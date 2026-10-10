@@ -203,7 +203,7 @@ describe("BUYBACK mode (the primary mechanic): swap at market, then burn everyth
   test("the committed rule file is buyback mode with a v2 memo", () => {
     assert.equal(loaded.rules.mode, "buyback");
     assert.equal(loaded.rules.memo.version, "v2");
-    assert.equal(loaded.rules.buyback.fractionPerUnit, "0.01", "1% per unit until the owner decides between 1% and 5% (the file says so)");
+    assert.equal(loaded.rules.buyback.fractionPerUnit, "0.02", "2% per unit — the owner's 2026-10-10 decision (the Fed's inflation target, pointed the other way)");
   });
 
   test("one burn day = one swap + one burn; spend = pool × (1 − (1 − f)^units); every token received is burned; the memo links the swap", async () => {

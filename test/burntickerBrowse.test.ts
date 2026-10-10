@@ -6,7 +6,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { kalshiEnabled } from "@/lib/burnticker/venues";
+import { kalshiEnabled, polymarketDiscoveryEnabled } from "@/lib/burnticker/venues";
 import { loadCategories } from "@/lib/burnticker/browse";
 import { KalshiClient, fixtureFetch, seriesByCategoryUrl, seriesListUrl, tagsByCategoriesUrl, eventsUrl } from "@/lib/burnticker/oracle/kalshi";
 import { categoryPage, isLadder, kindHintFor, parseBrowseSeriesList, parseTagsByCategories, POLYMARKET_TAG_FOR, seriesExample, summariseEvents } from "@/lib/burnticker/oracle/browse";
@@ -172,9 +172,12 @@ describe("GET /api/burnticker/v1/browse — venue-agnostic, Kalshi behind BURNTI
     return makeWorld();
   };
 
-  test("the flag: default on; 0 / false / off / no turn it off", () => {
-    assert.equal(kalshiEnabled({}), true); assert.equal(kalshiEnabled({ BURNTICKER_KALSHI_ENABLED: "1" }), true);
-    for (const v of ["0", "false", "OFF", " no "]) assert.equal(kalshiEnabled({ BURNTICKER_KALSHI_ENABLED: v }), false, v);
+  test("the flags: Kalshi OFF unless 1 / true / on / yes; Polymarket discovery ON unless 0 / false / off / no", () => {
+    assert.equal(kalshiEnabled({}), false, "Kalshi is off by default (its terms do not permit settling on or caching its data)");
+    for (const v of ["1", "true", "ON", " yes "]) assert.equal(kalshiEnabled({ BURNTICKER_KALSHI_ENABLED: v }), true, v);
+    for (const v of ["0", "false", "nonsense"]) assert.equal(kalshiEnabled({ BURNTICKER_KALSHI_ENABLED: v }), false, v);
+    assert.equal(polymarketDiscoveryEnabled({}), true);
+    for (const v of ["0", "false", "OFF", " no "]) assert.equal(polymarketDiscoveryEnabled({ BURNTICKER_POLYMARKET_DISCOVERY_ENABLED: v }), false, v);
   });
 
   test("the taxonomy file: eleven categories, every feed id it names exists in sources.json or the on-chain facts", () => {

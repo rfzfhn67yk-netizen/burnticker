@@ -72,6 +72,17 @@ export class Burnticker {
 
   /** Browse every source by Burnticker category: no argument → the categories; a category id → its source cards (feeds first, then Polymarket, then Kalshi when the host enables it). */
   browse(category?: string, o: { q?: string } = {}): Promise<Browse> { return this.api.get<Browse>("/browse", { category, q: o.q }); }
+  /** The universal search: describe the event ("El-Sayed wins Michigan Senate") → ready-made rules from every enabled source. */
+  search(q: string): Promise<Record<string, unknown>> { return this.api.get<Record<string, unknown>>("/search", { q }); }
+  /** Elections & Politics: no args → race types; a type → its states; a type + state → races with named outcomes and a ready rule each. */
+  elections(o: { type?: "senate" | "house" | "governor" | "control"; state?: string } = {}): Promise<Record<string, unknown>> { return this.api.get<Record<string, unknown>>("/elections", { type: o.type, state: o.state }); }
+  /** The election-pair template: candidate A vs B for a race (its event slug + two outcome condition ids) → two coins. */
+  electionPair(slug: string, a: string, b: string): Promise<Record<string, unknown>> { return this.api.get<Record<string, unknown>>("/elections/pair", { slug, a, b }); }
+  /** Team coins and matchups on the ESPN scoreboard: leagues, a league's teams, or its upcoming games. */
+  readonly sports = {
+    teams: (league?: "nfl" | "nba" | "mlb" | "nhl", o: { q?: string } = {}): Promise<Record<string, unknown>> => this.api.get<Record<string, unknown>>("/sports/teams", { league, q: o.q }),
+    games: (league: "nfl" | "nba" | "mlb" | "nhl", o: { q?: string } = {}): Promise<Record<string, unknown>> => this.api.get<Record<string, unknown>>("/sports/games", { league, q: o.q }),
+  };
 
   /** Kalshi: search series, read one series with its open markets, back-test a selector + mapping on the venue's settled history. */
   readonly kalshi = {

@@ -4,6 +4,7 @@ import { formatDate, utcDate } from "@/lib/burnReceipts/math";
 import { WAIT_REASONS, WAIT_RETRY_MS, type ProgramConfigView, type ProgramPort, type ProgramReadingView } from "@/lib/burnKeeper/programChain";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { feedById } from "@/lib/burnticker/catalogue";
+import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { readingMatches, selectorKeyOf, wideRule, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { DECIMALS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { unitSteps, type CarryPolicy, type SettledEvent } from "@/lib/burnticker/units";
@@ -47,6 +48,8 @@ export interface KeeperDeps {
   kalshiPollMs?: number;
   /** After a UTC day ends, wait this long (and for a fetch after it) before reading the day into the program (READING_GRACE_MS). */
   readingGraceMs?: number;
+  /** BURNTICKER_KALSHI_ENABLED (venues.ts). false: Kalshi is read only for coins already registered with a Kalshi rule, with a warning per read. Undefined = on. */
+  kalshiEnabled?: boolean;
 }
 
 export interface FetchReport { key: string; written: number; refusals: string[]; awaitingFinal: number; error: string | null; skipped: boolean }
@@ -62,7 +65,7 @@ const oracleFor = (d: KeeperDeps, key: string): OracleAdapter => {
 };
 const carryFor = (rule: BurnRule): CarryPolicy => (rule.oracle === "catalogue" && rule.series ? feedById(rule.series)?.carry ?? "none" : "none");
 /** A selector's read cadence: the feed's pollEverySec, or the market poll (5 min; Kalshi and Polymarket alike). Exported for the ops alerts (a stall = 2× this with no fetch). */
-export const pollMsFor = (d: Pick<KeeperDeps, "kalshiPollMs">, rule: BurnRule): number => (rule.oracle === "catalogue" && rule.series ? (feedById(rule.series)?.pollEverySec ?? 3600) * 1000 : d.kalshiPollMs ?? 5 * 60_000);
+export const pollMsFor = (d: Pick<KeeperDeps, "kalshiPollMs">, rule: BurnRule): number => (rule.oracle === "catalogue" && rule.series ? (feedById(rule.series)?.pollEverySec ?? nativeSourceById(rule.series)?.pollEverySec ?? 3600) * 1000 : d.kalshiPollMs ?? 5 * 60_000);
 
 /** Readings for the live tokens' keys, each key once per schedule. */
 export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Promise<FetchReport[]> {
@@ -80,6 +83,8 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
     // Feeds key readings by period strings ("2026-10-08"); compare in that space. Kalshi keys by ISO times.
     const sinceKey = since && key.startsWith("catalogue:") ? (last!.at.length === 7 ? since.slice(0, 7) : since.slice(0, 10)) : since;
     try {
+      const isKalshi = !key.startsWith("catalogue:") && !key.startsWith("polymarket:");
+      if (isKalshi && d.kalshiEnabled === false) d.log(`  [warn] ${key}: Kalshi read for $${t.ticker}, a coin registered with a Kalshi rule — BURNTICKER_KALSHI_ENABLED is off, so only already-registered Kalshi coins are read`);
       const r = await oracleFor(d, key).settledSince(rule, sinceKey);
       const written = d.registry.putReadings(locked.rule.oracle, key, r.events, { settlementSourceUrl: r.settlementSourceUrl, attestedBy: [d.attester] }, now);
       d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: now + pollMsFor(d, locked.rule) });

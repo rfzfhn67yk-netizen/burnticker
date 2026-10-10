@@ -1,0 +1,20 @@
+{
+  "schema": "burnticker.sos/v1",
+  "note": "The cross-read for election coins (2026-10-10): each state's certified results publisher. A Polymarket election coin settles on the Conditional Tokens payout vector on Polygon; the state's certified result is the published cross-check named on the card and the coin page. Checked 2026-10-10 from a script: 'ok' = HTTP 200; 'bot-wall' = the official domain answered 403 to a script (it serves browsers). States not listed fall back to the U.S. Election Assistance Commission's directory of every state's election office. michigan.gov is the official page; mielections.us (the state's results site) did not resolve from the checking host.",
+  "fallback": { "name": "the state's election office (U.S. Election Assistance Commission directory)", "url": "https://www.eac.gov/voters/register-and-vote-in-your-state", "check": "ok" },
+  "states": {
+    "MI": { "name": "Michigan Department of State — certified election results", "url": "https://www.michigan.gov/sos/elections/election-results-and-data", "check": "ok" },
+    "TX": { "name": "Texas Secretary of State — elections", "url": "https://www.sos.state.tx.us/elections/index.shtml", "check": "ok" },
+    "PA": { "name": "Pennsylvania Department of State — voting and elections", "url": "https://www.pa.gov/agencies/dos/programs/voting-and-elections", "check": "ok" },
+    "NC": { "name": "North Carolina State Board of Elections — results", "url": "https://www.ncsbe.gov/results-data", "check": "ok" },
+    "NV": { "name": "Nevada Secretary of State — elections", "url": "https://www.nvsos.gov/sos/elections", "check": "ok" },
+    "ME": { "name": "Maine Secretary of State — elections", "url": "https://www.maine.gov/sos/cec/elec/", "check": "ok" },
+    "AK": { "name": "Alaska Division of Elections", "url": "https://www.elections.alaska.gov/", "check": "ok" },
+    "IA": { "name": "Iowa Secretary of State", "url": "https://sos.iowa.gov", "check": "ok" },
+    "GA": { "name": "Georgia Secretary of State — elections", "url": "https://sos.ga.gov", "check": "bot-wall" },
+    "AZ": { "name": "Arizona Secretary of State — elections", "url": "https://azsos.gov", "check": "bot-wall" },
+    "WI": { "name": "Wisconsin Elections Commission", "url": "https://elections.wi.gov", "check": "bot-wall" },
+    "OH": { "name": "Ohio Secretary of State — elections", "url": "https://www.ohiosos.gov", "check": "bot-wall" },
+    "NH": { "name": "New Hampshire Secretary of State — elections", "url": "https://www.sos.nh.gov", "check": "bot-wall" }
+  }
+}

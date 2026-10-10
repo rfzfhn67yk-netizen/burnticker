@@ -1,9 +1,10 @@
 # @burnticker/sdk — build on Burnticker from a bot
 
-Burnticker launches memecoins whose supply burns on a Kalshi settlement — two coins on one matchup (a rivalry pair: when a side
-loses, its coin burns) or one coin on any settled Kalshi market. Polymarket binary markets are a second tier-1 source (since
-2026-10-10: the result read from the payout vector on Polygon). First-party feeds stay available as an advanced source; $DEFICIT
-runs on Treasury data directly. Everything below works the same for every source.
+Burnticker launches memecoins whose supply burns on a verifiable event — two coins on one matchup (a rivalry pair: when a side
+loses, its coin burns) or one coin on one rule. Readings come from first-party primaries with an independent cross-read (Treasury,
+BLS, FRED, ESPN, NWS, EDGAR, on-chain data; $DEFICIT runs on Treasury data directly) or from an on-chain Polymarket payout (the
+result read from the payout vector on Polygon). Kalshi is discovery-only and off by default (its terms do not permit settlement on
+its data; the launch preflight refuses Kalshi rules). Everything below works the same for every source.
 
 Owner decision, 2026-10-09: *"no tokens will be adopted into the platform, provide the sdk/api so people can incorporate into bots."*
 So there is no adopt-an-existing-token path anywhere. Instead, this TypeScript SDK (and the HTTP API it wraps, [api.md](api.md))
@@ -61,10 +62,11 @@ and `pending` says what is missing), so nothing is signable on a cluster yet. Th
 | `bt.catalogue()` | API | every source with its tier (1 adjudicated market … 5 page-scraped), launchability, last reading, and the public selection config a verifier needs |
 | `bt.sourcePreview(id, { fractionOfPool \| tokens })` | API | what a catalogue rule would have burned over the source's frozen fixture |
 | `bt.kalshi.search(q, { category })` · `bt.kalshi.series(ticker)` | API | live Kalshi series search with refuse-list verdicts; one series with its open markets (prices display-only) |
+| `bt.search(q)` · `bt.elections({ type, state })` · `bt.electionPair(slug, a, b)` · `bt.sports.teams(league)` · `bt.sports.games(league)` | API | the universal search (ready-made rules), the Elections & Politics flow and the election-pair template, the ESPN team / game pickers (API 1.4.0) |
 | `bt.browse()` · `bt.browse("weather", { q })` | API | every source by Burnticker category: first-party feeds, Polymarket events, Kalshi series (when the host enables Kalshi) as one `SourceCard` shape with the "burns when …" example and the selector to use |
 | `bt.kalshi.categories()` · `bt.kalshi.categories("Climate and Weather", { tag, q, events })` | API | browse like Kalshi: its categories (tags, series counts, the matching Polymarket tag); one category's series, most traded first, with `kindHint`, `example`, refuse-list verdicts and (for the first `events`) the upcoming-event summary |
 | `bt.kalshi.backtest(selector, mapping, { months })` | API | "settled N times in 12 months and would have burned X", plus the matched markets |
-| `bt.polymarket.search(q, { status })` | API | Polymarket (Gamma) search by text, event slug or condition id: events with their binary markets (`yes` / `no` labels), the event and its tags as recurring selectors; `impliedYes` display only |
+| `bt.polymarket.search(q, { status })` | API | Polymarket (Gamma) search by text, event slug or condition id: events with their binary markets (`yes` / `no` labels), the event and its tags as recurring selectors; no prices, odds or volume |
 | `bt.polymarket.backtest(selector, mapping, { months })` | API | a Polymarket selector (`{ market: "0x…" }`, `{ series: "tag:nfl/moneyline", filter: { titleRegex } }`, `{ series: "event:<slug>" }`; oracle defaults to `polymarket`) back-tested on Gamma's closed markets |
 | `rules.compose / validate / canonical / sha256 / lock / fromText / statement / receiptFormat` | local | the platform's own rule code: the hash you compute is the hash every receipt cites |
 | `fees.split({ phase, volumeSol })` | local | the designed split (curve: Raydium 25, Burnticker 25, burn pool 50 bps; post-graduation burn pool 4.75 bps) per volume, exact to the lamport; live values via `bt.trust()` |

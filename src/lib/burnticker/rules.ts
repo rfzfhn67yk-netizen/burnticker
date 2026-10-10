@@ -6,7 +6,7 @@ import { rulesSha256 } from "@/lib/burnKeeper/rules";
  * daily Denver high", "this one election"). Pure.
  *
  * TWO ORACLES, ONE ENGINE.
- *   · "kalshi" (PRIMARY): the selector names a Kalshi series, or one market, or a series + filter; `kind` says how the settled result is
+ *   · "kalshi" (DISCOVERY ONLY — refused by the launch preflight; Kalshi's terms do not permit settlement on its data): the selector names a Kalshi series, or one market, or a series + filter; `kind` says how the settled result is
  *     read — "binary" (result yes/no → onYes / onNo) or "scalar" (the settled value → units of `unit` from a baseline, in a direction).
  *   · "catalogue" (tier 2, for things no market covers): `series` is a first-party feed id (treasury.debt, bls.eggs, noaa.flares,
  *     ll2.launches, jpl.neo, wiki.views). The feed FIXES unit, direction, baseline and carry; the creator chooses only the mapping.

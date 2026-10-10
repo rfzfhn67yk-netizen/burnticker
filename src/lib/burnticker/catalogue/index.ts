@@ -7,6 +7,7 @@ import { backtest, type Backtest } from "@/lib/burnticker/oracle/backtest";
 import { httpSource, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import type { ResolutionSource } from "@/lib/burnticker/sources/types";
 import { copycatSource, type CopycatSourceConfig, type CopycatSourceOptions } from "@/lib/burnticker/sources/copycats";
+import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 
 /**
  * THE FIRST-PARTY CATALOGUE (tier 3–5) — config/burnticker/sources.json read through the generic attested-http adapter (2026-10-09:
@@ -20,8 +21,14 @@ export const SOURCES_FILE = path.join("config", "burnticker", "sources.json");
 export interface Feed extends ResolutionSource { config: HttpSourceConfig; parse(body: unknown, nowMs: number): { readings: SettledEvent[]; refusals: string[] }; pollEverySec: number; fixturePath: string | null; memoSource: string; param: string | null }
 
 let cachedConfig: { entries: SourceEntry[] } | null = null;
-/** Any entry of sources.json: the attested-http feeds (HttpSourceConfig) and the other kinds (onchain.copycats, CopycatSourceConfig). */
-export type SourceEntry = HttpSourceConfig | CopycatSourceConfig;
+/**
+ * A NATIVE source's descriptor in sources.json (2026-10-10): the first-party sources with their own code (sources/native.ts — the ESPN
+ * scoreboard, the NWS climate report, FEC reports) and their cross-reads. No request template: the entry carries what the settlement-
+ * coverage audit needs (operator, domain via sourceUrl, fact, launchable, readable). The catalogue's feed list skips them.
+ */
+export interface NativeSourceConfig { id: string; kind: "native"; tier: 4; title: string; sourceName: string; operator: string; sourceUrl: string; fact: { id: string }; launchable: boolean; readable: boolean; flags: string[]; leagues?: string[]; sameOperator?: boolean; note?: string }
+/** Any entry of sources.json: the attested-http feeds (HttpSourceConfig), the other kinds (onchain.copycats, CopycatSourceConfig) and the native descriptors. */
+export type SourceEntry = HttpSourceConfig | CopycatSourceConfig | NativeSourceConfig;
 /** Every entry of sources.json, whatever its kind. */
 export function loadSourceEntries(root = process.cwd()): SourceEntry[] {
   if (cachedConfig && root === process.cwd()) return cachedConfig.entries;
@@ -36,7 +43,7 @@ export function loadSourcesConfig(root = process.cwd()): HttpSourceConfig[] {
 }
 /** The copycat-count source (kind onchain, indexer-dependent), built from its config entry; null when sources.json has none. */
 export function copycatSourceFromConfig(o: CopycatSourceOptions = {}, root = process.cwd()): ReturnType<typeof copycatSource> | null {
-  const cfg = loadSourceEntries(root).find((e): e is CopycatSourceConfig => e.kind === "onchain" && e.id === "onchain.copycats");
+  const cfg = loadSourceEntries(root).find((e): e is CopycatSourceConfig => e.kind === "onchain" && (e as CopycatSourceConfig).id === "onchain.copycats");
   return cfg ? copycatSource(cfg, o) : null;
 }
 
@@ -134,8 +141,15 @@ export class CatalogueAdapter implements OracleAdapter {
     const q = query.trim().toLowerCase();
     return catalogue().filter((f) => !q || f.id.toLowerCase().includes(q) || f.title.toLowerCase().includes(q)).map(feedSummary);
   }
-  async seriesInfo(id: string): Promise<SeriesSummary | null> { const f = feedById(id); return f ? feedSummary(f) : null; }
+  async seriesInfo(id: string): Promise<SeriesSummary | null> {
+    const f = feedById(id); if (f) return feedSummary(f);
+    const n = nativeSourceById(id);
+    return n ? { oracle: "catalogue", ticker: n.id, title: n.title, category: "tier 4", frequency: n.cadence, settlementSource: { name: n.sourceName, url: n.sourceUrl }, tags: n.flags } : null;
+  }
   async settledSince(rule: BurnRule, sinceIso: string | null): Promise<ResolvedSelector> {
+    // native first-party sources (ESPN scoreboard with its cross-read, NWS daily climate): their own reader, the same fixed-unit check
+    const native = rule.series ? nativeSourceById(rule.series) : null;
+    if (native) { const np = nativeRuleProblems(native, rule); if (np.length) throw new Error(`catalogue: ${np.join("; ")}`); return native.settledSince(rule, sinceIso); }
     const feed = rule.series ? feedById(rule.series, this.o) : null;
     if (!feed) throw new Error(`catalogue: unknown source ${rule.series}`);
     const problems = feedRuleProblems(feed, rule);

@@ -35,6 +35,8 @@ export interface CopycatSourceConfig {
   indexer: { primary: { kind: "helius-das"; envKey: string; url: string; method: "searchAssets" }; fallback: { kind: "dexscreener-search" | "geckoterminal-search"; url: string }[] };
   unit: { size: number; label: string; definition: string }; direction: "up"; baseline: 0; carry: "none"; valueLabel: string;
   plausibility: { min: number; max: number }; memoSource: string; fixture: string | null; flags: string[]; launchable: boolean; note?: string;
+  /** Who runs the indexer(s) read (the settlement-coverage audit). */
+  operator?: string;
 }
 
 /** One candidate copycat, normalised from whichever indexer saw it. */

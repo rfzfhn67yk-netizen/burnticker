@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import CoverageSection from "./CoverageSection";
 
 /**
  * THE TRUST PAGE (the owner, 2026-10-09: no room for suspicion). Rendered from /api/burnticker/trust: the Powers Register, the LIVE
  * platform config decoded from chain next to the designed dials, the developer fee wallet and its ledger (from chain), team wallets and
  * the bots' refuse rule, LP burned 100% / no creator cash / no team allocation, attesters and quorum per token, program hash and verify
- * steps, the public audit, the append-only incident log — and the transparency block (who runs this, how it was built, every wallet,
+ * steps, the public audit, the settlement-coverage audit (GET /api/burnticker/v1/coverage: which categories settle on a primary source with an
+ * independent cross-read, which only on Polymarket's payout vector, which not at all), the append-only incident log — and the transparency block (who runs this, how it was built, every wallet,
  * known limitations, policies, the decision log, the changelog; config/burnticker/transparency.json). Facts, no marketing copy;
  * placeholders say so.
  */
@@ -42,6 +44,7 @@ export default function TrustPage() {
       <section className={card}><h2 className="font-medium">Attesters and quorum</h2>{t.attesters.length === 0 ? <p className="text-xs text-neutral-500">no tokens yet</p> : <ul className="text-xs">{t.attesters.map((a) => <li key={a.ticker}>${a.ticker}: {a.attesters} attester(s), {a.independent} independent, quorum {a.quorum}{a.independent === 0 ? " — level 1 (our data key only)" : ""}</li>)}</ul>}</section>
       <section className={card}><h2 className="font-medium">Program</h2><p className="text-xs">Program id <code>{t.program.programId ?? "not deployed"}</code> · build hash <code>{t.program.buildHash ?? "—"}</code></p><pre className="text-xs bg-neutral-950 rounded p-2 mt-1 whitespace-pre-wrap">{t.program.verify.join("\n")}</pre></section>
       <section className={card}><h2 className="font-medium">Public audit</h2>{t.audit ? <p className={t.audit.ok ? "text-emerald-400" : "text-red-400"}>{t.audit.ok ? "All receipts recompute" : `${t.audit.mismatches.length} mismatch(es)`} — {t.audit.receipts} receipt(s) across {t.audit.tokens} token(s), {t.audit.chainChecked ? "source + chain" : "source only"}, {t.audit.ranAt}</p> : <p className="text-neutral-500 text-xs">scripts/burnticker-audit.mts has not run on this host.</p>}{t.audit?.mismatches.map((m) => <p key={m.ticker + m.eventId} className="text-xs text-red-400">${m.ticker} {m.eventId}: {m.checks.join("; ")}</p>)}</section>
+      <CoverageSection card={card} />
       <section className={card}><h2 className="font-medium">Incident log (append-only)</h2>{t.incidents.entries === 0 ? <p className="text-xs text-neutral-500">No incidents recorded (docs/burnticker/incidents.md).</p> : <pre className="text-xs whitespace-pre-wrap">{t.incidents.markdown}</pre>}</section>
       {(() => { const x = t.transparency; const repo = x.publicRepo.url; const link = (rel: string) => (repo ? <a className="underline" href={`${repo.replace(/\/$/, "")}/blob/main/${rel}`}>{rel}</a> : <code>{rel}</code>); return (<>
       <section className={card}><h2 className="font-medium">Who runs this</h2>

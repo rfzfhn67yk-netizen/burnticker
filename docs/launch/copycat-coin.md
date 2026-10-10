@@ -34,7 +34,7 @@ on (the fixtures), not the demo coin's rule.
 > unit per creator wallet, at most ten units a day, our own mint excluded. Each unit spends 1% of the fee pool buying $COPYCAT at
 > market; everything bought is burned in the next transaction, with the receipt memo naming the copycat mints that counted.
 
-1% per unit (not $DEFICIT's 5%) because the day cap is 10: ten copycats spend 1 − 0.99^10 ≈ 9.6% of the pool, a bounded worst day.
+1% per unit (not $DEFICIT's 2%) because the day cap is 10: ten copycats spend 1 − 0.99^10 ≈ 9.6% of the pool, a bounded worst day.
 Zero-fill: a day with no qualifying copycat is a reading of 0 and no receipt (like the flare feed), so the page shows the quiet days too.
 
 Source entry: `onchain.copycats` in `config/burnticker/sources.json`; adapter: `src/lib/burnticker/sources/copycats.ts`; tests:

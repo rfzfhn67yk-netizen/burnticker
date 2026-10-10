@@ -17,7 +17,8 @@ import { loadPowersRegister, operatorPowersSummary } from "@/lib/burnticker/trus
 import { devFeeWallet } from "@/lib/burnticker/fees";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { readMarket, type MarketReader } from "@/lib/burnticker/market";
-import { kalshiEnabled } from "@/lib/burnticker/venues";
+import { kalshiEnabled, polymarketDiscoveryEnabled } from "@/lib/burnticker/venues";
+import { nativeSourceById } from "@/lib/burnticker/sources/native";
 
 /**
  * THE APP'S WIRING (2026-10-09): one place that opens the registry, builds the oracle clients, and chooses the program / LaunchLab
@@ -32,6 +33,8 @@ export interface Platform {
   market?: MarketReader | null;
   /** BURNTICKER_KALSHI_ENABLED (venues.ts): false turns off every Kalshi-facing surface; undefined = on. */
   kalshiEnabled?: boolean;
+  /** BURNTICKER_POLYMARKET_DISCOVERY_ENABLED (venues.ts): false withholds Polymarket discovery (search, Browse, elections); undefined = on. Settlement unaffected. */
+  polymarketDiscovery?: boolean;
 }
 
 let cached: Platform | null = null;
@@ -70,12 +73,12 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   // disableRetryOnRateLimit: a rate-limited RPC fails the read fast ("could not be read") instead of stalling every page on backoff.
   const market: MarketReader | null = rpc ? (new Connection(rpc, { commitment: "confirmed", disableRetryOnRateLimit: true }) as unknown as MarketReader) : null;
   if (!rpc) stubs.push("LaunchLab curve progress and top holders: no BURNTICKER_RPC_URL on this host (cards show —)");
-  if (!kalshiEnabled(env)) stubs.push("Kalshi: not enabled on this host (BURNTICKER_KALSHI_ENABLED=0) — team coins, matchups and Kalshi sources show venue unavailable");
+  if (!polymarketDiscoveryEnabled(env)) stubs.push("Polymarket discovery: off on this host (BURNTICKER_POLYMARKET_DISCOVERY_ENABLED=0); settlement reads the on-chain payout regardless");
   cached = {
     registry: openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE),
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
-    devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env),
+    devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
   };
   return cached;
 }
@@ -89,10 +92,14 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const readings = p.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
   const state = p.registry.state(t.mint);
   const oracle = locked.rule.oracle === "catalogue" ? p.oracles.catalogue : locked.rule.oracle === "polymarket" ? p.oracles.polymarket : p.oracles.kalshi;
-  // live: false (the receipts-only API route) skips the two oracle calls; the receipts do not depend on them.
+  // live: false (the receipts-only API route) skips the two oracle calls; the receipts do not depend on them. Venue display reads
+  // (venues.ts): no market-implied chance from Polymarket ever (no odds rendered), Kalshi's only with BURNTICKER_KALSHI_ENABLED on;
+  // series titles from Kalshi only when enabled, from Polymarket only with discovery on.
+  const isK = locked.rule.oracle === "kalshi", isP = locked.rule.oracle === "polymarket";
+  const kOk = p.kalshiEnabled !== false, pOk = p.polymarketDiscovery !== false;
   const [implied, info] = opts.live === false ? ([null, null] as const) : await Promise.all([
-    oracle.impliedChance(locked.rule, state.lastValue).catch((e: Error) => ({ chance: null, marketTicker: null, closeTime: null, basis: `unavailable: ${e.message.slice(0, 80)}` })),
-    locked.rule.oracle === "catalogue" ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.oracle === "polymarket" ? (locked.rule.market ?? locked.rule.series!) : locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
+    !isK || !kOk ? Promise.resolve(null) : oracle.impliedChance(locked.rule, state.lastValue).catch((e: Error) => ({ chance: null, marketTicker: null, closeTime: null, basis: `unavailable: ${e.message.slice(0, 80)}` })),
+    locked.rule.oracle === "catalogue" || (isK && !kOk) || (isP && !pOk) ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.oracle === "polymarket" ? (locked.rule.market ?? locked.rule.series!) : locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
   ]);
   const feedState = p.registry.feedState(t.selectorKey);
   const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
@@ -105,7 +112,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     pair: await pairCounterpart(p, t),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
     chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: await programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading")) },
-    now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? null, selectorPending: 0,
+    now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
     operator: operatorPowersSummary(loadPowersRegister()),
   };
 }

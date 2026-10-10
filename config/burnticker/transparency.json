@@ -166,9 +166,9 @@
       "text": "Switchboard Technology Labs ended all oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. The planned replacements — a Reclaim zkTLS proof of the source response posted by a relayer key, and/or a second human operator running the reader on another machine — are not live. The 'attester #2 within 14 days' line on this page is the schedule, not a built thing."
     },
     {
-      "id": "kalshi-offchain",
-      "status": "live design",
-      "text": "Kalshi is read off-chain: the keeper reads settled results from Kalshi's public API and signs them. Nothing on chain verifies that reading beyond the attester signatures. The series' settlement source URL is in every receipt so anyone can recompute. Kalshi's API terms on redistribution have not been reviewed."
+      "id": "kalshi-terms",
+      "status": "decided 2026-10-10",
+      "text": "Kalshi is not a settlement input. Its Developer Agreement v1.1 limits API use to a member's own trading and forbids caching or sharing API data with third parties without written authorization; its Data Terms of Use forbid using Kalshi Data to create, settle or support products without written consent. The Kalshi adapter remains in the code as discovery-only behind BURNTICKER_KALSHI_ENABLED (default off) and the launch preflight refuses any Kalshi rule regardless of the flag. Coins settle on first-party primaries with an independent cross-read, or on an on-chain Polymarket payout; Polymarket's Gamma API is used for discovery only and no prices, odds or volumes are displayed (its terms restrict market-data distribution)."
     },
     {
       "id": "one-shot",

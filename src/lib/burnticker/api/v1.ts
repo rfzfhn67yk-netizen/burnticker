@@ -10,10 +10,11 @@ import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
-import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, kalshiCategories, browse, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
+import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, kalshiCategories, browse, search, elections, electionPair, sportsTeams, sportsGames, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
 import type { FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import { API_PREFIX, buildOpenApi } from "@/lib/burnticker/api/spec";
+import { buildCoverage, type CoverageMatrix } from "@/lib/burnticker/coverage";
 
 /**
  * THE PUBLIC API, v1 (2026-10-09). One function per operation in spec.ts; the route files under src/app/api/burnticker/v1/ call these
@@ -56,6 +57,11 @@ export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()
 export const v1KalshiSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiSearch(p, { q: q.get("q"), category: q.get("category"), series: q.get("series") });
 export const v1KalshiEvents = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiEvents(p, { q: q.get("q"), series: q.get("series"), status: q.get("status") });
 export const v1KalshiTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiTeams(p, { series: q.get("series") });
+export const v1Search = (p: Platform, q: URLSearchParams): Promise<ApiResult> => search(p, { q: q.get("q") });
+export const v1Elections = (p: Platform, q: URLSearchParams): Promise<ApiResult> => elections(p, { type: q.get("type"), state: q.get("state") });
+export const v1ElectionPair = (p: Platform, q: URLSearchParams): Promise<ApiResult> => electionPair(p, { slug: q.get("slug"), a: q.get("a"), b: q.get("b") });
+export const v1SportsTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsTeams(p, { league: q.get("league"), q: q.get("q") });
+export const v1SportsGames = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsGames(p, { league: q.get("league"), q: q.get("q") });
 export const v1Browse = (p: Platform, q: URLSearchParams): Promise<ApiResult> => browse(p, { category: q.get("category"), q: q.get("q") });
 export const v1KalshiCategories = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiCategories(p, { category: q.get("category"), tag: q.get("tag"), q: q.get("q"), limit: q.get("limit"), offset: q.get("offset"), events: q.get("events"), polymarket: q.get("polymarket") });
 export const v1Backtest = (p: Platform, body: Record<string, unknown>): Promise<ApiResult> => runBacktest(p, body);
@@ -86,7 +92,7 @@ export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>)
   const r = await prepareLaunch(p, body, { register, mint });
   if ("error" in r) return r.error;
   if (!("ok" in r)) return fail(400, "rivalry pairs launch through the wizard's pair flow");
-  const { bundle, token, seriesTitle, locked } = r.ok;
+  const { bundle, token, seriesTitle, locked, preflight } = r.ok;
   const transactions = compileUnsigned(bundle.transactions, bundle.creator, blockhash);
   return ok({
     ok: true, cluster: bundle.cluster, ready: bundle.ready, pending: bundle.pending,
@@ -107,6 +113,7 @@ export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>)
       "send it, then POST /launch/confirm { mint, signature } — settlements after that moment count",
     ],
     stubs: p.stubs,
+    preflight,
   });
 }
 
@@ -210,5 +217,22 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
 }
 
 export const v1OpenApi = (): ApiResult => ok(buildOpenApi());
+
+/**
+ * GET /v1/coverage (1.3.0): the settlement-coverage matrix (src/lib/burnticker/coverage), computed OFFLINE from the sources' frozen
+ * fixtures — no network on a request — with the registry's first sightings for latency, cached in memory for ten minutes. The same
+ * object renders docs/burnticker/SETTLEMENT-COVERAGE.md and the trust page's "Settlement coverage" section.
+ */
+let coverageCache: { at: number; matrix: CoverageMatrix } | null = null;
+export const COVERAGE_TTL_MS = 600_000;
+export async function v1Coverage(p: Platform, now = Date.now()): Promise<ApiResult> {
+  if (coverageCache && now - coverageCache.at < COVERAGE_TTL_MS) return ok(coverageCache.matrix);
+  const observations = (id: string) => { try { return p.registry.readings(`catalogue:${id}`).map((r) => ({ id: r.id, firstSeenAt: r.fetchedAt })); } catch { return []; } };
+  const { matrix } = await buildCoverage({ mode: "offline", observations });
+  coverageCache = { at: now, matrix };
+  return ok(matrix);
+}
+/** For tests: drop the cached matrix. */
+export function resetCoverageCache(): void { coverageCache = null; }
 
 export { platform };

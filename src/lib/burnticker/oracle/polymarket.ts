@@ -63,6 +63,10 @@ export interface GammaMarket {
   umaResolutionStatus: string | null; resolvedBy: string | null; resolutionSource: string | null;
   endDate: string | null; closedTime: string | null; umaEndDate: string | null;
   negRisk: boolean; sportsMarketType: string | null;
+  /** The outcome's name inside a multi-outcome event ("Abdul El-Sayed (D)"; "Person A" on an unnamed placeholder). */
+  groupItemTitle: string | null;
+  /** Gamma marks the market `active: false` (an unnamed placeholder such as "Person A"): never offered. */
+  inactive: boolean;
   /** Gamma's per-outcome figures after resolution ("1","0" / "0.5","0.5"); read ONLY on a closed, resolved market as Gamma's report. */
   outcomeFigures: string[];
   /** DISPLAY ONLY: the YES side's mid (bestBid/bestAsk), else last trade, else the first outcome figure, on an open market. */
@@ -82,12 +86,12 @@ export function parseGammaMarket(raw: unknown, ctx: { eventSlug?: string | null;
     outcomes: list(m.outcomes), closed, active: m.active === true,
     umaResolutionStatus: str(m.umaResolutionStatus), resolvedBy: str(m.resolvedBy), resolutionSource: str(m.resolutionSource),
     endDate: normaliseTime(m.endDate), closedTime: normaliseTime(m.closedTime), umaEndDate: normaliseTime(m.umaEndDate),
-    negRisk: m.negRisk === true, sportsMarketType: str(m.sportsMarketType), outcomeFigures: figures,
+    negRisk: m.negRisk === true, sportsMarketType: str(m.sportsMarketType), groupItemTitle: str(m.groupItemTitle), inactive: m.active === false, outcomeFigures: figures,
     yesPrice: closed ? null : bid !== null && ask !== null ? (bid + ask) / 2 : last ?? num(figures[0]),
   };
 }
 
-export interface GammaEvent { id: string; slug: string; title: string; closed: boolean; endDate: string | null; closedTime: string | null; tags: { slug: string; label: string }[]; markets: GammaMarket[] }
+export interface GammaEvent { id: string; slug: string; title: string; closed: boolean; endDate: string | null; closedTime: string | null; tags: { slug: string; label: string }[]; markets: GammaMarket[]; /** the event's resolution rules (Gamma "description") */ description: string | null }
 
 export function parseGammaEvent(raw: unknown): GammaEvent | null {
   const e = raw as Record<string, unknown> | null;
@@ -95,7 +99,7 @@ export function parseGammaEvent(raw: unknown): GammaEvent | null {
   const tags = (Array.isArray(e.tags) ? e.tags : []).map((t: Record<string, unknown>) => ({ slug: String(t?.slug ?? ""), label: String(t?.label ?? t?.slug ?? "") })).filter((t) => t.slug);
   const title = String(e.title ?? e.slug);
   const markets = (Array.isArray(e.markets) ? e.markets : []).map((m) => parseGammaMarket(m, { eventSlug: e.slug as string, eventTitle: title, tags: tags.map((t) => t.slug) })).filter((m): m is GammaMarket => m !== null);
-  return { id: String(e.id ?? ""), slug: e.slug, title, closed: e.closed === true, endDate: normaliseTime(e.endDate), closedTime: normaliseTime(e.closedTime), tags, markets };
+  return { id: String(e.id ?? ""), slug: e.slug, title, closed: e.closed === true, endDate: normaliseTime(e.endDate), closedTime: normaliseTime(e.closedTime), tags, markets, description: str(e.description) };
 }
 
 export const parseMarketsBody = (body: unknown, ctx: { tags?: string[] } = {}): GammaMarket[] => (Array.isArray(body) ? body.map((m) => parseGammaMarket(m, ctx)).filter((m): m is GammaMarket => m !== null) : []);
@@ -249,14 +253,14 @@ export function impliedChanceFromMarkets(rule: BurnRule, open: readonly GammaMar
 
 // ---- search shapes ------------------------------------------------------------------------------------------------------------
 
-export interface PolyMarketHit { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; selector: { oracle: "polymarket"; series: null; market: string }; impliedYes: number | null }
+export interface PolyMarketHit { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; selector: { oracle: "polymarket"; series: null; market: string }; /** the outcome name inside its event (Gamma groupItemTitle), when Gamma names one */ outcome: string | null }
 export interface PolyEventHit { slug: string; title: string; url: string; endDate: string | null; closed: boolean; tags: { slug: string; label: string }[]; markets: PolyMarketHit[]; marketCount: number; selector: { oracle: "polymarket"; series: string; market: null }; refused: string[] }
 export interface PolyTagHit { slug: string; label: string; events: number; series: string[] }
 
 const HEAD_TO_HEAD = /^[^:]+ vs\.? [^:]+$/;
 export function marketHit(m: GammaMarket): PolyMarketHit {
   const { yes, no } = sideLabels(m);
-  return { conditionId: m.conditionId, question: m.question, yes, no, endDate: m.endDate, closed: m.closed, sportsMarketType: m.sportsMarketType, selector: { oracle: "polymarket", series: null, market: m.conditionId }, impliedYes: m.yesPrice };
+  return { conditionId: m.conditionId, question: m.question, yes, no, endDate: m.endDate, closed: m.closed, sportsMarketType: m.sportsMarketType, selector: { oracle: "polymarket", series: null, market: m.conditionId }, outcome: m.groupItemTitle };
 }
 
 /** Events → search hits (binary markets only, head-to-head and moneyline first, at most `perEvent`), tags aggregated into recurring selectors. */
@@ -267,7 +271,7 @@ export function searchHits(events: readonly GammaEvent[], o: { refuse?: TitleRef
   for (const e of events) {
     if (status === "open" && e.closed) continue;
     if (status === "closed" && !e.closed) continue;
-    const bin = e.markets.filter(isBinary).filter((m) => status !== "open" || !m.closed);
+    const bin = e.markets.filter(isBinary).filter((m) => status !== "open" || (!m.closed && !m.inactive));
     const rank = (m: GammaMarket) => (m.sportsMarketType === "moneyline" ? 0 : HEAD_TO_HEAD.test(m.question) ? 1 : 2);
     const markets = [...bin].sort((a, b) => rank(a) - rank(b) || (a.endDate ?? "9").localeCompare(b.endDate ?? "9")).slice(0, o.perEvent ?? 12).map(marketHit);
     const refused = o.refuse?.([e.title, ...bin.slice(0, 20).map((m) => m.question)]) ?? [];

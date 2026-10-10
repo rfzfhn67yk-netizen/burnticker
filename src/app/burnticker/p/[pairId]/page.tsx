@@ -18,7 +18,6 @@ interface Tally {
 }
 interface Data { pair: { pairId: string; selectorKey: string; createdAt: number }; a: Side; b: Side; tally: Tally; share: string; stubs: string[] }
 const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? `.${f}` : ""); };
-const chance = (c: number | null) => (c === null ? "—" : `${(c * 100).toFixed(0)}%`);
 
 export default function PairPage() {
   const { pairId } = useParams<{ pairId: string }>();
@@ -49,7 +48,7 @@ export default function PairPage() {
         <div className="grid md:grid-cols-3 gap-2">
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">supply left</div><div className="text-lg tabular-nums">{t.supplyPctA.toFixed(2)}% <span className="text-neutral-500">:</span> {t.supplyPctB.toFixed(2)}%</div><div className="text-xs text-neutral-500 tabular-nums">{fmt(t.supplyA)} : {fmt(t.supplyB)} of {fmt(d.a.status.supply.initial)} each</div></div>
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">last settlement</div>{ls ? <><div><code>{ls.eventId}</code></div><div className="text-xs text-neutral-500">settled {(ls.result ?? ls.value ?? "—").toUpperCase()} · {ls.settledAt.slice(0, 16).replace("T", " ")}Z → {sideName(ls.burnedSide)} burned{ls.burned ? ` ${fmt(ls.burned)}` : ""}</div></> : <div className="text-xs text-neutral-500">none yet — the first settlement after launch burns one side</div>}</div>
-          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">next scheduled market</div>{t.next.market ? <div><code>{t.next.market}</code></div> : <div>—</div>}<div className="text-xs text-neutral-500">{t.next.closeTime ? `closes ${t.next.closeTime} · ` : ""}Kalshi-implied chance ${A} burns {chance(t.next.chanceA)} : {chance(t.next.chanceB)} ${B} burns — display only, never used by either rule</div></div>
+          <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">next scheduled market</div>{t.next.market ? <div><code>{t.next.market}</code></div> : <div>—</div>}<div className="text-xs text-neutral-500">{t.next.closeTime ? `closes ${t.next.closeTime}` : ""}</div></div>
         </div>
       </section>
 

@@ -51,3 +51,12 @@ export function headToHead(rowsA: readonly { id: string; units: number; kind?: s
   }
   return { games, burnsA, burnsB, both, neither };
 }
+
+/**
+ * FIRST-PARTY RULES (2026-10-10: team coins and matchups run on the ESPN scoreboard; weather on the NWS climate report; Kalshi is not a
+ * settlement input). A native first-party series is scalar with a fixed unit of 1 qualifying game or day, baseline 0, direction up
+ * (sources/native.ts): one burn of `fraction` of the pool per qualifying game/day.
+ */
+export function firstPartyRule(series: string, fraction = DEFAULT_FRACTION): BurnRule {
+  return { ...base, kind: "scalar", series, market: null, filter: {}, oracle: "catalogue", scalar: { unit: 1, perUnit: { fractionOfPool: Number(fraction.toFixed(4)) }, baseline: 0, direction: "up" }, binary: null } as BurnRule;
+}

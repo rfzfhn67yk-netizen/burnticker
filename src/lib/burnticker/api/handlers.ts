@@ -9,7 +9,12 @@ import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
 import { categoryCards, categoryList, loadCategories, type FeedCardInput } from "@/lib/burnticker/browse";
-import { KALSHI_UNAVAILABLE, type VenueFlags } from "@/lib/burnticker/venues";
+import { KALSHI_UNAVAILABLE, POLYMARKET_UNAVAILABLE, scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
+import { espnClient, fecClient, nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
+import { electionPairTemplate } from "@/lib/burnticker/electionPair";
+import { universalSearch, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
+import { BALLOT_NOTE, RACE_TYPES, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
+import { LEAGUES, gameSeries, isLeague, findTeams, teamSeries, teamsOf, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
@@ -18,6 +23,8 @@ import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/b
 import { buildLaunchBundle, buildPairBundles, launchProblems, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
+import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
+import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 
 /**
  * THE BURNTICKER ROUTES' SHARED LOGIC (2026-10-09). The wizard's routes (/api/burnticker/{catalogue,oracle/*,launch}) and the public
@@ -132,8 +139,95 @@ export async function kalshiTeams(p: Platform, q: { series?: string | null }): P
   }
 }
 
+const refuseTitlesList = (titles: string[]): string[] => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))];
+const catalogueFeeds = (now: number): FeedLike[] => (catalogueSources(now).sources as unknown as (FeedLike & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
+
+/** GET /v1/search?q= — the universal search (src/lib/burnticker/search.ts): ready-made rules from every enabled venue and feed; the category list when nothing matches. */
+export async function search(p: Platform, q: { q?: string | null }, now = Date.now()): Promise<ApiResult> {
+  const venues = venueFlags(p);
+  const r = await universalSearch(q.q ?? "", { venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
+  let categories: { id: string; label: string; blurb: string }[] = [];
+  if (r.empty) { try { categories = loadCategories().map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })); } catch { categories = []; } }
+  return ok({ ...r, venues, categories, note: "ready-made rules; no prices, odds, volume or liquidity are returned" });
+}
+
+/** GET /v1/elections?type=&state= — the guided Elections & Politics flow (src/lib/burnticker/elections.ts), from Polymarket's open midterm races. */
+export async function elections(p: Platform, q: { type?: string | null; state?: string | null }): Promise<ApiResult> {
+  if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE);
+  try {
+    const races = await loadRaces((u) => p.polymarket.get(u), refuseTitlesList);
+    const type = RACE_TYPES.some((t) => t.id === q.type) ? q.type! : null;
+    const st = q.state?.trim().toUpperCase() || null;
+    const ofType = type ? races.filter((r) => r.type === type) : [];
+    const states = [...new Set(ofType.map((r) => r.state).filter((x): x is string => !!x))].sort().map((a) => ({ abbr: a, name: stateName(a) ?? a, races: ofType.filter((r) => r.state === a).length }));
+    const shown = type ? ofType.filter((r) => type === "control" || !st || r.state === st) : [];
+    return ok(scrubMarketData({
+      types: RACE_TYPES.map((t) => ({ ...t, races: races.filter((r) => r.type === t.id).length })), ballot: BALLOT_NOTE, type, state: st, states,
+      races: (type === "control" || st ? shown : []).slice(0, 60).map((r) => ({ ...r, outcomes: r.outcomes.map((o) => ({ ...o, title: outcomeCardTitle(r, o), settles: outcomeSettlesNote(r, o), rule: polyRule(o.conditionId) })) })),
+      note: "Polymarket's open midterm races; unnamed placeholder outcomes are hidden; settlement reads the on-chain payout and names the state's certified results as the cross-read",
+    }));
+  } catch (e) { return fail(502, `Polymarket unavailable: ${(e as Error).message.slice(0, 160)}`); }
+}
+
+/** GET /v1/elections/pair?slug=&a=&b= — the election-pair template (electionPair.ts): candidate A vs B for one race → two coins. */
+export async function electionPair(p: Platform, q: { slug?: string | null; a?: string | null; b?: string | null }): Promise<ApiResult> {
+  if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE);
+  if (!q.slug || !q.a || !q.b || q.a === q.b) return fail(400, "slug, a and b (two different outcome condition ids of the race) are required");
+  try {
+    const races = await loadRaces((u) => p.polymarket.get(u), refuseTitlesList);
+    const race = races.find((r) => r.slug === q.slug);
+    if (!race) return fail(404, `no open race ${q.slug}`);
+    const oa = race.outcomes.find((o) => o.conditionId === q.a!.toLowerCase()), ob = race.outcomes.find((o) => o.conditionId === q.b!.toLowerCase());
+    if (!oa || !ob) return fail(404, "both outcomes must be named outcomes of the race");
+    const office = race.type === "senate" ? "S" : race.type === "house" ? "H" : null;
+    const fecId = async (label: string): Promise<string | null> => {
+      if (!office || !race.state) return null;
+      const party = /\(D\)$/.test(label) ? "DEM" : /\(R\)$/.test(label) ? "REP" : null;
+      const surname = label.replace(/\s*\([A-Z]\)$/, "").trim().split(/\s+/).pop() ?? label;
+      try { const hits = await fecClient().searchCandidates(surname, office, race.state); return (hits.find((h) => !party || h.party === party) ?? hits[0])?.id ?? null; } catch { return null; }
+    };
+    const [fa, fb] = [await fecId(oa.label), await fecId(ob.label)];
+    return ok(scrubMarketData({ ...electionPairTemplate(race, oa, ob, { a: fa, b: fb }), note: "two coins, one per candidate; each launches on its winner component until composite rules land (see pending)" }));
+  } catch (e) { return fail(502, `Polymarket unavailable: ${(e as Error).message.slice(0, 160)}`); }
+}
+
+const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league).find((x) => x.abbr === s.abbr); return { abbr: s.abbr, name: s.name || t?.name || s.abbr, nickname: s.nickname || t?.nickname || s.abbr, ticker: t?.ticker ?? s.abbr, record: s.record }; };
+
+/** GET /v1/sports/teams?league= — the team picker for team coins (ESPN scoreboard): the static team table with each team's next game and record. No league → the leagues. */
+export async function sportsTeams(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
+  const league = q.league?.trim().toLowerCase() ?? "";
+  if (!league) return ok({ leagues: Object.values(LEAGUES).map((l) => ({ id: l.id, label: l.label, crossRead: l.crossLabel })), source: "ESPN scoreboard · first-party" });
+  if (!isLeague(league)) return fail(400, `league must be one of ${Object.keys(LEAGUES).join(", ")}`);
+  const games = await espnClient().upcoming(league, 8).catch(() => [] as Game[]);
+  const needle = (q.q ?? "").trim();
+  const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
+  const teams = teamsOf(league).filter((t) => !named || named.has(t.abbr) || t.name.toLowerCase().includes(needle.toLowerCase())).map((t) => {
+    const g = games.filter((x) => x.home.abbr === t.abbr || x.away.abbr === t.abbr).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
+    const opp = g ? (g.home.abbr === t.abbr ? g.away : g.home) : null;
+    const me = g ? (g.home.abbr === t.abbr ? g.home : g.away) : null;
+    return { abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league, series: { win: teamSeries(league, t.abbr, "win"), loss: teamSeries(league, t.abbr, "loss") }, record: me?.record ?? null, next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr } : null };
+  });
+  return ok({ league, label: LEAGUES[league].label, source: `ESPN scoreboard · first-party, cross-read with ${LEAGUES[league].crossLabel}`, teams });
+}
+
+/** GET /v1/sports/games?league=&q= — upcoming games for matchups (ESPN scoreboard, the next 8 days): both sides and each side's one-game loss selector. */
+export async function sportsGames(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
+  const league = q.league?.trim().toLowerCase() ?? "";
+  if (!isLeague(league)) return fail(400, `league must be one of ${Object.keys(LEAGUES).join(", ")}`);
+  try {
+    const games = await espnClient().upcoming(league, 8);
+    const needle = (q.q ?? "").trim();
+    const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
+    const rows = games.filter((g) => !g.completed && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
+      eventId: g.eventId, league, title: g.name, startsAt: g.startsAt, detail: g.detail, a: sideOf(league, g.away), b: sideOf(league, g.home),
+      series: { aLoss: gameSeries(league, g.eventId, g.away.abbr, "loss"), bLoss: gameSeries(league, g.eventId, g.home.abbr, "loss") },
+    }));
+    return ok({ league, label: LEAGUES[league].label, source: `ESPN scoreboard · first-party, cross-read with ${LEAGUES[league].crossLabel}`, games: rows, count: rows.length });
+  } catch (e) { return fail(502, `ESPN unavailable: ${(e as Error).message.slice(0, 160)}`); }
+}
+
 /** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */
-export const venueFlags = (p: Platform): VenueFlags => ({ kalshi: p.kalshiEnabled !== false, polymarket: true, feeds: true });
+export const venueFlags = (p: Platform): VenueFlags => ({ kalshi: p.kalshiEnabled !== false, polymarket: p.polymarketDiscovery !== false, feeds: true });
 
 /**
  * BROWSE, VENUE-AGNOSTIC (src/lib/burnticker/browse.ts): no category → Burnticker's categories (config/burnticker/categories.json)
@@ -152,7 +246,7 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
   if (!c) return fail(404, `no category "${id}" (known: ${cats.map((x) => x.id).join(", ")})`);
   const errors: string[] = [];
   const polymarket: PolyEventHit[] = [];
-  for (const tag of c.polymarket.slice(0, 2)) {
+  for (const tag of venues.polymarket ? c.polymarket.slice(0, 2) : []) {
     try { polymarket.push(...(await p.polymarket.eventsByTag(tag, 6)).events); } catch (e) { errors.push(`Polymarket ${tag}: ${(e as Error).message.slice(0, 100)}`); }
   }
   const kalshi: (BrowseSeries & { refused: string[] })[] = [];
@@ -190,10 +284,11 @@ export async function kalshiCategories(p: Platform, q: { category?: string | nul
     const intOr = (v: string | null | undefined, d: number, lo: number, hi: number) => { const n = Number(v); return v !== null && v !== undefined && v !== "" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.floor(n))) : d; };
     const page = await p.kalshi.seriesByCategory(category, { tag: q.tag?.trim() || null, q: q.q ?? null, limit: intOr(q.limit, 24, 1, 100), offset: intOr(q.offset, 0, 0, 100_000), withEvents: intOr(q.events, 0, 0, 24) });
     const list = loadRefuseList();
-    const series = page.series.map((s) => ({ ...s, refused: refusalsFor(list, { titles: [s.title], categories: s.category ? [s.category] : [] }).map((r) => r.reason) }));
+    // volume orders the page and is never returned (no market data in a discovery payload — venues.ts)
+    const series = page.series.map(({ volume: _v, ...s }) => ({ ...s, refused: refusalsFor(list, { titles: [s.title], categories: s.category ? [s.category] : [] }).map((r) => r.reason) }));
     const tag = POLYMARKET_TAG_FOR[category] ?? null;
     let polymarket: { tag: { slug: string; label: string }; events: unknown[]; error: string | null } | null = null;
-    if (tag && q.polymarket !== "0") {
+    if (tag && q.polymarket !== "0" && p.polymarketDiscovery !== false) {
       try { const r = await p.polymarket.eventsByTag(tag.slug, 8); polymarket = { tag, events: r.events, error: null }; } catch (e) { polymarket = { tag, events: [], error: (e as Error).message.slice(0, 120) }; }
     }
     return ok({ ...page, series, polymarket, note: "most traded on Kalshi first (ordering only); the kind (yes/no or a settled number) is confirmed by the markets on drill-down" });
@@ -206,15 +301,16 @@ export async function kalshiCategories(p: Platform, q: { category?: string | nul
  * POLYMARKET SEARCH (2026-10-10): Gamma's text search (or a pasted condition id / event slug) → events with their BINARY markets (YES =
  * the first outcome, NO the second; each a one-shot selector), the event as a recurring selector (`event:<slug>`), and the tags seen on
  * the hits as recurring selectors (`tag:<slug>`, `tag:<slug>/moneyline` where the hits are games). The refuse list marks refused events;
- * a refused market is never offered. `impliedYes` is display only.
+ * a refused market is never offered. No prices, odds or volume are returned (venues.ts).
  */
 export async function polymarketSearch(p: Platform, q: { q?: string | null; status?: string | null }): Promise<ApiResult> {
   const query = (q.q ?? "").trim();
   const status = q.status === "closed" || q.status === "all" ? q.status : "open";
+  if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE);
   if (query.length < 2) return fail(400, "q is required (2+ characters): a team, a person, an event, an event slug or a condition id");
   try {
-    const r = await p.polymarket.search(query, { status, limit: 10 });
-    return ok({ query, status, venue: "polymarket", events: r.events, markets: r.markets, tags: r.tags, note: "binary markets only: YES = a market's first outcome, NO its second; the result is read from the Conditional Tokens payout vector on Polygon; impliedYes is display only" });
+    const r = scrubMarketData(await p.polymarket.search(query, { status, limit: 10 }));
+    return ok({ query, status, venue: "polymarket", events: r.events, markets: r.markets, tags: r.tags, note: "binary markets only: YES = a market's first outcome, NO its second; the result is read from the Conditional Tokens payout vector on Polygon; no prices, odds or volume are returned — only" });
   } catch (e) {
     return fail(502, `Polymarket unavailable: ${(e as Error).message.slice(0, 160)}`);
   }
@@ -226,13 +322,24 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
   try { locked = lockRule(body.rule); } catch (e) { return fail(400, (e as Error).message); }
   const months = Math.min(24, Math.max(1, Number(body.months ?? 12) || 12));
   try {
+    if (locked.rule.oracle === "catalogue" && nativeSourceById(locked.rule.series!)) {
+      // native first-party source (ESPN scoreboard, NWS climate): a live read of what it has published — display-grade, no cross-read
+      const src = nativeSourceById(locked.rule.series!)!;
+      const np = nativeRuleProblems(src, locked.rule);
+      if (np.length) return fail(400, np.join("; "), { problems: np });
+      const since = new Date(now); since.setUTCMonth(since.getUTCMonth() - months);
+      const r = await src.settledSince(locked.rule, since.toISOString().slice(0, 10), { crossRead: false });
+      const b = backtest(locked.rule, r.events, now, months);
+      const pv = { ...b, window: { from: r.events[0]?.at ?? "", to: r.events[r.events.length - 1]?.at ?? "" }, lastReading: r.events[r.events.length - 1] ?? null };
+      return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { feedTitle: src.title }), backtest: pv, sentence: `${backtestSentence(b)} (read live from ${src.sourceName.split(" · ")[0]}; display-grade${src.crossRead ? `, the keeper also cross-reads ${src.crossRead}` : ""})`, refusals: [], seriesTitle: src.title, matched: r.events.length });
+    }
     if (locked.rule.oracle === "catalogue") {
       const feed = feedById(locked.rule.series!);
       if (!feed) return fail(400, `unknown feed ${locked.rule.series}`);
       const pv = previewFromFixture(feed, locked.rule, now);
       return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), backtest: pv, sentence: `${backtestSentence(pv)} (from the feed's frozen fixture, ${pv.window.from} → ${pv.window.to})`, refusals: [], seriesTitle: feed.title, matched: pv.rows.length });
     }
-    if (locked.rule.oracle === "polymarket") return await polymarketBacktest(p, locked, months);
+    if (locked.rule.oracle === "polymarket") { if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE); return await polymarketBacktest(p, locked, months); }
     if (locked.rule.oracle !== "kalshi") return fail(400, `oracle ${locked.rule.oracle} is not live (kalshi, polymarket and catalogue are)`);
     if (p.kalshiEnabled === false) return fail(503, KALSHI_UNAVAILABLE);
     const since = new Date(now); since.setUTCMonth(since.getUTCMonth() - months);
@@ -269,8 +376,8 @@ async function polymarketBacktest(p: Platform, locked: LockedRule, months: numbe
     matched: r.events.length, venue: "polymarket", scanComplete: r.complete });
 }
 
-export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule }
-export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null }
+export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule; preflight: PreflightResult | null }
+export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null }
 interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown }
 
 /**
@@ -283,7 +390,7 @@ interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknow
  * (buildPairBundles); refusals and the tier rule apply per side, and both drafts plus the pair row are registered together. A rule that
  * carries a `pair` field must come through that flow.
  */
-export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
+export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster };
   const problems = launchProblems(input);
@@ -295,7 +402,12 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   let seriesTitle: string | null = null;
-  if (locked.rule.oracle === "catalogue") {
+  const native = locked.rule.oracle === "catalogue" ? nativeSourceById(locked.rule.series!) : null;
+  if (native) {
+    const np = nativeRuleProblems(native, locked.rule);
+    if (np.length) return { error: fail(400, np.join("; "), { problems: np }) };
+    seriesTitle = native.title;
+  } else if (locked.rule.oracle === "catalogue") {
     const feed = feedById(locked.rule.series!);
     if (!feed) return { error: fail(400, `unknown feed ${locked.rule.series}`) };
     const fp = feedRuleProblems(feed, locked.rule);
@@ -326,6 +438,14 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (refusals.length) return { error: fail(403, `refused: ${refusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals }) };
   if (p.registry.tickerTaken(input.ticker)) return { error: fail(409, `ticker ${input.ticker} is taken`, { code: "ticker-taken" }) };
   if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `mint ${o.mint} is already registered`, { code: "mint-taken" }) };
+  // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
+  // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
+  // settling products on its data. BURNTICKER_PREFLIGHT_STRICT=0 skips it (the test hook does, for the suite).
+  let preflight: PreflightResult | null = null;
+  if (o.preflight?.strict ?? preflightStrict()) {
+    preflight = await preflightSelector(locked.rule, { polymarket: p.polymarket, ...(o.preflight?.deps ?? {}) });
+    if (preflight.refusal) return { error: fail(preflight.refusal.status, `preflight refused: ${preflight.refusal.reason}`, { code: "preflight", problems: [preflight.refusal.reason], preflight }) };
+  }
   const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: (m: string) => `/api/burnticker/metadata/${m}`, keeperPubkey: p.keeperPubkey };
   const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[]): TokenRow => {
     const token = p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId: bundle.addresses.poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
@@ -345,7 +465,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links) : null;
       const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;
-      return { pair: { pairId: pair.pairId, selector: pair.selector, notes: pair.notes, row, bundles: { a: pair.a, b: pair.b }, tokens: { a: tokenA, b: tokenB }, seriesTitle } };
+      return { pair: { pairId: pair.pairId, selector: pair.selector, notes: pair.notes, row, bundles: { a: pair.a, b: pair.b }, tokens: { a: tokenA, b: tokenB }, seriesTitle, preflight } };
     } catch (e) {
       return { error: fail(400, (e as Error).message) };
     }
@@ -354,7 +474,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   try {
     const bundle = await buildLaunchBundle(input, { ...deps, ...(o.mint ? { mint: o.mint } : {}) });
     const token = o.register ? register(bundle, input.ticker, input.imageUrl, input.links) : null;
-    return { ok: { bundle, token, seriesTitle, locked } };
+    return { ok: { bundle, token, seriesTitle, locked, preflight } };
   } catch (e) {
     return { error: fail(400, (e as Error).message) };
   }

@@ -36,7 +36,7 @@ let ledger: Ledger, loaded: LoadedRules, prog: FakeProgram, ctx: KeeperCtx, line
 function fake(l: LoadedRules, over: Partial<ConstructorParameters<typeof FakeProgram>[0]> = {}): FakeProgram {
   const buyback = l.rules.mode === "buyback";
   return new FakeProgram({ mode: l.rules.mode, rulesSha256: l.sha256, memoPrefix: l.rules.memo.prefix, memoSource: l.rules.feed.memoSource, unitValue: UNIT,
-    fractionPerUnitBps: buyback ? 100 : 0, floorLamports: buyback ? BigInt(1_000_000) : BigInt(0), reserveLamports: buyback ? BigInt(20_000_000) : BigInt(0),
+    fractionPerUnitBps: buyback ? 200 : 0, /* 2% per unit, matching deficit.rules.json (owner, 2026-10-10) */ floorLamports: buyback ? BigInt(1_000_000) : BigInt(0), reserveLamports: buyback ? BigInt(20_000_000) : BigInt(0),
     tokensPerUnit: buyback ? BigInt(0) : raw("100000"), vaultAllocation: buyback ? BigInt(0) : raw("250000000"), attesters: [KEEPER], now: () => clock, ...over });
 }
 function setup(l: LoadedRules, over: Partial<ConstructorParameters<typeof FakeProgram>[0]> = {}) {
@@ -98,7 +98,7 @@ describe("program execution, buyback", () => {
     assert.equal(rep.cranks[0].outcome, "confirmed");
     const b = ledger.burn(T, F, "2026-10-08")!;
     const pool = BigInt(5) * SOL; // fee − reserve (+ 0 WSOL): the deposit, since the reserve was funded at init
-    const rule = programSpend(pool, BigInt(21), 100);
+    const rule = programSpend(pool, BigInt(21), 200);
     assert.equal(b.status, "confirmed"); assert.equal(b.execution, "program"); assert.equal(b.chainOutcome, "burned"); assert.equal(b.chainUnits, 21);
     assert.equal(b.poolLamports, pool); assert.equal(b.ruleSpendLamports, rule); assert.equal(b.spendLamports, rule); assert.equal(b.carriedOutLamports, BigInt(0));
     assert.equal(b.gotRaw, (rule * raw("1000000")) / SOL); assert.equal(b.burnRaw, b.gotRaw);
@@ -183,7 +183,7 @@ describe("program execution, buyback", () => {
     await executeProgramPending(ctx, prog);
     const b = ledger.burn(T, F, "2026-10-08")!;
     assert.equal(b.poolLamports, BigInt(25) * SOL); assert.equal(b.poolActualLamports, BigInt(40) * SOL);
-    assert.equal(b.ruleSpendLamports, programSpend(BigInt(25) * SOL, BigInt(21), 100));
+    assert.equal(b.ruleSpendLamports, programSpend(BigInt(25) * SOL, BigInt(21), 200));
     assert.match(status().burns[0].partial!, /burn-pool cap bound: the rule applied to 25 of 40 SOL/);
   });
 

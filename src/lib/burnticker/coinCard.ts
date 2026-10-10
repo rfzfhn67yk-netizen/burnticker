@@ -60,6 +60,10 @@ export function plainSentence(rule: BurnRule, ticker: string, title: string | nu
   const t = ticker || "TICKER";
   const what = (title ?? "").trim() || rule.market || rule.series || "the source";
   if (rule.oracle === "catalogue" && rule.scalar) return `Each time ${what} publishes a complete reading, $${t} ${mapWords(rule.scalar.perUnit, t)} once for every unit the source counts (compounding).`;
+  if (rule.oracle === "polymarket" && rule.market && rule.kind === "binary" && rule.binary?.onYes && !rule.binary.onNo) {
+    const event = what.replace(/\s*\(resolves once\)$/, "");
+    return `If ${event}, $${t} ${mapWords(rule.binary.onYes, t)} — once, when Polymarket's on-chain payout resolves the market YES. Otherwise nothing burns.`;
+  }
   if (rule.kind === "binary" && rule.binary) {
     const yes = rule.binary.onYes ? `When ${what} settles YES, $${t} ${mapWords(rule.binary.onYes, t)}.` : "";
     const no = rule.binary.onNo ? ` When it settles NO, $${t} ${mapWords(rule.binary.onNo, t)}.` : "";

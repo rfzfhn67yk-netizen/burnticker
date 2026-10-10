@@ -1,11 +1,12 @@
-# Burnticker — launch a memecoin whose supply burns on a Kalshi settlement
+# Burnticker — launch a memecoin whose supply burns when a real-world event settles
 
-**Customer-facing (owner, 10-10): Burnticker is "burns on a Kalshi settlement".** Kalshi is THE source in all customer copy — 14,934
-series (sports 3,883, entertainment 2,582, elections 2,276, politics 2,193, financials 1,001, economics 852, weather 422, science/tech
-372, crypto 276). Rivalry pairs (two coins, one matchup) are the first product story, single Kalshi coins the second. The first-party
-feeds (Treasury, NOAA, Launch Library, JPL, BLS, Wikimedia, …) stay available behind "Advanced: first-party feed" in the wizard and an
-"Other sources" footnote on the landing page; $DEFICIT is the stated exception, running on Treasury data directly with Kalshi's monthly
-debt market as a cross-check.
+**Settlement (owner decision, 10-10): settled on primary sources; prediction markets are discovery and optional cross-checks where
+their terms permit.** Kalshi's Developer Agreement and Data Terms forbid using its API or data to settle products or to cache or
+redistribute it, so Kalshi is NOT a settlement input (the earlier customer line "burns on a Kalshi settlement" is withdrawn). A coin
+settles on a primary source with an independent cross-read of the same fact (another operator on another domain), or on Polymarket's
+Conditional Tokens payout vector on Polygon for an adjudicated market. What that covers today, category by category, is the
+[settlement coverage audit](#settlement-coverage-audit) and [SETTLEMENT-COVERAGE.md](SETTLEMENT-COVERAGE.md). $DEFICIT runs on
+Treasury data directly, cross-read against FRED's quarterly copy of the same figure.
 
 Built 2026-10-09 on top of the $DEFICIT burn keeper (`src/lib/burnKeeper/`). Spec: `mct-runner-study/launch-debt-egg-2026-10-09/LAUNCHPAD-PATH.md`
 (§1 creator flow, §2 under the hood, §3 feeds, §4 rules, §5 economics, §6 token page, §7 refusals, §9 acceptance, §11 Kalshi). Owner
@@ -70,6 +71,27 @@ burns exactly one side; the receipts are the scoreboard.
   receipts ($BRONCOS vs $CHIEFS on KXNFLGAME, $BULLS vs $BEARS on the KXINX close, illustrative tallies), how a pair works in three
   steps, and the "Launch a pair" button.
 
+## First-party settlement for team coins and weather; elections; the universal search (10-10, later the same day)
+
+- **Venues** (`src/lib/burnticker/venues.ts`): `BURNTICKER_KALSHI_ENABLED` defaults **off** — Kalshi routes, back-tests and launch bundles
+  answer 503; no Kalshi display reads by the app or the keeper's page publish; the keeper reads Kalshi only for coins already registered
+  with a Kalshi rule (a warning per read). `BURNTICKER_POLYMARKET_DISCOVERY_ENABLED` defaults **on**, with **no market data**: question,
+  outcomes, end date, resolution rules and condition id only (`scrubMarketData`, tested on every discovery payload). Settlement always
+  reads the Polymarket payout on chain.
+- **Native first-party sources** (`src/lib/burnticker/sources/native.ts`): catalogue series with their own reader — `espn.team:<league>-<ABBR>-win|loss`,
+  `espn.game:<league>-<event>-<ABBR>-win|loss` (ESPN scoreboard; NHL / MLB official feeds or TheSportsDB as the cross-read; a game is read
+  ≥ 6 h after its start and only when both agree), `nws.high:<ST>-<°F>`, `nws.rain:<ST>-<in>`, `nws.snow:<ST>` (NWS CLI final reports;
+  the Iowa Environmental Mesonet as the cross-read), `fec.beats:<A>-<B>` (OpenFEC receipts per report; same-operator cross-read, refused
+  by the coverage gate). Scalar, unit 1, baseline 0, direction up. Their descriptors (kind `native`) in `config/burnticker/sources.json`
+  feed the coverage matrix and the creation preflight.
+- **Team coin / Matchup** run on the scoreboard with Kalshi off (`/v1/sports/teams`, `/v1/sports/games`); a matchup is two coins, one per
+  team. **Elections** (`src/lib/burnticker/elections.ts`): Polymarket's open midterm races, named outcomes (`groupItemTitle`), unnamed
+  placeholders hidden, the state's certified-results publisher as the cross-read (`config/burnticker/sos.json`); the **election-pair
+  template** (`electionPair.ts`, `/v1/elections/pair`) — FEC beats + a one-shot winner burn per side; composite rules and the
+  both-or-neither void clause are pending cores, listed on the template.
+- **Universal search** (`src/lib/burnticker/search.ts`, `GET /v1/search`): one box on the launch page → ready-made rules (venue badge,
+  who settles it, when, how) → the create screen pre-filled. Owner test cases in `test/burntickerSearch.test.ts`.
+
 ## Launchpad look + Browse + the Kalshi switch (10-10)
 
 The owner asked for Burnticker to present like the launchpads new users know (pump.fun, LetsBonk/LaunchLab, Pons, Bags). The study,
@@ -91,9 +113,7 @@ with a source per pattern and the adopt / adapt / reject table, is [ui-conventio
   screen follows pump.fun's order (image → name → ticker → description → socials) with a live card preview. Review shows a plain
   sentence for any rule. Kalshi's own category tree is also exposed: `GET /api/burnticker/v1/kalshi/categories`
   (`oracle/browse.ts`, `KalshiClient.categories()` / `seriesByCategory()`, cached 1 h).
-- **`BURNTICKER_KALSHI_ENABLED`** (`src/lib/burnticker/venues.ts`) is on by default. `0` turns off every Kalshi-facing surface of the
-  app: the `/kalshi/*` routes, Kalshi back-tests and Kalshi launch bundles answer 503, and Team coin and Matchup show "venue
-  unavailable". Browse keeps feeds and Polymarket. The keeper's reads for coins already launched are not affected.
+- **`BURNTICKER_KALSHI_ENABLED`** (`src/lib/burnticker/venues.ts`): off by default since the later 10-10 change (see the section above).
 
 ## Polymarket — the second adjudicated oracle (owner, 10-10: "do both")
 
@@ -127,6 +147,44 @@ with a source per pattern and the adopt / adapt / reject table, is [ui-conventio
   vector on the caller's machine. **Fixtures** (fetched 10-10): `config/burnticker/fixtures/polymarket/{resolved,open}.market.json`,
   `tag.nfl.{closed,open}.json`, `search.eagles.json`. Tests: `test/burntickerPolymarket.test.ts`.
 
+## Settlement coverage audit
+
+`src/lib/burnticker/coverage/` + `scripts/burnticker-coverage-audit.mts` (10-10, after the Kalshi decision). For every category of
+`config/burnticker/categories.json` and every selector kind the wizard can emit (a settled number, a recurring yes/no series, a
+one-shot market, a team coin, a matchup game, a matchup season) it lists the primary sources, their independent cross-reads and a
+verdict:
+
+- **settleable** — at least one primary source AND an independent cross-read of the same fact. A primary is a first-party adapter
+  (attested-http or on-chain, tier 4 or better, launchable, not an aggregator, not cross-read-only); a cross-read shares the primary's
+  `fact` in `sources.json` and has another `operator` on another registrable domain. Kalshi is neither, whatever any file says.
+- **adjudicated-only** — no such pair, but Polymarket's binary markets cover the kind (the result is the CTF payout vector on Polygon).
+- **uncovered** — neither.
+
+Each primary and cross-read also gets a **90-day dry run** (`historicalDryRun`): readings its schedule expected vs produced (hit rate;
+schedules from the period kind and cadence, U.S. federal holidays for business-day series, n/a for snapshots and event-driven counts),
+median latency from the keeper's first sightings (n/a until the keeper has read the source), and the disagreement rate with its
+cross-read. Offline it reads the frozen fixtures, so the result is reproducible; `--live` fetches each source once, serially and spaced.
+
+- CLI: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-coverage-audit.mts
+  [--offline|--live] [--write] [--json] [--require-primary]`. `--write` regenerates [SETTLEMENT-COVERAGE.md](SETTLEMENT-COVERAGE.md)
+  (per-category tables and "What we cannot settle today"). Exit 1 when a category is uncovered (`--require-primary`: also when one has
+  no primary source at all).
+- API: `GET /api/burnticker/v1/coverage` (OpenAPI 1.3.0), the same matrix, offline and cached 10 minutes; the trust page's
+  "Settlement coverage" section reads it.
+- **Creation preflight** (`preflightSelector`, wired into `prepareLaunch`, so the wizard and `POST /v1/launch/bundle` share it): the
+  selector is run live once — primary + cross-read (Polymarket: the payout vector + Gamma's report) — and creation is refused on any
+  failure: a Kalshi rule, a stub oracle, a source that is not a primary, no cross-read, an unreadable read, or a disagreement on the
+  latest shared period. The answer (last reading, next expected date, agreement) rides in the bundle's `preflight`.
+  `BURNTICKER_PREFLIGHT_STRICT` defaults on; the test hook turns it off for the suite.
+- Cross-reads added on 10-10 (cross-read-only, not launchable): `fred.APU0000708111` (of `bls.eggs`), `bls.LNS14000000` (of
+  `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `bitcoin.blockHeight.blockstream` (of `bitcoin.blockHeight`); `fred.GFDEBTN`
+  and `treasury.debt` cross-read each other at quarter ends.
+- The first live dry run found a real fault: FRED's keyless CSV serves the whole history, the 2020-04 jump trips `fred.UNRATE`'s
+  plausibility delta and nothing after 2020-03 was read. The FRED requests now ask for three years (`cosd={from:1100}`), and the
+  preflight refuses a stale read (`stale-primary`).
+- Today (offline, 10-10): Economics and Crypto & On-chain are settleable; the other nine categories are adjudicated-only; none is
+  uncovered. Team coins and season matchups are uncovered (no Kalshi, and Polymarket's game markets have no fixed per-team YES/NO).
+
 ## 1. Architecture
 
 ```
@@ -134,7 +192,8 @@ src/lib/burnticker/
   rules.ts            a rule = SELECTOR + outcome→burn mapping; canonical JSON; sha256 (the keeper's rulesSha256); disclaimer
   units.ts            the unit engine (binary / scalar, exact decimals, carry only where a source says) — pure, runs in the browser too
   receipt.ts          the v3 receipt line, OFF-CHAIN only (the program writes v1/v2 on chain) (BT|TICKER|id|oracle=|market=|result=|settled=|src=|value=|units=|pool=|spent=|got=|burn=|swap=|rules=sha256:|v3)
-  oracle/kalshi.ts    the PRIMARY source: settled results only, finality timer, ladder derivation, voids, implied chance (display only), polite client
+  oracle/kalshi.ts    the Kalshi adapter (since 10-10 not a settlement input: discovery behind BURNTICKER_KALSHI_ENABLED; the keeper still reads coins already launched on it): settled results only, finality timer, ladder derivation, voids, implied chance (display only), polite client
+  coverage/           the settlement-coverage audit: matrix (verdict per category × selector kind), 90-day dry run, creation preflight, the report/doc glue
   oracle/backtest.ts  "this selector settled N times in 12 months and would have burned X"
   oracle/refuse.ts    the refuse list (config/burnticker/refuse.json)
   oracle/polymarket.ts the SECOND tier-1 source (10-10): Gamma discovery/search, the CTF payout vector on Polygon as the final read, back-test from Gamma's closed markets
@@ -223,11 +282,13 @@ must be LaunchLab's creator from the first trade. The wizard's routes and the v1
 
 ## 4. How to add a source
 
-Append an entry to `config/burnticker/sources.json` (see the 30 there): id, kind `attested-http`, tier, title, source name/URL,
+Append an entry to `config/burnticker/sources.json` (see the 34 there; four are cross-read-only): id, kind `attested-http`, tier, title, source name/URL,
 cadence, `pollEverySec`, `request` (url with `{today}` / `{from:N}` / `{yyyymmdd:…}` templates, method, headers, format json|csv|text),
 `select` (rows path + `value`, or `count` with weight rules, or a `regex` with named groups, or a `snapshot` path), `period` (kind
 day|week|month|quarter, path, format, `dropFirst`, `completeAfterDays`, `zeroFill`), unit/direction/baseline/carry, plausibility
-bounds, `memoSource`, a `fixture` fetched once and saved under `config/burnticker/fixtures/http/`, flags, `needsKey`, `launchable`.
+bounds, `memoSource`, a `fixture` fetched once and saved under `config/burnticker/fixtures/http/`, flags, `needsKey`, `launchable`,
+`operator` (who runs the endpoint; required, tested) and, when another operator publishes the same number, a shared `fact` (id, scale,
+alignment, tolerance) on both entries so each is the other's independent cross-read.
 Then add the fixture's expectations to `test/burntickerCatalogue.test.ts`. No code changes. Parameterised sources (wiki.views,
 github.stars, steam.players, defillama.tvl, edgar.8k) take the parameter after a colon in the series id.
 
@@ -249,7 +310,7 @@ token; not a disaster; never the token's own price. Elections are allowed (owner
 
 | Tier | What | Admission |
 |---|---|---|
-| 1 | adjudicated market (Kalshi and Polymarket live; Drift BET, Hedgehog stubs) | settled results only; the venue's finalisation window respected (Polymarket: the payout vector on chain); voids = no burn |
+| 1 | adjudicated market (Polymarket live; Kalshi not a settlement input since 10-10; Drift BET, Hedgehog stubs) | settled results only; the venue's finalisation window respected (Polymarket: the payout vector on chain); voids = no burn |
 | 2 | optimistic assertion (UMA OO v3 stub) | counts only once settled and not disputed-and-lost |
 | 3 | primary API attested by a TEE/zk job (Switchboard On-Demand: same URL + selection as tier 4) | third-party asset prices allowed from here up; not wired yet |
 | 4 | primary API read by our keeper | no prices of any asset; one real fixture; plausibility bounds; complete periods only |
@@ -257,7 +318,8 @@ token; not a disaster; never the token's own price. Elections are allowed (owner
 
 `usgs.quakes6` is present but flagged disaster-adjacent and not launchable until the owner confirms. Key-required sources (BEA, EIA,
 USDA MARS, Census, Congress.gov, YouTube) are present, not launchable, with the key named. ESPN's public scoreboard answered 403 to a
-plain client and 200 to a browser UA; it stays not launchable until its terms are checked (Kalshi KXNFLGAME is the tier-1 route).
+plain client and 200 to a browser UA; it stays not launchable until its terms are checked and an independent cross-read of the same results is configured; until then NFL
+results settle only on Polymarket game markets.
 
 ## 7. What we refuse (§7 + the owner's list)
 
@@ -294,7 +356,7 @@ redemption instruction a third party can read — DFlow's documentation host (`d
 page returned 404 at the time of writing. So: no on-chain Kalshi adapter is claimed. The sketch, if it exists as described: a
 `ResolutionSource` of kind `market`, tier 1, whose `settledSince` reads the market's resolution account (program id + PDA seeds from
 DFlow's docs), and whose on-chain settlement the Receipts program could verify by CPI/account read instead of trusting our API reading.
-Open item: read DFlow's docs when reachable and the program on an explorer; until then Kalshi stays an API-read tier-1 source.
+Open item: read DFlow's docs when reachable and the program on an explorer; until then Kalshi stays an API-read tier-1 source. (Moot since 10-10: Kalshi is not a settlement input at all.)
 
 Sources: [Unchained](https://unchainedcrypto.com/kalshi-powered-tokenized-prediction-markets-go-live-on-solana/),
 [CNBC](https://www.cnbc.com/2025/12/01/kalshi-makes-move-to-court-crypto-traders-with-tokenized-betting-contracts.html),
@@ -318,8 +380,10 @@ allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behin
   (`receipt.ts`) is off-chain only: built, published and parsed by the platform and the SDK, never written on chain by the program.
 - LaunchLab: `FakeLaunchLab` in the app; `SdkLaunchLab` wraps the merged builders but needs decoded configs from an RPC (not wired in
   the route). Mainnet launch refused outright.
-- Kalshi API terms of use on redistribution: unchecked. A coin whose supply tracks a CFTC event contract's resolution: disclosed on
-  every oracle-backed page (`EVENT_CONTRACT_DISCLOSURE`); the owner decided to proceed without a lawyer.
+- Kalshi terms reviewed (10-10): the Developer Agreement and Data Terms forbid settling products on Kalshi data and caching or
+  redistributing it, so Kalshi is not a settlement input; the creation preflight refuses every Kalshi rule. Coins already launched on a
+  Kalshi rule keep their disclosure (`EVENT_CONTRACT_DISCLOSURE`); whether the keeper keeps reading them is the owner's call
+  (`docs/burnticker/ui-conventions.md`).
 - One-shot election fixture: Kalshi's public `/markets` returned no settled markets for the one-off election events probed on 10-09
   (the Portugal event record is saved; the one-shot path is tested on a real settled NFL market).
 - Polymarket is live (10-10, see "Polymarket" below). UMA, Drift BET, Hedgehog: interfaces, decoders and fixtures only; `launchable: false`.
@@ -348,4 +412,10 @@ allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behin
 - [x] rules, readings and receipts append-only (SQL triggers; tests)
 - [x] settled results only, prices display-only (tests on real fixtures)
 - [ ] Switchboard attester #2 within 14 days of first launch
-- [ ] Kalshi terms of use reviewed
+- [x] Kalshi terms of use reviewed (10-10: no settlement use, no caching or redistribution → Kalshi is not a settlement input)
+- [x] **17 — settlement coverage** (the review question is item 17 of [reviews/checklist.md](reviews/checklist.md), pre-registered and
+  not edited here): no category of `config/burnticker/categories.json` is uncovered under the offline fixtures (the CI
+  gate in `test/burntickerCoverage.test.ts`; `scripts/burnticker-coverage-audit.mts` exits non-zero otherwise), and creation is refused
+  when the selector's preflight fails (`BURNTICKER_PREFLIGHT_STRICT`, default on)
+  - [ ] every category settleable on a primary pair (`--require-primary`): 2 of 11 today (Economics, Crypto & On-chain); Sports,
+    Financial markets, Weather & Climate and World have no first-party source at all ([SETTLEMENT-COVERAGE.md](SETTLEMENT-COVERAGE.md))

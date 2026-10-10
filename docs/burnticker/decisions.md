@@ -95,3 +95,12 @@ allowlist or matches a pattern. Three small modules were split so the keeper and
 check (`src/lib/sameOrigin.ts`), the keeper's key-file reader (`src/lib/burnKeeper/keyfile.ts`, same encrypted format as before)
 and the keeper's Jupiter client (`src/lib/burnKeeper/jupiterSwap.ts`). The trust page gained the sections this log sits in; their
 data is `config/burnticker/transparency.json`. The repository itself is not created yet (owner step).
+
+## 2026-10-10 — $DEFICIT burns 2 % of the burn pool per $1B unit (was 1 %)
+
+Owner: *"maybe we do 2% since that's the target for inflation."* The rule file `config/burnkeeper/deficit.rules.json` now carries
+`fractionPerUnit` 0.02 (statement: `1 - 0.98^units`); its sha256 is `78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58`.
+Why 2 and not more: total burned over the coin's life equals fee income plus the seed at any fraction — the fraction only sets the
+buffer (≈ 9 days of inflow at 2 % with ~6 units/day, versus ≈ 17 at 1 % and ≈ 2 at 10 %) and how strongly a big debt day out-burns a
+small one. The devnet rehearsal coin stays at 1 % (`deficit.devnet.rules.json`); it was launched with that hash. Immutable once the
+mainnet token is initialised.

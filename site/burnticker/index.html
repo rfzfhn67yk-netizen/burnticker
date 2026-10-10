@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Burnticker — burns on the news</title>
-<meta name="description" content="Burnticker is a memecoin launchpad: coins whose supply burns on a Kalshi settlement, with receipts. Pit two coins against each other on one matchup, or launch one on any settled Kalshi market. Every burn carries the settled result, the arithmetic and the rule hash on chain.">
+<meta name="description" content="Burnticker is a memecoin launchpad: coins whose supply burns when a settled public result says so, with receipts. Every coin settles on primary sources (ESPN, BLS, Treasury, NWS…) or on an on-chain Polymarket payout; prediction markets are for discovery. Pit two coins against each other on one matchup, or launch one on any settled result.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0a0c">
 <meta property="og:title" content="Burnticker — burns on the news">
-<meta property="og:description" content="A memecoin launchpad: coins whose supply burns on a Kalshi settlement, with receipts. Two coins, one matchup: when a side loses, its coin burns.">
+<meta property="og:description" content="A memecoin launchpad: coins whose supply burns when a settled public result says so, with receipts. Every coin settles on primary sources (ESPN, BLS, Treasury, NWS…) or on an on-chain Polymarket payout; prediction markets are for discovery.">
 <meta property="og:image" content="brand/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@burnticker">
@@ -177,7 +177,7 @@ footer .links a{color:var(--dim)}
     <nav class="nav" aria-label="Links">
       <a href="#rivalries">Rivalries</a>
       <a class="sec" href="#how">How</a>
-      <a class="sec" href="#feeds">Kalshi</a>
+      <a class="sec" href="#feeds">Sources</a>
       <a class="sec" href="#trust">Trust</a>
       <a href="whitepaper.html">Whitepaper</a>
       <a href="#deficit">$DEFICIT</a>
@@ -190,7 +190,7 @@ footer .links a{color:var(--dim)}
 <main>
   <section class="hero wrap lead">
     <h1>Burns on<br>the <em>news.</em></h1>
-    <p class="lede">Burnticker is a memecoin launchpad: coins whose supply burns on a Kalshi settlement, with receipts. Pit two coins against each other on one matchup, or launch one on any settled market. When the market settles, the coin's own trading fees buy it back and burn it — and the burn transaction carries the settled result, the arithmetic and the rule hash.</p>
+    <p class="lede">Burnticker is a memecoin launchpad: coins whose supply burns when a settled public result says so, with receipts. Every coin settles on primary sources (ESPN, BLS, Treasury, NWS…) or on an on-chain Polymarket payout; prediction markets are for discovery. Pit two coins against each other on one matchup, or launch one on any settled result. When the result is in and its cross-read agrees, the coin's own trading fees buy it back and burn it — and the burn transaction carries the settled result, the arithmetic and the rule hash.</p>
     <div class="cta">
       <a class="btn amber" href="/burnticker/launch?pair=1">Launch a pair</a>
       <a class="btn" href="/burnticker/launch">Launch a single coin</a>
@@ -199,15 +199,15 @@ footer .links a{color:var(--dim)}
   </section>
   <div class="tape" aria-label="A ticker of example burn receipts" role="marquee">
     <div class="reel" id="reel">
-      <span><i>KALSHI.KXNFLGAME</i>DEN at SF settled NO → <b>$BRONCOS 1 unit</b> → burned <u>✓ receipt</u></span>
-      <span><i>KALSHI.KXINX</i>4 pm close 7,765.36, <b>−36.41</b> vs prior → $BULLS 3 units → burned <u>✓ receipt</u></span>
+      <span><i>ESPN.NFL</i>LAR 24 @ PHI 20 final, cross-read agrees → <b>$EAGLESLOSE 1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>NWS.DEN</i>Denver high <b>86 °F</b> (≥ 85), cross-read 85 °F → 1 unit → burned <u>✓ receipt</u></span>
       <span><i>TREASURY.DEBT</i>2026-10-08 <b>+$21.28B</b> → 21 units → 2,100,000 $DEFICIT burned <u>✓ receipt</u></span>
-      <span><i>KALSHI.KXHIGHDEN</i>Denver high settled <b>84 °F</b> → 4 units → burned <u>✓ receipt</u></span>
-      <span><i>KALSHI.KXCPI</i>August CPI settled <b>0.4%</b> → 1 unit → burned <u>✓ receipt</u></span>
-      <span><i>KALSHI.KXNFLGAME</i>TB at DAL settled YES (TB) → <b>1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>BLS.CPI</i>CPI-U moved <b>1 index point</b>, FRED agrees → 1 unit → burned <u>✓ receipt</u></span>
+      <span><i>ESPN.NHL</i>UTA 1 @ BOS 6 final, NHL feed agrees → <b>$BRUINS 1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>POLYMARKET.CTF</i>one-shot race resolved, payout on Polygon → <b>10%</b> burned <u>✓ receipt</u></span>
       <span><i>TREASURY.DEBT</i>2025-07-07 <b>+$366.44B</b> → 366 units → the event <u>✓ receipt</u></span>
-      <span><i>KALSHI.KXINX</i>4 pm close 7,801.77, <b>−17.16</b> vs prior → $BULLS 1 unit → burned <u>✓ receipt</u></span>
-      <span><i>KALSHI.KXHIGHDEN</i>Denver high settled <b>87 °F</b> → 7 units → burned <u>✓ receipt</u></span>
+      <span><i>ESPN.MLB</i>final confirmed by MLB StatsAPI → <b>1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>NWS.NYC</i>Central Park rain <b>0.62 in</b> (≥ 0.50) → 1 unit → burned <u>✓ receipt</u></span>
       <span><i>TREASURY.DEBT</i>2026-10-07 <b>+$11.01B</b> → 11 units → 1,100,000 $DEFICIT burned <u>✓ receipt</u></span>
     </div>
   </div>
@@ -215,17 +215,17 @@ footer .links a{color:var(--dim)}
 
   <section class="wrap" id="rivalries">
     <h2>Rivalries · two coins, one matchup</h2>
-    <p class="lede">Pit two coins against each other on one settled Kalshi market. Each side's rule is the other's inverted: when a side loses, its coin burns. Every settlement burns exactly one side, and the receipts keep score.</p>
+    <p class="lede">Pit two coins against each other on one game or one race. Each coin burns when its side loses — read from the final score (ESPN, confirmed by a second scoreboard) or the race's on-chain payout — and the receipts keep score.</p>
     <div class="rivals">
       <article class="match" aria-label="Example matchup: $BRONCOS vs $CHIEFS">
-        <p class="mk">matchup · <b>KXNFLGAME</b> · Broncos–Chiefs games, Denver leg</p>
+        <p class="mk">matchup · <b>ESPN scoreboard</b> · Broncos–Chiefs, every game this season</p>
         <div class="slips">
           <div class="slipwrap"><div class="slip hit">
             <div class="sh">$BRONCOS</div><div class="ss">SIDE A · BURN RECEIPT</div>
             <div class="dash"></div>
-            <div class="row"><span>MARKET</span><b>KXNFLGAME</b></div>
-            <div class="row"><span>LEG</span><b>-DEN</b></div>
-            <div class="row"><span>BURNS ON</span><b>NO · DEN LOSES</b></div>
+            <div class="row"><span>SOURCE</span><b>ESPN · CROSS-READ</b></div>
+            <div class="row"><span>TEAM</span><b>DEN</b></div>
+            <div class="row"><span>BURNS ON</span><b>EACH DEN LOSS</b></div>
             <div class="dash"></div>
             <div class="row"><span>BURNS</span><b>3</b></div>
             <div class="row"><span>SUPPLY</span><b>97.2%</b></div>
@@ -236,9 +236,9 @@ footer .links a{color:var(--dim)}
           <div class="slipwrap b"><div class="slip">
             <div class="sh">$CHIEFS</div><div class="ss">SIDE B · BURN RECEIPT</div>
             <div class="dash"></div>
-            <div class="row"><span>MARKET</span><b>KXNFLGAME</b></div>
-            <div class="row"><span>LEG</span><b>-DEN</b></div>
-            <div class="row"><span>BURNS ON</span><b>YES · DEN WINS</b></div>
+            <div class="row"><span>SOURCE</span><b>ESPN · CROSS-READ</b></div>
+            <div class="row"><span>TEAM</span><b>KC</b></div>
+            <div class="row"><span>BURNS ON</span><b>EACH KC LOSS</b></div>
             <div class="dash"></div>
             <div class="row"><span>BURNS</span><b>1</b></div>
             <div class="row"><span>SUPPLY</span><b>99.1%</b></div>
@@ -246,79 +246,78 @@ footer .links a{color:var(--dim)}
           </div></div>
         </div>
         <p class="score">$BRONCOS 3 <i>:</i> 1 $CHIEFS <i>·</i> supply 97.2% <i>:</i> 99.1%</p>
-        <p class="ruleline">Denver's leg settles NO → $BRONCOS burns. It settles YES → $CHIEFS burns. A voided game burns nothing.</p>
+        <p class="ruleline">A Denver loss burns $BRONCOS; a Kansas City loss burns $CHIEFS. When they meet, exactly one side burns; a tie burns neither. Each final counts once a second scoreboard agrees.</p>
         <p class="mocknote">example matchup · illustrative tally, not a live coin</p>
       </article>
-      <article class="match" aria-label="Example matchup: $BULLS vs $BEARS">
-        <p class="mk">matchup · <b>KXINX</b> · S&amp;P 500 settled 4 pm close</p>
+      <article class="match" aria-label="Example matchup: $ELSAYED vs $ROGERS">
+        <p class="mk">matchup · <b>Michigan Senate 2026</b> · Polymarket on-chain payout + the state's certified result</p>
         <div class="slips">
           <div class="slipwrap"><div class="slip hit">
-            <div class="sh">$BULLS</div><div class="ss">SIDE A · BURN RECEIPT</div>
+            <div class="sh">$ELSAYED</div><div class="ss">SIDE A · BURN RECEIPT</div>
             <div class="dash"></div>
-            <div class="row"><span>MARKET</span><b>KXINX</b></div>
-            <div class="row"><span>UNIT</span><b>10 PTS</b></div>
-            <div class="row"><span>BURNS ON</span><b>EACH 10 DOWN</b></div>
+            <div class="row"><span>SOURCE</span><b>POLYGON PAYOUT</b></div>
+            <div class="row"><span>OUTCOME</span><b>EL-SAYED (D)</b></div>
+            <div class="row"><span>BURNS ON</span><b>HIS WIN · 10%</b></div>
             <div class="dash"></div>
-            <div class="row"><span>BURNS</span><b>11</b></div>
-            <div class="row"><span>SUPPLY</span><b>96.8%</b></div>
+            <div class="row"><span>BURNS</span><b>0</b></div>
+            <div class="row"><span>SUPPLY</span><b>100%</b></div>
             <p class="motto">when we lose, our coin burns</p>
             <span class="stamp" aria-hidden="true">BURNED ON-CHAIN</span>
           </div></div>
           <div class="vs" aria-hidden="true">VS</div>
           <div class="slipwrap b"><div class="slip">
-            <div class="sh">$BEARS</div><div class="ss">SIDE B · BURN RECEIPT</div>
+            <div class="sh">$ROGERS</div><div class="ss">SIDE B · BURN RECEIPT</div>
             <div class="dash"></div>
-            <div class="row"><span>MARKET</span><b>KXINX</b></div>
-            <div class="row"><span>UNIT</span><b>10 PTS</b></div>
-            <div class="row"><span>BURNS ON</span><b>EACH 10 UP</b></div>
+            <div class="row"><span>SOURCE</span><b>POLYGON PAYOUT</b></div>
+            <div class="row"><span>OUTCOME</span><b>ROGERS (R)</b></div>
+            <div class="row"><span>BURNS ON</span><b>HIS WIN · 10%</b></div>
             <div class="dash"></div>
-            <div class="row"><span>BURNS</span><b>9</b></div>
-            <div class="row"><span>SUPPLY</span><b>97.4%</b></div>
+            <div class="row"><span>BURNS</span><b>0</b></div>
+            <div class="row"><span>SUPPLY</span><b>100%</b></div>
             <p class="motto">when we lose, our coin burns</p>
           </div></div>
         </div>
-        <p class="score">$BULLS 11 <i>:</i> 9 $BEARS <i>·</i> supply 96.8% <i>:</i> 97.4%</p>
-        <p class="ruleline">Each full 10 points the close falls from the previous settlement burns $BULLS; each full 10 it rises burns $BEARS.</p>
+        <p class="score">$ELSAYED 0 <i>:</i> 0 $ROGERS <i>·</i> settles 2026-11-04</p>
+        <p class="ruleline">The race resolves once: the winning candidate's coin burns 10% of its pool, read from the on-chain payout, with the state's certified result as the cross-check.</p>
         <p class="mocknote">example matchup · illustrative tally, not a live coin</p>
       </article>
     </div>
 
     <div class="steps pairsteps">
-      <div class="step"><div class="n">01</div><h3>Pick the matchup on Kalshi</h3><p>Search a settled Kalshi series and narrow it to the matchup — one team's game leg (<code>KXNFLGAME</code>, ticker contains <code>-DEN</code>), one daily close (<code>KXINX</code>). Pairs use tier-1 adjudicated markets only.</p></div>
-      <div class="step"><div class="n">02</div><h3>Name both sides, two signatures</h3><p>Side A burns on one outcome; side B gets the inverted rule — the other outcome, or the other direction. Each rule is hashed and locked on its own with the same pair id in both. Two launch bundles, signed in sequence, A first.</p></div>
+      <div class="step"><div class="n">01</div><h3>Pick the matchup</h3><p>A game from the ESPN scoreboard (each final confirmed by the league's own feed or a second scoreboard), or a race from the Elections flow (settled on Polymarket's on-chain payout). Prediction markets are for discovery.</p></div>
+      <div class="step"><div class="n">02</div><h3>Name both sides, two signatures</h3><p>One coin per side, each with its own locked rule and hash: it burns when its side loses. Two launch bundles, signed in sequence.</p></div>
       <div class="step"><div class="n">03</div><h3>The pair page is the scoreboard</h3><p>Every settlement burns exactly one side. The pair page shows burns A : B, supply A : B, the last settlement with its market and result, the next scheduled market, and both receipts tables.</p></div>
     </div>
     <p class="then"><b>Same terms on both sides.</b> One fee split for both coins, each with its own burn pool. LP burned at graduation. No creator cash from fees, no team allocation. A scalar move smaller than one unit burns neither side; a voided market burns neither.</p>
     <div class="paircta">
       <a class="btn amber" href="/burnticker/launch?pair=1">Launch a pair</a>
-      <p>The wizard opens on the pair flow: matchup, both names, side-by-side back-test with the partition check, review, two bundles.</p>
+      <p>The wizard opens on the pair flow: matchup, both names, side-by-side back-test, review, two bundles.</p>
     </div>
   </section>
 
   <section class="wrap" id="how">
     <h2>How it works</h2>
     <div class="steps">
-      <div class="step"><div class="n">01</div><h3>Pick a Kalshi market</h3><p>A recurring Kalshi series — every future market in it, narrowed by a ticker filter — or one specific market. The back-test lists every past market that matched and what the rule would have burned on each settlement.</p></div>
-      <div class="step"><div class="n">02</div><h3>Lock a rule</h3><p>Choose what burns: a YES (or NO) settlement, or every full unit of a settled number (<code>10 S&amp;P points</code>, <code>1 °F</code>), and the fraction of the fee pool each spends, 1–10%. <b>Rules are locked at launch.</b> A new rule is a new coin.</p></div>
+      <div class="step"><div class="n">01</div><h3>Describe the event</h3><p>Type it — "Eagles win Sunday", "Detroit high above 90", "El-Sayed wins Michigan Senate", "US debt rises $1B" — or browse by category. Every suggestion names its source, who cross-reads it, and when it settles; the back-test shows what the rule would have burned.</p></div>
+      <div class="step"><div class="n">02</div><h3>Lock a rule</h3><p>Choose what burns: a YES (or NO) settlement, or every full unit of a settled number (<code>$1B of debt</code>, <code>one qualifying day</code>), and the fraction of the fee pool each spends, 1–10%. <b>Rules are locked at launch.</b> A new rule is a new coin.</p></div>
       <div class="step"><div class="n">03</div><h3>Launch</h3><p>One wallet approval creates the token on Raydium LaunchLab with its fee pool as the creator-fee recipient and registers the rule and its hash. You pay the venue's creation cost and gas; nothing to us up front.</p></div>
     </div>
-    <p class="then"><b>Then burns happen, with receipts.</b> When the market settles, the settled result is attested on chain, anyone can crank the burn, the pool buys the coin at market and burns everything received in one transaction — whose memo carries the result, the units, the pool, the spend, the swap and the rule hash. Nothing to run, nothing to trust, nothing to withdraw.</p>
-    <p class="then"><b>Or launch two at once: a rivalry pair.</b> Same three steps, on a Kalshi market only: name two coins, and side B's rule is side A's inverted, so every settlement burns one of them. Two rules, two hashes, two signatures, one pair page that keeps score. <a href="#rivalries">See rivalries ↑</a></p>
+    <p class="then"><b>Then burns happen, with receipts.</b> When the result is in and its cross-read agrees, the settled result is attested on chain, anyone can crank the burn, the pool buys the coin at market and burns everything received in one transaction — whose memo carries the result, the units, the pool, the spend, the swap and the rule hash. Nothing to run, nothing to trust, nothing to withdraw.</p>
+    <p class="then"><b>Or launch two at once: a rivalry pair.</b> Same three steps on one game or one race: one coin per side, each burning when its side loses. Two rules, two hashes, two signatures. <a href="#rivalries">See rivalries ↑</a></p>
   </section>
 
   <section class="wrap" id="feeds">
-    <h2>The source · Kalshi settlements</h2>
-    <p class="lede">Every coin burns on a Kalshi settlement: the exchange's adjudicated result of a regulated event contract, cross-checked against the series' own settlement source. 14,934 series to bind a rule to.</p>
+    <h2>The sources · primary data, cross-read</h2>
+    <p class="lede">Every coin settles on a primary source with an independent cross-read of the same fact — another operator on another domain — or on Polymarket's on-chain payout for an adjudicated race. Prediction markets are for discovery; Burnticker shows their questions and rules, never a price.</p>
     <div class="feeds">
-      <div class="feed kalshi"><div class="id">sports · 3,883 series</div><div class="src">game winners, totals, season results</div><div class="meta">e.g. <b>KXNFLGAME</b> · one market per team per game</div><span class="tag">the rivalry staple</span></div>
-      <div class="feed kalshi"><div class="id">elections · 2,276 · politics · 2,193</div><div class="src">adjudicated results of elections and votes</div><div class="meta">settled by Kalshi against each series' named source</div><span class="tag">allowed via adjudicated markets</span></div>
-      <div class="feed kalshi"><div class="id">entertainment · 2,582 series</div><div class="src">awards, charts, box office</div><div class="meta">one settlement per show, week or weekend</div><span class="tag">settled results only</span></div>
-      <div class="feed kalshi"><div class="id">economics · 852 · financials · 1,001</div><div class="src">CPI prints, Fed decisions, the S&amp;P 500 close</div><div class="meta">e.g. <b>KXCPI</b>, <b>KXINX</b> · read as a settled number</div><span class="tag">scalar rules</span></div>
-      <div class="feed kalshi"><div class="id">weather · 422 series</div><div class="src">daily highs, rain, snow by city</div><div class="meta">e.g. <b>KXHIGHDEN</b> · Denver's daily high</div><span class="tag">one settlement a day</span></div>
-      <div class="feed kalshi"><div class="id">science &amp; tech · 372 series</div><div class="src">launches, releases, measurements</div><div class="meta">one settlement per event</div><span class="tag">settled results only</span></div>
+      <div class="feed"><div class="id">sports · ESPN scoreboard</div><div class="src">final scores, NFL · NBA · MLB · NHL</div><div class="meta">cross-read: the NHL's and MLB's own feeds, TheSportsDB for NFL and NBA</div><span class="tag">team coins · matchups</span></div>
+      <div class="feed"><div class="id">weather · NWS climate report</div><div class="src">daily high, rain, first snow at 22 stations</div><div class="meta">cross-read: the Iowa Environmental Mesonet</div><span class="tag">one reading a day</span></div>
+      <div class="feed"><div class="id">economics · Treasury, BLS, FRED</div><div class="src">the national debt, CPI, unemployment, the cost of eggs</div><div class="meta">each cross-read by a second public publisher</div><span class="tag">settled numbers</span></div>
+      <div class="feed"><div class="id">elections · Polymarket payout</div><div class="src">Senate, House, governor races</div><div class="meta">read from the Conditional Tokens contract on Polygon; the state's certified result is the cross-check</div><span class="tag">one-shot</span></div>
+      <div class="feed"><div class="id">crypto · block heights</div><div class="src">Bitcoin and Solana chain facts</div><div class="meta">two independent explorers</div><span class="tag">chain data</span></div>
+      <div class="feed"><div class="id">science &amp; culture</div><div class="src">launches, flares, page views</div><div class="meta">first-party feeds; adjudicated markets where no second source exists</div><span class="tag">see the coverage audit</span></div>
     </div>
-    <div class="rulesbox"><b>Admission rules.</b> A settled Kalshi result, never the market's odds, never the token's price · unambiguous units · not controlled by anyone who can hold the coin · not a disaster. Elections and votes are allowed when an adjudicated market (a Kalshi settlement) is the source. Never: deaths, violence, terror, casualty counts, or named private individuals. Each rule reads the exchange's adjudicated result cross-checked against the series' own settlement source, and a voided market burns nothing.</div>
-    <p class="small muted" id="other-sources"><b>Other sources.</b> A few first-party feeds — U.S. Treasury's Debt to the Penny, NOAA solar flares, Launch Library orbital launches, JPL close approaches, BLS series, Wikimedia pageviews — stay available behind “Advanced: first-party feed” in the wizard, for things no market covers. $DEFICIT is the stated exception: it runs on Treasury's data directly, with Kalshi's monthly debt market as a cross-check.</p>
+    <div class="rulesbox"><b>Admission rules.</b> A settled public result, never a market's odds, never the token's price · a primary source with an independent cross-read, or an on-chain adjudicated payout · unambiguous units · not controlled by anyone who can hold the coin · not a disaster. The coverage audit lists what can be settled today and what cannot.</div>
   </section>
 
   <section class="wrap" id="trust">
@@ -345,7 +344,7 @@ footer .links a{color:var(--dim)}
           <div><b>6,490</b><span>units</span></div>
           <div><b>+$366B</b><span>biggest day · 2025-07-07</span></div>
         </div>
-        <p class="muted small">Replay of the real Treasury series, 2025-01 → 2026-10-08 — what the rule would have counted, not a forecast. The stated exception to Kalshi-first: $DEFICIT reads Treasury's data directly, with Kalshi's monthly debt market as a cross-check. A memecoin: the rule says what supply does, not what price does.</p>
+        <p class="muted small">Replay of the real Treasury series, 2025-01 → 2026-10-08 — what the rule would have counted, not a forecast. $DEFICIT reads Treasury's data directly, cross-read by FRED's series of the same debt. A memecoin: the rule says what supply does, not what price does.</p>
         <a class="btn" href="https://deficit.burnticker.com/" id="deficitLink">Open the $DEFICIT page →</a>
       </div>
     </div>
@@ -376,9 +375,9 @@ footer .links a{color:var(--dim)}
     <a href="/burnticker/launch?pair=1">Launch a pair</a>
     <a href="#rivalries">Rivalries</a>
     <a href="https://deficit.burnticker.com/" id="deficitLink2">$DEFICIT</a>
-    <a href="#feeds">Kalshi markets</a>
+    <a href="#feeds">Sources</a>
   </div>
-  <div>Burnticker runs the keeper, the catalogue and the pages. Kalshi and the other sources named above (U.S. Treasury, NOAA, BLS, JPL, Wikimedia and others) are not affiliated with and do not endorse any coin. Burns on the news; every event is a receipt.</div>
+  <div>Burnticker runs the keeper, the catalogue and the pages. The sources named above (U.S. Treasury, BLS, NOAA / NWS, ESPN, Polymarket, JPL, Wikimedia and others) are not affiliated with and do not endorse any coin. Burns on the news; every event is a receipt.</div>
 </footer>
 <script>
 (function () {

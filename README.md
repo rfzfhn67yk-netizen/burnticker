@@ -3,7 +3,7 @@
 An open launchpad for memecoins whose supply burns when a **settled real-world event** says so — and a receipt for every burn that
 anyone can recompute from the source.
 
-A creator picks an event (a Kalshi series or market, or a first-party data feed), maps outcomes to burns, and launches on Raydium
+A creator picks an event (a first-party data feed such as Treasury, BLS, ESPN or NWS, or an on-chain-adjudicated Polymarket market), maps outcomes to burns, and launches on Raydium
 LaunchLab under Burnticker's platform config. The rule is hashed on chain at create and can never change. A keeper reads the
 settled result, signs it, and cranks `crank_buyback` on the `burn_receipts` program: the token's fee pool buys the token on its
 own pool and burns everything it receives, writing a memo that names the event, the source, the reading, the amounts and the rule
@@ -54,7 +54,7 @@ Every burn writes a memo: `BT|TICKER|id|oracle=|market=|result=|settled=|src=|va
 1. Open the transaction on an explorer and read the memo.
 2. Fetch the rule: the token page serves `rules.json`; `sha256` of its canonical bytes must equal the `rules=` field
    (`src/lib/burnticker/rules.ts`, `rulesSha256`).
-3. Fetch the source named in `src=` (a Kalshi settled market, or the first-party API) and confirm `result=` / `value=`.
+3. Fetch the source named in `src=` (the first-party API, or the on-chain Polymarket payout) and confirm `result=` / `value=`.
 4. Recompute the units from the rule and the reading (`src/lib/burnticker/units.ts`), then the spend:
    `spent = pool × (1 − (1 − f)^units)` with the integer formula in `src/lib/burnKeeper/rules.ts` (`buybackSpend`).
 5. Confirm from the transaction's token balances that every token the fee PDA received was burned.
@@ -94,7 +94,7 @@ repository with `solana-verify` / `anchor verify`; `CHANGELOG.md` records the co
   sunset. Generated from the IDL; `npm run powers-register` proves it is current. "What does not exist" is the section to read first.
 - **Money**: `docs/burnkeeper/fees.md` and `src/lib/burnticker/fees.ts` — the designed split; the trust page compares it with the
   live `PlatformConfig` decoded from chain and lists the developer wallet's full ledger from chain.
-- **Readings**: settled results only; prices are never read into a rule (`src/lib/burnticker/oracle/kalshi.ts`, tests in
+- **Readings**: settled results only; prices are never read into a rule (`src/lib/burnticker/oracle/polymarket.ts`, `oracle/kalshi.ts` — discovery only, behind a flag; tests in
   `test/burntickerOracle.test.ts`). The registry refuses updates and deletes at the SQL level (`src/lib/burnticker/registry.ts`).
 - **Operator**: `config/burnticker/transparency.json` and `docs/burnticker/decisions.md`.
 - **Reviews and bounty**: `docs/burnticker/reviews/` and `SECURITY.md`.

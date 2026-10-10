@@ -87,6 +87,11 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/kalshi\/teams$/, "kalshi/teams", []],
   [/^\/kalshi\/categories$/, "kalshi/categories", []],
   [/^\/browse$/, "browse", []],
+  [/^\/search$/, "search", []],
+  [/^\/elections$/, "elections", []],
+  [/^\/elections\/pair$/, "elections/pair", []],
+  [/^\/sports\/teams$/, "sports/teams", []],
+  [/^\/sports\/games$/, "sports/games", []],
   [/^\/kalshi\/backtest$/, "kalshi/backtest", []],
   [/^\/polymarket\/search$/, "polymarket/search", []],
   [/^\/polymarket\/backtest$/, "polymarket/backtest", []],
@@ -98,6 +103,7 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/tokens\/([^/]+)\/receipts$/, "tokens/[ticker]/receipts", ["ticker"]],
   [/^\/tokens\/([^/]+)\/verify\/([^/]+)$/, "tokens/[ticker]/verify/[id]", ["ticker", "id"]],
   [/^\/trust$/, "trust", []],
+  [/^\/coverage$/, "coverage", []],
   [/^\/openapi\.json$/, "openapi.json", []],
 ];
 export const ROUTE_MODULES = ROUTES.map((r) => r[1]);

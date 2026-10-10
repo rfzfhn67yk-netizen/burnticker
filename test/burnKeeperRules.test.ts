@@ -135,13 +135,13 @@ describe("BUYBACK mode (the primary mechanic since 10-09 evening)", () => {
     assert.equal(rules.source, "fee-pool-buyback");
     assert.equal(rules.memo.version, "v2");
     assert.equal(rules.mint, null);
-    assert.deepEqual([rules.buyback.fractionPerUnit, rules.buyback.floorUsd, rules.buyback.reserveSol, rules.buyback.router, rules.buyback.burnShare], ["0.01", "1", "0.02", undefined, "all-received"]);
-    assert.match((rules.buyback as unknown as { fractionPerUnitDecision: string }).fractionPerUnitDecision, /OWNER DECISION 2026-10-09: 0\.01/);
+    assert.deepEqual([rules.buyback.fractionPerUnit, rules.buyback.floorUsd, rules.buyback.reserveSol, rules.buyback.router, rules.buyback.burnShare], ["0.02", "1", "0.02", undefined, "all-received"]);
+    assert.match((rules.buyback as unknown as { fractionPerUnitDecision: string }).fractionPerUnitDecision, /OWNER DECISION 2026-10-10 \(supersedes 2026-10-09's 0\.01\): 0\.02/);
     assert.doesNotMatch(JSON.stringify(rules), /PENDING|jupiter|next transaction/i, "no stale pre-program wording inside the hashed bytes");
     assert.match(rules.statement, /burn_receipts program[\s\S]*CPMM pool[\s\S]*same instruction/, "the statement describes program execution");
-    assert.match(rules.statement, /1 - 0\.99\^units/, "the statement names the same fraction as the dial");
-    assert.equal(buybackSpend(BigInt(1_000_000_000), 1, rules.buyback.fractionPerUnit), BigInt(10_000_000), "1 unit = 1% of the pool");
-    assert.equal(buybackSpend(BigInt(1_000_000_000), 21, rules.buyback.fractionPerUnit), BigInt(190_272_132), "21 units = 1 − 0.99^21 ≈ 19.03% (keep = floor(1e9 × 99^21 / 100^21) = 809,727,868)");
+    assert.match(rules.statement, /1 - 0\.98\^units/, "the statement names the same fraction as the dial");
+    assert.equal(buybackSpend(BigInt(1_000_000_000), 1, rules.buyback.fractionPerUnit), BigInt(20_000_000), "1 unit = 2% of the pool");
+    assert.equal(buybackSpend(BigInt(1_000_000_000), 21, rules.buyback.fractionPerUnit), BigInt(345_744_188), "21 units = 1 − 0.98^21 ≈ 34.57% (keep = floor(1e9 × 98^21 / 100^21) = 654,255,812)");
   });
   test("mode, source and memo version must agree; a bad fraction or a bad mint is refused", () => {
     const good = JSON.parse(fs.readFileSync(RULES, "utf8"));

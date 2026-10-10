@@ -24,7 +24,7 @@ Alternative bio if a shorter one reads better (121 chars):
 
 > Burnticker is a memecoin launchpad: coins whose supply burns on verifiable real-world events, with receipts.
 >
-> Pick a public feed (Treasury debt, solar flares, rocket launches, a settled Kalshi series). Lock a rule. Launch.
+> Pick a public feed (Treasury debt, solar flares, rocket launches, a game result). Lock a rule. Launch.
 >
 > When the event happens, the coin's own trading fees buy it back and burn it. The burn transaction carries the source row, the arithmetic and the rule hash — anyone can check it.
 >

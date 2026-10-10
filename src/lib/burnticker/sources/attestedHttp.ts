@@ -1,7 +1,7 @@
 import type { BurnRule, Direction } from "@/lib/burnticker/rules";
 import { canonicalDecimal, numToDec, type CarryPolicy, type SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
-import type { ResolutionSource, Tier } from "@/lib/burnticker/sources/types";
+import type { FactSpec, ResolutionSource, Tier } from "@/lib/burnticker/sources/types";
 
 /**
  * THE GENERIC ATTESTED-HTTP ADAPTER (2026-10-09): a feed is a CONFIG ENTRY (config/burnticker/sources.json), not a class. The entry
@@ -43,6 +43,10 @@ export interface HttpSourceConfig {
   unit: { size: number; label: string; definition: string }; direction: Direction; baseline: "previousSettlement" | number; carry: CarryPolicy; valueLabel: string;
   plausibility: { min: number; max: number; maxAbsDelta?: number };
   memoSource: string; fixture: string | null; flags: string[]; needsKey?: string | null; launchable: boolean; note?: string;
+  /** Who runs the endpoint (the independence test of the settlement-coverage audit compares operators and domains). */
+  operator?: string;
+  /** The fact this source reads; sources sharing it are cross-reads of each other (sources/types.ts FactSpec). */
+  fact?: FactSpec;
 }
 
 // ---- selection primitives ----

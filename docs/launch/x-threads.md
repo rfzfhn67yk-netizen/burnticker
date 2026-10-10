@@ -62,7 +62,7 @@ Words that do not appear anywhere below, by rule: guaranteed, moon, pump, 100x, 
 > Burns on the news. Every event is a receipt. 🧵
 
 **2/6 — three steps**
-> 1. Pick a feed from the catalogue: Treasury debt, solar flares, orbital launches, asteroid passes, egg prices, a settled Kalshi series.
+> 1. Pick a feed from the catalogue: Treasury debt, solar flares, orbital launches, asteroid passes, egg prices, a game result, a settled Polymarket market.
 > 2. Lock a rule: the unit and the fraction of the fee pool per unit. Locked means locked.
 > 3. Launch, one wallet approval.
 
@@ -97,7 +97,7 @@ score after launch is `pairDailyText()` (src/lib/launch/dailyPost.ts: "$A 3 : 1 
 below passes the copy lint (test/dailyPost.test.ts lints this section).
 
 **1/5 — the matchup**
-> ${TICKER_A} vs ${TICKER_B}: two memecoins on one Kalshi market, {SERIES} ({MATCHUP}).
+> ${TICKER_A} vs ${TICKER_B}: two memecoins on one event, {SERIES} ({MATCHUP}) — settled on the primary source.
 >
 > When a side loses, its coin burns. Every settlement burns exactly one side, and the receipts keep score. 🧵
 

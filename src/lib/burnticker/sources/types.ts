@@ -32,3 +32,12 @@ export interface SourceFacts {
 }
 
 export interface ResolutionSource extends OracleAdapter, SourceFacts {}
+
+/**
+ * THE FACT A SOURCE READS (2026-10-10, the settlement-coverage audit). Two sources with the same `id` read the same number; when their
+ * operators and domains differ, each is the other's independent CROSS-READ (src/lib/burnticker/coverage). `scale` turns the source's
+ * value into the fact's unit (FRED GFDEBTN is in $ millions: 1e6); `align` says how readings meet: "period" (default: the same period
+ * id), "quarter-end" (a quarterly reading meets the other source's last daily reading of that quarter), "snapshot" (two poll-time
+ * values, comparable only when read within `maxSkewMinutes` of each other). `tolerance`: the larger of the two sides' bounds applies.
+ */
+export interface FactSpec { id: string; scale?: number; align?: "period" | "quarter-end" | "snapshot"; tolerance?: { rel?: number; abs?: number }; maxSkewMinutes?: number }

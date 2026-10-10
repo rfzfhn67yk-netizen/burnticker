@@ -19,7 +19,8 @@ statement names its source file; where a component does not exist, this paper sa
 ## 1. Abstract
 
 Burnticker is a launchpad for Solana memecoins whose supply burns when an adjudicated real-world event settles. A creator binds a coin
-to a selector over a resolution source, usually a Kalshi series, and to a mapping from outcomes to burns. The rule is hashed and locked
+to a selector over a resolution source (a primary source with an independent cross-read, or a Polymarket market) and to a mapping
+from outcomes to burns. The rule is hashed and locked
 when the coin is created. When an event in the selector settles, attesters sign the settled reading, and the `burn_receipts` program
 spends a share of the coin's own creator-fee pool buying the coin on its Raydium CPMM pool and burns every token it receives, in one
 instruction that also writes a memo with the reading, the arithmetic and the rule hash. Anyone can recompute that memo from the public
@@ -60,7 +61,7 @@ outcomes to burns, and applies to markets that do not exist yet.
 | `oracle` | `kalshi`, `polymarket` (binary only) and `catalogue` are live; `uma`, `drift-bet`, `hedgehog` are parsers and stubs, not launchable |
 | `series` + `filter` | every present and future market of the series whose ticker contains the text and/or whose title matches a regex |
 | `market` | one market ticker: a one-shot rule that resolves once, after which the supply is fixed |
-| `kind: binary` | reads Kalshi's `result` (yes/no); `onYes` / `onNo` give the burn for each outcome |
+| `kind: binary` | reads the settled yes/no result (Polymarket: the payout vector on Polygon; Kalshi's `result` only for coins launched on it before 2026-10-10); `onYes` / `onNo` give the burn for each outcome |
 | `kind: scalar` | reads the settled number and counts `unit`s from a baseline (`previousSettlement` or a number) in a direction (`up`, `down`, `abs`) |
 | `fractionOfPool` / `tokens` | buyback mode: fraction `f` of the burn pool per unit (1 % to 10 %); vault mode: tokens per unit |
 | `onVoid` | `skip`, the only policy |
@@ -70,31 +71,35 @@ outcomes to burns, and applies to markets that do not exist yet.
 those bytes with sha256. The hash goes into `TokenConfig.rules_sha256` at `initialize_token`, into the token description's footer and
 into every on-chain memo as `rules=sha256:<first 12 hex>`. No instruction changes it. A different rule is a different coin.
 
-**Finality.** A Kalshi market counts when its status is `finalized`, or `settled` once `settlement_ts + settlement_timer_seconds` has
-passed (`src/lib/burnticker/oracle/kalshi.ts`). The rule reads settled results only, never prices; the token page's "market-implied chance of the next
+**Finality.** A Polymarket market counts once its payout vector is on chain; a primary source's period counts once it is complete
+(`src/lib/burnticker/sources/attestedHttp.ts`). For coins launched on a Kalshi rule before 2026-10-10, a Kalshi market counts when its
+status is `finalized`, or `settled` once `settlement_ts + settlement_timer_seconds` has passed (`src/lib/burnticker/oracle/kalshi.ts`). The rule reads settled results only, never prices; the token page's "market-implied chance of the next
 burn" is labelled display-only.
 
 ### 3.2 Sources
 
-**Kalshi settlements are the primary source.** Kalshi publishes settled results through a public, keyless API
-(`https://api.elections.kalshi.com/trade-api/v2`), each series carrying its own `settlement_sources` (for example BLS, the Fed, a
-sports league). The selector binds to that adjudicated result, not to the underlying data. The landing-page copy of 2026-10-10 counts
-14,934 Kalshi series: sports 3,883, entertainment 2,582, elections 2,276, politics 2,193, financials 1,001, economics 852, weather 422,
-science and technology 372, crypto 276, other categories 1,077 (source: `docs/burnticker/README.md` on branch
-`agent/RIVAL-2026-10-10`, commit `c0eb7ed`).
+**Settled on primary sources; prediction markets are discovery and optional cross-checks where their terms permit.** On 2026-10-10
+the owner decided that Kalshi is not a settlement input: Kalshi's Developer Agreement limits API use to a member's own trading, and its
+Data Terms forbid using Kalshi data to settle products or to cache or redistribute it. A coin settles on one of two things: a primary
+source read together with an independent cross-read of the same fact (another operator on another domain), or the payout vector of an
+adjudicated Polymarket market as Polygon's Conditional Tokens contract stores it (§3.4). The Kalshi adapter
+(`src/lib/burnticker/oracle/kalshi.ts`) remains for discovery behind `BURNTICKER_KALSHI_ENABLED`, and the creation preflight refuses
+every Kalshi rule.
 
-**Polymarket binary markets are the second tier-1 source** (since 2026-10-10): Gamma (`https://gamma-api.polymarket.com`) finds the
+**Polymarket binary markets are the adjudicated source** (since 2026-10-10): Gamma (`https://gamma-api.polymarket.com`) finds the
 markets, and the result is the payout vector the Conditional Tokens contract on Polygon stores for the market's condition id, read with
-`eth_call`; a reading counts only once that payout is on chain, a 50-50 payout is a void, and team coins and matchup pairs stay on Kalshi
-(`src/lib/burnticker/oracle/polymarket.ts`).
+`eth_call`; a reading counts only once that payout is on chain, a 50-50 payout is a void (`src/lib/burnticker/oracle/polymarket.ts`). A single game pairs on Polymarket's
+moneyline market; team coins have no settlement route (Polymarket lists the two teams in an order that changes from game to game).
 
-**First-party feeds are the advanced path.** `config/burnticker/sources.json` holds 30 sources read through one generic adapter
+**First-party feeds are the primary path.** `config/burnticker/sources.json` holds 34 sources (four of them cross-read-only) read through one generic adapter
 (`src/lib/burnticker/sources/attestedHttp.ts`): Treasury, BLS, NOAA, Launch Library 2, JPL, Wikimedia and others, each with a saved
-fixture, plausibility bounds and a fixed unit, direction, baseline and carry. Key-required sources are present but not launchable.
+fixture, plausibility bounds, a fixed unit, direction, baseline and carry, the `operator` that runs the endpoint and, where another
+operator publishes the same number, a shared `fact`. Key-required sources are present but not launchable.
 
 **$DEFICIT is the stated exception.** The operator's own first coin reads U.S. Treasury "Debt to the Penny"
 (`tot_pub_debt_out_amt`) directly: every full $1,000,000,000 added since the previous business day is one unit, remainders carry only
-across consecutive increases, and each unit spends 1 % of the burn pool (`config/burnkeeper/deficit.rules.json`).
+across consecutive increases, and each unit spends 2 % of the burn pool — the Federal Reserve's 2 % inflation goal, pointed the other way
+(`config/burnkeeper/deficit.rules.json`; the devnet rehearsal coin used 1 %).
 
 **Refused regardless of source** (`config/burnticker/refuse.json`, applied at create time): deaths, violence, terror, casualty counts,
 disasters and named private individuals; names that claim to be official; any selector on the coin's own trading (never the token's price). Elections are allowed.
@@ -103,13 +108,34 @@ disasters and named private individuals; names that claim to be official; any se
 
 | Tier | Source kind | Admission | What a skeptic verifies | What stays trusted |
 |---|---|---|---|---|
-| 1 | adjudicated market (Kalshi and Polymarket live; Drift BET, Hedgehog stubs) | settled results only; finality window respected; voids never burn | the settled market JSON (public, keyless) and the series' settlement source; the memo's `units` from the rule | Kalshi's adjudication and API availability; the attesters' honesty about the read |
+| 1 | adjudicated market (Polymarket live; Kalshi not a settlement input since 2026-10-10; Drift BET, Hedgehog stubs) | settled results only; finality window respected; voids never burn | the payout vector on Polygon (public chain data) and Gamma's report; the memo's `units` from the rule | Polymarket's adjudication (UMA); the attesters' honesty about the read |
 | 2 | optimistic assertion (UMA, stub) | counts only once settled and not disputed-and-lost | the assertion's settlement on chain | UMA's dispute process |
 | 3 | primary API attested by a TEE or zk job | third-party asset rates allowed from here up | the job definition and the oracle's on-chain record | not wired: Switchboard, the planned provider, ended service on 2026-09-25 |
 | 4 | primary API read by the keeper | no asset rates; one real fixture; plausibility bounds; complete periods only | the exact source row with the `curl` in every receipt | the attesters (quorum 1 at launch: the operator) |
 | 5 | page-scraped | owner's approval per source; regex pinned to the markup | the page and the regex | the page's editorial number and the attesters |
 
 Source: `docs/burnticker/README.md` §6 and `docs/burnkeeper/attestation.md` §1.
+
+### 3.4 Settlement coverage
+
+`src/lib/burnticker/coverage/` audits, for every category of `config/burnticker/categories.json` and every selector kind the wizard
+can emit, whether a coin can be settled without Kalshi. A category is **settleable** only with at least one primary source (a
+first-party adapter: attested-http or on-chain, tier 4 or better, launchable, not an aggregator) AND an independent cross-read of the
+same fact; **adjudicated-only** when Polymarket's binary markets are the only route; **uncovered** otherwise. Each source also gets a
+90-day dry run: readings its schedule expected against readings produced, the median latency from the period's end to the keeper's
+first sighting, and the rate at which the primary and its cross-read disagree.
+
+On the frozen fixtures of 2026-10-10 two of eleven categories are settleable: Economics (`fred.UNRATE` ↔ BLS `LNS14000000`,
+`fred.CPIAUCSL` ↔ BLS `CUSR0000SA0`, `bls.eggs` ↔ FRED `APU0000708111`, `treasury.debt` ↔ FRED `GFDEBTN` at quarter ends; 0
+disagreements on every shared month) and Crypto & On-chain (`bitcoin.blockHeight` ↔ blockstream.info). The other nine are
+adjudicated-only; none is uncovered. Settled numbers outside those two categories (index closes, daily temperatures and the other
+strike ladders), team coins and season matchups cannot be settled today. The pair catches a broken endpoint, a parser error or a
+tampered response; when the cross-read is a mirror (FRED republishes BLS), it does not catch an error in the original release.
+
+Creation runs the selector live once first (`preflightSelector`, wired into the launch pipeline): the primary and its cross-read are
+read, and creation is refused on a Kalshi rule, a missing cross-read, a failed read or a disagreement on the latest shared period. The
+matrix is served at `GET /api/burnticker/v1/coverage`, drawn on the trust page and rendered to `docs/burnticker/SETTLEMENT-COVERAGE.md`;
+the test suite fails when any category is uncovered.
 
 ## 4. Settlement on chain: the `burn_receipts` program
 
@@ -446,9 +472,9 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 
 ## 11. Limitations and risks
 
-- **Kalshi dependency.** Kalshi results are read off chain from Kalshi's API and signed by the attesters. Kalshi can delist or void a
-  series (voids never burn). Kalshi's API terms on redistribution have not been reviewed. A coin tracking a CFTC event contract's
-  resolution is disclosed as such on every oracle-backed page; the owner decided to proceed without a lawyer.
+- **Settlement coverage.** Without Kalshi, settled numbers exist only where a primary source has an independent cross-read: two of
+  eleven categories today (§3.4). Everything else settles on Polymarket's payout vector or not at all, and Polymarket is binary-only.
+  Coins launched on a Kalshi rule before 2026-10-10 carry the event-contract disclosure on every page.
 - **LaunchLab is closed source.** The claim, the migration's pool address, `pool_creator` and LP handling rest on its SDK and docs, and
   have run only against a stand-in. Confirmation is a devnet-rehearsal gate, not done.
 - **Sandwich bound.** A sandwich can take up to `slippage_bps` (≤ 3 %) of each crank's spend, itself at most 2 % of the reserve. A

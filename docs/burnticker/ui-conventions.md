@@ -124,21 +124,74 @@ The trust rules decide every row. We never talk about price. Market data is show
 | 25 | Category navigation (Kalshi, Polymarket) | **adapt** | The wizard's **Browse everything**: Burnticker's own taxonomy (`config/burnticker/categories.json`) on a left rail, or chips on a phone. Each category lists source cards from **every venue**: first-party feeds first, then Polymarket, then Kalshi when it is enabled. Each card shows venue, tier, cadence, next event and the "burns when …" example. |
 | 26 | Watchlist / favourites, quick-buy ⚡ (bonk.fun, Bags) | **reject** (for now) | Quick-buy is a call to buy. A watchlist needs accounts or local storage and is not a convention new users depend on. |
 
-## Kalshi as one venue behind a switch (coordinator, 10-10)
+## Venues — what settles, what only helps you find (10-10)
 
-Kalshi's Developer Agreement limits API use to a member's own trading. It also forbids caching or sharing Kalshi data with third
-parties without written authorization, and its Data Terms forbid using Kalshi Data to settle products. Browse is therefore
-venue-agnostic, and `BURNTICKER_KALSHI_ENABLED` (`src/lib/burnticker/venues.ts`) controls the following:
+**Settlement inputs.** A coin settles on a primary source with an independent cross-read of the same fact — another operator on
+another domain — or on Polymarket's Conditional Tokens payout vector on Polygon for an adjudicated market. Prediction markets are for
+discovery. The coverage gate (`src/lib/burnticker/coverage/`) refuses creation otherwise.
 
-- **Default: on.** This keeps the owner's live wizard working. `0` / `false` / `off` / `no` turns it off.
-- **Off:**
-  - `/api/burnticker/v1/kalshi/{search,events,teams,categories}` answer **503 "venue unavailable"**.
-  - So do a Kalshi back-test and a launch bundle for an `oracle: "kalshi"` rule.
-  - The wizard greys out **Team coin** and **Matchup pair** with "venue unavailable".
-  - **Browse** lists feeds and Polymarket only.
-  - The `/catalogue` route reports `venues.kalshi = false`.
-- **Not controlled (owner decision):** the keeper still reads the settled results of coins already launched on a Kalshi rule, because
-  their receipts depend on it.
+**Kalshi — `BURNTICKER_KALSHI_ENABLED`, default OFF.** Kalshi's Developer Agreement limits API use to a member's own trading and
+forbids caching or sharing its data with third parties without written authorization. Its Data Terms forbid using Kalshi Data to
+settle products. So Kalshi is never a settlement input and stays behind the flag for an eventual written consent.
+
+Off (the default):
+- The `/kalshi/*` routes answer 503.
+- Kalshi back-tests and launch bundles are refused.
+- The app and the keeper's page publish make no Kalshi display reads (series titles, implied chance).
+- The keeper reads Kalshi only for coins already registered with a Kalshi rule, logging a warning per read.
+- No default copy names Kalshi.
+
+**Polymarket discovery — `BURNTICKER_POLYMARKET_DISCOVERY_ENABLED`, default ON, NO MARKET DATA.** Polymarket's terms restrict "market
+data distributors". Burnticker shows only:
+- the question text
+- the outcomes (with the outcome's name, Gamma `groupItemTitle`)
+- the end date
+- the resolution rules
+- the condition id
+
+It never shows a price, odds, volume or liquidity, anywhere. `scrubMarketData` drops any such key from every discovery payload as
+defence in depth, and `test/burntickerSearch.test.ts` scans the search, elections, browse and Polymarket-search payloads for them.
+Off: the Polymarket search, back-test, Browse group, elections flow and search suggestions are withheld. Settlement reads the on-chain
+payout regardless.
+
+**Team coins and matchups never depend on a market.** They run on the ESPN scoreboard (`sources/espn.ts`). Each final counts only once
+a second read from another operator agrees on the score:
+- NHL: the league's own score feed
+- MLB: the league's own StatsAPI
+- NFL and NBA: TheSportsDB, a second public scoreboard (no keyless league feed exists for either)
+
+The venue badge reads "ESPN scoreboard · first-party".
+
+### FEC — the smallest gate change to propose
+
+The FEC adapter (`sources/fec.ts`) reads receipts per filed report from OpenFEC. Its only second read is the FEC's own `/filings`
+endpoint: the same operator, the same domain. The coverage gate's cross-read rule rightly refuses it, so `fec.beats` rules fail
+preflight with `no-cross-read`, and the election-pair template lists that as pending rather than weakening the gate.
+
+Proposed change, for the owner: admit a same-operator cross-read only when all of the following hold:
+- the primary is a federal or state government agency (`operator` on an allowlist of agencies)
+- the cross-read is a different publication channel of the same filing (a different endpoint or the bulk file)
+- the cross-read reports the same filing id
+
+Recorded as `sameOperator: true` and named on the card. Nothing in the gate is changed by this branch.
+
+## The 60-second path (the owner's usability test, 10-10)
+
+"If I wanted to add a coin for Abdul El-Sayed to win the Michigan Senate seat…" The launch page now opens on **Describe the event**.
+
+Typing "El-Sayed wins Michigan Senate" answers the card: "Abdul El-Sayed (D) wins the Michigan Senate race · settles 2026-11-04 ·
+Polymarket on-chain payout + Michigan SoS certified results". The card shows "How this settles": the party-nominee note plus the event's
+resolution rules, including the nominee-replacement clause. One click opens the create screen with the rule filled in (one-shot, 5%
+of the pool) and the name and ticker suggested.
+
+The same path, guided: Browse → Elections & Politics → US Senate → Michigan → the race's named outcomes. Unnamed placeholder markets
+("Person A…J", `active: false`) are hidden, and the card says how many. Ticking two candidates opens the election-pair template.
+
+The other test cases:
+- "Eagles win" → an ESPN team card, plus the next game
+- "US debt rises $1B" → the Treasury feed
+- "Detroit high above 90" → `nws.high:DTW-90`
+- "WIF vs SHIB" → the Coin vs Coin tile (its page when present, else "not built yet" — the copy lint forbids "coming soon")
 
 ## What was built (this branch)
 
@@ -166,6 +219,10 @@ venue-agnostic, and `BURNTICKER_KALSHI_ENABLED` (`src/lib/burnticker/venues.ts`)
 - `GET /api/burnticker/v1/tokens` gains `imageUrl` and `lastBurnAt`.
 - New routes: `GET /api/burnticker/v1/browse` and `GET /api/burnticker/v1/kalshi/categories` (OpenAPI 1.2.0).
 - New SDK methods: `bt.browse()` and `bt.kalshi.categories()`.
+
+**Later the same day (second commit set):** Kalshi off by default, Polymarket discovery without market data, the ESPN / NWS / FEC
+native sources with their cross-reads, the elections flow and the election-pair template, the universal search — see § Venues and
+§ The 60-second path above.
 
 **Live vs "—":**
 - Curve progress and top holders are read only where the host has `BURNTICKER_RPC_URL`; the app and the keeper both read them. Without

@@ -27,7 +27,7 @@ describe("transparency.json", () => {
     assert.ok(/recorded creator is the program's fee PDA/.test(keeper.description) && !/is LaunchLab's recorded creator/.test(keeper.description), "review H-2: the fee PDA, not the keeper, is the LaunchLab creator");
     const admin = cfg.wallets.find((w) => w.role === "platform-admin")!;
     assert.ok(/cannot be transferred to the Squads vault/.test(admin.description) && /untimelocked/.test(admin.description) && !/intended holder is the Squads vault/.test(admin.description), "D-3: the LaunchLab admin cannot move to Squads");
-    assert.ok(cfg.limitations.some((l) => l.id === "quorum-1") && cfg.limitations.some((l) => l.id === "switchboard-down") && cfg.limitations.some((l) => l.id === "kalshi-offchain") && cfg.limitations.some((l) => l.id === "cap-25") && cfg.limitations.some((l) => l.id === "devnet-rehearsal") && cfg.limitations.some((l) => l.id === "one-shot"));
+    assert.ok(cfg.limitations.some((l) => l.id === "quorum-1") && cfg.limitations.some((l) => l.id === "switchboard-down") && cfg.limitations.some((l) => l.id === "kalshi-terms" && /not a settlement input/.test(l.text)) && cfg.limitations.some((l) => l.id === "cap-25") && cfg.limitations.some((l) => l.id === "devnet-rehearsal") && cfg.limitations.some((l) => l.id === "one-shot"));
     assert.ok(cfg.policies.some((p) => p.id === "x-no-deletions") && cfg.policies.some((p) => p.id === "platform-never-buys") && cfg.policies.some((p) => p.id === "no-paid-promotion") && cfg.policies.some((p) => p.id === "nothing-coming-soon"));
     assert.equal(cfg.whoRunsThis.refuseListCode, "src/lib/ownTokens.ts");
     // the two sentences the launch runbook's gates 7 and 8 look for, verbatim

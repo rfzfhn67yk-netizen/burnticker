@@ -145,7 +145,7 @@ describe("BUYBACK mode status (the primary mechanic)", () => {
     for (const b of burns) {
       assert.equal(b.verify.verified, true, b.verify.checks.join("; "));
       assert.match(b.swapUrl!, /explorer\.solana\.com\/tx\/swap/);
-      assert.match(b.verify.formula, /spend = pool × \(1 − \(1 − 0\.01\)\^\d+\) = \d+ × \(1 − 0\.99\^\d+\) = \d+ lamports/);
+      assert.match(b.verify.formula, /spend = pool × \(1 − \(1 − 0\.02\)\^\d+\) = \d+ × \(1 − 0\.98\^\d+\) = \d+ lamports/);
       assert.equal(b.burned, b.got, "burned exactly what was bought (no dust in this scenario)");
     }
     JSON.parse(JSON.stringify(s)); JSON.parse(JSON.stringify(burns));
