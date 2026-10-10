@@ -7,6 +7,13 @@ import type { SettledEvent } from "@/lib/burnticker/units";
 import type { PreflightCode, PreflightReading, PreflightResult, SourceDescriptor } from "@/lib/burnticker/coverage/types";
 import { compareFact, crossReadsOf, describeEntry, primaryEligibility } from "@/lib/burnticker/coverage/sources";
 import { nextExpected } from "@/lib/burnticker/coverage/schedule";
+import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { DERBY_DISAGREEMENT_PP } from "@/lib/burnticker/derby/spec";
+import { PYTH_SOL_USD, pythFeedAccount, pythSnapshotFromAccount, type PythRead } from "@/lib/burnticker/derby/pyth";
+import { crossQuote } from "@/lib/burnticker/derby/cross";
+import { samplePool, type PoolPort } from "@/lib/burnticker/derby/pools";
+import { mulDec, truncDec } from "@/lib/burnticker/derby/measure";
+import { marketHours } from "@/lib/burnticker/derby/adapter";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 
 /**
@@ -24,6 +31,9 @@ import { nativeSourceById } from "@/lib/burnticker/sources/native";
  *               event: the latest settled market of the last 30 days, read on chain and compared with Gamma.
  *   kalshi      always refused: Kalshi's Developer Agreement and Data Terms forbid settling products on its data (owner, 10-10) —
  *               whatever BURNTICKER_KALSHI_ENABLED says.
+ *   derby       (Burn Derby, 2026-10-10) each coin's primary — Pyth's Solana account (keyless), Hermes when keyed, or the pool TWAP — and
+ *               its cross-read (Jupiter / DexScreener / RedStone) read in the same minute; refused when either is unreadable, the
+ *               cross-read does not carry the asset, or the two differ by more than 2%.
  *   uma / drift-bet / hedgehog   refused: stub adapters.
  */
 
@@ -44,6 +54,8 @@ export interface PreflightDeps {
   root?: string;
   /** The descriptors to look cross-reads up in (default: every sources.json entry). */
   sources?: SourceDescriptor[];
+  /** Burn Derby's readers (2026-10-10). */
+  derby?: DerbyPreflightDeps;
 }
 
 const reading = (e: SettledEvent | null | undefined): PreflightReading | null => (e ? { id: e.id, value: e.value, result: e.result, at: e.at } : null);
@@ -67,6 +79,7 @@ export async function preflightSelector(rule: BurnRule, deps: PreflightDeps = {}
   if (rule.oracle === "catalogue" && rule.series && nativeSourceById(rule.series)) return preflightNative(rule, deps, now);
   if (rule.oracle === "catalogue") return preflightCatalogue(rule, deps, now);
   if (rule.oracle === "polymarket") return preflightPolymarket(rule, deps, now);
+  if (rule.oracle === "derby") return preflightDerby(rule, deps, now);
   return result(rule, now, { primary: none }, { code: "stub-oracle", reason: `oracle ${rule.oracle} is a stub adapter: nothing can be read from it` });
 }
 
@@ -169,4 +182,77 @@ async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: num
   const agree = g ? g.result === last.result : null;
   if (agree === false) return result(rule, now, { primary, crossRead, nextExpectedAt: nextAt, nextExpectedBasis: nb, agreement: false, agreementBasis: `${last.id}: chain ${last.result} vs Gamma ${g!.result}` }, { code: "disagreement", reason: `the payout vector and Gamma's report disagree on ${last.id} (${last.result} vs ${g!.result})` });
   return result(rule, now, { primary, crossRead, nextExpectedAt: nextAt, nextExpectedBasis: nb, agreement: agree, agreementBasis: g ? `${last.id}: chain ${last.result} = Gamma ${g.result}` : `${last.id}: Gamma does not report it resolved` }, null);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// BURN DERBY (2026-10-10): the coin's value from its primary (Pyth on Solana — keyless —, Hermes with a key, or the pool TWAP) and the
+// independent cross-read (Jupiter / DexScreener / RedStone), read in the same minute; agreement within the derby bound (2%).
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/** What the derby preflight reads with (the platform passes its mainnet read port, its cross-read fetch, and Hermes when keyed). */
+export interface DerbyPreflightDeps { pools?: PoolPort | null; fetchImpl?: FetchLike; hermes?: { latest(feed: string): Promise<PythRead> } | null }
+
+const DERBY_OPERATOR: Record<string, string> = { jup: "Jupiter", dexscreener: "DexScreener", redstone: "RedStone" };
+const CROSS_ID: Record<string, string> = { jup: "jupiter.quote", dexscreener: "dexscreener.pairs", redstone: "redstone" };
+
+async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: number): Promise<{ id: string; operator: string; value: string; at: string } | { refusal: { code: PreflightCode; reason: string; status?: 400 | 502 }; id: string; operator: string }> {
+  if (u.pyth) {
+    const id = `pyth:${u.pyth.slice(0, 12)}`, operator = "Pyth Data Association";
+    const hours = marketHours(u.pyth);
+    let value: string | null = null, publish = 0, why = "";
+    if (d.pools) {
+      try {
+        const address = pythFeedAccount(u.pyth);
+        const [acct] = await d.pools.accounts([address]);
+        if (acct) { const s = pythSnapshotFromAccount(u.pyth, acct, null, address); value = s.value; publish = s.publishTime; }
+        else why = `no sponsored Pyth account on Solana for ${u.symbol} (${address})`;
+      } catch (e) { why = (e as Error).message.slice(0, 140); }
+    } else why = "no Solana read port on this host";
+    if (value === null && d.hermes) {
+      try { const r = await d.hermes.latest(u.pyth); if (r.ok) { value = r.point.value; publish = r.point.publishTime; } else why = `${why}; Hermes: ${r.reason}`; } catch (e) { why = `${why}; Hermes: ${(e as Error).message.slice(0, 120)}`; }
+    }
+    if (value === null) return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: Pyth could not be read just now (${why || "no route"}; Hermes needs BURNTICKER_PYTH_API_KEY)`, status: 502 } };
+    const age = now / 1000 - publish;
+    if (age > (hours ? 4 * 86_400 : 2 * 3600)) return { id, operator, refusal: { code: "stale-primary", reason: `${u.symbol}: Pyth's latest value was published ${Math.round(age / 3600)} h ago`, status: 502 } };
+    return { id, operator, value, at: new Date(publish * 1000).toISOString() };
+  }
+  const id = `raydium.twap:${u.pool}`, operator = "Raydium pool (on-chain)";
+  if (!d.pools || !u.pool || !u.mint) return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: the pool TWAP needs a Solana read port and the coin's pool and mint`, status: 502 } };
+  try {
+    const s = await samplePool(d.pools, u.pool, u.mint);
+    const [solAcct] = await d.pools.accounts([pythFeedAccount(PYTH_SOL_USD)]);
+    if (!solAcct) return { id, operator, refusal: { code: "primary-unreadable", reason: "Pyth SOL/USD could not be read on Solana", status: 502 } };
+    const sol = pythSnapshotFromAccount(PYTH_SOL_USD, solAcct, null, pythFeedAccount(PYTH_SOL_USD));
+    return { id, operator, value: truncDec(mulDec(s.priceSol, sol.value), 18), at: new Date(now).toISOString() };
+  } catch (e) { return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: pool ${u.pool} could not be read: ${(e as Error).message.slice(0, 120)}`, status: 502 } }; }
+}
+
+async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number): Promise<PreflightResult> {
+  const spec = rule.derby;
+  const sel = rule.series ?? "derby";
+  const none = { id: sel, operator: null, lastReading: null, error: null };
+  if (!spec) return result(rule, now, { primary: none }, { code: "unknown-selector", reason: "a derby rule needs its derby block" });
+  const d = deps.derby ?? {};
+  const fetchImpl = d.fetchImpl ?? deps.fetchImpl ?? (fetch as unknown as FetchLike);
+  const us = spec.selector === "coinvs" ? [spec.a, spec.b] : spec.selector === "price" ? [spec.u] : [spec.underlying];
+  const basis: string[] = [];
+  let first: { primary: PreflightResult["primary"]; crossRead: PreflightResult["crossRead"] } | null = null;
+  for (const u of us) {
+    const pr = await derbyPrimary(u, d, now);
+    const kind = u.cross.split(":")[0];
+    const crossBase = { id: `${CROSS_ID[kind] ?? kind}:${u.cross.slice(kind.length + 1)}`, operator: DERBY_OPERATOR[kind] ?? null, lastReading: null, error: null };
+    if ("refusal" in pr) return result(rule, now, { primary: { id: pr.id, operator: pr.operator, lastReading: null, error: pr.refusal.reason }, crossRead: crossBase }, pr.refusal);
+    const primary = { id: pr.id, operator: pr.operator, lastReading: { id: u.symbol, value: pr.value, result: null, at: pr.at }, error: null };
+    let q;
+    try { q = await crossQuote(fetchImpl, u.cross); } catch (e) { return result(rule, now, { primary, crossRead: { ...crossBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `${u.symbol}: the cross-read ${u.cross} could not be read just now: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+    if (!q) return result(rule, now, { primary, crossRead: crossBase }, { code: "no-cross-read", reason: `${u.symbol}: the cross-read ${u.cross} does not carry this asset, so it cannot settle a coin on Pyth's reading alone` });
+    const crossRead = { ...crossBase, lastReading: { id: u.symbol, value: q.usd, result: null, at: new Date(now).toISOString() } };
+    const diff = Math.abs(Number(pr.value) - Number(q.usd)) / Math.max(Number(pr.value), Number(q.usd));
+    const line = `${u.symbol}: ${pr.id} ${pr.value} vs ${crossBase.id} ${q.usd} (${(diff * 100).toFixed(2)}% apart; bound ${DERBY_DISAGREEMENT_PP}%)`;
+    basis.push(line);
+    if (diff * 100 > DERBY_DISAGREEMENT_PP) return result(rule, now, { primary, crossRead, agreement: false, agreementBasis: basis.join(" · ") }, { code: "disagreement", reason: `the primary and its cross-read disagree: ${line}` });
+    first ??= { primary, crossRead };
+  }
+  const next = new Date(Math.floor(now / 86_400_000) * 86_400_000 + 86_400_000).toISOString();
+  return result(rule, now, { primary: first!.primary, crossRead: first!.crossRead, nextExpectedAt: next, nextExpectedBasis: "the next 00:00 UTC window boundary", agreement: true, agreementBasis: basis.join(" · ") }, null);
 }

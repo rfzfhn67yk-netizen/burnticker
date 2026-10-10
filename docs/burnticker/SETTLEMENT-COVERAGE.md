@@ -10,18 +10,18 @@ A **primary** is a first-party source adapter: kind attested-http or on-chain, t
 
 ## Summary
 
-4 settleable · 7 adjudicated-only · 0 uncovered. Without any primary source: financials, world.
+5 settleable · 6 adjudicated-only · 0 uncovered. Without any primary source: world.
 
 | Category | Verdict | Primaries | Independent cross-reads | Polymarket tags |
 |---|---|---|---|---|
 | Sports | **settleable** | `espn.scoreboard` | `nhl.score` (of `espn.scoreboard`), `mlb.statsapi` (of `espn.scoreboard`), `thesportsdb.events` (of `espn.scoreboard`) | sports |
 | Elections & Politics | adjudicated-only (Polymarket) | `fedreg.finalRules`, `fec.reports` | none | elections, politics |
 | Economics | **settleable** | `treasury.debt`, `fred.UNRATE`, `fred.CPIAUCSL`, `fred.GFDEBTN`, `bls.eggs` | `fred.GFDEBTN` (of `treasury.debt`), `bls.LNS14000000` (of `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `treasury.debt` (of `fred.GFDEBTN`), `fred.APU0000708111` (of `bls.eggs`) | economy |
-| Financial markets | adjudicated-only (Polymarket) | none | none | finance |
+| Financial markets | **settleable** | `pyth.equity`, `pyth.fx`, `pyth.metal`, `pyth.commodity`, `pyth.rates` | `redstone.equity` (of `pyth.equity`), `redstone.fx` (of `pyth.fx`), `redstone.metal` (of `pyth.metal`), `redstone.commodity` (of `pyth.commodity`) | finance |
 | Weather & Climate | **settleable** | `nws.cli` | `iem.asos` (of `nws.cli`) | weather, climate-science |
 | Science & Space | adjudicated-only (Polymarket) | `ll2.launches`, `noaa.flares`, `jpl.neo` | none | space, tech |
 | Entertainment & Culture | adjudicated-only (Polymarket) | `wiki.views`, `steam.players` | none | pop-culture |
-| Crypto & On-chain | **settleable** | `bitcoin.blockHeight`, `solana.blockHeight.rpc` | `bitcoin.blockHeight.blockstream` (of `bitcoin.blockHeight`) | crypto |
+| Crypto & On-chain | **settleable** | `bitcoin.blockHeight`, `solana.blockHeight.rpc`, `pyth.crypto`, `raydium.twap` | `bitcoin.blockHeight.blockstream` (of `bitcoin.blockHeight`), `raydium.twap` (of `pyth.crypto`), `jupiter.quote` (of `pyth.crypto`), `dexscreener.pairs` (of `pyth.crypto`), `redstone.crypto` (of `pyth.crypto`), `pyth.crypto` (of `raydium.twap`), `jupiter.quote` (of `raydium.twap`), `dexscreener.pairs` (of `raydium.twap`), `redstone.crypto` (of `raydium.twap`) | crypto |
 | Companies | adjudicated-only (Polymarket) | `edgar.8k`, `github.stars` | none | business |
 | Health | adjudicated-only (Polymarket) | `openfda.approvals` | none | health |
 | World | adjudicated-only (Polymarket) | none | none | world, geopolitics |
@@ -94,15 +94,27 @@ Mapped here but not a primary: `bea.gdp` (not launchable: needs a key: BEA_API_K
 
 Kalshi categories mapped here (Economics) are discovery only: never a settlement input.
 
-## Financial markets — adjudicated-only
+## Financial markets — settleable
 
-no primary source maps here; Polymarket covers yes/no markets (finance).
+primary with an independent cross-read: pyth.equity ↔ redstone.equity, pyth.fx ↔ redstone.fx, pyth.metal ↔ redstone.metal, pyth.commodity ↔ redstone.commodity.
 
-No primary source maps to this category.
+| Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
+|---|---|---|---|---|---|---|---|---|
+| `pyth.equity` | primary | Pyth Data Association | pyth.network | 3 | `usd-at-boundary.equity` | n/a | n/a | n/a |
+| `pyth.fx` | primary | Pyth Data Association | pyth.network | 3 | `usd-at-boundary.fx` | n/a | n/a | n/a |
+| `pyth.metal` | primary | Pyth Data Association | pyth.network | 3 | `usd-at-boundary.metal` | n/a | n/a | n/a |
+| `pyth.commodity` | primary | Pyth Data Association | pyth.network | 3 | `usd-at-boundary.commodity` | n/a | n/a | n/a |
+| `pyth.rates` | primary | Pyth Data Association | pyth.network | 3 | — | n/a | n/a | n/a |
+| `redstone.equity` | cross-read of `pyth.equity` | RedStone | redstone.finance | 4 | `usd-at-boundary.equity` | n/a | n/a | n/a |
+| `redstone.fx` | cross-read of `pyth.fx` | RedStone | redstone.finance | 4 | `usd-at-boundary.fx` | n/a | n/a | n/a |
+| `redstone.metal` | cross-read of `pyth.metal` | RedStone | redstone.finance | 4 | `usd-at-boundary.metal` | n/a | n/a | n/a |
+| `redstone.commodity` | cross-read of `pyth.commodity` | RedStone | redstone.finance | 4 | `usd-at-boundary.commodity` | n/a | n/a | n/a |
+
+Mapped here but not a primary: `redstone.equity` (declared cross-read only); `redstone.fx` (declared cross-read only); `redstone.metal` (declared cross-read only); `redstone.commodity` (declared cross-read only).
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced: first-party feed (`scalar`) | **uncovered** | no primary source maps to this category, and Polymarket is binary-only (no adjudicated settled number) |
+| Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: pyth.equity ↔ redstone.equity, pyth.fx ↔ redstone.fx, pyth.metal ↔ redstone.metal, pyth.commodity ↔ redstone.commodity |
 | Any market → a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | Polymarket tag(s) finance: the result is the CTF payout vector on Polygon; no primary source here is binary |
 | Any market → one market (`one-shot`) | adjudicated-only (Polymarket) | Polymarket tag(s) finance: the result is the CTF payout vector on Polygon; no primary source here is binary |
 
@@ -164,19 +176,24 @@ Kalshi categories mapped here (Entertainment, Mentions, Social) are discovery on
 
 ## Crypto & On-chain — settleable
 
-primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream.
+primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream, pyth.crypto ↔ raydium.twap, pyth.crypto ↔ jupiter.quote, pyth.crypto ↔ dexscreener.pairs, pyth.crypto ↔ redstone.crypto, raydium.twap ↔ jupiter.quote, raydium.twap ↔ dexscreener.pairs, raydium.twap ↔ redstone.crypto.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
 | `bitcoin.blockHeight` | primary | mempool.space | mempool.space | 4 | `bitcoin.block-height` | n/a (no schedule) | n/a | n/a (the two snapshots were not read together; the creation preflight reads both at once) |
 | `solana.blockHeight.rpc` | primary | Solana Foundation (public mainnet-beta RPC) | solana.com | 4 | — | n/a (no schedule) | n/a | n/a |
+| `pyth.crypto` | primary; cross-read of `raydium.twap` | Pyth Data Association | pyth.network | 3 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `raydium.twap` | primary; cross-read of `pyth.crypto` | Raydium pool (on-chain) | raydium.io | 3 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
 | `bitcoin.blockHeight.blockstream` | cross-read of `bitcoin.blockHeight` | Blockstream | blockstream.info | 4 | `bitcoin.block-height` | n/a (no schedule) | n/a | n/a |
+| `jupiter.quote` | cross-read of `pyth.crypto`; cross-read of `raydium.twap` | Jupiter | jup.ag | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `dexscreener.pairs` | cross-read of `pyth.crypto`; cross-read of `raydium.twap` | DexScreener | dexscreener.com | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `redstone.crypto` | cross-read of `pyth.crypto`; cross-read of `raydium.twap` | RedStone | redstone.finance | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
 
-Mapped here but not a primary: `solana.blockHeight` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `solana.slot` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `ethereum.baseFeeBurn` (an aggregator, not a primary source); `defillama.tvl` (an aggregator, not a primary source); `onchain.copycats` (not launchable: second demo coin candidate (docs/launch/copycat-coin.md); not launchable until a keyed run logs 14 days and the admission rules are checked against them).
+Mapped here but not a primary: `solana.blockHeight` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `solana.slot` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `ethereum.baseFeeBurn` (an aggregator, not a primary source); `defillama.tvl` (an aggregator, not a primary source); `onchain.copycats` (not launchable: second demo coin candidate (docs/launch/copycat-coin.md); not launchable until a keyed run logs 14 days and the admission rules are checked against them); `jupiter.quote` (declared cross-read only); `dexscreener.pairs` (declared cross-read only); `redstone.crypto` (declared cross-read only).
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream |
+| Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream, pyth.crypto ↔ raydium.twap, pyth.crypto ↔ jupiter.quote, pyth.crypto ↔ dexscreener.pairs, pyth.crypto ↔ redstone.crypto, raydium.twap ↔ jupiter.quote, raydium.twap ↔ dexscreener.pairs, raydium.twap ↔ redstone.crypto |
 | Any market → a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | Polymarket tag(s) crypto: the result is the CTF payout vector on Polygon; no primary source here is binary |
 | Any market → one market (`one-shot`) | adjudicated-only (Polymarket) | Polymarket tag(s) crypto: the result is the CTF payout vector on Polygon; no primary source here is binary |
 
@@ -227,9 +244,9 @@ No primary source maps to this category.
 
 ## What we cannot settle today
 
-- **No first-party source at all:** Financial markets, World. Nothing in these categories settles on a primary reading; only Polymarket's yes/no markets can, where a tag maps.
+- **No first-party source at all:** World. Nothing in these categories settles on a primary reading; only Polymarket's yes/no markets can, where a tag maps.
 - **Primary source without an independent cross-read:** Elections & Politics (`fedreg.finalRules`, `fec.reports`); Science & Space (`ll2.launches`, `noaa.flares`, `jpl.neo`); Entertainment & Culture (`wiki.views`, `steam.players`); Companies (`edgar.8k`, `github.stars`); Health (`openfda.approvals`). One operator's number cannot settle a coin on its own, so these feeds are refused at creation until a second operator's read of the same fact is configured.
-- **Settled numbers (scalar rules) in:** Elections & Politics, Financial markets, Science & Space, Entertainment & Culture, Companies, Health, World. Polymarket is binary-only, so where no primary pair exists there is no settled number at all: index closes, rates and commodity settlements (Financial markets), daily temperatures and rainfall (Weather & Climate) and every other Kalshi strike ladder have no replacement today.
+- **Settled numbers (scalar rules) in:** Elections & Politics, Science & Space, Entertainment & Culture, Companies, Health, World. Polymarket is binary-only, so where no primary pair exists there is no settled number at all: index closes, rates and commodity settlements (Financial markets), daily temperatures and rainfall (Weather & Climate) and every other Kalshi strike ladder have no replacement today.
 - **Elections and votes:** adjudicated-only. They settle on Polymarket's payout vector or not at all; no official results feed is configured.
 - **One-shot markets** (one question that resolves once): Polymarket only. No primary source answers an arbitrary question.
 

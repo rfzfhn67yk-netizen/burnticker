@@ -6,8 +6,11 @@ import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { readingMatches, selectorKeyOf, wideRule, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
-import { DECIMALS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
-import { unitSteps, type CarryPolicy, type SettledEvent } from "@/lib/burnticker/units";
+import { DECIMALS, isOneShot, pairClause, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
+import { rulesSha256 } from "@/lib/burnKeeper/rules";
+import { solToLamports } from "@/lib/burnKeeper/rules";
+import { derbyProofHash } from "@/lib/burnticker/derby/adapter";
 import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type BurnProgramClient } from "@/lib/burnticker/program";
 
 /**
@@ -37,7 +40,13 @@ export interface KeeperDeps {
   registry: Registry;
   program: BurnProgramClient;
   /** Polymarket (2026-10-10) is optional so a keeper without it holds Polymarket keys with an error instead of misreading them. */
-  oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket?: OracleAdapter };
+  oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket?: OracleAdapter; /** Burn Derby (2026-10-10; derby/adapter.ts). */ derby?: OracleAdapter };
+  /**
+   * BURN DERBY'S KEEPER HOOKS (2026-10-10; DerbyAdapter): `sample` runs before the fetch (boundary snapshots: cross-reads, supplies,
+   * pool vault balances), `plan` after the cycle (the planning pass: retire coins whose season ended, whose flippening settled or
+   * whose bracket slot lost; log the bracket schedule). Optional: a keeper without them simply has no derby coins to serve.
+   */
+  derby?: { sample(tokens: readonly TokenRow[]): Promise<unknown>; plan(): string[]; /** Why and when a derby token's rule ended (season over, flippening settled, knocked out, voided). */ ended?(t: TokenRow): { reason: string; atMs: number } | null };
   /** The keeper's data key (attester v1); recorded on every reading. */
   attester: string;
   log: (line: string) => void;
@@ -61,6 +70,7 @@ export interface CycleReport { fetched: FetchReport[]; planned: { mint: string; 
 const oracleFor = (d: KeeperDeps, key: string): OracleAdapter => {
   if (key.startsWith("catalogue:")) return d.oracles.catalogue;
   if (key.startsWith("polymarket:")) { if (!d.oracles.polymarket) throw new Error("no Polymarket adapter configured on this keeper"); return d.oracles.polymarket; }
+  if (key.startsWith("derby:")) { if (!d.oracles.derby) throw new Error("no Burn Derby adapter configured on this keeper"); return d.oracles.derby; }
   return d.oracles.kalshi;
 };
 const carryFor = (rule: BurnRule): CarryPolicy => (rule.oracle === "catalogue" && rule.series ? feedById(rule.series)?.carry ?? "none" : "none");
@@ -102,7 +112,7 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
 }
 
 /** New readings for one token through the engine → receipt rows. Pure apart from the registry writes. */
-export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule): { mint: string; eventId: string; status: string }[] {
+export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null = null): { mint: string; eventId: string; status: string }[] {
   const state = d.registry.state(t.mint);
   const after = state.lastSettledAt ?? t.baselineAt;
   const fresh: SettledEvent[] = d.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r) && (r.at > after || (r.at === after && state.lastEventId !== null && r.id > state.lastEventId)) && !d.registry.receipt(t.mint, r.id));
@@ -111,9 +121,9 @@ export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule): { min
   const out: { mint: string; eventId: string; status: string }[] = [];
   let prev = { value: state.lastValue, carryOut: state.carryOut };
   for (const { event, step } of steps) {
-    const wrote = d.registry.applyStep(t.mint, event, step, prev, locked.rule.kind === "scalar", d.now());
+    const wrote = d.registry.applyStep(t.mint, event, step, prev, locked.rule.kind === "scalar", d.now(), gatedStatus(step, gate));
     const row = d.registry.receipt(t.mint, event.id)!;
-    if (wrote) { out.push({ mint: t.mint, eventId: event.id, status: row.status }); d.log(`  [plan] $${t.ticker} ${event.id}: ${step.note}${row.status === "planned" ? " → receipt planned" : ""}`); }
+    if (wrote) { out.push({ mint: t.mint, eventId: event.id, status: row.status }); d.log(`  [plan] $${t.ticker} ${event.id}: ${step.note}${row.status === "planned" ? " → receipt planned" : row.status === "pending-pair" ? " → pending-pair (both or neither: waiting for both pools)" : row.status === "voided" ? " → voided (the pair voided: no event burn)" : ""}`); }
     if (locked.rule.kind === "scalar" && event.value !== null && event.result !== "void") prev = { value: event.value, carryOut: step.carryOut };
     else prev = { value: prev.value, carryOut: step.carryOut };
   }
@@ -278,7 +288,12 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
     const mine = port.attesterKeys().filter((k) => cfg.attesters.some((a) => a.key === k));
     if (mine.length < cfg.quorum) return wait(`quorum short: the program needs ${cfg.quorum} attester signature(s); this keeper holds ${mine.length}`);
     if (d.dryRun) { d.log(`  [dry-run] $${t.ticker} ${Ds}: would attest the unit counter ${value} (${ids.length} receipt(s): ${ids.join(", ") || "baseline"})`); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "dry-run", why: `reading ${Ds} = ${value}` }); return false; }
-    const tx = await port.buildReading({ recordDate: D, prevDate: cfg.hasBaseline ? cfg.lastRecordDate : 0, value, sourceUrl: counterSourceUrl(t.ticker, Ds, ids), feedId: cfg.feedId, valueDecimals: 0 });
+    // Burn Derby: the counted readings' proof hash (the Pyth update digests behind the window) goes into the signed message's proof=.
+    // End-of-rule clock days: proof = sha256("clock|<date>|<rules sha256>") — date-based and deterministic, anyone recomputes it.
+    const derbyProof = t.selectorKey.startsWith("derby:") ? derbyProofHash(ids.map((id) => reg.readings(t.selectorKey).find((r) => r.id === id)?.proof ?? null)) : undefined;
+    const clockProof = counted.some((b) => END_KINDS.has(b.kind)) ? Buffer.from(clockProofHex(Ds, t.rulesSha), "hex") : undefined;
+    const proofHash = derbyProof && clockProof ? Buffer.from(rulesSha256(`${Buffer.from(derbyProof).toString("hex")},${clockProof.toString("hex")}`), "hex") : derbyProof ?? clockProof;
+    const tx = await port.buildReading({ recordDate: D, prevDate: cfg.hasBaseline ? cfg.lastRecordDate : 0, value, sourceUrl: counterSourceUrl(t.ticker, Ds, ids), feedId: cfg.feedId, valueDecimals: 0, ...(proofHash ? { proofHash } : {}) });
     const sim = await port.simulate(tx.raw);
     if (sim.err) {
       if (sim.err === "QuorumNotMet") return wait("quorum short: the program did not count enough attester signatures (QuorumNotMet)");
@@ -306,7 +321,9 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
   while (unassigned.length) {
     const D = Math.max(receiptDay(unassigned[0].settledAt), nextDay(cfg.lastRecordDate));
     const endMs = dayStartMs(D) + DAY_MS;
-    if (D > today || (!isFeed && (now < endMs + (d.readingGraceMs ?? READING_GRACE_MS) || (reg.feedState(t.selectorKey).lastOkAt ?? 0) < endMs))) {
+    // End-of-rule receipts (wind-down, drain, sweep) read no selector: a date-based clock — like a feed, the day only has to be over.
+    const clockOnly = unassigned.filter((b) => receiptDay(b.settledAt) <= D).every((b) => END_KINDS.has(b.kind));
+    if (D > today || (!isFeed && !clockOnly && (now < endMs + (d.readingGraceMs ?? READING_GRACE_MS) || (reg.feedState(t.selectorKey).lastOkAt ?? 0) < endMs))) {
       const why = `the program reads ${formatDate(D)} once that UTC day is over${isFeed ? "" : " and the selector has been read after it"} (settlements may still arrive)`;
       for (const b of unassigned) out.push({ mint, eventId: b.eventId, outcome: "waiting", why });
       break;
@@ -336,18 +353,186 @@ function recordCrank(d: KeeperDeps, t: TokenRow, cfg: ProgramConfigView, D: numb
   });
 }
 
-/** One full cycle over every live token. */
+/**
+ * BOTH OR NEITHER (2026-10-10): the state of every clause pair, per mint. A pair goes LIVE the first cycle both sides' TokenConfigs name a
+ * registered pool before its voidBy date ends — its pending-pair receipts become planned (they execute in settlement order); it VOIDS if
+ * either side is still unregistered when voidBy ends — its pending-pair receipts become voided and the rule ends (both coins wind down).
+ * Both outcomes are written once (registry pair_outcomes). A dry run computes the state and writes nothing.
+ */
+export async function pairGates(d: KeeperDeps): Promise<Map<string, { gate: PairGate; pairId: string; side: "A" | "B" }>> {
+  const out = new Map<string, { gate: PairGate; pairId: string; side: "A" | "B" }>();
+  const now = d.now();
+  for (const pr of d.registry.pairs()) {
+    const ta = d.registry.token(pr.mintA), tb = d.registry.token(pr.mintB);
+    if (!ta || !tb) continue;
+    let clause;
+    try { clause = pairClause(d.registry.lockedRule(ta).rule); } catch { continue; }
+    if (!clause) continue;
+    let gate: PairGate;
+    const have = d.registry.pairOutcome(pr.pairId);
+    if (have) gate = have.state === "live" ? { state: "live" } : { state: "voided", atMs: have.at };
+    else {
+      const registered = async (mint: string) => { try { return (await d.program.port(mint).config())?.poolRegistered === true; } catch { return false; } };
+      const [ra, rb] = [await registered(pr.mintA), await registered(pr.mintB)];
+      const voidAt = voidByEndMs(clause.voidBy);
+      if (ra && rb && now < voidAt) {
+        gate = { state: "live" };
+        if (!d.dryRun) {
+          d.registry.recordPairOutcome(pr.pairId, "live", now, "both pools registered");
+          const n = d.registry.promotePendingPair(pr.mintA, now) + d.registry.promotePendingPair(pr.mintB, now);
+          d.log(`  [pair] ${pr.pairId}: LIVE — both pools registered${n ? `; ${n} pending-pair receipt(s) now planned, in settlement order` : ""}`);
+        }
+      } else if (now >= voidAt) {
+        gate = { state: "voided", atMs: voidAt };
+        if (!d.dryRun) {
+          const why = `pair voided: ${[!ra ? `$${ta.ticker}` : null, !rb ? `$${tb.ticker}` : null].filter(Boolean).join(" and ")} had no registered pool when ${clause.voidBy} ended (UTC)`;
+          d.registry.recordPairOutcome(pr.pairId, "voided", voidAt, why);
+          const n = d.registry.voidPendingPair(pr.mintA, why, now) + d.registry.voidPendingPair(pr.mintB, why, now);
+          d.log(`  [pair] ${pr.pairId}: VOIDED — ${why}${n ? `; ${n} pending-pair receipt(s) voided` : ""}; the rule has ended: both coins wind down (onEnd)`);
+        }
+      } else gate = { state: "waiting", waitingOn: [...(ra ? [] : ["A" as const]), ...(rb ? [] : ["B" as const])], voidBy: clause.voidBy };
+    }
+    out.set(pr.mintA, { gate, pairId: pr.pairId, side: "A" });
+    out.set(pr.mintB, { gate, pairId: pr.pairId, side: "B" });
+  }
+  return out;
+}
+
+export const END_KINDS: ReadonlySet<string> = new Set(["winddown", "drain", "sweep"]);
+/** The proof a clock day's attestation commits to (date-based, deterministic): sha256("clock|<YYYY-MM-DD>|<rules sha256>"). */
+export const clockProofHex = (date: string, rulesSha: string): string => rulesSha256(`clock|${date}|${rulesSha}`);
+const isoDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+const addDay = (date: string, n: number): string => isoDay(Date.parse(`${date}T00:00:00Z`) + n * DAY_MS);
+
+/** The latest crank the program processed for a token (its lead receipt): what it carried out, and whether it fell under the floor. */
+function lastCrank(d: KeeperDeps, mint: string): { carriedOut: bigint; skipped: boolean } | null {
+  const leads = d.registry.receipts(mint).filter((b) => b.lead === true && b.readingDate !== null).sort((a, b) => (b.readingDate ?? 0) - (a.readingDate ?? 0));
+  const l = leads[0];
+  return l ? { carriedOut: l.carriedOutLamports ?? BigInt(0), skipped: l.status === "skipped" } : null;
+}
+
+/**
+ * WHY AND WHEN A RULE ENDED (no burn pool is ever left behind; rules.ts onEnd): a pair voided, a one-shot settled (YES / NO / void), a
+ * derby finished (the adapter's hook), or an adapter's explicit mark (registry.markRuleEnded: a team's season over, a nominee replaced).
+ * A one-shot YES at 100 % ends in a DRAIN; everything else in a WIND-DOWN. Written once.
+ */
+export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null): { mode: "drain" | "winddown"; reason: string; at: number } | null {
+  const have = d.registry.ruleEnd(t.mint);
+  if (have) return have;
+  // A clause pair that is still waiting for its second pool has not ended: its pending-pair receipts resolve first (live or void).
+  if (gate?.state === "waiting" || d.registry.receipts(t.mint).some((b) => b.status === "pending-pair")) return null;
+  let end: { mode: "drain" | "winddown"; reason: string; at: number } | null = null;
+  if (gate?.state === "voided") end = { mode: "winddown", reason: "the pair voided (both or neither)", at: gate.atMs };
+  else if (isOneShot(locked.rule)) {
+    const ev = d.registry.receipts(t.mint).filter((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair")[0];
+    if (ev) {
+      const all = ev.units > 0 && ev.status !== "voided" && (ev.mapping?.fractionOfPool ?? 0) >= 1;
+      end = { mode: all ? "drain" : "winddown", reason: all ? `the one-shot settled ${(ev.result ?? "YES").toUpperCase()} at 100 % of the pool` : `the one-shot settled ${(ev.result ?? ev.kind).toUpperCase()}`, at: Date.parse(ev.settledAt) || d.now() };
+    }
+  } else if (d.derby?.ended && t.selectorKey.startsWith("derby:")) {
+    const x = d.derby.ended(t);
+    if (x) end = { mode: "winddown", reason: x.reason, at: x.atMs };
+  }
+  if (!end) return null;
+  if (end.mode === "winddown" && !locked.rule.onEnd) return null;   // a rule made before the clause has no wind-down
+  if (d.dryRun) return end;
+  const rec = d.registry.markRuleEnded(t.mint, end.mode, end.reason, end.at);
+  d.log(`  [end] $${t.ticker}: the rule ENDED — ${rec.reason}; ${rec.mode === "drain" ? "the pool drains (one unit a day at 100 %)" : `the pool winds down over ${locked.rule.onEnd!.windDownDays} days`}`);
+  return rec;
+}
+
+/**
+ * The end-of-rule receipts due by now, and the retirement once they are done:
+ *   drain     one "drain-<date>" unit a day from the day after the YES (each unit's rule spend is the whole pool) while the program's last
+ *             crank carried spend forward and nothing is pending; done when a crank carries nothing more or falls under the floor.
+ *   winddown  "winddown-<date>" for each of the `windDownDays` days from the first day after the end, windDownUnits(f, days) units each;
+ *             then (cap-bound tail) one more day at a time while the last crank still carried spend; done when it carries nothing.
+ *   sweep     a RETIRED coin whose fee PDA (minus the reserve) passed onEnd.sweepThresholdLamports: "sweep-<date>" of full-spend units,
+ *             continued day by day while the cap carries spend; at most one sweep START per SWEEP_EVERY_DAYS.
+ * Buyback mode only (a vault rule has no pool to spend). Every amount is the program's, on the receipts.
+ */
+export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null): Promise<{ mint: string; eventId: string; status: string }[]> {
+  const reg = d.registry, rule = locked.rule, out: { mint: string; eventId: string; status: string }[] = [];
+  if (locked.mode !== "buyback") return out;
+  const end = detectRuleEnd(d, t, locked, gate);
+  if (!end || d.dryRun) return out;
+  const f = ruleMappings(rule)[0]?.mapping.fractionOfPool ?? 0;
+  if (!(f > 0)) return out;
+  const today = isoDay(d.now());
+  const add = (kind: EndReceiptKind, date: string, units: number): void => {
+    const id = `${kind}-${date}`;
+    const step = endStep(rule, kind, units);
+    if (reg.addEndReceipt(t.mint, kind, { id, at: `${date}T00:00:00Z` }, step, d.now())) { out.push({ mint: t.mint, eventId: id, status: "planned" }); d.log(`  [plan] $${t.ticker} ${id}: ${step.note} → receipt planned`); }
+  };
+  const mine = (kind: EndReceiptKind) => reg.receipts(t.mint).filter((b) => b.kind === kind).map((b) => b.eventId.slice(kind.length + 1)).sort();
+  const quiet = () => reg.pending(t.mint).length === 0;
+  const lc = () => lastCrank(d, t.mint);
+  const carrying = () => { const c = lc(); return !!c && !c.skipped && c.carriedOut > BigInt(0); };
+  let done = false;
+  if (end.mode === "drain") {
+    const days = mine("drain");
+    const next = days.length ? addDay(days[days.length - 1], 1) : firstWindDownDay(end.at + 1);
+    if (quiet()) {
+      const c = lc();
+      const more = days.length === 0 ? !!c && !c.skipped && c.carriedOut > BigInt(0) : carrying();
+      if (more && next <= today && days.length < 365) add("drain", next, 1);
+      else if (!more) done = true;
+    }
+  } else {
+    const N = rule.onEnd!.windDownDays, n = windDownUnits(f, N), first = firstWindDownDay(end.at);
+    for (let i = 0; i < N; i++) { const day = addDay(first, i); if (day > today) break; add("winddown", day, n); }
+    const days = mine("winddown");
+    if (days.length >= N && quiet()) {
+      if (carrying() && days.length < N + 365) { const next = addDay(days[days.length - 1], 1); if (next <= today) add("winddown", next, n); }
+      else if (!carrying()) done = true;
+    }
+  }
+  if (done && t.status !== "retired") {
+    reg.setTokenStatus(t.mint, "retired");
+    reg.setStatus(`rule.retired.${t.mint}`, JSON.stringify({ reason: end.reason, at: d.now(), mode: end.mode }));
+    d.log(`  [end] $${t.ticker} RETIRED — ${end.mode === "drain" ? "the pool is drained" : "the wind-down is done"} (${end.reason})`);
+  }
+  // The retired-coin sweep.
+  if ((done || t.status === "retired") && rule.onEnd && quiet()) {
+    const sweeps = mine("sweep");
+    const startKey = `sweep.start.${t.mint}`, lastStart = reg.getStatus(startKey);
+    const continuing = sweeps.length > 0 && lastStart !== null && carrying();
+    if (continuing) { const next = addDay(sweeps[sweeps.length - 1], 1); if (next <= today) add("sweep", next, fullSpendUnits(f)); }
+    else if (!lastStart || Date.parse(`${today}T00:00:00Z`) - Date.parse(`${lastStart}T00:00:00Z`) >= SWEEP_EVERY_DAYS * DAY_MS) {
+      const bal = await d.program.feePdaBalanceLamports(t.mint).catch(() => BigInt(0));
+      const spendable = bal - solToLamports(rule.reserveSol);
+      if (spendable > BigInt(rule.onEnd.sweepThresholdLamports) && !sweeps.includes(today)) {
+        add("sweep", today, fullSpendUnits(f));
+        reg.setStatus(startKey, today);
+        reg.setStatus(`rule.swept.${t.mint}`, today);
+      }
+    }
+  }
+  return out;
+}
+
+/** One full cycle over every live token (and, for the fallback clock, every retired coin of a voided pair). */
 export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): Promise<CycleReport> {
-  const tokens = d.registry.tokens("live");
-  const fetched = opts.fetch === false ? [] : await fetchDue(d, tokens);
-  const planned: CycleReport["planned"] = [], executed: ExecOutcome[] = [], errors: string[] = [];
+  const live = d.registry.tokens("live");
+  const errors: string[] = [];
+  if (d.derby) { try { await d.derby.sample(live); } catch (e) { errors.push(`derby sampler: ${(e as Error).message.slice(0, 160)}`); } }
+  const fetched = opts.fetch === false ? [] : await fetchDue(d, live);
+  const gates = await pairGates(d).catch((e: Error) => { errors.push(`pair gates: ${e.message.slice(0, 160)}`); return new Map<string, { gate: PairGate; pairId: string; side: "A" | "B" }>(); });
+  // Retired coins stay in the loop when their rule ended under onEnd: the wind-down's last cranks and the retired-coin sweep.
+  const tokens = [...live, ...d.registry.tokens("retired").filter((t) => gates.get(t.mint)?.gate.state === "voided" || d.registry.ruleEnd(t.mint) !== null)];
+  const planned: CycleReport["planned"] = [], executed: ExecOutcome[] = [];
   for (const t of tokens) {
     let locked: LockedRule;
     try { locked = d.registry.lockedRule(t); } catch (e) { errors.push(`$${t.ticker}: rule unreadable: ${(e as Error).message}`); continue; }
     if (selectorKeyOf(locked.rule) !== t.selectorKey) { errors.push(`$${t.ticker}: selector key drifted (${t.selectorKey} ≠ ${selectorKeyOf(locked.rule)})`); continue; }
-    try { planned.push(...planToken(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
+    const gate = gates.get(t.mint)?.gate ?? null;
+    try { if (t.status === "live" && !d.registry.ruleEnd(t.mint)) planned.push(...planToken(d, t, locked, gate)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
+    try { executed.push(...await executePending(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
+    // After the day's cranks: the end of the rule (drain / wind-down / retirement / sweep) is planned from what the program just did.
+    try { planned.push(...await planRuleEnd(d, t, locked, gate)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); }
     try { executed.push(...await executePending(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
   }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
+  if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }
   return { fetched, planned, executed, errors };
 }

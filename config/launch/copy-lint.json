@@ -53,6 +53,8 @@
     { "id": "pump-fun", "pattern": "pump\\.fun|pump-fun|pumpswap", "note": "venue names are facts" },
     { "id": "dollar-figures", "pattern": "[-+−]?\\$[\\d,]+(\\.\\d+)?\\s?[KMBT]?\\b", "note": "debt figures and SOL/USD amounts are data" },
     { "id": "buyback", "pattern": "\\b(buy ?backs?|bought back|buys? (it|itself) back|buy(s|ing)? \\$?[A-Za-z]{2,12} at market)\\b", "note": "the mechanic, not a call" },
-    { "id": "treasury-posts", "pattern": "treasury (posts|publishes)", "note": "a statement of Treasury's schedule, not a promise" }
+    { "id": "treasury-posts", "pattern": "treasury (posts|publishes)", "note": "a statement of Treasury's schedule, not a promise" },
+    { "id": "derby-input", "pattern": "(?<![$\\w])[A-Z0-9]{1,12} out-gains (?!\\$)[A-Z0-9]{1,12}( by market cap)?\\b", "note": "Burn Derby (2026-10-10): ANOTHER coin's move named as the rule's input ('WIF out-gains SHIB'); a $TICKER (our coins) never matches, so talk about our own coins still fails" },
+    { "id": "derby-flip", "pattern": "(?<![$\\w])[A-Z0-9]{1,12}'s market cap (never )?passes (?!\\$)[A-Z0-9]{1,12}'s", "note": "Burn Derby's one-shot flippening input ('WIF's market cap passes SHIB's'); never a $TICKER" }
   ]
 }

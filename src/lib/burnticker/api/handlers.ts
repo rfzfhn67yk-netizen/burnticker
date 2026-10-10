@@ -4,7 +4,7 @@ import { ONCHAIN_FACTS, onchainSource } from "@/lib/burnticker/sources/onchain";
 import { driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
 import { TIER_LABEL } from "@/lib/burnticker/sources/types";
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
-import { validateRule, lockRule, ruleStatement, BURNTICKER_RULES_SCHEMA, type LockedRule } from "@/lib/burnticker/rules";
+import { validateRule, lockRule, ruleStatement, BURNTICKER_RULES_SCHEMA, DEFAULT_ON_END, type LockedRule } from "@/lib/burnticker/rules";
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
@@ -23,6 +23,32 @@ import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/b
 import { buildLaunchBundle, buildPairBundles, launchProblems, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
+import { derbyAdmission } from "@/lib/burnticker/derby/admission";
+import { seasonEndMs, isoDate } from "@/lib/burnticker/derby/spec";
+import type { FetchLike } from "@/lib/burnticker/oracle/types";
+
+/** A derby rule's title for the review screen ("WIF vs SHIB · daily % change"; "bracket <id> · slot 3 (WIF)"). */
+export function derbyTitle(rule: LockedRule["rule"]): string {
+  const d = rule.derby;
+  if (!d) return rule.series ?? "derby";
+  if (d.selector === "bracket") return `Burn Derby bracket ${d.tournamentId} · slot ${d.slot} (${d.underlying.symbol})`;
+  if (d.selector === "price") return `Burn Derby ${d.u.symbol} · ${d.window} % change`;
+  return `Burn Derby ${d.a.symbol} vs ${d.b.symbol} · ${d.window} ${d.flip ? "flippening" : d.measure === "mcap" ? "market-cap change" : "% change"}`;
+}
+
+/**
+ * Both or neither: a ONE-SHOT pair's voidBy is its first settlement date — a Kalshi market's close date, a Polymarket market's end date,
+ * a derby flippening's last season day. Null (→ 30 days after launch) for recurring selectors or when the venue does not say.
+ */
+export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<string | null> {
+  const r = locked.rule;
+  try {
+    if (r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip) return isoDate(seasonEndMs(r.derby) - 86_400_000);
+    if (r.oracle === "kalshi" && r.market) { const m = (await p.kalshi.openMarkets(r.market.split("-")[0])).find((x) => x.ticker === r.market); return m?.closeTime ? m.closeTime.slice(0, 10) : null; }
+    if (r.oracle === "polymarket" && r.market) { const m = await p.polymarket.marketByCondition(r.market) as { endDate?: string | null } | null; return m?.endDate ? String(m.endDate).slice(0, 10) : null; }
+  } catch { return null; }
+  return null;
+}
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 
@@ -393,6 +419,9 @@ interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknow
 export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster };
+  // NO BURN POOL IS EVER LEFT BEHIND (owner, 2026-10-10): every new launch carries the onEnd wind-down + retired-coin sweep unless the
+  // rule names its own (rules.ts DEFAULT_ON_END; it is part of the canonical rule, so the hash locks it).
+  if (input.rule && typeof input.rule === "object" && !Array.isArray(input.rule) && (input.rule as { onEnd?: unknown }).onEnd === undefined) input.rule = { ...(input.rule as object), onEnd: { ...DEFAULT_ON_END } };
   const problems = launchProblems(input);
   if (o.mint !== undefined && o.mint !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(o.mint)) problems.push("mint must be the public key of a fresh mint keypair you generated");
   if (problems.length) return { error: fail(400, problems.join("; "), { problems }) };
@@ -434,7 +463,15 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       catch (e) { return { error: fail(502, `could not read a week of ${key} from Polymarket to check its density: ${(e as Error).message.slice(0, 120)}`) }; }
       if (!scan.complete) return { error: fail(400, `the Polymarket selector ${key} settles more than ${p.polymarket.pageCap * p.polymarket.pageSize} markets a week — narrow it with a market type (tag:<tag>/moneyline) or an event pattern (tag:<tag>:<event slug glob>)`) };
     }
-  } else return { error: fail(400, `oracle ${locked.rule.oracle} is not launchable (its adapter is a stub); kalshi, polymarket and catalogue are live`) };
+  } else if (locked.rule.oracle === "derby") {
+    // BURN DERBY (2026-10-10): platform coins never sit on the input side; the refuse list over the coins; a Pyth feed or ≥ $250K of
+    // liquidity; distinct coins; a season that starts after launch; a bracket slot that matches its registered tournament.
+    let dr;
+    try { dr = await derbyAdmission(locked.rule, { registry: p.registry, fetchImpl: p.derbyFetch ?? (globalThis.fetch as unknown as FetchLike), now: Date.now(), refuse: list }); }
+    catch (e) { return { error: fail(502, `a Burn Derby cross-read could not be read to check liquidity: ${(e as Error).message.slice(0, 120)}`) }; }
+    if (dr.length) return { error: fail(403, `refused: ${dr.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: dr }) };
+    seriesTitle = derbyTitle(locked.rule);
+  } else return { error: fail(400, `oracle ${locked.rule.oracle} is not launchable (its adapter is a stub); kalshi, polymarket, catalogue and derby are live`) };
   if (refusals.length) return { error: fail(403, `refused: ${refusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals }) };
   if (p.registry.tickerTaken(input.ticker)) return { error: fail(409, `ticker ${input.ticker} is taken`, { code: "ticker-taken" }) };
   if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `mint ${o.mint} is already registered`, { code: "mint-taken" }) };
@@ -443,7 +480,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // settling products on its data. BURNTICKER_PREFLIGHT_STRICT=0 skips it (the test hook does, for the suite).
   let preflight: PreflightResult | null = null;
   if (o.preflight?.strict ?? preflightStrict()) {
-    preflight = await preflightSelector(locked.rule, { polymarket: p.polymarket, ...(o.preflight?.deps ?? {}) });
+    preflight = await preflightSelector(locked.rule, { polymarket: p.polymarket, derby: { pools: p.derbyPools ?? null, fetchImpl: p.derbyFetch, hermes: p.derbyHermes ?? null }, ...(o.preflight?.deps ?? {}) });
     if (preflight.refusal) return { error: fail(preflight.refusal.status, `preflight refused: ${preflight.refusal.reason}`, { code: "preflight", problems: [preflight.refusal.reason], preflight }) };
   }
   const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: (m: string) => `/api/burnticker/metadata/${m}`, keeperPubkey: p.keeperPubkey };
@@ -461,7 +498,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     if (bRefusals.length) return { error: fail(403, `side B refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
     if (p.registry.tickerTaken(side.ticker)) return { error: fail(409, `ticker ${side.ticker} is taken`, { code: "ticker-taken" }) };
     try {
-      const pair = await buildPairBundles({ a: input, b: side }, deps);
+      const pair = await buildPairBundles({ a: input, b: side, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, deps);
       const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links) : null;
       const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;

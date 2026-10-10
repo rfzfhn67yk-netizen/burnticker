@@ -128,10 +128,11 @@ export class FakeProgram implements ProgramPort {
     this.signed.push({ sig, payload, lvbh: this.height + 150 });
     return { signature: sig, raw: new TextEncoder().encode(sig), blockhash: `bh${this.n}`, lastValidBlockHeight: this.height + 150 };
   }
-  async buildReading(o: { recordDate: number; prevDate: number; value: bigint; sourceUrl: string; feedId: string; valueDecimals: number }) {
+  async buildReading(o: { recordDate: number; prevDate: number; value: bigint; sourceUrl: string; feedId: string; valueDecimals: number; proofHash?: Uint8Array }) {
     if (this.heldKeys.length > MAX_QUORUM) throw new Error(`at most ${MAX_QUORUM} attester keys sign one reading`);
     const hex = "0".repeat(64);
-    const message = `${ATTESTATION_DOMAIN}|${this.cfg.clusterGenesis}|${this.programId}|${this.mint}|${o.feedId}|prev=${o.prevDate ? formatDate(o.prevDate) : "none"}|${formatDate(o.recordDate)}|${formatFixed(o.value, o.valueDecimals)}|src=${hex}|proof=${hex}`;
+    const proof = o.proofHash ? Buffer.from(o.proofHash).toString("hex") : hex;
+    const message = `${ATTESTATION_DOMAIN}|${this.cfg.clusterGenesis}|${this.programId}|${this.mint}|${o.feedId}|prev=${o.prevDate ? formatDate(o.prevDate) : "none"}|${formatDate(o.recordDate)}|${formatFixed(o.value, o.valueDecimals)}|src=${hex}|proof=${proof}`;
     this.lastReadingBytes = readingTxBytes(this.heldKeys.length, new TextEncoder().encode(message).length);
     if (this.lastReadingBytes > PACKET_DATA_SIZE && !this.lookupTable) throw new Error(`burnReceipts: the transaction is ${this.lastReadingBytes} bytes (limit ${PACKET_DATA_SIZE}); pass a lookup table (createReadingLookupTable)`);
     return { ...this.mk({ kind: "reading", recordDate: o.recordDate, prevDate: o.prevDate, value: o.value, keys: [...this.heldKeys] }), message };

@@ -81,3 +81,37 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `1c3fda17a66eba4855c53439e2b186c795f2d9e8fe6ba627c9b13a4057c1f516`
 - allowlist sha256 (config/public-repo.allowlist): `bb08241ed6570d363924fe7452e6acb85b5bbcf68c1c9fe22778312acb335b4b`
 - files published: 556
+
+## 2026-10-10 — Burn Derby + both-or-neither pairs (no publish, no deploy)
+
+- **Burn Derby** (owner-approved 10-10, "build it all"; design note docs/burnticker/DERBY.md): `oracle: "derby"` rules with a locked
+  `derby` block — coin vs coin (the winner's coin burns each UTC day or week; ties void; a one-shot flippening), single assets (Pyth's
+  crypto, equity/fund, FX, metal and commodity feeds, counted in percentage points), and brackets of 8 or 16 coins (losers' fan coins
+  retire; the final burns two units). Values from Pyth — keyless from its Solana `PriceUpdateV2` accounts, or Hermes boundary updates
+  with `BURNTICKER_PYTH_API_KEY` (keyless Hermes price paths answered 401 on 10-10) — or a pool TWAP for coins without a feed;
+  cross-read by Jupiter (price v3), DexScreener or RedStone; a gap above 2 points withholds the window. The window's proof hash is the
+  counter attestation's signed `proof=`.
+- **Both or neither** (owner decision 10-10): every new rivalry pair locks `clause`, `voidBy` and a weekly fallback clock in both rules;
+  `pending-pair` → planned when both pools register; `voided` + the clock when `voidBy` ends without both (registry `pair_outcomes`).
+- The wizard's "Coin vs Coin" tile; the pair page's derby block (score, day strip, season end, proof links) and the clause state with both
+  curves; `/burnticker/derby/<tournamentId>`; the derby day post and the pair state lines (lint-clean). OpenAPI 1.4.0 adds
+  `GET /derby`, `/derby/{id}`, `/derby/search`; SDK `bt.derby.*`.
+- Coverage: sources.json gains kind `price-feed` descriptors (Pyth crypto/equity/FX/metal/commodity/rates, the Raydium pool TWAP,
+  Jupiter, DexScreener, RedStone); the creation preflight reads each derby coin's primary and cross-read live. Financial markets
+  becomes settleable for equities, FX, metals and oil (RedStone cross-reads); rates have no keyless cross-read and are listed as such.
+- Copy lint: two narrow allowances for a derby's input ("WIF out-gains SHIB", "WIF's market cap passes SHIB's"), never a `$TICKER`.
+- **No burn pool is ever left behind** (owner decisions 10-10): every new rule carries `onEnd` (28-day wind-down + retired-coin sweep
+  threshold) in its hash — the API adds the default to a rule sent without it, the SDK does the same; a rule's end (one-shot NO / void,
+  pair voided, derby season over, bracket loser, an adapter's mark) starts a daily clock reading (proof = sha256 of date + rules sha)
+  that spends ≥ 99 % in 28 days; a one-shot may spend 100 % and drains across cranks (the program already allows 10,000 bps); retired
+  coins are swept above 0.05 SOL at most weekly; the pair clause's weekly fallback clock is replaced by the wind-down; outcome sets
+  (`set`) are in the schema. PROGRAM-UPGRADE-QUEUE.md: `sweep_retired`, `forward_to_winner`, per-outcome fractions.
+
+
+## 2026-10-10 — publish from 7bc68e5d324c
+
+- monorepo commit: `7bc68e5d324c09a87390565f8e388246427e4914` (the working tree had uncommitted changes when this tag was written)
+- program hash: `7a61f00bb38394a6ec57341836e2a261caa9b4befe67082a3ff9e0e9026f5739` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `1c3fda17a66eba4855c53439e2b186c795f2d9e8fe6ba627c9b13a4057c1f516`
+- allowlist sha256 (config/public-repo.allowlist): `bb08241ed6570d363924fe7452e6acb85b5bbcf68c1c9fe22778312acb335b4b`
+- files published: 591

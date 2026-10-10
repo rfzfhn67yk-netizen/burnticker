@@ -1,7 +1,7 @@
 import { Keypair, PublicKey, Transaction, type Connection } from "@solana/web3.js";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { transactionFrom, PLACEHOLDER_BLOCKHASH } from "@/lib/burnticker/transactions";
-import { lockRule } from "@/lib/burnticker/rules";
+import { DEFAULT_ON_END, lockRule } from "@/lib/burnticker/rules";
 import { compose, type Mapping, type Selector } from "./rules.ts";
 import type { ApiTransport } from "./http.ts";
 import type { LaunchBundleResponse, LaunchReview, UnsignedTx } from "./types.ts";
@@ -71,7 +71,10 @@ export async function assertNotMainnet(connection: Connection | undefined, allow
 
 export async function buildLaunchBundle(api: ApiTransport, o: LaunchOptions, ctx: { connection?: Connection; programId?: PublicKey | null } = {}): Promise<LaunchResult> {
   await assertNotMainnet(ctx.connection, o.allowMainnet, "launch");
-  const ruleObj = o.selector ? compose(o.selector, o.rule as Mapping) : o.rule;
+  const composed = o.selector ? compose(o.selector, o.rule as Mapping) : o.rule;
+  // Since API 1.4.0 every new coin carries the onEnd wind-down (no burn pool is ever left behind); the server adds the default to a rule
+  // without one, so the SDK adds the same default here and re-checks the exact bytes that come back.
+  const ruleObj = (composed as { onEnd?: unknown }).onEnd === undefined ? { ...(composed as object), onEnd: { ...DEFAULT_ON_END } } : composed;
   const locked = lockRule(ruleObj);   // fails here, locally, with every problem listed — before any request
   const kp = o.mintKeypair ?? Keypair.generate();
   const wallet = new PublicKey(o.wallet).toBase58();

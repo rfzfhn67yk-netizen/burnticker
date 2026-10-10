@@ -30,7 +30,8 @@ export { verifyReceiptCore, kalshiSourceReading, polymarketSourceReading, feedSo
 export { compileUnsigned, transactionFrom, PLACEHOLDER_BLOCKHASH, MAX_TX_BYTES } from "@/lib/burnticker/transactions";
 export { buildLaunchBundle as buildLaunchBundleOffline, launchProblems, allocationFor, FakeLaunchLab, type LaunchBundle, type LaunchInput, type LaunchDeps, type LaunchLabClient } from "@/lib/burnticker/launchBundle";
 export { FakeBurnProgram, PLACEHOLDER_PROGRAM_ID, type BurnProgramClient } from "@/lib/burnticker/program";
-export { DISCLAIMER_FOOTER, EVENT_CONTRACT_DISCLOSURE, POLYMARKET_DISCLOSURE, TOTAL_SUPPLY, DECIMALS } from "@/lib/burnticker/rules";
+export { DISCLAIMER_FOOTER, EVENT_CONTRACT_DISCLOSURE, POLYMARKET_DISCLOSURE, DERBY_DISCLOSURE, PAIR_CLAUSE, pairClause, TOTAL_SUPPLY, DECIMALS } from "@/lib/burnticker/rules";
+export { derbySeriesId, derbySpecProblems, derbySentence, derbyStatement, seasonWindows, windowAt, underlyingKey, DERBY_DISAGREEMENT_PP, type DerbySpec, type CoinVsSpec, type PriceSpec, type BracketSpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 export { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 export { buybackSpend } from "@/lib/burnKeeper/rules";
 export { configPda, feePda, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";

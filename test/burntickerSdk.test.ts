@@ -10,7 +10,7 @@ import {
   Burnticker, BurntickerApiError, rules, fees, feePdaFor, verifyReceipt, crank, subscribe, decodeEventData, EVENT_IX_TAG, buildLaunchBundleOffline, FakeBurnProgram, FakeLaunchLab, compileUnsigned, PLACEHOLDER_PROGRAM_ID,
   type BurntickerEvent,
 } from "../packages/burnticker-sdk/src/index.ts";
-import { lockRule } from "@/lib/burnticker/rules";
+import { DEFAULT_ON_END, lockRule } from "@/lib/burnticker/rules";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { encodeType } from "@/lib/burnReceipts/idlCoder";
 import { configPda, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
@@ -88,7 +88,7 @@ describe("buildLaunchBundle", () => {
     const sent: string[] = [];
     const spy = new Burnticker({ apiBase: API, connection: conn as never, programId: PLACEHOLDER_PROGRAM_ID, fetch: async (url, init) => { if (init?.body) sent.push(init.body); return routeFetch(url, init); } });
     const r = await spy.buildLaunchBundle({ wallet: wallet.publicKey, selector: { series: "KXHIGHDEN" }, rule: { kind: "scalar", scalar: { unit: 1, perUnit: { fractionOfPool: 0.01 }, baseline: 80, direction: "up" } }, metadata: { ticker: "hotden", name: "Hot Denver" }, acknowledgements: { ruleLocked: true, noReturns: true } });
-    assert.equal(r.rulesSha256, lockRule(DENVER_HIGH).sha256);
+    assert.equal(r.rulesSha256, lockRule({ ...DENVER_HIGH, onEnd: DEFAULT_ON_END }).sha256, "the SDK adds the onEnd wind-down the server adds (API 1.4.0)");
     assert.equal(r.feePda, feePdaFor(PLACEHOLDER_PROGRAM_ID, r.mint).toBase58());
     assert.equal(r.review.burnPoolAuthority, r.feePda);
     assert.match(r.receiptFormat, /^BT\|HOTDEN\|/);

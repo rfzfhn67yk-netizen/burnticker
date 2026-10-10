@@ -125,8 +125,9 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       // Review-3 I-1: never a mainnet-bound signature off mainnet; on devnet/mainnet the build's genesis must be the RPC's.
       assertSignableGenesis(genesis, ctx.cluster, genesisRpc);
       const srcHash = sourceUrlHash(i.sourceUrl);
-      const att = attestReading({ genesisHash: genesis, programId: o.programId, mint: o.mint, feedId: i.feedId, prevDate: i.prevDate, recordDate: i.recordDate, value: i.value, valueDecimals: i.valueDecimals, sourceUrlHash: srcHash, signers: o.attesters.map((k) => ({ publicKey: k.publicKey, secretKey: k.secretKey })) });
-      const tx = await sign([att.instruction, submitReadingIx({ programId: o.programId, payer: o.payer.publicKey, mint: o.mint, recordDate: i.recordDate, value: i.value, sourceUrlHash: srcHash })]);
+      // proof= (2026-10-10): Burn Derby readings commit to their proof hash (the Pyth update bytes' digest); zero for every other source.
+      const att = attestReading({ genesisHash: genesis, programId: o.programId, mint: o.mint, feedId: i.feedId, prevDate: i.prevDate, recordDate: i.recordDate, value: i.value, valueDecimals: i.valueDecimals, sourceUrlHash: srcHash, ...(i.proofHash ? { proofHash: i.proofHash } : {}), signers: o.attesters.map((k) => ({ publicKey: k.publicKey, secretKey: k.secretKey })) });
+      const tx = await sign([att.instruction, submitReadingIx({ programId: o.programId, payer: o.payer.publicKey, mint: o.mint, recordDate: i.recordDate, value: i.value, sourceUrlHash: srcHash, ...(i.proofHash ? { proofHash: i.proofHash } : {}) })]);
       return { ...tx, message: att.message.toString("utf8") };
     },
     async planCrank() {

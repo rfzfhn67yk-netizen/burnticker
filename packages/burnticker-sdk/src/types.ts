@@ -90,3 +90,27 @@ export interface ProgramEvent { kind: "program"; name: string; data: Record<stri
 /** A receipt that appeared or changed state, seen through the public API (the polling fallback). */
 export interface ReceiptEvent { kind: "receipt"; name: "ReceiptNew" | "ReceiptUpdated"; receipt: ReceiptJson; ticker: string }
 export type BurntickerEvent = ProgramEvent | ReceiptEvent;
+
+// ---- Burn Derby (2026-10-10; OpenAPI 1.4.0) ----
+export interface DerbyUnderlyingJson { symbol: string; pyth: string | null; mint: string | null; pool: string | null; cross: string }
+export interface DerbyDayJson {
+  day: number; windowId: string; at: string; status: "decided" | "withheld"; winner: "A" | "B" | "tie" | null;
+  a: { symbol: string; changePct: string | null; start: string | null; end: string | null; source: string | null }; b: { symbol: string; changePct: string | null; start: string | null; end: string | null; source: string | null } | null;
+  margin: string | null; crossMargin: string | null; reason: string | null; eventId: string | null; proofSha256: string | null; proof: { label: string; url: string | null; detail: string }[];
+  receipts: { a: { status: string; burned: string | null; signature: string | null; txUrl: string | null } | null; b: { status: string; burned: string | null; signature: string | null; txUrl: string | null } | null };
+}
+export interface DerbyPairJson {
+  pairId: string; selector: "coinvs" | "price"; series: string; window: string; measure: string; flip: boolean; symbols: { a: string; b: string | null };
+  season: { start: string; days: number; endsOn: string; over: boolean; windows: number; windowsDone: number };
+  score: { a: number; b: number; ties: number; withheld: number; dayNumber: number }; days: DerbyDayJson[]; retired: { a: string | null; b: string | null }; note: string;
+}
+export interface DerbyTournamentJson {
+  id: string; title: string; sha256: string; size: number; start: string; end: string; roundDays: number; fractionOfPool: number; finalBurn: string; finalUnits: number;
+  status: "upcoming" | "running" | "complete"; currentRound: number | null; champion: { slot: number; symbol: string; ticker: string | null } | null;
+  rounds: { index: number; start: string; end: string; final: boolean; matches: { round: number; index: number; final: boolean; a: { slot: number; symbol: string; ticker: string | null; status: string | null } | null; b: { slot: number; symbol: string; ticker: string | null; status: string | null } | null; winsA: number; winsB: number; ties: number; withheld: number; cumA: string; cumB: string; winner: number | null; tiebreak: string | null; days: { date: string; result: "A" | "B" | "tie" | "withheld" | "open"; changeA: string | null; changeB: string | null }[] }[] }[];
+  coins: { slot: number; symbol: string; ticker: string | null; mint: string | null; status: string | null; retiredReason: string | null; eliminatedInRound: number | null }[];
+}
+export interface DerbyList { tournaments: Pick<DerbyTournamentJson, "id" | "title" | "size" | "start" | "end" | "roundDays" | "status" | "currentRound" | "champion">[]; pairs: { pairId: string; a: string; b: string; series: string; selector: string; season: { start: string; days: number; endsOn: string }; score: { a: number; b: number; ties: number }; page: string }[]; note: string }
+export interface DerbyDetail { kind: "tournament" | "pair"; tournament: DerbyTournamentJson | null; pair: DerbyPairJson | null; tickers: { a: string; b: string } | null; post: string | null }
+export interface DerbySearchHit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlyingJson | null; why: string | null }
+export interface DerbySearch { query: string; assets: string; hits: DerbySearchHit[]; note: string }

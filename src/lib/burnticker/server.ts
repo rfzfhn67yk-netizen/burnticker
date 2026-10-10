@@ -10,15 +10,19 @@ import { SOL_MINT, usdPrice } from "@/lib/burnKeeper/jupiterSwap";
 import { FakeBurnProgram, programPageBlock, type BurnProgramClient } from "@/lib/burnticker/program";
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
 import { FakeLaunchLab, type LaunchLabClient } from "@/lib/burnticker/launchBundle";
-import { buildReceiptsJson, buildTokenStatus, type PairCounterpart, type TokenPageInput, type TokenStatusJson, type ReceiptJson } from "@/lib/burnticker/tokenPage";
+import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairClauseState, type PairCounterpart, type TokenPageInput, type TokenStatusJson, type ReceiptJson } from "@/lib/burnticker/tokenPage";
 import { DECIMALS, TOTAL_SUPPLY } from "@/lib/burnticker/rules";
 import { rawToTokens, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { loadPowersRegister, operatorPowersSummary } from "@/lib/burnticker/trust";
 import { devFeeWallet } from "@/lib/burnticker/fees";
-import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
+import type { FetchLike, OracleAdapter } from "@/lib/burnticker/oracle/types";
+import { connectionPoolPort, type PoolPort } from "@/lib/burnticker/derby/pools";
+import { HermesClient } from "@/lib/burnticker/derby/pyth";
+import { DerbyAdapter } from "@/lib/burnticker/derby/adapter";
 import { readMarket, type MarketReader } from "@/lib/burnticker/market";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "@/lib/burnticker/venues";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
+import { derbyTitle } from "@/lib/burnticker/api/handlers";
 
 /**
  * THE APP'S WIRING (2026-10-09): one place that opens the registry, builds the oracle clients, and chooses the program / LaunchLab
@@ -27,17 +31,26 @@ import { nativeSourceById } from "@/lib/burnticker/sources/native";
  */
 
 export interface Platform {
-  registry: Registry; oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket: OracleAdapter }; kalshi: KalshiClient; polymarket: PolymarketClient; program: BurnProgramClient; launchLab: LaunchLabClient;
+  registry: Registry; oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket: OracleAdapter; /** Burn Derby (derby/adapter.ts). */ derby?: OracleAdapter }; kalshi: KalshiClient; polymarket: PolymarketClient; program: BurnProgramClient; launchLab: LaunchLabClient;
   cluster: "devnet" | "mainnet" | "localnet"; publishDir: string; devFeeWallet: string | null; keeperPubkey: string | null; platformId: string | null; stubs: string[];
   /** Reads each coin's LaunchLab curve and top holders (market.ts) — present only with BURNTICKER_RPC_URL; without it the cards show "—". */
   market?: MarketReader | null;
   /** BURNTICKER_KALSHI_ENABLED (venues.ts): false turns off every Kalshi-facing surface; undefined = on. */
   kalshiEnabled?: boolean;
+  /** Burn Derby (2026-10-10): the fetch for cross-reads / Jupiter search (tests inject fixtures; production = global fetch). */
+  derbyFetch?: FetchLike;
+  /** Burn Derby: a read-only MAINNET account port (Pyth's Solana accounts, pools, mint supplies) — BURNTICKER_DERBY_RPC_URL, else the public RPC. */
+  derbyPools?: PoolPort | null;
+  /** Burn Derby: Hermes, only when BURNTICKER_PYTH_API_KEY is set (keyless price paths answer 401). */
+  derbyHermes?: HermesClient | null;
   /** BURNTICKER_POLYMARKET_DISCOVERY_ENABLED (venues.ts): false withholds Polymarket discovery (search, Browse, elections); undefined = on. Settlement unaffected. */
   polymarketDiscovery?: boolean;
 }
 
 let cached: Platform | null = null;
+
+/** A derby coin's page on a host whose platform carries no derby adapter: no market, no odds. */
+const derbyPageOracle: OracleAdapter = { id: "derby", searchSeries: async () => [], seriesInfo: async () => null, settledSince: async () => ({ events: [], awaitingFinal: 0, refusals: [], settlementSourceUrl: null }), impliedChance: async () => ({ chance: null, marketTicker: null, closeTime: null, basis: "Burn Derby: no market and no odds" }) };
 
 /** The refuse list (config/burnticker/refuse.json) as the Polymarket client's title check: the reasons a title is refused, or []. */
 export const refuseTitles: TitleRefuser = (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))];
@@ -74,9 +87,14 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const market: MarketReader | null = rpc ? (new Connection(rpc, { commitment: "confirmed", disableRetryOnRateLimit: true }) as unknown as MarketReader) : null;
   if (!rpc) stubs.push("LaunchLab curve progress and top holders: no BURNTICKER_RPC_URL on this host (cards show —)");
   if (!polymarketDiscoveryEnabled(env)) stubs.push("Polymarket discovery: off on this host (BURNTICKER_POLYMARKET_DISCOVERY_ENABLED=0); settlement reads the on-chain payout regardless");
+  const registry = openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE);
+  // Burn Derby (2026-10-10): Pyth / pools / supplies are MAINNET facts whatever cluster the coins live on — a read-only port, no key.
+  const derbyPools = connectionPoolPort(new Connection((env.BURNTICKER_DERBY_RPC_URL ?? "").trim() || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true }));
+  const derbyHermes = (env.BURNTICKER_PYTH_API_KEY ?? "").trim() ? HermesClient.fromEnv(env) : null;
+  const derby = new DerbyAdapter({ registry, hermes: derbyHermes, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now() });
   cached = {
-    registry: openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE),
-    oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket }, kalshi, polymarket, program, launchLab, cluster,
+    registry, derbyPools, derbyHermes,
+    oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
     devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
   };
@@ -91,7 +109,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const locked = p.registry.lockedRule(t);
   const readings = p.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
   const state = p.registry.state(t.mint);
-  const oracle = locked.rule.oracle === "catalogue" ? p.oracles.catalogue : locked.rule.oracle === "polymarket" ? p.oracles.polymarket : p.oracles.kalshi;
+  const oracle = locked.rule.oracle === "catalogue" ? p.oracles.catalogue : locked.rule.oracle === "polymarket" ? p.oracles.polymarket : locked.rule.oracle === "derby" ? p.oracles.derby ?? derbyPageOracle : p.oracles.kalshi;
   // live: false (the receipts-only API route) skips the two oracle calls; the receipts do not depend on them. Venue display reads
   // (venues.ts): no market-implied chance from Polymarket ever (no odds rendered), Kalshi's only with BURNTICKER_KALSHI_ENABLED on;
   // series titles from Kalshi only when enabled, from Polymarket only with discovery on.
@@ -99,7 +117,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const kOk = p.kalshiEnabled !== false, pOk = p.polymarketDiscovery !== false;
   const [implied, info] = opts.live === false ? ([null, null] as const) : await Promise.all([
     !isK || !kOk ? Promise.resolve(null) : oracle.impliedChance(locked.rule, state.lastValue).catch((e: Error) => ({ chance: null, marketTicker: null, closeTime: null, basis: `unavailable: ${e.message.slice(0, 80)}` })),
-    locked.rule.oracle === "catalogue" || (isK && !kOk) || (isP && !pOk) ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.oracle === "polymarket" ? (locked.rule.market ?? locked.rule.series!) : locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
+    locked.rule.oracle === "derby" ? Promise.resolve({ title: derbyTitle(locked.rule) }) : locked.rule.oracle === "catalogue" || (isK && !kOk) || (isP && !pOk) ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.oracle === "polymarket" ? (locked.rule.market ?? locked.rule.series!) : locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
   ]);
   const feedState = p.registry.feedState(t.selectorKey);
   const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
@@ -110,6 +128,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   return {
     market,
     pair: await pairCounterpart(p, t),
+    lifecycle: lifecycleFrom(p.registry, t, locked.rule, feePdaLamports),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
     chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: await programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading")) },
     now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
@@ -129,7 +148,8 @@ export async function pairCounterpart(p: Platform, t: TokenRow): Promise<PairCou
   const burnedRaw = p.registry.totalBurnedRaw(other.mint);
   const supplyRaw = (await p.program.supplyRaw(other.mint).catch(() => null)) ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS) - burnedRaw;
   const last = [...confirmed].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null } };
+  const clause = await pairClauseState(p.registry, pair, async (mint) => { try { return (await p.program.port(mint).config())?.poolRegistered ?? null; } catch { return null; } });
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause };
 }
 
 export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), opts: { live?: boolean } = {}): Promise<{ status: TokenStatusJson; receipts: ReceiptJson[]; readings: TokenPageInput["readings"]; rulesText: string; stubs: string[] }> {

@@ -40,7 +40,7 @@ export interface UnitStep {
   units: number;
   /** The mapping that applies (null = nothing burns: NO without onNo, void, flat/wrong-direction scalar). */
   mapping: BurnMapping | null;
-  kind: "yes" | "no" | "void" | "up" | "down" | "flat" | "under-unit";
+  kind: "yes" | "no" | "void" | "up" | "down" | "flat" | "under-unit" | "winddown" | "drain" | "sweep";
   /** Decimal remainder carried out (feeds with carry); "0" otherwise. */
   carryOut: string;
   baseline: string | null;
@@ -162,3 +162,65 @@ export function previewTotals(steps: readonly { step: UnitStep }[]): PreviewTota
   }
   return { events: steps.length, burnEvents, voids, units, poolFractionSpent: anyFraction ? 1 - keep : null, tokens: anyTokens ? tokens : null };
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// BOTH OR NEITHER (rivalry pairs, owner decision 2026-10-10; rules.ts PairField). Pure: what a step becomes under a pair's clause, and
+// the fallback clock a voided pair's coins run on.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/** A clause pair's state: live (both pools registered before voidBy ended), waiting (on side A, B or both), or voided. */
+export type PairGate = { state: "live" } | { state: "waiting"; waitingOn: ("A" | "B")[]; voidBy: string } | { state: "voided"; atMs: number };
+
+/**
+ * The receipt status a step gets under a pair's clause: a step that would burn (units > 0 with a mapping) waits as "pending-pair" while
+ * the pair is waiting, and is "voided" once the pair voided; a void / nothing step is unchanged (null), as is everything on a live pair.
+ */
+export function gatedStatus(step: Pick<UnitStep, "units" | "mapping" | "kind">, gate: PairGate | null): "pending-pair" | "voided" | null {
+  if (!gate || gate.state === "live" || step.kind === "void" || !step.mapping || step.units <= 0) return null;
+  return gate.state === "waiting" ? "pending-pair" : "voided";
+}
+
+/** The moment a clause pair voids if either side is still unregistered: the END of its voidBy UTC date. */
+export const voidByEndMs = (voidBy: string): number => Date.parse(`${voidBy}T00:00:00Z`) + 86_400_000;
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// NO BURN POOL IS EVER LEFT BEHIND (owner decision 2026-10-10; rules.ts onEnd). Pure: the wind-down schedule, the drain after a one-shot
+// YES at 100 %, and the retired-coin sweep — each a daily synthetic receipt the keeper attests like any reading.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/** The share of the pool a wind-down spends by its last day (≥ 99 %). */
+export const WIND_DOWN_TARGET = 0.99;
+
+/**
+ * Units per wind-down day for a rule's fraction f: the smallest n with (1 − f)^(n × days) ≤ 1 − WIND_DOWN_TARGET — the geometric daily
+ * fraction 1 − (1 − f)^n spends ≥ 99 % within `days` (f = 1 → one unit spends everything).
+ */
+export function windDownUnits(f: number, days: number): number {
+  if (!(f > 0 && f <= 1)) throw new Error(`fraction ${f} is outside (0, 1]`);
+  if (f >= 1) return 1;
+  const keepPerDay = Math.pow(1 - WIND_DOWN_TARGET, 1 / days);
+  return Math.max(1, Math.ceil(Math.log(keepPerDay) / Math.log(1 - f) - 1e-12));
+}
+
+/** The schedule: per day its units and the cumulative share spent (before the per-crank cap and the floor). */
+export function windDownSchedule(f: number, days: number): { day: number; units: number; spent: number }[] {
+  const n = windDownUnits(f, days);
+  return Array.from({ length: days }, (_, i) => ({ day: i + 1, units: n, spent: 1 - Math.pow(1 - f, n * (i + 1)) }));
+}
+
+/** Units that spend ≥ 99 % of the pool in ONE reading (the sweep's day): (1 − f)^n ≤ 0.01. */
+export const fullSpendUnits = (f: number): number => windDownUnits(f, 1);
+
+export type EndReceiptKind = "winddown" | "drain" | "sweep";
+
+/** One synthetic end-of-rule step: `units` of the rule's own mapping (its one fraction per unit, or token count). */
+export function endStep(rule: Pick<BurnRule, "kind" | "binary" | "scalar">, kind: EndReceiptKind, units: number): UnitStep {
+  const mapping = (rule.kind === "binary" ? rule.binary?.onYes ?? rule.binary?.onNo : rule.scalar?.perUnit) ?? null;
+  const note = kind === "drain" ? "one-shot settled YES at 100 % of the pool: one drain unit (its rule spend is the whole pool) until the program carries nothing more"
+    : kind === "winddown" ? `the rule ended: the wind-down clock, ${units} unit${units === 1 ? "" : "s"} of the rule's fraction today`
+    : `retired coin sweep: ${units} unit${units === 1 ? "" : "s"} — the fee income that arrived after retirement, spent and burned`;
+  return { units: mapping ? units : 0, mapping, kind, carryOut: "0", baseline: null, note };
+}
+
+/** The first wind-down day for a rule that ended at `endMs`: that UTC date when the end is exactly midnight, else the next one. */
+export const firstWindDownDay = (endMs: number): string => new Date(Math.ceil(endMs / 86_400_000) * 86_400_000).toISOString().slice(0, 10);

@@ -16,9 +16,32 @@ import { TEAM_ALIASES, type TeamAlias } from "@/lib/burnticker/oracle/events";
 const teamOf = (series: string | null, abbr: string, aliases: readonly TeamAlias[]): TeamAlias | null => aliases.find((a) => a.series === series && a.abbr === abbr) ?? null;
 const sideWord = (b: NonNullable<BurnRule["binary"]>): "win" | "lose" | "both" => (b.onYes && b.onNo ? "both" : b.onYes ? "win" : "lose");
 
-export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, aliases: readonly TeamAlias[] = TEAM_ALIASES): string {
+/**
+ * NO BURN POOL IS EVER LEFT BEHIND (2026-10-10; rules.ts onEnd): a one-shot at 100 % reads "burns everything the day X happens; if it
+ * doesn't, the pool burns down over four weeks after <end date>". `endDate` is the one-shot's settlement / void date when known.
+ */
+export function oneShotAllLiner(rule: BurnRule, event: string, endDate: string | null = null): string | null {
+  const m = rule.kind === "binary" && rule.binary ? rule.binary.onYes ?? rule.binary.onNo : null;
+  if (!m || (m.fractionOfPool ?? 0) < 1 || !(rule.market !== null || (rule.derby?.selector === "coinvs" && rule.derby.flip))) return null;
+  const weeks = rule.onEnd ? (rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`) : null;
+  return `burns everything the day ${event} happens${weeks ? `; if it doesn't, the pool burns down over ${weeks} after ${endDate ?? "it settles"}` : ""}`;
+}
+
+export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, aliases: readonly TeamAlias[] = TEAM_ALIASES, endDate: string | null = null): string {
   const title = (seriesTitle ?? "").trim();
+  const all = oneShotAllLiner(rule, title || rule.market || rule.series || "the event", endDate ?? rule.pair?.voidBy ?? null);
+  if (all) return all;
   if (rule.oracle === "catalogue") return `burns on the ${title || rule.series} feed`;
+  // Burn Derby (2026-10-10): the input is another coin's (or asset's) move — named as the rule's input, never this coin's.
+  if (rule.oracle === "derby" && rule.derby) {
+    const d = rule.derby, every = (w: string) => (w === "weekly" ? "week" : "day");
+    if (d.selector === "coinvs") {
+      const [win, lose] = rule.binary?.onNo && !rule.binary.onYes ? [d.b.symbol, d.a.symbol] : [d.a.symbol, d.b.symbol];
+      return d.flip ? (win === d.a.symbol ? `burns once if ${d.a.symbol}'s market cap passes ${d.b.symbol}'s` : `burns once if ${d.a.symbol}'s market cap never passes ${d.b.symbol}'s`) : `burns every ${every(d.window)} ${win} out-gains ${lose}`;
+    }
+    if (d.selector === "price") return `burns per ${rule.scalar?.unit ?? "?"}% ${d.u.symbol} ${rule.scalar?.direction === "down" ? "falls" : "rises"} each ${every(d.window)}`;
+    return `burns on ${d.underlying.symbol}'s winning days in bracket ${d.tournamentId}`;
+  }
   if (rule.kind === "binary" && rule.binary) {
     const side = sideWord(rule.binary);
     if (rule.oracle === "kalshi") {
@@ -56,9 +79,16 @@ const mapWords = (m: { fractionOfPool?: number; tokens?: number } | null | undef
  * The review screen's plain sentence for ANY rule (the team flow has its own, wizard.ts teamCoinSentence): what settles, which outcome,
  * what one burn does. Our words around the venue's title; the exact statement and hash stay under "details".
  */
-export function plainSentence(rule: BurnRule, ticker: string, title: string | null = null): string {
+export function plainSentence(rule: BurnRule, ticker: string, title: string | null = null, endDate: string | null = null): string {
   const t = ticker || "TICKER";
   const what = (title ?? "").trim() || rule.market || rule.series || "the source";
+  const all = oneShotAllLiner(rule, what.replace(/\s*\(resolves once\)$/, ""), endDate ?? rule.pair?.voidBy ?? null);
+  const tail = rule.onEnd ? ` When the rule ends, whatever is left in $${t}'s burn pool burns down over ${rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`}.` : "";
+  if (all) return `$${t} ${all}.`;
+  return plainCore(rule, t, what) + tail;
+}
+
+function plainCore(rule: BurnRule, t: string, what: string): string {
   if (rule.oracle === "catalogue" && rule.scalar) return `Each time ${what} publishes a complete reading, $${t} ${mapWords(rule.scalar.perUnit, t)} once for every unit the source counts (compounding).`;
   if (rule.oracle === "polymarket" && rule.market && rule.kind === "binary" && rule.binary?.onYes && !rule.binary.onNo) {
     const event = what.replace(/\s*\(resolves once\)$/, "");

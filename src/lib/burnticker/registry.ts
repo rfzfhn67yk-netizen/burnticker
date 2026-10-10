@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { lockRule, type BurnMapping, type BurnRule, type LockedRule, type RuleMode } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
+import { derbyReadingInSeason } from "@/lib/burnticker/derby/season";
 
 /**
  * THE REGISTRY — data/burnticker.db (node:sqlite, like the keeper's ledger and every other service here; 2026-10-09). One writer:
@@ -44,7 +45,11 @@ export interface TokenRow {
 
 export interface ReadingRow extends SettledEvent { oracle: string; selectorKey: string; settlementSourceUrl: string | null; method: string | null; proof: string | null; attestedBy: string[]; fetchedAt: number }
 
-export type ReceiptStatus = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing";
+/**
+ * "pending-pair": a clause pair's event burn read before both coins had a registered pool (rules.ts PairField) — it waits, and becomes
+ * "planned" (in order) when the second pool registers, or "voided" (final, never executed) if the pair voids.
+ */
+export type ReceiptStatus = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing" | "pending-pair" | "voided";
 export interface ReceiptRow {
   mint: string; eventId: string; settledAt: string; result: string | null; value: string | null; units: number; mapping: BurnMapping | null; kind: string; note: string;
   prevValue: string | null; carryIn: string; carryOut: string;
@@ -98,6 +103,12 @@ CREATE TABLE IF NOT EXISTS status (key TEXT PRIMARY KEY, value TEXT NOT NULL, up
 CREATE TABLE IF NOT EXISTS alerts (ts INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, text TEXT NOT NULL, meta_json TEXT, PRIMARY KEY (key, day));
 CREATE INDEX IF NOT EXISTS alerts_by_ts ON alerts (ts);
 CREATE TABLE IF NOT EXISTS pairs (pair_id TEXT PRIMARY KEY, mint_a TEXT NOT NULL UNIQUE, mint_b TEXT NOT NULL UNIQUE, selector_key TEXT NOT NULL, created_at INTEGER NOT NULL);
+-- BOTH OR NEITHER (2026-10-10): a clause pair's one terminal state — 'live' (both pools registered before voidBy ended) or 'voided'.
+-- Written once by the keeper; append-only.
+CREATE TABLE IF NOT EXISTS pair_outcomes (pair_id TEXT PRIMARY KEY, state TEXT NOT NULL, at INTEGER NOT NULL, detail TEXT);
+-- NO BURN POOL IS EVER LEFT BEHIND (2026-10-10): when and why a token's rule ENDED, and how its pool is spent from then on
+-- ('drain' after a one-shot YES at 100 %, else 'winddown'); written once by the keeper; append-only.
+CREATE TABLE IF NOT EXISTS rule_ends (mint TEXT PRIMARY KEY, mode TEXT NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL);
 `;
 
 /** Columns added to burns for program execution (2026-10-10), added in place to an older registry file. */
@@ -139,6 +150,14 @@ CREATE TRIGGER IF NOT EXISTS alerts_no_update BEFORE UPDATE ON alerts BEGIN SELE
 CREATE TRIGGER IF NOT EXISTS alerts_no_delete BEFORE DELETE ON alerts BEGIN SELECT RAISE(ABORT, 'alerts: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS pairs_no_update BEFORE UPDATE ON pairs BEGIN SELECT RAISE(ABORT, 'pairs: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS pairs_no_delete BEFORE DELETE ON pairs BEGIN SELECT RAISE(ABORT, 'pairs: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS pair_outcomes_no_update BEFORE UPDATE ON pair_outcomes BEGIN SELECT RAISE(ABORT, 'pair_outcomes: a pair goes live or voids once'); END;
+CREATE TRIGGER IF NOT EXISTS pair_outcomes_no_delete BEFORE DELETE ON pair_outcomes BEGIN SELECT RAISE(ABORT, 'pair_outcomes: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS rule_ends_no_update BEFORE UPDATE ON rule_ends BEGIN SELECT RAISE(ABORT, 'rule_ends: a rule ends once'); END;
+CREATE TRIGGER IF NOT EXISTS rule_ends_no_delete BEFORE DELETE ON rule_ends BEGIN SELECT RAISE(ABORT, 'rule_ends: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS burns_voided_frozen BEFORE UPDATE ON burns WHEN OLD.status = 'voided'
+  BEGIN SELECT RAISE(ABORT, 'burns: a voided receipt is final'); END;
+CREATE TRIGGER IF NOT EXISTS burns_pending_pair_moves BEFORE UPDATE OF status ON burns WHEN OLD.status = 'pending-pair' AND NEW.status NOT IN ('pending-pair', 'planned', 'voided')
+  BEGIN SELECT RAISE(ABORT, 'burns: a pending-pair receipt becomes planned or voided'); END;
 `;
 
 export interface PairRow { pairId: string; mintA: string; mintB: string; selectorKey: string; createdAt: number }
@@ -169,6 +188,7 @@ const toSig = (r: Row): SignatureRow => ({ signature: String(r.signature), mint:
  * or `polymarket:<series>:binary` ("polymarket:tag:nfl/moneyline:binary").
  */
 export function selectorKeyOf(rule: BurnRule): string {
+  if (rule.oracle === "derby") return `derby:${rule.series}`;
   if (rule.oracle === "catalogue") return `catalogue:${rule.series}`;
   if (rule.oracle === "polymarket") return rule.market ? `polymarket:market:${rule.market}` : `polymarket:${rule.series}:${rule.kind}`;
   return rule.market ? `kalshi:market:${rule.market}` : `kalshi:${rule.series}:${rule.kind}`;
@@ -178,7 +198,9 @@ export function selectorKeyOf(rule: BurnRule): string {
 export function wideRule(rule: BurnRule): BurnRule { return rule.market ? rule : { ...rule, filter: {} }; }
 
 /** Does a stored reading fall under this token's filter? (`tickerIncludes` over the event id, `titleRegex` over the title.) */
-export function readingMatches(rule: BurnRule, r: { id: string; title: string | null }): boolean {
+export function readingMatches(rule: BurnRule, r: { id: string; title: string | null; at?: string }): boolean {
+  // Burn Derby (2026-10-10): coin-vs-coin pairs on one matchup share its readings; each token counts only its own season's windows.
+  if (rule.oracle === "derby") return derbyReadingInSeason(rule, r);
   if (rule.oracle === "catalogue" || rule.market) return true;
   if (rule.filter.tickerIncludes && !r.id.includes(rule.filter.tickerIncludes)) return false;
   if (rule.filter.titleRegex && !new RegExp(rule.filter.titleRegex).test(r.title ?? "")) return false;
@@ -307,16 +329,43 @@ export class Registry {
 
   // ---- receipts ----
   /** Records one planned step for a token (the receipt row + the cursor), in one transaction. Idempotent per (mint, event). */
-  applyStep(mint: string, e: SettledEvent, step: { units: number; mapping: BurnMapping | null; kind: string; note: string; carryOut: string; baseline: string | null }, prev: { value: string | null; carryOut: string }, scalar: boolean, now = Date.now()): boolean {
+  applyStep(mint: string, e: SettledEvent, step: { units: number; mapping: BurnMapping | null; kind: string; note: string; carryOut: string; baseline: string | null }, prev: { value: string | null; carryOut: string }, scalar: boolean, now = Date.now(), gated: "pending-pair" | "voided" | null = null): boolean {
     return this.tx(() => {
       if (this.db.prepare("SELECT 1 FROM burns WHERE mint=? AND event_id=?").get(mint, e.id)) return false;
-      const status: ReceiptStatus = step.kind === "void" ? "void" : step.mapping && step.units > 0 ? "planned" : "nothing";
+      const base: ReceiptStatus = step.kind === "void" ? "void" : step.mapping && step.units > 0 ? "planned" : "nothing";
+      // Both or neither: a burn read before both pools registered waits; on a voided pair it is recorded and never executed.
+      const status: ReceiptStatus = base === "planned" && gated ? gated : base;
       this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(mint, e.id, e.at, e.result, e.value, step.units, step.mapping ? JSON.stringify(step.mapping) : null, step.kind, step.note, prev.value, prev.carryOut, step.carryOut, status, now, now);
       this.setState(mint, { lastEventId: e.id, lastValue: scalar && e.value !== null && e.result !== "void" ? e.value : prev.value, carryOut: step.carryOut, lastSettledAt: e.at }, now);
       return true;
     });
   }
+  /**
+   * An end-of-rule receipt (kind winddown / drain / sweep: no reading behind it — a date-based clock; the token's cursor is not moved).
+   * Idempotent per (mint, id).
+   */
+  addEndReceipt(mint: string, kind: "winddown" | "drain" | "sweep", e: { id: string; at: string }, step: { units: number; mapping: BurnMapping | null; note: string }, now = Date.now()): boolean {
+    if (this.db.prepare("SELECT 1 FROM burns WHERE mint=? AND event_id=?").get(mint, e.id)) return false;
+    this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at) VALUES (?,?,?,NULL,NULL,?,?,?,?,NULL,'0','0',?,?,?)`)
+      .run(mint, e.id, e.at, step.units, step.mapping ? JSON.stringify(step.mapping) : null, kind, step.note, step.mapping && step.units > 0 ? "planned" : "nothing", now, now);
+    return true;
+  }
+  /** When and why a token's rule ended (null while it reads). */
+  ruleEnd(mint: string): { mode: "drain" | "winddown"; reason: string; at: number } | null {
+    const r = this.db.prepare("SELECT mode, reason, at FROM rule_ends WHERE mint=?").get(mint) as Row | undefined;
+    return r ? { mode: String(r.mode) as "drain" | "winddown", reason: String(r.reason), at: Number(r.at) } : null;
+  }
+  /** Records the end once (an earlier record wins). Adapters that know a series is over (a team's season, a nominee replaced) call it too. */
+  markRuleEnded(mint: string, mode: "drain" | "winddown", reason: string, at: number): { mode: "drain" | "winddown"; reason: string; at: number } {
+    this.db.prepare("INSERT OR IGNORE INTO rule_ends (mint, mode, reason, at) VALUES (?,?,?,?)").run(mint, mode, reason.slice(0, 300), at);
+    return this.ruleEnd(mint)!;
+  }
+  /** A clause pair went live: its waiting receipts become planned (they execute in settlement order). Returns how many. */
+  promotePendingPair(mint: string, now = Date.now()): number { return Number(this.db.prepare("UPDATE burns SET status='planned', updated_at=? WHERE mint=? AND status='pending-pair'").run(now, mint).changes); }
+  /** A clause pair voided: its waiting receipts are voided (final; never executed). Returns how many. */
+  voidPendingPair(mint: string, reason: string, now = Date.now()): number { return Number(this.db.prepare("UPDATE burns SET status='voided', skipped_reason=?, updated_at=? WHERE mint=? AND status='pending-pair'").run(reason.slice(0, 300), now, mint).changes); }
+
   receipt(mint: string, eventId: string): ReceiptRow | null { const r = this.db.prepare("SELECT * FROM burns WHERE mint=? AND event_id=?").get(mint, eventId) as Row | undefined; return r ? toReceipt(r) : null; }
   receipts(mint: string): ReceiptRow[] { return (this.db.prepare("SELECT * FROM burns WHERE mint=? ORDER BY settled_at, event_id").all(mint) as Row[]).map(toReceipt); }
   pending(mint: string): ReceiptRow[] { return (this.db.prepare("SELECT * FROM burns WHERE mint=? AND status IN ('planned','sending') ORDER BY settled_at, event_id").all(mint) as Row[]).map(toReceipt); }
@@ -406,11 +455,23 @@ export class Registry {
     if (ra.pair?.pairId !== pairId || ra.pair.side !== "A") throw new Error(`registry: ${a.ticker}'s rule is not side A of ${pairId}`);
     if (rb.pair?.pairId !== pairId || rb.pair.side !== "B" || rb.pair.counterpartMint !== mintA) throw new Error(`registry: ${b.ticker}'s rule is not side B of ${pairId} naming ${mintA}`);
     if (a.selectorKey !== b.selectorKey) throw new Error("registry: a pair shares one selector key");
+    const ca = JSON.stringify({ c: ra.pair?.clause ?? null, v: ra.pair?.voidBy ?? null, e: ra.onEnd ?? null }), cb = JSON.stringify({ c: rb.pair?.clause ?? null, v: rb.pair?.voidBy ?? null, e: rb.onEnd ?? null });
+    if (ca !== cb) throw new Error("registry: both sides of a pair carry the same both-or-neither clause and onEnd (clause, voidBy, onEnd)");
     this.db.prepare("INSERT INTO pairs (pair_id, mint_a, mint_b, selector_key, created_at) VALUES (?,?,?,?,?)").run(pairId, mintA, mintB, a.selectorKey, now);
     return this.pair(pairId)!;
   }
   pair(pairId: string): PairRow | null { const r = this.db.prepare("SELECT * FROM pairs WHERE pair_id=?").get(pairId) as Row | undefined; return r ? { pairId: String(r.pair_id), mintA: String(r.mint_a), mintB: String(r.mint_b), selectorKey: String(r.selector_key), createdAt: Number(r.created_at) } : null; }
   pairOf(mint: string): PairRow | null { const r = this.db.prepare("SELECT * FROM pairs WHERE mint_a=? OR mint_b=?").get(mint, mint) as Row | undefined; return r ? { pairId: String(r.pair_id), mintA: String(r.mint_a), mintB: String(r.mint_b), selectorKey: String(r.selector_key), createdAt: Number(r.created_at) } : null; }
+  /** A clause pair's terminal state (live / voided), or null while it waits (or for a pair without the clause). */
+  pairOutcome(pairId: string): { state: "live" | "voided"; at: number; detail: string | null } | null {
+    const r = this.db.prepare("SELECT state, at, detail FROM pair_outcomes WHERE pair_id=?").get(pairId) as Row | undefined;
+    return r ? { state: String(r.state) as "live" | "voided", at: Number(r.at), detail: strOrNull(r.detail) } : null;
+  }
+  /** Records a clause pair's terminal state once (an earlier record wins). */
+  recordPairOutcome(pairId: string, state: "live" | "voided", at: number, detail: string | null): { state: "live" | "voided"; at: number; detail: string | null } {
+    this.db.prepare("INSERT OR IGNORE INTO pair_outcomes (pair_id, state, at, detail) VALUES (?,?,?,?)").run(pairId, state, at, detail);
+    return this.pairOutcome(pairId)!;
+  }
   pairs(): PairRow[] { return (this.db.prepare("SELECT * FROM pairs ORDER BY created_at").all() as Row[]).map((r) => ({ pairId: String(r.pair_id), mintA: String(r.mint_a), mintB: String(r.mint_b), selectorKey: String(r.selector_key), createdAt: Number(r.created_at) })); }
 
   // ---- attesters ----

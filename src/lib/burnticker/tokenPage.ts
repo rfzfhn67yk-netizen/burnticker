@@ -2,13 +2,13 @@ import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
 import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
-import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, oracleDisclosure, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, oracleDisclosure, pairClause, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { parseReceiptMemo } from "@/lib/burnticker/receipt";
-import { unitStep, type SettledEvent } from "@/lib/burnticker/units";
+import { fullSpendUnits, unitStep, windDownUnits, type SettledEvent } from "@/lib/burnticker/units";
 import { feedById } from "@/lib/burnticker/catalogue";
 import type { ImpliedChance } from "@/lib/burnticker/oracle/types";
 import type { AttesterRow, FeedState, ReadingRow, ReceiptRow, Registry, TokenRow, TokenState } from "@/lib/burnticker/registry";
-import type { PairCounterpart, PairSideSummary, ReceiptJson, TokenProgramJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
+import type { LifecycleJson, PairClauseJson, PairCounterpart, PairSideSummary, ReceiptJson, TokenProgramJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
 import { pairDailyText, platformDailyText, tokenDayText } from "@/lib/launch/dailyPost";
 import { parseBuybackMemo as parseProgramBuybackMemo, parseDebtMemo as parseProgramVaultMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/lib/burnReceipts/math";
@@ -39,6 +39,8 @@ export interface TokenPageInput {
   operator: { can: string[]; cannot: string[]; placeholder: boolean };
   /** Rivalry pair: the other side's summary, when this token is one half of a pair. */
   pair: PairCounterpart | null;
+  /** No burn pool is ever left behind: the end of the rule and the sweep, from the registry (lifecycleFrom). */
+  lifecycle?: LifecycleJson | null;
   /** The LaunchLab pool and top holders as read this cycle (market.ts readMarket); absent/null on a host without an RPC → the page shows "—". */
   market?: MarketInput | null;
 }
@@ -54,12 +56,35 @@ export interface PairTally {
   lastSettlement: { eventId: string; settledAt: string; burnedSide: "A" | "B" | null; result: string | null; value: string | null; burned: string | null } | null;
   /** The next scheduled market and the Kalshi-implied chance that each side burns on it — DISPLAY ONLY, never read by either rule. */
   next: { market: string | null; closeTime: string | null; chanceA: number | null; chanceB: number | null };
+  /** Both or neither (2026-10-10): the pair's state, void date and who it waits on (null for a pair made before the clause). */
+  clause: PairClauseJson | null;
+  /** Each side's LaunchLab curve as status.json carries it (null without an RPC read) — the pair page draws them side by side. */
+  curveA: TokenStatusJson["market"]["curve"]; curveB: TokenStatusJson["market"]["curve"];
 }
 
 /** One side's summary from its status (and receipts, for the last burn time). */
 export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" | "burned" | "supply">, receipts: readonly Pick<ReceiptJson, "status" | "settledAt" | "burned">[] = []): PairSideSummary {
   const last = [...receipts].filter((r) => r.status === "confirmed" && r.burned && r.burned !== "0").sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   return { ticker: s.ticker, name: s.name, mint: s.mint, burns: s.burned.count, burned: s.burned.total, supply: s.supply.current, lastBurnAt: last?.settledAt ?? null };
+}
+
+export const FEE_FLOW_LINE = "creator fees → burn pool → burned; LP fees → locked in the pool forever.";
+
+/** The lifecycle block from the registry (pure over its reads): ended, wind-down progress, the last sweep, the page's one line. */
+export function lifecycleFrom(reg: Pick<Registry, "ruleEnd" | "receipts" | "getStatus">, t: Pick<TokenRow, "mint" | "status">, rule: Pick<LockedRule["rule"], "onEnd" | "binary" | "scalar" | "kind">, poolLamports: bigint | null = null): LifecycleJson {
+  const end = reg.ruleEnd(t.mint);
+  const rs = reg.receipts(t.mint);
+  const wd = rs.filter((b) => b.kind === "winddown"), dr = rs.filter((b) => b.kind === "drain");
+  const lastSweep = reg.getStatus(`rule.swept.${t.mint}`);
+  const f = (rule.kind === "binary" ? rule.binary?.onYes ?? rule.binary?.onNo : rule.scalar?.perUnit)?.fractionOfPool ?? 0;
+  const days = rule.onEnd?.windDownDays ?? null;
+  const done = wd.filter((b) => b.status === "confirmed" || b.status === "skipped").length;
+  const poolNote = poolLamports !== null ? (poolLamports < BigInt(10_000_000) ? "pool ≈ 0" : `pool ${rawToTokens(poolLamports, 9)} SOL`) : "pool ≈ 0";
+  const line = t.status === "retired" ? `retired${lastSweep ? ` · swept ${lastSweep}` : ""} · ${poolNote}`
+    : end?.mode === "drain" ? `draining · ${dr.length} drain day(s) so far (100 % of the pool, under the per-crank cap)`
+    : end ? `winding down · day ${Math.max(1, wd.length)} of ${days ?? "?"}`
+    : "live";
+  return { ended: end ? { reason: end.reason, at: new Date(end.at).toISOString(), mode: end.mode } : null, windDown: end?.mode === "winddown" && days ? { days, done, unitsPerDay: f > 0 ? windDownUnits(f, days) : null } : null, lastSweep, line, fees: FEE_FLOW_LINE };
 }
 
 /** The scoreboard: burns A vs B, supply A vs B, the last settlement and which side it burned. Pure over the two sides' pages. */
@@ -80,6 +105,8 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
     supplyPctA: left(a), supplyPctB: left(b), settlements: events.length, voids,
     lastSettlement: last ? { eventId: last[0], settledAt: last[1].settledAt, burnedSide: lastSide, result: lastRow?.result ?? null, value: lastRow?.value ?? null, burned: lastSide ? lastRow?.burned ?? null : null } : null,
     next: { market: a.next.nextMarket ?? b.next.nextMarket, closeTime: a.next.nextCloseTime ?? b.next.nextCloseTime, chanceA: a.next.impliedChance, chanceB: b.next.impliedChance },
+    clause: a.pair?.clause ?? b.pair?.clause ?? null,
+    curveA: a.market?.curve ?? null, curveB: b.market?.curve ?? null,
   };
 }
 
@@ -87,7 +114,24 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
  * The other side of a rivalry pair as seen from `t`, from the registry and a supply reader (the chain's mint supply, else initial −
  * burned). The keeper uses it so the static pages carry the versus header and the pair cards; the app's server.ts has the same summary.
  */
-export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw">, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">): Promise<PairCounterpart | null> {
+/**
+ * Both or neither: a pair's clause state from the registry (the recorded outcome) and, while it waits, who has no registered pool yet
+ * (`poolRegistered` reads each side's TokenConfig; without it `waitingOn` is empty). Null for a pair whose rules carry no clause.
+ */
+export async function pairClauseState(reg: Pick<Registry, "token" | "lockedRule" | "pairOutcome">, pair: { pairId: string; mintA: string; mintB: string }, poolRegistered?: (mint: string) => Promise<boolean | null>, now = Date.now()): Promise<PairClauseJson | null> {
+  const ta = reg.token(pair.mintA);
+  if (!ta) return null;
+  let c;
+  try { c = pairClause(reg.lockedRule(ta).rule); } catch { return null; }
+  if (!c) return null;
+  const o = reg.pairOutcome(pair.pairId);
+  if (o) return { voidBy: c.voidBy, state: o.state, waitingOn: [], decidedAt: new Date(o.at).toISOString(), detail: o.detail };
+  const [ra, rb] = poolRegistered ? [await poolRegistered(pair.mintA).catch(() => null), await poolRegistered(pair.mintB).catch(() => null)] : [null, null];
+  const waitingOn = [...(ra === false ? ["A" as const] : []), ...(rb === false ? ["B" as const] : [])];
+  return { voidBy: c.voidBy, state: "waiting", waitingOn, decidedAt: null, detail: now >= Date.parse(`${c.voidBy}T00:00:00Z`) + 86_400_000 ? "voidBy has passed: the keeper voids the pair on its next cycle" : null };
+}
+
+export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw"> & Partial<Pick<Registry, "lockedRule" | "pairOutcome">>, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">, poolRegistered?: (mint: string) => Promise<boolean | null>): Promise<PairCounterpart | null> {
   const pair = reg.pairOf(t.mint);
   if (!pair) return null;
   const side: "A" | "B" = pair.mintA === t.mint ? "A" : "B";
@@ -97,7 +141,8 @@ export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token"
   const burnedRaw = reg.totalBurnedRaw(other.mint);
   const supply = (await supplyRaw(other.mint).catch(() => null)) ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS) - burnedRaw;
   const last = [...confirmed].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null } };
+  const clause = reg.lockedRule && reg.pairOutcome ? await pairClauseState({ token: reg.token.bind(reg), lockedRule: reg.lockedRule.bind(reg), pairOutcome: reg.pairOutcome.bind(reg) }, pair, poolRegistered) : null;
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause };
 }
 
 // ReceiptJson / TokenStatusJson live in pageTypes.ts (no runtime imports) so the public SDK can type the API without this module.
@@ -118,10 +163,18 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
     const rd = byId.get(b.eventId) ?? null;
     const checks: string[] = [];
     const ev: SettledEvent = { id: b.eventId, at: b.settledAt, result: (b.result ?? null) as SettledEvent["result"], value: b.value, title: rd?.title ?? null, sourceUrl: rd?.sourceUrl ?? "" };
-    if (!rd) checks.push("no recorded reading for this event");
+    const clock = b.kind === "winddown" || b.kind === "drain" || b.kind === "sweep";
+    if (clock) {
+      // No burn pool is ever left behind: an end-of-rule receipt has no reading (a date-based clock); its units follow from the rule.
+      const f = ruleMappings(rule)[0]?.mapping.fractionOfPool ?? 0;
+      const want = b.kind === "drain" ? (f >= 1 ? 1 : null) : !rule.onEnd || !(f > 0) ? null : b.kind === "winddown" ? windDownUnits(f, rule.onEnd.windDownDays) : fullSpendUnits(f);
+      if (want === null) checks.push(`a ${b.kind} receipt on a rule without ${b.kind === "drain" ? "a 100 % one-shot mapping" : "the onEnd clause"}`);
+      else if (b.units !== want) checks.push(`${b.kind} units: the rule gives ${want}, recorded ${b.units}`);
+      if (JSON.stringify(b.mapping) !== JSON.stringify(ruleMappings(rule)[0]?.mapping ?? null)) checks.push(`${b.kind} mapping ≠ the rule's mapping`);
+    } else if (!rd) checks.push("no recorded reading for this event");
     else if ((rd.result ?? null) !== (b.result ?? null) || (rd.value ?? null) !== (b.value ?? null)) checks.push("receipt result/value ≠ the recorded reading");
     let recomputedUnits = b.units;
-    try {
+    if (!clock) try {
       const s = unitStep(rule, ev, { value: b.prevValue, carryOut: b.carryIn }, feed?.carry ?? "none");
       recomputedUnits = s.units;
       if (s.units !== b.units) checks.push(`units: recomputed ${s.units}, recorded ${b.units}`);
@@ -168,7 +221,7 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
         if (m.rulesSha12 !== sha12) checks.push(`memo rules hash ${m.rulesSha12} ≠ the published rule ${sha12}`);
       }
     }
-    const verified = (b.status === "confirmed" || b.status === "skipped" || b.status === "void" || b.status === "nothing" || b.status === "exhausted") && checks.length === 0;
+    const verified = (b.status === "confirmed" || b.status === "skipped" || b.status === "void" || b.status === "nothing" || b.status === "exhausted" || b.status === "voided") && checks.length === 0;
     const curl = feed
       ? `curl -s '${rd?.sourceUrl ?? feed.sourceUrl}'   # ${feed.sourceName}: the row for ${b.eventId}${b.prevValue !== null ? ` (previous reading ${b.prevValue})` : ""}; selection: ${JSON.stringify(feed.config.select)}`
       : `curl -s '${rd?.sourceUrl ?? `https://api.elections.kalshi.com/trade-api/v2/markets/${b.eventId}`}' | jq '.market // .markets | if type=="array" then map({ticker, result, expiration_value, settlement_ts}) else {ticker, result, expiration_value, settlement_ts} end'`;
@@ -176,7 +229,7 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
       ? `result = ${b.result ?? "?"} → ${b.mapping ? (b.mapping.fractionOfPool !== undefined ? `spend ${b.mapping.fractionOfPool * 100}% of the pool` : `burn ${b.mapping.tokens} tokens`) : "nothing"}${!prog && i.locked.mode === "buyback" && b.poolLamports !== null ? `; spend = ${b.poolLamports} × ${b.mapping?.fractionOfPool ?? 0} = ${expectedSpend} lamports` : ""}`
       : `units = floor((${b.value ?? "?"} − ${b.prevValue !== null && rule.scalar!.baseline === "previousSettlement" ? b.prevValue : rule.scalar!.baseline}${b.carryIn !== "0" ? ` + ${b.carryIn} carried` : ""}) / ${rule.scalar!.unit}) = ${recomputedUnits} (direction ${rule.scalar!.direction})${prog ? "" : i.locked.mode === "buyback" && b.poolLamports !== null ? `; spend = pool × (1 − (1 − ${b.mapping?.fractionOfPool ?? 0})^${b.units}) = ${b.poolLamports} × … = ${expectedSpend} lamports` : i.locked.mode === "vault" ? `; burn = ${b.units} × ${b.mapping?.tokens ?? 0} tokens` : ""}`;
     const programFormula = prog && b.readingDate ? `; counted into program reading ${formatU32(b.readingDate)} (${readingUnits} unit(s) from ${together.length} receipt(s)) — the program ${i.locked.mode === "buyback" ? `spends min(pool × (1 − (1 − ${bps}/10000)^${readingUnits}) + carried spend, 2% of the pool's SOL reserve)${b.lead && b.poolLamports !== null ? ` = rule spend ${expectedSpend} lamports from a ${b.poolLamports}-lamport pool` : ""} and burns everything the fee PDA holds` : `burns ${readingUnits} × ${b.mapping?.tokens ?? 0} tokens from its vault, shortfall carried`}` : "";
-    const expected = prog && b.waitReason && (b.status === "planned" || b.status === "sending") ? `pending — ${b.waitReason}` : prog && b.lead === false ? `burned together with this reading's first receipt (the same crank${b.signature ? `, ${b.signature.slice(0, 12)}…` : ""})` : b.status === "skipped" ? `nothing bought — ${b.skippedReason ?? "skipped"}` : b.status === "void" ? "void market: no burn (a receipt all the same)" : b.status === "nothing" ? `no burn: ${b.note}` : prog && b.lead ? (i.locked.mode === "buyback" ? `rule spend ${expectedSpend ?? "?"} lamports; spent ${b.spendLamports ?? "pending"} (${sol(b.spendLamports) ?? "?"} SOL) buying $${i.token.ticker}; burned every token the fee PDA held (${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the program's vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`) : i.locked.mode === "buyback" ? `spend ${expectedSpend ?? "?"} lamports (${sol(expectedSpend) ?? "?"} SOL) buying $${i.token.ticker} at market; burn every token received (${b.gotRaw === null ? "pending" : rawToTokens(b.gotRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`;
+    const expected = b.status === "pending-pair" ? "pending-pair — both or neither: this burn executes, in order, once both coins of the pair have a registered pool (or is voided if the pair voids)" : b.status === "voided" ? `voided — ${b.skippedReason ?? "the pair voided"}: no event burn, ever` : prog && b.waitReason && (b.status === "planned" || b.status === "sending") ? `pending — ${b.waitReason}` : prog && b.lead === false ? `burned together with this reading's first receipt (the same crank${b.signature ? `, ${b.signature.slice(0, 12)}…` : ""})` : b.status === "skipped" ? `nothing bought — ${b.skippedReason ?? "skipped"}` : b.status === "void" ? "void market: no burn (a receipt all the same)" : b.status === "nothing" ? `no burn: ${b.note}` : prog && b.lead ? (i.locked.mode === "buyback" ? `rule spend ${expectedSpend ?? "?"} lamports; spent ${b.spendLamports ?? "pending"} (${sol(b.spendLamports) ?? "?"} SOL) buying $${i.token.ticker}; burned every token the fee PDA held (${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the program's vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`) : i.locked.mode === "buyback" ? `spend ${expectedSpend ?? "?"} lamports (${sol(expectedSpend) ?? "?"} SOL) buying $${i.token.ticker} at market; burn every token received (${b.gotRaw === null ? "pending" : rawToTokens(b.gotRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`;
     return {
       eventId: b.eventId, settledAt: b.settledAt, oracle: rule.oracle, market: b.eventId, result: b.result, value: b.value, title: rd?.title ?? null, method: rd?.method ?? null, sourceUrl: rd?.sourceUrl ?? null, settlementSourceUrl: rd?.settlementSourceUrl ?? null,
       units: b.units, kind: b.kind, note: b.note, prevValue: b.prevValue, carryIn: b.carryIn, mapping: b.mapping,
@@ -222,6 +275,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     program,
     profile: { imageUrl: t.imageUrl, description: t.description, links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle) },
     market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market }),
+    lifecycle: i.lifecycle ?? null,
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
   };
 }
@@ -344,6 +398,7 @@ ${programSection(s.program)}
 <h2>Addresses</h2>
 <ul class="addr"><li><span class="muted">Mint</span> <a href="${esc(s.addresses.mintUrl)}"><code>${esc(s.addresses.mint)}</code></a></li><li><span class="muted">Burn pool = the burn program's fee PDA = the LaunchLab creator (anyone can deposit, nobody can withdraw; the keeper only pays gas)</span> <a href="${esc(s.addresses.feePdaUrl)}"><code>${esc(s.addresses.feePda)}</code></a></li>${s.addresses.feeWsol ? `<li><span class="muted">Fee PDA's WSOL account (claimed curve fees land here)</span> <a href="${esc(s.addresses.feeWsolUrl)}"><code>${esc(s.addresses.feeWsol)}</code></a></li>` : ""}${s.addresses.vault ? `<li><span class="muted">Vault</span> <a href="${esc(s.addresses.vaultUrl)}"><code>${esc(s.addresses.vault)}</code></a></li>` : ""}<li><span class="muted">Creator</span> <a href="${esc(s.addresses.creatorUrl)}"><code>${esc(s.addresses.creator)}</code></a></li><li><span class="muted">Receipts program</span> <code>${esc(s.addresses.programId)}</code></li>${s.addresses.launchTx ? `<li><span class="muted">Launch</span> <a href="${esc(s.addresses.launchTxUrl)}"><code>${esc(s.addresses.launchTx)}</code></a></li>` : ""}</ul>
 ${s.disclosure.eventContract ? `<p class="rule">${esc(s.disclosure.eventContract)}</p>` : ""}
+<p class="rule">${s.lifecycle ? `${esc(s.lifecycle.line)} · ` : ""}${esc(FEE_FLOW_LINE)}</p>
 <footer>${esc(s.disclosure.disclaimer)} Health: ${s.health.pending} pending, ${s.health.unverified} unverified${s.health.lastError ? ` · last error: ${esc(s.health.lastError)}` : ""}.</footer>
 </main>
 <script>

@@ -10,6 +10,7 @@ import { aliasLookup } from "@/lib/burnticker/oracle/events";
 import { DEFAULT_FRACTION, firstPartyRule, teamCoinSentence } from "@/lib/burnticker/wizard";
 import { plainSentence, ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { CoinCard } from "../_components/CoinCard";
+import { CoinVsCoinTile } from "./CoinVsCoinTile";
 import { STATIONS, nwsSeries } from "@/lib/burnticker/sources/nws";
 
 /**
@@ -459,6 +460,7 @@ export default function LaunchWizard() {
               );
             })}
           </div>
+          <CoinVsCoinTile />
           <p className="text-xs text-neutral-500"><button className="underline" onClick={() => begin("feed")}>Advanced: first-party feed / custom selector</button></p>
         </section>
       )}

@@ -32,7 +32,7 @@ import { ProgramBurnClient } from "../src/lib/burnticker/programClient.ts";
 import { clusterOfGenesis } from "../src/lib/burnKeeper/solana.ts";
 import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
 import { runCycle, type KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
-import { buildReceiptsJson, buildTokenStatus, pairCounterpartFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
+import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairCounterpartFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
 import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRows, registryAlertSink, rpcBalanceLamports, runBurntickerAlertCheck, sinkFromEnv } from "../src/lib/burnticker/alerts.ts";
 import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
@@ -41,6 +41,10 @@ import { readMarket, type MarketReader } from "../src/lib/burnticker/market.ts";
 import { nativeSourceById } from "../src/lib/burnticker/sources/native.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { DECIMALS, TOTAL_SUPPLY } from "../src/lib/burnticker/rules.ts";
+import { DerbyAdapter } from "../src/lib/burnticker/derby/adapter.ts";
+import { HermesClient } from "../src/lib/burnticker/derby/pyth.ts";
+import { connectionPoolPort } from "../src/lib/burnticker/derby/pools.ts";
+import type { FetchLike } from "../src/lib/burnticker/oracle/types.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -83,7 +87,12 @@ async function buildProgram(): Promise<{ program: BurnProgramClient; real: boole
 }
 const built = await buildProgram();
 const program = built.program;
-const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE), kalshiEnabled: kalshiEnabled(process.env) };
+// BURN DERBY (2026-10-10): Pyth on Solana (keyless) / Hermes (BURNTICKER_PYTH_API_KEY), pool TWAPs and mint supplies are MAINNET facts
+// (BURNTICKER_DERBY_RPC_URL, else the public RPC), cross-reads from Jupiter / DexScreener / RedStone. Withheld windows raise an alert.
+const derbyPools = connectionPoolPort(new Connection(process.env.BURNTICKER_DERBY_RPC_URL?.trim() || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true }));
+const derby = new DerbyAdapter({ registry, hermes: process.env.BURNTICKER_PYTH_API_KEY?.trim() ? HermesClient.fromEnv(process.env) : null, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), log,
+  alert: (key, text) => { registry.recordAlert({ kind: "derby-withheld", key, text, meta: null }); } });
+const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, derby: { sample: (t) => derby.sample(t), plan: () => derby.plan(), ended: (t) => derby.ended(t) }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE), kalshiEnabled: kalshiEnabled(process.env) };
 const operator = operatorPowersSummary(loadPowersRegister());
 const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscoveryEnabled(process.env);
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
@@ -97,17 +106,17 @@ async function publishAll(now: number): Promise<void> {
       const locked = registry.lockedRule(t);
       const readings = registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
       const state = registry.state(t.mint);
-      const oracle = locked.rule.oracle === "catalogue" ? deps.oracles.catalogue : locked.rule.oracle === "polymarket" ? polymarket : kalshi;
+      const oracle = locked.rule.oracle === "catalogue" ? deps.oracles.catalogue : locked.rule.oracle === "polymarket" ? polymarket : locked.rule.oracle === "derby" ? derby : kalshi;
       // Display reads on the published pages (venues.ts): Kalshi's only with BURNTICKER_KALSHI_ENABLED on; never a Polymarket odds read;
       // Polymarket titles only with discovery on. Settlement reads (fetchDue) are separate.
-      const implied = locked.rule.oracle === "kalshi" && KALSHI_ON ? await oracle.impliedChance(locked.rule, state.lastValue).catch(() => null) : null;
+      const implied = (locked.rule.oracle === "kalshi" && KALSHI_ON) || locked.rule.oracle === "derby" ? await oracle.impliedChance(locked.rule, state.lastValue).catch(() => null) : null;
       const info = locked.rule.oracle === "kalshi" ? (KALSHI_ON ? await kalshi.seriesInfo(locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null) : null)
         : locked.rule.oracle === "polymarket" ? (POLY_DISCOVERY ? await polymarket.seriesInfo(locked.rule.market ?? locked.rule.series!).catch(() => null) : null) : null;
       const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
       const feedState = registry.feedState(t.selectorKey);
       const input = { token: t, locked, readings, receipts: registry.receipts(t.mint), attesters: registry.attesters(t.mint), state, feedState,
         chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: locked.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading")) },
-        now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0, operator, pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t),
+        now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0, operator, lifecycle: lifecycleFrom(registry, t, locked.rule, null), pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t, async (m) => { try { return (await program.port(m).config())?.poolRegistered ?? null; } catch { return null; } }),
         // the coin card's curve progress + top holders (read-only, the same RPC); without an RPC status.json says "not read" and the card shows —
         market: marketReader && t.status !== "draft" && t.status !== "expired" ? await readMarket(marketReader, { cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: (await program.supplyRaw(t.mint).catch(() => null)) ?? BigInt(TOTAL_SUPPLY) * BigInt(10) ** BigInt(DECIMALS), decimals: DECIMALS }, now).catch(() => null) : null };
       const receipts = buildReceiptsJson(input);

@@ -24,6 +24,7 @@
     "src/lib/burnReceipts/memo.ts",
     "src/lib/burnReceipts/pda.ts",
     "src/lib/burnReceipts/platformPins.ts",
+    "src/lib/burnticker/derby/spec.ts",
     "src/lib/burnticker/fees.ts",
     "src/lib/burnticker/launchBundle.ts",
     "src/lib/burnticker/oracle/backtest.ts",

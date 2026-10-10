@@ -9,7 +9,12 @@ import type { BurnMapping } from "@/lib/burnticker/rules";
 
 /** Rivalry pairs: one side's summary, and the other side as seen from a token. */
 export interface PairSideSummary { ticker: string; name: string; mint: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
-export interface PairCounterpart { pairId: string; side: "A" | "B"; counterpart: PairSideSummary }
+/**
+ * A clause pair's live state (both or neither, 2026-10-10): `live` once both pools registered, `waiting` (on side A, B or both) before,
+ * `voided` when voidBy ended without both — no event burns ever, both coins on the fallback clock. Null for a pair made before the clause.
+ */
+export interface PairClauseJson { voidBy: string; state: "live" | "waiting" | "voided"; waitingOn: ("A" | "B")[]; decidedAt: string | null; detail: string | null }
+export interface PairCounterpart { pairId: string; side: "A" | "B"; counterpart: PairSideSummary; clause?: PairClauseJson | null }
 
 /** Market data for the coin card and the coin page (market.ts builds it; 2026-10-10). Read from chain as data, never a price claim. */
 export type CurvePhase = "curve" | "migrating" | "graduated";
@@ -30,7 +35,17 @@ export interface MarketJson {
 /** The creator's card fields (from the launch request, in the registry) and the one-liner derived from the locked rule (coinCard.ts). */
 export interface TokenProfileJson { imageUrl: string | null; description: string; links: { label: string; url: string }[]; oneLiner: string }
 
-export type ReceiptStatusJson = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing";
+export interface LifecycleJson {
+  ended: { reason: string; at: string; mode: "drain" | "winddown" } | null;
+  windDown: { days: number; done: number; unitsPerDay: number | null } | null;
+  lastSweep: string | null;
+  /** "live", "winding down · day 3 of 28", "draining", "retired · swept 2026-11-20 · pool ≈ 0". */
+  line: string;
+  /** The fee-flow sentence every coin page carries. */
+  fees: string;
+}
+
+export type ReceiptStatusJson = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing" | "pending-pair" | "voided";
 
 export interface ReceiptJson {
   eventId: string; settledAt: string; oracle: string; market: string; result: string | null; value: string | null; title: string | null; method: string | null; sourceUrl: string | null; settlementSourceUrl: string | null;
@@ -77,4 +92,9 @@ export interface TokenStatusJson {
   market: MarketJson;
   /** Rivalry pair: this side, the other side, and the running tally (burns / supply, both sides). */
   pair: (PairCounterpart & { tally: { burnsThis: number; burnsOther: number; burnedThis: string; burnedOther: string; supplyThis: string; supplyOther: string }; pageUrl: string }) | null;
+  /**
+   * NO BURN POOL IS EVER LEFT BEHIND (2026-10-10): when the rule ended and why, how the pool is being spent (drain / wind-down), the last
+   * retired-coin sweep, and the one line the coin page shows ("retired · swept <date> · pool ≈ 0"). Absent on older status files.
+   */
+  lifecycle?: LifecycleJson | null;
 }

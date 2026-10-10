@@ -5,7 +5,7 @@ import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { backtest, type Backtest } from "@/lib/burnticker/oracle/backtest";
 import { httpSource, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
-import type { ResolutionSource } from "@/lib/burnticker/sources/types";
+import type { PriceFeedSourceConfig, ResolutionSource } from "@/lib/burnticker/sources/types";
 import { copycatSource, type CopycatSourceConfig, type CopycatSourceOptions } from "@/lib/burnticker/sources/copycats";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 
@@ -27,8 +27,8 @@ let cachedConfig: { entries: SourceEntry[] } | null = null;
  * coverage audit needs (operator, domain via sourceUrl, fact, launchable, readable). The catalogue's feed list skips them.
  */
 export interface NativeSourceConfig { id: string; kind: "native"; tier: 4; title: string; sourceName: string; operator: string; sourceUrl: string; fact: { id: string }; launchable: boolean; readable: boolean; flags: string[]; leagues?: string[]; sameOperator?: boolean; note?: string }
-/** Any entry of sources.json: the attested-http feeds (HttpSourceConfig), the other kinds (onchain.copycats, CopycatSourceConfig) and the native descriptors. */
-export type SourceEntry = HttpSourceConfig | CopycatSourceConfig | NativeSourceConfig;
+/** Any entry of sources.json: the attested-http feeds (HttpSourceConfig), the other kinds (onchain.copycats, CopycatSourceConfig), the native descriptors and Burn Derby's price feeds (PriceFeedSourceConfig). */
+export type SourceEntry = HttpSourceConfig | CopycatSourceConfig | NativeSourceConfig | PriceFeedSourceConfig;
 /** Every entry of sources.json, whatever its kind. */
 export function loadSourceEntries(root = process.cwd()): SourceEntry[] {
   if (cachedConfig && root === process.cwd()) return cachedConfig.entries;

@@ -78,6 +78,7 @@ and `pending` says what is missing), so nothing is signable on a cluster yet. Th
 | `bt.verifyOnServer(ticker, eventId)` | API | the same checks, run by the server |
 | `bt.crank(mint, crankerPubkey)` | RPC | the permissionless crank transaction for the next attested reading, unsigned |
 | `bt.subscribe(mint, onEvent, { ticker, pollMs, websocket, since })` | RPC or API | program events (decoded `emit_cpi` events) with `connection` + `programId`; otherwise receipts polled from the API |
+| `bt.derby.list()` · `bt.derby.get(id)` · `bt.derby.search(q, { assets })` | API | Burn Derby (API 1.4.0): brackets and coin-vs-coin pairs; one bracket or one pair's score, day strip and proof links; coins for a derby with the underlying to lock. `derbySeriesId`, `derbySentence`, `derbySpecProblems` are exported for building a derby rule locally |
 | `bt.trust()` · `bt.openapi()` | API | the Powers Register and the live fee bps; the OpenAPI document |
 
 Lower-level building blocks are re-exported from the platform's modules, not re-implemented: `KalshiClient`, `PolymarketClient`,

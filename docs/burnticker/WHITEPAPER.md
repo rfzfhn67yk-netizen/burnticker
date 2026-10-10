@@ -339,6 +339,65 @@ and $BEARS on the S&P close direction (scalar `up` against `down`). A binary set
 A relative-value perpetual version was considered and rejected (pool-depth caps, oracle manipulation, no US-legal path;
 LAUNCHPAD-PATH §22).
 
+### 5.1 Both or neither
+
+Every pair created since 2026-10-10 carries a clause in both sides' canonical rules: `pair.clause = "both-or-neither"`, a `voidBy` date
+(a one-shot's first settlement date, else 30 days after launch).
+
+- Event burns on either side apply only once BOTH coins have a registered pool. A settlement read before that is recorded as a
+  `pending-pair` receipt; the cycle the second pool registers, the pair goes live and the waiting receipts execute in settlement order.
+- If either side has no registered pool when the `voidBy` UTC date ends, the pair voids. Waiting receipts become `voided` (final), no
+  event burn happens on either side again, and the rule has ended: each coin's pool winds down (section 5.3), executed once that coin
+  has a pool, so no fee is stranded in a pool that can never burn.
+- The outcome (live or voided) is written once to the registry's append-only `pair_outcomes` table. The pair page shows the state, the
+  void date and both bonding curves side by side.
+
+### 5.2 Burn Derby: coin against coin
+
+Burn Derby is a selector kind for pairs: the relative performance of two existing coins over a UTC day (00:00 to 00:00) or week. The
+rule's `derby` block names both coins (a Pyth feed id, a Solana mint, the deepest SOL pool, an independent cross-read), the window, the
+measure (% change, or the change of circulating supply times the feed value) and the season; the rule's `series` is derived from it and
+the whole block is inside the rule hash (`src/lib/burnticker/derby/spec.ts`).
+
+- **Settlement.** A window's margin is coin A's % change minus coin B's, exact to six decimals. A positive margin settles YES and side A's
+  coin burns; a negative margin settles NO and side B's coin burns; an exact tie is a void on both sides. The winner's coin burns: the
+  burn is the reward. A one-shot variant settles once, on the first window that ends with A's size above B's (YES), or at the end of the
+  season without it (NO).
+- **Values.** Pyth: the sponsored `PriceUpdateV2` accounts on Solana, which Pyth's receiver program writes after verifying the
+  Wormhole-signed update, read keylessly and snapshotted at each boundary; or the Hermes update published at the boundary (Pyth's
+  pull service, with an API key), whose bytes' sha256 becomes the proof. A coin without a Pyth feed is read from the time-weighted vault
+  balances of its deepest SOL pool, priced with Pyth's SOL/USD feed.
+- **Cross-read.** An independent operator (Jupiter, DexScreener or RedStone) is snapshotted at the same boundaries. When its margin
+  differs from the primary's by more than two percentage points, or a value is missing, the window is withheld: no reading, no burn, an
+  alert. Each window is decided once and stored append-only.
+- **Proof on chain.** The reading carries `derby:sha256:<hex>` of the window's proof document; the counter attestation's quorum-signed
+  message carries the same hash as `proof=` (section 4.4), and `src=` commits to the event ids, which carry its first 16 hex digits.
+- **Brackets.** Eight or sixteen coins, one derby per match per round (default seven days). More winning days advances; the tiebreak is
+  the compounded change over the round, then the lower seed. The losing fan coin retires and reads nothing more. A winning day in the
+  final counts two units, which the program compounds as pool × (1 − (1 − f)²), while two times f stays within the rules' 10% maximum.
+- **Refused.** A Burnticker coin as an input, the refuse list, the same coin twice, a coin with no Pyth feed and under $250,000 of
+  liquidity, and US index proxy feeds unless the host enables them. A coin's own trading is never an input.
+
+### 5.3 No pool is left behind
+
+Every rule created since 2026-10-10 carries `onEnd: { windDownDays: 28, sweepThresholdLamports }` inside its hash.
+
+- **The wind-down.** When a rule ends for any reason (a one-shot resolved NO or void, a pair voided, a derby season over, a bracket coin
+  knocked out, a team's season over), the keeper attests a daily reading from a date-based clock whose proof is
+  sha256("clock|<date>|<rules sha256>"). Each day counts the smallest number of units n of the rule's own fraction f with
+  (1 − f)^(28n) ≤ 1 % — 17 units a day at 1 % — so at least 99 % of the pool is spent within 28 days; the 2 % per-crank cap carries the
+  rest forward and the $1 floor ends the tail. Then the coin retires.
+- **A one-shot at 100 %.** A one-shot mapping may spend the whole pool (recurring rules stay at 10 % or less); the program already accepts
+  10,000 basis points. Because a crank spends at most 2 % of the pool's reserve and needs a reading with units, the keeper attests one
+  drain unit a day after the YES — each one's rule spend is the whole pool, exactly — until the program carries nothing more.
+- **The sweep.** A retired coin's burn pool keeps receiving the post-graduation creator fee. When its spendable balance passes the
+  threshold the keeper attests one full-spend reading (at most once a week). A permissionless instruction that lets anyone do this
+  without the keeper is queued for the next program review (`PROGRAM-UPGRADE-QUEUE.md`), as is forwarding a losing coin's leftover to
+  the winning coin of an outcome set.
+
+Communities adding to a score by burning their own tokens into the program was considered and not built: it would turn the score into a
+function of spending and add a deposit path to a program designed without one.
+
 ## 6. Economics
 
 Fee dials were read from the pinned Raydium SDK, Raydium's documentation and the live config accounts (`docs/burnkeeper/fees.md`;

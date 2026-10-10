@@ -46,7 +46,7 @@ export interface ProgramPort {
   /** Public keys of the attester keys this process holds (it signs readings with all of them). */
   attesterKeys(): string[];
   /** Signs the canonical message with every held attester key (≤ 3) and builds [Ed25519SigVerify (one shared message), submit_reading]; signed, not sent. */
-  buildReading(o: { recordDate: number; prevDate: number; value: bigint; sourceUrl: string; feedId: string; valueDecimals: number }): Promise<SignedTx & { message: string }>;
+  buildReading(o: { recordDate: number; prevDate: number; value: bigint; sourceUrl: string; feedId: string; valueDecimals: number; /** 32 bytes for the signed message's proof= (Burn Derby: the reading's proof hash); zero when absent. */ proofHash?: Uint8Array }): Promise<SignedTx & { message: string }>;
   /** The next reading in line and its crank (signed only on build()) — or why there is nothing to crank. */
   planCrank(): Promise<CrankPlan>;
   /** `err` is the Anchor error name when the logs carry one ("TwapUnavailable"), else the raw error. */

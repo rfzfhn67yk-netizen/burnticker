@@ -10,6 +10,8 @@
  * answering for at least 90 days after /v2 ships, with a `Deprecation` header. `info.version` is the semver of this document.
  */
 
+import { DERBY_ENDPOINTS, DERBY_SCHEMAS } from "@/lib/burnticker/api/derbySpec";
+
 export type Bucket = "read" | "heavy" | "write";
 type Schema = Record<string, unknown>;
 
@@ -44,11 +46,12 @@ const nullable = (s: Schema): Schema => ({ anyOf: [s, { type: "null" }] });
 const PUBKEY: Schema = { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" };
 
 export const SCHEMAS: Record<string, Schema> = {
+  ...DERBY_SCHEMAS,
   Error: obj({ error: str, code: str, problems: arr(str), retryAfterSec: int }, ["error"]),
-  BurnMapping: obj({ fractionOfPool: { type: "number", minimum: 0.01, maximum: 0.1, description: "buyback: fraction of the burn pool spent buying the token at market, all of it burned" }, tokens: { type: "integer", minimum: 1, description: "vault: tokens burned from the vesting vault" } }, [], { description: "Exactly one key." }),
+  BurnMapping: obj({ fractionOfPool: { type: "number", minimum: 0.01, maximum: 1, description: "buyback: fraction of the burn pool spent buying the token at market, all of it burned (≤ 0.10 for recurring rules; a one-shot may go to 1.00 since 1.4.0)" }, tokens: { type: "integer", minimum: 1, description: "vault: tokens burned from the vesting vault" } }, [], { description: "Exactly one key." }),
   Rule: obj({
     schema: { const: "burnticker.rules/v1" },
-    oracle: { enum: ["kalshi", "catalogue", "polymarket", "uma", "drift-bet", "hedgehog"], description: "kalshi, polymarket (binary only) and catalogue are live; the others are accepted by the schema and refused at launch" },
+    oracle: { enum: ["kalshi", "catalogue", "polymarket", "uma", "drift-bet", "hedgehog", "derby"], description: "kalshi, polymarket (binary only), catalogue and derby (Burn Derby, since 1.4.0) are live; the others are accepted by the schema and refused at launch" },
     series: { ...nstr, description: "Kalshi series ticker; a catalogue source id (treasury.debt, wiki.views:Bitcoin); or a Polymarket series: \"tag:<tag slug>[/<market type>][:<event slug glob>]\" (tag:nfl/moneyline) or \"event:<event slug>\"" },
     market: { ...nstr, description: "one Kalshi market ticker, or one Polymarket condition id (0x + 64 lowercase hex): a one-shot rule" },
     filter: obj({ tickerIncludes: str, titleRegex: str }),
@@ -57,7 +60,10 @@ export const SCHEMAS: Record<string, Schema> = {
     scalar: nullable(obj({ unit: num, perUnit: ref("BurnMapping"), baseline: { anyOf: [{ const: "previousSettlement" }, num] }, direction: { enum: ["up", "down", "abs"] } }, ["unit", "perUnit", "baseline", "direction"])),
     onVoid: { const: "skip" }, floorUsd: str, reserveSol: str,
     vault: nullable(obj({ share: num, vestDays: int, cliffDays: int }, ["share", "vestDays", "cliffDays"])),
-    pair: { ...nullable(obj({ pairId: str, side: { enum: ["A", "B"] }, counterpartMint: nstr }, ["pairId", "side", "counterpartMint"])), description: "rivalry pairs (wizard flow): two coins on one selector with inverted mappings; null for a single coin" },
+    pair: { ...nullable(obj({ pairId: str, side: { enum: ["A", "B"] }, counterpartMint: nstr, clause: { const: "both-or-neither" }, voidBy: str, fallback: obj({ everyDays: int, units: int }, ["everyDays", "units"]) }, ["pairId", "side", "counterpartMint"])), description: "rivalry pairs (wizard flow): two coins on one selector with inverted mappings; null for a single coin. Since 1.4.0 every new pair carries the both-or-neither clause: event burns apply only once both coins have a registered pool; if either has none when voidBy ends (UTC) the pair voids and each coin falls back to `fallback` (units every N days)" },
+    onEnd: { ...obj({ windDownDays: int, sweepThresholdLamports: int }, ["windDownDays", "sweepThresholdLamports"]), description: "Since 1.4.0 (every new launch carries it; a rule sent without it gets { windDownDays: 28, sweepThresholdLamports: 50000000 }): when the rule ends for any reason the pool burns down on a daily clock (≥ 99 % within windDownDays), the coin retires, and later fee income is swept once it passes the threshold (at most weekly)" },
+    set: { ...obj({ id: str, outcome: str, forwardBps: int }, ["id", "outcome", "forwardBps"]), description: "Since 1.4.0, opt-in: an outcome-set member (one outcome of a selector with an outcome list); when the rule ends, forwardBps of the leftover is forwarded to the set's winning coin once the program's forward_to_winner instruction exists (queued) — until then all of it winds down here" },
+    derby: { type: "object", description: "Burn Derby (since 1.4.0; oracle derby only): { selector: \"coinvs\", a, b, window, measure, season, flip } (two coins' relative performance), { selector: \"price\", u, window, season } (one asset's % change) or { selector: \"bracket\", tournamentId, tournamentSha, slot, underlying }; each underlying is a DerbyUnderlying. `series` is derived from it" },
   }, ["schema", "oracle", "kind", "onVoid", "floorUsd", "reserveSol"], { description: "A selector + outcome→burn mapping, locked at launch by the sha256 of its canonical JSON (keys sorted at every level, two-space indent, trailing newline)." }),
   FeeLeg: obj({ label: str, bps: num, recipient: str, dial: str, note: str }, ["label", "bps", "recipient"]),
   FeeSplit: obj({ phase: { enum: ["curve", "post-graduation"] }, legs: arr(ref("FeeLeg")), totalBps: num }, ["phase", "legs", "totalBps"]),
@@ -220,6 +226,7 @@ export const SCHEMAS: Record<string, Schema> = {
 const tickerParam: Param = { name: "ticker", in: "path", required: true, description: "the token's ticker (case-insensitive) or its mint address", schema: str };
 
 export const ENDPOINTS: Endpoint[] = [
+  ...DERBY_ENDPOINTS,
   { operationId: "getCatalogue", method: "GET", path: "/catalogue", tag: "sources", summary: "Every resolution source with its tier", description: "The configured first-party sources (tiers 3–5, with the last fixture reading, a preview and the public selection config), the on-chain facts, and the market/assertion stubs (shown, not launchable). Kalshi series are searched live through /kalshi/search.", params: [], request: null, response: "Catalogue", errors: [429], cacheSec: 300, bucket: "read" },
   { operationId: "getSourcePreview", method: "GET", path: "/sources/{id}/preview", tag: "sources", summary: "What a catalogue rule would have burned over the source's frozen fixture", description: "The source fixes unit, direction, baseline and carry; you choose only the mapping (fractionOfPool for buyback, or tokens for vault mode).", params: [{ name: "id", in: "path", required: true, description: "source id, e.g. treasury.debt or wiki.views:Bitcoin", schema: str }, { name: "fractionOfPool", in: "query", required: false, description: "buyback mapping per unit, 0.01–0.10 (default 0.02)", schema: num }, { name: "tokens", in: "query", required: false, description: "vault mapping per unit (switches the preview to vault mode)", schema: int }], request: null, response: "SourcePreview", errors: [400, 404, 429], cacheSec: 300, bucket: "read" },
   { operationId: "searchKalshiEvents", method: "GET", path: "/kalshi/events", tag: "kalshi", summary: "Search Kalshi events: games, contests, people (or list a series' upcoming events)", description: "Event-level search: `q` is matched against event title, event ticker, market labels and suffixes, with a team-alias table (city, nickname, abbreviation: eagles / philadelphia / PHI; jaguars / jacksonville / JAC / JAX). Scans `series` when given, else the league series of the teams the query names, else the headline game leagues plus series whose titles share a word with the query. Events are cached 10 minutes per series. `?series=KXNFLGAME` alone lists its upcoming events; no parameters returns the league chooser. Two-team games carry both sides and both selector modes. Tickers and labels only — no prices.", params: [{ name: "q", in: "query", required: false, description: "a team, person, contest or ticker", schema: str }, { name: "series", in: "query", required: false, description: "scan only this series", schema: str }, { name: "status", in: "query", required: false, description: "open (default), closed or settled", schema: { enum: ["open", "closed", "settled"] } }], request: null, response: "KalshiEvents", errors: [429, 502, 503], cacheSec: 60, bucket: "heavy" },

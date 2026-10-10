@@ -1,4 +1,5 @@
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
+import { derbySeriesId, derbySpecProblems, derbyStatement, isDerbySeries, type DerbySpec } from "@/lib/burnticker/derby/spec";
 
 /**
  * BURNTICKER RULES (2026-10-09; the owner's redesign the same evening: the event space is OPEN). A rule is a SELECTOR plus an
@@ -28,11 +29,15 @@ export const BURNTICKER_RULES_SCHEMA = "burnticker.rules/v1";
  * a configured primary source (config/burnticker/sources.json: attested-http tiers 3–5) or an on-chain fact; "uma" / "drift-bet" /
  * "hedgehog" are accepted by the schema so the format is forward-compatible, but their adapters are stubs and the launch route refuses them.
  */
-export type OracleId = "kalshi" | "catalogue" | "polymarket" | "uma" | "drift-bet" | "hedgehog";
-export const ORACLE_IDS: readonly OracleId[] = ["kalshi", "catalogue", "polymarket", "uma", "drift-bet", "hedgehog"];
-export const LIVE_ORACLES: readonly OracleId[] = ["kalshi", "catalogue", "polymarket"];
-/** Tier-1 adjudicated market oracles: the ones a rivalry pair may use. */
-export const PAIR_ORACLES: readonly OracleId[] = ["kalshi", "polymarket"];
+export type OracleId = "kalshi" | "catalogue" | "polymarket" | "uma" | "drift-bet" | "hedgehog" | "derby";
+export const ORACLE_IDS: readonly OracleId[] = ["kalshi", "catalogue", "polymarket", "uma", "drift-bet", "hedgehog", "derby"];
+export const LIVE_ORACLES: readonly OracleId[] = ["kalshi", "catalogue", "polymarket", "derby"];
+/**
+ * The oracles a rivalry pair may use: the tier-1 adjudicated markets, and (2026-10-10) BURN DERBY — "derby" = the relative performance
+ * of two existing coins read from Pyth's signed price updates (or an on-chain pool TWAP), cross-read by an independent operator
+ * (derby/spec.ts; docs/burnticker/DERBY.md). Only a "coinvs" derby pairs; a bracket fan coin is a single coin.
+ */
+export const PAIR_ORACLES: readonly OracleId[] = ["kalshi", "polymarket", "derby"];
 
 /**
  * POLYMARKET SELECTORS (2026-10-10). One market = its CTF condition id, lowercase hex (`market: "0x…64"`), a one-shot. Recurring =
@@ -70,7 +75,28 @@ export interface BurnRule {
    * part of each side's canonical rule (so the link is locked), each side is hashed independently, and side B's rule carries side A's
    * mint as counterpart (A is created first, so A's counterpart is null in the rule and lives in the registry's pairs table).
    */
-  pair: { pairId: string; side: "A" | "B"; counterpartMint: string | null } | null;
+  pair: PairField | null;
+  /**
+   * The wind-down when the rule ends, and the retired-coin sweep threshold (see NO BURN POOL IS EVER LEFT BEHIND); absent on rules
+   * created before it.
+   */
+  onEnd?: { windDownDays: number; sweepThresholdLamports: number };
+  /**
+   * OUTCOME SETS (opt-in, owner design 2026-10-10; the program instruction is QUEUED — docs/burnticker/PROGRAM-UPGRADE-QUEUE.md): this
+   * coin is the member of set `id` bound to ONE `outcome` of the set's selector (a team id in a league season, a Polymarket outcome, a
+   * bracket slot). When its rule ends, `forwardBps` (0–10,000; 10,000 when the creator does not dial it) of the leftover burn pool is
+   * forwarded to the fee PDA of the set's WINNING member (fixed by the set's quorum-signed winner reading) and burns there. Rivalry pairs
+   * are the 2-member case; "league mode" (the wizard's word) a 32-member set; derby brackets forward round by round. Until
+   * `forward_to_winner` exists on chain — or when there is no winning coin, or it is not graduated/registered — the WHOLE leftover takes
+   * the normal wind-down on this coin (the conditional is in the description). Only selectors with an outcome list (binary rules, not
+   * scalar feeds such as debt, CPI or weather). Absent by default; locked by the rule hash.
+   */
+  set?: { id: string; outcome: string; forwardBps: number };
+  /**
+   * BURN DERBY (2026-10-10; oracle "derby" only, absent otherwise so every other rule's canonical bytes are unchanged): the two coins (or
+   * the bracket slot), the window, the measure and the season, locked with the rule. `series` is derived from it (derbySeriesId).
+   */
+  derby?: DerbySpec;
   /** A voided / cancelled market yields a VOID receipt and no burn. The only policy in v1. */
   onVoid: "skip";
   /** Buyback: below this (USD at execution) nothing is bought that period. Decimal string, ≤ 2 decimals. */
@@ -83,7 +109,58 @@ export interface BurnRule {
 
 export type RuleMode = "buyback" | "vault";
 
+/**
+ * BOTH OR NEITHER (owner decision, 2026-10-10): every rivalry pair created from now on carries this clause in BOTH sides' canonical
+ * rules (so it is locked by each side's hash):
+ *   1. event burns on either side apply only once BOTH coins have a registered pool (the burn program's TokenConfig names its CPMM
+ *      pool); a settlement read before that is recorded as a `pending-pair` receipt and executes, in order, when the second pool
+ *      registers;
+ *   2. if either side is still unregistered when the `voidBy` UTC date ends, the pair VOIDS: no event burn on either side, ever (pending
+ *      receipts become `voided`), and the rule has ENDED — each coin's pool then winds down under its `onEnd` clause (below).
+ * `voidBy` defaults to the first settlement date of a one-shot, else 30 days after launch. Pairs created before the clause carry none.
+ */
+export const PAIR_CLAUSE = "both-or-neither" as const;
+export interface PairField {
+  pairId: string; side: "A" | "B"; counterpartMint: string | null;
+  clause?: typeof PAIR_CLAUSE;
+  /** YYYY-MM-DD (UTC): the pair voids if either side has no registered pool when this date ends. */
+  voidBy?: string;
+}
+/** The pair's clause, or null (a pair created before the clause, or a single coin). */
+export const pairClause = (r: Pick<BurnRule, "pair">): { voidBy: string } | null => (r.pair?.clause === PAIR_CLAUSE && r.pair.voidBy ? { voidBy: r.pair.voidBy } : null);
+
+/**
+ * NO BURN POOL IS EVER LEFT BEHIND (owner decision, 2026-10-10). `onEnd: { windDownDays }` — when a rule ENDS for any reason (a one-shot
+ * resolved NO or void, a pair voided, a derby season over or a bracket coin knocked out, a team coin's season over, a nominee replaced)
+ * the remaining burn pool burns down on a daily clock: each day a normal quorum-signed reading counts `windDownUnits(f, days)` units of
+ * the rule's own fraction — the geometric schedule that spends ≥ 99 % of the pool within `windDownDays` (28 by default) — the
+ * program's 2 %-of-reserve per-crank cap carries the rest to the next day, the $1 floor stops the tail, then the coin retires
+ * (src/lib/burnticker/units.ts windDown*, multiKeeper.ts planRuleEnd). Absent on rules created before the clause (their canonical bytes
+ * are unchanged); every new launch carries it (api/handlers.ts prepareLaunch).
+ *
+ * ONE-SHOT 100 %. A one-shot's mapping may spend up to the WHOLE pool (`fractionOfPool` ≤ 1.00; recurring rules stay ≤ 0.10). The
+ * program accepts fraction_per_unit_bps up to 10,000 (programs/burn-receipts initialize_token validate_rule: 1 ≤ bps ≤ BPS_DENOMINATOR)
+ * and spends min(target, 2 % of the pool's WSOL reserve) per crank, carrying the rest; a crank needs a reading with units, so after a
+ * YES the keeper attests one "drain" unit per day — each one's rule spend is the whole pool, exactly (1 − (1 − 1)^1 = 1) — until a
+ * crank carries nothing more or falls under the floor. Every amount is the program's, on the receipts.
+ */
+export const DEFAULT_WIND_DOWN_DAYS = 28;
+/**
+ * RETIRED-COIN SWEEP (owner addendum, 2026-10-10): a retired coin's fee PDA keeps receiving the post-graduation creator fee, so the
+ * keeper sweeps it — when the spendable balance (minus the reserve) exceeds `onEnd.sweepThresholdLamports` (0.05 SOL by default), one
+ * "sweep" reading of full-spend units, cranked across days under the per-crank cap — at most one sweep start per coin per 7 days.
+ */
+export const DEFAULT_SWEEP_THRESHOLD_LAMPORTS = 50_000_000;
+export const SWEEP_EVERY_DAYS = 7;
+/** The onEnd clause every new launch carries. */
+/** An outcome set's default when a coin opts in ("league mode" in the wizard's copy): forward everything that can be forwarded. */
+export const DEFAULT_SET_FORWARD_BPS = 10_000;
+export const DEFAULT_ON_END = { windDownDays: DEFAULT_WIND_DOWN_DAYS, sweepThresholdLamports: DEFAULT_SWEEP_THRESHOLD_LAMPORTS } as const;
+export const ONE_SHOT_MAX_FRACTION = 1;
+export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby">): boolean => r.market !== null || (r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip === true);
+
 export const RULE_BOUNDS = {
+  /** Recurring rules: 1–10 % of the pool per unit. A one-shot may go to 100 % (ONE_SHOT_MAX_FRACTION; see "ONE-SHOT 100 %" above). */
   fractionOfPool: { min: 0.01, max: 0.10 },
   vaultShare: { min: 0.10, max: 0.30 },
   tokens: { min: 1, max: 100_000_000 },
@@ -101,8 +178,10 @@ export const DISCLAIMER_FOOTER = "A memecoin. The rule says what the supply does
 export const EVENT_CONTRACT_DISCLOSURE = "This token's supply rule reads the SETTLED result of a regulated event contract (Kalshi). The token pays nothing on any outcome and holds no position in any market; it only burns its own supply per the published rule. Market prices are shown for information and are never used by the rule.";
 /** The Polymarket counterpart (2026-10-10): the result is the market's payout vector as Polygon's Conditional Tokens contract stores it. */
 export const POLYMARKET_DISCLOSURE = "This token's supply rule reads the SETTLED result of a Polymarket market: the payout the Conditional Tokens contract on Polygon records once the market is resolved. The token pays nothing on any outcome and holds no position in any market; it only burns its own supply per the published rule. Market prices are shown for information and are never used by the rule.";
+/** Burn Derby (2026-10-10): the input is OTHER coins' published feeds; our coins' own trading is never read. */
+export const DERBY_DISCLOSURE = "This token's supply rule compares two OTHER coins over a window, read from Pyth's signed feed updates (or an on-chain pool average) and cross-checked by an independent operator. The token pays nothing on any outcome and holds no position in either coin; it only burns its own supply per the published rule. Its own trading is never an input.";
 /** The one extra disclosure line for a rule's oracle (null for first-party feeds). */
-export const oracleDisclosure = (oracle: OracleId): string | null => (oracle === "kalshi" ? EVENT_CONTRACT_DISCLOSURE : oracle === "polymarket" ? POLYMARKET_DISCLOSURE : null);
+export const oracleDisclosure = (oracle: OracleId): string | null => (oracle === "kalshi" ? EVENT_CONTRACT_DISCLOSURE : oracle === "polymarket" ? POLYMARKET_DISCLOSURE : oracle === "derby" ? DERBY_DISCLOSURE : null);
 
 /**
  * A catalogue series id: "<source>.<name>" with an optional ":<parameter>" (wiki.views:Bitcoin, github.stars:anza-xyz/agave,
@@ -153,7 +232,26 @@ export function validateRule(raw: unknown): BurnRule {
   if (!ORACLE_IDS.includes(r.oracle as OracleId)) p.push(`oracle must be one of ${ORACLE_IDS.join(", ")}`);
   const marketLike = r.oracle === "kalshi" || r.oracle === "polymarket" || r.oracle === "uma" || r.oracle === "drift-bet" || r.oracle === "hedgehog";
   const series = r.series ?? null, market = r.market ?? null;
-  if (r.oracle === "polymarket") {
+  const derby = (r as { derby?: unknown }).derby;
+  if (r.oracle === "derby") {
+    const dp = derby === undefined || derby === null ? ["derby: the derby block { selector, … } is required"] : derbySpecProblems(derby);
+    p.push(...dp);
+    if (typeof series !== "string" || !isDerbySeries(series)) p.push('derby: series must be "coinvs:<A>-<B>:<daily|weekly>:<pct|mcap>[-flip]:<hash>" or "bracket:<tournament id>:<slot>" (derbySeriesId)');
+    else if (!dp.length && series !== derbySeriesId(derby as DerbySpec, rulesSha256)) p.push(`derby: series must be ${derbySeriesId(derby as DerbySpec, rulesSha256)} (derived from the derby block)`);
+    if (market !== null) p.push("derby: market must be null");
+    const sel = !dp.length ? (derby as DerbySpec).selector : null;
+    if (sel === "coinvs" && r.kind !== "binary") p.push('derby: a coin-vs-coin rule is "binary" (YES = coin A wins the window, NO = coin B wins)');
+    if (sel === "price") {
+      if (r.kind !== "scalar") p.push('derby: a single-asset rule is "scalar" (the window\'s % change counted in units of percentage points)');
+      else if (r.scalar && (r.scalar.baseline !== 0 || (r.scalar.direction !== "up" && r.scalar.direction !== "down") || typeof r.scalar.unit !== "number" || r.scalar.unit < 0.1 || r.scalar.unit > 100)) p.push('derby: a single-asset scalar is { unit: 0.1–100 (percentage points), baseline: 0, direction: "up" | "down" }');
+    }
+    if (sel === "bracket") {
+      if (r.kind !== "scalar") p.push('derby: a bracket fan coin is "scalar" (the day\'s points: 1 for a win, 2 in the final, 0 for a loss)');
+      else if (r.scalar && (r.scalar.unit !== 1 || r.scalar.baseline !== 0 || r.scalar.direction !== "up")) p.push("derby: a bracket fan coin's scalar is { unit: 1, baseline: 0, direction: \"up\" }");
+    }
+  } else if (derby !== undefined && derby !== null) p.push('derby: only an oracle "derby" rule carries a derby block');
+  if (r.oracle === "derby") { /* checked above */ }
+  else if (r.oracle === "polymarket") {
     if (series !== null && (typeof series !== "string" || !isPolySeries(series))) p.push('polymarket: series must be "tag:<tag slug>[/<market type>][:<event slug glob>]" or "event:<event slug>"');
     if (market !== null && (typeof market !== "string" || !POLY_MARKET_RE.test(market))) p.push("polymarket: market must be a condition id (0x + 64 lowercase hex)");
     if (r.kind !== "binary") p.push('polymarket: kind must be "binary" (scalar Polymarket markets are not supported in v1)');
@@ -181,8 +279,10 @@ export function validateRule(raw: unknown): BurnRule {
     }
     if (market !== null && (filter.tickerIncludes !== undefined || filter.titleRegex !== undefined)) p.push("a one-market rule takes no filter");
     for (const k of Object.keys(filter)) if (k !== "tickerIncludes" && k !== "titleRegex") p.push(`filter.${k} is not a known key`);
+    if (r.oracle === "derby" && Object.keys(filter).length) p.push("derby: filter must be {} (the derby block is the whole selector)");
   }
   if (r.kind !== "binary" && r.kind !== "scalar") p.push('kind must be "binary" or "scalar"');
+  const oneShot = market !== null || (r.oracle === "derby" && (derby as { selector?: string; flip?: boolean } | undefined)?.selector === "coinvs" && (derby as { flip?: boolean }).flip === true);
   const checkMapping = (label: string, m: unknown): void => {
     if (!isMapping(m)) { p.push(`${label} must be { fractionOfPool } or { tokens }`); return; }
     const mode = mappingMode(m);
@@ -190,7 +290,8 @@ export function validateRule(raw: unknown): BurnRule {
     for (const k of Object.keys(m)) if (k !== "fractionOfPool" && k !== "tokens") p.push(`${label}.${k} is not a known key`);
     if (mode === "buyback") {
       const f = m.fractionOfPool as number;
-      if (typeof f !== "number" || !Number.isFinite(f) || f < RULE_BOUNDS.fractionOfPool.min || f > RULE_BOUNDS.fractionOfPool.max || Math.round(f * 1e6) !== f * 1e6) p.push(`${label}.fractionOfPool must be a number in [${RULE_BOUNDS.fractionOfPool.min}, ${RULE_BOUNDS.fractionOfPool.max}] with ≤ 6 decimals`);
+      const max = oneShot ? ONE_SHOT_MAX_FRACTION : RULE_BOUNDS.fractionOfPool.max;
+      if (typeof f !== "number" || !Number.isFinite(f) || f < RULE_BOUNDS.fractionOfPool.min || f > max || Math.round(f * 1e6) !== f * 1e6) p.push(`${label}.fractionOfPool must be a number in [${RULE_BOUNDS.fractionOfPool.min}, ${max}] with ≤ 6 decimals${oneShot ? "" : " (a one-shot may go to 1.00)"}`);
     } else {
       const t = m.tokens as number;
       if (!Number.isInteger(t) || t < RULE_BOUNDS.tokens.min || t > RULE_BOUNDS.tokens.max) p.push(`${label}.tokens must be a whole number in [${RULE_BOUNDS.tokens.min}, ${RULE_BOUNDS.tokens.max}]`);
@@ -215,10 +316,16 @@ export function validateRule(raw: unknown): BurnRule {
       if (pair.side !== "A" && pair.side !== "B") p.push('pair.side must be "A" or "B"');
       if (pair.counterpartMint !== null && (typeof pair.counterpartMint !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(pair.counterpartMint))) p.push("pair.counterpartMint must be a Solana address or null");
       if (pair.side === "B" && pair.counterpartMint === null) p.push("pair side B must name side A's mint as counterpartMint");
-      if (!PAIR_ORACLES.includes(r.oracle as OracleId)) p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket)");
+      if (!PAIR_ORACLES.includes(r.oracle as OracleId)) p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket) or a Burn Derby coin-vs-coin selector");
+      if (r.oracle === "derby" && (derby as DerbySpec | undefined)?.selector === "bracket") p.push("pair: a bracket fan coin is a single coin (coin-vs-coin and single-asset derby rules pair)");
       if (r.kind === "scalar" && r.scalar && r.scalar.direction === "abs") p.push('pair: a scalar side needs direction "up" or "down" (abs cannot be inverted)');
       if (r.kind === "binary" && r.binary && r.binary.onYes && r.binary.onNo) p.push("pair: a binary side burns on exactly one outcome (onYes or onNo, not both)");
-      for (const k of Object.keys(pair)) if (!["pairId", "side", "counterpartMint"].includes(k)) p.push(`pair.${k} is not a known key`);
+      const hasClause = pair.clause !== undefined || pair.voidBy !== undefined;
+      if (hasClause) {
+        if (pair.clause !== PAIR_CLAUSE) p.push(`pair.clause must be "${PAIR_CLAUSE}"`);
+        if (typeof pair.voidBy !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(pair.voidBy) || new Date(`${pair.voidBy}T00:00:00Z`).toISOString().slice(0, 10) !== pair.voidBy) p.push("pair.voidBy must be a YYYY-MM-DD date (UTC)");
+      }
+      for (const k of Object.keys(pair)) if (!["pairId", "side", "counterpartMint", "clause", "voidBy"].includes(k)) p.push(`pair.${k} is not a known key`);
     }
   }
   if (r.kind === "scalar") {
@@ -233,6 +340,18 @@ export function validateRule(raw: unknown): BurnRule {
     if (r.binary) p.push("scalar rule: binary must be null");
   }
   if (r.onVoid !== "skip") p.push('onVoid must be "skip"');
+  const set = (r as { set?: unknown }).set;
+  if (set !== undefined && set !== null) {
+    const l = set as { id?: unknown; outcome?: unknown; forwardBps?: unknown };
+    if (typeof l !== "object" || typeof l.id !== "string" || !/^[a-z0-9][a-z0-9-]{2,47}$/.test(l.id) || typeof l.outcome !== "string" || !/^[A-Za-z0-9._:\/-]{1,64}$/.test(l.outcome) || !Number.isInteger(l.forwardBps) || (l.forwardBps as number) < 0 || (l.forwardBps as number) > 10_000 || Object.keys(l).some((k) => !["id", "outcome", "forwardBps"].includes(k))) p.push("set must be { id: 3–48 lowercase letters/digits/dashes, outcome: 1–64 id characters, forwardBps: 0–10,000 }");
+    if ((r as { onEnd?: unknown }).onEnd === undefined || (r as { onEnd?: unknown }).onEnd === null) p.push("an outcome set needs the onEnd clause (the leftover that is not forwarded winds down on this coin)");
+    if (r.kind === "scalar" || r.oracle === "catalogue") p.push("an outcome set needs a selector with an outcome list (scalar feeds such as debt, CPI or weather have no winner)");
+  }
+  const onEnd = (r as { onEnd?: unknown }).onEnd;
+  if (onEnd !== undefined && onEnd !== null) {
+    const o = onEnd as { windDownDays?: unknown; sweepThresholdLamports?: unknown };
+    if (typeof o !== "object" || !Number.isInteger(o.windDownDays) || (o.windDownDays as number) < 7 || (o.windDownDays as number) > 90 || !Number.isInteger(o.sweepThresholdLamports) || (o.sweepThresholdLamports as number) < 1_000_000 || (o.sweepThresholdLamports as number) > 10_000_000_000 || Object.keys(o).some((k) => k !== "windDownDays" && k !== "sweepThresholdLamports")) p.push("onEnd must be { windDownDays: 7–90, sweepThresholdLamports: 1,000,000–10,000,000,000 }");
+  }
   if (typeof r.floorUsd !== "string" || !/^\d+(\.\d{1,2})?$/.test(r.floorUsd)) p.push("floorUsd must be a decimal string with ≤ 2 decimals");
   if (typeof r.reserveSol !== "string" || !/^\d+(\.\d{1,9})?$/.test(r.reserveSol)) p.push("reserveSol must be a decimal string with ≤ 9 decimals");
   // Mode agreement and the vault block.
@@ -248,7 +367,7 @@ export function validateRule(raw: unknown): BurnRule {
       if (!Number.isInteger(vault.cliffDays) || vault.cliffDays < 0 || vault.cliffDays > 365) p.push("vault.cliffDays must be a whole number 0–365");
     }
   } else if (vault !== null) p.push("buyback mode: vault must be null");
-  for (const k of Object.keys(r)) if (!["schema", "oracle", "series", "market", "filter", "kind", "binary", "scalar", "onVoid", "floorUsd", "reserveSol", "vault", "pair"].includes(k)) p.push(`${k} is not a known key`);
+  for (const k of Object.keys(r)) if (!["schema", "oracle", "series", "market", "filter", "kind", "binary", "scalar", "onVoid", "floorUsd", "reserveSol", "vault", "pair", "derby", "onEnd", "set"].includes(k)) p.push(`${k} is not a known key`);
   if (p.length) throw new Error(`rule: ${p.join("; ")}`);
   return {
     schema: BURNTICKER_RULES_SCHEMA, oracle: r.oracle as OracleId, series, market, filter,
@@ -256,7 +375,10 @@ export function validateRule(raw: unknown): BurnRule {
     binary: r.kind === "binary" ? { onYes: r.binary!.onYes ?? null, onNo: r.binary!.onNo ?? null } : null,
     scalar: r.kind === "scalar" ? { unit: r.scalar!.unit, perUnit: r.scalar!.perUnit, baseline: r.scalar!.baseline, direction: r.scalar!.direction } : null,
     onVoid: "skip", floorUsd: r.floorUsd as string, reserveSol: r.reserveSol as string, vault: mode === "vault" ? vault : null,
-    pair: pair === null ? null : { pairId: pair.pairId, side: pair.side, counterpartMint: pair.counterpartMint ?? null },
+    pair: pair === null ? null : { pairId: pair.pairId, side: pair.side, counterpartMint: pair.counterpartMint ?? null, ...(pair.clause !== undefined ? { clause: pair.clause, voidBy: pair.voidBy } : {}) },
+    ...(set !== undefined && set !== null ? { set: { id: (set as { id: string }).id, outcome: (set as { outcome: string }).outcome, forwardBps: (set as { forwardBps: number }).forwardBps } } : {}),
+    ...(onEnd !== undefined && onEnd !== null ? { onEnd: { windDownDays: (onEnd as { windDownDays: number }).windDownDays, sweepThresholdLamports: (onEnd as { sweepThresholdLamports: number }).sweepThresholdLamports } } : {}),
+    ...(r.oracle === "derby" ? { derby: derby as DerbySpec } : {}),
   };
 }
 
@@ -266,7 +388,7 @@ export function validateRule(raw: unknown): BurnRule {
  * both outcomes) throws. Each side is then hashed on its own (lockRule): two rules, two hashes, one pairId in both.
  */
 export function invertMapping(a: BurnRule, counterpartMint: string | null, pairId: string = a.pair?.pairId ?? ""): BurnRule {
-  const base = { ...a, pair: { pairId, side: "B" as const, counterpartMint } };
+  const base = { ...a, pair: { ...(a.pair ?? {}), pairId, side: "B" as const, counterpartMint } };
   if (a.kind === "binary" && a.binary) return validateRule({ ...base, binary: { onYes: a.binary.onNo, onNo: a.binary.onYes } });
   if (a.kind === "scalar" && a.scalar) return validateRule({ ...base, scalar: { ...a.scalar, direction: a.scalar.direction === "up" ? "down" : a.scalar.direction === "down" ? "up" : "abs" } });
   throw new Error("invertMapping: not a binary or scalar rule");
@@ -307,7 +429,7 @@ export function rulesFromText(text: string): LockedRule {
 }
 
 const pctOf = (f: number) => `${(f * 100).toFixed(f * 100 % 1 === 0 ? 0 : 2)}%`;
-const mapText = (m: BurnMapping, what: string) => (m.fractionOfPool !== undefined ? `spends ${pctOf(m.fractionOfPool)} of the fee pool buying the token at market and burns everything received ${what}` : `burns ${m.tokens!.toLocaleString("en-US")} tokens from the vault ${what}`);
+const mapText = (m: BurnMapping, what: string) => (m.fractionOfPool !== undefined ? (m.fractionOfPool >= 1 ? `spends the whole fee pool (100%) buying the token at market ${what} — across daily cranks, each at most 2% of the pool's reserve, until nothing is carried — and burns everything received` : `spends ${pctOf(m.fractionOfPool)} of the fee pool buying the token at market and burns everything received ${what}`) : `burns ${m.tokens!.toLocaleString("en-US")} tokens from the vault ${what}`);
 
 /** The rule in one plain paragraph for the review step and the token page. States the rule; says nothing about price. */
 /** A Polymarket selector in words ("every binary Polymarket market tagged nfl of type moneyline whose event slug matches nfl-*den-*"). */
@@ -320,7 +442,27 @@ export function polySelectorText(r: Pick<BurnRule, "series" | "market" | "filter
   return `every binary market of the Polymarket event ${e ? e[1] : r.series}${names.seriesTitle ? ` ("${names.seriesTitle}")` : ""}${re}`;
 }
 
+/** The both-or-neither clause in words ("" without one). Lint-clean (no future tense, nothing about price). */
+export function pairClauseText(r: Pick<BurnRule, "pair">): string {
+  const c = pairClause(r);
+  if (!c) return "";
+  return ` Both or neither: event burns on either side apply only once both coins have a registered pool; a settlement read before that waits as a pending-pair receipt and executes, in order, when the second pool registers. If either side has no registered pool when ${c.voidBy} ends (UTC), the pair voids: no event burn on either side, ever, and the rule has ended.`;
+}
+
+/** The onEnd clause in words ("" without one); `endDate` names the day the rule ends when it is known (a one-shot's settlement date). */
+export function onEndText(r: Pick<BurnRule, "onEnd" | "set">, endDate: string | null = null): string {
+  if (!r.onEnd) return "";
+  const lg = r.set && r.set.forwardBps > 0 ? ` and ${Math.round(r.set.forwardBps) / 100}% of the leftover burns the winning coin of set ${r.set.id} once the program's forward_to_winner instruction is live (queued, not deployed); when it is not — or there is no winning coin, or it is not graduated — all of it stays here`: "";
+  const weeks = r.onEnd.windDownDays % 7 === 0 ? `${r.onEnd.windDownDays / 7 === 4 ? "four" : r.onEnd.windDownDays / 7} weeks` : `${r.onEnd.windDownDays} days`;
+  return ` When the rule ends for any reason${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}${lg}, whatever is left in the burn pool burns down on a daily clock over ${weeks} (at least 99% of it), then the coin retires; fee income that arrives after that is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week) — no pool is left behind.`;
+}
+
 export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null; marketTitle?: string | null; feedTitle?: string | null } = {}): string {
+  if (r.oracle === "derby" && r.derby) {
+    const m = ruleMappings(r)[0]?.mapping;
+    const burn = m ? mapText(m, r.derby.selector === "coinvs" ? "for that window" : "per unit") : "burns nothing";
+    return `${derbyStatement(r.derby, r.pair?.side ?? null, r.pair?.pairId ?? null, r.scalar ? { unit: r.scalar.unit, direction: r.scalar.direction } : null)} On a window this coin wins, the keeper ${burn}. A voided (tied) window burns nothing.${pairClauseText(r)}${onEndText(r)}`;
+  }
   const what = r.oracle === "catalogue" ? `the ${names.feedTitle ?? r.series} feed`
     : r.oracle === "polymarket" ? polySelectorText(r, names)
     : r.market ? `the Kalshi market ${r.market}${names.marketTitle ? ` ("${names.marketTitle}")` : ""}`
@@ -330,18 +472,18 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
     const no = r.binary.onNo ? ` When it settles NO, ${r.binary.onYes ? "it" : "the keeper"} ${mapText(r.binary.onNo, "for that market")}.` : " A NO settlement burns nothing.";
     const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side burns on the opposite outcome, so each settlement burns exactly one of the two.` : "";
     const poly = r.oracle === "polymarket" ? " YES is the market's first outcome and NO its second; the result is the payout the Conditional Tokens contract on Polygon records, and a 50-50 resolution is a void." : "";
-    return `${yes}${no}${pair}${poly} A voided market burns nothing. Settled results only; prices are never read.`;
+    return `${yes}${no}${pair}${pairClauseText(r)}${poly} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
   }
   const s = r.scalar!;
   const base = s.baseline === "previousSettlement" ? "the previous settlement" : `a fixed baseline of ${s.baseline}`;
   const dir = s.direction === "up" ? "above" : s.direction === "down" ? "below" : "away from (either direction)";
-  const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.` : "";
-  return `Each time ${what} settles, every full ${s.unit} ${dir} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")} (buyback spend compounds: pool × (1 − (1 − f)^units)).${pair} A voided market burns nothing. Settled results only; prices are never read.`;
+  const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}` : "";
+  return `Each time ${what} settles, every full ${s.unit} ${dir} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")} (buyback spend compounds: pool × (1 − (1 − f)^units)).${pair} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
 }
 
 /** The description footer: feed/selector, the rule hash and the fixed disclaimer. */
 export function descriptionFooter(locked: LockedRule): string {
   const r = locked.rule;
-  const src = r.oracle === "catalogue" ? `feed ${r.series}` : r.oracle === "polymarket" ? (r.market ? `Polymarket market ${r.market}` : `Polymarket ${r.series}`) : r.market ? `Kalshi market ${r.market}` : `Kalshi series ${r.series}${r.filter.tickerIncludes ? ` (ticker ∋ ${r.filter.tickerIncludes})` : ""}`;
+  const src = r.oracle === "derby" ? `Burn Derby ${r.series}` : r.oracle === "catalogue" ? `feed ${r.series}` : r.oracle === "polymarket" ? (r.market ? `Polymarket market ${r.market}` : `Polymarket ${r.series}`) : r.market ? `Kalshi market ${r.market}` : `Kalshi series ${r.series}${r.filter.tickerIncludes ? ` (ticker ∋ ${r.filter.tickerIncludes})` : ""}`;
   return `— ${src} · rule sha256:${locked.sha12} · ${DISCLAIMER_FOOTER}`;
 }

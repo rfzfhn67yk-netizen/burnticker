@@ -3,7 +3,7 @@ import { LAUNCHLAB_PROGRAM, launchLabPoolId, WSOL_MINT } from "@/lib/burnKeeper/
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
 import { CURVE_FEES, POST_GRADUATION_FEES, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
-import { DECIMALS, descriptionFooter, invertMapping, lockRule, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
 
 /**
@@ -176,7 +176,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   const pool = burnPoolAddresses(deps.program.programId, mint);
   const feePda = pool.feePda;
   if (deps.program.feePdaFor(mint) !== feePda) throw new Error(`launch: the program client's fee PDA ${deps.program.feePdaFor(mint)} ≠ burn_receipts ["fee", mint] ${feePda}`);
-  const selectorKey = locked.rule.oracle === "catalogue" ? `catalogue:${locked.rule.series}`
+  const selectorKey = locked.rule.oracle === "derby" ? `derby:${locked.rule.series}` : locked.rule.oracle === "catalogue" ? `catalogue:${locked.rule.series}`
     : locked.rule.oracle === "polymarket" ? (locked.rule.market ? `polymarket:market:${locked.rule.market}` : `polymarket:${locked.rule.series}:${locked.rule.kind}`)
     : locked.rule.market ? `kalshi:market:${locked.rule.market}` : `kalshi:${locked.rule.series}`;
   const init = await deps.program.initializeToken({ mint, creator: input.creator, ticker: input.ticker, rulesSha256: locked.sha256, selectorKey, mode: locked.mode, attesters: deps.attesters, quorum: deps.quorum, vault, rule: locked.rule });
@@ -216,7 +216,16 @@ export interface PairLaunchInput {
   b: { ticker: string; name: string; description: string; imageUrl: string | null; links: { label: string; url: string }[] };
   /** Optional; derived from the tickers and the selector when absent (deterministic). */
   pairId?: string;
+  /**
+   * BOTH OR NEITHER (2026-10-10): the date (YYYY-MM-DD, UTC) by whose end both coins must have a registered pool, else the pair voids.
+   * The caller passes a one-shot's first settlement date; absent = 30 days after `now` (default Date.now()).
+   */
+  voidBy?: string;
+  now?: number;
 }
+
+/** The default voidBy for a pair: 30 days after launch (UTC date). */
+export const defaultVoidBy = (now = Date.now()): string => new Date(now + 30 * 86_400_000).toISOString().slice(0, 10);
 
 export interface PairBundles { pairId: string; a: LaunchBundle; b: LaunchBundle; selector: string; notes: string[] }
 
@@ -229,10 +238,12 @@ export interface PairBundles { pairId: string; a: LaunchBundle; b: LaunchBundle;
 export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps): Promise<PairBundles> {
   if (input.a.ticker === input.b.ticker) throw new Error("pair: the two sides need different tickers");
   const probe = validateRule({ ...(input.a.rule as object), pair: null });
-  if (!PAIR_ORACLES.includes(probe.oracle)) throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket)");
+  if (!PAIR_ORACLES.includes(probe.oracle)) throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket) or a Burn Derby coin-vs-coin selector");
   const selector = probe.market ?? `${probe.series}${probe.filter.tickerIncludes ? `:${probe.filter.tickerIncludes}` : ""}`;
   const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, selector);
-  const ruleA = validateRule({ ...probe, pair: { pairId, side: "A", counterpartMint: null } });
+  // Both or neither: the clause is part of BOTH sides' canonical rules (invertMapping carries it to side B), so each hash locks it.
+  // …and the onEnd wind-down (no burn pool is ever left behind), unless the caller's rule already names its own.
+  const ruleA = validateRule({ ...probe, onEnd: probe.onEnd ?? { ...DEFAULT_ON_END }, pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now) } });
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, deps);
   const ruleB = invertMapping(ruleA, a.mint, pairId);
   const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: undefined });
@@ -240,5 +251,6 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
     `rivalry pair ${pairId}: ${input.a.ticker} (side A) and ${input.b.ticker} (side B) on selector ${selector}; each settlement burns exactly one side`,
     "sign A's bundle first, then B's: B's rule names A's mint as counterpart; A's counterpart is recorded in the registry (A is created before B's mint exists)",
     "program seam: burn_receipts TokenConfig may carry no counterpart field; the link is in both rules.json files (pairId) and the registry's pairs table",
+    `both or neither: event burns on either side apply only once both coins have a registered pool; if either has none when ${ruleA.pair!.voidBy} ends (UTC) the pair voids — no event burns ever, and each coin's pool winds down over ${ruleA.onEnd!.windDownDays} days`,
   ] };
 }

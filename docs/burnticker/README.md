@@ -18,6 +18,22 @@ Two coins launched together on the SAME selector with inverted mappings — $BRO
 wins (one KXNFLGAME leg), $BULLS/$BEARS on the S&P close direction (scalar up vs down), two sides of a settled series. Each settlement
 burns exactly one side; the receipts are the scoreboard.
 
+- **Both or neither (owner, 10-10; every pair created since).** `pair.clause: "both-or-neither"`, `pair.voidBy` and
+  `pair.fallback: { everyDays: 7, units: 1 }` are in both sides' canonical rules. Event burns apply only once BOTH coins have a registered
+  pool: earlier settlements wait as `pending-pair` receipts and execute in settlement order the cycle the second pool registers
+  (`multiKeeper.pairGates`). If either side is unregistered when the `voidBy` UTC date ends, the pair voids (`pair_outcomes`, append-only):
+  pending receipts become `voided`, no event burns ever again, and the rule has ended: both pools wind down (below). `voidBy` defaults to
+  a one-shot's first settlement date, else 30 days after launch. The pair page shows the state (`live` / `waiting-on:A|B` / `voided`), the
+  void date and both curves side by side; the pair post adds "Pair live …" / "Pair voided — both pools wind down over four weeks …". A
+  voided Burn Derby pair is a no-contest.
+- **No burn pool is ever left behind (owner, 10-10).** Every new rule carries `onEnd: { windDownDays: 28, sweepThresholdLamports }` in
+  its hash. When a rule ends for any reason (one-shot NO / void, pair voided, derby season over, bracket loser, an adapter's
+  `markRuleEnded`), the keeper attests a daily `clock` reading of `windDownUnits(f, 28)` units (≥ 99 % of the pool in 28 days; proof =
+  sha256("clock|date|rules sha")) until the pool is spent, then retires the coin; a one-shot may spend 100 % (the program allows 10,000
+  bps) and DRAINS across daily cranks under the 2 %-of-reserve cap; a retired coin's later fee income is swept above the threshold, at
+  most weekly. Outcome sets (`set: { id, outcome, forwardBps }`, opt-in) are in the schema; their `forward_to_winner` instruction and a
+  permissionless `sweep_retired` are queued (PROGRAM-UPGRADE-QUEUE.md). Design: DERBY.md §6a.
+
 - Rule: `pair: { pairId, side: "A"|"B", counterpartMint }` is part of each side's canonical JSON, so the link is locked; the two rules
   are hashed independently. `invertMapping(ruleA, mintA, pairId)` derives side B (binary: swap onYes/onNo — a side burns on exactly
   one outcome; scalar: flip up↔down; `abs` cannot pair). v1 pairs must use a tier-1 adjudicated market source (kalshi); the refuse list
@@ -70,6 +86,35 @@ burns exactly one side; the receipts are the scoreboard.
 - Landing page (`site/burnticker/index.html`): the "Rivalries" section right after the ticker tape — two example matchups drawn as
   receipts ($BRONCOS vs $CHIEFS on KXNFLGAME, $BULLS vs $BEARS on the KXINX close, illustrative tallies), how a pair works in three
   steps, and the "Launch a pair" button.
+
+## Burn Derby — coin vs coin, single assets, brackets (owner-approved 10-10: "build it all")
+
+A new selector kind: the **relative performance of two existing coins** over a UTC day (00:00 → 00:00) or week. `oracle: "derby"` with a
+locked `derby` block (`src/lib/burnticker/derby/spec.ts`); design note: [DERBY.md](DERBY.md).
+
+- **Coin vs coin** (`selector: "coinvs"`): side A's coin burns on a window A out-gains B (% change, or market-cap change with
+  `measure: "mcap"`), side B's on a window B wins; a tie posts void receipts and burns nothing. The one-shot **flippening** (`flip: true`)
+  settles YES on the first window A's size passes B's, NO when the season ends without it; the pair then retires. **Single assets**
+  (`selector: "price"`): one Pyth feed — a coin, a stock or fund, FX, a metal, a commodity — counted in units of percentage points of its
+  window change (the coverage audit's Financial-markets primaries). **Brackets** (`selector: "bracket"`): 8 or 16 coins, one derby per
+  match per round (default 7 days); more winning days advances (tiebreak: compounded change, then the lower seed); the loser's fan coin
+  retires; the final burns two units. Page `/burnticker/derby/<tournamentId>`; `scripts/burnticker-derby.mts create|show|fan-rule`.
+- **Values:** Pyth — keyless from Pyth's sponsored `PriceUpdateV2` accounts on Solana (snapshotted at each boundary), or Hermes
+  `v2/updates/price/<t>?ids[]=…&encoding=base64&parsed=true` with `BURNTICKER_PYTH_API_KEY` (keyless Hermes price paths answered 401 on
+  10-10; the update bytes' sha256 is the proof). Coins without a feed (GIGA): the TWAP of the deepest SOL pool's vault balances (Raydium
+  CPMM / PumpSwap) × Pyth SOL/USD. **Cross-read:** Jupiter price v3, DexScreener, RedStone's gateway — snapshotted at each boundary; a
+  gap above 2 points on the margin withholds the window (no reading, no burn, an alert).
+- **Keeper:** a sampler before each fetch, decisions once per window (`derby_windows`, append-only), readings with
+  `proof: derby:sha256:<hex>`, the counter attestation's signed `proof=` carries it, a planning pass retires finished coins.
+- **Wizard:** the "Coin vs Coin" tile (`src/app/burnticker/launch/CoinVsCoinTile.tsx`): pick two coins (Pyth catalogue + Jupiter token
+  list), window, season (30 days), optional flippening; live cards; the review sentence — "$TEAMWIF burns 1% every day WIF out-gains SHIB
+  (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. 30 days."
+- **Pair page:** running score (receipt tally), day strip with both readings, season end, proof links; the day post
+  `Day 12 · WIF 7 – SHIB 5 · $TEAMWIF burned 1% · receipt …` with both communities' @handles.
+- **API 1.4.0:** `GET /v1/derby`, `GET /v1/derby/{id}`, `GET /v1/derby/search?q=&assets=`; SDK `bt.derby.list() / get(id) / search(q)`.
+- **Refused:** a platform coin as an underlying, the refuse list, no Pyth feed and < $250K liquidity, the same coin twice, a season that
+  starts before the next 00:00 UTC; Pyth's US index proxies stay behind `BURNTICKER_INDEX_PROXIES_ENABLED`. The coverage preflight runs
+  each coin's primary and cross-read live. Not built: communities burning their own tokens into a score (attack surface; DERBY.md §9).
 
 ## First-party settlement for team coins and weather; elections; the universal search (10-10, later the same day)
 

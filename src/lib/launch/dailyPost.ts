@@ -263,6 +263,19 @@ export const pairShareLine = (t: Pick<PairTally, "a" | "b" | "burnsA" | "burnsB"
  * with its market ticker and result and the side it burned, the next scheduled market (no odds in the post; the page shows the
  * display-only implied chance), the pair page link. Filled from pairTally over both sides' status.json + receipts.json.
  */
+/**
+ * Both or neither (2026-10-10): the pair's state line — "Pair live: both pools registered", "Pair voided — both sides on the weekly
+ * clock", or "Waiting on $B's pool (both or neither; voids after <date> UTC)". Null for a pair made before the clause.
+ */
+export function pairStateLine(t: Pick<PairTally, "a" | "b" | "clause">): string | null {
+  const c = t.clause;
+  if (!c) return null;
+  if (c.state === "live") return "Pair live: both pools registered, every settlement burns one side";
+  if (c.state === "voided") return `Pair voided — both pools wind down over four weeks (no event burns; ${c.voidBy} ended without both pools)`;
+  const who = c.waitingOn.length === 2 ? "both pools" : c.waitingOn.length === 1 ? `$${c.waitingOn[0] === "A" ? t.a.ticker : t.b.ticker}'s pool` : "both pools to register";
+  return `Waiting on ${who} (both or neither: settlements wait as pending; the pair voids if ${c.voidBy} ends without both)`;
+}
+
 export function pairDailyText(t: PairTally, site?: string | null): string {
   const A = `$${t.a.ticker}`, B = `$${t.b.ticker}`;
   const ls = t.lastSettlement;
@@ -272,6 +285,7 @@ export function pairDailyText(t: PairTally, site?: string | null): string {
     : `Last: ${ls.eventId} settled ${outcome} → neither side burned${ls.result === "void" ? " (void)" : ""}`;
   return [
     pairShareLine(t),
+    pairStateLine(t),
     `Supply ${fmtInt(t.supplyA)} : ${fmtInt(t.supplyB)} (${fmtPct(t.supplyPctA)} : ${fmtPct(t.supplyPctB)} of the start)`,
     `${t.settlements} ${t.settlements === 1 ? "settlement" : "settlements"}${t.voids ? `, ${t.voids} void` : ""} · one market, inverted rules`,
     last,

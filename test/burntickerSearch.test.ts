@@ -156,7 +156,7 @@ describe("the election-pair template (El-Sayed vs Rogers, Michigan Senate 2026)"
     assert.equal(t.a.ticker, "ELSAYED"); assert.equal(t.b.ticker, "ROGERS");
     assert.equal(t.launchable.component, "winner");
     assert.ok(t.pending.some((p) => /composite rules/.test(p))); assert.ok(t.pending.some((p) => /same operator/.test(p)));
-    assert.equal(t.voidClause.kind, "both-or-neither"); assert.equal(t.voidClause.voidBy, null);
+    assert.equal(t.voidClause.kind, "both-or-neither"); assert.match(t.voidClause.voidBy ?? "", /^\d{4}-\d{2}-\d{2}$/, "wired to the pairs core: the race's settlement date");
     const cfg = loadCopyLintConfig();
     for (const s of [t.a.sentences.fecBeats!, t.a.sentences.winner, t.b.sentences.fecBeats!, t.b.sentences.winner]) assert.ok(lintCopy(s, cfg).ok, s);
   });

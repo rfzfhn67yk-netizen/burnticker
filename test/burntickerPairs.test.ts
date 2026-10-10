@@ -63,11 +63,11 @@ describe("pair bundles and the registry", () => {
   test("buildPairBundles: A first, B derived with A's mint as counterpart, different mints/tickers, same selector, both hashed", async () => {
     const program = new FakeBurnProgram("devnet");
     const inputA = { creator: CREATOR, ticker: "BRONCOS", name: "Broncos", description: "burns when Denver loses", imageUrl: null, links: [], rule: { ...BRONCOS_LOSE, pair: null }, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" as const };
-    const pr = await buildPairBundles({ a: inputA, b: { ticker: "CHIEFS", name: "Chiefs", description: "burns when Denver wins", imageUrl: null, links: [] } }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
+    const pr = await buildPairBundles({ a: inputA, b: { ticker: "CHIEFS", name: "Chiefs", description: "burns when Denver wins", imageUrl: null, links: [] }, voidBy: "2026-11-09" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
     assert.equal(pr.pairId, "broncos-vs-chiefs-kxnflgame-den");
     assert.notEqual(pr.a.mint, pr.b.mint); assert.notEqual(pr.a.rules.sha256, pr.b.rules.sha256);
-    const rb = JSON.parse(pr.b.rules.text); assert.deepEqual(rb.pair, { pairId: pr.pairId, side: "B", counterpartMint: pr.a.mint }); assert.deepEqual(rb.binary, { onYes: { fractionOfPool: 0.02 }, onNo: null });
-    const ra = JSON.parse(pr.a.rules.text); assert.deepEqual(ra.pair, { pairId: pr.pairId, side: "A", counterpartMint: null });
+    const rb = JSON.parse(pr.b.rules.text); assert.deepEqual(rb.pair, { pairId: pr.pairId, side: "B", counterpartMint: pr.a.mint, clause: "both-or-neither", voidBy: "2026-11-09" }); assert.deepEqual(rb.binary, { onYes: { fractionOfPool: 0.02 }, onNo: null }); assert.deepEqual(rb.onEnd, { windDownDays: 28, sweepThresholdLamports: 50_000_000 });
+    const ra = JSON.parse(pr.a.rules.text); assert.deepEqual(ra.pair, { pairId: pr.pairId, side: "A", counterpartMint: null, clause: "both-or-neither", voidBy: "2026-11-09" });
     assert.equal(program.initialised.length, 2);
     await assert.rejects(buildPairBundles({ a: inputA, b: { ticker: "BRONCOS", name: "x", description: "", imageUrl: null, links: [] } }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [], quorum: 1, metadataUri: () => "u" }), /different tickers/);
     await assert.rejects(buildPairBundles({ a: { ...inputA, rule: { ...DENVER_HIGH, oracle: "catalogue", series: "treasury.debt", scalar: { unit: 1e9, perUnit: { fractionOfPool: 0.05 }, baseline: "previousSettlement", direction: "up" } } }, b: { ticker: "X", name: "x", description: "", imageUrl: null, links: [] } }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [], quorum: 1, metadataUri: () => "u" }), /tier-1/);
@@ -161,6 +161,7 @@ describe("a Broncos pair through the keeper", () => {
     const post = pairDailyText(t, "https://burnticker.com");
     const lines = post.split("\n");
     assert.equal(lines[0], "$BRONCOS 1 : 1 $CHIEFS — every loss burns");
+    assert.equal(lines.splice(1, 1)[0], "Pair live: both pools registered, every settlement burns one side");
     assert.match(lines[1], /^Supply [\d,]+ : [\d,]+ \(\d+\.\d\d% : \d+\.\d\d% of the start\)$/);
     assert.equal(lines[2], "2 settlements · one market, inverted rules");
     assert.match(lines[3], /^Last: KXNFLGAME-26OCT04DENSF-DEN settled NO → \$BRONCOS burned [\d,]+$/);

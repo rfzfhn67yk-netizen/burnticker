@@ -7,7 +7,7 @@ import { verifyReceipt, type VerifyOptions } from "./verify.ts";
 import { crank, type CrankPlan } from "./crank.ts";
 import { subscribe, type SubscribeOptions, type Subscription } from "./events.ts";
 import type {
-  BacktestResult, Browse, BurntickerEvent, Catalogue, KalshiCategories, KalshiEvents, KalshiSearchResult, KalshiSeriesDetail, KalshiTeams, PolymarketSearchResult, ReceiptJson, Receipts, ServerVerification, TokenDetail, TokenList, TokenStatusJson, Trust, VerifyResult,
+  BacktestResult, Browse, BurntickerEvent, Catalogue, DerbyDetail, DerbyList, DerbySearch, KalshiCategories, KalshiEvents, KalshiSearchResult, KalshiSeriesDetail, KalshiTeams, PolymarketSearchResult, ReceiptJson, Receipts, ServerVerification, TokenDetail, TokenList, TokenStatusJson, Trust, VerifyResult,
 } from "./types.ts";
 
 export interface BurntickerOptions {
@@ -190,6 +190,19 @@ export class Burnticker {
 
   /** The Powers Register and the live fee bps (designed vs decoded from chain). */
   trust(): Promise<Trust> { return this.api.get<Trust>("/trust"); }
+
+  /**
+   * BURN DERBY (2026-10-10; API 1.4.0). `list()` = every bracket and coin-vs-coin pair; `get(id)` = one bracket (rounds, matches, day
+   * strips, retired fan coins) or one pair's derby block (score as a receipt tally, the day strip with both readings and proof links,
+   * the season end, the latest day post); `search(q)` = coins for a derby (Pyth catalogue + Jupiter's token list, each hit with the
+   * underlying a rule locks or why it cannot be used; `assets: "all"` adds stocks/funds, FX, metals, commodities). Launch a derby pair
+   * with `launch()` + a rule whose `derby` block names the two underlyings (derbySeriesId from @burnticker/sdk builds its series).
+   */
+  readonly derby = {
+    list: (): Promise<DerbyList> => this.api.get<DerbyList>("/derby"),
+    get: (id: string): Promise<DerbyDetail> => this.api.get<DerbyDetail>(`/derby/${encodeURIComponent(id)}`),
+    search: (q: string, o: { assets?: "crypto" | "all" } = {}): Promise<DerbySearch> => this.api.get<DerbySearch>("/derby/search", { q, assets: o.assets }),
+  };
 
   /** The OpenAPI 3.1 document of the HTTP API. */
   openapi(): Promise<Record<string, unknown>> { return this.api.get("/openapi.json"); }

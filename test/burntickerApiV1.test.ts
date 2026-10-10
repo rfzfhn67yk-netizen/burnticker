@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { Keypair, Transaction } from "@solana/web3.js";
 import { buildOpenApi, ENDPOINTS, endpoint, RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { limiter, RateLimiter, clientKey } from "@/lib/burnticker/api/http";
-import { lockRule } from "@/lib/burnticker/rules";
+import { DEFAULT_ON_END, lockRule } from "@/lib/burnticker/rules";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { PLACEHOLDER_PROGRAM_ID } from "@/lib/burnticker/program";
 import { PLACEHOLDER_BLOCKHASH } from "@/lib/burnticker/transactions";
@@ -131,7 +131,7 @@ describe("v1 POST endpoints", () => {
     const { body } = await call("buildLaunchBundle", {}, { body: { creator: CREATOR, mint, ticker: "dnvr", name: "Denver Heat", description: "hot days burn", rule: DENVER_HIGH, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, register: false } });
     const review = body.review as { mint: string; rules: { sha256: string }; receiptFormat: string; addresses: { feePda: string }; burnPoolAuthority: string; disclosure: { eventContract: string | null } };
     assert.equal(review.mint, mint);
-    assert.equal(review.rules.sha256, lockRule(DENVER_HIGH).sha256);
+    assert.equal(review.rules.sha256, lockRule({ ...DENVER_HIGH, onEnd: DEFAULT_ON_END }).sha256, "since 1.4.0 a rule without onEnd gets the default wind-down");
     assert.equal(review.addresses.feePda, burnPoolFor(PLACEHOLDER_PROGRAM_ID, new (await import("@solana/web3.js")).PublicKey(mint)).feePda.toBase58());
     assert.equal(review.burnPoolAuthority, review.addresses.feePda, "LaunchLab's recorded creator is the fee PDA, not the keeper");
     assert.ok(review.disclosure.eventContract);

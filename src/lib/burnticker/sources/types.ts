@@ -16,7 +16,9 @@ import type { CarryPolicy } from "@/lib/burnticker/units";
  * The token's own price is excluded everywhere; third-party asset prices are admitted only through tiers 1–3.
  */
 
-export type SourceKind = "market" | "assertion" | "attested-http" | "onchain";
+/** "price-feed" (2026-10-10, Burn Derby): an oracle price feed (Pyth on Solana / Hermes) or a cross-read of one (Jupiter, DexScreener,
+ * RedStone) or an on-chain pool TWAP — read by the derby adapter (src/lib/burnticker/derby), never by the generic attested-http one. */
+export type SourceKind = "market" | "assertion" | "attested-http" | "onchain" | "price-feed";
 export type Tier = 1 | 2 | 3 | 4 | 5;
 export const TIER_LABEL: Record<Tier, string> = { 1: "adjudicated market", 2: "optimistic assertion", 3: "attested primary API (TEE/zk)", 4: "keeper-read primary API", 5: "page-scraped" };
 
@@ -41,3 +43,17 @@ export interface ResolutionSource extends OracleAdapter, SourceFacts {}
  * values, comparable only when read within `maxSkewMinutes` of each other). `tolerance`: the larger of the two sides' bounds applies.
  */
 export interface FactSpec { id: string; scale?: number; align?: "period" | "quarter-end" | "snapshot"; tolerance?: { rel?: number; abs?: number }; maxSkewMinutes?: number }
+
+/**
+ * A Burn Derby price source as config/burnticker/sources.json lists it (kind "price-feed"): who operates it, the fact it reads (one fact
+ * id per asset class: "usd-at-boundary.crypto" = "<symbol>/USD price at <boundary>"), how it is read (`route`), which Pyth asset classes
+ * it serves, and whether a coin may settle on it. The coverage audit treats it like any other descriptor; the derby adapter does the
+ * reading (derby/{pyth,cross,pools}.ts).
+ */
+export interface PriceFeedSourceConfig {
+  id: string; kind: "price-feed"; tier: Tier; title: string; sourceName: string; sourceUrl: string; operator: string;
+  /** Absent when no independent source of the same fact exists (then it can never be cross-read, and the audit says so). */
+  fact?: FactSpec;
+  route: "pyth-solana" | "pyth-hermes" | "jupiter" | "dexscreener" | "redstone" | "pool-twap";
+  assetTypes: string[]; cadence: string; flags: string[]; launchable: boolean; needsKey?: string | null; note?: string;
+}

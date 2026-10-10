@@ -3,6 +3,7 @@ import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
 import type { Race, RaceOutcome } from "@/lib/burnticker/elections";
 import { fecSeries } from "@/lib/burnticker/sources/fec";
 import { nativeRule } from "@/lib/burnticker/sources/native";
+import { defaultVoidBy } from "@/lib/burnticker/launchBundle";
 
 /**
  * THE ELECTION-PAIR TEMPLATE (owner-approved 2026-10-10): candidate A vs candidate B for one race → two coins, one per candidate, each
@@ -18,8 +19,9 @@ import { nativeRule } from "@/lib/burnticker/sources/native";
  *   · the FEC component's cross-read is the FEC's own filings endpoint (same operator); the settlement-coverage gate refuses a
  *     same-operator cross-read, so its preflight fails until the gate admits government primaries with a second publication channel
  *     (proposal: docs/burnticker/ui-conventions.md § FEC).
- *   · the pair's "both or neither" void clause (pending-pair / voidBy / a weekly fallback clock) belongs to the pairs core the Coin vs
- *     Coin branch is adding; `voidClause` is a stub until it lands (test/burntickerSearch.test.ts fails when the core lands unwired).
+ *   · the pair's "both or neither" void clause is in the pairs core (rules.ts PairField, 2026-10-10): `voidClause.voidBy` = the race's
+ *     settlement date (a one-shot's first settlement), passed to buildPairBundles so both sides' rules.json lock it; readings before both
+ *     pools register wait as pending-pair; a void ends the rule and both pools wind down over 28 days (rules.ts onEnd).
  */
 
 export interface ElectionPairSide {
@@ -31,7 +33,7 @@ export interface ElectionPair {
   race: { slug: string; title: string; settlesOn: string | null; state: string | null };
   a: ElectionPairSide; b: ElectionPairSide;
   crossRead: { name: string; url: string };
-  voidClause: { kind: "both-or-neither"; voidBy: string | null; pendingPair: boolean; fallbackClock: "weekly"; status: string };
+  voidClause: { kind: "both-or-neither"; voidBy: string | null; pendingPair: boolean; fallbackClock: "wind-down-28d"; status: string };
   launchable: { component: "winner"; why: string };
   pending: string[];
 }
@@ -60,12 +62,11 @@ export function electionPairTemplate(race: Race, a: RaceOutcome, b: RaceOutcome,
     race: { slug: race.slug, title: race.title, settlesOn: race.settlesOn, state: race.state },
     a: side(a, b, fec.a, fec.b), b: side(b, a, fec.b, fec.a),
     crossRead: { name: race.sos.name, url: race.sos.url },
-    voidClause: { kind: "both-or-neither", voidBy: null, pendingPair: true, fallbackClock: "weekly", status: "stub: the pairs core (pending-pair / voidBy / weekly fallback clock) lands with the Coin vs Coin branch" },
+    voidClause: { kind: "both-or-neither", voidBy: race.settlesOn ? race.settlesOn.slice(0, 10) : defaultVoidBy(), pendingPair: true, fallbackClock: "wind-down-28d", status: `locked in both rules at launch (pairs core): event burns apply once both coins have a registered pool; the pair voids if ${race.settlesOn ? race.settlesOn.slice(0, 10) : "its void date"} ends without both, and each coin's pool then winds down over 28 days (onEnd)` },
     launchable: { component: "winner", why: "the rules core locks one selector per coin; each side launches on its winner component until composite rules land" },
     pending: [
       "composite rules (one coin, two selectors): the FEC-beats component is shown and hashed, not launched",
       "the FEC component's only cross-read is the FEC itself (same operator): the coverage gate refuses it until government primaries may use a second publication channel",
-      "the both-or-neither void clause: pairs core (Coin vs Coin branch)",
       ...(fec.a && fec.b ? [] : ["an FEC candidate id was not found for one side"]),
     ],
   };
