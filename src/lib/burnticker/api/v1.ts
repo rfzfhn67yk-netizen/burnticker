@@ -1,16 +1,17 @@
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { feedById, loadFixture, previewFromFixture } from "@/lib/burnticker/catalogue";
 import { TIER_LABEL } from "@/lib/burnticker/sources/types";
-import { BURNTICKER_RULES_SCHEMA, DISCLAIMER_FOOTER, EVENT_CONTRACT_DISCLOSURE, lockRule, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { BURNTICKER_RULES_SCHEMA, DISCLAIMER_FOOTER, lockRule, oracleDisclosure, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { receiptFormatTemplate, receiptKey } from "@/lib/burnticker/receipt";
 import { compileUnsigned } from "@/lib/burnticker/transactions";
-import { feedSourceReading, kalshiSourceReading, verifyReceiptCore, type ChainReading, type SourceReading } from "@/lib/burnticker/verify";
+import { feedSourceReading, kalshiSourceReading, polymarketSourceReading, verifyReceiptCore, type ChainReading, type SourceReading } from "@/lib/burnticker/verify";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
-import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, publicConfig } from "@/lib/burnticker/api/handlers";
+import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
+import type { FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import { API_PREFIX, buildOpenApi } from "@/lib/burnticker/api/spec";
 
@@ -35,7 +36,7 @@ export function findToken(p: Platform, id: string): TokenRow | null {
 const links = (t: TokenRow) => ({ self: `${API_PREFIX}/tokens/${t.ticker}`, receipts: `${API_PREFIX}/tokens/${t.ticker}/receipts`, page: `/burnticker/t/${t.ticker}` });
 
 export function v1Catalogue(now = Date.now()): ApiResult {
-  return ok({ ...catalogueSources(now, { includeConfig: true }), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series (tier 1, adjudicated markets) are searched live; settled results only, prices display-only" } });
+  return ok({ ...catalogueSources(now, { includeConfig: true }), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series (tier 1, adjudicated markets) are searched live; settled results only, prices display-only" }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket binary markets (tier 1, adjudicated markets) are searched live on Gamma; each result is read from the Conditional Tokens payout vector on Polygon; prices display-only" } });
 }
 
 export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()): ApiResult {
@@ -56,6 +57,13 @@ export const v1KalshiSearch = (p: Platform, q: URLSearchParams): Promise<ApiResu
 export const v1KalshiEvents = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiEvents(p, { q: q.get("q"), series: q.get("series"), status: q.get("status") });
 export const v1KalshiTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiTeams(p, { series: q.get("series") });
 export const v1Backtest = (p: Platform, body: Record<string, unknown>): Promise<ApiResult> => runBacktest(p, body);
+export const v1PolymarketSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => polymarketSearch(p, { q: q.get("q"), status: q.get("status") });
+/** POST /polymarket/backtest — a Polymarket rule's back-test from Gamma's closed markets (the same pipeline as /kalshi/backtest). */
+export async function v1PolymarketBacktest(p: Platform, body: Record<string, unknown>): Promise<ApiResult> {
+  const oracle = (body.rule as { oracle?: unknown } | null | undefined)?.oracle;
+  if (oracle !== "polymarket") return fail(400, 'rule.oracle must be "polymarket" here (Kalshi and catalogue rules: POST /kalshi/backtest)');
+  return runBacktest(p, body);
+}
 
 export function v1Validate(body: Record<string, unknown>): ApiResult {
   try {
@@ -84,7 +92,7 @@ export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>)
       ticker: bundle.ticker, name: bundle.name, description: bundle.description, creator: bundle.creator, mint: bundle.mint, cluster: bundle.cluster, seriesTitle,
       rules: { ...bundle.rules, statement: ruleStatement(locked.rule, { seriesTitle }) }, receiptFormat: receiptFormatTemplate(bundle.ticker, locked.rule.oracle, locked.sha12),
       addresses: bundle.addresses, allocation: bundle.allocation, fees: bundle.fees, burnPoolAuthority: bundle.burnPoolAuthority, notes: bundle.notes,
-      disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: locked.rule.oracle === "kalshi" ? EVENT_CONTRACT_DISCLOSURE : null },
+      disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(locked.rule.oracle) },
       operator: operatorPowersSummary(loadPowersRegister()),
       acknowledgements: ["I understand the rule cannot be changed by anyone, including me", "I am not promising anyone anything (no returns, no price talk)"],
     },
@@ -127,7 +135,7 @@ export async function v1Token(p: Platform, id: string): Promise<ApiResult> {
   const t = findToken(p, id);
   if (!t) return fail(404, `no token ${decode(id)}`);
   const d = await tokenPageData(p, t);
-  return ok({ status: d.status, receipts: d.receipts, readings: d.readings.map((r) => ({ id: r.id, at: r.at, result: r.result, value: r.value, title: r.title, sourceUrl: r.sourceUrl, settlementSourceUrl: r.settlementSourceUrl, method: r.method, attestedBy: r.attestedBy })), rulesText: d.rulesText, stubs: d.stubs });
+  return ok({ status: d.status, receipts: d.receipts, readings: d.readings.map((r) => ({ id: r.id, at: r.at, result: r.result, value: r.value, title: r.title, sourceUrl: r.sourceUrl, settlementSourceUrl: r.settlementSourceUrl, method: r.method, proof: r.proof ?? null, attestedBy: r.attestedBy })), rulesText: d.rulesText, stubs: d.stubs });
 }
 
 export async function v1Receipts(p: Platform, id: string): Promise<ApiResult> {
@@ -138,7 +146,7 @@ export async function v1Receipts(p: Platform, id: string): Promise<ApiResult> {
 }
 
 /** Server-side verification: the same checks as the SDK's verifyReceipt, with the platform's Kalshi client and program client. */
-export async function v1Verify(p: Platform, id: string, eventId: string, o: { fetchImpl?: FetchLike; now?: number } = {}): Promise<ApiResult> {
+export async function v1Verify(p: Platform, id: string, eventId: string, o: { fetchImpl?: FetchLike; rpcFetch?: RpcFetchLike; now?: number } = {}): Promise<ApiResult> {
   const t = findToken(p, id);
   if (!t) return fail(404, `no token ${decode(id)}`);
   const ev = decode(eventId);
@@ -150,6 +158,8 @@ export async function v1Verify(p: Platform, id: string, eventId: string, o: { fe
   const feed = locked.rule.oracle === "catalogue" ? feedById(locked.rule.series!) : null;
   let source: SourceReading;
   if (locked.rule.oracle === "kalshi") source = await kalshiSourceReading(locked.rule, ev, o.fetchImpl ?? kalshiFetchVia(p), now);
+  // The payout vector through the platform's client (its RPC list; a resolved vector is immutable on chain, so its cache is exact) unless a fetch is given.
+  else if (locked.rule.oracle === "polymarket") source = await polymarketSourceReading(locked.rule, ev, { fetchImpl: o.fetchImpl ?? polymarketFetchVia(p), ...(o.rpcFetch ? { rpcFetch: o.rpcFetch } : { readChain: (id: string) => p.polymarket.readChain(id) }) });
   else if (feed) source = o.fetchImpl ? await feedSourceReading(feed.config, o.fetchImpl, now)
     // the keeper's own reader (the catalogue adapter: same request, same parser, same politeness)
     : await p.oracles.catalogue.settledSince(locked.rule, null).then((r) => ({ events: r.events, error: null, url: feed.config.request.url }), (e: Error) => ({ events: null, error: e.message.slice(0, 160), url: feed.config.request.url }));
@@ -162,13 +172,20 @@ export async function v1Verify(p: Platform, id: string, eventId: string, o: { fe
     chain = found ? { found: found.signature === receipt.signature, err: null, memo: found.memo } : { found: false, err: null, memo: null };
   }
   const v = verifyReceiptCore({ ticker: t.ticker, rulesText: t.rulesJson, receipt, carry: feed?.carry ?? "none", source, chain });
-  return ok({ ...v, receipt, how: ["rules: re-lock rules.json and hash it (shasum -a 256 rules.json)", "source: the settled result re-read from the original source just now", "units/spend: the published rule applied with the keeper's exact integer formula", "chain: the memo of the receipt's transaction", "do it yourself without trusting this server: @burnticker/sdk verifyReceipt()"] });
+  return ok({ ...v, receipt, how: ["rules: re-lock rules.json and hash it (shasum -a 256 rules.json)", "source: the settled result re-read from the original source just now (Polymarket: the CTF payout vector on Polygon)", "units/spend: the published rule applied with the keeper's exact integer formula", "chain: the memo of the receipt's transaction", "do it yourself without trusting this server: @burnticker/sdk verifyReceipt()"] });
 }
 
 /** The platform's Kalshi client as a FetchLike (its cache, politeness and — in tests — its fixture table). */
 function kalshiFetchVia(p: Platform): FetchLike {
   return async (url) => {
     try { const body = await p.kalshi.get(url, 60_000); return { ok: true, status: 200, json: async () => body }; } catch (e) { const m = /HTTP (\d+)/.exec((e as Error).message); return { ok: false, status: m ? Number(m[1]) : 502, json: async () => ({}) }; }
+  };
+}
+
+/** The platform's Polymarket client as a FetchLike for Gamma (its cache and politeness; in tests its fixture table). */
+function polymarketFetchVia(p: Platform): FetchLike {
+  return async (url) => {
+    try { const body = await p.polymarket.get(url, 60_000); return { ok: true, status: 200, json: async () => body }; } catch (e) { const m = /HTTP (\d+)/.exec((e as Error).message); return { ok: false, status: m ? Number(m[1]) : 502, json: async () => ({}) }; }
   };
 }
 

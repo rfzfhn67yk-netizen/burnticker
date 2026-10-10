@@ -7,7 +7,7 @@ import { verifyReceipt, type VerifyOptions } from "./verify.ts";
 import { crank, type CrankPlan } from "./crank.ts";
 import { subscribe, type SubscribeOptions, type Subscription } from "./events.ts";
 import type {
-  BacktestResult, BurntickerEvent, Catalogue, KalshiEvents, KalshiSearchResult, KalshiSeriesDetail, KalshiTeams, ReceiptJson, Receipts, ServerVerification, TokenDetail, TokenList, TokenStatusJson, Trust, VerifyResult,
+  BacktestResult, BurntickerEvent, Catalogue, KalshiEvents, KalshiSearchResult, KalshiSeriesDetail, KalshiTeams, PolymarketSearchResult, ReceiptJson, Receipts, ServerVerification, TokenDetail, TokenList, TokenStatusJson, Trust, VerifyResult,
 } from "./types.ts";
 
 export interface BurntickerOptions {
@@ -82,6 +82,21 @@ export class Burnticker {
     backtest: (selector: Selector | Record<string, unknown>, mapping?: Mapping, o: { months?: number } = {}): Promise<BacktestResult> => {
       const rule = mapping ? compose(selector as Selector, mapping) : selector;
       return this.api.post<BacktestResult>("/kalshi/backtest", { rule: lock(rule).rule, months: o.months });
+    },
+  };
+
+  /**
+   * Polymarket (tier 1, binary only; 2026-10-10): search Gamma (text, an event slug or a condition id) and back-test a selector —
+   * `{ oracle: "polymarket", market: "0x…" }` (one market), `{ oracle: "polymarket", series: "tag:nfl/moneyline" }` or
+   * `{ oracle: "polymarket", series: "event:<slug>" }` — on Gamma's closed markets. The keeper reads each result from the Conditional
+   * Tokens payout vector on Polygon; prices are display only.
+   */
+  readonly polymarket = {
+    search: (q: string, o: { status?: "open" | "closed" | "all" } = {}): Promise<PolymarketSearchResult> => this.api.get<PolymarketSearchResult>("/polymarket/search", { q, status: o.status }),
+    /** `backtest(selector, mapping)` or `backtest(fullRule)`; the selector's oracle defaults to "polymarket". Validated locally first. */
+    backtest: (selector: Selector | Record<string, unknown>, mapping?: Mapping, o: { months?: number } = {}): Promise<BacktestResult> => {
+      const rule = mapping ? compose({ ...(selector as Selector), oracle: (selector as Selector).oracle ?? "polymarket" }, mapping) : selector;
+      return this.api.post<BacktestResult>("/polymarket/backtest", { rule: lock(rule).rule, months: o.months });
     },
   };
 

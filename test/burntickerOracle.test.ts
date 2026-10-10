@@ -1,14 +1,14 @@
 // BURNTICKER (2026-10-09) — the Kalshi oracle on the FROZEN REAL FIXTURES (config/burnticker/fixtures/kalshi, fetched 10-09/10):
 // the four example selectors (Broncos games, Denver daily high, a one-shot market, the S&P 4pm close), finality (the settlement
 // timer), ladder derivation, voids, the back-test, the market-implied chance (display only), the client's cache/rate limit, the
-// refuse list, and the Polymarket stub's parser.
+// refuse list, and the Polymarket Gamma parser (the full Polymarket oracle: test/burntickerPolymarket.test.ts).
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { validateRule } from "@/lib/burnticker/rules";
 import { eventValue, fixtureFetch, impliedChanceFrom, isFinal, KalshiClient, parseMarketsBody, parseSeriesBody, resolveSelector, selectorMatches, settledMarketsUrl, seriesApiUrl, openMarketsUrl, seriesListUrl, type KalshiMarket } from "@/lib/burnticker/oracle/kalshi";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { loadRefuseList, nameRefusals, parseRefuseList, refusalsFor } from "@/lib/burnticker/oracle/refuse";
-import { parseGammaMarket, PolymarketStub, toSettledEvent } from "@/lib/burnticker/oracle/polymarket";
+import { gammaResult, parseGammaMarket, settledMarketUrl } from "@/lib/burnticker/oracle/polymarket";
 import { unitSteps } from "@/lib/burnticker/units";
 import { BRONCOS, DENVER_HIGH, NOW, ONE_SHOT, SPX, fx } from "./burntickerHelpers.ts";
 
@@ -193,15 +193,13 @@ describe("the refuse list", () => {
   });
 });
 
-describe("polymarket stub", () => {
-  test("the Gamma parser reads a resolved market as a settled event; the adapter refuses to feed a rule", async () => {
+describe("polymarket: the Gamma parser on the 10-09 fixture", () => {
+  test("a resolved market reads as Gamma's report (never final for a burn: the keeper reads the chain); a proposed resolution is not settled", () => {
     const g = gamma as Record<string, unknown>[];
     const p = parseGammaMarket(g[0])!;
-    assert.equal(p.outcome, "yes");
+    assert.equal(gammaResult(p), "yes");
     assert.equal(p.resolutionSource, "https://www.kleague.com/");
-    const e = toSettledEvent(p)!;
-    assert.equal(e.result, "yes"); assert.match(e.sourceUrl, /condition_ids=0x/);
-    assert.equal(parseGammaMarket({ ...(g[0] as object), umaResolutionStatus: "proposed" })!.outcome, null, "a proposed (disputable) resolution is not settled");
-    await assert.rejects(new PolymarketStub().settledSince(validateRule(BRONCOS), null), /not supported in v1/);
+    assert.match(settledMarketUrl(p.conditionId), /condition_ids=0x[0-9a-f]{64}&closed=true$/);
+    assert.equal(gammaResult(parseGammaMarket({ ...(g[0] as object), umaResolutionStatus: "proposed" })!), null, "a proposed (disputable) resolution is not settled");
   });
 });

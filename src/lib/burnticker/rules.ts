@@ -23,13 +23,30 @@ import { rulesSha256 } from "@/lib/burnKeeper/rules";
 export const BURNTICKER_RULES_SCHEMA = "burnticker.rules/v1";
 
 /**
- * Where a rule's facts come from. "kalshi" = adjudicated markets (tier 1, live); "catalogue" = a configured primary source
- * (config/burnticker/sources.json: attested-http tiers 3–5) or an on-chain fact; "polymarket" / "uma" / "drift-bet" / "hedgehog" are
- * accepted by the schema so the format is forward-compatible, but their adapters are stubs and the launch route refuses them.
+ * Where a rule's facts come from. "kalshi" = adjudicated markets (tier 1, live); "polymarket" = adjudicated markets (tier 1, live since
+ * 2026-10-10: binary only, the result read from the Conditional Tokens payout vector on Polygon — oracle/polymarket.ts); "catalogue" =
+ * a configured primary source (config/burnticker/sources.json: attested-http tiers 3–5) or an on-chain fact; "uma" / "drift-bet" /
+ * "hedgehog" are accepted by the schema so the format is forward-compatible, but their adapters are stubs and the launch route refuses them.
  */
 export type OracleId = "kalshi" | "catalogue" | "polymarket" | "uma" | "drift-bet" | "hedgehog";
 export const ORACLE_IDS: readonly OracleId[] = ["kalshi", "catalogue", "polymarket", "uma", "drift-bet", "hedgehog"];
-export const LIVE_ORACLES: readonly OracleId[] = ["kalshi", "catalogue"];
+export const LIVE_ORACLES: readonly OracleId[] = ["kalshi", "catalogue", "polymarket"];
+/** Tier-1 adjudicated market oracles: the ones a rivalry pair may use. */
+export const PAIR_ORACLES: readonly OracleId[] = ["kalshi", "polymarket"];
+
+/**
+ * POLYMARKET SELECTORS (2026-10-10). One market = its CTF condition id, lowercase hex (`market: "0x…64"`), a one-shot. Recurring =
+ * `series` in one of two forms:
+ *   tag:<tag slug>[/<sports market type>][:<event slug glob>]   every binary market Gamma lists under the tag (e.g. "tag:nfl/moneyline",
+ *                                                               "tag:fed-rates", "tag:nfl/moneyline:nfl-*den-*"); the type narrows the
+ *                                                               scan on Gamma's side, the glob (`*` = any run) is matched on the event slug
+ *   event:<event slug>                                           every binary market of one event (an election night, a Fed meeting)
+ * Filters: `titleRegex` over the market question only (`tickerIncludes` is Kalshi's). Binary only in v1 (no scalar).
+ */
+export const POLY_MARKET_RE = /^0x[0-9a-f]{64}$/;
+export const POLY_TAG_SERIES_RE = /^tag:([A-Za-z0-9][A-Za-z0-9-]{0,63})(?:\/([a-z0-9_]{1,40}))?(?::([a-z0-9*][a-z0-9*-]{0,99}))?$/;
+export const POLY_EVENT_SERIES_RE = /^event:([a-z0-9][a-z0-9-]{0,127})$/;
+export const isPolySeries = (s: string): boolean => POLY_TAG_SERIES_RE.test(s) || POLY_EVENT_SERIES_RE.test(s);
 export type Direction = "up" | "down" | "abs";
 /** One outcome's burn: a fraction of the fee pool (buyback) OR a count of tokens (vault). Exactly one key. */
 export interface BurnMapping { fractionOfPool?: number; tokens?: number }
@@ -82,6 +99,10 @@ export const DISCLAIMER_FOOTER = "A memecoin. The rule says what the supply does
 
 /** The one extra line on every oracle-backed page (LAUNCHPAD-PATH §11: closer to an event contract than Treasury data is). */
 export const EVENT_CONTRACT_DISCLOSURE = "This token's supply rule reads the SETTLED result of a regulated event contract (Kalshi). The token pays nothing on any outcome and holds no position in any market; it only burns its own supply per the published rule. Market prices are shown for information and are never used by the rule.";
+/** The Polymarket counterpart (2026-10-10): the result is the market's payout vector as Polygon's Conditional Tokens contract stores it. */
+export const POLYMARKET_DISCLOSURE = "This token's supply rule reads the SETTLED result of a Polymarket market: the payout the Conditional Tokens contract on Polygon records once the market is resolved. The token pays nothing on any outcome and holds no position in any market; it only burns its own supply per the published rule. Market prices are shown for information and are never used by the rule.";
+/** The one extra disclosure line for a rule's oracle (null for first-party feeds). */
+export const oracleDisclosure = (oracle: OracleId): string | null => (oracle === "kalshi" ? EVENT_CONTRACT_DISCLOSURE : oracle === "polymarket" ? POLYMARKET_DISCLOSURE : null);
 
 /**
  * A catalogue series id: "<source>.<name>" with an optional ":<parameter>" (wiki.views:Bitcoin, github.stars:anza-xyz/agave,
@@ -132,8 +153,15 @@ export function validateRule(raw: unknown): BurnRule {
   if (!ORACLE_IDS.includes(r.oracle as OracleId)) p.push(`oracle must be one of ${ORACLE_IDS.join(", ")}`);
   const marketLike = r.oracle === "kalshi" || r.oracle === "polymarket" || r.oracle === "uma" || r.oracle === "drift-bet" || r.oracle === "hedgehog";
   const series = r.series ?? null, market = r.market ?? null;
-  if (series !== null && (typeof series !== "string" || !TICKER_RE.test(series) && !isCatalogueSeries(series))) p.push("series must be a ticker (A–Z, 0–9, . _ -) or null");
-  if (market !== null && (typeof market !== "string" || !TICKER_RE.test(market))) p.push("market must be a market ticker or null");
+  if (r.oracle === "polymarket") {
+    if (series !== null && (typeof series !== "string" || !isPolySeries(series))) p.push('polymarket: series must be "tag:<tag slug>[/<market type>][:<event slug glob>]" or "event:<event slug>"');
+    if (market !== null && (typeof market !== "string" || !POLY_MARKET_RE.test(market))) p.push("polymarket: market must be a condition id (0x + 64 lowercase hex)");
+    if (r.kind !== "binary") p.push('polymarket: kind must be "binary" (scalar Polymarket markets are not supported in v1)');
+    if (r.filter && typeof r.filter === "object" && (r.filter as SelectorFilter).tickerIncludes !== undefined) p.push("polymarket: filter with titleRegex over the market question (tickerIncludes is for Kalshi tickers)");
+  } else {
+    if (series !== null && (typeof series !== "string" || !TICKER_RE.test(series) && !isCatalogueSeries(series))) p.push("series must be a ticker (A–Z, 0–9, . _ -) or null");
+    if (market !== null && (typeof market !== "string" || !TICKER_RE.test(market))) p.push("market must be a market ticker or null");
+  }
   if (marketLike) {
     if (series === null && market === null) p.push(`${r.oracle}: name a series or a market`);
     if (series !== null && market !== null) p.push(`${r.oracle}: a series OR one market, not both`);
@@ -187,7 +215,7 @@ export function validateRule(raw: unknown): BurnRule {
       if (pair.side !== "A" && pair.side !== "B") p.push('pair.side must be "A" or "B"');
       if (pair.counterpartMint !== null && (typeof pair.counterpartMint !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(pair.counterpartMint))) p.push("pair.counterpartMint must be a Solana address or null");
       if (pair.side === "B" && pair.counterpartMint === null) p.push("pair side B must name side A's mint as counterpartMint");
-      if (r.oracle !== "kalshi") p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi)");
+      if (!PAIR_ORACLES.includes(r.oracle as OracleId)) p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket)");
       if (r.kind === "scalar" && r.scalar && r.scalar.direction === "abs") p.push('pair: a scalar side needs direction "up" or "down" (abs cannot be inverted)');
       if (r.kind === "binary" && r.binary && r.binary.onYes && r.binary.onNo) p.push("pair: a binary side burns on exactly one outcome (onYes or onNo, not both)");
       for (const k of Object.keys(pair)) if (!["pairId", "side", "counterpartMint"].includes(k)) p.push(`pair.${k} is not a known key`);
@@ -282,15 +310,27 @@ const pctOf = (f: number) => `${(f * 100).toFixed(f * 100 % 1 === 0 ? 0 : 2)}%`;
 const mapText = (m: BurnMapping, what: string) => (m.fractionOfPool !== undefined ? `spends ${pctOf(m.fractionOfPool)} of the fee pool buying the token at market and burns everything received ${what}` : `burns ${m.tokens!.toLocaleString("en-US")} tokens from the vault ${what}`);
 
 /** The rule in one plain paragraph for the review step and the token page. States the rule; says nothing about price. */
+/** A Polymarket selector in words ("every binary Polymarket market tagged nfl of type moneyline whose event slug matches nfl-*den-*"). */
+export function polySelectorText(r: Pick<BurnRule, "series" | "market" | "filter">, names: { seriesTitle?: string | null; marketTitle?: string | null } = {}): string {
+  const re = r.filter.titleRegex ? ` whose question matches /${r.filter.titleRegex}/` : "";
+  if (r.market) { const t = names.marketTitle ?? names.seriesTitle; return `the Polymarket market ${r.market}${t ? ` ("${t}")` : ""}`; }
+  const t = POLY_TAG_SERIES_RE.exec(r.series ?? "");
+  if (t) return `every binary Polymarket market tagged "${t[1]}"${names.seriesTitle && names.seriesTitle !== t[1] ? ` (${names.seriesTitle})` : ""}${t[2] ? ` of type ${t[2]}` : ""}${t[3] ? ` whose event slug matches ${t[3]}` : ""}${re}`;
+  const e = POLY_EVENT_SERIES_RE.exec(r.series ?? "");
+  return `every binary market of the Polymarket event ${e ? e[1] : r.series}${names.seriesTitle ? ` ("${names.seriesTitle}")` : ""}${re}`;
+}
+
 export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null; marketTitle?: string | null; feedTitle?: string | null } = {}): string {
   const what = r.oracle === "catalogue" ? `the ${names.feedTitle ?? r.series} feed`
+    : r.oracle === "polymarket" ? polySelectorText(r, names)
     : r.market ? `the Kalshi market ${r.market}${names.marketTitle ? ` ("${names.marketTitle}")` : ""}`
     : `every market in the Kalshi series ${r.series}${names.seriesTitle ? ` ("${names.seriesTitle}")` : ""}${r.filter.tickerIncludes ? ` whose ticker contains "${r.filter.tickerIncludes}"` : ""}${r.filter.titleRegex ? ` whose title matches /${r.filter.titleRegex}/` : ""}`;
   if (r.kind === "binary" && r.binary) {
     const yes = r.binary.onYes ? `When ${what} settles YES, the keeper ${mapText(r.binary.onYes, "for that market")}.` : `A YES settlement of ${what} burns nothing.`;
     const no = r.binary.onNo ? ` When it settles NO, ${r.binary.onYes ? "it" : "the keeper"} ${mapText(r.binary.onNo, "for that market")}.` : " A NO settlement burns nothing.";
     const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side burns on the opposite outcome, so each settlement burns exactly one of the two.` : "";
-    return `${yes}${no}${pair} A voided market burns nothing. Settled results only; prices are never read.`;
+    const poly = r.oracle === "polymarket" ? " YES is the market's first outcome and NO its second; the result is the payout the Conditional Tokens contract on Polygon records, and a 50-50 resolution is a void." : "";
+    return `${yes}${no}${pair}${poly} A voided market burns nothing. Settled results only; prices are never read.`;
   }
   const s = r.scalar!;
   const base = s.baseline === "previousSettlement" ? "the previous settlement" : `a fixed baseline of ${s.baseline}`;
@@ -302,6 +342,6 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
 /** The description footer: feed/selector, the rule hash and the fixed disclaimer. */
 export function descriptionFooter(locked: LockedRule): string {
   const r = locked.rule;
-  const src = r.oracle === "catalogue" ? `feed ${r.series}` : r.market ? `Kalshi market ${r.market}` : `Kalshi series ${r.series}${r.filter.tickerIncludes ? ` (ticker ∋ ${r.filter.tickerIncludes})` : ""}`;
+  const src = r.oracle === "catalogue" ? `feed ${r.series}` : r.oracle === "polymarket" ? (r.market ? `Polymarket market ${r.market}` : `Polymarket ${r.series}`) : r.market ? `Kalshi market ${r.market}` : `Kalshi series ${r.series}${r.filter.tickerIncludes ? ` (ticker ∋ ${r.filter.tickerIncludes})` : ""}`;
   return `— ${src} · rule sha256:${locked.sha12} · ${DISCLAIMER_FOOTER}`;
 }

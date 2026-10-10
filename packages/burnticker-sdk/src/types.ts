@@ -37,6 +37,11 @@ export interface KalshiTeam { abbr: string; city: string; nickname: string | nul
 export interface KalshiTeams { series: string; since: string; teams: KalshiTeam[]; note: string }
 export interface KalshiSeriesDetail { series: KalshiSeries; open: { ticker: string; title: string; closeTime: string | null; yesPrice: number | null }[]; openCount: number; refusals: { kind: string; id: string; reason: string; matched: string }[]; note: string }
 
+/** Polymarket search (GET /polymarket/search): binary markets only — YES = a market's first outcome, NO its second; impliedYes is display only. */
+export interface PolymarketMarketHit { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; selector: { oracle: "polymarket"; series: null; market: string }; impliedYes: number | null }
+export interface PolymarketEventHit { slug: string; title: string; url: string; endDate: string | null; closed: boolean; tags: { slug: string; label: string }[]; markets: PolymarketMarketHit[]; marketCount: number; selector: { oracle: "polymarket"; series: string; market: null }; refused: string[] }
+export interface PolymarketTagHit { slug: string; label: string; events: number; series: string[] }
+export interface PolymarketSearchResult { query: string; status: "open" | "closed" | "all"; venue: "polymarket"; events: PolymarketEventHit[]; markets: PolymarketMarketHit[]; tags: PolymarketTagHit[]; note: string }
 export interface BacktestResult { rule: BurnRule; text: string; sha256: string; sha12: string; mode: RuleMode; statement: string; backtest: Backtest; sentence: string; refusals: unknown[]; seriesTitle: string | null; matched: number }
 
 export interface LaunchReview {

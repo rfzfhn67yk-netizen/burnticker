@@ -2,6 +2,8 @@ import "server-only";
 import path from "node:path";
 import { openRegistry, readingMatches, REGISTRY_FILE, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { KalshiClient } from "@/lib/burnticker/oracle/kalshi";
+import { PolymarketClient, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
+import { loadRefuseList, refusalsFor } from "@/lib/burnticker/oracle/refuse";
 import { CatalogueAdapter, feedById } from "@/lib/burnticker/catalogue";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { SOL_MINT, usdPrice } from "@/lib/burnKeeper/jupiterSwap";
@@ -22,11 +24,20 @@ import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
  */
 
 export interface Platform {
-  registry: Registry; oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter }; kalshi: KalshiClient; program: BurnProgramClient; launchLab: LaunchLabClient;
+  registry: Registry; oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket: OracleAdapter }; kalshi: KalshiClient; polymarket: PolymarketClient; program: BurnProgramClient; launchLab: LaunchLabClient;
   cluster: "devnet" | "mainnet" | "localnet"; publishDir: string; devFeeWallet: string | null; keeperPubkey: string | null; platformId: string | null; stubs: string[];
 }
 
 let cached: Platform | null = null;
+
+/** The refuse list (config/burnticker/refuse.json) as the Polymarket client's title check: the reasons a title is refused, or []. */
+export const refuseTitles: TitleRefuser = (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))];
+
+/** The Polymarket client the app and the keeper use: Gamma for discovery, the Polygon CTF for results, the refuse list over every question. */
+export function polymarketClient(env: Readonly<Record<string, string | undefined>> = process.env): PolymarketClient {
+  const rpcUrls = (env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
+  return new PolymarketClient({ refuse: refuseTitles, ...(rpcUrls.length ? { rpcUrls } : {}) });
+}
 
 export function platform(env: Readonly<Record<string, string | undefined>> = process.env): Platform {
   if (cached) return cached;
@@ -48,9 +59,10 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const launchLab = new FakeLaunchLab(platformId ?? undefined);
   stubs.push(platformId ? `LaunchLab platform ${platformId}: the SDK adapter needs an RPC to decode the configs (FakeLaunchLab in use on this host)` : "LaunchLab platform config: not created (scripts/burnticker-platform-config.mts prints the dry run)");
   const kalshi = new KalshiClient();
+  const polymarket = polymarketClient(env);
   cached = {
     registry: openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE),
-    oracles: { kalshi, catalogue: new CatalogueAdapter() }, kalshi, program, launchLab, cluster,
+    oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
     devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs,
   };
@@ -65,11 +77,11 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const locked = p.registry.lockedRule(t);
   const readings = p.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
   const state = p.registry.state(t.mint);
-  const oracle = locked.rule.oracle === "catalogue" ? p.oracles.catalogue : p.oracles.kalshi;
+  const oracle = locked.rule.oracle === "catalogue" ? p.oracles.catalogue : locked.rule.oracle === "polymarket" ? p.oracles.polymarket : p.oracles.kalshi;
   // live: false (the receipts-only API route) skips the two oracle calls; the receipts do not depend on them.
   const [implied, info] = opts.live === false ? ([null, null] as const) : await Promise.all([
     oracle.impliedChance(locked.rule, state.lastValue).catch((e: Error) => ({ chance: null, marketTicker: null, closeTime: null, basis: `unavailable: ${e.message.slice(0, 80)}` })),
-    locked.rule.oracle === "catalogue" ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
+    locked.rule.oracle === "catalogue" ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.oracle === "polymarket" ? (locked.rule.market ?? locked.rule.series!) : locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
   ]);
   const feedState = p.registry.feedState(t.selectorKey);
   const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;

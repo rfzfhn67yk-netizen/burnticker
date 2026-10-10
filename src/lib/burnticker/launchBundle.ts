@@ -3,7 +3,7 @@ import { LAUNCHLAB_PROGRAM, launchLabPoolId, WSOL_MINT } from "@/lib/burnKeeper/
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
 import { CURVE_FEES, POST_GRADUATION_FEES, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
-import { DECIMALS, descriptionFooter, invertMapping, lockRule, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, descriptionFooter, invertMapping, lockRule, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
 
 /**
@@ -176,7 +176,9 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   const pool = burnPoolAddresses(deps.program.programId, mint);
   const feePda = pool.feePda;
   if (deps.program.feePdaFor(mint) !== feePda) throw new Error(`launch: the program client's fee PDA ${deps.program.feePdaFor(mint)} ≠ burn_receipts ["fee", mint] ${feePda}`);
-  const selectorKey = locked.rule.oracle === "catalogue" ? `catalogue:${locked.rule.series}` : locked.rule.market ? `kalshi:market:${locked.rule.market}` : `kalshi:${locked.rule.series}`;
+  const selectorKey = locked.rule.oracle === "catalogue" ? `catalogue:${locked.rule.series}`
+    : locked.rule.oracle === "polymarket" ? (locked.rule.market ? `polymarket:market:${locked.rule.market}` : `polymarket:${locked.rule.series}:${locked.rule.kind}`)
+    : locked.rule.market ? `kalshi:market:${locked.rule.market}` : `kalshi:${locked.rule.series}`;
   const init = await deps.program.initializeToken({ mint, creator: input.creator, ticker: input.ticker, rulesSha256: locked.sha256, selectorKey, mode: locked.mode, attesters: deps.attesters, quorum: deps.quorum, vault, rule: locked.rule });
   const alloc = allocationFor(locked);
   const burnPoolAuthority = feePda;
@@ -227,7 +229,7 @@ export interface PairBundles { pairId: string; a: LaunchBundle; b: LaunchBundle;
 export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps): Promise<PairBundles> {
   if (input.a.ticker === input.b.ticker) throw new Error("pair: the two sides need different tickers");
   const probe = validateRule({ ...(input.a.rule as object), pair: null });
-  if (probe.oracle !== "kalshi") throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi)");
+  if (!PAIR_ORACLES.includes(probe.oracle)) throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket)");
   const selector = probe.market ?? `${probe.series}${probe.filter.tickerIncludes ? `:${probe.filter.tickerIncludes}` : ""}`;
   const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, selector);
   const ruleA = validateRule({ ...probe, pair: { pairId, side: "A", counterpartMint: null } });

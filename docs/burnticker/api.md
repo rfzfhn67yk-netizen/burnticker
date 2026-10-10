@@ -15,6 +15,7 @@ API=https://<host>/api/burnticker/v1
 curl -s "$API/kalshi/search?q=broncos"                                   # find a series
 curl -s -X POST "$API/rules/validate" -H 'content-type: application/json' -H "origin: https://<host>" \
   -d '{"rule":{"schema":"burnticker.rules/v1","oracle":"kalshi","series":"KXNFLGAME","market":null,"filter":{"tickerIncludes":"-DEN"},"kind":"binary","binary":{"onYes":{"fractionOfPool":0.02},"onNo":null},"scalar":null,"onVoid":"skip","floorUsd":"1","reserveSol":"0.02","vault":null}}'
+curl -s "$API/polymarket/search?q=eagles" | jq '.events[0].markets[0]'    # a Polymarket binary market (YES = first outcome)
 curl -s "$API/tokens/BRONCO" | jq '.status.next'                          # next possible burn + implied chance (display only)
 curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified, .checks'
 ```
@@ -28,12 +29,14 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/kalshi/search?q=&category=` · `?series=` | 60 s | heavy | live Kalshi series search with refuse-list verdicts, plus event-level hits (`events`, `ranking`: events first when the query names a team or a market); one series with its open markets (prices display only) |
 | GET | `/kalshi/events?q=&series=&status=` | 60 s | heavy | event-level search — games, contests, people: event title / ticker / market labels, with a team-alias table (eagles / philadelphia / PHI; jaguars / jacksonville / JAC / JAX); `?series=` alone lists its upcoming events; no parameters → the league chooser. Two-team games carry both sides and both selector modes (this game only = one market, side B inverted; every game = each side's own-leg filter). Events cached 10 min per series |
 | GET | `/kalshi/teams?series=` | 60 s | heavy | the team picker for a game series (team coins): every team, its next game, its record since the season started, its own-leg filter (`-PHI`) |
-| POST | `/kalshi/backtest` `{ rule, months? }` | — | heavy | the back-test on the venue's own settled history, the matched markets, the canonical text and hash |
+| POST | `/kalshi/backtest` `{ rule, months? }` | — | heavy | the back-test on the venue's own settled history, the matched markets, the canonical text and hash (a Polymarket rule sent here is back-tested the Polymarket way) |
+| GET | `/polymarket/search?q=&status=` | 60 s | heavy | Polymarket (Gamma) search by text, event slug or condition id: events with their binary markets (`yes` / `no` = the first / second outcome; each a one-shot selector), the event as `event:<slug>`, the tags seen as `tag:<slug>` / `tag:<slug>/moneyline`; refused events marked; `impliedYes` display only; `status` open (default) / closed / all |
+| POST | `/polymarket/backtest` `{ rule, months? }` | — | heavy | a Polymarket rule (`rule.oracle` must be `polymarket`) back-tested on Gamma's closed markets; `scanComplete: false` says where a dense selector's scan stopped. Display-grade: the keeper reads every result from the Polygon payout vector |
 | POST | `/rules/validate` `{ rule, ticker? }` | — | read | `canonical` (the exact bytes `rules.json` holds), `sha256`, `statement`, `receiptFormat`; 400 lists every problem |
 | POST | `/launch/bundle` | — | write | unsigned base64 transactions + the review payload the wizard shows; registers a DRAFT unless `register: false`; never signs |
 | POST | `/launch/confirm` `{ mint, signature }` | — | write | the landed launch transaction takes the draft live; settlements after this moment count (409 once the draft has expired) |
 | GET | `/tokens?status=&limit=&offset=` | 30 s | read | the registry: status (`draft` / `live` / `paused` / `retired` / `expired`), rule hash, receipt and burn counts (no network calls) |
-| GET | `/tokens/{ticker}` | 30 s | read | `status` (supply, burned, pool, `next` = next possible burn + implied chance), `receipts`, `readings`, exact `rulesText`; `{ticker}` may be the mint |
+| GET | `/tokens/{ticker}` | 30 s | read | `status` (supply, burned, pool, `next` = next possible burn + implied chance), `receipts`, `readings` (each with `sourceUrl`, `method` and, for Polymarket, `proof` = the Polygon payout locator), exact `rulesText`; `{ticker}` may be the mint |
 | GET | `/tokens/{ticker}/receipts` | 30 s | read | every receipt, recomputed at request time (`verify.verified`) |
 | GET | `/tokens/{ticker}/verify/{id}` | 60 s | heavy | rules / memo / source / units / spend / chain checks for one receipt |
 | GET | `/trust` | 60 s | read | the Powers Register, designed fees vs the LIVE LaunchLab platform config (when the host has an RPC), program facts, statements |
@@ -53,7 +56,19 @@ disclosures, operator powers), `transactions[]` (`transaction` = base64 wire for
 ["creator","mint"]`, `recentBlockhash`, `blockhashPlaceholder`, the instructions), `ready`, `pending`, `registered`, and `next`.
 Without `recentBlockhash` the transactions carry the all-ones placeholder, so rebuild them with a fresh blockhash before signing (the
 SDK does this). While `ready` is `false`, send nothing. Refusals: 400 for invalid input or rule, 403 for the refuse list, 409 if the
-ticker or mint is taken, 502 if Kalshi is unreachable. **A draft reserves its ticker for 24 hours.** Confirm the launch within that window. After it, the draft becomes `expired`: the row stays, the ticker is free for anyone, and confirming is refused, so build a fresh bundle. Mainnet is refused until the program and the LaunchLab adapter are live.
+ticker or mint is taken, 502 if Kalshi or Polymarket is unreachable (or the Polymarket selector is unknown). A Polymarket tag series
+must settle at most one keeper scan of markets a week (600 at the defaults); a denser tag is refused with a hint to add a market type
+(`tag:nfl/moneyline`) or an event pattern (`tag:nfl/moneyline:nfl-*den-*`). **A draft reserves its ticker for 24 hours.** Confirm the launch within that window. After it, the draft becomes `expired`: the row stays, the ticker is free for anyone, and confirming is refused, so build a fresh bundle. Mainnet is refused until the program and the LaunchLab adapter are live.
+
+### Polymarket rules (since 2026-10-10, API 1.1.0)
+
+`oracle: "polymarket"`, binary only. One market: `market` = its condition id (`0x` + 64 lowercase hex). Recurring: `series` =
+`tag:<tag slug>[/<sports market type>][:<event slug glob>]` (every binary market Gamma lists under the tag, optionally of one type and
+whose event slug matches the glob) or `event:<event slug>` (every binary market of one event); `filter.titleRegex` matches the market
+question (`tickerIncludes` is Kalshi's and is refused). YES = slot 0 of the condition = the market's first outcome ("Yes", or the
+first-listed team of a game), NO = slot 1. A reading is written only once the payout vector is on chain; a 50-50 payout is a void.
+Rivalry pairs work on a Polymarket market exactly like a Kalshi one-shot (side A YES, side B NO). Team coins and matchup pairs stay
+on Kalshi: a Polymarket game is one market whose YES is whichever team its title lists first, with no per-team leg.
 
 ## 3. Calling it from a bot
 
@@ -71,12 +86,13 @@ These are per client IP: the right-most `X-Forwarded-For` hop, which the platfor
 | Bucket | Limit | Endpoints |
 |---|---|---|
 | read | 120 burst, 120/min sustained | catalogue, previews, validate, tokens, receipts, trust, openapi |
-| heavy | 20 burst, 20/min sustained | Kalshi search and back-test, verify (these call Kalshi or re-read a source) |
+| heavy | 20 burst, 20/min sustained | Kalshi and Polymarket search and back-test, verify (these call Kalshi or Polymarket, or re-read a source) |
 | write | 10/hour | launch bundle, launch confirm |
 
 Every response carries `RateLimit-Limit` and `RateLimit-Remaining`. A 429 carries `Retry-After` (seconds). The limiter is in
 memory on the one app process. Be polite: the read routes are cacheable, Kalshi itself is cached server-side (series 1 h, settled
-5 min, open 1 min), and `subscribe()` defaults to a 15 s poll.
+5 min, open 1 min), Polymarket's Gamma responses are cached 10 min (a resolved on-chain payout for good), and `subscribe()`
+defaults to a 15 s poll.
 
 ## 5. What you cannot do
 
@@ -97,5 +113,6 @@ every parameter of a coin is in its `rules.json`.
 ## 7. Verifying the API's own answers
 
 You should not have to trust this server. `rulesText` hashes to the `sha256` every receipt cites. `/verify` explains each check, and
-the SDK's `verifyReceipt` repeats all of them on your machine: Kalshi re-read from Kalshi, feeds re-read through their published
+the SDK's `verifyReceipt` repeats all of them on your machine: Kalshi re-read from Kalshi, Polymarket re-read from the Conditional
+Tokens payout vector on Polygon (`eth_call` to `0x4D97DCd97eC945f40cF65F87097ACe5EA0476045`), feeds re-read through their published
 config, spend recomputed with the exact integer formula, and the memo read from the transaction itself. See [sdk.md](sdk.md) §5.

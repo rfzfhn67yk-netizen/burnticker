@@ -43,9 +43,9 @@ burns exactly one side; the receipts are the scoreboard.
 - Wizard (`/burnticker/launch`, rebuilt 10-10 after the owner: "I am still having a hard time setting up an nfl team coin"): the first
   screen is four plain choices, no jargon — **Team coin** (league → team picker → one toggle "burn when we WIN / LOSE" → name and
   ticker prefilled → review in plain words → launch), **Matchup pair** (league → upcoming game, or search a team → both sides
-  prefilled → "this game only" (default) or "every game this season" → back-tests side by side → review → bundles), **Any Kalshi
-  market** (one search box: teams, people, shows, elections — event-level hits merged with series), and a small "Advanced: first-party
-  feed / custom selector" link. `?pair=1` (the landing page's "Launch a pair") opens the matchup flow. Progress ("Step 2 of 4"), back
+  prefilled → "this game only" (default) or "every game this season" → back-tests side by side → review → bundles), **Any market**
+  (one search box: teams, people, shows, elections — Kalshi event-level hits merged with series, and Polymarket events, markets and
+  tags since 10-10, each result with a venue chip), and a small "Advanced: first-party feed / custom selector" link. `?pair=1` (the landing page's "Launch a pair") opens the matchup flow. Progress ("Step 2 of 4"), back
   buttons, state kept across a refresh (sessionStorage `burnticker.launch.v2`; "start over" clears it), a Devnet badge from
   `BURNTICKER_CLUSTER` (the wizard's catalogue route returns `cluster`). The simple paths generate the rule (`src/lib/burnticker/wizard.ts`):
   - team coin = `series` + the team's own-leg filter (`-PHI`), binary, onYes (win) or onNo (loss), 1% of the pool per game, $1 floor,
@@ -70,6 +70,38 @@ burns exactly one side; the receipts are the scoreboard.
   receipts ($BRONCOS vs $CHIEFS on KXNFLGAME, $BULLS vs $BEARS on the KXINX close, illustrative tallies), how a pair works in three
   steps, and the "Launch a pair" button.
 
+## Polymarket — the second adjudicated oracle (owner, 10-10: "do both")
+
+`oracle: "polymarket"` rules are tier 1 and launchable beside Kalshi's. `src/lib/burnticker/oracle/polymarket.ts`:
+
+- **Discovery** is Gamma, keyless (`public-search`, `events?slug=`, `tags/slug/`, `markets?tag_id=…&closed=…&order=…`,
+  `markets?condition_ids=…&closed=true|false`), every response cached 10 minutes, requests serial and spaced.
+- **The result is read from the chain.** A reading is written only when the Conditional Tokens contract on Polygon
+  (`0x4D97DCd97eC945f40cF65F87097ACe5EA0476045`) has the market's payout vector (`payoutDenominator > 0`, three `eth_call`s through
+  `src/lib/burnKeeper/attesters/polymarketOnchain.ts`; RPCs from `BURNTICKER_POLYGON_RPC_URLS` or the public list). Slot 0 = YES (the
+  market's first outcome: "Yes", or the first-listed team), slot 1 = NO, a split (50-50) = VOID. Gamma's own report (closed +
+  `umaResolutionStatus: resolved` + `outcomePrices` exactly 1/0) is a cross-check; on disagreement the chain is the record and the
+  keeper logs it. Each reading carries `sourceUrl` = the Gamma market URL and `proof` =
+  `polygon:137/ctf:<contract>/condition:<id>/payouts:1,0/block:<n>` (a new `readings.proof` column). A resolved vector is cached for
+  good (immutable on chain).
+- **Selectors:** `market: <condition id>` (one-shot), `series: "tag:<tag>[/<sports market type>][:<event slug glob>]"`
+  (`tag:nfl/moneyline` = every NFL game's moneyline) or `series: "event:<slug>"`; `filter.titleRegex` over the question. Binary only.
+  Selector keys `polymarket:market:<id>` / `polymarket:<series>:binary`. A tag series must fit one keeper scan per week (600 closed
+  markets at the defaults); a denser one is refused at launch with a hint to add a type or an event glob.
+- **Refuse list** applies to every market question at read time (a refused market is never read) and to the selector's title at
+  launch, the same file as Kalshi's.
+- **Back-test** (`POST /api/burnticker/v1/polymarket/backtest`, and the shared `/kalshi/backtest` dispatches on the oracle) reads
+  Gamma's closed markets — display-grade by design; the keeper reads the chain.
+- **Pairs:** a Polymarket binary market pairs exactly like a Kalshi one-shot (side A burns on YES, side B on NO).
+- **Why team coins and matchups stay Kalshi-only (v1):** a Polymarket game is an EVENT of ~300 markets whose moneyline is ONE binary
+  market with the two nicknames as outcomes in title order ("Broncos vs. 49ers" → Broncos is YES; "Rams vs. Broncos" → Broncos is
+  NO — the 10-10 fixture shows both). There is no per-team leg and no team-abbreviation field (teams appear only in the slug convention,
+  with Polymarket's own abbreviations, e.g. JAX where Kalshi says JAC), so "every Broncos loss" has no fixed YES/NO.
+- **Wizard:** "Any market" searches Kalshi and Polymarket at once; each hit carries a venue chip. **API:** `GET /polymarket/search`,
+  `POST /polymarket/backtest` (OpenAPI 1.1.0). **SDK:** `bt.polymarket.search()` / `backtest()`; `verifyReceipt` re-reads the payout
+  vector on the caller's machine. **Fixtures** (fetched 10-10): `config/burnticker/fixtures/polymarket/{resolved,open}.market.json`,
+  `tag.nfl.{closed,open}.json`, `search.eagles.json`. Tests: `test/burntickerPolymarket.test.ts`.
+
 ## 1. Architecture
 
 ```
@@ -80,7 +112,8 @@ src/lib/burnticker/
   oracle/kalshi.ts    the PRIMARY source: settled results only, finality timer, ladder derivation, voids, implied chance (display only), polite client
   oracle/backtest.ts  "this selector settled N times in 12 months and would have burned X"
   oracle/refuse.ts    the refuse list (config/burnticker/refuse.json)
-  oracle/polymarket.ts, sources/stubs.ts   Polymarket Gamma parser + CTF payout decoder, UMA decoder, Drift/Hedgehog placeholders (not launchable)
+  oracle/polymarket.ts the SECOND tier-1 source (10-10): Gamma discovery/search, the CTF payout vector on Polygon as the final read, back-test from Gamma's closed markets
+  sources/stubs.ts    the Polymarket catalogue card (launchable), UMA decoder, Drift/Hedgehog placeholders (not launchable)
   sources/types.ts    ResolutionSource: four kinds (market / assertion / attested-http / onchain) + tier 1–5
   sources/attestedHttp.ts  the generic config-driven adapter (JSON path / CSV / regex → rows → periods → values or counts; snapshots)
   sources/onchain.ts  Solana block height / slot through an RPC port (account/consensus data only, never an indexer)
@@ -191,7 +224,7 @@ token; not a disaster; never the token's own price. Elections are allowed (owner
 
 | Tier | What | Admission |
 |---|---|---|
-| 1 | adjudicated market (Kalshi live; Polymarket, Drift BET, Hedgehog stubs) | settled results only; the venue's finalisation window respected; voids = no burn |
+| 1 | adjudicated market (Kalshi and Polymarket live; Drift BET, Hedgehog stubs) | settled results only; the venue's finalisation window respected (Polymarket: the payout vector on chain); voids = no burn |
 | 2 | optimistic assertion (UMA OO v3 stub) | counts only once settled and not disputed-and-lost |
 | 3 | primary API attested by a TEE/zk job (Switchboard On-Demand: same URL + selection as tier 4) | third-party asset prices allowed from here up; not wired yet |
 | 4 | primary API read by our keeper | no prices of any asset; one real fixture; plausibility bounds; complete periods only |
@@ -264,7 +297,10 @@ allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behin
   every oracle-backed page (`EVENT_CONTRACT_DISCLOSURE`); the owner decided to proceed without a lawyer.
 - One-shot election fixture: Kalshi's public `/markets` returned no settled markets for the one-off election events probed on 10-09
   (the Portugal event record is saved; the one-shot path is tested on a real settled NFL market).
-- Polymarket (CTF payout vector on Polygon), UMA, Drift BET, Hedgehog: interfaces, decoders and fixtures only; `launchable: false`.
+- Polymarket is live (10-10, see "Polymarket" below). UMA, Drift BET, Hedgehog: interfaces, decoders and fixtures only; `launchable: false`.
+- Polymarket open items: the reportPayouts transaction hash is not recorded (no keyless Polygon RPC reachable on 10-10 serves
+  eth_getLogs; the proof is the condition id + payout vector + the block of the read); Gamma's terms of use on redistribution are
+  unchecked; scalar Polymarket markets and Polymarket team coins / matchups are v2.
 - Tier 3 (Switchboard On-Demand) and zkTLS: not wired; the config carries the same URL + selection a job would attest.
 - String-valued charts (Billboard, Spotify) need a "changed vs previous" binary mode (v2).
 - Fee ledger and live platform config need `BURNTICKER_RPC_URL` on the host; without it the trust page says so.

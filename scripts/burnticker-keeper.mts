@@ -22,6 +22,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { openRegistry, REGISTRY_FILE, readingMatches } from "../src/lib/burnticker/registry.ts";
 import { KalshiClient } from "../src/lib/burnticker/oracle/kalshi.ts";
+import { PolymarketClient } from "../src/lib/burnticker/oracle/polymarket.ts";
+import { loadRefuseList, refusalsFor } from "../src/lib/burnticker/oracle/refuse.ts";
 import { CatalogueAdapter, feedById } from "../src/lib/burnticker/catalogue/index.ts";
 import os from "node:os";
 import { Connection, PublicKey } from "@solana/web3.js";
@@ -53,6 +55,9 @@ const isPubkey = (s: string | null): s is string => !!s && /^[1-9A-HJ-NP-Za-km-z
 
 const registry = openRegistry(DB);
 const kalshi = new KalshiClient();
+// Polymarket (2026-10-10): Gamma for discovery, the Polygon CTF payout vector for results; the refuse list over every market question.
+const polygonRpcs = (process.env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
+const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))], ...(polygonRpcs.length ? { rpcUrls: polygonRpcs } : {}) });
 const PROGRAM_ID = process.env.BURNTICKER_PROGRAM_ID?.trim() || null;
 
 /** The real client when the program id, an RPC and the keeper's key exist; the fake otherwise (nothing sent). */
@@ -74,7 +79,7 @@ async function buildProgram(): Promise<{ program: BurnProgramClient; real: boole
 }
 const built = await buildProgram();
 const program = built.program;
-const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter() }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE) };
+const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE) };
 const operator = operatorPowersSummary(loadPowersRegister());
 
 async function publishAll(now: number): Promise<void> {
@@ -85,9 +90,10 @@ async function publishAll(now: number): Promise<void> {
       const locked = registry.lockedRule(t);
       const readings = registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
       const state = registry.state(t.mint);
-      const oracle = locked.rule.oracle === "catalogue" ? deps.oracles.catalogue : kalshi;
+      const oracle = locked.rule.oracle === "catalogue" ? deps.oracles.catalogue : locked.rule.oracle === "polymarket" ? polymarket : kalshi;
       const implied = await oracle.impliedChance(locked.rule, state.lastValue).catch(() => null);
-      const info = locked.rule.oracle === "kalshi" ? await kalshi.seriesInfo(locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null) : null;
+      const info = locked.rule.oracle === "kalshi" ? await kalshi.seriesInfo(locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null)
+        : locked.rule.oracle === "polymarket" ? await polymarket.seriesInfo(locked.rule.market ?? locked.rule.series!).catch(() => null) : null;
       const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
       const feedState = registry.feedState(t.selectorKey);
       const input = { token: t, locked, readings, receipts: registry.receipts(t.mint), attesters: registry.attesters(t.mint), state, feedState,

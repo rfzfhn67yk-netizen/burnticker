@@ -7,12 +7,10 @@ import type { ResolutionSource, SourceKind, Tier } from "@/lib/burnticker/source
  * with the reason, so nothing can be launched on them until they are built and verified. Each says plainly what was and was not
  * confirmed from primary sources.
  *
- *   polymarket (market, tier 1)  Gamma API for discovery; the AUTHORITATIVE read is the Conditional Tokens Framework on Polygon:
- *                                 ConditionalTokens.payoutNumerators(conditionId, i) / payoutDenominator(conditionId) after
- *                                 reportPayouts — a resolved YES is payoutNumerators = [1, 0] (or [0, 1] per outcome index).
- *                                 Contract 0x4D97DCd97eC945f40cF65F87097ACe5EA0476045 (CTF on Polygon). Read via eth_call; fixture =
- *                                 a JSON-RPC response pair. The UMA-adjudication dispute window must be over (umaResolutionStatus
- *                                 "resolved") before a payout vector is read as final.
+ *   polymarket (market, tier 1)  NO LONGER A STUB (2026-10-10): oracle/polymarket.ts is the live adapter — Gamma for discovery, the
+ *                                 Conditional Tokens payout vector on Polygon (contract 0x4D97DCd97eC945f40cF65F87097ACe5EA0476045,
+ *                                 payoutNumerators / payoutDenominator via eth_call) as the authoritative read; a reading is final
+ *                                 only once the chain has the vector. `polymarketCard()` below is its catalogue card (launchable).
  *   uma (assertion, tier 2)       UMA Optimistic Oracle V3: getAssertion(assertionId) → { settled, settlementResolution, ... };
  *                                 an assertion counts only when settled and not disputed-and-lost. EVM read-only; fixture of the
  *                                 struct as eth_call returns it. Not wired.
@@ -34,7 +32,8 @@ const stub = (id: string, kind: SourceKind, tier: Tier, title: string, sourceNam
 export const CTF_POLYGON = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045";
 export const UMA_OOV3_ETHEREUM = "0xfb55F43fB9F48F63f9269DB7Dde3BbBe1ebDC0dE";
 
-export const polymarketStub = (): ResolutionSource => stub("polymarket", "market", 1, "Polymarket (UMA-resolved)", "Polymarket Gamma API + Conditional Tokens on Polygon", "https://gamma-api.polymarket.com", "v1 stub: Gamma discovery parses (oracle/polymarket.ts); the authoritative CTF payout-vector read (eth_call payoutNumerators) and the UMA dispute window are not wired", ["market", "evm-read", "stub"]);
+/** The Polymarket catalogue card (launchable since 2026-10-10; the adapter is oracle/polymarket.ts, not this stub factory's). */
+export const polymarketCard = (): ResolutionSource => ({ ...stub("polymarket", "market", 1, "Polymarket (binary markets, result read on Polygon)", "Polymarket Gamma API + Conditional Tokens on Polygon", "https://gamma-api.polymarket.com", "the catalogue card reads nothing: settled results come from PolymarketClient (oracle/polymarket.ts)", ["market", "evm-read", "binary-only"]), launchable: { ok: true, why: null }, cadence: "per market (settled when the CTF payout vector is on chain)" });
 export const umaStub = (): ResolutionSource => stub("uma", "assertion", 2, "UMA Optimistic Oracle V3 assertion", "UMA OO v3 (Ethereum)", `https://etherscan.io/address/${UMA_OOV3_ETHEREUM}`, "v1 stub: getAssertion(assertionId) read-only path not wired; an assertion counts only once settled", ["assertion", "evm-read", "stub"]);
 export const driftBetStub = (): ResolutionSource => stub("drift-bet", "market", 1, "Drift BET (Solana)", "Drift prediction markets", "https://app.drift.trade/bet", "UNVERIFIED (2026-10-09): no primary-source documentation of a per-market on-chain resolution account was located; nothing is claimed", ["market", "solana", "unverified", "stub"]);
 export const hedgehogStub = (): ResolutionSource => stub("hedgehog", "market", 1, "Hedgehog Markets (Solana)", "Hedgehog Markets", "https://hedgehog.markets", "UNVERIFIED (2026-10-09): no primary-source documentation of a per-market on-chain resolution account was located; nothing is claimed", ["market", "solana", "unverified", "stub"]);

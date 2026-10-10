@@ -21,8 +21,12 @@ export const POLYMARKET_UMA_CTF_ADAPTER = "0x2F5e3684cb1F318ec51b00Edba38d79Ac2c
 export const SEL_PAYOUT_DENOMINATOR = "0xdd34de67";
 export const SEL_PAYOUT_NUMERATORS = "0x0504c814";
 export const SEL_OUTCOME_SLOT_COUNT = "0xd42dc0c2";
-/** Public Polygon JSON-RPC endpoints that answered an unauthenticated eth_call from this machine on 2026-10-09 (first that works wins). */
-export const DEFAULT_POLYGON_RPCS = ["https://1rpc.io/matic", "https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"];
+/**
+ * Public Polygon JSON-RPC endpoints, tried in order (first that works wins). polygon-bor.publicnode.com answered unauthenticated
+ * eth_call on 2026-10-10 (when 1rpc.io timed out and the others refused TLS from this network); 1rpc answered on 2026-10-09. None of
+ * them serves eth_getLogs without a key, so the reportPayouts transaction itself is not looked up — the payout vector is the read.
+ */
+export const DEFAULT_POLYGON_RPCS = ["https://polygon-bor.publicnode.com", "https://1rpc.io/matic", "https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"];
 
 export interface ConditionResolution {
   conditionId: string;

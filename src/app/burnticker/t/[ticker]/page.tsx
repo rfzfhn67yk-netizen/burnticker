@@ -54,7 +54,7 @@ export default function TokenPage() {
       <header>
         <p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p>
         <h1 className="text-2xl font-semibold">${s.ticker} <span className="text-neutral-400 font-normal">{s.name}</span></h1>
-        <p className="text-neutral-400 text-xs">{s.oracle === "kalshi" ? "Kalshi" : "first-party source"} · <code>{s.selectorKey}</code>{s.seriesTitle ? ` · ${s.seriesTitle}` : ""} · {s.cluster} · {s.status}</p>
+        <p className="text-neutral-400 text-xs">{s.oracle === "kalshi" ? "Kalshi" : s.oracle === "polymarket" ? "Polymarket (result read on Polygon)" : "first-party source"} · <code>{s.selectorKey}</code>{s.seriesTitle ? ` · ${s.seriesTitle}` : ""} · {s.cluster} · {s.status}</p>
       </header>
       <div className={card + " border-l-4 border-l-orange-500"}><strong>The rule.</strong> {s.rules.statement}<div className="text-xs text-neutral-500 mt-1">rules.json sha256 <code>{s.rules.sha256}</code> · <a className="underline" href={`/api/burnticker/tokens/${s.ticker}?format=rules`}>rules.json</a> · locked at launch; nobody can change it.{s.rules.oneShot && <> This rule resolves once{s.next.nextCloseTime ? `, on ${s.next.nextCloseTime}` : ""}; after that the supply is fixed.</>}</div></div>
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">

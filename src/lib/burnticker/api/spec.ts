@@ -22,13 +22,13 @@ export interface Endpoint {
   bucket: Bucket;
 }
 
-export const API_VERSION = "1.0.0";
+export const API_VERSION = "1.1.0";
 export const API_PREFIX = "/api/burnticker/v1";
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
 export const RATE_LIMITS: Record<Bucket, { burst: number; refillPerSec: number; human: string }> = {
   read: { burst: 120, refillPerSec: 2, human: "120 requests burst, 120 per minute sustained" },
-  heavy: { burst: 20, refillPerSec: 20 / 60, human: "20 requests burst, 20 per minute sustained (these call Kalshi or re-read a source)" },
+  heavy: { burst: 20, refillPerSec: 20 / 60, human: "20 requests burst, 20 per minute sustained (these call Kalshi or Polymarket, or re-read a source)" },
   write: { burst: 10, refillPerSec: 10 / 3600, human: "10 per hour (launch bundles and confirmations)" },
 };
 
@@ -48,12 +48,12 @@ export const SCHEMAS: Record<string, Schema> = {
   BurnMapping: obj({ fractionOfPool: { type: "number", minimum: 0.01, maximum: 0.1, description: "buyback: fraction of the burn pool spent buying the token at market, all of it burned" }, tokens: { type: "integer", minimum: 1, description: "vault: tokens burned from the vesting vault" } }, [], { description: "Exactly one key." }),
   Rule: obj({
     schema: { const: "burnticker.rules/v1" },
-    oracle: { enum: ["kalshi", "catalogue", "polymarket", "uma", "drift-bet", "hedgehog"], description: "kalshi and catalogue are live; the others are accepted by the schema and refused at launch" },
-    series: { ...nstr, description: "Kalshi series ticker, or a catalogue source id (treasury.debt, wiki.views:Bitcoin)" },
-    market: { ...nstr, description: "one Kalshi market: a one-shot rule" },
+    oracle: { enum: ["kalshi", "catalogue", "polymarket", "uma", "drift-bet", "hedgehog"], description: "kalshi, polymarket (binary only) and catalogue are live; the others are accepted by the schema and refused at launch" },
+    series: { ...nstr, description: "Kalshi series ticker; a catalogue source id (treasury.debt, wiki.views:Bitcoin); or a Polymarket series: \"tag:<tag slug>[/<market type>][:<event slug glob>]\" (tag:nfl/moneyline) or \"event:<event slug>\"" },
+    market: { ...nstr, description: "one Kalshi market ticker, or one Polymarket condition id (0x + 64 lowercase hex): a one-shot rule" },
     filter: obj({ tickerIncludes: str, titleRegex: str }),
     kind: { enum: ["binary", "scalar"] },
-    binary: nullable(obj({ onYes: ref("BurnMapping"), onNo: nullable(ref("BurnMapping")) }, ["onYes"])),
+    binary: nullable(obj({ onYes: nullable(ref("BurnMapping")), onNo: nullable(ref("BurnMapping")) }, ["onYes"], { description: "at least one of onYes / onNo is a mapping (a side that burns only on NO has onYes null)" })),
     scalar: nullable(obj({ unit: num, perUnit: ref("BurnMapping"), baseline: { anyOf: [{ const: "previousSettlement" }, num] }, direction: { enum: ["up", "down", "abs"] } }, ["unit", "perUnit", "baseline", "direction"])),
     onVoid: { const: "skip" }, floorUsd: str, reserveSol: str,
     vault: nullable(obj({ share: num, vestDays: int, cliffDays: int }, ["share", "vestDays", "cliffDays"])),
@@ -69,7 +69,7 @@ export const SCHEMAS: Record<string, Schema> = {
     lastReading: nullable(obj({ id: str, value: nstr, at: str })), preview: {},
     config: { description: "attested-http sources: the selection config a verifier needs (request URL template, selection, period); header VALUES are withheld", anyOf: [{ type: "object" }, { type: "null" }] },
   }, ["id", "kind", "tier", "title", "sourceUrl", "launchable"]),
-  Catalogue: obj({ sources: arr(ref("Source")), tiers: { type: "object" }, admission: { type: "object" }, kalshi: obj({ search: str, note: str }) }, ["sources", "tiers", "admission"]),
+  Catalogue: obj({ sources: arr(ref("Source")), tiers: { type: "object" }, admission: { type: "object" }, kalshi: obj({ search: str, note: str }), polymarket: obj({ search: str, note: str }) }, ["sources", "tiers", "admission"]),
   SourcePreview: obj({
     id: str, title: str, tier: int, rule: ref("Rule"), sha256: str, statement: str, window: obj({ from: str, to: str }, ["from", "to"]),
     totals: { type: "object" }, rows: arr({ type: "object" }), lastReading: {}, fixtureFetchedAt: nstr, sentence: str, note: str,
@@ -93,6 +93,13 @@ export const SCHEMAS: Record<string, Schema> = {
     query: str, results: arr(ref("KalshiSeries")), events: arr(ref("KalshiEventHit")), ranking: { enum: ["events", "series"], description: "which list to show first: events when the query names a team or matched a market by name" }, teams: arr({ type: "object" }),
     series: ref("KalshiSeries"), open: arr({ type: "object" }), openCount: int, refusals: arr({ type: "object" }), note: str,
   }, [], { description: "Either { query, results, events, ranking } (a search: series plus event-level hits) or { series, open, openCount, refusals } (?series=TICKER)." }),
+  PolymarketMarketHit: obj({ conditionId: str, question: str, yes: { ...str, description: "the first outcome: what YES means" }, no: { ...str, description: "the second outcome: what NO means" }, endDate: nstr, closed: bool, sportsMarketType: nstr, selector: { type: "object" }, impliedYes: { anyOf: [num, { type: "null" }], description: "display only" } }, ["conditionId", "question", "yes", "no", "selector"]),
+  PolymarketSearch: obj({
+    query: str, status: { enum: ["open", "closed", "all"] }, venue: { const: "polymarket" }, note: str,
+    events: arr(obj({ slug: str, title: str, url: str, endDate: nstr, closed: bool, tags: arr(obj({ slug: str, label: str })), markets: arr(ref("PolymarketMarketHit")), marketCount: int, selector: { type: "object", description: "the whole event as a recurring selector (event:<slug>)" }, refused: arr(str) }, ["slug", "title", "markets", "selector", "refused"])),
+    markets: arr(ref("PolymarketMarketHit")),
+    tags: arr(obj({ slug: str, label: str, events: int, series: arr(str) }, ["slug", "series"])),
+  }, ["query", "events", "markets", "tags"], { description: "Gamma search hits: events with their binary markets (each a one-shot selector), the event as a selector, and the tags seen as recurring selectors. `markets` is filled when q is a condition id." }),
   BacktestRequest: obj({ rule: ref("Rule"), months: { type: "integer", minimum: 1, maximum: 24 } }, ["rule"]),
   Backtest: obj({ rule: ref("Rule"), text: str, sha256: str, sha12: str, mode: { enum: ["buyback", "vault"] }, statement: str, backtest: { type: "object" }, sentence: str, refusals: arr({ type: "object" }), seriesTitle: nstr, matched: int }, ["rule", "text", "sha256", "statement", "backtest", "sentence", "matched"]),
   ValidateRequest: obj({ rule: {} }, ["rule"]),
@@ -152,6 +159,8 @@ export const ENDPOINTS: Endpoint[] = [
   { operationId: "listKalshiTeams", method: "GET", path: "/kalshi/teams", tag: "kalshi", summary: "Teams of a game series, with next game and season record (team coins)", description: "Derived from the series' open events (names, next game) and its settled markets since the season started (record: own leg YES = win, NO = loss, TIE YES = draw). For a team coin the selector is the series plus the team's own-leg filter (`-PHI`).", params: [{ name: "series", in: "query", required: true, description: "a head-to-head game series (…GAME), e.g. KXNFLGAME", schema: str }], request: null, response: "KalshiTeams", errors: [400, 429, 502], cacheSec: 60, bucket: "heavy" },
   { operationId: "searchKalshi", method: "GET", path: "/kalshi/search", tag: "kalshi", summary: "Search Kalshi series and events (or read one series with its open markets)", description: "Live search of Kalshi's public series list, with the refuse-list verdict per series, plus event-level hits (teams, people, contests; see /kalshi/events) ranked first when the query names a team or a market. `?series=TICKER` returns that series and its next open markets; their YES prices are display only and never reach a rule.", params: [{ name: "q", in: "query", required: false, description: "free text matched against ticker, title and tags", schema: str }, { name: "category", in: "query", required: false, description: "a Kalshi category (Sports, Economics, Climate and Weather, …)", schema: str }, { name: "series", in: "query", required: false, description: "one series ticker", schema: str }], request: null, response: "KalshiSearch", errors: [404, 429, 502], cacheSec: 60, bucket: "heavy" },
   { operationId: "backtestKalshi", method: "POST", path: "/kalshi/backtest", tag: "kalshi", summary: "Back-test a rule on the venue's own settled history", description: "\"This selector settled N times in the last 12 months and would have burned X\": the matched markets (so you see what a filter really binds to), the rule's canonical text and hash, and the refuse-list verdict. Catalogue rules preview from the source's frozen fixture.", params: [], request: "BacktestRequest", response: "Backtest", errors: [400, 403, 415, 429, 502], cacheSec: 0, bucket: "heavy" },
+  { operationId: "searchPolymarket", method: "GET", path: "/polymarket/search", tag: "polymarket", summary: "Search Polymarket events and binary markets", description: "Live search of Polymarket's Gamma API (text, an event slug, or a condition id). Returns events with their binary markets (YES = a market's first outcome, NO its second; each a one-shot selector `{ oracle: \"polymarket\", market: \"0x…\" }`), the event as a recurring selector (`event:<slug>`), and the tags seen on the hits as recurring selectors (`tag:<slug>`, `tag:<slug>/moneyline` for games). Refused events carry the refuse-list reasons. Gamma responses are cached 10 minutes. Results are read from the Conditional Tokens payout vector on Polygon; `impliedYes` is display only.", params: [{ name: "q", in: "query", required: true, description: "text, an event slug or a condition id (2+ characters)", schema: str }, { name: "status", in: "query", required: false, description: "open (default), closed or all", schema: { enum: ["open", "closed", "all"] } }], request: null, response: "PolymarketSearch", errors: [400, 429, 502], cacheSec: 60, bucket: "heavy" },
+  { operationId: "backtestPolymarket", method: "POST", path: "/polymarket/backtest", tag: "polymarket", summary: "Back-test a Polymarket rule on Gamma's closed markets", description: "The selector's closed markets as Gamma reports them resolved over the window (paged; `scanComplete: false` says where a dense selector's scan stopped), through the same unit engine as the keeper, with the rule's canonical text, hash and refuse-list verdict. Display-grade by design: the keeper reads every result from the Polygon payout vector and holds a market whose vector is not on chain. `rule.oracle` must be \"polymarket\".", params: [], request: "BacktestRequest", response: "Backtest", errors: [400, 403, 404, 415, 429, 502], cacheSec: 0, bucket: "heavy" },
   { operationId: "validateRule", method: "POST", path: "/rules/validate", tag: "rules", summary: "Validate a rule; get its canonical JSON and sha256", description: "Returns the exact bytes rules.json will hold and their sha256 (what every receipt cites as rules=sha256:<first 12>), the plain-language statement and the receipt format. A rule that does not validate returns 400 with every problem listed.", params: [], request: "ValidateRequest", response: "Validation", errors: [400, 403, 415, 429], cacheSec: 0, bucket: "read" },
   { operationId: "buildLaunchBundle", method: "POST", path: "/launch/bundle", tag: "launch", summary: "Build the unsigned launch transactions + the review payload", description: "initialize_token (burn_receipts) + the Raydium LaunchLab create under the Burnticker platform config, with the token's burn pool as the creator-fee recipient. NEVER signs: you sign with the creator wallet and your own mint keypair. Refusals: the refuse list, rules that do not validate, catalogue rules that disagree with their source, a taken ticker, mainnet (until the program and the LaunchLab adapter are live). Registers a DRAFT unless register=false. There is no path to adopt an existing token: the program requires the new mint's signature at init.", params: [], request: "LaunchRequest", response: "LaunchBundle", errors: [400, 403, 409, 415, 429, 502], cacheSec: 0, bucket: "write" },
   { operationId: "confirmLaunch", method: "POST", path: "/launch/confirm", tag: "launch", summary: "Report the landed launch transaction (takes the draft live)", description: "Sets the baseline to now: settlements after this moment count. The keeper verifies the transaction on its next cycle.", params: [], request: "ConfirmRequest", response: "Confirmation", errors: [400, 403, 404, 409, 415, 429], cacheSec: 0, bucket: "write" },
@@ -195,7 +204,7 @@ export function buildOpenApi(serverUrl = API_PREFIX): Record<string, unknown> {
       license: { name: "see the repository" },
     },
     servers: [{ url: serverUrl }],
-    tags: [{ name: "sources" }, { name: "kalshi" }, { name: "rules" }, { name: "launch" }, { name: "tokens" }, { name: "platform" }],
+    tags: [{ name: "sources" }, { name: "kalshi" }, { name: "polymarket" }, { name: "rules" }, { name: "launch" }, { name: "tokens" }, { name: "platform" }],
     paths,
     components: { schemas: SCHEMAS },
   };

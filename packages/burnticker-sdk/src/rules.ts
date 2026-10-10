@@ -7,7 +7,7 @@ import { receiptFormatTemplate } from "@/lib/burnticker/receipt";
  * a hash computed here is byte-for-byte the hash the launch bundle, the registry, the token page and every receipt memo carry.
  */
 
-/** Which settled events count. Kalshi: a series (+ optional filter) or one market. Catalogue: a source id as `series`. */
+/** Which settled events count. Kalshi: a series (+ optional filter) or one market. Polymarket: a condition id as `market`, or `series` "tag:<slug>[/<type>][:<event glob>]" / "event:<slug>" (+ titleRegex). Catalogue: a source id as `series`. */
 export interface Selector { oracle?: OracleId; series?: string | null; market?: string | null; filter?: SelectorFilter }
 
 /** What each settled event burns, and the buyback guards. Exactly one of `binary` / `scalar` for the rule's `kind`. */

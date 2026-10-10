@@ -2,7 +2,7 @@ import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
 import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
-import { DECIMALS, EVENT_CONTRACT_DISCLOSURE, DISCLAIMER_FOOTER, TOTAL_SUPPLY, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, oracleDisclosure, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { parseReceiptMemo } from "@/lib/burnticker/receipt";
 import { unitStep, type SettledEvent } from "@/lib/burnticker/units";
 import { feedById } from "@/lib/burnticker/catalogue";
@@ -211,7 +211,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
     fees: { curve: CURVE_FEES, postGraduation: POST_GRADUATION_FEES, sentence: feeSplitSentence(), creatorSliceBps: 0 },
     health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
-    disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: rule.oracle === "kalshi" ? EVENT_CONTRACT_DISCLOSURE : null },
+    disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
     trust: { lpBurnedPct: LP_BURNED_PCT, creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
     program: buildTokenProgram(i),
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
@@ -269,7 +269,7 @@ export function renderTokenHtml(s: TokenStatusJson, receipts: readonly ReceiptJs
   const check = (b: ReceiptJson) => (b.verify.verified ? `<span class="ok" title="recomputed from the reading and the rule; matches the memo on chain">✓</span>` : b.status === "confirmed" ? `<span class="bad" title="${esc(b.verify.checks.join("; "))}">!</span>` : "…");
   const link = (url: string | null, sig: string | null, fallback: string) => (url && sig ? `<a href="${esc(url)}">${esc(sig.slice(0, 10))}…</a>` : esc(fallback));
   const chartReadings = readings.filter((r) => r.value !== null).map((r) => ({ recordDate: r.at, amount: r.value! }));
-  const chart = s.oracle === "kalshi" && readings.every((r) => r.value === null)
+  const chart = (s.oracle === "kalshi" || s.oracle === "polymarket") && readings.every((r) => r.value === null)
     ? `<p class="muted">Binary selector: ${readings.length} settled market(s) read — ${readings.filter((r) => r.result === "yes").length} YES, ${readings.filter((r) => r.result === "no").length} NO, ${readings.filter((r) => r.result === "void").length} void.</p>`
     : seriesChartSvg(chartReadings, receipts.map((b) => ({ recordDate: b.settledAt, units: b.units, status: b.status })), { ariaLabel: `${s.seriesTitle ?? s.selectorKey}, with a marker on each burn`, tick: (v) => (Math.abs(v) >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : String(Number(v.toFixed(2)))) });
   const implied = s.next.impliedChance === null ? "" : tile("Market-implied chance of the next burn", `${(s.next.impliedChance * 100).toFixed(0)}%`, `${esc(s.next.nextMarket ?? "")}${s.next.nextCloseTime ? ` · closes ${esc(s.next.nextCloseTime)}` : ""} · display only, never used by the rule`);
@@ -303,7 +303,7 @@ ${STATUS_CSS}
 <p><a href="../../">← Burnticker</a></p>
 ${s.pair ? `<div class="rule"><strong>$${t} <span class="muted">vs</span> <a href="../${esc(s.pair.counterpart.ticker)}/">$${esc(s.pair.counterpart.ticker)}</a></strong> — rivalry pair <code>${esc(s.pair.pairId)}</code> (this is side ${esc(s.pair.side)}; one selector, inverted mappings: each settlement burns exactly one side). Burns ${s.pair.tally.burnsThis} : ${s.pair.tally.burnsOther} · burned ${fmt(s.pair.tally.burnedThis)} : ${fmt(s.pair.tally.burnedOther)} · supply ${fmt(s.pair.tally.supplyThis)} : ${fmt(s.pair.tally.supplyOther)}${s.pair.counterpart.lastBurnAt ? ` · the other side last burned ${esc(s.pair.counterpart.lastBurnAt.slice(0, 10))}` : ""}. <a href="../../p/${esc(s.pair.pairId)}/">Pair page</a>.</div>` : ""}
 <h1>$${t} <span class="muted" style="font-weight:400">${esc(s.name)}</span></h1>
-<p class="muted">${esc(s.oracle === "kalshi" ? "Kalshi" : "first-party feed")} · <code>${esc(s.selectorKey)}</code>${s.seriesTitle ? ` · ${esc(s.seriesTitle)}` : ""} · ${esc(s.cluster)} · ${esc(s.status)} · updated ${esc(s.generatedAt)}</p>
+<p class="muted">${esc(s.oracle === "kalshi" ? "Kalshi" : s.oracle === "polymarket" ? "Polymarket (result read on Polygon)" : "first-party feed")} · <code>${esc(s.selectorKey)}</code>${s.seriesTitle ? ` · ${esc(s.seriesTitle)}` : ""} · ${esc(s.cluster)} · ${esc(s.status)} · updated ${esc(s.generatedAt)}</p>
 <div class="rule"><strong>The rule.</strong> ${esc(s.rules.statement)}<br><span class="muted">Rule file: <a href="rules.json">rules.json</a> · sha256 <code>${esc(s.rules.sha256)}</code> · locked at launch; nobody can change it.</span>${s.rules.oneShot ? `<br><span class="muted">This rule resolves once${s.next.nextCloseTime ? `, on ${esc(s.next.nextCloseTime)}` : ""}; after that the supply is fixed.</span>` : ""}</div>
 <div class="tiles">
 ${tiles}

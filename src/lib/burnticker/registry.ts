@@ -42,7 +42,7 @@ export interface TokenRow {
   baselineAt: string; createdAt: number; status: TokenStatus;
 }
 
-export interface ReadingRow extends SettledEvent { oracle: string; selectorKey: string; settlementSourceUrl: string | null; method: string | null; attestedBy: string[]; fetchedAt: number }
+export interface ReadingRow extends SettledEvent { oracle: string; selectorKey: string; settlementSourceUrl: string | null; method: string | null; proof: string | null; attestedBy: string[]; fetchedAt: number }
 
 export type ReceiptStatus = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing";
 export interface ReceiptRow {
@@ -152,7 +152,7 @@ const toToken = (r: Row): TokenRow => ({ mint: String(r.mint), ticker: String(r.
   oracle: String(r.oracle) as BurnRule["oracle"], selectorKey: String(r.selector_key), rulesJson: String(r.rules_json), rulesSha: String(r.rules_sha), mode: String(r.mode) as RuleMode, feePda: String(r.fee_pda), vault: strOrNull(r.vault),
   tokenConfig: strOrNull(r.token_config), poolId: strOrNull(r.pool_id), launchTx: strOrNull(r.launch_tx), cluster: String(r.cluster), platformId: strOrNull(r.platform_id), baselineAt: String(r.baseline_at), createdAt: Number(r.created_at), status: String(r.status) as TokenStatus });
 const toReading = (r: Row): ReadingRow => ({ oracle: String(r.oracle), selectorKey: String(r.selector_key), id: String(r.event_id), at: String(r.settled_at), result: strOrNull(r.result) as ReadingRow["result"], value: strOrNull(r.value), title: strOrNull(r.title), sourceUrl: String(r.source_url),
-  settlementSourceUrl: strOrNull(r.settlement_source_url), method: strOrNull(r.method), attestedBy: JSON.parse(String(r.attested_by ?? "[]")), fetchedAt: Number(r.fetched_at) });
+  settlementSourceUrl: strOrNull(r.settlement_source_url), method: strOrNull(r.method), proof: strOrNull(r.proof), attestedBy: JSON.parse(String(r.attested_by ?? "[]")), fetchedAt: Number(r.fetched_at) });
 const toReceipt = (r: Row): ReceiptRow => ({ mint: String(r.mint), eventId: String(r.event_id), settledAt: String(r.settled_at), result: strOrNull(r.result), value: strOrNull(r.value), units: Number(r.units), mapping: r.mapping_json ? JSON.parse(String(r.mapping_json)) : null, kind: String(r.kind), note: String(r.note),
   prevValue: strOrNull(r.prev_value), carryIn: String(r.carry_in), carryOut: String(r.carry_out),
   poolLamports: bigOrNull(r.pool_lamports), spendLamports: bigOrNull(r.spend_lamports), solUsd: numOrNull(r.sol_usd), vaultRaw: bigOrNull(r.vault_raw), shortInRaw: bigOrNull(r.short_in_raw), shortOutRaw: bigOrNull(r.short_out_raw), gotRaw: bigOrNull(r.got_raw), burnRaw: bigOrNull(r.burn_raw), memo: strOrNull(r.memo),
@@ -165,10 +165,12 @@ const toSig = (r: Row): SignatureRow => ({ signature: String(r.signature), mint:
 /**
  * The key readings are stored under: the feed id; one Kalshi market; or a Kalshi series PLUS the rule kind — a series read as
  * binaries (one reading per market) and the same series read as scalars (one per event) are two different reading streams. Tokens
- * on one key share its readings and apply their own filter at plan time.
+ * on one key share its readings and apply their own filter at plan time. Polymarket (binary only): `polymarket:market:<condition id>`
+ * or `polymarket:<series>:binary` ("polymarket:tag:nfl/moneyline:binary").
  */
 export function selectorKeyOf(rule: BurnRule): string {
   if (rule.oracle === "catalogue") return `catalogue:${rule.series}`;
+  if (rule.oracle === "polymarket") return rule.market ? `polymarket:market:${rule.market}` : `polymarket:${rule.series}:${rule.kind}`;
   return rule.market ? `kalshi:market:${rule.market}` : `kalshi:${rule.series}:${rule.kind}`;
 }
 
@@ -197,6 +199,8 @@ export class Registry {
     this.db.exec(SCHEMA);
     const have = new Set((this.db.prepare("PRAGMA table_info(burns)").all() as { name: string }[]).map((c) => c.name));
     for (const [name, type] of BURN_PROGRAM_COLUMNS) if (!have.has(name)) this.db.exec(`ALTER TABLE burns ADD COLUMN ${name} ${type}`);
+    // 2026-10-10: a reading's on-chain proof locator (Polymarket: the CTF payout vector's condition id and block). Added, never changed.
+    if (!(this.db.prepare("PRAGMA table_info(readings)").all() as { name: string }[]).some((c) => c.name === "proof")) this.db.exec("ALTER TABLE readings ADD COLUMN proof TEXT");
     this.db.exec(IMMUTABILITY);
     // A program reading, once a receipt is counted into it, is part of the receipt's facts.
     this.db.exec(`CREATE TRIGGER IF NOT EXISTS burns_reading_once BEFORE UPDATE OF reading_date ON burns WHEN OLD.reading_date IS NOT NULL AND NEW.reading_date IS NOT OLD.reading_date
@@ -287,8 +291,8 @@ export class Registry {
       for (const e of events) {
         const have = this.db.prepare("SELECT result, value FROM readings WHERE oracle=? AND selector_key=? AND event_id=?").get(oracle, selectorKey, e.id) as { result: string | null; value: string | null } | undefined;
         if (have) { if ((have.result ?? null) !== (e.result ?? null) || (have.value ?? null) !== (e.value ?? null)) throw new Error(`registry: ${selectorKey} ${e.id} already recorded as ${have.result ?? have.value}, the oracle now says ${e.result ?? e.value} — holding`); continue; }
-        this.db.prepare("INSERT INTO readings (oracle, selector_key, event_id, settled_at, result, value, title, source_url, settlement_source_url, method, attested_by, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-          .run(oracle, selectorKey, e.id, e.at, e.result, e.value, e.title, e.sourceUrl, meta.settlementSourceUrl, meta.method?.(e) ?? e.method ?? null, JSON.stringify(meta.attestedBy), now);
+        this.db.prepare("INSERT INTO readings (oracle, selector_key, event_id, settled_at, result, value, title, source_url, settlement_source_url, method, proof, attested_by, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+          .run(oracle, selectorKey, e.id, e.at, e.result, e.value, e.title, e.sourceUrl, meta.settlementSourceUrl, meta.method?.(e) ?? e.method ?? null, e.proof ?? null, JSON.stringify(meta.attestedBy), now);
         n++;
       }
     });

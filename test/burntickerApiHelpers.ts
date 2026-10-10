@@ -19,6 +19,7 @@ import type { IdlType } from "@/lib/burnReceipts/idlTypes";
 import { base58Decode } from "../packages/burnticker-sdk/src/events.ts";
 import type { Fetch } from "../packages/burnticker-sdk/src/http.ts";
 import { BRONCOS, DEBT_RULE, NOW, fx } from "./burntickerHelpers.ts";
+import { polyClient } from "./burntickerPolyHelpers.ts";
 
 export const CREATOR = "CreatorWa11et111111111111111111111111111111";
 export const ATTESTER = "KeeperDataKey1111111111111111111111111111111";
@@ -67,8 +68,9 @@ export async function makeWorld(): Promise<World> {
   program.deposit(bronco.mint, BigInt(5_000_000_000));
   program.deposit(deficit.mint, BigInt(3_000_000_000));
   await runCycle({ registry, program, oracles: { kalshi, catalogue }, attester: ATTESTER, log: () => {}, now: () => NOW, dryRun: false });
+  const polymarket = polyClient();
   const p: Platform = {
-    registry, oracles: { kalshi, catalogue }, kalshi, program, launchLab: new FakeLaunchLab(), cluster: "devnet", publishDir: path.join(os.tmpdir(), `bt-api-${process.pid}`),
+    registry, oracles: { kalshi, catalogue, polymarket }, kalshi, polymarket, program, launchLab: new FakeLaunchLab(), cluster: "devnet", publishDir: path.join(os.tmpdir(), `bt-api-${process.pid}`),
     devFeeWallet: null, keeperPubkey: ATTESTER, platformId: null, stubs: ["burn_receipts program: not deployed (FakeBurnProgram — test)"],
   };
   setPlatformForTests(p);
@@ -84,6 +86,8 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/kalshi\/events$/, "kalshi/events", []],
   [/^\/kalshi\/teams$/, "kalshi/teams", []],
   [/^\/kalshi\/backtest$/, "kalshi/backtest", []],
+  [/^\/polymarket\/search$/, "polymarket/search", []],
+  [/^\/polymarket\/backtest$/, "polymarket/backtest", []],
   [/^\/rules\/validate$/, "rules/validate", []],
   [/^\/launch\/bundle$/, "launch/bundle", []],
   [/^\/launch\/confirm$/, "launch/confirm", []],

@@ -280,6 +280,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
       "Rules, readings and receipts are append-only: SQL triggers refuse updates and deletes; a rule change is a new token.",
       "No referral codes, fee discounts or hidden parameters exist in the launch wizard; every parameter is in the canonical rules.json.",
       "Settled results only: the keeper never reads a market price into a rule. Prices shown on pages are labelled display-only.",
+      "Market sources: Kalshi settlements (primary, read from Kalshi's public API) and Polymarket binary markets (tier 1 since 2026-10-10: Gamma for discovery, the result read from the Conditional Tokens payout vector on Polygon, a reading counted only once that payout is on chain).",
       `Pre-audit cap: each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL; fee income above it is queued and released after the audit (enforced by the keeper today, by the program once deployed — that seam is open until then).`,
       "Anonymous creators are allowed; the creator wallet is always displayed. One-shot markets are allowed; their pages say 'resolves once on <date>'. Elections are allowed; deaths, violence, terror, casualty counts and named private individuals are refused.",
       USE_OF_FEES,

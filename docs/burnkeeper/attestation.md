@@ -101,8 +101,10 @@ airdrops. Limits: HTTP job responses are capped in size and time by the oracle r
 `scripts/burnkeeper-attest-polymarket.mts read 253591` (gamma id, slug or condition id) → read live on 2026-10-09 at Polygon block
 95,264,243: condition `0xdd22…0917` ("Will Donald Trump win the 2024 US Presidential Election?"), `outcomeSlotCount 2`,
 `payoutDenominator 1`, `payoutNumerators [1, 0]` → `outcome 0 = Yes`; the script prints the `curl` that reproduces the denominator call.
-The reader tries `1rpc.io/matic`, `polygon-rpc.com`, `publicnode`, `drpc` in order (only the first answered unauthenticated eth_calls
-from here; gamma's `outcomePrices` are never used for the result). For a selector rule (§14) the receipt carries the condition id, the
+The reader tries `polygon-bor.publicnode.com`, `1rpc.io/matic`, `polygon-rpc.com`, `polygon-bor-rpc.publicnode.com`, `drpc` in order (on
+2026-10-09 only 1rpc answered unauthenticated eth_calls from here; on 2026-10-10 only `polygon-bor.publicnode.com` did, and none serves
+eth_getLogs keyless; gamma's `outcomePrices` are never used for the result). Since 2026-10-10 this read is the Burnticker Polymarket
+oracle's finality rule (`src/lib/burnticker/oracle/polymarket.ts`). For a selector rule (§14) the receipt carries the condition id, the
 block number and the payout vector; `onVoid` maps a split payout (`outcome: null`, e.g. `1/2, 1/2`).
 
 ## 6. Who is signer two for $DEFICIT — the decision this leaves open

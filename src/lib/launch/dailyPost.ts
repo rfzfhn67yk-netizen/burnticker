@@ -200,7 +200,7 @@ export function platformDailyText(i: PlatformDailyInput): string {
       else if (r.status === "skipped") today.push(`$${t.ticker} — ${t.seriesTitle ?? t.selectorKey} ${r.eventId}, ${plural(r.units, "unit")}, nothing bought (${r.skippedReason ?? "under the floor"})`);
     }
   }
-  const launches = ix.tokens.filter((t) => t.launchedAt && t.launchedAt.slice(0, 10) === i.day).map((t) => `$${t.ticker} — ${t.seriesTitle ?? t.selectorKey} (${t.oracle === "kalshi" ? "Kalshi" : t.selectorKey.replace(/^catalogue:/, "")})`);
+  const launches = ix.tokens.filter((t) => t.launchedAt && t.launchedAt.slice(0, 10) === i.day).map((t) => `$${t.ticker} — ${t.seriesTitle ?? t.selectorKey} (${t.oracle === "kalshi" ? "Kalshi" : t.oracle === "polymarket" ? "Polymarket" : t.selectorKey.replace(/^catalogue:/, "")})`);
   const a = ix.audit;
   const audit = a ? (a.ok ? `all ${a.receipts} receipts recompute (${a.chainChecked ? "source + chain" : "source only"}) · ran ${a.ranAt.slice(0, 16).replace("T", " ")}Z` : `${a.mismatches} of ${a.receipts} receipts do not recompute — on the trust page, with the reason`) : "not run yet";
   return [

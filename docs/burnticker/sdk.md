@@ -1,7 +1,8 @@
 # @burnticker/sdk — build on Burnticker from a bot
 
 Burnticker launches memecoins whose supply burns on a Kalshi settlement — two coins on one matchup (a rivalry pair: when a side
-loses, its coin burns) or one coin on any settled Kalshi market. First-party feeds stay available as an advanced source; $DEFICIT
+loses, its coin burns) or one coin on any settled Kalshi market. Polymarket binary markets are a second tier-1 source (since
+2026-10-10: the result read from the payout vector on Polygon). First-party feeds stay available as an advanced source; $DEFICIT
 runs on Treasury data directly. Everything below works the same for every source.
 
 Owner decision, 2026-10-09: *"no tokens will be adopted into the platform, provide the sdk/api so people can incorporate into bots."*
@@ -61,6 +62,8 @@ and `pending` says what is missing), so nothing is signable on a cluster yet. Th
 | `bt.sourcePreview(id, { fractionOfPool \| tokens })` | API | what a catalogue rule would have burned over the source's frozen fixture |
 | `bt.kalshi.search(q, { category })` · `bt.kalshi.series(ticker)` | API | live Kalshi series search with refuse-list verdicts; one series with its open markets (prices display-only) |
 | `bt.kalshi.backtest(selector, mapping, { months })` | API | "settled N times in 12 months and would have burned X", plus the matched markets |
+| `bt.polymarket.search(q, { status })` | API | Polymarket (Gamma) search by text, event slug or condition id: events with their binary markets (`yes` / `no` labels), the event and its tags as recurring selectors; `impliedYes` display only |
+| `bt.polymarket.backtest(selector, mapping, { months })` | API | a Polymarket selector (`{ market: "0x…" }`, `{ series: "tag:nfl/moneyline", filter: { titleRegex } }`, `{ series: "event:<slug>" }`; oracle defaults to `polymarket`) back-tested on Gamma's closed markets |
 | `rules.compose / validate / canonical / sha256 / lock / fromText / statement / receiptFormat` | local | the platform's own rule code: the hash you compute is the hash every receipt cites |
 | `fees.split({ phase, volumeSol })` | local | the designed split (curve: Raydium 25, Burnticker 25, burn pool 50 bps; post-graduation burn pool 4.75 bps) per volume, exact to the lamport; live values via `bt.trust()` |
 | `bt.buildLaunchBundle({ wallet, selector, rule, metadata, … })` | API + RPC | unsigned transactions, the review payload, `receiptFormat`, `rulesSha256`, `feePda`; mainnet refused unless `allowMainnet: true` |
@@ -73,7 +76,8 @@ and `pending` says what is missing), so nothing is signable on a cluster yet. Th
 | `bt.subscribe(mint, onEvent, { ticker, pollMs, websocket, since })` | RPC or API | program events (decoded `emit_cpi` events) with `connection` + `programId`; otherwise receipts polled from the API |
 | `bt.trust()` · `bt.openapi()` | API | the Powers Register and the live fee bps; the OpenAPI document |
 
-Lower-level building blocks are re-exported from the platform's modules, not re-implemented: `KalshiClient`, `backtest`,
+Lower-level building blocks are re-exported from the platform's modules, not re-implemented: `KalshiClient`, `PolymarketClient`,
+`resolvePolymarket`, `readConditionResolution` (the Polygon CTF payout-vector read), `backtest`,
 `unitStep`, `parseReceiptMemo`, `verifyReceiptCore`, `compileUnsigned`, `buildLaunchBundleOffline` (the platform's builder, for dry
 runs on `FakeBurnProgram` / `FakeLaunchLab`), the `burn_receipts` PDAs and account fetchers, `buybackSpend`, `burnPoolFor`.
 
@@ -120,7 +124,10 @@ checked here, e.g. no RPC was given, or the source no longer serves that period)
 3. **source.** The settled result is re-read from the original source. For Kalshi, the verifier builds the URL itself from the event
    id (`/markets/<ticker>` for binaries, `/markets?event_ticker=` for scalar ladders) and applies the same finality rules (finalized,
    or settled plus the settlement timer). For catalogue feeds it uses the feed's own published request, parsed by its published
-   selection config from `GET /catalogue`. A receipt cannot point the verifier at a URL.
+   selection config from `GET /catalogue`. For Polymarket it reads the market from Gamma (built from the condition id) and the
+   AUTHORITATIVE payout vector from the Conditional Tokens contract on Polygon with three `eth_call`s (pass `polygonRpcUrls` /
+   `polygonFetch` to choose the RPC; default: public endpoints); a market whose payout is not on chain is `null`, never a pass.
+   A receipt cannot point the verifier at a URL.
 4. **units.** The published rule is applied to that settled result, with the previous value and carried remainder the receipt
    states, by the platform's own unit engine.
 5. **spend.** For buyback coins, `spend = pool × (1 − (1 − f)^units)` using the keeper's exact integer formula must equal the memo's

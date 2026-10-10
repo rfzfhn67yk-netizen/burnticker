@@ -57,7 +57,7 @@ outcomes to burns, and applies to markets that do not exist yet.
 
 | Field | Meaning |
 |---|---|
-| `oracle` | `kalshi` or `catalogue` are live; `polymarket`, `uma`, `drift-bet`, `hedgehog` are parsers and stubs, not launchable |
+| `oracle` | `kalshi`, `polymarket` (binary only) and `catalogue` are live; `uma`, `drift-bet`, `hedgehog` are parsers and stubs, not launchable |
 | `series` + `filter` | every present and future market of the series whose ticker contains the text and/or whose title matches a regex |
 | `market` | one market ticker: a one-shot rule that resolves once, after which the supply is fixed |
 | `kind: binary` | reads Kalshi's `result` (yes/no); `onYes` / `onNo` give the burn for each outcome |
@@ -83,6 +83,11 @@ sports league). The selector binds to that adjudicated result, not to the underl
 science and technology 372, crypto 276, other categories 1,077 (source: `docs/burnticker/README.md` on branch
 `agent/RIVAL-2026-10-10`, commit `c0eb7ed`).
 
+**Polymarket binary markets are the second tier-1 source** (since 2026-10-10): Gamma (`https://gamma-api.polymarket.com`) finds the
+markets, and the result is the payout vector the Conditional Tokens contract on Polygon stores for the market's condition id, read with
+`eth_call`; a reading counts only once that payout is on chain, a 50-50 payout is a void, and team coins and matchup pairs stay on Kalshi
+(`src/lib/burnticker/oracle/polymarket.ts`).
+
 **First-party feeds are the advanced path.** `config/burnticker/sources.json` holds 30 sources read through one generic adapter
 (`src/lib/burnticker/sources/attestedHttp.ts`): Treasury, BLS, NOAA, Launch Library 2, JPL, Wikimedia and others, each with a saved
 fixture, plausibility bounds and a fixed unit, direction, baseline and carry. Key-required sources are present but not launchable.
@@ -98,7 +103,7 @@ disasters and named private individuals; names that claim to be official; any se
 
 | Tier | Source kind | Admission | What a skeptic verifies | What stays trusted |
 |---|---|---|---|---|
-| 1 | adjudicated market (Kalshi live; Polymarket, Drift BET, Hedgehog stubs) | settled results only; finality window respected; voids never burn | the settled market JSON (public, keyless) and the series' settlement source; the memo's `units` from the rule | Kalshi's adjudication and API availability; the attesters' honesty about the read |
+| 1 | adjudicated market (Kalshi and Polymarket live; Drift BET, Hedgehog stubs) | settled results only; finality window respected; voids never burn | the settled market JSON (public, keyless) and the series' settlement source; the memo's `units` from the rule | Kalshi's adjudication and API availability; the attesters' honesty about the read |
 | 2 | optimistic assertion (UMA, stub) | counts only once settled and not disputed-and-lost | the assertion's settlement on chain | UMA's dispute process |
 | 3 | primary API attested by a TEE or zk job | third-party asset rates allowed from here up | the job definition and the oracle's on-chain record | not wired: Switchboard, the planned provider, ended service on 2026-09-25 |
 | 4 | primary API read by the keeper | no asset rates; one real fixture; plausibility bounds; complete periods only | the exact source row with the `curl` in every receipt | the attesters (quorum 1 at launch: the operator) |

@@ -1,13 +1,15 @@
 import type { Platform } from "@/lib/burnticker/server";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems } from "@/lib/burnticker/catalogue";
 import { ONCHAIN_FACTS, onchainSource } from "@/lib/burnticker/sources/onchain";
-import { driftBetStub, hedgehogStub, polymarketStub, umaStub } from "@/lib/burnticker/sources/stubs";
+import { driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
 import { TIER_LABEL } from "@/lib/burnticker/sources/types";
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import { validateRule, lockRule, ruleStatement, BURNTICKER_RULES_SCHEMA, type LockedRule } from "@/lib/burnticker/rules";
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
+import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
+import { wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { buildLaunchBundle, buildPairBundles, launchProblems, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
@@ -43,7 +45,7 @@ export function catalogueSources(now: number, o: { includeConfig?: boolean } = {
     return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: TIER_LABEL[f.tier], title: f.title, sourceName: f.sourceName, sourceUrl: f.sourceUrl, cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: f.launchable, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
   });
   const onchain = (Object.keys(ONCHAIN_FACTS) as (keyof typeof ONCHAIN_FACTS)[]).map((id) => { const s = onchainSource(id, null); return { id, kind: s.kind, tier: s.tier, tierLabel: TIER_LABEL[s.tier], title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: s.unit, direction: s.direction, baseline: s.baseline, carry: s.carry, valueLabel: s.valueLabel, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }; });
-  const stubs = [polymarketStub(), umaStub(), driftBetStub(), hedgehogStub()].map((s) => ({ id: s.id, kind: s.kind, tier: s.tier, tierLabel: TIER_LABEL[s.tier], title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: null, direction: null, baseline: null, carry: s.carry, valueLabel: null, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }));
+  const stubs = [polymarketCard(), umaStub(), driftBetStub(), hedgehogStub()].map((s) => ({ id: s.id, kind: s.kind, tier: s.tier, tierLabel: TIER_LABEL[s.tier], title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: null, direction: null, baseline: null, carry: s.carry, valueLabel: null, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }));
   return { sources: [...http, ...onchain, ...stubs], tiers: TIER_LABEL, admission: ADMISSION };
 }
 
@@ -123,7 +125,25 @@ export async function kalshiTeams(p: Platform, q: { series?: string | null }): P
   }
 }
 
-/** The back-test of a rule from the venue's own settled history (catalogue rules: the source's frozen fixture). */
+/**
+ * POLYMARKET SEARCH (2026-10-10): Gamma's text search (or a pasted condition id / event slug) → events with their BINARY markets (YES =
+ * the first outcome, NO the second; each a one-shot selector), the event as a recurring selector (`event:<slug>`), and the tags seen on
+ * the hits as recurring selectors (`tag:<slug>`, `tag:<slug>/moneyline` where the hits are games). The refuse list marks refused events;
+ * a refused market is never offered. `impliedYes` is display only.
+ */
+export async function polymarketSearch(p: Platform, q: { q?: string | null; status?: string | null }): Promise<ApiResult> {
+  const query = (q.q ?? "").trim();
+  const status = q.status === "closed" || q.status === "all" ? q.status : "open";
+  if (query.length < 2) return fail(400, "q is required (2+ characters): a team, a person, an event, an event slug or a condition id");
+  try {
+    const r = await p.polymarket.search(query, { status, limit: 10 });
+    return ok({ query, status, venue: "polymarket", events: r.events, markets: r.markets, tags: r.tags, note: "binary markets only: YES = a market's first outcome, NO its second; the result is read from the Conditional Tokens payout vector on Polygon; impliedYes is display only" });
+  } catch (e) {
+    return fail(502, `Polymarket unavailable: ${(e as Error).message.slice(0, 160)}`);
+  }
+}
+
+/** The back-test of a rule from the venue's own settled history (catalogue rules: the source's frozen fixture; Polymarket: Gamma's closed markets). */
 export async function runBacktest(p: Platform, body: { rule?: unknown; months?: unknown }, now = Date.now()): Promise<ApiResult> {
   let locked: LockedRule;
   try { locked = lockRule(body.rule); } catch (e) { return fail(400, (e as Error).message); }
@@ -135,7 +155,8 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
       const pv = previewFromFixture(feed, locked.rule, now);
       return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), backtest: pv, sentence: `${backtestSentence(pv)} (from the feed's frozen fixture, ${pv.window.from} → ${pv.window.to})`, refusals: [], seriesTitle: feed.title, matched: pv.rows.length });
     }
-    if (locked.rule.oracle !== "kalshi") return fail(400, `oracle ${locked.rule.oracle} is not live (kalshi and catalogue are)`);
+    if (locked.rule.oracle === "polymarket") return await polymarketBacktest(p, locked, months);
+    if (locked.rule.oracle !== "kalshi") return fail(400, `oracle ${locked.rule.oracle} is not live (kalshi, polymarket and catalogue are)`);
     const since = new Date(now); since.setUTCMonth(since.getUTCMonth() - months);
     const r = await p.kalshi.settledSince(locked.rule, since.toISOString(), { limitPages: 10 });
     const seriesTicker = locked.rule.series ?? locked.rule.market!.split("-")[0];
@@ -147,6 +168,27 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
   } catch (e) {
     return fail(502, `back-test unavailable: ${(e as Error).message.slice(0, 160)}`);
   }
+}
+
+/**
+ * A Polymarket back-test: the selector's closed markets as GAMMA reports them resolved, over the window (paged; a dense selector says
+ * where the scan stopped), through the same unit engine. Display-grade by design: the keeper reads every result from the Polygon
+ * payout vector instead, and holds a market whose vector is not on chain.
+ */
+async function polymarketBacktest(p: Platform, locked: LockedRule, months: number): Promise<ApiResult> {
+  const key = locked.rule.market ?? locked.rule.series!;
+  const info = await p.polymarket.seriesInfo(key).catch(() => null);
+  if (!info) return fail(404, `Polymarket does not know ${key} (a condition id, tag:<slug> or event:<slug>)`);
+  const at = p.polymarket.clock();   // the client's clock (Date.now() in production; fixed in the fixture tests)
+  const since = new Date(at); since.setUTCMonth(since.getUTCMonth() - months);
+  const r = await p.polymarket.gammaSettled(locked.rule, since.toISOString(), 40);
+  const bt = backtest(locked.rule, r.events, at, months, r.oneShotCloseTime);
+  const refusals = refusalsFor(loadRefuseList(), { titles: [info.title] });
+  const names = locked.rule.market ? { marketTitle: info.title } : { seriesTitle: info.title };
+  return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, names), backtest: bt,
+    sentence: `${backtestSentence(bt)} (from Gamma's closed markets; the keeper reads each result from the Polygon payout vector)`, refusals, seriesTitle: info.title, settlementSourceUrl: POLYGONSCAN_CTF,
+    awaitingFinal: r.awaitingFinal, oracleRefusals: [...r.refusals, ...(r.complete ? [] : [`the scan stopped after ${r.scanned} market(s) before ${since.toISOString().slice(0, 10)}: older settlements are not in this back-test`])],
+    matched: r.events.length, venue: "polymarket", scanComplete: r.complete });
 }
 
 export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule }
@@ -185,7 +227,23 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     if (!info) return { error: fail(502, "the Kalshi series could not be read; try again") };
     seriesTitle = info.title;
     refusals.push(...refusalsFor(list, { titles: [info.title], categories: info.category ? [info.category] : [] }));
-  } else return { error: fail(400, `oracle ${locked.rule.oracle} is not launchable (its adapter is a stub); kalshi and catalogue are live`) };
+  } else if (locked.rule.oracle === "polymarket") {
+    const key = locked.rule.market ?? locked.rule.series!;
+    const info = await p.polymarket.seriesInfo(key).catch(() => null);
+    if (!info) return { error: fail(502, `the Polymarket selector ${key} could not be read (unknown condition id, tag or event, or Gamma did not answer); try again`) };
+    seriesTitle = info.title;
+    refusals.push(...refusalsFor(list, { titles: [info.title] }));
+    if (locked.rule.market) {
+      const m = await p.polymarket.marketByCondition(locked.rule.market).catch(() => null);
+      if (m && !isBinary(m)) return { error: fail(400, `Polymarket market ${key} has ${m.outcomes.length} outcomes — binary markets only in v1`) };
+    } else {
+      // One keeper cycle must cover a week of the selector's closed markets (the scan cap): a denser tag is narrowed or refused.
+      let scan;
+      try { scan = await p.polymarket.candidates(wideRule(locked.rule), { closed: true, sinceIso: new Date(p.polymarket.clock() - 7 * 86_400_000).toISOString() }); }
+      catch (e) { return { error: fail(502, `could not read a week of ${key} from Polymarket to check its density: ${(e as Error).message.slice(0, 120)}`) }; }
+      if (!scan.complete) return { error: fail(400, `the Polymarket selector ${key} settles more than ${p.polymarket.pageCap * p.polymarket.pageSize} markets a week — narrow it with a market type (tag:<tag>/moneyline) or an event pattern (tag:<tag>:<event slug glob>)`) };
+    }
+  } else return { error: fail(400, `oracle ${locked.rule.oracle} is not launchable (its adapter is a stub); kalshi, polymarket and catalogue are live`) };
   if (refusals.length) return { error: fail(403, `refused: ${refusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals }) };
   if (p.registry.tickerTaken(input.ticker)) return { error: fail(409, `ticker ${input.ticker} is taken`, { code: "ticker-taken" }) };
   if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `mint ${o.mint} is already registered`, { code: "mint-taken" }) };

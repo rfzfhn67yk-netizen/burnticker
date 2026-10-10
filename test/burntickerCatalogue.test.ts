@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { CATALOGUE, CatalogueAdapter, catalogue, feedById, feedRuleProblems, fixtureReadings, loadFixture, loadSourcesConfig, previewFromFixture } from "@/lib/burnticker/catalogue";
 import { expandUrl, jsonPath, parseBody, parseCsv, toPeriod } from "@/lib/burnticker/sources/attestedHttp";
 import { onchainSource, type SolanaRpcPort } from "@/lib/burnticker/sources/onchain";
-import { ctfOutcome, umaOutcome, driftBetStub, hedgehogStub, polymarketStub, umaStub } from "@/lib/burnticker/sources/stubs";
+import { ctfOutcome, umaOutcome, driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
 import { TIER_LABEL } from "@/lib/burnticker/sources/types";
 import { validateRule } from "@/lib/burnticker/rules";
 import { unitSteps } from "@/lib/burnticker/units";
@@ -134,8 +134,12 @@ describe("onchain and the stubs", () => {
     assert.equal((await s.settledSince(validateRule(DEBT_RULE), "2026-10-10")).events.length, 0);
     assert.equal(onchainSource("solana.slot", null).launchable.ok, false);
   });
-  test("stubs refuse to feed a rule and say why; the CTF payout vector and UMA assertion decoders are pure and exact", async () => {
-    for (const s of [polymarketStub(), umaStub(), driftBetStub(), hedgehogStub()]) { assert.equal(s.launchable.ok, false); await assert.rejects(s.settledSince(validateRule(DEBT_RULE), null)); }
+  test("stubs refuse to feed a rule and say why (Polymarket is live and its card says so); the CTF payout vector and UMA assertion decoders are pure and exact", async () => {
+    for (const s of [umaStub(), driftBetStub(), hedgehogStub()]) { assert.equal(s.launchable.ok, false); await assert.rejects(s.settledSince(validateRule(DEBT_RULE), null)); }
+    // Polymarket is live since 2026-10-10 (oracle/polymarket.ts): its catalogue card is launchable, tier 1, and reads nothing itself.
+    const pm = polymarketCard();
+    assert.equal(pm.launchable.ok, true); assert.equal(pm.tier, 1); assert.equal(pm.kind, "market");
+    await assert.rejects(pm.settledSince(validateRule(DEBT_RULE), null), /PolymarketClient/);
     assert.match(driftBetStub().launchable.why!, /UNVERIFIED/); assert.match(hedgehogStub().flags.join(" "), /unverified/);
     assert.equal(ctfOutcome([BigInt(1), BigInt(0)], BigInt(1)), "yes");
     assert.equal(ctfOutcome([BigInt(0), BigInt(1)], BigInt(1)), "no");

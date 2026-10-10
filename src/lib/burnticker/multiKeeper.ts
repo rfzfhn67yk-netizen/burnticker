@@ -12,8 +12,9 @@ import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type B
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
  *
- *   1. FETCH every selector key in use that is due (a Kalshi series+kind, one market, or a feed), through its oracle adapter, with the
- *      filter cleared so the whole series is stored once; write the settled readings (an oracle that changes a recorded result holds
+ *   1. FETCH every selector key in use that is due (a Kalshi series+kind, one market, a Polymarket tag/event/market, or a feed),
+ *      through its oracle adapter, with the filter cleared so the whole series is stored once (a Polymarket reading also carries its
+ *      on-chain proof: the CTF payout vector's condition id and block, and is written only once the chain has the payout); write the settled readings (an oracle that changes a recorded result holds
  *      the key — the registry refuses the write). Finality is the adapter's job; the keeper never sees a price.
  *   2. PLAN every live token: its readings after its baseline that its filter admits and that it has not yet seen, through the shared
  *      unit engine (the catalogue's carry policy where the feed says so), one receipt row per event — planned (something to crank),
@@ -34,7 +35,8 @@ import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type B
 export interface KeeperDeps {
   registry: Registry;
   program: BurnProgramClient;
-  oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter };
+  /** Polymarket (2026-10-10) is optional so a keeper without it holds Polymarket keys with an error instead of misreading them. */
+  oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket?: OracleAdapter };
   /** The keeper's data key (attester v1); recorded on every reading. */
   attester: string;
   log: (line: string) => void;
@@ -53,9 +55,13 @@ export type ExecOutcome =
   | { mint: string; eventId: string; outcome: "skipped" | "exhausted" | "waiting" | "error" | "dry-run"; why: string };
 export interface CycleReport { fetched: FetchReport[]; planned: { mint: string; eventId: string; status: string }[]; executed: ExecOutcome[]; errors: string[] }
 
-const oracleFor = (d: KeeperDeps, key: string): OracleAdapter => (key.startsWith("catalogue:") ? d.oracles.catalogue : d.oracles.kalshi);
+const oracleFor = (d: KeeperDeps, key: string): OracleAdapter => {
+  if (key.startsWith("catalogue:")) return d.oracles.catalogue;
+  if (key.startsWith("polymarket:")) { if (!d.oracles.polymarket) throw new Error("no Polymarket adapter configured on this keeper"); return d.oracles.polymarket; }
+  return d.oracles.kalshi;
+};
 const carryFor = (rule: BurnRule): CarryPolicy => (rule.oracle === "catalogue" && rule.series ? feedById(rule.series)?.carry ?? "none" : "none");
-/** A selector's read cadence: the feed's pollEverySec, or the Kalshi poll (5 min). Exported for the ops alerts (a stall = 2× this with no fetch). */
+/** A selector's read cadence: the feed's pollEverySec, or the market poll (5 min; Kalshi and Polymarket alike). Exported for the ops alerts (a stall = 2× this with no fetch). */
 export const pollMsFor = (d: Pick<KeeperDeps, "kalshiPollMs">, rule: BurnRule): number => (rule.oracle === "catalogue" && rule.series ? (feedById(rule.series)?.pollEverySec ?? 3600) * 1000 : d.kalshiPollMs ?? 5 * 60_000);
 
 /** Readings for the live tokens' keys, each key once per schedule. */

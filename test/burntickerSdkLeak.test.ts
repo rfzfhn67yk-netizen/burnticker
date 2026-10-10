@@ -33,6 +33,7 @@ const ALLOWED_BURNKEEPER: Record<string, string> = {
   "src/lib/burnKeeper/burnPool.ts": "burnPoolFor: the burn program's fee PDA = LaunchLab's creator (review H-2)",
   "src/lib/burnKeeper/programPort.ts": "the import-free ProgramPort types BurnProgramClient.port() returns (2026-10-10)",
   "src/lib/burnKeeper/fakeProgram.ts": "FakeBurnProgram's in-memory burn_receipts program (the program's own math mirror; no keeper cycle)",
+  "src/lib/burnKeeper/attesters/polymarketOnchain.ts": "the import-free Polygon CTF payout-vector reader (three eth_calls) a Polymarket receipt is verified against (2026-10-10)",
 };
 /** Platform modules that must never be in the SDK: server wiring, storage, page rendering, filesystem config readers, the keeper loop. */
 const FORBIDDEN_BURNTICKER = ["server.ts", "registry.ts", "tokenPage.ts", "trust.ts", "multiKeeper.ts", "audit.ts", "catalogue/index.ts", "oracle/refuse.ts", "alerts.ts", "alertIntake.ts", "checkin.ts", "ownTokensSync.ts", "api/"];

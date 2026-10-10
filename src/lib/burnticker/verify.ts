@@ -1,5 +1,5 @@
 import { buybackSpend } from "@/lib/burnKeeper/rules";
-import { rulesFromText, type BurnMapping, type BurnRule } from "@/lib/burnticker/rules";
+import { POLY_MARKET_RE, rulesFromText, type BurnMapping, type BurnRule } from "@/lib/burnticker/rules";
 import { parseReceiptMemo } from "@/lib/burnticker/receipt";
 import { parseBuybackMemo as parseProgramBuybackMemo, parseDebtMemo as parseProgramVaultMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend as programBuybackSpend } from "@/lib/burnReceipts/math";
@@ -7,6 +7,8 @@ import { unitStep, type CarryPolicy, type SettledEvent } from "@/lib/burnticker/
 import { KALSHI_API, marketApiUrl, parseMarketsBody, resolveSelector } from "@/lib/burnticker/oracle/kalshi";
 import { expandUrl, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
+import { parseMarketsBody as parseGammaMarkets, resolvePolymarket, settledMarketUrl } from "@/lib/burnticker/oracle/polymarket";
+import { readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 
 /**
  * VERIFY ONE RECEIPT (2026-10-09; shared by the public API's /verify route and the SDK's verifyReceipt). A receipt is checked from
@@ -16,8 +18,8 @@ import type { FetchLike } from "@/lib/burnticker/oracle/types";
  *   memo     the on-chain memo (v3) parses and says the same event, units, result and value as the receipt — or, for a receipt executed
  *            by the burn_receipts program (2026-10-10), the PROGRAM's memo (v2 buyback / v1 vault) for the reading the receipt was counted
  *            into: the token's prefix, the reading date, a unit count that includes this receipt's, counter now − prev = units;
- *   source   the settled result/value re-read from the ORIGINAL source (Kalshi's public API, or the feed's exact source URL) equals the
- *            receipt's — fetched by the verifier, never taken from us;
+ *   source   the settled result/value re-read from the ORIGINAL source (Kalshi's public API, the Polymarket market's payout vector on
+ *            Polygon, or the feed's exact source URL) equals the receipt's — fetched by the verifier, never taken from us;
  *   units    the rule applied to that settled result (and the previous value / carried remainder the receipt states) gives the units;
  *   spend    buyback: spend = pool × (1 − (1 − f)^units), the keeper's exact integer formula, equals the memo's spent; burn ≥ got;
  *   chain    the transaction at the receipt's signature exists, succeeded, and wrote exactly this memo.
@@ -137,6 +139,24 @@ export async function kalshiSourceReading(rule: BurnRule, eventId: string, fetch
     const body = await res.json() as { market?: unknown; markets?: unknown };
     const { markets } = parseMarketsBody(rule.kind === "binary" ? { markets: [body.market] } : body);
     return { events: resolveSelector(rule, markets, { nowMs, sinceIso: null }).events, error: null, url };
+  } catch (e) { return { events: null, error: (e as Error).message.slice(0, 160), url }; }
+}
+
+/**
+ * Re-read a Polymarket result (2026-10-10): the market from Gamma (built from the condition id — the receipt supplies no URL) for its
+ * labels, event and time, and the AUTHORITATIVE payout vector from the Conditional Tokens contract on Polygon (eth_call through the
+ * given RPC fetch, or the public endpoints). A market whose vector is not on chain comes back "not listed" (ok: null).
+ */
+export async function polymarketSourceReading(rule: BurnRule, eventId: string, o: { fetchImpl: FetchLike; rpcFetch?: RpcFetchLike; rpcUrls?: string[]; readChain?: (conditionId: string) => Promise<ConditionResolution> }): Promise<SourceReading> {
+  if (!POLY_MARKET_RE.test(eventId)) return { events: null, error: `${eventId} is not a Polymarket condition id`, url: null };
+  const url = settledMarketUrl(eventId);
+  try {
+    const res = await o.fetchImpl(url, { headers: { accept: "application/json" } });
+    if (!res.ok) return { events: null, error: `Gamma HTTP ${res.status}`, url };
+    const m = parseGammaMarkets(await res.json()).find((x) => x.conditionId === eventId);
+    if (!m) return { events: [], error: null, url };
+    const chain = o.readChain ? await o.readChain(eventId) : await readConditionResolution(eventId, { fetchImpl: o.rpcFetch, rpcUrls: o.rpcUrls });
+    return { events: resolvePolymarket(rule, [{ market: m, chain }], { sinceIso: null }).events, error: null, url: `${url} + eth_call ${chain.contract} on Polygon (block ${chain.blockNumber ?? "latest"})` };
   } catch (e) { return { events: null, error: (e as Error).message.slice(0, 160), url }; }
 }
 

@@ -27,8 +27,13 @@ export interface SettledEvent {
   title: string | null;
   /** Where a stranger checks it: Kalshi's market page / settlement source, or the feed's exact source row. */
   sourceUrl: string;
-  /** How a scalar value was read ("expiration_value", "ladder-between", …); null for binaries and feeds. */
+  /** How a scalar value was read ("expiration_value", "ladder-between", …), or how a Polymarket result was read ("ctf-payout: …"). */
   method?: string | null;
+  /**
+   * Where the result can be re-read without trusting us, beyond `sourceUrl`: for Polymarket the on-chain locator of the payout vector
+   * ("polygon:137/ctf:<contract>/condition:<id>/payouts:1,0/block:<n>"); null/absent for Kalshi and feeds. Never an input to a rule.
+   */
+  proof?: string | null;
 }
 
 export interface UnitStep {

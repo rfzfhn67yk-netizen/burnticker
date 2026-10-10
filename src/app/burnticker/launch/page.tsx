@@ -20,8 +20,11 @@ import { DEFAULT_FRACTION, headToHead, matchupRules, teamCoinRule, teamCoinSente
  *   MATCHUP PAIR  league → upcoming game (or search a team) → both sides prefilled → "this game only" (default: one market, side B
  *                 derived by inversion — a partition, a registered pair) or "every game this season" (each side its own team's games
  *                 — two independent records, launched as two coins) → back-tests side by side → review → two bundles.
- *   ANY MARKET    one search box for teams, people, shows, elections (event-level search merged with series) → a market or a series
- *                 → rule → name → review → launch.
+ *   ANY MARKET    one search box for teams, people, shows, elections: Kalshi (event-level search merged with series) and Polymarket
+ *                 (Gamma search: events with their binary markets, the event and its tags as recurring selectors), each result with a
+ *                 venue chip → a market or a series → rule → name → review → launch. Team coins and matchup pairs stay Kalshi-only in
+ *                 v1: a Polymarket game is one binary market whose YES is whichever team its title lists first (no per-team leg, no
+ *                 team-abbreviation field), so "every <team> loss" has no fixed side (oracle/polymarket.ts explains).
  *   ADVANCED      first-party feeds and the custom Kalshi selector (series + ticker filter, or a pasted market).
  *
  * Progress ("Step 2 of 4"), back buttons, state kept across a refresh (sessionStorage), a Devnet badge from the server's cluster.
@@ -30,7 +33,7 @@ import { DEFAULT_FRACTION, headToHead, matchupRules, teamCoinRule, teamCoinSente
  */
 
 type Step = "choose" | "team" | "pick" | "rule" | "name" | "review" | "launch";
-/** team = one team's every game; pair = two teams; single = any Kalshi market; feed = advanced (first-party feed / custom selector). */
+/** team = one team's every game; pair = two teams; single = any Kalshi or Polymarket market; feed = advanced (first-party feed / custom selector). */
 type Flow = "team" | "pair" | "single" | "feed";
 const ORDER: Record<Flow, Step[]> = { team: ["team", "name", "review", "launch"], pair: ["pick", "name", "rule", "review", "launch"], single: ["pick", "rule", "name", "review", "launch"], feed: ["pick", "rule", "name", "review", "launch"] };
 const LABELS: Record<Flow, Partial<Record<Step, string>>> = {
@@ -46,6 +49,11 @@ interface Bundle { ready: boolean; pending: string[]; mint: string; ticker: stri
 interface League { id: string; label: string; series: { ticker: string; title: string }[] }
 interface Team { abbr: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null } | null; record: { w: number; l: number; d: number; since: string } }
 interface Side { abbr: string; marketTicker: string; label: string; nickname: string | null; name: string; ticker: string }
+interface PolyMarket { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null }
+interface PolyEvent { slug: string; title: string; url: string; endDate: string | null; closed: boolean; markets: PolyMarket[]; marketCount: number; refused: string[] }
+interface PolyTag { slug: string; label: string; events: number; series: string[] }
+interface PolyFound { events: PolyEvent[]; tags: PolyTag[]; markets: PolyMarket[] }
+type Venue = "kalshi" | "polymarket";
 interface EventHit { eventTicker: string; seriesTicker: string; title: string; subTitle: string | null; category: string | null; expectedAt: string | null; closeTime: string | null; markets: { ticker: string; suffix: string; label: string; status: string }[]; matchedSides: string[]; pair: { a: Side; b: Side; tieMarket: string | null } | null; refused: string[] }
 
 const SCHEMA = "burnticker.rules/v1";
@@ -71,11 +79,12 @@ export default function LaunchWizard() {
   const [game, setGame] = useState<EventHit | null>(null), [swap, setSwap] = useState(false), [pairMode, setPairMode] = useState<"game" | "season">("game");
   // any-market search (events + series)
   const [q2, setQ2] = useState(""), [found, setFound] = useState<{ results: Series[]; events: EventHit[]; ranking: "events" | "series" } | null>(null), [findBusy, setFindBusy] = useState(false);
+  const [polyFound, setPolyFound] = useState<PolyFound | null>(null), [polyErr, setPolyErr] = useState<string | null>(null);
   // advanced: custom selector + first-party feeds
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Series[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
-  const [pick, setPick] = useState<{ oracle: "kalshi" | "catalogue"; series: string | null; market: string | null; title: string; source?: Source } | null>(null);
+  const [pick, setPick] = useState<{ oracle: "kalshi" | "catalogue" | "polymarket"; series: string | null; market: string | null; title: string; source?: Source; yes?: string; no?: string } | null>(null);
   const [filter, setFilter] = useState("");
   // the generic rule (any market / advanced)
   const [kind, setKind] = useState<"binary" | "scalar">("binary");
@@ -137,9 +146,15 @@ export default function LaunchWizard() {
   }, [flow, leagueSeries, gameQ]);
   // any-market search
   useEffect(() => {
-    if (flow !== "single" || q2.trim().length < 2) { setFound(null); return; }
+    if (flow !== "single" || q2.trim().length < 2) { setFound(null); setPolyFound(null); return; }
     setFindBusy(true);
-    const t = setTimeout(() => { getJson<{ results: Series[]; events: EventHit[]; ranking: "events" | "series" }>(`${V1}/kalshi/search?q=${encodeURIComponent(q2.trim())}`).then((j) => setFound({ results: j.results ?? [], events: j.events ?? [], ranking: j.ranking ?? "series" })).catch(() => setFound({ results: [], events: [], ranking: "series" })).finally(() => setFindBusy(false)); }, 400);
+    const t = setTimeout(() => {
+      const qs = encodeURIComponent(q2.trim());
+      // Both venues at once; either may fail without hiding the other.
+      const kalshi = getJson<{ results: Series[]; events: EventHit[]; ranking: "events" | "series" }>(`${V1}/kalshi/search?q=${qs}`).then((j) => setFound({ results: j.results ?? [], events: j.events ?? [], ranking: j.ranking ?? "series" })).catch(() => setFound({ results: [], events: [], ranking: "series" }));
+      const poly = getJson<PolyFound>(`${V1}/polymarket/search?q=${qs}`).then((j) => { setPolyFound({ events: j.events ?? [], tags: j.tags ?? [], markets: j.markets ?? [] }); setPolyErr(null); }).catch((e) => { setPolyFound({ events: [], tags: [], markets: [] }); setPolyErr(String((e as Error).message)); });
+      void Promise.allSettled([kalshi, poly]).then(() => setFindBusy(false));
+    }, 400);
     return () => clearTimeout(t);
   }, [flow, q2]);
 
@@ -147,9 +162,12 @@ export default function LaunchWizard() {
   const genericRule: BurnRule | null = useMemo(() => {
     if (!pick) return null;
     const mapping = (f: number, tok: number) => (mode === "buyback" ? { fractionOfPool: Number(f.toFixed(4)) } : { tokens: Math.round(tok) });
-    const base = { schema: SCHEMA, oracle: pick.oracle, series: pick.series, market: pick.market, filter: pick.market || !filter.trim() ? {} : { tickerIncludes: filter.trim().toUpperCase() }, onVoid: "skip" as const, floorUsd: "1", reserveSol: "0.02", vault: mode === "vault" ? { share: vaultShare, vestDays: 365, cliffDays: 0 } : null };
+    // Kalshi filters by ticker text; Polymarket by a regular expression over the market question (it has no tickers).
+    // (A question regex left over from a Polymarket pick is not a ticker filter, so a non-ticker text is ignored for Kalshi.)
+    const flt = pick.market || !filter.trim() ? {} : pick.oracle === "polymarket" ? { titleRegex: filter.trim() } : /^[-A-Za-z0-9._]{1,32}$/.test(filter.trim()) ? { tickerIncludes: filter.trim().toUpperCase() } : {};
+    const base = { schema: SCHEMA, oracle: pick.oracle, series: pick.series, market: pick.market, filter: flt, onVoid: "skip" as const, floorUsd: "1", reserveSol: "0.02", vault: mode === "vault" ? { share: vaultShare, vestDays: 365, cliffDays: 0 } : null };
     if (pick.oracle === "catalogue" && pick.source?.unit) return { ...base, kind: "scalar", scalar: { unit: pick.source.unit.size, perUnit: mapping(perUnit, tokensYes), baseline: pick.source.baseline!, direction: pick.source.direction! }, binary: null } as BurnRule;
-    if (kind === "binary") {
+    if (kind === "binary" || pick.oracle === "polymarket") {
       const main = mapping(onYes, tokensYes), other = onNoEnabled ? mapping(onNo, Math.round(tokensYes / 4)) : null;
       return { ...base, kind: "binary", binary: burnOn === "yes" ? { onYes: main, onNo: other } : { onYes: other, onNo: main }, scalar: null } as BurnRule;
     }
@@ -254,6 +272,9 @@ export default function LaunchWizard() {
       </div>
     </div>
   );
+  const chip = (v: Venue) => <span className={`ml-2 inline-block rounded px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide ring-1 ${v === "kalshi" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40" : "bg-indigo-500/15 text-indigo-300 ring-indigo-500/40"}`}>{v === "kalshi" ? "Kalshi" : "Polymarket"}</span>;
+  const pickPoly = (m: PolyMarket) => { setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setFilter(""); next(); };
+  const pickPolySeries = (series: string, title: string) => { setPick({ oracle: "polymarket", series, market: null, title }); setKind("binary"); setFilter(series.includes("/moneyline") ? "^[^:]+ vs\\. [^:]+$" : ""); next(); };
   const badge = (abbr: string) => <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 font-mono text-xs font-bold tracking-tight text-amber-300 ring-1 ring-neutral-700">{abbr}</span>;
   const teamFilter = (t: Team) => { const s = teamQ.trim().toLowerCase(); if (!s) return true; if (`${t.name} ${t.abbr} ${t.city} ${t.nickname ?? ""}`.toLowerCase().includes(s)) return true; return aliasLookup(teamQ).some((a) => a.abbr === t.abbr && a.series === leagueSeries); };
 
@@ -269,7 +290,7 @@ export default function LaunchWizard() {
 
       {step !== "choose" && (
         <div aria-label="Progress">
-          <div className="flex items-center justify-between text-xs text-neutral-400"><span>Step {idx + 1} of {order.length} · <span className="text-neutral-200">{LABELS[flow][step]}</span></span><span>{flow === "team" ? "Team coin" : flow === "pair" ? "Matchup pair" : flow === "single" ? "Any Kalshi market" : "Advanced"}</span></div>
+          <div className="flex items-center justify-between text-xs text-neutral-400"><span>Step {idx + 1} of {order.length} · <span className="text-neutral-200">{LABELS[flow][step]}</span></span><span>{flow === "team" ? "Team coin" : flow === "pair" ? "Matchup pair" : flow === "single" ? "Any market" : "Advanced"}</span></div>
           <div className="mt-1 h-1.5 rounded bg-neutral-800"><div className="h-1.5 rounded bg-amber-400" style={{ width: `${((idx + 1) / order.length) * 100}%` }} /></div>
         </div>
       )}
@@ -281,7 +302,7 @@ export default function LaunchWizard() {
             {([
               ["team", "Team coin", "One team. Burns on every win, or on every loss — you pick.", "e.g. $EAGLES burns every time the Eagles lose"],
               ["pair", "Matchup pair", "Two teams, two coins. This game only, or the whole season.", "e.g. $EAGLES vs $JAGUARS — the loser burns"],
-              ["single", "Any Kalshi market", "Search by name: a player, a show, an election, a city's weather.", "e.g. CPI, Denver snow, the Oscars"],
+              ["single", "Any market", "Search Kalshi and Polymarket by name: a player, a show, an election, a city's weather.", "e.g. CPI, Denver snow, the Oscars"],
             ] as const).map(([f, title, body, eg]) => (
               <button key={f} onClick={() => begin(f)} className="text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none">
                 <div className="text-lg font-semibold">{title}</div>
@@ -419,12 +440,12 @@ export default function LaunchWizard() {
       {flow === "single" && step === "pick" && (
         <section className="space-y-4">
           <div className={card + " space-y-3"}>
-            <h2 className="font-medium">Search Kalshi by name</h2>
+            <h2 className="font-medium">Search Kalshi and Polymarket by name</h2>
             <input autoFocus className={input + " text-base py-2"} placeholder="a team, a player, a person, a show, a city, an election…" value={q2} onChange={(e) => setQ2(e.target.value)} />
             {findBusy && <p className="text-sm text-neutral-500">Searching…</p>}
             {found && (() => {
               const evs = (
-                <div key="events" className="space-y-2">{found.events.length > 0 && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Games and events</h3>}{found.events.map((e) => (
+                <div key="events" className="space-y-2">{found.events.length > 0 && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Games and events{chip("kalshi")}</h3>}{found.events.map((e) => (
                   <div key={e.eventTicker} className="rounded border border-neutral-800 p-2">
                     <div className="text-sm font-medium">{e.title} <span className="text-xs text-neutral-500">{e.subTitle ?? ""} · result ~{denver(e.expectedAt)}</span></div>
                     {e.refused.length > 0 ? <p className="text-xs text-red-400">REFUSED: {e.refused.join("; ")}</p> : <>
@@ -435,12 +456,31 @@ export default function LaunchWizard() {
                 ))}</div>
               );
               const ser = (
-                <div key="series" className="space-y-1">{found.results.length > 0 && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Recurring series (every future market)</h3>}{found.results.map((h) => (
+                <div key="series" className="space-y-1">{found.results.length > 0 && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Recurring series (every future market){chip("kalshi")}</h3>}{found.results.map((h) => (
                   <div key={h.ticker} className="flex items-start justify-between gap-2 py-1"><div><div className="text-sm"><code>{h.ticker}</code> {h.title}</div><div className="text-xs text-neutral-500">{h.category} · {h.frequency ?? "—"}{h.refused.length ? ` · REFUSED: ${h.refused.join("; ")}` : ""}</div></div>
                     {h.refused.length === 0 && <button className="text-xs underline" onClick={() => { setPick({ oracle: "kalshi", series: h.ticker, market: null, title: h.title }); next(); }}>every market →</button>}</div>
                 ))}</div>
               );
-              return <div className="space-y-4">{found.ranking === "events" ? [evs, ser] : [ser, evs]}{!found.events.length && !found.results.length && <p className="text-sm text-neutral-500">Nothing on Kalshi matches “{q2}”. Try a team, a city, a series ticker (KXCPI), or a person&apos;s last name.</p>}</div>;
+              const pm = polyFound;
+              const poly = pm && (
+                <div key="polymarket" className="space-y-2">
+                  {(pm.events.length > 0 || pm.markets.length > 0) && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Events and markets{chip("polymarket")}</h3>}
+                  {pm.markets.map((m) => <div key={m.conditionId} className="flex items-center justify-between gap-2 rounded border border-neutral-800 p-2 text-sm"><span>{m.question} <span className="text-xs text-neutral-500">YES = {m.yes}, NO = {m.no}</span></span><button className="text-xs underline" onClick={() => pickPoly(m)}>burn on this market →</button></div>)}
+                  {pm.events.map((e) => (
+                    <div key={e.slug} className="rounded border border-neutral-800 p-2">
+                      <div className="text-sm font-medium">{e.title}{chip("polymarket")} <span className="text-xs text-neutral-500">ends ~{denver(e.endDate)}</span></div>
+                      {e.refused.length > 0 ? <p className="text-xs text-red-400">REFUSED: {e.refused.join("; ")}</p> : <>
+                        <ul className="mt-1 text-xs text-neutral-400 space-y-0.5">{e.markets.map((m) => <li key={m.conditionId} className="flex items-center justify-between gap-2"><span>{m.question} <span className="text-neutral-500">(YES = {m.yes}, NO = {m.no})</span></span><button className="underline" onClick={() => pickPoly(m)}>burn on this market →</button></li>)}</ul>
+                        {e.marketCount > 1 && <button className="mt-1 text-xs underline" onClick={() => pickPolySeries(`event:${e.slug}`, e.title)}>every market of this event ({e.marketCount}) →</button>}
+                      </>}
+                    </div>
+                  ))}
+                  {pm.tags.length > 0 && <div className="text-xs text-neutral-400"><span className="text-neutral-500">Recurring on Polymarket:</span> {pm.tags.flatMap((t) => t.series.map((sr) => <button key={sr} className="mr-2 underline" onClick={() => pickPolySeries(sr, `${t.label}${sr.endsWith("/moneyline") ? " games (moneyline)" : ""}`)}>{sr.endsWith("/moneyline") ? `every ${t.label} game` : `every ${t.label} market`}</button>))}</div>}
+                  {polyErr && <p className="text-xs text-neutral-500">Polymarket is not answering right now ({polyErr}).</p>}
+                </div>
+              );
+              const none = !found.events.length && !found.results.length && !(pm && (pm.events.length || pm.markets.length));
+              return <div className="space-y-4">{found.ranking === "events" ? [evs, ser] : [ser, evs]}{poly}{none && <p className="text-sm text-neutral-500">Nothing on Kalshi or Polymarket matches “{q2}”. Try a team, a city, a series ticker (KXCPI), or a person&apos;s last name.</p>}<p className="text-xs text-neutral-600">Team coins and matchup pairs use Kalshi&apos;s per-team game markets; a Polymarket game is one market whose YES is whichever team its title lists first.</p></div>;
             })()}
           </div>
           {navRow(null)}
@@ -478,12 +518,14 @@ export default function LaunchWizard() {
       {/* ------------------------------------------------- the generic rule step (any market / advanced) ------------------------------------------------- */}
       {(flow === "single" || flow === "feed") && step === "rule" && pick && rule && (
         <section className="space-y-4">
-          <div className={card}><div className="text-sm">Market: <strong>{pick.title}</strong> <span className="text-neutral-500">({pick.oracle === "kalshi" ? (pick.market ? `market ${pick.market}` : `series ${pick.series}`) : `source ${pick.series}`})</span></div>
+          <div className={card}><div className="text-sm">Market: <strong>{pick.title}</strong>{pick.oracle !== "catalogue" && chip(pick.oracle)} <span className="text-neutral-500">({pick.oracle === "kalshi" ? (pick.market ? `market ${pick.market}` : `series ${pick.series}`) : pick.oracle === "polymarket" ? (pick.market ? `condition ${pick.market.slice(0, 10)}…` : pick.series) : `source ${pick.series}`})</span></div>
             {pick.oracle === "kalshi" && !pick.market && <label className="block text-xs mt-2">Only markets whose ticker contains <input className={input + " inline w-40 ml-1"} placeholder="-DEN" value={filter} onChange={(e) => setFilter(e.target.value)} /> <span className="text-neutral-500">(optional; &quot;-DEN&quot; = Denver&apos;s own leg — the back-test lists what matched)</span></label>}
+            {pick.oracle === "polymarket" && !pick.market && <label className="block text-xs mt-2">Only markets whose question matches <input className={input + " inline w-56 ml-1 font-mono"} placeholder="^[^:]+ vs\. [^:]+$" value={filter} onChange={(e) => setFilter(e.target.value)} /> <span className="text-neutral-500">(optional regular expression; the back-test lists what matched)</span></label>}
+            {pick.oracle === "polymarket" && <p className="text-xs text-neutral-400 mt-2">{pick.market ? `YES = ${pick.yes ?? "the first outcome"}, NO = ${pick.no ?? "the second outcome"}.` : "YES = each market's first outcome, NO its second (for a game: the team its title lists first, which changes from game to game)."} The result is the payout Polygon&apos;s Conditional Tokens contract records; a 50-50 resolution burns nothing.</p>}
           </div>
           <div className={card + " space-y-3"}>
-            {pick.oracle === "kalshi" && kind === "binary" && <label className="block text-sm">Burn when it settles <select className={input + " inline w-24 ml-1"} value={burnOn} onChange={(e) => setBurnOn(e.target.value as "yes" | "no")}><option value="yes">YES</option><option value="no">NO</option></select></label>}
-            {pick.oracle === "kalshi" && kind === "binary" && <label className="block text-sm">Each burn spends {mode === "buyback" ? pct(onYes) : `${tokensYes.toLocaleString()} tokens`} {mode === "buyback" ? "of the burn pool" : ""}
+            {pick.oracle !== "catalogue" && kind === "binary" && <label className="block text-sm">Burn when it settles <select className={input + " inline w-48 ml-1"} value={burnOn} onChange={(e) => setBurnOn(e.target.value as "yes" | "no")}><option value="yes">YES{pick.yes ? ` (${pick.yes})` : ""}</option><option value="no">NO{pick.no ? ` (${pick.no})` : ""}</option></select></label>}
+            {pick.oracle !== "catalogue" && kind === "binary" && <label className="block text-sm">Each burn spends {mode === "buyback" ? pct(onYes) : `${tokensYes.toLocaleString()} tokens`} {mode === "buyback" ? "of the burn pool" : ""}
               {mode === "buyback" ? <input type="range" min={0.01} max={0.1} step={0.005} value={onYes} onChange={(e) => setOnYes(Number(e.target.value))} className="w-full" /> : <input type="range" min={100000} max={20000000} step={100000} value={tokensYes} onChange={(e) => setTokensYes(Number(e.target.value))} className="w-full" />}</label>}
             <details className="text-sm"><summary className="cursor-pointer text-neutral-300">More options</summary>
               <div className="mt-2 space-y-3">
@@ -492,7 +534,7 @@ export default function LaunchWizard() {
                   <label>Burn from <select className={input + " inline w-40 ml-1"} value={mode} onChange={(e) => setMode(e.target.value as "buyback" | "vault")}><option value="buyback">the fee pool (buyback)</option><option value="vault">a vesting vault</option></select></label>
                 </div>
                 {mode === "vault" && <label className="block">Vault share of supply: {pct(vaultShare)} <input type="range" min={0.1} max={0.3} step={0.01} value={vaultShare} onChange={(e) => setVaultShare(Number(e.target.value))} className="w-full" /></label>}
-                {pick.oracle === "kalshi" && kind === "binary" && <label className="block"><input type="checkbox" checked={onNoEnabled} onChange={(e) => setOnNoEnabled(e.target.checked)} /> also burn on {burnOn === "yes" ? "NO" : "YES"}{onNoEnabled && mode === "buyback" && <>: {pct(onNo)} <input type="range" min={0.01} max={0.1} step={0.005} value={onNo} onChange={(e) => setOnNo(Number(e.target.value))} className="w-full" /></>}</label>}
+                {pick.oracle !== "catalogue" && kind === "binary" && <label className="block"><input type="checkbox" checked={onNoEnabled} onChange={(e) => setOnNoEnabled(e.target.checked)} /> also burn on {burnOn === "yes" ? "NO" : "YES"}{onNoEnabled && mode === "buyback" && <>: {pct(onNo)} <input type="range" min={0.01} max={0.1} step={0.005} value={onNo} onChange={(e) => setOnNo(Number(e.target.value))} className="w-full" /></>}</label>}
                 {(kind === "scalar" || pick.oracle === "catalogue") && <>
                   {pick.oracle === "kalshi" && <>
                     <label className="block">Unit size: <input className={input + " inline w-28 ml-1"} type="number" step="any" value={unit} onChange={(e) => setUnit(Number(e.target.value))} /></label>
@@ -553,7 +595,7 @@ export default function LaunchWizard() {
                 <div key={label}><div className="text-xs text-neutral-400">{label}{b ? ` · sha256 ${b.sha256}` : ""}</div>{b && <p className="text-xs">{b.statement}</p>}<pre className="text-xs bg-neutral-950 border border-neutral-800 rounded p-2 overflow-x-auto mt-1">{b?.text ?? JSON.stringify(r, null, 2)}</pre></div>
               ))}
               {pairOn && !season && <p className="text-xs text-neutral-500">A registered rivalry pair: the pairId is added to both canonical rules at launch, each side hashed on its own; two bundles signed in sequence (A first). Pair page: /burnticker/p/&lt;pairId&gt;.</p>}
-              <pre className="text-xs bg-neutral-950 border border-neutral-800 rounded p-2 overflow-x-auto">{`BT|${ticker || "TICKER"}|<market>|oracle=kalshi|market=<ticker>|result=<yes|no|void>|settled=<time>|src=<settlement source>|value=<n|->|units=<n>|pool=<lamports>|spent=<lamports>|got=<tokens>|burn=<tokens>|swap=<sig12|none>|rules=sha256:<12>|v3`}</pre>
+              <pre className="text-xs bg-neutral-950 border border-neutral-800 rounded p-2 overflow-x-auto">{`BT|${ticker || "TICKER"}|<market>|oracle=${rule.oracle}|market=<${rule.oracle === "polymarket" ? "condition id" : "ticker"}>|result=<yes|no|void>|settled=<time>|src=<settlement source>|value=<n|->|units=<n>|pool=<lamports>|spent=<lamports>|got=<tokens>|burn=<tokens>|swap=<sig12|none>|rules=sha256:<12>|v3`}</pre>
               <ul className="list-disc pl-5 space-y-1 text-xs text-neutral-300">
                 <li>On every 1 SOL traded on the curve: 0.0025 SOL to Raydium, 0.0025 SOL to Burnticker (25 bps), 0.005 SOL to {pairOn ? "that coin's" : "the coin's"} burn pool (50 bps, 100% to the pool).</li>
                 <li>After graduation: LP burned 100%; Burnticker takes 0; the burn pool receives Raydium&apos;s fixed CPMM creator fee (4.75 bps).</li>
