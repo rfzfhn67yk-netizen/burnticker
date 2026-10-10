@@ -20,7 +20,7 @@ a flippening), so pairs on the same matchup share one reading stream and each to
 (`derby/season.ts`). Each underlying is `{ symbol, pyth, mint, pool, cross }`: the Pyth feed id (primary), the Solana mint (needed for
 `mcap` and the flippening), the deepest SOL pool (the TWAP fallback when there is no Pyth feed) and the cross-read locator.
 
-**Pair semantics (the owner's choice):** the coin on the WINNING side burns `fractionOfPool` — the burn is the reward. A tie burns neither
+**Pair semantics (the owner's choice):** the coin on the WINNING side burns `fractionOfPool` (the owner chose the winning side; it is a supply rule, nothing is paid to anyone). A tie burns neither
 and still posts a receipt (a void receipt on both sides).
 
 ## 2. Where the values come from
@@ -50,6 +50,19 @@ and still posts a receipt (a void receipt on both sides).
 ratio over the hour before each boundary, from the two vault balances (Raydium CPMM through `src/lib/burnReceipts/cpmm.ts`, protocol and
 fund fees excluded; PumpSwap with its signed i128 quote offset at byte 245), ≥ 3 samples, × Pyth SOL/USD at the boundary. The proof
 lists the pool, every sample's slot and both raw balances. Meteora pools are not read (dynamic fees, bin liquidity) and are refused.
+
+**Primary of last resort: RedStone's signed packages** (coordinator follow-up, 10-10) — for a coin with no Pyth sponsored Solana account,
+no Hermes key on the host and no Solana pool for the TWAP (the SHIB case). The underlying names a RedStone feed (`redstone: "SHIB"`); the
+keeper snapshots the keyless gateway `https://oracle-gateway-1.a.redstone.finance/data-packages/latest/redstone-primary-prod` after each
+boundary (packages signed at most 5 minutes before the boundary). Every package is serialised exactly as RedStone signs it (feed id
+bytes32 ‖ value × 10^8 uint256 ‖ timestamp 6 bytes ‖ value size 4 bytes ‖ count 3 bytes), its secp256k1 signature is recovered over
+keccak256 of those bytes, and it counts only when the signer is one of the five redstone-primary-prod nodes RedStone publishes (npm
+`@redstone-finance/oracles-smartweave-contracts@0.8.0`, `redstone-oracle-registry/initial-state.json`). The value is the median of ≥ 3
+distinct verified signers; the proof keeps every package (signer, timestamp, value, signature) and their sha256 — **signatures verified**.
+Its cross-read must be another operator: DexScreener on the coin's home chain (a curated contract table,
+`config/burnticker/derby-home-chains.json` — never a symbol search, which returns copies with inflated liquidity) or Jupiter. The order
+of preference everywhere (keeper and preflight): Pyth's Solana account → Hermes (with a key) → the Raydium / PumpSwap TWAP → RedStone.
+On 10-10 the gateway priced SHIB, PEPE, DOGE, WIF, BONK, FARTCOIN, TRUMP, SOL, BTC, ETH, AAPL, XAU and EUR, not GIGA, SPX6900, POPCAT or SPY.
 
 **Cross-read (an independent operator, snapshotted within 15 min of each boundary):** Jupiter's price API
 `https://lite-api.jup.ag/price/v3?ids=<mint>` (the brief named `api.jup.ag/price/v2`: it answered 404 on 10-10), DexScreener
@@ -146,6 +159,9 @@ Pyth's US index feeds (`Equity.Index.US500/US30/US100`) are excluded unless `BUR
 - **Pyth terms.** Pyth's on-chain feeds are permissionless to read. The pyth.network website's terms forbid scraping the website — we do
   not: we read Hermes, Pyth's designed pull path for its signed updates, and the on-chain accounts. The price-feed disclaimer carries no
   commercial-use restriction. Keys, when used, are the host's own.
+- **RedStone terms.** RedStone's website Terms of Use (dated 2023-05-15) cover the website's content; RedStone publishes no API terms; the
+  oracle gateway is its documented public pull path for signed data packages, and we verify each package's signature rather than trust
+  the transport. Open item: confirm with RedStone (dev@redstone.finance) that settling coins on the public gateway is within their intent.
 - **Index licences.** Burnticker never names the S&P 500, the Dow Jones Industrial Average or the Nasdaq-100 (trademarks licensed for
   financial products). SPY, QQQ and DIA are fund tickers and may be used as fund tickers. Pyth's US index proxy feeds stay behind the flag.
 - **Our coins' own trading is never an input.** A derby's inputs are OTHER coins' published feeds; the copy lint admits "WIF out-gains SHIB"
@@ -162,8 +178,9 @@ second mint impersonating a community). The score stays a function of the publis
 
 - The wind-down, drain and sweep are keeper-driven clock readings today; the permissionless `sweep_retired` and `forward_to_winner`
   instructions are queued (PROGRAM-UPGRADE-QUEUE.md). A vault-mode rule has no pool to wind down.
-- Hermes needs a key on this host; until one is set, feeds without a sponsored Solana account (SHIB) cannot be read and their pairs are
-  refused by the preflight.
+- Hermes needs a key on this host; until one is set, a coin without a sponsored Solana account (SHIB) is read from RedStone when its
+  rule names a RedStone feed, else its pair is refused by the preflight.
+- RedStone terms: the API question to dev@redstone.finance is open (§8).
 - Cross-reads are spot reads snapshotted by the keeper; a keeper that misses a boundary withholds that window (no historical cross-read).
 - Meteora pools are not read; a TWAP coin whose deepest pool is Meteora is refused.
 - Interest-rate feeds have no keyless independent cross-read: listed as primaries without one (the preflight refuses a rate rule).

@@ -106,6 +106,10 @@ publish script.
   that spends ≥ 99 % in 28 days; a one-shot may spend 100 % and drains across cranks (the program already allows 10,000 bps); retired
   coins are swept above 0.05 SOL at most weekly; the pair clause's weekly fallback clock is replaced by the wind-down; outcome sets
   (`set`) are in the schema. PROGRAM-UPGRADE-QUEUE.md: `sweep_retired`, `forward_to_winner`, per-outcome fractions.
+- **RedStone as a keyless primary** for derby coins with no Pyth Solana account, no Hermes key and no pool (SHIB): signed packages from the
+  public gateway, each secp256k1 signature verified against RedStone's five published redstone-primary-prod signers, median of ≥ 3;
+  cross-read DexScreener on the home chain (curated contracts) or Jupiter. `redstone.crypto` becomes a launchable primary in the coverage
+  audit. A WIF-vs-SHIB pair passes the creation preflight with no Pyth key. New page `/burnticker/derby` (open pairs, brackets, ended ones).
 
 
 ## 2026-10-10 — publish from 7bc68e5d324c
@@ -115,3 +119,11 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `1c3fda17a66eba4855c53439e2b186c795f2d9e8fe6ba627c9b13a4057c1f516`
 - allowlist sha256 (config/public-repo.allowlist): `bb08241ed6570d363924fe7452e6acb85b5bbcf68c1c9fe22778312acb335b4b`
 - files published: 591
+
+## 2026-10-10 — publish from 33da9b7ea6a6
+
+- monorepo commit: `33da9b7ea6a6a6e9377ffcfb355c745ab2527426` (the working tree had uncommitted changes when this tag was written)
+- program hash: `7a61f00bb38394a6ec57341836e2a261caa9b4befe67082a3ff9e0e9026f5739` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `1c3fda17a66eba4855c53439e2b186c795f2d9e8fe6ba627c9b13a4057c1f516`
+- allowlist sha256 (config/public-repo.allowlist): `bb08241ed6570d363924fe7452e6acb85b5bbcf68c1c9fe22778312acb335b4b`
+- files published: 595

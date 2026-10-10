@@ -48,7 +48,7 @@ export const ratioPct = (a: string, b: string): string => pctChange(b, a);
 export interface SideReading {
   symbol: string;
   key: string;
-  source: "pyth" | "twap";
+  source: "pyth" | "twap" | "redstone";
   start: string;
   end: string;
   /** Circulating supply (UI units) at each boundary — the mcap measure and the flippening. */

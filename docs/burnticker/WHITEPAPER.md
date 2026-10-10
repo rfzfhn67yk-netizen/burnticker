@@ -360,8 +360,8 @@ measure (% change, or the change of circulating supply times the feed value) and
 the whole block is inside the rule hash (`src/lib/burnticker/derby/spec.ts`).
 
 - **Settlement.** A window's margin is coin A's % change minus coin B's, exact to six decimals. A positive margin settles YES and side A's
-  coin burns; a negative margin settles NO and side B's coin burns; an exact tie is a void on both sides. The winner's coin burns: the
-  burn is the reward. A one-shot variant settles once, on the first window that ends with A's size above B's (YES), or at the end of the
+  coin burns; a negative margin settles NO and side B's coin burns; an exact tie is a void on both sides. The coin on the winning side burns;
+  nothing is paid to anyone. A one-shot variant settles once, on the first window that ends with A's size above B's (YES), or at the end of the
   season without it (NO).
 - **Values.** Pyth: the sponsored `PriceUpdateV2` accounts on Solana, which Pyth's receiver program writes after verifying the
   Wormhole-signed update, read keylessly and snapshotted at each boundary; or the Hermes update published at the boundary (Pyth's

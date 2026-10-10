@@ -21,8 +21,8 @@ interface Hit { symbol: string; name: string; source: "pyth" | "jupiter"; assetT
 interface Bundle { mint: string; ticker: string; ready: boolean; pending: string[]; rules: { sha256: string; statement: string } }
 const PUB = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-function CoinPicker({ label, value, onPick, exclude }: { label: string; value: Hit | null; onPick: (h: Hit | null) => void; exclude: string | null }) {
-  const [q, setQ] = useState(""), [hits, setHits] = useState<Hit[]>([]), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+function CoinPicker({ label, value, onPick, exclude, initial }: { label: string; value: Hit | null; onPick: (h: Hit | null) => void; exclude: string | null; initial?: string }) {
+  const [q, setQ] = useState(initial ?? ""), [hits, setHits] = useState<Hit[]>([]), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     const s = q.trim();
     if (s.length < 2) { setHits([]); return; }
@@ -60,6 +60,12 @@ function CoinPicker({ label, value, onPick, exclude }: { label: string; value: H
 export function CoinVsCoinTile() {
   const wallet = useWallet();
   const [open, setOpen] = useState(false);
+  // `/burnticker/launch?derby=1&a=WIF&b=SHIB` (the Burn Derby page and the search card) opens the tile with both searches filled in.
+  const [initial, setInitial] = useState<{ a: string; b: string }>({ a: "", b: "" });
+  useEffect(() => {
+    const u = new URLSearchParams(window.location.search);
+    if (u.get("derby") === "1") { setOpen(true); setInitial({ a: (u.get("a") ?? "").slice(0, 12), b: (u.get("b") ?? "").slice(0, 12) }); }
+  }, []);
   const [a, setA] = useState<Hit | null>(null), [b, setB] = useState<Hit | null>(null);
   const [window_, setWindow] = useState<"daily" | "weekly">("daily"), [seasonDays, setSeasonDays] = useState(30), [flip, setFlip] = useState(false), [fraction, setFraction] = useState(0.01);
   const [names, setNames] = useState({ a: "", b: "", ta: "", tb: "" });
@@ -87,19 +93,25 @@ export function CoinVsCoinTile() {
     } catch (e) { setErr(String((e as Error).message ?? e)); } finally { setBusy(false); }
   };
 
-  if (!open) return (
+  const tileButton = (
     <button onClick={() => setOpen(true)} className="w-full text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none" aria-label="Coin vs Coin">
       <div className="text-lg font-semibold">Coin vs Coin <span className="ml-1 rounded bg-amber-400/15 px-1.5 text-xs text-amber-300 align-middle">Burn Derby</span></div>
       <p className="mt-1 text-sm text-neutral-300">Two coins people already hold race every day. The winner&apos;s coin burns.</p>
       <p className="mt-3 text-xs text-neutral-500">e.g. $TEAMWIF burns every day WIF out-gains SHIB (Pyth, 00:00 UTC)</p>
     </button>
   );
+  if (!open) return (
+    <div className="space-y-1">
+      {tileButton}
+      <p className="text-xs text-neutral-500"><a className="underline" href="/burnticker/derby">See the open Burn Derby pairs and brackets →</a></p>
+    </div>
+  );
   return (
     <section className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-4" aria-label="Coin vs Coin">
-      <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">Coin vs Coin</h3><button className="text-xs underline" onClick={() => setOpen(false)}>close</button></div>
+      <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">Coin vs Coin</h3><span className="flex gap-3 text-xs"><a className="underline" href="/burnticker/derby">Burn Derby pairs and brackets →</a><button className="underline" onClick={() => setOpen(false)}>close</button></span></div>
       <div className="grid gap-3 md:grid-cols-2">
-        <CoinPicker label="Coin A (side A burns when it wins)" value={a} onPick={setA} exclude={b?.symbol ?? null} />
-        <CoinPicker label="Coin B (side B burns when it wins)" value={b} onPick={setB} exclude={a?.symbol ?? null} />
+        <CoinPicker key={`a-${initial.a}`} initial={initial.a} label="Coin A (side A burns when it wins)" value={a} onPick={setA} exclude={b?.symbol ?? null} />
+        <CoinPicker key={`b-${initial.b}`} initial={initial.b} label="Coin B (side B burns when it wins)" value={b} onPick={setB} exclude={a?.symbol ?? null} />
       </div>
       <div className="grid gap-3 md:grid-cols-4 text-sm">
         <label className="text-xs text-neutral-400">Window<select className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={window_} onChange={(e) => setWindow(e.target.value as "daily" | "weekly")}><option value="daily">daily (00:00 → 00:00 UTC)</option><option value="weekly">weekly (Monday → Monday)</option></select></label>

@@ -1,7 +1,7 @@
 /**
  * BURN DERBY — THE SELECTOR (owner-approved 2026-10-10: "build it all"). A derby is a rivalry pair whose selector is the RELATIVE
  * PERFORMANCE OF TWO EXISTING COINS over a window: "every UTC day WIF out-gains SHIB". Side A's coin burns on a window A wins, side B's
- * on a window B wins (the burn is the winner's reward); a tie burns neither and still posts a receipt (a void). A one-shot
+ * on a window B wins (the owner chose the winning side; nothing is paid to anyone); a tie burns neither and still posts a receipt (a void). A one-shot
  * "flippening" variant reads size (circulating supply × the feed) and settles once: the first window A is bigger than B (side A burns),
  * or the season ending without that (side B burns). A tournament ("Bracket") runs one derby per match per round over 8 or 16 coins.
  *
@@ -30,6 +30,12 @@ export interface DerbyUnderlying {
   pool: string | null;
   /** The cross-read: "jup:<mint>", "dexscreener:<chainId>:<address>" or "redstone:<data feed id>" (equities, FX, metals, commodities). */
   cross: string;
+  /**
+   * RedStone's data feed id when RedStone may be the PRIMARY (coordinator follow-up, 2026-10-10): used only when Pyth cannot be read (no
+   * sponsored Solana account and no Hermes key) and there is no pool for the TWAP — the SHIB case. Optional: absent keeps an underlying's
+   * canonical bytes unchanged. The cross-read must then be another operator (DexScreener / Jupiter).
+   */
+  redstone?: string | null;
 }
 
 export interface CoinVsSpec {
@@ -113,7 +119,7 @@ export function canonical(v: unknown): string {
 }
 
 /** The stable identity of an underlying (what readings and samples are keyed by): its Pyth feed, else its pool. */
-export const underlyingKey = (u: DerbyUnderlying): string => (u.pyth ? `pyth:${u.pyth}` : `pool:${u.pool}`);
+export const underlyingKey = (u: DerbyUnderlying): string => (u.pyth ? `pyth:${u.pyth}` : u.pool ? `pool:${u.pool}` : `redstone:${u.redstone}`);
 
 function underlyingProblems(u: unknown, label: string, p: string[]): void {
   const x = u as Partial<DerbyUnderlying> | null;
@@ -122,11 +128,14 @@ function underlyingProblems(u: unknown, label: string, p: string[]): void {
   if (x.pyth !== null && (typeof x.pyth !== "string" || !PYTH_ID_RE.test(x.pyth))) p.push(`derby.${label}.pyth must be a Pyth feed id (64 lowercase hex) or null`);
   if (x.mint !== null && (typeof x.mint !== "string" || !PUBKEY_RE.test(x.mint))) p.push(`derby.${label}.mint must be a Solana mint or null`);
   if (x.pool !== null && (typeof x.pool !== "string" || !PUBKEY_RE.test(x.pool))) p.push(`derby.${label}.pool must be a Solana pool address or null`);
-  if (x.pyth === null && !x.pool) p.push(`derby.${label}: without a Pyth feed the coin needs its deepest SOL pool (the TWAP fallback)`);
+  const rs = x.redstone ?? null;
+  if (rs !== null && (typeof rs !== "string" || !/^[A-Za-z0-9._-]{1,40}$/.test(rs))) p.push(`derby.${label}.redstone must be a RedStone data feed id or absent`);
+  if (x.pyth === null && !x.pool && !rs) p.push(`derby.${label}: without a Pyth feed the coin needs its deepest SOL pool (the TWAP fallback) or a RedStone feed`);
+  if (rs && typeof x.cross === "string" && x.cross.startsWith("redstone:")) p.push(`derby.${label}: with RedStone as a primary, the cross-read must be another operator (DexScreener or Jupiter)`);
   if (typeof x.cross === "string" && x.cross.startsWith("redstone:") && !x.pyth) p.push(`derby.${label}: a RedStone cross-read checks a Pyth feed (no pool coin uses it)`);
-  if (x.pyth === null && !x.mint) p.push(`derby.${label}: the TWAP fallback needs the coin's mint (to orient the pool)`);
+  if (x.pyth === null && x.pool && !x.mint) p.push(`derby.${label}: the TWAP fallback needs the coin's mint (to orient the pool)`);
   if (typeof x.cross !== "string" || !CROSS_RE.test(x.cross)) p.push(`derby.${label}.cross must be "jup:<mint>" or "dexscreener:<chainId>:<address>" (the independent cross-read)`);
-  for (const k of Object.keys(x)) if (!["symbol", "pyth", "mint", "pool", "cross"].includes(k)) p.push(`derby.${label}.${k} is not a known key`);
+  for (const k of Object.keys(x)) if (!["symbol", "pyth", "mint", "pool", "cross", "redstone"].includes(k)) p.push(`derby.${label}.${k} is not a known key`);
 }
 
 const validDate = (s: unknown): s is string => typeof s === "string" && DATE_RE.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { DERBY_MIN_LIQUIDITY_USD, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { feedBase, loadPythCatalogue, PRICE_ASSET_TYPES, searchPyth, type PythFeedRow } from "@/lib/burnticker/derby/pyth";
@@ -45,6 +47,8 @@ async function jupiterSearch(d: SearchDeps, q: string): Promise<JupToken[]> {
 }
 
 const SOL = "So11111111111111111111111111111111111111112";
+/** Curated home-chain contracts for coins without a Solana mint (config/burnticker/derby-home-chains.json). */
+export const HOME_CHAINS: Record<string, { chain: string; address: string }> = (() => { try { return (JSON.parse(fs.readFileSync(path.join("config", "burnticker", "derby-home-chains.json"), "utf8")) as { coins: Record<string, { chain: string; address: string }> }).coins; } catch { return {}; } })();
 /** The deepest SOL pool of a mint on Raydium or PumpSwap (DexScreener's pairs), or null. */
 export async function deepestSolPool(fetchImpl: FetchLike, mint: string): Promise<{ pool: string; dexId: string; liquidityUsd: number } | null> {
   try {
@@ -70,10 +74,14 @@ export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "
     const sym = h.base.slice(0, 12);
     const tok = h.assetType === "Crypto" ? bySym(sym) : null;
     const rsId = redstoneIdFor(row);
-    const cross = tok ? `jup:${tok.id}` : rsId && rs.has(rsId) ? `redstone:${rsId}` : null;
+    const home = h.assetType === "Crypto" ? HOME_CHAINS[sym] ?? null : null;
+    // A coin with no Solana mint but a curated home-chain contract (SHIB, PEPE): RedStone is its keyless primary when Pyth cannot be
+    // read, DexScreener on the home chain its cross-read. Otherwise Jupiter (Solana coins) or RedStone (equities, FX, metals) cross-reads.
+    const rsPrimary = !tok && home && rsId && rs.has(rsId) ? rsId : null;
+    const cross = tok ? `jup:${tok.id}` : rsPrimary && home ? `dexscreener:${home.chain}:${home.address}` : rsId && rs.has(rsId) ? `redstone:${rsId}` : null;
     out.push({ symbol: sym, name: row.symbol, source: "pyth", assetType: h.assetType, feed: h.id, mint: tok?.id ?? null, liquidityUsd: tok?.liquidity ?? null, verified: true,
-      underlying: cross ? { symbol: sym, pyth: h.id, mint: tok?.id ?? null, pool: null, cross } : null,
-      why: cross ? null : `no independent cross-read carries ${sym} (no verified Jupiter token, not on RedStone's gateway): the preflight would refuse it` });
+      underlying: cross ? { symbol: sym, pyth: h.id, mint: tok?.id ?? null, pool: null, cross, ...(rsPrimary ? { redstone: rsPrimary } : {}) } : null,
+      why: cross ? (rsPrimary ? "Pyth on Solana has no account for it: RedStone's signed packages are the primary when no Hermes key is set; DexScreener on its home chain is the cross-read" : null) : `no independent cross-read carries ${sym} (no verified Jupiter token, not on RedStone's gateway): the preflight would refuse it` });
   }
   const seen = new Set(out.map((x) => x.mint).filter(Boolean));
   let resolved = 0;

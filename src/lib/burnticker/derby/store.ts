@@ -33,7 +33,7 @@ CREATE TRIGGER IF NOT EXISTS derby_tournaments_no_delete BEFORE DELETE ON derby_
 `;
 
 export interface PointRow { feed: string; boundary: number; publishTime: number; price: string; conf: string; expo: number; value: string; slot: number | null; updateSha256: string; updateBase64: string; url: string; fetchedAt: number }
-export interface SampleRow { key: string; kind: "pool" | "cross" | "supply" | "pyth"; ts: number; slot: number | null; value: string; detail: Record<string, unknown> }
+export interface SampleRow { key: string; kind: "pool" | "cross" | "supply" | "pyth" | "redstone"; ts: number; slot: number | null; value: string; detail: Record<string, unknown> }
 export interface WindowRow { selectorKey: string; windowId: string; status: "decided" | "withheld"; eventId: string | null; at: string; result: "yes" | "no" | "void" | null; value: string | null; reason: string | null; proofSha256: string | null; proof: Record<string, unknown> | null; decidedAt: number }
 export interface TournamentRow { id: string; json: string; sha256: string; createdAt: number }
 

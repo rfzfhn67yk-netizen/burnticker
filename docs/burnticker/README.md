@@ -102,10 +102,14 @@ locked `derby` block (`src/lib/burnticker/derby/spec.ts`); design note: [DERBY.m
 - **Values:** Pyth — keyless from Pyth's sponsored `PriceUpdateV2` accounts on Solana (snapshotted at each boundary), or Hermes
   `v2/updates/price/<t>?ids[]=…&encoding=base64&parsed=true` with `BURNTICKER_PYTH_API_KEY` (keyless Hermes price paths answered 401 on
   10-10; the update bytes' sha256 is the proof). Coins without a feed (GIGA): the TWAP of the deepest SOL pool's vault balances (Raydium
-  CPMM / PumpSwap) × Pyth SOL/USD. **Cross-read:** Jupiter price v3, DexScreener, RedStone's gateway — snapshotted at each boundary; a
+  CPMM / PumpSwap) × Pyth SOL/USD. Coins with no Pyth account, no key and no pool (SHIB): RedStone's signed packages, each signature verified
+  against RedStone's published primary-prod signers (`derby/redstone.ts`). **Cross-read:** Jupiter price v3, DexScreener, RedStone's gateway — snapshotted at each boundary; a
   gap above 2 points on the margin withholds the window (no reading, no burn, an alert).
 - **Keeper:** a sampler before each fetch, decisions once per window (`derby_windows`, append-only), readings with
   `proof: derby:sha256:<hex>`, the counter attestation's signed `proof=` carries it, a planning pass retires finished coins.
+- **Index:** `/burnticker/derby` — open pairs (score, last days, season end), active brackets, ended ones below, and the "Coin vs Coin"
+  button (`/burnticker/launch?derby=1&a=&b=` opens the tile with both searches filled in); the universal search's "WIF vs SHIB" card links
+  to it.
 - **Wizard:** the "Coin vs Coin" tile (`src/app/burnticker/launch/CoinVsCoinTile.tsx`): pick two coins (Pyth catalogue + Jupiter token
   list), window, season (30 days), optional flippening; live cards; the review sentence — "$TEAMWIF burns 1% every day WIF out-gains SHIB
   (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. 30 days."

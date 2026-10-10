@@ -21,7 +21,7 @@ A **primary** is a first-party source adapter: kind attested-http or on-chain, t
 | Weather & Climate | **settleable** | `nws.cli` | `iem.asos` (of `nws.cli`) | weather, climate-science |
 | Science & Space | adjudicated-only (Polymarket) | `ll2.launches`, `noaa.flares`, `jpl.neo` | none | space, tech |
 | Entertainment & Culture | adjudicated-only (Polymarket) | `wiki.views`, `steam.players` | none | pop-culture |
-| Crypto & On-chain | **settleable** | `bitcoin.blockHeight`, `solana.blockHeight.rpc`, `pyth.crypto`, `raydium.twap` | `bitcoin.blockHeight.blockstream` (of `bitcoin.blockHeight`), `raydium.twap` (of `pyth.crypto`), `jupiter.quote` (of `pyth.crypto`), `dexscreener.pairs` (of `pyth.crypto`), `redstone.crypto` (of `pyth.crypto`), `pyth.crypto` (of `raydium.twap`), `jupiter.quote` (of `raydium.twap`), `dexscreener.pairs` (of `raydium.twap`), `redstone.crypto` (of `raydium.twap`) | crypto |
+| Crypto & On-chain | **settleable** | `bitcoin.blockHeight`, `solana.blockHeight.rpc`, `pyth.crypto`, `raydium.twap`, `redstone.crypto` | `bitcoin.blockHeight.blockstream` (of `bitcoin.blockHeight`), `raydium.twap` (of `pyth.crypto`), `jupiter.quote` (of `pyth.crypto`), `dexscreener.pairs` (of `pyth.crypto`), `redstone.crypto` (of `pyth.crypto`), `pyth.crypto` (of `raydium.twap`), `jupiter.quote` (of `raydium.twap`), `dexscreener.pairs` (of `raydium.twap`), `redstone.crypto` (of `raydium.twap`), `pyth.crypto` (of `redstone.crypto`), `raydium.twap` (of `redstone.crypto`), `jupiter.quote` (of `redstone.crypto`), `dexscreener.pairs` (of `redstone.crypto`) | crypto |
 | Companies | adjudicated-only (Polymarket) | `edgar.8k`, `github.stars` | none | business |
 | Health | adjudicated-only (Polymarket) | `openfda.approvals` | none | health |
 | World | adjudicated-only (Polymarket) | none | none | world, geopolitics |
@@ -176,24 +176,24 @@ Kalshi categories mapped here (Entertainment, Mentions, Social) are discovery on
 
 ## Crypto & On-chain — settleable
 
-primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream, pyth.crypto ↔ raydium.twap, pyth.crypto ↔ jupiter.quote, pyth.crypto ↔ dexscreener.pairs, pyth.crypto ↔ redstone.crypto, raydium.twap ↔ jupiter.quote, raydium.twap ↔ dexscreener.pairs, raydium.twap ↔ redstone.crypto.
+primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream, pyth.crypto ↔ raydium.twap, pyth.crypto ↔ jupiter.quote, pyth.crypto ↔ dexscreener.pairs, pyth.crypto ↔ redstone.crypto, raydium.twap ↔ jupiter.quote, raydium.twap ↔ dexscreener.pairs, raydium.twap ↔ redstone.crypto, redstone.crypto ↔ jupiter.quote, redstone.crypto ↔ dexscreener.pairs.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
 | `bitcoin.blockHeight` | primary | mempool.space | mempool.space | 4 | `bitcoin.block-height` | n/a (no schedule) | n/a | n/a (the two snapshots were not read together; the creation preflight reads both at once) |
 | `solana.blockHeight.rpc` | primary | Solana Foundation (public mainnet-beta RPC) | solana.com | 4 | — | n/a (no schedule) | n/a | n/a |
-| `pyth.crypto` | primary; cross-read of `raydium.twap` | Pyth Data Association | pyth.network | 3 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
-| `raydium.twap` | primary; cross-read of `pyth.crypto` | Raydium pool (on-chain) | raydium.io | 3 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `pyth.crypto` | primary; cross-read of `raydium.twap`; cross-read of `redstone.crypto` | Pyth Data Association | pyth.network | 3 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `raydium.twap` | primary; cross-read of `pyth.crypto`; cross-read of `redstone.crypto` | Raydium pool (on-chain) | raydium.io | 3 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `redstone.crypto` | primary; cross-read of `pyth.crypto`; cross-read of `raydium.twap` | RedStone | redstone.finance | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
 | `bitcoin.blockHeight.blockstream` | cross-read of `bitcoin.blockHeight` | Blockstream | blockstream.info | 4 | `bitcoin.block-height` | n/a (no schedule) | n/a | n/a |
-| `jupiter.quote` | cross-read of `pyth.crypto`; cross-read of `raydium.twap` | Jupiter | jup.ag | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
-| `dexscreener.pairs` | cross-read of `pyth.crypto`; cross-read of `raydium.twap` | DexScreener | dexscreener.com | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
-| `redstone.crypto` | cross-read of `pyth.crypto`; cross-read of `raydium.twap` | RedStone | redstone.finance | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `jupiter.quote` | cross-read of `pyth.crypto`; cross-read of `raydium.twap`; cross-read of `redstone.crypto` | Jupiter | jup.ag | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
+| `dexscreener.pairs` | cross-read of `pyth.crypto`; cross-read of `raydium.twap`; cross-read of `redstone.crypto` | DexScreener | dexscreener.com | 4 | `usd-at-boundary.crypto` | n/a | n/a | n/a |
 
-Mapped here but not a primary: `solana.blockHeight` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `solana.slot` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `ethereum.baseFeeBurn` (an aggregator, not a primary source); `defillama.tvl` (an aggregator, not a primary source); `onchain.copycats` (not launchable: second demo coin candidate (docs/launch/copycat-coin.md); not launchable until a keyed run logs 14 days and the admission rules are checked against them); `jupiter.quote` (declared cross-read only); `dexscreener.pairs` (declared cross-read only); `redstone.crypto` (declared cross-read only).
+Mapped here but not a primary: `solana.blockHeight` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `solana.slot` (not launchable: on-chain facts are shown in the catalogue but the launch route does not take them yet (feedById knows attested-http sources only)); `ethereum.baseFeeBurn` (an aggregator, not a primary source); `defillama.tvl` (an aggregator, not a primary source); `onchain.copycats` (not launchable: second demo coin candidate (docs/launch/copycat-coin.md); not launchable until a keyed run logs 14 days and the admission rules are checked against them); `jupiter.quote` (declared cross-read only); `dexscreener.pairs` (declared cross-read only).
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream, pyth.crypto ↔ raydium.twap, pyth.crypto ↔ jupiter.quote, pyth.crypto ↔ dexscreener.pairs, pyth.crypto ↔ redstone.crypto, raydium.twap ↔ jupiter.quote, raydium.twap ↔ dexscreener.pairs, raydium.twap ↔ redstone.crypto |
+| Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: bitcoin.blockHeight ↔ bitcoin.blockHeight.blockstream, pyth.crypto ↔ raydium.twap, pyth.crypto ↔ jupiter.quote, pyth.crypto ↔ dexscreener.pairs, pyth.crypto ↔ redstone.crypto, raydium.twap ↔ jupiter.quote, raydium.twap ↔ dexscreener.pairs, raydium.twap ↔ redstone.crypto, redstone.crypto ↔ jupiter.quote, redstone.crypto ↔ dexscreener.pairs |
 | Any market → a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | Polymarket tag(s) crypto: the result is the CTF payout vector on Polygon; no primary source here is binary |
 | Any market → one market (`one-shot`) | adjudicated-only (Polymarket) | Polymarket tag(s) crypto: the result is the CTF payout vector on Polygon; no primary source here is binary |
 

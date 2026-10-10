@@ -9,6 +9,8 @@ import { canonicalDecimal } from "@/lib/burnticker/units";
 import { hermesBoundaryUrl, HERMES_URL, loadPythCatalogue, PYTH_ONCHAIN_TOLERANCE_SEC, PYTH_SOL_USD, pythFeedAccount, pythSnapshotFromAccount, sha256Hex, type PythRead } from "@/lib/burnticker/derby/pyth";
 import { crossQuote } from "@/lib/burnticker/derby/cross";
 import { readSupply, samplePool, twap, TWAP_WINDOW_MS, type PoolPort } from "@/lib/burnticker/derby/pools";
+import { redstonePrimary } from "@/lib/burnticker/derby/redstone";
+import { REDSTONE_LATEST_URL } from "@/lib/burnticker/derby/cross";
 import { bracketState, matchKey, roundCount, slotMatchOn, slotPoints, tournamentEnd, type BracketState, type MatchDayResult, type Tournament } from "@/lib/burnticker/derby/bracket";
 import { derbyStore, type DerbyStore, type WindowRow } from "@/lib/burnticker/derby/store";
 
@@ -57,6 +59,7 @@ const crossKey = (u: DerbyUnderlying) => `cross:${u.cross}`;
 const supplyKey = (u: DerbyUnderlying) => `supply:${u.mint}`;
 const poolKey = (u: DerbyUnderlying) => `pool:${u.pool}`;
 const pythKey = (feed: string) => `pyth:${feed}`;
+const redstoneKey = (feed: string) => `redstone:${feed}`;
 /** Market-hours feeds (anything that is not a crypto feed) read the last published value at a boundary. Unknown ids count as crypto. */
 export function marketHours(feed: string): boolean {
   try { const r = loadPythCatalogue().find((x) => x.id === feed); return !!r && r.asset_type !== "Crypto"; } catch { return false; }
@@ -122,11 +125,32 @@ export class DerbyAdapter implements OracleAdapter {
   }
 
   /** One coin's boundary value: Pyth, or the pool TWAP × Pyth SOL/USD. */
+  /**
+   * One coin's boundary value, in the order of preference: Pyth (a stored Hermes update, the Solana account snapshot, Hermes with a key)
+   * → the pool TWAP → RedStone's verified signed packages (the coin's `redstone` feed, snapshotted at the boundary).
+   */
   async valueAt(u: DerbyUnderlying, boundaryMs: number): Promise<{ ok: true; value: string; proof: Record<string, unknown> } | { ok: false; reason: string }> {
+    const why: string[] = [];
     if (u.pyth) {
       const r = await this.pythAt(u.pyth, boundaryMs);
-      return r.ok ? r : { ok: false, reason: `${u.symbol}: ${r.reason}` };
+      if (r.ok) return r;
+      why.push(r.reason);
     }
+    if (u.pool) {
+      const r = await this.twapAt(u, boundaryMs);
+      if (r.ok) return r;
+      why.push(r.reason);
+    }
+    if (u.redstone) {
+      const x = this.store.samples(redstoneKey(u.redstone), "redstone", boundaryMs, boundaryMs + TOL_MS)[0];
+      if (x) return { ok: true, value: x.value, proof: { ...x.detail, boundary: Math.floor(boundaryMs / 1000), sampledAt: x.ts } };
+      why.push("no verified RedStone snapshot was taken at the boundary");
+    }
+    return { ok: false, reason: `${u.symbol}: ${why.join("; ") || "no source"}` };
+  }
+
+  /** The pool TWAP × Pyth SOL/USD at a boundary. */
+  private async twapAt(u: DerbyUnderlying, boundaryMs: number): Promise<{ ok: true; value: string; proof: Record<string, unknown> } | { ok: false; reason: string }> {
     const samples = this.store.samples(poolKey(u), "pool", boundaryMs - TWAP_WINDOW_MS, boundaryMs);
     const t = twap(samples.map((s) => ({ ts: s.ts, priceSol: s.value })), boundaryMs);
     if (t.value === null) return { ok: false, reason: `${u.symbol}: ${t.reason}` };
@@ -147,7 +171,7 @@ export class DerbyAdapter implements OracleAdapter {
     if (!e.ok) return e;
     const supS = measure === "mcap" ? this.supplyAt(u, w.startMs) : null, supE = measure === "mcap" ? this.supplyAt(u, w.endMs) : null;
     if (measure === "mcap" && (supS === null || supE === null)) return { ok: false, reason: `${u.symbol}: no circulating-supply reading within ${DERBY_SNAPSHOT_TOLERANCE_SEC / 60} min of a boundary` };
-    return { ok: true, side: { symbol: u.symbol, key: underlyingKey(u), source: u.pyth ? "pyth" : "twap", start: s.value, end: e.value, supplyStart: supS, supplyEnd: supE, changePct: sideChange(measure, s.value, e.value, supS, supE), proof: { start: s.proof, end: e.proof } } };
+    return { ok: true, side: { symbol: u.symbol, key: underlyingKey(u), source: (s.proof.source === "redstone" ? "redstone" : s.proof.source === "twap" ? "twap" : "pyth") as SideReading["source"], start: s.value, end: e.value, supplyStart: supS, supplyEnd: supE, changePct: sideChange(measure, s.value, e.value, supS, supE), proof: { start: s.proof, end: e.proof } } };
   }
 
   /** The cross-read's boundary quotes for one coin over a window (null when either snapshot is missing). */
@@ -398,6 +422,19 @@ export class DerbyAdapter implements OracleAdapter {
         const snap = pythSnapshotFromAccount(feed, acct, await this.d.pools.slot(), address);
         if (this.store.putSample({ key: pythKey(feed), kind: "pyth", ts: now, slot: (snap.detail.slot as number | null) ?? null, value: snap.value, detail: snap.detail })) taken++;
       } catch (e) { errors.push(`Pyth ${feed.slice(0, 12)}… on Solana: ${(e as Error).message.slice(0, 120)}`); }
+    }
+    // RedStone as a primary: a verified snapshot after each boundary for coins that carry a RedStone feed (the SHIB case).
+    for (const { u } of this.underlyingsInUse(tokens)) {
+      if (!u.redstone || now < lastB || now - lastB > TOL_MS || this.store.samples(redstoneKey(u.redstone), "redstone", lastB, lastB + TOL_MS).length) continue;
+      try {
+        let body = cache.get(REDSTONE_LATEST_URL);
+        if (body === undefined) { const res = await this.d.fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) }); if (!res.ok) throw new Error(`RedStone HTTP ${res.status}`); body = await res.json(); cache.set(REDSTONE_LATEST_URL, body); }
+        const r = await redstonePrimary(body, u.redstone, REDSTONE_LATEST_URL);
+        if (!r.ok) { errors.push(`${u.symbol}: ${r.reason}`); continue; }
+        // The packages must be from this boundary (signed at most 5 minutes before it), never a stale gateway answer.
+        if (r.timestampMs < lastB - 5 * 60_000 || r.timestampMs > now + 60_000) { errors.push(`${u.symbol}: RedStone's packages were signed at ${new Date(r.timestampMs).toISOString()}, not at the ${new Date(lastB).toISOString()} boundary`); continue; }
+        if (this.store.putSample({ key: redstoneKey(u.redstone), kind: "redstone", ts: now, slot: null, value: r.value, detail: r.proof })) taken++;
+      } catch (e) { errors.push(`${u.symbol} RedStone: ${(e as Error).message.slice(0, 120)}`); }
     }
     for (const { u, supply } of this.underlyingsInUse(tokens)) {
       if (atBoundary && !this.store.nearest(crossKey(u), "cross", nearest, TOL_MS)) {

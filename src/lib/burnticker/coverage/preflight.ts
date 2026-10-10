@@ -10,7 +10,8 @@ import { nextExpected } from "@/lib/burnticker/coverage/schedule";
 import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { DERBY_DISAGREEMENT_PP } from "@/lib/burnticker/derby/spec";
 import { PYTH_SOL_USD, pythFeedAccount, pythSnapshotFromAccount, type PythRead } from "@/lib/burnticker/derby/pyth";
-import { crossQuote } from "@/lib/burnticker/derby/cross";
+import { crossQuote, REDSTONE_LATEST_URL } from "@/lib/burnticker/derby/cross";
+import { redstonePrimary } from "@/lib/burnticker/derby/redstone";
 import { samplePool, type PoolPort } from "@/lib/burnticker/derby/pools";
 import { mulDec, truncDec } from "@/lib/burnticker/derby/measure";
 import { marketHours } from "@/lib/burnticker/derby/adapter";
@@ -195,36 +196,59 @@ export interface DerbyPreflightDeps { pools?: PoolPort | null; fetchImpl?: Fetch
 const DERBY_OPERATOR: Record<string, string> = { jup: "Jupiter", dexscreener: "DexScreener", redstone: "RedStone" };
 const CROSS_ID: Record<string, string> = { jup: "jupiter.quote", dexscreener: "dexscreener.pairs", redstone: "redstone" };
 
-async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: number): Promise<{ id: string; operator: string; value: string; at: string } | { refusal: { code: PreflightCode; reason: string; status?: 400 | 502 }; id: string; operator: string }> {
+/**
+ * One coin's primary value now, in the order of preference: Pyth's sponsored Solana account (keyless) → Pyth Hermes (with a key) → the
+ * Raydium / PumpSwap pool TWAP (spot × Pyth SOL/USD) → RedStone's verified signed packages (when the coin names a RedStone feed).
+ */
+async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: number, fetchImpl: FetchLike): Promise<{ id: string; operator: string; value: string; at: string; route: string } | { refusal: { code: PreflightCode; reason: string; status?: 400 | 502 }; id: string; operator: string }> {
+  const why: string[] = [];
   if (u.pyth) {
     const id = `pyth:${u.pyth.slice(0, 12)}`, operator = "Pyth Data Association";
     const hours = marketHours(u.pyth);
-    let value: string | null = null, publish = 0, why = "";
+    let value: string | null = null, publish = 0, route = "";
     if (d.pools) {
       try {
         const address = pythFeedAccount(u.pyth);
         const [acct] = await d.pools.accounts([address]);
-        if (acct) { const s = pythSnapshotFromAccount(u.pyth, acct, null, address); value = s.value; publish = s.publishTime; }
-        else why = `no sponsored Pyth account on Solana for ${u.symbol} (${address})`;
-      } catch (e) { why = (e as Error).message.slice(0, 140); }
-    } else why = "no Solana read port on this host";
+        if (acct) { const s = pythSnapshotFromAccount(u.pyth, acct, null, address); value = s.value; publish = s.publishTime; route = "pyth-solana"; }
+        else why.push(`no sponsored Pyth account on Solana for ${u.symbol}`);
+      } catch (e) { why.push((e as Error).message.slice(0, 140)); }
+    } else why.push("no Solana read port on this host");
     if (value === null && d.hermes) {
-      try { const r = await d.hermes.latest(u.pyth); if (r.ok) { value = r.point.value; publish = r.point.publishTime; } else why = `${why}; Hermes: ${r.reason}`; } catch (e) { why = `${why}; Hermes: ${(e as Error).message.slice(0, 120)}`; }
+      try { const r = await d.hermes.latest(u.pyth); if (r.ok) { value = r.point.value; publish = r.point.publishTime; route = "pyth-hermes"; } else why.push(`Hermes: ${r.reason}`); } catch (e) { why.push(`Hermes: ${(e as Error).message.slice(0, 120)}`); }
+    } else if (value === null) why.push("no Hermes key on this host (BURNTICKER_PYTH_API_KEY)");
+    if (value !== null) {
+      const age = now / 1000 - publish;
+      if (age > (hours ? 4 * 86_400 : 2 * 3600)) return { id, operator, refusal: { code: "stale-primary", reason: `${u.symbol}: Pyth's latest value was published ${Math.round(age / 3600)} h ago`, status: 502 } };
+      return { id, operator, value, at: new Date(publish * 1000).toISOString(), route };
     }
-    if (value === null) return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: Pyth could not be read just now (${why || "no route"}; Hermes needs BURNTICKER_PYTH_API_KEY)`, status: 502 } };
-    const age = now / 1000 - publish;
-    if (age > (hours ? 4 * 86_400 : 2 * 3600)) return { id, operator, refusal: { code: "stale-primary", reason: `${u.symbol}: Pyth's latest value was published ${Math.round(age / 3600)} h ago`, status: 502 } };
-    return { id, operator, value, at: new Date(publish * 1000).toISOString() };
   }
-  const id = `raydium.twap:${u.pool}`, operator = "Raydium pool (on-chain)";
-  if (!d.pools || !u.pool || !u.mint) return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: the pool TWAP needs a Solana read port and the coin's pool and mint`, status: 502 } };
-  try {
-    const s = await samplePool(d.pools, u.pool, u.mint);
-    const [solAcct] = await d.pools.accounts([pythFeedAccount(PYTH_SOL_USD)]);
-    if (!solAcct) return { id, operator, refusal: { code: "primary-unreadable", reason: "Pyth SOL/USD could not be read on Solana", status: 502 } };
-    const sol = pythSnapshotFromAccount(PYTH_SOL_USD, solAcct, null, pythFeedAccount(PYTH_SOL_USD));
-    return { id, operator, value: truncDec(mulDec(s.priceSol, sol.value), 18), at: new Date(now).toISOString() };
-  } catch (e) { return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: pool ${u.pool} could not be read: ${(e as Error).message.slice(0, 120)}`, status: 502 } }; }
+  if (u.pool && u.mint && d.pools) {
+    try {
+      const s = await samplePool(d.pools, u.pool, u.mint);
+      const [solAcct] = await d.pools.accounts([pythFeedAccount(PYTH_SOL_USD)]);
+      if (!solAcct) why.push("Pyth SOL/USD could not be read on Solana");
+      else {
+        const sol = pythSnapshotFromAccount(PYTH_SOL_USD, solAcct, null, pythFeedAccount(PYTH_SOL_USD));
+        return { id: `raydium.twap:${u.pool}`, operator: "Raydium pool (on-chain)", value: truncDec(mulDec(s.priceSol, sol.value), 18), at: new Date(now).toISOString(), route: "pool-twap" };
+      }
+    } catch (e) { why.push(`pool ${u.pool} could not be read: ${(e as Error).message.slice(0, 120)}`); }
+  } else if (u.pool) why.push("the pool TWAP needs a Solana read port and the coin's mint");
+  if (u.redstone) {
+    try {
+      const res = await fetchImpl(REDSTONE_LATEST_URL, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const r = await redstonePrimary(await res.json(), u.redstone, REDSTONE_LATEST_URL);
+      if (r.ok) {
+        if (now - r.timestampMs > 2 * 3600_000) return { id: `redstone:${u.redstone}`, operator: "RedStone", refusal: { code: "stale-primary", reason: `${u.symbol}: RedStone's latest packages are ${Math.round((now - r.timestampMs) / 3600_000)} h old`, status: 502 } };
+        return { id: `redstone:${u.redstone}`, operator: "RedStone", value: r.value, at: new Date(r.timestampMs).toISOString(), route: "redstone" };
+      }
+      why.push(r.reason);
+    } catch (e) { why.push(`RedStone: ${(e as Error).message.slice(0, 120)}`); }
+  }
+  const id = u.pyth ? `pyth:${u.pyth.slice(0, 12)}` : u.pool ? `raydium.twap:${u.pool}` : `redstone:${u.redstone}`;
+  const operator = u.pyth ? "Pyth Data Association" : u.pool ? "Raydium pool (on-chain)" : "RedStone";
+  return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: no primary could be read just now (${why.join("; ") || "no route"})`, status: 502 } };
 }
 
 async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number): Promise<PreflightResult> {
@@ -238,7 +262,7 @@ async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number):
   const basis: string[] = [];
   let first: { primary: PreflightResult["primary"]; crossRead: PreflightResult["crossRead"] } | null = null;
   for (const u of us) {
-    const pr = await derbyPrimary(u, d, now);
+    const pr = await derbyPrimary(u, d, now, fetchImpl);
     const kind = u.cross.split(":")[0];
     const crossBase = { id: `${CROSS_ID[kind] ?? kind}:${u.cross.slice(kind.length + 1)}`, operator: DERBY_OPERATOR[kind] ?? null, lastReading: null, error: null };
     if ("refusal" in pr) return result(rule, now, { primary: { id: pr.id, operator: pr.operator, lastReading: null, error: pr.refusal.reason }, crossRead: crossBase }, pr.refusal);
