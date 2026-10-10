@@ -1,0 +1,50 @@
+{
+  "source": "@raydium-io/raydium-sdk-v2 0.2.74-alpha claimCreatorFee (src/raydium/launchpad/instrument.ts)",
+  "burnReceiptsProgramId": "GV9CMjXPGbmXnn3ci3RjvTBpfdgiZ4Ts7UWu1LCnSuF8",
+  "mint": "J2xccRtuG43drESLYznHhLhQkLTdfepcKYbiQ9BsJVaf",
+  "feePda": "HWe5FMPVZmD5sRFdM3ZzRLWP9sy5DrsYNrwaFbFi2G8U",
+  "programId": "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj",
+  "keys": [
+    {
+      "pubkey": "HWe5FMPVZmD5sRFdM3ZzRLWP9sy5DrsYNrwaFbFi2G8U",
+      "isSigner": true,
+      "isWritable": true
+    },
+    {
+      "pubkey": "9sHpTfmVpCfP2zexRNK6j38NBchMv1RWpdXPK5NEcZan",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "pubkey": "Fx8Avkg9abkVFwobfySDJRP4qfZSiejJr7n4SXbAy6su",
+      "isSigner": false,
+      "isWritable": true
+    },
+    {
+      "pubkey": "CG47jQ2WDYRQ3WCr92eZJRuoqeEfa5ho8ftSPACjL3Mz",
+      "isSigner": false,
+      "isWritable": true
+    },
+    {
+      "pubkey": "So11111111111111111111111111111111111111112",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "pubkey": "11111111111111111111111111111111",
+      "isSigner": false,
+      "isWritable": false
+    },
+    {
+      "pubkey": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+      "isSigner": false,
+      "isWritable": false
+    }
+  ],
+  "dataHex": "1a618acb84ab8dfc"
+}

@@ -1,0 +1,79 @@
+# Burnticker + $DEFICIT on the DEDICATED Burnticker VPS behind Caddy (the owner, 2026-10-09: this box serves the public web; the trading
+# VPS stays on its private network only and never does). Install: /etc/caddy/Caddyfile (scripts/ops/provision-burnticker-host.sh copies it).
+#
+#   https://burnticker.com/              static /var/www/burnticker  (site/burnticker + the keeper's index.json, audit.json, ops.json, t/<ticker>/…;
+#                                        the keeper's own platform index is published beside the landing page as /tokens.html)
+#   https://burnticker.com/burnticker/*  the Next app on 127.0.0.1:3000 (mct-burnticker-web): the wizard, in-app token pages, the trust page
+#   https://burnticker.com/api/burnticker/*, /_next/*   the app's API routes and its bundles — NOTHING ELSE of the app is proxied
+#   https://burnticker.com/deficit/*     static /var/www/deficit (the $DEFICIT status site), also served at the $DEFICIT host's root
+#   https://www.burnticker.com/*         301 → the apex
+#
+# PLACEHOLDER VARIABLES — Caddy substitutes {$NAME:default} from the environment of the caddy service at load time. Set them with
+# `systemctl edit caddy` ([Service] Environment=DEFICIT_DOMAIN=…) or edit the defaults below. The $DEFICIT host is a placeholder until
+# the owner picks it (the site pages still say deficit.burnticker.com / burnticker.com — fix those links in site/ when the names are final).
+#   BURNTICKER_DOMAIN   burnticker.com           BURNTICKER_WWW_DOMAIN  www.burnticker.com
+#   DEFICIT_DOMAIN      deficit.burnticker.com   MCT_APP_UPSTREAM       127.0.0.1:3000  (mct-burnticker-web; loopback only)
+#
+# SECURITY, READ BEFORE EDITING THE PROXY BLOCK. Since 2026-10-10 the Next app on this host is built from the PUBLIC tree only
+# (docs/burnticker/deploy.md "The host runs the public tree") — it has no trading routes at all. Keep the proxy narrow anyway: Caddy
+# passes the PUBLIC Host through unchanged by default — keep it that way: never add `header_up Host {upstream_hostport}` (a loopback Host
+# is what a trusted-host check would trust), never widen the @app matcher to /api/* or /. The matcher is the second lock, not the only one.
+#
+# LOGGING: no access log is configured (Caddy's default) — client IPs are not recorded. Enable `log` under a site only if needed and
+# know that it records remote_ip in JSON. Caddy provisions TLS (ACME HTTP-01 / TLS-ALPN on 80/443); with Cloudflare in front, keep the
+# records DNS-only (grey cloud) until the first certificate is issued, then proxy them with SSL mode "Full (strict)".
+
+(security) {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}
+
+(static_site) {
+	import security
+	encode zstd gzip
+	# Receipts must never be stale in a CDN or a browser: a page that says "no burn yet" an hour late is a lie about the supply.
+	header Cache-Control "no-store"
+	try_files {path} {path}/index.html
+	file_server
+}
+
+{$BURNTICKER_WWW_DOMAIN:www.burnticker.com} {
+	import security
+	redir https://{$BURNTICKER_DOMAIN:burnticker.com}{uri} permanent
+}
+
+{$BURNTICKER_DOMAIN:burnticker.com} {
+	encode zstd gzip
+
+	# The Next app: wizard, in-app token pages, trust page, API. ONLY these paths; the public Host header passes through (see the header).
+	@app path /burnticker /burnticker/* /api/burnticker/* /_next/*
+	handle @app {
+		import security
+		reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# $DEFICIT's static status site on the main host too (status.json, burns.json, rules.json, index.html).
+	handle_path /deficit/* {
+		root * /var/www/deficit
+		import static_site
+	}
+
+	# The platform's static receipts site: landing page, index.json, audit.json, ops.json, tokens.html, t/<ticker>/{index.html,status.json,receipts.json,rules.json}.
+	handle {
+		root * /var/www/burnticker
+		import static_site
+	}
+}
+
+{$DEFICIT_DOMAIN:deficit.burnticker.com} {
+	root * /var/www/deficit
+	import static_site
+}

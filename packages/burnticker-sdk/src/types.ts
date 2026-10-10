@@ -1,0 +1,73 @@
+import type { BurnRule, RuleMode } from "@/lib/burnticker/rules";
+import type { FeeSplit } from "@/lib/burnticker/fees";
+import type { SerializedIx } from "@/lib/burnticker/program";
+import type { UnsignedTx } from "@/lib/burnticker/transactions";
+import type { VerifyResult } from "@/lib/burnticker/verify";
+import type { Backtest } from "@/lib/burnticker/oracle/backtest";
+import type { ReceiptJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
+
+/**
+ * The public API's JSON shapes, as the SDK returns them. The OpenAPI document (GET /api/burnticker/v1/openapi.json) is the
+ * language-neutral version of the same contract; the route tests validate every response against it.
+ */
+
+export type { BurnRule, RuleMode, FeeSplit, SerializedIx, UnsignedTx, VerifyResult, Backtest, ReceiptJson, TokenStatusJson };
+
+/** One resolution source (GET /catalogue). */
+export interface SourceCard {
+  id: string; kind: "market" | "assertion" | "attested-http" | "onchain"; tier: 1 | 2 | 3 | 4 | 5; tierLabel: string; title: string; sourceName: string; sourceUrl: string; cadence: string;
+  unit: { size: number; label: string; definition: string } | null; direction: string | null; baseline: "previousSettlement" | number | null; carry: string | null; valueLabel: string | null; flags: string[];
+  launchable: { ok: boolean; why: string | null }; param: unknown; needsKey: string | null; fixtureFetchedAt: string | null; refusals: string[];
+  lastReading: { id: string; value: string | null; at: string } | null; readings: { id: string; value: string | null }[]; preview: unknown;
+  /** attested-http only: the public selection config a verifier needs (header values withheld). */
+  config: Record<string, unknown> | null;
+}
+export interface Catalogue { sources: SourceCard[]; tiers: Record<string, string>; admission: { all: string[]; byTier: Record<string, string> }; kalshi: { search: string; note: string } }
+
+export interface KalshiSeries { oracle: string; ticker: string; title: string; category: string | null; frequency: string | null; settlementSource: { name: string; url: string } | null; tags: string[]; refused?: string[] }
+export interface KalshiEventHit {
+  eventTicker: string; seriesTicker: string; title: string; subTitle: string | null; category: string | null; competition: string | null; expectedAt: string | null; closeTime: string | null;
+  markets: { ticker: string; suffix: string; label: string; status: string; closeTime: string | null }[]; score: number; matchedSides: string[]; matched: string[];
+  /** Two-team games: both sides and the two selector modes (thisGameOnly: one market, side B inverted — a partition; everyGame: each side's own-leg filter — not a partition in general). */
+  pair: Record<string, unknown> | null; refused: string[];
+}
+export interface KalshiSearchResult { query: string; results: KalshiSeries[]; events?: KalshiEventHit[]; ranking?: "events" | "series"; teams?: { league: string; abbr: string; city: string; nickname: string }[] }
+export interface KalshiEvents { query: string; series: string | null; events: KalshiEventHit[]; scanned: string[]; teams: { league: string; abbr: string; city: string; nickname: string }[]; leagues?: { id: string; label: string; series: { ticker: string; title: string }[] }[]; count?: number }
+export interface KalshiTeam { abbr: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null } | null; record: { w: number; l: number; d: number; since: string } }
+export interface KalshiTeams { series: string; since: string; teams: KalshiTeam[]; note: string }
+export interface KalshiSeriesDetail { series: KalshiSeries; open: { ticker: string; title: string; closeTime: string | null; yesPrice: number | null }[]; openCount: number; refusals: { kind: string; id: string; reason: string; matched: string }[]; note: string }
+
+export interface BacktestResult { rule: BurnRule; text: string; sha256: string; sha12: string; mode: RuleMode; statement: string; backtest: Backtest; sentence: string; refusals: unknown[]; seriesTitle: string | null; matched: number }
+
+export interface LaunchReview {
+  ticker: string; name: string; description: string; creator: string; mint: string; cluster: string; seriesTitle: string | null;
+  rules: { text: string; sha256: string; sha12: string; statement: string; mode: string };
+  /** The exact receipt format every burn of this coin will write on chain. */
+  receiptFormat: string;
+  addresses: { tokenConfig: string; feePda: string; vault: string | null; poolId: string; platformId: string; configId: string };
+  allocation: { supply: string; curve: string; locked: string; reserve: string; vestDays: number | null; cliffDays: number | null; lpBurnedPct: number; teamAllocationPct: 0 };
+  fees: { curve: FeeSplit; postGraduation: FeeSplit; creatorSliceBps: 0; sentence: string; devFeeWallet: string | null };
+  /** LaunchLab's recorded creator: the burn program's fee PDA for the mint (never a person, never the keeper). */
+  burnPoolAuthority: string;
+  notes: string[]; disclosure: { disclaimer: string; eventContract: string | null }; operator: { can: string[]; cannot: string[]; placeholder: boolean }; acknowledgements: string[];
+}
+export interface LaunchBundleResponse { ok: true; cluster: string; ready: boolean; pending: string[]; review: LaunchReview; transactions: UnsignedTx[]; registered: { status: string; ticker: string; mint: string } | null; next: string[]; stubs: string[] }
+
+export interface TokenSummary { ticker: string; name: string; mint: string; status: "draft" | "live" | "paused" | "retired" | "expired"; oracle: string; selectorKey: string; mode: string; rulesSha256: string; creator: string; cluster: string; baselineAt: string; receipts: number; burns: number; burnedTokens: string; links: { self: string; receipts: string; page: string } }
+export interface TokenList { tokens: TokenSummary[]; count: number; total: number; cluster: string }
+export interface Reading { id: string; at: string; result: string | null; value: string | null; title: string | null; sourceUrl: string; settlementSourceUrl: string | null; method: string | null; attestedBy: string[] }
+export interface TokenDetail { status: TokenStatusJson; receipts: ReceiptJson[]; readings: Reading[]; rulesText: string; stubs: string[] }
+export interface Receipts { ticker: string; mint: string; rulesSha256: string; count: number; receipts: ReceiptJson[] }
+export interface ServerVerification extends VerifyResult { receipt: ReceiptJson; how: string[] }
+export interface Trust {
+  generatedAt: string; cluster: string; powers: { schema: string; placeholder: boolean; powers: { id: string; power: string; holder: string | null; holderKind: string; timelock: string | null; sunset: string | null; canDo: string[]; cannotDo: string[] }[] };
+  operator: { can: string[]; cannot: string[]; placeholder: boolean };
+  fees: { designed: { curve: FeeSplit; postGraduation: FeeSplit; devFeeBps: number; lpBurnedPct: number; creatorCashBps: 0; teamAllocationPct: 0 }; live: { platformId: string; found: boolean; readAt: string; error: string | null; fields: Record<string, { designed: string; live: string; matches: boolean }> | null } };
+  program: { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[] }; attesters: unknown[]; audit: unknown; statements: string[]; cannot: string[]; rpcConfigured: boolean; stubs: string[];
+}
+
+/** One decoded program event (Anchor emit_cpi), from a confirmed transaction. */
+export interface ProgramEvent { kind: "program"; name: string; data: Record<string, unknown>; signature: string; slot: number; blockTime: number | null; memo: string | null }
+/** A receipt that appeared or changed state, seen through the public API (the polling fallback). */
+export interface ReceiptEvent { kind: "receipt"; name: "ReceiptNew" | "ReceiptUpdated"; receipt: ReceiptJson; ticker: string }
+export type BurntickerEvent = ProgramEvent | ReceiptEvent;

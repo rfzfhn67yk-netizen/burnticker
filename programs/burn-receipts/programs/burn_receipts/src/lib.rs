@@ -1,0 +1,144 @@
+//! burn_receipts — event-indexed burns for the Receipts launchpad (first token $DEFICIT).
+//!
+//! The formula and the money live here; the data arrives as an attested reading; anyone can crank; nobody custodies the creator's
+//! fees. See docs/burn-receipts/README.md for the architecture, the trust model and the audit checklist.
+//!
+//! Instruction set (there is deliberately NO withdraw / close / sweep instruction for the fee PDA or the vault):
+//!   initialize_token       mint-signed, once per mint: rule, attesters, quorum; funds the fee PDA's reserve
+//!   register_pool          permissionless, once: the CPMM pool whose creator is the fee PDA (buyback, policy 0)
+//!   check_pool_health / replace_pool   permissionless: record a dead pool; after 7 days of it, move to another fee-PDA pool
+//!   claim_launchlab_creator_fee        permissionless: LaunchLab curve creator fee → the fee PDA's WSOL account (fee PDA signs)
+//!   submit_reading         permissionless; valid only with a quorum of attester ed25519 signatures over the canonical message
+//!                          (feed, period, value, source-URL hash, zkTLS proof locator)
+//!   crank_buyback          permissionless: spend → swap on CPMM → burn all received → memo v2
+//!   crank_vault            permissionless: burn from the vault (shortfall carried) → memo v1
+//!   crank_no_units         permissionless: process a zero-unit reading that is next in line
+//!   propose_attesters / cancel_attester_change / renounce_admin    admin only (48 h timelock on proposals)
+//!   apply_attester_change  permissionless after the timelock
+//!   initialize_platform    upgrade-authority-signed, once: the program-wide pre-audit burn-pool cap (sunsets automatically)
+//!   propose_cap_raise / cancel_cap_raise / renounce_platform_authority    platform authority (48 h timelock; raise only)
+//!   apply_cap_raise        permissionless after the timelock
+//!   set_registration_policy / cancel_registration_policy   admin (48 h timelock): stranding recovery between policy 0 and a
+//!                          fixed pool that passes the creator + LP checks; only while no pool works, and only until the cap sunset
+//!   apply_registration_policy   permissionless after the timelock and within 14 days of the proposal; a fallback FIXED pool needs
+//!                          ≥ 90 % of its LP burned/locked or must be the pool PDA of a LaunchLab-known AmmConfig
+//!   veto_registration_policy    any current attester: kill a pending registration-policy proposal
+//!   clear_cranker_allowlist     platform authority or any allowlisted key: return crank_buyback to permissionless (the allowlist
+//!                          stops applying at the cap sunset or 90 days after initialize_platform)
+
+pub mod attest;
+pub mod constants;
+pub mod cpmm;
+pub mod error;
+pub mod events;
+pub mod guards;
+pub mod instructions;
+pub mod math;
+pub mod memo;
+pub mod state;
+
+use anchor_lang::prelude::*;
+
+pub use constants::*;
+pub use instructions::*;
+pub use state::*;
+
+declare_id!("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
+
+#[program]
+pub mod burn_receipts {
+    use super::*;
+
+    pub fn initialize_token(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Result<()> {
+        instructions::initialize_token::handle_initialize_token(ctx, args)
+    }
+
+    pub fn register_pool(ctx: Context<RegisterPool>) -> Result<()> {
+        instructions::register_pool::handle_register_pool(ctx)
+    }
+
+    pub fn check_pool_health(ctx: Context<CheckPoolHealth>) -> Result<()> {
+        instructions::pool_health::handle_check_pool_health(ctx)
+    }
+
+    pub fn replace_pool(ctx: Context<ReplacePool>) -> Result<()> {
+        instructions::pool_health::handle_replace_pool(ctx)
+    }
+
+    pub fn claim_launchlab_creator_fee(ctx: Context<ClaimLaunchlabCreatorFee>) -> Result<()> {
+        instructions::claim_launchlab::handle_claim_launchlab_creator_fee(ctx)
+    }
+
+    pub fn submit_reading(ctx: Context<SubmitReading>, record_date: u32, value: u64, source_url_hash: [u8; 32], proof_hash: [u8; 32]) -> Result<()> {
+        instructions::submit_reading::handle_submit_reading(ctx, record_date, value, source_url_hash, proof_hash)
+    }
+
+    pub fn crank_buyback(ctx: Context<CrankBuyback>, record_date: u32) -> Result<()> {
+        instructions::crank_buyback::handle_crank_buyback(ctx, record_date)
+    }
+
+    pub fn crank_vault(ctx: Context<CrankVault>, record_date: u32) -> Result<()> {
+        instructions::crank_vault::handle_crank_vault(ctx, record_date)
+    }
+
+    pub fn crank_no_units(ctx: Context<CrankNoUnits>, record_date: u32) -> Result<()> {
+        instructions::crank_no_units::handle_crank_no_units(ctx, record_date)
+    }
+
+    pub fn propose_attesters(ctx: Context<AdminOnly>, attesters: Vec<AttesterEntry>, quorum: u8) -> Result<()> {
+        instructions::admin::handle_propose_attesters(ctx, attesters, quorum)
+    }
+
+    pub fn cancel_attester_change(ctx: Context<AdminOnly>) -> Result<()> {
+        instructions::admin::handle_cancel_attester_change(ctx)
+    }
+
+    pub fn renounce_admin(ctx: Context<AdminOnly>) -> Result<()> {
+        instructions::admin::handle_renounce_admin(ctx)
+    }
+
+    pub fn apply_attester_change(ctx: Context<ApplyAttesterChange>) -> Result<()> {
+        instructions::admin::handle_apply_attester_change(ctx)
+    }
+
+    pub fn set_registration_policy(ctx: Context<RegistrationPolicyAdmin>, policy: u8, pool: Pubkey) -> Result<()> {
+        instructions::admin::handle_set_registration_policy(ctx, policy, pool)
+    }
+
+    pub fn cancel_registration_policy(ctx: Context<RegistrationPolicyAdmin>) -> Result<()> {
+        instructions::admin::handle_cancel_registration_policy(ctx)
+    }
+
+    pub fn apply_registration_policy(ctx: Context<ApplyRegistrationPolicy>) -> Result<()> {
+        instructions::admin::handle_apply_registration_policy(ctx)
+    }
+
+    /// Re-check R3-2: any current attester vetoes (clears) a pending registration-policy proposal.
+    pub fn veto_registration_policy(ctx: Context<VetoRegistrationPolicy>) -> Result<()> {
+        instructions::admin::handle_veto_registration_policy(ctx)
+    }
+
+    pub fn clear_cranker_allowlist(ctx: Context<ClearCrankerAllowlist>) -> Result<()> {
+        instructions::platform::handle_clear_cranker_allowlist(ctx)
+    }
+
+    pub fn initialize_platform(ctx: Context<InitializePlatform>, authority: Pubkey, burn_pool_cap_lamports: u64, cap_sunset_ts: i64, crankers: Vec<Pubkey>) -> Result<()> {
+        instructions::platform::handle_initialize_platform(ctx, authority, burn_pool_cap_lamports, cap_sunset_ts, crankers)
+    }
+
+    pub fn propose_cap_raise(ctx: Context<PlatformAuthorityOnly>, new_cap_lamports: u64) -> Result<()> {
+        instructions::platform::handle_propose_cap_raise(ctx, new_cap_lamports)
+    }
+
+    pub fn cancel_cap_raise(ctx: Context<PlatformAuthorityOnly>) -> Result<()> {
+        instructions::platform::handle_cancel_cap_raise(ctx)
+    }
+
+    pub fn apply_cap_raise(ctx: Context<ApplyCapRaise>) -> Result<()> {
+        instructions::platform::handle_apply_cap_raise(ctx)
+    }
+
+    pub fn renounce_platform_authority(ctx: Context<PlatformAuthorityOnly>) -> Result<()> {
+        instructions::platform::handle_renounce_platform_authority(ctx)
+    }
+}

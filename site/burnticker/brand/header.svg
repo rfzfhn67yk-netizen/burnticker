@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="500" viewBox="0 0 1500 500">
+  <!-- Burnticker X header: wordmark + flame mark, a tagline, and a strip of ticker tape carrying real-looking receipt lines. -->
+  <defs>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff4d1f"/>
+      <stop offset="0.55" stop-color="#ffb000"/>
+      <stop offset="1" stop-color="#ffe08a"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffb000"/>
+      <stop offset="1" stop-color="#fff3c4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1500" height="500" fill="#0a0a0c"/>
+  <!-- flame mark, scaled from the avatar -->
+  <g transform="translate(82 70) scale(0.42)">
+    <path d="M400 128 C 470 210, 560 262, 548 384 C 540 452, 500 490, 462 506 C 486 462, 478 420, 440 392 C 436 436, 414 462, 386 480 C 358 462, 340 428, 346 384 C 302 420, 294 470, 318 512 C 262 486, 232 428, 240 364 C 252 268, 352 220, 400 128 Z" fill="url(#flame)" transform="translate(-230 -120)"/>
+    <path d="M400 300 C 436 344, 470 372, 462 428 C 458 462, 436 486, 412 498 C 420 470, 412 448, 396 432 C 380 452, 366 478, 372 504 C 346 486, 332 452, 338 420 C 346 372, 380 338, 400 300 Z" fill="url(#core)" transform="translate(-230 -120)"/>
+  </g>
+  <text x="250" y="178" font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="92" font-weight="700" letter-spacing="5" fill="#f6f4ee">BURNTICKER</text>
+  <text x="252" y="238" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="40" font-weight="700" fill="#ffb000">Burns on the news.</text>
+  <text x="252" y="286" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="27" fill="#b8b6ae">A memecoin launchpad: coins whose supply burns on verifiable real-world events, with receipts.</text>
+  <!-- the tape -->
+  <rect x="0" y="352" width="1500" height="96" fill="#141418"/>
+  <rect x="0" y="352" width="1500" height="3" fill="#ffb000"/>
+  <rect x="0" y="445" width="1500" height="3" fill="#ffb000"/>
+  <g fill="#0a0a0c">
+    <circle cx="30" cy="366" r="5"/><circle cx="90" cy="366" r="5"/><circle cx="150" cy="366" r="5"/><circle cx="210" cy="366" r="5"/><circle cx="270" cy="366" r="5"/><circle cx="330" cy="366" r="5"/><circle cx="390" cy="366" r="5"/><circle cx="450" cy="366" r="5"/><circle cx="510" cy="366" r="5"/><circle cx="570" cy="366" r="5"/><circle cx="630" cy="366" r="5"/><circle cx="690" cy="366" r="5"/><circle cx="750" cy="366" r="5"/><circle cx="810" cy="366" r="5"/><circle cx="870" cy="366" r="5"/><circle cx="930" cy="366" r="5"/><circle cx="990" cy="366" r="5"/><circle cx="1050" cy="366" r="5"/><circle cx="1110" cy="366" r="5"/><circle cx="1170" cy="366" r="5"/><circle cx="1230" cy="366" r="5"/><circle cx="1290" cy="366" r="5"/><circle cx="1350" cy="366" r="5"/><circle cx="1410" cy="366" r="5"/><circle cx="1470" cy="366" r="5"/>
+  </g>
+  <text x="24" y="412" font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="26" fill="#ffb000">TREASURY.DEBT  2026-10-08  +$21.28B → 21 units → 2,100,000 $DEFICIT burned ✓    NOAA.FLARES  X1.2 → 10 units → burned ✓    LL2.LAUNCHES  orbital launch → 1 unit → burned ✓    KALSHI.KXCPI  settled → 1 unit ✓</text>
+  <text x="1476" y="484" text-anchor="end" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="20" fill="#6d6c66">memecoins — the rule says what supply does, not what price does</text>
+</svg>

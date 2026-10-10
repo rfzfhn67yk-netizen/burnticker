@@ -1,0 +1,92 @@
+# THE PUBLIC-REPO ALLOWLIST (the owner, 2026-10-09: "i dont want to hide anything" — and the trading code never leaves).
+#
+# One git pathspec per line (a file, a directory, or a glob git understands). scripts/ops/publish-public-repo.sh copies exactly the
+# TRACKED files these lines match into the public tree, at the same paths, and nothing else: ignored files (data/, .next/, builds,
+# local env files) can never be matched because git does not track them. This is an allowlist, never a denylist — a new private
+# directory is private by default; a new public file is published only when a line here names it.
+#
+# A line that matches no tracked file is reported as a warning (not an error), so a renamed directory is noticed.
+# config/public-repo.denypatterns is the second gate: every copied text file is scanned against it, and the check fails on a hit.
+
+# --- the on-chain program (Anchor) and its generator scripts ---
+programs/burn-receipts
+
+# --- the TypeScript client of the program ---
+src/lib/burnReceipts
+scripts/burnreceipts-*.mts
+
+# --- the $DEFICIT keeper (single-token) ---
+src/lib/burnKeeper
+config/burnkeeper
+scripts/burn-keeper.mts
+scripts/burnkeeper-*.mts
+scripts/burnkeeper-keygen.mjs
+
+# --- the platform (multi-token keeper, registry, oracles, token pages, trust page, launch wizard, API routes) ---
+src/lib/burnticker
+src/app/burnticker
+src/app/api/burnticker
+config/burnticker
+scripts/burnticker-*.mts
+scripts/whitepaper-html.mjs
+
+# --- the public SDK for bots (@burnticker/sdk) and the manifest of the repo files it imports (kept current by test/burntickerSdkLeak.test.ts;
+#     every file it lists is covered by the src/lib/{burnticker,burnReceipts,burnKeeper} lines above) ---
+packages/burnticker-sdk
+packages/burnticker-sdk/public-closure.json
+
+# --- public launch content: the daily post and its copy lint (the token page and scripts/burnkeeper-post-draft.mts import them) and
+#     the lint's word list. Named file by file: the rest of src/lib/launch (drafts, other launchpads' tooling) uses the private database. ---
+src/lib/launch/dailyPost.ts
+src/lib/launch/copyLint.ts
+config/launch
+
+# --- the two shared modules the public code imports (split out of the private app so nothing else is dragged along) ---
+src/lib/sameOrigin.ts
+src/lib/live/validateSwap.ts
+
+# --- the refuse list: the operator's trading bots read this and refuse every platform coin. Publishing it is the proof. ---
+src/lib/ownTokens.ts
+config/own-tokens.json
+
+# --- sites and brand ---
+site/deficit
+site/burnticker
+site/brand-concepts
+
+# --- docs ---
+docs/burnkeeper
+docs/burn-receipts
+docs/burnticker
+docs/launch
+
+# --- deploy: the Burnticker host runs THIS tree (2026-10-10, docs/burnticker/deploy.md "The host runs the public tree") — so every
+#     unit, entrypoint and ops script the box uses is published, and nothing of the trading app is on it ---
+deploy/caddy
+deploy/systemd/mct-burnkeeper.service
+deploy/systemd/mct-burnticker-*.service
+deploy/systemd/mct-burnticker-*.timer
+scripts/load-env.sh
+scripts/service/run-burnticker-web.sh
+scripts/service/run-burnkeeper.sh
+scripts/service/run-burnticker-keeper.sh
+scripts/service/run-burnticker-audit.sh
+scripts/ops/deploy-sites.sh
+scripts/ops/install-burnticker-units.sh
+
+# --- tests and the fixtures they read ---
+test/burnKeeper*.ts
+test/burnReceipts*.ts
+test/burnticker*.ts
+test/fixtures/treasury-debt-to-penny-2024-12-to-2026-10-08.json
+test/fixtures/polymarket-trump-2024-condition.json
+test/fixtures/reclaim-sample-proof.json
+test/fixtures/bom-weekend-2026W40-row1.html
+
+# --- the carve-out itself, so the public can see how the public tree is cut ---
+config/public-repo.allowlist
+config/public-repo.denypatterns
+config/public-repo/overlay
+scripts/ops/publish-public-repo.sh
+scripts/ops/public-repo-lib.mjs
+scripts/ops/verify-evidence-signatures.mjs

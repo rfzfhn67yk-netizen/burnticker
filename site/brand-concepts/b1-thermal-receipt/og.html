@@ -1,0 +1,85 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B1 og</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root{ --surface:#1f1c19; --paper:#f2eee4; --ink:#1b1916; --stamp:#5b3fa3; }
+  html,body{margin:0;width:1200px;height:630px;overflow:hidden;background:var(--surface);}
+  body{position:relative;font-family:'Courier Prime',monospace;color:var(--ink);}
+  .surface{position:absolute;inset:0;background:
+    repeating-linear-gradient(97deg, rgba(255,255,255,.018) 0 2px, transparent 2px 9px),
+    radial-gradient(90% 120% at 30% 10%, #272421 0%, #1a1816 75%);}
+  .receipt{position:absolute;left:760px;top:-30px;width:380px;height:700px;background:var(--paper);transform:rotate(2.4deg);
+    box-shadow:0 14px 34px rgba(0,0,0,.55),0 2px 0 rgba(0,0,0,.4);}
+  .receipt:before{content:"";position:absolute;inset:0;background:
+      linear-gradient(90deg, transparent 0 58%, rgba(255,255,255,.5) 58% 58.6%, transparent 58.6%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.028) 0 1px, transparent 1px 3px);}
+  .grain{position:absolute;inset:0;opacity:.09;mix-blend-mode:multiply}
+  .body{position:absolute;left:26px;right:26px;top:48px;font-size:19px;line-height:27px;}
+  .h{font-weight:700;font-size:32px;letter-spacing:2px;line-height:1.1}
+  .sub{font-size:15px;letter-spacing:4px;margin:2px 0 8px;color:#3a352e}
+  .rule{border-top:2px dashed #2a2622;height:0;margin:9px 0 7px}
+  .row{display:flex;justify-content:space-between}
+  .fade{opacity:.6}
+  .keep{margin-top:12px;font-size:14px;letter-spacing:4px;color:#4a443c;text-align:right}
+  .hole{position:absolute;left:186px;top:214px;width:180px;height:160px}
+  .stamp{position:absolute;left:26px;top:446px;transform:rotate(-9deg);color:var(--stamp);border:4px solid var(--stamp);border-radius:3px;
+    padding:0 10px;font-weight:700;font-size:40px;letter-spacing:4px;line-height:1.1;mix-blend-mode:multiply;filter:url(#inkbleed);opacity:.9}
+  .stamp small{display:block;font-size:12px;letter-spacing:3px;font-weight:400}
+  .copy{position:absolute;left:72px;top:120px;width:620px;color:var(--paper)}
+  .wordmark{font-weight:700;font-size:86px;letter-spacing:8px;line-height:1;margin-left:-4px;
+    -webkit-mask-image:linear-gradient(90deg,#000 0 52%,rgba(0,0,0,.7) 62%,#000 74%);}
+  .line{margin-top:30px;font-size:27px;line-height:38px;color:#e6e0d2}
+  .feeds{margin-top:28px;font-size:18px;letter-spacing:2px;color:#9c9587;line-height:30px}
+  .disc{position:absolute;left:72px;top:560px;color:#7d776c;font-size:15px;letter-spacing:1px}
+</style></head>
+<body>
+<div class="surface"></div>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="inkbleed" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="9" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.4 1.25" result="mask"/>
+    <feComposite in="d" in2="mask" operator="in"/>
+  </filter>
+  <defs>
+    <radialGradient id="sc" cx="48%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#1f1c19"/><stop offset=".40" stop-color="#1f1c19"/>
+      <stop offset=".46" stop-color="#0e0b08"/><stop offset=".55" stop-color="#3a2411"/>
+      <stop offset=".66" stop-color="#8a5a24"/><stop offset=".78" stop-color="#cfa65c" stop-opacity=".85"/>
+      <stop offset=".9" stop-color="#e7d6a6" stop-opacity=".45"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="rough" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency=".045" numOctaves="4" seed="11" result="t"/>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="26" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" stitchTiles="stitch"/></filter>
+  </defs>
+</svg>
+<div class="copy">
+  <div class="wordmark">BURNTICKER</div>
+  <div class="line">Memecoins whose supply burns when a verifiable real-world event happens. Every burn carries an on-chain receipt.</div>
+  <div class="feeds">TREASURY.DEBT · NOAA.FLARES · LL2.LAUNCHES · JPL.NEO · WIKI.VIEWS<br>RULES LOCKED AT LAUNCH · ANYONE CAN CHECK THE ARITHMETIC</div>
+</div>
+<div class="receipt" id="r">
+  <svg class="grain" width="100%" height="100%"><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="body"><div class="h">BURNTICKER</div><div class="sub">BURN RECEIPT</div><div class="rule"></div>
+    <div class="row"><span>FEED</span><b>TREASURY.DEBT</b></div>
+    <div class="row"><span>DATE</span><b>2026-10-08</b></div>
+    <div class="row fade"><span>READING</span><b>38,411,206,558,942</b></div>
+    <div class="row"><span>DELTA</span><b>+21,284,113,007</b></div>
+    <div class="row"><span>UNIT</span><b>$1,000,000,000</b></div>
+    <div class="row"><span>UNITS</span><b>21</b></div><div class="rule"></div>
+    <div class="row"><span>BURNED</span><b>2,100,000 DEFICIT</b></div>
+    <div class="row"><span>TX</span><b>5xQm7…kR7a</b></div>
+    <div class="row fade"><span>RULE</span><b>sha256:9f3e…c21b</b></div><div class="keep">KEEP THIS RECEIPT</div></div>
+  <svg class="hole" viewBox="0 0 180 160"><ellipse cx="88" cy="78" rx="80" ry="64" fill="url(#sc)" filter="url(#rough)"/></svg>
+  <div class="stamp">BURNED<small>ON-CHAIN · 2026-10-08</small></div>
+</div>
+<div class="disc">a memecoin launchpad — the rule says what supply does, not what price does</div>
+<script>
+  const r=document.getElementById('r'),W=380,H=700,t=12,d=8;let p=[];
+  for(let x=0;x<=W;x+=t)p.push(`${x}px ${(x/t)%2?0:d}px`);for(let x=W;x>=0;x-=t)p.push(`${x}px ${H-((x/t)%2?0:d)}px`);r.style.clipPath=`polygon(${p.join(',')})`;
+</script>
+</body></html>

@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$DEFICIT — burns when the debt rises</title>
+<meta name="description" content="$DEFICIT is a Solana memecoin whose supply burns when the U.S. national debt rises: every $1,000,000,000 of new debt on Treasury's Debt to the Penny triggers a buyback and burn paid by the token's own trading fees, with a receipt on chain.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#e7e5df" media="(prefers-color-scheme: light)">
+<meta property="og:title" content="$DEFICIT — burns when the debt rises">
+<meta property="og:description" content="Every $1B the U.S. borrows buys back and burns $DEFICIT with its own trading fees. Receipts on chain. A memecoin: the rule says what supply does, not what price does.">
+<meta property="og:image" content="og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@USA_DEFICIT">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+<link rel="apple-touch-icon" href="avatar.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&amp;display=swap">
+<style>
+/* D1 "Debt clock" (site/brand-concepts/d1-debt-clock): a black LED board in a dark housing, white Oswald marquee, red
+   seven-segment digits for what the U.S. borrowed, amber for what was burned. Dark-first. The light variant is the same board
+   UNLIT — the enamel housing and a pale face in daylight, segments printed in matte ink instead of glowing — not an inversion. */
+:root{
+  --bg:#0a0a0a;--panel:#0f0f0f;--panel2:#171717;--line:#262626;--ink:#f1eee6;--dim:#bdb9af;--muted:#8f8b82;
+  --red:#ff3b2e;--hot:#ff3b2e;--onred:#0a0a0a;--amber:#ffb000;--ok:#4cc38a;--warn:#ffb000;--stamp:rgba(255,59,46,.10);
+  --housing:linear-gradient(180deg,#161616,#0c0c0c 30%,#070707);--face:#030303;
+  --faceshadow:inset 0 0 0 2px #1c1c1c,inset 0 0 0 3px #000,inset 0 10px 24px rgba(0,0,0,.9);
+  --bolt:radial-gradient(circle at 35% 35%,#3a3a3a,#111 70%);
+  --seg-lit:#ff3b2e;--seg-dot:#ff6a5c;--seg-off:#2a100d;--seg-amber:#ffb000;--seg-amberdot:#ffd166;--seg-amberoff:#2a1e08;
+  --marquee:"Oswald","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){--bg:#e7e5df;--panel:#f2f1ec;--panel2:#e8e6e0;--line:#cac7be;--ink:#15130f;--dim:#3d3a34;--muted:#625e55;
+    --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1f7a4a;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
+    --housing:linear-gradient(180deg,#d4d1c9,#c8c5bc 30%,#bfbcb3);--face:#dddbd4;
+    --faceshadow:inset 0 0 0 1px #b4b0a7,inset 0 8px 18px rgba(0,0,0,.10);
+    --bolt:radial-gradient(circle at 35% 35%,#f6f5f1,#9e9a90 70%);
+    --seg-lit:#b3261e;--seg-dot:#c8463a;--seg-off:rgba(21,19,15,.075);--seg-amber:#8f5600;--seg-amberdot:#a86d12;--seg-amberoff:rgba(21,19,15,.075)}
+}
+:root[data-theme="light"]{--bg:#e7e5df;--panel:#f2f1ec;--panel2:#e8e6e0;--line:#cac7be;--ink:#15130f;--dim:#3d3a34;--muted:#625e55;
+  --red:#b3261e;--hot:#b3261e;--onred:#ffffff;--amber:#8f5600;--ok:#1f7a4a;--warn:#8f5600;--stamp:rgba(179,38,30,.08);
+  --housing:linear-gradient(180deg,#d4d1c9,#c8c5bc 30%,#bfbcb3);--face:#dddbd4;
+  --faceshadow:inset 0 0 0 1px #b4b0a7,inset 0 8px 18px rgba(0,0,0,.10);
+  --bolt:radial-gradient(circle at 35% 35%,#f6f5f1,#9e9a90 70%);
+  --seg-lit:#b3261e;--seg-dot:#c8463a;--seg-off:rgba(21,19,15,.075);--seg-amber:#8f5600;--seg-amberdot:#a86d12;--seg-amberoff:rgba(21,19,15,.075)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);}
+a{color:var(--hot);text-decoration:none}a:hover{text-decoration:underline}
+code,pre,.mono{font-family:var(--mono)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.dim{color:var(--dim)}
+h2{font:600 1.05rem/1.3 var(--marquee);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 16px}
+h2 span{color:var(--hot);margin-right:10px}
+section{padding:40px 0;border-top:1px solid var(--line)}
+section.wrap{padding:40px 16px}
+section.first{border-top:0}
+.intro{margin:0 0 14px}
+.gap{margin-top:12px}
+
+/* top bar: the marquee wordmark */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;flex-wrap:wrap}
+.wordmark{font:700 1.75rem/1 var(--marquee);letter-spacing:.07em;color:var(--ink)}
+.wordmark:hover{text-decoration:none}
+.nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.nav a{font:500 .8rem/1 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:8px 10px;border:1px solid var(--line);white-space:nowrap}
+.nav a:hover{text-decoration:none;border-color:var(--hot);color:var(--ink)}
+.nav a.primary{background:var(--red);border-color:var(--red);color:var(--onred);font-weight:600}
+
+/* hero: the board */
+section.hero{padding:8px 16px 32px;position:relative}
+.board{background:var(--housing);padding:clamp(8px,1.6vw,16px);margin:0 0 26px}
+.face{position:relative;background:var(--face);box-shadow:var(--faceshadow);padding:clamp(22px,4vw,44px) clamp(16px,4.4vw,52px) clamp(20px,3.4vw,36px);overflow:hidden}
+.bolt{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--bolt)}
+.bolt.tl{left:9px;top:9px}.bolt.tr{right:9px;top:9px}.bolt.bl{left:9px;bottom:9px}.bolt.br{right:9px;bottom:9px}
+.strap{margin:0 0 clamp(16px,3vw,26px);font:500 clamp(1rem,2.6vw,1.9rem)/1.15 var(--marquee);letter-spacing:.16em;color:var(--ink)}
+.label{font:500 clamp(.7rem,1.3vw,.95rem)/1.35 var(--marquee);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0}
+@media (max-width:480px){.label{letter-spacing:.12em}}
+.figred{--w:clamp(28px,7.4vw,76px);margin:2px 0 0}
+.figamber{--w:clamp(16px,3.4vw,34px);margin:2px 0 0}
+.figcap{margin:0 0 clamp(16px,3vw,26px);font:500 clamp(.82rem,1.4vw,1rem)/1.4 var(--marquee);letter-spacing:.08em;color:var(--dim)}
+.figcap b{color:var(--ink);font-weight:600}
+.hero h1{font:600 clamp(1.45rem,4vw,2.5rem)/1.18 var(--marquee);letter-spacing:.035em;text-transform:uppercase;margin:clamp(6px,1.4vw,12px) 0 clamp(14px,2.4vw,22px);max-width:30ch;color:var(--ink)}
+.hero h1 em{font-style:normal;color:var(--hot)}
+.rule{font-size:1.1rem;line-height:1.55;color:var(--dim);max-width:62ch;margin:0 0 20px}
+.rule strong{color:var(--ink)}
+.stamp{display:block;font:500 clamp(.72rem,1.2vw,.88rem)/1.4 var(--marquee);letter-spacing:.1em;color:var(--muted)}
+.hero .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.btn{display:inline-block;padding:11px 16px;border:1px solid var(--line);color:var(--ink);font:500 .92rem/1.2 var(--marquee);letter-spacing:.1em;text-transform:uppercase}
+.btn:hover{text-decoration:none;border-color:var(--hot)}
+.btn.red{background:var(--red);border-color:var(--red);color:var(--onred);font-weight:600}
+.btn.ghost{color:var(--dim)}
+
+/* seven-segment component (from d1-debt-clock/seg.css, scoped under .seg7 and themed). Unlit segments stay faintly visible,
+   lit ones carry an LED dot matrix. --w sizes a digit; everything else derives from it. */
+.seg7{display:flex;align-items:flex-end;max-width:100%;overflow:hidden;--t:calc(var(--w) * .17);--gap:calc(var(--w) * .28);--h:calc(var(--w) * 1.8);
+  --lit:var(--seg-lit);--litdot:var(--seg-dot);--off:var(--seg-off);padding:calc(var(--t) * .7) 0 calc(var(--t) * 1.1)}
+.seg7.amber{--lit:var(--seg-amber);--litdot:var(--seg-amberdot);--off:var(--seg-amberoff)}
+.seg7 .fb{font:700 calc(var(--w) * 1.6)/1 var(--marquee);color:var(--lit);letter-spacing:.04em}
+.seg7 .d{display:block;position:relative;width:var(--w);height:var(--h);margin-right:var(--gap);flex:none}
+.seg7 .s{display:block;position:absolute;background:var(--off)}
+.seg7 .s.on{background:var(--lit);
+  background-image:radial-gradient(circle at 50% 50%, var(--litdot) 0 22%, var(--lit) 30% 46%, rgba(0,0,0,.25) 56%, transparent 60%);
+  background-size:calc(var(--t) * .55) calc(var(--t) * .55)}
+.seg7 .a,.seg7 .g,.seg7 .dd{left:calc(var(--t) * .55);right:calc(var(--t) * .55);height:var(--t);
+  clip-path:polygon(0 50%, calc(var(--t) * .5) 0, calc(100% - var(--t) * .5) 0, 100% 50%, calc(100% - var(--t) * .5) 100%, calc(var(--t) * .5) 100%)}
+.seg7 .a{top:0}.seg7 .g{top:calc(50% - var(--t) / 2)}.seg7 .dd{bottom:0}
+.seg7 .b,.seg7 .c,.seg7 .e,.seg7 .f{width:var(--t);height:calc(50% - var(--t) * .6);
+  clip-path:polygon(50% 0, 100% calc(var(--t) * .5), 100% calc(100% - var(--t) * .5), 50% 100%, 0 calc(100% - var(--t) * .5), 0 calc(var(--t) * .5))}
+.seg7 .f,.seg7 .b{top:calc(var(--t) * .55)}.seg7 .e,.seg7 .c{bottom:calc(var(--t) * .55)}
+.seg7 .f,.seg7 .e{left:0}.seg7 .b,.seg7 .c{right:0}
+.seg7 .d.comma{width:calc(var(--t) * .9)}
+.seg7 .d.comma .s{left:0;bottom:calc(var(--t) * -.9);width:calc(var(--t) * .9);height:calc(var(--t) * 1.5);clip-path:polygon(0 0,100% 0,100% 55%,30% 100%,0 100%)}
+.seg7 .d.dot{width:calc(var(--t) * .9)}
+.seg7 .d.dot .s{left:0;bottom:0;width:calc(var(--t) * .9);height:calc(var(--t) * .9)}
+.seg7 .bar{left:calc(50% - var(--t) * .18);top:calc(var(--t) * -.6);bottom:calc(var(--t) * -.6);width:calc(var(--t) * .36)}
+
+/* live strip */
+.strip{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line);border:1px solid var(--line);overflow:hidden}
+.cell{background:var(--panel);padding:16px 16px 14px;min-width:0}
+.cell .k{font:500 .74rem/1.3 var(--marquee);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.cell .v{font:600 1.85rem/1.1 var(--marquee);letter-spacing:.02em;word-break:break-word;font-variant-numeric:tabular-nums}
+.cell .v.mono{font:500 1.45rem/1.2 var(--marquee);letter-spacing:.04em}
+.cell .s{font-size:.8rem;color:var(--muted);margin-top:6px;line-height:1.35}
+.cell .s b{color:var(--dim);font-weight:600}
+#debtNow{color:var(--hot)}#burned{color:var(--amber)}
+.notice{margin-top:12px;font-size:.85rem;color:var(--warn);display:none}
+.notice.show{display:block}
+.banner{display:none;margin:0 0 16px;padding:10px 14px;border-left:3px solid var(--warn);background:var(--panel);font:500 .86rem/1.45 var(--marquee);letter-spacing:.05em;color:var(--dim)}
+.banner.show{display:block}
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:3px}
+.pulse.off{background:var(--muted)}
+@media (min-width:640px){.strip{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:980px){.strip{grid-template-columns:repeat(4,1fr)}.cell:first-child,.cell:last-child{grid-column:span 2}.cell:first-child .v{font-size:2.7rem}}
+
+/* today */
+.today{margin:0;padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--hot);font:1rem/1.55 var(--sans);white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+.today a{word-break:break-all}
+.todaysub{margin:10px 0 0;font-size:.85rem;color:var(--muted)}
+.todaysub button{font:500 .78rem/1 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);background:var(--panel2);border:1px solid var(--line);padding:6px 10px;cursor:pointer;margin-left:6px}
+tr:target td{background:var(--stamp)}
+
+/* table */
+.tablewrap{border:1px solid var(--line);overflow:auto;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:860px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:top}
+th{font:500 .72rem/1.3 var(--marquee);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);background:var(--panel2);position:sticky;top:0}
+td.r,th.r{text-align:right}
+td.units{font:600 1rem/1.2 var(--marquee);letter-spacing:.04em;color:var(--hot)}
+tr.detail td{white-space:normal;background:var(--panel2);padding:12px 14px 14px}
+tr.detail pre{margin:6px 0 10px;padding:9px 10px;background:var(--bg);border:1px solid var(--line);font-size:.76rem;line-height:1.45;white-space:pre-wrap;word-break:break-all;overflow-x:auto}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--hot);font-weight:700}
+.vbtn{font:500 .74rem/1 var(--marquee);letter-spacing:.14em;text-transform:uppercase;color:var(--hot);background:none;border:1px solid var(--line);padding:5px 9px;cursor:pointer}
+.vbtn:hover{border-color:var(--hot)}
+.tfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;font-size:.82rem;color:var(--muted);flex-wrap:wrap}
+.tfoot button{font:500 .8rem/1 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);background:var(--panel2);border:1px solid var(--line);padding:9px 12px;cursor:pointer}
+.empty{padding:28px 16px;color:var(--muted);font-size:.95rem;text-align:center}
+
+/* chart */
+.chartbox{border:1px solid var(--line);background:var(--panel);padding:12px 12px 8px}
+canvas{display:block;width:100%;height:280px;touch-action:pan-y}
+.legend{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);padding:8px 2px 2px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--amber);margin-right:6px;vertical-align:-1px}
+.legend .cap{color:var(--dim);font-family:var(--mono);font-size:.78rem}
+
+/* verify */
+.grid2{display:grid;grid-template-columns:1fr;gap:18px}
+@media (min-width:860px){.grid2{grid-template-columns:1fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);padding:18px}
+.card h3{margin:0 0 10px;font:600 1.15rem/1.3 var(--marquee);letter-spacing:.06em;text-transform:uppercase}
+.card p{margin:0 0 10px;color:var(--dim);font-size:.95rem}
+.card pre{margin:8px 0;padding:10px 12px;background:var(--bg);border:1px solid var(--line);font-size:.78rem;line-height:1.5;white-space:pre-wrap;word-break:break-all;overflow-x:auto;color:var(--ink)}
+.hash{font-family:var(--mono);font-size:.78rem;word-break:break-all;color:var(--ink)}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{position:relative;padding-left:34px;margin:0 0 12px;color:var(--dim);font-size:.95rem}
+.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:1px;width:22px;height:22px;background:var(--red);color:var(--onred);font:600 .85rem/22px var(--marquee);text-align:center}
+.steps li b{color:var(--ink)}
+
+/* flow */
+.flow{display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:760px){.flow{grid-template-columns:repeat(4,1fr)}}
+.flow .f{background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--amber);padding:14px;position:relative}
+.flow .f .t{font:600 .8rem/1.3 var(--marquee);letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin-bottom:6px}
+.flow .f p{margin:0;font-size:.9rem;color:var(--dim)}
+.flow .f p code{font-size:.75rem;word-break:break-all;color:var(--ink)}
+.addr{font-family:var(--mono);font-size:.76rem;word-break:break-all;color:var(--dim)}
+
+/* disclaimer */
+.disc{border:2px solid var(--hot);padding:18px 20px;background:var(--stamp)}
+.disc h3{margin:0 0 8px;font:600 1.3rem/1.25 var(--marquee);letter-spacing:.05em;text-transform:uppercase}
+.disc p{margin:0 0 8px;color:var(--ink)}
+.disc p:last-child{margin:0}
+
+/* footer */
+footer{padding:28px 0 48px;color:var(--muted);font-size:.84rem}
+footer .links{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spacing:.1em;text-transform:uppercase}
+.replay{margin-top:18px;font-size:.88rem;color:var(--muted)}
+.replay b{color:var(--dim)}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <div class="top">
+    <a class="wordmark" href="./" aria-label="$DEFICIT, home">$DEFICIT</a>
+    <nav class="nav" aria-label="Links">
+      <a href="#today">Today</a>
+      <a href="#receipts">Receipts</a>
+      <a href="#verify">Verify</a>
+      <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>
+      <a href="https://burnticker.com/" rel="noopener" target="_blank">Burnticker</a>
+      <a class="primary" id="tradeTop" href="#trade">Trade</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap first">
+    <div class="board">
+      <div class="face">
+        <span class="bolt tl"></span><span class="bolt tr"></span><span class="bolt bl"></span><span class="bolt br"></span>
+        <p class="strap">BURNS WHEN AMERICA BORROWS</p>
+        <p class="label" id="heroLabel">One burn unit per</p>
+        <div class="seg7 figred" id="heroFig" role="img" aria-label="$1B"><span class="fb">$1B</span></div>
+        <p class="figcap" id="heroCap">of new U.S. debt on Treasury's Debt to the Penny, counted each business day.</p>
+        <p class="label">$DEFICIT bought and burned to date</p>
+        <div class="seg7 amber figamber" id="heroBurn" role="img" aria-label="not published yet"><span class="fb">—</span></div>
+        <h1>Every <em>$1,000,000,000</em> the U.S. borrows burns $DEFICIT.</h1>
+        <span class="stamp">a memecoin · the rule says what supply does, not what price does</span>
+      </div>
+    </div>
+    <p class="rule"><strong>The rule in one sentence:</strong> each business day Treasury publishes the national debt; every full $1B it rose since the previous reading is one unit, each unit spends 1% of the token's own burn pool (1 − 0.99<sup>units</sup>) buying $DEFICIT on its Raydium pool, and the on-chain program burns everything bought in the same instruction — with a receipt on chain.</p>
+    <div class="cta">
+      <a class="btn red" id="tradeHero" href="#trade">Trade $DEFICIT</a>
+      <a class="btn" href="#receipts">Read the receipts</a>
+      <a class="btn ghost" href="rules.json">rules.json</a>
+    </div>
+    <p class="replay">Replayed over the real Treasury series, 2025-01 → 2026-10-08: <b>235 burn days</b>, <b>6,490 units</b>, biggest day <b>2025-07-07, +$366.44B → 366 units</b> (the day after the debt ceiling rose). A replay of what the rule would have counted, not a forecast.</p>
+  </section>
+
+  <section class="wrap" id="live">
+    <h2><span>§1</span>Live</h2>
+    <div class="banner" id="banner"></div>
+    <div class="strip" aria-live="polite">
+      <div class="cell">
+        <div class="k">U.S. total public debt outstanding</div>
+        <div class="v num" id="debtNow">—</div>
+        <div class="s"><span class="mono num" id="debtExact">awaiting the keeper's status.json</span></div>
+      </div>
+      <div class="cell">
+        <div class="k">Last reading</div>
+        <div class="v mono num" id="lastDate">—</div>
+        <div class="s" id="lastDelta">Treasury posts each business day's figure the next afternoon (ET).</div>
+      </div>
+      <div class="cell">
+        <div class="k">Next possible burn</div>
+        <div class="v mono num" id="next">—</div>
+        <div class="s" id="nextSub">The keeper checks the feed at 16:30 and 20:00 ET; a burn needs a full $1B of new debt.</div>
+      </div>
+      <div class="cell">
+        <div class="k">Bought and burned</div>
+        <div class="v num" id="burned">—</div>
+        <div class="s" id="burnedSub">of 1,000,000,000 supply</div>
+      </div>
+      <div class="cell">
+        <div class="k">Fee pool</div>
+        <div class="v mono num" id="pool">—</div>
+        <div class="s" id="poolSub">SOL available for the next burn, after a 0.02 SOL fee reserve</div>
+      </div>
+      <div class="cell">
+        <div class="k">Keeper</div>
+        <div class="v mono num" id="health"><span class="pulse off"></span>—</div>
+        <div class="s" id="healthSub">last feed check —</div>
+      </div>
+    </div>
+    <p class="notice" id="notice"></p>
+  </section>
+
+  <section class="wrap" id="today">
+    <h2><span>§2</span>Today</h2>
+    <pre class="today" id="todayText">awaiting the keeper's status.json</pre>
+    <p class="todaysub">The day's report, in the same words as the post on <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>: filled from status.json and burns.json, never retyped (format: docs/launch/daily-post.md). <button type="button" id="copyToday" hidden>copy</button></p>
+  </section>
+
+  <section class="wrap" id="receipts">
+    <h2><span>§3</span>Receipts</h2>
+    <p class="dim intro">One row per burn day. The reading is Treasury's number for that date; units are what the rule counted; the swap bought the tokens and the burn destroyed them. <b>Verify</b> opens the exact curl, the arithmetic and the memo the burn carries on chain.</p>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr>
+          <th scope="col">Record date</th><th scope="col" class="r">Reading</th><th scope="col" class="r">Debt change</th><th scope="col" class="r">Units</th><th scope="col" class="r">Spent (SOL)</th><th scope="col" class="r">Bought</th><th scope="col" class="r">Burned</th><th scope="col">Swap tx</th><th scope="col">Burn tx</th><th scope="col">Check</th><th scope="col"></th>
+        </tr></thead>
+        <tbody id="rows"><tr><td colspan="11" class="empty">No receipts loaded. The first reading after launch is the baseline; the first burn follows the first full $1B increase after it.</td></tr></tbody>
+      </table>
+      <div class="tfoot"><span id="count"></span><button type="button" id="more" hidden>Show every burn</button></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="chart">
+    <h2><span>§4</span>The debt curve</h2>
+    <div class="chartbox">
+      <canvas id="cv" width="1000" height="280" aria-label="U.S. total public debt outstanding over time, with a marker on each burn day" role="img"></canvas>
+      <div class="legend"><span><i></i>burn day (bigger = more units)</span><span class="cap" id="cap">hover or touch the line for a reading</span></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="verify">
+    <h2><span>§5</span>Verify it yourself</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>The rule file and its hash</h3>
+        <p>The rule is fixed at launch and published as <a href="rules.json">rules.json</a>. Its SHA-256 is written into every burn's memo, so a receipt that cites a different hash is not this rule.</p>
+        <div class="hash" id="sha">sha256: — (loaded from status.json)</div>
+        <p class="muted gap" id="statement"></p>
+      </div>
+      <div class="card">
+        <h3>Three steps, any machine</h3>
+        <ol class="steps">
+          <li><b>Fetch the two Treasury rows a burn used</b> — public API, no key:
+            <pre id="curl">curl -s 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt&amp;filter=record_date:in:(PREV_DATE,RECORD_DATE)&amp;sort=record_date'</pre></li>
+          <li><b>Apply the rule</b>:
+            <pre>units = floor((now − prev + carry) / 1,000,000,000)
+spend = pool × (1 − 0.99^units)        # pool = the burn pool's SOL − 0.02 reserve
+burn  = every token the swap delivered</pre>
+            <span class="muted">carry = the sub-$1B remainder from a run of consecutive increases; any down or flat day resets it to 0.</span></li>
+          <li><b>Read the memo on the burn transaction</b> — it carries the same numbers, in this order:
+            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;sig12&gt;|rules=sha256:dae4d8042ac1|v2</pre>
+            If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings and marks <span class="ok">✓</span> only when they match; anything else shows <span class="bad">!</span> with the reason.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="money">
+    <h2><span>§6</span>Who pays for the burn</h2>
+    <div class="flow">
+      <div class="f"><div class="t">1 · trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. That fee is the only income the mechanism has.</p></div>
+      <div class="f"><div class="t">2 · the fee pool</div><p>Fees are claimed into the burn pool, an account of the on-chain program that has no withdraw instruction. Any seed deposit is disclosed with its transaction. Nobody can withdraw it; the program never sells.</p><p class="addr" id="feeWallet"></p></div>
+      <div class="f"><div class="t">3 · the swap</div><p>On a day with units the program spends 1 − 0.99<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. Under the floor (about $1) it buys nothing and the pool keeps it.</p></div>
+      <div class="f"><div class="t">4 · the burn</div><p>Every token received is burned in the same instruction, with the memo. Holders' balances are never touched: no delegate, no transfer hook, no mint authority.</p><p class="addr" id="mintAddr"></p></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="disclaimer">
+    <div class="disc">
+      <h3>A memecoin. The rule says what supply does, not what price does.</h3>
+      <p>$DEFICIT has no product, no revenue share and no team promise beyond running the published rule. Burning supply does not make a price go up; nobody here says it will. Buying fees fund the burns, so days with no trading are days with small burns.</p>
+      <p>Everything on this page is recomputed from public data — Treasury's API and the Solana chain. If a number here and a number on chain disagree, the chain is right and the page is wrong. Not investment advice; nothing here is an offer.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <div class="links">
+    <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">X · @USA_DEFICIT</a>
+    <a href="https://burnticker.com/" rel="noopener" target="_blank">Launched on Burnticker</a>
+    <a id="tradeFoot" href="#trade">Trade</a>
+    <a href="status.json">status.json</a>
+    <a href="burns.json">burns.json</a>
+    <a href="rules.json">rules.json</a>
+  </div>
+  <div id="trade" class="muted">Trade link: the curve / pool link is set at launch (see README). Until then the Trade buttons point here.</div>
+  <div class="gap">Feed: U.S. Treasury, Fiscal Data, “Debt to the Penny” (tot_pub_debt_out_amt). The Treasury is not affiliated with and does not endorse this token. Generated <span id="gen">—</span>.</div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  // ------------------------------------------------------------------ config the owner fills at launch
+  var LINKS = { trade: "" }; // e.g. the Raydium LaunchLab / pool URL. Empty = the Trade buttons point at the footer note.
+  var TREASURY = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt";
+  // `?data=sample/` previews the page against the committed replay sample; production reads ./status.json beside the page.
+  var base = (new URLSearchParams(location.search).get("data") || "").replace(/[^\w./-]/g, "");
+  if (base && !/\/$/.test(base)) base += "/";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var fmtInt = function (s) { s = String(s).split(".")[0]; return s.replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+  var fmtT = function (amount, d) { return "$" + (Number(amount) / 1e12).toFixed(d == null ? 3 : d) + "T"; };
+  var fmtB = function (delta) { var n = Number(delta); return (n >= 0 ? "+" : "−") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
+  var fmtSol = function (s) { if (s == null) return "—"; var n = Number(s); return (n >= 100 ? n.toFixed(1) : n >= 1 ? n.toFixed(3) : n.toFixed(4)) + " SOL"; };
+  var short = function (sig) { return sig ? sig.slice(0, 8) + "…" : "—"; };
+  var link = function (url, sig, fallback) { return url && sig ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(short(sig)) + "</a>" : esc(fallback || "—"); };
+
+  if (LINKS.trade) ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); a.href = LINKS.trade; a.target = "_blank"; a.rel = "noopener"; });
+
+  var status = null, burns = [], readings = [];
+
+  // ------------------------------------------------------------------ hero board (D1 seven-segment digits, from brand-concepts/d1-debt-clock/seg.js)
+  var SEG = { "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g", "S": "afgcd", "b": "fgedc", " ": "" };
+  function seg7(el, text, label) {
+    el.innerHTML = String(text).split("").map(function (ch) {
+      if (ch === "," || ch === ".") return '<span class="d ' + (ch === "," ? "comma" : "dot") + '"><span class="s on"></span></span>';
+      var on = ch === "$" ? SEG.S : (SEG[ch] || "");
+      return '<span class="d">' + "abcdefg".split("").map(function (s) { return '<span class="s ' + (s === "d" ? "dd" : s) + (on.indexOf(s) >= 0 ? " on" : "") + '"></span>'; }).join("") + (ch === "$" ? '<span class="s bar on"></span>' : "") + "</span>";
+    }).join("");
+    el.setAttribute("aria-label", label);
+  }
+  // The red figure is the latest burn day's debt delta ("$1b", the unit, until a receipt exists); amber is what was burned.
+  function renderHero() {
+    var last = burns.length ? burns[burns.length - 1] : null;
+    if (last) {
+      seg7($("heroFig"), "$" + (Number(last.delta) / 1e9).toFixed(2) + "b", fmtB(last.delta) + " of new U.S. debt on " + last.recordDate);
+      $("heroLabel").textContent = "New U.S. debt · Debt to the Penny · " + last.recordDate;
+      $("heroCap").innerHTML = "<b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b> → " + (last.status === "skipped" ? "nothing bought (under the $1 floor)" : last.burned ? "<b>" + fmtInt(last.burned) + "</b> $" + esc(status && status.ticker || "DEFICIT") + " bought and burned" : "burn pending") + ' · <a href="#r-' + burns.length + '">receipt #' + burns.length + "</a>";
+    } else seg7($("heroFig"), "$1b", "$1B of new U.S. debt per burn unit");
+    if (status && status.burned) seg7($("heroBurn"), fmtInt(status.burned.total), fmtInt(status.burned.total) + " $DEFICIT bought and burned to date");
+    else seg7($("heroBurn"), "-------", "not published yet");
+  }
+  renderHero();
+
+  // ------------------------------------------------------------------ live strip
+  function renderStatus(s) {
+    var isSample = !!s.sample || s.cluster === "replay";
+    if (isSample || (s.cluster && s.cluster !== "mainnet-beta")) {
+      var b = $("banner"); b.classList.add("show");
+      b.textContent = isSample ? "SAMPLE DATA — " + (s.sample || "replayed series; no transactions exist.") : "Cluster: " + s.cluster + " — this is not the mainnet token.";
+    }
+    if (s.feed && s.feed.lastAmount) {
+      $("debtNow").textContent = fmtT(s.feed.lastAmount);
+      $("debtExact").textContent = "$" + fmtInt(s.feed.lastAmount) + "." + (String(s.feed.lastAmount).split(".")[1] || "00") + " on " + s.feed.lastRecordDate;
+    }
+    $("lastDate").textContent = s.feed && s.feed.lastRecordDate ? s.feed.lastRecordDate : "—";
+    $("burned").textContent = fmtInt(s.burned.total);
+    $("burnedSub").innerHTML = "<b>" + Number(s.burned.pctOfSupply).toFixed(2) + "%</b> of " + fmtInt(s.supply.initial) + " · " + s.burned.count + " burns · " + fmtInt(s.burned.thisMonth) + " this month";
+    if (s.buyback) {
+      $("pool").textContent = s.buyback.feePoolSol == null ? "—" : fmtSol(s.buyback.feePoolSol);
+      $("poolSub").innerHTML = "spent <b>" + fmtSol(s.buyback.spentSolMonth) + "</b> this month · " + fmtSol(s.buyback.spentSolTotal) + " in all" + (s.buyback.skippedDays ? " · " + s.buyback.skippedDays + " day(s) under the $" + s.buyback.floorUsd + " floor" : "");
+    }
+    var ok = s.health && !s.health.lastError && s.health.unverified === 0;
+    $("health").innerHTML = '<span class="pulse' + (ok ? "" : " off") + '"></span>' + (ok ? "all receipts ✓" : (s.health.unverified ? s.health.unverified + " unverified" : "error"));
+    $("healthSub").textContent = "last feed check " + (s.feed.lastPollAt ? new Date(s.feed.lastPollAt).toLocaleString() : "—") + (s.feed.lastPollOutcome ? " · " + s.feed.lastPollOutcome : "") + (s.health.lastError ? " · " + s.health.lastError : "");
+    $("gen").textContent = new Date(s.generatedAt).toLocaleString();
+    if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }
+    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "fee pool: " + (s.buyback.funding.feeWalletUrl ? '<a href="' + esc(s.buyback.funding.feeWalletUrl) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? ' · seed ' + esc(s.buyback.funding.seedSol || "?") + ' SOL (<a href="' + esc(s.buyback.funding.seedTxUrl) + '" target="_blank" rel="noopener">tx</a>)' : " · no seed deposit");
+    if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "mint: " + (s.addresses.mintUrl ? '<a href="' + esc(s.addresses.mintUrl) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
+    startClock(s.feed && s.feed.nextPollAt);
+    renderHero();
+  }
+
+  var clock = null;
+  function startClock(iso) {
+    var at = iso ? Date.parse(iso) : NaN;
+    if (clock) clearInterval(clock);
+    if (!at) { $("next").textContent = "—"; return; }
+    function tick() {
+      var d = at - Date.now();
+      if (d <= 0) { $("next").textContent = "checking now"; return; }
+      var h = Math.floor(d / 36e5), m = Math.floor(d % 36e5 / 6e4), s = Math.floor(d % 6e4 / 1e3);
+      $("next").textContent = (h ? h + "h " : "") + m + "m " + s + "s";
+    }
+    tick(); clock = setInterval(tick, 1000);
+    $("nextSub").textContent = "next feed check " + new Date(at).toLocaleString() + " · a burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + ".";
+  }
+
+  // ------------------------------------------------------------------ receipts
+  var LIMIT = 25, showAll = false;
+  function renderBurns() {
+    var rows = burns.slice().reverse();
+    var tb = $("rows");
+    if (!rows.length) { $("count").textContent = ""; return; }
+    var shown = showAll ? rows : rows.slice(0, LIMIT);
+    tb.innerHTML = shown.map(function (b, i) {
+      var skipped = b.status === "skipped", no = rows.length - i;
+      var check = b.verify && b.verify.verified ? '<span class="ok" title="recomputed from the feed and the rule; matches the memo">✓</span>' : b.status === "confirmed" ? '<span class="bad" title="' + esc((b.verify && b.verify.checks || []).join("; ")) + '">!</span>' : '<span class="muted">' + esc(b.status) + "</span>";
+      return '<tr id="r-' + no + '">' +
+        "<td class=\"mono\" title=\"receipt #" + no + "\">" + esc(b.recordDate) + "</td>" +
+        "<td class=\"r num\" title=\"$" + esc(b.now) + "\">" + fmtT(b.now) + "</td>" +
+        "<td class=\"r num\">" + fmtB(b.delta) + (Number(b.carryIn) > 0 ? ' <span class="muted" title="carried from the run of consecutive increases">(+$' + (Number(b.carryIn) / 1e9).toFixed(2) + "B carried)</span>" : "") + "</td>" +
+        "<td class=\"r units\">" + b.units + "</td>" +
+        "<td class=\"r num\">" + (skipped ? "—" : b.spent == null ? "pending" : esc(Number(b.spent).toFixed(4))) + "</td>" +
+        "<td class=\"r num\">" + (b.got == null ? (skipped ? "—" : "pending") : fmtInt(b.got)) + "</td>" +
+        "<td class=\"r num\">" + (skipped ? '<span class="muted" title="' + esc(b.skippedReason) + '">skipped</span>' : b.burned == null ? "pending" : "<b>" + fmtInt(b.burned) + "</b>") + "</td>" +
+        "<td>" + link(b.swapUrl, b.swapSig, skipped ? "—" : "—") + "</td>" +
+        "<td>" + link(b.txUrl, b.signature, skipped ? "—" : b.signature ? "" : "—") + "</td>" +
+        "<td>" + check + "</td>" +
+        '<td><button type="button" class="vbtn" data-i="' + i + '" aria-expanded="false">verify</button></td>' +
+        "</tr>";
+    }).join("");
+    $("count").textContent = (showAll ? rows.length : Math.min(LIMIT, rows.length)) + " of " + rows.length + " burn days";
+    var more = $("more"); more.hidden = showAll || rows.length <= LIMIT;
+    tb.onclick = function (e) {
+      var btn = e.target.closest ? e.target.closest("button.vbtn") : null; if (!btn) return;
+      var tr = btn.parentNode.parentNode, nxt = tr.nextElementSibling;
+      if (nxt && nxt.classList.contains("detail")) { nxt.remove(); btn.setAttribute("aria-expanded", "false"); return; }
+      var b = shown[Number(btn.getAttribute("data-i"))], d = document.createElement("tr"); d.className = "detail";
+      d.innerHTML = '<td colspan="11">' +
+        "<div><b>1.</b> Fetch the two Treasury rows this day used:</div><pre>" + esc(b.verify.curl) + "</pre>" +
+        "<div><b>2.</b> Apply the rule:</div><pre>" + esc(b.verify.formula) + "</pre>" +
+        (b.carryRunSince ? '<div class="muted">The carried $' + esc(b.carryIn) + " comes from the run of consecutive increases since " + esc(b.carryRunSince) + ".</div>" : "") +
+        "<div><b>3.</b> Expected: " + esc(b.verify.expected) + "</div>" +
+        "<div style=\"margin-top:8px\"><b>4.</b> The memo on the burn transaction" + (b.txUrl ? ' (<a href="' + esc(b.txUrl) + '" target="_blank" rel="noopener">open</a>)' : "") + ":</div><pre>" + esc(b.memo || (skippedText(b))) + "</pre>" +
+        '<div><a href="' + esc(b.sourceUrl) + '" target="_blank" rel="noopener">Treasury source row for ' + esc(b.recordDate) + "</a>" + (b.verify.checks && b.verify.checks.length ? ' · <span class="bad">checks that did not pass: ' + esc(b.verify.checks.join("; ")) + "</span>" : ' · <span class="ok">recomputation matches</span>') + "</div>" +
+        "</td>";
+      tr.parentNode.insertBefore(d, tr.nextSibling); btn.setAttribute("aria-expanded", "true");
+    };
+    var last = rows[0];
+    if (last) {
+      $("lastDelta").innerHTML = fmtB(last.delta) + " → <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>" + (last.burned ? " → " + fmtInt(last.burned) + " burned" : "") + " · vs " + esc(last.prevDate);
+      $("curl").textContent = b2curl(last);
+      if (last.memo) $("memo").textContent = last.memo;
+    }
+  }
+
+  // ------------------------------------------------------------------ today (the daily post, same words as the script)
+  /* @daily-post-begin — mirrors src/lib/launch/dailyPost.ts (dailyText / noBurnText / dayState); test/dailyPost.test.ts pins the two outputs equal. */
+  var BurnDaily = (function () {
+    var DISCLAIMER = "a memecoin — the rule says what supply does, not what price does";
+    var WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    var fInt = function (s) { if (s == null) return "—"; return String(s).split(".")[0].replace(/^-/, "−").replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+    var fB = function (usd) { var n = Number(usd); return (n >= 0 ? "+" : "−") + "$" + (Math.abs(n) / 1e9).toFixed(2) + "B"; };
+    var fSol = function (s) { return s == null ? "—" : Number(s).toFixed(4) + " SOL"; };
+    var plural = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+    var pad = function (n) { return String(n).length < 2 ? "0" + n : String(n); };
+    var wd = function (day) { return new Date(day + "T00:00:00Z").getUTCDay(); };
+    var addDays = function (day, n) { return new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10); };
+    var nth = function (y, m, dow, n) { var first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(); var d = 1 + ((dow - first + 7) % 7) + (n - 1) * 7; return y + "-" + pad(m) + "-" + pad(d); };
+    var lastW = function (y, m, dow) { var last = new Date(Date.UTC(y, m, 0)); var d = last.getUTCDate() - ((last.getUTCDay() - dow + 7) % 7); return y + "-" + pad(m) + "-" + pad(d); };
+    var observed = function (day) { var w = wd(day); return w === 6 ? addDays(day, -1) : w === 0 ? addDays(day, 1) : day; };
+    function holidays(y) {
+      var h = {};
+      [[y + "-01-01", "New Year's Day"], [y + "-06-19", "Juneteenth"], [y + "-07-04", "Independence Day"], [y + "-11-11", "Veterans Day"], [y + "-12-25", "Christmas Day"]].forEach(function (x) { h[observed(x[0])] = x[1]; });
+      h[nth(y, 1, 1, 3)] = "Martin Luther King Jr. Day"; h[nth(y, 2, 1, 3)] = "Presidents' Day"; h[lastW(y, 5, 1)] = "Memorial Day";
+      h[nth(y, 9, 1, 1)] = "Labor Day"; h[nth(y, 10, 1, 2)] = "Columbus Day"; h[nth(y, 11, 4, 4)] = "Thanksgiving Day";
+      if (observed((y + 1) + "-01-01") === y + "-12-31") h[y + "-12-31"] = "New Year's Day (observed)";
+      return h;
+    }
+    var holiday = function (day) { return holidays(Number(day.slice(0, 4)))[day] || null; };
+    var biz = function (day) { var w = wd(day); return w !== 0 && w !== 6 && holiday(day) === null; };
+    var prevBiz = function (day) { var d = addDays(day, -1); while (!biz(d)) d = addDays(d, -1); return d; };
+    var nextBiz = function (day) { var d = addDays(day, 1); while (!biz(d)) d = addDays(d, 1); return d; };
+    function dateIn(ms, tz) { var p = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms)); var g = function (t) { for (var i = 0; i < p.length; i++) if (p[i].type === t) return p[i].value; }; return g("year") + "-" + g("month") + "-" + g("day"); }
+    function hhmmIn(ms, tz) { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms)); }
+    function dayState(status, burns, nowMs) {
+      var tz = "America/New_York", postDay = dateIn(nowMs, tz), w = wd(postDay), hol = holiday(postDay), last = status.feed.lastRecordDate, lastRow = burns.length ? burns[burns.length - 1] : null;
+      if (w === 0 || w === 6) { var np = nextBiz(postDay); return { postDay: postDay, expected: null, kind: "weekend", reason: "Treasury does not post Debt to the Penny on a " + WEEKDAY[w] + ". The next figure is " + prevBiz(np) + "'s, posted " + WEEKDAY[wd(np)] + " afternoon ET.", row: null }; }
+      if (hol) { var np2 = nextBiz(postDay); return { postDay: postDay, expected: null, kind: "holiday", reason: "Treasury does not post Debt to the Penny on " + hol + ". The next figure is " + prevBiz(np2) + "'s, posted " + WEEKDAY[wd(np2)] + " afternoon ET.", row: null }; }
+      var expected = prevBiz(postDay), row = null;
+      for (var i = 0; i < burns.length; i++) if (burns[i].recordDate === expected) { row = burns[i]; break; }
+      if (row) return { postDay: postDay, expected: expected, kind: "burn", reason: "", row: row };
+      if (last !== null && last >= expected) return { postDay: postDay, expected: expected, kind: "no-unit", reason: "Treasury's figure for " + expected + " did not add a full $1,000,000,000 over the previous reading, so the rule counted nothing. A rise under $1B carries into the next consecutive rise; a flat or down day resets the remainder to zero.", row: null };
+      if (hhmmIn(nowMs, tz) < "20:30") return { postDay: postDay, expected: expected, kind: "pending", reason: "Treasury's figure for " + expected + " is not posted yet (it usually appears mid-afternoon ET); the keeper reads the feed at 16:30 and 20:00 ET" + (lastRow ? ". Last reading on file: " + (last == null ? "none" : last) : "") + ".", row: null };
+      return { postDay: postDay, expected: expected, kind: "late", reason: "Treasury's figure for " + expected + " was not posted by 20:30 ET; the keeper keeps checking hourly and reads it, with the day's units, when it appears. Last reading on file: " + (last == null ? "none" : last) + ".", row: null };
+    }
+    function receiptNo(burns, row) { for (var i = 0; i < burns.length; i++) if (burns[i].recordDate === row.recordDate) return i + 1; return 0; }
+    function supplyAfter(status, burns, row) { var n = receiptNo(burns, row), burned = 0n; for (var i = 0; i < n; i++) if (burns[i].status === "confirmed" && burns[i].burned) burned += BigInt(String(burns[i].burned).split(".")[0]); return (BigInt(String(status.supply.initial).split(".")[0]) - burned).toString(); }
+    function dailyText(status, burns, row, site) {
+      var n = receiptNo(burns, row), t = status.ticker, carry = Number(row.carryIn) > 0 ? " · " + fB(row.carryIn) + " carried" : "";
+      var head = "Receipt #" + n + " · " + row.recordDate + "\nDebt to the Penny: $" + fInt(row.now) + " (" + fB(row.delta) + carry + ")";
+      if (row.status === "skipped") return head + "\n" + plural(row.units, "unit") + ", but the day's spend would have been under $1 — nothing bought; the pool keeps it for the next burn day\nSupply unchanged at " + fInt(supplyAfter(status, burns, row)) + "\nverify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
+      return head + "\n" + plural(row.units, "unit") + " → " + fInt(row.burned) + " $" + t + " bought back and burned" + (row.spent != null ? " (" + fSol(row.spent) + ")" : "") + "\nSupply now " + fInt(supplyAfter(status, burns, row)) + "\nReceipt: " + (row.txUrl || "{TX}") + " · verify: " + site + "/#r-" + n + "\n" + DISCLAIMER;
+    }
+    function noBurnText(status, burns, state, site) {
+      var t = status.ticker, last = burns.length ? burns[burns.length - 1] : null;
+      var lastLine = last ? "Last receipt: #" + receiptNo(burns, last) + " · " + last.recordDate + " · " + fB(last.delta) + " → " + plural(last.units, "unit") + " → " + (last.status === "skipped" ? "nothing bought (under the $1 floor)" : fInt(last.burned) + " $" + t + " burned") : "No receipt yet: the first reading after launch is the baseline.";
+      var pool = status.buyback && status.buyback.feePoolSol != null ? " · fee pool " + fSol(status.buyback.feePoolSol) : "";
+      var label = state.kind === "weekend" ? "(" + WEEKDAY[wd(state.postDay)] + ")" : state.kind === "holiday" ? "(" + holiday(state.postDay) + ")" : state.expected ? "(figure for " + state.expected + ")" : "";
+      return "No burn today, " + state.postDay + " " + label + "\n" + state.reason + "\n" + lastLine + "\nSupply " + fInt(status.supply.current) + pool + "\nverify: " + site + "/#receipts\n" + DISCLAIMER;
+    }
+    function pick(status, burns, nowMs, site) { var st = dayState(status, burns, nowMs); return { state: st, text: st.kind === "burn" ? dailyText(status, burns, st.row, site) : noBurnText(status, burns, st, site) }; }
+    return { pick: pick, dayState: dayState, dailyText: dailyText, noBurnText: noBurnText, receiptNo: receiptNo };
+  })();
+  /* @daily-post-end */
+  function renderToday() {
+    if (!status) return;
+    var site = location.origin && location.origin !== "null" ? location.origin + location.pathname.replace(/\/[^/]*$/, "") : "{SITE_URL}";
+    var r = BurnDaily.pick(status, burns, Date.now(), site), el = $("todayText");
+    el.innerHTML = esc(r.text).replace(/(https?:\/\/[^\s]+)/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u + "</a>"; });
+    var btn = $("copyToday");
+    if (navigator.clipboard) { btn.hidden = false; btn.onclick = function () { navigator.clipboard.writeText(r.text).then(function () { btn.textContent = "copied"; setTimeout(function () { btn.textContent = "copy"; }, 1500); }); }; }
+  }
+  function skippedText(b) { return b.status === "skipped" ? "no transaction — " + (b.skippedReason || "skipped") : "not sent yet"; }
+  function b2curl(b) { return b.verify && b.verify.curl ? b.verify.curl : "curl -s '" + TREASURY + "&filter=record_date:in:(" + b.prevDate + "," + b.recordDate + ")&sort=record_date'"; }
+  $("more").onclick = function () { showAll = true; renderBurns(); };
+
+  // ------------------------------------------------------------------ chart (Canvas, no library)
+  var cv = $("cv"), ctx = cv.getContext("2d"), pts = [], marks = [], geom = null;
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function buildSeries() {
+    var m = {};
+    burns.forEach(function (b) { m[b.prevDate] = b.prev; m[b.recordDate] = b.now; });
+    readings.forEach(function (r) { m[r.recordDate] = r.amount; });
+    pts = Object.keys(m).sort().map(function (d) { return { d: d, t: Date.parse(d + "T00:00:00Z"), v: Number(m[d]) }; });
+    var byDate = {}; pts.forEach(function (p, i) { byDate[p.d] = i; });
+    marks = burns.filter(function (b) { return b.status === "confirmed" && byDate[b.recordDate] != null && Number(b.burned) > 0; }).map(function (b) { return { i: byDate[b.recordDate], units: b.units, b: b }; });
+  }
+  function draw(hoverI) {
+    var dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    var ink = css("--ink"), muted = css("--muted"), line = css("--line"), hot = css("--hot");
+    ctx.font = "11px " + css("--mono"); ctx.fillStyle = muted; ctx.textBaseline = "middle";
+    if (pts.length < 2) { ctx.textAlign = "center"; ctx.fillText("The curve appears once two readings are published.", W / 2, H / 2); return; }
+    var L = 58, R = 12, T = 14, B = 26;
+    var x0 = pts[0].t, x1 = pts[pts.length - 1].t, ys = pts.map(function (p) { return p.v; }), yMin = Math.min.apply(null, ys), yMax = Math.max.apply(null, ys), pad = (yMax - yMin) * 0.06 || 1e9;
+    var sx = function (t) { return L + ((t - x0) / Math.max(1, x1 - x0)) * (W - L - R); };
+    var sy = function (v) { return T + (1 - (v - (yMin - pad)) / (yMax - yMin + 2 * pad)) * (H - T - B); };
+    geom = { sx: sx, sy: sy, L: L, R: R, W: W };
+    ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.textAlign = "right";
+    [yMin, (yMin + yMax) / 2, yMax].forEach(function (v) { var y = sy(v); ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke(); ctx.fillText("$" + (v / 1e12).toFixed(2) + "T", L - 6, y); });
+    ctx.textAlign = "left"; ctx.fillText(pts[0].d, L, H - 9); ctx.textAlign = "right"; ctx.fillText(pts[pts.length - 1].d, W - R, H - 9);
+    // area under the curve, faint
+    ctx.beginPath(); ctx.moveTo(sx(pts[0].t), sy(pts[0].v));
+    pts.forEach(function (p) { ctx.lineTo(sx(p.t), sy(p.v)); });
+    ctx.lineTo(sx(pts[pts.length - 1].t), H - B); ctx.lineTo(sx(pts[0].t), H - B); ctx.closePath();
+    ctx.fillStyle = hot; ctx.globalAlpha = 0.07; ctx.fill(); ctx.globalAlpha = 1;
+    // the line
+    ctx.beginPath(); pts.forEach(function (p, i) { i ? ctx.lineTo(sx(p.t), sy(p.v)) : ctx.moveTo(sx(p.t), sy(p.v)); });
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke();
+    // burn markers (amber: what was burned; the curve itself is what was borrowed)
+    ctx.fillStyle = css("--amber"); ctx.globalAlpha = 0.6;
+    var mscale = Math.min(1, W / 720); // smaller dots on a narrow screen so the line stays visible
+    marks.forEach(function (mk) { var p = pts[mk.i]; ctx.beginPath(); ctx.arc(sx(p.t), sy(p.v), (1.5 + Math.sqrt(mk.units) * 0.5) * mscale, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    if (hoverI != null) {
+      var p = pts[hoverI], x = sx(p.t), y = sy(p.v);
+      ctx.strokeStyle = muted; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, H - B); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function nearest(clientX) {
+    if (!geom || !pts.length) return null;
+    var x = clientX - cv.getBoundingClientRect().left, best = 0, bd = 1e9;
+    pts.forEach(function (p, i) { var d = Math.abs(geom.sx(p.t) - x); if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+  function hover(e) {
+    var cx = e.touches ? e.touches[0].clientX : e.clientX, i = nearest(cx); if (i == null) return;
+    draw(i);
+    var p = pts[i], mk = null; marks.forEach(function (m) { if (m.i === i) mk = m; });
+    $("cap").textContent = p.d + " · " + fmtT(p.v) + (mk ? " · " + fmtB(mk.b.delta) + " → " + mk.units + " units → " + fmtInt(mk.b.burned) + " burned" : "");
+  }
+  cv.addEventListener("mousemove", hover); cv.addEventListener("touchstart", hover, { passive: true }); cv.addEventListener("touchmove", hover, { passive: true });
+  cv.addEventListener("mouseleave", function () { draw(); $("cap").textContent = "hover or touch the line for a reading"; });
+  window.addEventListener("resize", function () { draw(); });
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { draw(); });
+
+  // Densify the curve from Treasury directly when online (fail-soft; the page is complete without it).
+  function fetchTreasury(fromDate) {
+    if (!fromDate || !window.fetch || (status && (status.sample || status.cluster === "replay"))) return;
+    var ctl = window.AbortController ? new AbortController() : null, timer = ctl && setTimeout(function () { ctl.abort(); }, 7000);
+    fetch(TREASURY + "&filter=record_date:gte:" + fromDate + "&sort=record_date&page[size]=1000", ctl ? { signal: ctl.signal } : {})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (!j || !j.data) return; readings = j.data.map(function (r) { return { recordDate: r.record_date, amount: r.tot_pub_debt_out_amt }; }); buildSeries(); draw(); })
+      .catch(function () { /* offline or blocked: keep the sparse curve */ })
+      .then(function () { if (timer) clearTimeout(timer); });
+  }
+
+  // ------------------------------------------------------------------ load
+  function getJson(name) { return fetch(base + name, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status + " " + name); return r.json(); }); }
+  function offline(msg) { var n = $("notice"); n.textContent = msg; n.classList.add("show"); draw(); }
+  if (!window.fetch) { offline("This browser cannot load the live figures; the receipts are in status.json and burns.json beside this page."); return; }
+  getJson("status.json").then(function (s) {
+    status = s; renderStatus(s);
+    return getJson("burns.json").catch(function () { return []; });
+  }).then(function (b) {
+    burns = Array.isArray(b) ? b : [];
+    var deep = /^#r-(\d+)$/.exec(location.hash); if (deep && Number(deep[1]) <= burns.length - LIMIT) showAll = true;
+    renderBurns(); renderHero(); renderToday(); buildSeries(); draw();
+    if (deep && $("r-" + deep[1])) $("r-" + deep[1]).scrollIntoView();
+    fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
+  }).catch(function () {
+    offline("No status.json beside this page yet — the keeper publishes one every cycle into its publish directory (see README). Everything above fills in once it exists.");
+  });
+})();
+</script>
+</body>
+</html>

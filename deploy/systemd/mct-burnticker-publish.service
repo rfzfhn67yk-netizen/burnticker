@@ -1,0 +1,15 @@
+[Unit]
+Description=Burnticker static publish (sync the keepers' publish dirs + site/ into /var/www for Caddy) — fired every minute by mct-burnticker-publish.timer
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/meme-coin-trader
+# --publish-only: the keepers' files (status.json, receipts.json, audit.json, ops.json, t/<ticker>/…) only; the brand pages ship with
+# `sh scripts/ops/deploy-sites.sh` by hand after a change to site/. Prints only what changed, so the log stays quiet.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/ops/deploy-sites.sh --publish-only
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=TZ=America/Denver
+Environment=BURNTICKER_PUBLISH_DIR=%h/meme-coin-trader/data/burnticker-site
+Environment=BURNKEEPER_PUBLISH_DIR=%h/meme-coin-trader/data/burnkeeper-site
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-publish.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-publish.log

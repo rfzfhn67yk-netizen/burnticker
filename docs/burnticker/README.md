@@ -1,0 +1,290 @@
+# Burnticker — launch a memecoin whose supply burns on a Kalshi settlement
+
+**Customer-facing (owner, 10-10): Burnticker is "burns on a Kalshi settlement".** Kalshi is THE source in all customer copy — 14,934
+series (sports 3,883, entertainment 2,582, elections 2,276, politics 2,193, financials 1,001, economics 852, weather 422, science/tech
+372, crypto 276). Rivalry pairs (two coins, one matchup) are the first product story, single Kalshi coins the second. The first-party
+feeds (Treasury, NOAA, Launch Library, JPL, BLS, Wikimedia, …) stay available behind "Advanced: first-party feed" in the wizard and an
+"Other sources" footnote on the landing page; $DEFICIT is the stated exception, running on Treasury data directly with Kalshi's monthly
+debt market as a cross-check.
+
+Built 2026-10-09 on top of the $DEFICIT burn keeper (`src/lib/burnKeeper/`). Spec: `mct-runner-study/launch-debt-egg-2026-10-09/LAUNCHPAD-PATH.md`
+(§1 creator flow, §2 under the hood, §3 feeds, §4 rules, §5 economics, §6 token page, §7 refusals, §9 acceptance, §11 Kalshi). Owner
+decisions of 10-09 are baked in and listed in §9 below. Everything here runs with no real funds, no keys, no mainnet sends.
+
+## Rivalry pairs — two coins, one matchup (owner-approved 10-09 night; the headline since 10-10)
+
+Two coins launched together on the SAME selector with inverted mappings — $BRONCOS burns when Denver loses and $CHIEFS when Denver
+wins (one KXNFLGAME leg), $BULLS/$BEARS on the S&P close direction (scalar up vs down), two sides of a settled series. Each settlement
+burns exactly one side; the receipts are the scoreboard.
+
+- Rule: `pair: { pairId, side: "A"|"B", counterpartMint }` is part of each side's canonical JSON, so the link is locked; the two rules
+  are hashed independently. `invertMapping(ruleA, mintA, pairId)` derives side B (binary: swap onYes/onNo — a side burns on exactly
+  one outcome; scalar: flip up↔down; `abs` cannot pair). v1 pairs must use a tier-1 adjudicated market source (kalshi); the refuse list
+  and the tier rules apply per side.
+- `buildPairBundles({ a: LaunchInput, b: { ticker, name, description, imageUrl, links }, pairId? }, deps)` (exported from
+  `src/lib/burnticker/launchBundle.ts`, the seam the SDK and `/api/burnticker/v1` can call) returns `{ pairId, a, b, selector, notes }`:
+  two bundles signed in sequence — A first (its fresh mint), then B whose rule names A's mint as counterpart. A's counterpart lives in
+  the registry's `pairs` table (A exists before B's mint). The LaunchLab creator of each side is the burn program's fee PDA for that
+  mint (`burnPoolFor`, review finding H-2), never a key; the keeper only pays gas. **Program seam:** if `burn_receipts`' TokenConfig carries no counterpart
+  field, nothing else is needed — the link is in both rules.json files and the pairs table.
+- Registry: `pairs (pair_id, mint_a, mint_b, selector_key, created_at)`, append-only; `registerPair` checks both rules carry the
+  pairId/side/counterpart and share the selector key.
+- Pages: each side's page opens with a "versus" header (burns A : B, burned, supply, the other side's last burn, link to the pair
+  page). The pair page — `/burnticker/p/<pairId>` in the app (`/api/burnticker/pairs/<pairId>`) and `p/<pairId>/index.html` +
+  `pair.json` in the static site (`renderPairHtml` / `publishPairSite`, written by `publishPlatformIndex` for every pair) — is the
+  scoreboard: burns A : B, supply A : B (and % of the start left), the last settlement with its market ticker and result and the side
+  it burned, the next scheduled market with each side's Kalshi-implied chance (display only), the share line, both receipts tables
+  stacked, both rules with their hashes. `pairTally()` builds it from both sides' status.json + receipts.json. The platform index
+  lists a pair as one card. `GET /api/burnticker/tokens/<ticker>` carries `status.pair`. The keeper fills `pair` on every token page
+  through `pairCounterpartFrom()` (registry + supply reader), so the static versus headers, index cards and pair pages appear.
+- Share line / pair post: `pairDailyText(tally, site)` in `src/lib/launch/dailyPost.ts` — "$A 3 : 1 $B — every loss burns", supply both
+  sides, the last settlement (market, result, side), the next market (no odds in the post), the scoreboard link, the pair disclaimer.
+  Lint-clean under config/launch/copy-lint.json (tested). The 5-post announcement thread is docs/launch/x-threads.md §2b.
+- Wizard (`/burnticker/launch`, rebuilt 10-10 after the owner: "I am still having a hard time setting up an nfl team coin"): the first
+  screen is four plain choices, no jargon — **Team coin** (league → team picker → one toggle "burn when we WIN / LOSE" → name and
+  ticker prefilled → review in plain words → launch), **Matchup pair** (league → upcoming game, or search a team → both sides
+  prefilled → "this game only" (default) or "every game this season" → back-tests side by side → review → bundles), **Any Kalshi
+  market** (one search box: teams, people, shows, elections — event-level hits merged with series), and a small "Advanced: first-party
+  feed / custom selector" link. `?pair=1` (the landing page's "Launch a pair") opens the matchup flow. Progress ("Step 2 of 4"), back
+  buttons, state kept across a refresh (sessionStorage `burnticker.launch.v2`; "start over" clears it), a Devnet badge from
+  `BURNTICKER_CLUSTER` (the wizard's catalogue route returns `cluster`). The simple paths generate the rule (`src/lib/burnticker/wizard.ts`):
+  - team coin = `series` + the team's own-leg filter (`-PHI`), binary, onYes (win) or onNo (loss), 1% of the pool per game, $1 floor,
+    0.02 SOL reserve; "Edit the rule" holds the slider and the generated selector. On a league with draws a draw settles the team's
+    leg NO, so a loss coin also burns on a draw.
+  - pair, this game only = one market (side A's own leg, `KXNFLGAME-26OCT11PHIJAC-PHI`) burning on NO; the server derives side B by
+    inversion (YES on the same market) — a partition, a registered pair (a draw burns side A; "swap sides" moves it).
+  - pair, every game this season = each side's OWN team's games (`-PHI`, `-JAC`), each burning on its own loss: the two selectors are
+    not a partition in general — they meet only on head-to-head games (where exactly one burns) — so the wizard shows two independent
+    records with the head-to-head count and launches two coins (two `POST /api/burnticker/launch` calls without `pair`); they are not a
+    registered pair, because the pairs table requires one shared selector (a server change would be needed for a two-selector pair).
+  The request body and the launch route are unchanged.
+- Event-level search (10-10; the owner searched "eagles" and got nothing — series titles say "Professional Football Game", the game is an
+  EVENT): `src/lib/burnticker/oracle/events.ts` (parsing, a team-alias table for NFL/NBA/NHL/MLB with Kalshi's spellings — JAC not JAX,
+  LAR/LAC, NOP, GSW, VGK …, matching, a game's two sides, the league chooser derived from the Sports "…GAME" series, the team picker with
+  next game and season record) and `KalshiClient.searchEvents / eventsForSeries / teams / leagues` (events cached 10 min per series).
+  Public API: `GET /api/burnticker/v1/kalshi/events?q=&series=&status=` (no parameters → the league chooser), `GET /kalshi/teams?series=`,
+  and `/kalshi/search` now also returns `events` + `ranking` (events first when the query names a team or matched a market). A person
+  who appears only in the market labels of a series whose title does not name them is found by passing that series (`?series=KXNEWPOPE&q=parolin`);
+  the global index of ~15,700 open events (79 pages) is too slow to scan per request. SDK: `kalshi.events()`, `kalshi.teams()`.
+- Landing page (`site/burnticker/index.html`): the "Rivalries" section right after the ticker tape — two example matchups drawn as
+  receipts ($BRONCOS vs $CHIEFS on KXNFLGAME, $BULLS vs $BEARS on the KXINX close, illustrative tallies), how a pair works in three
+  steps, and the "Launch a pair" button.
+
+## 1. Architecture
+
+```
+src/lib/burnticker/
+  rules.ts            a rule = SELECTOR + outcome→burn mapping; canonical JSON; sha256 (the keeper's rulesSha256); disclaimer
+  units.ts            the unit engine (binary / scalar, exact decimals, carry only where a source says) — pure, runs in the browser too
+  receipt.ts          the v3 receipt line, OFF-CHAIN only (the program writes v1/v2 on chain) (BT|TICKER|id|oracle=|market=|result=|settled=|src=|value=|units=|pool=|spent=|got=|burn=|swap=|rules=sha256:|v3)
+  oracle/kalshi.ts    the PRIMARY source: settled results only, finality timer, ladder derivation, voids, implied chance (display only), polite client
+  oracle/backtest.ts  "this selector settled N times in 12 months and would have burned X"
+  oracle/refuse.ts    the refuse list (config/burnticker/refuse.json)
+  oracle/polymarket.ts, sources/stubs.ts   Polymarket Gamma parser + CTF payout decoder, UMA decoder, Drift/Hedgehog placeholders (not launchable)
+  sources/types.ts    ResolutionSource: four kinds (market / assertion / attested-http / onchain) + tier 1–5
+  sources/attestedHttp.ts  the generic config-driven adapter (JSON path / CSV / regex → rows → periods → values or counts; snapshots)
+  sources/onchain.ts  Solana block height / slot through an RPC port (account/consensus data only, never an indexer)
+  catalogue/index.ts  config/burnticker/sources.json read through the generic adapter (tier 3–5 cards, fixtures, previews)
+  registry.ts         data/burnticker.db: tokens, readings, burns (receipts), signatures, token_state, feed_state, attesters — APPEND-ONLY (SQL triggers)
+  program.ts          BurnProgramClient (the Receipts program from the keeper's side) + FakeBurnProgram
+  launchBundle.ts     buildLaunchBundle(): initialize_token + LaunchLab create (FakeLaunchLab now; SdkLaunchLab over src/lib/burnKeeper/launch.ts)
+  multiKeeper.ts      one loop over every token: fetch due selectors → plan → crank (write-ahead, chain-is-final-word) → publish
+  tokenPage.ts        status.json / receipts.json / index.html per token (§6) + the platform index; shares the $DEFICIT CSS and chart
+  fees.ts             the fee split (designed numbers from docs/burnkeeper/fees.md), the 25 SOL pre-audit cap, operator lines
+  trust.ts            the Powers Register, live PlatformConfig vs designed, fee ledger from chain, team wallets, incidents, audit
+  audit.ts            recompute every receipt of every token (source + rule, and the memo on chain when a client exists)
+  server.ts           the app's wiring (registry, oracles, program/LaunchLab clients — fakes until the program and RPC exist)
+  verify.ts           one receipt's checks (rules / memo / source / units / spend / chain) — shared by the API's /verify and the SDK
+  transactions.ts     launch-bundle instructions → unsigned wire-format transactions (never signs; placeholder blockhash flagged)
+  pageTypes.ts        status.json / receipts.json shapes (types only, so the SDK can import them)
+  api/                the public API: spec.ts (the ONE schema source → openapi.json, cache, rate limits), http.ts (rate limit, CORS,
+                      cross-site refusal), handlers.ts (logic shared with the wizard's routes), v1.ts (one function per operation)
+packages/burnticker-sdk/   @burnticker/sdk — the public SDK for bots (docs/burnticker/sdk.md); public-closure.json = the repo files it needs
+src/app/api/burnticker/v1/*   the public HTTP API (docs/burnticker/api.md)
+scripts/burnticker-keeper.mts · burnticker-platform-config.mts (dry run, never sends) · burnticker-audit.mts (exit 1 on any mismatch)
+src/app/burnticker/{page,launch,t/[ticker],trust} · src/app/api/burnticker/{catalogue,oracle/search,oracle/backtest,tokens,tokens/[ticker],launch,trust}
+config/burnticker/{sources.json,refuse.json,fixtures/**} · deploy/caddy/Caddyfile · docs/burnticker/{README,deploy,incidents}.md
+```
+
+Reused from the keeper, not forked: `rulesSha256`, `buybackSpend`, `spendablePool`, `belowFloor`, `settleBurn`, `rawToTokens`,
+`tokensToRaw`, `backoffMs`, `publishSite`/`toJson`, `explorerUrl`, the memo byte ceiling, and (new small exports) `STATUS_CSS` and
+`seriesChartSvg`; the LaunchLab builders `planLaunch`/`buildCreateTx`/`buildVestingTx`/`buildPlatformTx`/`feeSplit` from the merged
+`launch.ts`. The keeper's `cycle.ts` stays the single-token $DEFICIT path: it is bound to Treasury cents and the two-leg swap+burn; the
+Receipts program's one-instruction `crank_burn` is what the multi-keeper drives, with the same write-ahead discipline.
+
+## 2. The selector model — how a creator binds to "all future X"
+
+A rule names an oracle and a selector, and maps outcomes to burns. It is locked by its canonical bytes' sha256 and applied to markets
+that do not exist yet.
+
+```json
+{ "schema": "burnticker.rules/v1", "oracle": "kalshi", "series": "KXNFLGAME", "market": null, "filter": { "tickerIncludes": "-DEN" },
+  "kind": "binary", "binary": { "onYes": { "fractionOfPool": 0.02 }, "onNo": null }, "scalar": null,
+  "onVoid": "skip", "floorUsd": "1", "reserveSol": "0.02", "vault": null }
+```
+
+- `series` + `filter` = every future market of the series whose ticker contains the text (and/or whose title matches a regex).
+  The back-test lists exactly which past markets matched, so a creator sees that a bare "DEN" also matches the opponent's leg.
+- `market` = one ticker: a one-shot rule; the page says "resolves once on <close time>", then the supply is fixed.
+- `kind: "scalar"` reads the settled number (Kalshi's `expiration_value`, else the strike ladder: the YES `between` band's floor, else the
+  highest `greater` YES, else the lowest `less` YES, else void) and counts `unit`s from a baseline ("previousSettlement" or a number) in a
+  direction (up / down / abs). `kind: "binary"` reads `result` yes/no.
+- `fractionOfPool` = buyback (spend = pool × (1 − (1 − f)^units), the keeper's exact integer formula; floor and reserve from the rule);
+  `tokens` = vault mode (units × tokens from a 10–30 % vesting allocation; shortfalls carried and published). One mode per rule.
+- `oracle: "catalogue"` + `series: "<source id>"` binds to a first-party source; the source fixes unit, direction, baseline and carry.
+- Voids never burn. Finality: a Kalshi market counts when `finalized`, or `settled` once `settlement_ts + settlement_timer_seconds` has
+  passed. Prices are never read into a rule; the page's "market-implied chance of the next burn" is labelled display-only.
+
+Examples under test (`test/burntickerHelpers.ts`, real fixtures): Broncos games (binary, filter), Denver daily high (scalar, fixed
+baseline 80 °F), a one-shot market, the S&P 4 pm close (scalar vs previous settlement, 10 points per unit), the $DEFICIT Treasury rule
+(tier 2 with the keeper's carry, reproduced to the cent).
+
+### Rivalry pairs
+
+See [Rivalry pairs](#rivalry-pairs--two-coins-one-matchup-owner-approved-10-09-night-the-headline-since-10-10) at the top: a pair is two rules on the same selector with inverted mappings.
+
+## 3. How a creator launches (§1)
+
+`/burnticker/launch`: connect a wallet (wallet-adapter, already a dependency; Wallet Standard discovery, nothing added) or paste a
+pubkey → pick an event (live Kalshi search, or a first-party card with its tier and fixture preview) → define the mapping with sliders
+and run the back-test → name it → review the rule text and hash, the receipt format, the fee split per 1 SOL (pre/post graduation),
+"LP burned at graduation: 100 %", "creator cash from fees: 0", "team allocation: 0 %", what the operator can and cannot do; tick the
+two boxes → the API builds the unsigned bundle (`initialize_token` + LaunchLab create under our platform config with the burn pool as
+the creator-fee recipient, optional first buy) and registers a DRAFT. The bundle says `ready: false` until the Receipts program and the
+LaunchLab adapter are live; nothing is sent until it says `ready`. `action: "launched"` with the landed tx takes the draft live and
+sets the baseline (settlements after that moment count). Anonymous creators are allowed; the creator wallet is always displayed.
+
+### Bots: the SDK and the public API (owner, 10-09: "no tokens will be adopted into the platform, provide the sdk/api so people can incorporate into bots")
+
+Everything the wizard does and everything the pages show is available to bots — trading bots, launch bots, Telegram bots, agents —
+through `@burnticker/sdk` (`packages/burnticker-sdk/`, guide: [sdk.md](sdk.md)) and the keyless HTTP API under
+`/api/burnticker/v1` ([api.md](api.md), OpenAPI at `/api/burnticker/v1/openapi.json`). Public data and unsigned transactions only.
+There is no adopt-an-existing-token path: `initialize_token` must be signed by the new mint keypair and the burn pool (the fee PDA)
+must be LaunchLab's creator from the first trade. The wizard's routes and the v1 routes share one pipeline
+(`src/lib/burnticker/api/handlers.ts`), so a refusal, a hash or a fee can never differ between them.
+
+## 4. How to add a source
+
+Append an entry to `config/burnticker/sources.json` (see the 30 there): id, kind `attested-http`, tier, title, source name/URL,
+cadence, `pollEverySec`, `request` (url with `{today}` / `{from:N}` / `{yyyymmdd:…}` templates, method, headers, format json|csv|text),
+`select` (rows path + `value`, or `count` with weight rules, or a `regex` with named groups, or a `snapshot` path), `period` (kind
+day|week|month|quarter, path, format, `dropFirst`, `completeAfterDays`, `zeroFill`), unit/direction/baseline/carry, plausibility
+bounds, `memoSource`, a `fixture` fetched once and saved under `config/burnticker/fixtures/http/`, flags, `needsKey`, `launchable`.
+Then add the fixture's expectations to `test/burntickerCatalogue.test.ts`. No code changes. Parameterised sources (wiki.views,
+github.stars, steam.players, defillama.tvl, edgar.8k) take the parameter after a colon in the series id.
+
+## 5. How to run the keeper
+
+See `docs/burnticker/deploy.md` (the dedicated Burnticker VPS: units, Caddy, DNS, the host rule) and `docs/burnticker/runbook.md`
+(start/stop/pause, key rotation, what to do on each alert, adding a token by hand, verifying a receipt, backups, the go/no-go gates and
+the $DEFICIT launch-day sequence). `scripts/burnticker-keeper.mts [--once] [--dry-run] [--alerts]`; `data/PAUSE-burnticker` holds
+cranks. The keeper publishes `index.html`, `index.json`, `ops.json` (the morning check's block, for other hosts),
+`t/<ticker>/{index.html,status.json,receipts.json,rules.json}`, rewrites `data/own-tokens.generated.json` (the arms' refuse list for
+platform coins, merged by `src/lib/ownTokens.ts`) and runs the ops alert check every 5 minutes (`src/lib/burnticker/alerts.ts` → the
+registry's `alerts` table, forwarded to the operator's alert channel by `BURNTICKER_ALERT_WEBHOOK`); the audit script publishes `audit.json` and exits
+non-zero on any mismatch (the index badge and the trust page show it; the hourly timer runs it).
+
+## 6. Admission rules per tier (§3, extended)
+
+All tiers: official or primary source; machine-readable; timestamped; unambiguous units; not controlled by anyone who can hold the
+token; not a disaster; never the token's own price. Elections are allowed (owner, 10-09).
+
+| Tier | What | Admission |
+|---|---|---|
+| 1 | adjudicated market (Kalshi live; Polymarket, Drift BET, Hedgehog stubs) | settled results only; the venue's finalisation window respected; voids = no burn |
+| 2 | optimistic assertion (UMA OO v3 stub) | counts only once settled and not disputed-and-lost |
+| 3 | primary API attested by a TEE/zk job (Switchboard On-Demand: same URL + selection as tier 4) | third-party asset prices allowed from here up; not wired yet |
+| 4 | primary API read by our keeper | no prices of any asset; one real fixture; plausibility bounds; complete periods only |
+| 5 | page-scraped | the owner's say-so per source; regex pinned to the markup; never a price; zkTLS candidates |
+
+`usgs.quakes6` is present but flagged disaster-adjacent and not launchable until the owner confirms. Key-required sources (BEA, EIA,
+USDA MARS, Census, Congress.gov, YouTube) are present, not launchable, with the key named. ESPN's public scoreboard answered 403 to a
+plain client and 200 to a browser UA; it stays not launchable until its terms are checked (Kalshi KXNFLGAME is the tier-1 route).
+
+## 7. What we refuse (§7 + the owner's list)
+
+Markets about deaths, violence, terror, casualty counts, disasters, named private individuals (`config/burnticker/refuse.json`, applied
+to series/market/event titles and categories at create time, whatever the oracle); names that claim to be official; feeds outside
+the catalogue; rule changes after launch (impossible by design); mainnet until the program and the adapter are live; third-party price
+feeds below tier 3; the token's own price anywhere. Creators who market returns using our pages lose the embed, not the rule. Our bots
+refuse every platform coin (`config/own-tokens.json`, enforced in the arms).
+
+## 8. Trust ladder and the operator
+
+Level 1 (now): our data key signs each reading (quorum 1 — operator only; Switchboard On-Demand attester #2 scheduled within 14 days
+of the first launch; the trust page shows the due date). Level 2: an independent attester per selector, quorum 2, creator-added
+attesters under a 48 h timelock. Level 3: a proof of the API response (zkTLS) or an on-chain settlement the venue publishes.
+
+`/burnticker/trust` renders the Powers Register (a typed placeholder until `docs/burn-receipts/powers-register.json` ships with the
+program), the LIVE LaunchLab PlatformConfig decoded from chain next to the designed dials, the developer wallet and its fee ledger from
+chain, team wallets and the refuse rule, attesters and quorum, the program id/hash/verify steps, the public audit and the append-only
+incident log. Every token page carries "what the operator can and cannot do", derived from the register. The registry is append-only
+at the SQL level (triggers refuse rule/identity changes, reading updates and deletes, receipt-fact changes, and any change to a final
+receipt). There are no referral codes, fee discounts or hidden parameters in the wizard.
+
+Operated by one independent operator (United States) — contact: TODO (a clearly marked constant, `OPERATOR_CONTACT_TODO`). Use of fees: "Burnticker's
+25 bps funds attesters, hosting, the audit, and the operator. The platform never buys back any coin, including its own."
+
+### Kalshi on Solana — the level-3 path for Kalshi selectors (research, 10-09; not confirmed from primary sources)
+
+Secondary sources (CNBC, Unchained, Blockhead, Solana Foundation news, QuickNode's guide) report that since 2025-12-02 Kalshi markets
+are tokenised on Solana through DFlow's Prediction Markets API: positions are SPL "outcome tokens" minted when liquidity providers fill
+intents through DFlow's Concurrent Liquidity Programs, Jupiter was the first DEX integration, and "when markets resolve, winning tokens
+can be redeemed for stablecoins" with DFlow "monitoring Kalshi oracle resolution mechanisms and enabling on-chain redemption". What
+this build could NOT confirm from a primary source: a program id, an account layout carrying a per-market resolved outcome, or a
+redemption instruction a third party can read — DFlow's documentation host (`docs.dflow.net`) did not resolve and `pond.dflow.net`'s
+page returned 404 at the time of writing. So: no on-chain Kalshi adapter is claimed. The sketch, if it exists as described: a
+`ResolutionSource` of kind `market`, tier 1, whose `settledSince` reads the market's resolution account (program id + PDA seeds from
+DFlow's docs), and whose on-chain settlement the Receipts program could verify by CPI/account read instead of trusting our API reading.
+Open item: read DFlow's docs when reachable and the program on an explorer; until then Kalshi stays an API-read tier-1 source.
+
+Sources: [Unchained](https://unchainedcrypto.com/kalshi-powered-tokenized-prediction-markets-go-live-on-solana/),
+[CNBC](https://www.cnbc.com/2025/12/01/kalshi-makes-move-to-court-crypto-traders-with-tokenized-betting-contracts.html),
+[Blockhead](https://www.blockhead.co/2025/12/02/kalshi-launches-tokenized-prediction-markets-on-solana-through-dflow-integration/),
+[Solana news](https://solana.com/news/dflow-prediction-markets-api), [QuickNode guide](https://www.quicknode.com/guides/solana-development/3rd-party-integrations/kalshi-prediction-markets-with-dflow).
+
+## 9. Owner decisions baked in (2026-10-09)
+
+Developer slice 25 bps of curve volume via the platform slot to `BURNTICKER_FEE_WALLET`; creators earn no cash from fees (creator-fee
+slot → burn pool, 100 %, 50 bps cap); LP burned 100 % at graduation (developer post-graduation take 0; burn pool gets Raydium's fixed
+4.75 bps/SOL CPMM creator fee); no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
+keeper-enforced today, program-enforced later — that seam is open); refuse list as above with elections allowed; anonymous creators
+allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behind Caddy.
+
+## 10. Open items / stubbed pending other work
+
+- The Receipts program (`burn_receipts`): `BurnProgramClient` has the real `ProgramBurnClient` (`programClient.ts`, over the keeper
+  adapter) and `FakeBurnProgram` for tests and pages before a deployment; the program is not deployed on any public cluster.
+  **Memos:** the program itself writes the v1 (vault) / v2 (buyback) memo on chain, in the same instruction as the burn (Memo program
+  CPI; prefix = the ticker, `src=burnticker <selector>`, `prev`/`now` = the unit counter). The platform's v3 `BT|…` receipt format
+  (`receipt.ts`) is off-chain only: built, published and parsed by the platform and the SDK, never written on chain by the program.
+- LaunchLab: `FakeLaunchLab` in the app; `SdkLaunchLab` wraps the merged builders but needs decoded configs from an RPC (not wired in
+  the route). Mainnet launch refused outright.
+- Kalshi API terms of use on redistribution: unchecked. A coin whose supply tracks a CFTC event contract's resolution: disclosed on
+  every oracle-backed page (`EVENT_CONTRACT_DISCLOSURE`); the owner decided to proceed without a lawyer.
+- One-shot election fixture: Kalshi's public `/markets` returned no settled markets for the one-off election events probed on 10-09
+  (the Portugal event record is saved; the one-shot path is tested on a real settled NFL market).
+- Polymarket (CTF payout vector on Polygon), UMA, Drift BET, Hedgehog: interfaces, decoders and fixtures only; `launchable: false`.
+- Tier 3 (Switchboard On-Demand) and zkTLS: not wired; the config carries the same URL + selection a job would attest.
+- String-valued charts (Billboard, Spotify) need a "changed vs previous" binary mode (v2).
+- Fee ledger and live platform config need `BURNTICKER_RPC_URL` on the host; without it the trust page says so.
+
+- Public API / SDK (10-09): the rate limiter is in memory (one app process); a launch bundle's DRAFT reserves its ticker for 24 h
+  (registry `DRAFT_TTL_MS`; then `expired`, final by SQL trigger, ticker released — closes the squatting risk); `@burnticker/sdk` is built
+  (`packages/burnticker-sdk/scripts/build.mjs`) but not published, and its license is the owner's call (`UNLICENSED` until then);
+  the API's host name is the Caddyfile's `burnticker.com` placeholder.
+
+## 11. Acceptance criteria (§9) — checklist
+
+- [ ] every receipt on $DEFICIT green for 14 days
+- [ ] program tests green on localnet; deployed and exercised on devnet with 3 tokens
+- [ ] crank from a second, unrelated machine works
+- [ ] no withdraw path (reviewed by someone other than the author)
+- [ ] multisig holds the upgrade authority
+- [ ] the create wizard produces a working token end to end on devnet in under 10 minutes (the wizard runs end to end on the fakes today)
+- [x] the token page recomputes every burn from source (buildReceiptsJson; the audit script does it for every token and exits non-zero on a mismatch)
+- [ ] refuse-list live in all arms (`config/own-tokens.json` is referenced; the arms' entry filters must read it)
+- [x] rules, readings and receipts append-only (SQL triggers; tests)
+- [x] settled results only, prices display-only (tests on real fixtures)
+- [ ] Switchboard attester #2 within 14 days of first launch
+- [ ] Kalshi terms of use reviewed

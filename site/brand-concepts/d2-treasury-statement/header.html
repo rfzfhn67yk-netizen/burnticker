@@ -1,0 +1,50 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>D2 header</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=block" rel="stylesheet">
+<link rel="stylesheet" href="statement.css">
+<style>
+  html,body{margin:0;width:1500px;height:500px;overflow:hidden;background:var(--sheet)}
+  body{position:relative;color:var(--ink);font-family:'IBM Plex Mono',monospace}
+  /* the header is the statement page itself, seen close: margin punches on the left, text from x=400 */
+  .page:before{content:"";position:absolute;inset:0;pointer-events:none;background:
+    linear-gradient(180deg, transparent 0 62%, rgba(0,0,0,.06) 62% 62.3%, rgba(255,255,255,.6) 62.3% 62.6%, transparent 62.6%)}
+  .page{position:absolute;inset:0}
+  .ticker{position:absolute;left:396px;top:44px;font-size:92px}
+  .kicker{position:absolute;left:402px;top:146px;font-size:17px}
+  .strap{position:absolute;left:1000px;top:54px;width:460px;font-family:'IBM Plex Sans Condensed',sans-serif;font-weight:500;font-size:20px;line-height:27px;color:#2a2a28}
+  .tbl{position:absolute;left:402px;top:190px;width:1058px;font-size:19px}
+  .tbl td{padding:7px 0 5px}
+  .stamp{left:1030px;top:238px;transform:rotate(-7deg);font-size:46px;padding:6px 14px 2px}
+  .disc{position:absolute;left:402px;top:402px;font-size:15px;color:#6a6a66}
+  .rule{position:absolute;left:402px;top:30px;width:1058px;height:3px;background:var(--ink)}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="stampink" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="2" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="7" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.2 1.2" result="mask"/>
+    <feComposite in="d" in2="mask" operator="in"/>
+  </filter>
+  <filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" stitchTiles="stitch"/></filter>
+</svg>
+<div class="page">
+  <svg class="grain" width="1500" height="500"><rect width="1500" height="500" filter="url(#g)"/></svg>
+  <div class="punch" style="left:70px;top:110px"></div><div class="punch" style="left:70px;top:364px"></div>
+  <div class="rule"></div>
+  <div class="ticker">$DEFICIT</div>
+  <div class="strap">Burns when America borrows. Every $1,000,000,000 of new federal debt, trading fees buy back and burn 100,000 $DEFICIT; the burn transaction carries the source row, the arithmetic and the rule hash. Rule locked at launch.</div>
+  <div class="kicker">Daily statement · Debt to the Penny · 2026-10-08</div>
+  <table class="tbl">
+    <tr><td class="k">Total public debt outstanding</td><td class="dots"></td><td class="v">38,411,206,558,942.17</td></tr>
+    <tr class="muted"><td class="k">Prior business day</td><td class="dots"></td><td class="v">38,389,922,445,934.62</td></tr>
+    <tr><td class="k">Change</td><td class="dots"></td><td class="v">+21,284,113,007.55</td></tr>
+    <tr class="muted"><td class="k">Units of 1,000,000,000.00</td><td class="dots"></td><td class="v">21</td></tr>
+    <tr class="total"><td class="k">Burn ($DEFICIT) · tx 5xQm7…kR7a</td><td class="dots"></td><td class="v">2,100,000</td></tr>
+  </table>
+  <div class="stamp">Burned<small>on-chain · 2026-10-08</small></div>
+  <div class="disc">a memecoin — the rule says what supply does, not what price does</div>
+</div>
+</body></html>

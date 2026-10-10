@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burnticker — burns on the news</title>
+<meta name="description" content="Burnticker is a memecoin launchpad: coins whose supply burns on a Kalshi settlement, with receipts. Pit two coins against each other on one matchup, or launch one on any settled Kalshi market. Every burn carries the settled result, the arithmetic and the rule hash on chain.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0a0c">
+<meta property="og:title" content="Burnticker — burns on the news">
+<meta property="og:description" content="A memecoin launchpad: coins whose supply burns on a Kalshi settlement, with receipts. Two coins, one matchup: when a side loses, its coin burns.">
+<meta property="og:image" content="brand/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@burnticker">
+<link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
+<link rel="apple-touch-icon" href="brand/avatar.png">
+<style>
+:root{
+  --bg:#0a0a0c;--panel:#131317;--panel2:#1a1a20;--line:#26262d;--ink:#f6f4ee;--dim:#b8b6ae;--muted:#7f7e78;
+  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#0a0a0c;--ok:#5ad38f;--tape:#141418;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114}
+}
+:root[data-theme="light"]{--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans)}
+a{color:var(--amber);text-decoration:none}a:hover{text-decoration:underline}
+.mono,code,pre{font-family:var(--mono)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.muted{color:var(--muted)}.dim{color:var(--dim)}
+h2{font:700 .82rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin:0 0 14px}
+h2::before{content:"▮ ";color:var(--ember)}
+section{padding:44px 0;border-top:1px solid var(--line)}
+section.lead{border-top:0}
+.okmark{color:var(--ok)}
+.small{font-size:.86rem}
+.lede{font-size:1.15rem;color:var(--dim);max-width:60ch;margin:0 0 22px}
+
+/* top */
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink)}
+.brand svg{width:30px;height:30px}
+.brand b{font:700 1.05rem/1 var(--mono);letter-spacing:.12em}
+.nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.nav a{font-size:.84rem;color:var(--dim);padding:7px 10px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
+.nav a:hover{text-decoration:none;border-color:var(--amber);color:var(--ink)}
+.btn{display:inline-block;padding:12px 18px;border-radius:8px;border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:.95rem}
+.btn:hover{text-decoration:none;border-color:var(--amber)}
+.btn.amber{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.nav .btn{padding:7px 12px;font-size:.84rem;border-radius:999px}
+@media (max-width:639px){.nav a.sec{display:none}}
+
+/* hero + ticker */
+.hero{padding:30px 0 10px}
+.hero h1{font:700 clamp(2.4rem,8vw,5rem)/.98 var(--mono);letter-spacing:-.02em;margin:0 0 16px;text-transform:uppercase}
+.hero h1 em{font-style:normal;color:var(--amber)}
+.hero .cta{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 26px}
+.tape{position:relative;background:var(--tape);border-top:3px solid var(--amber);border-bottom:3px solid var(--amber);overflow:hidden;width:100%}
+.tape::before,.tape::after{content:"";position:absolute;left:0;right:0;height:8px;background-image:radial-gradient(circle,var(--bg) 2.4px,transparent 2.6px);background-size:28px 8px;background-position:14px 0;opacity:.9}
+.tape::before{top:5px}.tape::after{bottom:5px}
+.reel{display:flex;width:max-content;animation:scroll 70s linear infinite;padding:22px 0}
+.tape:hover .reel{animation-play-state:paused}
+.reel span{font:600 1rem/1 var(--mono);color:#ffb000;white-space:nowrap;padding:0 28px;letter-spacing:.02em}
+.reel span i{font-style:normal;color:#6d6c66;margin-right:10px}
+.reel span b{font-weight:600;color:#fff3c4}
+.reel span u{text-decoration:none;color:#5ad38f}
+@keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion: reduce){.reel{animation:none;flex-wrap:wrap;width:auto;gap:12px 0}.reel span{font-size:.85rem}}
+.tagline{font:700 .78rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:14px 0 0}
+.tagline b{color:var(--amber)}
+
+/* steps */
+.steps{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width:760px){.steps{grid-template-columns:repeat(3,1fr)}}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;position:relative}
+.step .n{font:700 2.2rem/1 var(--mono);color:var(--amber);margin-bottom:8px}
+.step h3{margin:0 0 6px;font:700 1.1rem/1.3 var(--sans)}
+.step p{margin:0;color:var(--dim);font-size:.95rem}
+.step p code{font-size:.8rem;color:var(--ink)}
+.then{margin:14px 0 0;padding:14px 16px;border-left:3px solid var(--ember);background:var(--panel);border-radius:0 10px 10px 0;color:var(--dim)}
+.then b{color:var(--ink)}
+
+/* catalogue */
+.feeds{display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:640px){.feeds{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:980px){.feeds{grid-template-columns:repeat(3,1fr)}}
+.feed{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:4px}
+.feed .id{font:700 .86rem var(--mono);color:var(--amber);letter-spacing:.04em}
+.feed .src{font-size:.86rem;color:var(--ink)}
+.feed .meta{font-size:.78rem;color:var(--muted);font-family:var(--mono)}
+.feed .meta b{color:var(--dim);font-weight:600}
+.feed .tag{align-self:flex-start;margin-top:6px;font:600 .68rem var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:4px;background:var(--panel2);color:var(--muted)}
+.feed.kalshi{border-color:var(--amber)}
+.feed.kalshi .tag{background:var(--amber);color:var(--amber-ink)}
+.rulesbox{margin-top:16px;padding:14px 16px;border:1px dashed var(--line);border-radius:10px;font-size:.9rem;color:var(--dim)}
+.rulesbox b{color:var(--ink)}
+
+/* trust */
+.trust{display:grid;grid-template-columns:1fr;gap:10px}
+@media (min-width:760px){.trust{grid-template-columns:repeat(2,1fr)}}
+.t{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.t h3{margin:0 0 6px;font:700 1rem/1.3 var(--sans)}
+.t h3::before{content:"✓ ";color:var(--ok)}
+.t p{margin:0;color:var(--dim);font-size:.93rem}
+.t p code{font-size:.78rem;color:var(--ink);word-break:break-all}
+
+/* first token */
+.first{display:grid;grid-template-columns:1fr;gap:18px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+@media (min-width:760px){.first{grid-template-columns:200px 1fr}}
+.first img{width:100%;max-width:200px;border-radius:12px;display:block;border:1px solid var(--line)}
+.first h3{margin:0 0 6px;font:700 1.6rem/1.15 var(--sans)}
+.first p{margin:0 0 10px;color:var(--dim)}
+.first .stats{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0 14px}
+.first .stats div{font-family:var(--mono)}
+.first .stats b{display:block;font-size:1.3rem;color:var(--ink)}
+.first .stats span{font-size:.74rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+
+/* economics */
+.econ{display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:760px){.econ{grid-template-columns:repeat(3,1fr)}}
+.econ .e{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.econ .e .k{font:700 .72rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px}
+.econ .e p{margin:0;font-size:.92rem;color:var(--dim)}
+
+/* rivalries: two thermal receipts per matchup (B1 identity: paper #f2eee4, thermal black #1b1916, stamp violet #5b3fa3) */
+.rivals{display:grid;grid-template-columns:1fr;gap:16px}
+@media (min-width:900px){.rivals{grid-template-columns:repeat(2,1fr)}}
+.match{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 14px 14px;min-width:0}
+.match .mk{font:700 .72rem/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+.match .mk b{color:var(--amber);font-weight:700}
+.slips{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start;gap:8px}
+.vs{align-self:center;font:700 .95rem/1 var(--mono);color:var(--amber);letter-spacing:.06em}
+.slipwrap{filter:drop-shadow(0 8px 12px rgba(0,0,0,.45));transform:rotate(-1.2deg);min-width:0}
+.slipwrap.b{transform:rotate(1deg);margin-top:10px}
+.slip{position:relative;background:#f2eee4;color:#1b1916;font:12px/1.45 var(--mono);padding:18px 12px 18px;overflow:hidden;
+  background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.03) 0 1px,transparent 1px 3px),linear-gradient(90deg,transparent 0 63%,rgba(255,255,255,.55) 63% 63.8%,transparent 63.8%);
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/10px 51% repeat-x;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/10px 51% repeat-x}
+.slip .sh{font:700 1.15rem/1.1 var(--mono);letter-spacing:.04em;overflow-wrap:anywhere}
+.slip .ss{font-size:.66rem;letter-spacing:.16em;color:#4a443c;margin:3px 0 0}
+.slip .dash{border-top:2px dashed #2a2622;margin:8px 0 6px}
+.slip .row{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:6px}
+.slip .row span{color:#4a443c}
+.slip .row b{margin-left:auto;text-align:right;font-weight:700;overflow-wrap:anywhere}
+.slip .motto{margin:10px 0 0;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:#4a443c;text-align:center}
+.slip.hit{padding-bottom:44px}
+.slip .stamp{position:absolute;right:10px;bottom:16px;transform:rotate(-8deg);color:#5b3fa3;border:2px solid #5b3fa3;border-radius:3px;padding:0 5px;font:700 .82rem/1.2 var(--mono);letter-spacing:.12em;opacity:.82;mix-blend-mode:multiply;pointer-events:none}
+.score{margin:16px 0 4px;font:700 1.05rem/1.4 var(--mono);color:var(--ink);text-align:center}
+.score i{font-style:normal;color:var(--muted);font-weight:400}
+.ruleline{margin:6px 0 0;font-size:.9rem;color:var(--dim);text-align:center}
+.ruleline code{font-size:.8rem;color:var(--ink)}
+.mocknote{margin:8px 0 0;font:.7rem/1.4 var(--mono);letter-spacing:.06em;color:var(--muted);text-align:center}
+.pairsteps{margin-top:22px}
+.paircta{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:18px 0 0}
+.paircta p{margin:0;color:var(--muted);font-size:.86rem;flex:1 1 260px}
+@media (max-width:519px){.slip{font-size:10.5px;padding:16px 8px}.slip .sh{font-size:.95rem}.slip .stamp{font-size:.7rem;right:6px;bottom:14px}.slip.hit{padding-bottom:38px}.slips{gap:5px}.vs{font-size:.8rem}}
+
+/* footer */
+.disc{border:2px solid var(--ember);border-radius:12px;padding:18px 20px}
+.disc h3{margin:0 0 6px;font:700 1.2rem/1.25 var(--mono)}
+.disc p{margin:0 0 8px;color:var(--ink)}.disc p:last-child{margin:0}
+footer{padding:28px 0 48px;color:var(--muted);font-size:.84rem}
+footer .links{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+footer .links a{color:var(--dim)}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <div class="top">
+    <a class="brand" href="./" aria-label="Burnticker">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><radialGradient id="bt-scorch" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1f1c19"/><stop offset=".46" stop-color="#1f1c19"/><stop offset=".56" stop-color="#0e0b08"/><stop offset=".66" stop-color="#3a2411"/><stop offset=".78" stop-color="#8a5a24"/><stop offset=".9" stop-color="#cfa65c" stop-opacity=".6"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/></radialGradient></defs><rect width="64" height="64" rx="12" fill="#1f1c19"/><g transform="rotate(-5 32 32)"><path d="M14 11 L17.5 7.5 L21 11 L24.5 7.5 L28 11 L31.5 7.5 L35 11 L38.5 7.5 L42 11 L45.5 7.5 L49 11 L49 55 L45.5 58.5 L42 55 L38.5 58.5 L35 55 L31.5 58.5 L28 55 L24.5 58.5 L21 55 L17.5 58.5 L14 55 Z" fill="#f2eee4"/><rect x="18" y="15" width="25" height="4" fill="#1b1916"/><rect x="18" y="22" width="14" height="1.6" fill="#4a443c"/><path d="M18 27 H45" stroke="#2a2622" stroke-width="1.2" stroke-dasharray="2 1.5"/><rect x="18" y="31" width="9" height="1.6" fill="#1b1916"/><rect x="34" y="31" width="11" height="1.6" fill="#1b1916"/><rect x="18" y="36" width="8" height="1.6" fill="#1b1916"/><path d="M28.5 45.5 C28 40.5 32 37.5 36.5 38 C41.5 37.5 45.5 41 44.5 45.5 C44 50 40 52.5 36 52 C31.5 52.5 29 49.5 28.5 45.5 Z" fill="url(#bt-scorch)" transform="translate(36.5 45) scale(1.45) translate(-36.5 -45)"/><path d="M33 44.5 C33 42 35 40.8 37 41.2 C39.5 41 40.6 43 40.2 45 C40 47.2 38.2 48.6 36.2 48.3 C34.2 48.4 33 46.8 33 44.5 Z" fill="#1f1c19"/></g></svg>
+      <b>BURNTICKER</b>
+    </a>
+    <nav class="nav" aria-label="Links">
+      <a href="#rivalries">Rivalries</a>
+      <a class="sec" href="#how">How</a>
+      <a class="sec" href="#feeds">Kalshi</a>
+      <a class="sec" href="#trust">Trust</a>
+      <a href="whitepaper.html">Whitepaper</a>
+      <a href="#deficit">$DEFICIT</a>
+      <a class="sec" href="https://x.com/burnticker" rel="me noopener" target="_blank">@burnticker</a>
+      <a class="btn amber" href="/burnticker/launch">Launch</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap lead">
+    <h1>Burns on<br>the <em>news.</em></h1>
+    <p class="lede">Burnticker is a memecoin launchpad: coins whose supply burns on a Kalshi settlement, with receipts. Pit two coins against each other on one matchup, or launch one on any settled market. When the market settles, the coin's own trading fees buy it back and burn it — and the burn transaction carries the settled result, the arithmetic and the rule hash.</p>
+    <div class="cta">
+      <a class="btn amber" href="/burnticker/launch?pair=1">Launch a pair</a>
+      <a class="btn" href="/burnticker/launch">Launch a single coin</a>
+      <a class="btn" href="#rivalries">Rivalries: two coins, one matchup</a>
+    </div>
+  </section>
+  <div class="tape" aria-label="A ticker of example burn receipts" role="marquee">
+    <div class="reel" id="reel">
+      <span><i>KALSHI.KXNFLGAME</i>DEN at SF settled NO → <b>$BRONCOS 1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>KALSHI.KXINX</i>4 pm close 7,765.36, <b>−36.41</b> vs prior → $BULLS 3 units → burned <u>✓ receipt</u></span>
+      <span><i>TREASURY.DEBT</i>2026-10-08 <b>+$21.28B</b> → 21 units → 2,100,000 $DEFICIT burned <u>✓ receipt</u></span>
+      <span><i>KALSHI.KXHIGHDEN</i>Denver high settled <b>84 °F</b> → 4 units → burned <u>✓ receipt</u></span>
+      <span><i>KALSHI.KXCPI</i>August CPI settled <b>0.4%</b> → 1 unit → burned <u>✓ receipt</u></span>
+      <span><i>KALSHI.KXNFLGAME</i>TB at DAL settled YES (TB) → <b>1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>TREASURY.DEBT</i>2025-07-07 <b>+$366.44B</b> → 366 units → the event <u>✓ receipt</u></span>
+      <span><i>KALSHI.KXINX</i>4 pm close 7,801.77, <b>−17.16</b> vs prior → $BULLS 1 unit → burned <u>✓ receipt</u></span>
+      <span><i>KALSHI.KXHIGHDEN</i>Denver high settled <b>87 °F</b> → 7 units → burned <u>✓ receipt</u></span>
+      <span><i>TREASURY.DEBT</i>2026-10-07 <b>+$11.01B</b> → 11 units → 1,100,000 $DEFICIT burned <u>✓ receipt</u></span>
+    </div>
+  </div>
+  <div class="wrap"><p class="tagline"><b>every event is a receipt</b> · example lines above; live lines come from each coin's own ledger</p></div>
+
+  <section class="wrap" id="rivalries">
+    <h2>Rivalries · two coins, one matchup</h2>
+    <p class="lede">Pit two coins against each other on one settled Kalshi market. Each side's rule is the other's inverted: when a side loses, its coin burns. Every settlement burns exactly one side, and the receipts keep score.</p>
+    <div class="rivals">
+      <article class="match" aria-label="Example matchup: $BRONCOS vs $CHIEFS">
+        <p class="mk">matchup · <b>KXNFLGAME</b> · Broncos–Chiefs games, Denver leg</p>
+        <div class="slips">
+          <div class="slipwrap"><div class="slip hit">
+            <div class="sh">$BRONCOS</div><div class="ss">SIDE A · BURN RECEIPT</div>
+            <div class="dash"></div>
+            <div class="row"><span>MARKET</span><b>KXNFLGAME</b></div>
+            <div class="row"><span>LEG</span><b>-DEN</b></div>
+            <div class="row"><span>BURNS ON</span><b>NO · DEN LOSES</b></div>
+            <div class="dash"></div>
+            <div class="row"><span>BURNS</span><b>3</b></div>
+            <div class="row"><span>SUPPLY</span><b>97.2%</b></div>
+            <p class="motto">when we lose, our coin burns</p>
+            <span class="stamp" aria-hidden="true">BURNED ON-CHAIN</span>
+          </div></div>
+          <div class="vs" aria-hidden="true">VS</div>
+          <div class="slipwrap b"><div class="slip">
+            <div class="sh">$CHIEFS</div><div class="ss">SIDE B · BURN RECEIPT</div>
+            <div class="dash"></div>
+            <div class="row"><span>MARKET</span><b>KXNFLGAME</b></div>
+            <div class="row"><span>LEG</span><b>-DEN</b></div>
+            <div class="row"><span>BURNS ON</span><b>YES · DEN WINS</b></div>
+            <div class="dash"></div>
+            <div class="row"><span>BURNS</span><b>1</b></div>
+            <div class="row"><span>SUPPLY</span><b>99.1%</b></div>
+            <p class="motto">when we lose, our coin burns</p>
+          </div></div>
+        </div>
+        <p class="score">$BRONCOS 3 <i>:</i> 1 $CHIEFS <i>·</i> supply 97.2% <i>:</i> 99.1%</p>
+        <p class="ruleline">Denver's leg settles NO → $BRONCOS burns. It settles YES → $CHIEFS burns. A voided game burns nothing.</p>
+        <p class="mocknote">example matchup · illustrative tally, not a live coin</p>
+      </article>
+      <article class="match" aria-label="Example matchup: $BULLS vs $BEARS">
+        <p class="mk">matchup · <b>KXINX</b> · S&amp;P 500 settled 4 pm close</p>
+        <div class="slips">
+          <div class="slipwrap"><div class="slip hit">
+            <div class="sh">$BULLS</div><div class="ss">SIDE A · BURN RECEIPT</div>
+            <div class="dash"></div>
+            <div class="row"><span>MARKET</span><b>KXINX</b></div>
+            <div class="row"><span>UNIT</span><b>10 PTS</b></div>
+            <div class="row"><span>BURNS ON</span><b>EACH 10 DOWN</b></div>
+            <div class="dash"></div>
+            <div class="row"><span>BURNS</span><b>11</b></div>
+            <div class="row"><span>SUPPLY</span><b>96.8%</b></div>
+            <p class="motto">when we lose, our coin burns</p>
+            <span class="stamp" aria-hidden="true">BURNED ON-CHAIN</span>
+          </div></div>
+          <div class="vs" aria-hidden="true">VS</div>
+          <div class="slipwrap b"><div class="slip">
+            <div class="sh">$BEARS</div><div class="ss">SIDE B · BURN RECEIPT</div>
+            <div class="dash"></div>
+            <div class="row"><span>MARKET</span><b>KXINX</b></div>
+            <div class="row"><span>UNIT</span><b>10 PTS</b></div>
+            <div class="row"><span>BURNS ON</span><b>EACH 10 UP</b></div>
+            <div class="dash"></div>
+            <div class="row"><span>BURNS</span><b>9</b></div>
+            <div class="row"><span>SUPPLY</span><b>97.4%</b></div>
+            <p class="motto">when we lose, our coin burns</p>
+          </div></div>
+        </div>
+        <p class="score">$BULLS 11 <i>:</i> 9 $BEARS <i>·</i> supply 96.8% <i>:</i> 97.4%</p>
+        <p class="ruleline">Each full 10 points the close falls from the previous settlement burns $BULLS; each full 10 it rises burns $BEARS.</p>
+        <p class="mocknote">example matchup · illustrative tally, not a live coin</p>
+      </article>
+    </div>
+
+    <div class="steps pairsteps">
+      <div class="step"><div class="n">01</div><h3>Pick the matchup on Kalshi</h3><p>Search a settled Kalshi series and narrow it to the matchup — one team's game leg (<code>KXNFLGAME</code>, ticker contains <code>-DEN</code>), one daily close (<code>KXINX</code>). Pairs use tier-1 adjudicated markets only.</p></div>
+      <div class="step"><div class="n">02</div><h3>Name both sides, two signatures</h3><p>Side A burns on one outcome; side B gets the inverted rule — the other outcome, or the other direction. Each rule is hashed and locked on its own with the same pair id in both. Two launch bundles, signed in sequence, A first.</p></div>
+      <div class="step"><div class="n">03</div><h3>The pair page is the scoreboard</h3><p>Every settlement burns exactly one side. The pair page shows burns A : B, supply A : B, the last settlement with its market and result, the next scheduled market, and both receipts tables.</p></div>
+    </div>
+    <p class="then"><b>Same terms on both sides.</b> One fee split for both coins, each with its own burn pool. LP burned at graduation. No creator cash from fees, no team allocation. A scalar move smaller than one unit burns neither side; a voided market burns neither.</p>
+    <div class="paircta">
+      <a class="btn amber" href="/burnticker/launch?pair=1">Launch a pair</a>
+      <p>The wizard opens on the pair flow: matchup, both names, side-by-side back-test with the partition check, review, two bundles.</p>
+    </div>
+  </section>
+
+  <section class="wrap" id="how">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step"><div class="n">01</div><h3>Pick a Kalshi market</h3><p>A recurring Kalshi series — every future market in it, narrowed by a ticker filter — or one specific market. The back-test lists every past market that matched and what the rule would have burned on each settlement.</p></div>
+      <div class="step"><div class="n">02</div><h3>Lock a rule</h3><p>Choose what burns: a YES (or NO) settlement, or every full unit of a settled number (<code>10 S&amp;P points</code>, <code>1 °F</code>), and the fraction of the fee pool each spends, 1–10%. <b>Rules are locked at launch.</b> A new rule is a new coin.</p></div>
+      <div class="step"><div class="n">03</div><h3>Launch</h3><p>One wallet approval creates the token on Raydium LaunchLab with its fee pool as the creator-fee recipient and registers the rule and its hash. You pay the venue's creation cost and gas; nothing to us up front.</p></div>
+    </div>
+    <p class="then"><b>Then burns happen, with receipts.</b> When the market settles, the settled result is attested on chain, anyone can crank the burn, the pool buys the coin at market and burns everything received in one transaction — whose memo carries the result, the units, the pool, the spend, the swap and the rule hash. Nothing to run, nothing to trust, nothing to withdraw.</p>
+    <p class="then"><b>Or launch two at once: a rivalry pair.</b> Same three steps, on a Kalshi market only: name two coins, and side B's rule is side A's inverted, so every settlement burns one of them. Two rules, two hashes, two signatures, one pair page that keeps score. <a href="#rivalries">See rivalries ↑</a></p>
+  </section>
+
+  <section class="wrap" id="feeds">
+    <h2>The source · Kalshi settlements</h2>
+    <p class="lede">Every coin burns on a Kalshi settlement: the exchange's adjudicated result of a regulated event contract, cross-checked against the series' own settlement source. 14,934 series to bind a rule to.</p>
+    <div class="feeds">
+      <div class="feed kalshi"><div class="id">sports · 3,883 series</div><div class="src">game winners, totals, season results</div><div class="meta">e.g. <b>KXNFLGAME</b> · one market per team per game</div><span class="tag">the rivalry staple</span></div>
+      <div class="feed kalshi"><div class="id">elections · 2,276 · politics · 2,193</div><div class="src">adjudicated results of elections and votes</div><div class="meta">settled by Kalshi against each series' named source</div><span class="tag">allowed via adjudicated markets</span></div>
+      <div class="feed kalshi"><div class="id">entertainment · 2,582 series</div><div class="src">awards, charts, box office</div><div class="meta">one settlement per show, week or weekend</div><span class="tag">settled results only</span></div>
+      <div class="feed kalshi"><div class="id">economics · 852 · financials · 1,001</div><div class="src">CPI prints, Fed decisions, the S&amp;P 500 close</div><div class="meta">e.g. <b>KXCPI</b>, <b>KXINX</b> · read as a settled number</div><span class="tag">scalar rules</span></div>
+      <div class="feed kalshi"><div class="id">weather · 422 series</div><div class="src">daily highs, rain, snow by city</div><div class="meta">e.g. <b>KXHIGHDEN</b> · Denver's daily high</div><span class="tag">one settlement a day</span></div>
+      <div class="feed kalshi"><div class="id">science &amp; tech · 372 series</div><div class="src">launches, releases, measurements</div><div class="meta">one settlement per event</div><span class="tag">settled results only</span></div>
+    </div>
+    <div class="rulesbox"><b>Admission rules.</b> A settled Kalshi result, never the market's odds, never the token's price · unambiguous units · not controlled by anyone who can hold the coin · not a disaster. Elections and votes are allowed when an adjudicated market (a Kalshi settlement) is the source. Never: deaths, violence, terror, casualty counts, or named private individuals. Each rule reads the exchange's adjudicated result cross-checked against the series' own settlement source, and a voided market burns nothing.</div>
+    <p class="small muted" id="other-sources"><b>Other sources.</b> A few first-party feeds — U.S. Treasury's Debt to the Penny, NOAA solar flares, Launch Library orbital launches, JPL close approaches, BLS series, Wikimedia pageviews — stay available behind “Advanced: first-party feed” in the wizard, for things no market covers. $DEFICIT is the stated exception: it runs on Treasury's data directly, with Kalshi's monthly debt market as a cross-check.</p>
+  </section>
+
+  <section class="wrap" id="trust">
+    <h2>Why you can trust a burn</h2>
+    <div class="trust">
+      <div class="t"><h3>Locked rules</h3><p>The rule and its SHA-256 are written into the token's config at launch and into every receipt. There is no instruction to change them. A different rule is a different coin.</p></div>
+      <div class="t"><h3>Attested readings</h3><p>Each feed reading is signed on chain as a <code>Reading</code> record before any burn uses it. v1: our data key. v2: a second, independent attester per feed and a quorum of 2; attesters can be added under a 48-hour timelock, never removed below quorum.</p></div>
+      <div class="t"><h3>Permissionless crank</h3><p><code>crank_burn</code> is callable by anyone. It computes the amount from the rule and the pool, swaps on the coin's own pool and burns in the same instruction. If we disappear, the public readings and the program keep working.</p></div>
+      <div class="t"><h3>No withdraw instruction</h3><p>The fee pool is a program-derived account. Trading fees flow in; anyone may deposit; the only way out is the burn. The program has no withdraw path, and the upgrade authority is a multisig, renounced once audited.</p></div>
+      <div class="t"><h3>Receipts</h3><p>One memo per burn, in a fixed order: date, source, previous and current reading, delta, units, pool, spent, got, burned, the swap signature, the rule hash. Each coin's page recomputes every burn from the source and shows <span class="okmark">✓</span> only when chain and feed agree.</p></div>
+      <div class="t"><h3>Holders are never touched</h3><p>No permanent delegate, no transfer hook, no mint authority. Burns consume only what the pool bought. A coin that stops trading simply stops burning.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="deficit">
+    <h2>The first token</h2>
+    <div class="first">
+      <img src="deficit-avatar.png" alt="$DEFICIT avatar: a debt-clock board reading $1B, burns when America borrows" width="200" height="200">
+      <div>
+        <h3>$DEFICIT — burns when the U.S. national debt rises</h3>
+        <p>Every full $1,000,000,000 added to Treasury's Debt to the Penny since the previous business day is one unit; each unit spends 5% of the fee pool buying $DEFICIT at market, and everything bought is burned.</p>
+        <div class="stats">
+          <div><b>235</b><span>burn days</span></div>
+          <div><b>6,490</b><span>units</span></div>
+          <div><b>+$366B</b><span>biggest day · 2025-07-07</span></div>
+        </div>
+        <p class="muted small">Replay of the real Treasury series, 2025-01 → 2026-10-08 — what the rule would have counted, not a forecast. The stated exception to Kalshi-first: $DEFICIT reads Treasury's data directly, with Kalshi's monthly debt market as a cross-check. A memecoin: the rule says what supply does, not what price does.</p>
+        <a class="btn" href="https://deficit.burnticker.com/" id="deficitLink">Open the $DEFICIT page →</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="economics">
+    <h2>Who gets what</h2>
+    <div class="econ">
+      <div class="e"><div class="k">the coin</div><p>Its creator-fee share flows to its fee pool, which is the burn budget. Days with no trading are days with small burns. Optionally a disclosed slice (≤ 20%) of creator fees can go to the creator's wallet instead; default 0, shown on the coin's page.</p></div>
+      <div class="e"><div class="k">the creator</div><p>Pays the venue's creation cost and gas. In the default template earns nothing in cash from fees — what they get is a coin whose burns are funded by its own trading. We say this plainly on the review screen.</p></div>
+      <div class="e"><div class="k">burnticker</div><p>A platform fee on curve volume and the platform's share of post-graduation LP fees, program-enforced. Nothing from burn pools, ever. Our bots never trade coins launched here, and our own holdings of any coin are shown on its page.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="disc">
+      <h3>Memecoins. The rule says what supply does, not what price does.</h3>
+      <p>Coins launched on Burnticker have no product, no revenue share and no promise beyond the published rule. Burning supply does not make a price go up; nobody here says it will. We refuse markets about deaths, violence, terror, casualty counts, disasters or named private individuals, and never the token's price as a source; we refuse names that impersonate people or institutions, and creators who use our pages to promise anyone anything.</p>
+      <p>Every number on every coin page is recomputed from the chain and the source at render time. If the page and the chain disagree, the chain is right. Not investment advice; nothing here is an offer.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <div class="links">
+    <a href="https://x.com/burnticker" rel="me noopener" target="_blank">X · @burnticker</a>
+    <a href="/burnticker/launch">Launch a coin</a>
+    <a href="/burnticker/launch?pair=1">Launch a pair</a>
+    <a href="#rivalries">Rivalries</a>
+    <a href="https://deficit.burnticker.com/" id="deficitLink2">$DEFICIT</a>
+    <a href="#feeds">Kalshi markets</a>
+  </div>
+  <div>Burnticker runs the keeper, the catalogue and the pages. Kalshi and the other sources named above (U.S. Treasury, NOAA, BLS, JPL, Wikimedia and others) are not affiliated with and do not endorse any coin. Burns on the news; every event is a receipt.</div>
+</footer>
+<script>
+(function () {
+  // Duplicate the reel once so the CSS loop is seamless (translateX(-50%) lands on the copy's first item).
+  var reel = document.getElementById("reel");
+  if (reel && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    var copy = reel.cloneNode(true); copy.removeAttribute("id");
+    while (copy.firstChild) reel.appendChild(copy.firstChild);
+  }
+})();
+</script>
+</body>
+</html>

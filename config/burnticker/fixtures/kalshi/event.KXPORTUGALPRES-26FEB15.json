@@ -1,0 +1,23 @@
+{
+ "fetchedAt": "2026-10-10T02:00:00Z",
+ "url": "https://api.elections.kalshi.com/trade-api/v2/events/KXPORTUGALPRES-26FEB15?with_nested_markets=true",
+ "event": {
+  "category": "Politics",
+  "collateral_return_type": "MECNET",
+  "event_ticker": "KXPORTUGALPRES-26FEB15",
+  "exchange_index": 0,
+  "last_updated_ts": "0001-01-01T00:00:00Z",
+  "mutually_exclusive": true,
+  "series_ticker": "KXPORTUGALPRES",
+  "settlement_sources": [
+   {
+    "name": "the official electoral commission",
+    "url": "https://www.eleicoes.mai.gov.pt/"
+   }
+  ],
+  "strike_period": "",
+  "sub_title": "In 2026",
+  "title": "Portugal Presidential election winner?"
+ },
+ "markets": []
+}

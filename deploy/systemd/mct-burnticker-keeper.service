@@ -1,0 +1,29 @@
+[Unit]
+Description=Burnticker multi-token keeper (event-indexed burns for every token in data/burnticker.db; FakeBurnProgram until BURNTICKER_PROGRAM_ID is wired — nothing is sent)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/meme-coin-trader
+# Loop mode: the script cycles once a minute by itself; data/PAUSE-burnticker holds cranks while reading, publishing and alerts go on.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnticker-keeper.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+# Logs read in Denver time like every unit here (2026-09-05); Kalshi settlement times and feed periods are recorded as the source states them.
+Environment=TZ=America/Denver
+Environment=BURNTICKER_DB=%h/meme-coin-trader/data/burnticker.db
+Environment=BURNTICKER_PUBLISH_DIR=%h/meme-coin-trader/data/burnticker-site
+# BURNTICKER_CLUSTER, BURNTICKER_KEEPER_PUBKEY, BURNTICKER_FEE_WALLET, BURNTICKER_RPC_URL, BURNTICKER_PLATFORM_ID, BURNTICKER_PROGRAM_ID,
+# BURNTICKER_ALERT_WEBHOOK, BURNTICKER_ALERT_WEBHOOK_TOKEN live in .env.local on the host, read by run-burnticker-keeper.sh — never in this file.
+Restart=always
+RestartSec=30
+KillSignal=SIGTERM
+# A crank in flight finishes its confirmation wait before the process exits; its signature is write-ahead on the ledger either way.
+TimeoutStopSec=150
+# Output goes to the log file like every mct-* unit; journald keeps the unit's own lifecycle (starts, crashes, restarts): journalctl --user -u mct-burnticker-keeper
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-keeper.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-keeper.log
+
+[Install]
+WantedBy=default.target
