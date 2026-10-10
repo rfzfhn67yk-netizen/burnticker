@@ -1,4 +1,14 @@
-# Burnticker — launch a memecoin whose supply burns when a real-world event settles
+# Burnticker — coins that burn on real-world results, with receipts
+
+**Positioning (owner-approved 2026-10-10 night).** One sentence everywhere: **"Coins that burn on real-world results — with
+receipts."** Sub-line: **"Launch one. Follow the season."** The receipt is the product; a season is a scoreboard of burns; nothing is
+ever won — things are only burned, and a champion is the coin with the most receipts, never a recipient of anything. Four surfaces
+with plain names: **Coins** (the grid), **Launch** (the sentence box and the dials), **Seasons** (scoreboards: team coins and
+rivalries, every number a receipt count or a burned share — today the rivalries page, `/burnticker/rivalries`) and **Trust**
+(sources, the coverage table, reviews, the receipts audit). Two layers, shown by example: the engine (a launchpad with locked rules;
+the rule is enforced by a program, not a promise) and the show (seasons and rivalries). Sports copy rotates across leagues and never
+leads with the NFL. Copy rules: `config/launch/copy-lint.json`, including the `no-prizes` category (no prize, pot, payout, jackpot,
+reward, stake, bet, wager or odds; nobody wins money, gets paid or earns). Voice: `docs/launch/x-burnticker-profile.md`.
 
 **Settlement (owner decision, 10-10): settled on primary sources; prediction markets are discovery and optional cross-checks where
 their terms permit.** Kalshi's Developer Agreement and Data Terms forbid using its API or data to settle products or to cache or

@@ -1175,4 +1175,4 @@ Items marked **[fixed 2026-10-10]** were corrected on this branch after the firs
     it is an attester and fee payer only (README-execution §3).
 19. **[fixed 2026-10-10]** **The `run-burnkeeper.sh` header** documents legacy behaviour. It does not mention `BURNKEEPER_EXECUTION` or `BURNTICKER_PROGRAM_ID`, both of
     which the keeper reads.
-20. **`OPERATOR_LINE`** still says `TODO_CONTACT_ADDRESS`, against LAUNCHPAD §18's real-name operator line with a contact.
+20. **`OPERATOR_LINE`** — RESOLVED 2026-10-10: contact@burnticker.com (iCloud+ custom domain; security@burnticker.com for the bounty).

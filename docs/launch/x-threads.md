@@ -1,10 +1,14 @@
-# X threads and post templates — $DEFICIT and Burnticker (drafts, 2026-10-09)
+# X threads and post templates — $DEFICIT and Burnticker (drafts, 2026-10-09; Burnticker re-cut 2026-10-10 night)
 
 Drafts only. Nothing posts itself. Each post is written to fit 280 characters without links counted (X counts a link as 23);
 the character count is noted where it is close. Placeholders are in `ALL_CAPS_BRACES`. The memecoin disclaimer sits on every post
 that describes the mechanic and on the last post of every thread.
 
-Words that do not appear anywhere below, by rule: guaranteed, moon, pump, 100x, early, target, "will go", "don't miss".
+Words that do not appear anywhere below, by rule: guaranteed, moon, pump, 100x, early, target, "will go", "don't miss" — and, since
+2026-10-10, nothing that reads as a prize: nothing is ever won, things are only burned (the `no-prizes` lint category).
+
+Burnticker's one sentence, everywhere: **"Coins that burn on real-world results — with receipts."** Sub-line: **"Launch one. Follow
+the season."** Sports examples rotate across leagues (Rays, Lakers, Oilers, Eagles) and no list of leagues starts with the NFL.
 
 ---
 
@@ -26,7 +30,7 @@ Words that do not appear anywhere below, by rule: guaranteed, moon, pump, 100x, 
 > 21 units on 2026-10-08: the debt rose $21.28B.
 
 **4/8 — who pays for it**
-> Nobody mints, nobody donates. Every trade pays the venue's creator fee into the keeper's fee pool. On a day with units the pool spends 1 − 0.95^units buying $DEFICIT at market and burns every token received.
+> Nobody mints, nobody donates. Every trade pays the venue's creator fee into the keeper's fee pool. On a day with units the pool spends 1 − 0.98^units buying $DEFICIT at market and burns every token received.
 >
 > No trading, small burns. Fees fund burns, nothing else.
 
@@ -48,41 +52,41 @@ Words that do not appear anywhere below, by rule: guaranteed, moon, pump, 100x, 
 **8/8 — links**
 > Rules, receipts, the live debt curve and the verify-it-yourself block: {SITE_URL}
 > Rule file + sha256: {SITE_URL}/rules.json
-> Launched on @burnticker — burns on the news.
+> Launched on @BurnTicker — coins that burn on real-world results, with receipts.
 >
 > A memecoin. The rule says what supply does, not what price does. Not advice.
 
 ---
 
-## 2. Burnticker announcement thread (@burnticker, 6 posts)
+## 2. Burnticker announcement thread (@BurnTicker, 6 posts; re-cut 2026-10-10 night)
 
-**1/6**
-> Burnticker is a memecoin launchpad: coins whose supply burns on verifiable real-world events, with receipts.
+Every post below passes the copy lint (test/burntickerCopy.test.ts lints this section post by post).
+
+**1/6 — the sentence**
+> Coins that burn on real-world results — with receipts.
 >
-> Burns on the news. Every event is a receipt. 🧵
+> Launch one. Follow the season. 🧵
 
-**2/6 — three steps**
-> 1. Pick a feed from the catalogue: Treasury debt, solar flares, orbital launches, asteroid passes, egg prices, a game result, a settled Polymarket market.
-> 2. Lock a rule: the unit and the fraction of the fee pool per unit. Locked means locked.
-> 3. Launch, one wallet approval.
-
-**3/6 — what a receipt is**
-> When the feed posts, the reading is attested on chain, anyone can crank the burn, the coin's fee pool buys it at market and burns everything received.
+**2/6 — the engine**
+> Launch: write the result in one sentence — "Rays lose", "Denver high above 90", "US debt rises $1B" — set the dial (1–10% of the coin's fee pool per burn) and lock the rule.
 >
-> The memo on that transaction carries the reading, the arithmetic, the swap and the rule hash. That memo is the receipt.
+> The rule is hashed at launch. It is enforced by a program, not a promise.
 
-**4/6 — why trust it**
-> No instruction to change a rule. No instruction to withdraw a pool. Readings signed before use; a second independent attester per feed in v2. A crank anyone can call. Our bots never trade coins launched here; our holdings are shown on each page.
+**3/6 — the receipt**
+> When the result settles on a primary source and a second publisher agrees, the reading is signed on chain and the program spends the coin's own fees buying it at market and burning what it bought.
 >
-> Trust the program, not us.
+> The memo on that transaction is the receipt: reading, units, spent, burned, rule hash.
 
-**5/6 — the first coin**
-> First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it. Treasury's Debt to the Penny is the feed.
+**4/6 — the show**
+> Follow the season: team coins across MLB, NBA, NHL and NFL, scored in receipts. Rivalries keep a running tally of burns.
 >
-> Receipts and the live curve: {DEFICIT_SITE_URL}
+> Nothing is ever won here. Things are only burned. The champion is the coin with the most receipts: a stat, not a prize.
 
-**6/6 — what we refuse, and the line**
-> We refuse: feeds that are prices, disasters, elections or votes; names that impersonate people or institutions; anyone marketing returns with our pages.
+**5/6 — the guardrails**
+> Settled on primary sources · quorum-signed readings · program-run burns · receipts anyone can recompute · open source · reviewed · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
+
+**6/6 — the first coin, and the line**
+> First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.
 >
 > Memecoins: the rule says what supply does, not what price does. Not advice. {SITE_URL}
 
@@ -90,9 +94,9 @@ Words that do not appear anywhere below, by rule: guaranteed, moon, pump, 100x, 
 
 ## 2b. Rivalry pair announcement thread (@burnticker, 5 posts; added 2026-10-10)
 
-One thread per pair, posted after both bundles have landed. Placeholders: `{TICKER_A}`, `{TICKER_B}`, `{SERIES}` (e.g. KXNFLGAME),
-`{MATCHUP}` (e.g. Broncos–Chiefs games, Denver leg), `{OUTCOME_A}` / `{OUTCOME_B}` (e.g. NO · Denver loses / YES · Denver wins; for a
-scalar pair, e.g. each full 10 points down / up), `{PCT}` (the fraction of the pool per burn), `{PAIR_ID}`, `{SITE_URL}`. The running
+One thread per pair, posted after both bundles have landed. Placeholders: `{TICKER_A}`, `{TICKER_B}`, `{SERIES}` (the source, e.g.
+ESPN scoreboard), `{MATCHUP}` (e.g. Oilers–Flames, one game), `{OUTCOME_A}` / `{OUTCOME_B}` (e.g. an Edmonton loss / a Calgary loss;
+for a scalar pair, e.g. each full 10 points down / up), `{PCT}` (the fraction of the pool per burn), `{PAIR_ID}`, `{SITE_URL}`. The running
 score after launch is `pairDailyText()` (src/lib/launch/dailyPost.ts: "$A 3 : 1 $B — every loss burns"), never retyped. Every post
 below passes the copy lint (test/dailyPost.test.ts lints this section).
 
@@ -102,9 +106,9 @@ below passes the copy lint (test/dailyPost.test.ts lints this section).
 > When a side loses, its coin burns. Every settlement burns exactly one side, and the receipts keep score. 🧵
 
 **2/5 — the two rules**
-> ${TICKER_A} burns when the market settles {OUTCOME_A}. ${TICKER_B} burns when it settles {OUTCOME_B}.
+> ${TICKER_A} burns on {OUTCOME_A}. ${TICKER_B} burns on {OUTCOME_B}.
 >
-> Each burn spends {PCT}% of that coin's own fee pool buying it at market and burns everything bought. A voided market burns neither.
+> Each burn spends {PCT}% of that coin's own fee pool buying it at market and burns everything bought. A void or a tie burns neither.
 
 **3/5 — locked**
 > Two rules, two hashes, one pair id in both. Side B's rule is side A's inverted and names side A's mint. Both are locked at launch; nobody can change either.
@@ -117,10 +121,57 @@ below passes the copy lint (test/dailyPost.test.ts lints this section).
 > Neither pool can pay the other side. Anyone can deposit into either; nobody can withdraw.
 
 **5/5 — the scoreboard**
-> The pair page is the scoreboard: burns A : B, supply A : B, the last settlement with its market and result, the next market, both receipts tables.
+> The pair page is the scoreboard: burns A : B, supply A : B, the last settlement with its result, the next scheduled result, both receipts tables.
 >
 > {SITE_URL}/p/{PAIR_ID}/
 > Two memecoins: each rule says what its supply does, not what price does. Not advice.
+
+---
+
+## 2c. The two @BurnTicker formats — receipts and scoreboards (added 2026-10-10 night)
+
+@BurnTicker posts two visibly different formats and nothing else of its own. Both are filled from the platform's published files
+(each coin's status.json + receipts.json; the platform's index.json), never retyped, and both pass the copy lint.
+`test/burntickerCopy.test.ts` renders them on the sample in `test/burntickerCopyFixture.ts` and requires the filled examples below
+to equal the output, character for character.
+
+**Receipts** — `receiptPostText(status, receipts, receipt, site)` in `src/lib/launch/dailyPost.ts`. One post per confirmed burn
+(anything else throws). Plain and numeric:
+
+| Line | Source |
+|---|---|
+| `Receipt #{N} · ${TICKER} · {DAY}` | the receipt's position in receipts.json, the ticker, the settled day |
+| `{EVENT} · reading {VALUE}` or `· settled {RESULT}` `({METHOD})` | the receipt's title, value or result, and the source + cross-read method |
+| `{UNITS} unit(s) → {BURNED} ${TICKER} burned · {SPENT} SOL spent` | units, burned, spent |
+| `Supply {SUPPLY} ({PCT}% burned · {COUNT} receipts)` | status.json supply and burned |
+| `tx {TX} · page {SITE}/t/{TICKER}/` | the burn transaction and the coin's page |
+| `a memecoin — supply, not price.` | the short disclaimer |
+
+```text
+Receipt #5 · $RAYS · 2026-10-09
+NYY 5 @ TB 2 · reading 1 (espn-final+mlb)
+1 unit → 40,973 $RAYS burned · 0.0041 SOL spent
+Supply 975,900,000 (2.41% burned · 5 receipts)
+tx https://solscan.io/tx/5QmRays · page https://burnticker.com/t/RAYS/
+a memecoin — supply, not price.
+```
+
+**Scoreboards** — `scoreboardText({ index, receiptsByTicker, day, week, top, site })`. The season as receipt counts across every
+league the platform reads. Team coins are the live coins on an ESPN team or game series. The header counts them, their leagues and how
+many burned on `day` (yesterday, for a morning post). The ranked lines (default 3) order them by receipts, then by share of supply
+burned. The leader is marked champion; a tie names every leader. Every number is a receipt count or a burned share. The link is
+optional, because it costs 24 of the 280 characters.
+
+```text
+Week 6 · 14 team coins across 4 leagues · 9 burned yesterday
+1. $OILERS 6 receipts, 2.94% burned · NHL · champion
+2. $RAYS 5 receipts, 2.41% burned · MLB
+3. $LAKERS 4 receipts, 1.96% burned · NBA
+Champion = most receipts, not a prize. Memecoins — supply, not price.
+```
+
+The receipt format replaces B1 (§3) for @BurnTicker. The rivalry post (`pairDailyText`, §2b) stays the format for a pair's own
+running score.
 
 ---
 
@@ -208,7 +259,7 @@ supply does, not what price does.`
 
 ### Burnticker-side evergreen (for @burnticker, one template per coin)
 
-**B1 — the cross-post**
+**B1 — the cross-post** (kept for `scripts/burnkeeper-post-draft.mts --template=B1`; @BurnTicker posts the receipt format, §2c)
 > Receipt on the tape: ${TICKER} burned {BURNED} tokens — {FEED_ID} {DATE}, {UNITS} units → {TX}
 > Burns on the news. Memecoins: the rule says what supply does, not what price does.
 

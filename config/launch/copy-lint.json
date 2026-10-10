@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.copy-lint/v1",
-  "note": "The owner's copy rule for every post, page and card (2026-10-09): report, do not promote. No price talk, no promises, no calls to buy, no 'coming soon', no hype punctuation. The draft script lints every template before printing and refuses on a hit; `scripts/burnkeeper-post-draft.mts lint <text|file>` lints anything else. Patterns are JavaScript regexes applied case-insensitively after the ALLOWED spans are masked out. References: docs/launch/x-burnticker-profile.md § Voice rules; src/lib/burnKeeper/statusPage.ts COPY RULE (SPEC §9.2); docs/launch/daily-post.md § Lint.",
+  "note": "The owner's copy rule for every post, page and card (2026-10-09): report, do not promote. No price talk, no promises, no calls to buy, no 'coming soon', no hype punctuation. Since 2026-10-10 also no prizes: nothing is ever won, things are only burned (the receipt is the product, a season is a scoreboard of burns). The draft script lints every template before printing and refuses on a hit; `scripts/burnkeeper-post-draft.mts lint <text|file>` lints anything else. Patterns are JavaScript regexes applied case-insensitively after the ALLOWED spans are masked out. References: docs/launch/x-burnticker-profile.md § Voice rules; src/lib/burnKeeper/statusPage.ts COPY RULE (SPEC §9.2); docs/launch/daily-post.md § Lint.",
   "maxChars": 280,
   "linkCountsAs": 23,
   "categories": {
@@ -8,7 +8,8 @@
     "promises": { "ref": "x-burnticker-profile.md § Voice rules: no promises; x-threads.md header", "why": "the rule is the only promise; everything else is a report of what already happened" },
     "calls-to-buy": { "ref": "x-burnticker-profile.md § Voice rules: 'Never a call to buy'", "why": "trade links live on the pages, not in posts" },
     "urgency": { "ref": "x-burnticker-profile.md § Voice rules: no countdowns to a listing, no urgency", "why": "urgency is a sales device; receipts have no deadline" },
-    "hype-punctuation": { "ref": "docs/launch/daily-post.md § Lint", "why": "three exclamation marks or a rocket is a promise in costume" }
+    "hype-punctuation": { "ref": "docs/launch/daily-post.md § Lint", "why": "three exclamation marks or a rocket is a promise in costume" },
+    "no-prizes": { "ref": "x-burnticker-profile.md § Voice rules: 'Nothing is ever won — things are only burned' (owner, 2026-10-10)", "why": "a burn is a receipt, not a prize; a season is a scoreboard of burns, a champion is a stat; nobody is paid on any result" }
   },
   "rules": [
     { "id": "price", "category": "price-returns", "pattern": "\\bprices?\\b", "note": "the token's price in any form; the disclaimer sentence is allowed (see allowed)" },
@@ -40,7 +41,20 @@
     { "id": "dont-miss", "category": "urgency", "pattern": "\\b(don'?t miss|last chance|hurry|act now|before it'?s too late|limited time|only \\d+ (left|spots?))\\b" },
     { "id": "countdown", "category": "urgency", "pattern": "\\b(countdown|t-minus|\\d+ ?(h|hrs?|hours?|m|mins?|minutes?|d|days?) (left|to go|until|till)|launching in)\\b" },
     { "id": "exclamation", "category": "hype-punctuation", "pattern": "(?:![^!\\n]*){3}", "note": "three or more exclamation marks on one line, together or apart" },
-    { "id": "emoji", "category": "hype-punctuation", "pattern": "[\\u{1F680}\\u{1F525}\\u{1F319}\\u{1F315}\\u{1F31D}\\u{1F4B0}\\u{1F4B8}\\u{1F4C8}\\u{1F48E}\\u{1F4AF}\\u{1F911}\\u{1F440}]", "note": "rocket, fire, moons, money bag, flying money, chart up, gem, 100, money face, eyes; the thread emoji 🧵 is fine" }
+    { "id": "emoji", "category": "hype-punctuation", "pattern": "[\\u{1F680}\\u{1F525}\\u{1F319}\\u{1F315}\\u{1F31D}\\u{1F4B0}\\u{1F4B8}\\u{1F4C8}\\u{1F48E}\\u{1F4AF}\\u{1F911}\\u{1F440}]", "note": "rocket, fire, moons, money bag, flying money, chart up, gem, 100, money face, eyes; the thread emoji 🧵 is fine" },
+    { "id": "prize", "category": "no-prizes", "pattern": "\\bprizes?\\b" },
+    { "id": "payout", "category": "no-prizes", "pattern": "\\bpay-?outs?\\b", "note": "Polymarket's settlement is named only as 'on-chain payout' / 'payout vector' (see allowed)" },
+    { "id": "jackpot", "category": "no-prizes", "pattern": "\\bjackpots?\\b" },
+    { "id": "winnings", "category": "no-prizes", "pattern": "\\bwinnings\\b" },
+    { "id": "pot", "category": "no-prizes", "pattern": "\\bpots?\\b", "note": "a season has no pot; 'honeypot' and 'spot' do not match" },
+    { "id": "reward", "category": "no-prizes", "pattern": "\\breward(s|ed|ing)?\\b" },
+    { "id": "stake", "category": "no-prizes", "pattern": "\\b(stak(e|es|ed|ing)|stakers?)\\b" },
+    { "id": "bet", "category": "no-prizes", "pattern": "\\b(bet|bets|betting|bettors?)\\b", "note": "'between' and 'better' do not match; the drift-bet parser name is allowed" },
+    { "id": "wager", "category": "no-prizes", "pattern": "\\bwager(s|ed|ing)?\\b" },
+    { "id": "odds", "category": "no-prizes", "pattern": "\\bodds\\b", "note": "saying we never show odds is allowed (see allowed)" },
+    { "id": "win-money", "category": "no-prizes", "pattern": "\\b(win|wins|winning|won) (money|cash|sol|usdc|crypto|big|something|it all)\\b", "note": "'burn when we win' is a result, not money" },
+    { "id": "get-paid", "category": "no-prizes", "pattern": "\\b(get|gets|getting|got) paid\\b" },
+    { "id": "holders-earn", "category": "no-prizes", "pattern": "\\b((holders?|you|your wallet|everyone|anyone|winners?|fans?|investors?)( can| could| also| all)? earns?|earn(s|ing)? (yield|interest|money|cash|sol|usdc|passive|rewards?|a share|income)|passive income)\\b", "note": "earning, said of holders; 'creators earn nothing' is a fact about the creator and passes" }
   ],
   "allowed": [
     { "id": "disclaimer", "pattern": "the rule says what supply does, not what price does", "note": "the fixed memecoin disclaimer" },
@@ -54,6 +68,10 @@
     { "id": "dollar-figures", "pattern": "[-+−]?\\$[\\d,]+(\\.\\d+)?\\s?[KMBT]?\\b", "note": "debt figures and SOL/USD amounts are data" },
     { "id": "buyback", "pattern": "\\b(buy ?backs?|bought back|buys? (it|itself) back|buy(s|ing)? \\$?[A-Za-z]{2,12} at market)\\b", "note": "the mechanic, not a call" },
     { "id": "treasury-posts", "pattern": "treasury (posts|publishes)", "note": "a statement of Treasury's schedule, not a promise" },
+    { "id": "on-chain-payout", "pattern": "\\b(on-chain payouts?( vectors?)?|payout vectors?|payouts? (is |are )?on (chain|polygon)|50-50 payouts?|payoutNumerators|payoutDenominator)\\b", "note": "Polymarket's adjudicated settlement on Polygon, named the one way the owner allows" },
+    { "id": "no-prize", "pattern": "\\b(no|not|never|nor|without|nothing is)( an?| the| any| its| a market'?s| a)? (prizes?|pay-?outs?|jackpots?|pots?|rewards?|stakes?|staking|bets?|betting|wagers?|odds|winnings)\\b", "note": "saying what does not exist" },
+    { "id": "no-team-buy", "pattern": "\\bno team buys?\\b", "note": "the guardrail: the team never buys at launch (team allocation 0%)" },
+    { "id": "drift-bet", "pattern": "\\bdrift[- ]bet\\b", "note": "a venue/parser name in the rules schema (Drift BET)" },
     { "id": "derby-input", "pattern": "(?<![$\\w])[A-Z0-9]{1,12} out-gains (?!\\$)[A-Z0-9]{1,12}( by market cap)?\\b", "note": "Burn Derby (2026-10-10): ANOTHER coin's move named as the rule's input ('WIF out-gains SHIB'); a $TICKER (our coins) never matches, so talk about our own coins still fails" },
     { "id": "derby-flip", "pattern": "(?<![$\\w])[A-Z0-9]{1,12}'s market cap (never )?passes (?!\\$)[A-Z0-9]{1,12}'s", "note": "Burn Derby's one-shot flippening input ('WIF's market cap passes SHIB's'); never a $TICKER" }
   ]

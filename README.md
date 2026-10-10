@@ -1,14 +1,23 @@
 # Burnticker
 
-An open launchpad for memecoins whose supply burns when a **settled real-world event** says so — and a receipt for every burn that
-anyone can recompute from the source.
+**Coins that burn on real-world results — with receipts.** Launch one. Follow the season.
 
-A creator picks an event (a first-party data feed such as Treasury, BLS, ESPN or NWS, or an on-chain-adjudicated Polymarket market), maps outcomes to burns, and launches on Raydium
-LaunchLab under Burnticker's platform config. The rule is hashed on chain at create and can never change. A keeper reads the
-settled result, signs it, and cranks `crank_buyback` on the `burn_receipts` program: the token's fee pool buys the token on its
-own pool and burns everything it receives, writing a memo that names the event, the source, the reading, the amounts and the rule
-hash. The token page recomputes every receipt from the source; the audit script does it for every token and exits non-zero on
-a mismatch; the trust page shows the result.
+Burnticker is an open launchpad for memecoins whose supply burns when a settled real-world result says so. Every burn leaves a receipt
+that anyone can recompute from the source. The receipt is the product; nothing is ever won — things are only burned.
+
+**The engine.** A creator writes the result in one sentence. It can come from a first-party data feed (Treasury, BLS, ESPN, NWS and
+others, each cross-read by a second publisher) or from the on-chain payout of an adjudicated Polymarket market; prediction markets are
+otherwise for discovery. The creator maps outcomes to burns and launches on Raydium LaunchLab under Burnticker's platform config. The
+rule is hashed on chain at create and can never change. A keeper reads the settled result, signs it, and cranks `crank_buyback` on the
+`burn_receipts` program. The coin's fee pool buys the coin on its own pool and burns everything it receives, writing a memo that names
+the event, the source, the reading, the amounts and the rule hash. The rule is enforced by a program, not a promise.
+
+**The show.** Team coins across MLB, NBA, NHL and NFL and rivalry pairs, scored by the same receipts. A season is a scoreboard of
+burns; its champion is the coin with the most receipts, a stat and never a recipient. The token page recomputes every receipt from the
+source. The audit script does it for every token and exits non-zero on a mismatch, and the trust page shows the result.
+
+**Guardrails.** Settled on primary sources · quorum-signed readings · program-run burns · receipts anyone can recompute · open source ·
+reviewed · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
 
 **Operated by one independent operator (United States).** This repository is the public, buildable copy of everything the platform runs: the on-chain
 program, the keeper, the platform, the sites, the deploy files, the docs, the tests. It is carved out of a private monorepo by an
@@ -18,7 +27,7 @@ scan that enforces it is here too (`config/public-repo.denypatterns`, `scripts/o
 log, the changelog, the known limitations — and that this code was written with AI assistance and reviewed by AI tooling and a
 public bounty, **not audited by a security firm**.
 
-Nothing here is investment advice. A memecoin can go to zero. Burns reduce supply; they do not promise a price.
+Nothing here is investment advice. A memecoin can go to zero. The rule says what supply does, not what price does.
 
 ## What is where
 

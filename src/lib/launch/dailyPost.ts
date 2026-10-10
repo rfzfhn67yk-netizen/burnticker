@@ -16,6 +16,10 @@ import { BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
  *   incident  INCIDENT: what / when (Denver + UTC) / affected / not affected / what we did / status — the owner's facts, still linted
  *   pair      RIVALRY PAIR (2026-10-10): "$A 3 : 1 $B — every loss burns", supply both sides, the last settlement (market, result,
  *             which side burned), the next scheduled market, the scoreboard link — from the pair's tally (tokenPage.ts pairTally)
+ *   receipt   @BurnTicker RECEIPT (2026-10-10, "the receipt is the product"): one post per confirmed burn, plain and numeric — receipt
+ *             number, ticker, settled day, the reading, units → tokens burned, supply, tx + page link. Nothing else.
+ *   scoreboard @BurnTicker SCOREBOARD (2026-10-10, "a season is a scoreboard of burns"): "Week 6 · 14 team coins across 5 leagues · 9
+ *             burned yesterday", then the team coins ranked by receipts. The leader is the champion: a stat, never a recipient.
  *
  * `pickTemplate` chooses by the day's state on Treasury's clock (America/New_York) and the owner's clock (America/Denver, Sunday =
  * weekly). The same text is rendered on the $DEFICIT page (site/deficit/index.html #today — its JS mirrors `dailyText`, pinned by a
@@ -292,5 +296,73 @@ export function pairDailyText(t: PairTally, site?: string | null): string {
     t.next.market ? `Next market: ${t.next.market}${t.next.closeTime ? ` (closes ${t.next.closeTime.slice(0, 16).replace("T", " ")}Z)` : ""}` : null,
     `Scoreboard: ${siteOf(site)}/p/${t.pairId}/`,
     PAIR_DISCLAIMER,
+  ].filter((x): x is string => x !== null).join("\n");
+}
+
+// ---- the two @BurnTicker formats (owner, 2026-10-10): receipts and scoreboards, visibly different on the timeline ----
+/** The short disclaimer the @BurnTicker posts carry (fits the 280-character budget). */
+export const SHORT_DISCLAIMER = "a memecoin — supply, not price.";
+export const SCOREBOARD_FOOTER = "Champion = most receipts, not a prize. Memecoins — supply, not price.";
+
+/** The league of a team coin from its selector (`catalogue:espn.team:<league>-<ABBR>-…` or `…espn.game:<league>-…`); null for any other coin. */
+export function teamLeagueOf(selectorKey: string): string | null {
+  const m = /^(?:catalogue:)?espn\.(?:team|game):([a-z0-9]+)-/i.exec(selectorKey);
+  return m ? m[1].toUpperCase() : null;
+}
+
+/**
+ * (g) RECEIPT — one post per confirmed burn: plain, numeric, nothing about anything but what happened. The reading line is the
+ * receipt's own title (the source's description of the event, e.g. the final score) and the settled result or value; the method names
+ * the source and its cross-read. Only a confirmed burn has a receipt post — anything else throws, so a skipped day cannot pose as one.
+ */
+export function receiptPostText(s: Pick<TokenStatusJson, "ticker" | "seriesTitle" | "selectorKey" | "supply" | "burned">, receipts: readonly ReceiptJson[], r: ReceiptJson, site?: string | null): string {
+  if (r.status !== "confirmed" || !r.burned || r.burned === "0") throw new Error(`receiptPostText: $${s.ticker} ${r.eventId} is ${r.status}, not a confirmed burn`);
+  const n = receipts.findIndex((x) => x.eventId === r.eventId && x.settledAt === r.settledAt) + 1;
+  const what = r.title ?? s.seriesTitle ?? s.selectorKey;
+  const reading = r.result !== null ? `settled ${r.result.toUpperCase()}` : r.value !== null ? `reading ${r.value}` : null;
+  return [
+    `Receipt #${n || "—"} · $${s.ticker} · ${r.settledAt.slice(0, 10)}`,
+    `${what}${reading ? ` · ${reading}` : ""}${r.method ? ` (${r.method})` : ""}`,
+    `${plural(r.units, "unit")} → ${fmtInt(r.burned)} $${s.ticker} burned${r.spent ? ` · ${fmtSol(r.spent)} spent` : ""}`,
+    `Supply ${fmtInt(s.supply.current)} (${fmtPct(s.burned.pctOfSupply)} burned · ${plural(s.burned.count, "receipt")})`,
+    `${r.txUrl ? `tx ${r.txUrl} · ` : ""}page ${siteOf(site)}/t/${s.ticker}/`,
+    SHORT_DISCLAIMER,
+  ].join("\n");
+}
+
+export interface ScoreboardInput {
+  index: PlatformIndexJson; receiptsByTicker: Record<string, readonly ReceiptJson[]>;
+  /** The day the "burned yesterday" count reads (UTC date of the settlements) — the post goes out the day after. */
+  day: string;
+  /** The season's week number when the caller knows it; otherwise the header reads "Week of <Monday>". */
+  week?: number | null;
+  /** How many ranked lines (default 3, which keeps the post inside 280 characters without a link). */
+  top?: number;
+  /** Appended to the footer when given (a link costs 24 of the 280 characters; the profile carries the site anyway). */
+  site?: string | null;
+}
+
+/**
+ * (h) SCOREBOARD — the season as a count of receipts across every league: the header line, the team coins ranked by receipts (ties by
+ * the share of supply burned, then ticker), the leader marked champion. Every number is a receipt count or a burned share — never a
+ * price, never a pot. Team coins are the live coins whose selector is an ESPN team or game series (`teamLeagueOf`).
+ */
+export function scoreboardText(i: ScoreboardInput): string {
+  const team = i.index.tokens.filter((t) => t.status === "live" && teamLeagueOf(t.selectorKey) !== null);
+  const leagues = new Set(team.map((t) => teamLeagueOf(t.selectorKey)!));
+  const burnedOnDay = team.filter((t) => (i.receiptsByTicker[t.ticker] ?? []).some((r) => onDay(r, i.day) && r.status === "confirmed" && Number(r.burned ?? 0) > 0)).length;
+  const ranked = [...team].sort((a, b) => b.burns - a.burns || b.pctOfSupply - a.pctOfSupply || a.ticker.localeCompare(b.ticker));
+  const top = ranked.slice(0, Math.max(1, i.top ?? 3));
+  const lead = ranked[0]?.burns ?? 0;
+  const champions = lead > 0 ? ranked.filter((t) => t.burns === lead) : [];
+  const head = `${i.week ? `Week ${i.week}` : `Week of ${weekOf(i.day).from}`} · ${plural(team.length, "team coin")} across ${plural(leagues.size, "league")} · ${burnedOnDay} burned yesterday`;
+  const lines = top.map((t, k) => `${k + 1}. $${t.ticker} ${plural(t.burns, "receipt")}, ${fmtPct(t.pctOfSupply)} burned · ${teamLeagueOf(t.selectorKey)}${champions.length === 1 && champions[0] === t ? " · champion" : ""}`);
+  const tie = champions.length > 1 ? `Champion: tied at ${plural(lead, "receipt")} (${champions.map((t) => `$${t.ticker}`).join(", ")})` : null;
+  return [
+    head,
+    team.length ? lines.join("\n") : "No team coin is live.",
+    tie,
+    lead === 0 && team.length ? "No receipts this season so far: no champion." : null,
+    i.site && i.site.trim() ? `${SCOREBOARD_FOOTER} ${siteOf(i.site)}/` : SCOREBOARD_FOOTER,
   ].filter((x): x is string => x !== null).join("\n");
 }

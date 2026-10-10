@@ -1,4 +1,4 @@
-# Burnticker: event-indexed burns with on-chain receipts
+# Burnticker: coins that burn on real-world results, with receipts
 
 Technical paper, draft 1, 2026-10-10. Written from the code and documents of the Burnticker repository at commit `76b9caa`. Every
 statement names its source file; where a component does not exist, this paper says "not built" or "not done".
@@ -18,15 +18,24 @@ statement names its source file; where a component does not exist, this paper sa
 
 ## 1. Abstract
 
-Burnticker is a launchpad for Solana memecoins whose supply burns when an adjudicated real-world event settles. A creator binds a coin
-to a selector over a resolution source (a primary source with an independent cross-read, or a Polymarket market) and to a mapping
-from outcomes to burns. The rule is hashed and locked
-when the coin is created. When an event in the selector settles, attesters sign the settled reading, and the `burn_receipts` program
-spends a share of the coin's own creator-fee pool buying the coin on its Raydium CPMM pool and burns every token it receives, in one
-instruction that also writes a memo with the reading, the arithmetic and the rule hash. Anyone can recompute that memo from the public
-source and the published rule. Burnticker is run by one independent operator, reachable at contact@burnticker.com; the operator’s identity is held privately until a legal entity is formed. It is not an investment product: a
-coin pays nothing on any outcome, holds no position in any market, and the rule says what the supply does, not what the price does.
-The program is not audited by a security firm.
+**Coins that burn on real-world results — with receipts.** Burnticker is a launchpad for Solana memecoins whose supply burns when a
+settled real-world result says so. The receipt is the product: every burn leaves one that a stranger can recompute, and nothing is ever
+won — things are only burned.
+
+A creator binds a coin to a selector over a resolution source and to a mapping from outcomes to burns. The source is a primary source
+with an independent cross-read, or the on-chain payout of an adjudicated Polymarket market. The rule is hashed and locked when the coin
+is created. When an event in the selector settles, attesters sign the settled reading. The `burn_receipts` program then spends a share
+of the coin's own creator-fee pool buying the coin on its Raydium CPMM pool and burns every token it receives, in one instruction that
+also writes a memo with the reading, the arithmetic and the rule hash. Anyone can recompute that memo from the public source and the
+published rule.
+
+The platform has two layers. The engine is the launchpad and the program: rules locked at launch, readings signed before use, burns run
+by a program rather than promised by a person. The show is built from the same receipts: team coins scored by burns across the
+leagues, rivalry pairs (§5) whose pages keep the tally, and Burn Derby pairs and brackets (§5.2). A season is a scoreboard of burns.
+Its champion is the coin with the most receipts — a stat, never a recipient: no coin pays anything on any outcome.
+
+Burnticker is run by one independent operator, reachable at contact@burnticker.com; the operator’s identity is held privately until a legal entity is formed. It is not an investment product: a coin holds no position in any
+market, and the rule says what the supply does, not what the price does. The program is not audited by a security firm.
 
 ## 2. The problem with "burn" claims today
 

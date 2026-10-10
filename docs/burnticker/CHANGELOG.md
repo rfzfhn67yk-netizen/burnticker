@@ -127,3 +127,33 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `1c3fda17a66eba4855c53439e2b186c795f2d9e8fe6ba627c9b13a4057c1f516`
 - allowlist sha256 (config/public-repo.allowlist): `bb08241ed6570d363924fe7452e6acb85b5bbcf68c1c9fe22778312acb335b4b`
 - files published: 595
+
+## 2026-10-10 — receipts-first copy re-cut (no publish, no deploy)
+
+- Owner-approved positioning (10-10 night): "Coins that burn on real-world results — with receipts." / "Launch one. Follow the season." The
+  receipt is the product; a season is a scoreboard of burns; nothing is ever won — things are only burned; a champion is the coin with
+  the most receipts.
+- Landing page (`site/burnticker/index.html`) re-cut: the sentence as the hero, two doors above the fold (Launch → the wizard,
+  Seasons → the rivalries page), the eleven-item guardrail strip, sports examples rotated across MLB, NBA, NHL and NFL with no list led
+  by the NFL, a "receipt is the product" section, a Seasons section (an example scoreboard by receipts, an Oilers–Flames rivalry and the Burn Derby, linked
+  to `/burnticker/derby` now that its index is on main),
+  the engine and the show as two layers. Corrections made on the way: $DEFICIT spends 2% per unit (was 5%), the creator's slice is
+  fixed at 0 (the page offered an optional ≤ 20% slice that does not exist), the crank is `crank_buyback`, the upgrade authority is
+  described as planned (multisig, then none), and the quorum is stated as one key at launch. No Kalshi on the page; Polymarket only as
+  the on-chain payout.
+- Whitepaper: new title line and abstract (§1); technical sections unchanged; `site/burnticker/whitepaper.html` regenerated.
+- X kit: @BurnTicker profile (bio, pinned post, voice rules), the announcement thread re-cut, the rivalry thread without Kalshi
+  series, and the two @BurnTicker formats — receipts (`receiptPostText`) and scoreboards (`scoreboardText`) in
+  `src/lib/launch/dailyPost.ts`, with filled examples in docs/launch/x-threads.md §2c.
+- Copy lint: new `no-prizes` category (prize, payout, jackpot, winnings, pot, reward, stake, bet, wager, odds, "win money", "get paid",
+  holders earning), with allowed spans for the on-chain payout, saying what does not exist, "no team buy" and the Drift BET parser name.
+  `test/burntickerCopy.test.ts` lints the landing page, the X kit, the thread templates, the public README opening and the abstract.
+- Public README opening (`config/public-repo/overlay/README.md`) and `docs/burnticker/README.md` opening re-cut to the same sentence.
+
+## 2026-10-10 — publish from 429bcd736105
+
+- monorepo commit: `429bcd736105d8a29c1f14f280321e4be2937509` (the working tree had uncommitted changes when this tag was written)
+- program hash: `7a61f00bb38394a6ec57341836e2a261caa9b4befe67082a3ff9e0e9026f5739` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `1c3fda17a66eba4855c53439e2b186c795f2d9e8fe6ba627c9b13a4057c1f516`
+- allowlist sha256 (config/public-repo.allowlist): `bb08241ed6570d363924fe7452e6acb85b5bbcf68c1c9fe22778312acb335b4b`
+- files published: 597

@@ -11,7 +11,7 @@ this reason.
 |---|---|
 | Pool | **5–10 SOL**, paid from the developer fee (25 bps of curve volume), per the owner's decision of 2026-10-09. Exact tiers: TODO. |
 | Status | **not published** — these terms are a draft until the owner removes this line |
-| Contact | TODO (a mailbox or an encrypted channel; the same address goes on the trust page as the operator contact) |
+| Contact | security@burnticker.com (the operator contact on the trust page is contact@burnticker.com; both reach the operator directly) |
 | Response | acknowledge within 72 h; a fix or a published decision within 14 days; the report and the payment transaction published with the review reports |
 
 ### In scope
@@ -28,7 +28,7 @@ this reason.
 
 ### Out of scope
 
-- Raydium LaunchLab / CPMM, Kalshi, Jupiter, Reclaim and Solana themselves (report to them; tell us too).
+- Raydium LaunchLab / CPMM, Jupiter, Polymarket's contracts, Pyth, RedStone, Reclaim and Solana themselves (report to them; tell us too).
 - Denial of service against the keeper or the site; social engineering; findings that need a compromised operator key (the
   Powers Register already states what that key can do).
 - Market behaviour of any coin.
