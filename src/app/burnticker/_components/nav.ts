@@ -8,7 +8,7 @@ export interface NavItem { label: string; href: string; external?: boolean; /** 
 export const NAV: NavItem[] = [
   { label: "Launch", href: "/burnticker/launch" },
   { label: "Coins", href: "/burnticker", match: ["/burnticker/t/"] },
-  { label: "Rivalries", href: "/burnticker/rivalries", match: ["/burnticker/p/"] },
+  { label: "Seasons", href: "/burnticker/rivalries", match: ["/burnticker/p/"] },
   { label: "Trust", href: "/burnticker/trust" },
   { label: "$DEFICIT", href: "https://deficit.burnticker.com", external: true },
   { label: "Docs/API", href: "/burnticker/docs" },
@@ -40,11 +40,11 @@ export interface TabItem { label: string; href: string; glyph: string }
 export const TABS: TabItem[] = [
   { label: "Coins", href: "/burnticker", glyph: "▦" },
   { label: "Launch", href: "/burnticker/launch", glyph: "+" },
-  { label: "Rivalries", href: "/burnticker/rivalries", glyph: "⇄" },
+  { label: "Seasons", href: "/burnticker/rivalries", glyph: "⇄" },
   { label: "Trust", href: "/burnticker/trust", glyph: "✓" },
 ];
 
-/** Which tab is current: the nav's own matching (a coin page belongs to Coins, a pair page to Rivalries); Docs/API has no tab. */
+/** Which tab is current: the nav's own matching (a coin page belongs to Coins, a pair page to Seasons); Docs/API has no tab. */
 export function activeTab(pathname: string | null): string | null {
   const a = activeNav(pathname);
   return a && TABS.some((t) => t.href === a) ? a : null;

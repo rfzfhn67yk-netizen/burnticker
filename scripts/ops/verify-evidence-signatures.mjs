@@ -11,6 +11,7 @@
 //      ≤ 44-char base58 pubkey (32 bytes), never anything longer.
 //
 //   node scripts/ops/verify-evidence-signatures.mjs [--rpc https://api.devnet.solana.com] [file|dir ...]
+//   (default: both devnet run logs and every evidence directory — the 10-10 rehearsal and the pair_curve rehearsal)
 //
 // Exits 0 only when every token is a confirmed devnet transaction and the evidence directory is clean; prints one summary. Read-only.
 
@@ -21,8 +22,12 @@ const args = process.argv.slice(2);
 const rpcIdx = args.indexOf("--rpc");
 const RPC = rpcIdx >= 0 ? args[rpcIdx + 1] : "https://api.devnet.solana.com";
 const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
-const EVIDENCE_DIR = "docs/burnkeeper/evidence/devnet-2026-10-10";
-const DEFAULT_TARGETS = ["docs/burnkeeper/devnet-run.md", "docs/burnkeeper/devnet-run-log-2026-10-10.md", EVIDENCE_DIR];
+// Every directory under docs/burnkeeper/evidence/ is an evidence directory (the 10-10 rehearsal, then the pair_curve rehearsal).
+const EVIDENCE_ROOT = "docs/burnkeeper/evidence/";
+const DEFAULT_TARGETS = [
+  "docs/burnkeeper/devnet-run.md", "docs/burnkeeper/devnet-run-log-2026-10-10.md", "docs/burnkeeper/evidence/devnet-2026-10-10",
+  "docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md", "docs/burnkeeper/evidence/devnet-paircurve-2026-10-10",
+];
 const targets = args.filter((a, i) => !(a === "--rpc" || (rpcIdx >= 0 && i === rpcIdx + 1)));
 const files = (targets.length ? targets : DEFAULT_TARGETS).flatMap((t) => fs.statSync(t).isDirectory() ? fs.readdirSync(t).sort().map((f) => path.join(t, f)) : [t]);
 
@@ -86,7 +91,7 @@ for (const s of candidates) {
 }
 
 // 2. the evidence directory: no key material
-const evidence = files.filter((f) => f.startsWith(EVIDENCE_DIR));
+const evidence = files.filter((f) => f.startsWith(EVIDENCE_ROOT));
 const ARRAY64 = /\[\s*(\d{1,3}\s*,\s*){63}\d{1,3}\s*\]/;   // multi-line too: \s matches newlines
 let jsonFiles = 0;
 for (const f of evidence) {

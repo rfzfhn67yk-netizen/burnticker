@@ -97,6 +97,28 @@ burns exactly one side; the receipts are the scoreboard.
   receipts ($BRONCOS vs $CHIEFS on KXNFLGAME, $BULLS vs $BEARS on the KXINX close, illustrative tallies), how a pair works in three
   steps, and the "Launch a pair" button.
 
+## Pair curve — both coins graduate together, or neither does (owner 10-10; behind a flag)
+
+`pair_curve` (`programs/burn-receipts/programs/pair_curve`, program id `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN`, design and threat
+model in `docs/burnticker/PAIR-CURVE.md`) is the launch program for rivalry pairs: one `Pair` account, two path-independent
+virtual-reserve curves, one SOL vault, 100 bps per trade (25 developer, 75 the traded coin's burn pool), graduation only when the
+combined raise hits the target with each side at its minimum share (default 25 %), both CPMM pools created at pair_curve addresses with
+all LP burned, or a void at the deadline after which every holder sells back. No admin, no withdraw.
+
+- **Flag:** `BURNTICKER_PAIR_CURVE_ENABLED=1` (default off) makes the wizard's matchup / election pair launch through pair_curve:
+  `src/lib/burnticker/pairCurveLaunch.ts` turns `buildPairBundles`' two LaunchLab bundles into three transactions (mint A + its
+  TokenConfig with registration policy 2, the same for B, `init_pair`) and exports the badge (`PAIR_CURVE_BADGE`); the launch API returns
+  it as `pair.pairCurve`. `BURNTICKER_CP_CONFIG_ID` overrides the AmmConfig (default: CPMM index 0 per cluster). Off = the LaunchLab
+  path with the rules-level "both or neither" clause.
+- **Client:** `src/lib/pairCurve/{pricing,accounts,client,idl}.ts` — the curve math mirrored in bigint, PDAs and Pair decoding, IDL-driven
+  builders, the crank planner.
+- **Keeper:** with the flag and the program client real, every cycle of `scripts/burnticker-keeper.mts` scans the program's Pair
+  accounts and cranks `graduate` (per side, with `register_pair_pool`), `register_pair_pool` or `void_pair`
+  (`src/lib/burnKeeper/pairCurveCrank.ts`). The registered pools then run through the ordinary `crank_buyback`.
+- **Admin CLI:** `scripts/paircurve-admin.mts` (devnet/localnet only; init-pair, buy, sell, crank, graduate, register, void, close,
+  status). Devnet rehearsal: `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md`.
+- **burn_receipts** gained registration policy 2 and `register_pair_pool` (the LaunchLab path is untouched); Powers Registers:
+  `docs/burn-receipts/powers-register.md`, `docs/burn-receipts/pair-curve-powers-register.md`.
 ## Burn Derby — coin vs coin, single assets, brackets (owner-approved 10-10: "build it all")
 
 A new selector kind: the **relative performance of two existing coins** over a UTC day (00:00 → 00:00) or week. `oracle: "derby"` with a

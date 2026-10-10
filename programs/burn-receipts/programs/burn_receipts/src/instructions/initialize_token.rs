@@ -99,7 +99,10 @@ pub fn validate_rule(rule: &RuleParams, rent_min_fee_pda: u64) -> Result<()> {
                 && (rule.slippage_bps as u32) * rule.twap_window_secs >= TWAP_BUCKET_TOLERANCE_BPS_SECS,
             BurnError::InvalidRule
         );
-        require!(rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA || rule.pool_policy == POOL_POLICY_FIXED, BurnError::InvalidRule);
+        require!(
+            rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA || rule.pool_policy == POOL_POLICY_FIXED || rule.pool_policy == POOL_POLICY_PAIR_CURVE,
+            BurnError::InvalidRule
+        );
         require!(rule.tokens_per_unit == 0 && rule.vault_allocation == 0, BurnError::InvalidRule);
         require!(rule.reserve_lamports >= rent_min_fee_pda, BurnError::ReserveBelowRent);
     } else {
@@ -161,7 +164,9 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
 
     // Review L-2: the config authority is explicit (the Squads vault), never an implicit default.
     require!(args.admin != Pubkey::default(), BurnError::AdminRequired);
-    let (ll_platform, ll_cp_config, ll_lock_scale_ppm) = if args.rule.mode == MODE_BUYBACK && args.rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA {
+    // Policy 2 (pair curve) pins the platform exactly like policy 0: its cpConfigId is the AmmConfig pair_curve's pools must use.
+    let pins_platform = args.rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA || args.rule.pool_policy == POOL_POLICY_PAIR_CURVE;
+    let (ll_platform, ll_cp_config, ll_lock_scale_ppm) = if args.rule.mode == MODE_BUYBACK && pins_platform {
         let Some(p) = ctx.accounts.launchlab_platform.as_ref() else {
             return err!(BurnError::LaunchLabPlatformRequired);
         };

@@ -1,5 +1,22 @@
 # burn_receipts — changelog
 
+## 2026-10-10 (evening) — registration policy 2: pools created by pair_curve
+
+The owner's pair-curve decision (`docs/burnticker/PAIR-CURVE.md`): rivalry pairs launch through a second program, `pair_curve`, whose
+`graduate` creates each coin's CPMM pool. burn_receipts had to accept those pools without weakening the LaunchLab path.
+
+| Change | Why | Test |
+|---|---|---|
+| `POOL_POLICY_PAIR_CURVE = 2` accepted by `validate_rule`; `initialize_token` pins the LaunchLab platform for policy 2 exactly as for policy 0 (its cpConfigId is the AmmConfig the pair pools must use; pair_curve reads the developer wallet from it) | the token's venue is fixed at init, in the params hash and the event; a policy-0 token can never take a pair pool and vice versa | `integration.rs::policy_2_pins_the_launchlab_platform_and_only_register_pair_pool_accepts_it` |
+| new permissionless **`register_pair_pool`** (once): the Pair account must be pair_curve's (hard-coded `PAIR_CURVE_PROGRAM_ID`, discriminator, PDA `["pair", mint_a, mint_b]`, status Graduated or Graduating), name this mint and this pool; the pool must be the pair_curve PDA `["pool", pair, [side]]`, WSOL/mint on SPL Token, on the pinned cpConfigId, `pool_creator` = the pair's vault PDA; ≥ 90 % of the LP that existed at creation burned per the Pair, confirmed by CPMM `lp_supply − LP mint supply` | provenance by address (only pair_curve can sign for its pool PDA), creator and config; the LP ratio is against the creation supply so a later depositor cannot block registration (the review-3 M-2 class) | `pair_curve/tests/lifecycle.rs::register_pair_pool_refuses_forgeries_and_survives_lp_dilution`, `both_pools_register_in_burn_receipts_and_the_buyback_crank_runs_on_one` |
+| `src/pair_curve.rs` — the Pair reader by byte offset (pair_curve's layout contract, pinned by `layout_offsets_burn_receipts_reads_match_the_real_account`) | burn_receipts does not depend on the pair_curve crate | same |
+| errors `InvalidPairAccount`, `PairNotGraduated`, `NotPairPool` | | |
+| unchanged: `register_pool`, `replace_pool` (policy 0 only), the fixed-pool fallback (still needs a fee-PDA creator), `set_registration_policy` (cannot select policy 2 — no new admin power), every post-CPI guard, every account layout | | `policy_2_…` (the switch refuses policy 2); the whole earlier suite |
+
+Also: `fixtures/launchlab-claim-sdk.json` / `launchlab-accounts-sdk.json` regenerated for the real program id (they still held the retired
+test key, so `tests/launchlab.rs` failed on the base branch). Devnet: upgraded through the Squads vault (vault transaction 2,
+`docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md` §U); two pair pools registered and cranked there.
+
 ## 2026-10-10 (night) — the re-check after round 3
 
 Re-check: the "Re-check after round 3" section of `mct-runner-study/launch-debt-egg-2026-10-09/review-claude-blind-3-2026-10-10.md`

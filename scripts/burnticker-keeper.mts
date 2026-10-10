@@ -41,6 +41,8 @@ import { readMarket, type MarketReader } from "../src/lib/burnticker/market.ts";
 import { nativeSourceById } from "../src/lib/burnticker/sources/native.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { DECIMALS, TOTAL_SUPPLY } from "../src/lib/burnticker/rules.ts";
+import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG } from "../src/lib/burnKeeper/pairCurveCrank.ts";
+import type { Keypair } from "@solana/web3.js";
 import { DerbyAdapter } from "../src/lib/burnticker/derby/adapter.ts";
 import { HermesClient } from "../src/lib/burnticker/derby/pyth.ts";
 import { connectionPoolPort } from "../src/lib/burnticker/derby/pools.ts";
@@ -69,7 +71,7 @@ const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusa
 const PROGRAM_ID = process.env.BURNTICKER_PROGRAM_ID?.trim() || null;
 
 /** The real client when the program id, an RPC and the keeper's key exist; the fake otherwise (nothing sent). */
-async function buildProgram(): Promise<{ program: BurnProgramClient; real: boolean; why: string }> {
+async function buildProgram(): Promise<{ program: BurnProgramClient; real: boolean; why: string; chain?: { connection: Connection; cluster: "mainnet" | "devnet" | "localnet"; payer: Keypair } }> {
   if (!PROGRAM_ID || !RPC) return { program: new FakeBurnProgram(cluster), real: false, why: !PROGRAM_ID ? "no BURNTICKER_PROGRAM_ID" : "no BURNTICKER_RPC_URL" };
   const connection = new Connection(RPC, "confirmed");
   const actual = clusterOfGenesis(await connection.getGenesisHash());
@@ -83,7 +85,7 @@ async function buildProgram(): Promise<{ program: BurnProgramClient; real: boole
   if (isPubkey(attester) && attester !== kp.publicKey.toBase58()) throw new Error(`BURNTICKER_KEEPER_PUBKEY ${attester} is not the key at ${keyPath} (${kp.publicKey.toBase58()})`);
   const program = new ProgramBurnClient({ connection, programId: new PublicKey(PROGRAM_ID), cluster: actual, payer: kp, admin: process.env.BURNTICKER_ADMIN?.trim() ? new PublicKey(process.env.BURNTICKER_ADMIN.trim()) : null,
     solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable"); return px; }, allowMainnet: process.env.BURNTICKER_MAINNET === "1", log });
-  return { program, real: true, why: `program ${PROGRAM_ID} on ${actual}, keeper ${kp.publicKey.toBase58()}` };
+  return { program, real: true, why: `program ${PROGRAM_ID} on ${actual}, keeper ${kp.publicKey.toBase58()}`, chain: { connection, cluster: actual, payer: kp } };
 }
 const built = await buildProgram();
 const program = built.program;
@@ -164,6 +166,14 @@ while (!stopping) {
     if (f.length || r.planned.length || r.executed.length) log(`cycle: ${f.length} fetch(es), ${r.planned.length} planned, ${r.executed.length} executed${r.errors.length ? ` · errors: ${r.errors.slice(0, 3).join(" | ")}` : ""}`);
     registry.setStatus("lastCycle", { at: Date.now(), fetched: f.length, planned: r.planned.length, executed: r.executed.length, errors: r.errors.slice(0, 5), refusals: r.fetched.flatMap((x) => x.refusals).slice(0, 10) });
   } catch (e) { log(`cycle failed: ${(e as Error).message.slice(0, 200)}`); }
+  // Rivalry pairs on the pair curve (2026-10-10, docs/burnticker/PAIR-CURVE.md): graduate both sides / register / void — program
+  // mode only, behind BURNTICKER_PAIR_CURVE_ENABLED. Permissionless cranks; the keeper key pays transaction fees only.
+  if (built.chain && pairCurveEnabled(process.env)) {
+    try {
+      const pc = await crankPairCurves({ ctx: { connection: built.chain.connection, cluster: built.chain.cluster, burnReceiptsProgramId: new PublicKey(PROGRAM_ID!), allowMainnet: process.env.BURNTICKER_MAINNET === "1" }, cranker: built.chain.payer, dryRun: deps.dryRun, log });
+      if (pc.acted.length || pc.errors.length) log(`pair curve: ${pc.scanned} pair(s) scanned, ${pc.acted.length} cranked${pc.errors.length ? ` · errors: ${pc.errors.slice(0, 3).join(" | ")}` : ""}`);
+    } catch (e) { log(`pair curve crank failed: ${(e as Error).message.slice(0, 200)}`); }
+  } else if (pairCurveEnabled(process.env) && !built.real) log(`  [pair-curve] ${PAIR_CURVE_FLAG} is set but the program client is the fake — nothing cranked`);
   try { await publishAll(Date.now()); } catch (e) { log(`publish failed: ${(e as Error).message.slice(0, 200)}`); }
   try { const w = writeOwnTokensGenerated(registry, process.env.OWN_TOKENS_GENERATED_PATH?.trim() || undefined); if (w.changed) log(`  [refuse-list] ${w.file} rewritten: ${w.count} platform token(s) — the arms re-read it on their next candidate`); } catch (e) { log(`  [refuse-list] not written: ${(e as Error).message.slice(0, 160)}`); }
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }

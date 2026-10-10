@@ -110,6 +110,7 @@ footer p{margin:0 0 6px;max-width:none}
 <tr><td><code>burn_receipts</code> program (Anchor 1.2.1)</td><td>built; 82 Rust tests and the TS suites pass; localnet only</td><td><code>docs/burn-receipts/README.md</code>, <code>CHANGELOG.md</code></td></tr>
 <tr><td>$DEFICIT keeper and Burnticker multi-token keeper</td><td>built; run against the program in a local end-to-end test; pages run on <code>FakeBurnProgram</code></td><td><code>docs/burnkeeper/README-execution.md</code></td></tr>
 <tr><td>Devnet rehearsal, mainnet rehearsal coin</td><td>not done</td><td><code>docs/burnticker/REHEARSAL-RUNSHEET.md</code></td></tr>
+<tr><td><code>pair_curve</code> program (rivalry pairs: both coins graduate or neither; Anchor 1.2.1)</td><td>built 2026-10-10; LiteSVM suite and TS fixtures pass; devnet rehearsal run (one pair graduated to two CPMM pools and registered, one pair voided and sold back); not on mainnet; not reviewed</td><td><code>docs/burnticker/PAIR-CURVE.md</code>, <code>docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md</code></td></tr>
 <tr><td>Program deployment, program id, verifiable hash</td><td>not done</td><td><code>docs/burn-receipts/README.md</code> §5.4</td></tr>
 <tr><td>Second, independent attester</td><td>not built</td><td><code>config/burnticker/transparency.json</code> (<code>switchboard-down</code>, <code>quorum-1</code>)</td></tr>
 <tr><td>Public repository</td><td>not created</td><td><code>docs/burnticker/transparency.md</code> §3</td></tr>
@@ -247,6 +248,7 @@ crank_buyback (anyone; allowlist only while the cap stands)
 <li><strong>Seed deposits.</strong> Anyone can send SOL to the fee PDA. Nobody can take it out.</li>
 </ul>
 <h3 id="s-4-7-pool-registration-and-provenance">4.7 Pool registration and provenance</h3>
+<p>*Pair coins (registration policy 2, §5.4) register through <code>register_pair_pool</code> instead; everything below is the LaunchLab path, unchanged.*</p>
 <p><code>register_pool</code> (permissionless, once) accepts only LaunchLab's own migration pool:</p>
 <ol>
 <li>the token's LaunchLab pool (<code>[&quot;pool&quot;, mint, WSOL]</code> under LaunchLab) records the fee PDA as creator, CPMM as its migration destination, and the platform pinned at init;</li>
@@ -312,6 +314,16 @@ crank_buyback (anyone; allowlist only while the cap stands)
 <li><strong>The sweep.</strong> A retired coin's burn pool keeps receiving the post-graduation creator fee. When its spendable balance passes the threshold the keeper attests one full-spend reading (at most once a week). A permissionless instruction that lets anyone do this without the keeper is queued for the next program review (<code>PROGRAM-UPGRADE-QUEUE.md</code>), as is forwarding a losing coin's leftover to the winning coin of an outcome set.</li>
 </ul>
 <p>Communities adding to a score by burning their own tokens into the program was considered and not built: it would turn the score into a function of spending and add a deposit path to a program designed without one.</p>
+<h3 id="s-5-4-the-pair-curve-both-coins-graduate-or-neither-does">5.4 The pair curve: both coins graduate, or neither does</h3>
+<p>On LaunchLab each coin of a pair has its own curve, so one side can graduate while the other stalls. The owner's decision of 2026-10-10 is a second program, <code>pair_curve</code> (<code>docs/burnticker/PAIR-CURVE.md</code>), through which a pair launches when <code>BURNTICKER_PAIR_CURVE_ENABLED</code> is set (default off; single coins stay on LaunchLab). Until it is on, pairs launch on two LaunchLab curves under the rules-level &quot;both or neither&quot; clause of §5.1.</p>
+<ul>
+<li><strong>One account per pair</strong>, two virtual-reserve bonding curves (pump.fun's constants by default: 30 SOL virtual, 1.073 B virtual tokens, 793.1 M sellable, 206.9 M reserved for the pool), one System-owned SOL vault, 1,000,000,000 tokens per coin at 6 decimals, mint authority revoked at creation and no freeze authority. The curve is path-independent — the vault holds exactly <code>F(sold) = ceil(V_s · sold / (V_t − sold))</code> per side after any sequence of trades, so selling everything back drains it exactly.</li>
+<li><strong>Fee: 100 bps of every trade</strong>, 25 to the developer wallet (the LaunchLab platform's claim wallet, pinned at creation) and 75 to the traded coin's <code>burn_receipts</code> fee PDA. No Raydium curve fee, no referral, no creator slice.</li>
+<li><strong>Graduation</strong> needs the combined raise to reach the pair's threshold with each side holding a minimum share of it (default 25 %), before the deadline. The first <code>graduate</code> call commits the pair (both curves close; it can no longer void); each call creates its side's CPMM pool at a <code>pair_curve</code> address nobody else can sign for, with SOL and tokens in the curve's closing ratio, and burns 100 % of the LP and every token the pool did not need. Two transactions, because both pools in one would sit at Solana's 64-entry instruction-trace cap and a griefer could push them over it.</li>
+<li><strong>Void</strong>: at the deadline without graduation, buys close and sells stay open on the same curves; every holder can exit.</li>
+<li><strong>Registration</strong>: <code>burn_receipts</code> gained registration policy 2 and <code>register_pair_pool</code>, which accepts only the pool <code>pair_curve</code> recorded for that mint, at its <code>pair_curve</code> address, created by the pair's vault on the pinned cpConfigId, with ≥ 90 % of the creation LP burned (§4.7).</li>
+<li><strong>Powers</strong>: none over funds. No admin, no parameter update, no withdraw; the upgrade authority is the same Squads vault as <code>burn_receipts</code> (<code>docs/burn-receipts/pair-curve-powers-register.md</code>).</li>
+</ul>
 </section>
 <section aria-labelledby="s-6-economics">
 <h2 id="s-6-economics">6. Economics</h2>
@@ -321,6 +333,8 @@ crank_buyback (anyone; allowlist only while the cap stands)
 <tbody>
 <tr><td>Bonding curve (LaunchLab)</td><td>25 bps</td><td>25 bps (platform <code>feeRate</code> 2,500 ppm)</td><td>50 bps (<code>creatorFeeRate</code> 5,000 ppm, the maximum)</td><td>none</td></tr>
 <tr><td>After graduation (CPMM tier 0, 25 bps trade fee)</td><td>4 bps of trade fee + 0.25 bp (5 % of the creator fee)</td><td>0</td><td>4.75 bps (Raydium's fixed 5 bps creator fee, less 5 %)</td><td>21 bps (the burned LP's share of LP fees)</td></tr>
+<tr><td>Pair curve (<code>pair_curve</code>, §5.4)</td><td>0</td><td>25 bps</td><td>75 bps</td><td>none</td></tr>
+<tr><td>Pair coin after graduation (CPMM public <code>initialize</code>, creator fee off)</td><td>4 bps of trade fee</td><td>0</td><td><strong>0</strong> (public pool creation cannot turn the creator fee on)</td><td>21 bps</td></tr>
 </tbody>
 </table></div>
 <ul>
@@ -440,7 +454,7 @@ crank_buyback (anyone; allowlist only while the cap stands)
 <li><strong>Reading:</strong> <code>kind</code>, <code>processed</code>, <code>config</code>, <code>record_date</code>, <code>prev_date</code>, <code>value</code>, <code>prev_value</code>, <code>delta</code>, <code>carry_in</code>, <code>carry_out</code>, <code>units</code>, <code>signers_mask</code>, <code>source_url_hash</code>, <code>proof_hash</code>, <code>submitted_at</code>, <code>outcome</code>, <code>processed_at</code>, <code>pool_lamports</code>, <code>spent_lamports</code>, <code>got</code>, <code>burned</code>, <code>owed</code>, <code>shortfall</code>, <code>pool_actual_lamports</code>, <code>rule_spend_lamports</code>, <code>carried_in_lamports</code>, <code>carried_out_lamports</code>, <code>pool</code>.</li>
 <li><strong>PlatformConfig:</strong> <code>authority</code>, <code>burn_pool_cap_lamports</code>, <code>cap_sunset_ts</code>, <code>pending_cap_lamports</code>, <code>pending_cap_eta</code>, <code>created_at</code>, <code>crankers[3]</code>, <code>cranker_count</code>, reserved.</li>
 </ul>
-<h3 id="s-13-3-instructions-23-generated-from-src-lib-burnreceipts-idl-ts">13.3 Instructions (23, generated from <code>src/lib/burnReceipts/idl.ts</code>)</h3>
+<h3 id="s-13-3-instructions-24-generated-from-src-lib-burnreceipts-idl-ts">13.3 Instructions (24, generated from <code>src/lib/burnReceipts/idl.ts</code>)</h3>
 <div class="tbl"><table>
 <thead><tr><th scope="col">Instruction</th><th scope="col">Arguments</th><th scope="col">Signers</th><th scope="col">Class</th></tr></thead>
 <tbody>
@@ -452,6 +466,7 @@ crank_buyback (anyone; allowlist only while the cap stands)
 <tr><td><code>crank_no_units</code></td><td>record_date</td><td>cranker</td><td>permissionless</td></tr>
 <tr><td><code>claim_launchlab_creator_fee</code></td><td>—</td><td>payer</td><td>permissionless</td></tr>
 <tr><td><code>register_pool</code></td><td>—</td><td>registrar</td><td>permissionless</td></tr>
+<tr><td><code>register_pair_pool</code></td><td>—</td><td>registrar</td><td>permissionless</td></tr>
 <tr><td><code>check_pool_health</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
 <tr><td><code>replace_pool</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
 <tr><td><code>apply_attester_change</code></td><td>—</td><td>caller</td><td>permissionless</td></tr>
@@ -469,7 +484,8 @@ crank_buyback (anyone; allowlist only while the cap stands)
 <tr><td><code>clear_cranker_allowlist</code></td><td>—</td><td>caller (authority or listed cranker)</td><td>privileged</td></tr>
 </tbody>
 </table></div>
-<p>Events (26): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, LaunchLabCreatorFeeClaimed, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, SpendCapBound, SpendCarried, TokenInitialized. Error codes: 66.</p>
+<p>Events (26): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, LaunchLabCreatorFeeClaimed, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, SpendCapBound, SpendCarried, TokenInitialized. Error codes: 69.</p>
+<p><code>pair_curve</code> (<code>src/lib/pairCurve/idl.ts</code>): <code>init_pair</code> (args; payer, creator — creation), the two curve-trade instructions (side, an amount, a slippage bound; the trader signs), <code>graduate</code> (side; cranker), <code>void_pair</code> (caller), <code>close_pair</code> (caller) — every one after <code>init_pair</code> permissionless. Events (5): PairInitialized, Trade, SideGraduated, PairVoided, PairClosed.</p>
 <h3 id="s-13-4-memo-grammars">13.4 Memo grammars</h3>
 <p>Written on chain by the program (<code>src/memo.rs</code>), at most 566 bytes:</p>
 <pre><code>v1 (vault):   &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt;|now=&lt;v&gt;|delta=&lt;v&gt;|units=&lt;n&gt;|burn=&lt;tokens&gt;[|short=&lt;tokens&gt;]|rules=sha256:&lt;12&gt;|v1

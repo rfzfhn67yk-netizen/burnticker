@@ -18,8 +18,8 @@
     <path d="M400 300 C 436 344, 470 372, 462 428 C 458 462, 436 486, 412 498 C 420 470, 412 448, 396 432 C 380 452, 366 478, 372 504 C 346 486, 332 452, 338 420 C 346 372, 380 338, 400 300 Z" fill="url(#core)" transform="translate(-230 -120)"/>
   </g>
   <text x="250" y="178" font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="92" font-weight="700" letter-spacing="5" fill="#f6f4ee">BURNTICKER</text>
-  <text x="252" y="238" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="40" font-weight="700" fill="#ffb000">Burns on the news.</text>
-  <text x="252" y="286" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="27" fill="#b8b6ae">A memecoin launchpad: coins whose supply burns on verifiable real-world events, with receipts.</text>
+  <text x="252" y="238" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="40" font-weight="700" fill="#ffb000">Coins that burn on real-world results.</text>
+  <text x="252" y="286" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="27" fill="#b8b6ae">With receipts. Launch one. Follow the season.</text>
   <!-- the tape -->
   <rect x="0" y="352" width="1500" height="96" fill="#141418"/>
   <rect x="0" y="352" width="1500" height="3" fill="#ffb000"/>
@@ -27,6 +27,6 @@
   <g fill="#0a0a0c">
     <circle cx="30" cy="366" r="5"/><circle cx="90" cy="366" r="5"/><circle cx="150" cy="366" r="5"/><circle cx="210" cy="366" r="5"/><circle cx="270" cy="366" r="5"/><circle cx="330" cy="366" r="5"/><circle cx="390" cy="366" r="5"/><circle cx="450" cy="366" r="5"/><circle cx="510" cy="366" r="5"/><circle cx="570" cy="366" r="5"/><circle cx="630" cy="366" r="5"/><circle cx="690" cy="366" r="5"/><circle cx="750" cy="366" r="5"/><circle cx="810" cy="366" r="5"/><circle cx="870" cy="366" r="5"/><circle cx="930" cy="366" r="5"/><circle cx="990" cy="366" r="5"/><circle cx="1050" cy="366" r="5"/><circle cx="1110" cy="366" r="5"/><circle cx="1170" cy="366" r="5"/><circle cx="1230" cy="366" r="5"/><circle cx="1290" cy="366" r="5"/><circle cx="1350" cy="366" r="5"/><circle cx="1410" cy="366" r="5"/><circle cx="1470" cy="366" r="5"/>
   </g>
-  <text x="24" y="412" font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="26" fill="#ffb000">TREASURY.DEBT  2026-10-08  +$21.28B → 21 units → 2,100,000 $DEFICIT burned ✓    NOAA.FLARES  X1.2 → 10 units → burned ✓    LL2.LAUNCHES  orbital launch → 1 unit → burned ✓    KALSHI.KXCPI  settled → 1 unit ✓</text>
+  <text x="24" y="412" font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="26" fill="#ffb000">TREASURY.DEBT  2026-10-08  +$21.28B → 21 units → 2,100,000 $DEFICIT burned ✓    NOAA.FLARES  X1.2 → 10 units → burned ✓    LL2.LAUNCHES  orbital launch → 1 unit → burned ✓    ESPN.NHL  EDM 2 @ CGY 4 → $OILERS 1 unit ✓</text>
   <text x="1476" y="484" text-anchor="end" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="20" fill="#6d6c66">memecoins — the rule says what supply does, not what price does</text>
 </svg>

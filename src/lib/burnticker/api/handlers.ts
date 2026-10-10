@@ -21,6 +21,7 @@ import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
 import { wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { buildLaunchBundle, buildPairBundles, launchProblems, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
+import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import { derbyAdmission } from "@/lib/burnticker/derby/admission";
@@ -403,7 +404,7 @@ async function polymarketBacktest(p: Platform, locked: LockedRule, months: numbe
 }
 
 export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule; preflight: PreflightResult | null }
-export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null }
+export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null; /** BURNTICKER_PAIR_CURVE_ENABLED: the pair launches through pair_curve (sign this instead of the two LaunchLab bundles). */ pairCurve?: PairCurveLaunchBundle }
 interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown }
 
 /**
@@ -502,7 +503,9 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links) : null;
       const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;
-      return { pair: { pairId: pair.pairId, selector: pair.selector, notes: pair.notes, row, bundles: { a: pair.a, b: pair.b }, tokens: { a: tokenA, b: tokenB }, seriesTitle, preflight } };
+      // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
+      const pairCurve = pairCurveEnabled(process.env) ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
+      return { pair: { pairId: pair.pairId, selector: pair.selector, notes: pair.notes, row, bundles: { a: pair.a, b: pair.b }, tokens: { a: tokenA, b: tokenB }, seriesTitle, preflight, ...(pairCurve ? { pairCurve } : {}) } };
     } catch (e) {
       return { error: fail(400, (e as Error).message) };
     }

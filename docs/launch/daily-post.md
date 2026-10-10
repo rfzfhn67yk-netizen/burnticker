@@ -9,7 +9,8 @@ linted against `config/launch/copy-lint.json`, and approved by the owner before 
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnkeeper-post-draft.mts --auto --site=https://<site>
 ```
 
-`--auto` picks the format from the day's state (below). `--template=daily|noburn|weekly|platform|incident` forces one. The website's
+`--auto` picks the format from the day's state (below). `--template=daily|noburn|weekly|platform|incident|receipt|scoreboard` forces
+one (`receipt` and `scoreboard` are the two @BurnTicker formats, §(g) and §(h); they replace the old B1 cross-post). The website's
 §2 "Today" card (`site/deficit/index.html#today`) renders the burn-day / no-burn text from the same `status.json` + `burns.json` with a
 JavaScript mirror of the same function; `test/dailyPost.test.ts` pins the two outputs equal, so the page and the post are the same words.
 
@@ -207,6 +208,48 @@ Any correction posts in this thread with the receipt that shows it.
 
 Rules for incidents (x-burnticker-profile.md § Voice rules): correct in public, in the same thread, with the receipt. If a receipt's
 check on the page is `!`, nothing about that receipt posts until the page is green; then the correction posts with the receipt.
+
+## (g) RECEIPT — `receipt` (@BurnTicker, one post per burn)
+
+The receipt is the product, so the account posts one per confirmed burn: plain and numeric, nothing else. From the token's own
+`t/<ticker>/status.json` + `receipts.json` under `--platform-dir`; the latest confirmed burn, or `--event=<eventId>`, or every burn
+settled on `--date`. A skipped, void or planned row has no receipt post (the script refuses). `receiptPostText` in
+`src/lib/launch/dailyPost.ts`.
+
+```
+--template=receipt --platform-dir=test/fixtures/burnticker-season --ticker=RAYS --site=https://burnticker.com
+```
+
+```text
+Receipt #5 · $RAYS · 2026-10-09
+NYY 5 @ TB 2 · reading 1 (espn-final+mlb)
+1 unit → 40,973 $RAYS burned · 0.0041 SOL spent
+Supply 975,900,000 (2.41% burned · 5 receipts)
+tx https://solscan.io/tx/5QmRays · page https://burnticker.com/t/RAYS/
+a memecoin — supply, not price.
+```
+
+## (h) SCOREBOARD — `scoreboard` (@BurnTicker, the season)
+
+A season is a scoreboard of burns. From `index.json` and each token's `receipts.json`: the live team coins (an ESPN team or game
+selector), how many leagues they span, how many burned on `--date` (default: the day before `--now`, UTC — "yesterday" for a morning
+post), and the top `--top` (default 3) ranked by receipts, then by share of supply burned. The leader is marked champion; a tie names
+every leader. Every number is a receipt count or a burned share. `--site` appends the link (24 of the 280 characters).
+`scoreboardText` in `src/lib/launch/dailyPost.ts`.
+
+```
+--template=scoreboard --platform-dir=test/fixtures/burnticker-season --week=6 --now=2026-10-10T14:00:00Z
+```
+
+```text
+Week 6 · 14 team coins across 4 leagues · 9 burned yesterday
+1. $OILERS 6 receipts, 2.94% burned · NHL · champion
+2. $RAYS 5 receipts, 2.41% burned · MLB
+3. $LAKERS 4 receipts, 1.96% burned · NBA
+Champion = most receipts, not a prize. Memecoins — supply, not price.
+```
+
+`test/copyLint.test.ts` runs both commands above and requires the two examples to equal the script's output.
 
 ## Lint
 

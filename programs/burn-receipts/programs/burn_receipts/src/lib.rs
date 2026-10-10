@@ -6,6 +6,8 @@
 //! Instruction set (there is deliberately NO withdraw / close / sweep instruction for the fee PDA or the vault):
 //!   initialize_token       mint-signed, once per mint: rule, attesters, quorum; funds the fee PDA's reserve
 //!   register_pool          permissionless, once: the CPMM pool whose creator is the fee PDA (buyback, policy 0)
+//!   register_pair_pool     permissionless, once: policy 2 — the CPMM pool pair_curve's graduate created for this token (pair_curve
+//!                          PDA, pair-vault creator, pinned cpConfigId, ≥ 90 % of the creation LP burned)
 //!   check_pool_health / replace_pool   permissionless: record a dead pool; after 7 days of it, move to another fee-PDA pool
 //!   claim_launchlab_creator_fee        permissionless: LaunchLab curve creator fee → the fee PDA's WSOL account (fee PDA signs)
 //!   submit_reading         permissionless; valid only with a quorum of attester ed25519 signatures over the canonical message
@@ -35,6 +37,7 @@ pub mod guards;
 pub mod instructions;
 pub mod math;
 pub mod memo;
+pub mod pair_curve;
 pub mod state;
 
 use anchor_lang::prelude::*;
@@ -55,6 +58,11 @@ pub mod burn_receipts {
 
     pub fn register_pool(ctx: Context<RegisterPool>) -> Result<()> {
         instructions::register_pool::handle_register_pool(ctx)
+    }
+
+    /// Registration policy 2 (2026-10-10): the CPMM pool pair_curve's `graduate` created for this token (src/pair_curve.rs).
+    pub fn register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
+        instructions::register_pair_pool::handle_register_pair_pool(ctx)
     }
 
     pub fn check_pool_health(ctx: Context<CheckPoolHealth>) -> Result<()> {

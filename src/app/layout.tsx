@@ -4,7 +4,8 @@ import { SiteHeader } from "@/app/burnticker/_components/SiteHeader";
 import { SiteFooter } from "@/app/burnticker/_components/SiteFooter";
 import { TabBar } from "@/app/burnticker/_components/TabBar";
 
-const DESCRIPTION = "A memecoin launchpad: coins whose supply burns when a settled real-world event says so — with a receipt for every burn. Not advice.";
+const DESCRIPTION = "Coins that burn on real-world results — with receipts. Launch one. Follow the season. Memecoins: the rule says what supply does, not what price does. Not advice.";
+const TITLE = "Burnticker — coins that burn on real-world results, with receipts";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://burnticker.com"),
@@ -12,8 +13,8 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   applicationName: "Burnticker",
   icons: { icon: [{ url: "/burnticker/brand/favicon.png", type: "image/png", sizes: "32x32" }], apple: "/burnticker/brand/apple-touch-icon.png" },
-  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker — burns on the news", description: DESCRIPTION, url: "/burnticker", images: [{ url: "/burnticker/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
-  twitter: { card: "summary_large_image", site: "@burnticker", title: "Burnticker — burns on the news", description: DESCRIPTION, images: ["/burnticker/brand/og.png"] },
+  openGraph: { type: "website", siteName: "Burnticker", title: TITLE, description: DESCRIPTION, url: "/burnticker", images: [{ url: "/burnticker/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+  twitter: { card: "summary_large_image", site: "@BurnTicker", title: TITLE, description: DESCRIPTION, images: ["/burnticker/brand/og.png"] },
 };
 
 export const viewport: Viewport = {

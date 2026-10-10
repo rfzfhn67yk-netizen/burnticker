@@ -10,7 +10,11 @@
  *   … --template=weekly [--date=2026-10-11]       # (c) Sunday roll-up for the week containing --date (default: today)
  *   … --template=platform --platform-dir=data/burnticker-site   # (d) @burnticker daily from index.json + t/<ticker>/receipts.json
  *   … --template=incident --what=… --affects=… --action=… --status=… [--not-affected=…] [--at=ISO]   # (e) incident frame
- *   … --template=T2                               # the evergreen set T1–T10, B1 (docs/launch/x-threads.md §3) still works
+ *   … --template=receipt --platform-dir=… --ticker=RAYS [--event=<eventId>|--date=YYYY-MM-DD]   # (g) @BurnTicker receipt: one post per
+ *                                                   confirmed burn (latest, the named event, or every burn settled on --date)
+ *   … --template=scoreboard --platform-dir=… [--date=YYYY-MM-DD] [--week=6] [--top=3] [--site=…]   # (h) @BurnTicker scoreboard: team
+ *                                                   coins ranked by receipts; --date is the "yesterday" counted (default: the day before --now, UTC)
+ *   … --template=T2                               # the evergreen set T1–T10 (docs/launch/x-threads.md §3) still works; B1 is replaced by `receipt`
  *   … lint "some text" | lint path/to/file.txt | lint -   # lint anything (stdin with -); exit 3 on a hit
  *
  * Common flags: --dir=site/deficit/sample (status.json + burns.json; default BURNKEEPER_PUBLISH_DIR or data/burnkeeper-site),
@@ -24,9 +28,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { BurnJson, StatusJson } from "@/lib/burnKeeper/statusPage";
-import type { PlatformIndexJson, ReceiptJson } from "@/lib/burnticker/tokenPage";
+import type { PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
-import { dailyText, dayState, incidentText, noBurnText, pickTemplate, platformDailyText, weeklyText, type DailyTemplate, type NoBurnReason } from "@/lib/launch/dailyPost";
+import { dailyText, dayState, incidentText, noBurnText, pickTemplate, platformDailyText, receiptPostText, scoreboardText, weeklyText, type DailyTemplate, type NoBurnReason } from "@/lib/launch/dailyPost";
 import { dateIn } from "@/lib/burnKeeper/schedule";
 
 const positional: string[] = [];
@@ -77,10 +81,9 @@ function fillT(t: string, b: BurnJson, s: StatusJson | null): string {
     T8: `$${v.TICKER} so far: ${v.TOTAL_BURNED} tokens bought back and burned, ${v.PCT}% of supply, every one with a receipt.\nLatest: ${v.DATE}, ${v.DELTA_B} → ${v.UNITS} units → ${v.TX}\n${SHORT_DISCLAIMER}`,
     T9: `Verify today's $${v.TICKER} burn in three steps:\n1. curl the Treasury rows for ${v.PREV_DATE} and ${v.DATE}: ${v.SOURCE}\n2. units = floor((${v.NOW_T} − prev + carry) / $1B) = ${v.UNITS}\n3. open ${v.TX} and read the memo.\nIf they agree, the receipt is good. No trust required.`,
     T10: `${v.DATE} ${v.DELTA_B} → ${v.UNITS}u → ${v.BURNED} burned`,
-    B1: `Receipt on the tape: $${v.TICKER} burned ${v.BURNED} tokens — ${v.FEED_ID} ${v.DATE}, ${v.UNITS} units → ${v.TX}\nBurns on the news. Memecoins: the rule says what supply does, not what price does.`,
   };
   const out = T[t];
-  if (!out) throw new Error(`unknown template ${t}; use one of daily, noburn, weekly, platform, incident, ${Object.keys(T).join(", ")}`);
+  if (!out) throw new Error(`unknown template ${t}; use one of daily, noburn, weekly, platform, incident, receipt, scoreboard, ${Object.keys(T).join(", ")}`);
   return out;
 }
 
@@ -141,6 +144,35 @@ function main(): void {
     for (const t of ix.tokens) receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
     const day = args.get("date") ?? new Date(now).toISOString().slice(0, 10);
     emit(platformDailyText({ index: ix, receiptsByTicker, day, site }), `platform · ${day}`);
+    return;
+  }
+
+  if (forced === "B1") { console.error("B1 is replaced by the @BurnTicker receipt format: --template=receipt --platform-dir=… --ticker=…"); process.exit(2); }
+  if (forced === "receipt") {
+    const ticker = (args.get("ticker") ?? "").toUpperCase();
+    if (!ticker) { console.error("receipt needs --ticker=…"); process.exit(2); }
+    const s = readJson<TokenStatusJson>(path.join(platformDir, "t", ticker, "status.json"));
+    const receipts = readJson<ReceiptJson[]>(path.join(platformDir, "t", ticker, "receipts.json"));
+    if (!s || !receipts) { console.error(`no t/${ticker}/status.json + receipts.json in ${platformDir} (pass --platform-dir=…)`); process.exit(2); }
+    const burned = receipts.filter((r) => r.status === "confirmed" && r.burned && r.burned !== "0");
+    const ev = args.get("event"), date = args.get("date");
+    const chosen = ev ? burned.filter((r) => r.eventId === ev) : date ? burned.filter((r) => r.settledAt.slice(0, 10) === date) : burned.slice(-1);
+    if (!chosen.length) { console.error(`no confirmed burn for $${ticker}${ev ? ` event ${ev}` : date ? ` settled ${date}` : ""} — only a confirmed burn has a receipt post`); process.exit(1); }
+    for (const r of chosen) {
+      if (r.verify && r.verify.verified === false) console.error(`# WARNING: $${ticker} ${r.eventId}'s recomputation did NOT match (${r.verify.checks.join("; ")}). Do not post until the page is green.`);
+      emit(receiptPostText(s, receipts, r, site), `receipt · $${ticker} · ${r.settledAt.slice(0, 10)}`);
+    }
+    return;
+  }
+  if (forced === "scoreboard") {
+    const ix = readJson<PlatformIndexJson>(path.join(platformDir, "index.json"));
+    if (!ix) { console.error(`no index.json in ${platformDir} (pass --platform-dir=…)`); process.exit(2); }
+    const receiptsByTicker: Record<string, ReceiptJson[]> = {};
+    for (const t of ix.tokens) receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
+    const day = args.get("date") ?? new Date(now - 86_400_000).toISOString().slice(0, 10);
+    const week = args.has("week") ? Number(args.get("week")) : null;
+    const top = args.has("top") ? Number(args.get("top")) : undefined;
+    emit(scoreboardText({ index: ix, receiptsByTicker, day, week: week && Number.isFinite(week) ? week : null, top, site: args.get("site") ?? null }), `scoreboard · ${day}`);
     return;
   }
 

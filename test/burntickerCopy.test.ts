@@ -10,13 +10,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { formatHits, lintCopy, loadCopyLintConfig, xLength } from "@/lib/launch/copyLint";
 import { receiptPostText, scoreboardText, teamLeagueOf, SCOREBOARD_FOOTER, SHORT_DISCLAIMER } from "@/lib/launch/dailyPost";
-import { COPY_SITE, RAYS_RECEIPTS, RAYS_STATUS, SEASON_INDEX, SEASON_RECEIPTS, rc } from "./burntickerCopyFixture.ts";
+import { COPY_SITE, RAYS_RECEIPTS, RAYS_STATUS, SEASON_DIR, SEASON_INDEX, SEASON_RECEIPTS, rc } from "./burntickerCopyFixture.ts";
 
 const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
 const SENTENCE = "Coins that burn on real-world results — with receipts.";
 const SUBLINE = "Launch one. Follow the season.";
-const GUARDRAILS = ["settled on primary sources", "quorum-signed readings", "program-run burns", "receipts anyone can recompute", "open source", "reviewed", "creators earn nothing", "no team buy", "the platform never buys any coin", "all LP burned", "rules locked at launch"];
+const GUARDRAILS = ["settled on primary sources", "signed readings (one attester at launch, a second within 14 days)", "program-run burns", "receipts anyone can recompute", "open source", "reviewed", "creators earn nothing", "no team buy", "the platform never buys any coin", "all LP burned", "rules locked at launch"];
 const LEAGUE = "(?:NFL|MLB|NBA|NHL|WNBA|MLS)";
 
 /** The words a visitor reads: meta descriptions + the body without style, script and the inline SVG, tags stripped. */
@@ -186,5 +186,34 @@ describe("the public README opening and the whitepaper title", () => {
     const abs = md.slice(md.indexOf("## 1. Abstract"), md.indexOf("## 2. "));
     assert.ok(abs.includes(`**${SENTENCE}**`)); assert.match(abs, /nothing is ever\nwon — things are only burned/); clean(abs, "abstract");
     assert.match(fs.readFileSync("docs/burnticker/README.md", "utf8"), /^# Burnticker — coins that burn on real-world results, with receipts\n/);
+  });
+});
+
+describe("the committed platform fixture and the brand", () => {
+  test("test/fixtures/burnticker-season (the draft script's --platform-dir sample) equals the fixture objects", () => {
+    const read = (f: string) => JSON.parse(fs.readFileSync(path.join(SEASON_DIR, f), "utf8"));
+    assert.deepEqual(read("index.json"), SEASON_INDEX);
+    for (const [t, r] of Object.entries(SEASON_RECEIPTS)) assert.deepEqual(read(`t/${t}/receipts.json`), r, t);
+    assert.deepEqual(read("t/RAYS/status.json"), RAYS_STATUS);
+  });
+  test("the B1 header and OG carry the sentence, no Kalshi, and the published PNGs are the concept renders at X's sizes", () => {
+    const dims = (f: string) => { const b = fs.readFileSync(f); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+    for (const [html, png, size] of [["header.html", "header.png", [1500, 500]], ["og.html", "og.png", [1200, 630]]] as const) {
+      const src = fs.readFileSync(`site/brand-concepts/b1-thermal-receipt/${html}`, "utf8");
+      assert.match(src, /coins that burn on real-world results — with receipts\./i, html);
+      assert.doesNotMatch(src, /kalshi|KX[A-Z]{3,}/i, html);
+      clean(visibleText(src), html);
+      assert.deepEqual(dims(`site/burnticker/brand/${png}`), size, png);
+      assert.ok(fs.readFileSync(`site/burnticker/brand/${png}`).equals(fs.readFileSync(`site/brand-concepts/b1-thermal-receipt/${png}`)), `${png} is the published copy of the concept render`);
+    }
+    assert.doesNotMatch(fs.readFileSync("site/burnticker/brand/header.svg", "utf8"), /kalshi/i, "the retired SVG kit too");
+  });
+  test("the app shell: footer line, the public layout's Open Graph title and description, the Seasons label", () => {
+    assert.match(fs.readFileSync("src/app/burnticker/_components/SiteFooter.tsx", "utf8"), /COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS/);
+    const layout = fs.readFileSync("config/public-repo/overlay/src/app/layout.tsx", "utf8");
+    assert.match(layout, /const TITLE = "Burnticker — coins that burn on real-world results, with receipts"/);
+    assert.match(layout, /const DESCRIPTION = "Coins that burn on real-world results — with receipts\. Launch one\. Follow the season\./);
+    assert.doesNotMatch(layout, /burns on the news/i);
+    clean(/const DESCRIPTION = "([^"]+)"/.exec(layout)![1], "OG description");
   });
 });

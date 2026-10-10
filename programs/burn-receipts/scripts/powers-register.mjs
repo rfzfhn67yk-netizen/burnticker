@@ -47,6 +47,13 @@ const POWERS = {
     cannot: "Register any other pool (another AmmConfig, a random-keypair pool, a pool whose LP its creator can withdraw); register twice; change a registered pool.",
     timelock: null, sunset: "Once per token (then frozen).", funds: "None.",
   },
+  register_pair_pool: {
+    class: "permissionless",
+    signers: { registrar: "anyone" },
+    can: "Registration policy 2 (2026-10-10, rivalry pairs): record the CPMM pool that the pair_curve program's graduate created for this token — the Pair account is pair_curve's (hard-coded id, discriminator, PDA [\"pair\", mint_a, mint_b]), Graduated (or Graduating with this side done) and names this mint; the pool is the one the Pair records for that side AND the pair_curve PDA [\"pool\", pair, [side]] (only pair_curve can sign for it), on the cpConfigId pinned at initialize_token, with the pair's SOL vault PDA as pool_creator; ≥ 90 % of the LP that existed at creation was burned (Pair record, confirmed by CPMM lp_supply − LP mint supply).",
+    cannot: "Register a pool for a policy-0/1 token, a pool from another pair or side, a pool at any other address, on another AmmConfig or with an unburned LP; register twice; change a registered pool. Later LP deposits cannot block it (the ratio is against the creation supply).",
+    timelock: null, sunset: "Once per token (then frozen).", funds: "None.",
+  },
   check_pool_health: {
     class: "permissionless",
     signers: { caller: "anyone" },
@@ -216,7 +223,7 @@ const NON_POWERS = [
   "No instruction updates the burn rule (RuleParams), the feed id, the memo text, the rules hash, the mint, the creator record or the registered pool.",
   "No instruction edits or deletes a reading; readings are append-only and quorum-checked.",
   "The quorum can never be lowered (nor exceed 3), the attester set can never be smaller than the quorum, and one proposal must keep at least `quorum` of the current keys and add fewer new keys than the new quorum; keys are added only on the strength of kept keys ≥ 7 days old.",
-  "No instruction changes the pinned LaunchLab platform / cpConfigId; the registration policy changes only through set_registration_policy (48 h, stranding only, until the cap sunset).",
+  "No instruction changes the pinned LaunchLab platform / cpConfigId; the registration policy changes only through set_registration_policy (48 h, stranding only, until the cap sunset), which can never select policy 2 (pair curve) — that policy is chosen at initialize_token or not at all.",
   "No PlatformConfig is required: without one, the hard-coded default cap (25 SOL until 2027-10-01) applies, so a lost or finalised upgrade authority cannot wedge buybacks.",
 ];
 

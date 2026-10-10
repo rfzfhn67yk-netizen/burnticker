@@ -18,7 +18,7 @@ export function SiteFooter() {
       <div className="bt-slip">
         <div className="bt-slip-head">
           <span className="bt-slip-title">BURNTICKER</span>
-          <span className="bt-slip-sub">BURNS ON THE NEWS · RECEIPT FOR EVERY BURN</span>
+          <span className="bt-slip-sub">COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS</span>
         </div>
         <div className="bt-rule" />
         <p className="bt-slip-text"><b>*** NOT ADVICE ***</b> {SITE_DISCLAIMER}</p>

@@ -30,6 +30,7 @@
   .wordmark{font-weight:700;font-size:86px;letter-spacing:8px;line-height:1;margin-left:-4px;
     -webkit-mask-image:linear-gradient(90deg,#000 0 52%,rgba(0,0,0,.7) 62%,#000 74%);}
   .line{margin-top:30px;font-size:27px;line-height:38px;color:#e6e0d2}
+  .sub2{margin-top:14px;font-size:24px;line-height:32px;color:#ffb000;font-weight:700}
   .feeds{margin-top:28px;font-size:18px;letter-spacing:2px;color:#9c9587;line-height:30px}
   .disc{position:absolute;left:72px;top:560px;color:#7d776c;font-size:15px;letter-spacing:1px}
 </style></head>
@@ -59,25 +60,26 @@
 </svg>
 <div class="copy">
   <div class="wordmark">BURNTICKER</div>
-  <div class="line">Memecoins whose supply burns when a verifiable real-world event happens. Every burn carries an on-chain receipt.</div>
-  <div class="feeds">TREASURY.DEBT · NOAA.FLARES · LL2.LAUNCHES · JPL.NEO · WIKI.VIEWS<br>RULES LOCKED AT LAUNCH · ANYONE CAN CHECK THE ARITHMETIC</div>
+  <div class="line">Coins that burn on real-world results — with receipts.</div>
+  <div class="sub2">Launch one. Follow the season.</div>
+  <div class="feeds">ESPN FINALS · TREASURY.DEBT · NWS<br>ON-CHAIN PAYOUT · RULES LOCKED AT LAUNCH<br>NOTHING IS WON — ONLY BURNED</div>
 </div>
 <div class="receipt" id="r">
   <svg class="grain" width="100%" height="100%"><rect width="100%" height="100%" filter="url(#g)"/></svg>
   <div class="body"><div class="h">BURNTICKER</div><div class="sub">BURN RECEIPT</div><div class="rule"></div>
     <div class="row"><span>FEED</span><b>TREASURY.DEBT</b></div>
     <div class="row"><span>DATE</span><b>2026-10-08</b></div>
-    <div class="row fade"><span>READING</span><b>38,411,206,558,942</b></div>
+    <div class="row fade"><span>READING</span><b>40,305,316,210,829</b></div>
     <div class="row"><span>DELTA</span><b>+21,284,113,007</b></div>
     <div class="row"><span>UNIT</span><b>$1,000,000,000</b></div>
     <div class="row"><span>UNITS</span><b>21</b></div><div class="rule"></div>
-    <div class="row"><span>BURNED</span><b>2,100,000 DEFICIT</b></div>
+    <div class="row"><span>BURNED</span><b>146,702 DEFICIT</b></div>
     <div class="row"><span>TX</span><b>5xQm7…kR7a</b></div>
     <div class="row fade"><span>RULE</span><b>sha256:9f3e…c21b</b></div><div class="keep">KEEP THIS RECEIPT</div></div>
   <svg class="hole" viewBox="0 0 180 160"><ellipse cx="88" cy="78" rx="80" ry="64" fill="url(#sc)" filter="url(#rough)"/></svg>
   <div class="stamp">BURNED<small>ON-CHAIN · 2026-10-08</small></div>
 </div>
-<div class="disc">a memecoin launchpad — the rule says what supply does, not what price does</div>
+<div class="disc">memecoins — the rule says what supply does, not what price does</div>
 <script>
   const r=document.getElementById('r'),W=380,H=700,t=12,d=8;let p=[];
   for(let x=0;x<=W;x+=t)p.push(`${x}px ${(x/t)%2?0:d}px`);for(let x=W;x>=0;x-=t)p.push(`${x}px ${H-((x/t)%2?0:d)}px`);r.style.clipPath=`polygon(${p.join(',')})`;

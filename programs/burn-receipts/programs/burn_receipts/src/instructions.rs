@@ -7,6 +7,7 @@ pub mod crank_vault;
 pub mod initialize_token;
 pub mod platform;
 pub mod pool_health;
+pub mod register_pair_pool;
 pub mod register_pool;
 pub mod submit_reading;
 
@@ -18,5 +19,6 @@ pub use crank_vault::*;
 pub use initialize_token::*;
 pub use platform::*;
 pub use pool_health::*;
+pub use register_pair_pool::*;
 pub use register_pool::*;
 pub use submit_reading::*;

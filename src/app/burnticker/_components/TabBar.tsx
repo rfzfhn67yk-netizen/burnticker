@@ -6,7 +6,7 @@ import { TABS, activeTab } from "./nav";
 
 /**
  * THE PHONE TAB BAR (2026-10-10, launchpad conventions: Bags and pump.fun's app keep the main sections one thumb away). Under 900 px a
- * fixed bar at the bottom — Coins · Launch · Rivalries · Trust — with Launch stamped in the violet; hidden on wider screens, where the
+ * fixed bar at the bottom — Coins · Launch · Seasons · Trust — with Launch stamped in the violet; hidden on wider screens, where the
  * header row carries the same links. Reads only the pathname.
  */
 export function TabBar() {

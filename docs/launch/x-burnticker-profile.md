@@ -20,7 +20,7 @@ won — things are only burned. One sentence everywhere: **"Coins that burn on r
 | Birth date | leave blank | |
 | Category (Professional) | Software company / Technology | avoids "Financial services" categorisation |
 | Avatar | `site/burnticker/brand/avatar.png` (800×800) | the B1 thermal receipt with the burned amount scorched out |
-| Header | `site/burnticker/brand/header.png` (1500×500) | TODO before upload: the committed header still carries the retired tagline "Burns on the news." and a KALSHI line in its tape; re-render it from `brand/render.mjs` with the sentence above and a tape without Kalshi |
+| Header | `site/burnticker/brand/header.png` (1500×500, X's header size) | re-rendered 2026-10-10 from `site/brand-concepts/b1-thermal-receipt/header.html`: three B1 receipts (TREASURY.DEBT, an ESPN.NHL final, NWS.DEN), the sentence as the tagline, and a ticker tape across MLB, debt, NHL, weather, NBA, the on-chain payout and NFL — no Kalshi line |
 
 Shorter bio if the guardrails do not fit a layout (85 characters):
 `Coins that burn on real-world results — with receipts. Launch one. Follow the season.`

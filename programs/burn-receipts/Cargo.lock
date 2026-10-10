@@ -2083,6 +2083,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "pair_curve"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "burn_receipts",
+ "litesvm",
+ "serde_json",
+ "sha2 0.10.9",
+ "solana-account",
+ "solana-instructions-sysvar 3.0.1",
+ "solana-keypair",
+ "solana-message",
+ "solana-signer",
+ "solana-transaction",
+]
+
+[[package]]
 name = "pairing"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

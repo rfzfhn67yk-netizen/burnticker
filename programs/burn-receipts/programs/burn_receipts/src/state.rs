@@ -19,7 +19,7 @@ pub struct RuleParams {
     pub mode: u8,
     /// CARRY_CONSECUTIVE (0) or CARRY_NONE (1).
     pub carry_rule: u8,
-    /// POOL_POLICY_CREATOR_IS_FEE_PDA (0) or POOL_POLICY_FIXED (1). Buyback only.
+    /// POOL_POLICY_CREATOR_IS_FEE_PDA (0), POOL_POLICY_FIXED (1) or POOL_POLICY_PAIR_CURVE (2). Buyback only.
     pub pool_policy: u8,
     /// Decimals of the attested value (2: the Treasury figure in cents).
     pub value_decimals: u8,

@@ -114,6 +114,13 @@ pub const CARRY_NONE: u8 = 1;
 /// before any buyback.
 pub const POOL_POLICY_CREATOR_IS_FEE_PDA: u8 = 0;
 pub const POOL_POLICY_FIXED: u8 = 1;
+/// Pool policy 2 (2026-10-10, rivalry pairs): the token launched through the `pair_curve` program, whose `graduate` creates the
+/// token's CPMM pool at a pair_curve PDA and burns its LP. Registered permissionlessly by `register_pair_pool` (src/pair_curve.rs):
+/// the Pair account (owner pair_curve, its PDA, status Graduated) names this mint and this pool; the pool is the pair_curve PDA
+/// ["pool", pair, [side]] on the cpConfigId pinned at initialize_token, its `pool_creator` is the pair's SOL vault PDA, and ≥ 90 % of
+/// the LP that existed at creation was burned (recorded by the Pair, confirmed by CPMM's lp_supply − LP mint supply).
+/// initialize_token pins the LaunchLab platform exactly as under policy 0 (the cpConfigId and the developer wallet come from it).
+pub const POOL_POLICY_PAIR_CURVE: u8 = 2;
 
 /// Attester kind tags. INFORMATIONAL ONLY: every attester is an ed25519 key and the program verifies nothing but signatures and the
 /// quorum. The tag tells a reader what stands behind the key (the published attester list, the status page, the Powers Register).
@@ -139,6 +146,18 @@ pub const OUTCOME_BELOW_FLOOR: u8 = 3;
 pub const OUTCOME_SHORT: u8 = 4;
 /// Vault: the allocation is used up; nothing is owed, ever again.
 pub const OUTCOME_EXHAUSTED: u8 = 5;
+
+/// The pair_curve program (programs/pair_curve; one id for devnet and mainnet, like this program's). Its keypair is
+/// ~/.config/meme-coin-trader/mainnet-keys/pair_curve-program.json (never committed). register_pair_pool trusts an account only if
+/// this program owns it.
+pub const PAIR_CURVE_PROGRAM_ID: Pubkey = pubkey!("2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN");
+/// pair_curve seeds: the Pair ["pair", mint_a, mint_b], its SOL vault ["vault", pair] (the pools' creator) and the pools
+/// ["pool", pair, [side]].
+pub const PAIR_CURVE_PAIR_SEED: &[u8] = b"pair";
+pub const PAIR_CURVE_VAULT_SEED: &[u8] = b"vault";
+pub const PAIR_CURVE_POOL_SEED: &[u8] = b"pool";
+/// register_pair_pool: at least this share of the LP that existed when pair_curve created the pool must have been burned.
+pub const PAIR_MIN_BURNED_LP_BPS: u128 = 9_000;
 
 /// Programs this program talks to. Hard-coded so a cranker can never substitute a look-alike.
 pub const MEMO_PROGRAM_ID: Pubkey = pubkey!("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");

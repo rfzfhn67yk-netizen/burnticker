@@ -16,7 +16,7 @@ the event, the source, the reading, the amounts and the rule hash. The rule is e
 burns; its champion is the coin with the most receipts, a stat and never a recipient. The token page recomputes every receipt from the
 source. The audit script does it for every token and exits non-zero on a mismatch, and the trust page shows the result.
 
-**Guardrails.** Settled on primary sources · quorum-signed readings · program-run burns · receipts anyone can recompute · open source ·
+**Guardrails.** Settled on primary sources · signed readings (one attester at launch, a second within 14 days) · program-run burns · receipts anyone can recompute · open source ·
 reviewed · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
 
 **Operated by one independent operator (United States).** This repository is the public, buildable copy of everything the platform runs: the on-chain

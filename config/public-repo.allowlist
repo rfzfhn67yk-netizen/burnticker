@@ -15,6 +15,12 @@ programs/burn-receipts
 src/lib/burnReceipts
 scripts/burnreceipts-*.mts
 
+# --- pair_curve (2026-10-10): its TypeScript client, admin CLI and the Squads v4 upgrade-proposal tool (the program itself is under
+#     programs/burn-receipts, the same Anchor workspace) ---
+src/lib/pairCurve
+scripts/paircurve-*.mts
+scripts/squads-program-upgrade.mts
+
 # --- the $DEFICIT keeper (single-token) ---
 src/lib/burnKeeper
 config/burnkeeper
@@ -77,6 +83,7 @@ scripts/ops/install-burnticker-units.sh
 # --- tests and the fixtures they read ---
 test/burnKeeper*.ts
 test/burnReceipts*.ts
+test/pairCurve*.ts
 test/burnticker*.ts
 test/fixtures/treasury-debt-to-penny-2024-12-to-2026-10-08.json
 test/fixtures/polymarket-trump-2024-condition.json
@@ -90,3 +97,4 @@ config/public-repo/overlay
 scripts/ops/publish-public-repo.sh
 scripts/ops/public-repo-lib.mjs
 scripts/ops/verify-evidence-signatures.mjs
+test/fixtures/burnticker-season/**

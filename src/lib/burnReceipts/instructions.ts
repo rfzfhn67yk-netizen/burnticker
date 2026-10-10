@@ -98,6 +98,14 @@ export function registerPoolIx(o: { programId: PublicKey; registrar: PublicKey; 
   return build(o.programId, "register_pool", accounts, {});
 }
 
+/**
+ * register_pair_pool (2026-10-10, registration policy 2): the CPMM pool pair_curve's `graduate` created for this mint. Permissionless;
+ * `pair` is the pair_curve Pair account (src/lib/pairCurve/accounts.ts pairPda), `pool` the side's pool (poolPda), `lpMint` its LP mint.
+ */
+export function registerPairPoolIx(o: { programId: PublicKey; registrar: PublicKey; mint: PublicKey; pool: PublicKey; lpMint: PublicKey; pair: PublicKey }): TransactionInstruction {
+  return build(o.programId, "register_pair_pool", { registrar: o.registrar, config: configPda(o.programId, o.mint), mint: o.mint, pool_state: o.pool, lp_mint: o.lpMint, pair: o.pair }, {});
+}
+
 /** SPL Token SyncNative (instruction 17) — the client prepends it for the fee PDA's WSOL account before every buyback (review-2 F3). */
 export function syncNativeIx(account: PublicKey): TransactionInstruction {
   return new TransactionInstruction({ programId: TOKEN_PROGRAM_ID, keys: [{ pubkey: account, isSigner: false, isWritable: true }], data: Buffer.from([17]) });

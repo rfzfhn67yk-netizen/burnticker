@@ -157,3 +157,44 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `1c3fda17a66eba4855c53439e2b186c795f2d9e8fe6ba627c9b13a4057c1f516`
 - allowlist sha256 (config/public-repo.allowlist): `bb08241ed6570d363924fe7452e6acb85b5bbcf68c1c9fe22778312acb335b4b`
 - files published: 597
+
+## 2026-10-10 — devnet deploy: burn_receipts upgraded (register_pair_pool) and pair_curve deployed (no mainnet change)
+
+- burn_receipts `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` on **devnet** upgraded through the Squads 2-of-3 vault (60 s time lock):
+  vault transaction 2, executed `3ARtrz75uBvA…`; deployed bytes
+  (devnet build, 721,096 B) sha1 `4f6307f34ebfc22b7d2403f2922846f2a7a7c093`
+- pair_curve `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` deployed on **devnet** `jX24ZrjbmW7q…`,
+  upgrade authority → the vault `36V5B8wPZ4wS…`; devnet build
+  344,688 B, sha1 `e31f2ade7bd37fcc9489c300926850cd252835f1`
+- rehearsal record: `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md`; mainnet: nothing deployed (the owner's step)
+
+## 2026-10-10 — brand header, shell labels, signed-readings guardrail, draft-script formats (no publish, no deploy)
+
+- B1 header and OG re-rendered (`site/brand-concepts/b1-thermal-receipt/{header,og}.html` → `node site/brand-concepts/render.mjs b1` →
+  `node site/burnticker/brand/render.mjs`): tagline "Coins that burn on real-world results — with receipts.", receipts for
+  TREASURY.DEBT / ESPN.NHL / NWS.DEN, a ticker tape across leagues with the on-chain payout and no Kalshi line. The public overlay's
+  `og.png` is the same file. The retired `brand/header.svg` loses its Kalshi line too.
+- `SiteFooter.tsx` slip line and the public layout's Open Graph / Twitter title and description carry the sentence; the nav and phone
+  tab bar label the rivalries page "Seasons" (the route stays `/burnticker/rivalries`).
+- Guardrail strip (landing, public README, announcement thread): "quorum-signed readings" → "signed readings (one attester at launch,
+  a second within 14 days)" — the schedule in docs/burnticker/decisions.md.
+- `scripts/burnkeeper-post-draft.mts --template=receipt|scoreboard` prints the two @BurnTicker formats from a platform publish dir
+  (sample: `test/fixtures/burnticker-season`); `--template=B1` is retired and says so. docs/launch/daily-post.md §(g), §(h) carry the
+  examples, pinned equal to the script's output.
+
+
+## 2026-10-10 — publish from 547558fafa4b
+
+- monorepo commit: `547558fafa4baeca807bf8f4e0a8f549ff8cc2b7` (the working tree had uncommitted changes when this tag was written)
+- program hash: `f3812ce47ff86e8c0bc8dcaae856e0e2c8523850afb19bda9de05ce559c775d0` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
+- allowlist sha256 (config/public-repo.allowlist): `f7a1767e8ba1732d7463fdb4e582f34c5865756d72673b6a8b7337be3313b82b`
+- files published: 674
+
+## 2026-10-10 — publish from 84ca648cd21f
+
+- monorepo commit: `84ca648cd21f88553b650cf10bcd8b36b8eb121a` (the working tree had uncommitted changes when this tag was written)
+- program hash: `f3812ce47ff86e8c0bc8dcaae856e0e2c8523850afb19bda9de05ce559c775d0` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
+- allowlist sha256 (config/public-repo.allowlist): `7add0488a2ba7070d08f39d8bd2409dc5b5a3a3027df97b0134fedf8e2d80276`
+- files published: 688

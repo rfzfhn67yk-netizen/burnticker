@@ -102,6 +102,15 @@ instruction.**
 
 ---
 
+### Registration policy 2 — pools created by `pair_curve` (2026-10-10)
+
+A rivalry pair launched through the `pair_curve` program (`docs/burnticker/PAIR-CURVE.md`) has no LaunchLab pool: its CPMM pools are
+created by `pair_curve`'s `graduate` at pair_curve PDAs, with the pair's SOL vault as `pool_creator` and all LP burned. Such a token is
+initialised with `pool_policy = 2` (the LaunchLab platform is still pinned — its cpConfigId is the AmmConfig the pools must use) and its
+pool is registered by `register_pair_pool` (`src/instructions/register_pair_pool.rs`, `src/pair_curve.rs`). Nothing else changes:
+`crank_buyback`, `check_pool_health` and the fee PDA work the same; `replace_pool` stays policy-0 only; the stranding switch cannot
+select policy 2.
+
 ## 2. Trust model, level by level
 
 | Level | Who can lie about the number | Who holds the money | What a stranger checks |

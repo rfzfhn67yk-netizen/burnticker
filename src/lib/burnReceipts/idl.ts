@@ -1740,6 +1740,80 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "register_pair_pool",
+      "docs": [
+        "Registration policy 2 (2026-10-10): the CPMM pool pair_curve's `graduate` created for this token (src/pair_curve.rs)."
+      ],
+      "discriminator": [
+        98,
+        101,
+        59,
+        6,
+        134,
+        161,
+        2,
+        171
+      ],
+      "accounts": [
+        {
+          "name": "registrar",
+          "docs": [
+            "Anyone (recorded in the event)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The token's mint: fixed supply, no freeze authority (review L-3)."
+          ]
+        },
+        {
+          "name": "pool_state"
+        },
+        {
+          "name": "lp_mint",
+          "docs": [
+            "The pool's LP mint (must equal pool_state.lp_mint)."
+          ]
+        },
+        {
+          "name": "pair"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "register_pool",
       "discriminator": [
         85,
@@ -3005,6 +3079,21 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6065,
       "name": "NotAttester",
       "msg": "only a current attester may veto a pending registration-policy proposal"
+    },
+    {
+      "code": 6066,
+      "name": "InvalidPairAccount",
+      "msg": "the account is not a pair_curve Pair (owner, discriminator, length or address)"
+    },
+    {
+      "code": 6067,
+      "name": "PairNotGraduated",
+      "msg": "the pair has not graduated"
+    },
+    {
+      "code": 6068,
+      "name": "NotPairPool",
+      "msg": "the pool is not the pair_curve pool of this mint (Pair record, pair_curve PDA or pinned cpConfigId)"
     }
   ],
   "types": [
@@ -4126,7 +4215,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "pool_policy",
             "docs": [
-              "POOL_POLICY_CREATOR_IS_FEE_PDA (0) or POOL_POLICY_FIXED (1). Buyback only."
+              "POOL_POLICY_CREATOR_IS_FEE_PDA (0), POOL_POLICY_FIXED (1) or POOL_POLICY_PAIR_CURVE (2). Buyback only."
             ],
             "type": "u8"
           },

@@ -5,7 +5,7 @@
 #   2. fixtures/launchlab_mock.so missing or older than its source → rebuilt from mocks/launchlab_mock (local, no network);
 #   3. the hostile callee and the multicall wrapper (test-only mocks) and the --features localnet build in target/deploy-localnet
 #      (the only producer of what the opt-in TS localnet suite loads — re-check R3-6);
-#   4. the LiteSVM suite (anchor build has already produced target/deploy/burn_receipts.so).
+#   4. the LiteSVM suites of burn_receipts and pair_curve (anchor build has already produced both .so files).
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,6 +41,16 @@ if [ ! -f "$mc_so" ] || [ -n "$(find "$mc_src/src" "$mc_src/Cargo.toml" -newer "
   echo "fixtures/multicall.so built (test-only CPI wrapper)"
 fi
 
+# The hostile CPMM `initialize` for pair_curve's graduation guards (plays a malicious CPMM upgrade that abuses the SOL vault's
+# signature); test-only, local build.
+ecpmm_so="$here/fixtures/evil_cpmm_init.so"
+ecpmm_src="$here/mocks/evil_cpmm_init"
+if [ ! -f "$ecpmm_so" ] || [ -n "$(find "$ecpmm_src/src" "$ecpmm_src/Cargo.toml" -newer "$ecpmm_so" -print -quit)" ]; then
+  cargo-build-sbf --manifest-path "$ecpmm_src/Cargo.toml"
+  cp "$ecpmm_src/target/deploy/evil_cpmm_init.so" "$ecpmm_so"
+  echo "fixtures/evil_cpmm_init.so built (test-only hostile CPMM initialize)"
+fi
+
 # The local-validator build (review-3 I-1: binds the localnet genesis tag, never mainnet's) used by the opt-in TS localnet test.
 cargo-build-sbf --manifest-path "$here/programs/burn_receipts/Cargo.toml" --features localnet --sbf-out-dir "$here/target/deploy-localnet"
 # Re-check R3-6: say where it went — the TS localnet suite loads it from there and skips without it.
@@ -49,3 +59,5 @@ echo "  (run it from the repo root with BURN_RECEIPTS_LOCALNET=1; it starts sola
 
 cd "$here"
 cargo test -p burn_receipts -- --test-threads=1
+# pair_curve (2026-10-10): its LiteSVM suite loads target/deploy/pair_curve.so + burn_receipts.so + the CPMM fixture.
+cargo test -p pair_curve -- --test-threads=1

@@ -9,6 +9,8 @@
 mod common;
 
 use anchor_lang::prelude::Pubkey;
+use anchor_lang::solana_program::instruction::Instruction;
+use anchor_lang::{InstructionData, ToAccountMetas};
 use anchor_spl::associated_token::get_associated_token_address;
 use burn_receipts::constants::*;
 use burn_receipts::math;
@@ -726,6 +728,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "initialize_token",
             "propose_attesters",
             "propose_cap_raise",
+            "register_pair_pool",
             "register_pool",
             "renounce_admin",
             "renounce_platform_authority",
@@ -854,4 +857,42 @@ fn attester_rotation_waits_48h_and_renounce_freezes_the_set() {
     expect_anchor_err(env.send(&[ix_apply(&env.payer.pubkey(), &mint)], &[]), "NoPendingChange");
     expect_anchor_err(env.send(&[ix_admin("propose", &creator.pubkey(), &mint, ed(&[stranger.pubkey()]), 1)], &[creator]), "AdminRenounced");
     expect_anchor_err(env.send(&[ix_admin("renounce", &creator.pubkey(), &mint, vec![], 0)], &[creator]), "AdminRenounced");
+}
+
+// ================================================================================================================================
+// registration policy 2 (pair_curve, 2026-10-10) — the full path (graduate → register_pair_pool → crank) is in
+// programs/pair_curve/tests/lifecycle.rs, against the real pair_curve program
+// ================================================================================================================================
+
+#[test]
+fn policy_2_pins_the_launchlab_platform_and_only_register_pair_pool_accepts_it() {
+    let mut env = Env::new();
+    let t = new_token(1);
+    let mut rule = buyback_rule();
+    rule.pool_policy = POOL_POLICY_PAIR_CURVE;
+    let mut args = init_args(rule, t.attesters.iter().map(|k| k.pubkey()).collect(), 1);
+    args.admin = t.creator.pubkey();
+    let payer = env.payer.pubkey();
+    // like policy 0, policy 2 needs the LaunchLab platform (its cpConfigId is the AmmConfig the pair pools must use)
+    expect_anchor_err(env.send(&[ix_initialize_with_platform(&payer, &t.creator.pubkey(), &t.mint.pubkey(), args.clone(), None)], &[&t.creator, &t.mint]), "LaunchLabPlatformRequired");
+    env.ok(&[ix_initialize_with_platform(&payer, &t.creator.pubkey(), &t.mint.pubkey(), args, Some(TEST_LAUNCHLAB_PLATFORM))], &[&t.creator, &t.mint]);
+    let c = env.config(&config_pda(&t.mint.pubkey()));
+    assert_eq!((c.registration_policy, c.ll_platform, c.ll_cp_config), (POOL_POLICY_PAIR_CURVE, TEST_LAUNCHLAB_PLATFORM, cpmm::amm_config_0()));
+    assert!(!c.pool_verified && c.cpmm_pool == Pubkey::default());
+    // the LaunchLab path refuses a policy-2 token; an unknown policy value is refused at init
+    mint_or_create(&mut env, &t);
+    expect_anchor_err(env.send(&[ix_register_pool_full(&payer, &t.mint.pubkey(), &Pubkey::new_unique(), &t.mint.pubkey(), None)], &[]), "WrongPoolPolicy");
+    let t2 = new_token(1);
+    let mut rule3 = buyback_rule();
+    rule3.pool_policy = 3;
+    let mut args3 = init_args(rule3, t2.attesters.iter().map(|k| k.pubkey()).collect(), 1);
+    args3.admin = t2.creator.pubkey();
+    expect_anchor_err(env.send(&[ix_initialize_with_platform(&payer, &t2.creator.pubkey(), &t2.mint.pubkey(), args3, Some(TEST_LAUNCHLAB_PLATFORM))], &[&t2.creator, &t2.mint]), "InvalidRule");
+    // the admin's stranding-recovery switch cannot target policy 2 (no new admin power)
+    let ix = Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::SetRegistrationPolicy { policy: POOL_POLICY_PAIR_CURVE, pool: Pubkey::default() }.data(),
+        burn_receipts::accounts::RegistrationPolicyAdmin { admin: t.creator.pubkey(), config: config_pda(&t.mint.pubkey()), platform: platform_pda(), event_authority: event_authority(), program: burn_receipts::ID }.to_account_metas(None),
+    );
+    expect_anchor_err(env.send(&[ix], &[&t.creator]), "WrongPoolPolicy");
 }

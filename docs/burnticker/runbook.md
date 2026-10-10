@@ -161,6 +161,26 @@ aside, `cp` the backup into place, start — and an incident entry, because the 
 
 No gate, no `--send`. A gate that cannot be proven with its artefact is a no-go, not a judgement call.
 
+## Pair program gates — `pair_curve` (2026-10-10; before `BURNTICKER_PAIR_CURVE_ENABLED=1` on mainnet)
+
+`pair_curve` is deployed and governed exactly like `burn_receipts`: the deployer deploys once, the upgrade authority moves to the same
+Squads 2-of-3 vault with its time lock, every later change is a Squads vault transaction (`scripts/squads-program-upgrade.mts` creates
+the proposal — `squads-multisig-cli` 0.1.7 cannot; the CLI votes and executes), and the authority is finalised on the same plan as
+`burn_receipts` (README §5.3). Design and threat model: `docs/burnticker/PAIR-CURVE.md`.
+
+| # | Gate | Proof |
+|---|---|---|
+| P1 | `burn_receipts` on the cluster includes `register_pair_pool` (upgraded through the vault) | `solana program dump AuQj…zhMM` sha256 = the tagged build; the IDL lists `register_pair_pool` |
+| P2 | `pair_curve` deployed from the tagged commit at `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` (keypair `~/.config/meme-coin-trader/mainnet-keys/pair_curve-program.json`, never committed), DEFAULT-feature build (mainnet CPMM/LaunchLab ids), verifiable hash recorded | `solana program dump` sha256 = the verifiable build; a byte scan finds the mainnet CPMM id and not the devnet one |
+| P3 | upgrade authority = the Squads vault | `solana program show 2jQo…ELkN` → `Authority: <VAULT>` |
+| P4 | devnet rehearsal green: a pair graduated to two CPMM pools with LP burned and both registered, one burn per side; a pair voided and sold back to the vault's rent minimum | `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md` checkpoints PC1–PC7; `node scripts/ops/verify-evidence-signatures.mjs` PASSED |
+| P5 | blind review of `pair_curve` + `register_pair_pool` completed, findings closed or accepted in writing | `docs/burnticker/reviews/` |
+| P6 | the platform's `platformClaimFeeWallet` is the developer wallet and holds ≥ the rent minimum (else every developer slice goes to the burn pools — safe, but not the intended split) | `burnkeeper-launch.mts platform` dry run shows the wallet; `solana balance <wallet>` |
+| P7 | the pinned AmmConfig's create-pool fee is what the launch parameters assumed (init_pair refuses a target whose minimum side cannot pay for its pool) | `scripts/paircurve-admin.mts init-pair` dry run prints `createPoolFee` and `sideCosts` |
+| P8 | the keeper runs in program mode with the flag on and its crank works on a test pair (graduate/void) | keeper log line `pair curve: N pair(s) scanned, M cranked` |
+
+Turning the flag on changes only how NEW pairs launch; existing LaunchLab pairs keep the rules-level void clause.
+
 ## Launch day — $DEFICIT, in order
 
 Preconditions: every gate above ticked; weekday morning 08–09 Denver (Treasury posts ~14:00 Denver); the Burnticker host fully provisioned

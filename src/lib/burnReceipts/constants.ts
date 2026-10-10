@@ -81,6 +81,10 @@ export const CARRY_CONSECUTIVE = 0;
 export const CARRY_NONE = 1;
 export const POOL_POLICY_CREATOR_IS_FEE_PDA = 0;
 export const POOL_POLICY_FIXED = 1;
+/** 2026-10-10: the token launched through pair_curve; its pool is registered by register_pair_pool (docs/burnticker/PAIR-CURVE.md §5.2). */
+export const POOL_POLICY_PAIR_CURVE = 2;
+/** The pair_curve program (one id for devnet and mainnet; burn_receipts hard-codes it as PAIR_CURVE_PROGRAM_ID). */
+export const PAIR_CURVE_PROGRAM_ID = new PublicKey("2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN");
 
 export const KIND_BASELINE = 0;
 export const KIND_INCREASE = 1;

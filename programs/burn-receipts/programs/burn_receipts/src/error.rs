@@ -134,4 +134,10 @@ pub enum BurnError {
     PolicyProposalExpired,
     #[msg("only a current attester may veto a pending registration-policy proposal")]
     NotAttester,
+    #[msg("the account is not a pair_curve Pair (owner, discriminator, length or address)")]
+    InvalidPairAccount,
+    #[msg("the pair has not graduated")]
+    PairNotGraduated,
+    #[msg("the pool is not the pair_curve pool of this mint (Pair record, pair_curve PDA or pinned cpConfigId)")]
+    NotPairPool,
 }

@@ -1,5 +1,8 @@
 // The sample data behind the two @BurnTicker formats' filled examples in docs/launch/x-threads.md §2c (receipt + scoreboard).
 // test/burntickerCopy.test.ts renders receiptPostText / scoreboardText on it and requires the doc's ```text blocks to equal the output.
+// The same data is committed as a platform publish dir (SEASON_DIR: index.json + t/<ticker>/{status,receipts}.json) for the draft
+// script's --template=receipt|scoreboard; the test pins those files equal to these objects.
+export const SEASON_DIR = "test/fixtures/burnticker-season";
 import type { PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
 
 export const COPY_SITE = "https://burnticker.com";
@@ -39,6 +42,7 @@ export const SEASON_INDEX: PlatformIndexJson = {
 const burnOn = (day: string) => [rc({ eventId: day, settledAt: day })];
 /** Nine team coins burned on 2026-10-09 (the "yesterday" of a post on 10-10); $DEFICIT burned too and is not counted. */
 export const SEASON_RECEIPTS: Record<string, ReceiptJson[]> = Object.fromEntries([
-  ...["OILERS", "RAYS", "LAKERS", "EAGLES", "BRUINS", "FLAMES", "DODGERS", "CELTICS", "CUBS"].map((t) => [t, burnOn("2026-10-09")]),
+  ["RAYS", RAYS_RECEIPTS],
+  ...["OILERS", "LAKERS", "EAGLES", "BRUINS", "FLAMES", "DODGERS", "CELTICS", "CUBS"].map((t) => [t, burnOn("2026-10-09")]),
   ["KNICKS", [rc({ status: "skipped", burned: null, skippedReason: "spend under $1" })]], ["DEFICIT", burnOn("2026-10-09")], ["CHIEFS", burnOn("2026-10-08")],
 ]);

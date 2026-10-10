@@ -83,7 +83,7 @@ Every post below passes the copy lint (test/burntickerCopy.test.ts lints this se
 > Nothing is ever won here. Things are only burned. The champion is the coin with the most receipts: a stat, not a prize.
 
 **5/6 — the guardrails**
-> Settled on primary sources · quorum-signed readings · program-run burns · receipts anyone can recompute · open source · reviewed · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
+> Settled on primary sources · signed readings (one attester at launch, a second within 14 days) · program-run burns · receipts anyone can recompute · open source · reviewed · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
 
 **6/6 — the first coin, and the line**
 > First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.
@@ -170,7 +170,7 @@ Week 6 · 14 team coins across 4 leagues · 9 burned yesterday
 Champion = most receipts, not a prize. Memecoins — supply, not price.
 ```
 
-The receipt format replaces B1 (§3) for @BurnTicker. The rivalry post (`pairDailyText`, §2b) stays the format for a pair's own
+The receipt format replaces B1 (§3) for @BurnTicker; the draft script prints both formats (`--template=receipt`, `--template=scoreboard`; docs/launch/daily-post.md §(g), §(h)). The rivalry post (`pairDailyText`, §2b) stays the format for a pair's own
 running score.
 
 ---
@@ -259,9 +259,8 @@ supply does, not what price does.`
 
 ### Burnticker-side evergreen (for @burnticker, one template per coin)
 
-**B1 — the cross-post** (kept for `scripts/burnkeeper-post-draft.mts --template=B1`; @BurnTicker posts the receipt format, §2c)
-> Receipt on the tape: ${TICKER} burned {BURNED} tokens — {FEED_ID} {DATE}, {UNITS} units → {TX}
-> Burns on the news. Memecoins: the rule says what supply does, not what price does.
+**B1 — retired 2026-10-10.** The cross-post is replaced by the receipt format (§2c): `scripts/burnkeeper-post-draft.mts
+--template=receipt --ticker=…` (the script refuses `--template=B1` and says so).
 
 ---
 
