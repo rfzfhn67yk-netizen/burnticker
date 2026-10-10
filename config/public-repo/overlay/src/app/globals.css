@@ -129,4 +129,51 @@ body.bt-body {
 /* the wallet adapter's button in the stamp violet (the wizard is its only user) */
 .wallet-adapter-button-trigger { background-color: var(--bt-stamp-solid) !important; font-family: var(--font-mono) !important; white-space: nowrap; }
 
+/* ---- launchpad conventions (2026-10-10, docs/burnticker/ui-conventions.md): coin cards, tabs, the curve bar, chips, tape, tab bar ---- */
+.bt-coin-card { height: 100%; border: 1px solid var(--bt-line); background: var(--bt-counter); border-radius: 10px; padding: 12px; transition: border-color .15s, transform .15s; }
+a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
+.bt-thumb-receipt { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: var(--bt-paper); color: var(--bt-paper-ink); border-radius: 4px; font-family: var(--font-mono); overflow: hidden;
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.03) 0 1px, transparent 1px 3px); clip-path: polygon(0 0, 100% 0, 100% 92%, 92% 100%, 84% 92%, 76% 100%, 68% 92%, 60% 100%, 52% 92%, 44% 100%, 36% 92%, 28% 100%, 20% 92%, 12% 100%, 4% 92%, 0 100%); }
+.bt-thumb-top { font-size: 7px; letter-spacing: .14em; color: var(--bt-paper-dim); }
+.bt-thumb-ticker { font-weight: 700; line-height: 1; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-thumb-rule { width: 70%; border-top: 1px dashed color-mix(in srgb, var(--bt-paper-ink) 60%, transparent); }
+.bt-chip { display: inline-block; font: 700 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; padding: 3px 6px; border-radius: 3px; border: 1px solid var(--bt-line); color: var(--bt-dim); }
+.bt-chip-kalshi { color: #6fcf97; border-color: color-mix(in srgb, #6fcf97 45%, transparent); }
+.bt-chip-polymarket { color: #8ea2ff; border-color: color-mix(in srgb, #8ea2ff 45%, transparent); }
+.bt-chip-catalogue, .bt-chip-feed { color: var(--bt-scorch); border-color: color-mix(in srgb, var(--bt-scorch) 50%, transparent); }
+.bt-chip-grad { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-chip-draft { border-style: dashed; }
+.bt-curve { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--bt-line) 80%, transparent); overflow: hidden; }
+.bt-curve-fill { height: 100%; border-radius: 99px; background: repeating-linear-gradient(90deg, var(--bt-scorch) 0 6px, color-mix(in srgb, var(--bt-scorch) 75%, transparent) 6px 8px); }
+.bt-curve-fill.is-done { background: var(--bt-stamp-solid); }
+.bt-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.bt-tabs::-webkit-scrollbar { display: none; }
+.bt-tab { flex: 0 0 auto; font: 700 .76rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 99px; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+.bt-tab:hover { color: var(--bt-ink); border-color: var(--bt-stamp); }
+.bt-tab.is-active { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-tab-count { margin-left: 6px; opacity: .7; }
+.bt-launch-btn { display: inline-block; font: 700 .85rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border: 2px solid var(--bt-stamp-solid); border-radius: 4px; padding: 11px 16px; text-decoration: none; }
+.bt-launch-btn:hover { filter: brightness(1.12); }
+.bt-ghost-btn { display: inline-block; font: 700 .8rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-ink); border: 1px solid var(--bt-line); border-radius: 4px; padding: 10px 14px; text-decoration: none; }
+.bt-ghost-btn:hover { border-color: var(--bt-stamp); }
+.bt-copy { font: 700 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--bt-line); border-radius: 3px; padding: 4px 6px; color: var(--bt-dim); background: transparent; cursor: pointer; }
+.bt-copy:hover { color: var(--bt-ink); border-color: var(--bt-stamp); }
+.bt-tape { list-style: none; margin: 0; padding: 14px 14px 18px; background: var(--bt-paper); color: var(--bt-paper-ink); border-radius: 2px; font-family: var(--font-mono);
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.025) 0 1px, transparent 1px 3px); }
+.bt-tape-row { padding: 8px 0; border-bottom: 2px dashed color-mix(in srgb, var(--bt-paper-ink) 35%, transparent); }
+.bt-tape-row:last-child { border-bottom: 0; }
+.bt-tape a { color: var(--bt-paper-ink); }
+.bt-tape .text-neutral-500 { color: var(--bt-paper-dim); }
+.bt-rule-card { border-left: 4px solid var(--bt-stamp-solid) !important; }
+.bt-preview-frame { border: 2px dashed var(--bt-line); border-radius: 12px; padding: 10px; }
+.bt-tabbar { display: none; }
+@media (max-width: 899px) {
+  body.bt-body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .bt-tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: color-mix(in srgb, var(--bt-bg) 94%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
+  .bt-tabbar-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 60px; font: 700 10px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; }
+  .bt-tabbar-glyph { font-size: 18px; line-height: 1; }
+  .bt-tabbar-item.is-active { color: var(--bt-ink); box-shadow: inset 0 2px 0 var(--bt-stamp); }
+  .bt-tabbar-item.is-launch .bt-tabbar-glyph { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 22px; border-radius: 4px; background: var(--bt-stamp-solid); color: var(--bt-stamp-ink); }
+}
+
 @media (prefers-reduced-motion: reduce) { .bt-nav-link.is-launch, .bt-slip { transform: none; } }

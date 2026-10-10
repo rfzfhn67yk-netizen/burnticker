@@ -11,6 +11,25 @@ import type { BurnMapping } from "@/lib/burnticker/rules";
 export interface PairSideSummary { ticker: string; name: string; mint: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
 export interface PairCounterpart { pairId: string; side: "A" | "B"; counterpart: PairSideSummary }
 
+/** Market data for the coin card and the coin page (market.ts builds it; 2026-10-10). Read from chain as data, never a price claim. */
+export type CurvePhase = "curve" | "migrating" | "graduated";
+/** The LaunchLab curve: quote raised, the raise that completes the curve (graduation), the share done, what is left. Decimal strings. */
+export interface CurveJson { phase: CurvePhase; status: number; raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string }
+export interface HolderRow { account: string; owner: string | null; amount: string; pct: number; label: string | null }
+/** Where to trade: deep links only — Burnticker hosts no swap. */
+export interface TradeLinks { links: { id: "launchlab" | "raydium" | "jupiter"; label: string; url: string }[]; note: string | null }
+export interface ChartJson { provider: "geckoterminal" | null; embedUrl: string | null; pageUrl: string | null; note: string }
+/** status.json's market block. Every field the chain did not give is null and carries its reason. */
+export interface MarketJson {
+  phase: CurvePhase | null; curve: CurveJson | null; curveNote: string;
+  /** The CPMM pool the curve migrated to, as registered in the burn program (null before graduation or with no program read). */
+  graduatedPool: string | null;
+  holders: { count: number | null; countNote: string; top: HolderRow[] | null; topNote: string };
+  trade: TradeLinks; chart: ChartJson; readAt: string | null; error: string | null;
+}
+/** The creator's card fields (from the launch request, in the registry) and the one-liner derived from the locked rule (coinCard.ts). */
+export interface TokenProfileJson { imageUrl: string | null; description: string; links: { label: string; url: string }[]; oneLiner: string }
+
 export type ReceiptStatusJson = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing";
 
 export interface ReceiptJson {
@@ -40,7 +59,7 @@ export interface TokenStatusJson {
   rules: { sha256: string; sha12: string; statement: string; file: "rules.json"; oneShot: boolean };
   addresses: { mint: string; mintUrl: string; feePda: string; feePdaUrl: string; feeWsol: string | null; feeWsolUrl: string | null; vault: string | null; vaultUrl: string | null; creator: string; creatorUrl: string; programId: string; poolId: string | null; launchTx: string | null; launchTxUrl: string | null };
   supply: { initial: string; current: string; source: "chain" | "registry" };
-  burned: { total: string; pctOfSupply: number; count: number; last30d: string };
+  burned: { total: string; pctOfSupply: number; count: number; last30d: string; /** settled time of the latest confirmed burn */ lastAt: string | null };
   pool: { feePdaSol: string | null; spendableSol: string | null; reserveSol: string; vaultBalance: string | null; vaultAllocation: string | null; shortfallOutstanding: string; capSol: number; queuedSol: string | null; queuedNote: string };
   /** impliedChance is the market-implied chance of the next burn — DISPLAY ONLY, never read by the rule. */
   next: { nextCheckAt: string | null; impliedChance: number | null; impliedBasis: string | null; nextMarket: string | null; nextCloseTime: string | null; awaitingFinal: number };
@@ -52,6 +71,10 @@ export interface TokenStatusJson {
   trust: { lpBurnedPct: number; creatorCashBps: 0; teamAllocationPct: 0; operator: { can: string[]; cannot: string[]; placeholder: boolean }; registerUrl: string };
   /** The burn_receipts program: attestation, the queue (unattested days, cranks waiting, carried spend), pool health. Null with no program config read. */
   program: TokenProgramJson | null;
+  /** The coin card: image, description, socials, the rule's one-liner. */
+  profile: TokenProfileJson;
+  /** Bonding curve, graduation, top holders, chart embed and trade links (market.ts). */
+  market: MarketJson;
   /** Rivalry pair: this side, the other side, and the running tally (burns / supply, both sides). */
   pair: (PairCounterpart & { tally: { burnsThis: number; burnsOther: number; burnedThis: string; burnedOther: string; supplyThis: string; supplyOther: string }; pageUrl: string }) | null;
 }

@@ -16,6 +16,8 @@ import { rawToTokens, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { loadPowersRegister, operatorPowersSummary } from "@/lib/burnticker/trust";
 import { devFeeWallet } from "@/lib/burnticker/fees";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
+import { readMarket, type MarketReader } from "@/lib/burnticker/market";
+import { kalshiEnabled } from "@/lib/burnticker/venues";
 
 /**
  * THE APP'S WIRING (2026-10-09): one place that opens the registry, builds the oracle clients, and chooses the program / LaunchLab
@@ -26,6 +28,10 @@ import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 export interface Platform {
   registry: Registry; oracles: { kalshi: OracleAdapter; catalogue: OracleAdapter; polymarket: OracleAdapter }; kalshi: KalshiClient; polymarket: PolymarketClient; program: BurnProgramClient; launchLab: LaunchLabClient;
   cluster: "devnet" | "mainnet" | "localnet"; publishDir: string; devFeeWallet: string | null; keeperPubkey: string | null; platformId: string | null; stubs: string[];
+  /** Reads each coin's LaunchLab curve and top holders (market.ts) — present only with BURNTICKER_RPC_URL; without it the cards show "—". */
+  market?: MarketReader | null;
+  /** BURNTICKER_KALSHI_ENABLED (venues.ts): false turns off every Kalshi-facing surface; undefined = on. */
+  kalshiEnabled?: boolean;
 }
 
 let cached: Platform | null = null;
@@ -60,11 +66,16 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   stubs.push(platformId ? `LaunchLab platform ${platformId}: the SDK adapter needs an RPC to decode the configs (FakeLaunchLab in use on this host)` : "LaunchLab platform config: not created (scripts/burnticker-platform-config.mts prints the dry run)");
   const kalshi = new KalshiClient();
   const polymarket = polymarketClient(env);
+  // Bonding curve + top holders for the coin cards: read-only account reads over the same RPC (no key). Without one: "—" and the reason.
+  // disableRetryOnRateLimit: a rate-limited RPC fails the read fast ("could not be read") instead of stalling every page on backoff.
+  const market: MarketReader | null = rpc ? (new Connection(rpc, { commitment: "confirmed", disableRetryOnRateLimit: true }) as unknown as MarketReader) : null;
+  if (!rpc) stubs.push("LaunchLab curve progress and top holders: no BURNTICKER_RPC_URL on this host (cards show —)");
+  if (!kalshiEnabled(env)) stubs.push("Kalshi: not enabled on this host (BURNTICKER_KALSHI_ENABLED=0) — team coins, matchups and Kalshi sources show venue unavailable");
   cached = {
     registry: openRegistry((env.BURNTICKER_DB ?? "").trim() || REGISTRY_FILE),
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
-    devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs,
+    devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env),
   };
   return cached;
 }
@@ -86,7 +97,11 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const feedState = p.registry.feedState(t.selectorKey);
   const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
   const [supplyRaw, feePdaLamports, vaultRaw] = await Promise.all([p.program.supplyRaw(t.mint).catch(() => null), p.program.feePdaBalanceLamports(t.mint).catch(() => null), locked.mode === "vault" ? p.program.vaultBalanceRaw(t.mint).catch(() => null) : Promise.resolve(null)]);
+  const market = p.market && opts.live !== false && t.status !== "draft" && t.status !== "expired"
+    ? await readMarket(p.market, { cluster: p.cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: supplyRaw ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS), decimals: DECIMALS }, now).catch(() => null)
+    : null;
   return {
+    market,
     pair: await pairCounterpart(p, t),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
     chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: await programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading")) },

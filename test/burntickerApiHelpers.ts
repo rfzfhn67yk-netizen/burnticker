@@ -85,6 +85,8 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/kalshi\/search$/, "kalshi/search", []],
   [/^\/kalshi\/events$/, "kalshi/events", []],
   [/^\/kalshi\/teams$/, "kalshi/teams", []],
+  [/^\/kalshi\/categories$/, "kalshi/categories", []],
+  [/^\/browse$/, "browse", []],
   [/^\/kalshi\/backtest$/, "kalshi/backtest", []],
   [/^\/polymarket\/search$/, "polymarket/search", []],
   [/^\/polymarket\/backtest$/, "polymarket/backtest", []],

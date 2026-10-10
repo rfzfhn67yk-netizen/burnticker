@@ -16,7 +16,7 @@ import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
  * markets by ticker and label only.
  */
 
-export interface KalshiEventMarket { ticker: string; suffix: string; label: string; status: string; result: string; closeTime: string | null; expectedAt: string | null }
+export interface KalshiEventMarket { ticker: string; suffix: string; label: string; status: string; result: string; closeTime: string | null; expectedAt: string | null; /** Kalshi strike_type ("between", "greater", "less", …) when the market is a rung of a ladder; null for a plain yes/no. */ strikeType?: string | null }
 export interface KalshiEvent {
   eventTicker: string; seriesTicker: string; title: string; subTitle: string | null; category: string | null; competition: string | null;
   /** When the result is expected (the markets' expected_expiration_time / occurrence_datetime; for a game, roughly its end). */
@@ -29,9 +29,9 @@ export const suffixOf = (marketTicker: string): string => marketTicker.split("-"
 export function parseEvent(raw: unknown): KalshiEvent | null {
   const e = raw as Record<string, unknown> | null;
   if (!e || typeof e.event_ticker !== "string") return null;
-  const markets = (Array.isArray(e.markets) ? e.markets : []).map((m: Record<string, unknown>) => (typeof m?.ticker === "string" ? {
+  const markets = (Array.isArray(e.markets) ? e.markets : []).map((m: Record<string, unknown>): KalshiEventMarket | null => (typeof m?.ticker === "string" ? {
     ticker: m.ticker, suffix: suffixOf(m.ticker), label: String(m.yes_sub_title ?? m.subtitle ?? ""), status: String(m.status ?? ""), result: String(m.result ?? ""),
-    closeTime: s(m.close_time), expectedAt: s(m.expected_expiration_time) ?? s(m.occurrence_datetime),
+    closeTime: s(m.close_time), expectedAt: s(m.expected_expiration_time) ?? s(m.occurrence_datetime), strikeType: s(m.strike_type),
   } : null)).filter((m): m is KalshiEventMarket => m !== null);
   const pm = e.product_metadata as Record<string, unknown> | undefined;
   const times = (k: "expectedAt" | "closeTime") => markets.map((m) => m[k]).filter((x): x is string => !!x).sort()[0] ?? null;

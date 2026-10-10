@@ -13,6 +13,8 @@ import { pairDailyText, platformDailyText, tokenDayText } from "@/lib/launch/dai
 import { parseBuybackMemo as parseProgramBuybackMemo, parseDebtMemo as parseProgramVaultMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/lib/burnReceipts/math";
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
+import { buildMarketJson, type MarketInput } from "@/lib/burnticker/market";
+import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 
 /**
  * THE TOKEN PAGE (LAUNCHPAD-PATH §6; 2026-10-09), generalised from the $DEFICIT status page to N tokens: supply and burned, the feed
@@ -37,6 +39,8 @@ export interface TokenPageInput {
   operator: { can: string[]; cannot: string[]; placeholder: boolean };
   /** Rivalry pair: the other side's summary, when this token is one half of a pair. */
   pair: PairCounterpart | null;
+  /** The LaunchLab pool and top holders as read this cycle (market.ts readMarket); absent/null on a host without an RPC → the page shows "—". */
+  market?: MarketInput | null;
 }
 
 // PairSideSummary / PairCounterpart live in pageTypes.ts with the JSON shapes that carry them.
@@ -198,13 +202,15 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
   const lastFinal = [...i.receipts].reverse().find((b) => b.status === "confirmed" || b.status === "exhausted");
   const allocation = i.locked.mode === "vault" ? (BigInt(TOTAL_SUPPLY) * BigInt(Math.round(rule.vault!.share * 100))) / BigInt(100) : null;
   const activeAtt = i.attesters.filter((a) => a.active);
+  const program = buildTokenProgram(i);
+  const lastBurn = [...confirmed].filter((b) => (b.burnRaw ?? ZERO) > ZERO).sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   return {
     schema: TOKEN_STATUS_SCHEMA, generatedAt: new Date(i.now).toISOString(), ticker: t.ticker, name: t.name, mint: t.mint, cluster: i.chain.cluster, status: t.status, launchedAt: t.launchTx ? t.baselineAt : null,
     oracle: rule.oracle, selectorKey: t.selectorKey, seriesTitle: i.seriesTitle, mode: i.locked.mode,
     rules: { sha256: i.locked.sha256, sha12: i.locked.sha12, statement: ruleStatement(rule, { seriesTitle: i.seriesTitle }), file: "rules.json", oneShot: !!rule.market },
     addresses: (() => { let feeWsol: string | null = null; try { feeWsol = i.chain.programId ? burnPoolAddresses(i.chain.programId, t.mint).feeWsol : null; } catch { feeWsol = null; } return { mint: t.mint, mintUrl: addr(t.mint)!, feePda: t.feePda, feePdaUrl: addr(t.feePda)!, feeWsol, feeWsolUrl: addr(feeWsol), vault: t.vault, vaultUrl: addr(t.vault), creator: t.creator, creatorUrl: addr(t.creator)!, programId: i.chain.programId, poolId: t.poolId, launchTx: t.launchTx, launchTxUrl: t.launchTx ? explorerUrl(i.chain.cluster, t.launchTx) : null }; })(),
     supply: { initial: TOTAL_SUPPLY, current: rawToTokens(current, DECIMALS), source: i.chain.supplyRaw !== null ? "chain" : "registry" },
-    burned: { total: rawToTokens(totalRaw, DECIMALS), pctOfSupply: pct(totalRaw, supplyRaw), count: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, last30d: rawToTokens(last30, DECIMALS) },
+    burned: { total: rawToTokens(totalRaw, DECIMALS), pctOfSupply: pct(totalRaw, supplyRaw), count: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, last30d: rawToTokens(last30, DECIMALS), lastAt: lastBurn?.settledAt ?? null },
     pool: (() => { const spendable = i.chain.feePdaLamports === null ? null : spendablePool(i.chain.feePdaLamports, rule.reserveSol); const c = spendable === null ? null : capPool(spendable); return { feePdaSol: sol(i.chain.feePdaLamports), spendableSol: c === null ? null : sol(c.pool), reserveSol: rule.reserveSol, vaultBalance: i.chain.vaultRaw === null ? null : rawToTokens(i.chain.vaultRaw, DECIMALS), vaultAllocation: allocation === null ? null : allocation.toString(), shortfallOutstanding: rawToTokens(lastFinal?.shortOutRaw ?? ZERO, DECIMALS), capSol: PRE_AUDIT_POOL_CAP_SOL, queuedSol: c === null ? null : sol(c.queued), queuedNote: `pre-audit cap: burns spend from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL; fee income above it is queued, released after audit (enforced by the keeper today; by the program once deployed)` }; })(),
     next: { nextCheckAt: i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, impliedChance: i.implied?.chance ?? null, impliedBasis: i.implied?.basis ?? null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime: i.implied?.closeTime ?? null, awaitingFinal: i.selectorPending },
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
@@ -213,7 +219,9 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
     trust: { lpBurnedPct: LP_BURNED_PCT, creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
-    program: buildTokenProgram(i),
+    program,
+    profile: { imageUrl: t.imageUrl, description: t.description, links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle) },
+    market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market }),
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
   };
 }
@@ -347,8 +355,15 @@ tick();setInterval(tick,1000);})();
 `;
 }
 
+/** One coin on the platform index — the launchpad card's fields (2026-10-10: image, one-liner, curve progress, last burn, next result). */
+export interface PlatformIndexToken {
+  ticker: string; name: string; mint: string; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; status: string; launchedAt: string | null; burned: string; burns: number; pctOfSupply: number; impliedChance: number | null; nextCheckAt: string | null; pairId: string | null;
+  imageUrl: string | null; oneLiner: string; lastBurnAt: string | null; nextMarket: string | null; nextCloseTime: string | null; oneShot: boolean;
+  /** null = the curve was not read (no RPC on the host, or not launched): the card shows "—", never a guess. */
+  phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null;
+}
 export interface AuditBadge { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean }
-export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: { ticker: string; name: string; mint: string; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; status: string; launchedAt: string | null; burned: string; burns: number; pctOfSupply: number; impliedChance: number | null; nextCheckAt: string | null; pairId: string | null }[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null }
+export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null }
 
 /** Pairs listed once (both sides), from the statuses' pair fields. */
 export function groupPairs(statuses: readonly TokenStatusJson[]): PlatformIndexJson["pairs"] {
@@ -357,11 +372,21 @@ export function groupPairs(statuses: readonly TokenStatusJson[]): PlatformIndexJ
   return [...by.entries()].filter(([, p]) => p.a && p.b).map(([pairId, p]) => ({ pairId, selectorKey: p.a!.selectorKey, seriesTitle: p.a!.seriesTitle, a: sideSummary(p.a!), b: sideSummary(p.b!) }));
 }
 
+/** A status.json → its index card. Tolerates a status published before the card fields existed (profile/market absent). */
+export function indexToken(s: TokenStatusJson): PlatformIndexToken {
+  const c = s.market?.curve ?? null;
+  return {
+    ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: s.next.impliedChance, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
+    imageUrl: s.profile?.imageUrl ?? null, oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot,
+    phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
+  };
+}
+
 export function buildPlatformIndex(statuses: readonly TokenStatusJson[], now: number, audit: AuditBadge | null = null): PlatformIndexJson {
   const pairs = groupPairs(statuses);
   return {
     schema: "burnticker.index/v1", generatedAt: new Date(now).toISOString(), audit, pairs,
-    tokens: statuses.map((s) => ({ ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: s.next.impliedChance, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null })),
+    tokens: statuses.map((s) => indexToken(s)),
     totals: { tokens: statuses.length, live: statuses.filter((s) => s.status === "live").length, burns: statuses.reduce((a, s) => a + s.burned.count, 0), burnedTokens: statuses.reduce((a, s) => a + BigInt(s.burned.total.split(".")[0]), ZERO).toString(), pairs: pairs.length },
   };
 }

@@ -2,6 +2,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { canonicalDecimal, numToDec, type SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OpenMarketSummary, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { aliasLookup, buildTeams, matchEvents, matchupLeagues, parseEventsBody, seasonStart, type EventHit, type KalshiEvent, type MatchupLeague, type TeamRow } from "@/lib/burnticker/oracle/events";
+import { categoryPage, parseBrowseSeriesList, parseTagsByCategories, seriesExample, summariseEvents, type BrowseSeries, type CategoryPage, type KalshiCategory } from "@/lib/burnticker/oracle/browse";
 
 /**
  * THE KALSHI ORACLE (the PRIMARY event source; the owner, 2026-10-09). Public, keyless: https://api.elections.kalshi.com/trade-api/v2
@@ -11,6 +12,7 @@ import { aliasLookup, buildTeams, matchEvents, matchupLeagues, parseEventsBody, 
  *   GET /markets?series_ticker=…&status=open                         the next ones (prices: DISPLAY ONLY)
  *   GET /markets/{ticker}
  *   GET /events?series_ticker=…&status=open&with_nested_markets=true    the games / contests themselves (event search; events.ts)
+ *   GET /search/tags_by_categories    the category → tag tree Kalshi navigates by (browse.ts; the wizard's Browse path)
  *
  * SETTLED RESULTS ONLY. A market counts when it is FINAL: status "finalized", or status "settled" once `settlement_ts +
  * settlement_timer_seconds` has passed (the finalisation window the API exposes: 300 s on the series probed 10-09). `result` is
@@ -127,6 +129,9 @@ export const settledMarketsUrl = (series: string, limit = 200, cursor: string | 
 export const openMarketsUrl = (series: string, limit = 100): string => `${KALSHI_API}/markets?series_ticker=${encodeURIComponent(series)}&status=open&limit=${limit}`;
 export const eventsUrl = (series: string, status = "open", cursor: string | null = null): string => `${KALSHI_API}/events?series_ticker=${encodeURIComponent(series)}&status=${encodeURIComponent(status)}&with_nested_markets=true&limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
 export const seriesListUrl = (category?: string): string => `${KALSHI_API}/series${category ? `?category=${encodeURIComponent(category)}` : ""}`;
+export const tagsByCategoriesUrl = (): string => `${KALSHI_API}/search/tags_by_categories`;
+/** One category's series with Kalshi's traded volume (ordering only — browse.ts). */
+export const seriesByCategoryUrl = (category: string): string => `${KALSHI_API}/series?category=${encodeURIComponent(category)}&include_volume=true`;
 
 /**
  * Pure: the rule's settled events from a bag of markets (any order, any series). Binary rules yield one event per final market;
@@ -351,6 +356,48 @@ export class KalshiClient implements OracleAdapter {
   /** The wizard's league chooser, derived from Kalshi's Sports series list (head-to-head "…GAME" series). */
   async leagues(): Promise<MatchupLeague[]> {
     return matchupLeagues(parseSeriesListBody(await this.get(seriesListUrl("Sports"), this.ttl.series)));
+  }
+
+  /**
+   * BROWSE (2026-10-10): Kalshi's categories in the order its API reports them, each with its tags and (with `counts`) its number of
+   * series. The category list and every category's series list are cached 1 h (the series TTL); counts cost one request per category
+   * on a cold cache. A category whose list fails reads `seriesCount: null`, never a guess.
+   */
+  async categories(o: { counts?: boolean } = {}): Promise<KalshiCategory[]> {
+    const cats = parseTagsByCategories(await this.get(tagsByCategoriesUrl(), this.ttl.series));
+    const out: KalshiCategory[] = [];
+    for (const c of cats) {
+      let seriesCount: number | null = null;
+      if (o.counts !== false) { try { seriesCount = parseBrowseSeriesList(await this.get(seriesByCategoryUrl(c.category), this.ttl.series)).length; } catch { seriesCount = null; } }
+      out.push({ ...c, seriesCount });
+    }
+    return out;
+  }
+
+  /**
+   * One category's series, most traded first, filtered by a Kalshi tag and/or text, windowed. `withEvents` = how many of the returned
+   * series also get their upcoming-event summary (open count, the next event and its close, whether the markets are a strike ladder) —
+   * one events request per series, cached 10 min.
+   */
+  async seriesByCategory(category: string, o: { tag?: string | null; q?: string | null; limit?: number; offset?: number; withEvents?: number } = {}): Promise<CategoryPage> {
+    const [all, cats] = await Promise.all([
+      this.get(seriesByCategoryUrl(category), this.ttl.series).then(parseBrowseSeriesList),
+      this.get(tagsByCategoriesUrl(), this.ttl.series).then(parseTagsByCategories).catch(() => []),
+    ]);
+    const page = categoryPage(category, all, { ...o, tagOrder: cats.find((c) => c.category === category)?.tags ?? [] });
+    const n = Math.min(page.series.length, Math.max(0, o.withEvents ?? 0));
+    const series: BrowseSeries[] = [];
+    for (let i = 0; i < page.series.length; i++) {
+      const s = page.series[i];
+      if (i >= n) { series.push(s); continue; }
+      try {
+        const ev = summariseEvents(await this.eventsForSeries(s.ticker, "open", 1), this.now());
+        // the markets decide: a strike ladder reads a number, plain markets a yes/no (no open event: the title's guess stands)
+        const kindHint = ev.ladder ? "scalar" : ev.open > 0 ? "binary" : s.kindHint;
+        series.push({ ...s, events: ev, kindHint, example: seriesExample(kindHint) });
+      } catch { series.push(s); }
+    }
+    return { ...page, series };
   }
 
   async openMarkets(series: string): Promise<KalshiMarket[]> {

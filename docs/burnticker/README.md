@@ -70,6 +70,31 @@ burns exactly one side; the receipts are the scoreboard.
   receipts ($BRONCOS vs $CHIEFS on KXNFLGAME, $BULLS vs $BEARS on the KXINX close, illustrative tallies), how a pair works in three
   steps, and the "Launch a pair" button.
 
+## Launchpad look + Browse + the Kalshi switch (10-10)
+
+The owner asked for Burnticker to present like the launchpads new users know (pump.fun, LetsBonk/LaunchLab, Pons, Bags). The study,
+with a source per pattern and the adopt / adapt / reject table, is [ui-conventions.md](ui-conventions.md).
+
+- **Coins page** (`/burnticker`): a coin card grid. Each card shows image (or a receipt-paper thumbnail), name / $TICKER and the rule's
+  one-liner (`coinCard.ts`; there is no market cap). It also shows the bonding curve as SOL raised of the graduation threshold, a
+  "graduated" badge, burns, last burn, next result and a venue chip. Tabs are New · Next to settle · About to graduate · Graduated ·
+  Pairs, with search and "Launch a coin" next to them.
+- **Coin page**: chart on the left (GeckoTerminal embed of the pool that trades now on mainnet, else the readings chart), receipts tape
+  below it. On the right are Trade deep links to Raydium / Jupiter (no hosted swap, no presets), the curve, holders and the rule card.
+- **Phone**: a bottom tab bar (Coins · Launch · Rivalries · Trust) under 900 px.
+- **Market data** (`src/lib/burnticker/market.ts`): the LaunchLab PoolState decoder, pinned against the SDK layout and three real
+  mainnet pools. It also reads the top-20 holders, and builds the trade links and chart embed. These land in `status.json` `market`,
+  next to a new `profile` block and `burned.lastAt`. They are read by the app and the keeper only with `BURNTICKER_RPC_URL`;
+  otherwise they show "—" with the reason. Holder count is always "—" (it needs an indexer).
+- **Wizard**: a **Browse everything** path over Burnticker's own taxonomy (`config/burnticker/categories.json`), listing first-party
+  feeds first, then Polymarket tags, then Kalshi series (`src/lib/burnticker/browse.ts`, `GET /api/burnticker/v1/browse`). The create
+  screen follows pump.fun's order (image → name → ticker → description → socials) with a live card preview. Review shows a plain
+  sentence for any rule. Kalshi's own category tree is also exposed: `GET /api/burnticker/v1/kalshi/categories`
+  (`oracle/browse.ts`, `KalshiClient.categories()` / `seriesByCategory()`, cached 1 h).
+- **`BURNTICKER_KALSHI_ENABLED`** (`src/lib/burnticker/venues.ts`) is on by default. `0` turns off every Kalshi-facing surface of the
+  app: the `/kalshi/*` routes, Kalshi back-tests and Kalshi launch bundles answer 503, and Team coin and Matchup show "venue
+  unavailable". Browse keeps feeds and Polymarket. The keeper's reads for coins already launched are not affected.
+
 ## Polymarket — the second adjudicated oracle (owner, 10-10: "do both")
 
 `oracle: "polymarket"` rules are tier 1 and launchable beside Kalshi's. `src/lib/burnticker/oracle/polymarket.ts`:

@@ -174,6 +174,8 @@ export const eventBySlugUrl = (slug: string): string => `${GAMMA_API}/events?slu
 export const tagBySlugUrl = (slug: string): string => `${GAMMA_API}/tags/slug/${encodeURIComponent(slug)}`;
 export const searchUrl = (q: string, status: "open" | "closed" | "all", limit: number): string => `${GAMMA_API}/public-search?q=${encodeURIComponent(q)}&limit_per_type=${limit}${status === "open" ? "&events_status=active&keep_closed_markets=0" : ""}`;
 export const eventPageUrl = (slug: string): string => `${POLYMARKET_SITE}/event/${slug}`;
+/** A top-level tag's open events, most traded first (the wizard's Browse path: the Polymarket group under a Kalshi category). */
+export const eventsByTagUrl = (slug: string, limit: number): string => `${GAMMA_API}/events?tag_slug=${encodeURIComponent(slug)}&closed=false&active=true&order=volume&ascending=false&limit=${limit}`;
 
 // ---- resolution (pure) ----------------------------------------------------------------------------------------------------------
 
@@ -481,6 +483,11 @@ export class PolymarketClient implements OracleAdapter {
     if (/^[a-z0-9]+(-[a-z0-9]+){2,}$/.test(query)) { const e = await this.eventBySlug(query).catch(() => null); if (e) events.push(e); }
     if (!events.length && query.length >= 2) events.push(...parseEventsBody(await this.get(searchUrl(query, status, Math.min(20, o.limit ?? 10)))));
     return { ...searchHits(events, { refuse: this.refuse, status: events.length === 1 && events[0].slug === query ? "all" : status }), markets: [] };
+  }
+
+  /** Open events of one tag (Browse), as search hits: binary markets only, the refuse list applied, the tags as recurring selectors. */
+  async eventsByTag(slug: string, limit = 8): Promise<{ events: PolyEventHit[]; tags: PolyTagHit[] }> {
+    return searchHits(parseEventsBody(await this.get(eventsByTagUrl(slug, Math.min(24, Math.max(1, limit))))), { refuse: this.refuse, status: "open", perEvent: 6 });
   }
 
   async searchSeries(query: string, opts: { limit?: number } = {}): Promise<SeriesSummary[]> {

@@ -19,12 +19,12 @@ writing its own findings. Every fix and its closing test is in `docs/burn-receip
 | tooling | cargo-audit, clippy pedantic, anchor verify / solana-verify, Trident fuzzing where feasible, Sec3 X-ray free tier | partly run: clippy `--all-targets -D warnings` clean (review 3 re-check); the rest not run | — |
 | bounty | public, 5–10 SOL from the developer fee (SECURITY.md in the public repository) | not published | — |
 
-`checklist.md` has not been committed to this folder; the checklist verdicts each reviewer gave are inside its report.
+`checklist.md` (items 1–17 + UI trust rules) was committed on 2026-10-10 before the ChatGPT review started; the three Claude reviews answered items 1–12 inside their reports.
 
 ## What appears here, and the rules
 
 - `checklist.md` — the pre-registered checklist for the remaining reviews, committed BEFORE the review starts, so the questions
-  cannot be tuned to the answers (not committed yet).
+  cannot be tuned to the answers (committed 2026-10-10).
 - `YYYY-MM-DD-claude-blind-N.md` (three present) and `YYYY-MM-DD-chatgpt-adversarial.md` (pending) — each report **as delivered**, unedited. Every finding
   keeps its original severity and wording. A finding that turns out to be wrong is answered under it, not removed.
 - `YYYY-MM-DD-tooling.md` — the raw output of the free tooling run against the tagged commit.

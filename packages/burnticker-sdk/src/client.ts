@@ -7,7 +7,7 @@ import { verifyReceipt, type VerifyOptions } from "./verify.ts";
 import { crank, type CrankPlan } from "./crank.ts";
 import { subscribe, type SubscribeOptions, type Subscription } from "./events.ts";
 import type {
-  BacktestResult, BurntickerEvent, Catalogue, KalshiEvents, KalshiSearchResult, KalshiSeriesDetail, KalshiTeams, PolymarketSearchResult, ReceiptJson, Receipts, ServerVerification, TokenDetail, TokenList, TokenStatusJson, Trust, VerifyResult,
+  BacktestResult, Browse, BurntickerEvent, Catalogue, KalshiCategories, KalshiEvents, KalshiSearchResult, KalshiSeriesDetail, KalshiTeams, PolymarketSearchResult, ReceiptJson, Receipts, ServerVerification, TokenDetail, TokenList, TokenStatusJson, Trust, VerifyResult,
 } from "./types.ts";
 
 export interface BurntickerOptions {
@@ -70,6 +70,9 @@ export class Burnticker {
     return this.api.get(`/sources/${encodeURIComponent(id)}/preview`, { fractionOfPool: mapping.fractionOfPool, tokens: mapping.tokens });
   }
 
+  /** Browse every source by Burnticker category: no argument → the categories; a category id → its source cards (feeds first, then Polymarket, then Kalshi when the host enables it). */
+  browse(category?: string, o: { q?: string } = {}): Promise<Browse> { return this.api.get<Browse>("/browse", { category, q: o.q }); }
+
   /** Kalshi: search series, read one series with its open markets, back-test a selector + mapping on the venue's settled history. */
   readonly kalshi = {
     search: (q: string, o: { category?: string } = {}): Promise<KalshiSearchResult> => this.api.get<KalshiSearchResult>("/kalshi/search", { q, category: o.category }),
@@ -78,6 +81,9 @@ export class Burnticker {
     events: (q = "", o: { series?: string; status?: "open" | "closed" | "settled" } = {}): Promise<KalshiEvents> => this.api.get<KalshiEvents>("/kalshi/events", { q: q || undefined, series: o.series, status: o.status }),
     /** The teams of a head-to-head game series (KXNFLGAME, …): next game, season record, the own-leg filter for a team coin. */
     teams: (series: string): Promise<KalshiTeams> => this.api.get<KalshiTeams>("/kalshi/teams", { series }),
+    /** Browse like Kalshi: no argument → its categories (tags, series counts, the matching Polymarket tag); a category → its series, most traded first (`events: n` adds the upcoming-event summary to the first n). */
+    categories: (category?: string, o: { tag?: string; q?: string; limit?: number; offset?: number; events?: number; polymarket?: boolean } = {}): Promise<KalshiCategories> =>
+      this.api.get<KalshiCategories>("/kalshi/categories", { category, tag: o.tag, q: o.q, limit: o.limit, offset: o.offset, events: o.events, polymarket: o.polymarket === false ? "0" : undefined }),
     /** `backtest(selector, mapping)` or `backtest(fullRule)`. The rule is validated locally first. */
     backtest: (selector: Selector | Record<string, unknown>, mapping?: Mapping, o: { months?: number } = {}): Promise<BacktestResult> => {
       const rule = mapping ? compose(selector as Selector, mapping) : selector;

@@ -27,6 +27,7 @@
     "src/lib/burnticker/fees.ts",
     "src/lib/burnticker/launchBundle.ts",
     "src/lib/burnticker/oracle/backtest.ts",
+    "src/lib/burnticker/oracle/browse.ts",
     "src/lib/burnticker/oracle/events.ts",
     "src/lib/burnticker/oracle/kalshi.ts",
     "src/lib/burnticker/oracle/polymarket.ts",

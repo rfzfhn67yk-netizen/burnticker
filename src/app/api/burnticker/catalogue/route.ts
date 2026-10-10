@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { catalogueSources } from "@/lib/burnticker/api/handlers";
+import { kalshiEnabled } from "@/lib/burnticker/venues";
 
 export const dynamic = "force-dynamic";
 
@@ -12,5 +13,6 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   // The cluster rides along so the wizard can show its "Devnet" badge (the same reading of BURNTICKER_CLUSTER as server.ts platform()).
   const c = process.env.BURNTICKER_CLUSTER;
-  return NextResponse.json({ ...catalogueSources(Date.now()), cluster: c === "mainnet" ? "mainnet" : c === "localnet" ? "localnet" : "devnet" });
+  // …and which venues this host serves (venues.ts): the wizard greys out Team coin / Matchup when Kalshi is off.
+  return NextResponse.json({ ...catalogueSources(Date.now()), cluster: c === "mainnet" ? "mainnet" : c === "localnet" ? "localnet" : "devnet", venues: { kalshi: kalshiEnabled(), polymarket: true, feeds: true } });
 }

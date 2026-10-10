@@ -10,7 +10,7 @@ import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { buildTrustPage, loadPowersRegister, operatorPowersSummary, web3ChainReader } from "@/lib/burnticker/trust";
 import type { TokenRow, TokenStatus } from "@/lib/burnticker/registry";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
-import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
+import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, kalshiCategories, browse, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
 import type { FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import { API_PREFIX, buildOpenApi } from "@/lib/burnticker/api/spec";
@@ -56,6 +56,8 @@ export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()
 export const v1KalshiSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiSearch(p, { q: q.get("q"), category: q.get("category"), series: q.get("series") });
 export const v1KalshiEvents = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiEvents(p, { q: q.get("q"), series: q.get("series"), status: q.get("status") });
 export const v1KalshiTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiTeams(p, { series: q.get("series") });
+export const v1Browse = (p: Platform, q: URLSearchParams): Promise<ApiResult> => browse(p, { category: q.get("category"), q: q.get("q") });
+export const v1KalshiCategories = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiCategories(p, { category: q.get("category"), tag: q.get("tag"), q: q.get("q"), limit: q.get("limit"), offset: q.get("offset"), events: q.get("events"), polymarket: q.get("polymarket") });
 export const v1Backtest = (p: Platform, body: Record<string, unknown>): Promise<ApiResult> => runBacktest(p, body);
 export const v1PolymarketSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => polymarketSearch(p, { q: q.get("q"), status: q.get("status") });
 /** POST /polymarket/backtest — a Polymarket rule's back-test from Gamma's closed markets (the same pipeline as /kalshi/backtest). */
@@ -126,7 +128,9 @@ export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
     const rows = p.registry.receipts(t.mint);
     const confirmed = rows.filter((b) => b.status === "confirmed");
     const burned = confirmed.reduce((a, b) => a + (b.burnRaw ?? ZERO), ZERO);
-    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, burns: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnedTokens: rawToTokens(burned, 6), links: links(t) };
+    const burns = confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO);
+    const lastBurnAt = burns.map((b) => b.settledAt).sort().pop() ?? null;
+    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t) };
   });
   return ok({ tokens: page, count: page.length, total: all.length, cluster: p.cluster });
 }

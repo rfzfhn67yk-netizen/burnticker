@@ -7,6 +7,10 @@ import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import { validateRule, lockRule, ruleStatement, BURNTICKER_RULES_SCHEMA, type LockedRule } from "@/lib/burnticker/rules";
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
+import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
+import { categoryCards, categoryList, loadCategories, type FeedCardInput } from "@/lib/burnticker/browse";
+import { KALSHI_UNAVAILABLE, type VenueFlags } from "@/lib/burnticker/venues";
+import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
 import { wideRule } from "@/lib/burnticker/registry";
@@ -51,6 +55,7 @@ export function catalogueSources(now: number, o: { includeConfig?: boolean } = {
 
 /** Live Kalshi series search, or one series with its next open markets (`series`). */
 export async function kalshiSearch(p: Platform, q: { q?: string | null; category?: string | null; series?: string | null }): Promise<ApiResult> {
+  if (p.kalshiEnabled === false) return fail(503, KALSHI_UNAVAILABLE);
   const series = q.series?.trim().toUpperCase();
   try {
     if (series) {
@@ -95,6 +100,7 @@ export function eventHitJson(e: EventHit, list = loadRefuseList()) {
 
 /** Event-level search (teams, people, contests) — `q` matched against event title / ticker / market labels with the team-alias table; `series` scans one series; neither → the league chooser. */
 export async function kalshiEvents(p: Platform, q: { q?: string | null; series?: string | null; status?: string | null }): Promise<ApiResult> {
+  if (p.kalshiEnabled === false) return fail(503, KALSHI_UNAVAILABLE);
   const query = (q.q ?? "").trim(), series = q.series?.trim().toUpperCase() || null;
   const status = q.status && ["open", "closed", "settled"].includes(q.status) ? q.status : "open";
   try {
@@ -114,12 +120,83 @@ export async function kalshiEvents(p: Platform, q: { q?: string | null; series?:
 
 /** The team picker for one head-to-head game series (team coins): every team, its next game, its record so far this season. */
 export async function kalshiTeams(p: Platform, q: { series?: string | null }): Promise<ApiResult> {
+  if (p.kalshiEnabled === false) return fail(503, KALSHI_UNAVAILABLE);
   const series = q.series?.trim().toUpperCase();
   if (!series) return fail(400, "series is required (a head-to-head game series, e.g. KXNFLGAME)");
   if (!/^[A-Z0-9]+GAME$/.test(series)) return fail(400, `${series} is not a head-to-head game series (…GAME)`);
   try {
     const t = await p.kalshi.teams(series);
     return ok({ ...t, note: "a team's record counts its own leg: settled YES = win, NO = loss, a YES on the event's TIE market = draw; voided games are not counted" });
+  } catch (e) {
+    return fail(502, `Kalshi unavailable: ${(e as Error).message.slice(0, 160)}`);
+  }
+}
+
+/** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */
+export const venueFlags = (p: Platform): VenueFlags => ({ kalshi: p.kalshiEnabled !== false, polymarket: true, feeds: true });
+
+/**
+ * BROWSE, VENUE-AGNOSTIC (src/lib/burnticker/browse.ts): no category → Burnticker's categories (config/burnticker/categories.json)
+ * with what each venue contributes on this host; `category` → its source cards — first-party feeds first, then Polymarket events of
+ * its tags, then (Kalshi enabled) Kalshi series of its categories, the four series soonest-listed with their next event. A venue that
+ * fails is named in `errors` and the rest of the page still renders.
+ */
+export async function browse(p: Platform, q: { category?: string | null; q?: string | null }, now = Date.now()): Promise<ApiResult> {
+  const venues = venueFlags(p);
+  let cats;
+  try { cats = loadCategories(); } catch (e) { return fail(500, (e as Error).message); }
+  const feeds = (catalogueSources(now).sources as unknown as (FeedCardInput & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
+  const id = q.category?.trim() || null;
+  if (!id) return ok({ categories: categoryList(cats, feeds, venues), venues, note: "Burnticker's categories; each lists first-party feeds, Polymarket events and (when enabled on this host) Kalshi series" });
+  const c = cats.find((x) => x.id === id);
+  if (!c) return fail(404, `no category "${id}" (known: ${cats.map((x) => x.id).join(", ")})`);
+  const errors: string[] = [];
+  const polymarket: PolyEventHit[] = [];
+  for (const tag of c.polymarket.slice(0, 2)) {
+    try { polymarket.push(...(await p.polymarket.eventsByTag(tag, 6)).events); } catch (e) { errors.push(`Polymarket ${tag}: ${(e as Error).message.slice(0, 100)}`); }
+  }
+  const kalshi: (BrowseSeries & { refused: string[] })[] = [];
+  if (venues.kalshi) {
+    const list = loadRefuseList();
+    const per = Math.max(4, Math.floor(12 / Math.max(1, c.kalshi.length)));
+    for (const cat of c.kalshi) {
+      try {
+        const page = await p.kalshi.seriesByCategory(cat, { q: q.q ?? null, limit: per, withEvents: Math.min(4, per) });
+        kalshi.push(...page.series.map((s) => ({ ...s, refused: refusalsFor(list, { titles: [s.title], categories: s.category ? [s.category] : [] }).map((r) => r.reason) })));
+      } catch (e) { errors.push(`Kalshi ${cat}: ${(e as Error).message.slice(0, 100)}`); }
+    }
+  }
+  const cards = categoryCards(c, { feeds, polymarket, kalshi }, { q: q.q ?? null });
+  return ok({ category: { id: c.id, label: c.label, blurb: c.blurb }, venues, cards, counts: { feeds: cards.filter((x) => x.venue === "feed").length, polymarket: cards.filter((x) => x.venue === "polymarket").length, kalshi: cards.filter((x) => x.venue === "kalshi").length }, errors, note: venues.kalshi ? "first-party feeds first; market venues after" : "first-party feeds first; Kalshi is not enabled on this host" });
+}
+
+/**
+ * BROWSE (2026-10-10, the owner: "make it navigate like Kalshi navigates"). No category → Kalshi's categories in its own order, each
+ * with its tags and series count, and the Polymarket tag each maps to. `category` → that category's series (most traded first; `tag`
+ * and `q` filter; `limit`/`offset` page; the first `events` series carry their upcoming-event summary), each with the refuse-list
+ * verdict and a one-line example mapping, plus — where the category maps to a Polymarket tag and `polymarket` is not 0 — that tag's
+ * open events as a second venue group. A Polymarket failure never fails the Kalshi page.
+ */
+export async function kalshiCategories(p: Platform, q: { category?: string | null; tag?: string | null; q?: string | null; limit?: string | null; offset?: string | null; events?: string | null; polymarket?: string | null }): Promise<ApiResult> {
+  if (p.kalshiEnabled === false) return fail(503, KALSHI_UNAVAILABLE);
+  const category = q.category?.trim() || null;
+  try {
+    if (!category) {
+      const cats = await p.kalshi.categories({ counts: true });
+      return ok({ categories: cats.map((c) => ({ ...c, polymarket: POLYMARKET_TAG_FOR[c.category] ?? null })), note: "Kalshi's own category → tag tree (GET /search/tags_by_categories); counts are series per category" });
+    }
+    const known = (await p.kalshi.categories({ counts: false }).catch(() => [])).map((c) => c.category);
+    if (known.length && !known.includes(category)) return fail(404, `no Kalshi category "${category}" (known: ${known.join(", ")})`);
+    const intOr = (v: string | null | undefined, d: number, lo: number, hi: number) => { const n = Number(v); return v !== null && v !== undefined && v !== "" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.floor(n))) : d; };
+    const page = await p.kalshi.seriesByCategory(category, { tag: q.tag?.trim() || null, q: q.q ?? null, limit: intOr(q.limit, 24, 1, 100), offset: intOr(q.offset, 0, 0, 100_000), withEvents: intOr(q.events, 0, 0, 24) });
+    const list = loadRefuseList();
+    const series = page.series.map((s) => ({ ...s, refused: refusalsFor(list, { titles: [s.title], categories: s.category ? [s.category] : [] }).map((r) => r.reason) }));
+    const tag = POLYMARKET_TAG_FOR[category] ?? null;
+    let polymarket: { tag: { slug: string; label: string }; events: unknown[]; error: string | null } | null = null;
+    if (tag && q.polymarket !== "0") {
+      try { const r = await p.polymarket.eventsByTag(tag.slug, 8); polymarket = { tag, events: r.events, error: null }; } catch (e) { polymarket = { tag, events: [], error: (e as Error).message.slice(0, 120) }; }
+    }
+    return ok({ ...page, series, polymarket, note: "most traded on Kalshi first (ordering only); the kind (yes/no or a settled number) is confirmed by the markets on drill-down" });
   } catch (e) {
     return fail(502, `Kalshi unavailable: ${(e as Error).message.slice(0, 160)}`);
   }
@@ -157,6 +234,7 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
     }
     if (locked.rule.oracle === "polymarket") return await polymarketBacktest(p, locked, months);
     if (locked.rule.oracle !== "kalshi") return fail(400, `oracle ${locked.rule.oracle} is not live (kalshi, polymarket and catalogue are)`);
+    if (p.kalshiEnabled === false) return fail(503, KALSHI_UNAVAILABLE);
     const since = new Date(now); since.setUTCMonth(since.getUTCMonth() - months);
     const r = await p.kalshi.settledSince(locked.rule, since.toISOString(), { limitPages: 10 });
     const seriesTicker = locked.rule.series ?? locked.rule.market!.split("-")[0];
@@ -213,6 +291,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (problems.length) return { error: fail(400, problems.join("; "), { problems }) };
   let locked: LockedRule;
   try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, (e as Error).message) }; }
+  if (locked.rule.oracle === "kalshi" && p.kalshiEnabled === false) return { error: fail(503, KALSHI_UNAVAILABLE) };
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   let seriesTitle: string | null = null;

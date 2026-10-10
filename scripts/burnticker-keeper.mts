@@ -37,6 +37,8 @@ import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib
 import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRows, registryAlertSink, rpcBalanceLamports, runBurntickerAlertCheck, sinkFromEnv } from "../src/lib/burnticker/alerts.ts";
 import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
 import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts";
+import { readMarket, type MarketReader } from "../src/lib/burnticker/market.ts";
+import { DECIMALS, TOTAL_SUPPLY } from "../src/lib/burnticker/rules.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -81,6 +83,8 @@ const built = await buildProgram();
 const program = built.program;
 const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE) };
 const operator = operatorPowersSummary(loadPowersRegister());
+/** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
+const marketReader: MarketReader | null = RPC ? (new Connection(RPC, { commitment: "confirmed", disableRetryOnRateLimit: true }) as unknown as MarketReader) : null;
 
 async function publishAll(now: number): Promise<void> {
   const statuses: TokenStatusJson[] = [];
@@ -98,7 +102,9 @@ async function publishAll(now: number): Promise<void> {
       const feedState = registry.feedState(t.selectorKey);
       const input = { token: t, locked, readings, receipts: registry.receipts(t.mint), attesters: registry.attesters(t.mint), state, feedState,
         chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: locked.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading")) },
-        now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? null, selectorPending: 0, operator, pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t) };
+        now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? null, selectorPending: 0, operator, pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t),
+        // the coin card's curve progress + top holders (read-only, the same RPC); without an RPC status.json says "not read" and the card shows —
+        market: marketReader && t.status !== "draft" && t.status !== "expired" ? await readMarket(marketReader, { cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: (await program.supplyRaw(t.mint).catch(() => null)) ?? BigInt(TOTAL_SUPPLY) * BigInt(10) ** BigInt(DECIMALS), decimals: DECIMALS }, now).catch(() => null) : null };
       const receipts = buildReceiptsJson(input);
       const status = buildTokenStatus(input, receipts);
       publishTokenSite(SITE, status, receipts, readings, t.rulesJson);

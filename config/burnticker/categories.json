@@ -1,0 +1,17 @@
+{
+  "schema": "burnticker.categories/v1",
+  "note": "THE BURNTICKER CATEGORY TAXONOMY (2026-10-10). Browse is venue-agnostic: each category lists SOURCES from every adapter kind that maps to it — first-party feeds from config/burnticker/sources.json (matched by source id, the part before ':' for parameterised feeds), Polymarket tags (Gamma tag slugs, open events), and Kalshi categories (only while BURNTICKER_KALSHI_ENABLED is not 0). The page reads the same whether a venue is on or off; a category with no source on this host says so. Order here is the order on the page. usgs.quakes6 is deliberately unmapped (disaster-adjacent, not launchable until the owner confirms).",
+  "categories": [
+    { "id": "sports", "label": "Sports", "blurb": "games, seasons, tournaments", "feeds": ["espn.nfl"], "polymarket": ["sports"], "kalshi": ["Sports"] },
+    { "id": "politics", "label": "Elections & Politics", "blurb": "elections, laws signed, rules published", "feeds": ["congress.lawsSigned", "fedreg.finalRules"], "polymarket": ["elections", "politics"], "kalshi": ["Elections", "Politics"] },
+    { "id": "economics", "label": "Economics", "blurb": "debt, jobs, inflation, the cost of eggs and gas", "feeds": ["treasury.debt", "fred.UNRATE", "fred.CPIAUCSL", "fred.GFDEBTN", "bls.eggs", "bea.gdp", "eia.gasoline", "usda.eggs", "census.tradeBalance"], "polymarket": ["economy"], "kalshi": ["Economics"] },
+    { "id": "financials", "label": "Financial markets", "blurb": "index closes, rates, commodities", "feeds": [], "polymarket": ["finance"], "kalshi": ["Financials", "Commodities"] },
+    { "id": "weather", "label": "Weather & Climate", "blurb": "temperatures, rain and snow, the climate record", "feeds": [], "polymarket": ["weather", "climate-science"], "kalshi": ["Climate and Weather"] },
+    { "id": "science", "label": "Science & Space", "blurb": "launches, solar flares, asteroids, tech", "feeds": ["ll2.launches", "noaa.flares", "jpl.neo"], "polymarket": ["space", "tech"], "kalshi": ["Science and Technology"] },
+    { "id": "culture", "label": "Entertainment & Culture", "blurb": "shows, charts, awards, what people look up", "feeds": ["wiki.views", "steam.players", "youtube.views", "billboard.hot100", "spotify.charts", "bom.weekendGross"], "polymarket": ["pop-culture"], "kalshi": ["Entertainment", "Mentions", "Social"] },
+    { "id": "crypto", "label": "Crypto & On-chain", "blurb": "block heights, fee burns, protocol activity", "feeds": ["solana.blockHeight", "solana.slot", "bitcoin.blockHeight", "ethereum.baseFeeBurn", "defillama.tvl", "solana.blockHeight.rpc", "onchain.copycats"], "polymarket": ["crypto"], "kalshi": ["Crypto"] },
+    { "id": "companies", "label": "Companies", "blurb": "filings, repositories, company news", "feeds": ["edgar.8k", "github.stars"], "polymarket": ["business"], "kalshi": ["Companies", "Business"] },
+    { "id": "health", "label": "Health", "blurb": "drug approvals, public-health records", "feeds": ["openfda.approvals"], "polymarket": ["health"], "kalshi": [] },
+    { "id": "world", "label": "World", "blurb": "international affairs", "feeds": [], "polymarket": ["world", "geopolitics"], "kalshi": [] }
+  ]
+}

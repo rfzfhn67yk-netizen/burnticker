@@ -35,6 +35,20 @@ export interface KalshiSearchResult { query: string; results: KalshiSeries[]; ev
 export interface KalshiEvents { query: string; series: string | null; events: KalshiEventHit[]; scanned: string[]; teams: { league: string; abbr: string; city: string; nickname: string }[]; leagues?: { id: string; label: string; series: { ticker: string; title: string }[] }[]; count?: number }
 export interface KalshiTeam { abbr: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null } | null; record: { w: number; l: number; d: number; since: string } }
 export interface KalshiTeams { series: string; since: string; teams: KalshiTeam[]; note: string }
+/** GET /browse — one source, any venue, in one shape. */
+export interface BrowseSourceCard { id: string; venue: "feed" | "polymarket" | "kalshi"; venueLabel: string; tier: number; tierLabel: string; title: string; cadence: string | null; kind: "binary" | "scalar"; next: { label: string; at: string | null } | null; example: string; launchable: { ok: boolean; why: string | null }; refused: string[]; flags: string[]; sourceName: string | null; sourceUrl: string | null; pick: { oracle: "catalogue" | "polymarket" | "kalshi"; series: string | null; market: string | null; title: string } }
+export interface Browse {
+  venues: { kalshi: boolean; polymarket: boolean; feeds: boolean };
+  categories?: { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[] }[];
+  category?: { id: string; label: string; blurb: string }; cards?: BrowseSourceCard[]; counts?: { feeds: number; polymarket: number; kalshi: number }; errors?: string[]; note?: string;
+}
+/** GET /kalshi/categories — Kalshi's category → tag tree, or one category's series (most traded first) with the matching Polymarket tag's events. */
+export interface KalshiCategorySeries { ticker: string; title: string; category: string | null; frequency: string | null; tags: string[]; settlementSource: { name: string; url: string } | null; volume: number; kindHint: "binary" | "scalar"; example: string; refused: string[]; events: { open: number; next: { eventTicker: string; title: string; closeTime: string | null; expectedAt: string | null } | null; ladder: boolean } | null }
+export interface KalshiCategories {
+  categories?: { category: string; tags: string[]; seriesCount: number | null; polymarket: { slug: string; label: string } | null }[];
+  category?: string; total?: number; offset?: number; limit?: number; tags?: { tag: string; count: number }[]; series?: KalshiCategorySeries[];
+  polymarket?: { tag: { slug: string; label: string }; events: unknown[]; error: string | null } | null; note?: string;
+}
 export interface KalshiSeriesDetail { series: KalshiSeries; open: { ticker: string; title: string; closeTime: string | null; yesPrice: number | null }[]; openCount: number; refusals: { kind: string; id: string; reason: string; matched: string }[]; note: string }
 
 /** Polymarket search (GET /polymarket/search): binary markets only — YES = a market's first outcome, NO its second; impliedYes is display only. */

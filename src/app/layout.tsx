@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { SiteHeader } from "@/app/burnticker/_components/SiteHeader";
 import { SiteFooter } from "@/app/burnticker/_components/SiteFooter";
+import { TabBar } from "@/app/burnticker/_components/TabBar";
 
 const DESCRIPTION = "A memecoin launchpad: coins whose supply burns when a settled real-world event says so — with a receipt for every burn. Not advice.";
 
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SiteHeader />
         <div id="bt-content" className="bt-content">{children}</div>
         <SiteFooter />
+        <TabBar />
       </body>
     </html>
   );
