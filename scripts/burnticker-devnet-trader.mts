@@ -92,16 +92,16 @@ if (CMD === "status") {
   if (CMD === "curve-buy") {
     const amountB = lamports(opt("sol") ?? die("--sol is required"));
     const q = Curve.buyExactIn({ poolInfo, amountB: new BN(amountB.toString()), ...fees } as Parameters<typeof Curve.buyExactIn>[0]);
-    const minA = (BigInt(q.amountA.amount.toString()) * (10000n - slippageBps)) / 10000n;
+    const minA = (BigInt(q.amountA.amount.toString()) * (BigInt(10000) - slippageBps)) / BigInt(10000);
     ixs.push(SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: wsol, lamports: Number(amountB) }), syncNativeIx(wsol));
     ixs.push(buyExactInInstruction(LL, payer.publicKey, auth, pool.configId, pool.platformId, poolId, ata, wsol, pool.vaultA, pool.vaultB, mint, WSOL_MINT, TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, platformVault, creatorVault, new BN(amountB.toString()), new BN(minA.toString()), new BN(0)));
     summary = { launchlabPool: poolId, amountBLamports: amountB, quotedTokensRaw: q.amountA.amount.toString(), minTokensRaw: minA, quotedAmountBUsed: q.amountB.toString(), realBBefore: pool.realB.toString(), raise: pool.totalFundRaisingB.toString() };
   } else {
     const pct = BigInt(opt("pct") ?? die("--pct is required"));
-    const amountA = (await tokenBalance(payer.publicKey, mint)) * pct / 100n;
-    if (amountA === 0n) die("the payer holds no tokens");
+    const amountA = (await tokenBalance(payer.publicKey, mint)) * pct / BigInt(100);
+    if (amountA === BigInt(0)) die("the payer holds no tokens");
     const q = Curve.sellExactIn({ poolInfo, amountA: new BN(amountA.toString()), ...fees } as Parameters<typeof Curve.sellExactIn>[0]);
-    const minB = (BigInt(q.amountB.toString()) * (10000n - slippageBps)) / 10000n;
+    const minB = (BigInt(q.amountB.toString()) * (BigInt(10000) - slippageBps)) / BigInt(10000);
     ixs.push(sellExactInInstruction(LL, payer.publicKey, auth, pool.configId, pool.platformId, poolId, ata, wsol, pool.vaultA, pool.vaultB, mint, WSOL_MINT, TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, platformVault, creatorVault, new BN(amountA.toString()), new BN(minB.toString()), new BN(0)));
     summary = { launchlabPool: poolId, amountATokensRaw: amountA, quotedLamports: q.amountB.toString(), minLamports: minB };
   }
@@ -121,11 +121,11 @@ if (CMD === "status") {
   const rIn = dir === "buy" ? solRes - fSol : tokRes - fTok, rOut = dir === "buy" ? tokRes - fTok : solRes - fSol;
   const amountIn = dir === "buy" ? lamports(opt("sol") ?? die("--sol is required"))
     : opt("tokens") ? BigInt(Math.round(Number(opt("tokens")) * 1e6))   // $DEFICIT has 6 decimals
-    : (await tokenBalance(payer.publicKey, mint)) * BigInt(opt("pct") ?? die("--pct or --tokens is required")) / 100n;
-  if (amountIn === 0n) die("nothing to swap");
-  const inNet = (amountIn * 9900n) / 10000n;   // ≥ the 25 bps trade fee + 25 bps creator fee, with margin
+    : (await tokenBalance(payer.publicKey, mint)) * BigInt(opt("pct") ?? die("--pct or --tokens is required")) / BigInt(100);
+  if (amountIn === BigInt(0)) die("nothing to swap");
+  const inNet = (amountIn * BigInt(9900)) / BigInt(10000);   // ≥ the 25 bps trade fee + 25 bps creator fee, with margin
   const quoted = (rOut * inNet) / (rIn + inNet);
-  const minOut = (quoted * (10000n - slippageBps)) / 10000n;
+  const minOut = (quoted * (BigInt(10000) - slippageBps)) / BigInt(10000);
   const ixs: TransactionInstruction[] = [createAtaIdempotentIx(payer.publicKey, payer.publicKey, WSOL_MINT), createAtaIdempotentIx(payer.publicKey, payer.publicKey, mint)];
   if (dir === "buy") ixs.push(SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: wsol, lamports: Number(amountIn) }), syncNativeIx(wsol));
   const [inAcc, outAcc, inVault, outVault, inMint, outMint] = dir === "buy" ? [wsol, ata, solVault, tokVault, WSOL_MINT, mint] : [ata, wsol, tokVault, solVault, mint, WSOL_MINT];
