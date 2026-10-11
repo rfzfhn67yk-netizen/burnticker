@@ -207,6 +207,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
 .replay{margin-top:18px;font-size:.88rem;color:var(--muted)}
 .replay b{color:var(--dim)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+.ready{margin:14px 0 0;border:1px dashed var(--line);padding:12px 14px;max-width:72ch}.ready p{margin:0}.ready .rk{font:500 .72rem/1.3 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.ready .rl{margin:4px 0;font-weight:600}.ready .rd{color:var(--dim);font-size:.9rem}
 </style>
 </head>
 <body>
@@ -240,6 +241,11 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
       </div>
     </div>
     <p class="rule"><strong>The rule in one sentence:</strong> each business day Treasury publishes the national debt; every full $1B it rose since the previous reading is one unit, each unit spends 2% of the token's own burn pool (1 − 0.98<sup>units</sup> — the Fed's 2%, pointed the other way) buying $DEFICIT on its Raydium pool, and the on-chain program burns everything bought in the same instruction — with a receipt on chain.</p>
+    <div class="ready" id="readiness" data-readiness="not-launched" aria-live="polite">
+      <p class="rk" id="readyStep">Step 1 of 7 · where $DEFICIT stands</p>
+      <p class="rl" id="readyLabel">Not launched</p>
+      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises: $DEFICIT first trades on its LaunchLab curve, which graduates at 85 SOL raised (a seed gift to the burn pool does not count toward it); its pool must then be registered and verified, and only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
+    </div>
     <div class="cta">
       <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
       <a class="btn" href="#receipts">Read the receipts</a>
@@ -425,6 +431,8 @@ burn  = every token the swap delivered</pre>
 
   // ------------------------------------------------------------------ live strip
   function renderStatus(s) {
+    // ONE readiness state (src/lib/burnticker/readiness.ts), derived by the keeper into status.json; the static default above is "Not launched".
+    if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); $("readyStep").textContent = "Step " + s.readiness.step + " of 7 · where $DEFICIT stands"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
     var isSample = !!s.sample || s.cluster === "replay";
     if (isSample || (s.cluster && s.cluster !== "mainnet-beta")) {
       var b = $("banner"); b.classList.add("show");

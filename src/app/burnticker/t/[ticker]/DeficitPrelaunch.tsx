@@ -5,6 +5,9 @@ import Link from "next/link";
 import type { DeficitPrelaunch as Data } from "@/lib/burnticker/deficitPrelaunch";
 import { EmptyState } from "../../_components/EmptyState";
 import { BurnMath } from "../../_components/BurnMath";
+import { ReadinessPanel } from "../../_components/ReadinessPanel";
+import { readinessOf } from "@/lib/burnticker/readiness";
+import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 
 /**
  * /burnticker/t/DEFICIT BEFORE THE COIN IS REGISTERED ON THIS HOST (website brief 2026-10-11 §1). A useful page instead of "no token":
@@ -28,6 +31,8 @@ export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
       {!d && !err && <EmptyState kind="loading" body="Reading the $DEFICIT rule file." />}
       {err && <EmptyState kind="unavailable" body="The $DEFICIT rule could not be read on this host just now." details={err}><p className="mt-2"><a className="underline" href={fallbackSite}>Open the $DEFICIT page</a></p></EmptyState>}
       {d && <>
+        <ReadinessPanel r={readinessOf({ launched: false, phase: null, raisedSol: null, poolVerified: null, latest: null })} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
+        <section className={card} aria-label="What launch day looks like"><h2 className="font-medium">What happens after launch</h2><p className="mt-1 text-xs text-neutral-300">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve; the curve graduates at 85 SOL raised (a seed gift to the burn pool does not count toward it), its Raydium pool is registered and verified, and only then can a Treasury reading with at least one full $1B unit start a burn.</p></section>
         <section className={card} aria-label="The rule">
           <h2 className="font-medium">The rule, in one sentence</h2>
           <p className="mt-1 text-neutral-100">{d.oneSentence}</p>

@@ -11,3 +11,6 @@ export const EXPLORE_VERIFIED_BURN = {
 
 /** The one destination for "Seasons" on every surface (header, footer, landing door, leagues index). */
 export const SEASONS_HREF = "/burnticker/leagues";
+
+/** The prerequisite chain from mint to first receipt (docs/burnticker/FIRST-BURN-PATH.md), in the public repository. */
+export const FIRST_BURN_PATH_URL = "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md";

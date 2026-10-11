@@ -27,12 +27,12 @@ the season."** Sports examples rotate across leagues (Rays, Lakers, Oilers, Eagl
 **3/8 — how a burn day works**
 > Each business day the keeper reads Treasury's figure, subtracts yesterday's, and counts full $1B steps — the units. Sub-$1B remainders carry across consecutive rises; a flat or down day counts nothing and resets them.
 >
-> 21 units on 2026-10-08: the debt rose $21.28B.
+> For example, on 2026-10-08 the debt rose $21.28B: 21 units under the rule (a replayed day, before launch).
 
 **4/8 — who pays for it**
-> Nobody mints, nobody donates. Every trade pays the venue's creator fee into the keeper's fee pool. On a day with units the pool spends 1 − 0.98^units buying $DEFICIT at market and burns every token received.
+> Every trade pays the venue's creator fee into the coin's burn pool. Nothing burns until the curve fills and the debt rises: the curve graduates at 85 SOL raised, its pool is registered, and then a day with units spends 1 − 0.98^units of the pool buying $DEFICIT and burns every token received.
 >
-> No trading, small burns. Fees fund burns, nothing else.
+> Fees fund burns, nothing else.
 
 **5/8 — how a burn is verified**
 > The burn transaction carries a memo: date, source, prev, now, delta, units, pool, spent, got, burned, the swap signature, the rule hash.
@@ -86,7 +86,7 @@ Every post below passes the copy lint (test/burntickerCopy.test.ts lints this se
 > Settled on primary sources · signed readings (one operator attester; no independent second attester is live) · program-run burns · receipts anyone can recompute · open source · three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform never buys any coin · LP locked forever, its fees fund the burn · rules locked at launch.
 
 **6/6 — the first coin, and the line**
-> First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.
+> First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it. Nothing burns until the curve fills and the debt rises.
 >
 > Memecoins: the rule says what supply does, not what price does. Not advice. {SITE_URL}
 

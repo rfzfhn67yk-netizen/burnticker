@@ -6,6 +6,7 @@ import type { PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from 
 import { BURN_POOL_CURVE_BPS, BURNTICKER_DEV_FEE_BPS, LP_LOCKED_PCT, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { LEAGUES } from "@/lib/burnticker/sources/espn";
 import { formatHits, lintCopy, loadCopyLintConfig, xLength, type CopyLintConfig, type CopyLintHit } from "@/lib/launch/copyLint";
+import { GRADUATION_SOL } from "@/lib/burnticker/readiness";
 import { DISCLAIMER, SHORT_DISCLAIMER, allLeaguesLine, dailyText, fmtInt, fmtPct, pairDailyText, receiptPostText, scoreboardLeagues, scoreboardText } from "@/lib/launch/dailyPost";
 
 /**
@@ -233,6 +234,12 @@ const pctOf = (f: string) => `${+(Number(f) * 100).toFixed(4)}%`;
 const keepOf = (f: string) => String(+(1 - Number(f)).toFixed(6));
 const dollarsB = (usd: string) => `$${fmtInt(usd)}`;
 
+/**
+ * THE LAUNCH-DAY LINE (2026-10-11): $DEFICIT cannot burn before graduation (crank_buyback requires pool_verified; the curve graduates
+ * at 85 SOL raised; the seed gift does not count). No launch draft says or implies a burn on launch day; both launch threads carry this.
+ */
+export const NOTHING_BURNS_LINE = "Nothing burns until the curve fills and the debt rises";
+
 /** $DEFICIT's launch thread for @USA_DEFICIT: the rule (fraction from the rule file), the source, the receipt format, the guardrails. */
 export function deficitLaunchThread(f: DeficitRuleFacts, site: string, launchTxUrl?: string | null): Draft {
   const S = siteOf(site), T = `$${f.ticker}`;
@@ -242,7 +249,7 @@ export function deficitLaunchThread(f: DeficitRuleFacts, site: string, launchTxU
       `${T}: every full ${dollarsB(f.unitUsd)} the U.S. national debt rises, ${pctOf(f.fractionPerUnit)} of its burn pool buys ${T} on its own pool and the program burns all of it. A receipt for every burn. 🧵`,
       `The rule: each business day, every full ${dollarsB(f.unitUsd)} added to Treasury's Debt to the Penny since the previous reading is one unit. Spend = pool × (1 − ${keepOf(f.fractionPerUnit)}^units).\n\nLocked at launch. Rule hash sha256:${f.sha256.slice(0, 12)}`,
       `The source: ${f.feedName}, posted each business-day afternoon ET, cross-read against FRED's quarterly copy of the same figure. Nothing happens until the debt rises: the first reading after launch is the baseline.`,
-      `Until the bonding curve graduates there is no pool for the burn: readings are signed and wait in line, then burn in order once the pool is registered. Each burn day gets one post: the figure, units → ${T} burned, supply, the transaction.${launchTxUrl ? `\nLaunch: ${launchTxUrl}` : ""}`,
+      `${NOTHING_BURNS_LINE}: ${T} trades on its bonding curve first; burns start only after it graduates at ${GRADUATION_SOL} SOL raised and its pool is registered. Earlier readings wait in line.${launchTxUrl ? `\nLaunch: ${launchTxUrl}` : ""}`,
       `Creators earn nothing: the creator fee goes to the burn pool, 100%. LP locked forever; its fees fund the burn (80% burned, 20% operator). The platform never buys any coin.\n\nReceipts: ${S}\n${DISCLAIMER}`,
     ],
   };
@@ -282,7 +289,7 @@ export function platformLaunchThread(rf: ReviewFacts, site: string): Draft {
       `Follow the season: team coins across ${lg.map((x) => x.label).join(", ")} (${lg.map((x) => x.team).join(", ")}), scored in receipts. Nothing is won here. Things are only burned.`,
       `Guardrails: creators earn nothing · zero team allocation · the platform never buys any coin · LP locked forever, its fees fund the burn · rules locked at launch · every receipt recomputable from its public source.`,
       `Open source: ${PUBLIC_REPO}\nReviewed: ${reviewLine(rf)}. Not audited by a security firm.`,
-      `First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.\n\nOperated by one independent operator.\nMemecoins: the rule says what supply does, not what price does. ${S}`,
+      `First coin: $DEFICIT (@USA_DEFICIT): each $1B the U.S. debt rises, its fees buy it back and burn it. ${NOTHING_BURNS_LINE}.\n\nRun by one independent operator.\nMemecoins: the rule says what supply does, not what price does. ${S}`,
     ],
   };
 }

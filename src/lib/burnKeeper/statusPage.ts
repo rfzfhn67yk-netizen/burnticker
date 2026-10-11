@@ -8,6 +8,7 @@ import { parseBuybackMemo, parseDebtMemo } from "@/lib/burnKeeper/memo";
 import { buybackSpend, centsToUsd, debtStep, rawToTokens, spendablePool, tokensToRaw, type LoadedRules } from "@/lib/burnKeeper/rules";
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { dateIn } from "@/lib/burnKeeper/schedule";
+import { readinessOf, type Readiness } from "@/lib/burnticker/readiness";
 
 /**
  * THE STATUS PAGE (SPEC §5 — "the product people actually see"; 2026-10-09). A STATIC SITE the keeper publishes every cycle:
@@ -144,6 +145,8 @@ export interface StatusJson {
   mode: "buyback" | "vault";
   execution: "program" | "legacy";
   program: ProgramStatusJson | null;
+  /** Where the coin stands on the way to its burns (src/lib/burnticker/readiness.ts; docs/burnticker/FIRST-BURN-PATH.md). Absent on older files. */
+  readiness?: Readiness;
   /** Buyback mode only (null in vault mode). SOL amounts as decimal strings. */
   buyback: {
     feePoolSol: string | null; reserveSol: string; fractionPerUnit: string; floorUsd: string;
@@ -300,6 +303,13 @@ export function buildStatus(i: StatusInput, burnsJson: readonly BurnJson[] = bui
     mode: rules.mode,
     execution: i.program ? "program" : "legacy",
     program: i.program ? buildProgramStatus(i.program, i.burns, i.chain.cluster, dec) : null,
+    readiness: (() => {
+      // one derivation for every page: no curve read here (null → "unavailable"), the program's pool flag, the newest burn row
+      const last = [...i.burns].sort((x, y) => (x.recordDate < y.recordDate ? 1 : -1))[0] ?? null;
+      const lj = last ? burnsJson.find((b) => b.recordDate === last.recordDate) ?? null : null;
+      return readinessOf({ launched: !!i.chain.mint, phase: null, raisedSol: null, poolVerified: i.program ? !!i.program.config?.poolRegistered : null,
+        latest: last ? { status: last.status, units: last.units, skippedReason: last.skippedReason, waitReason: last.waitReason ?? null, checks: lj?.verify.checks, verified: lj?.verify.verified, burned: last.burnRaw !== null ? rawToTokens(last.burnRaw, dec) : null, readingDate: last.recordDate } : null });
+    })(),
     buyback: rules.mode !== "buyback" ? null : (() => {
       const bought = i.burns.filter((b) => b.swapSig && b.spendLamports !== null && (b.status === "confirmed" || b.status === "swapped" || b.status === "sending"));
       const dayOf = (b: BurnRow) => dateIn(b.confirmedAt ?? b.updatedAt);
