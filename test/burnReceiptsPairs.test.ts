@@ -12,6 +12,8 @@ import {
   attestPairResult, decodePairLink, decodePairResult, forwardToWinnerIx, linkPairIx, OUTCOME_FORWARDED, PAIR_ATTESTATION_DOMAIN, PAIR_RESULT_DRAW, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST,
   PAIR_RESULT_NONE, PAIR_RESULT_WON, PAIR_STATE_NONE, PAIR_STATE_PAIRED, PAIR_STATE_PROVISIONAL, PAIR_WITNESS_INITIALIZE, PAIR_WITNESS_PAIR_CURVE, PAIRING_WINDOW_SECS, pairLinkPda, pairOrder,
   pairResultFor, pairResultMessage, pairResultPda, parseForwardMemo, SEED_PAIR_LINK, SEED_PAIR_RESULT, submitPairResultIx, unlinkPairIx,
+  applyPairedAttesterChangeIx, attesterSetHash, pairAttesterChangeMessage, pairSetHash, PAIR_ATTESTER_CHANGE_DOMAIN, PAIR_STATE_UNLINKED,
+  UNLINK_PAIR_VOIDED, UNLINK_SIDE_REFUNDING, UNLINK_VOID_BY_PASSED,
 } from "../src/lib/burnReceipts/pairs.ts";
 
 const PID = new PublicKey(BURN_RECEIPTS_IDL.address);
@@ -19,7 +21,11 @@ const order = (n: string) => BURN_RECEIPTS_IDL.instructions.find((i) => i.name =
 
 describe("burnReceipts pairs (LAUNCHPAD-PATH §40) — constants and addresses", () => {
   test("the constants come from the program's IDL", () => {
-    assert.deepEqual([PAIR_STATE_NONE, PAIR_STATE_PROVISIONAL, PAIR_STATE_PAIRED], [0, 1, 2]);
+    assert.deepEqual([PAIR_STATE_NONE, PAIR_STATE_PROVISIONAL, PAIR_STATE_PAIRED, PAIR_STATE_UNLINKED], [0, 1, 2, 3]);
+    // r3 RN-1/RN-2: terminal evidence only (r2's reason 2, "no verified pool 30 days after pairing", is gone from the program)
+    assert.deepEqual([UNLINK_PAIR_VOIDED, UNLINK_SIDE_REFUNDING, UNLINK_VOID_BY_PASSED], [0, 1, 3]);
+    assert.equal((BURN_RECEIPTS_IDL as { constants?: { name: string }[] }).constants?.some((c) => c.name === "UNLINK_NOT_LIVE" || c.name === "PAIR_UNLINK_NOT_LIVE_SECS"), false);
+    assert.equal(PAIR_ATTESTER_CHANGE_DOMAIN, "BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1");
     assert.deepEqual([PAIR_WITNESS_INITIALIZE, PAIR_WITNESS_PAIR_CURVE], [0, 1]);
     assert.deepEqual([PAIR_RESULT_NONE, PAIR_RESULT_WON, PAIR_RESULT_LOST, PAIR_RESULT_DRAW], [0, 1, 2, 3]);
     assert.equal(PAIRING_WINDOW_SECS, 7 * 86_400);
@@ -141,5 +147,39 @@ describe("burnReceipts pairs — the signed message and the instructions", () =>
     const m = `DEBT|forward|from=${a.publicKey.toBase58().slice(0, 12)}|to=${b.publicKey.toBase58().slice(0, 12)}|period=2026-10-06|lamports=146536720|v1`;
     assert.deepEqual(parseForwardMemo(m), { prefix: "DEBT", from12: a.publicKey.toBase58().slice(0, 12), to12: b.publicKey.toBase58().slice(0, 12), period: "2026-10-06", lamports: BigInt(146536720) });
     assert.equal(parseForwardMemo("DEBT|lockfees|wsol=1"), null);
+  });
+});
+
+describe("burnReceipts pairs — round 3 (one attester set, voidBy, paired attester changes)", () => {
+  test("pairSetHash: domain ‖ quorum ‖ (kind ‖ key)…, order- and quorum-sensitive; attesterSetHash reads the active slots", () => {
+    const k1 = Keypair.generate().publicKey, k2 = Keypair.generate().publicKey;
+    const h = pairSetHash(1, [operatorAttester(k1), operatorAttester(k2)]);
+    assert.equal(h.length, 32);
+    assert.ok(!h.equals(pairSetHash(2, [operatorAttester(k1), operatorAttester(k2)])));
+    assert.ok(!h.equals(pairSetHash(1, [operatorAttester(k2), operatorAttester(k1)])));
+    const cfg = { quorum: 1, attester_count: 2, attesters: [operatorAttester(k1), operatorAttester(k2), operatorAttester(PublicKey.default)] };
+    assert.ok(attesterSetHash(cfg).equals(h));
+  });
+  test("pairAttesterChangeMessage is the program's text; applyPairedAttesterChangeIx follows the IDL account order", () => {
+    const mint = Keypair.generate().publicKey, partner = Keypair.generate().publicKey, caller = Keypair.generate().publicKey;
+    const set = new Uint8Array(32).fill(0xab);
+    const m = pairAttesterChangeMessage(GENESIS_HASH.mainnet, PID, mint, partner, set, BigInt(1791720000)).toString();
+    assert.equal(m, `BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1|${GENESIS_HASH.mainnet}|${PID.toBase58()}|${mint.toBase58()}|${partner.toBase58()}|set=${"ab".repeat(32)}|eta=1791720000`);
+    const ix = applyPairedAttesterChangeIx({ programId: PID, caller, mint, partnerMint: partner });
+    assert.equal(ix.keys.length, order("apply_paired_attester_change").length);
+    assert.ok(ix.keys[1].pubkey.equals(configPda(PID, mint)) && ix.keys[2].pubkey.equals(pairLinkPda(PID, mint)) && ix.keys[3].pubkey.equals(configPda(PID, partner)));
+  });
+  test("initializeTokenIx carries pair_void_by (pairVoidBy; 0 by default)", () => {
+    const a = Keypair.generate(), b = Keypair.generate();
+    const rule = ruleParamsFromKeeperRules(
+      { mode: "buyback", decimals: 6, vaultAllocation: "0", buyback: { fractionPerUnit: "0.05", reserveSol: "0.02", slippageBps: 300 }, rule: { unitUsd: "1000000000", burnPerUnitTokens: "0", maxAbsDeltaUsd: "2000000000000", carry: "consecutive-increases", onNonIncrease: "burn-nothing-reset-carry" } },
+      { floorLamports: BigInt(1), maxTwapDeviationBps: 1500, twapWindowSecs: 600 },
+    );
+    const args = { feed_id: "x", memo_prefix: "X", memo_source: "x", rules_sha256: new Uint8Array(32), rule, attesters: [operatorAttester(a.publicKey)], quorum: 1, fixed_pool: PublicKey.default, admin: a.publicKey };
+    const plain = initializeTokenIx({ programId: PID, payer: a.publicKey, creator: a.publicKey, mint: a.publicKey, args });
+    const paired = initializeTokenIx({ programId: PID, payer: a.publicKey, creator: a.publicKey, mint: a.publicKey, args, pairMint: b.publicKey, pairVoidBy: 20261120 });
+    assert.equal(paired.data.length, plain.data.length);
+    assert.equal(plain.data.readUInt32LE(plain.data.length - 4), 0);
+    assert.equal(paired.data.readUInt32LE(paired.data.length - 4), 20261120);
   });
 });

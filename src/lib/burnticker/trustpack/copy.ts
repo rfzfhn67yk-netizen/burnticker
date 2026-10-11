@@ -58,7 +58,7 @@ export const TRUSTPACK_SECTION_COPY = {
   title: "Check it yourself",
   intro: "Three pages that read only public files and the chain:",
   bountyTitle: "Bounty wallet",
-  bountyTodo: "not created yet (TODO_BOUNTY_WALLET): it is the mainnet Squads vault, funded with 5–10 SOL from the developer fee once created. Terms: SECURITY.md.",
+  bountyTodo: "set (held by the operator); funding of 5–10 SOL from the developer fee is pending. Terms: SECURITY.md.",
   bountyReports: "Paid and rejected reports are listed in SECURITY.md and here once decided. None yet.",
 } as const;
 

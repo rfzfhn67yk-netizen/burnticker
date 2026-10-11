@@ -64,9 +64,9 @@ export interface KeeperDeps {
   /** BURNTICKER_KALSHI_ENABLED (venues.ts). false: Kalshi is never read; coins with a Kalshi rule are held with a venue-disabled alert (C1, 2026-10-10). Undefined = on. */
   kalshiEnabled?: boolean;
   /**
-   * Send unlink_pair when the program's evidence holds (pairForwardKeeper.pairUnlinkStep). OFF by default (pair-forward re-check RN-1/RN-2:
-   * the round-2 30-day not-live evidence would unlink healthy open pairs at day 30) until the round-3 evidence set is bound. Off, the step
-   * only observes: it records an unlink someone else made and alerts when the registry and the chain disagree.
+   * Send unlink_pair when the program's TERMINAL evidence holds (round 3: a voided pair curve, a refunding side, or a LaunchLab pair's
+   * void-by date passed with a coin unverified — pairForwardKeeper.pairUnlinkStep). On by default; false only observes (records an unlink
+   * someone else made, alerts when the registry and the chain disagree).
    */
   pairUnlink?: boolean;
 }
@@ -174,7 +174,7 @@ export function independentReadings(rule: BurnRule, carry: CarryPolicy): boolean
 }
 
 /** New readings for one token through the engine → receipt rows. Pure apart from the registry writes. */
-export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null = null, wtb: { otherTicker: string } | null = null): { mint: string; eventId: string; status: string }[] {
+export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null = null, wtb: { otherTicker: string; afterDate?: number } | null = null): { mint: string; eventId: string; status: string }[] {
   const state = d.registry.state(t.mint);
   const after = state.lastSettledAt ?? t.baselineAt;
   const carry = carryFor(locked.rule);
@@ -195,7 +195,8 @@ export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: 
     // gets the units it would have had had it won (the mirrored mapping = its own fraction) — its fuel for the result forwards to the
     // winner's burn pool by forward_to_winner. Nothing on either side (a draw / a void) stays as it is.
     let step = own, role: PairRole | null = null;
-    if (wtb && own.kind !== "void" && event.result !== "void") {
+    // r3: a result settled on or before pair_after_date belongs to a period read before the pairing — planned as a plain result
+    if (wtb && own.kind !== "void" && event.result !== "void" && receiptDay(event.at) > (wtb.afterDate ?? 0)) {
       if (own.units > 0 && own.mapping) role = "won";
       else {
         const m = unitStep(pairMirrorRule(locked.rule), event, prev, carry);
@@ -328,7 +329,8 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     // losing coin. The chain planner (burnReceipts/crank.ts planCrank) plans the forward for a LOST period until PAIR_RESULT_GRACE_SECS
     // after the reading (chain time), then the paired buyback (the program accepts it and emits PairForwardMissing) — the keeper follows
     // the planner and does not repeat that time-out. A period dated before the pairing day has no PairResult (PairDateBeforePairing).
-    if (pairCtx?.active && (plan.kind === "buyback" || plan.kind === "forward") && (pairCtx.pairedOn == null || D >= pairCtx.pairedOn)) {
+    // r3: a period on or before pair_after_date was read before the pairing — no PairResult (PairPeriodUnpaired); it cranks as plain.
+    if (pairCtx?.active && (plan.kind === "buyback" || plan.kind === "forward") && (pairCtx.pairedOn == null || D >= pairCtx.pairedOn) && D > (pairCtx.pairAfterDate ?? 0)) {
       const pr = await ensurePairResult(pairCtx, reg, D, { now, dryRun: d.dryRun, log: d.log, winnerReading: () => winnerFlatReading(d, pairCtx, D) });
       if ("waiting" in pr) {
         if (plan.kind === "forward") { hold(`pair result for ${Ds}: ${pr.waiting}`, rows); break; }
@@ -712,7 +714,7 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     if (locked.rule.oracle === "kalshi" && d.kalshiEnabled === false) continue;   // venue disabled: held (fetchDue raised the alert)
     const ctx = ctxs.get(t.mint) ?? null;
     if (ctx?.hold) { d.log(`  [pair] $${t.ticker}: held this cycle — ${ctx.hold}`); continue; }
-    try { if (t.status === "live" && !d.registry.ruleEnd(t.mint)) planned.push(...planToken(d, t, locked, gate, ctx?.active ? { otherTicker: ctx.other.ticker } : null)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
+    try { if (t.status === "live" && !d.registry.ruleEnd(t.mint)) planned.push(...planToken(d, t, locked, gate, ctx?.active ? { otherTicker: ctx.other.ticker, afterDate: ctx.pairAfterDate ?? 0 } : null)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
     // An active pair coin's end-of-rule days are planned BEFORE anything executes too, so a one-shot loser's forwarding day is on its
     // receipts (and attested) when the winner settles the same day's pair result.
     if (ctx?.active) { try { planned.push(...await planRuleEnd(d, t, locked, gate, ctx)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); } }
@@ -737,8 +739,8 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
   }
   try { await pairUnmatchedAlerts(d.registry, d.program, d.now(), d.log); } catch (e) { errors.push(`pair links: ${(e as Error).message.slice(0, 160)}`); }
-  // r2 M-2: unlink_pair on the program's evidence — sending is OFF unless d.pairUnlink (re-check RN-1/RN-2); observing always runs.
-  try { await pairUnlinkStep(d.registry, d.program, d.now(), !!d.dryRun, d.log, { send: d.pairUnlink === true }); } catch (e) { errors.push(`pair unlink: ${(e as Error).message.slice(0, 160)}`); }
+  // unlink_pair on the program's terminal evidence (round 3); d.pairUnlink === false only observes.
+  try { await pairUnlinkStep(d.registry, d.program, d.now(), !!d.dryRun, d.log, { send: d.pairUnlink !== false }); } catch (e) { errors.push(`pair unlink: ${(e as Error).message.slice(0, 160)}`); }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
   for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }

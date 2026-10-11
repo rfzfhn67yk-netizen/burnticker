@@ -12,6 +12,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 |---|---|---|---|---|
 | burn_receipts | `apply_attester_change` | anyone | **none** | None. |
 | burn_receipts | `apply_cap_raise` | anyone | **none** | None. |
+| burn_receipts | `apply_paired_attester_change` | anyone | **none** | None. |
 | burn_receipts | `apply_registration_policy` | anyone | **none** | None. |
 | burn_receipts | `cancel_attester_change` | config_authority | **none** | None. |
 | burn_receipts | `cancel_cap_raise` | platform_authority | **none** | None. |
@@ -117,7 +118,7 @@ Powers outside the programs that they depend on:
 - **Upgrade authority held by Squads until finalisation** (not done) — Both programs can still be upgraded by the 2-of-3 Squads vault (devnet: A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD, 60 s time lock; mainnet: 48 h). Finalising (setting it to none) is the planned last step, not done. *Where:* docs/burn-receipts/powers-register.json → upgrade_authority
 - **No professional security firm has reviewed the code** (not done) — Not independently audited by a security firm. Reviewed by three independent blind AI reviews and one re-check of burn_receipts and two blind AI reviews of pair_curve (all published), an adversarial ChatGPT/Codex PR review (published with its response) and, once published, a public bounty. *Where:* config/burnticker/transparency.json → howBuilt
 - **Third Squads signer** (not done) — The trusted third party who holds the third key is not named yet (name and address TODO). *Where:* config/burnticker/operator.json → clusters.mainnet.wallets[squads-member-3]
-- **Bounty wallet** (not done) — Not created yet (TODO_BOUNTY_WALLET): the mainnet Squads vault, funded with 5–10 SOL from the developer fee. *Where:* config/public-repo/overlay/SECURITY.md
+- **Bounty wallet** (wallet set; funding pending) — Set 2026-10-11: HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator; funding of 5–10 SOL from the developer fee is pending. *Where:* config/public-repo/overlay/SECURITY.md
 - **Legal entity** (not done) — LLC: pending owner decision. Until an entity exists the platform is operated by one independent individual whose identity is held privately; contact@burnticker.com reaches the operator. *Where:* config/burnticker/operator.json → operator.entity
 - **Docker verified build** (interim) — INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check. *Where:* config/burnticker/verified-build.json
 - **switchboard down** (not available) — Switchboard Technology Labs ended all oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. The planned replacements — a Reclaim zkTLS proof of the source response posted by a relayer key, and/or a second human operator running the reader on another machine — are not live. The 'attester #2 within 14 days' line on this page is the schedule, not a built thing. *Where:* config/burnticker/transparency.json → limitations.switchboard-down
@@ -125,7 +126,6 @@ Powers outside the programs that they depend on:
 - **no systemd unit** (not built) — deploy/ has a unit for the $DEFICIT keeper only; the multi-token Burnticker keeper and the hourly audit timer have no systemd units yet. *Where:* config/burnticker/transparency.json → limitations.no-systemd-unit
 - **signed operator message** (not done) — The operator's signed statement (a message signed by the developer fee wallet, verifiable on /burnticker/operator) is not signed yet: the mainnet wallet does not exist. *Where:* config/burnticker/transparency.json → limitations.signed-operator-message
 - **paircurve findings open** (not done) — The two pair_curve reviews (2026-10-10) found High-severity issues (close_pair could strand the burn-pool registration, a pre-funded pool vault or a pre-created token account could block graduation or init_pair, an executable developer wallet could freeze trades). All findings are fixed or accepted in writing (docs/burn-receipts/CHANGELOG.md, code fa8627a4), the reviewers' exploit tests now assert each attack fails, and the fixed program was re-rehearsed on devnet (docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md §R2). An independent re-check confirmed the fixes and found five residuals (a post-deadline curve-sell race, a stuck-side lock without an AmmConfig signal, a close blocked by an executable developer wallet, the upgrade script's hash check, an unsynced WSOL donation); all fixed in fcda14eb and spot-checked on devnet (§R3). Not yet done: a review of the round-2 code. Pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until it is done. *Where:* config/burnticker/transparency.json → limitations.paircurve-findings-open
-- **operator treasury mainnet** (not done) — The operator treasury is not compiled into the mainnet burn_receipts build yet (the devnet build pays the devnet Squads vault). Until the owner compiles the mainnet vault in, every mainnet claim_lock_fees refuses (TreasuryNotPinned) and the LP fees stay in the lock; nothing is lost, nothing is claimed. *Where:* config/burnticker/transparency.json → limitations.operator-treasury-mainnet
 - **Mainnet rehearsal coin $REHEARSAL** (not done) — $REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP locked forever; not for trading. Its mint and the date go here when it happens; until then: not done. *Where:* config/burnticker/transparency.json → rehearsals
 
 ## 5. Is the deployed code this code?
@@ -134,10 +134,10 @@ Kind: **interim-local**. INTERIM: built with cargo build-sbf on the operator's M
 
 | Program | Build | Features | Executable hash | Deployed (devnet) |
 |---|---|---|---|---|
-| burn_receipts | mainnet | default | `2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3` | — |
-| burn_receipts | devnet | devnet | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` = build |
-| pair_curve | mainnet | default | `82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4` | — |
-| pair_curve | devnet | devnet | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` = build |
+| burn_receipts | mainnet | default | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | — |
+| burn_receipts | devnet | devnet | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` = build |
+| pair_curve | mainnet | default | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | — |
+| pair_curve | devnet | devnet | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` = build |
 
 How to reproduce: docs/burnticker/VERIFIED-BUILD.md.
 

@@ -78,6 +78,22 @@ pub fn canonical_pair_message(program_id: &Pubkey, mint_lo: &Pubkey, mint_hi: &P
     )
 }
 
+/// Pair-forward r3 M-1: what the PARTNER's quorum signs to let a paired coin apply its pending attester change —
+/// `BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1|<genesis>|<program>|<mint>|<partner mint>|set=<hex sha256 of the pending set>|eta=<unix>`,
+/// the set hash being pair::set_hash(pending_quorum, pending attesters) (the same form as PairLink.attester_set_hash).
+pub fn canonical_pair_attester_change_message(program_id: &Pubkey, mint: &Pubkey, partner_mint: &Pubkey, pending_set_hash: &[u8; 32], eta: i64) -> String {
+    format!(
+        "{}|{}|{}|{}|{}|set={}|eta={}",
+        PAIR_ATTESTER_CHANGE_DOMAIN,
+        CLUSTER_GENESIS_HASH,
+        program_id,
+        mint,
+        partner_mint,
+        hex(pending_set_hash),
+        eta
+    )
+}
+
 fn hex(b: &[u8; 32]) -> String {
     let mut s = String::with_capacity(64);
     for x in b {

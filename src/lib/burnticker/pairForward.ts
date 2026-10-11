@@ -35,8 +35,11 @@ export const PAIR_FORWARD_ALERT_SECS = 60 * 60;
 export const OUTCOME_FORWARDED = PROGRAM_OUTCOME_FORWARDED;
 export const PAIR_MESSAGE_DOMAIN = PAIR_ATTESTATION_DOMAIN;
 
-export type PairState = 0 | 1 | 2;
-export const PAIR_STATE_NAMES: Record<PairState, "none" | "provisional" | "paired"> = { 0: "none", 1: "provisional", 2: "paired" };
+/** TokenConfig.pair_state: 0 none / 1 provisional / 2 paired / 3 unlinked (r3: unlink_pair ran on terminal evidence — a plain coin). */
+export type PairState = 0 | 1 | 2 | 3;
+export const PAIR_STATE_NAMES: Record<PairState, "none" | "provisional" | "paired" | "unlinked"> = { 0: "none", 1: "provisional", 2: "paired", 3: "unlinked" };
+/** YYYY-MM-DD → the program's u32 YYYYMMDD (0 for none). */
+export const dateU32 = (d: string | null | undefined): number => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? Number(d.replace(/-/g, "")) : 0);
 export interface PairLinkView {
   mint: string; pairMint: string; paired: boolean; witness: 0 | 1; createdAt: number; pairingDeadline: number; pairedAt: number | null;
   /** r2 M-1: the coin's attester-set hash at pairing (hex; all zeros for links written before r2). */
@@ -49,12 +52,16 @@ export function pairedOn(a: PairLinkView | null, b: PairLinkView | null): number
   const d = new Date(t * 1000);
   return d.getUTCFullYear() * 10_000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
 }
-/** unlink_pair's evidence (r2 M-2): PairUnlinked.reason and, for 0 / 1, the pair_curve Pair passed as evidence. */
-export type UnlinkReason = 0 | 1 | 2;
+/**
+ * unlink_pair's TERMINAL evidence (r3): PairUnlinked.reason — 0 the pair_curve Pair voided, 1 one of its sides refunding (both pass the
+ * Pair as evidence), 3 a LaunchLab pair's locked voidBy day ended with a coin still without a verified pool. r2's reason 2 (no verified
+ * pool 30 days after pairing) is gone: it appears only in r2-era history.
+ */
+export type UnlinkReason = 0 | 1 | 3;
 export const UNLINK_REASON_TEXT: Record<UnlinkReason, string> = {
   0: "the pair curve voided",
   1: "one side is refunding (its pool never came)",
-  2: "one coin had no verified pool 30 days after the pairing",
+  3: "the pair's void-by date passed with a coin still without a verified pool",
 };
 /** The per-period result: winner null = draw. */
 export interface PairResultView { recordDate: number; winner: string | null; submittedAt: number; forwarded: boolean; forwardedLamports: bigint; forwardedAt: number | null }
@@ -77,8 +84,14 @@ export const PAIR_ERRORS: Record<string, { code: number; sentence: string }> = {
   PairSideNotLive: { code: 6089, sentence: "a pair side is not live (no longer raised since round 2: a side without a verified pool forwards 0 lamports and the period is still processed)" },
   PairResultNotServable: { code: 6090, sentence: "a win needs both coins' readings for the date and the loser's still unprocessed; until it can be recorded the period has no result (no draw is substituted)" },
   PairDateBeforePairing: { code: 6091, sentence: "the period is dated before the two coins were paired, so it has no pair result (it burns unpaired after 72 hours)" },
-  PairHasReadings: { code: 6092, sentence: "a coin already has readings under its unpaired rule; a pair is linked before its first reading, so this pair stays unlinked" },
-  PairStillLive: { code: 6093, sentence: "there is no on-chain evidence yet that the partner can never be live (a voided pair curve, a refunding side, or no verified pool 30 days after pairing)" },
+  PairHasReadings: { code: 6092, sentence: "no longer raised (round 3): link_pair accepts coins with readings, and the periods already read stay unpaired" },
+  PairStillLive: { code: 6093, sentence: "there is no terminal on-chain evidence that the partner can never be live (a voided pair curve, a refunding side, or a LaunchLab pair's void-by date passed without both pools)" },
+  PairAttestersDiffer: { code: 6094, sentence: "the two coins do not have the same attester set and quorum (same keys, same order), so they cannot pair" },
+  ForwardWindowClosed: { code: 6095, sentence: "the 72-hour forward window after the loser's reading has passed; the period burns as a plain period" },
+  PairedAttesterChange: { code: 6096, sentence: "this coin is paired: its attester change goes through apply_paired_attester_change, with the partner's quorum co-signing" },
+  InvalidPairVoidBy: { code: 6097, sentence: "a pair's void-by date must be a valid date, today or later (UTC), and the same on both coins" },
+  PairTerminal: { code: 6098, sentence: "the pair curve is voided or one of its sides is refunding, so the coins cannot be linked" },
+  PairPeriodUnpaired: { code: 6099, sentence: "the period was read before the coins were paired, so it has no pair result and burns as a plain period" },
 };
 export function pairErrorSentence(name: string | null | undefined): string {
   if (!name) return "unknown refusal";
@@ -119,19 +132,27 @@ function lamportsToSol(l: bigint): string {
 }
 
 /** What a forward moves, by the program's rule (the fake's arithmetic; the pages recompute receipts with it). */
-export function forwardAmount(i: { feeLamports: bigint; reserveLamports: bigint; wsolLamports: bigint; capLamports: bigint | null; units: number; fractionBps: number; floorLamports: bigint }): { pool: bigint; lamports: bigint } {
-  const actual = spendablePool(i.feeLamports, i.reserveLamports, i.wsolLamports);
+export function forwardAmount(i: { feeLamports: bigint; reserveLamports: bigint; wsolLamports: bigint; capLamports: bigint | null; units: number; fractionBps: number; floorLamports: bigint; carriedSpendLamports?: bigint }): { pool: bigint; lamports: bigint } {
+  // r3 RI-4: the basis leaves the loser's carried spend (owed to its earlier periods), then the cap
+  const spendable = spendablePool(i.feeLamports, i.reserveLamports, i.wsolLamports), carried = i.carriedSpendLamports ?? BigInt(0);
+  const actual = spendable > carried ? spendable - carried : BigInt(0);
   const pool = i.capLamports !== null && actual > i.capLamports ? i.capLamports : actual;
   const amt = buybackSpend(pool, BigInt(i.units), i.fractionBps);
   return { pool, lamports: amt < i.floorLamports ? BigInt(0) : amt };
 }
+
+/**
+ * The chain's view of a pair. r3: `pairVoidBy` (YYYYMMDD; a LaunchLab pair's locked voidBy, 0 for none) and `pairAfterDate` (YYYYMMDD; the
+ * later of the two coins' pair_after_date — periods on or before it stay unpaired and get no PairResult).
+ */
+export interface PairLinks { a: PairLinkView | null; b: PairLinkView | null; stateA: PairState; stateB: PairState; paired: boolean; poolsVerified?: [boolean, boolean]; pairVoidBy?: number; pairAfterDate?: number }
 
 /** One pair's port: links, per-period results, the two instructions, and what a landed forward did. */
 export interface PairForwardPort {
   readonly mintA: string;
   readonly mintB: string;
   /** `poolsVerified` [A, B]: each TokenConfig's pool_verified (unlink evidence, a win's servability). */
-  links(): Promise<{ a: PairLinkView | null; b: PairLinkView | null; stateA: PairState; stateB: PairState; paired: boolean; poolsVerified?: [boolean, boolean] }>;
+  links(): Promise<PairLinks>;
   result(recordDate: number): Promise<PairResultView | null>;
   /** submit_pair_result: both coins' quorums sign the same message (on devnet the keeper is both sides' attester). Signed, not sent. */
   buildSubmitResult(o: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array }): Promise<SignedTx>;
@@ -163,7 +184,11 @@ const fakeSig = (label: string): string => crypto.createHash("sha256").update(la
  * forward_to_winner moves exactly forwardAmount() from the loser's fee PDA (SOL first, then WSOL) into the winner's WSOL — 0 lamports
  * when a side has no verified pool or the pair is no longer paired — marks the loser's reading processed with outcome "forwarded" and its
  * amount in spentLamports, and ALWAYS writes the forward memo. unlink_pair needs `unlinkReason` (else PairStillLive).
- * Knobs: `paired`, `pairedAtSec`, `simErr`, `dropSends`, `winnerLive` (false = the winner has no verified pool), `unlinkReason`.
+ * Round 3: no result for a period on or before `pairAfterDate` (PairPeriodUnpaired; the gate passes it unpaired); a forward is refused
+ * 72 h after the loser's reading (ForwardWindowClosed) unless it already landed; the basis leaves the loser's carried spend; an unlink
+ * leaves both coins in state 3 (unlinked).
+ * Knobs: `paired`, `pairedAtSec`, `pairAfterDate`, `pairVoidBy`, `simErr`, `dropSends`, `winnerLive` (false = the winner has no verified
+ * pool), `unlinkReason`.
  */
 export class FakePairForwardPort implements PairForwardPort {
   readonly mintA: string; readonly mintB: string;
@@ -173,6 +198,10 @@ export class FakePairForwardPort implements PairForwardPort {
   winnerLive = true;
   /** The pairing time (unix seconds) both links report; 0 = 1970 (no date is before it). */
   pairedAtSec = 0;
+  /** r3: periods on or before this date (YYYYMMDD) stay unpaired; 0 = none. */
+  pairAfterDate = 0;
+  /** r3: the LaunchLab pair's locked voidBy (YYYYMMDD) the configs report; 0 = none. */
+  pairVoidBy = 0;
   /** unlink_pair's evidence on chain now (null = PairStillLive); `unlinked` once it landed. */
   unlinkReason: UnlinkReason | null = null;
   unlinked: { reason: UnlinkReason } | null = null;
@@ -196,6 +225,7 @@ export class FakePairForwardPort implements PairForwardPort {
     if (!this.paired) return null;
     const r = this.results.get(D);
     const timedOut = readingSubmittedAtMs !== null && this.now() - readingSubmittedAtMs >= PAIR_RESULT_GRACE_SECS * 1000;
+    if (D <= this.pairAfterDate) return null;   // r3: read before the pairing — a plain period
     if (!r) return timedOut ? "missing" : "pending";
     if (r.winner === null) return "draw";
     return r.winner === mint ? "won" : timedOut ? "forward-missing" : "lost";
@@ -205,11 +235,11 @@ export class FakePairForwardPort implements PairForwardPort {
     return [v(this.mintA), v(this.mintB)];
   }
   async links() {
-    if (this.unlinked) return { a: null, b: null, stateA: 0 as PairState, stateB: 0 as PairState, paired: false, poolsVerified: this.verified() };
+    if (this.unlinked) return { a: null, b: null, stateA: 3 as PairState, stateB: 3 as PairState, paired: false, poolsVerified: this.verified(), pairVoidBy: this.pairVoidBy, pairAfterDate: this.pairAfterDate };
     const v = (mint: string, other: string): PairLinkView => ({ mint, pairMint: other, paired: this.paired, witness: 0, createdAt: 0, pairingDeadline: this.pairingDeadline, pairedAt: this.paired ? this.pairedAtSec : null });
-    return { a: v(this.mintA, this.mintB), b: v(this.mintB, this.mintA), stateA: (this.paired ? 2 : 1) as PairState, stateB: (this.paired ? 2 : 1) as PairState, paired: this.paired, poolsVerified: this.verified() };
+    return { a: v(this.mintA, this.mintB), b: v(this.mintB, this.mintA), stateA: (this.paired ? 2 : 1) as PairState, stateB: (this.paired ? 2 : 1) as PairState, paired: this.paired, poolsVerified: this.verified(), pairVoidBy: this.pairVoidBy, pairAfterDate: this.pairAfterDate };
   }
-  async unlinkEvidence(): Promise<{ reason: UnlinkReason; pair: string | null } | null> { return this.paired && this.unlinkReason !== null ? { reason: this.unlinkReason, pair: this.unlinkReason === 2 ? null : `pair:${this.mintA.slice(0, 8)}` } : null; }
+  async unlinkEvidence(): Promise<{ reason: UnlinkReason; pair: string | null } | null> { return this.paired && this.unlinkReason !== null ? { reason: this.unlinkReason, pair: this.unlinkReason === 3 ? null : `pair:${this.mintA.slice(0, 8)}` } : null; }
   async buildUnlink(o: { pair: string | null }) { const tx = this.sig("unlink"); this.built.set(tx.signature, { kind: "unlink", pair: o.pair }); return tx; }
   async result(D: number) { return this.results.get(D) ?? null; }
   private sig(kind: string): SignedTx { const signature = fakeSig(`pair|${this.mintA}|${this.mintB}|${kind}|${++this.n}`); return { signature, raw: new TextEncoder().encode(signature), blockhash: `pbh${this.n}`, lastValidBlockHeight: 2_000 + this.n }; }
@@ -224,6 +254,7 @@ export class FakePairForwardPort implements PairForwardPort {
       if (b.winner !== null && b.winner !== this.mintA && b.winner !== this.mintB) return "InvalidWinner";
       const on = pairedOn({ mint: this.mintA, pairMint: this.mintB, paired: true, witness: 0, createdAt: 0, pairingDeadline: 0, pairedAt: this.pairedAtSec }, null);
       if (on !== null && b.recordDate < on) return "PairDateBeforePairing";
+      if (b.recordDate <= this.pairAfterDate) return "PairPeriodUnpaired";
       const have = this.results.get(b.recordDate);
       if (have && have.winner !== b.winner) return "ConflictingPairResult";
       if (have) return null;
@@ -245,6 +276,9 @@ export class FakePairForwardPort implements PairForwardPort {
     if (!rd) return "AccountNotInitialized";
     if (rd.processed) return null;   // already forwarded: a no-op
     if (rd.prevDate !== loser.cfg.crankCursor) return "OutOfOrder";
+    // r3 RI-1: the forward window closes 72 h after the loser's reading — the period then belongs to the loser's own crank
+    const at = loser.readingSubmittedAt.get(b.recordDate);
+    if (at !== undefined && this.now() - at >= PAIR_RESULT_GRACE_SECS * 1000) return "ForwardWindowClosed";
     return null;
   }
   async simulate(raw: Uint8Array) {
@@ -274,7 +308,7 @@ export class FakePairForwardPort implements PairForwardPort {
     // r2 H-1(b): a side without a verified pool, or a pair no longer paired, forwards 0 lamports — the reading is still processed
     const [va, vb] = this.verified();
     const dead = !va || !vb || !this.winnerLive || !this.paired;
-    const a0 = forwardAmount({ feeLamports: loser.feeLamports, reserveLamports: loser.cfg.reserveLamports, wsolLamports: loser.wsol, capLamports: loser.capLamports, units: rd.units, fractionBps: loser.cfg.fractionPerUnitBps, floorLamports: loser.cfg.floorLamports });
+    const a0 = forwardAmount({ feeLamports: loser.feeLamports, reserveLamports: loser.cfg.reserveLamports, wsolLamports: loser.wsol, capLamports: loser.capLamports, units: rd.units, fractionBps: loser.cfg.fractionPerUnitBps, floorLamports: loser.cfg.floorLamports, carriedSpendLamports: loser.cfg.carriedSpendLamports });
     const a = dead ? { pool: a0.pool, lamports: BigInt(0) } : a0;
     const avail = loser.feeLamports > loser.cfg.reserveLamports ? loser.feeLamports - loser.cfg.reserveLamports : BigInt(0);
     const sol = a.lamports < avail ? a.lamports : avail, wsol = a.lamports - sol;

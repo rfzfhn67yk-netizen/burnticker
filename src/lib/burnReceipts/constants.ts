@@ -159,12 +159,12 @@ export const SEED_FEE_KEY = Buffer.from("fee_key", "utf8");
 export const LOCK_FEE_BURN_BPS = 8_000;
 export const LOCK_FEE_OPERATOR_BPS = 2_000;
 /**
- * The operator treasury compiled into each build (program constant OPERATOR_TREASURY): devnet = the Squads vault; the default
- * (mainnet) build carries the all-zero placeholder and refuses claims (TreasuryNotPinned) until the owner's mainnet vault is compiled
- * in; localnet = the LiteSVM suites' test treasury.
+ * The operator treasury compiled into each build (program constant OPERATOR_TREASURY): mainnet = the owner's hardware wallet 8cwwy895…
+ * (also the LaunchLab platform fee wallet; owner decision 2026-10-11); devnet = the devnet Squads vault; localnet = the LiteSVM suites'
+ * test treasury.
  */
 export const OPERATOR_TREASURY: Record<Cluster, PublicKey> = {
-  mainnet: PublicKey.default,
+  mainnet: new PublicKey("8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5"),
   devnet: new PublicKey("A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"),
   localnet: new PublicKey(Buffer.alloc(32, 0x7e)),
 };
@@ -184,11 +184,11 @@ export const LAUNCHLAB_VAULT_AUTH: Record<Cluster, PublicKey> = {
 };
 /**
  * BURNTICKER_PLATFORM compiled into each build (round 2): initialize_token for policies 0 and 2 requires launchlab_platform == it
- * (PlatformNotAllowed). Devnet = Burnticker's devnet LaunchLab platform; the default (mainnet) build carries all zeros and refuses
- * (PlatformNotPinned) until the owner's mainnet platform is compiled in; localnet uses the `test-pins` cargo feature's value (not mirrored).
+ * (PlatformNotAllowed). Mainnet = 94x5qDDJ… = getPdaPlatformId(LaunchLab LanMV9sA…, admin EMht6aGc…) (compiled 2026-10-11); devnet =
+ * Burnticker's devnet LaunchLab platform; localnet uses the `test-pins` cargo feature's value (not mirrored).
  */
 export const BURNTICKER_PLATFORM: Record<Cluster, PublicKey> = {
-  mainnet: PublicKey.default,
+  mainnet: new PublicKey("94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9"),
   devnet: new PublicKey("GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf"),
   localnet: PublicKey.default,
 };

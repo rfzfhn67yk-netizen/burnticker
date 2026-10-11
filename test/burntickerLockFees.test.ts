@@ -68,7 +68,8 @@ describe("the program interface (final 2026-10-10)", () => {
     assert.equal(LOCK_FEES_INTERFACE.interface, "r2-2026-10-11");
     assert.deepEqual(LP_LOCK_PROGRAM, { mainnet: "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE", devnet: "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX", localnet: "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE" });
     assert.equal(OPERATOR_TREASURY.devnet, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
-    assert.equal(OPERATOR_TREASURY.mainnet, null, "mainnet is not pinned until the owner compiles the vault in");
+    // owner, 2026-10-11 (program bc056558): the mainnet treasury is compiled in — the owner's hardware wallet, also the platform fee wallet
+    assert.equal(OPERATOR_TREASURY.mainnet, "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5");
   });
   test("the lock authority PDA derives to Raydium's published authority on both clusters", () => {
     assert.equal(lockAuthorityPda(LP_LOCK_PROGRAM.mainnet).toBase58(), LP_LOCK_AUTHORITY.mainnet);
@@ -301,11 +302,14 @@ describe("the launch gate's LP-lock pins (platformLockNftWallet @48 = fee_keys P
     assert.match(checkLpLockPins(platform({ wallet: new PublicKey(LP_LOCK_AUTHORITY.mainnet) }), { programId: PID, cluster: "devnet" }).problems.join(";"), /not the burn program's fee-keys PDA/);
     assert.match(checkLpLockPins(null, { programId: PID, cluster: "devnet" }).problems.join(";"), /does not exist/);
   });
-  test("mainnet: the unpinned operator treasury is a launch-gate problem (TreasuryNotPinned)", () => {
-    const r = checkLpLockPins(platform(), { programId: PID, cluster: "mainnet", requireTreasury: true });
-    assert.equal(r.ok, false);
-    assert.match(r.problems.join(";"), /TreasuryNotPinned/);
-    assert.equal(checkLpLockPins(platform(), { programId: PID, cluster: "mainnet" }).ok, true, "without requireTreasury only the LP pins count");
+  test("mainnet: the launch gate passes with the compiled pins (platform 94x5qDDJ…, treasury / fee wallet 8cwwy895…) and refuses any other platform", () => {
+    const MAIN_PLATFORM = "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9", TREASURY = "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5";
+    const cfg = platform(); new PublicKey(TREASURY).toBuffer().copy(cfg, 16);   // platformClaimFeeWallet @16 = the owner's wallet
+    const r = checkLpLockPins(cfg, { programId: PID, cluster: "mainnet", requireTreasury: true, platformId: MAIN_PLATFORM });
+    assert.deepEqual(r.problems, []); assert.equal(r.ok, true);
+    assert.deepEqual([r.pinned.operatorTreasury, r.pinned.platform], [TREASURY, MAIN_PLATFORM]);
+    const other = checkLpLockPins(cfg, { programId: PID, cluster: "mainnet", requireTreasury: true, platformId: "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf" });
+    assert.equal(other.ok, false); assert.match(other.problems.join(";"), /PlatformNotAllowed/);
   });
 });
 
@@ -316,8 +320,8 @@ describe("the fee ledger's operator LP-fee line", () => {
     assert.deepEqual([d.claims, d.solLamports, d.toOperatorLamports, d.toBurnPoolLamports, d.treasury, d.source], [2, "59456055", "11891211", "47564844", OPERATOR_TREASURY.devnet, "keeper records"]);
     assert.match(d.title, /20% of post-graduation LP fees/);
     const m = lpFeeLine("mainnet", null);
-    assert.deepEqual([m.claims, m.treasury, m.treasuryPinned, m.source], [0, null, false, "none"]);
-    assert.match(m.note, /TreasuryNotPinned/);
+    assert.deepEqual([m.claims, m.treasury, m.treasuryPinned, m.source], [0, "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", true, "none"], "mainnet pinned (owner, 2026-10-11)");
+    assert.doesNotMatch(m.note, /TreasuryNotPinned/);
     const cfg = loadCopyLintConfig();
     for (const t of [d.title, d.note, m.note]) assert.equal(lintCopy(t, cfg).ok, true, t);
   });
@@ -426,10 +430,10 @@ describe("round 2 (2026-10-11): order, lockers, no-memo claims, donations, plain
   });
   test("pins: the platform compiled per cluster, the policy block never has a null fee-keys PDA", () => {
     assert.equal(BURNTICKER_PLATFORM.devnet, "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf");
-    assert.equal(BURNTICKER_PLATFORM.mainnet, null);
+    assert.equal(BURNTICKER_PLATFORM.mainnet, "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9", "compiled in (owner, 2026-10-11)");
     const d = lpLockPolicyJson("devnet", null), m = lpLockPolicyJson("mainnet", null);
     assert.equal(d.feeKeysPda, feeKeysPda(BURN_RECEIPTS_IDL.address).toBase58(), "derived from the IDL's program id when none is configured");
-    assert.deepEqual([d.platformPinned, d.platform, m.platformPinned, m.platform], [true, "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf", false, null]);
+    assert.deepEqual([d.platformPinned, d.platform, m.platformPinned, m.platform], [true, "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf", true, "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9"]);
     assert.deepEqual([d.launchLabLocker, m.launchLabLocker], ["5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq", "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh"]);
   });
 });

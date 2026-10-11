@@ -45,9 +45,15 @@ fn platform(env: &mut Env) {
 
 /// initialize_token for a policy-0 coin, optionally naming a partner (`partner_first`: the partner already named this mint).
 fn init(env: &mut Env, mint: &Keypair, attester: &Pubkey, rule: RuleParams, pair: Option<(Pubkey, bool)>) -> TxResult {
+    init_with(env, mint, vec![*attester], 1, rule, pair, 0)
+}
+
+/// As `init`, with the attester set, quorum and (r3 RN-2) the pair's voidBy (0 = the harness default TEST_PAIR_VOID_BY).
+fn init_with(env: &mut Env, mint: &Keypair, attesters: Vec<Pubkey>, quorum: u8, rule: RuleParams, pair: Option<(Pubkey, bool)>, void_by: u32) -> TxResult {
     let creator = Keypair::new();
-    let mut args = init_args(rule, vec![*attester], 1);
+    let mut args = init_args(rule, attesters, quorum);
     args.admin = creator.pubkey();
+    args.pair_void_by = void_by;
     let payer = env.payer.pubkey();
     let platform = (rule.mode == MODE_BUYBACK && rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA).then_some(TEST_LAUNCHLAB_PLATFORM);
     let ix = ix_initialize_full(&payer, &creator.pubkey(), &mint.pubkey(), args, platform, pair.map(|p| p.0), pair.map(|p| p.1).unwrap_or(false));
@@ -87,20 +93,16 @@ fn market(env: &mut Env, mint_kp: &Keypair) -> Coin {
     Coin { mint, pool }
 }
 
-/// Two paired coins A and B (A initialized first naming B; B answers), both with markets; both read D1 (baseline).
+/// Two paired coins A and B (A initialized first naming B; B answers), one common attester (r3 M-1), both with markets; both read D1
+/// (baseline).
 fn paired(env: &mut Env, attester: &Keypair, rule_a: RuleParams, rule_b: RuleParams) -> (Coin, Coin) {
-    paired_with(env, attester, attester, rule_a, rule_b)
-}
-
-/// As `paired`, each coin with its own attester (quorum 1).
-fn paired_with(env: &mut Env, att_a: &Keypair, att_b: &Keypair, rule_a: RuleParams, rule_b: RuleParams) -> (Coin, Coin) {
     let (ka, kb) = (Keypair::new(), Keypair::new());
-    init(env, &ka, &att_a.pubkey(), rule_a, Some((kb.pubkey(), false))).unwrap();
-    init(env, &kb, &att_b.pubkey(), rule_b, Some((ka.pubkey(), true))).unwrap();
+    init(env, &ka, &attester.pubkey(), rule_a, Some((kb.pubkey(), false))).unwrap();
+    init(env, &kb, &attester.pubkey(), rule_b, Some((ka.pubkey(), true))).unwrap();
     let a = market(env, &ka);
     let b = market(env, &kb);
-    submit(env, &a.mint, D1, V1, &[att_a]).unwrap();
-    submit(env, &b.mint, D1, V1, &[att_b]).unwrap();
+    submit(env, &a.mint, D1, V1, &[attester]).unwrap();
+    submit(env, &b.mint, D1, V1, &[attester]).unwrap();
     (a, b)
 }
 
@@ -127,13 +129,15 @@ fn event<T: AnchorDeserialize + Discriminator>(meta: &litesvm::types::Transactio
     events(meta).into_iter().find(|(d, _)| d[..] == T::DISCRIMINATOR[..]).map(|(_, p)| T::try_from_slice(&p).unwrap())
 }
 
-/// What forward_to_winner must move: the loser's buyback_spend on min(SOL above reserve + WSOL, cap); 0 under the floor.
+/// What forward_to_winner must move: the loser's buyback_spend on min(SOL above reserve + WSOL − its carried spend (r3 RI-4), cap);
+/// 0 under the floor.
 fn expected_forward(env: &Env, loser: &Pubkey, date: u32) -> u64 {
-    let rule = env.config(&config_pda(loser)).rule;
+    let cfg = env.config(&config_pda(loser));
+    let rule = cfg.rule;
     let units = env.reading(&reading_pda(&config_pda(loser), date)).unwrap().units;
     let fee = fee_pda(loser);
     let wsol = env.svm.get_account(&get_associated_token_address(&fee, &NATIVE_MINT)).map(|_| env.token_amount(&get_associated_token_address(&fee, &NATIVE_MINT))).unwrap_or(0);
-    let basis = (env.lamports(&fee).saturating_sub(rule.reserve_lamports) + wsol).min(DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    let basis = (env.lamports(&fee).saturating_sub(rule.reserve_lamports) + wsol).saturating_sub(cfg.carried_spend_lamports).min(DEFAULT_BURN_POOL_CAP_LAMPORTS);
     let spend = math::buyback_spend(basis, units, rule.fraction_per_unit_bps).unwrap();
     if spend < rule.floor_lamports { 0 } else { spend }
 }
@@ -220,28 +224,42 @@ fn a_partner_answering_after_the_window_never_pairs_and_bad_partners_are_refused
 // results and the crank gate
 // =================================================================================================================================
 
-/// Who signs (pair-forward blind review M-1): a WIN needs the LOSER's quorum (the side giving up fuel consents); the winner's
-/// signatures are optional — required only if the loser rotated its attesters since pairing. A DRAW needs both quorums. Plus the
-/// basics: one winner from the pair, byte order, unpaired coins, future dates, append-only, and (I-2) a repeated submission is
-/// checked for signatures too.
+/// r3 M-1: pairing needs ONE attester set and quorum (same keys, same order, same quorum) on both coins — the second coin's
+/// initialize_token is refused otherwise (link_pair likewise: programs/pair_curve/tests/lifecycle.rs).
 #[test]
-fn a_win_needs_the_losers_quorum_a_draw_needs_both_and_results_never_change() {
+fn m1_pairing_requires_the_same_attester_set_and_quorum() {
     let mut env = Env::new();
     let (att_a, att_b) = (Keypair::new(), Keypair::new());
-    let (ca, cb) = paired_with(&mut env, &att_a, &att_b, buyback_rule(), buyback_rule());
+    let (ka, kb) = (Keypair::new(), Keypair::new());
+    init_with(&mut env, &ka, vec![att_a.pubkey(), att_b.pubkey()], 1, buyback_rule(), Some((kb.pubkey(), false)), 0).unwrap();
+    // another set, the same set with another quorum, the same keys in another order: all refused
+    expect_anchor_err(init_with(&mut env, &kb, vec![att_b.pubkey()], 1, buyback_rule(), Some((ka.pubkey(), true)), 0), "PairAttestersDiffer");
+    expect_anchor_err(init_with(&mut env, &kb, vec![att_a.pubkey(), att_b.pubkey()], 2, buyback_rule(), Some((ka.pubkey(), true)), 0), "PairAttestersDiffer");
+    expect_anchor_err(init_with(&mut env, &kb, vec![att_b.pubkey(), att_a.pubkey()], 1, buyback_rule(), Some((ka.pubkey(), true)), 0), "PairAttestersDiffer");
+    init_with(&mut env, &kb, vec![att_a.pubkey(), att_b.pubkey()], 1, buyback_rule(), Some((ka.pubkey(), true)), 0).unwrap();
+    let h = burn_receipts::instructions::pair::attester_set_hash(&env.config(&config_pda(&ka.pubkey())));
+    assert_eq!((pair_link(&env, &ka.pubkey()).unwrap().attester_set_hash, pair_link(&env, &kb.pubkey()).unwrap().attester_set_hash), (h, h));
+}
+
+/// Who signs (r3 M-1): EVERY result — win or draw — needs both coins' quorums, which (one common set) is one set of signatures; a key
+/// outside the set never counts. Plus the basics: one winner from the pair, byte order, unpaired coins, future dates, append-only,
+/// and (I-2) a repeated submission is checked for signatures too.
+#[test]
+fn every_result_needs_the_common_quorum_and_results_never_change() {
+    let mut env = Env::new();
+    let (att, stranger) = (Keypair::new(), Keypair::new());
+    let (ca, cb) = paired(&mut env, &att, buyback_rule(), buyback_rule());
     let (a, b) = (ca.mint, cb.mint);
-    submit(&mut env, &a, D2, V1 + UNIT, &[&att_a]).unwrap();
-    submit(&mut env, &b, D2, V1 + 2 * UNIT, &[&att_b]).unwrap();
-    // B loses: the WINNER's signature alone is not enough; the loser's alone is.
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&att_a]), "QuorumNotMet");
-    // a draw needs both
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, Pubkey::default(), &[&att_b]), "QuorumNotMet");
+    submit(&mut env, &a, D2, V1 + UNIT, &[&att]).unwrap();
+    submit(&mut env, &b, D2, V1 + 2 * UNIT, &[&att]).unwrap();
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&stranger]), "QuorumNotMet");
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, Pubkey::default(), &[&stranger]), "QuorumNotMet");
     // a winner outside the pair
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, Pubkey::new_unique(), &[&att_b]), "InvalidWinner");
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, Pubkey::new_unique(), &[&att]), "InvalidWinner");
     // the configs out of byte order
     let (lo, hi) = burn_receipts::state::pair_order(&a, &b);
     let msg = pair_message(&a, &b, D2, &a, src_hash(), [0u8; 32]);
-    let entries = vec![(att_b.pubkey(), sign(&att_b, &msg))];
+    let entries = vec![(att.pubkey(), sign(&att, &msg))];
     let mut ix = ix_submit_pair_result(&env.payer.pubkey(), &a, &b, D2, a, src_hash(), [0u8; 32]);
     ix.accounts.swap(1, 2);
     ix.accounts.swap(3, 4);
@@ -250,42 +268,66 @@ fn a_win_needs_the_losers_quorum_a_draw_needs_both_and_results_never_change() {
     expect_anchor_err(env.send(&[ed25519_shared(&entries, &msg), ix], &[]), "PairOrder");
     // unpaired coins
     let kc = Keypair::new();
-    init(&mut env, &kc, &att_a.pubkey(), buyback_rule(), None).unwrap();
-    expect_anchor_err(submit_pair_result(&mut env, &a, &kc.pubkey(), D2, a, &[&att_a]), "AccountNotInitialized");
+    init(&mut env, &kc, &att.pubkey(), buyback_rule(), None).unwrap();
+    expect_anchor_err(submit_pair_result(&mut env, &a, &kc.pubkey(), D2, a, &[&att]), "AccountNotInitialized");
     // a future date
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, 20991231, a, &[&att_b]), "FutureDate");
-    // the result, signed by the loser (B) only
-    submit_pair_result(&mut env, &a, &b, D2, a, &[&att_b]).unwrap();
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, 20991231, a, &[&att]), "FutureDate");
+    // the result, signed by the common attester: it meets both coins' quorums
+    submit_pair_result(&mut env, &a, &b, D2, a, &[&att]).unwrap();
     let r = pair_result(&env, &a, &b, D2).unwrap();
     assert_eq!((r.mint_lo, r.mint_hi, r.record_date, r.winner, r.forwarded), (lo, hi, D2, a, false));
     assert_eq!((r.result_for(&a), r.result_for(&b), r.result_for(&kc.pubkey())), (PAIR_RESULT_WON, PAIR_RESULT_LOST, PAIR_RESULT_NONE));
-    let (mask_a, mask_b) = if a == lo { (r.signers_mask_lo, r.signers_mask_hi) } else { (r.signers_mask_hi, r.signers_mask_lo) };
-    assert_eq!((mask_a, mask_b), (0, 1));
+    assert_eq!((r.signers_mask_lo, r.signers_mask_hi), (1, 1));
     // the same result again: a no-op — but only with valid signatures (I-2); a different one: refused
     env.set_time(env.now() + 1);
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&att_a]), "QuorumNotMet");
-    submit_pair_result(&mut env, &a, &b, D2, a, &[&att_b]).unwrap();
-    // (a win co-signed by both quorums does not fit a legacy transaction with the readings: v0 + lookup table)
-    expect_anchor_err(submit_pair_result_v0(&mut env, &a, &b, D2, b, &[&att_a, &att_b]), "ConflictingPairResult");
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, Pubkey::default(), &[&att_a, &att_b]), "ConflictingPairResult");
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&stranger]), "QuorumNotMet");
+    submit_pair_result(&mut env, &a, &b, D2, a, &[&att]).unwrap();
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, b, &[&att]), "ConflictingPairResult");
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, Pubkey::default(), &[&att]), "ConflictingPairResult");
 }
 
-/// M-1: after the loser rotates its attesters (its set no longer hashes to PairLink.attester_set_hash), its own quorum alone cannot
-/// sign away its fuel — the partner's quorum must co-sign.
+/// r3 M-1: a PAIRED coin changes its attesters only with the partner's quorum co-signing (apply_paired_attester_change);
+/// apply_attester_change refuses it. Afterwards every result needs both quorums — the partner's (who approved the change) and the new
+/// set — so the changed side still cannot sign its wins without signing its losses.
 #[test]
-fn m1_a_loser_that_rotated_its_attesters_needs_the_partner_to_co_sign() {
+fn m1_a_paired_coin_changes_attesters_only_with_the_partners_quorum() {
     let mut env = Env::new();
-    let (att_a, att_b) = (Keypair::new(), Keypair::new());
-    let (ca, cb) = paired_with(&mut env, &att_a, &att_b, buyback_rule(), buyback_rule());
+    let att = Keypair::new();
+    let (ca, cb) = paired(&mut env, &att, buyback_rule(), buyback_rule());
     let (a, b) = (ca.mint, cb.mint);
-    assert_eq!(pair_link(&env, &b).unwrap().attester_set_hash, burn_receipts::instructions::pair::attester_set_hash(&env.config(&config_pda(&b))));
-    submit(&mut env, &a, D2, V1 + UNIT, &[&att_a]).unwrap();
-    submit(&mut env, &b, D2, V1 + 2 * UNIT, &[&att_b]).unwrap();
-    // B's set is rotated to a new key (what apply_attester_change leaves after 48 h).
+    submit(&mut env, &a, D2, V1 + UNIT, &[&att]).unwrap();
+    submit(&mut env, &b, D2, V1 + 2 * UNIT, &[&att]).unwrap();
+    // B's admin proposed [att, rotated] at quorum 2, 48 h ago (the state propose_attesters leaves).
     let rotated = Keypair::new();
-    patch_config(&mut env, &b, |c| c.attesters[0] = burn_receipts::state::AttesterEntry::operator(rotated.pubkey()));
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&rotated]), "QuorumNotMet");
-    submit_pair_result_v0(&mut env, &a, &b, D2, a, &[&rotated, &att_a]).unwrap();
+    let now = env.now();
+    patch_config(&mut env, &b, |c| {
+        c.pending_attesters[0] = burn_receipts::state::AttesterEntry::operator(att.pubkey());
+        c.pending_attesters[1] = burn_receipts::state::AttesterEntry::operator(rotated.pubkey());
+        c.pending_count = 2;
+        c.pending_quorum = 2;
+        c.pending_eta = now - 1;
+    });
+    let k = cranker(&mut env);
+    expect_anchor_err(env.send(&[ix_apply(&k.pubkey(), &b)], &[&k]), "PairedAttesterChange");
+    let msg = pair_attester_change_message(&env, &b, &a);
+    // without the partner's signatures / signed by the new key only: refused
+    expect_anchor_err(env.send(&[ix_apply_paired_attester_change(&k.pubkey(), &b, &a)], &[&k]), "QuorumNotMet");
+    let by_rotated = ed25519_shared(&[(rotated.pubkey(), sign(&rotated, &msg))], &msg);
+    expect_anchor_err(env.send(&[by_rotated, ix_apply_paired_attester_change(&k.pubkey(), &b, &a)], &[&k]), "QuorumNotMet");
+    // A's quorum co-signs: applied, B's PairLink records the new set
+    let by_partner = ed25519_shared(&[(att.pubkey(), sign(&att, &msg))], &msg);
+    env.ok(&[by_partner, ix_apply_paired_attester_change(&k.pubkey(), &b, &a)], &[&k]);
+    let cfg_b = env.config(&config_pda(&b));
+    assert_eq!((cfg_b.attester_count, cfg_b.quorum, cfg_b.pending_eta), (2, 2, 0));
+    assert_eq!(pair_link(&env, &b).unwrap().attester_set_hash, burn_receipts::instructions::pair::attester_set_hash(&cfg_b));
+    // results now need A's quorum (att) and B's new quorum (att + rotated)
+    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&att]), "QuorumNotMet");
+    expect_anchor_err(submit_pair_result_v0(&mut env, &a, &b, D2, b, &[&rotated]), "QuorumNotMet");
+    submit_pair_result_v0(&mut env, &a, &b, D2, a, &[&att, &rotated]).unwrap();
+    // an unpaired coin still uses apply_attester_change
+    let kc = Keypair::new();
+    init(&mut env, &kc, &att.pubkey(), buyback_rule(), None).unwrap();
+    expect_anchor_err(env.send(&[ix_apply(&k.pubkey(), &kc.pubkey())], &[&k]), "NoPendingChange");
 }
 
 /// H-1(a) + L-2: a WIN is recorded only when forward_to_winner can serve it — both coins read the date and the loser's reading is
@@ -587,37 +629,140 @@ fn h1c_a_lost_period_without_a_forward_times_out_after_72_hours() {
     expect_anchor_err(env.send(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]), "AlreadyProcessed");
 }
 
-/// M-2: unlink_pair on evidence — a coin still without a verified pool 30 days after the pairing — returns both coins to plain coins
-/// (pair_state NONE, PairLinks closed to the fee PDAs); refused while both are live / before the 30 days.
+/// M-2 + r3 RN-2: unlink_pair on a LaunchLab pair needs the pair's locked voidBy day to have ENDED (UTC) with a coin still lacking a
+/// verified pool — not "N days after pairing", so a pair whose coins are still on their curves stays paired until its own voidBy.
+/// Both coins become UNLINKED (PairLinks closed to the fee PDAs) and crank as plain coins.
 #[test]
 fn m2_unlink_pair_on_evidence_returns_both_coins_to_plain() {
     let mut env = Env::new();
     let att = Keypair::new();
     let (ka, kb) = (Keypair::new(), Keypair::new());
-    init(&mut env, &ka, &att.pubkey(), buyback_rule(), Some((kb.pubkey(), false))).unwrap();
-    init(&mut env, &kb, &att.pubkey(), buyback_rule(), Some((ka.pubkey(), true))).unwrap();
+    const VOID_BY: u32 = 20261120;
+    const VOID_BY_ENDED: i64 = 1_795_219_200; // 2026-11-21T00:00:00Z
+    init_with(&mut env, &ka, vec![att.pubkey()], 1, buyback_rule(), Some((kb.pubkey(), false)), VOID_BY).unwrap();
     let a = market(&mut env, &ka); // B never gets a pool
+    init_with(&mut env, &kb, vec![att.pubkey()], 1, buyback_rule(), Some((ka.pubkey(), true)), VOID_BY).unwrap();
+    assert_eq!((env.config(&config_pda(&a.mint)).pair_void_by, env.config(&config_pda(&kb.pubkey())).pair_void_by), (VOID_BY, VOID_BY));
     let k = cranker(&mut env);
+    // 40 days after pairing, but still on the voidBy day itself: refused (r2 accepted this at day 30)
     let paired_at = pair_link(&env, &a.mint).unwrap().paired_at;
+    assert!(VOID_BY_ENDED - 1 > paired_at + 30 * 86_400);
+    env.set_time(VOID_BY_ENDED - 1);
     expect_anchor_err(env.send(&[ix_unlink_pair(&k.pubkey(), &a.mint, &kb.pubkey(), None)], &[&k]), "PairStillLive");
-    env.set_time(paired_at + PAIR_UNLINK_NOT_LIVE_SECS);
+    env.set_time(VOID_BY_ENDED);
     let (fa, fb) = (env.lamports(&fee_pda(&a.mint)), env.lamports(&fee_pda(&kb.pubkey())));
     let link_rent = env.lamports(&pair_link_pda(&a.mint));
     let meta = env.ok(&[ix_unlink_pair(&k.pubkey(), &a.mint, &kb.pubkey(), None)], &[&k]);
     let ev: burn_receipts::events::PairUnlinked = event(&meta).expect("PairUnlinked");
-    assert_eq!(ev.reason, UNLINK_NOT_LIVE);
+    assert_eq!(ev.reason, UNLINK_VOID_BY_PASSED);
     for m in [a.mint, kb.pubkey()] {
-        assert_eq!(env.config(&config_pda(&m)).pair_state, PAIR_STATE_NONE);
+        let c = env.config(&config_pda(&m));
+        assert_eq!((c.pair_state, c.pair_unlinked_at), (PAIR_STATE_UNLINKED, VOID_BY_ENDED));
         assert!(pair_link(&env, &m).is_none(), "PairLink closed");
     }
     assert_eq!(env.lamports(&fee_pda(&a.mint)) - fa, link_rent, "the link's rent goes to the coin's own fee PDA");
     assert!(env.lamports(&fee_pda(&kb.pubkey())) > fb);
     // A cranks as a plain coin (no pair accounts)
-    submit(&mut env, &a.mint, D1, V1, &[&att]).unwrap();
-    submit(&mut env, &a.mint, D2, V1 + 2 * UNIT, &[&att]).unwrap();
+    let (d1, d2) = (20261121, 20261122);
+    submit(&mut env, &a.mint, d1, V1, &[&att]).unwrap();
+    env.set_time(VOID_BY_ENDED + 86_400 + 3_600);
+    submit(&mut env, &a.mint, d2, V1 + 2 * UNIT, &[&att]).unwrap();
     env.transfer_sol(&fee_pda(&a.mint), SOL);
     cpmm::seed_history(&mut env, &a.pool, &a.mint);
-    env.ok(&[cpmm::ix_crank_buyback(&k.pubkey(), &a.mint, &a.pool, D2)], &[&k]);
+    env.ok(&[cpmm::ix_crank_buyback(&k.pubkey(), &a.mint, &a.pool, d2)], &[&k]);
+}
+
+/// r3 RN-2: the voidBy rides with pair_mint — a valid date, today or later; the partner names the same date; none without pair_mint.
+#[test]
+fn rn2_the_pair_void_by_is_locked_on_both_coins() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let (ka, kb, kc) = (Keypair::new(), Keypair::new(), Keypair::new());
+    expect_anchor_err(init_with(&mut env, &ka, vec![att.pubkey()], 1, buyback_rule(), Some((kb.pubkey(), false)), 20261008), "InvalidPairVoidBy");
+    expect_anchor_err(init_with(&mut env, &ka, vec![att.pubkey()], 1, buyback_rule(), Some((kb.pubkey(), false)), 20261131), "InvalidPairVoidBy");
+    expect_anchor_err(init_with(&mut env, &kc, vec![att.pubkey()], 1, buyback_rule(), None, 20261120), "InvalidPairVoidBy");
+    init_with(&mut env, &ka, vec![att.pubkey()], 1, buyback_rule(), Some((kb.pubkey(), false)), 20261009).unwrap();
+    expect_anchor_err(init_with(&mut env, &kb, vec![att.pubkey()], 1, buyback_rule(), Some((ka.pubkey(), true)), 20261010), "InvalidPairVoidBy");
+    init_with(&mut env, &kb, vec![att.pubkey()], 1, buyback_rule(), Some((ka.pubkey(), true)), 20261009).unwrap();
+    assert_eq!(env.config(&config_pda(&kb.pubkey())).pair_state, PAIR_STATE_PAIRED);
+}
+
+/// r3 (RN-1 second route, init side): what the first coin read while provisional stays unpaired history — pair_after_date on both
+/// coins; no result may name those periods and the crank gate passes them.
+#[test]
+fn periods_read_before_the_pairing_stay_unpaired() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let (ka, kb) = (Keypair::new(), Keypair::new());
+    let (e1, e2, e3) = (20261014, 20261015, 20261016); // T0 is 2026-10-15T12:00Z
+    init(&mut env, &ka, &att.pubkey(), buyback_rule(), Some((kb.pubkey(), false))).unwrap();
+    let a = market(&mut env, &ka);
+    // A reads e1 and e2 (today, with units) while provisional
+    submit(&mut env, &a.mint, e1, V1, &[&att]).unwrap();
+    submit(&mut env, &a.mint, e2, V1 + 3 * UNIT, &[&att]).unwrap();
+    // B answers the same day: the pairing day is e2, and e2 was already read
+    init(&mut env, &kb, &att.pubkey(), buyback_rule(), Some((ka.pubkey(), true))).unwrap();
+    let b = market(&mut env, &kb);
+    assert_eq!((env.config(&config_pda(&a.mint)).pair_after_date, env.config(&config_pda(&b.mint)).pair_after_date), (e2, e2));
+    submit(&mut env, &b.mint, e2, V1, &[&att]).unwrap();
+    expect_anchor_err(submit_pair_result(&mut env, &a.mint, &b.mint, e2, b.mint, &[&att]), "PairPeriodUnpaired");
+    expect_anchor_err(submit_pair_result(&mut env, &a.mint, &b.mint, e2, Pubkey::default(), &[&att]), "PairPeriodUnpaired");
+    // A's e2 cranks at once as unpaired (no PairResultPending wait)
+    env.transfer_sol(&fee_pda(&a.mint), SOL);
+    cpmm::seed_history(&mut env, &a.pool, &a.mint);
+    let k = cranker(&mut env);
+    env.ok(&[cpmm::ix_crank_buyback_paired(&k.pubkey(), &a.mint, &a.pool, e2, Some(b.mint))], &[&k]);
+    assert_eq!(env.reading(&reading_pda(&config_pda(&a.mint), e2)).unwrap().outcome, OUTCOME_BURNED);
+    // e3 is a paired period
+    env.set_time(T0 + 86_400);
+    submit(&mut env, &a.mint, e3, V1 + 4 * UNIT, &[&att]).unwrap();
+    submit(&mut env, &b.mint, e3, V1, &[&att]).unwrap();
+    submit_pair_result(&mut env, &a.mint, &b.mint, e3, b.mint, &[&att]).unwrap();
+    expect_anchor_err(env.send(&[cpmm::ix_crank_buyback_paired(&k.pubkey(), &a.mint, &a.pool, e3, Some(b.mint))], &[&k]), "ForwardRequired");
+}
+
+/// r3 RI-1: the 72 h time-out ends the forward window — after it, forward_to_winner is refused (no race with the loser's own crank).
+#[test]
+fn ri1_the_forward_is_refused_after_the_72_hour_time_out() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let (a, b) = paired(&mut env, &att, buyback_rule(), buyback_rule());
+    env.transfer_sol(&fee_pda(&b.mint), 2 * SOL);
+    submit(&mut env, &a.mint, D2, V1, &[&att]).unwrap();
+    submit(&mut env, &b.mint, D2, V1 + 3 * UNIT, &[&att]).unwrap();
+    submit_pair_result(&mut env, &a.mint, &b.mint, D2, a.mint, &[&att]).unwrap();
+    let k = cranker(&mut env);
+    let submitted = env.reading(&reading_pda(&config_pda(&b.mint), D2)).unwrap().submitted_at;
+    env.set_time(submitted + PAIR_RESULT_GRACE_SECS);
+    expect_anchor_err(env.send(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]), "ForwardWindowClosed");
+    env.set_time(submitted + PAIR_RESULT_GRACE_SECS - 1);
+    env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+    // idempotent even after the window
+    env.set_time(submitted + PAIR_RESULT_GRACE_SECS + 10);
+    env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+}
+
+/// r3 RI-4: a one-shot forward's basis leaves the lamports the loser still owes its earlier periods (carried_spend_lamports).
+#[test]
+fn ri4_a_forward_never_takes_the_losers_carried_spend() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let mut one_shot = buyback_rule();
+    one_shot.fraction_per_unit_bps = 10_000;
+    let (a, b) = paired(&mut env, &att, buyback_rule(), one_shot);
+    env.transfer_sol(&fee_pda(&b.mint), 3 * SOL);
+    patch_config(&mut env, &b.mint, |c| c.carried_spend_lamports = 2 * SOL);
+    submit(&mut env, &a.mint, D2, V1, &[&att]).unwrap();
+    submit(&mut env, &b.mint, D2, V1 + UNIT, &[&att]).unwrap();
+    submit_pair_result(&mut env, &a.mint, &b.mint, D2, a.mint, &[&att]).unwrap();
+    let k = cranker(&mut env);
+    let fb0 = env.lamports(&fee_pda(&b.mint));
+    let expect = expected_forward(&env, &b.mint, D2);
+    assert_eq!(expect, fb0 - one_shot.reserve_lamports - 2 * SOL);
+    env.ok(&[ix_forward_to_winner(&k.pubkey(), &b.mint, &a.mint, D2)], &[&k]);
+    assert_eq!(fb0 - env.lamports(&fee_pda(&b.mint)), expect);
+    assert_eq!(env.lamports(&fee_pda(&b.mint)), one_shot.reserve_lamports + 2 * SOL, "the owed 2 SOL stay for the crank that owes them");
+    assert_eq!(env.config(&config_pda(&b.mint)).carried_spend_lamports, 2 * SOL);
 }
 
 /// L-4: WSOL lamports sent to the loser's WSOL account without a SyncNative count in the forward's basis exactly as in the crank's.

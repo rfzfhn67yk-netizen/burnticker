@@ -60,6 +60,8 @@ export interface InitializeTokenInput {
   pairMint?: string | null;
   /** The second coin of a pair: the partner's TokenConfig exists, so this initialize_token completes the pairing. */
   partnerFirst?: boolean;
+  /** r3 (RN-2): with pairMint, the pair's locked voidBy as YYYYMMDD — the rules' pair.voidBy, the same on both coins (InvalidPairVoidBy otherwise). */
+  pairVoidBy?: number;
 }
 
 export interface BurnProgramClient {
@@ -203,6 +205,8 @@ export class FakeBurnProgram implements BurnProgramClient {
     return f;
   }
   async initializeToken(i: InitializeTokenInput) {
+    // r3: the program refuses a pairing without a valid voidBy (InvalidPairVoidBy) — the fake too
+    if (i.pairMint && !(i.pairVoidBy && i.pairVoidBy > 20000101)) throw new Error("InvalidPairVoidBy: a paired initialize_token needs the pair's voidBy (YYYYMMDD)");
     this.initialised.push(i);
     const tokenConfig = burnPoolFor(PLACEHOLDER_PROGRAM_ID, new PublicKey(i.mint)).config.toBase58();
     if (i.rule) {

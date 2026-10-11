@@ -25,17 +25,19 @@ replace this table (`kind: docker`). The OtterSec verified-builds registry entry
 
 The executable hash is solana-verify's definition: sha256 of the program bytes with trailing zero bytes removed — the number
 `solana-verify get-executable-hash <file.so>` prints for a build and `solana-verify get-program-hash <PROGRAM_ID>` prints for the
-deployed program. Source: monorepo commit `6fc15f00ff13c86c7efdc9e7a69573527d6bde9c`, the last commit that changed the compiled program sources — the §40 blind
-review r2 fixes (docs/burnticker/reviews/2026-10-11-pair-forward-blind.md: no result can wedge a queue, the loser's quorum consents, a
-win servable without the pools, unlink_pair, link before readings) on top of LAUNCHPAD-PATH §40, winner takes the burn. pair_curve's
-source is unchanged; it links the burn_receipts crate, so its bytes change with it. Both programs are built at opt-level "z".
+deployed program. Source: monorepo commit `bc0565589ad99c774786adc21bc1e505c6e5f733`, the last commit that changed the compiled program sources — the
+owner's mainnet pins (OPERATOR_TREASURY, BURNTICKER_PLATFORM; they change the two mainnet rows only — the devnet bytes are identical to
+the deployed `a3a968e5` build) on pair-forward round 3 (docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md: terminal-only unlink evidence, one attester set per pair with the
+partner co-signing attester changes, link_pair after readings, the forward window and basis) on top of the §40 blind review r2 fixes and
+LAUNCHPAD-PATH §40, winner takes the burn. pair_curve's source is unchanged; it links the burn_receipts crate, so its bytes change with
+it. Both programs are built at opt-level "z".
 
 | Program | Program id | Build | Features | Bytes | Executable hash | Deployed on devnet |
 |---|---|---|---|---|---|---|
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 749,552 | `2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3` | — (not deployed on mainnet) |
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 749,736 | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` = build (upgraded through the Squads vault 2026-10-11, vault transaction 15; docs/burnkeeper/devnet-pair-forward-r2-run-log.md) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 410,008 | `82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4` | — (not deployed on mainnet) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 410,064 | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` = build (vault transaction 16, same run) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 763,536 | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | — (not deployed yet; file sha256 `7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a`) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 763,536 | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` = build (upgraded through the Squads vault 2026-10-11, vault transaction 17; docs/burnkeeper/devnet-pair-forward-r3-run-log.md) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 411,296 | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | — (not deployed yet; file sha256 `f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767`) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 411,296 | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` = build (vault transaction 18, same run) |
 
 **Bytecode version: sBPFv3 (SIMD-0500 checked 2026-10-11).** cargo-build-sbf 4.4.0 (Solana CLI 4.3.0, platform-tools v1.57, Anchor
 1.2.1) builds `--arch v3` by default, and all four rows above are sBPFv3 — ELF header `e_flags = 0x3` (`readelf -h <file>.so | grep
@@ -54,7 +56,11 @@ platform, and must never be deployed anywhere: a `localnet` build on mainnet wou
 `devnet` build on mainnet would route it to the devnet vault's address and would not match mainnet's Raydium ids. The upgrade script
 refuses any buffer whose executable hash is not one of this table's rows.
 
-**Previous builds (history, no longer deployed):** the r2 intermediate (source `bfe3bfd6`, superseded within the hour by the servability change): burn_receipts devnet
+**Previous builds (history, no longer deployed):** pair-forward round 2 (source `6fc15f00`): burn_receipts mainnet
+`2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3` / devnet `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87`
+(749,552 / 749,736 B; vault transaction 15), pair_curve mainnet `82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4` / devnet
+`96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` (410,008 / 410,064 B; vault transaction 16;
+docs/burnkeeper/devnet-pair-forward-r2-run-log.md). The r2 intermediate (source `bfe3bfd6`, superseded within the hour by the servability change): burn_receipts devnet
 `7a70b20841cd7e418111ef5d9833b4f43e1eadd75a90a9cf39581c5d8a7ef90e`, pair_curve devnet `bdb8ae753c5de001e33e5023d2ec6901f80d1c486ed2cd7874e7ee59c7d63dc6`
 (vault transactions 13 / 14). §40 winner takes the burn (source `c1834074`): burn_receipts mainnet
 `7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22` / devnet `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5`
@@ -72,14 +78,36 @@ pair_curve mainnet `9ef38e0d8954f6c8242d8157dccdc8a2b169dbd987b13f588c5096ee280e
 devnet LP-lock release was first deployed at source `d54664ed` (burn_receipts devnet `755fb289…`, pair_curve devnet `affb2774…`,
 vault transactions 5 and 6, 21:42 Denver) and replaced 14 minutes later by the treasury-parking fix above.
 
-The burn_receipts **mainnet** row also pins no LaunchLab platform yet (BURNTICKER_PLATFORM = the all-zero placeholder, lp-lock blind
-review RL-3): every policy-0 and policy-2 initialize_token fails with `PlatformNotPinned` until the owner's mainnet platform is compiled
-in, which changes this hash. It also carries no operator treasury yet (the all-zero placeholder): claim_lock_fees refuses every
-claim (TreasuryNotPinned) until the owner's mainnet Squads vault is compiled in, and the fees wait in the lock meanwhile.
+**The mainnet rows carry the owner's pins (2026-10-11).** burn_receipts: `OPERATOR_TREASURY` = `8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5`
+(the owner's hardware wallet, which is also the LaunchLab platform's fee wallet — owner decision; not the Squads vault): claim_lock_fees
+pays the 20 % there and nowhere else. burn_receipts and pair_curve: `BURNTICKER_PLATFORM` = `94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9`
+= getPdaPlatformId(LaunchLab `LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj`, admin `EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23`) —
+re-derived with the Raydium SDK (the same derivation gives the devnet platform `GvSKpe5p…` from `Bfy67…`). That PlatformConfig does not
+exist on chain yet: until the admin creates it, initialize_token (policies 0 and 2) and init_pair cannot read it and fail. No other
+placeholder is left in either mainnet build (CLUSTER_GENESIS_HASH is mainnet's; the Raydium ids are mainnet's). Both mainnet builds
+are sBPFv3 (e_flags 0x3). Upgrade authority after the deploy: the mainnet Squads vault `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`
+(multisig `7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc`). `scripts/squads-program-upgrade.mts` refuses any buffer whose executable
+hash is not this table's.
 
-The pair_curve **mainnet** row is a build that can never open a pair: its `BURNTICKER_PLATFORM` is still the all-zero placeholder, so
-every `init_pair` fails with `PlatformNotPinned` (runbook gate P0). Pinning the owner's mainnet LaunchLab platform changes that hash;
-the table is rewritten then. `scripts/squads-program-upgrade.mts` refuses any buffer whose executable hash is not this table's.
+**Mainnet deploy (Monday 2026-10-12) — runbook delta.** Build: `bash scripts/ops/verified-build.sh --local` must print MATCH for both
+mainnet rows (default features; the files land in `$TMPDIR/burnticker-verified-build/local-mainnet/`). Rent (`solana rent`, mainnet,
+2026-10-11: 5,080 lamports/byte): burn_receipts needs 3.8796 SOL for its buffer and 3.8796 SOL for its program data (peak ≈ 7.76 SOL;
+the buffer's lamports come back when the deploy completes), pair_curve 2.0902 + 2.0903 SOL (peak ≈ 4.18) — ≈ 5.97 SOL stays locked in
+the two program-data accounts. Deployed one after the other, the deployer's 10 SOL covers both (≈ 4 SOL left, less fees). No `--max-len` headroom is needed (program data is extended at upgrade time with `solana program
+extend`, as on devnet). Deploy each with its program-id keypair (the one devnet was deployed with; `solana-keygen pubkey` must print the
+id): `solana program deploy -u mainnet-beta -k <deployer.json> --program-id <AuQjoSgq… keypair> <local-mainnet>/burn_receipts.so`,
+then pair_curve likewise with the `2jQotwSG…` keypair; confirm `bash scripts/ops/verified-build.sh --onchain mainnet` prints MATCH;
+then `solana program set-upgrade-authority -u mainnet-beta -k <deployer.json> <PROGRAM_ID> --new-upgrade-authority
+8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV --skip-new-upgrade-authority-signer-check` for each, and `solana program show <PROGRAM_ID>
+-u mainnet-beta` must show that authority. Platform: the admin `EMht6aGc…` creates the PlatformConfig with the transaction printed by
+`node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-platform-config.mts --admin
+EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23 --fee-wallet 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5 --cluster mainnet
+--lp-platform-pct 100 --program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM --web <https url> --img <https url>` (dry run; it prints
+platformId `94x5qDDJ…`, scales 1,000,000 / 0 / 0, lock-NFT wallet = the FEE_KEYS PDA `Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3`,
+fee wallet `8cwwy895…`), signed and sent by the admin through `scripts/burnkeeper-launch.mts --platform`. Per coin, after its
+initialize_token and immediately before LaunchLab's create: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import
+./test/alias-hook.mjs scripts/burnreceipts-admin.mts verify-platform-pins --cluster mainnet --mint <the coin's mint>` — never create on a
+non-zero exit.
 
 The publish entries in `docs/burnticker/CHANGELOG.md` record the plain sha256 of `target/deploy/burn_receipts.so` (`f3812ce4…` for
 the same default build); the executable hash differs only because it strips the file's 15 trailing zero bytes.

@@ -186,8 +186,20 @@ pub enum BurnError {
     PairResultNotServable,
     #[msg("pair result: the date is before the coins were paired")]
     PairDateBeforePairing,
-    #[msg("link_pair: a coin already has readings under its unpaired rule; pairs are linked before their first reading")]
+    #[msg("retired (pair-forward r3): link_pair accepts coins with readings; periods already read stay unpaired")]
     PairHasReadings,
-    #[msg("unlink_pair: no on-chain evidence that the partner can never be live (Pair voided / side refunding, or no verified pool 30 days after pairing)")]
+    #[msg("unlink_pair: no terminal on-chain evidence (Pair voided, a side refunding, or a LaunchLab pair's voidBy ended without both pools)")]
     PairStillLive,
+    #[msg("pairing: both coins must have the same attester set and quorum")]
+    PairAttestersDiffer,
+    #[msg("forward_to_winner: the 72 h window after the loser's reading has passed; the period burns as unpaired")]
+    ForwardWindowClosed,
+    #[msg("apply_attester_change: the coin is paired; use apply_paired_attester_change with the partner's quorum co-signing")]
+    PairedAttesterChange,
+    #[msg("initialize_token: pair_void_by must be a valid date, today (UTC) or later, with pair_mint, and 0 without it; both coins name the same")]
+    InvalidPairVoidBy,
+    #[msg("link_pair: the pair_curve Pair is voided or one of its sides is refunding")]
+    PairTerminal,
+    #[msg("pair result: the period predates the pairing (readings already existed when the coins were paired)")]
+    PairPeriodUnpaired,
 }

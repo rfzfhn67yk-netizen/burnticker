@@ -239,6 +239,21 @@ pool (blind review 2 I-4: aggregators may route there; the site links only the r
    true draw; a win it cannot record is an alert, never a substitute draw), attests a flat 0-unit winner reading when the winner had nothing
    to read that day, and follows `planCrank` for the 72 h time-out (the forward until then, the paired buyback after) — a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published. Against a dead winner the forward moves 0 lamports: the fuel stays in the loser's pool, where the loser's own later
    burns spend it.
+   **Round 3 (2026-10-11, after the re-check docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md):** `unlink_pair` accepts
+   TERMINAL evidence only — the Pair Voided or a side refunding (the Pair is required evidence for a policy-2 coin), or, for a LaunchLab
+   pair, its locked voidBy day (`initialize_token` arg `pair_void_by`, the same on both coins, stored as TokenConfig.pair_void_by) ended
+   with a coin still unverified. r2's "no verified pool 30 days after pairing" is gone, so an Open pair_curve pair is never unlinked
+   however long its curve runs (RN-1, RN-2). Unlinked coins are `PAIR_STATE_UNLINKED` (pair_unlinked_at) and a policy-2 coin still
+   registers its pool. `link_pair` no longer refuses coins with readings: the periods already read when the coins pair stay unpaired
+   history (`pair_after_date`, on both coins — no PairResult may name them, the crank gate passes them), so a coin read before its link
+   is never frozen (the second RN-1 route). M-1: pairing (both `initialize_token` and `link_pair`) requires both coins to have the same
+   attester set and quorum (same keys, same order), every result needs both quorums — one set of signatures — and a paired coin changes
+   its attesters only through `apply_paired_attester_change`, with the partner's quorum co-signing the pending set
+   (`BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1`); `apply_attester_change` refuses a paired coin. Residual, stated plainly: whoever holds that
+   common quorum decides every result; on Burnticker it is the operator keeper alone, at quorum 1. RI-1: `forward_to_winner` is refused
+   after the 72 h time-out (`ForwardWindowClosed`) — no race with the paired buyback. RI-4: a forward's basis leaves the loser's
+   `carried_spend_lamports` (owed to its earlier periods). There is no on-chain "rule ended / wind-down done" state, so a partner whose
+   rule ended is not unlink evidence: the keeper posts no more results and each period falls back after 72 h.
    `claim_lock_fees` always collects everything accrued (no amount argument, r2 L-3) against the FeeKeyRecord's pool (r2 L-1).
 6. **Fallback if the lock cannot be made** (r2 L-2): `lock_lp` depends on Raydium's upgradeable lock program. If a graduated side's LP
    is still unlocked 30 days (`LP_LOCK_FALLBACK_SECS`) after the graduation decision, anyone may call pair_curve's `burn_lp(side)`: it

@@ -449,8 +449,15 @@ pub fn init_args_entries(rule: RuleParams, attesters: Vec<AttesterEntry>, quorum
         quorum,
         fixed_pool: Pubkey::default(),
         admin: Pubkey::default(),
+        pair_void_by: 0,
     }
 }
+
+/// Pair-forward r3 (RN-2): the voidBy ix_initialize_full fills in for a pairing coin that names none (far in the future, so the
+/// voidBy evidence never fires unless a test sets its own).
+pub const TEST_PAIR_VOID_BY: u32 = 20301231;
+/// 2031-01-01T00:00:00Z — the first second after TEST_PAIR_VOID_BY has ended (UTC).
+pub const TEST_PAIR_VOID_BY_ENDED_TS: i64 = 1_924_992_000;
 
 /// initialize_token; a default `args.admin` is filled with the creator (test convenience — the program itself requires an
 /// explicit admin, see `ix_initialize_raw` and the AdminRequired test).
@@ -482,6 +489,10 @@ pub fn ix_initialize_full(
     pair_mint: Option<Pubkey>,
     partner_first: bool,
 ) -> Instruction {
+    let mut args = args;
+    if pair_mint.is_some() && args.pair_void_by == 0 {
+        args.pair_void_by = TEST_PAIR_VOID_BY;
+    }
     Instruction::new_with_bytes(
         burn_receipts::ID,
         &burn_receipts::instruction::InitializeToken { args }.data(),
@@ -942,6 +953,31 @@ pub fn ix_unlink_pair(cranker: &Pubkey, a: &Pubkey, b: &Pubkey, pair: Option<Pub
         }
         .to_account_metas(None),
     )
+}
+
+/// apply_paired_attester_change (pair-forward r3 M-1) for `mint`, whose partner is `partner`.
+pub fn ix_apply_paired_attester_change(caller: &Pubkey, mint: &Pubkey, partner: &Pubkey) -> Instruction {
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::ApplyPairedAttesterChange {}.data(),
+        burn_receipts::accounts::ApplyPairedAttesterChange {
+            caller: *caller,
+            config: config_pda(mint),
+            link: pair_link_pda(mint),
+            partner_config: config_pda(partner),
+            instructions: solana_instructions_sysvar::ID,
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// The message the partner's quorum signs for `mint`'s pending attester change (attest::canonical_pair_attester_change_message).
+pub fn pair_attester_change_message(env: &Env, mint: &Pubkey, partner: &Pubkey) -> Vec<u8> {
+    let c = env.config(&config_pda(mint));
+    let h = burn_receipts::instructions::pair::set_hash(c.pending_quorum, &c.pending_attesters[..c.pending_count as usize]);
+    burn_receipts::attest::canonical_pair_attester_change_message(&burn_receipts::ID, mint, partner, &h, c.pending_eta).into_bytes()
 }
 
 /// submit_pair_result in a v0 transaction through a lookup table holding its accounts — what a result signed by two different keys

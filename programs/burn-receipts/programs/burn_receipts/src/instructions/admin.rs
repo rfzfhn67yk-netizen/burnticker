@@ -19,7 +19,9 @@ use crate::instructions::pool_health::{clear_untradeable, continuous_untradeable
 use crate::instructions::register_pool::verify_pool_provenance;
 use anchor_spl::token::Mint;
 use crate::instructions::initialize_token::{governance_hash, validate_attesters};
-use crate::state::{AttesterEntry, TokenConfig};
+use crate::attest::{attested_mask, canonical_pair_attester_change_message};
+use crate::instructions::pair::set_hash;
+use crate::state::{AttesterEntry, PairLink, TokenConfig};
 
 #[event_cpi]
 #[derive(Accounts)]
@@ -129,8 +131,17 @@ pub struct ApplyAttesterChange<'info> {
 }
 
 pub fn handle_apply_attester_change(ctx: Context<ApplyAttesterChange>) -> Result<()> {
+    // Pair-forward r3 M-1: a paired coin changes its attesters only with the partner's quorum co-signing.
+    require!(ctx.accounts.config.pair_state != PAIR_STATE_PAIRED, BurnError::PairedAttesterChange);
     let caller = ctx.accounts.caller.key();
-    let c = &mut ctx.accounts.config;
+    let config = ctx.accounts.config.key();
+    let ev = apply_pending(&mut ctx.accounts.config, config, caller)?;
+    emit_cpi!(ev);
+    Ok(())
+}
+
+/// Applies the pending attester proposal (timelock elapsed). Shared by apply_attester_change and apply_paired_attester_change.
+fn apply_pending(c: &mut TokenConfig, config: Pubkey, caller: Pubkey) -> Result<AttesterChangeApplied> {
     require!(c.pending_eta != 0, BurnError::NoPendingChange);
     require!(Clock::get()?.unix_timestamp >= c.pending_eta, BurnError::TimelockNotElapsed);
     // Re-check at application time (defence in depth; the proposal was validated when made).
@@ -148,9 +159,43 @@ pub fn handle_apply_attester_change(ctx: Context<ApplyAttesterChange>) -> Result
     let attesters = c.attesters[..c.attester_count as usize].to_vec();
     let quorum = c.quorum;
     clear_pending(c);
-    let config = c.key();
     let governance_hash = governance_hash(&c.admin, quorum, &attesters);
-    emit_cpi!(AttesterChangeApplied { config, applied_by: caller, attesters, quorum, governance_hash });
+    Ok(AttesterChangeApplied { config, applied_by: caller, attesters, quorum, governance_hash })
+}
+
+/// Pair-forward r3 M-1. PERMISSIONLESS once the timelock has elapsed: applies a PAIRED coin's pending attester change when a quorum of
+/// the PARTNER's current attesters signed attest::canonical_pair_attester_change_message over the pending set (Ed25519SigVerify in the
+/// same transaction). The coin's PairLink then records the new set. Results need both coins' quorums (submit_pair_result), so after a
+/// change the partner's attesters — who approved it — and the new set must both sign.
+#[event_cpi]
+#[derive(Accounts)]
+pub struct ApplyPairedAttesterChange<'info> {
+    /// Anyone (recorded in the event).
+    pub caller: Signer<'info>,
+    #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
+    pub config: Box<Account<'info, TokenConfig>>,
+    #[account(mut, seeds = [PAIR_LINK_SEED, config.mint.as_ref()], bump = link.bump)]
+    pub link: Box<Account<'info, PairLink>>,
+    #[account(seeds = [CONFIG_SEED, partner_config.mint.as_ref()], bump = partner_config.bump)]
+    pub partner_config: Box<Account<'info, TokenConfig>>,
+    /// CHECK: address-checked: the instructions sysvar.
+    #[account(address = solana_instructions_sysvar::ID)]
+    pub instructions: UncheckedAccount<'info>,
+}
+
+pub fn handle_apply_paired_attester_change(ctx: Context<ApplyPairedAttesterChange>) -> Result<()> {
+    let a = &ctx.accounts;
+    require!(a.config.pair_state == PAIR_STATE_PAIRED && a.link.paired && a.link.pair_mint == a.partner_config.mint, BurnError::NotPaired);
+    require!(a.config.pending_eta != 0, BurnError::NoPendingChange);
+    let pending = set_hash(a.config.pending_quorum, &a.config.pending_attesters[..a.config.pending_count as usize]);
+    let msg = canonical_pair_attester_change_message(&crate::ID, &a.config.mint, &a.partner_config.mint, &pending, a.config.pending_eta);
+    let mask = attested_mask(&a.instructions.to_account_info(), msg.as_bytes(), a.partner_config.attester_slice())?;
+    require!(mask.count_ones() >= a.partner_config.quorum as u32, BurnError::QuorumNotMet);
+    let caller = a.caller.key();
+    let config = a.config.key();
+    let ev = apply_pending(&mut ctx.accounts.config, config, caller)?;
+    ctx.accounts.link.attester_set_hash = pending;
+    emit_cpi!(ev);
     Ok(())
 }
 

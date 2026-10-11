@@ -37,7 +37,7 @@ Today, Sat 2026-10-10, is T-16.
    `/burnticker/rivalries`; there is no `/burnticker/seasons` route on main, and the season window (this season / postseason) is on
    `agent/UI-2026-10-10`, not merged.
 6. **Verifier route.** PLAN §6 counts hits on `/v1/receipts/*/verify`; the route is `/api/burnticker/v1/tokens/{ticker}/verify/{id}`
-   (OpenAPI 1.11.0). Measure that one.
+   (OpenAPI 1.12.0). Measure that one.
 
 ---
 

@@ -3,8 +3,8 @@ import type { PairAccount } from "@/lib/pairCurve/accounts";
 import { LP_LOCK_FALLBACK_SECS } from "@/lib/pairCurve/client";
 import { fetchPairs, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
 import { assertPairCurveCluster, crankPair, simulateAndSend, type CrankStep, type PairCurveContext, type SendResult } from "@/lib/pairCurve/client";
-import { configPda } from "@/lib/burnReceipts/pda";
-import { fetchPairLink, linkPairIx, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { fetchPairLink, linkPairIx, PAIR_STATE_UNLINKED, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { pairErrorSentence } from "@/lib/burnticker/pairForward";
 
 /**
@@ -21,8 +21,9 @@ import { pairErrorSentence } from "@/lib/burnticker/pairForward";
  *   any                               → claim_developer_fee once the accrual reaches 0.01 SOL
  *   right after init_pair, first     → link_pair (LAUNCHPAD-PATH §40, winner takes the burn) when both TokenConfigs exist and the two
  *                                       PairLinks do not name each other yet — permissionless, a no-op once paired; register_pair_pool
- *                                       refuses PairNotLinked without it, and since round 2 link_pair refuses once either coin has a reading
- *                                       (PairHasReadings), so it runs before the first reading. Its own transaction, before crankPair's steps.
+ *                                       refuses PairNotLinked without it (it also accepts an UNLINKED coin). Round 3: a coin that read first
+ *                                       is fine (its periods so far stay unpaired, pair_after_date); refused only for a voided Pair or a
+ *                                       refunding side (PairTerminal — alert `pair-link-refused`). Never for an unlinked pair. Its own transaction.
  *   a graduated side with lp_locked 0 → lock_lp; from 30 days after the commit also burn_lp (LP-lock round 2: the fallback, the only
  *                                       path that destroys LP) — and an alert `pair-side-unlocked` every cycle the side stays unlocked
  *
@@ -103,12 +104,15 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
     try {
       // link_pair BEFORE register_pair_pool (its own transaction; a refusal is logged and retried next cycle, crankPair still runs).
       const B = d.ctx.burnReceiptsProgramId;
-      const configs = await Promise.all(pair.mints.map(async (m) => !!(await d.ctx.connection.getAccountInfo(configPda(B, m), "confirmed")))) as [boolean, boolean];
+      const cfgs = await Promise.all(pair.mints.map((m) => fetchTokenConfig(d.ctx.connection, B, m)));
+      const configs = cfgs.map((c) => !!c) as [boolean, boolean];
       const links = await Promise.all(pair.mints.map((m) => fetchPairLink(d.ctx.connection, B, m))) as [PairLinkAccount | null, PairLinkAccount | null];
-      if (linkPairDue(pair, configs, links, d.isUnlinked?.(pair.mints[0].toBase58(), pair.mints[1].toBase58()) ?? false)) {
+      // r3: an UNLINKED coin (pair_state 3) is never re-linked by the keeper, nor a pair the registry records as unlinked (review RL-2)
+      const unlinked = cfgs.some((c) => c?.config.pair_state === PAIR_STATE_UNLINKED) || (d.isUnlinked?.(pair.mints[0].toBase58(), pair.mints[1].toBase58()) ?? false);
+      if (linkPairDue(pair, configs, links, unlinked)) {
         const result = await simulateAndSend(d.ctx, [linkPairIx({ programId: B, payer: d.cranker.publicKey, pair: address, mintA: pair.mints[0], mintB: pair.mints[1] })], [d.cranker], { dryRun: d.dryRun });
         d.log(`  [pair-curve] ${address.toBase58().slice(0, 8)}… link_pair: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${pairErrorSentence(result.error)}`}`);
-        if (!result.ok && result.error === "PairHasReadings") d.alert?.("pair-link-refused", `pair-link-refused:${address.toBase58()}`, `pair ${address.toBase58().slice(0, 8)}…: ${pairErrorSentence(result.error)}`, { pair: address.toBase58() });
+        if (!result.ok && result.error === "PairTerminal") d.alert?.("pair-link-refused", `pair-link-refused:${address.toBase58()}`, `pair ${address.toBase58().slice(0, 8)}…: ${pairErrorSentence(result.error)}`, { pair: address.toBase58() });
         (out.links ??= []).push({ pair: address.toBase58(), result });
       }
       const steps = await crankPair(d.ctx, d.cranker, address, { now, dryRun: d.dryRun, log: d.log, skipClusterCheck: true });

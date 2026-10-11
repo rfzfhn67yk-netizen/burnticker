@@ -515,6 +515,20 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 997
 
+## 2026-10-11 — Pair-forward round 3 (re-check RN-1 / RN-2 / M-1 / RI-1 / RI-4), client side; no publish, no deploy
+
+- burn_receipts gains `apply_paired_attester_change` (31 entrypoints, 100 error codes; `PairHasReadings` no longer raised).
+- Launch: `initialize_token` with `pair_mint` carries `pair_void_by` (the rules' locked voidBy, both coins) and both coins one attester set;
+  a pair-curve coin's `pair_void_by` is 0 (it pairs through `link_pair`).
+- Keeper: unlink sending back ON under terminal evidence only (voided Pair, refunding side, a LaunchLab voidBy day ended with a coin
+  unverified; the 30-day rule is deleted); unlinked coins show pair state 3 and are never re-linked; `link_pair` refused only on
+  `PairTerminal` (`pair-link-refused`); results never posted for periods on or before `pair_after_date` and such results plan without pair
+  roles; a closed forward window (`ForwardWindowClosed`) is a wait — the planner's buyback takes the period.
+- Pages / API 1.12.0 (additive): `status.pair.pairState` (none / provisional / paired / unlinked), `pairVoidBy`, `pairAfterDate`; the pair
+  page states "Whoever holds the common attester quorum decides every result; on Burnticker that is the operator's keeper alone at quorum 1."
+- Docs: whitepaper §5.5 and §13.3, ATTESTERS.md (one set; rotating a paired coin through `apply_paired_attester_change`), a dated checklist
+  erratum, runbook W7, api.md.
+
 ## 2026-10-11 — Pair-forward round-2 re-check, keeper items (RL-1, RL-2, RI-2); no publish, no deploy
 
 - RL-1: a `forward_to_winner` the keeper did not itself just confirm (another cranker's, one that won the 72 h race, or its own with a
@@ -645,3 +659,27 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `8f0fed930369e67f3c0d172159dd86311836304f5da7cc87a160075b95863574`
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 1076
+
+## 2026-10-11 — publish from 924ea66e25fb
+
+- monorepo commit: `924ea66e25fbf187cca5cdcd2cd5cf616f05265d` (the working tree had uncommitted changes when this tag was written)
+- program hash: `ac00ae8ef9c7791e73511413f3a53710d1275b242d25f4b91c2970d41562b316` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `8f0fed930369e67f3c0d172159dd86311836304f5da7cc87a160075b95863574`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1076
+
+## 2026-10-11 — publish from 73a657ae0baa
+
+- monorepo commit: `73a657ae0baa7ce4599a5dbe986921593671c043` (the working tree had uncommitted changes when this tag was written)
+- program hash: `ac00ae8ef9c7791e73511413f3a53710d1275b242d25f4b91c2970d41562b316` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `8f0fed930369e67f3c0d172159dd86311836304f5da7cc87a160075b95863574`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1076
+
+## 2026-10-11 — publish from d9c54e61b600
+
+- monorepo commit: `d9c54e61b600fd5cfaf72943efbea087f47b9521` (the working tree had uncommitted changes when this tag was written)
+- program hash: `7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `209308d514373bdf45d920ff0724cbf27e1812f4ff2e49c84dc8c1aae9c02d55`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1107

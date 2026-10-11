@@ -64,6 +64,9 @@ export interface InitializeTokenArgs {
   fixed_pool: PublicKey;
   /** The config authority (attester proposals only; renounceable) — the Squads 2-of-3 vault. Mandatory (review L-2). */
   admin: PublicKey;
+  /** Pair-forward r3 (RN-2): with pair_mint, the pair's locked voidBy as YYYYMMDD (UTC; today or later; both coins the same); 0 without.
+   *  initializeTokenIx fills it from `pairVoidBy` (default 0). */
+  pair_void_by?: number;
 }
 
 /**
@@ -77,7 +80,12 @@ export interface InitializeTokenArgs {
  * provisional until the partner's initialize_token names this mint back within PAIRING_WINDOW_SECS; pass `partnerFirst: true` when
  * the partner already initialized naming this mint (its PairLink and TokenConfig are then passed and both coins become paired).
  */
-export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; creator: PublicKey; mint: PublicKey; args: InitializeTokenArgs; launchlabPlatform?: PublicKey; pairMint?: PublicKey; partnerFirst?: boolean }): TransactionInstruction {
+/**
+ * Pair-forward r3 (RN-2): `pairVoidBy` (YYYYMMDD, UTC) is REQUIRED on chain with `pairMint` — the rules' `pair.voidBy`, the same on
+ * both coins; once that day has ended with a coin still lacking a verified pool, unlink_pair may unpair the two. Also r3 (M-1): the
+ * partner must have the SAME attester set and quorum (same keys, same order), or the second coin's initialize_token is refused.
+ */
+export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; creator: PublicKey; mint: PublicKey; args: InitializeTokenArgs; launchlabPlatform?: PublicKey; pairMint?: PublicKey; partnerFirst?: boolean; pairVoidBy?: number }): TransactionInstruction {
   return build(o.programId, "initialize_token", {
     payer: o.payer,
     creator: o.creator,
@@ -88,7 +96,7 @@ export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; c
     // r2 L-3: the partner's PairLink address always rides with pairMint (empty when this coin is first).
     ...(o.pairMint ? { pair_mint: o.pairMint, pair_link: pairLinkPda(o.programId, o.mint), partner_link: pairLinkPda(o.programId, o.pairMint) } : {}),
     ...(o.pairMint && o.partnerFirst ? { partner_config: configPda(o.programId, o.pairMint) } : {}),
-  }, { args: o.args });
+  }, { args: { ...o.args, pair_void_by: o.pairVoidBy ?? o.args.pair_void_by ?? 0 } });
 }
 
 /**

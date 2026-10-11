@@ -25,6 +25,9 @@ pub struct InitializeTokenArgs {
     pub fixed_pool: Pubkey,
     /// The config authority (attester proposals only; renounceable) — the Squads 2-of-3 vault. Mandatory (review L-2).
     pub admin: Pubkey,
+    /// Pair-forward r3 (RN-2): with pair_mint, the pair's locked voidBy (YYYYMMDD, UTC; today or later; the partner names the same
+    /// date) — once that day has ended with a coin still lacking a verified pool, unlink_pair may unpair the two. 0 without pair_mint.
+    pub pair_void_by: u32,
 }
 
 #[event_cpi]
@@ -296,14 +299,17 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
     c.pending_policy_pool = Pubkey::default();
     c.pending_policy_eta = 0;
     c.pair_state = PAIR_STATE_NONE;
-    c.reserved = [0u8; 22];
+    c.pair_void_by = 0;
+    c.pair_after_date = 0;
+    c.pair_unlinked_at = 0;
+    c.reserved = [0u8; 6];
 
     // LAUNCHPAD-PATH §40: the partner coin (optional).
     let pairing = match ctx.accounts.pair_mint.as_ref() {
         Some(pm) => {
             let link = ctx.accounts.pair_link.as_ref().ok_or(BurnError::PairMismatch)?;
             let now = ctx.accounts.config.created_at;
-            let (state, l) = crate::instructions::pair::pair_at_initialize(
+            let (state, l, after) = crate::instructions::pair::pair_at_initialize(
                 crate::instructions::pair::InitPairAccounts {
                     payer: &ctx.accounts.payer.to_account_info(),
                     system: &ctx.accounts.system_program.to_account_info(),
@@ -316,12 +322,18 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
                 args.rule.mode,
                 args.rule.pool_policy,
                 now,
+                args.pair_void_by,
                 crate::instructions::pair::attester_set_hash(&ctx.accounts.config),
             )?;
             ctx.accounts.config.pair_state = state;
+            ctx.accounts.config.pair_void_by = args.pair_void_by;
+            ctx.accounts.config.pair_after_date = after;
             Some(l)
         }
-        None => None,
+        None => {
+            require!(args.pair_void_by == 0, BurnError::InvalidPairVoidBy);
+            None
+        }
     };
     let c = &mut ctx.accounts.config;
 

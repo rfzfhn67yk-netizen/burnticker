@@ -85,6 +85,8 @@ export function toPairCurvePolicy(ix: SerializedIx, burnReceiptsProgramId: strin
   if (ix.programId !== burnReceiptsProgramId || data.length < 8 || !data.subarray(0, 8).equals(Buffer.from(def.discriminator))) return null;
   const args = decodeType(BURN_RECEIPTS_IDL, def.args[0].type, data, 8).value as { rule: { pool_policy: number } };
   args.rule.pool_policy = POOL_POLICY_PAIR_CURVE;
+  // r3: a pair-curve coin pairs through link_pair, so initialize_token carries no pair_mint and pair_void_by must be 0
+  (args as { pair_void_by?: number }).pair_void_by = 0;
   const slot = def.accounts.findIndex((a) => a.name === "launchlab_platform");
   // LAUNCHPAD-PATH §40: a pair-curve coin pairs through link_pair (the Pair is the witness), never through initialize_token's pair_mint
   // (the program refuses InvalidPairMint for policy 2) — the LaunchLab bundle's pair accounts become Anchor's "omitted" placeholder.

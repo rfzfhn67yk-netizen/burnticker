@@ -32,8 +32,15 @@ export interface TokenConfigAccount {
   pool_untradeable_candidate_at: bigint;
   /** Review-3 L-2: when each attester slot's key joined. */
   attester_added_at: bigint[];
-  /** LAUNCHPAD-PATH §40: 0 not paired / 1 provisional (partner not answered yet; behaves as a plain coin) / 2 paired (pairs.ts). */
+  /** LAUNCHPAD-PATH §40: 0 not paired / 1 provisional (partner not answered yet; behaves as a plain coin) / 2 paired / 3 unlinked
+   *  (r3: unlink_pair on terminal evidence; a plain coin, still registers its pool) (pairs.ts). */
   pair_state: number;
+  /** r3 (RN-2): a LaunchLab pair's locked voidBy (YYYYMMDD; 0 = none). */
+  pair_void_by: number;
+  /** r3: periods dated on or before this stay unpaired (read before the pairing; 0 = none). */
+  pair_after_date: number;
+  /** r3: when unlink_pair ran (0 = never). */
+  pair_unlinked_at: bigint;
   // conveniences
   feedId: string; memoPrefix: string; memoSource: string; activeAttesters: AttesterEntry[]; adminRenounced: boolean; poolRegistered: boolean;
 }

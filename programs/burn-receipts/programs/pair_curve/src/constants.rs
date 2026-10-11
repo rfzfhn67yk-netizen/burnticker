@@ -42,14 +42,15 @@ pub const LP_LOCK_FALLBACK_SECS: i64 = 30 * 24 * 60 * 60;
 
 /// The LaunchLab PlatformConfig every pair must pin (blind review 1 M-1: the developer wallet is read from it, so it cannot be a
 /// creator's own platform). Per build: devnet = Burnticker's devnet platform (docs/burnkeeper/devnet-run-log-2026-10-10.md A10);
-/// `localnet` (LiteSVM suite) = the harness's test platform; the default (mainnet) build is UNSET (all zeros) until the owner creates
-/// the mainnet platform — init_pair refuses (`PlatformNotPinned`) until it is compiled in (runbook "Pair program gates" P0).
+/// `localnet` (LiteSVM suite) = the harness's test platform; the default (mainnet) build = Burnticker's mainnet platform 94x5qDDJ…
+/// (getPdaPlatformId(LaunchLab LanMV9sA…, admin EMht6aGc…), compiled in 2026-10-11; created on chain by that admin before launch —
+/// until then init_pair cannot read it). A build left at all zeros refuses init_pair (`PlatformNotPinned`).
 #[cfg(feature = "devnet")]
 pub const BURNTICKER_PLATFORM: Pubkey = pubkey!("GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf");
 #[cfg(all(feature = "localnet", not(feature = "devnet")))]
 pub const BURNTICKER_PLATFORM: Pubkey = Pubkey::new_from_array([0x5a; 32]);
 #[cfg(not(any(feature = "devnet", feature = "localnet")))]
-pub const BURNTICKER_PLATFORM: Pubkey = Pubkey::new_from_array([0u8; 32]);
+pub const BURNTICKER_PLATFORM: Pubkey = pubkey!("94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9");
 
 /// Each coin: 1,000,000,000 tokens at 6 decimals, all minted into the side's token vault at init_pair.
 pub const TOKEN_DECIMALS: u8 = 6;

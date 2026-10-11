@@ -45,7 +45,7 @@ describe("burnReceipts client — IDL", () => {
   });
   test("no instruction can withdraw, close or sweep", () => {
     const names = BURN_RECEIPTS_IDL.instructions.map((i) => i.name).sort();
-    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_registration_policy", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_vault", "forward_to_winner", "initialize_platform", "initialize_token", "link_pair", "propose_attesters", "propose_cap_raise", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "unlink_pair", "veto_registration_policy"]);
+    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_vault", "forward_to_winner", "initialize_platform", "initialize_token", "link_pair", "propose_attesters", "propose_cap_raise", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "unlink_pair", "veto_registration_policy"]);
   });
 });
 
@@ -57,7 +57,7 @@ describe("burnReceipts client — LP lock and fee split (LAUNCHPAD-PATH §35)", 
       const auth = PublicKey.findProgramAddressSync([LOCK_CP_AUTHORITY_SEED], LOCK_CPMM_PROGRAM_ID[cluster])[0];
       assert.ok(auth.equals(LOCK_CPMM_AUTHORITY[cluster]), cluster);
     }
-    assert.ok(OPERATOR_TREASURY.mainnet.equals(PublicKey.default), "the mainnet build carries no treasury until the owner compiles it in");
+    assert.equal(OPERATOR_TREASURY.mainnet.toBase58(), "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", "the mainnet build pays the owner's wallet (2026-10-11)");
     assert.equal(OPERATOR_TREASURY.devnet.toBase58(), "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     assert.ok(!feeKeysPda(PID).equals(feeKeyRecordPda(PID, MINT)));
   });
@@ -104,11 +104,12 @@ describe("burnReceipts client — PDAs and accounts", () => {
       attesters: [operatorAttester(a1), ...Array.from({ length: 4 }, () => operatorAttester(PublicKey.default))], attester_count: 1, quorum: 1,
       pending_attesters: Array.from({ length: 5 }, () => operatorAttester(PublicKey.default)), pending_count: 0, pending_quorum: 0, pending_eta: BigInt(0),
       cpmm_pool: PublicKey.default, last_record_date: 20261008, last_value: BigInt("4030531621082972"), carry: BigInt(28006346253), crank_cursor: 20261007,
-      readings: 3, burns: 1, total_burned: BigInt(5), total_spent_lamports: BigInt(6), shortfall: BigInt(0), created_at: BigInt(1791547200), carried_spend_lamports: BigInt(11), pool_untradeable_since: BigInt(0), pool_untradeable_last_seen: BigInt(0), pool_verified: false, cluster_genesis: new PublicKey(G), registration_policy: 0, ll_platform: a1, ll_cp_config: PublicKey.default, ll_lock_scale_ppm: BigInt(1_000_000), pool_untradeable_candidate_at: BigInt(0), attester_added_at: [BigInt(1791547200), BigInt(0), BigInt(0), BigInt(0), BigInt(0)], pending_policy: 0, pending_policy_pool: PublicKey.default, pending_policy_eta: BigInt(0), pair_state: 2, reserved: new Uint8Array(22),
+      readings: 3, burns: 1, total_burned: BigInt(5), total_spent_lamports: BigInt(6), shortfall: BigInt(0), created_at: BigInt(1791547200), carried_spend_lamports: BigInt(11), pool_untradeable_since: BigInt(0), pool_untradeable_last_seen: BigInt(0), pool_verified: false, cluster_genesis: new PublicKey(G), registration_policy: 0, ll_platform: a1, ll_cp_config: PublicKey.default, ll_lock_scale_ppm: BigInt(1_000_000), pool_untradeable_candidate_at: BigInt(0), attester_added_at: [BigInt(1791547200), BigInt(0), BigInt(0), BigInt(0), BigInt(0)], pending_policy: 0, pending_policy_pool: PublicKey.default, pending_policy_eta: BigInt(0), pair_state: 2, pair_void_by: 20261120, pair_after_date: 20261007, pair_unlinked_at: BigInt(0), reserved: new Uint8Array(6),
     };
     const data = Buffer.concat([accountDiscriminator(BURN_RECEIPTS_IDL, "TokenConfig"), encodeType(BURN_RECEIPTS_IDL, { defined: { name: "TokenConfig" } }, cfg)]);
     const back = decodeTokenConfig(data);
     assert.equal(back.pair_state, 2, "LAUNCHPAD-PATH §40: pair_state took the first reserved byte");
+    assert.deepEqual([back.pair_void_by, back.pair_after_date, back.pair_unlinked_at], [20261120, 20261007, BigInt(0)], "pair-forward r3 fields from the reserved bytes");
     assert.equal(back.feedId, "treasury.debt_to_penny");
     assert.equal(back.memoSource, "fiscaldata.treasury.gov debt_to_penny");
     assert.equal(back.rule.fraction_per_unit_bps, 500);

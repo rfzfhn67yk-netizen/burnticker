@@ -58,23 +58,24 @@
         "burn_receipts": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
         "pair_curve": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
       },
-      "launchlabPlatform": "TODO_MAINNET_PLATFORM_ID",
+      "launchlabPlatform": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
       "squads": {
-        "vault": "TODO_MAINNET_SQUADS_VAULT",
-        "multisig": "TODO_MAINNET_SQUADS_MULTISIG",
+        "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+        "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
         "timeLock": "48 h",
         "source": "docs/burn-receipts/powers-register.md"
       },
       "wallets": [
-        { "role": "dev-fee", "label": "developer fee wallet (PlatformConfig.platformClaimFeeWallet)", "pubkey": "TODO_MAINNET_DEV_FEE_WALLET", "source": null },
+        { "role": "dev-fee", "label": "developer fee wallet = operator treasury (PlatformConfig.platformClaimFeeWallet: the 25 bps curve fee, launch fees AND the 20 % post-graduation LP-fee share via OPERATOR_TREASURY; owner hardware wallet — owner decision 2026-10-11)", "pubkey": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", "source": "owner, 2026-10-11" },
         { "role": "keeper", "label": "keeper data key (attester, quorum 1; pays crank fees)", "pubkey": "TODO_MAINNET_KEEPER", "source": null },
         { "role": "deployer", "label": "program deployer (upgrade authority handed to the Squads vault)", "pubkey": "TODO_MAINNET_DEPLOYER", "source": null },
-        { "role": "platform-admin", "label": "LaunchLab platform admin", "pubkey": "TODO_MAINNET_PLATFORM_ADMIN", "source": null },
-        { "role": "squads-vault", "label": "Squads 2-of-3 vault (upgrade authority, platform authority, config authority)", "pubkey": "TODO_MAINNET_SQUADS_VAULT", "source": null },
-        { "role": "squads-member-1", "label": "Squads member: owner, hardware key (Phantom/Ledger)", "pubkey": "TODO_SQUADS_MEMBER_1", "source": null },
-        { "role": "squads-member-2", "label": "Squads member: owner, second key", "pubkey": "TODO_SQUADS_MEMBER_2", "source": null },
-        { "role": "squads-member-3", "label": "Squads member: trusted third party (named with consent)", "pubkey": "TODO_THIRD_SIGNER_ADDRESS", "name": "TODO_THIRD_SIGNER_NAME", "source": null }
+        { "role": "platform-admin", "label": "LaunchLab platform admin", "pubkey": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23", "source": "owner, 2026-10-11" },
+        { "role": "squads-vault", "label": "Squads 2-of-3 vault (upgrade authority of both programs, config authority; holds no fee streams)", "pubkey": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "source": "created by the owner 2026-10-11; vault PDA derived from the multisig and checked" },
+        { "role": "squads-member-1", "label": "Squads member A: owner, hardware key", "pubkey": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ", "source": "owner, 2026-10-11" },
+        { "role": "squads-member-2", "label": "Squads member B: owner, second key", "pubkey": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt", "source": "owner, 2026-10-11" },
+        { "role": "squads-member-3", "label": "Squads member C: trusted third party (named only with consent)", "pubkey": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG", "name": "TODO_THIRD_SIGNER_NAME", "source": "owner, 2026-10-11" },
+        { "role": "bounty", "label": "bounty wallet (held by the operator; pays security reports)", "pubkey": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u", "source": "config/public-repo/overlay/SECURITY.md" }
       ],
       "platformMints": []
     }

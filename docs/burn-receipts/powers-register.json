@@ -4,7 +4,7 @@
     "name": "burn_receipts",
     "version": "0.1.0",
     "address_in_idl": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
-    "idl_sha256": "cb254a31b4336f4f0d11058515c7308d2d6cb69ab0304870e6825375b8b2d6fe"
+    "idl_sha256": "0c4bd98f38854d40471e2e7ebf940d7d5999fbb2282325f0ba6e4bfe45897666"
   },
   "roles": {
     "anyone": "Anyone with a funded wallet. Pays only the transaction fee (and rent where noted); chooses no amounts.",
@@ -28,8 +28,8 @@
         }
       ],
       "gated_by": null,
-      "can": "Apply a pending attester proposal after its 48-hour timelock.",
-      "cannot": "Apply early; apply a proposal that lowers the quorum (re-checked).",
+      "can": "Apply a pending attester proposal after its 48-hour timelock (a coin that is not paired).",
+      "cannot": "Apply early; apply a proposal that lowers the quorum (re-checked); apply to a PAIRED coin (pair-forward r3 M-1: use apply_paired_attester_change).",
       "timelock": "Executable only after the proposal's ETA.",
       "sunset": "None.",
       "funds": "None.",
@@ -47,6 +47,23 @@
       "gated_by": null,
       "can": "Apply a pending cap raise after its 48-hour timelock.",
       "cannot": "Apply early; apply anything but a raise (re-checked).",
+      "timelock": "Executable only after the proposal's ETA.",
+      "sunset": "None.",
+      "funds": "None.",
+      "temporary": false
+    },
+    {
+      "name": "apply_paired_attester_change",
+      "class": "permissionless",
+      "signers": [
+        {
+          "account": "caller",
+          "role": "anyone"
+        }
+      ],
+      "gated_by": "attesters",
+      "can": "Pair-forward r3 M-1: apply a PAIRED coin's pending attester proposal after its 48-hour timelock, only with a quorum of the PARTNER's current attesters signing BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1 ‖ cluster genesis ‖ program ‖ mint ‖ partner ‖ sha256 of the pending set ‖ ETA (Ed25519SigVerify in the same transaction). The coin's PairLink then records the new set.",
+      "cannot": "Apply early, without the partner's quorum, a proposal that lowers the quorum, or to a coin that is not paired to that partner; let either side's attesters alone change who signs the pair's results.",
       "timelock": "Executable only after the proposal's ETA.",
       "sunset": "None.",
       "funds": "None.",
@@ -249,8 +266,8 @@
         }
       ],
       "gated_by": null,
-      "can": "LAUNCHPAD-PATH §40: for a period whose result names a winner, process the LOSER's reading by moving exactly what its own rule would have spent had it won — pool × (1 − (1 − f)^units) on min(spendable incl. synced WSOL, the burn-pool cap), nothing under its floor, nothing when either coin has no verified pool (pair-forward blind review H-1: the reading is still processed, lamports=0) — from the loser's fee PDA to the winner's fee PDA (SOL above the reserve first, then WSOL into the winner fee PDA's WSOL account); mark the reading forwarded, record the forward on the result, write memo `<PREFIX>|forward|…|v1` (always, lamports=0 included). A second call is a no-op.",
-      "cannot": "Choose the amount or the recipient (only the winner's fee PDA, which spends only through crank_buyback); forward on a draw, to the losing coin, out of the loser's reading order, or below the loser's reserve; touch either coin's supply; run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+      "can": "LAUNCHPAD-PATH §40: for a period whose result names a winner, within 72 h of the loser's reading (pair-forward r3 RI-1), process the LOSER's reading by moving exactly what its own rule would have spent had it won — pool × (1 − (1 − f)^units) on min(spendable incl. synced WSOL − the spend it still owes earlier periods (r3 RI-4), the burn-pool cap), nothing under its floor, nothing when either coin has no verified pool (pair-forward blind review H-1: the reading is still processed, lamports=0) — from the loser's fee PDA to the winner's fee PDA (SOL above the reserve first, then WSOL into the winner fee PDA's WSOL account); mark the reading forwarded, record the forward on the result, write memo `<PREFIX>|forward|…|v1` (always, lamports=0 included). A second call is a no-op.",
+      "cannot": "Choose the amount or the recipient (only the winner's fee PDA, which spends only through crank_buyback); forward on a draw, to the losing coin, out of the loser's reading order, after the 72 h time-out, or below the loser's reserve; take lamports the loser owes its earlier periods; touch either coin's supply; run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
       "timelock": null,
       "sunset": "None.",
       "funds": "Loser fee PDA SOL / WSOL → winner fee PDA SOL / WSOL account (then burned by the winner's cranks).",
@@ -312,8 +329,8 @@
         }
       ],
       "gated_by": null,
-      "can": "LAUNCHPAD-PATH §40: pair the two coins of a pair_curve Pair (the Pair account — pair_curve's, not Voided — names both mints; both TokenConfigs are policy 2): write or complete both coins' PairLink [\"pair_link\", mint] and set both configs paired. Idempotent; the payer pays the PairLink rent.",
-      "cannot": "Pair coins the Pair does not name, a voided pair, a coin already linked to another partner, non-policy-2 coins, or coins that already have a reading (pair-forward blind review L-1: a pair is linked before its first reading, never retroactively); change a partner.",
+      "can": "LAUNCHPAD-PATH §40: pair the two coins of a pair_curve Pair (the Pair account — pair_curve's, not Voided, no side refunding — names both mints; both TokenConfigs are policy 2 with the SAME attester set and quorum, pair-forward r3 M-1): write or complete both coins' PairLink [\"pair_link\", mint] and set both configs paired. Periods either coin has already read stay unpaired (pair_after_date: no result may name them, the crank treats them as unpaired — r3; r2 refused such coins outright, freezing them). Idempotent; the payer pays the PairLink rent.",
+      "cannot": "Pair coins the Pair does not name, a voided pair or one with a refunding side, a coin already linked to another partner, non-policy-2 coins, or coins with different attester sets / quorums; re-interpret a period read before the link; change a partner.",
       "timelock": null,
       "sunset": "Once per pair (then frozen).",
       "funds": "Payer → the PairLinks' rent.",
@@ -381,7 +398,7 @@
       ],
       "gated_by": null,
       "can": "Registration policy 2 (2026-10-10, rivalry pairs): record the CPMM pool that the pair_curve program's graduate created for this token — the Pair account is pair_curve's (hard-coded id, discriminator, PDA [\"pair\", mint_a, mint_b]), Graduated (or Graduating with this side done) and names this mint; the pool is the one the Pair records for that side AND the pair_curve PDA [\"pool\", pair, [side]] (only pair_curve can sign for it), on the cpConfigId pinned at initialize_token, with the pair's SOL vault PDA as pool_creator; ≥ 90 % of the LP that existed at creation was LOCKED by pair_curve's lock_lp (or burned, for pairs graduated before LAUNCHPAD-PATH §35) — Pair record, confirmed on chain by the LP in Raydium's lock account plus CPMM lp_supply − LP mint supply.",
-      "cannot": "Register a pool for a policy-0/1 token, a pool from another pair or side, a pool at any other address, on another AmmConfig or with its LP neither locked nor burned; register a coin not yet paired by link_pair (LAUNCHPAD-PATH §40: every pair is winner-takes-the-burn); register twice; change a registered pool. Later LP deposits cannot block it (the ratio is against the creation supply).",
+      "cannot": "Register a pool for a policy-0/1 token, a pool from another pair or side, a pool at any other address, on another AmmConfig or with its LP neither locked nor burned; register a coin not yet paired by link_pair (LAUNCHPAD-PATH §40: every pair is winner-takes-the-burn) — a coin unlinked by unlink_pair on terminal evidence (pair-forward r3) still registers; register twice; change a registered pool. Later LP deposits cannot block it (the ratio is against the creation supply).",
       "timelock": null,
       "sunset": "Once per token (then frozen).",
       "funds": "None.",
@@ -482,8 +499,8 @@
         }
       ],
       "gated_by": "attesters",
-      "can": "LAUNCHPAD-PATH §40: append one period's result of a pair — the winning mint or a draw — over BURNRECEIPTS-PAIR-v1 ‖ cluster genesis ‖ program ‖ both mints ‖ date ‖ winner ‖ source hash ‖ proof locator. A win needs the LOSER's attester quorum (the side giving up fuel consents; pair-forward blind review M-1), plus the winner's quorum if the loser's attester set changed since pairing; a draw needs both quorums. A win is recorded only if both coins read the date and the loser's reading is still unprocessed (H-1), so forward_to_winner can always serve it (a side without a verified pool then forwards 0 lamports).",
-      "cannot": "Change or replace a recorded result; post a result for coins that are not paired to each other, a future date, a date before the pairing (L-2), a winner outside the pair, or a win the forward could not serve; reuse a signature made for another cluster, pair or date; be re-submitted without valid signatures (I-2).",
+      "can": "LAUNCHPAD-PATH §40: append one period's result of a pair — the winning mint or a draw — over BURNRECEIPTS-PAIR-v1 ‖ cluster genesis ‖ program ‖ both mints ‖ date ‖ winner ‖ source hash ‖ proof locator. Every result — win or draw — needs BOTH coins' attester quorums (pair-forward r3 M-1); pairing requires one common attester set and quorum and a paired coin changes its set only with the partner's quorum co-signing, so this is one set of signatures and neither side's attesters can sign its wins while withholding its losses (on Burnticker that common quorum is the operator keeper alone, quorum 1). A win is recorded only if both coins read the date and the loser's reading is still unprocessed (H-1), so forward_to_winner can always serve it (a side without a verified pool then forwards 0 lamports).",
+      "cannot": "Change or replace a recorded result; post a result for coins that are not paired to each other, a future date, a date before the pairing (L-2) or on/before pair_after_date (r3), a winner outside the pair, or a win the forward could not serve; reuse a signature made for another cluster, pair or date; be re-submitted without valid signatures (I-2).",
       "timelock": null,
       "sunset": "None.",
       "funds": "Payer pays the PairResult account's rent (kept forever).",
@@ -516,9 +533,9 @@
         }
       ],
       "gated_by": null,
-      "can": "pair-forward blind review M-2: undo a pairing on on-chain evidence only — the pair_curve Pair holding both mints is Voided or one of its sides is refunding, or one coin still has no verified pool 30 days after the pairing; both coins become plain coins (pair_state NONE) and both PairLinks close, their rent to each coin's own fee PDA.",
-      "cannot": "Unlink a pair whose two coins are live (both pools verified) without such evidence; move any other funds; pair the coins again (link_pair refuses coins with readings).",
-      "timelock": "30 days after pairing for the no-verified-pool evidence.",
+      "can": "pair-forward blind review M-2 / r3 RN-1, RN-2: undo a pairing on TERMINAL on-chain evidence only — the pair_curve Pair holding both mints is Voided or one of its sides is refunding (required evidence when either coin is policy 2), or, for a LaunchLab pair, its locked voidBy day (TokenConfig.pair_void_by, set at initialize_token, the same on both coins) has ended (UTC) with a coin still lacking a verified pool; both coins become UNLINKED plain coins (pair_unlinked_at; a policy-2 coin still registers its pool) and both PairLinks close, their rent to each coin's own fee PDA.",
+      "cannot": "Unlink a pair_curve pair while its Pair is Open (or Graduating with no refunding side), however long the curve runs (r2's 'no verified pool 30 days after pairing' is gone); unlink a LaunchLab pair before its voidBy has ended or once both pools are verified; move any other funds.",
+      "timelock": "A LaunchLab pair: after its locked voidBy day.",
       "sunset": "Once per pair.",
       "funds": "PairLink rent → each coin's fee PDA.",
       "temporary": false

@@ -251,7 +251,8 @@ fn event<T: AnchorDeserialize + Discriminator>(meta: &litesvm::types::Transactio
 fn the_split_constants_are_80_20_and_compiled() {
     assert_eq!((LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS), (8_000, 2_000));
     assert_eq!(LOCK_FEE_BURN_BPS + LOCK_FEE_OPERATOR_BPS, 10_000);
-    assert_eq!(OPERATOR_TREASURY, Pubkey::default(), "the default (mainnet) build carries no treasury until the owner compiles it in");
+    assert_eq!(OPERATOR_TREASURY.to_string(), "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", "the default (mainnet) build pays the owner's wallet (2026-10-11)");
+    assert_eq!(BURNTICKER_PLATFORM.to_string(), "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9", "and pins the owner's LaunchLab platform");
     assert_eq!(LOCK_CPMM_PROGRAM_ID.to_string(), "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE");
     assert_eq!(Pubkey::find_program_address(&[b"lock_cp_authority_seed"], &LOCK_CPMM_PROGRAM_ID).0, LOCK_CPMM_AUTHORITY);
 }
@@ -443,7 +444,7 @@ fn initialize_token_requires_the_platform_to_lock_everything_to_fee_keys() {
 /// The default (mainnet) build pins no platform and no treasury: policy-0 initialize_token refuses (PlatformNotPinned) and, for a
 /// coin set up under another build, claim_lock_fees refuses (TreasuryNotPinned) — the fees stay in the lock.
 #[test]
-fn the_mainnet_build_refuses_until_platform_and_treasury_are_compiled_in() {
+fn the_mainnet_build_pins_the_owners_treasury_and_platform() {
     let mut env = lock_env();
     let c = coin(&mut env, &[100], None);
     register(&mut env, &c, 0);
@@ -451,12 +452,14 @@ fn the_mainnet_build_refuses_until_platform_and_treasury_are_compiled_in() {
     env.svm.add_program(burn_receipts::ID, &read("target/deploy/burn_receipts.so")).unwrap();
     let k = Keypair::new();
     env.fund(&k.pubkey(), SOL);
-    // whatever treasury is passed, it is not the (all-zero placeholder) compiled one
+    // the mainnet build pays only the compiled treasury (the owner's wallet 8cwwy895…, 2026-10-11): the harness treasury is refused
+    // by the address constraint (its error is TreasuryNotPinned)
     expect_anchor_err(env.send(&[ix_claim(&k.pubkey(), &c.mint, &c.pool, &c.nfts[0], &TREASURY)], &[&k]), "TreasuryNotPinned");
+    // and pins only the owner's LaunchLab platform (94x5qDDJ…): the harness platform is refused
     let payer = env.payer.pubkey();
     let (mint, creator, a) = (Keypair::new(), Keypair::new(), Keypair::new());
     let r = env.send(&[ix_initialize(&payer, &creator.pubkey(), &mint.pubkey(), init_args(buyback_rule(), vec![a.pubkey()], 1))], &[&creator, &mint]);
-    expect_anchor_err(r, "PlatformNotPinned");
+    expect_anchor_err(r, "PlatformNotAllowed");
 }
 
 /// An unfunded treasury (below its rent-exempt minimum — a fresh Squads vault) cannot be credited a small amount: the claim still

@@ -75,8 +75,8 @@ export const lpLockAuthorityFor = (cluster: string): string => LP_LOCK_AUTHORITY
 
 /**
  * OPERATOR_TREASURY, compiled into the program per cluster (where claim_lock_fees pays the 20 %). Devnet: the Squads vault. Mainnet:
- * NOT PINNED — the mainnet build carries all zeros and claim_lock_fees refuses `TreasuryNotPinned` until the owner compiles the mainnet
- * vault in; the fees stay in the lock meanwhile (a launch gate and a TODO-OWNER row). null = not pinned (the program's all-zero value).
+ * the owner's hardware wallet 8cwwy895… (also the LaunchLab platform fee wallet; compiled in 2026-10-11). A build with all zeros would
+ * refuse claims with `TreasuryNotPinned` (a launch-gate problem). null = not pinned (the program's all-zero value).
  * Localnet = the LiteSVM suites' test treasury.
  */
 const pinnedOrNull = (k: PublicKey): string | null => (k.equals(PublicKey.default) ? null : k.toBase58());
@@ -91,7 +91,7 @@ export const TREASURY_NOT_PINNED = "TreasuryNotPinned";
 
 /**
  * BURNTICKER_PLATFORM compiled into each build (round 2): the one LaunchLab platform initialize_token accepts for policies 0 and 2.
- * null = not pinned (mainnet today: initialize_token refuses PlatformNotPinned until the owner's platform is compiled in).
+ * null = not pinned (initialize_token would refuse PlatformNotPinned); mainnet = 94x5qDDJ… since 2026-10-11.
  */
 export const BURNTICKER_PLATFORM: Record<ClusterKey, string | null> = {
   mainnet: pinnedOrNull(PROGRAM_BURNTICKER_PLATFORM.mainnet),

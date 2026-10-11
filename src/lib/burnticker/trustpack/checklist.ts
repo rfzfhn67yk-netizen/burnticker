@@ -47,7 +47,7 @@ export type OutflowClass = keyof typeof OUTFLOW;
 /** Every instruction's class. A new instruction must be added here (the test fails on any instruction missing from this table). */
 export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowClass>> = {
   burn_receipts: {
-    apply_attester_change: "none", apply_cap_raise: "none", apply_registration_policy: "none", cancel_attester_change: "none", cancel_cap_raise: "none",
+    apply_attester_change: "none", apply_paired_attester_change: "none", apply_cap_raise: "none", apply_registration_policy: "none", cancel_attester_change: "none", cancel_cap_raise: "none",
     cancel_registration_policy: "none", check_pool_health: "none", claim_launchlab_creator_fee: "intoPool", claim_lock_fees: "lockFees", clear_cranker_allowlist: "none",
     crank_buyback: "swapBurn", crank_no_units: "none", crank_vault: "burn", initialize_platform: "rent", initialize_token: "rent", propose_attesters: "none",
     propose_cap_raise: "none", register_fee_key: "rent", link_pair: "rent", submit_pair_result: "rent", forward_to_winner: "forwardWinner", unlink_pair: "rent", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
@@ -106,7 +106,7 @@ export function buildChecklist(root = process.cwd()): Checklist {
     { id: "upgrade-authority", title: "Upgrade authority held by Squads until finalisation", text: `Both programs can still be upgraded by the 2-of-3 Squads vault (devnet: ${dev.squads.vault}, 60 s time lock; mainnet: 48 h). Finalising (setting it to none) is the planned last step, not done.`, where: `${REGISTER_FILES.burn_receipts} → upgrade_authority`, status: "not done" },
     { id: "no-firm-review", title: "No professional security firm has reviewed the code", text: t.howBuilt.firmAuditStatement, where: `${TRANSPARENCY_FILE} → howBuilt`, status: "not done" },
     { id: "third-signer", title: "Third Squads signer", text: "The trusted third party who holds the third key is not named yet (name and address TODO).", where: `${OPERATOR_FILE} → clusters.mainnet.wallets[squads-member-3]`, status: "not done" },
-    { id: "bounty-wallet", title: "Bounty wallet", text: "Not created yet (TODO_BOUNTY_WALLET): the mainnet Squads vault, funded with 5–10 SOL from the developer fee.", where: "config/public-repo/overlay/SECURITY.md", status: "not done" },
+    { id: "bounty-wallet", title: "Bounty wallet", text: "Set 2026-10-11: HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator; funding of 5–10 SOL from the developer fee is pending.", where: "config/public-repo/overlay/SECURITY.md", status: "wallet set; funding pending" },
     { id: "entity", title: "Legal entity", text: op.operator.entityPending, where: `${OPERATOR_FILE} → operator.entity`, status: "not done" },
     { id: "verified-build", title: "Docker verified build", text: build.kindNote, where: VERIFIED_BUILD_FILE, status: build.kind === "docker" ? "done" : "interim" },
   ];

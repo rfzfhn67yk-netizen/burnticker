@@ -28,6 +28,12 @@ export interface PairCounterpart {
   forwards?: PairForwardJson[];
   /** Since 1.11.0: unlink_pair ran (a voided pair curve, a refunding side, or no verified pool 30 days after pairing) — two plain coins now. */
   unpaired?: { reason: string; at: string; signature: string | null } | null;
+  /** Since 1.12.0 (pair-forward round 3), from the chain: none / provisional / paired / unlinked; null when not read. */
+  pairState?: "none" | "provisional" | "paired" | "unlinked" | null;
+  /** Since 1.12.0: a LaunchLab pair's locked voidBy on chain (YYYY-MM-DD; null for none / pair_curve). */
+  pairVoidBy?: string | null;
+  /** Since 1.12.0: periods on or before this date (YYYY-MM-DD) were read before the pairing and stay unpaired; null for none. */
+  pairAfterDate?: string | null;
 }
 
 /** Market data for the coin card and the coin page (market.ts builds it; 2026-10-10). Read from chain as data, never a price claim. */

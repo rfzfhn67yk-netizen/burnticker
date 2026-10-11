@@ -1,17 +1,15 @@
 //! Pair-forward RE-CHECK (2026-10-11) of the round-2 fixes — the pair_curve (policy-2) half of the new tests for
 //! docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md. The harness below is a verbatim copy of tests/review_pc1.rs's.
 //!
-//!   RN-1 (High)  unlink_pair's UNLINK_NOT_LIVE starts its 30 days at the PAIRING (link_pair, right after init_pair), while a pair_curve
-//!                curve may stay Open up to 90 days. 30 days into an Open curve anyone (and the keeper's own pairUnlinkStep) can unlink
-//!                the pair. link_pair then refuses to re-pair once either coin has a reading (PairHasReadings), and register_pair_pool
-//!                requires PAIR_STATE_PAIRED — so after graduation neither side can ever register its pool: both coins' burn engines
-//!                never start and their fee PDAs (graduation burn escrow, every later deposit) are frozen with no withdraw path.
-//!
-//!   `rn1_*_must_*` asserts the SAFE behaviour and is #[ignore]d (it FAILS at 9d81ee5e); `rn1_still_*` asserts today's behaviour and
-//!   passes (invert it with the fix).
+//!   RN-1 (High)  r2's unlink_pair accepted "no verified pool 30 days after pairing" (UNLINK_NOT_LIVE) on an Open pair_curve pair, and
+//!                link_pair then refused to re-pair a coin with readings while register_pair_pool required PAIRED — both fee PDAs
+//!                frozen. Round 3 (2026-10-11) closed it; the tests are INVERTED:
+//!                  rn1_an_open_pair_is_never_unlinked_and_both_pools_register   (was the #[ignore]d `must` test)
+//!                  rn1_a_coin_read_before_link_pair_still_links_and_registers   (was `rn1_still_*`; the second route)
+//!                An unlinked coin (terminal evidence) registering its pool: tests/review_pc1.rs pf_r2_….
 //!
 //! Run: scripts/test.sh builds the fixtures; then
-//!   cargo test -p pair_curve --test review_pair_r2 -- --include-ignored --test-threads=1 --nocapture
+//!   cargo test -p pair_curve --test review_pair_r2 -- --test-threads=1 --nocapture
 
 #![allow(clippy::result_large_err, clippy::too_many_arguments, dead_code, unused_imports)]
 
@@ -420,70 +418,91 @@ const DAY: i64 = 86_400;
 const R0: u32 = 20261009;
 
 /// A pair whose curve runs 60 days (pair_curve allows up to 90). link_pair ran right after init_pair (setup). Coin A has one reading
-/// before graduation — the baseline the keeper attests when the coin's first receipt settles (any reading does: link_pair counts
-/// `readings`). 30 days after the link, the curve still Open, someone sends unlink_pair with no evidence account.
-fn open_pair_unlink_attempt(env: &mut Env) -> (P, Keypair, TxResult) {
+/// before graduation. 30 days after the link, the curve still Open, someone sends unlink_pair — without evidence, and with the (Open)
+/// Pair as "evidence". Returns both attempts.
+fn open_pair_unlink_attempt(env: &mut Env) -> (P, Keypair, TxResult, TxResult) {
     let p = setup(env, MAINNET_POOL_FEE, |a| a.deadline += 59 * DAY);
     let paired_at = pair_link(env, &p.mint(0)).expect("linked by setup").paired_at;
     submit(env, &p.mint(0), R0, V1, &[&p.attester]).unwrap();
     assert_eq!(env.config(&config_pda(&p.mint(0))).readings, 1);
-    env.set_time(paired_at + PAIR_UNLINK_NOT_LIVE_SECS);
+    env.set_time(paired_at + 30 * DAY);
     let s = pair_state(env, &p);
     assert!(s.status == pair_curve::STATUS_OPEN && env.now() < s.deadline, "the curve is still open and healthy");
     let c = trader(env, 2 * SOL);
     let r = env.send(&[ix_unlink_pair(&c.pubkey(), &p.mint(0), &p.mint(1), None)], &[&c]);
-    (p, c, r)
+    let r2 = env.send(&[ix_unlink_pair(&c.pubkey(), &p.mint(0), &p.mint(1), Some(p.pair))], &[&c]);
+    (p, c, r, r2)
 }
 
-/// RN-1, the SAFE behaviour (#[ignore]: FAILS at 9d81ee5e). Whatever happens to the pairing while the curve is open, once the pair
-/// commits and both sides graduate (LP locked), both coins must be able to register their pools — else their fee PDAs are frozen.
+/// RN-1 (round 3): an Open pair is never unlinked — no evidence, or the Open Pair itself, is refused (PairStillLive) however long the
+/// curve runs; link_pair stays an idempotent no-op; after the commit and both graduations both coins register their pools.
 #[test]
-#[ignore = "RN-1 (High): fails at 9d81ee5e — an Open pair unlinked 30 days after link_pair can never register its pools"]
-fn rn1_an_open_pair_unlinked_after_30_days_must_still_register_both_pools() {
+fn rn1_an_open_pair_is_never_unlinked_and_both_pools_register() {
     let mut env = new_env();
-    let (p, c, unlink) = open_pair_unlink_attempt(&mut env);
-    println!("unlink_pair on an Open pair, 30 days after link: {}", if unlink.is_ok() { "ACCEPTED (UNLINK_NOT_LIVE)".to_string() } else { format!("{:?}", unlink.as_ref().err().map(|e| &e.err)) });
-    // anyone may try to re-pair (the keeper's pairCurveCrank does, every cycle)
+    let (p, c, unlink, unlink_with_pair) = open_pair_unlink_attempt(&mut env);
+    expect_anchor_err(unlink, "PairStillLive");
+    expect_anchor_err(unlink_with_pair, "PairStillLive");
+    // day 59: still refused
+    env.set_time(env.now() + 29 * DAY);
+    expect_anchor_err(env.send(&[ix_unlink_pair(&c.pubkey(), &p.mint(0), &p.mint(1), Some(p.pair))], &[&c]), "PairStillLive");
     let payer = env.payer.pubkey();
-    let relink = env.send(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]);
-    println!("link_pair after the unlink: {}", if relink.is_ok() { "ok".to_string() } else { format!("{:?}", relink.as_ref().err().map(|e| e.meta.logs.iter().find(|l| l.contains("Error Code")).cloned())) });
+    env.ok(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]);
     fill(&mut env, &p, 50 * SOL, 40 * SOL);
     graduate_both(&mut env, &p, &c);
     for side in 0..2u8 {
         let pool = pool_of(&p, side);
-        let r = env.send(&[ix_register_pair(&c.pubkey(), &p.mint(side), &pool.pool, &pool.lp_mint, &p.pair)], &[&c]);
-        assert!(r.is_ok(), "side {side}: register_pair_pool must succeed after graduation, got {:?}", r.err().map(|e| e.meta.logs.into_iter().find(|l| l.contains("Error Code"))));
+        env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(side), &pool.pool, &pool.lp_mint, &p.pair)], &[&c]);
+        let cfg = env.config(&config_pda(&p.mint(side)));
+        assert!(cfg.pool_verified && cfg.pair_state == PAIR_STATE_PAIRED);
+    }
+    // Graduated: still no evidence
+    expect_anchor_err(env.send(&[ix_unlink_pair(&c.pubkey(), &p.mint(0), &p.mint(1), Some(p.pair))], &[&c]), "PairStillLive");
+}
+
+/// Writes a TokenConfig change straight into the account (a state another instruction would leave).
+fn patch_config(env: &mut Env, mint: &Pubkey, f: impl FnOnce(&mut burn_receipts::state::TokenConfig)) {
+    let key = config_pda(mint);
+    let mut cfg = env.config(&key);
+    f(&mut cfg);
+    let mut acc = env.svm.get_account(&key).unwrap();
+    let mut data = Vec::new();
+    anchor_lang::AccountSerialize::try_serialize(&cfg, &mut data).unwrap();
+    acc.data[..data.len()].copy_from_slice(&data);
+    env.svm.set_account(key, acc).unwrap();
+}
+
+/// RN-1 second route (round 3): a policy-2 coin that read BEFORE link_pair (keeper ordering went wrong) still links — the periods
+/// already read stay unpaired (pair_after_date) — and registers after graduation. link_pair also requires one attester set (M-1).
+#[test]
+fn rn1_a_coin_read_before_link_pair_still_links_and_registers() {
+    let mut env = new_env();
+    let p = prepare(&mut env, MAINNET_POOL_FEE);
+    let args = default_args(env.now());
+    let ix = ix_init_pair(&env, &p, args);
+    env.ok(&[ix], &[&p.creator]);
+    // coin A reads before the link
+    submit(&mut env, &p.mint(0), R0, V1, &[&p.attester]).unwrap();
+    let payer = env.payer.pubkey();
+    // (M-1) a coin whose attester set differs cannot link
+    let other = Keypair::new();
+    let saved = env.config(&config_pda(&p.mint(1))).attesters[0];
+    patch_config(&mut env, &p.mint(1), |c| c.attesters[0] = burn_receipts::state::AttesterEntry::operator(other.pubkey()));
+    expect_anchor_err(env.send(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]), "PairAttestersDiffer");
+    patch_config(&mut env, &p.mint(1), |c| c.attesters[0] = saved);
+    env.ok(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]);
+    for side in 0..2u8 {
+        let c = env.config(&config_pda(&p.mint(side)));
+        assert_eq!((c.pair_state, c.pair_after_date), (PAIR_STATE_PAIRED, R0));
+    }
+    // the period read before the link can never get a result
+    submit(&mut env, &p.mint(1), R0, V1, &[&p.attester]).unwrap();
+    expect_anchor_err(submit_pair_result(&mut env, &p.mint(0), &p.mint(1), R0, Pubkey::default(), &[&p.attester]), "PairPeriodUnpaired");
+    let c = trader(&mut env, 2 * SOL);
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    graduate_both(&mut env, &p, &c);
+    for side in 0..2u8 {
+        let pool = pool_of(&p, side);
+        env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(side), &pool.pool, &pool.lp_mint, &p.pair)], &[&c]);
         assert!(env.config(&config_pda(&p.mint(side))).pool_verified);
     }
-}
-
-/// RN-1, TODAY's behaviour (passes; invert with the fix): the unlink is accepted on a healthy Open pair, the re-link is refused
-/// (PairHasReadings), and after graduation register_pair_pool refuses both sides (PairNotLinked) — with the graduation burn escrow
-/// already sitting in each coin's fee PDA, which has no withdraw path and can now never be cranked.
-#[test]
-fn rn1_still_an_open_pair_unlinked_after_30_days_freezes_both_fee_pdas() {
-    let mut env = new_env();
-    let (p, c, unlink) = open_pair_unlink_attempt(&mut env);
-    let meta = unlink.expect("unlink_pair accepted on a healthy, Open pair");
-    let (_, ev) = events(&meta).into_iter().find(|(d, _)| d[..] == <burn_receipts::events::PairUnlinked as Discriminator>::DISCRIMINATOR[..]).expect("PairUnlinked");
-    let ev = <burn_receipts::events::PairUnlinked as AnchorDeserialize>::try_from_slice(&ev).unwrap();
-    assert_eq!(ev.reason, UNLINK_NOT_LIVE);
-    for side in 0..2u8 {
-        assert_eq!(env.config(&config_pda(&p.mint(side))).pair_state, PAIR_STATE_NONE);
-    }
-    let payer = env.payer.pubkey();
-    expect_anchor_err(env.send(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]), "PairHasReadings");
-    let fee0 = [env.lamports(&fee_pda(&p.mint(0))), env.lamports(&fee_pda(&p.mint(1)))];
-    fill(&mut env, &p, 50 * SOL, 40 * SOL);
-    graduate_both(&mut env, &p, &c);
-    for side in 0..2u8 {
-        let pool = pool_of(&p, side);
-        expect_anchor_err(env.send(&[ix_register_pair(&c.pubkey(), &p.mint(side), &pool.pool, &pool.lp_mint, &p.pair)], &[&c]), "PairNotLinked");
-        let fee = env.lamports(&fee_pda(&p.mint(side)));
-        println!("side {side}: fee PDA {} → {} lamports at graduation; pool never registrable", fee0[side as usize], fee);
-        assert!(!env.config(&config_pda(&p.mint(side))).pool_verified);
-    }
-    // the Pair is Graduated; no unlink evidence changes anything now, and link_pair stays refused
-    assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
-    expect_anchor_err(env.send(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]), "PairHasReadings");
 }

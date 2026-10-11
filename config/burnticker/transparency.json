@@ -93,8 +93,8 @@
       "fundedFrom": "the developer fee (25 bps of curve volume)",
       "termsPath": "SECURITY.md in the public repository",
       "contact": "security@burnticker.com",
-      "wallet": null,
-      "walletTodo": "TODO_BOUNTY_WALLET: the mainnet Squads vault once created (docs/burnticker/TODO-OWNER.md)",
+      "wallet": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u",
+      "walletTodo": "funding (5–10 SOL) pending — docs/burnticker/TODO-OWNER.md row 4",
       "howReportsArePaid": "config/public-repo/overlay/SECURITY.md § Bounty wallet",
       "reports": {
         "paid": [],
@@ -259,8 +259,8 @@
     },
     {
       "id": "bounty-wallet",
-      "status": "not done",
-      "text": "The bounty wallet does not exist yet: it is the mainnet Squads vault, funded with 5–10 SOL from the developer fee once created. SECURITY.md and this page show TODO_BOUNTY_WALLET until then; the trust page shows its live balance once set."
+      "status": "wallet set 2026-10-11; funding pending",
+      "text": "The bounty wallet is HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator (not the Squads vault — payouts are plain transfers by the operator, each posted in the report thread). Funding of 5–10 SOL is pending; the trust page shows its live balance."
     },
     {
       "id": "entity",
@@ -284,8 +284,8 @@
     },
     {
       "id": "operator-treasury-mainnet",
-      "status": "not done",
-      "text": "The operator treasury is not compiled into the mainnet burn_receipts build yet (the devnet build pays the devnet Squads vault). Until the owner compiles the mainnet vault in, every mainnet claim_lock_fees refuses (TreasuryNotPinned) and the LP fees stay in the lock; nothing is lost, nothing is claimed."
+      "status": "done",
+      "text": "The mainnet burn_receipts and pair_curve builds compile the operator treasury 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5 (the owner's hardware wallet, also the LaunchLab platform fee wallet) and the Burnticker LaunchLab platform 94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9 (owner, 2026-10-11; docs/burnticker/VERIFIED-BUILD.md). claim_lock_fees pays the operator's 20 % there; initialize_token accepts only that platform."
     }
   ],
   "policies": [
