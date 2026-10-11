@@ -19,7 +19,7 @@ import type { FeedLike } from "@/lib/burnticker/search";
 import { fx } from "./burntickerHelpers.ts";
 import { API, callRoute, makeWorld, validateSchema } from "./burntickerApiHelpers.ts";
 import { GAMMA_TABLE } from "./burntickerPolyHelpers.ts";
-import { ESPN_NOW, espnFixtureClient, exactFetch, nwsFixtureClient } from "./burntickerFirstPartyHelpers.ts";
+import { CHAMPIONSHIPS, ESPN_NOW, espnFixtureClient, exactFetch, nwsFixtureClient } from "./burntickerFirstPartyHelpers.ts";
 
 const MI = fx("polymarket/event.michigan-senate.json") as { url: string; body: unknown[] };
 const IDX = fx("polymarket/midterms.index.json") as { pages: { url: string; body: unknown[] }[] };
@@ -74,10 +74,11 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
     assertNoMarketData(r, "search payload");
   });
 
-  test("'Eagles win' → an ESPN team card; 'US debt rises $1B' → Treasury; 'Detroit high above 90' → NWS; 'WIF vs SHIB' → the Coin vs Coin tile", async () => {
+  test("'Eagles win' → a team card (the NFL schedule needs the licensed key: said, not faked); 'US debt rises $1B' → Treasury; 'Detroit high above 90' → NWS; 'WIF vs SHIB' → the Coin vs Coin tile", async () => {
     const eagles = await universalSearch("Eagles win", deps());
     assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026", "this season by default, the team pinned by its ESPN id"); assert.equal(eagles.cards[0].venueLabel, "On-chain payout · league's official feed"); assert.doesNotMatch(eagles.cards[0].settlement, /ESPN/);
-    assert.ok(eagles.cards.some((c) => c.matchup?.eventId === "401872981" && c.matchup.a.series === "espn.game:nfl-401872981-PHI-loss"), "the next game (at JAX) as a matchup card");
+    assert.equal(eagles.cards[0].note, "schedule needs the licensed key (BURNTICKER_THESPORTSDB_KEY)", "no TheSportsDB key on this host: no NFL schedule, and never a fallback to ESPN");
+    assert.ok(!eagles.cards.some((c) => c.matchup), "no next game without a schedule");
     assert.ok(!eagles.cards.some((c) => c.venue === "kalshi"));
     const debt = await universalSearch("US debt rises $1B", deps());
     assert.equal(debt.cards[0].rule?.series, "treasury.debt"); assert.match(debt.cards[0].title, /^Burns 2% per \$1B added — /);
@@ -91,6 +92,25 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
     assert.equal(none.empty, true);
     const cfg = loadCopyLintConfig();
     for (const c of [...eagles.cards, ...debt.cards, ...wx.cards]) assert.ok(lintCopy(c.title, cfg).ok, c.title);
+  });
+
+  test("names are matched forgivingly but completely: 'el sayed' ≡ 'El-Sayed' ≡ 'elsayed'; a two-letter token never surfaces a card; each fixture's expected card first", async () => {
+    const top = async (q: string) => (await universalSearch(q, { ...deps(), polyGet: async (u: string) => { const r = await exactFetch({ ...POLY, ...CHAMPIONSHIPS })(u); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); } }));
+    for (const q of ["e", "el", "el s", "el sa"]) { const r = await top(q); assert.equal(r.cards.length, 0, `${q} surfaces nothing`); }
+    for (const q of ["el sayed", "El-Sayed", "elsayed", "abdul el sayed", "EL SAYED", "Él-Sayed"]) {
+      const r = await top(q);
+      assert.ok(r.cards[0]?.title.startsWith("Abdul El-Sayed (D) wins the Michigan Senate race"), `${q} → ${r.cards[0]?.title}`);
+      assert.ok(!r.cards.some((c) => c.venue === "espn" || c.group === "teams"), `${q}: no sports card for an election query`);
+    }
+    const rogers = await top("rogers michigan");
+    assert.ok(rogers.cards[0].title.startsWith("Mike Rogers (R) wins the Michigan Senate race")); assert.ok(!rogers.cards.some((c) => c.venue === "espn"));
+    assert.match((await top("rays world series")).cards[0].title, /Rays win the 2026 World Series/);
+    assert.equal((await top("eagles")).cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026");
+    assert.equal((await top("detroit high 90")).cards[0].rule?.series, "nws.high:DTW-90");
+    assert.equal((await top("us debt")).cards[0].rule?.series, "treasury.debt");
+    const lakers = await top("lakers tonight");
+    assert.equal(lakers.cards[0].group, "teams", "a team name is not a person's name");
+    for (const q of ["el sayed", "rays world series", "us debt"]) { const r = await top(q); assert.ok(r.cards.length <= 6); assert.ok(r.cards.every((c) => c.score >= 1)); }
   });
 
   test("Polymarket discovery off → no Polymarket cards; Kalshi off → no Kalshi cards", async () => {
@@ -133,14 +153,19 @@ describe("the API: /search, /elections, /elections/pair, /sports — schemas, no
     setNativeClients({ espn: null, nws: null });
   });
 
-  test("sports pickers on the ESPN scoreboard: teams with next game and record; games with each side's one-game selector", async () => {
+  test("sports pickers on the leagues' own schedules (never ESPN): teams with the next game; games with each side's one-game selector; a league without its key says so", async () => {
     await world();
     const lg = await get("/sports/teams", "listSportsTeams") as { leagues: { id: string }[] };
     for (const id of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "mcbb", "wcbb", "eng.1", "usa.1", "uefa.champions"]) assert.ok(lg.leagues.some((l) => l.id === id), id);
-    const t = await get("/sports/teams?league=nfl&q=eagles", "listSportsTeams") as { teams: { abbr: string; series: { win: string }; next: { opponent: string } | null; record: string | null }[] };
-    assert.equal(t.teams[0].abbr, "PHI"); assert.match(t.teams[0].series.win, /^espn\.team:nfl-PHI\.21-win-s\d{4}$/);
-    const g = await get("/sports/games?league=nfl&q=eagles", "listSportsGames") as { games: { eventId: string; a: { abbr: string }; b: { abbr: string }; series: { aLoss: string; bLoss: string } }[] };
-    assert.equal(g.games[0].eventId, "401872981"); assert.equal(g.games[0].series.aLoss, "espn.game:nfl-401872981-PHI-loss"); assert.equal(g.games[0].series.bLoss, "espn.game:nfl-401872981-JAX-loss");
+    const t = await get("/sports/teams?league=mlb&q=rays", "listSportsTeams") as { teams: { abbr: string; series: { win: string }; next: { opponent: string } | null }[]; scheduleNote: string | null };
+    assert.equal(t.teams[0].abbr, "TB"); assert.match(t.teams[0].series.win, /^espn\.team:mlb-TB\.30-win-s\d{4}$/); assert.equal(t.scheduleNote, null);
+    assert.equal(t.teams[0].next?.opponent, "CLE/CWS", "MLB's official schedule lists the next game, opponent still to be decided");
+    const g = await get("/sports/games?league=mlb&q=dodgers", "listSportsGames") as { games: { eventId: string; a: { abbr: string }; b: { abbr: string }; series: { aLoss: string; bLoss: string } }[] };
+    assert.equal(g.games[0].eventId, "849809"); assert.equal(g.games[0].series.aLoss, "espn.game:mlb-849809-LAD-loss"); assert.equal(g.games[0].series.bLoss, "espn.game:mlb-849809-MIL-loss");
+    const nfl = await get("/sports/teams?league=nfl&q=eagles", "listSportsTeams") as { teams: { abbr: string; next: unknown }[]; scheduleNote: string | null };
+    assert.equal(nfl.teams[0].abbr, "PHI"); assert.equal(nfl.teams[0].next, null); assert.match(nfl.scheduleNote ?? "", /schedule needs the licensed key/);
+    const nflGames = await get("/sports/games?league=nfl", "listSportsGames") as { games: unknown[]; scheduleNote: string | null };
+    assert.equal(nflGames.games.length, 0); assert.match(nflGames.scheduleNote ?? "", /schedule needs the licensed key/);
     await get("/sports/games?league=xfl", "listSportsGames", 400);
     setNativeClients({ espn: null, nws: null });
   });

@@ -3,7 +3,7 @@
 // (the wind-down starts the next day); soccer has draws and shoot-outs; every league ESPN serves is listed with its cross-read.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { EspnClient, LEAGUES, findTeams, gamesFor, outcomeOf, parseEspnSeries, parseGames, scheduleUrl, seasonLabel, seasonYearAt, teamSeries, windowFor, windowStatus, espnSettled, tsdbNamePairs, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { EspnClient, LEAGUES, findTeams, gamesFor, outcomeOf, parseEspnSeries, mlbGames, mlbTeamScheduleUrl, nhlClubScheduleUrl, tsdbScheduleUrl, seasonLabel, seasonYearAt, teamSeries, windowFor, windowStatus, tsdbNamePairs, type EspnSeries, type Game } from "@/lib/burnticker/sources/espn";
 import { describeRule } from "@/lib/burnticker/describe";
 import { namesTeam } from "@/lib/burnticker/search";
 import { nativeRule } from "@/lib/burnticker/sources/native";
@@ -32,10 +32,10 @@ describe("series: the window in the hash, the team pinned by its ESPN id", () =>
     assert.notEqual(a.sha256, b.sha256, "a different window is a different coin");
   });
 
-  test("schedules are asked for by ESPN team id (and by season year when the window pins one)", () => {
-    assert.match(scheduleUrl("mlb", "TB", 2), /\/teams\/30\/schedule\?seasontype=2$/);
-    assert.match(scheduleUrl("mlb", "TB", 3, 2025), /\/teams\/30\/schedule\?season=2025&seasontype=3$/);
-    assert.match(scheduleUrl("eng.1", "ARS", 2), /soccer\/eng\.1\/teams\/359\/schedule/);
+  test("schedules come from the league's official feed (MLB, NHL, NBA) or TheSportsDB — never ESPN", () => {
+    assert.equal(mlbTeamScheduleUrl("TB", 2025), "https://statsapi.mlb.com/api/v1/schedule?sportId=1&season=2025&gameType=R,F,D,L,W&teamId=139");
+    assert.equal(nhlClubScheduleUrl("TB", 2027), "https://api-web.nhle.com/v1/club-schedule-season/TBL/20262027");
+    assert.equal(tsdbScheduleUrl("eng.1", 2026), "https://www.thesportsdb.com/api/v2/json/schedule/league/4328/2026-2027");
   });
 });
 
@@ -50,7 +50,8 @@ describe("season boundaries from frozen ESPN schedules", () => {
     const p25 = team("espn.team:mlb-TB.30-win-p2025");
     const pst = windowStatus(p25, await c.season("mlb", "30", 2025), ESPN_NOW);
     assert.equal(pst.ended, true); assert.match(pst.reason, /no postseason games/);
-    const r = await espnSettled(c, s25, null, { crossRead: false, nowMs: ESPN_NOW });
+    const { sportsSettled } = await import("@/lib/burnticker/sources/gameSettle");
+    const r = await sportsSettled(c, s25, "2025-12-31", { tsdbKey: null, apiSportsKey: null, market: null, payout: null }, { nowMs: ESPN_NOW });
     assert.equal(r.window?.ended, true);
   });
 
@@ -107,7 +108,7 @@ describe("season boundaries from frozen ESPN schedules", () => {
 });
 
 describe("every league, draws and shoot-outs", () => {
-  const g0 = (): Game => parseGames("mlb", F("espn/mlb.tb.schedule.post.json").body)[0];
+  const g0 = (): Game => mlbGames(F("sports/mlb.tb.2026.json").body).find((g) => g.eventId === "849835")!;
   test("outcomeOf: a draw is a tie; a level knockout game decided on penalties is a win for ESPN's winner", () => {
     const g = g0();
     const lvl = { ...g, completed: true, home: { ...g.home, score: 1, winner: null }, away: { ...g.away, score: 1, winner: null } };
@@ -133,14 +134,21 @@ describe("every league, draws and shoot-outs", () => {
     assert.ok(findTeams("Georgia Bulldogs").some((t) => t.league === "cfb" && t.abbr === "UGA"));
   });
 
-  test("the per-league coverage: every league listed with its primaries (payout → TheSportsDB) and whether its cross-read exists", () => {
+  test("the per-league coverage: schedule source, the two reads with and without a market, the verdict — no league depends on ESPN", () => {
     const rows = leagueCoverage(loadSourceEntries());
     assert.deepEqual(rows.map((r) => r.id).sort(), Object.keys(LEAGUES).sort());
-    for (const r of rows) { assert.equal(r.primaryA, "polymarket.gamepayout", r.label); assert.deepEqual(r.primaryB, { id: "thesportsdb.v2", needsKey: "BURNTICKER_THESPORTSDB_KEY" }); assert.ok(r.teams > 0, r.label); assert.notEqual(r.crossRead?.operator, "ESPN (Disney)"); }
-    assert.deepEqual(rows.filter((r) => r.verdict === "settleable").map((r) => [r.id, r.crossRead!.id]).sort(), [["mlb", "mlb.statsapi"], ["nba", "nba.cdn"], ["nhl", "nhl.score"]]);
-    for (const r of rows.filter((x) => !["mlb", "nba", "nhl"].includes(x.id))) { assert.equal(r.verdict, "settleable with a key", r.label); assert.equal(r.crossRead!.needsKey, "BURNTICKER_APISPORTS_KEY"); }
+    for (const r of rows) { assert.equal(r.primaryA, "polymarket.gamepayout", r.label); assert.deepEqual(r.primaryB, { id: "thesportsdb.v2", needsKey: "BURNTICKER_THESPORTSDB_KEY" }); assert.ok(r.teams > 0, r.label); }
+    assert.deepEqual(rows.filter((r) => r.verdict === "settleable").map((r) => [r.id, r.official!.id, r.schedule.needsKey]).sort(), [["mlb", "mlb.statsapi", null], ["nba", "nba.cdn", null], ["nhl", "nhl.score", null]]);
+    for (const r of rows.filter((x) => !["mlb", "nba", "nhl"].includes(x.id))) {
+      assert.equal(r.verdict, "settleable with the TheSportsDB key", r.label);
+      assert.equal(r.schedule.needsKey, "BURNTICKER_THESPORTSDB_KEY");
+      assert.match(r.withMarket, /^on-chain payout \+ TheSportsDB/, "the payout and TheSportsDB confirm each other");
+      assert.match(r.withoutMarket, /API-Sports/, "a game without a market needs the optional second licensed read");
+    }
+    assert.ok(!JSON.stringify(rows).includes("espn"), "no ESPN source in the table");
     assert.ok(rows.filter((r) => r.draws).every((r) => r.sport === "soccer"));
   });
+
 });
 
 // keep the fixture table referenced (the season-year URLs it maps are what the boundary tests read)

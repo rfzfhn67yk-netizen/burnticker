@@ -74,7 +74,7 @@ describe("sources.json: every configured source", () => {
     for (const id of ["bea.gdp", "eia.gasoline", "usda.eggs", "census.tradeBalance", "congress.lawsSigned", "youtube.views"]) { const f = feedById(id)!; assert.equal(f.launchable.ok, false, id); assert.match(f.launchable.why!, /needs a key/); }
     assert.equal(feedById("usgs.quakes6")!.launchable.ok, false); assert.match(feedById("usgs.quakes6")!.flags.join(" "), /disaster-adjacent: OWNER TO CONFIRM/);
     assert.equal(feedById("billboard.hot100")!.tier, 5); assert.equal(feedById("bom.weekendGross")!.tier, 5); assert.equal(feedById("spotify.charts")!.launchable.ok, false);
-    assert.equal(feedById("espn.nfl")!.launchable.ok, false);
+    assert.equal(feedById("espn.nfl"), null, "no ESPN source in the catalogue (owner, 2026-10-10: no ESPN reads)");
     const bom = fixtureReadings(feedById("bom.weekendGross")!, NOW);
     assert.ok(bom.readings.length <= 1, "at most one weekend gross from the excerpt");
   });

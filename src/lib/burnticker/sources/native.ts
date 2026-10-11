@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
-import { CROSS_LABEL, crossAvailable, crossIdOf, envGameDeps, settleGame, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
+import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
+import { CROSS_LABEL, envGameDeps, officialOf, operatorsFor, settleGame, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
 import { NwsClient, crossCheck, iemFor, nwsSeriesTitle, nwsSettled, parseNwsSeries, qualifies, stationByCode, type NwsSeries } from "@/lib/burnticker/sources/nws";
 
@@ -46,7 +46,7 @@ export const nwsClient = (): NwsClient => (nws ??= new NwsClient());
 export const fecClient = (): FecClient => (fec ??= new FecClient());
 
 function espnSource(id: string, s: EspnSeries): NativeSource {
-  const t = teamByAbbr(s.league, s.abbr)!, cid = crossIdOf(s.league), crossLabel = CROSS_LABEL[cid];
+  const t = teamByAbbr(s.league, s.abbr)!, off = officialOf(s.league), crossLabel = off ? `${CROSS_LABEL[off]} and each other` : "each other (the on-chain payout and TheSportsDB)";
   const deps = () => gameDeps();
   const settles = "settled on the game's on-chain payout where a market exists, else on a licensed final score";
   return {
@@ -54,15 +54,14 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     sourceUrl: `https://www.thesportsdb.com/`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
     unit: { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
-    flags: ["the game list (which games, when) comes from ESPN's scoreboard: discovery only, never a settlement input", "primary B needs BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial licence)", cid === "apisports.games" ? "cross-read: API-Sports (needs BURNTICKER_APISPORTS_KEY; without it the cross-read is missing)" : `cross-read: ${crossLabel} (league official)`],
-    launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "thesportsdb.v2", crossReadId: cid,
+    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial licence) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent operators must read every game and agree"],
+    launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",
     settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps()),
     preflight: async (nowMs) => {
       const c = espnClient(), d = deps();
       const none = { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "" };
-      if (!crossAvailable(s.league, d)) return { ...none, problem: { code: "cross-read-unreadable", reason: `${LEAGUES[s.league].label}: cross-read missing — no official league feed is configured and BURNTICKER_APISPORTS_KEY (a second licensed provider) is not set` } };
       let games;
-      try { games = await gamesFor(c, s); } catch (e) { return { ...none, problem: { code: "primary-unreadable", reason: `the game list could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
+      try { games = await gamesFor(c, s); } catch (e) { return { ...none, problem: { code: "primary-unreadable", reason: e instanceof ScheduleUnavailable ? (e as Error).message : `the game list could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
       if (s.kind === "game" && !games.length) return { ...none, problem: { code: "primary-unreadable", reason: `game ${s.eventId} is not listed for ${t.name}` } };
       const next = games.find((g) => !g.completed && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS) ?? null;
       const nextAt = next?.startsAt ?? null, nextBasis = next ? `the next game's start (schedule): ${next.name}` : "no scheduled game listed";
@@ -72,10 +71,12 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
         // no game played yet: a primary must exist for the next one (its market, or the licensed final)
         const m = next && d.market ? await d.market(next).catch(() => null) : null;
         if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: "no primary: no moneyline market for the next game and BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial licence) is not set" } };
+        const ops = operatorsFor(s.league, d, !!m);
+        if (ops.length < 2) return { ...none, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: `only one operator can read these games (${ops.join(", ")}): a second independent read is needed` } };
         return { ...none, basis: "no completed game yet: both reads are compared at the first one", nextAt, nextBasis, problem: null };
       }
       const v = await settleGame(c, lastGame, d);
-      if (v.kind === "held") return { ...none, nextAt, nextBasis, basis: v.why, problem: { code: /no primary/.test(v.why) ? "primary-unreadable" : /cross-read/.test(v.why) ? "cross-read-unreadable" : "disagreement", reason: `${lastGame.name}: ${v.why}` } };
+      if (v.kind === "held") return { ...none, nextAt, nextBasis, basis: v.why, problem: { code: /no primary/.test(v.why) ? "primary-unreadable" : /only one operator/.test(v.why) ? "cross-read-unreadable" : "disagreement", reason: `${lastGame.name}: ${v.why}` } };
       if (v.kind === "awaiting") return { ...none, nextAt, nextBasis, basis: v.why, problem: { code: "cross-read-unreadable", reason: `${lastGame.name}: ${v.why}` } };
       const last = { id: lastGame.date, value: `${lastGame.name}: ${v.winner} (settled on: ${v.settledOn})`, at: lastGame.startsAt };
       return { last, crossLast: { id: lastGame.date, value: `confirmed by ${v.confirmedBy}`, at: lastGame.startsAt }, agreement: true, basis: `${lastGame.date}: ${v.detail}`, nextAt, nextBasis, problem: null };

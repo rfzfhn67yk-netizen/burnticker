@@ -1,9 +1,12 @@
-// FIRST-PARTY SOURCES WITH THEIR OWN CODE (2026-10-10): the ESPN scoreboard adapter (team coins and matchups without Kalshi; the
-// second cross-read — NHL / MLB official feeds, TheSportsDB for NFL / NBA) and the NWS daily climate adapter (Weather), wired into the
-// catalogue as native series. Frozen fixtures fetched 2026-10-10: config/burnticker/fixtures/espn/*, config/burnticker/fixtures/nws/*.
+// FIRST-PARTY SOURCES WITH THEIR OWN CODE (2026-10-10): team coins and matchups (schedules from the leagues' official feeds or
+// TheSportsDB, never ESPN; each game settled by two independent operators — sources/gameSettle.ts) and the NWS daily climate adapter,
+// wired into the catalogue as native series. Frozen fixtures: config/burnticker/fixtures/sports/*, fixtures/espn/mlb.schedule.*, nws/*.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { EspnClient, crossFromMlb, crossFromNhl, crossFromTsdb, espnSettled, findTeams, gameSeries, outcomeOf, parseEspnSeries, parseGames, scheduleUrl, scoreboardUrl, teamByAbbr, teamSeries, teamsOf, tsdbUrl, type Game } from "@/lib/burnticker/sources/espn";
+import fs from "node:fs";
+import path from "node:path";
+import { EspnClient, ScheduleUnavailable, findTeams, gameSeries, mlbGames, mlbTeamScheduleUrl, nbaGames, nhlGames, outcomeOf, parseEspnSeries, teamByAbbr, teamSeries, teamsOf, tsdbGames } from "@/lib/burnticker/sources/espn";
+import { espnGameUrl } from "@/lib/burnticker/sources/gameSettle";
 import { NwsClient, cliListUrl, nwsSeries, nwsSettled, parseCli, parseNwsSeries, productUrl, qualifies } from "@/lib/burnticker/sources/nws";
 import { nativeRule, nativeRuleProblems, nativeSourceById, setNativeClients } from "@/lib/burnticker/sources/native";
 import { CatalogueAdapter } from "@/lib/burnticker/catalogue";
@@ -12,18 +15,18 @@ import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { fx } from "./burntickerHelpers.ts";
 
-import { CLI, ESPN_NOW, F, IEM, TSDB, espnFixtureClient, fakeGameDeps, nwsFixtureClient } from "./burntickerFirstPartyHelpers.ts";
+import { CLI, ESPN_NOW, F, IEM, espnFixtureClient, fakeGameDeps, nwsFixtureClient } from "./burntickerFirstPartyHelpers.ts";
 
-describe("the ESPN scoreboard adapter", () => {
-  test("the static team table per league, with ESPN's abbreviations; free-text team lookup", () => {
+describe("sports schedules and readers (no ESPN reads)", () => {
+  test("the static team table per league; free-text team lookup", () => {
     assert.equal(teamsOf("nfl").length, 32); assert.equal(teamsOf("nba").length, 30); assert.equal(teamsOf("mlb").length, 30); assert.equal(teamsOf("nhl").length, 32);
-    assert.equal(teamByAbbr("nfl", "JAC")?.abbr, "JAX", "Kalshi's JAC is ESPN's JAX"); assert.equal(teamByAbbr("nba", "GSW")?.abbr, "GS");
+    assert.equal(teamByAbbr("nfl", "JAC")?.abbr, "JAX"); assert.equal(teamByAbbr("nba", "GSW")?.abbr, "GS");
     assert.deepEqual(findTeams("Eagles win Sunday").map((t) => `${t.league}:${t.abbr}`), ["nfl:PHI"]);
     assert.equal(teamByAbbr("nfl", "PHI")?.ticker, "EAGLES");
   });
 
   test("series ids: catalogue-shaped, validated by the rule schema, round-trip", () => {
-    for (const id of [teamSeries("nfl", "PHI", "win"), teamSeries("nhl", "BOS", "loss"), gameSeries("nfl", "401872981", "PHI", "loss")]) {
+    for (const id of [teamSeries("nfl", "PHI", "win"), teamSeries("nhl", "BOS", "loss"), gameSeries("mlb", "849809", "LAD", "loss")]) {
       assert.ok(isCatalogueSeries(id), id);
       assert.doesNotThrow(() => validateRule(nativeRule(id)), `${id} validates`);
       assert.ok(parseEspnSeries(id), id);
@@ -32,54 +35,40 @@ describe("the ESPN scoreboard adapter", () => {
     assert.equal(parseEspnSeries("espn.team:xfl-PHI-win"), null, "unknown league");
   });
 
-  test("a team schedule parses into games; outcomes from the final scores (ties are neither)", () => {
-    const games = parseGames("nfl", F("espn/nfl.phi.schedule.json").body);
-    const done = games.filter((g) => g.completed);
-    assert.ok(done.length >= 4);
-    const lar = games.find((g) => g.eventId === "401872970")!;
-    assert.equal(lar.date, "2026-10-04"); assert.equal(lar.home.abbr, "PHI"); assert.equal(lar.away.score, 24);
-    assert.equal(outcomeOf(lar, "PHI"), "loss"); assert.equal(outcomeOf(lar, "LAR"), "win");
-    assert.equal(outcomeOf({ ...lar, home: { ...lar.home, score: 24 } }, "PHI"), "tie");
-    assert.equal(outcomeOf(games.find((g) => !g.completed)!, "PHI"), null);
+  test("MLB's official schedule (StatsAPI): the Rays' 2026 season, regular season and postseason, a TBD opponent kept as TBD", () => {
+    const games = mlbGames(F("sports/mlb.tb.2026.json").body);
+    assert.equal(games.length, 174);
+    const post = games.filter((g) => g.seasonType === 3);
+    assert.equal(post.length, 10); assert.ok(games.every((g) => g.seasonYear === 2026));
+    const g6 = games.find((g) => g.eventId === "849839")!;
+    assert.deepEqual([g6.date, g6.home.abbr, g6.home.score, g6.away.abbr, g6.away.score, g6.completed], ["2026-10-06", "TB", 5, "NYY", 2, true]);
+    assert.equal(g6.home.id, "30", "the series pin (the frozen team id), not a provider id");
+    assert.equal(outcomeOf(g6, "TB"), "win"); assert.equal(outcomeOf(g6, "NYY"), "loss");
+    assert.equal(outcomeOf({ ...g6, away: { ...g6.away, score: 5 } }, "TB"), "tie");
+    const tbd = games.find((g) => g.eventId === "849820")!;
+    assert.equal(tbd.away.abbr, "TBD"); assert.equal(tbd.completed, false); assert.equal(outcomeOf(tbd, "TB"), null);
+    assert.match(mlbTeamScheduleUrl("TB", 2026), /teamId=139$/);
   });
 
-  test("cross-reads: TheSportsDB / NHL / MLB agree on the same final, disagree on another, are unavailable when the game is missing", () => {
-    const lar = parseGames("nfl", F("espn/nfl.phi.schedule.json").body).find((g) => g.eventId === "401872970")!;
-    assert.equal(crossFromTsdb(lar, TSDB.body, "u").verdict, "agree");
-    assert.equal(crossFromTsdb({ ...lar, away: { ...lar.away, score: 27 } }, TSDB.body, "u").verdict, "disagree");
-    assert.equal(crossFromTsdb(lar, { event: null }, "u").verdict, "unavailable");
-    const nhl = (F("espn/nhl.score.20261008.json").body as { games: { homeTeam: { name: { default: string }; score: number; abbrev: string }; awayTeam: { name: { default: string }; score: number; abbrev: string }; startTimeUTC: string }[] }).games[0];
-    const g: Game = { eventId: "1", league: "nhl", startsAt: nhl.startTimeUTC, date: nhl.startTimeUTC.slice(0, 10), name: "", completed: true, state: "post", detail: "Final", home: { abbr: nhl.homeTeam.abbrev, name: "", nickname: nhl.homeTeam.name.default, score: nhl.homeTeam.score, homeAway: "home", record: null }, away: { abbr: nhl.awayTeam.abbrev, name: "", nickname: nhl.awayTeam.name.default, score: nhl.awayTeam.score, homeAway: "away", record: null } };
-    assert.equal(crossFromNhl(g, F("espn/nhl.score.20261008.json").body, "u").verdict, "agree");
-    assert.equal(crossFromNhl({ ...g, home: { ...g.home, score: 0 } }, F("espn/nhl.score.20261008.json").body, "u").verdict, "disagree");
-    const mb = (F("espn/mlb.schedule.20261005.json").body as { dates: { games: { gameDate: string; teams: { home: { team: { name: string }; score: number }; away: { team: { name: string }; score: number } } }[] }[] }).dates[0].games[0];
-    const m: Game = { ...g, league: "mlb", startsAt: mb.gameDate, date: mb.gameDate.slice(0, 10), home: { ...g.home, name: mb.teams.home.team.name, score: mb.teams.home.score }, away: { ...g.away, name: mb.teams.away.team.name, score: mb.teams.away.score } };
-    assert.equal(crossFromMlb(m, F("espn/mlb.schedule.20261005.json").body, "u").verdict, "agree");
-    assert.equal(crossFromMlb({ ...m, home: { ...m.home, score: 99 } }, F("espn/mlb.schedule.20261005.json").body, "u").verdict, "disagree");
+  test("NHL and NBA official schedules parse; the other leagues need TheSportsDB's licensed key (never a fallback)", async () => {
+    const nhl = nhlGames({ games: [{ id: 2026020101, season: 20262027, gameType: 2, startTimeUTC: "2026-10-12T23:00:00Z", gameState: "OFF", homeTeam: { abbrev: "EDM", commonName: { default: "Oilers" }, placeName: { default: "Edmonton" }, score: 4 }, awayTeam: { abbrev: "TBL", commonName: { default: "Lightning" }, placeName: { default: "Tampa Bay" }, score: 2 } }] });
+    assert.deepEqual([nhl[0].home.abbr, nhl[0].away.abbr, nhl[0].seasonYear, nhl[0].completed], ["EDM", "TB", 2027, true]);
+    const nba = nbaGames({ leagueSchedule: { seasonYear: "2026-27", gameDates: [{ games: [{ gameId: "0022600001", gameDateTimeUTC: "2026-10-21T23:30:00Z", gameStatus: 1, homeTeam: { teamTricode: "BOS", teamName: "Celtics", teamCity: "Boston", score: 0 }, awayTeam: { teamTricode: "LAL", teamName: "Lakers", teamCity: "Los Angeles", score: 0 } }, { gameId: "0012600001", gameDateTimeUTC: "2026-10-05T23:30:00Z", gameStatus: 3, homeTeam: { teamName: "Celtics", teamCity: "Boston" }, awayTeam: { teamName: "Lakers", teamCity: "Los Angeles" } }] }] } });
+    assert.equal(nba.length, 1, "preseason (001…) is not a game a coin counts"); assert.deepEqual([nba[0].home.abbr, nba[0].away.abbr, nba[0].seasonType, nba[0].seasonYear], ["BOS", "LAL", 2, 2027]);
+    const c = new EspnClient({ fetchImpl: async () => ({ ok: false, status: 404, json: async () => ({}) }), tsdbKey: null, minIntervalMs: 0, now: () => ESPN_NOW });
+    assert.equal(c.scheduleAvailable("mlb"), true); assert.equal(c.scheduleAvailable("eng.1"), false);
+    await assert.rejects(c.season("eng.1", "ARS"), (e: Error) => e instanceof ScheduleUnavailable && /schedule needs the licensed key/.test(e.message));
+    const t = tsdbGames("eng.1", { schedule: [{ idEvent: "2271234", strEvent: "Arsenal vs Chelsea", strHomeTeam: "Arsenal", strAwayTeam: "Chelsea", intHomeScore: "2", intAwayScore: "2", dateEvent: "2026-10-18", strTimestamp: "2026-10-18T14:00:00", strStatus: "Match Finished" }] }, 2026);
+    assert.deepEqual([t[0].home.abbr, t[0].away.abbr, t[0].completed, t[0].startsAt], ["ARS", "CHE", true, "2026-10-18T14:00:00Z"]);
   });
 
-  test("settlement: only cross-read games are read; the others wait; a disagreement is held and reported", async () => {
-    const lose = parseEspnSeries(teamSeries("nfl", "PHI", "loss"))!, win = parseEspnSeries(teamSeries("nfl", "PHI", "win"))!;
-    const r = await espnSettled(espnFixtureClient(), lose, null, { nowMs: ESPN_NOW });
-    assert.deepEqual(r.events.map((e) => [e.id, e.value]), [["2026-10-04", "1"]], "the LAR loss, the only game TheSportsDB's free key returns");
-    assert.ok(r.awaitingFinal >= 3, "the earlier games wait for their cross-read");
-    assert.match(r.events[0].title ?? "", /LAR 24 @ PHI 20 final .*TheSportsDB final 20–24/);
-    const w = await espnSettled(espnFixtureClient(), win, null, { nowMs: ESPN_NOW });
-    assert.deepEqual(w.events.map((e) => [e.id, e.value]), [["2026-10-04", "0"]], "a loss reads 0 for the win coin: no burn, a receipt of nothing");
-    const lar = parseGames("nfl", F("espn/nfl.phi.schedule.json").body).find((g) => g.eventId === "401872970")!;
-    const bad = await espnSettled(espnFixtureClient({ [tsdbUrl("123", lar)]: { event: [{ intHomeScore: "21", intAwayScore: "24", strStatus: "FT" }] } }), lose, null, { nowMs: ESPN_NOW });
-    assert.equal(bad.events.length, 0); assert.match(bad.refusals[0], /401872970: TheSportsDB final 21–24 ≠ ESPN 20–24 — held/);
-    const bt = await espnSettled(espnFixtureClient(), lose, null, { nowMs: ESPN_NOW, crossRead: false });
-    assert.equal(bt.events.length, 4, "the back-test (display-grade) reads every final without the cross-read");
-    const early = await espnSettled(espnFixtureClient(), lose, null, { nowMs: Date.parse("2026-10-04T19:00:00Z") });
-    assert.ok(!early.events.some((e) => e.id === "2026-10-04"), "not read within 6 h of the start");
-  });
-
-  test("one game: only that event; the matchup's other side reads the opposite", async () => {
-    const r = await espnSettled(espnFixtureClient(), parseEspnSeries(gameSeries("nfl", "401872970", "PHI", "loss"))!, null, { nowMs: ESPN_NOW, crossRead: false });
-    assert.deepEqual(r.events.map((e) => e.value), ["1"]);
-    const none = await espnSettled(espnFixtureClient(), parseEspnSeries(gameSeries("nfl", "401872981", "PHI", "loss"))!, null, { nowMs: ESPN_NOW });
-    assert.equal(none.events.length, 0, "the JAX game has not been played");
+  test("no ESPN reads anywhere in the source: no fetch of ESPN's API; only the human scoreboard link remains", () => {
+    const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : /\.(ts|tsx|mts)$/.test(e.name) ? [path.join(d, e.name)] : []));
+    const root = path.join(import.meta.dirname, "..");
+    const hits = [...walk(path.join(root, "src")), ...walk(path.join(root, "scripts"))].filter((f) => /site\.api\.espn\.com|espn\.com\/apis|sports\.core\.api\.espn/.test(fs.readFileSync(f, "utf8")));
+    assert.deepEqual(hits.map((f) => path.relative(root, f)), []);
+    assert.equal(espnGameUrl("mlb", "2026-10-06"), "https://www.espn.com/mlb/scoreboard/_/date/20261006");
+    assert.equal(espnGameUrl("eng.1", "2026-10-18"), "https://www.espn.com/soccer/scoreboard/_/date/20261018/league/eng.1");
   });
 });
 
@@ -124,7 +113,7 @@ describe("native sources in the catalogue", () => {
     setNativeClients({ games: fakeGameDeps() });
     const r = await cat.settledSince(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), "2026-09-30");
     assert.deepEqual(r.events.map((e) => [e.id, e.value]), [["2026-10-03", "1"], ["2026-10-06", "1"], ["2026-10-08", "1"]], "the three Rays postseason wins");
-    assert.match(r.events[0].title ?? "", /settled on the game's on-chain payout · confirmed by MLB's official feed · see this game on ESPN → https:\/\/www\.espn\.com\/mlb\/game\/_\/gameId\/401907985/);
+    assert.match(r.events[0].title ?? "", /settled on the game's on-chain payout · confirmed by MLB's official feed · see this game on ESPN → https:\/\/www\.espn\.com\/mlb\/scoreboard\/_\/date\/20261003/);
     const info = await cat.seriesInfo(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 }));
     assert.match(info!.settlementSource!.name, /on-chain payout .* confirmed by MLB's official feed/); assert.doesNotMatch(info!.settlementSource!.name, /ESPN/);
     setNativeClients({ games: null });
@@ -143,7 +132,7 @@ describe("the creation preflight passes team coins, matchups and weather rules (
     setNativeClients({ espn: espnFixtureClient(), nws: nwsFixtureClient(), games: fakeGameDeps() });
     const team = await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
     assert.equal(team.ok, true, JSON.stringify(team.refusal));
-    assert.equal(team.primary.operator, "TheSportsDB (commercial licence)", "the descriptor of record is the licensed primary; the game at hand settled on its payout");
+    assert.equal(team.primary.operator, "Polymarket / UMA (Conditional Tokens on Polygon)", "the on-chain payout is primary A");
     assert.equal(team.crossRead?.id, "mlb.statsapi"); assert.equal(team.agreement, true);
     assert.match(team.primary.lastReading?.value ?? "", /settled on: on-chain payout/);
     const wx = await preflightSelector(nativeRule(nwsSeries("high", "DEN", 85)), { now: ESPN_NOW });
@@ -173,7 +162,12 @@ describe("the creation preflight passes team coins, matchups and weather rules (
     assert.equal((await preflightSelector(TB, { now: ESPN_NOW })).refusal?.code, "disagreement");
     setNativeClients({ games: fakeGameDeps() });
     const nfl = await preflightSelector(nativeRule(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
-    assert.equal(nfl.refusal?.code, "cross-read-unreadable"); assert.match(nfl.refusal!.reason, /cross-read missing .*BURNTICKER_APISPORTS_KEY/);
+    assert.equal(nfl.refusal?.code, "primary-unreadable"); assert.match(nfl.refusal!.reason, /schedule needs the licensed key/, "no TheSportsDB key: no NFL schedule, never ESPN");
+    const { operatorsFor } = await import("@/lib/burnticker/sources/gameSettle");
+    const none = { tsdbKey: null, apiSportsKey: null, market: null, payout: null };
+    assert.deepEqual(operatorsFor("eng.1", { ...none, tsdbKey: "K" }, false), ["TheSportsDB"], "a soccer game without a market and without API-Sports: one operator → refused");
+    assert.deepEqual(operatorsFor("eng.1", { ...none, tsdbKey: "K" }, true), ["on-chain payout", "TheSportsDB"], "with a market the payout and TheSportsDB confirm each other");
+    assert.deepEqual(operatorsFor("mlb", none, true), ["on-chain payout", "MLB's official feed"]);
     setNativeClients({ nws: nwsFixtureClient() });
     assert.equal((await preflightSelector(nativeRule(nwsSeries("high", "DEN", 85)), { now: ESPN_NOW + 30 * 86_400_000 })).refusal?.code, "stale-primary");
     setNativeClients({ espn: null, nws: null, games: null });

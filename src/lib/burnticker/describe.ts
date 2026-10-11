@@ -110,7 +110,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const verb = o === "win" ? "win" : o === "draw" ? "draw" : "lose", noun = o === "win" ? "win" : o === "draw" ? "draw" : "loss";
   const other = o === "win" ? `a loss or a ${tie}` : o === "draw" ? "a win or a loss" : `a win or a ${tie}`;
   const sfx = o === "win" ? "" : o === "draw" ? "D" : "L", Noun = o === "win" ? "Wins" : o === "draw" ? "Draws" : "Losses";
-  const cross = CROSS[s.league] ?? "a second licensed provider";
+  const cross = CROSS[s.league] ?? "a second independent source";
   const badge = windowBadge(r, c);
   const mk = (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]): CoinText => {
     const ruleBlock = `${rules} ${windowSentence}${leagueSentence(r)} ${CLOSER}`;

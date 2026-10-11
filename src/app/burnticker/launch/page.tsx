@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
@@ -16,6 +16,7 @@ import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
 import { describeRule, DESCRIPTION_MAX, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
+import { meaningful, queryTokens } from "@/lib/burnticker/textMatch";
 
 /**
  * THE CREATE WIZARD (LAUNCHPAD-PATH §1; the owner 10-09/10-10: "make it so its easier to navigate. I am still having a hard time
@@ -82,7 +83,7 @@ interface Backtest { sentence: string; text: string; sha256: string; sha12: stri
 interface Bundle { ready: boolean; pending: string[]; mint: string; ticker: string; rules: { text: string; sha256: string; statement: string; mode: string }; addresses: { feePda: string; feeWsol: string; vault: string | null; poolId: string; platformId: string }; allocation: { curve: string; locked: string; reserve: string; lpBurnedPct: number; teamAllocationPct: number }; fees: { sentence: string; curve: { legs: { label: string; bps: number }[]; totalBps: number }; postGraduation: { legs: { label: string; bps: number }[]; totalBps: number } }; burnPoolAuthority: string; transactions: { label: string; signers: string[]; instructions: { label: string }[] }[]; notes: string[] }
 interface League { id: string; label: string; series: { ticker: string; title: string }[]; sport?: string; crossRead?: string | null; draws?: boolean }
 interface Team { abbr: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null } | null; record: { w: number; l: number; d: number; since: string }; series?: { win: string; loss: string }; recordText?: string | null }
-/** The ESPN scoreboard pickers (GET /v1/sports/teams, /v1/sports/games). */
+/** The sports pickers (GET /v1/sports/teams, /v1/sports/games): the leagues' own schedules or TheSportsDB, never ESPN. */
 interface SportsTeam { abbr: string; city: string; nickname: string; name: string; ticker: string; league: string; series: { win: string; loss: string }; record: string | null; next: { eventId: string; title: string; startsAt: string; detail: string; opponent: string; home: boolean } | null }
 interface SportsSide { abbr: string; name: string; nickname: string; ticker: string; record: string | null }
 interface SportsGame { eventId: string; league: string; title: string; startsAt: string; detail: string; a: SportsSide; b: SportsSide; series: { aLoss: string; bLoss: string } }
@@ -122,7 +123,7 @@ export default function LaunchWizard() {
   const creator = wallet.publicKey?.toBase58() ?? (PUB.test(pasted.trim()) ? pasted.trim() : "");
   // team / pair pickers
   const [leagues, setLeagues] = useState<League[]>([]), [leagueErr, setLeagueErr] = useState<string | null>(null);
-  const [leagueSeries, setLeagueSeries] = useState<string | null>(null), [leagueQ, setLeagueQ] = useState("");
+  const [leagueSeries, setLeagueSeries] = useState<string | null>(null), [leagueQ, setLeagueQ] = useState(""), [scheduleNote, setScheduleNote] = useState<string | null>(null);
   const [teams, setTeams] = useState<Team[]>([]), [teamsBusy, setTeamsBusy] = useState(false), [teamQ, setTeamQ] = useState("");
   const [team, setTeam] = useState<Team | null>(null), [winLose, setWinLose] = useState<"win" | "lose">("win");
   const [games, setGames] = useState<EventHit[]>([]), [gamesBusy, setGamesBusy] = useState(false), [gameQ, setGameQ] = useState("");
@@ -198,10 +199,21 @@ export default function LaunchWizard() {
   useEffect(() => { if (flow === "browse" && curCat?.guided === "elections" && !etypes.length && venues.polymarket) getJson<{ types: { id: string; label: string; races: number }[] }>(`${V1}/elections`).then((j) => setEtypes(j.types)).catch(() => setEtypes([])); }, [flow, curCat?.guided, etypes.length, venues.polymarket]);
   useEffect(() => { if (!etype) return; setEbusy(true); setEraces(null); setEpair(null); setEsel([]); getJson<{ states: { abbr: string; name: string; races: number }[]; races: ElRace[] }>(`${V1}/elections?type=${etype}${estate ? `&state=${estate}` : ""}`).then((j) => { setEstates(j.states); setEraces(etype === "control" || estate ? j.races : null); }).catch(() => setEraces([])).finally(() => setEbusy(false)); }, [etype, estate]);
   useEffect(() => { if (esel.length !== 2 || !eraces?.[0]) { setEpair(null); return; } const race = eraces.find((r) => esel.every((c) => r.outcomes.some((o) => o.conditionId === c))); if (!race) return; getJson<ElPair>(`${V1}/elections/pair?slug=${race.slug}&a=${esel[0]}&b=${esel[1]}`).then(setEpair).catch(() => setEpair(null)); }, [esel, eraces]);
+  // the search box: 300 ms after the last keystroke, only for 3+ characters with at least one meaningful token, and only the response
+  // to the LATEST query is shown (a sequence id discards a slow answer to an earlier keystroke); old results clear as soon as you type
+  const useq = useRef(0);
+  const shortQuery = uq.trim().length > 0 && (uq.trim().length < 3 || !meaningful(queryTokens(uq)).length);
   useEffect(() => {
-    if (uq.trim().length < 2) { setUres(null); return; }
+    const qv = uq.trim(), seq = ++useq.current;
+    setUres(null);
+    if (qv.length < 3 || !meaningful(queryTokens(qv)).length) { setUbusy(false); return; }
     setUbusy(true);
-    const t = setTimeout(() => { getJson<{ cards: Suggestion[]; empty: boolean; categories: { id: string; label: string; blurb: string }[] }>(`${V1}/search?q=${encodeURIComponent(uq.trim())}`).then((j) => setUres(j)).catch(() => setUres({ cards: [], empty: true, categories: [] })).finally(() => setUbusy(false)); }, 350);
+    const t = setTimeout(() => {
+      getJson<{ cards: Suggestion[]; empty: boolean; categories: { id: string; label: string; blurb: string }[] }>(`${V1}/search?q=${encodeURIComponent(qv)}`)
+        .then((j) => { if (seq === useq.current) setUres(j); })
+        .catch(() => { if (seq === useq.current) setUres({ cards: [], empty: true, categories: [] }); })
+        .finally(() => { if (seq === useq.current) setUbusy(false); });
+    }, 300);
     return () => clearTimeout(t);
   }, [uq]);
   // browse: the categories once, then one category's cards (debounced text filter)
@@ -215,11 +227,11 @@ export default function LaunchWizard() {
   useEffect(() => { if (!drill) { setDrillEvents(null); return; } getJson<{ events: EventHit[] }>(`${V1}/kalshi/events?series=${encodeURIComponent(drill)}`).then((j) => setDrillEvents(j.events.slice(0, 12))).catch(() => setDrillEvents([])); }, [drill]);
   useEffect(() => { if (!q.trim()) { setHits([]); return; } const t = setTimeout(() => { fetch(`/api/burnticker/oracle/search?q=${encodeURIComponent(q.trim())}`).then((r) => r.json()).then((j) => setHits(j.results ?? [])).catch(() => setHits([])); }, 350); return () => clearTimeout(t); }, [q]);
   // leagues for the team / pair pickers
-  // Team coins and matchups run on the ESPN scoreboard (sources/espn.ts; every result confirmed by a second, independent read).
+  // Team coins and matchups: schedules from the leagues' own feeds or TheSportsDB; each game settled by two independent operators (gameSettle.ts).
   useEffect(() => { if ((flow === "team" || flow === "pair") && !leagues.length) getJson<{ leagues: { id: string; label: string; sport: string; crossRead: string | null; draws: boolean }[] }>(`${V1}/sports/teams`).then((j) => setLeagues((j.leagues ?? []).map((l) => ({ id: l.id, label: l.label, sport: l.sport, crossRead: l.crossRead, draws: l.draws, series: [{ ticker: l.id, title: l.label }] })))).catch((e) => setLeagueErr(String(e.message))); }, [flow, leagues.length]);
   useEffect(() => {
     if (flow !== "team" || !leagueSeries) return; setTeamsBusy(true);
-    getJson<{ teams: SportsTeam[] }>(`${V1}/sports/teams?league=${leagueSeries}`).then((j) => setTeams(j.teams.map((t) => ({ abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league: t.league, filter: t.series.win, collisions: [], series: t.series, recordText: t.record, record: recordOf(t.record),
+    getJson<{ teams: SportsTeam[]; scheduleNote?: string | null }>(`${V1}/sports/teams?league=${leagueSeries}`).then((j) => (setScheduleNote(j.scheduleNote ?? null), j)).then((j) => setTeams(j.teams.map((t) => ({ abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league: t.league, filter: t.series.win, collisions: [], series: t.series, recordText: t.record, record: recordOf(t.record),
       next: t.next ? { eventTicker: t.next.eventId, marketTicker: t.next.eventId, title: t.next.title, expectedAt: t.next.startsAt, opponent: t.next.opponent } : null })))).catch(() => setTeams([])).finally(() => setTeamsBusy(false));
   }, [flow, leagueSeries]);
   useEffect(() => {
@@ -227,7 +239,7 @@ export default function LaunchWizard() {
     const url = `${V1}/sports/games?league=${leagueSeries}${gameQ.trim() ? `&q=${encodeURIComponent(gameQ.trim())}` : ""}`;
     setGamesBusy(true);
     const side = (x: SportsSide, series: string): Side => ({ abbr: x.abbr, marketTicker: series, label: x.name, nickname: x.nickname, name: x.name, ticker: x.ticker });
-    const t = setTimeout(() => { getJson<{ games: SportsGame[] }>(url).then((j) => setGames(j.games.map((g) => ({ eventTicker: g.eventId, seriesTicker: g.league, title: g.title, subTitle: g.detail, category: "Sports", expectedAt: g.startsAt, closeTime: null, markets: [], matchedSides: [], pair: { a: side(g.a, g.series.aLoss), b: side(g.b, g.series.bLoss), tieMarket: null }, refused: [] })))).catch(() => setGames([])).finally(() => setGamesBusy(false)); }, gameQ ? 300 : 0);
+    const t = setTimeout(() => { getJson<{ games: SportsGame[]; scheduleNote?: string | null }>(url).then((j) => (setScheduleNote(j.scheduleNote ?? null), j)).then((j) => setGames(j.games.map((g) => ({ eventTicker: g.eventId, seriesTicker: g.league, title: g.title, subTitle: g.detail, category: "Sports", expectedAt: g.startsAt, closeTime: null, markets: [], matchedSides: [], pair: { a: side(g.a, g.series.aLoss), b: side(g.b, g.series.bLoss), tieMarket: null }, refused: [] })))).catch(() => setGames([])).finally(() => setGamesBusy(false)); }, gameQ ? 300 : 0);
     return () => clearTimeout(t);
   }, [flow, leagueSeries, gameQ]);
   // any-market search
@@ -260,7 +272,7 @@ export default function LaunchWizard() {
     return { ...base, kind: "scalar", scalar: { unit, perUnit: mapping(perUnit, tokensYes), baseline, direction }, binary: null } as BurnRule;
   }, [pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn]);
 
-  /** Matchups (ESPN): two coins, one per team — "this game only" = each side burns if its team loses that game; "every game" = each side's team-loss coin. */
+  /** Matchups: two coins, one per team — "this game only" = each side burns if its team loses that game; "every game" = each side's team-loss coin. */
   const pairRules = useMemo(() => {
     if (!pairOn || !game || !sideA || !sideB || !leagueSeries) return null;
     // a game pair is that game (one-shot: 10 % default); a season pair is this season or perpetual (recurring: 2 % default)
@@ -343,7 +355,7 @@ export default function LaunchWizard() {
     const common = { creator, firstBuySol: firstBuy || "0", acknowledgements: { ruleLocked: ackLocked, noReturns: ackNoReturns } };
     try {
       if (pairOn && ruleB) {
-        // A matchup on the ESPN scoreboard: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
+        // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: customImages && imageUrl.trim() ? imageUrl.trim() : null, links: linksOf(), rule });
         const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}, note: "", imageUrl: customImages && imageB.trim() ? imageB.trim() : null, links: [], rule: ruleB });
         setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [season ? "Two coins, each burning on its own team's losses: two independent records. They meet only when the two teams play each other; on those games exactly one side burns." : `Two coins on ${game?.title ?? "one game"}: the loser's coin burns once the final score is confirmed; a tie burns neither.`] }); setBundle(a.bundle);
@@ -414,7 +426,7 @@ export default function LaunchWizard() {
   const navRow = (nextLabel: string | null, disabled = false, onNext: () => void = next) => (
     <div className="flex items-center gap-3 pt-2"><button className="text-sm underline" onClick={back}>← Back</button>{nextLabel && <button className={primary} disabled={disabled} onClick={onNext}>{nextLabel}</button>}</div>
   );
-  /** Every league ESPN's scoreboard serves, grouped by sport and searchable (no league first by habit). */
+  /** Every league, grouped by sport and searchable (no league first by habit). */
   const leaguePicker = (
     <div className="space-y-2">
       {leagueErr && <p className="text-red-400 text-xs">The scoreboard is not answering right now ({leagueErr}).</p>}
@@ -540,13 +552,16 @@ export default function LaunchWizard() {
             <span className="text-lg font-medium">Describe the event</span>
             <input autoFocus className={input + " mt-1 text-base py-3"} value={uq} onChange={(e) => setUq(e.target.value)} placeholder="e.g. 'Rays win the World Series', 'Lakers win tonight', 'Arsenal win', 'Oilers lose', 'El-Sayed wins Michigan Senate', 'Detroit high above 90'" aria-label="Describe the event" />
           </label>
+          {shortQuery && <p className="text-sm text-neutral-500">Type a few more letters…</p>}
           {ubusy && <p className="text-sm text-neutral-500">Searching every source…</p>}
           {ures && ures.cards.length > 0 && (
             <ul className="grid gap-2 md:grid-cols-2 lg:grid-cols-3" aria-label="Ready-made rules">
-              {ures.cards.map((c) => {
+              {ures.cards.map((c, ci) => {
+                const head = ci === 0 || ures.cards[ci - 1].group !== c.group ? ({ teams: "Teams", elections: "Elections", weather: "Weather", feeds: "Public data", markets: "Markets", tiles: "Coin vs Coin" } as Record<string, string>)[c.group ?? ""] ?? null : null;
                 const wi = cardWin[c.id] ?? 0, w = c.windows?.[wi] ?? null, title = w?.title ?? c.title, tx = w?.text ?? c.text, endText = w?.endText ?? c.endText, badgeText = w?.text.badge ?? c.badge;
-                return (
-                <li key={c.id} className={`rounded-lg border p-3 text-sm ${c.refused.length ? "border-neutral-900 opacity-60" : "border-neutral-800 bg-neutral-900"}`}>
+                return (<Fragment key={c.id}>
+                {head && <li className="col-span-full font-mono text-[11px] uppercase tracking-widest text-neutral-500" aria-hidden="true">{head}</li>}
+                <li className={`rounded-lg border p-3 text-sm ${c.refused.length ? "border-neutral-900 opacity-60" : "border-neutral-800 bg-neutral-900"}`}>
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                     <span className={`bt-chip bt-chip-${c.venue === "espn" || c.venue === "nws" ? "feed" : c.venue}`}>{c.venueLabel}</span>
                     {c.shape !== "tile" && <span className="bt-chip">{c.shape === "pair" ? "two coins" : c.shape}</span>}
@@ -570,11 +585,11 @@ export default function LaunchWizard() {
                     : (c.rule || c.matchup) ? <button className="mt-2 rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950" onClick={() => applySuggestion(c, wi)}>Use this →</button>
                     : <button className="mt-2 rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-500" disabled>Use this</button>}
                 </li>
-              ); })}
+              </Fragment>); })}
             </ul>
           )}
           {ures && ures.cards.length === 0 && !ubusy && (
-            <div className="rounded-lg border border-dashed border-neutral-700 p-3 text-sm text-neutral-400">No match — try Browse: {(ures.categories ?? []).map((c) => <button key={c.id} className="ml-2 underline" onClick={() => { begin("browse"); setCat(c.id); }}>{c.label}</button>)}</div>
+            <div className="rounded-lg border border-dashed border-neutral-700 p-3 text-sm text-neutral-400">No close match — try Browse: {(ures.categories ?? []).map((c) => <button key={c.id} className="ml-2 underline" onClick={() => { begin("browse"); setCat(c.id); }}>{c.label}</button>)}</div>
           )}
         </section>
       )}
@@ -615,6 +630,7 @@ export default function LaunchWizard() {
             <div className={card + " space-y-3"}>
               <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick your team</h2><input className={input + " w-64"} placeholder="Rays, Lakers, Oilers, Arsenal, Inter Miami…" value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
               {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}
+              {scheduleNote && <p className="text-sm text-amber-300">This league&apos;s {scheduleNote}: teams are listed, next games are not.</p>}
               {!teamsBusy && !teams.length && <p className="text-sm text-neutral-500">No teams found for this league right now.</p>}
               <div className="grid gap-2 sm:grid-cols-2">{teams.filter(teamFilter).map((t) => (
                 <button key={t.abbr} onClick={() => chooseTeam(t)} className={`flex items-center gap-3 rounded-lg border p-2 text-left hover:border-amber-400 ${team?.abbr === t.abbr ? "border-amber-400" : "border-neutral-800"}`}>
@@ -645,6 +661,7 @@ export default function LaunchWizard() {
             <div className={card + " space-y-3"}>
               <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick the game</h2><input className={input + " w-64"} placeholder="search a team: Lakers, Oilers, Arsenal…" value={gameQ} onChange={(e) => setGameQ(e.target.value)} /></div>
               {gamesBusy && <p className="text-sm text-neutral-500">Loading games…</p>}
+              {scheduleNote && <p className="text-sm text-amber-300">This league&apos;s {scheduleNote}.</p>}
               {!gamesBusy && !games.length && <p className="text-sm text-neutral-500">No upcoming games{gameQ ? ` matching “${gameQ}”` : ""}.</p>}
               <ul className="divide-y divide-neutral-800">{games.map((g) => (
                 <li key={g.eventTicker}><button onClick={() => chooseGame(g)} className="flex w-full items-center gap-3 py-2 text-left hover:bg-neutral-800/40">

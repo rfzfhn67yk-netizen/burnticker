@@ -1,5 +1,5 @@
 // Shared fixture clients for the first-party source tests (ESPN scoreboard + cross-reads, NWS climate + IEM). Not a test file itself.
-import { EspnClient, parseGames, scheduleUrl, scoreboardUrl, tsdbUrl } from "@/lib/burnticker/sources/espn";
+import { EspnClient, mlbRangeUrl, mlbTeamScheduleUrl } from "@/lib/burnticker/sources/espn";
 import { NwsClient, cliListUrl, productUrl } from "@/lib/burnticker/sources/nws";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { fx } from "./burntickerHelpers.ts";
@@ -10,20 +10,12 @@ export const F = (f: string) => fx(f) as Fx;
 /** Exact-URL fetch over a table (a missing URL is a 404). */
 export const exactFetch = (table: Record<string, unknown>): FetchLike => async (url) => (url in table ? { ok: true, status: 200, json: async () => table[url] } : { ok: false, status: 404, json: async () => ({}) });
 
+/** The schedule and cross-read fixtures (no ESPN): MLB StatsAPI for the Rays' 2026 and 2025 seasons and the week of Oct 10, and the day files of the Rays' postseason games. */
 export const ESPN_TABLE: Record<string, unknown> = {
-  [scheduleUrl("nfl", "PHI", 2)]: F("espn/nfl.phi.schedule.json").body,
-  [scoreboardUrl("nfl", "20261011")]: F("espn/nfl.scoreboard.20261011.json").body,
-  [scoreboardUrl("nfl", "20261004")]: F("espn/nfl.scoreboard.20261004.json").body,
-  [scheduleUrl("nfl", "PHI", 2, 2026)]: F("espn/nfl.phi.schedule.json").body,
-  [scheduleUrl("mlb", "TB", 2)]: F("espn/mlb.tb.schedule.json").body,
-  [scheduleUrl("mlb", "TB", 3)]: F("espn/mlb.tb.schedule.post.json").body,
-  // the same 2026 bodies asked for by season year (a season window pins its year), and the 2025 season (TB missed the playoffs)
-  [scheduleUrl("mlb", "TB", 2, 2026)]: F("espn/mlb.tb.schedule.json").body,
-  [scheduleUrl("mlb", "TB", 3, 2026)]: F("espn/mlb.tb.schedule.post.json").body,
-  [scheduleUrl("mlb", "TB", 2, 2025)]: F("espn/mlb.30.schedule.2025.2.json").body,
-  [scheduleUrl("mlb", "TB", 3, 2025)]: F("espn/mlb.30.schedule.2025.3.json").body,
-  ...Object.fromEntries(["20261010", "20261011", "20261012"].map((d) => [scoreboardUrl("mlb", d), F(`espn/mlb.scoreboard.${d}.json`).body])),
-  // MLB StatsAPI (the official cross-read) for the Rays' three postseason games so far (Oct 3, Oct 6 [listed on the 5th's date], Oct 8 [the 7th's])
+  [mlbTeamScheduleUrl("TB", 2026)]: F("sports/mlb.tb.2026.json").body,
+  [mlbTeamScheduleUrl("TB", 2025)]: F("sports/mlb.tb.2025.json").body,
+  [mlbRangeUrl("2026-10-10", "2026-10-18")]: F("sports/mlb.week.20261010.json").body,
+  [mlbRangeUrl("2026-10-10", "2026-10-17")]: F("sports/mlb.week.20261010.json").body,
   ...Object.fromEntries(["20261003", "20261005", "20261007", "20261008"].map((d) => { const f = F(`espn/mlb.schedule.${d}.json`); return [f.url, f.body]; })),
 };
 /**
@@ -41,10 +33,8 @@ export function fakeGameDeps(o: { winner?: (g: { date: string }) => "Tampa Bay R
 }
 /** Gamma: each league's championship search and the matching events (config/burnticker/fixtures/polymarket/championships.json). */
 export const CHAMPIONSHIPS = (fx("polymarket/championships.json") as { search: Record<string, unknown> }).search;
-export const TSDB = F("espn/tsdb.phi-lar.20261004.json");
-export function espnFixtureClient(extra: Record<string, unknown> = {}): EspnClient {
-  const g = parseGames("nfl", F("espn/nfl.phi.schedule.json").body).find((x) => x.eventId === "401872970")!;
-  return new EspnClient({ fetchImpl: exactFetch({ ...ESPN_TABLE, [tsdbUrl("123", g)]: TSDB.body, ...extra }), now: () => ESPN_NOW, minIntervalMs: 0, tsdbKey: "123" });
+export function espnFixtureClient(extra: Record<string, unknown> = {}, o: { tsdbKey?: string | null } = {}): EspnClient {
+  return new EspnClient({ fetchImpl: exactFetch({ ...ESPN_TABLE, ...extra }), now: () => ESPN_NOW, minIntervalMs: 0, tsdbKey: o.tsdbKey ?? null });
 }
 export const CLI = fx("nws/cli.DEN.json") as { body: { "@graph": { id: string }[] }; products: Record<string, { productText: string }> };
 export const IEM = fx("nws/iem.DEN.json") as { daily: Fx; cli: Fx };

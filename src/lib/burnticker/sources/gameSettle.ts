@@ -3,19 +3,18 @@ import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { LEAGUES, SETTLE_AFTER_START_MS, gamesFor, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
 
 /**
- * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10: "good to go on the sports sources"). ESPN's scoreboard is DISCOVERY ONLY now — it
- * lists the games (which, when, who) and shows the next game and the record; its scores are never a settlement input. Each completed
- * game settles on
+ * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
+ * StatsAPI, the NHL's api-web, the NBA's cdn) or TheSportsDB v2 (licensed key) — espn.ts EspnClient/SportsClient. Each completed game:
  *
- *   PRIMARY A  the game's ON-CHAIN PAYOUT: when Polymarket lists a moneyline market for the game (Gamma search by the two teams and the
- *              date → its condition id), the Conditional Tokens payout vector on Polygon names the winner — exactly as an election does;
- *   PRIMARY B  otherwise THESPORTSDB (commercial licence, BURNTICKER_THESPORTSDB_KEY, the v2 API): the game's final score;
- *   neither    → held and refused ("no primary"), never read from ESPN;
+ *   PRIMARY A  the game's ON-CHAIN PAYOUT where Polymarket lists a moneyline market (Gamma search by the two teams and the date → the
+ *              condition id → the Conditional Tokens payout vector on Polygon), exactly as an election does;
+ *   PRIMARY B  otherwise THESPORTSDB (commercial licence, BURNTICKER_THESPORTSDB_KEY, the v2 API): the final score;
+ *   CONFIRMED  by a SECOND, independent operator: the on-chain payout and TheSportsDB confirm each other when both exist; the league's
+ *              official feed (MLB, NHL, NBA) is a further read where it is free; API-Sports (BURNTICKER_APISPORTS_KEY) is optional.
+ *              Every read must agree (scores where both carry scores, else the winner). A game only ONE operator can read is held.
  *
- * and is CONFIRMED by an independent cross-read: the league's own official feed where one exists (MLB StatsAPI, the NHL score feed,
- * the NBA's cdn schedule), else a second licensed provider (API-Sports, BURNTICKER_APISPORTS_KEY) — without one the league's
- * cross-read is missing and its coins are refused at creation. Both reads must agree on the final (a score-based primary: the exact
- * score; the payout: the winner). Every reading says which source settled it: "settled on: on-chain payout · confirmed by MLB StatsAPI".
+ * Every reading says how it settled: "settled on the game's on-chain payout · confirmed by MLB's official feed", plus a plain human
+ * link to ESPN's scoreboard for that day ("see this game on ESPN →", never fetched).
  */
 
 export interface Final { home: number; away: number; done: boolean; detail: string; url: string }
@@ -36,8 +35,8 @@ export type CrossId = "mlb.statsapi" | "nhl.score" | "nba.cdn" | "apisports.game
 export const CROSS_LABEL: Record<CrossId, string> = { "mlb.statsapi": "MLB's official feed", "nhl.score": "NHL's official scores", "nba.cdn": "NBA's official feed", "apisports.games": "a second licensed provider" };
 /** How the primary is named outside the sources table and the trust page (TheSportsDB is named there, with "data: TheSportsDB"). */
 export const SETTLED_ON: Record<"on-chain payout" | "TheSportsDB", string> = { "on-chain payout": "the game's on-chain payout", TheSportsDB: "a licensed final score" };
-/** The public ESPN game page — a plain human link on each game row and receipt, never fetched. */
-export const espnGameUrl = (league: LeagueId, eventId: string): string => `https://www.espn.com/${LEAGUES[league].path.split("/")[1]}/game/_/gameId/${eventId}`;
+/** The public ESPN scoreboard page for the game's day — a plain human link on each game row and receipt, never fetched (no ESPN reads). */
+export const espnGameUrl = (league: LeagueId, date: string): string => { const [sport, lg] = LEAGUES[league].path.split("/"); const d = date.slice(0, 10).replace(/-/g, ""); return sport === "soccer" ? `https://www.espn.com/soccer/scoreboard/_/date/${d}/league/${lg}` : `https://www.espn.com/${lg}/scoreboard/_/date/${d}`; };
 /** The league's cross-read: its own official feed where one exists, else the second licensed provider. */
 export const crossIdOf = (league: LeagueId): CrossId => (league === "mlb" ? "mlb.statsapi" : league === "nhl" ? "nhl.score" : league === "nba" ? "nba.cdn" : "apisports.games");
 /** Whether the cross-read can be read on this host (API-Sports needs its key). */
@@ -105,7 +104,7 @@ export function finalFromApiSports(g: Game, body: unknown, url: string): Final |
 // ---- one game, settled ----------------------------------------------------------------------------------------------------------
 
 export type GameVerdict =
-  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; settledOn: "on-chain payout" | "TheSportsDB"; confirmedBy: string; detail: string; url: string }
+  | { kind: "settled"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; settledOn: "on-chain payout" | "TheSportsDB"; confirmedBy: string; ops: string[]; detail: string; url: string }
   | { kind: "awaiting"; why: string }
   | { kind: "held"; why: string };
 
@@ -124,8 +123,8 @@ async function firstFinal(client: EspnClient, urls: string[], parse: (body: unkn
   if (!any && err) throw err;
   return null;
 }
-export async function crossFinal(client: EspnClient, g: Game, d: GameDeps): Promise<{ id: CrossId; final: Final | null }> {
-  const id = crossIdOf(g.league);
+export async function crossFinal(client: EspnClient, g: Game, d: GameDeps, which: CrossId | null = null): Promise<{ id: CrossId; final: Final | null }> {
+  const id = which ?? crossIdOf(g.league);
   const prevDay = new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
   if (id === "mlb.statsapi") return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${day}`), (b, u) => finalFromMlb(g, b, u)) };
   if (id === "nhl.score") return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => `https://api-web.nhle.com/v1/score/${day}`), (b, u) => finalFromNhl(g, b, u)) };
@@ -134,31 +133,66 @@ export async function crossFinal(client: EspnClient, g: Game, d: GameDeps): Prom
   return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => apiSportsUrl(g.league, day)), (b, u) => finalFromApiSports(g, b, u), { "x-apisports-key": d.apiSportsKey }) };
 }
 
-/** Settles one completed game: primary (payout → TheSportsDB → none) and the cross-read must agree. Pure apart from the readers. */
+/** The league's free official feed (MLB, NHL, NBA), if any — a third read where it exists. */
+export const officialOf = (league: LeagueId): CrossId | null => (league === "mlb" ? "mlb.statsapi" : league === "nhl" ? "nhl.score" : league === "nba" ? "nba.cdn" : null);
+/** How many independent operators can read this league's games on this host, at best (for the creation check before any game). */
+export function operatorsFor(league: LeagueId, d: GameDeps, hasMarket: boolean): string[] {
+  return [hasMarket ? "on-chain payout" : null, d.tsdbKey ? "TheSportsDB" : null, officialOf(league) ? CROSS_LABEL[officialOf(league)!] : null, d.apiSportsKey ? "API-Sports" : null].filter((x): x is string => !!x);
+}
+
+/**
+ * Settles one completed game. The PRIMARY is the on-chain payout where a market exists, else TheSportsDB's licensed final; the
+ * on-chain payout and TheSportsDB are independent operators, so when both exist each confirms the other. The league's official feed
+ * (MLB, NHL, NBA) is a further read where it is free, API-Sports where its key is set. At least TWO operators must read the game and
+ * every read must agree (scores where both carry scores, else the winner); one operator alone is held.
+ */
 export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Promise<GameVerdict> {
-  // PRIMARY
-  let primary: { settledOn: "on-chain payout" | "TheSportsDB"; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string } | null = null;
+  type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string };
+  const reads: Read[] = []; const pending: string[] = []; const errors: string[] = [];
+  // the on-chain payout
   const market = d.market ? await d.market(g).catch(() => null) : null;
   if (market) {
     const p = d.payout ? await d.payout(market.conditionId).catch(() => null) : null;
-    if (!p || !p.resolved) return { kind: "awaiting", why: `the on-chain payout for ${market.question} is not resolved yet` };
-    const name = p.outcome === null ? null : market.outcomes[p.outcome];
-    const winner = name === null ? "tie" : sideMatches(name, g.home) ? "home" : sideMatches(name, g.away) ? "away" : null;
-    if (winner === null) return { kind: "held", why: `the payout names "${name}", which matches neither team` };
-    primary = { settledOn: "on-chain payout", winner, final: null, detail: `on-chain payout ${market.question}: ${name ?? "split"}`, url: market.url };
-  } else if (d.tsdbKey) {
-    let f: Final | null = null;
-    try { f = await firstFinal(client, tsdbNamePairs(g).map(tsdbV2Url), (b, u) => finalFromTsdb(g, b, u), { "X-API-KEY": d.tsdbKey }); } catch (e) { return { kind: "awaiting", why: `TheSportsDB could not be read: ${(e as Error).message.slice(0, 80)}` }; }
-    if (!f || !f.done) return { kind: "awaiting", why: f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet" };
-    primary = { settledOn: "TheSportsDB", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url };
-  } else return { kind: "held", why: "no primary: no moneyline market for the game and BURNTICKER_THESPORTSDB_KEY (the commercial licence) is not set" };
-  // CROSS-READ
-  let cross: { id: CrossId; final: Final | null };
-  try { cross = await crossFinal(client, g, d); } catch (e) { return { kind: "held", why: (e as Error).message.slice(0, 160) }; }
-  if (!cross.final || !cross.final.done) return { kind: "awaiting", why: `${CROSS_LABEL[cross.id]} has no final for the game yet` };
-  const agrees = primary.final ? primary.final.home === cross.final.home && primary.final.away === cross.final.away : primary.winner === winnerOf(cross.final);
-  if (!agrees) return { kind: "held", why: `${primary.detail} ≠ ${cross.final.detail} — held` };
-  return { kind: "settled", winner: primary.winner, final: primary.final ?? { home: cross.final.home, away: cross.final.away }, settledOn: primary.settledOn, confirmedBy: CROSS_LABEL[cross.id], detail: `${primary.detail}; ${cross.final.detail}`, url: primary.url };
+    if (!p || !p.resolved) pending.push(`the on-chain payout for ${market.question} is not resolved yet`);
+    else {
+      const name = p.outcome === null ? null : market.outcomes[p.outcome];
+      const winner = name === null ? "tie" : sideMatches(name, g.home) ? "home" : sideMatches(name, g.away) ? "away" : null;
+      if (winner === null) return { kind: "held", why: `the payout names "${name}", which matches neither team` };
+      reads.push({ op: "on-chain payout", label: "the game's on-chain payout", winner, final: null, detail: `on-chain payout ${market.question}: ${name ?? "split"}`, url: market.url });
+    }
+  }
+  // TheSportsDB (licensed)
+  if (d.tsdbKey) {
+    try {
+      const f = await firstFinal(client, tsdbNamePairs(g).map(tsdbV2Url), (b, u) => finalFromTsdb(g, b, u), { "X-API-KEY": d.tsdbKey });
+      if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url });
+      else pending.push(f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet");
+    } catch (e) { errors.push(`TheSportsDB: ${(e as Error).message.slice(0, 80)}`); }
+  }
+  if (!market && !d.tsdbKey) return { kind: "held", why: "no primary: no moneyline market for the game and BURNTICKER_THESPORTSDB_KEY (the commercial licence) is not set" };
+  // the league's official feed (free) and API-Sports (optional)
+  const off = officialOf(g.league);
+  for (const id of [off, d.apiSportsKey ? "apisports.games" as const : null]) {
+    if (!id) continue;
+    try {
+      const c = await crossFinal(client, g, d, id);
+      if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url });
+      else pending.push(`${CROSS_LABEL[id]} has no final for the game yet`);
+    } catch (e) { errors.push(`${CROSS_LABEL[id]}: ${(e as Error).message.slice(0, 80)}`); }
+  }
+  const primary = reads.find((r) => r.op === "on-chain payout") ?? reads.find((r) => r.op === "TheSportsDB");
+  const others = reads.filter((r) => r !== primary);
+  if (!primary || others.length === 0) {
+    const possible = operatorsFor(g.league, d, !!market);
+    if (possible.length < 2) return { kind: "held", why: `only one operator can read this game (${possible.join(", ") || "none"}): a second independent read is needed` };
+    return { kind: "awaiting", why: pending[0] ?? errors[0] ?? "waiting for a second read" };
+  }
+  for (const r of others) {
+    const agree = primary.final && r.final ? primary.final.home === r.final.home && primary.final.away === r.final.away : primary.winner === r.winner;
+    if (!agree) return { kind: "held", why: `${primary.detail} ≠ ${r.detail} — held` };
+  }
+  const confirmed = others.map((r) => r.label);
+  return { kind: "settled", winner: primary.winner, final: primary.final ?? others.find((r) => r.final)?.final ?? null, settledOn: primary.op === "on-chain payout" ? "on-chain payout" : "TheSportsDB", confirmedBy: confirmed.join(" and "), ops: reads.map((r) => r.op), detail: reads.map((r) => r.detail).join("; "), url: primary.url };
 }
 
 const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, teamId: string | null): Outcome | "tie" | null => {
@@ -168,7 +202,7 @@ const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, team
   return winner === "tie" ? "tie" : winner === us ? "win" : "loss";
 };
 
-/** Settled readings for an ESPN-listed team or game series since `sinceIso` (the keeper; back-tests pass `crossRead: false` → display-grade only). */
+/** Settled readings for a team or game series since `sinceIso` (the keeper and the back-test). */
 export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number } = {}): Promise<ResolvedSelector> {
   const now = o.nowMs ?? Date.now();
   const all = await gamesFor(client, s, sinceIso);
@@ -187,8 +221,8 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: v.url, method: "" };
     if (out === s.outcome || (s.outcome === "draw" && out === "tie")) cur.value++;
     const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
-    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · settled on ${SETTLED_ON[v.settledOn]} · confirmed by ${v.confirmedBy} · see this game on ESPN → ${espnGameUrl(g.league, g.eventId)}`);
-    cur.method = `${v.settledOn === "on-chain payout" ? "onchain-payout" : "thesportsdb"}+${crossIdOf(g.league)}`;
+    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}) · settled on ${SETTLED_ON[v.settledOn]} · confirmed by ${v.confirmedBy} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
+    cur.method = v.ops.map((o) => (o === "on-chain payout" ? "onchain-payout" : o === "TheSportsDB" ? "thesportsdb" : o)).join("+");
     byDay.set(g.date, cur);
   }
   const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method } as SettledEvent));

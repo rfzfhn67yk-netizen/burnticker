@@ -2,12 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
-import { findTeams, gameSeries, teamSeries, LEAGUES, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
+import { findTeams, gameSeries, teamSeries, LEAGUES, SCHEDULE_NEEDS_KEY, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { findStations, nwsSeries, nwsSeriesTitle, parseNwsSeries, type NwsMetric } from "@/lib/burnticker/sources/nws";
 import { nativeRule, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { loadRaces, outcomeCardTitle, outcomeSettlesNote, searchRaces, tokens, type Race } from "@/lib/burnticker/elections";
 import { searchHits, parseEventsBody, searchUrl, type GammaEvent, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
 import { scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
+import { looksLikePerson, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
 import { championshipCode, describeRule, tickerFrom, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 
@@ -62,6 +63,8 @@ export interface Suggestion {
   leagueSet: { id: string; outcome: string } | null;
   /** The ESPN season year in progress, for a team card (the create screen's window dial needs it). */
   seasonYear: number | null;
+  /** The card's category on the page (teams, elections, weather, feeds, markets, tiles). */
+  group?: SuggestionGroup;
   /** The matchup card: both sides, each with its one-game loss selector. */
   matchup: { league: string; eventId: string; title: string; startsAt: string; a: MatchupSide; b: MatchupSide } | null;
   /** When a card cannot offer its rule, why ("market lists no Rays outcome"). */
@@ -103,7 +106,7 @@ export const SPORTS_SETTLEMENT = "the game's on-chain payout where a market exis
 const CROSS_NAME_: Partial<Record<LeagueId, string>> = { nhl: "NHL's official scores", mlb: "MLB's official feed", nba: "NBA's official feed" };
 const OFFICIAL_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official postseason results (statsapi.mlb.com)", nba: "the NBA's official results (nba.com)", nhl: "the NHL's official results (nhl.com)", nfl: "the league's official results" };
 const OFFICIAL_SHORT_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official results", nba: "the NBA's official results", nhl: "the NHL's official results", nfl: "the league's official results" };
-const CROSS_NAME = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => CROSS_NAME_[lg as LeagueId] ?? "a second licensed provider" });
+const CROSS_NAME = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => CROSS_NAME_[lg as LeagueId] ?? "a second independent source (the on-chain payout and the licensed final confirm each other)" });
 const OFFICIAL = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => OFFICIAL_[lg as LeagueId] ?? `the ${LEAGUES[lg as LeagueId]?.label ?? "league"}'s official results` });
 const OFFICIAL_SHORT = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => OFFICIAL_SHORT_[lg as LeagueId] ?? "the league's official results" });
 /** Friendlier names and tickers for the common feeds (else the title's first word). */
@@ -193,9 +196,11 @@ function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Sugges
 }
 
 async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<Suggestion[]> {
-  const games = d.espn ? await d.espn.season(t.league, t.abbr).catch(() => [] as Game[]) : [];
+  let scheduleNote: string | null = null;
+  const games = d.espn ? await d.espn.season(t.league, t.abbr).catch((e) => { scheduleNote = e instanceof ScheduleUnavailable ? SCHEDULE_NEEDS_KEY : null; return [] as Game[]; }) : [];
   const outcome: "win" | "loss" | "draw" = /\b(lose|loses|losing|loss|losses)\b/i.test(q) ? "loss" : LEAGUES[t.league].draws && /\b(draw|draws|tie|ties)\b/i.test(q) ? "draw" : "win";
   const rec = recurringCard(t, games, outcome, d.nowMs);
+  if (scheduleNote) rec.note = scheduleNote;
   const champ = await championshipCard(t, d);
   if (CHAMP_WORDS.test(q)) { champ.score = 3.1; }
   const pair = matchupCard(t, games, d.nowMs);
@@ -266,26 +271,38 @@ export function raceCards(races: readonly Race[], q: string): Suggestion[] {
 
 const withBadges = (cards: Suggestion[]): Suggestion[] => cards.map((c) => ({ ...c, badge: c.badge ?? c.text?.badge ?? (c.shape === "pair" ? `ONE-SHOT${c.matchup ? ` · ${new Date(c.matchup.startsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" })}` : ""}` : null) }));
 
+/** The card's group on the page (cards are grouped by category, best group first). */
+export type SuggestionGroup = "teams" | "elections" | "weather" | "feeds" | "markets" | "tiles";
+const groupOf = (c: Suggestion): SuggestionGroup => (c.venue === "espn" ? "teams" : c.venue === "nws" ? "weather" : c.venue === "feed" ? "feeds" : c.venue === "tile" ? "tiles" : c.id.startsWith("polymarket:") && c.howSettles?.includes("Resolution rules") && /wins the .* race/.test(c.title) ? "elections" : c.id.startsWith("champ:") ? "teams" : "markets");
+/** At most this many cards, each above MIN_SCORE; nothing above it → "no close match — try Browse". */
+export const MAX_CARDS = 6, MIN_SCORE = 1;
+
 export async function universalSearch(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[] }> {
   const query = q.trim().slice(0, 160);
-  if (query.length < 2) return { query, cards: [], empty: true, errors: [] };
+  // no meaningful token (every token one or two letters: "e", "el", "el s") → nothing, never a partial match
+  if (query.length < 3 || !meaningful(queryTokens(query)).length) return { query, cards: [], empty: true, errors: [] };
   const errors: string[] = []; const cards: Suggestion[] = [];
   const derby = derbyCard(query, d.derbyHref);
   if (derby) return { query, cards: [derby], empty: false, errors };
-  const team = findTeams(query).find((t) => namesTeam(query, t)) ?? null;
-  if (team) {
+  const person = looksLikePerson(query);
+  const team = findTeams(query).find((t) => namesTeam(query, t) && nameMatch(query, [t.name, t.nickname, ...t.alt]).nameHits > 0) ?? null;
+  // a person-looking query ("lakers tonight" is not one; "el sayed" is) goes to the people only when a candidate's name matches it
+  let personHit = false;
+  if (team && person && d.venues.polymarket && d.polyGet) { try { personHit = searchRaces(await loadRaces(d.polyGet, d.refuse), query).some((h) => h.score >= 1.5); } catch { personHit = false; } }
+  if (team && !personHit) {
     // a team is named: exactly the team's shapes (recurring, one-shot championship, the next game when both sides are known)
     const tc = await teamIntentCards(query, team, d);
-    return scrubMarketData({ query, cards: withBadges(tc.sort((a, b) => b.score - a.score)), empty: false, errors });
+    return scrubMarketData({ query, cards: withBadges(tc.sort((a, b) => b.score - a.score)).map((c) => ({ ...c, group: groupOf(c) })), empty: false, errors });
   }
   cards.push(...weatherCards(query), ...feedCards(query, d.feeds));
   if (d.venues.polymarket && d.polyGet) {
     try { cards.push(...raceCards(await loadRaces(d.polyGet, d.refuse), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); }
-    if (!cards.some((c) => c.score >= 1.5)) {
+    if (!cards.some((c) => c.score >= 1.5) && !person) {
       try {
         const hits = searchHits(parseEventsBody(await d.polyGet(searchUrl(query.replace(/\b(wins?|will|above|over)\b/gi, " ").replace(/\s+/g, " ").trim(), "open", 8))), { refuse: d.refuse, status: "open", perEvent: 4 });
         for (const e of hits.events.slice(0, 3)) for (const m of e.markets.slice(0, 1)) {
           if (cards.some((c) => c.pick?.market === m.conditionId)) continue;
+          if (!nameMatch(query, [m.outcome ?? "", m.question, e.title]).all) continue;   // every meaningful token must name the market
           const label = m.outcome ?? m.question, rule = polyRule(m.conditionId);
           const descCtx = { eventPhrase: m.outcome ? `${m.outcome} — ${e.title}` : "this market resolves YES", endsAt: m.endDate };
           const text = describeRule(rule, { ticker: "", ...descCtx });
@@ -297,9 +314,14 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
   if (d.venues.kalshi && d.kalshiSearch) {
     try { for (const s of (await d.kalshiSearch(query)).slice(0, 2)) cards.push({ ...base, id: `kalshi:${s.ticker}`, venue: "kalshi", venueLabel: "Kalshi", shape: "recurring", title: s.title, subtitle: `every market in series ${s.ticker}`, settlement: s.settlementSource?.name ?? "Kalshi", pick: { oracle: "kalshi", series: s.ticker, market: null, title: s.title }, score: 0.5 + overlap(query, s.title) }); } catch (e) { errors.push(`kalshi: ${(e as Error).message.slice(0, 80)}`); }
   }
+  // a query that reads like a person's name ranks people (election outcomes) above everything else
+  if (person) for (const c of cards) if (groupOf(c) === "elections") c.score += 1;
   const seen = new Set<string>();
-  const ranked = cards.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true))).sort((a, b) => b.score - a.score).slice(0, 3);
-  return scrubMarketData({ query, cards: withBadges(ranked), empty: ranked.length === 0, errors });
+  const ranked = cards.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)) && c.score >= MIN_SCORE).sort((a, b) => b.score - a.score).slice(0, MAX_CARDS);
+  // grouped by category, the best group first (its best card's score), best first inside each group
+  const order = [...new Set(ranked.map(groupOf))];
+  const grouped = order.flatMap((g) => ranked.filter((c) => groupOf(c) === g)).map((c) => ({ ...c, group: groupOf(c) }));
+  return scrubMarketData({ query, cards: withBadges(grouped), empty: grouped.length === 0, errors });
 }
 
 /**

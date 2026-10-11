@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { nameMatch } from "@/lib/burnticker/textMatch";
 import path from "node:path";
 import { parseEventsBody, type GammaEvent, type GammaMarket } from "@/lib/burnticker/oracle/polymarket";
 
@@ -107,16 +108,15 @@ export const tokens = (q: string): string[] => norm(q).split(" ").filter((w) => 
 
 /** Race outcomes a free-text query names, best first (candidate name, state, office, party). */
 export function searchRaces(races: readonly Race[], q: string): { race: Race; outcome: RaceOutcome; score: number }[] {
-  const qt = tokens(q);
-  if (!qt.length) return [];
+  // every meaningful query token must match: the candidate's name (groupItemTitle) first, then the race's state / office / title
+  // (textMatch.ts: "el sayed" ≡ "El-Sayed" ≡ "elsayed"; a two-letter token never surfaces a card on its own)
   const OFFICE: Record<RaceType, string[]> = { senate: ["senate", "senator"], governor: ["governor", "gubernatorial"], house: ["house", "congress", "district"], control: ["control", "majority", "party", "senate", "house"] };
   const hits: { race: Race; outcome: RaceOutcome; score: number }[] = [];
   for (const r of races) for (const o of r.outcomes) {
-    const hay = new Set(tokens(`${o.label} ${o.question} ${r.title} ${r.stateName ?? ""} ${r.state ?? ""} ${OFFICE[r.type].join(" ")}`));
-    const matched = qt.filter((w) => hay.has(w)).length;
-    if (!matched) continue;
-    const nameHit = tokens(o.label).some((w) => qt.includes(w) && !["d", "r"].includes(w));
-    hits.push({ race: r, outcome: o, score: matched / qt.length + (nameHit ? 0.5 : 0) });
+    const m = nameMatch(q, [o.label.replace(/\s*\([A-Z]\)$/, "")], [o.question, r.title, r.stateName ?? "", r.state ?? "", ...OFFICE[r.type]]);
+    const ctx = nameMatch(q, [r.title, r.stateName ?? "", ...OFFICE[r.type]], []);
+    if (m.all) hits.push({ race: r, outcome: o, score: 1 + m.nameHits * 0.5 });
+    else if (ctx.all && !m.nameHits) hits.push({ race: r, outcome: o, score: 0.6 });   // "michigan senate": the race's outcomes, below any name hit
   }
-  return hits.sort((a, b) => b.score - a.score).filter((h, _i, a) => h.score >= Math.min(0.6, a[0]?.score ?? 0));
+  return hits.sort((a, b) => b.score - a.score).filter((h, _i, a) => h.score >= Math.min(1, a[0]?.score ?? 0));
 }

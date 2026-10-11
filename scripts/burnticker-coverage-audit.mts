@@ -56,6 +56,6 @@ else {
   if (matrix.uncovered.length) { console.log("\nuncovered (category / kind):"); for (const u of matrix.uncovered) console.log(`  ${u.category} / ${u.kind}: ${u.why}`); }
 }
 const leagues = leagueCoverage(loadSourceEntries());
-if (!args.includes("--json")) { console.log("\nper league (team coins and matchups):"); for (const l of leagues) console.log(`  ${l.label.padEnd(26)} ${l.sport.padEnd(10)} ${String(l.teams).padStart(4)} teams · primary ${[l.primaryA ? "on-chain payout" : null, l.primaryB ? "TheSportsDB (key)" : null].filter(Boolean).join(" → ") || "—"} · cross-read ${l.crossRead ? `${l.crossRead.id}${l.crossRead.needsKey ? " (key)" : ""}` : "missing"} · ${l.verdict}`); }
+if (!args.includes("--json")) { console.log("\nper league (team coins and matchups):"); for (const l of leagues) console.log(`  ${l.label.padEnd(26)} ${l.sport.padEnd(10)} ${String(l.teams).padStart(4)} teams · schedule ${l.schedule.id}${l.schedule.needsKey ? " (key)" : ""} · with a market: ${l.withMarket} · without: ${l.withoutMarket} · ${l.verdict}`); }
 if (args.includes("--write")) { fs.writeFileSync(DOC, renderCoverageMarkdown(matrix, leagues)); console.log(`\nwrote ${DOC}`); }
 process.exit(coverageExitCode(matrix, { requirePrimary: args.includes("--require-primary") }));

@@ -154,20 +154,19 @@ defence in depth, and `test/burntickerSearch.test.ts` scans the search, election
 Off: the Polymarket search, back-test, Browse group, elections flow and search suggestions are withheld. Settlement reads the on-chain
 payout regardless.
 
-**Team coins and matchups — final sourcing (owner: "good to go on the sports sources").** ESPN's scoreboard is discovery only: it lists
-the games and shows the next game and the record, and it is never a settlement input. Each game settles on:
-- **primary A:** the game's on-chain payout (Polymarket moneyline market → the CTF payout vector on Polygon), where a market exists;
-- **primary B:** TheSportsDB v2 under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`), otherwise;
-- **neither:** the game is held and the coin is refused at creation.
+**Team coins and matchups — final sourcing (owner, 2026-10-10).** No ESPN reads, for settlement or for discovery:
+- **Schedules:** MLB StatsAPI, the NHL's api-web and the NBA's cdn feed are free and official. Every other league uses TheSportsDB v2
+  under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`). Until that key is set, those leagues' pickers say "schedule needs the
+  licensed key".
+- **Settlement, primary A:** the game's on-chain payout (Polymarket moneyline → the CTF payout vector on Polygon), where a market exists.
+- **Settlement, primary B:** TheSportsDB's final, otherwise.
+- **Confirmation:** a game counts only when a second, independent operator agrees. The on-chain payout and TheSportsDB confirm each
+  other when both exist. The league's official feed (MLB, NHL, NBA) is a further read where it is free. API-Sports
+  (`BURNTICKER_APISPORTS_KEY`) is optional. A game only one operator can read is held, and the coin is refused at creation.
 
-It counts only once a cross-read from another operator agrees on the final:
-- MLB: MLB StatsAPI
-- NHL: the NHL score feed
-- NBA: the NBA's cdn schedule feed
-- every other league: API-Sports (`BURNTICKER_APISPORTS_KEY`); without that key the cross-read is missing and the coin is refused
-
-Each reading says which source settled it: "settled on: on-chain payout · confirmed by MLB StatsAPI". The venue badge reads
-"On-chain payout or TheSportsDB · games listed by ESPN".
+Cards, coin pages, receipts and posts say "settled on the game's on-chain payout · confirmed by MLB's official feed". TheSportsDB is
+named on the trust page with "data: TheSportsDB". The only trace of ESPN is a plain "see this game on ESPN →" link to that day's
+scoreboard, which is never fetched. The venue badge reads "On-chain payout · league's official feed".
 
 ### FEC — the smallest gate change to propose
 
@@ -238,9 +237,9 @@ The badge (2026 SEASON / POSTSEASON 2026 / NEXT 5 GAMES / PERPETUAL / ONE-SHOT �
 pair page, the first line of the token metadata description and the footer of every post. Season tickers carry the year ($RAYS26).
 When a window ends (frozen-fixture tested), the keeper records the rule end and the wind-down starts the next day.
 
-**Every league.** The pickers and the search cover every team-sport league ESPN's scoreboard serves: baseball, basketball (NBA, WNBA,
+**Every league.** The pickers and the search cover 25 team-sport leagues: baseball, basketball (NBA, WNBA,
 college), hockey, soccer (MLS, NWSL, the Premier League, La Liga, Serie A, the Bundesliga, Ligue 1, the UEFA cups, Liga MX and more),
-football (NFL, college). ESPN's scoreboard lists their games. Settlement is the on-chain payout or TheSportsDB, confirmed by MLB StatsAPI, the NHL feed, the NBA feed, or API-Sports. The league picker is a
+football (NFL, college). Their schedules and settlement follow the final sourcing above. The league picker is a
 searchable list grouped by sport. The per-league verdicts are in SETTLEMENT-COVERAGE.md.
 
 **The description is generated and locked** (a deliberate choice: anti-misrepresentation). There is no free-text description.

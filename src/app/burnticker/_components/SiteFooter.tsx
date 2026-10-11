@@ -4,7 +4,7 @@ import { NAV, X_HREF, API_BASE_PATH } from "./nav";
 
 /** The site-wide memecoin disclaimer (the token pages carry the per-coin DISCLAIMER_FOOTER and their rule on top of this). */
 export const SITE_DISCLAIMER = "Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing: a rule says what a coin's supply does when a settled public event says so — never what its price does. Nothing on this site is investment advice.";
-export const SOURCES_LINE = "The public sources the rules read (U.S. Treasury, BLS, NOAA / NWS, ESPN, the FEC, JPL, Wikimedia, Polymarket and others) are not affiliated with and do not endorse any coin.";
+export const SOURCES_LINE = "The public sources the rules read (U.S. Treasury, BLS, NOAA / NWS, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia, Polymarket and others) are not affiliated with and do not endorse any coin.";
 
 /**
  * THE FOOTER (B1 "thermal receipt"): the slip the product prints — torn top edge, label/value rows, dashed rules — carrying the

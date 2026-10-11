@@ -3,21 +3,15 @@ import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { TEAM_ALIASES, aliasLookup, type TeamAlias } from "@/lib/burnticker/oracle/events";
 import { TEAM_IDS } from "@/lib/burnticker/sources/teamColors";
+import { PROVIDER_TEAM_IDS } from "@/lib/burnticker/sources/providerTeams";
 import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { type: "json" };
 
 /**
- * THE ESPN SCOREBOARD ADAPTER (tier 4, first-party; 2026-10-10 — team coins and matchups no longer depend on Kalshi). It reads a team's
- * season from ESPN's public scoreboard API and counts, per game day, whether the team won or lost. A result is read into a reading only
- * after a SECOND, independent cross-read agrees on the final score:
- *
- *   NHL  the league's own score feed   api-web.nhle.com/v1/score/<date>
- *   MLB  the league's own StatsAPI     statsapi.mlb.com/api/v1/schedule?sportId=1&date=<date>
- *   NFL  TheSportsDB event search      thesportsdb.com/api/v1/json/<key>/searchevents.php (a second public scoreboard; key from
- *   NBA                                 BURNTICKER_THESPORTSDB_KEY, else the free test key "123", which returns a limited set)
- *
- * Disagreement holds the game and is reported as a refusal; a cross-read that cannot find the game holds it as "awaiting cross-read"
- * (counted in awaitingFinal). A game is read no sooner than 6 h after its start. Terms: ESPN's endpoint is public but undocumented
- * (sources.json espn.nfl carries the flag); TheSportsDB's free key is for testing — both are named on every card.
+ * TEAMS, LEAGUES, SERIES AND SCHEDULES FOR TEAM COINS (the file keeps its old name; since 2026-10-10 NOTHING here reads ESPN). The team
+ * tables are frozen (oracle/events alias table + config/burnticker/espn-teams.json: names, abbreviations, colours, the ESPN team id used
+ * only as a stable PIN in series ids). Schedules come from the league's free official feed (MLB StatsAPI, NHL api-web, NBA cdn) or from
+ * TheSportsDB v2 under its commercial licence (every other league; without BURNTICKER_THESPORTSDB_KEY: "schedule needs the licensed
+ * key"). Settlement: sources/gameSettle.ts. A plain human link to ESPN's scoreboard is the only trace of ESPN on a page.
  *
  * SERIES (catalogue ids; scalar, unit 1, baseline 0, direction up — one unit per qualifying game):
  *   espn.team:<league>-<ABBR>.<ID>-<win|loss>-<window>   a team coin, the team PINNED BY ITS ESPN TEAM ID (a rename or relocation keeps
@@ -206,21 +200,69 @@ export interface GameSide { abbr: string; /** ESPN team id ("" when the body has
 export interface Game { eventId: string; league: LeagueId; /** 2 regular season, 3 postseason (from the schedule it was read from); null from a scoreboard */ seasonType?: 2 | 3 | null; /** ESPN season year of the schedule it was read from */ seasonYear?: number | null; startsAt: string; date: string; name: string; completed: boolean; state: string; detail: string; home: GameSide; away: GameSide }
 
 const num = (v: unknown): number | null => { const x = typeof v === "object" && v !== null ? (v as { value?: unknown }).value : v; const n = Number(x); return x === null || x === undefined || x === "" || !Number.isFinite(n) ? null : n; };
-function parseEvent(league: LeagueId, raw: unknown): Game | null {
-  const e = raw as { id?: string; date?: string; name?: string; competitions?: { status?: { type?: { completed?: boolean; state?: string; shortDetail?: string } }; competitors?: { homeAway?: string; score?: unknown; winner?: boolean; team?: { id?: string | number; location?: string; abbreviation?: string; displayName?: string; name?: string; shortDisplayName?: string }; records?: { type?: string; summary?: string }[]; record?: { type?: string; displayValue?: string }[] }[] }[]; status?: { type?: { completed?: boolean; state?: string; shortDetail?: string } } } | null;
-  const c = e?.competitions?.[0];
-  if (!e?.id || !e.date || !c?.competitors || c.competitors.length !== 2) return null;
-  const st = c.status?.type ?? e.status?.type ?? {};
-  const side = (x: NonNullable<typeof c.competitors>[number]): GameSide => ({ abbr: String(x.team?.abbreviation ?? "").toUpperCase(), id: x.team?.id === undefined ? "" : String(x.team.id), short: String(x.team?.shortDisplayName ?? ""), location: String(x.team?.location ?? ""), winner: typeof x.winner === "boolean" ? x.winner : null, name: String(x.team?.displayName ?? ""), nickname: String(x.team?.name ?? x.team?.shortDisplayName ?? ""), score: num(x.score), homeAway: x.homeAway === "home" ? "home" : "away", record: x.records?.find((r) => r.type === "total")?.summary ?? x.record?.find((r) => r.type === "total")?.displayValue ?? null });
-  const home = c.competitors.find((x) => x.homeAway === "home"), away = c.competitors.find((x) => x.homeAway !== "home");
-  if (!home || !away) return null;
-  const startsAt = /Z$/.test(e.date) && e.date.length === 17 ? e.date.replace("Z", ":00Z") : e.date;
-  return { eventId: e.id, league, startsAt, date: startsAt.slice(0, 10), name: String(e.name ?? ""), completed: !!st.completed && st.state === "post", state: String(st.state ?? ""), detail: String(st.shortDetail ?? ""), home: side(home), away: side(away) };
+
+// ---- schedules: NO ESPN READS (owner, 2026-10-10). The free official feeds for MLB, the NHL and the NBA; TheSportsDB v2 (licensed key)
+// for every other league. A league without its feed answers "schedule needs the licensed key" — never a fallback to ESPN.
+
+export class ScheduleUnavailable extends Error {}
+export const SCHEDULE_NEEDS_KEY = "schedule needs the licensed key (BURNTICKER_THESPORTSDB_KEY)";
+const normName = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+/** A provider's team → our team (abbreviation first, then the name ending in our nickname or naming our club / college). */
+export function ourTeam(league: LeagueId, name: string, abbr: string | null = null): EspnTeam | null {
+  const ts = teamsOf(league), n = normName(name);
+  if (abbr) { const A = abbr.toUpperCase(); const byProv = ts.find((t) => PROVIDER_TEAM_IDS[`${league}:${t.abbr}`] === A); if (byProv) return byProv; const byAbbr = ts.find((t) => t.abbr === A); if (byAbbr) return byAbbr; }
+  return ts.find((t) => n === normName(t.name)) ?? ts.find((t) => n.endsWith(` ${normName(t.nickname)}`) || n === normName(t.nickname)) ?? ts.find((t) => [t.name, ...t.alt].some((k) => k.length >= 4 && n === normName(k))) ?? null;
 }
-/** A team schedule or a scoreboard body → games. */
-export function parseGames(league: LeagueId, body: unknown): Game[] {
-  const evs = (body as { events?: unknown[] } | null)?.events;
-  return Array.isArray(evs) ? evs.map((x) => parseEvent(league, x)).filter((g): g is Game => g !== null) : [];
+const sideOf = (league: LeagueId, homeAway: "home" | "away", name: string, abbr: string | null, score: number | null, winner: boolean | null = null): GameSide => {
+  const t = ourTeam(league, name, abbr);
+  return { abbr: t?.abbr ?? "TBD", id: t ? teamIdOf(league, t.abbr) ?? "" : "", short: t?.nickname ?? name, location: t?.city ?? "", winner, name: name || t?.name || "", nickname: t?.nickname ?? name, score, homeAway, record: null };
+};
+const mk = (league: LeagueId, eventId: string, startsAt: string, seasonType: 2 | 3, seasonYear: number | null, state: "pre" | "in" | "post", completed: boolean, detail: string, home: GameSide, away: GameSide): Game =>
+  ({ eventId, league, seasonType, seasonYear, startsAt, date: startsAt.slice(0, 10), name: `${away.name} at ${home.name}`, completed, state, detail, home, away });
+
+export const MLB_API = "https://statsapi.mlb.com/api/v1";
+export const mlbTeamScheduleUrl = (abbr: string, year: number): string => `${MLB_API}/schedule?sportId=1&season=${year}&gameType=R,F,D,L,W&teamId=${PROVIDER_TEAM_IDS[`mlb:${abbr}`] ?? ""}`;
+export const mlbRangeUrl = (from: string, to: string): string => `${MLB_API}/schedule?sportId=1&startDate=${from}&endDate=${to}&gameType=R,F,D,L,W`;
+export function mlbGames(body: unknown): Game[] {
+  const games = (((body as { dates?: { games?: unknown[] }[] } | null)?.dates ?? []).flatMap((d) => d.games ?? [])) as { gamePk?: number; gameDate?: string; gameType?: string; season?: string; status?: { abstractGameState?: string; detailedState?: string }; teams?: { home?: { team?: { name?: string }; score?: number; isWinner?: boolean }; away?: { team?: { name?: string }; score?: number; isWinner?: boolean } } }[];
+  return games.filter((g) => g.gamePk && g.gameDate).map((g) => {
+    const st = g.status?.abstractGameState ?? "", postponed = /postponed|cancel|suspend/i.test(g.status?.detailedState ?? "");
+    const state = st === "Final" || postponed ? "post" : st === "Live" ? "in" : "pre";
+    return mk("mlb", String(g.gamePk), g.gameDate!, g.gameType === "R" ? 2 : 3, num(g.season), state, st === "Final" && !postponed, g.status?.detailedState ?? "", sideOf("mlb", "home", g.teams?.home?.team?.name ?? "", null, num(g.teams?.home?.score), g.teams?.home?.isWinner ?? null), sideOf("mlb", "away", g.teams?.away?.team?.name ?? "", null, num(g.teams?.away?.score), g.teams?.away?.isWinner ?? null));
+  });
+}
+export const NHL_API = "https://api-web.nhle.com/v1";
+export const nhlClubScheduleUrl = (abbr: string, year: number): string => `${NHL_API}/club-schedule-season/${PROVIDER_TEAM_IDS[`nhl:${abbr}`] ?? abbr}/${year - 1}${year}`;
+export const nhlWeekUrl = (date: string): string => `${NHL_API}/schedule/${date}`;
+export function nhlGames(body: unknown): Game[] {
+  const b = body as { games?: unknown[]; gameWeek?: { games?: unknown[] }[] } | null;
+  const games = [...(b?.games ?? []), ...(b?.gameWeek ?? []).flatMap((d) => d.games ?? [])] as { id?: number; season?: number; gameType?: number; startTimeUTC?: string; gameState?: string; homeTeam?: { abbrev?: string; commonName?: { default?: string }; placeName?: { default?: string }; score?: number }; awayTeam?: { abbrev?: string; commonName?: { default?: string }; placeName?: { default?: string }; score?: number } }[];
+  return games.filter((g) => g.id && g.startTimeUTC && (g.gameType === 2 || g.gameType === 3)).map((g) => {
+    const done = /^(FINAL|OFF)$/.test(g.gameState ?? ""), live = /^(LIVE|CRIT)$/.test(g.gameState ?? "");
+    const nm = (t: typeof g.homeTeam) => `${t?.placeName?.default ?? ""} ${t?.commonName?.default ?? ""}`.trim();
+    return mk("nhl", String(g.id), g.startTimeUTC!, g.gameType === 3 ? 3 : 2, g.season ? Number(String(g.season).slice(4)) : null, done ? "post" : live ? "in" : "pre", done, g.gameState ?? "", sideOf("nhl", "home", nm(g.homeTeam), g.homeTeam?.abbrev ?? null, num(g.homeTeam?.score)), sideOf("nhl", "away", nm(g.awayTeam), g.awayTeam?.abbrev ?? null, num(g.awayTeam?.score)));
+  });
+}
+export const NBA_LEAGUE_SCHEDULE = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json";
+export function nbaGames(body: unknown): Game[] {
+  const ls = (body as { leagueSchedule?: { seasonYear?: string; gameDates?: { games?: unknown[] }[] } } | null)?.leagueSchedule;
+  const year = ls?.seasonYear ? Number(String(ls.seasonYear).slice(0, 4)) + 1 : null;
+  const games = (ls?.gameDates ?? []).flatMap((d) => d.games ?? []) as { gameId?: string; gameDateTimeUTC?: string; gameStatus?: number; gameStatusText?: string; homeTeam?: { teamTricode?: string; teamName?: string; teamCity?: string; score?: number }; awayTeam?: { teamTricode?: string; teamName?: string; teamCity?: string; score?: number } }[];
+  return games.filter((g) => g.gameId && g.gameDateTimeUTC && /^00[245]/.test(g.gameId)).map((g) => {
+    const nm = (t: typeof g.homeTeam) => `${t?.teamCity ?? ""} ${t?.teamName ?? ""}`.trim();
+    return mk("nba", g.gameId!, g.gameDateTimeUTC!, /^002/.test(g.gameId!) ? 2 : 3, year, g.gameStatus === 3 ? "post" : g.gameStatus === 2 ? "in" : "pre", g.gameStatus === 3, g.gameStatusText ?? "", sideOf("nba", "home", nm(g.homeTeam), null, num(g.homeTeam?.score)), sideOf("nba", "away", nm(g.awayTeam), null, num(g.awayTeam?.score)));
+  });
+}
+/** TheSportsDB league ids (v2 schedule/league/<id>/<season>). Checked against TheSportsDB's public league pages; verify on the licensed account. */
+export const TSDB_LEAGUE: Partial<Record<LeagueId, string>> = { wnba: "4516", mcbb: "4607", wcbb: "4608", nfl: "4391", cfb: "4479", "eng.1": "4328", "esp.1": "4335", "ita.1": "4332", "ger.1": "4331", "fra.1": "4334", "uefa.champions": "4480", "uefa.europa": "4481", "uefa.europa.conf": "5071", "usa.1": "4346", "usa.nwsl": "4521", "mex.1": "4350", "ned.1": "4337", "por.1": "4344", "eng.2": "4329", "sco.1": "4330", "bra.1": "4351", "arg.1": "4406", nba: "4387", mlb: "4424", nhl: "4380" };
+export const tsdbSeasonCode = (league: LeagueId, year: number): string => (LEAGUES[league].span === "single" ? String(year) : LEAGUES[league].span === "later" ? `${year - 1}-${year}` : `${year}-${year + 1}`);
+export const tsdbScheduleUrl = (league: LeagueId, year: number): string => `https://www.thesportsdb.com/api/v2/json/schedule/league/${TSDB_LEAGUE[league] ?? ""}/${tsdbSeasonCode(league, year)}`;
+export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[] {
+  const lists = body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][]) : [];
+  return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent)).map((e) => {
+    const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
+    return mk(league, String(e.idEvent), startsAt, /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer" ? 3 : 2, year, done ? "post" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
+  });
 }
 /** A team's outcome in a completed game, or null (not completed, not its game, or no scores). Ties are neither win nor loss. */
 export function outcomeOf(g: Game, abbr: string, teamId: string | null = null): Outcome | "tie" | null {
@@ -233,64 +275,31 @@ export function outcomeOf(g: Game, abbr: string, teamId: string | null = null): 
   return us.score > them.score ? "win" : us.score < them.score ? "loss" : "tie";
 }
 
-// ---- cross-reads ----------------------------------------------------------------------------------------------------------
-
-export type CrossVerdict = { verdict: "agree" | "disagree" | "unavailable"; detail: string; url: string };
-const scoresMatch = (g: Game, home: number | null, away: number | null) => home !== null && away !== null && home === g.home.score && away === g.away.score;
-const prevDay = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-
-export const tsdbUrl = (key: string, g: Game, names: [string, string] = [g.home.name, g.away.name]): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/searchevents.php?e=${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_"))}&d=${g.date}`;
-/** The names TheSportsDB may file a game under: ESPN's display name, its short name, the location, the club name without FC / CF / AFC / SC. */
+// ---- name variants (TheSportsDB names clubs and colleges its own way) ----
 export function tsdbNamePairs(g: Game): [string, string][] {
   const vs = (x: GameSide) => [...new Set([x.name, (x.name || "").replace(/^(AFC|FC|CF|SC|CD|CA|AC|AS|SS|SSC|US|RC|RCD|VfB|VfL|TSG|1\. FC)\s+|\s+(FC|CF|SC|AFC)$/g, "").trim(), x.short ?? "", x.location ?? ""].filter((n) => n && n.length >= 3))];
   const h = vs(g.home), a = vs(g.away), out: [string, string][] = [];
   for (let k = 0; k < Math.max(h.length, a.length); k++) out.push([h[Math.min(k, h.length - 1)], a[Math.min(k, a.length - 1)]]);
   return out.filter((p, i) => out.findIndex((q) => q[0] === p[0] && q[1] === p[1]) === i).slice(0, 4);
 }
-export const nhlScoreUrl = (date: string): string => `https://api-web.nhle.com/v1/score/${date}`;
-export const mlbScheduleUrl = (date: string): string => `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}`;
-
-export function crossFromTsdb(g: Game, body: unknown, url: string): CrossVerdict {
-  const ev = ((body as { event?: unknown[] } | null)?.event ?? []) as { intHomeScore?: string | null; intAwayScore?: string | null; strStatus?: string; dateEvent?: string }[];
-  const done = ev.find((e) => /^(FT|AOT|AET|AP|Match Finished|Final)/i.test(String(e.strStatus ?? "")));
-  if (!done) return { verdict: "unavailable", detail: ev.length ? `TheSportsDB has the game but not final (${ev[0].strStatus ?? "?"})` : "TheSportsDB has no such game", url };
-  return scoresMatch(g, num(done.intHomeScore), num(done.intAwayScore)) ? { verdict: "agree", detail: `TheSportsDB final ${done.intHomeScore}–${done.intAwayScore}`, url } : { verdict: "disagree", detail: `TheSportsDB final ${done.intHomeScore}–${done.intAwayScore} ≠ ESPN ${g.home.score}–${g.away.score}`, url };
-}
-export function crossFromNhl(g: Game, body: unknown, url: string): CrossVerdict {
-  const games = ((body as { games?: unknown[] } | null)?.games ?? []) as { gameState?: string; homeTeam?: { name?: { default?: string }; score?: number }; awayTeam?: { name?: { default?: string }; score?: number } }[];
-  const hit = games.find((x) => x.homeTeam?.name?.default?.toLowerCase() === g.home.nickname.toLowerCase() && x.awayTeam?.name?.default?.toLowerCase() === g.away.nickname.toLowerCase());
-  if (!hit) return { verdict: "unavailable", detail: "not in the NHL score feed for that date", url };
-  if (!/^(OFF|FINAL)$/.test(String(hit.gameState))) return { verdict: "unavailable", detail: `NHL feed state ${hit.gameState}`, url };
-  return scoresMatch(g, num(hit.homeTeam?.score), num(hit.awayTeam?.score)) ? { verdict: "agree", detail: `NHL final ${hit.homeTeam?.score}–${hit.awayTeam?.score}`, url } : { verdict: "disagree", detail: `NHL final ${hit.homeTeam?.score}–${hit.awayTeam?.score} ≠ ESPN ${g.home.score}–${g.away.score}`, url };
-}
-export function crossFromMlb(g: Game, body: unknown, url: string): CrossVerdict {
-  const games = (((body as { dates?: { games?: unknown[] }[] } | null)?.dates ?? []).flatMap((d) => d.games ?? [])) as { gameDate?: string; status?: { abstractGameState?: string }; teams?: { home?: { team?: { name?: string }; score?: number }; away?: { team?: { name?: string }; score?: number } } }[];
-  const hits = games.filter((x) => x.teams?.home?.team?.name === g.home.name && x.teams?.away?.team?.name === g.away.name);
-  const hit = hits.find((x) => Math.abs(Date.parse(String(x.gameDate)) - Date.parse(g.startsAt)) < 6 * 3_600_000) ?? hits[0];
-  if (!hit) return { verdict: "unavailable", detail: "not in MLB StatsAPI for that date", url };
-  if (hit.status?.abstractGameState !== "Final") return { verdict: "unavailable", detail: `MLB state ${hit.status?.abstractGameState}`, url };
-  return scoresMatch(g, num(hit.teams?.home?.score), num(hit.teams?.away?.score)) ? { verdict: "agree", detail: `MLB final ${hit.teams?.home?.score}–${hit.teams?.away?.score}`, url } : { verdict: "disagree", detail: `MLB final ${hit.teams?.home?.score}–${hit.teams?.away?.score} ≠ ESPN ${g.home.score}–${g.away.score}`, url };
-}
-
-// ---- the client -----------------------------------------------------------------------------------------------------------
-
-export const ESPN_API = "https://site.api.espn.com/apis/site/v2/sports";
-/** ESPN refuses a User-Agent carrying a URL (403 on 10-10); the plain product token passes. */
+/** The User-Agent the readers send. */
 export const ESPN_UA = "burnticker/0.1";
-/** ESPN's default schedule is the CURRENT season type (the postseason during the playoffs), so both are asked for explicitly. */
-export const scheduleUrl = (league: LeagueId, abbrOrId: string, seasonType: 2 | 3 = 2, year: number | null = null): string => `${ESPN_API}/${LEAGUES[league].path}/teams/${teamKey(league, abbrOrId)}/schedule?${year ? `season=${year}&` : ""}seasontype=${seasonType}`;
-export const scoreboardUrl = (league: LeagueId, yyyymmdd: string): string => `${ESPN_API}/${LEAGUES[league].path}/scoreboard?dates=${yyyymmdd}`;
 export const SETTLE_AFTER_START_MS = 6 * 3_600_000;
 
-export interface EspnClientOpts { fetchImpl?: FetchLike; now?: () => number; minIntervalMs?: number; ttlMs?: number; tsdbKey?: string }
+export interface EspnClientOpts { fetchImpl?: FetchLike; now?: () => number; minIntervalMs?: number; ttlMs?: number; /** TheSportsDB v2 (commercial licence): schedules for the leagues without a free official feed */ tsdbKey?: string | null }
 
+/**
+ * THE SPORTS SCHEDULE READER (no ESPN reads). Kept under its old name for the callers; `SportsClient` is the same class.
+ *   MLB  statsapi.mlb.com  (free, official)      NHL  api-web.nhle.com (free, official)      NBA  cdn.nba.com (free, official)
+ *   every other league     TheSportsDB v2 league schedule (BURNTICKER_THESPORTSDB_KEY) — without the key: ScheduleUnavailable
+ */
 export class EspnClient {
-  private fetchImpl: FetchLike; private now: () => number; private minInterval: number; private ttl: number; readonly tsdbKey: string;
+  private fetchImpl: FetchLike; private now: () => number; private minInterval: number; private ttl: number; readonly tsdbKey: string | null;
   private cache = new Map<string, { at: number; body: unknown }>(); private lastAt = 0; private chain: Promise<void> = Promise.resolve();
   requests: string[] = [];
   constructor(o: EspnClientOpts = {}) {
     this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
-    this.tsdbKey = (o.tsdbKey ?? process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || "123";
+    this.tsdbKey = o.tsdbKey === undefined ? ((process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || null) : o.tsdbKey;
   }
   /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
   async get(url: string, headers: Record<string, string> = {}): Promise<unknown> {
@@ -300,54 +309,43 @@ export class EspnClient {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.lastAt = this.now(); this.requests.push(url);
       const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers } });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url.replace(/\/json\/[^/]+\//, "/json/<key>/").slice(0, 120)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url.slice(0, 120)}`);
       const body = await res.json(); this.cache.set(url, { at: this.now(), body }); return body;
     };
     const p = this.chain.then(run, run); this.chain = p.then(() => undefined, () => undefined); return p;
   }
-  /** A team's season (regular season, plus the postseason when ESPN lists one): the current one, or ESPN season `year`. */
+  /** Whether this host can read a league's schedule (the three free official feeds, or TheSportsDB with the key). */
+  scheduleAvailable(league: LeagueId): boolean { return league === "mlb" || league === "nhl" || league === "nba" || !!this.tsdbKey; }
+  private async tsdb(league: LeagueId, year: number): Promise<Game[]> {
+    if (!this.tsdbKey || !TSDB_LEAGUE[league]) throw new ScheduleUnavailable(`${LEAGUES[league].label}: ${SCHEDULE_NEEDS_KEY}`);
+    return tsdbGames(league, await this.get(tsdbScheduleUrl(league, year), { "X-API-KEY": this.tsdbKey }), year);
+  }
+  /** A team's season (regular season and postseason): the current one, or season `year` (the league's own year naming, as ESPN's was). */
   async season(league: LeagueId, abbrOrId: string, year: number | null = null): Promise<Game[]> {
-    const yr = (b: unknown) => { const y = Number((b as { requestedSeason?: { year?: unknown } } | null)?.requestedSeason?.year); return Number.isFinite(y) && y > 1900 ? y : year; };
-    const regBody = await this.get(scheduleUrl(league, abbrOrId, 2, year));
-    const reg = parseGames(league, regBody).map((g) => ({ ...g, seasonType: 2 as const, seasonYear: yr(regBody) }));
-    const post = await this.get(scheduleUrl(league, abbrOrId, 3, year)).then((b) => parseGames(league, b).map((g) => ({ ...g, seasonType: 3 as const, seasonYear: yr(regBody) }))).catch(() => [] as Game[]);
+    const t = /^\d+$/.test(abbrOrId) ? teamById(league, abbrOrId) : teamByAbbr(league, abbrOrId);
+    if (!t) return [];
+    const y = year ?? seasonYearAt(league, this.now());
+    const mine = (g: Game) => g.home.abbr === t.abbr || g.away.abbr === t.abbr;
+    let games: Game[];
+    if (league === "mlb") games = mlbGames(await this.get(mlbTeamScheduleUrl(t.abbr, y)));
+    else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y)));
+    else if (league === "nba") games = nbaGames(await this.get(NBA_LEAGUE_SCHEDULE)).filter((g) => g.seasonYear === y);
+    else games = await this.tsdb(league, y);
     const seen = new Set<string>();
-    return [...reg, ...post].filter((g) => (seen.has(g.eventId) ? false : (seen.add(g.eventId), true))).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    return games.filter((g) => mine(g) && (seen.has(g.eventId) ? false : (seen.add(g.eventId), true))).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
-  /** Games on the next `days` days (one scoreboard request per day, cached), for the matchup picker and the team picker's next game. */
+  /** A league's games in the next `days` days (the matchup picker and the team picker's next game). */
   async upcoming(league: LeagueId, days = 7): Promise<Game[]> {
-    const out: Game[] = [];
-    for (let i = 0; i < days; i++) {
-      const d = new Date(this.now() + i * 86_400_000).toISOString().slice(0, 10).replace(/-/g, "");
-      try { out.push(...parseGames(league, await this.get(scoreboardUrl(league, d)))); } catch { /* a day ESPN will not serve: skip */ }
-    }
-    const seen = new Set<string>();
-    return out.filter((g) => (seen.has(g.eventId) ? false : (seen.add(g.eventId), true)));
-  }
-  async crossRead(g: Game): Promise<CrossVerdict> {
-    const L = LEAGUES[g.league];
-    try {
-      if (L.cross === "nhl") {
-        for (const d of [g.date, prevDay(g.date)]) { const url = nhlScoreUrl(d); const v = crossFromNhl(g, await this.get(url), url); if (v.verdict !== "unavailable") return v; }
-        return { verdict: "unavailable", detail: "not in the NHL score feed", url: nhlScoreUrl(g.date) };
-      }
-      if (L.cross === "mlb") {
-        for (const d of [g.date, prevDay(g.date)]) { const url = mlbScheduleUrl(d); const v = crossFromMlb(g, await this.get(url), url); if (v.verdict !== "unavailable") return v; }
-        return { verdict: "unavailable", detail: "not in MLB StatsAPI", url: mlbScheduleUrl(g.date) };
-      }
-      let last: CrossVerdict = { verdict: "unavailable", detail: "TheSportsDB has no such game", url: "" };
-      for (const names of tsdbNamePairs(g)) {
-        const url = tsdbUrl(this.tsdbKey, g, names);
-        let body: unknown;
-        try { body = await this.get(url); } catch (e) { last = { verdict: "unavailable", detail: `TheSportsDB: ${(e as Error).message.slice(0, 60)}`, url: url.replace(`/json/${encodeURIComponent(this.tsdbKey)}/`, "/json/<key>/") }; continue; }
-        const v = crossFromTsdb(g, body, url.replace(`/json/${encodeURIComponent(this.tsdbKey)}/`, "/json/<key>/"));
-        if (v.verdict !== "unavailable" || !/no such game/.test(v.detail)) return v;
-        last = v;
-      }
-      return last;
-    } catch (e) { return { verdict: "unavailable", detail: `cross-read failed: ${(e as Error).message.slice(0, 80)}`, url: "" }; }
+    const from = new Date(this.now()).toISOString().slice(0, 10), to = new Date(this.now() + days * 86_400_000).toISOString().slice(0, 10);
+    let games: Game[];
+    if (league === "mlb") games = mlbGames(await this.get(mlbRangeUrl(from, to)));
+    else if (league === "nhl") games = nhlGames(await this.get(nhlWeekUrl(from)));
+    else if (league === "nba") games = nbaGames(await this.get(NBA_LEAGUE_SCHEDULE));
+    else games = await this.tsdb(league, seasonYearAt(league, this.now()));
+    return games.filter((g) => g.date >= from && g.date <= to).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
 }
+export { EspnClient as SportsClient };
 
 /**
  * The games a series reads (every listed game of its window, completed or not). A next-N or perpetual window that reaches back past
@@ -401,38 +399,6 @@ export function windowStatus(s: EspnSeries, games: readonly Game[], nowMs: numbe
   if (nowMs - lastAt < SEASON_END_GRACE_MS) return { perpetual: false, ended: false, endsAt: null, lastGame: last, reason: "every listed game is final; waiting for the next round to be listed" };
   const endG = scope.filter((g) => g.completed).pop() ?? scope[scope.length - 1] ?? last!;
   return { perpetual: false, ended: true, endsAt: endG.startsAt, lastGame: last, reason: scope.length ? `the team's last game of the window was ${endG.date}` : `no postseason games: the season ended ${last!.date}` };
-}
-
-/**
- * Settled readings for an ESPN series since `sinceIso` (a "YYYY-MM-DD" period key, or null). `crossRead: false` (back-tests only:
- * display-grade) skips the second read; the keeper always cross-reads.
- */
-export async function espnSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, o: { crossRead?: boolean; nowMs?: number } = {}): Promise<ResolvedSelector> {
-  const now = o.nowMs ?? Date.now();
-  const all = await gamesFor(client, s, sinceIso);
-  const games = all.filter((g) => !sinceIso || g.date > sinceIso.slice(0, 10));
-  const tid = s.kind === "team" ? s.teamId : null;
-  const byDay = new Map<string, { value: number; titles: string[]; url: string }>();
-  let awaiting = 0; const refusals: string[] = [];
-  for (const g of games) {
-    const out = outcomeOf(g, s.abbr, tid);
-    if (out === null) { if (g.completed) awaiting++; continue; }
-    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; continue; }
-    let crossText = "cross-read skipped (back-test)";
-    if (o.crossRead !== false) {
-      const v = await client.crossRead(g);
-      if (v.verdict === "disagree") { refusals.push(`${g.eventId}: ${v.detail} — held`); continue; }
-      if (v.verdict === "unavailable") { awaiting++; continue; }
-      crossText = v.detail;
-    }
-    const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: `https://www.espn.com/${s.league}/game/_/gameId/${g.eventId}` };
-    if (out === s.outcome || (s.outcome === "draw" && out === "tie")) cur.value++;
-    cur.titles.push(`${g.away.abbr} ${g.away.score} @ ${g.home.abbr} ${g.home.score} final (${out === "tie" ? "tie" : `${s.abbr} ${out}`}; ${crossText})`);
-    byDay.set(g.date, cur);
-  }
-  const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, d]) => ({ id: date, at: date, result: null, value: String(d.value), title: d.titles.join(" · "), sourceUrl: d.url, method: `espn-final+${LEAGUES[s.league].cross}` } as SettledEvent));
-  const window = windowStatus(s, s.kind === "team" && s.window.kind === "post" ? await client.season(s.league, s.teamId ?? s.abbr, s.window.year).catch(() => all) : all, now);
-  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: `${ESPN_API}/${LEAGUES[s.league].path}`, window };
 }
 
 /** True when the rule is an ESPN catalogue rule. */

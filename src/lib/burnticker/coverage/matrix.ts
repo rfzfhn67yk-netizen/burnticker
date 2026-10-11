@@ -61,13 +61,13 @@ function kindRow(kind: SelectorKind, primaries: SourceDescriptor[], pairs: Cross
     case "one-shot":
       return polyOk ? row("adjudicated-only", `Polymarket tag(s) ${tags.join(", ")}: the result is the CTF payout vector on Polygon; no primary source here is binary`) : row("uncovered", poly ? "no Polymarket tag maps to this category and no primary source is binary" : "Polymarket is not available on this host and no primary source is binary");
     case "matchup-game":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two coins on one game, one per team (espn.game:…-loss): the game settles on its on-chain payout where a moneyline market exists, else TheSportsDB's licensed final, confirmed by the league's cross-read", true);
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two coins on one game, one per team (espn.game:…-loss): the game settles on its on-chain payout where a moneyline market exists, else TheSportsDB's licensed final, once a second independent operator agrees", true);
       return polyOk ? row("adjudicated-only", "one Polymarket game market (the moneyline), side B inverted: a partition, like a Kalshi one-shot") : row("uncovered", "no Polymarket game markets on this host");
     case "team-coin":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `every game of the team (listed by ESPN's scoreboard, discovery only) settles on its on-chain payout where a Polymarket moneyline market exists, else on TheSportsDB's final under its commercial licence, confirmed by the league's official feed (MLB, NHL, NBA) or API-Sports (src/lib/burnticker/sources/gameSettle.ts; per league below)`, true);
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `no ESPN reads: the schedule from the league's own feed (MLB, NHL, NBA) or TheSportsDB (licensed); every game settles on its on-chain payout where a Polymarket moneyline market exists, else on TheSportsDB's final, and counts once a second independent operator agrees (the on-chain payout and TheSportsDB confirm each other; the league's official feed where free; API-Sports optional) (src/lib/burnticker/sources/gameSettle.ts; per league below)`, true);
       return row("uncovered", "the team's own leg of a Kalshi game series was the only route; Polymarket moneylines have no fixed per-team YES/NO (the team order changes per game); espn.nfl counts finals only and is not admitted");
     case "matchup-season":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two team coins, each game settled on its on-chain payout or TheSportsDB's final and confirmed by its league's cross-read", true);
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two team coins, each game settled on its on-chain payout or TheSportsDB's final once a second independent operator agrees", true);
       return row("uncovered", "two team coins (one per team's games): uncovered for the same reason as team coins");
   }
 }
