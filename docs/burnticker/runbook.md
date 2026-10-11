@@ -207,6 +207,11 @@ pair) goes out, in order:
 
 ## Launch day — $DEFICIT, in order
 
+**Creator launches stay closed** (`BURNTICKER_CREATOR_LAUNCHES_ENABLED` unset — deploy.md): the web wizard and the launch API refuse with "Creator
+launches are not open yet. $DEFICIT is the first coin." The operator's coins ($REHEARSAL, then $DEFICIT) go out ONLY through the CLI steps below
+and "Add a token by hand"; check `curl -s https://burnticker.com/api/burnticker/v1/catalogue | jq .launches` → `{"creators": false, …}` before
+announcing anything.
+
 Preconditions: every gate above ticked; weekday morning 08–09 Denver (Treasury posts ~14:00 Denver); the Burnticker host fully provisioned
 (`deploy.md` §First run), both keepers installed and **stopped**, DNS live, `config/own-tokens.json` ready to take the mint. Commands are the
 exact ones from `docs/burnkeeper/devnet-run.md` (mainnet section) and `docs/burnkeeper/fees.md`; every send needs `BURNKEEPER_MAINNET=1`

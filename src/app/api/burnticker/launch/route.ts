@@ -6,6 +6,7 @@ import { clientKey, limiter } from "@/lib/burnticker/api/http";
 import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
+import { creatorLaunchRefusal } from "@/lib/burnticker/creatorLaunches";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export async function POST(req: Request) {
   // Cross-site requests are refused before the body is read (the repo's rule for every mutating route). No PIN and no trusted-host
   // check here: creators are third parties using the wizard on this origin.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "cross-site request refused", code: "cross-origin" }, { status: 403 });
+  // BURNTICKER_CREATOR_LAUNCHES_ENABLED off (the default): no creator launch — the operator's coins launch through the CLI.
+  const closed = creatorLaunchRefusal(process.env);
+  if (closed) return NextResponse.json(closed.body, { status: closed.status });
   // ChatGPT/Codex review N4 (2026-10-10): the same per-client write bucket as /v1/launch/bundle and /v1/launch/confirm (one shared
   // bucket: a client cannot double its allowance by alternating routes). An Origin header is not authentication; this is the meter.
   const rl = limiter.take(clientKey(req), "write");
