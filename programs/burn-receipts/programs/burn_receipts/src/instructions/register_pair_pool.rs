@@ -52,8 +52,9 @@ pub fn handle_register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
     require!(c.cpmm_pool == Pubkey::default() && !c.pool_verified, BurnError::PoolAlreadyRegistered);
     // LAUNCHPAD-PATH §40: every pair is winner-takes-the-burn — the two coins must be paired (link_pair, the Pair as witness) first.
     // Policy-2 coins can only be paired by link_pair (initialize_token refuses a partner for them), so PAIRED means "paired to the
-    // other mint of this Pair".
-    require!(c.pair_state == PAIR_STATE_PAIRED, BurnError::PairNotLinked);
+    // other mint of this Pair". Pair-forward r3 (RN-1): a coin unlinked on terminal evidence (its partner side voided / refunding)
+    // still registers its own pool — it burns as a plain coin.
+    require!(c.pair_state == PAIR_STATE_PAIRED || c.pair_state == PAIR_STATE_UNLINKED, BurnError::PairNotLinked);
     require_fixed_supply(&a.mint)?;
     let mint = c.mint;
 

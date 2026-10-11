@@ -11,6 +11,7 @@ import type { Cluster } from "@/lib/burnKeeper/solana";
 import { counterRule, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
 import { ChainLockFees } from "@/lib/burnticker/lockFeesChain";
 import { ChainPairForward } from "@/lib/burnticker/pairForwardChain";
+import { dateU32 } from "@/lib/burnticker/pairForward";
 
 /**
  * THE REAL burn_receipts CLIENT FOR BURNTICKER (2026-10-10) — see program.ts for the interface and the unit counter. Per-token
@@ -69,7 +70,7 @@ export class ProgramBurnClient implements BurnProgramClient {
     const ix = initializeTokenIx({ programId: this.o.programId, payer: creator, creator, mint, args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: i.attesters.map((a) => operatorAttester(new PublicKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
-    }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst } : {}) });
+    }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });
     return { tokenConfig: configPda(this.o.programId, mint).toBase58(), instructions: [serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)] };
   }
   feePdaFor(mint: string) { return burnPoolFor(this.o.programId, new PublicKey(mint)).feePda.toBase58(); }

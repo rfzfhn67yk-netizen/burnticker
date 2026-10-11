@@ -142,7 +142,17 @@ pub struct TokenConfig {
     /// LAUNCHPAD-PATH §40: PAIR_STATE_NONE / _PROVISIONAL / _PAIRED (the partner is in PairLink ["pair_link", mint]). Taken from the
     /// former reserved bytes, so configs created before §40 read as NONE.
     pub pair_state: u8,
-    pub reserved: [u8; 22],
+    /// Pair-forward r3 (RN-2): a LaunchLab pair's locked voidBy (YYYYMMDD, UTC; the same on both coins, set by initialize_token).
+    /// When that day has ended and a coin still has no verified pool, unlink_pair may unpair the two. 0 = none (pair_curve pairs:
+    /// the Pair's own Voided / refunding state is the evidence).
+    pub pair_void_by: u32,
+    /// Pair-forward r3 (RN-1 second route): periods dated on or before this day had readings before the coins were paired (or the
+    /// first coin read while provisional) — they stay unpaired history: the crank gate passes them, no PairResult may name them.
+    /// The same on both coins; 0 = none.
+    pub pair_after_date: u32,
+    /// Pair-forward r3: when unlink_pair ran (pair_state is then PAIR_STATE_UNLINKED); 0 = never.
+    pub pair_unlinked_at: i64,
+    pub reserved: [u8; 6],
 }
 
 impl TokenConfig {

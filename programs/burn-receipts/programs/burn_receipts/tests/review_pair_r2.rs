@@ -1,11 +1,11 @@
 //! Pair-forward RE-CHECK (2026-10-11) of the round-2 fixes (program 6fc15f00, merged at 9d81ee5e) — burn_receipts tests for
 //! docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md. The High (RN-1, policy 2) is in programs/pair_curve/tests/review_pair_r2.rs
-//! (it needs a pair_curve Pair). Every test here ASSERTS TODAY'S BEHAVIOUR and passes; a name with `still` documents a residual the
-//! round did not close, so a fix makes it fail and it must then be inverted.
+//! (it needs a pair_curve Pair). The re-check's `still` tests documented residuals; round 3 (2026-10-11) closed them and they are
+//! INVERTED here (each now asserts the fixed behaviour):
 //!
-//!   M-1 residual   m1_still_the_losing_sides_attesters_veto_its_losses_while_it_collects_its_wins
-//!   RN-2 (Medium)  rn2_still_a_launchlab_pair_with_both_coins_on_their_curves_is_unpaired_for_good_after_30_days
-//!   RI-1 (Info)    ri1_still_a_lost_period_can_be_forwarded_after_the_72_hour_time_out
+//!   M-1 residual   m1_a_side_cannot_veto_its_losses_while_collecting_its_wins            (one attester set per pair; both quorums)
+//!   RN-2 (Medium)  rn2_a_launchlab_pair_with_both_coins_on_their_curves_stays_paired_until_its_void_by   (voidBy evidence)
+//!   RI-1 (Info)    ri1_a_lost_period_cannot_be_forwarded_after_the_72_hour_time_out       (ForwardWindowClosed)
 //!
 //! Run: scripts/test.sh builds target/deploy-test; then
 //!   cargo test -p burn_receipts --test review_pair_r2 -- --test-threads=1 --nocapture
@@ -94,121 +94,119 @@ fn event<T: anchor_lang::AnchorDeserialize + anchor_lang::Discriminator>(meta: &
     events(meta).into_iter().find(|(d, _)| d[..] == T::DISCRIMINATOR[..]).map(|(_, p)| T::try_from_slice(&p).unwrap())
 }
 
-/// Two paired coins with markets, each with its OWN attester set (quorum 1) — a pair made directly on the program, or any future
-/// per-creator attester set. Both read D1 (baseline).
-fn paired_distinct(env: &mut Env, att_a: &Keypair, att_b: &Keypair) -> ((Pubkey, Pool), (Pubkey, Pool)) {
+/// Two paired coins with markets and one common attester (quorum 1); both read D1 (baseline).
+fn paired_common(env: &mut Env, att: &Keypair) -> ((Pubkey, Pool), (Pubkey, Pool)) {
     let (ka, kb) = (Keypair::new(), Keypair::new());
-    init(env, &ka, &att_a.pubkey(), buyback_rule(), Some((kb.pubkey(), false))).unwrap();
-    init(env, &kb, &att_b.pubkey(), buyback_rule(), Some((ka.pubkey(), true))).unwrap();
+    init(env, &ka, &att.pubkey(), buyback_rule(), Some((kb.pubkey(), false))).unwrap();
+    init(env, &kb, &att.pubkey(), buyback_rule(), Some((ka.pubkey(), true))).unwrap();
     let pa = market(env, &ka);
     let pb = market(env, &kb);
-    submit(env, &ka.pubkey(), D1, V1, &[att_a]).unwrap();
-    submit(env, &kb.pubkey(), D1, V1, &[att_b]).unwrap();
+    submit(env, &ka.pubkey(), D1, V1, &[att]).unwrap();
+    submit(env, &kb.pubkey(), D1, V1, &[att]).unwrap();
     ((ka.pubkey(), pa), (kb.pubkey(), pb))
 }
 
 // =================================================================================================================================
-// M-1 residual — the losing side's attesters still decide whether its losses forward
+// M-1 residual — closed in round 3: one attester set per pair, every result signed by both quorums
 // =================================================================================================================================
 
-/// The blind review's M-1 scenario, unchanged by round 2: B's attesters never sign a result in which B loses. A's attesters cannot
-/// record A's win alone (QuorumNotMet — by design since r2, the loser must consent), so 72 h after B's reading B burns its own fuel
-/// (PairResultMissing). When B WINS, A's honest attesters sign A's loss and A's fuel moves to B. Round 2 removed only the winner's
-/// (pointless) veto and pinned the attester set against rotation; the asymmetric loser veto remains and is not disclosed.
+/// The blind review's M-1 scenario: B's attesters refuse to sign B's losses while A's sign B's wins. Round 3: two coins with
+/// different attester sets cannot pair at all (PairAttestersDiffer), and with the one common set the signatures that record B's win
+/// are the same that record A's win — no side has attesters of its own to withhold. (A paired coin's set changes only with the
+/// partner's quorum: tests/pairs.rs m1_a_paired_coin_changes_attesters_only_with_the_partners_quorum.)
 #[test]
-fn m1_still_the_losing_sides_attesters_veto_its_losses_while_it_collects_its_wins() {
+fn m1_a_side_cannot_veto_its_losses_while_collecting_its_wins() {
     let mut env = Env::new();
     let (att_a, att_b) = (Keypair::new(), Keypair::new());
-    let ((a, pa), (b, pb)) = paired_distinct(&mut env, &att_a, &att_b);
+    let (ka, kb) = (Keypair::new(), Keypair::new());
+    init(&mut env, &ka, &att_a.pubkey(), buyback_rule(), Some((kb.pubkey(), false))).unwrap();
+    expect_anchor_err(init(&mut env, &kb, &att_b.pubkey(), buyback_rule(), Some((ka.pubkey(), true))), "PairAttestersDiffer");
+
+    let att = Keypair::new();
+    let ((a, pa), (b, _pb)) = paired_common(&mut env, &att);
     env.transfer_sol(&fee_pda(&a), 3 * SOL);
     env.transfer_sol(&fee_pda(&b), 3 * SOL);
     let k = cranker(&mut env);
-
-    // D2: A won, B lost. Only A's attesters are willing to sign.
-    submit(&mut env, &a, D2, V1 + 4 * UNIT, &[&att_a]).unwrap();
-    submit(&mut env, &b, D2, V1 + 4 * UNIT, &[&att_b]).unwrap();
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&att_a]), "QuorumNotMet");
-    let submitted = env.reading(&reading_pda(&config_pda(&b), D2)).unwrap().submitted_at;
-    env.set_time(submitted + PAIR_RESULT_GRACE_SECS);
-    cpmm::seed_history(&mut env, &pb, &b);
-    let supply_b = env.mint_supply(&b);
-    let meta = env.ok(&[cpmm::ix_crank_buyback_paired(&k.pubkey(), &b, &pb, D2, Some(a))], &[&k]);
-    assert!(event::<burn_receipts::events::PairResultMissing>(&meta).is_some());
-    assert!(env.mint_supply(&b) < supply_b, "B's lost period burned B's own supply");
-    // and the period can no longer be decided against B
-    expect_anchor_err(submit_pair_result(&mut env, &a, &b, D2, a, &[&att_b]), "PairResultNotServable");
-    // (A's own D2 — the period it won — also waited out the 72 h without a result, then burns A's own fuel)
+    // D2: A won, B lost — recorded by the common quorum, and B's fuel moves to A.
+    submit(&mut env, &a, D2, V1 + 4 * UNIT, &[&att]).unwrap();
+    submit(&mut env, &b, D2, V1 + 4 * UNIT, &[&att]).unwrap();
+    submit_pair_result(&mut env, &a, &b, D2, a, &[&att]).unwrap();
+    let fa = env.lamports(&fee_pda(&a));
+    env.ok(&[ix_forward_to_winner(&k.pubkey(), &b, &a, D2)], &[&k]);
+    assert!(env.lamports(&fee_pda(&a)) > fa, "B's lost period moved B's fuel to A");
+    // A's own D2 (won) burns A's coin with its fuel (now including B's)
     cpmm::seed_history(&mut env, &pa, &a);
     env.ok(&[cpmm::ix_crank_buyback_paired(&k.pubkey(), &a, &pa, D2, Some(b))], &[&k]);
-
-    // D3: B won, A lost. A's honest attesters sign A's loss: A's fuel moves to B.
+    // D3: B won, A lost — the same signer, the other direction.
     env.set_time(env.now() + DAY);
-    submit(&mut env, &a, D3, V1 + 6 * UNIT, &[&att_a]).unwrap();
-    submit(&mut env, &b, D3, V1 + 6 * UNIT, &[&att_b]).unwrap();
-    submit_pair_result(&mut env, &a, &b, D3, b, &[&att_a]).unwrap();
+    submit(&mut env, &a, D3, V1 + 6 * UNIT, &[&att]).unwrap();
+    submit(&mut env, &b, D3, V1 + 6 * UNIT, &[&att]).unwrap();
+    submit_pair_result(&mut env, &a, &b, D3, b, &[&att]).unwrap();
     let fb = env.lamports(&fee_pda(&b));
     env.ok(&[ix_forward_to_winner(&k.pubkey(), &a, &b, D3)], &[&k]);
-    let gained = env.lamports(&fee_pda(&b)) - fb;
-    println!("M-1 residual: B kept (burned) its own D2 fuel; A's D3 loss moved {gained} lamports into B's burn pool");
-    assert!(gained > 0);
+    assert!(env.lamports(&fee_pda(&b)) > fb);
 }
 
 // =================================================================================================================================
-// RN-2 — UNLINK_NOT_LIVE fires on a healthy pair whose coins are simply still on their curves
+// RN-2 — closed in round 3: a LaunchLab pair is unlinked only after its locked voidBy
 // =================================================================================================================================
 
-/// A LaunchLab pair (policy 0) paired at initialize_token. Neither coin has graduated 30 days after the pairing (a LaunchLab curve has
-/// no deadline; an election pair's rules carry voidBy = the race's settlement date, a one-shot's = its settlement date — later than
-/// 30 days is allowed). Anyone — and the keeper's own pairUnlinkStep — may unlink it: nothing in the evidence says either coin is dead.
-/// Both coins then graduate; the pair is gone for good (initialize_token cannot run twice; link_pair is policy-2 only), so the winner's
-/// side never receives a forward its locked rules promise.
+/// A LaunchLab pair (policy 0) paired at initialize_token, neither coin graduated 30 (and 60) days after the pairing: unlink_pair is
+/// refused (PairStillLive) — the only LaunchLab evidence is the pair's own voidBy having ended with a coin still unverified. Both
+/// coins then graduate and stay paired; once both pools are verified even an ended voidBy is no evidence.
 #[test]
-fn rn2_still_a_launchlab_pair_with_both_coins_on_their_curves_is_unpaired_for_good_after_30_days() {
+fn rn2_a_launchlab_pair_with_both_coins_on_their_curves_stays_paired_until_its_void_by() {
     let mut env = Env::new();
     let att = Keypair::new();
     let (ka, kb) = (Keypair::new(), Keypair::new());
     init(&mut env, &ka, &att.pubkey(), buyback_rule(), Some((kb.pubkey(), false))).unwrap();
     init(&mut env, &kb, &att.pubkey(), buyback_rule(), Some((ka.pubkey(), true))).unwrap();
     let paired_at = pair_link(&env, &ka.pubkey()).unwrap().paired_at;
-    // neither coin has a pool yet (both on their curves)
     assert!(!env.config(&config_pda(&ka.pubkey())).pool_verified && !env.config(&config_pda(&kb.pubkey())).pool_verified);
     let stranger = cranker(&mut env);
-    env.set_time(paired_at + PAIR_UNLINK_NOT_LIVE_SECS);
-    let meta = env.ok(&[ix_unlink_pair(&stranger.pubkey(), &ka.pubkey(), &kb.pubkey(), None)], &[&stranger]);
-    assert_eq!(event::<burn_receipts::events::PairUnlinked>(&meta).unwrap().reason, UNLINK_NOT_LIVE);
-    // day 31: both coins graduate and register normally ...
+    for days in [30, 60] {
+        env.set_time(paired_at + days * DAY);
+        expect_anchor_err(env.send(&[ix_unlink_pair(&stranger.pubkey(), &ka.pubkey(), &kb.pubkey(), None)], &[&stranger]), "PairStillLive");
+    }
+    // both coins graduate and register: still paired, and a result is recorded and forwarded
     let pa = market(&mut env, &ka);
     let _pb = market(&mut env, &kb);
     for m in [ka.pubkey(), kb.pubkey()] {
         let c = env.config(&config_pda(&m));
-        assert!(c.pool_verified && c.pair_state == PAIR_STATE_NONE, "registered, but unpaired for good");
-        assert!(pair_link(&env, &m).is_none());
+        assert!(c.pool_verified && c.pair_state == PAIR_STATE_PAIRED);
     }
-    // ... and the winner-takes-the-burn rule is gone: a result cannot be recorded, the loser burns its own supply.
-    submit(&mut env, &ka.pubkey(), D1, V1, &[&att]).unwrap();
-    submit(&mut env, &kb.pubkey(), D1, V1, &[&att]).unwrap();
-    expect_anchor_err(submit_pair_result(&mut env, &ka.pubkey(), &kb.pubkey(), D1, Pubkey::default(), &[&att]), "AccountNotInitialized");
-    submit(&mut env, &ka.pubkey(), D2, V1 + 3 * UNIT, &[&att]).unwrap();
+    let (e1, e2) = (math_date(env.now() - DAY), math_date(env.now()));
+    submit(&mut env, &ka.pubkey(), e1, V1, &[&att]).unwrap();
+    submit(&mut env, &kb.pubkey(), e1, V1, &[&att]).unwrap();
+    submit(&mut env, &ka.pubkey(), e2, V1 + 3 * UNIT, &[&att]).unwrap();
+    submit(&mut env, &kb.pubkey(), e2, V1, &[&att]).unwrap();
+    submit_pair_result(&mut env, &ka.pubkey(), &kb.pubkey(), e2, kb.pubkey(), &[&att]).unwrap();
     env.transfer_sol(&fee_pda(&ka.pubkey()), SOL);
-    cpmm::seed_history(&mut env, &pa, &ka.pubkey());
     let k = cranker(&mut env);
-    env.ok(&[cpmm::ix_crank_buyback(&k.pubkey(), &ka.pubkey(), &pa, D2)], &[&k]);
-    assert_eq!(env.reading(&reading_pda(&config_pda(&ka.pubkey()), D2)).unwrap().outcome, OUTCOME_BURNED);
+    let fb = env.lamports(&fee_pda(&kb.pubkey()));
+    env.ok(&[ix_forward_to_winner(&k.pubkey(), &ka.pubkey(), &kb.pubkey(), e2)], &[&k]);
+    assert!(env.lamports(&fee_pda(&kb.pubkey())) > fb, "the winner's side receives the forward its locked rules promise");
+    let _ = pa;
+    // after the voidBy has ended, with both pools verified: still no evidence
+    env.set_time(TEST_PAIR_VOID_BY_ENDED_TS + DAY);
+    expect_anchor_err(env.send(&[ix_unlink_pair(&stranger.pubkey(), &ka.pubkey(), &kb.pubkey(), None)], &[&stranger]), "PairStillLive");
+}
+
+fn math_date(ts: i64) -> u32 {
+    burn_receipts::math::utc_date(ts)
 }
 
 // =================================================================================================================================
-// RI-1 — the 72 h time-out does not end the forward window
+// RI-1 — closed in round 3: the 72 h time-out ends the forward window
 // =================================================================================================================================
 
-/// The whitepaper / checklist say a LOST period whose forward never landed within 72 h "can no longer forward". On chain the forward
-/// stays valid until a crank processes the reading: after the time-out forward_to_winner and the paired crank_buyback RACE (the keeper's
-/// planner always picks the buyback; any other cranker may still forward). Harmless, but the docs and the keeper's
-/// `pair-forward-missing` wording assume otherwise.
+/// A LOST period whose forward never landed within 72 h can no longer forward (ForwardWindowClosed): the period belongs to the loser's
+/// own crank (PairForwardMissing) — no race between forward_to_winner and the paired crank_buyback.
 #[test]
-fn ri1_still_a_lost_period_can_be_forwarded_after_the_72_hour_time_out() {
+fn ri1_a_lost_period_cannot_be_forwarded_after_the_72_hour_time_out() {
     let mut env = Env::new();
     let att = Keypair::new();
-    let ((a, _pa), (b, _pb)) = paired_distinct(&mut env, &att, &att);
+    let ((a, _pa), (b, pb)) = paired_common(&mut env, &att);
     env.transfer_sol(&fee_pda(&b), 2 * SOL);
     submit(&mut env, &a, D2, V1, &[&att]).unwrap();
     submit(&mut env, &b, D2, V1 + 3 * UNIT, &[&att]).unwrap();
@@ -217,7 +215,10 @@ fn ri1_still_a_lost_period_can_be_forwarded_after_the_72_hour_time_out() {
     env.set_time(submitted + PAIR_RESULT_GRACE_SECS + 7 * DAY);
     let k = cranker(&mut env);
     let fa = env.lamports(&fee_pda(&a));
-    env.ok(&[ix_forward_to_winner(&k.pubkey(), &b, &a, D2)], &[&k]);
-    assert!(env.lamports(&fee_pda(&a)) > fa, "a week past the time-out the forward still moves the loser's fuel");
-    assert_eq!(env.reading(&reading_pda(&config_pda(&b), D2)).unwrap().outcome, OUTCOME_FORWARDED);
+    expect_anchor_err(env.send(&[ix_forward_to_winner(&k.pubkey(), &b, &a, D2)], &[&k]), "ForwardWindowClosed");
+    assert_eq!(env.lamports(&fee_pda(&a)), fa);
+    cpmm::seed_history(&mut env, &pb, &b);
+    let meta = env.ok(&[cpmm::ix_crank_buyback_paired(&k.pubkey(), &b, &pb, D2, Some(a))], &[&k]);
+    assert!(event::<burn_receipts::events::PairForwardMissing>(&meta).is_some());
+    assert_eq!(env.reading(&reading_pda(&config_pda(&b), D2)).unwrap().outcome, OUTCOME_BURNED);
 }

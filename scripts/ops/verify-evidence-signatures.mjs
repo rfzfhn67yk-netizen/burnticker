@@ -30,6 +30,7 @@ const DEFAULT_TARGETS = [
   "docs/burnkeeper/devnet-lock-run-log-2026-10-10.md", "docs/burnkeeper/evidence/devnet-lock-2026-10-10",
   "docs/burnkeeper/devnet-lock-r2-run-log.md", "docs/burnkeeper/evidence/devnet-lock-r2",
   "docs/burnkeeper/devnet-pair-forward-run-log-2026-10-11.md", "docs/burnkeeper/evidence/devnet-pair-forward-2026-10-11",
+  "docs/burnkeeper/devnet-pair-forward-r2-run-log.md", "docs/burnkeeper/evidence/devnet-pair-forward-r2",
 ];
 const targets = args.filter((a, i) => !(a === "--rpc" || (rpcIdx >= 0 && i === rpcIdx + 1)));
 const files = (targets.length ? targets : DEFAULT_TARGETS).flatMap((t) => fs.statSync(t).isDirectory() ? fs.readdirSync(t).sort().map((f) => path.join(t, f)) : [t]);

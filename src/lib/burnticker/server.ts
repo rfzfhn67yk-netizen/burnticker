@@ -15,7 +15,7 @@ import { FakeBurnProgram, programPageBlock, type BurnProgramClient } from "@/lib
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
 import { FakeLaunchLab, type LaunchLabClient } from "@/lib/burnticker/launchBundle";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
-import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairClauseState, pairForwardsJson, type PairCounterpart, type TokenPageInput, type TokenStatusJson, type ReceiptJson } from "@/lib/burnticker/tokenPage";
+import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairChainFields, pairClauseState, pairForwardsJson, type PairCounterpart, type TokenPageInput, type TokenStatusJson, type ReceiptJson } from "@/lib/burnticker/tokenPage";
 import { DECIMALS, TOTAL_SUPPLY, pairWinnerTakesBurn } from "@/lib/burnticker/rules";
 import { rawToTokens, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { loadPowersRegister, operatorPowersSummary } from "@/lib/burnticker/trust";
@@ -176,7 +176,7 @@ export async function pairCounterpart(p: Platform, t: TokenRow): Promise<PairCou
   // Winner takes the burn (API 1.10.0): the flag from this coin's locked rule, and every forward between the two coins.
   let winnerTakesBurn = false;
   try { winnerTakesBurn = pairWinnerTakesBurn(p.registry.lockedRule(t).rule); } catch { winnerTakesBurn = false; }
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards: pairForwardsJson(p.registry, pair.pairId, other.cluster), unpaired: pairUnlinked(p.registry, pair.pairId) };
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards: pairForwardsJson(p.registry, pair.pairId, other.cluster), unpaired: pairUnlinked(p.registry, pair.pairId), ...(await pairChainFields(p.program.pairForward ? (a, b) => p.program.pairForward!.port(a, b).links() : undefined, pair.mintA, pair.mintB, side)) };
 }
 
 export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), opts: { live?: boolean } = {}): Promise<{ status: TokenStatusJson; receipts: ReceiptJson[]; readings: TokenPageInput["readings"]; rulesText: string; stubs: string[] }> {

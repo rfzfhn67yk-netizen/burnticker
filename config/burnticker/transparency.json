@@ -284,8 +284,8 @@
     },
     {
       "id": "operator-treasury-mainnet",
-      "status": "not done",
-      "text": "The operator treasury is not compiled into the mainnet burn_receipts build yet (the devnet build pays the devnet Squads vault). Until the owner compiles the mainnet vault in, every mainnet claim_lock_fees refuses (TreasuryNotPinned) and the LP fees stay in the lock; nothing is lost, nothing is claimed."
+      "status": "done",
+      "text": "The mainnet burn_receipts and pair_curve builds compile the operator treasury 8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5 (the owner's hardware wallet, also the LaunchLab platform fee wallet) and the Burnticker LaunchLab platform 94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9 (owner, 2026-10-11; docs/burnticker/VERIFIED-BUILD.md). claim_lock_fees pays the operator's 20 % there; initialize_token accepts only that platform."
     }
   ],
   "policies": [

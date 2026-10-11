@@ -1,4 +1,5 @@
-import { type Connection, PublicKey, SystemProgram, type TransactionInstruction } from "@solana/web3.js";
+import crypto from "node:crypto";
+import { type Connection, PublicKey, SystemProgram, SYSVAR_INSTRUCTIONS_PUBKEY, type TransactionInstruction } from "@solana/web3.js";
 import { ed25519SharedMessageInstruction, signAttestation } from "@/lib/burnReceipts/attestation";
 import { MEMO_PROGRAM_ID, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
@@ -10,13 +11,20 @@ import { associatedTokenAddress, configPda, feePda, pairLinkPda, pairOrder, pair
 /**
  * LAUNCHPAD-PATH §40 — WINNER TAKES THE BURN (owner decision 2026-10-11). The low-level client for the program side:
  *
- *   PairLink   ["pair_link", mint]                               the coin's one partner (TokenConfig.pair_state says 0 / 1 / 2)
+ *   PairLink   ["pair_link", mint]                               the coin's one partner (TokenConfig.pair_state says 0 / 1 / 2 / 3)
  *   PairResult ["pair_result", mint_lo, mint_hi, record_date LE] one period's winner (Pubkey.default = draw), signed by a quorum of
  *                                                                EACH coin's attesters over pairResultMessage()
  *   link_pair            the pair_curve Pair is the witness (policy 2; register_pair_pool requires it)
  *   submit_pair_result   the dated result
  *   forward_to_winner    the loser's fuel for the period → the winner's fee PDA (exact formula: the loser's buyback_spend)
  *   crank_buyback        a paired coin passes its PairLink + the period's PairResult (crankBuybackIx `partner`)
+ *   unlink_pair          terminal on-chain evidence only (r3): Pair voided / a side refunding / a LaunchLab voidBy ended
+ *   apply_paired_attester_change   a paired coin's attester change, co-signed by the partner's quorum (r3 M-1)
+ *
+ * Round 3 (2026-10-11): both coins of a pair share ONE attester set and quorum (pairing refuses otherwise) and every result needs both
+ * quorums (= one set of signatures); a LaunchLab pair carries its locked voidBy on both coins (initializeTokenIx `pairVoidBy`);
+ * periods already read when the coins paired stay unpaired (TokenConfig.pair_after_date); forward_to_winner is refused after the 72 h
+ * time-out; its basis leaves the loser's carried spend.
  *
  * Every constant below is read from the IDL (the program's `#[constant]`s) so this file and the program cannot drift.
  */
@@ -46,11 +54,21 @@ export const PAIR_RESULT_LOST = num("PAIR_RESULT_LOST");
 export const PAIR_RESULT_DRAW = num("PAIR_RESULT_DRAW");
 /** Reading.outcome after forward_to_winner. */
 export const OUTCOME_FORWARDED = num("OUTCOME_FORWARDED");
-/** unlink_pair (r2 M-2): a coin still without a verified pool this long after the pairing can be unlinked; PairUnlinked.reason values. */
-export const PAIR_UNLINK_NOT_LIVE_SECS = num("PAIR_UNLINK_NOT_LIVE_SECS");
+/** r3: unpaired by unlink_pair (a plain coin again; a policy-2 coin still registers its pool). */
+export const PAIR_STATE_UNLINKED = num("PAIR_STATE_UNLINKED");
+/** PairUnlinked.reason — terminal evidence only (r3): the Pair is Voided / a side is refunding / a LaunchLab voidBy ended without both pools. */
 export const UNLINK_PAIR_VOIDED = num("UNLINK_PAIR_VOIDED");
 export const UNLINK_SIDE_REFUNDING = num("UNLINK_SIDE_REFUNDING");
-export const UNLINK_NOT_LIVE = num("UNLINK_NOT_LIVE");
+export const UNLINK_VOID_BY_PASSED = num("UNLINK_VOID_BY_PASSED");
+/**
+ * @deprecated r3 RN-1/RN-2: "no verified pool 30 days after pairing" is NO LONGER evidence — the program refuses it (PairStillLive).
+ * Kept (no longer in the IDL) only so older callers compile; PairUnlinked.reason 2 appears only in r2-era history. Remove usages.
+ */
+export const UNLINK_NOT_LIVE = 2;
+/** @deprecated r3: see UNLINK_NOT_LIVE — the program has no time-based unlink evidence any more. */
+export const PAIR_UNLINK_NOT_LIVE_SECS = 30 * 24 * 60 * 60;
+/** The domain of the partner's co-signature over a paired coin's attester change (pairAttesterChangeMessage). */
+export const PAIR_ATTESTER_CHANGE_DOMAIN = JSON.parse(idlConstant("PAIR_ATTESTER_CHANGE_DOMAIN")) as string;
 export const SEED_PAIR_LINK = seed("PAIR_LINK_SEED");
 export const SEED_PAIR_RESULT = seed("PAIR_RESULT_SEED");
 
@@ -67,7 +85,8 @@ export { pairLinkPda, pairOrder, pairResultPda } from "@/lib/burnReceipts/pda";
 export interface PairLinkAccount {
   version: number; bump: number; mint: PublicKey; pair_mint: PublicKey; paired: boolean; witness: number;
   created_at: bigint; pairing_deadline: bigint; paired_at: bigint;
-  /** r2 M-1: the coin's attester-set hash at pairing (zero for links written before r2); a rotation since then makes the partner co-sign. */
+  /** The pair's common attester-set hash at pairing (r3: equal on both links; zero for links written before r2); after a co-signed
+   *  apply_paired_attester_change, this coin's new set. */
   attester_set_hash: Uint8Array;
 }
 
@@ -105,11 +124,39 @@ export async function fetchPairResult(connection: Connection, programId: PublicK
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
+// attester sets (r3 M-1)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+const PAIR_ATTESTERS_DOMAIN = Buffer.from("BURNRECEIPTS-PAIR-ATTESTERS-v1", "utf8");
+
+/** sha256("BURNRECEIPTS-PAIR-ATTESTERS-v1" ‖ quorum ‖ (kind ‖ key)…) — program pair::set_hash. Order matters: same keys, same order. */
+export function pairSetHash(quorum: number, attesters: { kind: number; key: PublicKey }[]): Buffer {
+  const parts = Buffer.concat([Buffer.from([quorum]), ...attesters.map((a) => Buffer.concat([Buffer.from([a.kind]), a.key.toBuffer()]))]);
+  return crypto.createHash("sha256").update(PAIR_ATTESTERS_DOMAIN).update(parts).digest();
+}
+
+/** A config's CURRENT attester-set hash (program pair::attester_set_hash). Pairing needs the two coins' hashes equal. */
+export function attesterSetHash(c: { quorum: number; attesters: { kind: number; key: PublicKey }[]; attester_count: number }): Buffer {
+  return pairSetHash(c.quorum, c.attesters.slice(0, c.attester_count));
+}
+
+/**
+ * What the PARTNER's quorum signs to let a paired coin apply its pending attester change (attest.rs
+ * canonical_pair_attester_change_message): `BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1|<genesis>|<program>|<mint>|<partner>|set=<hex>|eta=<unix>`,
+ * set = pairSetHash(pending_quorum, pending attesters).
+ */
+export function pairAttesterChangeMessage(genesisHash: string | PublicKey, programId: PublicKey, mint: PublicKey, partner: PublicKey, pendingSetHash: Uint8Array, eta: bigint | number): Buffer {
+  if (pendingSetHash.length !== 32) throw new Error("pending set hash must be 32 bytes");
+  const genesis = typeof genesisHash === "string" ? new PublicKey(genesisHash).toBase58() : genesisHash.toBase58();
+  return Buffer.from(`${PAIR_ATTESTER_CHANGE_DOMAIN}|${genesis}|${programId.toBase58()}|${mint.toBase58()}|${partner.toBase58()}|set=${Buffer.from(pendingSetHash).toString("hex")}|eta=${eta.toString()}`, "utf8");
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
 // the signed message
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 /**
- * The bytes a quorum of EACH coin's attesters signs (program: attest.rs canonical_pair_message):
+ * The bytes a quorum of EACH coin's attesters signs — r3: one common set, so one set of signatures (attest.rs canonical_pair_message):
  *   BURNRECEIPTS-PAIR-v1|<cluster genesis>|<program id>|<mint_lo>|<mint_hi>|<YYYY-MM-DD>|winner=<mint or "draw">|src=<hex>|proof=<hex>
  * `genesisHash` = the TokenConfigs' `cluster_genesis` (both coins of a pair share the build). `winner` null = draw. Pack it with
  * ed25519SharedMessageInstruction (attestation.ts) before submitPairResultIx in the same transaction.
@@ -129,7 +176,8 @@ export function pairResultMessage(genesisHash: string | PublicKey, programId: Pu
 /**
  * Signs the pair message with each attester key (64-byte Solana secret keys of DATA keys) and packs ONE Ed25519SigVerify instruction
  * (shared message) to place before submitPairResultIx. Each key counts for whichever coin's attester set holds it (the program needs
- * a quorum of EACH coin's set; on devnet the keeper key is both coins' attester). Two signatures fit a legacy transaction.
+ * a quorum of EACH coin's set — r3: both coins share one set, so the common quorum signs once; on Burnticker that is the operator
+ * keeper key alone, quorum 1). One signature with the readings fits a legacy transaction; two need v0 + a lookup table.
  */
 export function attestPairResult(o: { genesisHash: string | PublicKey; programId: PublicKey; mintA: PublicKey; mintB: PublicKey; recordDate: number; winner: PublicKey | null; sourceUrlHash: Uint8Array; proofHash?: Uint8Array; signers: { publicKey: PublicKey; secretKey: Uint8Array }[] }): { message: Buffer; instruction: TransactionInstruction } {
   const message = pairResultMessage(o.genesisHash, o.programId, o.mintA, o.mintB, o.recordDate, o.winner, o.sourceUrlHash, o.proofHash);
@@ -158,10 +206,9 @@ export function linkPairIx(o: { programId: PublicKey; payer: PublicKey; pair: Pu
  * submit_pair_result — mints in any order (sorted here). `winner` null = draw.
  * r2: a WIN carries both coins' readings for the date (reading_lo / reading_hi; the program requires both to exist and the loser's
  * to be unprocessed — pools are NOT required: a side without a verified pool makes the forward a 0-lamport FORWARDED, so the loser
- * keeps its fuel instead of burning a period it lost; never post a fallback draw for that) and needs the LOSER's quorum (+ the winner's only if the loser rotated its attesters since
- * pairing — then the transaction needs a v0 + lookup table); a DRAW omits the readings and needs both quorums. Dates on or after the
- * pairing day only.
- */
+ * keeps its fuel instead of burning a period it lost; never post a fallback draw for that); a DRAW omits the readings.
+ * r3 M-1: EVERY result needs both coins' quorums — one common set, so the same signatures. Dates on or after the pairing day and
+ * after TokenConfig.pair_after_date (PairPeriodUnpaired otherwise). */
 export function submitPairResultIx(o: { programId: PublicKey; payer: PublicKey; mintA: PublicKey; mintB: PublicKey; recordDate: number; winner: PublicKey | null; sourceUrlHash: Uint8Array; proofHash?: Uint8Array }): TransactionInstruction {
   const [lo, hi] = pairOrder(o.mintA, o.mintB);
   const readings: Record<string, PublicKey> = o.winner && !o.winner.equals(PublicKey.default)
@@ -184,7 +231,11 @@ export function submitPairResultIx(o: { programId: PublicKey; payer: PublicKey; 
   });
 }
 
-/** forward_to_winner — the loser's fuel for `recordDate` → the winner's fee PDA. Permissionless (cranker allowlist during the cap). */
+/**
+ * forward_to_winner — the loser's fuel for `recordDate` → the winner's fee PDA. Permissionless (cranker allowlist during the cap).
+ * r3: refused (ForwardWindowClosed) once PAIR_RESULT_GRACE_SECS have passed since the loser's reading was submitted — the period then
+ * belongs to the loser's own crank; the basis leaves the loser's carried_spend_lamports.
+ */
 export function forwardToWinnerIx(o: { programId: PublicKey; cranker: PublicKey; loserMint: PublicKey; winnerMint: PublicKey; recordDate: number }): TransactionInstruction {
   // r2 H-1(b): no winner_reading account; a dead side (no verified pool) forwards 0 lamports but still processes the loser's reading.
   const [lc, wc] = [configPda(o.programId, o.loserMint), configPda(o.programId, o.winnerMint)];
@@ -206,9 +257,10 @@ export function forwardToWinnerIx(o: { programId: PublicKey; cranker: PublicKey;
 }
 
 /**
- * unlink_pair (r2 M-2) — permissionless, on on-chain evidence only: `pair` = the pair_curve Pair when it is Voided or one side is
- * refunding; without it, one coin must still lack a verified pool PAIR_UNLINK_NOT_LIVE_SECS after the pairing. Both coins become plain;
- * both PairLinks close (rent to each coin's fee PDA).
+ * unlink_pair — permissionless, on TERMINAL on-chain evidence only (r3 RN-1/RN-2): a pair_curve pair (either coin policy 2) needs
+ * `pair` = its Pair, Voided or with a refunding side (never while Open, or Graduating without a refunding side); a LaunchLab pair needs
+ * its locked voidBy day (TokenConfig.pair_void_by) to have ended, UTC, with a coin still lacking a verified pool. Both coins become
+ * PAIR_STATE_UNLINKED (pair_unlinked_at); both PairLinks close (rent to each coin's fee PDA).
  */
 export function unlinkPairIx(o: { programId: PublicKey; cranker: PublicKey; mintA: PublicKey; mintB: PublicKey; pair?: PublicKey }): TransactionInstruction {
   return buildIx(o.programId, "unlink_pair", {
@@ -220,6 +272,21 @@ export function unlinkPairIx(o: { programId: PublicKey; cranker: PublicKey; mint
     fee_a: feePda(o.programId, o.mintA),
     fee_b: feePda(o.programId, o.mintB),
     ...(o.pair ? { pair: o.pair } : {}),
+  }, {});
+}
+
+/**
+ * apply_paired_attester_change (r3 M-1) — permissionless after the 48 h timelock: a PAIRED coin's pending attester change, with a
+ * quorum of the PARTNER's attesters signing pairAttesterChangeMessage (pack with ed25519SharedMessageInstruction, same transaction).
+ * apply_attester_change refuses a paired coin (PairedAttesterChange).
+ */
+export function applyPairedAttesterChangeIx(o: { programId: PublicKey; caller: PublicKey; mint: PublicKey; partnerMint: PublicKey }): TransactionInstruction {
+  return buildIx(o.programId, "apply_paired_attester_change", {
+    caller: o.caller,
+    config: configPda(o.programId, o.mint),
+    link: pairLinkPda(o.programId, o.mint),
+    partner_config: configPda(o.programId, o.partnerMint),
+    instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
   }, {});
 }
 

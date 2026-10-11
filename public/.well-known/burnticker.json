@@ -28,15 +28,15 @@
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": true,
-          "executableHash": "5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87",
-          "buildHash": "5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87",
+          "executableHash": "90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35",
+          "buildHash": "90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": true,
-          "executableHash": "96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178",
-          "buildHash": "96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178",
+          "executableHash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42",
+          "buildHash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         }
       },
@@ -95,18 +95,18 @@
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3",
+          "buildHash": "e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19",
           "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4",
+          "buildHash": "50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef",
           "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
         }
       },
-      "launchlabPlatform": "TODO_MAINNET_PLATFORM_ID",
+      "launchlabPlatform": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
       "squads": {
         "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
@@ -117,7 +117,7 @@
         "dev-fee": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
         "keeper": "TODO_MAINNET_KEEPER",
         "deployer": "TODO_MAINNET_DEPLOYER",
-        "platform-admin": "TODO_MAINNET_PLATFORM_ADMIN",
+        "platform-admin": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23",
         "squads-vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "squads-member-1": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ",
         "squads-member-2": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt",
@@ -131,10 +131,10 @@
         "lockProgram": "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE",
         "lockAuthority": "3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH",
         "feeKeysPda": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
-        "operatorTreasury": null,
-        "treasuryPinned": false,
-        "platform": null,
-        "platformPinned": false,
+        "operatorTreasury": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
+        "treasuryPinned": true,
+        "platform": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
+        "platformPinned": true,
         "launchLabLocker": "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh",
         "split": {
           "burnBps": 8000,
@@ -169,7 +169,7 @@
     "operator": "https://burnticker.com/burnticker/operator",
     "verifiedBuild": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/VERIFIED-BUILD.md",
     "verifiedBuildKind": "interim-local",
-    "sourceCommit": "6fc15f00ff13c86c7efdc9e7a69573527d6bde9c",
+    "sourceCommit": "bc0565589ad99c774786adc21bc1e505c6e5f733",
     "powersRegisters": [
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/powers-register.md",
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/pair-curve-powers-register.md"

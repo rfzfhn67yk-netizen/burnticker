@@ -20,7 +20,8 @@
 //!   crank_vault            permissionless: burn from the vault (shortfall carried) → memo v1
 //!   crank_no_units         permissionless: process a zero-unit reading that is next in line
 //!   propose_attesters / cancel_attester_change / renounce_admin    admin only (48 h timelock on proposals)
-//!   apply_attester_change  permissionless after the timelock
+//!   apply_attester_change  permissionless after the timelock (unpaired coins)
+//!   apply_paired_attester_change  permissionless after the timelock, a paired coin: the partner's quorum co-signs the new set
 //!   initialize_platform    upgrade-authority-signed, once: the program-wide pre-audit burn-pool cap (sunsets automatically)
 //!   propose_cap_raise / cancel_cap_raise / renounce_platform_authority    platform authority (48 h timelock; raise only)
 //!   apply_cap_raise        permissionless after the timelock
@@ -142,6 +143,10 @@ pub mod burn_receipts {
 
     pub fn apply_attester_change(ctx: Context<ApplyAttesterChange>) -> Result<()> {
         instructions::admin::handle_apply_attester_change(ctx)
+    }
+
+    pub fn apply_paired_attester_change(ctx: Context<ApplyPairedAttesterChange>) -> Result<()> {
+        instructions::admin::handle_apply_paired_attester_change(ctx)
     }
 
     pub fn set_registration_policy(ctx: Context<RegistrationPolicyAdmin>, policy: u8, pool: Pubkey) -> Result<()> {

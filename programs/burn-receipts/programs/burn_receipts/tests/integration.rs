@@ -714,6 +714,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
         vec![
             "apply_attester_change",
             "apply_cap_raise",
+            "apply_paired_attester_change",
             "apply_registration_policy",
             "cancel_attester_change",
             "cancel_cap_raise",

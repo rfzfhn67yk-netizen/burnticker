@@ -3,7 +3,8 @@ import { fetchReading, fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, NATIVE_MINT, type Cluster } from "@/lib/burnReceipts/constants";
 import { anchorErrorName, assertClusterAllowed, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
 import { createAtaIdempotentIx } from "@/lib/burnReceipts/instructions";
-import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_STATE_PAIRED, PAIR_UNLINK_NOT_LIVE_SECS, submitPairResultIx, unlinkPairIx, UNLINK_NOT_LIVE, UNLINK_PAIR_VOIDED, UNLINK_SIDE_REFUNDING, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_STATE_PAIRED, submitPairResultIx, unlinkPairIx, UNLINK_PAIR_VOIDED, UNLINK_SIDE_REFUNDING, UNLINK_VOID_BY_PASSED, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
 import { fetchPair, pairPda, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
 import { sourceUrlHash } from "@/lib/burnReceipts/attestation";
 import { configPda, feePda, feeWsolAddress } from "@/lib/burnReceipts/pda";
@@ -28,8 +29,8 @@ import { parseForwardMemo, type ForwardFacts, type PairForwardClient, type PairF
  *   forwardFacts(sig)   the burn program's own Memo CPI (memoFromTransaction, never log text) — the program ALWAYS writes the forward memo,
  *                       lamports=0 included — the loser's processed Reading (units, pool) and the loser fee PDA's lamport change (the
  *                       SOL part; the rest came from its WSOL).
- *   unlinkEvidence      r2 M-2: a voided pair_curve Pair / a refunding side (the Pair is passed), or one coin without a verified pool
- *                       PAIR_UNLINK_NOT_LIVE_SECS after the pairing; buildUnlink sends the permissionless unlink_pair.
+ *   unlinkEvidence      r3: TERMINAL evidence only — a voided pair_curve Pair / a refunding side (the Pair is passed), or a LaunchLab
+ *                       pair whose locked voidBy day ended with a coin unverified; buildUnlink sends the permissionless unlink_pair.
  */
 
 export interface ChainPairForwardOpts {
@@ -78,6 +79,7 @@ export class ChainPairForward implements PairForwardClient {
     const o = this.o, c = o.connection, A = new PublicKey(mintAS), B = new PublicKey(mintBS);
     const ctx: ProgramContext = { connection: c, programId: o.programId, mint: A, cluster: o.cluster, allowMainnet: o.allowMainnet };
     let rpcGenesis: string | null = null;
+    let policy2 = false;   // set by links(): either coin is a pair_curve coin (registration policy 2)
     const need = async (): Promise<Keypair> => {
       if (!o.payer) throw new Error("read-only pair-forward client (no payer key): cannot sign");
       if (!rpcGenesis) rpcGenesis = await assertClusterAllowed(ctx);
@@ -94,28 +96,35 @@ export class ChainPairForward implements PairForwardClient {
       mintB: mintBS,
       async links() {
         const [ca, cb, la, lb] = await Promise.all([fetchTokenConfig(c, o.programId, A), fetchTokenConfig(c, o.programId, B), fetchPairLink(c, o.programId, A), fetchPairLink(c, o.programId, B)]);
-        const st = (x: typeof ca): PairState => { const v = x?.config.pair_state ?? 0; return (v === 1 || v === 2 ? v : 0) as PairState; };
+        const st = (x: typeof ca): PairState => { const v = x?.config.pair_state ?? 0; return (v === 1 || v === 2 || v === 3 ? v : 0) as PairState; };
         const stateA = st(ca), stateB = st(cb);
         const paired = stateA === PAIR_STATE_PAIRED && stateB === PAIR_STATE_PAIRED && !!la?.pair_mint.equals(B) && !!lb?.pair_mint.equals(A);
-        return { a: linkView(la), b: linkView(lb), stateA, stateB, paired, poolsVerified: [!!ca?.config.pool_verified, !!cb?.config.pool_verified] as [boolean, boolean] };
+        // r3: the locked voidBy (both coins the same for a LaunchLab pair) and the later pair_after_date (periods on/before it stay unpaired)
+        const pairVoidBy = Math.max(ca?.config.pair_void_by ?? 0, cb?.config.pair_void_by ?? 0);
+        const pairAfterDate = Math.max(ca?.config.pair_after_date ?? 0, cb?.config.pair_after_date ?? 0);
+        policy2 = ca?.config.rule.pool_policy === POOL_POLICY_PAIR_CURVE || cb?.config.rule.pool_policy === POOL_POLICY_PAIR_CURVE;
+        return { a: linkView(la), b: linkView(lb), stateA, stateB, paired, poolsVerified: [!!ca?.config.pool_verified, !!cb?.config.pool_verified] as [boolean, boolean], pairVoidBy, pairAfterDate };
       },
       async unlinkEvidence(nowMs: number): Promise<{ reason: UnlinkReason; pair: string | null } | null> {
+        // r3: TERMINAL evidence only. A pair_curve pair (either coin policy 2, or a pair_curve witness) needs its Pair: Voided → 0, a
+        // side refunding → 1; an Open pair (or Graduating without a refunding side) is never unlinked. A LaunchLab pair: its locked voidBy
+        // day ended (UTC) with a coin still without a verified pool → 3. No time-based evidence (r2's 30-day rule is gone).
         const l = await port.links();
         if (!l.paired || !l.a || !l.b) return null;
-        // a pair_curve pair: its Pair account is the evidence for a void or a refunding side
-        if (l.a.witness === 1 || l.b.witness === 1) {
+        if (policy2 || l.a.witness === 1 || l.b.witness === 1) {
           for (const [x, y] of [[A, B], [B, A]] as const) {
             const addr = pairPda(x, y);
             const p = await fetchPair(c, addr).catch(() => null);
             if (!p) continue;
             if (p.status === STATUS_VOIDED) return { reason: UNLINK_PAIR_VOIDED as UnlinkReason, pair: addr.toBase58() };
             if (p.refunding.some(Boolean)) return { reason: UNLINK_SIDE_REFUNDING as UnlinkReason, pair: addr.toBase58() };
-            break;
+            return null;
           }
+          return null;
         }
-        const since = Math.max(l.a.pairedAt ?? 0, l.b.pairedAt ?? 0, l.a.createdAt, l.b.createdAt);
+        const d = new Date(nowMs), today = d.getUTCFullYear() * 10_000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
         const dead = !(l.poolsVerified?.[0] ?? false) || !(l.poolsVerified?.[1] ?? false);
-        return dead && nowMs / 1000 >= since + PAIR_UNLINK_NOT_LIVE_SECS ? { reason: UNLINK_NOT_LIVE as UnlinkReason, pair: null } : null;
+        return l.pairVoidBy && today > l.pairVoidBy && dead ? { reason: UNLINK_VOID_BY_PASSED as UnlinkReason, pair: null } : null;
       },
       async buildUnlink(i: { pair: string | null }) {
         const payer = await need();

@@ -33,6 +33,8 @@ export interface PairCtx {
   pair: PairRow; me: TokenRow; other: TokenRow; port: PairForwardPort; active: boolean; hold?: string;
   /** The pairing day (YYYYMMDD, the later paired_at): periods before it have no PairResult (PairDateBeforePairing) and crank as plain. */
   pairedOn?: number | null;
+  /** r3: the later pair_after_date (YYYYMMDD): periods on or before it were read before the pairing — no PairResult (PairPeriodUnpaired). */
+  pairAfterDate?: number;
 }
 
 /** This coin's pair, its counterpart and the pair port — or null outside a pair / without a pair client. */
@@ -48,7 +50,7 @@ export async function pairCtxFor(reg: Registry, program: Pick<BurnProgramClient,
   try { links = await port.links(); } catch (e) {
     return { pair, me: t, other, port, active: false, ...(ruleSays ? { hold: `pair state unreadable (${(e as Error).message.slice(0, 80)})` } : {}) };
   }
-  if (links.paired) return { pair, me: t, other, port, active: true, pairedOn: pairedOn(links.a, links.b) };
+  if (links.paired) return { pair, me: t, other, port, active: true, pairedOn: pairedOn(links.a, links.b), pairAfterDate: links.pairAfterDate ?? 0 };
   const deadline = Math.max(links.a?.pairingDeadline ?? 0, links.b?.pairingDeadline ?? 0);
   const provisional = links.stateA === 1 || links.stateB === 1;
   if (ruleSays && provisional && now < deadline * 1000) return { pair, me: t, other, port, active: false, hold: `pairing window open until ${new Date(deadline * 1000).toISOString()} (the second coin has not named the first back yet)` };
@@ -150,6 +152,8 @@ export async function forwardLoss(ctx: PairCtx, reg: Registry, port: ProgramPort
   if (o.dryRun) { o.log(`  [dry-run] $${ctx.me.ticker} ${Ds}: would forward_to_winner → $${ctx.other.ticker}`); return { waiting: "dry run" }; }
   const tx = await ctx.port.buildForward({ loserMint: mint, recordDate: D });
   const sim = await ctx.port.simulate(tx.raw);
+  // r3 RI-1: past the 72 h window the forward is refused — the planner switches to the paired buyback; a wait, not an error
+  if (sim.err === "ForwardWindowClosed") return { waiting: `forward_to_winner: ${pairErrorSentence(sim.err)}` };
   if (sim.err) { const why = `forward_to_winner refused: ${pairErrorSentence(sim.err)}`; pending(why); return { waiting: why, error: true }; }
   reg.recordSignature({ signature: tx.signature, mint, eventId: `forward:${Ds}`, memo: `forward_to_winner ${Ds}`, burnRaw: BigInt(0), spendLamports: BigInt(0), blockhash: tx.blockhash, lastValidBlockHeight: tx.lastValidBlockHeight, sentAt: o.now });
   try { await ctx.port.send(tx.raw); } catch (e) { o.log(`  [pair] $${ctx.me.ticker} ${Ds}: forward send raised ${(e as Error).message.slice(0, 120)} — the signature is on the ledger and will be resolved`); }
@@ -217,7 +221,8 @@ export async function pairUnlinkStep(reg: Registry, program: Pick<BurnProgramCli
     if (!l.paired) {
       // unlinked by someone else: both links closed, both coins plain — recorded once the pair had acted as a pair here
       const wasPaired = [...reg.receipts(pr.mintA), ...reg.receipts(pr.mintB)].some((r) => r.pairRole !== null);
-      if (wasPaired && !l.a && !l.b && l.stateA === 0 && l.stateB === 0) {
+      // r3: unlink_pair leaves both coins UNLINKED (pair_state 3); r2-era unlinks left them at 0
+      if (wasPaired && !l.a && !l.b && ((l.stateA === 3 && l.stateB === 3) || (l.stateA === 0 && l.stateB === 0))) {
         reg.setStatus(unlinkedKey(pr.pairId), JSON.stringify({ reason: null, reasonText: "unlinked on chain (the reason is in its PairUnlinked event)", at: now, signature: null }));
         log(`  [pair] ${pr.pairId}: unlinked on chain — both coins are plain coins now`);
         out.push({ pairId: pr.pairId, reason: null, signature: null });
@@ -228,7 +233,7 @@ export async function pairUnlinkStep(reg: Registry, program: Pick<BurnProgramCli
     try { ev = await port.unlinkEvidence(now); } catch { continue; }
     if (!ev) continue;
     const text = UNLINK_REASON_TEXT[ev.reason];
-    if (!o.send) { log(`  [pair] ${pr.pairId}: unlink evidence holds (${text}) — not sent: unlink_pair is off until the round-3 evidence set is bound`); continue; }
+    if (!o.send) { log(`  [pair] ${pr.pairId}: unlink evidence holds (${text}) — not sent (KeeperDeps.pairUnlink is false)`); continue; }
     if (dryRun) { log(`  [dry-run] pair ${pr.pairId}: would unlink_pair (${text})`); continue; }
     const tx = await port.buildUnlink({ pair: ev.pair });
     const sim = await port.simulate(tx.raw);

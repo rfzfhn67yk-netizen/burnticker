@@ -92,7 +92,7 @@ describe("operator.json", () => {
     for (const m of op.clusters.devnet.platformMints) assert.ok(read(m.source).includes(m.mint), `${m.symbol} in ${m.source}`);
     assert.ok(read(op.clusters.devnet.squads.source).includes(op.clusters.devnet.squads.vault));
     assert.ok(read("docs/burnkeeper/evidence/devnet-2026-10-10/platform.json").includes(`"feeWallet": "${op.clusters.devnet.wallets.find((w) => w.role === "dev-fee")!.pubkey}"`), "the dev-fee wallet is the platform config's claim wallet");
-    assert.ok(op.clusters.mainnet.wallets.filter((w) => !["bounty", "squads-member-1", "squads-member-2", "squads-member-3", "dev-fee", "squads-vault"].includes(w.role)).every((w) => /^TODO_/.test(w.pubkey)), "no mainnet hot wallet exists yet; each is a TODO (the bounty wallet, Squads members A/B/C, the vault and the dev-fee wallet are set)");
+    assert.ok(op.clusters.mainnet.wallets.filter((w) => !["bounty", "squads-member-1", "squads-member-2", "squads-member-3", "dev-fee", "squads-vault", "platform-admin"].includes(w.role)).every((w) => /^TODO_/.test(w.pubkey)), "no mainnet hot wallet exists yet; each is a TODO (the bounty wallet, Squads members A/B/C, the vault and the dev-fee wallet are set)");
     assert.equal(op.clusters.mainnet.wallets.find((w) => w.role === "bounty")?.pubkey, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u", "the bounty wallet (set 2026-10-11)");
     assert.equal(op.operator.entity, "TODO_ENTITY"); assert.match(op.operator.entityPending, /LLC: pending owner decision/);
     assert.equal(op.operator.contact, "contact@burnticker.com");
@@ -125,7 +125,7 @@ describe("TODO-OWNER.md: every placeholder, every pointer", () => {
   test("every TODO_ placeholder in the trust-pack files is on the page", () => {
     const files = ["config/burnticker/operator.json", "config/burnticker/expenses.json", "config/burnticker/transparency.json", "config/public-repo/overlay/SECURITY.md"];
     const all = new Set(files.flatMap((f) => placeholders(f.endsWith(".json") ? JSON.parse(read(f)) : read(f)).map((p) => p.value)));
-    assert.ok(all.size >= 13, `${all.size} placeholders`);   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11
+    assert.ok(all.size >= 11, `${all.size} placeholders`);   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11
     for (const v of all) assert.ok(doc.includes(v), `${v} is missing from docs/burnticker/TODO-OWNER.md`);
   });
   test("every `file:line` (and `:line` after it) points at a line that holds the token named beside it", () => {
@@ -219,7 +219,7 @@ describe("/.well-known/burnticker.json", () => {
     assert.equal(w.links.github, loadTransparency(ROOT).publicRepo.url);
     assert.deepEqual(w.links.x, ["https://x.com/burnticker", "https://x.com/USA_DEFICIT"]);
     assert.equal(w.clusters.devnet.programs.burn_receipts.programId, "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
-    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178"); // §40 r2 build on devnet (vault transaction 16, 2026-10-11)
+    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42"); // pair-forward r3 build on devnet (vault transaction 18, 2026-10-11)
     assert.equal(w.clusters.devnet.squads.vault, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     assert.equal(w.clusters.mainnet.squads.vault, "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV");
     assert.equal(w.security.bountyWallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u");

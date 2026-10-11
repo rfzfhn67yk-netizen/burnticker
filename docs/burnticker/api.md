@@ -265,3 +265,12 @@ without a verified pool is a `forwarded` receipt with `spent` 0 (the program alw
 `pair-unlinked`, `pair-link-refused`. Errors 6090–6093 (`PairResultNotServable`, `PairDateBeforePairing`, `PairHasReadings`,
 `PairStillLive`) appear as plain sentences.
 
+## Pair-forward round 3 (API 1.12.0)
+
+All additive: `status.pair.pairState` — this coin's pair state on chain: `none`, `provisional`, `paired` or `unlinked` (round 3: `unlink_pair`
+on terminal evidence leaves both coins unlinked, plain coins); `status.pair.pairVoidBy` — a LaunchLab pair's locked voidBy as stored on
+chain (YYYY-MM-DD, the same on both coins); `status.pair.pairAfterDate` — periods on or before it were read before the pairing and stay
+unpaired (no pair result). The pair page states who decides results: "Whoever holds the common attester quorum decides every result; on
+Burnticker that is the operator's keeper alone at quorum 1." Errors 6094–6099 (`PairAttestersDiffer`, `ForwardWindowClosed`,
+`PairedAttesterChange`, `InvalidPairVoidBy`, `PairTerminal`, `PairPeriodUnpaired`) appear as plain sentences.
+

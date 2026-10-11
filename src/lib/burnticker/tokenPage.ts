@@ -19,7 +19,7 @@ import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type MarketInput } from "@/lib/burnticker/market";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
-import { parseForwardMemo } from "@/lib/burnticker/pairForward";
+import { PAIR_STATE_NAMES, parseForwardMemo, type PairLinks } from "@/lib/burnticker/pairForward";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
 import { LP_POLICY_BADGE, buildLpLockJson, feeKeysPda, operatorTreasuryFor, solscanUrl, type LpLockJson } from "@/lib/burnticker/lockFees";
 
@@ -130,12 +130,16 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
     winnerTakesBurn: !!(a.pair?.winnerTakesBurn || b.pair?.winnerTakesBurn), forwardedAtoB: forwardedSol(receiptsA), forwardedBtoA: forwardedSol(receiptsB),
     forwards: a.pair?.forwards ?? b.pair?.forwards ?? forwardsFromReceipts(a, b, receiptsA, receiptsB),
     unpaired: a.pair?.unpaired ?? b.pair?.unpaired ?? null,
-    attesterLine: soleAttester(a, b) ? PAIR_SOLE_ATTESTER_LINE : null,
+    attesterLine: soleAttester(a, b) ? PAIR_SOLE_ATTESTER_LINE : (a.pair?.winnerTakesBurn || b.pair?.winnerTakesBurn) ? PAIR_QUORUM_LINE : null,
   };
 }
 
-/** The pair page's attester fact while a second attester does not exist (the pair-forward re-check asked for it in plain words). */
-export const PAIR_SOLE_ATTESTER_LINE = "On this platform the operator's keeper is the sole attester (quorum 1) for both coins of a pair.";
+/**
+ * The pair page's attester fact (the M-1 residual, stated plainly — pair-forward round 3: both coins share ONE attester set). While one
+ * key attests both coins at quorum 1, the full sentence; otherwise its first half.
+ */
+export const PAIR_QUORUM_LINE = "Whoever holds the common attester quorum decides every result.";
+export const PAIR_SOLE_ATTESTER_LINE = "Whoever holds the common attester quorum decides every result; on Burnticker that is the operator's keeper alone at quorum 1.";
 /** True when both coins have exactly one active attester, the same key, at quorum 1. */
 export function soleAttester(a: Pick<TokenStatusJson, "attesters" | "quorum">, b: Pick<TokenStatusJson, "attesters" | "quorum">): boolean {
   const act = (s: Pick<TokenStatusJson, "attesters">) => (s.attesters ?? []).filter((x) => x.active);
@@ -153,6 +157,16 @@ function forwardsFromReceipts(a: TokenStatusJson, b: TokenStatusJson, receiptsA:
   const one = (from: TokenStatusJson, to: TokenStatusJson, rs: readonly ReceiptJson[]) => rs.filter((r) => r.status === "forwarded" && r.spent && r.signature && r.lead !== false)
     .map((r) => ({ recordDate: r.readingDate ?? r.settledAt.slice(0, 10), from: from.ticker, to: to.ticker, fromMint: from.mint, toMint: to.mint, sol: r.spent!, units: r.units, signature: r.signature!, txUrl: r.txUrl }));
   return [...one(a, b, receiptsA), ...one(b, a, receiptsB)].sort((x, y) => (x.recordDate < y.recordDate ? -1 : x.recordDate > y.recordDate ? 1 : 0));
+}
+
+/** r3 API fields from the chain's view of the pair (pairState for THIS side, the locked voidBy, the later pair_after_date); {} without a reader. */
+export async function pairChainFields(chain: ((a: string, b: string) => Promise<PairLinks | null>) | undefined, mintA: string, mintB: string, side: "A" | "B"): Promise<Pick<PairCounterpart, "pairState" | "pairVoidBy" | "pairAfterDate">> {
+  if (!chain) return {};
+  let l: PairLinks | null = null;
+  try { l = await chain(mintA, mintB); } catch { l = null; }
+  if (!l) return { pairState: null, pairVoidBy: null, pairAfterDate: null };
+  const ds = (n: number | undefined) => (n ? `${String(n).slice(0, 4)}-${String(n).slice(4, 6)}-${String(n).slice(6, 8)}` : null);
+  return { pairState: PAIR_STATE_NAMES[side === "A" ? l.stateA : l.stateB], pairVoidBy: ds(l.pairVoidBy), pairAfterDate: ds(l.pairAfterDate) };
 }
 
 /** The registry's forwards for a pair as the public shape (tickers, SOL, explorer links). */
@@ -181,7 +195,7 @@ export async function pairClauseState(reg: Pick<Registry, "token" | "lockedRule"
   return { voidBy: c.voidBy, state: "waiting", waitingOn, decidedAt: null, detail: now >= Date.parse(`${c.voidBy}T00:00:00Z`) + 86_400_000 ? "voidBy has passed: the keeper voids the pair on its next cycle" : null };
 }
 
-export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw"> & Partial<Pick<Registry, "lockedRule" | "pairOutcome" | "pairForwards" | "getStatus">>, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">, poolRegistered?: (mint: string) => Promise<boolean | null>): Promise<PairCounterpart | null> {
+export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw"> & Partial<Pick<Registry, "lockedRule" | "pairOutcome" | "pairForwards" | "getStatus">>, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">, poolRegistered?: (mint: string) => Promise<boolean | null>, chain?: (mintA: string, mintB: string) => Promise<PairLinks | null>): Promise<PairCounterpart | null> {
   const pair = reg.pairOf(t.mint);
   if (!pair) return null;
   const side: "A" | "B" = pair.mintA === t.mint ? "A" : "B";
@@ -196,7 +210,7 @@ export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token"
   const me = reg.token(t.mint);
   if (reg.lockedRule && me) { try { winnerTakesBurn = pairWinnerTakesBurn(reg.lockedRule(me).rule); } catch { winnerTakesBurn = false; } }
   const forwards = reg.pairForwards ? pairForwardsJson({ pairForwards: reg.pairForwards.bind(reg), token: reg.token.bind(reg) }, pair.pairId, other.cluster) : [];
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards, unpaired: reg.getStatus ? pairUnlinked({ getStatus: reg.getStatus.bind(reg) }, pair.pairId) : null };
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards, unpaired: reg.getStatus ? pairUnlinked({ getStatus: reg.getStatus.bind(reg) }, pair.pairId) : null, ...(await pairChainFields(chain, pair.mintA, pair.mintB, side)) };
 }
 
 // ReceiptJson / TokenStatusJson live in pageTypes.ts (no runtime imports) so the public SDK can type the API without this module.

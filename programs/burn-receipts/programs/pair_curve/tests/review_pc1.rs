@@ -581,8 +581,8 @@ fn pf_r2_half_graduated_pair_refuses_a_win_for_the_dead_side_and_unlinks_on_the_
     let c = trader(&mut env, SOL);
     let (_ba, bb) = fill(&mut env, &p, 50 * SOL, 40 * SOL);
     let pa = pool_of(&p, 0);
-    graduate_side(&mut env, &p, &c, 0, &[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)]).unwrap();
-    assert!(env.config(&config_pda(&p.mint(0))).pool_verified);
+    // side A graduates; its pool is registered only after the unlink below (r3 RN-1: an unlinked coin still registers)
+    graduate_side(&mut env, &p, &c, 0, &[]).unwrap();
     let s = pair_state(&env, &p);
     let mut cfg = env.svm.get_account(&p.amm).unwrap();
     cfg.data[36..44].copy_from_slice(&(100 * SOL).to_le_bytes());
@@ -609,12 +609,19 @@ fn pf_r2_half_graduated_pair_refuses_a_win_for_the_dead_side_and_unlinks_on_the_
     let ev = <burn_receipts::events::PairUnlinked as AnchorDeserialize>::try_from_slice(&ev.1).unwrap();
     assert_eq!(ev.reason, UNLINK_SIDE_REFUNDING);
     for side in 0..2u8 {
-        assert_eq!(env.config(&config_pda(&p.mint(side))).pair_state, PAIR_STATE_NONE);
+        let cfg = env.config(&config_pda(&p.mint(side)));
+        assert_eq!(cfg.pair_state, PAIR_STATE_UNLINKED);
+        assert!(cfg.pair_unlinked_at > 0);
     }
     // no more results for the unlinked coins
-    expect_anchor_err(submit_pair_result(&mut env, &p.mint(0), &p.mint(1), P2, Pubkey::default(), &[&p.attester]), "AccountNotInitialized");    // L-1: the coins have readings now — link_pair refuses to re-pair them under a rule they did not read with
+    expect_anchor_err(submit_pair_result(&mut env, &p.mint(0), &p.mint(1), P2, Pubkey::default(), &[&p.attester]), "AccountNotInitialized");
+    // r3: the evidence is terminal — link_pair refuses to re-pair a pair with a refunding side
     let payer = env.payer.pubkey();
-    expect_anchor_err(env.send(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]), "PairHasReadings");
+    expect_anchor_err(env.send(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]), "PairTerminal");
+    // r3 RN-1: the unlinked side A still registers its graduated pool and burns as a plain coin
+    env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)], &[&c]);
+    let cfg = env.config(&config_pda(&p.mint(0)));
+    assert!(cfg.pool_verified && cfg.pair_state == PAIR_STATE_UNLINKED);
 }
 
 /// L-3 REGRESSION: inactivity alone (no Raydium block) never refunds side B: void_pair = NotStuck, sells stay closed.

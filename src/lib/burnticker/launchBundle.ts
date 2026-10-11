@@ -171,6 +171,13 @@ export interface LaunchDeps {
   allowMainnet?: boolean;
 }
 
+/** r3 (RN-2): a paired coin's locked voidBy as the program's YYYYMMDD (the rules' pair.voidBy; both sides carry the same clause). */
+function pairVoidByOf(rule: LockedRule["rule"]): number {
+  const v = (rule.pair as { voidBy?: string } | null | undefined)?.voidBy;
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error("pair: a paired coin's rule needs pair.voidBy (initialize_token's pair_void_by)");
+  return Number(v.replace(/-/g, ""));
+}
+
 /** Composes the bundle. Pure apart from the mint keypair (fresh unless injected) and the two clients (fakes until the real ones land). */
 export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): Promise<LaunchBundle> {
   const problems = launchProblems(input);
@@ -191,7 +198,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   const selectorKey = locked.rule.oracle === "derby" ? `derby:${locked.rule.series}` : locked.rule.oracle === "catalogue" ? `catalogue:${locked.rule.series}`
     : locked.rule.oracle === "polymarket" ? (locked.rule.market ? `polymarket:market:${locked.rule.market}` : `polymarket:${locked.rule.series}:${locked.rule.kind}`)
     : locked.rule.market ? `kalshi:market:${locked.rule.market}` : `kalshi:${locked.rule.series}`;
-  const init = await deps.program.initializeToken({ mint, creator: input.creator, ticker: input.ticker, rulesSha256: locked.sha256, selectorKey, mode: locked.mode, attesters: deps.attesters, quorum: deps.quorum, vault, rule: locked.rule, ...(deps.pairMint ? { pairMint: deps.pairMint, partnerFirst: !!deps.partnerFirst } : {}) });
+  const init = await deps.program.initializeToken({ mint, creator: input.creator, ticker: input.ticker, rulesSha256: locked.sha256, selectorKey, mode: locked.mode, attesters: deps.attesters, quorum: deps.quorum, vault, rule: locked.rule, ...(deps.pairMint ? { pairMint: deps.pairMint, partnerFirst: !!deps.partnerFirst, pairVoidBy: pairVoidByOf(locked.rule) } : {}) });
   const alloc = allocationFor(locked);
   const burnPoolAuthority = feePda;
   const create = await deps.launchLab.createLaunchIxs({
@@ -262,6 +269,9 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   // partnerFirst inside the 7-day pairing window. So side A is never built alone: B's draft — its rule and its mint — exists before A's
   // initialize_token is composed. A caller-supplied mint public key (deps.mint) cannot pre-name B: those bundles pair in the registry only.
   const kpB = deps.mint === undefined ? Keypair.generate() : null;
+  // r3 (M-1): the program pairs two coins only with the SAME attester set and quorum (same keys, same order) — both sides are built from
+  // the one deps.attesters / deps.quorum below; refuse a set the program would refuse anyway.
+  if (new Set(deps.attesters).size !== deps.attesters.length) throw new Error("pair: both coins need one attester set of distinct keys (the program refuses PairAttestersDiffer otherwise)");
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...deps, ...(kpB ? { pairMint: kpB.publicKey.toBase58(), partnerFirst: false } : {}) });
   const ruleB = invertMapping(ruleA, a.mint, pairId);
   const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: kpB ?? undefined, ...(kpB ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });

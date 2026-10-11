@@ -30,7 +30,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.11.0";
+export const API_VERSION = "1.12.0";
 export const API_PREFIX = "/api/burnticker/v1";
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
@@ -233,6 +233,9 @@ export const SCHEMAS: Record<string, Schema> = {
     winnerTakesBurn: { ...bool, description: "since 1.10.0: fees from both coins burn the winner's supply (the coin whose rule a result fires); false for pairs made before 2026-10-11" },
     forwards: { ...arr(ref("PairForward")), description: "since 1.10.0: every forward between the two coins, oldest first" },
     unpaired: { ...nullable(obj({ reason: str, at: str, signature: nstr }, ["reason", "at"])), description: "since 1.11.0: unlink_pair ran on chain (a voided pair curve, a refunding side, or one coin without a verified pool 30 days after pairing) — two plain coins now; later receipts carry no pairRole" },
+    pairState: { enum: ["none", "provisional", "paired", "unlinked", null], description: "since 1.12.0, from the chain: this coin's pair state (unlinked = unlink_pair ran on terminal evidence; a plain coin)" },
+    pairVoidBy: { ...nstr, description: "since 1.12.0: a LaunchLab pair's locked voidBy on chain (YYYY-MM-DD; both coins the same); null for none" },
+    pairAfterDate: { ...nstr, description: "since 1.12.0: periods on or before this date were read before the pairing and stay unpaired (no pair result); null for none" },
     tally: { type: "object" }, pageUrl: str,
   }, ["pairId", "side", "counterpart"]),
   TokenStatus: obj({

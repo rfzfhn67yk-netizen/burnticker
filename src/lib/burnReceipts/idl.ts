@@ -115,6 +115,113 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "args": []
     },
     {
+      "name": "apply_paired_attester_change",
+      "discriminator": [
+        5,
+        169,
+        32,
+        177,
+        105,
+        129,
+        176,
+        233
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone (recorded in the event)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "link",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114,
+                  95,
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "partner_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "partner_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "apply_registration_policy",
       "discriminator": [
         168,
@@ -912,7 +1019,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "operator_treasury",
           "writable": true,
-          "address": "11111111111111111111111111111111"
+          "address": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5"
         },
         {
           "name": "mint",
@@ -3390,6 +3497,9 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         },
         {
           "name": "pair",
+          "docs": [
+            "required when either coin is policy 2."
+          ],
           "optional": true
         },
         {
@@ -4443,12 +4553,42 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "code": 6092,
       "name": "PairHasReadings",
-      "msg": "link_pair: a coin already has readings under its unpaired rule; pairs are linked before their first reading"
+      "msg": "retired (pair-forward r3): link_pair accepts coins with readings; periods already read stay unpaired"
     },
     {
       "code": 6093,
       "name": "PairStillLive",
-      "msg": "unlink_pair: no on-chain evidence that the partner can never be live (Pair voided / side refunding, or no verified pool 30 days after pairing)"
+      "msg": "unlink_pair: no terminal on-chain evidence (Pair voided, a side refunding, or a LaunchLab pair's voidBy ended without both pools)"
+    },
+    {
+      "code": 6094,
+      "name": "PairAttestersDiffer",
+      "msg": "pairing: both coins must have the same attester set and quorum"
+    },
+    {
+      "code": 6095,
+      "name": "ForwardWindowClosed",
+      "msg": "forward_to_winner: the 72 h window after the loser's reading has passed; the period burns as unpaired"
+    },
+    {
+      "code": 6096,
+      "name": "PairedAttesterChange",
+      "msg": "apply_attester_change: the coin is paired; use apply_paired_attester_change with the partner's quorum co-signing"
+    },
+    {
+      "code": 6097,
+      "name": "InvalidPairVoidBy",
+      "msg": "initialize_token: pair_void_by must be a valid date, today (UTC) or later, with pair_mint, and 0 without it; both coins name the same"
+    },
+    {
+      "code": 6098,
+      "name": "PairTerminal",
+      "msg": "link_pair: the pair_curve Pair is voided or one of its sides is refunding"
+    },
+    {
+      "code": 6099,
+      "name": "PairPeriodUnpaired",
+      "msg": "pair result: the period predates the pairing (readings already existed when the coins were paired)"
     }
   ],
   "types": [
@@ -5021,6 +5161,14 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
               "The config authority (attester proposals only; renounceable) — the Squads 2-of-3 vault. Mandatory (review L-2)."
             ],
             "type": "pubkey"
+          },
+          {
+            "name": "pair_void_by",
+            "docs": [
+              "Pair-forward r3 (RN-2): with pair_mint, the pair's locked voidBy (YYYYMMDD, UTC; today or later; the partner names the same",
+              "date) — once that day has ended with a coin still lacking a verified pool, unlink_pair may unpair the two. 0 without pair_mint."
+            ],
+            "type": "u32"
           }
         ]
       }
@@ -6618,11 +6766,36 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
             "type": "u8"
           },
           {
+            "name": "pair_void_by",
+            "docs": [
+              "Pair-forward r3 (RN-2): a LaunchLab pair's locked voidBy (YYYYMMDD, UTC; the same on both coins, set by initialize_token).",
+              "When that day has ended and a coin still has no verified pool, unlink_pair may unpair the two. 0 = none (pair_curve pairs:",
+              "the Pair's own Voided / refunding state is the evidence)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "pair_after_date",
+            "docs": [
+              "Pair-forward r3 (RN-1 second route): periods dated on or before this day had readings before the coins were paired (or the",
+              "first coin read while provisional) — they stay unpaired history: the crank gate passes them, no PairResult may name them.",
+              "The same on both coins; 0 = none."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "pair_unlinked_at",
+            "docs": [
+              "Pair-forward r3: when unlink_pair ran (pair_state is then PAIR_STATE_UNLINKED); 0 = never."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                22
+                6
               ]
             }
           }
@@ -6774,6 +6947,14 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "\"BURNRECEIPTS-PAIR-v1\""
     },
     {
+      "name": "PAIR_ATTESTER_CHANGE_DOMAIN",
+      "docs": [
+        "The co-signature domain of an attester change on a PAIRED coin (apply_paired_attester_change, pair-forward r3 M-1)."
+      ],
+      "type": "string",
+      "value": "\"BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1\""
+    },
+    {
       "name": "PAIR_LINK_SEED",
       "docs": [
         "PairLink [\"pair_link\", mint]: the coin's one partner (immutable once written)."
@@ -6840,12 +7021,13 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "1"
     },
     {
-      "name": "PAIR_UNLINK_NOT_LIVE_SECS",
+      "name": "PAIR_STATE_UNLINKED",
       "docs": [
-        "unlink_pair (pair-forward blind review M-2): a coin whose pool is still not verified this long after pairing can never take part."
+        "Pair-forward r3: unpaired by unlink_pair on terminal evidence. A plain coin again (the crank gate passes it), and a policy-2 coin",
+        "can still register its pool (RN-1)."
       ],
-      "type": "i64",
-      "value": "2592000"
+      "type": "u8",
+      "value": "3"
     },
     {
       "name": "PAIR_WITNESS_INITIALIZE",
@@ -6861,14 +7043,11 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "1"
     },
     {
-      "name": "UNLINK_NOT_LIVE",
-      "type": "u8",
-      "value": "2"
-    },
-    {
       "name": "UNLINK_PAIR_VOIDED",
       "docs": [
-        "PairUnlinked.reason: the pair_curve Pair is Voided / one of its sides is refunding / a coin has no verified pool 30 days after pairing."
+        "PairUnlinked.reason — on-chain TERMINAL evidence only (pair-forward r3 RN-1/RN-2; r2's \"no verified pool 30 days after pairing\",",
+        "reason 2, is gone): the pair_curve Pair is Voided / one of its sides is refunding (its pool can never come) / a LaunchLab pair's",
+        "locked voidBy day has ended with a coin still lacking a verified pool."
       ],
       "type": "u8",
       "value": "0"
@@ -6877,6 +7056,11 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "name": "UNLINK_SIDE_REFUNDING",
       "type": "u8",
       "value": "1"
+    },
+    {
+      "name": "UNLINK_VOID_BY_PASSED",
+      "type": "u8",
+      "value": "3"
     }
   ]
 };

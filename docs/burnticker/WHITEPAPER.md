@@ -458,18 +458,24 @@ The owner's decision of 2026-10-11 (LAUNCHPAD-PATH §40): "the fees for both the
 pair made since carries `pair.winnerTakesBurn: true` in both sides' canonical rules (inside each hash; pairs made before keep their bytes).
 
 - **Pairing on chain.** A LaunchLab pair names each other in `initialize_token` (`pair_mint`, with the partner's PairLink address passed
-  every time): side A is provisional until side B names it back within 7 days, else both are plain coins for good (the keeper alerts
-  `pair-unmatched` daily meanwhile). A `pair_curve` pair is linked by the permissionless `link_pair` right after `init_pair`, with the Pair
-  account as the witness; it is refused once either coin has a reading (`PairHasReadings`), and `register_pair_pool` refuses until it has
-  run. Pairing is deliberately not part of a coin's rules hash or `params_hash`: those are fixed at `initialize_token`, while a pair_curve
-  pairing happens later and can be undone; the chain's `pair_state` and PairLink accounts are the record (a link written since round 2 also
-  keeps the coin's attester-set hash at pairing).
+  every time, and `pair_void_by` — the rules' locked voidBy, the same on both coins): side A is provisional until side B names it back
+  within 7 days, else both are plain coins for good (the keeper alerts `pair-unmatched` daily meanwhile). A `pair_curve` pair is linked by
+  the permissionless `link_pair` right after `init_pair`, with the Pair account as the witness; `register_pair_pool` refuses until it has
+  run (or after an unlink). `link_pair` is refused only for a voided Pair or a refunding side (`PairTerminal`). Both coins must have the
+  SAME attester set and quorum — same keys, same order — at the second `initialize_token` and at `link_pair` (`PairAttestersDiffer`).
+  Periods already read when the coins pair stay unpaired history (`pair_after_date` on both coins: no PairResult may name them and the
+  crank passes them as plain periods), so a coin that read first is never frozen. Pairing is deliberately not part of a coin's rules hash
+  or `params_hash`: those are fixed at `initialize_token`, while a pair_curve pairing happens later and can be undone; the chain's
+  `pair_state` (0 none, 1 provisional, 2 paired, 3 unlinked) and PairLink accounts are the record. A paired coin changes its attesters only
+  through `apply_paired_attester_change`, with the partner's quorum co-signing the pending set; `apply_attester_change` refuses it
+  (`PairedAttesterChange`). The residual, stated plainly: whoever holds the common attester quorum decides every result; on Burnticker that
+  is the operator's keeper alone at quorum 1.
 - **Each result.** One PairResult `["pair_result", mint_lo, mint_hi, date]` names the winner — the coin whose rule the result fires — or a
-  draw, never for a date before the pairing day. A win needs the LOSER's attester quorum (the side giving up fuel consents; the winner's
-  quorum too only if the loser's attester set changed since pairing) and is recorded only when both coins have a reading for the date and
-  the loser's is still unprocessed (`PairResultNotServable` otherwise; there is no pool condition). The keeper attests a flat 0-unit
+  draw, never for a date before the pairing day or on/before `pair_after_date` (`PairPeriodUnpaired`). Every result needs both coins'
+  quorums — one common set, so one set of signatures. A win is recorded only when both coins have a reading for the date and the loser's is
+  still unprocessed (`PairResultNotServable` otherwise; there is no pool condition). The keeper attests a flat 0-unit
   reading for the winner first when the winner had nothing to read that day. A draw is posted only for a true draw and needs both quorums. The loser's `crank_buyback` for that period refuses (`ForwardRequired`); the permissionless
-  `forward_to_winner` moves exactly what the loser's own rule would have spent, `buyback_spend(min(spendable pool, cap), units, f)` with
+  `forward_to_winner` moves exactly what the loser's own rule would have spent, `buyback_spend(min(spendable pool − the loser's carried spend, cap), units, f)` with
   the loser's units and fraction (nothing below the rule's minimum spend; a one-shot pair maps 100 %, so all of it), from the loser's burn
   pool into the winner's, and writes the memo in every case `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. If either
   coin has no verified pool (or the pair has been unlinked) it moves 0 lamports and still processes the loser's reading, so a dead side can
@@ -480,12 +486,14 @@ pair made since carries `pair.winnerTakesBurn: true` in both sides' canonical ru
 - **What does not happen.** The loser's supply is untouched and nobody is paid: SOL moves between two program PDAs that have no withdraw
   path. A draw or a void forwards nothing; each coin burns its own fuel. With no result 72 h after a reading, or a LOST period whose
   forward never landed within 72 h, the coin cranks as unpaired (`PairResultMissing` / `PairForwardMissing`) and that period can no longer
-  forward (the planner switches from the forward to the paired buyback at that point; the keeper does not repeat the time-out); the keeper
+  forward — `forward_to_winner` is refused after the window (`ForwardWindowClosed`), so there is no race with the crank (the planner switches from the forward to the paired buyback at that point; the keeper does not repeat the time-out); the keeper
   alerts `pair-result-missing` 12 h and `pair-forward-pending` 1 h after the reading, `pair-result-unservable` when a win cannot be
   recorded, and `pair-forward-missing` if a time-out happens. No draw is ever substituted for a result.
-- **Unlinking.** The permissionless `unlink_pair` turns a pair back into two plain coins on on-chain evidence only: the pair_curve Pair is
-  Voided, one of its sides is refunding, or one coin still has no verified pool 30 days after the pairing (else `PairStillLive`). Both
-  PairLinks close (their rent goes to each coin's burn pool); recorded results stay as history. The keeper sends it when the evidence
+- **Unlinking.** The permissionless `unlink_pair` turns a pair back into two plain coins on TERMINAL on-chain evidence only: the pair_curve
+  Pair is Voided or one of its sides is refunding (the Pair is required evidence for a pair_curve coin; an Open pair is never unlinked,
+  however long its curve runs), or a LaunchLab pair's locked voidBy day has ended with a coin still without a verified pool (else
+  `PairStillLive`). Both coins become `unlinked` (pair_state 3; a pair_curve coin still registers its pool); both PairLinks close (their
+  rent goes to each coin's burn pool); recorded results stay as history. The keeper sends it when the evidence
   holds; the pair page then says "unpaired (reason)" and later receipts carry no pair role.
 - **Order.** The keeper attests both coins' readings, posts the PairResult, runs the loser's forward and only then the winner's crank, so
   the forwarded fuel is in the pool that crank spends. After a one-shot pair's result, whatever reaches the loser's burn pool later (its
@@ -711,7 +719,7 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 - **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
   `crankers[3]`, `cranker_count`, reserved.
 
-### 13.3 Instructions (30, generated from `src/lib/burnReceipts/idl.ts`)
+### 13.3 Instructions (31, generated from `src/lib/burnReceipts/idl.ts`)
 
 | Instruction | Arguments | Signers | Class |
 |---|---|---|---|
@@ -728,6 +736,7 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 | `submit_pair_result` | record_date, winner, source_url_hash, proof_hash | payer (+ both coins' quorums via Ed25519) | permissionless |
 | `forward_to_winner` | record_date | cranker | permissionless |
 | `unlink_pair` | — | cranker | permissionless |
+| `apply_paired_attester_change` | — | caller (+ the partner's quorum via Ed25519) | permissionless |
 | `register_fee_key` | — | payer | permissionless |
 | `claim_lock_fees` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `check_pool_health` | — | caller | permissionless |
@@ -750,7 +759,7 @@ Events (34): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, Att
 BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered, ForwardedToWinner,
 LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked, PairResultMissing, PairResultSubmitted (plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged,
 ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed,
-SpendCapBound, SpendCarried, TokenInitialized. Error codes: 94.
+SpendCapBound, SpendCarried, TokenInitialized. Error codes: 100.
 
 `pair_curve` (`src/lib/pairCurve/idl.ts`): `init_pair` (args; payer, creator — creation), the two curve-trade instructions (side, an
 amount, a slippage bound; the trader signs), `graduate` (side; cranker), `lock_lp` (side; cranker — locks the side's LP forever, Fee

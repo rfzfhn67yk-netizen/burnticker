@@ -191,9 +191,10 @@ fn h1b_a_result_naming_a_winner_without_a_verified_pool_must_not_wedge_the_loser
     assert_eq!(f, "ok");
     assert_eq!(env.lamports(&fee_pda(&a.mint)), fee_a, "nothing moved to the dead side");
     assert_eq!(env.reading(&reading_pda(&config_pda(&a.mint), D2)).unwrap().outcome, OUTCOME_FORWARDED);
-    // 30 days after pairing, the dead partner can be unlinked on that evidence (M-2)
-    let paired_at = pair_link(&env, &a.mint).unwrap().paired_at;
-    env.set_time(paired_at.max(env.now()) + PAIR_UNLINK_NOT_LIVE_SECS);
+    // r3 RN-2: the dead partner is unlinked only once the pair's locked voidBy day has ended (not N days after pairing)
+    env.set_time(TEST_PAIR_VOID_BY_ENDED_TS - 1);
+    expect_anchor_err(env.send(&[ix_unlink_pair(&k.pubkey(), &a.mint, &b.mint, None)], &[&k]), "PairStillLive");
+    env.set_time(TEST_PAIR_VOID_BY_ENDED_TS);
     env.ok(&[ix_unlink_pair(&k.pubkey(), &a.mint, &b.mint, None)], &[&k]);
-    assert_eq!(env.config(&config_pda(&a.mint)).pair_state, PAIR_STATE_NONE);
+    assert_eq!(env.config(&config_pda(&a.mint)).pair_state, PAIR_STATE_UNLINKED);
 }

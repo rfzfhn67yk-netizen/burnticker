@@ -168,6 +168,10 @@ pub const PAIR_STATE_NONE: u8 = 0;
 pub const PAIR_STATE_PROVISIONAL: u8 = 1;
 #[constant]
 pub const PAIR_STATE_PAIRED: u8 = 2;
+/// Pair-forward r3: unpaired by unlink_pair on terminal evidence. A plain coin again (the crank gate passes it), and a policy-2 coin
+/// can still register its pool (RN-1).
+#[constant]
+pub const PAIR_STATE_UNLINKED: u8 = 3;
 /// PairLink.witness: how the pairing was proven — both initialize_token calls named each other, or a pair_curve Pair holds both mints.
 #[constant]
 pub const PAIR_WITNESS_INITIALIZE: u8 = 0;
@@ -194,16 +198,18 @@ pub const PAIR_RESULT_LOST: u8 = 2;
 pub const PAIR_RESULT_DRAW: u8 = 3;
 /// pair_curve's Voided status (programs/pair_curve/src/constants.rs STATUS_VOIDED).
 pub const PAIR_CURVE_STATUS_VOIDED: u8 = 2;
-/// unlink_pair (pair-forward blind review M-2): a coin whose pool is still not verified this long after pairing can never take part.
-#[constant]
-pub const PAIR_UNLINK_NOT_LIVE_SECS: i64 = 30 * 24 * 60 * 60;
-/// PairUnlinked.reason: the pair_curve Pair is Voided / one of its sides is refunding / a coin has no verified pool 30 days after pairing.
+/// PairUnlinked.reason — on-chain TERMINAL evidence only (pair-forward r3 RN-1/RN-2; r2's "no verified pool 30 days after pairing",
+/// reason 2, is gone): the pair_curve Pair is Voided / one of its sides is refunding (its pool can never come) / a LaunchLab pair's
+/// locked voidBy day has ended with a coin still lacking a verified pool.
 #[constant]
 pub const UNLINK_PAIR_VOIDED: u8 = 0;
 #[constant]
 pub const UNLINK_SIDE_REFUNDING: u8 = 1;
 #[constant]
-pub const UNLINK_NOT_LIVE: u8 = 2;
+pub const UNLINK_VOID_BY_PASSED: u8 = 3;
+/// The co-signature domain of an attester change on a PAIRED coin (apply_paired_attester_change, pair-forward r3 M-1).
+#[constant]
+pub const PAIR_ATTESTER_CHANGE_DOMAIN: &str = "BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1";
 /// The attester-set hash domain (pair::attester_set_hash).
 pub const PAIR_ATTESTERS_DOMAIN: &[u8] = b"BURNRECEIPTS-PAIR-ATTESTERS-v1";
 
@@ -281,22 +287,24 @@ pub const FEE_KEY_SEED: &[u8] = b"fee_key";
 /// burn). The coin side of every claim is burned in the same instruction.
 pub const LOCK_FEE_BURN_BPS: u64 = 8_000;
 pub const LOCK_FEE_OPERATOR_BPS: u64 = 2_000;
-/// The operator treasury that receives the 20 % (the Squads vault), compiled per cluster like CLUSTER_GENESIS_HASH. The mainnet
-/// build carries the placeholder (all zeros) until the owner's mainnet Squads vault is compiled in: claim_lock_fees then refuses with
-/// TreasuryNotPinned and the fees stay in the lock (nothing is lost). Localnet = the test treasury of the LiteSVM suites.
+/// The operator treasury that receives the 20 %, compiled per cluster like CLUSTER_GENESIS_HASH. Mainnet (owner decision 2026-10-11):
+/// the owner's hardware wallet 8cwwy895…, which is also the LaunchLab platform's fee wallet — not the Squads vault. Devnet: the devnet
+/// Squads vault. Localnet = the test treasury of the LiteSVM suites. (claim_lock_fees refuses with TreasuryNotPinned on a build whose
+/// treasury is the all-zero placeholder.)
 #[cfg(not(any(feature = "devnet", feature = "test-pins")))]
-pub const OPERATOR_TREASURY: Pubkey = Pubkey::new_from_array([0u8; 32]);
+pub const OPERATOR_TREASURY: Pubkey = pubkey!("8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5");
 #[cfg(feature = "devnet")]
 pub const OPERATOR_TREASURY: Pubkey = pubkey!("A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
 #[cfg(all(feature = "test-pins", not(feature = "devnet")))]
 pub const OPERATOR_TREASURY: Pubkey = Pubkey::new_from_array([0x7e; 32]);
 
 /// The ONE LaunchLab PlatformConfig a LaunchLab-path (policy 0) or pair (policy 2) token may pin (lp-lock blind review RL-3): the
-/// operator's own platform, whose admin is held under the Squads vault. Compiled per cluster like pair_curve's BURNTICKER_PLATFORM;
-/// the mainnet build carries the all-zero placeholder and refuses every such initialize_token (PlatformNotPinned) until the owner's
-/// mainnet platform is compiled in. test-pins / localnet = the LiteSVM harness's test platform.
+/// operator's own platform. Compiled per cluster like pair_curve's BURNTICKER_PLATFORM. Mainnet (2026-10-11): 94x5qDDJ… =
+/// getPdaPlatformId(LaunchLab LanMV9sA…, admin EMht6aGc…) — created by that admin with scales 1,000,000/0/0, the lock-NFT wallet =
+/// the FEE_KEYS PDA, the fee wallet 8cwwy895…. test-pins / localnet = the LiteSVM harness's test platform. (A build whose platform is
+/// the all-zero placeholder refuses every such initialize_token with PlatformNotPinned.)
 #[cfg(not(any(feature = "devnet", feature = "test-pins")))]
-pub const BURNTICKER_PLATFORM: Pubkey = Pubkey::new_from_array([0u8; 32]);
+pub const BURNTICKER_PLATFORM: Pubkey = pubkey!("94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9");
 #[cfg(feature = "devnet")]
 pub const BURNTICKER_PLATFORM: Pubkey = pubkey!("GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf");
 #[cfg(all(feature = "test-pins", not(feature = "devnet")))]

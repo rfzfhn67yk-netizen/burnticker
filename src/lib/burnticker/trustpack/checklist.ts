@@ -47,7 +47,7 @@ export type OutflowClass = keyof typeof OUTFLOW;
 /** Every instruction's class. A new instruction must be added here (the test fails on any instruction missing from this table). */
 export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowClass>> = {
   burn_receipts: {
-    apply_attester_change: "none", apply_cap_raise: "none", apply_registration_policy: "none", cancel_attester_change: "none", cancel_cap_raise: "none",
+    apply_attester_change: "none", apply_paired_attester_change: "none", apply_cap_raise: "none", apply_registration_policy: "none", cancel_attester_change: "none", cancel_cap_raise: "none",
     cancel_registration_policy: "none", check_pool_health: "none", claim_launchlab_creator_fee: "intoPool", claim_lock_fees: "lockFees", clear_cranker_allowlist: "none",
     crank_buyback: "swapBurn", crank_no_units: "none", crank_vault: "burn", initialize_platform: "rent", initialize_token: "rent", propose_attesters: "none",
     propose_cap_raise: "none", register_fee_key: "rent", link_pair: "rent", submit_pair_result: "rent", forward_to_winner: "forwardWinner", unlink_pair: "rent", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",

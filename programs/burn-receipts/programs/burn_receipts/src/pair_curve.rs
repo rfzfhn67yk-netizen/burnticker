@@ -3,7 +3,9 @@
 //! Read by byte offset, like the LaunchLab views in cpmm.rs: owner (the hard-coded PAIR_CURVE_PROGRAM_ID), Anchor discriminator
 //! sha256("account:Pair")[..8], length and address (["pair", mint_a, mint_b] under pair_curve) are checked before any field is used.
 //! The offsets are pair_curve's LAYOUT CONTRACT (state.rs `offsets`), pinned by programs/pair_curve/tests/lifecycle.rs against a real
-//! account created by the real program.
+//! account created by the real program — except `refunding` (offset 880, outside state.rs `offsets`), which is pinned by
+//! programs/pair_curve/tests/review_pc1.rs `pf_r2_half_graduated_pair_refuses_a_win_for_the_dead_side_and_unlinks_on_the_refund`
+//! (pair-forward r3 RI-5).
 
 use anchor_lang::prelude::*;
 
@@ -24,8 +26,9 @@ mod off {
     pub const LP_LOCKED: usize = 156;
     pub const CP_CONFIG: usize = 172;
     pub const VAULT: usize = 204;
-    /// `refunding: [bool; 2]` (pair_curve state.rs; pinned by programs/pair_curve/tests/lifecycle.rs) — read only when the account is
-    /// long enough (unlink_pair's evidence).
+    /// `refunding: [bool; 2]` (pair_curve state.rs; NOT in its `offsets` module — pinned by programs/pair_curve/tests/review_pc1.rs
+    /// pf_r2_half_graduated_pair_refuses_a_win_for_the_dead_side_and_unlinks_on_the_refund, against a real account; 880 is correct for
+    /// the 946-byte layout) — read only when the account is long enough (unlink_pair / link_pair evidence).
     pub const REFUNDING: usize = 880;
     pub const MIN_LEN: usize = 236;
 }

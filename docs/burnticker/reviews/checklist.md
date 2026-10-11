@@ -171,3 +171,20 @@ coin unless no forward lands within 72 hours, in which case it burns as a plain 
 Against a side without a verified pool the forward moves 0 lamports and the fuel stays in the loser's pool, where the loser's own later burns
 spend it. The whitepaper's §5.5, PAIR-CURVE.md and ATTESTERS.md carry the same wording.
 
+## Erratum 2026-10-11 (pair-forward round 3, after the re-check)
+
+The text above and the earlier errata stay as written. Round 3 (re-check RN-1, RN-2, M-1, RI-1, RI-4) changes what a reviewer checks for
+paired coins only; a single coin's path is unchanged:
+
+- **Instruction count (item 1).** burn_receipts now has **31 entrypoints**: the 30 above plus `apply_paired_attester_change`. The IDL, the
+  Powers Register and the whitepaper's §13.3 list 31 (34 event types, 100 error codes; `PairHasReadings` is no longer raised).
+- **Unlink is terminal only (RN-1, RN-2).** `unlink_pair` accepts a voided pair_curve Pair, a refunding side (the Pair is required for a
+  pair_curve coin; an Open pair is always refused), or a LaunchLab pair whose locked `pair_void_by` day ended with a coin unverified
+  (`UNLINK_VOID_BY_PASSED`). The 30-day not-live evidence is gone. Unlinked coins are `PAIR_STATE_UNLINKED` and still register a pool.
+- **Pairing (M-1).** Both coins must have the same attester set and quorum (`PairAttestersDiffer`); every result needs both quorums; a
+  paired coin's attester change goes through `apply_paired_attester_change` with the partner's quorum co-signing. `initialize_token` with
+  `pair_mint` takes `pair_void_by` (`InvalidPairVoidBy`). `link_pair` accepts coins with readings: those periods stay unpaired
+  (`pair_after_date`; `PairPeriodUnpaired` for a result naming them); it refuses only a voided Pair or a refunding side (`PairTerminal`).
+- **Forward window and basis (RI-1, RI-4).** `forward_to_winner` is refused 72 h after the loser's reading (`ForwardWindowClosed`); its
+  basis leaves the loser's carried spend.
+

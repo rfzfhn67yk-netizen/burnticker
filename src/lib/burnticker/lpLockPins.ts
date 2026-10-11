@@ -7,11 +7,11 @@ import { LP_SCALES_PPM, burntickerPlatformFor, feeKeysPda, lockFeeErrorSentence,
  *   platformScale (@80) = 1,000,000, creatorScale (@88) = 0, burnScale (@96) = 0   — 100 % of the graduation LP locked, nothing burned
  *   platformLockNftWallet (@48) = the burn_receipts fee-keys PDA ["fee_keys"]     — the Fee Key NFT is owned by the program
  * (the program's initialize_token and buyback cranks assert the same two pins on chain; this is the client-side copy that names the
- * difference before anything is signed). The operator treasury compiled for the cluster is reported too: on mainnet it is not pinned
- * yet, so claim_lock_fees would refuse TreasuryNotPinned and the LP fees would stay in the lock — a launch-gate PROBLEM until the owner
- * compiles the Squads vault in (docs/burnticker/TODO-OWNER.md). Round 2 (2026-10-11): the program also pins BURNTICKER_PLATFORM —
+ * difference before anything is signed). The operator treasury compiled for the cluster is reported too: a build without one (all
+ * zeros) would make claim_lock_fees refuse TreasuryNotPinned — a launch-gate PROBLEM. Mainnet is pinned since 2026-10-11 (owner: treasury
+ * 8cwwy895…, platform 94x5qDDJ…; docs/burnticker/TODO-OWNER.md row 27). Round 2 (2026-10-11): the program also pins BURNTICKER_PLATFORM —
  * initialize_token (policies 0 and 2) refuses any other LaunchLab platform (PlatformNotAllowed), and a build without it compiled in
- * refuses everything (PlatformNotPinned, mainnet today). With `platformId` given, the gate checks it is the pinned one. Offsets: the SDK's PlatformConfig layout (8-byte discriminator, epoch,
+ * refuses everything (PlatformNotPinned). With `platformId` given, the gate checks it is the pinned one. Offsets: the SDK's PlatformConfig layout (8-byte discriminator, epoch,
  * platformClaimFeeWallet @16, platformLockNftWallet @48, platformScale/creatorScale/burnScale @80/88/96).
  */
 

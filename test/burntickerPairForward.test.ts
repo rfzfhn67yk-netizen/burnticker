@@ -27,6 +27,9 @@ import { buildOpsStatus } from "@/lib/burnticker/ops/status";
 import { Keypair } from "@solana/web3.js";
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
 import { pairLinkPda, configPda } from "@/lib/burnReceipts/pda";
+import { decodeType } from "@/lib/burnReceipts/idlCoder";
+import { UNLINK_REASON_TEXT, dateU32 } from "@/lib/burnticker/pairForward";
+import { pairChainFields } from "@/lib/burnticker/tokenPage";
 import { winnerFlatReading } from "@/lib/burnticker/multiKeeper";
 import { linkPairDue } from "@/lib/burnKeeper/pairCurveCrank";
 import type { PairLinkAccount } from "@/lib/burnReceipts/pairs";
@@ -70,10 +73,11 @@ describe("the forward amount (the program's rule)", () => {
     assert.equal(forwardLine("CHIEFS", "BRONCOS", B(99_600_000)), "forwarded from $CHIEFS: 0.0996 SOL → $BRONCOS burn pool");
     const [lo, hi] = sortPairMints(winner, loser);
     assert.equal(Buffer.compare(new PublicKey(lo).toBuffer(), new PublicKey(hi).toBuffer()), -1);
-    assert.equal(Object.keys(PAIR_ERRORS).length, 17);
-    assert.deepEqual(Object.values(PAIR_ERRORS).map((e) => e.code), Array.from({ length: 17 }, (_, i) => 6077 + i));
-    // every pair error of the program's IDL has a plain sentence (6077–6093)
-    for (const e of BURN_RECEIPTS_IDL.errors.filter((x) => x.code >= 6077 && x.code <= 6093)) assert.equal(PAIR_ERRORS[e.name]?.code, e.code, e.name);
+    assert.equal(Object.keys(PAIR_ERRORS).length, 23);
+    assert.deepEqual(Object.values(PAIR_ERRORS).map((e) => e.code), Array.from({ length: 23 }, (_, i) => 6077 + i));
+    // every pair error of the program's IDL has a plain sentence (6077–6099)
+    for (const e of BURN_RECEIPTS_IDL.errors.filter((x) => x.code >= 6077 && x.code <= 6099)) assert.equal(PAIR_ERRORS[e.name]?.code, e.code, e.name);
+    assert.match(pairErrorSentence("PairHasReadings"), /no longer raised/);
     assert.match(pairErrorSentence("PairResultNotServable"), /no draw is substituted/);
     assert.match(pairErrorSentence("custom program error: 0x17c5"), /^ForwardRequired: /);
     const cfg = loadCopyLintConfig();
@@ -294,22 +298,24 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     assert.ok(lost.length > 0 && lost.every((r) => r.status === "confirmed" || r.status === "skipped"), "the lost periods burned their own coin");
   });
 
-  test("r2: unlink_pair runs only on evidence; afterwards the pair is 'unpaired (reason)', new receipts carry no role; an unlink by someone else is recorded too", async () => {
+  test("r3: unlink_pair runs only on terminal evidence (sending on by default, off only observes); afterwards the pair is 'unpaired (reason)' and state 3; an unlink by someone else is recorded too", async () => {
     const { a, b, pairId } = await launchPair();
     program.now = () => clock;
     const port = program.pairForward.port(a.mint, b.mint);
     await runCycle(deps);
     assert.equal(reg.getStatus(`pair.unlinked.${pairId}`), null, "no evidence: PairStillLive, nothing sent");
-    port.unlinkReason = 2;
-    // re-check RN-1/RN-2: sending is OFF by default — the evidence is logged, nothing is sent
+    port.unlinkReason = 3;
+    // pairUnlink false only observes — the evidence is logged, nothing is sent
+    deps.pairUnlink = false;
     await runCycle(deps);
-    assert.equal(port.unlinked, null, "off by default");
+    assert.equal(port.unlinked, null, "observe only");
     assert.ok(logs.some((l) => /unlink evidence holds .* not sent/.test(l)));
-    deps.pairUnlink = true;
+    delete deps.pairUnlink;   // round 3: on by default
     await runCycle(deps);
     assert.ok(port.unlinked, "unlink_pair landed");
+    assert.deepEqual([(await port.links()).stateA, (await port.links()).stateB], [3, 3], "both coins UNLINKED");
     const cp = (await pairCounterpartFrom(reg, async () => null, a))!;
-    assert.equal(cp.unpaired!.reason, "one coin had no verified pool 30 days after the pairing");
+    assert.equal(cp.unpaired!.reason, "the pair's void-by date passed with a coin still without a verified pool");
     assert.ok(reg.alertsSince(0).some((x) => x.kind === "pair-unlinked"));
     const ctx = (await pairCtxFor(reg, program, a, clock))!;
     assert.equal(ctx.active, false, "both are plain coins now");
@@ -344,6 +350,51 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     assert.ok(reg.pairForwards(pairId).some((f) => f.signature === tx.signature));
     assert.ok(!logs.some((l) => /transaction is not found yet/.test(l)));
     assert.ok(logs.some((l) => /a forward already on chain .* adopted/.test(l)));
+  });
+
+  // ---- round 3 (after the re-check: RN-1/RN-2, M-1, RI-1, RI-4) ----
+  test("r3: a launched pair passes the locked voidBy on both initialize_tokens and one attester set; the fake refuses a pairing without voidBy", async () => {
+    const before = program.initialised.length;
+    await launchPair();
+    const two = program.initialised.slice(before).filter((i) => i.pairMint);
+    assert.equal(two.length, 2);
+    assert.deepEqual(two.map((i) => i.pairVoidBy), [20261130, 20261130], "voidBy 2026-11-30 on both");
+    assert.deepEqual(two[0].attesters, two[1].attesters); assert.equal(two[0].quorum, two[1].quorum);
+    await assert.rejects(program.initializeToken({ ...two[0], mint: Keypair.generate().publicKey.toBase58(), pairVoidBy: undefined }), /InvalidPairVoidBy/);
+    const deps0 = { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER, ATTESTER], quorum: 1, metadataUri: (m: string) => `https://x/${m}.json` };
+    await assert.rejects(buildPairBundles({ a: { creator: CREATOR, ticker: "AA", name: "AA", description: "", imageUrl: null, links: [], rule: BRONCOS_LOSE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, b: { ticker: "BB", name: "BB", description: "", imageUrl: null, links: [] }, voidBy: "2026-11-30" }, deps0), /one attester set/);
+    assert.equal(dateU32("2026-11-30"), 20261130); assert.equal(dateU32(null), 0);
+  });
+
+  test("r3: periods read before the pairing (on or before pair_after_date) get no pair role and no result — plain periods", async () => {
+    const { a, b, pairId } = await launchPair();
+    program.now = () => clock;
+    const port = program.pairForward.port(a.mint, b.mint);
+    port.pairAfterDate = 20261231;
+    await runCycle(deps);
+    assert.equal(port.results.size, 0, "no PairResult for an unpaired period");
+    assert.equal(reg.pairForwards(pairId).length, 0);
+    assert.ok([...reg.receipts(a.mint), ...reg.receipts(b.mint)].every((r) => r.pairRole === null), "planned as plain results");
+    const t0 = await port.buildSubmitResult({ recordDate: 20261005, winner: null, sourceUrl: "x" });
+    assert.equal((await port.simulate(t0.raw)).err, "PairPeriodUnpaired");
+    const fields = await pairChainFields((x, y) => program.pairForward.port(x, y).links(), a.mint, b.mint, "A");
+    assert.deepEqual(fields, { pairState: "paired", pairVoidBy: null, pairAfterDate: "2026-12-31" });
+  });
+
+  test("r3: forward_to_winner is refused once the 72 h window closed (ForwardWindowClosed); the basis leaves the loser's carried spend", async () => {
+    const { a, b } = await launchPair();
+    program.now = () => clock;
+    const port = program.pairForward.port(a.mint, b.mint), fa = program.fake(a.mint);
+    const D = 20261001;
+    fa.readings.set(D, { recordDate: D, prevDate: fa.cfg.crankCursor, kind: 1, processed: false, value: B(2), prevValue: B(1), delta: B(1), units: 1, signersMask: 1, pool: null, outcome: "pending", poolLamports: B(0), poolActualLamports: B(0), spentLamports: B(0), ruleSpendLamports: B(0), carriedInLamports: B(0), carriedOutLamports: B(0), got: B(0), burned: B(0), owed: B(0), shortfall: B(0) } as never);
+    fa.readingSubmittedAt.set(D, clock - (PAIR_RESULT_GRACE_SECS + 60) * 1000);
+    port.results.set(D, { recordDate: D, winner: b.mint, submittedAt: 0, forwarded: false, forwardedLamports: B(0), forwardedAt: null });
+    const tx = await port.buildForward({ loserMint: a.mint, recordDate: D });
+    assert.equal((await port.simulate(tx.raw)).err, "ForwardWindowClosed");
+    assert.match(pairErrorSentence("ForwardWindowClosed"), /burns as a plain period/);
+    const base = { feeLamports: B(5_000_000_000), reserveLamports: B(20_000_000), wsolLamports: B(0), capLamports: null, units: 1, fractionBps: 200, floorLamports: B(0) };
+    assert.equal(forwardAmount({ ...base, carriedSpendLamports: B(980_000_000) }).pool, B(4_000_000_000), "spendable 4.98 SOL − 0.98 SOL carried");
+    assert.deepEqual(Object.keys(UNLINK_REASON_TEXT).map(Number), [0, 1, 3], "terminal evidence only: no reason 2");
   });
 
   test("an unpaired LaunchLab pair raises pair-unmatched until its second coin names the first back", async () => {
@@ -528,6 +579,11 @@ describe("r2: initialize_token at launch always carries the partner's PairLink (
     assert.deepEqual([slot(Bx.keys, "partner_link"), slot(Bx.keys, "partner_config")], [pairLinkPda(programId, new PublicKey(mA)).toBase58(), configPda(programId, new PublicKey(mA)).toBase58()]);
     const single = (await client.initializeToken({ ...base, mint: mA })).instructions[0];
     for (const n of ["pair_mint", "pair_link", "partner_link", "partner_config"]) assert.equal(slot(single.keys, n), programId.toBase58(), n);
+    // r3 (RN-2): pair_void_by rides with pair_mint (the rules' pair.voidBy on both sides), 0 for a single coin
+    const voidBy = (ix: { dataBase64: string }) => (decodeType(BURN_RECEIPTS_IDL, def.args[0].type, Buffer.from(ix.dataBase64, "base64"), 8).value as { pair_void_by: number }).pair_void_by;
+    const A2 = (await client.initializeToken({ ...base, mint: mA, pairMint: mB, partnerFirst: false, pairVoidBy: 20261130 })).instructions[0];
+    const B2 = (await client.initializeToken({ ...base, ticker: "CHIEFS", mint: mB, pairMint: mA, partnerFirst: true, pairVoidBy: 20261130 })).instructions[0];
+    assert.deepEqual([voidBy(A2), voidBy(B2), voidBy(single)], [20261130, 20261130, 0]);
   });
 });
 
@@ -537,7 +593,7 @@ describe("the pair page states the attester fact plainly (pair-forward re-check)
     assert.equal(soleAttester(st(["K"]), st(["K"])), true);
     assert.equal(soleAttester(st(["K", "X"], 2), st(["K"])), false);
     assert.equal(soleAttester(st(["K"]), st(["J"])), false);
-    assert.equal(PAIR_SOLE_ATTESTER_LINE, "On this platform the operator's keeper is the sole attester (quorum 1) for both coins of a pair.");
+    assert.equal(PAIR_SOLE_ATTESTER_LINE, "Whoever holds the common attester quorum decides every result; on Burnticker that is the operator's keeper alone at quorum 1.");
     assert.deepEqual(lintCopy(PAIR_SOLE_ATTESTER_LINE, loadCopyLintConfig()).hits, []);
   });
 });

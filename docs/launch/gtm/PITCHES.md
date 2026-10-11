@@ -126,15 +126,15 @@ The launchpad where the rule is enforced by a program, not a promise: open sourc
 
 ```text pitch
 Every Burnticker coin's rule, readings and receipts are public JSON; every launch is an unsigned transaction you sign yourself.
-Keyless HTTP API (OpenAPI 1.11.0) for search, back-tests, launch bundles and receipt verification.
+Keyless HTTP API (OpenAPI 1.12.0) for search, back-tests, launch bundles and receipt verification.
 The program, keeper, pages and tests are open source.
 ```
 
 ```text pitch
-Everything the Burnticker wizard does is available to a bot: search every settleable result, back-test a rule, build an unsigned launch bundle, read any coin's status and receipts, and verify one receipt against its source and the chain — through a keyless HTTP API under /api/burnticker/v1 (OpenAPI 1.11.0) or the TypeScript SDK in the repository. The wizard and the API share one pipeline, so a refusal, a hash or a fee can never differ between them. The on-chain program, the keeper, the pages and the tests are open source, with the Powers Register generated from the program's IDL.
+Everything the Burnticker wizard does is available to a bot: search every settleable result, back-test a rule, build an unsigned launch bundle, read any coin's status and receipts, and verify one receipt against its source and the chain — through a keyless HTTP API under /api/burnticker/v1 (OpenAPI 1.12.0) or the TypeScript SDK in the repository. The wizard and the API share one pipeline, so a refusal, a hash or a fee can never differ between them. The on-chain program, the keeper, the pages and the tests are open source, with the Powers Register generated from the program's IDL.
 ```
 
-**Proof:** https://github.com/rfzfhn67yk-netizen/burnticker and https://burnticker.com/api/burnticker/v1/openapi.json (live, 1.11.0).
+**Proof:** https://github.com/rfzfhn67yk-netizen/burnticker and https://burnticker.com/api/burnticker/v1/openapi.json (live, 1.12.0).
 **Checked against:** `docs/burnticker/api.md`, `docs/burnticker/sdk.md`, `src/lib/burnticker/api/spec.ts`. **Gap:** `@burnticker/sdk` is
 not on npm (`npm view` → 404; licence `UNLICENSED` until the owner decides), so the pitch says "the SDK in the repository", never
 "npm install".

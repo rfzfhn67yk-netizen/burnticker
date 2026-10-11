@@ -23,9 +23,10 @@ attesters' signatures over that message are in the same transaction (an Ed25519S
 ### Pair results (winner takes the burn, 2026-10-11)
 
 For a rivalry pair, each result period also gets one PairResult: the winner (the coin whose rule the result fires) or a draw, signed
-over one shared message. Since round 2 (the pair-forward blind review): a **win** needs a quorum of the **losing** coin's attesters — the
-side giving up its fuel consents — plus the winner's quorum only if the loser's attester set changed since the pairing (the PairLink keeps
-the set's hash); a **draw** needs a quorum of **each** coin's attesters; repeated submissions are signature-checked too. The message (`pairResultMessage`, `attestPairResult` in
+over one shared message. Since round 3 (after the pair-forward re-check): both coins of a pair carry **one attester set and quorum** —
+same keys, same order; the program refuses to pair them otherwise (`PairAttestersDiffer`) — and **every** result, win or draw, needs a
+quorum of each coin's set, which is the same set of signatures. Repeated submissions are signature-checked too. Plainly: whoever holds that
+common quorum decides every result; on Burnticker that is the operator's keeper alone at quorum 1. The message (`pairResultMessage`, `attestPairResult` in
 `src/lib/burnReceipts/pairs.ts`):
 
 ```
@@ -38,10 +39,17 @@ devnet the keeper key is both coins' attester). Two notes for anyone checking or
 - **Its event is a plain log.** `PairResultSubmitted` is written with `emit!`, not `emit_cpi!`: read it from the transaction's
   "Program data:" log lines written inside burn_receipts' own invocation (the SDK's `logEventsFrom` does), not from an inner
   instruction. The PairResult account `["pair_result", mint_lo, mint_hi, date]` is the durable record.
-- **Transaction size.** A win carries both coins' readings for the date: one signature plus both readings fits a legacy transaction; a
-  two-signature draw fits too; a two-signature win (the winner co-signing after a loser rotation) needs a v0 transaction with an address
-  lookup table, as does any quorum above two.
-- **What a win needs on chain.** The two coins paired to each other, a date on or after the pairing day (`PairDateBeforePairing`), both
+- **Transaction size.** A win carries both coins' readings for the date: one signature plus both readings fits a legacy transaction, and
+  so does a draw; a quorum of two or more needs a v0 transaction with an address lookup table.
+- **Rotating a paired coin's attesters.** `propose_attesters` works as for any coin (48 h timelock), but a PAIRED coin applies the change
+  only through `apply_paired_attester_change`: a quorum of the PARTNER's attesters signs
+  `BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1|<genesis>|<program>|<mint>|<partner>|set=<sha256 of the pending set>|eta=<pending eta>`
+  (`pairAttesterChangeMessage`, `pairSetHash`), packed in one Ed25519SigVerify instruction in the same transaction;
+  `apply_attester_change` refuses a paired coin (`PairedAttesterChange`). To keep the two coins on one set, propose the same set on both and
+  apply each with the other's co-signature. The keeper never rotates attesters on its own: a rotation is the operator's (Squads vault)
+  decision, run by hand with the admin CLI.
+- **What a win needs on chain.** The two coins paired to each other, a date on or after the pairing day (`PairDateBeforePairing`) and after
+  `pair_after_date` (periods read before the pairing stay unpaired: `PairPeriodUnpaired`), both
   coins' readings for the date (the keeper attests a flat 0-unit winner reading first when needed) and the loser's still unprocessed —
   else `PairResultNotServable`. There is no pool condition: against a side without a verified pool the forward moves 0 lamports and the
   fuel stays in the loser's pool (its own later burns spend it). A lost period never burns the losing coin unless no forward lands within

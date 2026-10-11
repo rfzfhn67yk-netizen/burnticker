@@ -28,8 +28,8 @@
 //   submit-pair-result         --mint-a <pubkey> --mint-b <pubkey> --date YYYYMMDD --winner <mint|draw> --attester <keypath>...
 //                              [--source-url <url>]   (a quorum of EACH coin's attesters signs BURNRECEIPTS-PAIR-v1|…)
 //   forward-to-winner          --loser <mint> --winner <mint> --date YYYYMMDD   (the loser's fuel for the period → the winner's fee PDA)
-//   unlink-pair                --mint-a <pubkey> --mint-b <pubkey> [--pair <pair_curve Pair>]   (r2 M-2: on evidence only — the Pair
-//                              Voided / a side refunding, or a coin without a verified pool 30 days after the pairing)
+//   unlink-pair                --mint-a <pubkey> --mint-b <pubkey> [--pair <pair_curve Pair>]   (r3: terminal evidence only — the Pair
+//                              Voided / a side refunding (required for policy 2), or a LaunchLab pair's voidBy ended without both pools)
 //   pair-status                --mint <pubkey> [--date YYYYMMDD]   READ-ONLY: pair_state, the PairLink, the period's PairResult
 //   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
 //                              (the cap is always the 25 SOL default at creation; ≤ 3 crankers, enforced only while the cap is in force)
@@ -203,7 +203,7 @@ if (CMD === "pair-status") {
   const link = await fetchPairLink(connection, programId, mint);
   const d = opt("date") ? Number(opt("date")) : null;
   const result = link && d ? await fetchPairResult(connection, programId, mint, link.pair_mint, d) : null;
-  console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), pair_state: cfg.config.pair_state, link, date: d, result, view: d ? pairResultFor(result, mint) : null }), null, 2));
+  console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), pair_state: cfg.config.pair_state, pair_void_by: cfg.config.pair_void_by, pair_after_date: cfg.config.pair_after_date, pair_unlinked_at: cfg.config.pair_unlinked_at, link, date: d, result, view: d ? pairResultFor(result, mint) : null }), null, 2));
   process.exit(0);
 }
 const payer: Party = (await party("payer", false)) ?? (CMD === "initialize-platform" ? await party("upgrade-authority") : CMD === "set-registration-policy" || CMD === "cancel-registration-policy" ? await party("admin") : CMD === "veto-registration-policy" ? await party("attester") : null) ?? die("--payer <keypath|pubkey> is required");

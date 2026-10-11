@@ -5,12 +5,15 @@
 //!   pairing        TokenConfig.pair_state + PairLink ["pair_link", mint]: written by initialize_token when the creator names the
 //!                  partner mint (provisional until the partner's initialize_token names this mint back within PAIRING_WINDOW_SECS;
 //!                  an unanswered provisional coin is a plain coin for good), or by link_pair when a pair_curve Pair holds both mints
-//!                  (policy 2; register_pair_pool requires it).
+//!                  (policy 2; register_pair_pool requires it, or an unlink). r3: both coins must share ONE attester set and quorum
+//!                  (M-1), a LaunchLab pair carries its locked voidBy on both coins (RN-2), and periods already read stay unpaired.
 //!   result         submit_pair_result: one PairResult per (pair, period), a quorum of EACH coin's attesters over the pair message
-//!                  (attest.rs canonical_pair_message); winner = a mint, or Pubkey::default() for a draw. Append-only.
+//!                  (attest.rs canonical_pair_message) — with the one common set, one set of signatures; winner = a mint, or
+//!                  Pubkey::default() for a draw. Append-only.
+//!   unlink         unlink_pair on terminal evidence only (Pair voided, a side refunding, a LaunchLab voidBy ended without both pools).
 //!   forward        forward_to_winner: processes the LOSER's reading for that period (next in its queue) by moving
 //!                  buyback_spend(min(spendable, cap), units, f) from its fee PDA to the winner's (SOL first, then WSOL), marks the
-//!                  reading OUTCOME_FORWARDED and records the forward on the PairResult. Idempotent.
+//!                  reading OUTCOME_FORWARDED and records the forward on the PairResult. Idempotent. Only inside the 72 h window (r3).
 //!   crank gate     crank_buyback on a paired coin needs the period's PairResult: LOST refuses (ForwardRequired), WON / DRAW proceed;
 //!                  no result yet refuses (PairResultPending) until PAIR_RESULT_GRACE_SECS after the reading, then it burns as an
 //!                  unpaired coin would (a missing result never wedges the queue; that period can no longer be forwarded).
@@ -74,16 +77,21 @@ pub fn read_link(acc: &AccountInfo) -> Result<Option<PairLink>> {
     Ok(Some(PairLink::try_deserialize(&mut &data[..])?))
 }
 
-/// sha256(PAIR_ATTESTERS_DOMAIN ‖ quorum ‖ (kind ‖ key) per current attester) — what PairLink.attester_set_hash records at pairing
-/// (pair-forward blind review M-1).
-pub fn attester_set_hash(c: &TokenConfig) -> [u8; 32] {
+/// sha256(PAIR_ATTESTERS_DOMAIN ‖ quorum ‖ (kind ‖ key) per attester).
+pub fn set_hash(quorum: u8, attesters: &[crate::state::AttesterEntry]) -> [u8; 32] {
     let mut parts: Vec<u8> = Vec::with_capacity(1 + MAX_ATTESTERS * 33);
-    parts.push(c.quorum);
-    for a in c.attester_slice() {
+    parts.push(quorum);
+    for a in attesters {
         parts.push(a.kind);
         parts.extend_from_slice(a.key.as_ref());
     }
     solana_sha256_hasher::hashv(&[PAIR_ATTESTERS_DOMAIN, &parts]).to_bytes()
+}
+
+/// The coin's CURRENT attester set and quorum, hashed (set_hash) — r3 M-1: pairing requires the two coins' hashes to be equal; the
+/// PairLinks record it.
+pub fn attester_set_hash(c: &TokenConfig) -> [u8; 32] {
+    set_hash(c.quorum, c.attester_slice())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -135,10 +143,22 @@ pub struct InitPairAccounts<'a, 'info> {
 /// Writes this coin's PairLink; returns the coin's pair_state. Pairs the two coins when the partner already named this mint
 /// (inside its window); otherwise the coin is provisional until the partner answers (or for good, as a plain coin).
 /// Policy-2 (pair_curve) coins are paired only by link_pair, with the Pair as the witness.
-pub fn pair_at_initialize(a: InitPairAccounts, mint: &Pubkey, mode: u8, pool_policy: u8, now: i64, attesters: [u8; 32]) -> Result<(u8, PairLink)> {
+/// Pair-forward r3: the two coins must share one attester set and quorum (M-1) and name the same voidBy (RN-2); periods the first
+/// coin already read while provisional stay unpaired (pair_after_date on both coins).
+#[allow(clippy::too_many_arguments)]
+pub fn pair_at_initialize(
+    a: InitPairAccounts,
+    mint: &Pubkey,
+    mode: u8,
+    pool_policy: u8,
+    now: i64,
+    void_by: u32,
+    attesters: [u8; 32],
+) -> Result<(u8, PairLink, u32)> {
     let pair_mint = *a.pair_mint.key;
     require!(mode == MODE_BUYBACK && pool_policy != POOL_POLICY_PAIR_CURVE, BurnError::InvalidPairMint);
     require!(pair_mint != *mint && pair_mint != Pubkey::default(), BurnError::InvalidPairMint);
+    require!(math::valid_date(void_by) && void_by >= math::utc_date(now), BurnError::InvalidPairVoidBy);
     // L-3: the partner's PairLink address is mandatory, so a second coin can never "forget" it and leave both coins provisional.
     let pl = a.partner_link.ok_or(BurnError::PairMismatch)?;
     require_keys_eq!(*pl.key, pair_link_address(&pair_mint).0, BurnError::PairMismatch);
@@ -149,16 +169,23 @@ pub fn pair_at_initialize(a: InitPairAccounts, mint: &Pubkey, mode: u8, pool_pol
             require!(!theirs.paired && now <= theirs.pairing_deadline, BurnError::PairingClosed);
             let pc = a.partner_config.ok_or(BurnError::PairMismatch)?;
             require!(pc.mint == pair_mint && pc.pair_state == PAIR_STATE_PROVISIONAL, BurnError::PairMismatch);
+            // r3 M-1: one attester set for the pair — a result signed by it is signed by both sides.
+            require!(attester_set_hash(pc) == attesters, BurnError::PairAttestersDiffer);
+            // r3 RN-2: both coins carry the same locked voidBy.
+            require!(pc.pair_void_by == void_by, BurnError::InvalidPairVoidBy);
             let ours = new_link(a.payer, a.pair_link, a.system, mint, &pair_mint, true, PAIR_WITNESS_INITIALIZE, now, attesters)?;
             theirs.paired = true;
             theirs.paired_at = now;
+            theirs.attester_set_hash = attesters;
             write_link(pl, &theirs)?;
             pc.pair_state = PAIR_STATE_PAIRED;
-            Ok((PAIR_STATE_PAIRED, ours))
+            // r3 (RN-1 second route): what the first coin read while provisional stays unpaired history.
+            pc.pair_after_date = pc.last_record_date;
+            Ok((PAIR_STATE_PAIRED, ours, pc.pair_after_date))
         }
         None => {
             let ours = new_link(a.payer, a.pair_link, a.system, mint, &pair_mint, false, PAIR_WITNESS_INITIALIZE, now, attesters)?;
-            Ok((PAIR_STATE_PROVISIONAL, ours))
+            Ok((PAIR_STATE_PROVISIONAL, ours, 0))
         }
     }
 }
@@ -167,10 +194,13 @@ pub fn pair_at_initialize(a: InitPairAccounts, mint: &Pubkey, mode: u8, pool_pol
 // link_pair: the pair_curve Pair is the witness (policy 2)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// PERMISSIONLESS, idempotent. Pairs the two coins of a pair_curve Pair (policy-2 TokenConfigs, Pair not Voided): writes or completes
-/// both PairLinks and sets both configs PAIRED. Refuses if either coin is already linked to another partner, and (pair-forward blind
-/// review L-1) if either coin already has a reading: a pair is linked before its coins read anything, so no period processed under
-/// the unpaired rule is ever re-interpreted. (register_pair_pool requires the link, so the keeper links right after init_pair.)
+/// PERMISSIONLESS, idempotent. Pairs the two coins of a pair_curve Pair (policy-2 TokenConfigs; the Pair neither Voided nor with a
+/// refunding side): writes or completes both PairLinks and sets both configs PAIRED. Refuses if either coin is already linked to another
+/// partner, or (pair-forward r3 M-1) if the two coins do not share one attester set and quorum.
+/// Readings that already exist (pair-forward r3, RN-1 second route — r2 refused them, which froze a coin read before its link): the
+/// periods dated on or before the later of the two coins' last readings stay UNPAIRED history (pair_after_date): the crank gate passes
+/// them and no PairResult may name them, so nothing processed under the unpaired rule is ever re-interpreted (r2 L-1). The same rule
+/// lets a pair re-link after unlink_pair (whose evidence is terminal, so in practice this only matters if evidence ever widens).
 #[event_cpi]
 #[derive(Accounts)]
 pub struct LinkPair<'info> {
@@ -193,7 +223,7 @@ pub struct LinkPair<'info> {
 
 pub fn handle_link_pair(ctx: Context<LinkPair>) -> Result<()> {
     let pair = PairView::load(&ctx.accounts.pair.to_account_info())?;
-    require!(pair.status != PAIR_CURVE_STATUS_VOIDED, BurnError::PairMismatch);
+    require!(pair.status != PAIR_CURVE_STATUS_VOIDED && !pair.refunding[0] && !pair.refunding[1], BurnError::PairTerminal);
     let (ma, mb) = (ctx.accounts.config_a.mint, ctx.accounts.config_b.mint);
     require!(ma == pair.mints[0] && mb == pair.mints[1], BurnError::PairMismatch);
     for c in [&ctx.accounts.config_a, &ctx.accounts.config_b] {
@@ -206,8 +236,12 @@ pub fn handle_link_pair(ctx: Context<LinkPair>) -> Result<()> {
     if already {
         return Ok(());
     }
-    require!(ctx.accounts.config_a.readings == 0 && ctx.accounts.config_b.readings == 0, BurnError::PairHasReadings);
-    let hashes = [attester_set_hash(&ctx.accounts.config_a), attester_set_hash(&ctx.accounts.config_b)];
+    // r3 M-1: one attester set for the pair.
+    let common = attester_set_hash(&ctx.accounts.config_a);
+    require!(attester_set_hash(&ctx.accounts.config_b) == common, BurnError::PairAttestersDiffer);
+    let hashes = [common, common];
+    // r3: periods already read stay unpaired history.
+    let after = ctx.accounts.config_a.last_record_date.max(ctx.accounts.config_b.last_record_date);
     let now = Clock::get()?.unix_timestamp;
     let (payer, system) = (ctx.accounts.payer.to_account_info(), ctx.accounts.system_program.to_account_info());
     let mut linked = Vec::new();
@@ -227,8 +261,10 @@ pub fn handle_link_pair(ctx: Context<LinkPair>) -> Result<()> {
             None => linked.push(new_link(&payer, &acc, &system, &mint, &other, true, PAIR_WITNESS_PAIR_CURVE, now, hashes[i])?),
         }
     }
-    ctx.accounts.config_a.pair_state = PAIR_STATE_PAIRED;
-    ctx.accounts.config_b.pair_state = PAIR_STATE_PAIRED;
+    for c in [&mut ctx.accounts.config_a, &mut ctx.accounts.config_b] {
+        c.pair_state = PAIR_STATE_PAIRED;
+        c.pair_after_date = after;
+    }
     for l in linked {
         emit_cpi!(PairLinked { mint: l.mint, pair_mint: l.pair_mint, paired: true, witness: l.witness, pairing_deadline: l.pairing_deadline });
     }
@@ -240,13 +276,14 @@ pub fn handle_link_pair(ctx: Context<LinkPair>) -> Result<()> {
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 /// PERMISSIONLESS submission (Ed25519SigVerify in the same transaction, as for submit_reading). Configs in byte order of their mints.
-/// Who must sign (pair-forward blind review M-1): a WIN needs the LOSER's quorum — the side that gives up fuel consents; the winner's
-/// signatures are accepted, not required — and, if the loser's attester set changed since pairing (PairLink.attester_set_hash), the
-/// winner's quorum too. A DRAW needs both quorums (neither side may call off a result alone).
+/// Who must sign (pair-forward r3 M-1): EVERY result — win or draw — needs both coins' quorums. Pairing requires the two coins to share
+/// one attester set and quorum, and a paired coin's set changes only with the partner's quorum co-signing
+/// (apply_paired_attester_change), so one set of signatures meets both: no side's attesters can sign its wins and withhold its losses.
+/// (Residual: whoever holds that common quorum decides every result; on Burnticker that is the operator keeper alone, quorum 1.)
 /// What a WIN needs on chain (H-1(a), L-2): both coins' readings for the date exist (reading_lo / reading_hi) and the loser's is still
 /// unprocessed — so forward_to_winner can always run. Pools are NOT required: a side without a verified pool makes the forward a
 /// 0-lamport FORWARDED (the loser's fuel stays with the loser for later periods, never burned for a period it lost). Any result: the date is on or
-/// after the day the coins were paired. Re-submitting the same result is a no-op (after the signature check, I-2); a different one is
+/// after the day the coins were paired, and after pair_after_date (periods read before the pairing stay unpaired). Re-submitting the same result is a no-op (after the signature check, I-2); a different one is
 /// refused. PairResultSubmitted is a plain log event (emit!), so a win signed by one quorum fits a legacy transaction.
 #[derive(Accounts)]
 #[instruction(record_date: u32)]
@@ -311,6 +348,8 @@ pub fn handle_submit_pair_result(ctx: Context<SubmitPairResult>, record_date: u3
     // L-2: never a period from before the pairing.
     let paired_on = math::utc_date(a.link_lo.paired_at.max(a.link_hi.paired_at));
     require!(record_date >= paired_on, BurnError::PairDateBeforePairing);
+    // r3: periods with readings from before the pairing stay unpaired.
+    require!(record_date > a.config_lo.pair_after_date.max(a.config_hi.pair_after_date), BurnError::PairPeriodUnpaired);
 
     // Signatures (checked before the idempotent return too: I-2).
     let msg = canonical_pair_message(&crate::ID, &lo, &hi, record_date, &winner, &source_url_hash, &proof_hash);
@@ -319,17 +358,8 @@ pub fn handle_submit_pair_result(ctx: Context<SubmitPairResult>, record_date: u3
     let mask_hi = attested_mask(&ix, msg.as_bytes(), a.config_hi.attester_slice())?;
     let ok_lo = mask_lo.count_ones() >= a.config_lo.quorum as u32;
     let ok_hi = mask_hi.count_ones() >= a.config_hi.quorum as u32;
-    if winner == Pubkey::default() {
-        require!(ok_lo && ok_hi, BurnError::QuorumNotMet);
-    } else {
-        // M-1: the loser's quorum; the winner's too if the loser rotated its attesters since pairing.
-        let (loser_ok, winner_ok, loser_cfg, loser_link) =
-            if winner == hi { (ok_lo, ok_hi, &a.config_lo, &a.link_lo) } else { (ok_hi, ok_lo, &a.config_hi, &a.link_hi) };
-        require!(loser_ok, BurnError::QuorumNotMet);
-        if attester_set_hash(loser_cfg) != loser_link.attester_set_hash {
-            require!(winner_ok, BurnError::QuorumNotMet);
-        }
-    }
+    // r3 M-1: both quorums, whatever the result (one common set at pairing → the same signatures).
+    require!(ok_lo && ok_hi, BurnError::QuorumNotMet);
     if a.pair_result.record_date != 0 {
         require!(a.pair_result.winner == winner, BurnError::ConflictingPairResult);
         return Ok(());
@@ -394,7 +424,8 @@ pub enum PairGate {
 /// crank_buyback on a PAIRED coin: the period's PairResult decides. WON / DRAW → crank normally. LOST → ForwardRequired until
 /// PAIR_RESULT_GRACE_SECS after the reading's submission, then (no forward having landed — a forward processes the reading) crank as
 /// unpaired, so no precondition of the forward can wedge the queue (pair-forward blind review H-1(c)). No result: PairResultPending
-/// for the same time, then crank as unpaired. Unpaired and provisional coins pass straight through.
+/// for the same time, then crank as unpaired. Unpaired, provisional and unlinked coins pass straight through, and so do periods from
+/// before the pairing (r3: dated on or before pair_after_date, or before the pairing day — no result can ever name them).
 pub fn crank_pair_gate(c: &TokenConfig, r: &Reading, link: Option<&AccountInfo>, result: Option<&AccountInfo>, now: i64) -> Result<PairGate> {
     if c.pair_state != PAIR_STATE_PAIRED {
         return Ok(PairGate::Proceed);
@@ -403,6 +434,10 @@ pub fn crank_pair_gate(c: &TokenConfig, r: &Reading, link: Option<&AccountInfo>,
     require_keys_eq!(*link.key, pair_link_address(&c.mint).0, BurnError::PairMismatch);
     let pl = read_link(link)?.ok_or(BurnError::PairMismatch)?;
     require!(pl.paired, BurnError::NotPaired);
+    // r3: a period from before the pairing (read before it, or dated before the pairing day) can never have a result — unpaired history.
+    if r.record_date <= c.pair_after_date || r.record_date < math::utc_date(pl.paired_at) {
+        return Ok(PairGate::Proceed);
+    }
     let res = result.ok_or(BurnError::InvalidPairResult)?;
     require_keys_eq!(*res.key, pair_result_address(&c.mint, &pl.pair_mint, r.record_date).0, BurnError::InvalidPairResult);
     let timed_out = now >= r.submitted_at.saturating_add(PAIR_RESULT_GRACE_SECS);
@@ -428,15 +463,16 @@ pub fn crank_pair_gate(c: &TokenConfig, r: &Reading, link: Option<&AccountInfo>,
 
 /// PERMISSIONLESS (the cranker allowlist of crank_buyback applies while the pre-audit cap is in force). For the period
 /// `record_date` whose PairResult names `winner_config` the winner:
-///   pool   = loser fee PDA lamports − reserve + the loser fee PDA's WSOL (synced: lamports − rent, like the crank — L-4), capped at
-///            the burn-pool cap while in force
+///   pool   = loser fee PDA lamports − reserve + the loser fee PDA's WSOL (synced: lamports − rent, like the crank — L-4), minus the
+///            spend it still owes earlier periods (carried_spend_lamports, r3 RI-4), capped at the burn-pool cap while in force
 ///   amount = pool × (1 − (1 − f)^units)   (the loser's own rule and its reading's units: what it would have spent had it won;
 ///            0 if under its floor; a one-shot rule with f = 100 % forwards the whole pool basis)
 ///            and 0 when either coin has no verified pool (pair-forward blind review H-1(b): a voided / unregistered / switched-away
 ///            side forwards nothing — and never blocks the loser's queue)
 /// moved loser fee PDA → winner fee PDA (SOL above the reserve first, then WSOL token → the winner fee PDA's WSOL account). The loser's
 /// reading is processed with OUTCOME_FORWARDED (it must be next in the loser's queue) and the PairResult records the forward; the memo
-/// is written every time (lamports=0 included). The winner's reading is not needed (H-1(b)). A second call is a no-op.
+/// is written every time (lamports=0 included). The winner's reading is not needed (H-1(b)). A second call is a no-op. Refused once
+/// PAIR_RESULT_GRACE_SECS have passed since the loser's reading was submitted (r3 RI-1): the period then burns as unpaired.
 #[event_cpi]
 #[derive(Accounts)]
 #[instruction(record_date: u32)]
@@ -498,6 +534,8 @@ pub fn handle_forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32)
     }
     require!(a.loser_config.rule.mode == MODE_BUYBACK && a.winner_config.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
     require_next_in_line(&a.loser_config, &a.loser_reading)?;
+    // r3 RI-1: the 72 h time-out ends the forward window — from then on the period belongs to the loser's own crank (no race).
+    require!(now < a.loser_reading.submitted_at.saturating_add(PAIR_RESULT_GRACE_SECS), BurnError::ForwardWindowClosed);
     let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
     require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     // H-1(b): a side without a verified pool (or unlinked since) forwards nothing — the reading is still processed.
@@ -517,10 +555,13 @@ pub fn handle_forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32)
     }
     let sol_avail = a.loser_fee_vault.lamports().saturating_sub(rule.reserve_lamports);
     let pool_actual = sol_avail.checked_add(wsol_avail).ok_or(BurnError::MathOverflow)?;
+    // r3 RI-4: lamports the loser still owes its own earlier periods (carried_spend_lamports, review H-1) are not this period's fuel —
+    // they stay in its fee PDA for the crank that owes them.
+    let basis = pool_actual.saturating_sub(a.loser_config.carried_spend_lamports);
     let cap = active_cap(&a.platform.to_account_info(), now)?;
     let pool_before = match cap {
-        Some(c) if pool_actual > c => c,
-        _ => pool_actual,
+        Some(c) if basis > c => c,
+        _ => basis,
     };
     let rule_spend = math::buyback_spend(pool_before, units, rule.fraction_per_unit_bps).map_err(|_| BurnError::MathOverflow)?;
     let amount = if !live || rule_spend < rule.floor_lamports { 0 } else { rule_spend };
@@ -588,13 +629,17 @@ pub fn handle_forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32)
 // unlink_pair (pair-forward blind review M-2)
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// PERMISSIONLESS. Undoes a pairing on on-chain evidence only that one coin can never be live:
-///   UNLINK_PAIR_VOIDED      the pair_curve Pair holding both mints is Voided (pass `pair`);
-///   UNLINK_SIDE_REFUNDING   one side of that Pair is refunding (its pool never came);
-///   UNLINK_NOT_LIVE         one coin still has no verified pool PAIR_UNLINK_NOT_LIVE_SECS (30 days) after the pairing.
-/// Sets both configs' pair_state to NONE and closes both PairLinks (their rent to each coin's own fee PDA). Afterwards both coins are
-/// plain coins (the crank gate passes them through; no new result can be recorded). Existing PairResults stay as history.
-/// (A partner whose rule "ended" has no on-chain end state: the keeper posts no more results for it and the 72 h time-outs apply.)
+/// PERMISSIONLESS. Undoes a pairing on TERMINAL on-chain evidence only (pair-forward r3 RN-1/RN-2):
+///   UNLINK_PAIR_VOIDED       the pair_curve Pair holding both mints is Voided (pass `pair`);
+///   UNLINK_SIDE_REFUNDING    one side of that Pair is refunding (its pool can never come; the other side may still graduate);
+///   UNLINK_VOID_BY_PASSED    a LaunchLab pair (paired by initialize_token): its locked voidBy day (TokenConfig.pair_void_by) has ended
+///                            (UTC) and a coin still has no verified pool.
+/// Never while a pair_curve Pair is Open or Graduating without a refunding side — however long its curves take (r2's "no verified
+/// pool 30 days after pairing" is gone). A policy-2 coin is unlinked only with its Pair as evidence. Sets both configs to
+/// PAIR_STATE_UNLINKED (pair_unlinked_at = now) and closes both PairLinks (their rent to each coin's own fee PDA). Afterwards both are
+/// plain coins (the crank gate passes them through; no new result can be recorded) and a policy-2 coin can still register its pool.
+/// Existing PairResults stay as history. (A partner whose rule "ended" has no on-chain end state — no wind-down flag exists in
+/// TokenConfig — so it is not evidence: the keeper posts no more results for it and each period falls back after 72 h.)
 #[event_cpi]
 #[derive(Accounts)]
 pub struct UnlinkPair<'info> {
@@ -611,7 +656,8 @@ pub struct UnlinkPair<'info> {
     pub fee_a: SystemAccount<'info>,
     #[account(mut, seeds = [FEE_SEED, config_b.mint.as_ref()], bump = config_b.fee_bump)]
     pub fee_b: SystemAccount<'info>,
-    /// CHECK: the pair_curve Pair holding both mints (PairView::load) — the evidence for UNLINK_PAIR_VOIDED / UNLINK_SIDE_REFUNDING.
+    /// CHECK: the pair_curve Pair holding both mints (PairView::load) — the evidence for UNLINK_PAIR_VOIDED / UNLINK_SIDE_REFUNDING;
+    /// required when either coin is policy 2.
     pub pair: Option<UncheckedAccount<'info>>,
 }
 
@@ -620,26 +666,31 @@ pub fn handle_unlink_pair(ctx: Context<UnlinkPair>) -> Result<()> {
     let (ma, mb) = (a.config_a.mint, a.config_b.mint);
     require!(a.link_a.pair_mint == mb && a.link_b.pair_mint == ma, BurnError::NotPaired);
     let now = Clock::get()?.unix_timestamp;
+    let pair_curve = a.config_a.rule.pool_policy == POOL_POLICY_PAIR_CURVE || a.config_b.rule.pool_policy == POOL_POLICY_PAIR_CURVE;
     let mut reason: Option<u8> = None;
-    if let Some(p) = a.pair.as_ref() {
+    if pair_curve {
+        // A pair_curve pair: only its Pair's terminal state counts.
+        let p = a.pair.as_ref().ok_or(BurnError::PairStillLive)?;
         let pair = PairView::load(&p.to_account_info())?;
-        require!((pair.mints[0] == ma && pair.mints[1] == mb) || (pair.mints[0] == mb && pair.mints[1] == ma), BurnError::PairMismatch);
+        require!(pair.mints[0] == ma && pair.mints[1] == mb || pair.mints[0] == mb && pair.mints[1] == ma, BurnError::PairMismatch);
         if pair.status == PAIR_CURVE_STATUS_VOIDED {
             reason = Some(UNLINK_PAIR_VOIDED);
         } else if pair.refunding[0] || pair.refunding[1] {
             reason = Some(UNLINK_SIDE_REFUNDING);
         }
-    }
-    if reason.is_none() {
-        let since = a.link_a.paired_at.max(a.link_b.paired_at).max(a.link_a.created_at).max(a.link_b.created_at);
+    } else {
+        // A LaunchLab pair: its locked voidBy has ended (the day after it has begun, UTC) without both pools.
+        let void_by = a.config_a.pair_void_by.max(a.config_b.pair_void_by);
         let one_dead = !a.config_a.pool_verified || !a.config_b.pool_verified;
-        if one_dead && now >= since.saturating_add(PAIR_UNLINK_NOT_LIVE_SECS) {
-            reason = Some(UNLINK_NOT_LIVE);
+        if void_by != 0 && one_dead && math::utc_date(now) > void_by {
+            reason = Some(UNLINK_VOID_BY_PASSED);
         }
     }
     let reason = reason.ok_or(BurnError::PairStillLive)?;
-    ctx.accounts.config_a.pair_state = PAIR_STATE_NONE;
-    ctx.accounts.config_b.pair_state = PAIR_STATE_NONE;
+    for c in [&mut ctx.accounts.config_a, &mut ctx.accounts.config_b] {
+        c.pair_state = PAIR_STATE_UNLINKED;
+        c.pair_unlinked_at = now;
+    }
     emit_cpi!(PairUnlinked { mint_a: ma, mint_b: mb, reason, cranker: ctx.accounts.cranker.key() });
     Ok(())
 }
