@@ -243,7 +243,7 @@ describe("2 · feed health, status.json and the status page", () => {
     assert.ok(!JSON.stringify(back).includes("secret detail"));
     assert.equal(back.keeper.lastCycleAt, NOW - 30_000); assert.equal(back.keeper.active, true); assert.equal(back.keeper.role, "leader");
     assert.deepEqual(back.programs.map((p) => [p.name, p.verified]), [["burn_receipts", "matches"], ["pair_curve", "matches"]]);
-    assert.deepEqual(programStatuses(loadVerifiedBuild(ROOT), "mainnet").map((p) => p.verified), ["not-deployed", "not-deployed"]);
+    assert.deepEqual(programStatuses(loadVerifiedBuild(ROOT), "mainnet").map((p) => p.verified), ["matches", "matches"]);
     // the standby reads it back as a heartbeat
     const fetchImpl: FetchJson = async () => ({ ok: true, status: 200, json: async () => back });
     const peer = await readPeer("https://burnticker.com/status/status.json", fetchImpl, NOW);

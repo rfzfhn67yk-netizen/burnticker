@@ -28,8 +28,8 @@
     "summary": "Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06: 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool; one crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT and every token bought was burned in the same transaction; the rest carried to the next crank."
   },
   "phase": {
-    "label": "pre-launch",
-    "line": "Pre-launch: both programs run on devnet, a rehearsal network with no money value; neither is deployed on mainnet yet; creator launches are closed."
+    "label": "pre-launch (mainnet programs deployed)",
+    "line": "Pre-launch: both programs are deployed on mainnet (2026-10-11) with the Squads vault as upgrade authority and the LaunchLab platform configured; no coin is launched on mainnet yet; creator launches are closed."
   },
   "networks": {
     "devnet": {
@@ -40,21 +40,35 @@
     },
     "mainnet": {
       "role": "production network",
-      "deployment": "not deployed yet",
-      "since": null,
-      "evidence": null
+      "deployment": "deployed",
+      "since": "2026-10-11",
+      "evidence": "docs/burnticker/VERIFIED-BUILD.md"
     }
   },
   "programs": [
     {
       "name": "burn_receipts",
       "version": "pair-forward round 3 build",
-      "note": "winner-takes-the-burn round 3 (terminal-only unlink evidence, shared attester set) with the mainnet pins compiled; the end-of-rule sink (round 4) is not built"
+      "note": "winner-takes-the-burn round 3 (terminal-only unlink evidence, shared attester set) with the mainnet pins compiled; the end-of-rule sink (round 4) is not built",
+      "mainnetDeploy": {
+        "date": "2026-10-11",
+        "slot": 455814493,
+        "onChainSha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
+        "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+        "evidence": "docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json"
+      }
     },
     {
       "name": "pair_curve",
       "version": "pair-forward round 3 build",
-      "note": "pair launches stay off on mainnet (BURNTICKER_PAIR_CURVE_ENABLED)"
+      "note": "pair launches stay off on mainnet (BURNTICKER_PAIR_CURVE_ENABLED)",
+      "mainnetDeploy": {
+        "date": "2026-10-11",
+        "slot": 455815136,
+        "onChainSha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
+        "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+        "evidence": "docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json"
+      }
     }
   ],
   "squads": {
@@ -226,8 +240,7 @@
           "deployed": "devnet"
         }
       ]
-    }
-,
+    },
     {
       "id": "chatgpt-3",
       "report": "docs/burnticker/reviews/2026-10-11-chatgpt-review-3-response.md",
@@ -324,5 +337,16 @@
       "label": "Devnet rehearsal records",
       "path": "docs/burnkeeper/devnet-run.md"
     }
-  ]
+  ],
+  "launchlabPlatform": {
+    "mainnet": {
+      "platformId": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
+      "admin": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23",
+      "feeWallet": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
+      "lpToFeeKeyPct": 100,
+      "platformFeeBps": 25,
+      "createdAt": "2026-10-11",
+      "evidence": "docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json"
+    }
+  }
 }

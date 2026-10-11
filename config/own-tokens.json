@@ -11,9 +11,9 @@
     {
       "symbol": "REHEARSAL",
       "chain": "solana",
-      "address": null,
+      "address": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
       "status": "planned",
-      "note": "The platform's mainnet rehearsal coin (a throwaway under the real platform config to prove fee routing and burns; LP locked forever; not for trading). Set address to the mint when it is created. Listed on the trust page under rehearsals."
+      "note": "The platform's mainnet rehearsal coin (a throwaway under the real platform config to prove fee routing and the Fee Key claim on mainnet; LP locked forever; not for trading). Mint FwXiFscF…pzkp (keypair created 2026-10-11); status becomes \"launched\" at the create."
     }
   ]
 }
