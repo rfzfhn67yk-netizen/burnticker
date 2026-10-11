@@ -14,7 +14,7 @@ const blocks = (md: string, kind: "pitch" | "draft" | "edit") => [...md.matchAll
 
 describe("docs/launch/gtm", () => {
   test("PLAN.md is the owner's plan of record, byte for byte", () => {
-    assert.equal(crypto.createHash("sha256").update(fs.readFileSync(`${DIR}/PLAN.md`)).digest("hex"), "2556dc5f11b105691518444f434cb0e655212bf4d9c46e308d81b3f8ab3f6c40");
+    assert.equal(crypto.createHash("sha256").update(fs.readFileSync(`${DIR}/PLAN.md`)).digest("hex"), "fe1f4ea3d4e1897c431afc8b99c4f3bf91411e6423e50c8e8acc2debcfe7db43");
   });
   test("PITCHES.md: six audiences × (1-line, 3-line, paragraph), every one lint-clean", () => {
     const p = blocks(read("PITCHES.md"), "pitch");

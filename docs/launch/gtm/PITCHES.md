@@ -149,7 +149,7 @@ Every power the operator holds is on the Powers Register, generated from the pro
 ```
 
 ```text pitch
-Burnticker is run by one named operator, one independent operator (United States), who also runs trading bots — and those bots refuse every Burnticker coin in code that is public. The program, keeper and pages are open source. Three blind AI reviews are published in full, every finding with its fix; the adversarial ChatGPT review is pending and the bounty terms are drafted, not published; no security firm has audited any of it. Quorum is one key at launch, the operator's, and the trust page says so. The trust page lists every wallet, every power, the decision log, the incident log, the settlement coverage table and the known limitations.
+Burnticker is run by one independent operator who also runs trading bots — and those bots refuse every Burnticker coin in code that is public. The program, keeper and pages are open source. Three blind AI reviews are published in full, every finding with its fix; the adversarial ChatGPT review is pending and the bounty terms are drafted, not published; no security firm has audited any of it. Quorum is one key at launch, the operator's, and the trust page says so. The trust page lists every wallet, every power, the decision log, the incident log, the settlement coverage table and the known limitations.
 ```
 
 **Proof:** https://burnticker.com/burnticker/trust (live) and https://github.com/rfzfhn67yk-netizen/burnticker/tree/main/docs/burnticker/reviews.

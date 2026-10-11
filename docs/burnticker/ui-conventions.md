@@ -210,6 +210,48 @@ The other test cases (they rotate across sports on purpose — no league comes f
 - "Detroit high above 90" → `nws.high:DTW-90`
 - "WIF vs SHIB" → the Coin vs Coin tile (its page when present, else "not built yet" — the copy lint forbids "coming soon")
 
+## Presets, not dials — the web UI offers presets; the API offers dials (10-10, the owner's cut)
+
+The owner, 2026-10-10: "it feels overly complicated to get a coin set up" and "the UI needs to be simpler, even if it means giving up a
+little bit of adjustability". **Rule: the web launch page offers presets; the API offers dials.** The rules, the API contract and every
+server gate (copy lint, preflight, locked description, pinning, anti-clone) are unchanged — only the web UI narrows.
+
+**The web path is three decisions** (test/burntickerThreeDecisions.test.ts counts them on the source: every control declares
+`data-decision="what" | "name" | "launch"`, `data-optional` with a default already chosen, or `data-nav`):
+
+1. **What burns it** — the sentence search (one click on a card; an event card opens its list of names), or one of four tiles —
+   Team coin (league → team), Matchup (league → game), Coin vs Coin (two coins), Any result (category → source; Elections: race →
+   candidate) — or a template / "launch one like this".
+2. **The review card** (src/app/burnticker/launch/ReviewCard.tsx) — generated art, name + ticker prefilled (tap "edit" to change),
+   the rule in one sentence, "Ends: …, then winds down", the receipts line, one preset row with the default chosen, an "add a note"
+   link. Recurring shares: **2 % / 5 % / 10 %** (default 2 %); one-shot: **10 % / 50 % / 100 %** (default 10 %); a Matchup also
+   "until the result" / "this season". A copied share snaps to the nearest preset.
+3. **Launch** — pressing it is the acknowledgement (the line under the button: the rule is locked for good; you make no promises to
+   anyone about the coin). Without a wallet it opens the wallet chooser and launches once connected.
+
+Happy path from the sentence: pick the card → Launch (a preset is already chosen). Screens to Launch: sentence 2 (was 3), tiles 3
+(was 4–5), Coin vs Coin 1 (inline). Time-to-launch telemetry stores screens shown and decisions made per launch (productStore.ts,
+GET /api/burnticker/v1/ops/search-misses → `timeToLaunch.flow`) for the before / after.
+
+**Moved to API-only** (each still works exactly as before through the endpoint named):
+
+| Removed from the web UI | Where it lives now |
+| --- | --- |
+| Any burn share other than the presets; the per-unit share of a number feed | `rule.binary.onYes / onNo.fractionOfPool`, `rule.scalar.perUnit` in POST /api/burnticker/v1/launch/bundle |
+| A team coin's window (postseason, next N games, perpetual) and the side (win / loss / draw) | `rule.series` (`espn.team:<lg>-<ABBR>.<id>-<side>-<window>`) in POST /v1/launch/bundle; the sentence search still reads "… lose" |
+| League mode, outcome sets, end-of-window forwarding | `rule.onEnd` / league set in POST /v1/launch/bundle |
+| Coin vs Coin weekly windows, run lengths other than 30 days, brackets | a `derby` rule in POST /v1/launch/bundle; brackets: the operator's bracket registration |
+| The flippening checkbox | its own template card (`/burnticker/launch?template=flippening`); any flippening rule via POST /v1/launch/bundle |
+| Election pairs (two candidates, two coins) | GET /api/burnticker/v1/elections/pair, then POST /api/burnticker/launch with `pair` |
+| Polymarket "every market of an event", recurring tag selectors, the question filter; Kalshi series filters and pasted tickers | `rule.series` (`event:<slug>`, `tag:<slug>`) and `rule.filter` in POST /v1/launch/bundle |
+| Read-as (yes/no vs number), unit, baseline, direction, "also burn on the other side", burn from a vesting vault | `rule.kind`, `rule.scalar`, `rule.binary`, `rule.vault` in POST /v1/launch/bundle |
+| Social links, a first buy, a custom image link (where enabled) | `links`, `firstBuySol`, `imageUrl` in POST /v1/launch/bundle |
+| Pasting a wallet address to build now and sign later | POST /v1/launch/bundle with `creator`; /burnticker/me reads any pasted wallet |
+| The rule dials panel, the create form (image, description, socials), the back-test step, the acknowledgement checkboxes, the pair-venue line | gone: the review card shows the outcome; the back-test still runs and blocks Launch on a refusal |
+| The advanced first-party feed / custom selector screen | the feeds are in Any result; custom selectors via POST /v1/launch/bundle |
+
+A single "More options: the API" link under Launch opens /burnticker/docs. A dials panel is not offered on the web.
+
 ## Intent cards, the rule dials, the window, the text and the image (10-10, third commit set)
 
 **Intent → rule cards.** The phrase box answers two or three cards. Each card shows the full rule sentence, the venue and its

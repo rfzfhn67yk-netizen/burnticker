@@ -5,7 +5,9 @@
 // NOT one of them; the nearest Spider-Man Oscars market is Best Visual Effects.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { universalSearch, dedupeTickers, type Suggestion } from "@/lib/burnticker/search";
+import { universalSearch, dedupeTickers, raceCards, type Suggestion } from "@/lib/burnticker/search";
+import { raceFromEvent } from "@/lib/burnticker/elections";
+import { parseGammaEvent } from "@/lib/burnticker/oracle/polymarket";
 import { outcomeTicker, plainQuestion, searchQueries, splitQuery } from "@/lib/burnticker/polySearch";
 import { nameMatch } from "@/lib/burnticker/textMatch";
 import { catalogueSources } from "@/lib/burnticker/api/handlers";
@@ -18,8 +20,10 @@ import { ESPN_NOW } from "./burntickerFirstPartyHelpers.ts";
 const FX = fx("polymarket/search.oscars.json") as { pages: { url: string; body: unknown }[] };
 const TABLE = new Map(FX.pages.map((p) => [p.url, p.body]));
 const asked: string[] = [];
-// Gamma searches come from the frozen table; the elections index is not part of this case (an empty list, like a quiet day)
-const polyGet = async (u: string) => { asked.push(u); if (TABLE.has(u)) return TABLE.get(u); if (u.includes("public-search")) throw new Error(`no fixture for ${u}`); return []; };
+// Gamma searches come from the frozen table; the elections index answers with the live GA-05 race (its candidate John OSCAR Salvesen
+// is what "oscars" matched on the live host, 2026-10-10) on its first page and nothing after
+const GA05 = (fx("polymarket/race.ga-05.json") as { event: unknown }).event;
+const polyGet = async (u: string) => { asked.push(u); if (TABLE.has(u)) return TABLE.get(u); if (u.includes("public-search")) throw new Error(`no fixture for ${u}`); return /tag_slug=midterms/.test(u) && /offset=0\b/.test(u) ? [GA05] : []; };
 const deps = { venues: { kalshi: false, polymarket: true, feeds: true }, feeds: catalogueSources(ESPN_NOW).sources as unknown as FeedLike[], espn: null, polyGet, refuse: () => [], kalshiSearch: null, derbyHref: null, nowMs: ESPN_NOW };
 const search = (q: string) => universalSearch(q, deps);
 const BP_WINNER = "polyevent:oscars-2027-best-picture-winner-20260727173620857";
@@ -69,6 +73,19 @@ describe("the owner's three Best Picture queries", () => {
     assert.ok(r.cards.length >= 3, r.cards.map((c) => c.title).join("\n"));
     for (const c of r.cards) { assert.match(c.title, /Spider-Man/); assert.equal(c.suggestedTicker, "SPIDER"); assert.ok(c.pick?.market); }
     assert.ok(r.cards.some((c) => c.subtitle.startsWith("Highest grossing movie in 2026")), "an outcome deep inside a 28-market event");
+  });
+});
+
+describe("the live miss: \"oscars\" returned a House candidate whose middle name is Oscar", () => {
+  test("an award phrase is never a race query, and a race card needs a whole name, not a substring across names", async () => {
+    const race = raceFromEvent(parseGammaEvent(GA05)!, () => [])!;
+    assert.ok(race.outcomes.some((o) => /Oscar Salvesen/.test(o.label)));
+    assert.deepEqual(raceCards([race], "oscars"), [], "\"oscars\" does not name John Oscar Salvesen");
+    assert.ok(raceCards([race], "salvesen").length >= 1, "his surname still finds him");
+    assert.ok(raceCards([race], "oscar salvesen").length >= 1, "and his names together");
+    const r = await search("oscars");
+    assert.equal(r.cards[0].id, BP_WINNER);
+    assert.ok(!r.cards.some((c) => /Salvesen/.test(c.title)), r.cards.map((c) => c.title).join("\n"));
   });
 });
 

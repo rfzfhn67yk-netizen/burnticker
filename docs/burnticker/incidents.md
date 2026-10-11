@@ -52,7 +52,7 @@ A postmortem never names a person outside the operator, never includes a secret,
 
 ## Who signs it
 
-The operator, the Burnticker operator, signs every postmortem: by name at the end of the document, and with an ed25519 signature over the
+The operator signs every postmortem: as "the operator" at the end of the document, and with an ed25519 signature over the
 document's sha256 from the operator's developer fee wallet — the same key that signs the operator statement
 (`config/burnticker/operator.json` → `signedMessage`, verified on `/burnticker/operator`). Until that mainnet wallet exists, the
 name and the signed git commit that adds the file are the signature, and the postmortem says so. A correction to a postmortem is

@@ -209,7 +209,7 @@ ${body.join("\n")}
 </main>
 <footer class="wrap">
   <p>A memecoin platform. The rule says what the supply does, not what the price does. Nobody is promised anything.</p>
-  <p>Operated by one independent operator (United States). Source of this page: <code>docs/burnticker/WHITEPAPER.md</code>.</p>
+  <p>Operated by one independent operator (United States); contact@burnticker.com. Source of this page: <code>docs/burnticker/WHITEPAPER.md</code>.</p>
 </footer>
 </body>
 </html>

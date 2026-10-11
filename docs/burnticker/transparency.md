@@ -15,7 +15,7 @@ is either public already (in the monorepo paths named, and in the public reposit
 | The fee design and the live comparison | `src/lib/burnticker/fees.ts`, `docs/burnkeeper/fees.md` | same paths | "Platform config — live vs designed" |
 | The developer fee wallet's ledger | read from chain | — | "Developer fee wallet and ledger" |
 | The refuse list the operator's trading bots obey | `src/lib/ownTokens.ts`, `config/own-tokens.json` | same paths (the only files from the trading side that leave) | "Who runs this" |
-| Who runs this (real name, also runs trading bots, bots refuse platform coins) | `src/lib/burnticker/fees.ts` (`OPERATOR_LINE`), `config/burnticker/transparency.json` | same paths | "Who runs this" |
+| Who runs this (one independent operator, identity held privately; also runs trading bots, which refuse platform coins) | `src/lib/burnticker/fees.ts` (`OPERATOR_LINE`), `config/burnticker/transparency.json` | same paths | "Who runs this" |
 | How it was built (AI-assisted; two AI reviews + bounty; not a firm audit) | `config/burnticker/transparency.json`, `docs/burnticker/reviews/` | same paths | "How this was built" |
 | Every wallet (ops, deployer, keeper, dev fee, platform admin, Squads vault + 3 members, $DEFICIT mint pubkey, trading wallets) | `config/burnticker/transparency.json` → `wallets` (TODO until set; env vars fill some) | same path | "Every wallet" |
 | The decision log (dated, append-only) | `docs/burnticker/decisions.md` | same path | "Decision log" |

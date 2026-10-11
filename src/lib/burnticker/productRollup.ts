@@ -10,5 +10,7 @@ export function rollupMarkdown(m: ReturnType<ProductStore["missSummary"]>, t: Re
   L.push(`## Time to launch (${t.drafts} draft${t.drafts === 1 ? "" : "s"})`, "", "| Step | Drafts | p50 | p90 |", "| --- | ---: | ---: | ---: |");
   for (const s of t.steps) L.push(`| ${s.label} | ${s.n} | ${sec(s.p50Sec)} | ${sec(s.p90Sec)} |`);
   L.push(`| **search to Launch, total** | ${t.total.n} | ${sec(t.total.p50Sec)} | ${sec(t.total.p90Sec)} |`, "");
+  // the owner's "three decisions" measure (2026-10-10): screens shown and decisions made from landing to Launch, per launch
+  if (t.flow && t.flow.n) L.push(`Screens shown, landing to Launch: p50 ${t.flow.screensP50}, p90 ${t.flow.screensP90}. Decisions made: p50 ${t.flow.decisionsP50}, p90 ${t.flow.decisionsP90} (${t.flow.n} launch${t.flow.n === 1 ? "" : "es"}; before the cut the sentence path showed 3 screens to Launch and the tile paths 4–5).`, "");
   return L.join("\n");
 }

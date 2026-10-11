@@ -282,7 +282,7 @@ export function platformLaunchThread(rf: ReviewFacts, site: string): Draft {
       `Follow the season: team coins across ${lg.map((x) => x.label).join(", ")} (${lg.map((x) => x.team).join(", ")}), scored in receipts. Nothing is won here. Things are only burned.`,
       `Guardrails: creators earn nothing · zero team allocation · the platform never buys any coin · all LP burned · rules locked at launch · every receipt recomputable from its public source.`,
       `Open source: ${PUBLIC_REPO}\nReviewed: ${reviewLine(rf)}. Not audited by a security firm.`,
-      `First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.\n\nOperated by one independent operator (United States).\nMemecoins: the rule says what supply does, not what price does. ${S}`,
+      `First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.\n\nOperated by one independent operator.\nMemecoins: the rule says what supply does, not what price does. ${S}`,
     ],
   };
 }
@@ -331,7 +331,7 @@ export function teaserDraft(topic: TeaserTopic, c: TeaserContext): Draft {
     "devnet-receipt": () => { const d = need(c.devnet, "the devnet evidence file"); return { account: "@BurnTicker", posts: [`Devnet rehearsal, ${d.date}: Treasury's debt figure counted ${d.units} units. The burn_receipts program spent ${d.spentSol} SOL of a test coin's fee pool, bought ${fmtInt(d.burned)} test $DEFICIT on its own pool and burned all of it, memo on chain.\n${d.txUrl}\nLog: ${d.log}`] }; },
     "the-rule": () => { const f = need(c.deficit, "the $DEFICIT rule file"); return { account: "@USA_DEFICIT", posts: [`$${f.ticker}'s rule: every full ${dollarsB(f.unitUsd)} added to Treasury's Debt to the Penny is one unit; each unit spends ${pctOf(f.fractionPerUnit)} of the burn pool buying $${f.ticker} on its own pool, and the program burns all of it.\nRule file sha256:${f.sha256.slice(0, 12)}\n${SHORT_DISCLAIMER}`] }; },
     reviews: () => { const r = need(c.reviews, "transparency.json review facts"); return { account: "@BurnTicker", posts: [`Burnticker's program and keeper: ${reviewLine(r)}. Every finding is in the reports with its fix. Not audited by a security firm.\n\n${REPO_TREE("docs/burnticker/reviews")}`] }; },
-    "open-source": () => ({ account: "@BurnTicker", posts: [`Everything Burnticker runs is public: the on-chain program, the keeper, the pages, the tests. The operator's trading bots refuse every platform coin, in code, and that file is public too.\n\nOperated by one independent operator (United States).\n${PUBLIC_REPO}`] }),
+    "open-source": () => ({ account: "@BurnTicker", posts: [`Everything Burnticker runs is public: the on-chain program, the keeper, the pages, the tests. The operator's trading bots refuse every platform coin, in code, and that file is public too.\n\nOperated by one independent operator.\n${PUBLIC_REPO}`] }),
     coverage: () => { const k = need(c.coverage, "the coverage counts"); return { account: "@BurnTicker", posts: [`What Burnticker can settle today, category by category, with the primary source and its independent cross-read: ${k.settleable} settleable · ${k.adjudicatedOnly} on an on-chain payout only · ${k.uncovered} uncovered.\n\n${REPO_FILE("docs/burnticker/SETTLEMENT-COVERAGE.md")}\n${S}/burnticker/trust`] }; },
   };
   const t = text[topic]();

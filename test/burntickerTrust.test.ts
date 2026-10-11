@@ -90,7 +90,7 @@ describe("buildTransparency / buildTrustPage", () => {
   test("the section carries the operator's real name, the refuse-list presence, the reviews' presence and the TODO count", () => {
     const t = buildTransparency(ROOT, {});
     assert.equal(t.whoRunsThis.operatorLine, OPERATOR_LINE);
-    assert.ok(t.whoRunsThis.operatorLine.includes("the Burnticker operator"));
+    assert.ok(t.whoRunsThis.operatorLine.includes("contact@burnticker.com")); assert.ok(!/Shane|Cassidy|Colorado/.test(t.whoRunsThis.operatorLine));
     assert.equal(t.whoRunsThis.refuseListPresent, true);
     assert.equal(t.howBuilt.reviewsReadmePresent, true);
     assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), [true, true, true, true, true, true], "the five Claude reports and the ChatGPT/Codex report all exist");

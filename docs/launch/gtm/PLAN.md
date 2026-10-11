@@ -16,7 +16,7 @@ show (seasons, rivalries, derbies — scoreboards of burns). Nothing is ever won
 - Never call the reviews an audit. Say: three blind AI reviews, an adversarial ChatGPT review, a public bounty, open source.
 - Never name Kalshi (its terms forbid public mention without written approval). Polymarket only as "an on-chain payout".
 - All leagues, always: rotate Rays / Lakers / Oilers / Arsenal / Inter Miami / Eagles; never lead with the NFL.
-- Operator named (one independent operator (United States)). Creators earn nothing. No team buy. The platform never buys any coin. All LP burned.
+- Operator reachable (contact@burnticker.com; identity held privately until an LLC exists — owner 2026-10-10 "too much exposure"). Creators earn nothing. No team buy. The platform never buys any coin. LP locked forever; its fees fund the burn (80 % burned, 20 % operator, fixed in code).
 - Every claim in every message must be true of the code on main that day. If a feature is not live, it is not mentioned.
 
 ## 2. Who we talk to, and what we say (one proof link each)
@@ -79,3 +79,16 @@ the GitHub repo moves to a `burnticker` org · Kalshi consent email: optional, n
 Paid KOLs/boosts/ads (policy; clones can't say it) · Kalshi mentions (terms) · "audited" (false) · a platform token (decided: not before
 10 launches) · league-mode forwarding as a headline (reads as a prize; stays an opt-in for a later cycle) · AI-generated coin images
 (IP and consistency) · auto-posting to X (approval queue only).
+
+## 9. The 30-day scorecard (written before launch, so failure has a definition — the PHI lesson)
+Read at T+30 (≈ 2026-11-25). Each line has the bar we set in advance; results are published on the trust page whatever they say.
+| Measure | Bar at T+30 | Why this one |
+|---|---|---|
+| Coins launched by people who are not the operator | ≥ 10 (≥ 3 leagues or categories) | the platform exists only if others use it |
+| Receipts posted per day (7-day mean) | ≥ 3 | the engine is running, not idling |
+| Verifier runs by strangers (API + /check, unique anonymised sessions) | ≥ 100 | people check, not just look |
+| Outreach replies turned into a listing, mention or launch | ≥ 3 | earned channels work without paying |
+| Copy-lint violations in anything we posted | 0 | discipline held |
+| Claims retracted | 0 | nothing said that wasn't true |
+| Days the keeper missed a scheduled reading without a public incident note | 0 | status page is honest |
+If the first line is under 5, say so publicly in the T+30 post and change course (product, outreach or both) rather than seeding activity.

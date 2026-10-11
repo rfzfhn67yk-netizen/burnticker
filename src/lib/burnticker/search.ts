@@ -301,7 +301,8 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
   }
   cards.push(...weatherCards(query), ...feedCards(query, d.feeds));
   if (d.venues.polymarket && d.polyGet) {
-    try { cards.push(...raceCards(await loadRaces(d.polyGet, d.refuse), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); }
+    // an award / event phrase ("oscars", "best picture", "emmys") is never a race query: no candidate cards for it
+    if (!split.phrase) { try { cards.push(...raceCards(await loadRaces(d.polyGet, d.refuse), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); } }
     if (!cards.some((c) => c.score >= 1.5) && !person) {
       try {
         // polySearch.ts: the whole query, the event phrase and the entity; EVERY market of every hit event is read (not markets[0])

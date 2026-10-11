@@ -46,7 +46,7 @@ The sheet assumes the **default** shown in each row. Change it in the row if you
 the mint is written in. The row stays so the owner rereads the final text before hashing.
 
 Smaller items that must be done before launch (not blocking the devnet run): `OPERATOR_LINE` in `src/lib/burnticker/fees.ts` still says
-`TODO_CONTACT_ADDRESS` (LAUNCHPAD §18 "real name … + contact"). The platform CLI used to default `--web`/`--img` to `burnticker.com`. Since 2026-10-10
+`TODO_CONTACT_ADDRESS` (LAUNCHPAD §18 "operator line + contact"). The platform CLI used to default `--web`/`--img` to `burnticker.com`. Since 2026-10-10
 both flags are **required** for `--send` (steps A10 and B9 pass them), because the values are written on chain. The bug bounty
 (5–10 SOL) and both review reports must be published (LAUNCHPAD §19).
 

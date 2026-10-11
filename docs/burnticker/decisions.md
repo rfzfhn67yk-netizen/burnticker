@@ -53,7 +53,7 @@ $DEFICIT: fractionPerUnit 1%; a 3 SOL seed to the burn pool, a disclosed gift; n
 metadata name/symbol DEFICIT, description = rule sentence + disclaimer + rules hash. Platform: refuse list as above; elections
 allowed; anonymous creators allowed with the creator wallet always shown; one-shot markets allowed; pre-audit cap 25 SOL per burn
 pool with the excess queued, on the register with a sunset. Custody: Squads 2-of-3 (owner hardware key, owner second key, a trusted
-third), 48 h timelock on fee changes and upgrades. Operator line: real name, one independent operator (United States), with a contact address (which
+third), 48 h timelock on fee changes and upgrades. Operator line: a contact address (the real name and state were removed on 2026-10-10 — exposure; see that entry) (which
 one: TODO). A use-of-fees statement on the trust page (attesters, hosting, audit, operator; the platform never buys back any coin).
 Sequencing: launch at level 1 (quorum 1), attester #2 within 14 days with the due date on the register; hosting on one VPS behind
 Caddy with Cloudflare DNS; a devnet rehearsal the first weekday morning after the program merges. No platform coin until at least
@@ -104,3 +104,13 @@ Why 2 and not more: total burned over the coin's life equals fee income plus the
 buffer (≈ 9 days of inflow at 2 % with ~6 units/day, versus ≈ 17 at 1 % and ≈ 2 at 10 %) and how strongly a big debt day out-burns a
 small one. The devnet rehearsal coin stays at 1 % (`deficit.devnet.rules.json`); it was launched with that hash. Immutable once the
 mainnet token is initialised.
+
+## 2026-10-10 (late) — the operator's name and state leave every public surface
+
+Owner decision ("too much exposure"). The operator line, the whitepaper, the operator page and `.well-known`, the README, the licence,
+the incident template, the GTM drafts and the post generator now say "one independent operator (United States) — contact:
+contact@burnticker.com"; security reports go to security@burnticker.com. The signed operator statement binds the developer-fee
+wallet to "the operator of burnticker.com" rather than to a person. The identity is held privately until a legal entity exists;
+the entity, when formed, becomes the named party on /burnticker/operator. Nothing else about the trust pack changes: the wallets,
+the never-buys monitor, the reviews, the bounty and the verified build are unchanged. Tests pin the absence of the name on the
+operator line and in generated posts.

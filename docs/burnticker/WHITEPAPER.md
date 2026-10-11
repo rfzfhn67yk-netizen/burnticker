@@ -618,7 +618,7 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
   described as forthcoming; the platform never buys any coin.
 - **The operator also runs trading bots.** Every one refuses any platform coin by mint and ticker, fail-closed, in code
   (`src/lib/ownTokens.ts` reading `config/own-tokens.json`, both published).
-- **The operator:** one independent operator (United States). Contact address: TODO (`OPERATOR_CONTACT_TODO`).
+- **The operator:** one independent operator (United States). Contact: contact@burnticker.com; security reports: security@burnticker.com.
 - **How it was built:** with AI assistance (Claude Code) under the operator's direction and review.
 
 ## 13. Appendix

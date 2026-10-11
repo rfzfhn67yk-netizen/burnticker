@@ -14,11 +14,15 @@ export const queryTokens = (q: string): string[] => fold(q).split(" ").filter((w
 /** Tokens that may surface a card: three or more characters, or digits (a year, a district, a threshold). */
 export const meaningful = (tokens: readonly string[]): string[] => tokens.filter((w) => w.length >= 3 || /^\d+$/.test(w));
 
-/** Does one query token match a field (folded)? A whole-word match; a 2-letter token only next to a matched neighbour (checked by the caller); a long token (≥ 5) also inside the field written as one word. */
+/**
+ * Does one query token match a field (folded)? A whole-word match; a 2-letter token only next to a matched neighbour (checked by the
+ * caller); a long token (≥ 5) also as CONSECUTIVE WHOLE WORDS written as one ("elsayed" = "el sayed", "spiderman" = "spider man") —
+ * never a substring that runs across a word boundary ("oscars" is not "John OSCAR Salvesen": the live miss of 2026-10-10).
+ */
 function tokenIn(t: string, field: string): boolean {
   const words = field.split(" ");
   if (words.includes(t)) return true;
-  if (t.length >= 5 && field.replace(/ /g, "").includes(t)) return true;
+  if (t.length >= 5) for (let i = 0; i < words.length; i++) { let acc = ""; for (let j = i; j < words.length && acc.length < t.length; j++) { acc += words[j]; if (acc === t) return true; } }
   return false;
 }
 

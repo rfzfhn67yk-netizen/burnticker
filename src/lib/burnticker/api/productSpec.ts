@@ -18,7 +18,7 @@ export const PRODUCT_SCHEMAS: Record<string, Schema> = {
   OpsSearchMisses: obj({
     days: int,
     misses: obj({ since: str, total: int, noCard: int, noClick: int, queries: arr(obj({ query: str, misses: int, noCard: int, noClick: int, lastHour: str }, ["query", "misses"])) }, ["total", "queries"]),
-    timeToLaunch: obj({ since: str, drafts: int, steps: arr(obj({ step: str, label: str, n: int, p50Sec: nnum, p90Sec: nnum }, ["step", "n"])), total: obj({ n: int, p50Sec: nnum, p90Sec: nnum }) }, ["drafts", "steps"]),
+    timeToLaunch: obj({ since: str, drafts: int, steps: arr(obj({ step: str, label: str, n: int, p50Sec: nnum, p90Sec: nnum }, ["step", "n"])), total: obj({ n: int, p50Sec: nnum, p90Sec: nnum }), flow: obj({ n: int, screensP50: nnum, screensP90: nnum, decisionsP50: nnum, decisionsP90: nnum }) }, ["drafts", "steps"]),
     privacy: str,
   }, ["misses", "timeToLaunch"], { description: "Admin only (a trusted host and the action PIN): searches that missed, by query, and time-to-launch p50 / p90 per wizard step." }),
   CreatorCoin: obj({

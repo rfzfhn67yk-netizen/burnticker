@@ -89,7 +89,12 @@ export function CurveBar({ c, compact = false }: { c: Pick<CoinCardData, "phase"
   );
 }
 
-export function CoinCard({ c, href, now }: { c: CoinCardData; href: string | null; now?: number }) {
+/**
+ * `prelaunch` (the launch review card, 2026-10-10): the coin does not exist yet, so the card shows only what the rule fixes — the
+ * generated art, name, $TICKER, the one-liner, the badge — and none of the live rows (curve, burns, last burn, next result) or the
+ * draft / not-launched chips, which read as a broken coin before launch (the owner's paste: "NO IMAGE · draft · not launched · burns 0").
+ */
+export function CoinCard({ c, href, now, prelaunch = false }: { c: CoinCardData; href: string | null; now?: number; prelaunch?: boolean }) {
   const t = now ?? Date.now();
   const body = (
     <article className="bt-coin-card">
@@ -99,22 +104,22 @@ export function CoinCard({ c, href, now }: { c: CoinCardData; href: string | nul
           <div className="flex items-center gap-1.5 flex-wrap">
             <VenueChip oracle={c.oracle} />
             {c.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}
-            {c.status === "draft" && <span className="bt-chip bt-chip-draft" title="registered, not launched: nothing trades yet">draft</span>}
+            {c.status === "draft" && !prelaunch && <span className="bt-chip bt-chip-draft" title="registered, not launched: nothing trades yet">draft</span>}
             {c.pairId && <span className="bt-chip">pair</span>}
             {c.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{c.badge}</span>}
-            <span className="ml-auto text-[11px] text-neutral-500" title={c.launchedAt ?? "not launched"}>{c.launchedAt ? ago(c.launchedAt, t) : "not launched"}</span>
+            {!prelaunch && <span className="ml-auto text-[11px] text-neutral-500" title={c.launchedAt ?? "not launched"}>{c.launchedAt ? ago(c.launchedAt, t) : "not launched"}</span>}
           </div>
           <h3 className="mt-1 truncate text-base font-semibold leading-tight">{c.name || "Coin name"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>
           <p className="mt-0.5 line-clamp-2 text-sm text-neutral-300">{c.oneLiner}</p>
           <p className="mt-0.5 text-[10px] leading-tight text-neutral-500">Not affiliated with any team, league, candidate, agency or market.</p>
         </div>
       </div>
-      <div className="mt-3"><CurveBar c={c} compact /></div>
+      {!prelaunch && <><div className="mt-3"><CurveBar c={c} compact /></div>
       <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
         <div><dt className="text-neutral-500">burns</dt><dd className="font-mono tabular-nums text-neutral-200">{c.burns}</dd></div>
         <div><dt className="text-neutral-500">last burn</dt><dd className="font-mono text-neutral-200">{ago(c.lastBurnAt, t)}</dd></div>
         <div><dt className="text-neutral-500">next result</dt><dd className="font-mono text-neutral-200" title={c.nextAt ?? "no scheduled result known"}>{until(c.nextAt, t)}</dd></div>
-      </dl>
+      </dl></>}
     </article>
   );
   return href ? <Link href={href} className="block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bt-stamp,#9b84e6)]">{body}</Link> : body;
