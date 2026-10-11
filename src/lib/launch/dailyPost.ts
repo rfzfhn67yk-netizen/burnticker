@@ -218,6 +218,9 @@ export function platformDailyText(i: PlatformDailyInput): string {
   ].join("\n");
 }
 
+/** The daily post footer's registry-snapshot line (trust ops, 2026-10-10 night): the latest Arweave snapshot's date, sha256 and transaction id; null when none is pinned. */
+export const snapshotLine = (s: { date: string; sha256: string; arweaveTxId: string } | null | undefined): string | null => (s ? `Ledger snapshot ${s.date}: sha256 ${s.sha256.slice(0, 16)}… · arweave ${s.arweaveTxId}` : null);
+
 // ---- incidents ----
 export interface IncidentInput { at: number; what: string; affects: string; action: string; status: string; notAffected?: string }
 const stamp = (ms: number, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms)).replace(",", "");

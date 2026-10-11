@@ -20,7 +20,13 @@ is either public already (in the monorepo paths named, and in the public reposit
 | Every wallet (ops, deployer, keeper, dev fee, platform admin, Squads vault + 3 members, $DEFICIT mint pubkey, trading wallets) | `config/burnticker/transparency.json` → `wallets` (TODO until set; env vars fill some) | same path | "Every wallet" |
 | The decision log (dated, append-only) | `docs/burnticker/decisions.md` | same path | "Decision log" |
 | The changelog (every publish and deploy, with commit + program hash) | `docs/burnticker/CHANGELOG.md` | same path + root `CHANGELOG.md` | "Changelog" |
-| The incident log (append-only) | `docs/burnticker/incidents.md` | same path | "Incident log" |
+| The incident log (append-only) | `docs/burnticker/incidents/LOG.md` | same path | "Incident log" |
+| The incident policy (what counts, 48-hour public postmortem, where, who signs) and its template | `docs/burnticker/INCIDENTS.md`, `docs/burnticker/incidents/TEMPLATE.md` | same paths | "Incident policy" |
+| The daily registry snapshots (canonical JSONL of the whole ledger, pinned to Arweave; sha256 + transaction id per day) and their verifier | `src/lib/burnticker/ops/snapshot.ts`, `scripts/burnticker-verify-snapshot.mts` | same paths; the bytes on Arweave | "Registry snapshots on Arweave"; `GET /api/burnticker/v1/snapshots` |
+| The keeper's live status (heartbeat, role, every source's state, open alert kinds, wind-downs, the latest snapshot, programs) | `src/lib/burnticker/ops/status.ts`, `site/burnticker/status/` | same paths | linked: `https://status.burnticker.com/` |
+| Keeper redundancy (leader / standby, signed takeover notes) and what it does not guarantee | `src/lib/burnticker/ops/leaderLock.ts`, `readingFence.ts`, `docs/burnticker/runbook.md` | same paths | "Keepers — which one is active" |
+| Bring-your-own-attester guide and tools | `docs/burnticker/ATTESTERS.md`, `scripts/burnticker-attester.mts` | same paths | "Attesters per coin" |
+| The launch-day load test, its numbers, and the caching plan | `docs/burnticker/LOADTEST.md`, `scripts/ops/loadtest.sh` | same paths | — |
 | Known limitations (quorum 1, Switchboard shutdown, Kalshi off-chain read, one-shot markets, 25 SOL cap, devnet rehearsal not done, program not deployed, …) | `config/burnticker/transparency.json` → `limitations` | same path | "Known limitations" |
 | Policies (no deletions on X, corrections in-thread with the receipt, no paid promotion, the platform never buys any coin, nothing announced as coming later, …) | `config/burnticker/transparency.json` → `policies` | same path | "Policies" |
 | The public audit (every receipt recomputed) | `scripts/burnticker-audit.mts` → `audit.json` in the site dir | same script | "Public audit" |

@@ -9,9 +9,9 @@
 #   --start   also start mct-burnticker-web, mct-burnticker-keeper and mct-burnkeeper after enabling
 set -eu
 cd "$(dirname "$0")/../.."
-UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer"
+UNITS="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service mct-burnticker-audit.service mct-burnticker-audit.timer mct-burnticker-publish.service mct-burnticker-publish.timer mct-burnticker-clonewatch.service mct-burnticker-clonewatch.timer"
 ENABLE="mct-burnticker-keeper.service mct-burnticker-web.service mct-burnkeeper.service"
-TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer"
+TIMERS="mct-burnticker-audit.timer mct-burnticker-publish.timer mct-burnticker-clonewatch.timer"
 CHECK=0; START=0
 for a in "$@"; do case "$a" in --check) CHECK=1 ;; --start) START=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
 if [ "$(uname -s)" != "Linux" ]; then echo "systemd user units are a Linux thing; on the Mac nothing to install (the keepers run on the Burnticker VPS)"; exit 0; fi

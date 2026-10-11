@@ -48,6 +48,9 @@ import { DerbyAdapter } from "../src/lib/burnticker/derby/adapter.ts";
 import { HermesClient } from "../src/lib/burnticker/derby/pyth.ts";
 import { connectionPoolPort } from "../src/lib/burnticker/derby/pools.ts";
 import type { FetchLike } from "../src/lib/burnticker/oracle/types.ts";
+// TRUST OPS (2026-10-10 night): leader/standby role + the foreign-reading fence, feed health, the daily Arweave snapshot, status/status.json.
+import { KeeperOps } from "../src/lib/burnticker/ops/keeperOps.ts";
+import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -101,6 +104,7 @@ const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new 
 const operator = operatorPowersSummary(loadPowersRegister());
 const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscoveryEnabled(process.env);
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */
+const ops = new KeeperOps({ registry, siteDir: SITE, cluster, env: process.env, log, uploader: uploaderFromEnv(process.env, cluster), snapshots: !DRY, signer: built.chain ? { publicKey: built.chain.payer.publicKey.toBase58(), secretKey: built.chain.payer.secretKey } : null });
 const marketReader: MarketReader | null = RPC ? (new Connection(RPC, { commitment: "confirmed", disableRetryOnRateLimit: true }) as unknown as MarketReader) : null;
 
 async function publishAll(now: number): Promise<void> {
@@ -151,19 +155,23 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   }
   const r = await runBurntickerAlertCheck({ registry, siteDir: SITE, now, paused, balances, crankStreaks: tracker.snapshot(), sink });
   for (const a of r.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);
+  for (const a of await ops.alerts(sink, now)) log(`  [alert] ${a.slice(0, 160)}`);
   const launched = registry.tokens("live").map((t) => Date.parse(t.baselineAt)).filter((x) => Number.isFinite(x));
   let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] | null = null;
   try { alerts = registryAlertRows(registry, now); } catch { alerts = null; }
   publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook }));
 }
 
-log(`burnticker keeper starting — ${registry.tokens("live").length} live token(s) · ledger ${DB} · site ${SITE} · ${cluster}${DRY ? " · DRY RUN" : ""} · program ${program.programId} (${built.real ? `REAL: ${built.why}` : `FAKE — ${built.why}; nothing is sent`}) · alerts ${ALERTS ? `every ${ALERT_EVERY_MS / 60_000} min${RPC ? " with balances" : " (no BURNTICKER_RPC_URL: balances unknown)"}${webhook.configured ? " → webhook" : " (no BURNTICKER_ALERT_WEBHOOK: local only)"}` : "off (--once)"}`);
+log(`burnticker keeper starting — ${registry.tokens("live").length} live token(s) · ledger ${DB} · site ${SITE} · ${cluster}${DRY ? " · DRY RUN" : ""} · program ${program.programId} (${built.real ? `REAL: ${built.why}` : `FAKE — ${built.why}; nothing is sent`}) · ${ops.banner()} · alerts ${ALERTS ? `every ${ALERT_EVERY_MS / 60_000} min${RPC ? " with balances" : " (no BURNTICKER_RPC_URL: balances unknown)"}${webhook.configured ? " → webhook" : " (no BURNTICKER_ALERT_WEBHOOK: local only)"}` : "off (--once)"}`);
 while (!stopping) {
   const paused = fs.existsSync(PAUSE);
   if (paused && !DRY) log(`  ${PAUSE} present — cranks held, reading and publishing go on`);
   deps.dryRun = DRY || paused;
+  const gate = await ops.beforeCycle(deps);
+  deps.dryRun = DRY || paused || !gate.sendsAllowed;
+  let cycleReport: Awaited<ReturnType<typeof runCycle>> | null = null;
   try {
-    const r = await runCycle(deps);
+    const r = cycleReport = await runCycle(deps);
     tracker.note(r);
     const f = r.fetched.filter((x) => !x.skipped);
     if (f.length || r.planned.length || r.executed.length) log(`cycle: ${f.length} fetch(es), ${r.planned.length} planned, ${r.executed.length} executed${r.errors.length ? ` · errors: ${r.errors.slice(0, 3).join(" | ")}` : ""}`);
@@ -171,13 +179,14 @@ while (!stopping) {
   } catch (e) { log(`cycle failed: ${(e as Error).message.slice(0, 200)}`); }
   // Rivalry pairs on the pair curve (2026-10-10, docs/burnticker/PAIR-CURVE.md): graduate both sides / register / void — program
   // mode only, behind BURNTICKER_PAIR_CURVE_ENABLED. Permissionless cranks; the keeper key pays transaction fees only.
-  if (built.chain && pairCurveEnabled(process.env)) {
+  if (built.chain && pairCurveEnabled(process.env) && gate.sendsAllowed) {
     try {
       const pc = await crankPairCurves({ ctx: { connection: built.chain.connection, cluster: built.chain.cluster, burnReceiptsProgramId: new PublicKey(PROGRAM_ID!), allowMainnet: process.env.BURNTICKER_MAINNET === "1" }, cranker: built.chain.payer, dryRun: deps.dryRun, log });
       if (pc.acted.length || pc.errors.length) log(`pair curve: ${pc.scanned} pair(s) scanned, ${pc.acted.length} cranked${pc.errors.length ? ` · errors: ${pc.errors.slice(0, 3).join(" | ")}` : ""}`);
     } catch (e) { log(`pair curve crank failed: ${(e as Error).message.slice(0, 200)}`); }
   } else if (pairCurveEnabled(process.env) && !built.real) log(`  [pair-curve] ${PAIR_CURVE_FLAG} is set but the program client is the fake — nothing cranked`);
   try { await publishAll(Date.now()); } catch (e) { log(`publish failed: ${(e as Error).message.slice(0, 200)}`); }
+  await ops.afterCycle(cycleReport, paused, ALERTS ? sink : null);
   try { const w = writeOwnTokensGenerated(registry, process.env.OWN_TOKENS_GENERATED_PATH?.trim() || undefined); if (w.changed) log(`  [refuse-list] ${w.file} rewritten: ${w.count} platform token(s) — the arms re-read it on their next candidate`); } catch (e) { log(`  [refuse-list] not written: ${(e as Error).message.slice(0, 160)}`); }
   if (ALERTS && Date.now() - lastAlertAt >= ALERT_EVERY_MS) { lastAlertAt = Date.now(); try { await opsCheck(lastAlertAt, paused); } catch (e) { log(`  [alert] check failed: ${(e as Error).message.slice(0, 160)}`); } }
   if (ONCE) break;

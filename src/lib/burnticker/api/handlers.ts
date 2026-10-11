@@ -56,6 +56,7 @@ export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<st
   return null;
 }
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
+import { launchGuardRefusal } from "@/lib/burnticker/launchGuards";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
 
 /**
@@ -498,6 +499,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (refusals.length) return { error: fail(403, `refused: ${refusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals }) };
   if (p.registry.tickerTaken(input.ticker)) return { error: fail(409, `ticker ${input.ticker} is taken`, { code: "ticker-taken" }) };
   if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `mint ${o.mint} is already registered`, { code: "mint-taken" }) };
+  { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
   // (Polymarket: the payout vector + Gamma) — and creation refused if anything fails. Kalshi is always refused here: its terms forbid
   // settling products on its data. BURNTICKER_PREFLIGHT_STRICT=0 skips it (the test hook does, for the suite).
@@ -556,6 +558,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     if (bRefusals.length) return { error: fail(403, `side B refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
     if (p.registry.tickerTaken(side.ticker)) return { error: fail(409, `ticker ${side.ticker} is taken`, { code: "ticker-taken" }) };
+    { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null }); if (g) return { error: fail(g.status, `side B: ${g.error}`, g.extra) }; }
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
       const probe = await buildPairBundles({ a: input, b: { ...side, description: "" }, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });

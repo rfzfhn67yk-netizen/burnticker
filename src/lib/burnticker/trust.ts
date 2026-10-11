@@ -16,7 +16,7 @@ import { compareLivePlatform, CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, B
  *   team wallets      the operator's own wallets, and the rule that our bots refuse platform coins (config/own-tokens.json)
  *   attesters         second-attester / quorum status per token
  *   program           the deployed program's hash and how to verify it
- *   incidents         docs/burnticker/incidents.md, append-only, rendered as written
+ *   incidents         docs/burnticker/incidents/LOG.md (policy: docs/burnticker/INCIDENTS.md), append-only, rendered as written
  *   audit             the last run of scripts/burnticker-audit.mts (data/burnticker-site/audit.json): the public alarm
  *   transparency      config/burnticker/transparency.json (the owner, 2026-10-09: "i dont want to hide anything"): who runs this and
  *                     that the operator's trading bots refuse platform coins, how it was built (AI-assisted, AI-reviewed, no firm
@@ -109,7 +109,7 @@ export function teamWallets(env: Readonly<Record<string, string | undefined>> = 
 
 // ---- append-only markdown logs: incidents, decisions, changelog ----
 
-export const INCIDENTS_FILE = path.join("docs", "burnticker", "incidents.md");
+export const INCIDENTS_FILE = path.join("docs", "burnticker", "incidents", "LOG.md");
 export const DECISIONS_FILE = path.join("docs", "burnticker", "decisions.md");
 export const CHANGELOG_FILE = path.join("docs", "burnticker", "CHANGELOG.md");
 export interface MarkdownLog { markdown: string; entries: number; file: string; present: boolean }

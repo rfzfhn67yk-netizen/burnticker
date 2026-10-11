@@ -53,7 +53,7 @@ cat ~/.config/meme-coin-trader/signer-burnticker.enc.json.address               
 # the registry: add the new key as an attester on every live token and retire the old one (append-only: a new row + active=0 on the old)
 NEW_KEY=<new> OLD_KEY=<old> R --input-type=module -e 'import { openRegistry } from "./src/lib/burnticker/registry.ts"; const r = openRegistry("data/burnticker.db"); const NEW = process.env.NEW_KEY, OLD = process.env.OLD_KEY, now = Date.now(); for (const t of r.tokens()) { r.addAttester({ mint: t.mint, pubkey: NEW, role: "data-key", addedAt: now, timelockUntil: null }); if (OLD) r.addAttester({ mint: t.mint, pubkey: OLD, role: "data-key", addedAt: now, active: false, timelockUntil: null }); } r.close(); console.log("attesters updated on", r.tokens().length, "tokens")'
 systemctl --user restart mct-burnticker-keeper && rm data/PAUSE-burnticker
-# fund the new address (≥ 0.1 SOL); sweep the old one to the dev fee wallet once its last crank is confirmed; log it in docs/burnticker/incidents.md
+# fund the new address (≥ 0.1 SOL); sweep the old one to the dev fee wallet once its last crank is confirmed; log it in docs/burnticker/incidents/LOG.md
 ```
 
 For the **$DEFICIT keeper** (`signer-burnkeeper.enc.json`) the same applies since program execution (2026-10-10): the key is the TokenConfig's
@@ -73,15 +73,22 @@ as `[alert] …`. The morning block (`## Burnticker` in the check-in, `https://b
 | `bt-reading-conflict` | the oracle changed a recorded result; the registry refused and the key is HELD | Stop. Read the source and the stored reading (`sqlite3 data/burnticker.db "SELECT * FROM readings WHERE selector_key='…' AND event_id='…'"`). If the venue re-settled (rare, documented by them): the rule's `onVoid`/finality policy decides; the fix is an incident entry + a new reading row under a new event id if the rule allows — never an edit (the triggers refuse it). |
 | `bt-reading-implausible` | the adapter refused a reading (bounds, period, parse) | Look at the source row; if the bounds are wrong, that is a `config/burnticker/sources.json` change with a test — a rule change is impossible, the reading simply waits. |
 | `bt-crank-failed` | 3 failures in a row on one receipt | The log line says why: `simulation refused` (program/pool state — read the logs it quotes), `RPC/program error` (RPC down: check `BURNTICKER_RPC_URL`), `crank failed on chain`. The receipt retries with backoff forever; it is late, never lost. Fix the cause; do not touch the row. |
-| `bt-audit-mismatch` | audit.json: a receipt does not recompute | THE PUBLIC ALARM — the index badge is red. `R scripts/burnticker-audit.mts --json` lists the checks per receipt. A mismatch is either a code change in the recompute (revert it) or a tampered/duplicated row (the triggers make that hard; compare with the latest `.backup`). Publish the finding in `docs/burnticker/incidents.md` the same day. |
+| `bt-audit-mismatch` | audit.json: a receipt does not recompute | THE PUBLIC ALARM — the index badge is red. `R scripts/burnticker-audit.mts --json` lists the checks per receipt. A mismatch is either a code change in the recompute (revert it) or a tampered/duplicated row (the triggers make that hard; compare with the latest `.backup`). Publish the finding in `docs/burnticker/incidents/LOG.md` the same day. |
 | `bt-audit-stale` | the hourly audit has not run for 3 h | `systemctl --user list-timers mct-burnticker-audit.timer`; `systemctl --user start mct-burnticker-audit.service` and read `logs/burnticker-audit.log`. |
 | `bt-keeper-balance-low` | keeper key < 0.05 SOL | Send 0.1–0.2 SOL to `BURNTICKER_KEEPER_PUBKEY` (crank fees only; it is never the treasury). |
 | `bt-cap-binding` | a burn pool holds more than the 25 SOL pre-audit cap | Expected while the cap stands; the excess is queued and shown on the token page. It lifts with the audit decision (fees.ts `PRE_AUDIT_POOL_CAP_SOL`, a reviewed change + a register entry). |
 | `bt-keeper-stale` | no cycle for 10 min, not paused | `systemctl --user status mct-burnticker-keeper`; `journalctl --user -u mct-burnticker-keeper -n 50`; restart. |
 | `bt-daily-summary` | the one line a day | Read it. "pools X SOL" rising with no burns = check the feed; "dev fees unknown" = `BURNTICKER_RPC_URL`/`BURNTICKER_FEE_WALLET` unset. |
+| `bt-feed-down` | a source failed ≥ 3 reads in a row (trust ops; `src/lib/burnticker/ops/feedHealth.ts`) | The reading is withheld, nothing burns; the status page shows the selector "down". Check the source by hand; it resumes by itself. Over a day: an incident only if it changed an outcome (INCIDENTS.md §7). |
+| `bt-feed-disagree` | the source's independent cross-read disagreed on a reading | Withheld, never burned. Read both sources for that period by hand. If the primary re-publishes or the cross-read catches up, the next read agrees and the reading lands; a disagreement you resolve by hand is an incident (INCIDENTS.md §7). |
+| `bt-feed-stale` | a scheduled source has published nothing new for longer than its cadence allows (day feeds 5 days, monthly 100) | Check the publisher's release calendar (holidays, a shutdown). Nothing to invent: no new reading, no burn. |
+| `bt-snapshot-failed` | today's registry snapshot was not pinned (no `BURNTICKER_UPLOAD_PAYER`, an empty Irys balance, an upload error) | Retried every 30 min. Fund the upload payer / set it; or `R scripts/burnticker-snapshot.mts --now` by hand. Missed > 48 h = an incident (INCIDENTS.md §5). |
+| `bt-foreign-reading` | the fence found a reading on chain this keeper did not write and could not match it (two registries disagree on units) — **this keeper's sends are held** | Stop and reconcile: section "Keeper redundancy" below. An incident (INCIDENTS.md §6). |
+| `bt-keeper-yielded` | the leader sees a standby that took over (a signed note) and stopped cranking | Decide which host keeps running; fail back by hand (below). |
+| `bt-keeper-takeover` | the standby took over after N missed leader heartbeats | Find out why the leader stopped (host down, Caddy down, network); then fail back by hand (below). An incident if both were active (INCIDENTS.md §6). |
 | webhook FAILING (ops.json / morning block) | alerts stay on this host | `curl -s -o /dev/null -w '%{http_code}' -X POST -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"kind":"bt-test","key":"bt-test:'$(date +%s)'","text":"webhook test"}' "$BURNTICKER_ALERT_WEBHOOK"` → 200 expected; 403 = the Host is not trusted (use the tailnet address), 503 = `MCT_ALERT_INTAKE_TOKEN` unset on the trading VPS, 401 = token mismatch. |
 
-Every alert that changed anything gets a line in `docs/burnticker/incidents.md` (append-only, rendered on the trust page).
+Every alert that changed anything gets a line in `docs/burnticker/incidents/LOG.md` (append-only, rendered on the trust page) — and, when it is an incident under [INCIDENTS.md](INCIDENTS.md), a public postmortem within 48 hours from [incidents/TEMPLATE.md](incidents/TEMPLATE.md).
 
 ## Add a token by hand
 
@@ -146,7 +153,7 @@ aside, `cp` the backup into place, start — and an incident entry, because the 
 | # | Gate (one line) | Proof |
 |---|---|---|
 | 1 | Devnet rehearsal complete on the PROGRAM path: deploy → initialize_token → create (creator = fee PDA) → buy → keeper attests → claim into the fee PDA → register_pool → crank_buyback burns → receipt page green | `docs/burnkeeper/devnet-run.md` §4 table filled with explorer links; `data/burnkeeper-devnet-site/burns.json` shows one `confirmed` day with `execution: "program"` whose verify block recomputes; `status.json` `.program.attestation.lastReading` set |
-| 2 | MAINNET REHEARSAL COIN: a disclosed throwaway ($REHEARSAL, ~0.1 SOL, LP burned, listed on the trust page as a rehearsal) created under the REAL platform config 1–2 days before | its launch JSON saved (`/tmp/rehearsal.json`: `mint, poolId, creatorFeeVault, platformId`), a `confirmed` burn in `data/burnticker-site/t/REHEARSAL/receipts.json`, `audit.json` `ok: true`, and the rehearsal line in `docs/burnticker/incidents.md` |
+| 2 | MAINNET REHEARSAL COIN: a disclosed throwaway ($REHEARSAL, ~0.1 SOL, LP burned, listed on the trust page as a rehearsal) created under the REAL platform config 1–2 days before | its launch JSON saved (`/tmp/rehearsal.json`: `mint, poolId, creatorFeeVault, platformId`), a `confirmed` burn in `data/burnticker-site/t/REHEARSAL/receipts.json`, `audit.json` `ok: true`, and the rehearsal line in `docs/burnticker/incidents/LOG.md` |
 | 3 | Fee routing on the rehearsal coin's first real trades: creator == the program's fee PDA, platform fee vault accrues 25 bps | `jq '.creator, .burnPool.feePda, .burnPool.creatorIsFeePda' /tmp/rehearsal.json` → the same address twice and `true`; `spl-token balance --address <creatorFeeVault>` grew by 0.5% of a test buy; the platform vault (`platformFeeVault` in the JSON) grew by 0.25% |
 | 4 | Two-person pre-send read of the launch JSON (mint, decimals 6, supply, creator, platform id, rules sha, metadata URI/image) against this checklist | the dry-run JSON (`/tmp/deficit-dry.json`) initialled by the owner next to each field; `jq '.rules.sha256' /tmp/deficit-dry.json` equals `R scripts/burn-keeper.mts --print-rules` and `BURNKEEPER_RULES_SHA` |
 | 5 | Mint-first announcement: the mint address is in both X bios and on the site BEFORE any other post ("the only $DEFICIT is mint …") | screenshots of both bios with the mint; `grep -c <mint> /var/www/deficit/index.html` ≥ 1 and `curl -s https://<deficit host>/status.json | jq .addresses.mint` |
@@ -235,3 +242,111 @@ the keepers afterwards.
    refusals if any candidate carries the mint or ticker; the 14-day clock for signer two starts (trust page shows the due date; signer two is
    added on chain by `propose_attesters` together with the quorum raise to 2 — the shared-message submission is in place, and since
    review 3 a kept key must be ≥ 7 days in the set before it can vouch for a new one, which the 14-day clock satisfies); nothing else changes.
+11. **Anti-impersonation, the same morning** (growth batch, owner-approved 2026-10-10). Copycats appear within the first hour of any
+   launch. Do these in order:
+   - **First post, then pin it.** The first post names the canonical mint and the burn_receipts program id in full, not shortened, and
+     links `https://burnticker.com/burnticker/verify?mint=<MINT>`, which must answer "Burnticker coin: yes". Pin that post on @BurnTicker
+     (and on @USA_DEFICIT for $DEFICIT). Every later post links the coin page, which shows "verified by program · mint …" above the fold.
+   - **Verification requests, launch morning:**
+     - DexScreener Enhanced Token Info for the mint (the paid form). Give the site, the X account and the logo, which is the generated
+       receipt art.
+     - Solscan token-info update for the mint (site, socials, logo).
+     - Jupiter: the token verification request for the mint, through whatever form Jupiter currently uses (check its docs that morning).
+     Record each request's date and reference in `docs/burnticker/incidents.md`, under "verification requests". None of them is a
+     launch gate.
+   - **Clone watch on:** `systemctl --user enable --now mct-burnticker-clonewatch.timer` (installed by `install-burnticker-units.sh`).
+     Then `tail -n 20 logs/burnticker-clonewatch.log` after the first scan. `/burnticker/not-burnticker` and
+     `GET /api/burnticker/v1/clones` list each lookalike with evidence only. The launch handler already refuses lookalike tickers and
+     names (`src/lib/burnticker/lookalike.ts`) and any mint that already exists.
+   - **Impersonator accounts, the same day:** report any X / Telegram account that impersonates @BurnTicker, @USA_DEFICIT or the
+     platform. Use the platform's own impersonation form, from the owner's account. Note the handle, the time and the report reference
+     in `docs/burnticker/incidents.md`. Never name a person in public; the "Not Burnticker" page lists tokens and evidence, not people.
+
+## Trust ops (owner-approved 2026-10-10 night)
+
+### Registry snapshots on Arweave
+
+Once per UTC day (first cycle after 00:15 UTC) the ACTIVE keeper exports the append-only ledger — rules, readings, receipts, pairs,
+pair outcomes, rule ends, launch pins — as canonical JSONL, uploads it through Irys and records `{date, sha256, arweaveTxId,
+rowCounts}` in the registry's write-once `snapshots` table (`src/lib/burnticker/ops/snapshot.ts`). Needs `BURNTICKER_UPLOAD_PAYER` in the
+host's env file (the same ops wallet that pins coin metadata; never the keeper signer) and a funded Irys balance; without it the job
+refuses and alerts (`bt-snapshot-failed`) — there is never a server-hosted copy in its place.
+
+```sh
+R scripts/burnticker-snapshot.mts --list                        # every recorded snapshot
+R scripts/burnticker-snapshot.mts --now                         # today's now, if not taken (exit 3 = refused: no payer)
+R scripts/burnticker-snapshot.mts --export /tmp/ledger.jsonl    # the canonical bytes locally (no upload, nothing recorded)
+R scripts/burnticker-verify-snapshot.mts <txid> --cluster mainnet --api https://burnticker.com             # anyone: re-download, recompute, compare
+R scripts/burnticker-verify-snapshot.mts <txid> --cluster mainnet --db ~/backups/burnticker-<stamp>.db      # + every row still present, unchanged
+```
+
+The latest hash is on the status page, in `GET /api/burnticker/v1/snapshots`, on the trust page and in the platform daily post's footer
+(`scripts/burnkeeper-post-draft.mts --template=platform` reads it from `status/status.json`).
+
+### The public status page
+
+`status/status.json` is rewritten every cycle into the publish dir (`src/lib/burnticker/ops/status.ts`; schema in that file's header):
+keeper heartbeat and role, every selector's last good read, cross-read agreement and staleness, open alert kinds and counts (no text),
+wind-downs and retired coins with their last sweep, the latest snapshot, program ids with the verified-build status, the fence. The
+page that renders it is `site/burnticker/status/index.html` (shipped by `sh scripts/ops/deploy-sites.sh --pages-only`, and by every
+`--publish-only` run of the timer). Served at `https://status.burnticker.com/` (Caddy site block; **owner: add the DNS record `A status
+→ the Burnticker VPS`, grey cloud until the certificate is issued**) and at `https://burnticker.com/status/`.
+
+### Keeper redundancy (leader / standby)
+
+`BURNTICKER_KEEPER_ROLE=leader` (default) on the primary host; on a second host `BURNTICKER_KEEPER_ROLE=standby` with
+`BURNTICKER_LEADER_STATUS_URL=https://burnticker.com/status/status.json`, and on the leader `BURNTICKER_PEER_STATUS_URL=<the standby's
+public status.json>`. Tunables: `BURNTICKER_TAKEOVER_MISSED` (default 5), `BURNTICKER_HEARTBEAT_STALE_SEC` (default 180). Code:
+`src/lib/burnticker/ops/leaderLock.ts`, `readingFence.ts`, hooked into the keeper by `keeperOps.ts`.
+
+- The standby runs every cycle PASSIVE: it reads every source, plans into its own registry, publishes its own status.json — and
+  signs and sends nothing. It counts a heartbeat when the leader's status.json says `role: leader` and its last cycle is younger than
+  180 s. After 5 consecutive misses (≈ 3 min of staleness + 5 one-minute cycles ≈ 8 minutes) it writes a takeover note signed with its
+  keeper key (`data/burnticker-takeover.json`, published in its status.json) and goes ACTIVE. Without a key on the host it never
+  takes over.
+- The leader reads the standby's status.json each cycle and YIELDS (reads and publishes, cranks nothing) while the standby is active
+  with a takeover note whose signature verifies. An unreachable standby never makes the leader yield.
+- **Fail back by hand:** on the standby `systemctl --user stop mct-burnticker-keeper && mv data/burnticker-takeover.json
+  data/burnticker-takeover.$(date +%Y%m%d-%H%M).json && systemctl --user start mct-burnticker-keeper` — it is passive again on its
+  next cycle; the leader sees an inactive peer and resumes. Log it in incidents/LOG.md.
+- **Keys:** to attest, a keeper needs a key in each coin's attester set. The program adds a key only with a quorum raise (fewer new
+  keys than the new quorum — ATTESTERS.md §4), and then BOTH keys must sign every reading, which defeats redundancy. So the choice is:
+  (A) the standby holds a copy of the same keeper key (full takeover; the key now lives on two hosts — twice the exposure), or (B) the
+  standby holds only its own fee-payer key: after a takeover it publishes, runs the pair-curve cranks and cranks readings the leader
+  already attested (cranking is permissionless — while the pre-audit cap is in force its key must be on the platform's cranker
+  allowlist), and NEW readings wait (quorum-short) until the leader's key is back. Today's default is (B); (A) is the owner's call.
+
+**What this design does NOT guarantee (said plainly):**
+
+1. **It is not a lock.** Nothing shared decides who is active; each host decides from what it can see. In a symmetric partition
+   (neither host can read the other's status page — e.g. the leader's outbound HTTPS is down while it still reaches its RPC) **both
+   keepers are active for as long as the partition lasts**, not for a bounded number of minutes. With a one-way partition the leader
+   yields within one cycle of seeing the note.
+2. **Two active keepers cannot double-burn one reading:** the program stores one reading per date — a second `submit_reading` for the
+   same date with the same counter is a no-op (it lands, changes nothing), with a different counter it is refused
+   (`ConflictingReading`), and a date at or before the config's last one is refused (`StaleReading`) — and it processes each reading
+   once (`AlreadyProcessed`). They **can double-pay fees**: every duplicate or losing `submit_reading`, crank, creator-fee claim or
+   health check that reaches the chain costs its base and priority fee (a few thousand lamports each).
+3. **Counting the same receipt into two readings** (a keeper whose registry missed the other's landed reading would add the same units
+   to the next day) is prevented by the fence, not by the program: before every cycle a keeper adopts any on-chain reading it did not
+   write whose units equal its own unassigned receipts through that day, and HOLDS all sends (`bt-foreign-reading`) when they differ.
+   The match is on unit totals per reading, not on event ids (the program stores only the hash of the source URL that names them); a
+   coincidental equal total is adopted. A cycle that is already past its fence when the other keeper's reading lands loses its
+   `submit_reading` in simulation (point 2) and is fenced next cycle.
+4. **Takeover is slow on purpose** (≈ 8 minutes) and readings are late, never lost, in between. A leader that is alive but whose public
+   status page is unreachable (Caddy or Cloudflare down) looks dead to the standby; that is a takeover, and the leader yields only if it
+   can read the standby's page.
+5. **Both hosts alert** (each dedupes per key per day on its own), and both snapshot on a day both were active (two records, two
+   registries; the public API shows the host DNS points at). The public pages always show the DNS host's view.
+6. A standby's registry is its own (fed from the same sources, seeded from a `.backup` of the leader's); after a takeover the two
+   registries are reconciled by hand before failing back if the fence held anything.
+
+### Monthly drills
+
+- **Source-outage drill, first Monday of each month** (≈ 1 minute, no network, scratch registry): `R scripts/burnticker-drill.mts --feed
+  treasury.debt --all` and one feed per category in rotation (`bls.eggs`, `noaa.flares`, `fred.UNRATE`). Every mode must print `DRILL
+  PASSED` with five ✓ (control, withheld, alert, status, no-crank). A failure is an incident (INCIDENTS.md §3/§7). Note the date in
+  incidents/LOG.md only when it fails.
+- **Snapshot verify, same day:** `R scripts/burnticker-verify-snapshot.mts <latest txid> --cluster mainnet --db <latest .backup>` → `SNAPSHOT VERIFIED`.
+- **Standby check, same day:** the standby's status page says `standby · passive` with a heartbeat under 3 minutes, and the leader's
+  status page shows the peer reachable.

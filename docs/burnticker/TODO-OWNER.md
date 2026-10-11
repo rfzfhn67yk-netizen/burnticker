@@ -42,6 +42,16 @@ phrase or password), or edit the named file yourself and say "done". For each, I
 | 21 | **Fill the mainnet program facts** | The verified-build table's `deployed.mainnet` and the trust page's program block | `config/burnticker/verified-build.json` (`deployed.mainnet: null`) | after deploy, tell me; I run `bash scripts/ops/verified-build.sh --onchain mainnet` and record it |
 | 22 | **Daily independent debt source** | $DEFICIT's (treasury.debt) only cross-read, FRED GFDEBTN, is quarterly, so a daily reading is corroborated at series level only (ChatGPT/Codex review N2; each receipt says so). Accepted for now (2026-10-10) | `src/lib/burnticker/catalogue/corroborate.ts` (quarter-end branch); `config/burnticker/sources.json` (`fact: us.debt.total-public-outstanding`) | name a daily, independently operated source of total public debt outstanding (another operator, another domain), or decide the series-level check stays |
 
+## Trust ops (2026-10-10 night)
+
+| # | What | Why | Where | How |
+|---|---|---|---|---|
+| 22 | **DNS record for the status page** | `https://status.burnticker.com/` is configured in Caddy (`BURNTICKER_STATUS_DOMAIN`) but has no DNS yet; `/status/` on the apex works without it | `deploy/caddy/Caddyfile`, `docs/burnticker/runbook.md` "The public status page" | Cloudflare → `A status <Burnticker VPS IPv4>`, grey cloud until Caddy has the certificate, then proxied; then `sh scripts/ops/deploy-sites.sh --pages-only` on the box after the next ship |
+| 23 | **Cloudflare cache rules** | Absorb a launch spike at the edge without ever caching receipts | `docs/burnticker/LOADTEST.md` "Cloudflare cache rules" | five rules in the dashboard, in the order written there |
+| 24 | **The API limiter's client key behind Cloudflare** | The per-client rate limit keys on the Cloudflare edge's address, so visitors behind one edge share a bucket (the load test's finding) | `docs/burnticker/LOADTEST.md` "Finding" | say "fix it" and I change Caddy's trusted proxies + the limiter's key together, and close 80/443 to non-Cloudflare addresses |
+| 25 | **A standby keeper: which host, and which key option** | Leader/standby is built; it needs a second host and the choice between (A) the same keeper key on both hosts or (B) a fee-payer-only standby | `docs/burnticker/runbook.md` "Keeper redundancy" | pick a host and A or B; nothing changes until then (the keeper defaults to leader with no peer) |
+| 26 | **The Irys payer also pays the daily registry snapshot** | Item 16's ops wallet; without it the snapshot job refuses and alerts once a day | `docs/burnticker/runbook.md` "Registry snapshots on Arweave" | same as item 16; a snapshot is a few hundred kB a day at Irys' price |
+
 ## Already resolved (kept for the record)
 
 - Operator contact: contact@burnticker.com, security@burnticker.com (2026-10-10).

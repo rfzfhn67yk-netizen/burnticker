@@ -610,7 +610,7 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
   (`config/public-repo.denypatterns`); the operator's trading code never leaves. Licence: MIT, brand assets excluded. Every publish
   appends the commit, program hash, IDL hash and allowlist hash to `docs/burnticker/CHANGELOG.md`.
 - **Powers Register:** `docs/burn-receipts/powers-register.{md,json}`, generated from the IDL.
-- **Decision log:** `docs/burnticker/decisions.md`, append-only. **Incident log:** `docs/burnticker/incidents.md` (no incidents
+- **Decision log:** `docs/burnticker/decisions.md`, append-only. **Incident log:** `docs/burnticker/incidents/LOG.md` (no incidents
   recorded). **Review reports:** `docs/burnticker/reviews/`.
 - **Wallet list:** `config/burnticker/transparency.json` names every role (operations, deployer, keeper, developer fee, LaunchLab
   platform admin, Squads vault and three members, the $DEFICIT mint, the operator's trading wallets). Every public key is TODO until set.

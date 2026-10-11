@@ -32,7 +32,7 @@ import path from "node:path";
 import type { BurnJson, StatusJson } from "@/lib/burnKeeper/statusPage";
 import type { PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
-import { allLeaguesLine, dailyText, dayState, incidentText, noBurnText, pickTemplate, platformDailyText, receiptPostText, scoreboardLeagues, scoreboardText, weeklyText, type DailyTemplate, type NoBurnReason } from "@/lib/launch/dailyPost";
+import { allLeaguesLine, dailyText, dayState, incidentText, noBurnText, pickTemplate, platformDailyText, receiptPostText, scoreboardLeagues, scoreboardText, snapshotLine, weeklyText, type DailyTemplate, type NoBurnReason } from "@/lib/launch/dailyPost";
 import { dateIn } from "@/lib/burnKeeper/schedule";
 
 const positional: string[] = [];
@@ -145,7 +145,9 @@ function main(): void {
     const receiptsByTicker: Record<string, ReceiptJson[]> = {};
     for (const t of ix.tokens) receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
     const day = args.get("date") ?? new Date(now).toISOString().slice(0, 10);
-    emit(platformDailyText({ index: ix, receiptsByTicker, day, site }), `platform · ${day}`);
+    // footer: the latest registry snapshot on Arweave (status/status.json, written by the keeper every cycle; trust ops 2026-10-10)
+    const snap = snapshotLine(readJson<{ snapshot?: { date: string; sha256: string; arweaveTxId: string } | null }>(path.join(platformDir, "status", "status.json"))?.snapshot ?? null);
+    emit([platformDailyText({ index: ix, receiptsByTicker, day, site }), snap].filter(Boolean).join("\n"), `platform · ${day}`);
     return;
   }
 

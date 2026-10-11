@@ -40,6 +40,9 @@ scripts/whitepaper-html.mjs
 #     every file it lists is covered by the src/lib/{burnticker,burnReceipts,burnKeeper} lines above) ---
 packages/burnticker-sdk
 packages/burnticker-sdk/public-closure.json
+# the bot starter kit (growth batch 2026-10-10): follow / launch-preview / post-queue samples on the SDK; imports only the SDK (through
+# its one line src/sdk.ts) and the public post generator + copy lint named below
+packages/burnticker-bot-starter
 
 # --- public launch content: the daily post and its copy lint (the token page and scripts/burnkeeper-post-draft.mts import them) and
 #     the lint's word list. Named file by file: the rest of src/lib/launch (drafts, other launchpads' tooling) uses the private database. ---
@@ -81,8 +84,11 @@ scripts/service/run-burnticker-web.sh
 scripts/service/run-burnkeeper.sh
 scripts/service/run-burnticker-keeper.sh
 scripts/service/run-burnticker-audit.sh
+scripts/service/run-burnticker-clonewatch.sh
 scripts/ops/deploy-sites.sh
 scripts/ops/install-burnticker-units.sh
+scripts/ops/loadtest.sh
+scripts/ops/loadtest.mjs
 
 # --- tests and the fixtures they read ---
 test/burnKeeper*.ts
@@ -105,4 +111,5 @@ scripts/ops/verified-build.sh
 public/.well-known/burnticker.json
 test/fixtures/burnticker-trustpack/**
 test/fixtures/burnticker-season/**
+test/fixtures/burnticker-ops/**
 scripts/ops/codex-setup.sh

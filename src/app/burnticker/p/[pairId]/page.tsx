@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
 
 /**
@@ -90,6 +91,7 @@ export default function PairPage() {
 
       {receiptsTable(d.a)}
       {receiptsTable(d.b)}
+      {d.a.status.status !== "draft" && d.b.status.status !== "draft" && <EmbedSnippet kind="pair" id={d.pair.pairId} label={`$${A} vs $${B}`} />}
 
       <section className="grid md:grid-cols-2 gap-3">{([[d.a, "A"], [d.b, "B"]] as const).map(([s, side]) => (
         <div className={card} key={side}><div className="text-xs text-neutral-400">side {side}</div><h2 className="font-medium"><Link className="underline" href={`/burnticker/t/${s.status.ticker}`}>${s.status.ticker}</Link> <span className="text-neutral-400 font-normal">{s.status.name}</span></h2><p className="text-xs text-neutral-400 mt-1">{s.status.rules.statement}</p><p className="text-xs text-neutral-500 mt-1 break-all">rules sha256 {s.status.rules.sha256}</p></div>

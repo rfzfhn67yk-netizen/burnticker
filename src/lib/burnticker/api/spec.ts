@@ -13,6 +13,8 @@
 import { DERBY_ENDPOINTS, DERBY_SCHEMAS } from "@/lib/burnticker/api/derbySpec";
 import { TRUSTPACK_ENDPOINTS, TRUSTPACK_SCHEMAS } from "@/lib/burnticker/trustpack/spec";
 import { PRODUCT_ENDPOINTS, PRODUCT_SCHEMAS } from "@/lib/burnticker/api/productSpec";
+import { BADGE_ENDPOINTS, BADGE_SCHEMAS } from "@/lib/burnticker/api/badgeSpec";
+import { OPS_ENDPOINTS, OPS_SCHEMAS } from "@/lib/burnticker/ops/spec";
 
 export type Bucket = "read" | "heavy" | "write";
 type Schema = Record<string, unknown>;
@@ -24,9 +26,11 @@ export interface Endpoint {
   /** Seconds a 200 may be cached (public, CDN + client). 0 = no-store. POST routes are never cached. */
   cacheSec: number;
   bucket: Bucket;
+  /** Further 200 media types besides application/json (the badge's image/svg+xml and image/png, since 1.7.0). */
+  media?: string[];
 }
 
-export const API_VERSION = "1.6.0";
+export const API_VERSION = "1.7.0";
 export const API_PREFIX = "/api/burnticker/v1";
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
@@ -51,6 +55,8 @@ export const SCHEMAS: Record<string, Schema> = {
   ...DERBY_SCHEMAS,
   ...TRUSTPACK_SCHEMAS,
   ...PRODUCT_SCHEMAS,
+  ...BADGE_SCHEMAS,
+  ...OPS_SCHEMAS,
   Error: obj({ error: str, code: str, problems: arr(str), retryAfterSec: int }, ["error"]),
   BurnMapping: obj({ fractionOfPool: { type: "number", minimum: 0.01, maximum: 1, description: "buyback: fraction of the burn pool spent buying the token at market, all of it burned (≤ 0.10 for recurring rules; a one-shot may go to 1.00 since 1.4.0)" }, tokens: { type: "integer", minimum: 1, description: "vault: tokens burned from the vesting vault" } }, [], { description: "Exactly one key." }),
   Rule: obj({
@@ -242,6 +248,8 @@ export const ENDPOINTS: Endpoint[] = [
   ...DERBY_ENDPOINTS,
   ...TRUSTPACK_ENDPOINTS,
   ...PRODUCT_ENDPOINTS,
+  ...BADGE_ENDPOINTS,
+  ...OPS_ENDPOINTS,
   { operationId: "getCatalogue", method: "GET", path: "/catalogue", tag: "sources", summary: "Every resolution source with its tier", description: "The configured first-party sources (tiers 3–5, with the last fixture reading, a preview and the public selection config), the on-chain facts, and the market/assertion stubs (shown, not launchable). Kalshi series are searched live through /kalshi/search.", params: [], request: null, response: "Catalogue", errors: [429], cacheSec: 300, bucket: "read" },
   { operationId: "getSourcePreview", method: "GET", path: "/sources/{id}/preview", tag: "sources", summary: "What a catalogue rule would have burned over the source's frozen fixture", description: "The source fixes unit, direction, baseline and carry; you choose only the mapping (fractionOfPool for buyback, or tokens for vault mode).", params: [{ name: "id", in: "path", required: true, description: "source id, e.g. treasury.debt or wiki.views:Bitcoin", schema: str }, { name: "fractionOfPool", in: "query", required: false, description: "buyback mapping per unit, 0.01–0.10 (default 0.02)", schema: num }, { name: "tokens", in: "query", required: false, description: "vault mapping per unit (switches the preview to vault mode)", schema: int }], request: null, response: "SourcePreview", errors: [400, 404, 429], cacheSec: 300, bucket: "read" },
   { operationId: "searchKalshiEvents", method: "GET", path: "/kalshi/events", tag: "kalshi", summary: "Search Kalshi events: games, contests, people (or list a series' upcoming events)", description: "Event-level search: `q` is matched against event title, event ticker, market labels and suffixes, with a team-alias table (city, nickname, abbreviation: eagles / philadelphia / PHI; jaguars / jacksonville / JAC / JAX). Scans `series` when given, else the league series of the teams the query names, else the headline game leagues plus series whose titles share a word with the query. Events are cached 10 minutes per series. `?series=KXNFLGAME` alone lists its upcoming events; no parameters returns the league chooser. Two-team games carry both sides and both selector modes. Tickers and labels only — no prices.", params: [{ name: "q", in: "query", required: false, description: "a team, person, contest or ticker", schema: str }, { name: "series", in: "query", required: false, description: "scan only this series", schema: str }, { name: "status", in: "query", required: false, description: "open (default), closed or settled", schema: { enum: ["open", "closed", "settled"] } }], request: null, response: "KalshiEvents", errors: [429, 502, 503], cacheSec: 60, bucket: "heavy" },
@@ -285,7 +293,7 @@ export function buildOpenApi(serverUrl = API_PREFIX): Record<string, unknown> {
       operationId: e.operationId, tags: [e.tag], summary: e.summary, description: e.description,
       parameters: e.params.map((p) => ({ name: p.name, in: p.in, required: p.required, description: p.description, schema: p.schema })),
       responses: {
-        200: { description: "OK", headers: { "RateLimit-Limit": { schema: int }, "RateLimit-Remaining": { schema: int } }, content: { "application/json": { schema: e.response === "OpenApi" ? { type: "object" } : ref(e.response) } } },
+        200: { description: "OK", headers: { "RateLimit-Limit": { schema: int }, "RateLimit-Remaining": { schema: int } }, content: { "application/json": { schema: e.response === "OpenApi" ? { type: "object" } : ref(e.response) }, ...Object.fromEntries((e.media ?? []).map((m) => [m, { schema: { type: "string", format: "binary" } }])) } },
         ...Object.fromEntries(e.errors.map((c) => [c, { description: ERROR_TEXT[c] ?? "error", content: { "application/json": { schema: ref("Error") } } }])),
       },
       "x-cache-seconds": e.cacheSec, "x-rate-limit": RATE_LIMITS[e.bucket].human,

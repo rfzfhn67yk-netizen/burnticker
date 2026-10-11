@@ -19,7 +19,7 @@ can only crank burns is the whole blast radius of this box. `scripts/ops/install
 
 | Piece | Host | Unit | Writes / serves |
 |---|---|---|---|
-| Caddy | Burnticker | system `caddy` | `deploy/caddy/Caddyfile`: static `/var/www/burnticker` at `/`, `/var/www/deficit` at `/deficit/` and at the $DEFICIT host's root, proxies ONLY `/burnticker`, `/burnticker/*`, `/api/burnticker/*`, `/_next/*` to the app |
+| Caddy | Burnticker | system `caddy` | `deploy/caddy/Caddyfile`: static `/var/www/burnticker` at `/`, `/var/www/deficit` at `/deficit/` and at the $DEFICIT host's root, proxies ONLY `/burnticker`, `/burnticker/*`, `/api/burnticker/*`, `/_next/*` to the app; the status page at `status.burnticker.com` and `/status/`; the static fallback (`/var/www/burnticker/fallback/`, 503) when the app is down or answers a page with 5xx (trust ops, 2026-10-10 night; docs/burnticker/LOADTEST.md) |
 | Next app | Burnticker | `mct-burnticker-web` (`run-burnticker-web.sh`, `127.0.0.1:3000`, production) | the PUBLIC tree's app (below): the wizard, in-app token, rivalry, docs and trust pages, `/api/burnticker/*`; reads `data/burnticker.db` (the launch route writes drafts) |
 | `scripts/burnticker-keeper.mts` | Burnticker | `mct-burnticker-keeper` (loop) | reads selectors, plans and cranks receipts, publishes `data/burnticker-site` every cycle, writes `data/own-tokens.generated.json`, runs the ops alert check every 5 min and publishes `ops.json` |
 | `scripts/burn-keeper.mts` | Burnticker | `mct-burnkeeper` (loop) | the $DEFICIT keeper; publishes `data/burnkeeper-site` |
@@ -50,6 +50,10 @@ the local env file in `~/meme-coin-trader` (user `mct`) on the Burnticker host, 
 | `BURNTICKER_RPC_URL`, `NEXT_PUBLIC_BURNTICKER_RPC_URL` | an RPC for balance reads, the trust page's live reads and the on-chain source kind; the wizard's public endpoint. REQUIRED to take a draft live: a launch confirmation is read from the chain first (review N1); without it every confirmation answers 503 |
 | `BURNTICKER_ALERT_WEBHOOK`, `BURNTICKER_ALERT_WEBHOOK_TOKEN` | where ops alerts are POSTed (the trading VPS's alert-intake route over Tailscale: `http://<trading-host-tailnet-ip>:3001/<intake path>`) and its bearer token |
 | `OWN_TOKENS_GENERATED_PATH` | optional override of `data/own-tokens.generated.json` |
+| `BURNTICKER_KEEPER_ROLE` | `leader` (default) or `standby` — keeper redundancy (runbook "Keeper redundancy"; `src/lib/burnticker/ops/leaderLock.ts`) |
+| `BURNTICKER_LEADER_STATUS_URL` / `BURNTICKER_PEER_STATUS_URL` | on a standby: the leader's public `status.json` (its heartbeat); on the leader (and its web app, for the trust page): the standby's. https only (or a loopback / tailnet address) |
+| `BURNTICKER_TAKEOVER_MISSED`, `BURNTICKER_HEARTBEAT_STALE_SEC` | a standby's takeover after N missed heartbeats (default 5) of a leader whose last cycle is older than S seconds (default 180) |
+| `BURNTICKER_STATUS_URL` | optional: where the trust page links the status page (default `/status/`) |
 
 On the **trading host's** environment file: `MCT_ALERT_INTAKE_TOKEN` (16+ characters, the same string as the webhook token) opens the intake route;
 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` stay there (the Burnticker host does not get them: one Telegram sender, one place to look). On
@@ -117,6 +121,7 @@ address is never used: its web listens on the Tailscale address only and its fir
    - `A  @    <Burnticker VPS public IPv4>`  — **DNS only (grey cloud) for the first hour**
    - `A  www  <Burnticker VPS public IPv4>`  — same
    - the $DEFICIT host: `A  deficit  <same IPv4>` (or whatever name the owner picks; set `DEFICIT_DOMAIN` to match), same
+   - the public status page: `A  status  <same IPv4>` (set `BURNTICKER_STATUS_DOMAIN` if the name differs), same
    - (if the box has IPv6 and Caddy should answer on it: matching `AAAA` records)
 2. Firewall on the box (provision step 5): `ufw` default deny; `80/tcp` and `443/tcp` from anywhere; `22/tcp` only from the tailnet's CGNAT range (`ufw allow from <tailnet range>`, see the provision script)
    and `tailscale0`. If the provider's **cloud firewall** is attached to the server, add inbound TCP 80 and 443 there too (and remove public 22).
@@ -188,7 +193,8 @@ None of these are in the repository. Each one goes into the host's environment f
 - **`BURNTICKER_UPLOAD_PAYER`**: the ops wallet that pays Irys to pin each coin's metadata JSON and receipt-art PNG on Arweave
   (about $0.01–0.05 per coin). It is a base58 Solana secret key, used only for uploads, and it is never the keeper's signer. Fund it
   with a small balance and top it up. The Irys client (`@irys/upload`, `@irys/upload-solana`) is in `package.json`, so `npm ci` installs it.
-  **Until this key is set, every launch is refused**, because a coin's metadata is never hosted on a server that could change it.
+  **Until this key is set, every launch is refused**, because a coin's metadata is never hosted on a server that could change it. The same
+  payer pins the keeper's daily registry snapshot (`src/lib/burnticker/ops/snapshot.ts`); without it the snapshot job refuses and alerts.
   Devnet scripts may set `BURNTICKER_ALLOW_HOSTED_METADATA=1` instead.
 - **`BURNTICKER_PIN_DAILY_CAP`** (optional, default 50): the most coins this host pins on Arweave per UTC day. Pins are paid before
   any wallet signs, so this caps the upload spend however requests arrive (ChatGPT/Codex review N4); past it a launch answers 429

@@ -124,6 +124,36 @@ all LP burned, or a void at the deadline after which every holder sells back. No
   status). Devnet rehearsal: `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md`.
 - **burn_receipts** gained registration policy 2 and `register_pair_pool` (the LaunchLab path is untouched); Powers Registers:
   `docs/burn-receipts/powers-register.md`, `docs/burn-receipts/pair-curve-powers-register.md`.
+## Trust ops — snapshots, status, redundancy, drills, attesters, incidents (owner-approved 2026-10-10 night: "build them all")
+
+New modules only (`src/lib/burnticker/ops/`, `src/lib/burnticker/attesters/`), four hook lines in `scripts/burnticker-keeper.mts`.
+
+- **Daily registry snapshot on Arweave** (`ops/snapshot.ts`): once per UTC day the active keeper exports the append-only ledger (rules,
+  readings, receipts, pairs, pair outcomes, rule ends, launch pins) as canonical JSONL, pins it through Irys (`BURNTICKER_UPLOAD_PAYER`;
+  refused without it, never a hosted copy) and records `{date, sha256, arweaveTxId, rowCounts}` in a write-once `snapshots` table.
+  `GET /api/burnticker/v1/snapshots` (API 1.7.0), the status page, the trust page and the platform daily post's footer (`snapshotLine()`)
+  show the latest. Verify any of them: `scripts/burnticker-verify-snapshot.mts <txid> [--cluster mainnet] [--db <registry copy>]` (re-download,
+  recompute, canonical-form checks; `--db` = every row still present, unchanged). By hand: `scripts/burnticker-snapshot.mts --now|--list|--export`.
+- **Public status page** (`ops/status.ts`, `ops/feedHealth.ts`): `status/status.json` every cycle — heartbeat, role, each selector's last
+  good read, cross-read agreement and staleness (down / disagree / withheld / stale, each withholding the reading), open alert kinds,
+  wind-downs, retired coins and sweeps, the latest snapshot, program ids with the verified-build status — rendered by the static
+  `site/burnticker/status/` page (the landing's CSS tokens, B1 receipt) at `status.burnticker.com` and `/status/`.
+- **Keeper redundancy** (`ops/leaderLock.ts`, `ops/readingFence.ts`): `BURNTICKER_KEEPER_ROLE=leader|standby`; a standby takes over only
+  after N missed heartbeats AND a takeover note signed with its key; the leader yields to a verified note; no automatic fail-back. The
+  foreign-reading fence stops a second keeper from counting a receipt the other already attested (the program cannot catch that case).
+  What it does not guarantee: runbook "Keeper redundancy".
+- **Source-outage drill** (`ops/drill.ts`, `scripts/burnticker-drill.mts --feed <id> --mode down|disagree|stale|--all`): the keeper's
+  planning pass in a scratch registry against a wrapped source asserts withheld / alerted / shown / no crank, after a control run that
+  cranks. Monthly (runbook "Monthly drills").
+- **Bring your own attester** ([ATTESTERS.md](ATTESTERS.md), `attesters/byo.ts`, `scripts/burnticker-attester.mts keygen|read|status|propose|apply`):
+  run the reader from the public tree, compute and sign the exact reading message, compare it with the chain; proposals checked against
+  the program's quorum and 7-day seniority rules before the vault is asked. The trust page lists each coin's attesters.
+- **Incident policy** ([INCIDENTS.md](INCIDENTS.md), [incidents/TEMPLATE.md](incidents/TEMPLATE.md), the log moved to
+  [incidents/LOG.md](incidents/LOG.md)): what counts, a public postmortem within 48 hours, where, signed by the operator.
+- **Launch-day load test + fallback** ([LOADTEST.md](LOADTEST.md), `scripts/ops/loadtest.sh`): 50 RPS mixed passed on 2026-10-11 (p95 198 ms,
+  0 5xx) with the limiter answering most API calls; Cloudflare cache rules to apply; Caddy now caps app page shells at 60 s at the edge and
+  serves `site/burnticker/fallback/` (503) when the app is down.
+
 ## Burn Derby — coin vs coin, single assets, brackets (owner-approved 10-10: "build it all")
 
 A new selector kind: the **relative performance of two existing coins** over a UTC day (00:00 → 00:00) or week. `oracle: "derby"` with a
@@ -168,6 +198,59 @@ locked `derby` block (`src/lib/burnticker/derby/spec.ts`); design note: [DERBY.m
 - **Search misses and time-to-launch.** These are anonymous first-party records (`src/lib/burnticker/productStore.ts`;
   transparency.md § 4). The admin summary is `GET /api/burnticker/v1/ops/search-misses`; the weekly markdown rollup is
   `scripts/burnticker-search-misses.mts`.
+
+## Growth batch — badges, league pages, the bot starter kit, mint verification and clone watch (10-10, the owner: "build them all")
+
+- **Embeddable receipt badge.** `GET /api/burnticker/v1/badge/<TICKER>.svg|.png|.json` and `/badge/pairs/<pairId>.*` serve a small
+  receipt-slip card (`src/lib/burnticker/badge.ts`). It shows the ticker, the rule's one-liner, the last burn (date and units), the
+  receipts this season (a team coin's own season, otherwise the calendar year) and **verify →**, which links to the coin page's
+  `#verify` section. The card is built from the coin page's own status and receipts, cached for 60 s. It carries no price, market
+  cap, odds, implied chance or volume: `badgePayloadProblems` guards every payload.
+- **Embed page.** `/burnticker/embed/<TICKER>` (and `/embed/pairs/<pairId>`) is a route handler, not an app page, so no header,
+  footer, fonts or cookies load. It shows the same SVG and a live "next settlement" countdown. CSP is `frame-ancestors *` with hashed
+  style and script. Caddy serves it through `security_embed`, which drops `X-Frame-Options`.
+- **Embed box.** Every coin page and pair page has an "Embed this coin" box (`_components/EmbedSnippet.tsx`) with a copy-paste
+  iframe and a Markdown badge.
+- **League and season pages.** `/burnticker/leagues` lists the leagues by sport, alphabetically, with counts only.
+  `/burnticker/leagues/<league>/<season>` (for example `nhl/2026-27` or `mlb/2026`) has:
+  - the scoreboard cards from `seasons.ts`, imported rather than copied. A coin is ranked only inside its own league, and
+    "champion" appears only after the season has ended;
+  - the team list, with "launch a coin for this team" links (`/burnticker/launch?q=<team>`);
+  - the games the league's coins settled in the last seven days, each with its recorded source line ("settled on the game's
+    on-chain payout · confirmed by NHL's official scores") and a plain "see on ESPN →" link;
+  - JSON-LD (BreadcrumbList, and a SportsEvent with only the recorded facts), OpenGraph metadata and a generated OG image at
+    `…/og`.
+
+  `src/lib/burnticker/leagues.ts` builds all of this, and `leaguesServe.ts` keeps a 60 s registry memo.
+- **Sitemap.** `/burnticker/sitemap.xml` (Caddy serves it at `/sitemap.xml`) lists the app pages, the docs, every launched coin
+  (never a draft), the pairs and the league seasons.
+- **Bot starter kit.** `packages/burnticker-bot-starter/` holds three scripts:
+  - `follow.ts` prints each new receipt with its verifier call;
+  - `launch.ts` previews a launch bundle for a catalogue rule. It prints the unsigned transactions and the rules sha, and never
+    signs;
+  - `post.ts` renders lint-clean receipt, season-card or scoreboard posts through the platform's generator into a queue file. It
+    has no X API.
+
+  The SDK is imported through one line (`src/sdk.ts`). The package README covers setup, the keyless API and the rules.
+- **Verify a mint.** `/burnticker/verify` and `GET /api/burnticker/v1/verify-mint/<mint>` compare the burn_receipts program's
+  TokenConfig with the registry (`verifyMint.ts`). The answer is either "Burnticker coin: yes", with the rule sha, creator, launch
+  date, receipts and page link, or "NOT registered with the burn_receipts program". It is phrased plainly and never accuses anyone.
+  The fake program client never counts as a program read. Every coin page shows "verified by program · mint …" beside the address
+  copy button, and the receipt verifier links to this page.
+- **Lookalike refusal and no adoption.** The launch handler calls `launchGuards.ts` once per side.
+  - `lookalike.ts` reduces tickers and names to skeletons (homoglyphs, 0 → O, 1 / l → I, accents, rn → m). It refuses an exact
+    skeleton match, one edit (on four letters or more), copycat suffixes and prefixes (DEFICIT2, REALDEFICIT) and the platform's
+    name, with a reason (409 `lookalike`). Two windows of the same team are exempt, and a draft reserves its ticker.
+  - `mintAdoptionRefusal` refuses a mint that is already registered or already exists on chain (409 `mint-exists`).
+- **Clone watch and "Not Burnticker".** `src/lib/burnticker/ops/cloneWatch.ts` is run every 15 minutes by
+  `scripts/burnticker-clone-watch.mts` and `mct-burnticker-clonewatch.timer`. It uses DexScreener's keyless search for DEFICIT,
+  Burnticker and every launched ticker, Solana only, with lookalike matching. For each match it records:
+  - whether the program knows the mint;
+  - the holder-stack signal (5 or more top holders with identical shares);
+  - the LP state, and when the LP was pulled.
+
+  Rows are append-only. `/burnticker/not-burnticker` and `GET /api/burnticker/v1/clones` list evidence only. They name no one, and
+  every line passes the copy lint. The launch-day anti-impersonation steps are in runbook.md, step 11.
 
 ## First-party settlement for team coins and weather; elections; the universal search (10-10, later the same day)
 
@@ -315,13 +398,16 @@ src/lib/burnticker/
   verify.ts           one receipt's checks (rules / memo / source / units / spend / chain) — shared by the API's /verify and the SDK
   transactions.ts     launch-bundle instructions → unsigned wire-format transactions (never signs; placeholder blockhash flagged)
   pageTypes.ts        status.json / receipts.json shapes (types only, so the SDK can import them)
+  ops/                trust ops (2026-10-10 night): snapshot (daily Arweave ledger snapshot + verifier), feedHealth, status (status.json),
+                      leaderLock + readingFence (keeper redundancy), drill (source-outage drill), keeperOps (the keeper's hooks), trustOps, spec/api (/v1/snapshots)
+  attesters/byo.ts    bring your own attester: keygen, the counter + signed reading message, chain comparison, proposal checks
   api/                the public API: spec.ts (the ONE schema source → openapi.json, cache, rate limits), http.ts (rate limit, CORS,
                       cross-site refusal), handlers.ts (logic shared with the wizard's routes), v1.ts (one function per operation)
 packages/burnticker-sdk/   @burnticker/sdk — the public SDK for bots (docs/burnticker/sdk.md); public-closure.json = the repo files it needs
 src/app/api/burnticker/v1/*   the public HTTP API (docs/burnticker/api.md)
 scripts/burnticker-keeper.mts · burnticker-platform-config.mts (dry run, never sends) · burnticker-audit.mts (exit 1 on any mismatch)
 src/app/burnticker/{page,launch,t/[ticker],trust} · src/app/api/burnticker/{catalogue,oracle/search,oracle/backtest,tokens,tokens/[ticker],launch,trust}
-config/burnticker/{sources.json,refuse.json,fixtures/**} · deploy/caddy/Caddyfile · docs/burnticker/{README,deploy,incidents}.md
+config/burnticker/{sources.json,refuse.json,fixtures/**} · deploy/caddy/Caddyfile · docs/burnticker/{README,deploy,INCIDENTS,ATTESTERS,LOADTEST}.md, incidents/{LOG,TEMPLATE}.md
 ```
 
 Reused from the keeper, not forked: `rulesSha256`, `buybackSpend`, `spendablePool`, `belowFloor`, `settleBurn`, `rawToTokens`,

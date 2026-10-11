@@ -123,4 +123,4 @@ automatic.
 | Verifier runs from strangers | access log hits on `/api/burnticker/v1/tokens/*/verify/*` (not `/v1/receipts/*/verify`) |
 | Outreach that turns into a listing, a mention or a launch | OUTREACH.md, one line per reply, dated |
 | Zero copy-lint violations in anything posted | everything posted came through the queue (refusals never queue); hand-written posts go through `burnkeeper-post-draft.mts lint` |
-| Zero claims retracted | `docs/burnticker/incidents.md` and in-thread corrections |
+| Zero claims retracted | `docs/burnticker/incidents/LOG.md` and in-thread corrections |

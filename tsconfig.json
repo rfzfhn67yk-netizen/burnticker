@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,32 +15,9 @@
     "jsx": "react-jsx",
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/.cache/burnticker-tsconfig.tsbuildinfo",
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    },
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
+    "paths": { "@/*": ["./src/*"] },
+    "plugins": [{ "name": "next" }]
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "scripts/**/*.mts",
-    "test/**/*.ts",
-    "next.config.ts",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    ".next-burnticker/types/**/*.ts",
-    ".next-burnticker/dev/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "programs",
-    "site",
-    "config/public-repo"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.mts", "test/**/*.ts", "next.config.ts", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
+  "exclude": ["node_modules", "programs", "site", "config/public-repo"]
 }

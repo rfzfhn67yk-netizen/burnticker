@@ -7,12 +7,18 @@
 #   https://burnticker.com/api/burnticker/*, /_next/*   the app's API routes and its bundles — NOTHING ELSE of the app is proxied
 #   https://burnticker.com/deficit/*     static /var/www/deficit (the $DEFICIT status site), also served at the $DEFICIT host's root
 #   https://www.burnticker.com/*         301 → the apex
+#   https://status.burnticker.com/       static /var/www/burnticker/status (the keeper's status/status.json + site/burnticker/status/index.html;
+#                                        also at https://burnticker.com/status/) — trust ops 2026-10-10; the owner adds the DNS record
+#   APP DOWN → STATIC FALLBACK           when the Next upstream is unreachable, times out or answers 5xx, /burnticker* pages get
+#                                        /var/www/burnticker/fallback/index.html (503, no-store) and /api/burnticker/* a JSON 503 — receipts,
+#                                        the static receipts site and the program are unaffected (deploy-sites.sh publishes the page)
 #
 # PLACEHOLDER VARIABLES — Caddy substitutes {$NAME:default} from the environment of the caddy service at load time. Set them with
 # `systemctl edit caddy` ([Service] Environment=DEFICIT_DOMAIN=…) or edit the defaults below. The $DEFICIT host is a placeholder until
 # the owner picks it (the site pages still say deficit.burnticker.com / burnticker.com — fix those links in site/ when the names are final).
 #   BURNTICKER_DOMAIN   burnticker.com           BURNTICKER_WWW_DOMAIN  www.burnticker.com
 #   DEFICIT_DOMAIN      deficit.burnticker.com   MCT_APP_UPSTREAM       127.0.0.1:3000  (mct-burnticker-web; loopback only)
+#   BURNTICKER_STATUS_DOMAIN  status.burnticker.com
 #
 # SECURITY, READ BEFORE EDITING THE PROXY BLOCK. Since 2026-10-10 the Next app on this host is built from the PUBLIC tree only
 # (docs/burnticker/deploy.md "The host runs the public tree") — it has no trading routes at all. Keep the proxy narrow anyway: Caddy
@@ -34,6 +40,36 @@
 	}
 }
 
+# The embed pages (growth batch 2026-10-10: /burnticker/embed/<TICKER>, an iframe any site may frame) get every header of `security`
+# EXCEPT X-Frame-Options DENY; the app sends their CSP itself (frame-ancestors *, hashed style + script, no cookies; src/lib/burnticker/embed.ts).
+(security_embed) {
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-X-Frame-Options
+		-Server
+	}
+}
+# What a visitor gets while the app is down or slow: pages → /var/www/burnticker/fallback/index.html (deploy-sites.sh writes it from
+# site/burnticker/fallback/), the API → a JSON 503. Receipts, the static receipts site and the program are unaffected.
+(app_fallback_page) {
+	root * /var/www/burnticker/fallback
+	rewrite * /index.html
+	header Cache-Control "no-store"
+	header Retry-After "30"
+	file_server {
+		status 503
+	}
+}
+(app_fallback_api) {
+	header Content-Type "application/json; charset=utf-8"
+	header Cache-Control "no-store"
+	header Retry-After "30"
+	respond `{"error":"the app is catching up; receipts and the program are unaffected","code":"app-unavailable","retryAfterSec":30}` 503
+}
+
 (static_site) {
 	import security
 	encode zstd gzip
@@ -51,14 +87,83 @@
 {$BURNTICKER_DOMAIN:burnticker.com} {
 	encode zstd gzip
 
-	# The Next app: wizard, in-app token pages, trust page, API. ONLY these paths; the public Host header passes through (see the header).
-	@app path /burnticker /burnticker/* /api/burnticker/* /_next/*
-	handle @app {
-		import security
+	# Embeds first (handle blocks with named matchers run in order): the same upstream, without X-Frame-Options (see security_embed).
+	@embed path /burnticker/embed/*
+	handle @embed {
+		import security_embed
 		reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
 			header_up X-Forwarded-Proto {scheme}
 		}
 	}
+
+	# The sitemap at the apex (growth batch): the app renders it at /burnticker/sitemap.xml (coins, pairs, leagues, docs).
+	handle /sitemap.xml {
+		import security
+		rewrite * /burnticker/sitemap.xml
+		reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# The Next app: wizard, in-app token pages, trust page, API — ONLY these paths; the public Host header passes through (see the header).
+	# Inside, the API and the pages are proxied separately so the API's own 5xx answers (a venue switched off, an upstream source down)
+	# reach bots unchanged while a PAGE answering 5xx gets the static fallback.
+	@app path /burnticker /burnticker/* /api/burnticker/* /_next/*
+	handle @app {
+		import security
+		@app_api path /api/burnticker/*
+		handle @app_api {
+			reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
+				header_up X-Forwarded-Proto {scheme}
+				transport http {
+					dial_timeout 3s
+					response_header_timeout 20s
+				}
+			}
+		}
+		handle {
+			reverse_proxy {$MCT_APP_UPSTREAM:127.0.0.1:3000} {
+				header_up X-Forwarded-Proto {scheme}
+				# Next serves its prerendered page shells with "s-maxage=31536000" (one year at a CDN). A shell cached that long would point at
+				# /_next/static chunks the next deploy removes, so a CDN may keep a page shell 60 s, then revalidate (docs/burnticker/LOADTEST.md
+				# "Cloudflare cache rules"). /_next/static keeps Next's own "public, max-age=31536000, immutable" (content-hashed files).
+				header_down Cache-Control "s-maxage=31536000" "public, max-age=0, s-maxage=60, stale-while-revalidate=300"
+				# a wedged app must not hold a visitor for minutes: give up and serve the static fallback (handle_errors below)
+				transport http {
+					dial_timeout 3s
+					response_header_timeout 20s
+				}
+				# a page answering 5xx itself (a crash page, an unhandled error) gets the fallback, never a stack trace
+				@upstream_5xx status 5xx
+				handle_response @upstream_5xx {
+					import app_fallback_page
+				}
+			}
+		}
+	}
+
+	# Upstream unreachable or timed out (Caddy's own 502/504) on an app path → the static fallback. Static paths keep Caddy's plain errors.
+	handle_errors {
+		@api_down {
+			path /api/burnticker/*
+			expression {err.status_code} >= 500
+		}
+		handle @api_down {
+			import security
+			import app_fallback_api
+		}
+		@app_down {
+			path /burnticker /burnticker/* /_next/*
+			expression {err.status_code} >= 500
+		}
+		handle @app_down {
+			import security
+			import app_fallback_page
+		}
+	}
+
+	# The public status page also lives under /status/ on the apex (relative links need the trailing slash).
+	redir /status /status/ 308
 
 	# $DEFICIT's static status site on the main host too (status.json, burns.json, rules.json, index.html).
 	handle_path /deficit/* {
@@ -71,6 +176,14 @@
 		root * /var/www/burnticker
 		import static_site
 	}
+}
+
+# The public status page (trust ops, 2026-10-10 night): the keeper's status/status.json and the static page that renders it. The owner adds
+# the DNS record (A status → this box, grey cloud until the certificate is issued, like the others).
+{$BURNTICKER_STATUS_DOMAIN:status.burnticker.com} {
+	root * /var/www/burnticker/status
+	header /status.json Access-Control-Allow-Origin "*"
+	import static_site
 }
 
 {$DEFICIT_DOMAIN:deficit.burnticker.com} {

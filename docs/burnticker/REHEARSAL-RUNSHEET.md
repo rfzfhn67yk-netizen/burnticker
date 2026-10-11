@@ -634,7 +634,7 @@ platform config and program. B10–B20 are the rehearsal coin itself.
 | B15 | Claude | Fee routing check | gate 3 |
 | B16 | owner or Claude | Claim against mainnet LaunchLab | fee WSOL grows |
 | B17 | Claude | Keeper instance for the rehearsal (host, `--once`) | baseline attested; after 14:30, a unit reading attested |
-| B18 | Claude | incidents.md line + sites shipped | gate 2 |
+| B18 | Claude | incidents/LOG.md line + sites shipped | gate 2 |
 | B19 | — | What it proved / did not | — |
 | B20 | owner | Retirement wording (D-8) | trust page |
 
@@ -883,7 +883,7 @@ do. That is a D-8 decision.
 
 ### B18. Disclose (gate 2)
 
-Append one line to `docs/burnticker/incidents.md`, saying $REHEARSAL was created: date, mint, purpose, the 0.1 SOL buy, and what it cannot
+Append one line to `docs/burnticker/incidents/LOG.md`, saying $REHEARSAL was created: date, mint, purpose, the 0.1 SOL buy, and what it cannot
 prove. Commit it and the B12 files, ship the build (`sh scripts/ops/deploy-burnticker-host.sh`), and check that
 `https://burnticker.com/burnticker/trust` lists the rehearsal.
 
@@ -1072,7 +1072,7 @@ program show` must print `Authority: none`. Then set `BURNTICKER_UPGRADE_AUTHORI
 | # | Gate | Proof artefact (path) | Made in |
 |---|---|---|---|
 | 1 | Devnet program path end to end | `docs/burnkeeper/devnet-run.md` §4 filled; `data/burnkeeper-devnet-site/burns.json` with one `confirmed`, `execution: "program"`, `verify.verified: true`; `status.json .program.attestation.lastReading` set | A26 |
-| 2 | Mainnet rehearsal coin, **amended per D-2** | `$M/rehearsal.json` (`mint, poolId, creatorFeeVault, platformId`); `data/burnkeeper-rehearsal-site/status.json` with an attested reading; the B16 claim signature; the trust page rehearsal row; the `docs/burnticker/incidents.md` line. ⚠ The runbook's artefact (`data/burnticker-site/t/REHEARSAL/receipts.json` with a confirmed burn, `audit.json ok`) cannot be produced: the Burnticker wizard uses `FakeLaunchLab` (`src/lib/burnticker/server.ts`), and a 0.1 SOL coin cannot burn | B14–B18 |
+| 2 | Mainnet rehearsal coin, **amended per D-2** | `$M/rehearsal.json` (`mint, poolId, creatorFeeVault, platformId`); `data/burnkeeper-rehearsal-site/status.json` with an attested reading; the B16 claim signature; the trust page rehearsal row; the `docs/burnticker/incidents/LOG.md` line. ⚠ The runbook's artefact (`data/burnticker-site/t/REHEARSAL/receipts.json` with a confirmed burn, `audit.json ok`) cannot be produced: the Burnticker wizard uses `FakeLaunchLab` (`src/lib/burnticker/server.ts`), and a 0.1 SOL coin cannot burn | B14–B18 |
 | 3 | Fee routing 50 / 25 bps on real trades | `jq '.creator, .burnPool.feePda, .burnPool.creatorIsFeePda' $M/rehearsal.json` → the same address twice + `true`; the B15 balance lines | B15 |
 | 4 | Two-person pre-send read | `$M/deficit-dry.json` initialed; `jq .rules.sha256` = `--print-rules` = `BURNKEEPER_RULES_SHA` | C6 |
 | 5 | Mint-first announcement | screenshots of both bios; `grep -c <mint> /var/www/deficit/index.html` ≥ 1; `curl -s https://<DEFICIT_HOST>/status.json \| jq .addresses.mint` | C12 |

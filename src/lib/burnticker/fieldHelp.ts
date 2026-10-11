@@ -9,6 +9,7 @@ export interface Help { what: string; does: string }
 export const FIELD_HELP = {
   // ---- finding the event
   search: { what: "Describe the event in a few words: a team, a candidate, a city and a threshold, a public number.", does: "Shows ready-made rules from every source that can settle it; one click opens the create screen with the rule filled in." },
+  "outcome-search": { what: "Part of a name in this market's list (a film, a person, a team).", does: "Filters the list; picking a name opens the create screen for that name's own yes/no market." },
   "market-search": { what: "A team, a person, a show, a city or an election, in plain words.", does: "Lists adjudicated markets that can settle a rule; nothing is chosen until you pick one." },
   "browse-filter": { what: "A word to narrow this category's sources.", does: "Filters the cards below; it changes no rule." },
   "league-search": { what: "Part of a league's name: MLB, Premier League, WNBA, college…", does: "Filters the league list; picking a league loads its teams." },
@@ -40,7 +41,7 @@ export const FIELD_HELP = {
   "kalshi-series-search": { what: "A series name or topic (discovery only).", does: "Kalshi is never a settlement input; this only helps you find an event to settle elsewhere." },
   "kalshi-market-paste": { what: "One market ticker, pasted.", does: "Discovery only; Kalshi data cannot settle a coin." },
   "kalshi-filter": { what: "Text the market tickers must contain (optional).", does: "Narrows which markets of the series count; the back-test lists what matched." },
-  "poly-filter": { what: "A pattern the market questions must match (optional).", does: "Narrows which markets of the event or tag count; the back-test lists what matched." },
+  "poly-filter": { what: "Words every counted market's question must contain, in plain text (optional).", does: "Narrows which markets of the event or tag count toward the rule; the back-test below lists exactly which past markets matched, so check it before launch." },
   "read-as": { what: "Yes/no, or a settled number.", does: "How the result is read: a yes/no burns on the chosen answer; a number burns once per unit it moves." },
   "burn-from": { what: "The fee pool (buyback) or a vesting vault.", does: "Buyback spends the coin's own fees on its own token and burns it; vault burns tokens set aside at launch." },
   "vault-share": { what: "10 to 30 % of supply.", does: "Locked in a vault at launch and burned by the rule over time; the rest trades on the curve." },

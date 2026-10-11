@@ -58,6 +58,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/fees/ledger` | 600 s | read | the pinned developer fee wallet's ledger from chain, by UTC month, and the expenses the fee pays (`config/burnticker/expenses.json`, placeholders marked) |
 | GET | `/operator` | 60 s | read | who runs this, every operator wallet per cluster (TODO placeholders listed), the signed-statement check (ed25519), the never-buys monitor's last report |
 | GET | `/bounty` | 60 s | read | the bounty wallet (null until the mainnet Squads vault exists; `walletTodo` says so), its live balance once set, the decided reports |
+| GET | `/snapshots?limit=` | 60 s | read | (API 1.7.0, trust ops; `src/lib/burnticker/ops/snapshot.ts`) the daily registry snapshots pinned to Arweave, newest first: `{ date, sha256, arweaveTxId, url, rowCounts, bytes, capturedAt, verify }` — the append-only ledger (rules, readings, receipts, pairs, pair outcomes, rule ends, launch pins) as canonical JSONL; re-download and recompute with `scripts/burnticker-verify-snapshot.mts <txid>` |
 | GET | `/openapi.json` | 3600 s | read | the OpenAPI 3.1 document |
 
 ### `POST /launch/bundle`
@@ -171,3 +172,43 @@ curl -s "<pinned.metadataUri>" | jq -r .description        # = pinned.expectedDe
 
 `POST /launch/bundle` (and the wizard's launch route) accepts an optional `timings` object holding the page's step timestamps
 (`search`, `card`, `create`, `review`, `launch`). They are stored with the draft as durations.
+
+## Growth batch (API 1.7.0)
+
+| Method | Path | Cache | Bucket | What |
+|---|---|---|---|---|
+| GET | `/badge/{TICKER}.svg` · `.png` · `.json` | 60 s | read | A coin's embeddable receipt card: ticker, the rule's one-liner, the last burn (date + units), receipts this season, "verify →" to the coin page's `#verify`. `.json` is the payload (`burnticker.badge/v1`) with the iframe / Markdown / HTML snippets. **No market data**: no price, market cap, odds, implied chance or volume in any payload (`badgePayloadProblems`). Drafts are 404. |
+| GET | `/badge/pairs/{pairId}.svg` · `.png` · `.json` | 60 s | read | The same card for a rivalry pair: both coins, the burns per side, the last burn, "verify →" to the pair page. |
+| GET | `/verify-mint/{mint}` | 60 s | heavy | Is this mint a Burnticker coin? The burn_receipts program's TokenConfig (read through the platform's read-only program client; a host without the deployed program says it did not read it) and the registry, with the rules sha256 compared. `verdict`: `burnticker` ("Burnticker coin: yes": ticker, creator, launch date, receipts, page), `program-only`, `not-launched` (a draft), `not-registered` ("NOT registered with the burn_receipts program"), `invalid`. Always 200 with the verdict. |
+| GET | `/clones` | 300 s | read | The "Not Burnticker" list (`burnticker.clones/v1`): Solana tokens whose name or ticker resembles DEFICIT, Burnticker or a launched ticker and that are not Burnticker coins, as the clone watch recorded them. Each has the mint, pool, first / last seen, `registered` (program), `bundle` (top holders with identical shares), `lp` (present / thin / pulled + when) and `evidence` lines. Evidence only: it names no one. |
+
+The badge endpoints answer `image/svg+xml` and `image/png` as well as JSON. The OpenAPI document lists those media types beside
+`application/json` on the 200. Errors stay JSON.
+
+**Embedding (not under `/v1`).** `GET /burnticker/embed/{TICKER}` and `/burnticker/embed/pairs/{pairId}` serve one self-contained
+HTML document: the badge's SVG and a live "next settlement" line. It is built for an iframe:
+- the CSP is `frame-ancestors *`, with `default-src 'none'` and a sha256 hash for its one style and its one script;
+- it sets no cookies and sends `Referrer-Policy: no-referrer`;
+- it is cached for 60 s and the page reloads itself every 60 s.
+
+Snippets:
+
+```html
+<iframe src="https://burnticker.com/burnticker/embed/DEFICIT" width="480" height="230" style="border:0;max-width:100%" loading="lazy" title="$DEFICIT receipts on Burnticker"></iframe>
+```
+
+```markdown
+[![$DEFICIT receipts on Burnticker](https://burnticker.com/api/burnticker/v1/badge/DEFICIT.svg)](https://burnticker.com/burnticker/t/DEFICIT)
+```
+
+**Launch refusals added in 1.7.0.** `POST /launch/bundle` answers **409** in two new cases:
+- `code: "lookalike"` with `hits`: the ticker or name reads as an existing Burnticker coin's. That covers homoglyphs, 0/O and 1/l/I,
+  accents, a single edit, a copycat suffix or prefix such as `DEFICIT2` or `REALDEFICIT`, and the platform's own name;
+- `code: "mint-exists"`: the mint is already registered, or already exists on chain when the host has an RPC to check. Burnticker
+  never adopts an existing token.
+
+**Other new pages.** `/burnticker/leagues` and `/burnticker/leagues/{league}/{season}` are the league scoreboards. The season is
+`2026-27` for leagues whose season spans two years and `2026` for the others. `/burnticker/verify` answers for a mint,
+`/burnticker/not-burnticker` lists lookalikes, and `/sitemap.xml` is the sitemap.
+
+A bot that follows receipts, previews a launch or queues posts can start from `packages/burnticker-bot-starter/` ([sdk.md](sdk.md) §10).

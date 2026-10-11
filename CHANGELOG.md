@@ -401,6 +401,65 @@ publish script.
     shown for any coin, and `impliedChance` stays in `status.json` as an always-null field.
   - The $DEFICIT series-level cross-check is accepted for now; "daily independent debt source" is a TODO-OWNER row.
 
+## 2026-10-10 (night) — trust ops (no publish, no deploy)
+
+Owner-approved batch ("build them all"), branch `burnticker/trust-ops`. New modules under `src/lib/burnticker/ops/` and
+`src/lib/burnticker/attesters/`; four hook lines in `scripts/burnticker-keeper.mts`. Nothing is deployed by this entry: the keeper picks it
+up on its next restart after a ship; the Caddyfile and the two static pages ship with the next deploy (`deploy-sites.sh --pages-only`).
+
+- **Daily registry snapshot pinned to Arweave**: canonical JSONL of rules, readings, receipts, pairs, pair outcomes, rule ends and launch
+  pins; sha256; Irys upload with `BURNTICKER_UPLOAD_PAYER` (refused without it — no hosted fallback); a write-once `snapshots` table in the
+  registry (SQL triggers refuse updates and deletes). `GET /api/burnticker/v1/snapshots` — **API 1.7.0**. Verifier:
+  `scripts/burnticker-verify-snapshot.mts <txid>` (re-download, recompute, canonical checks; `--db` append-only check against a later copy).
+  The platform daily post's footer carries the latest hash (`snapshotLine()` in `src/lib/launch/dailyPost.ts`).
+- **Public status page**: `status/status.json` every cycle (schema `burnticker.ops-status/v1`), `site/burnticker/status/index.html`, Caddy
+  site block for `status.burnticker.com` (DNS record: owner) and `/status/` on the apex.
+- **Feed health**: down / disagree / stale per selector, each withholding the reading; alerts `bt-feed-down`, `bt-feed-disagree`,
+  `bt-feed-stale`.
+- **Keeper redundancy**: `BURNTICKER_KEEPER_ROLE=leader|standby`, heartbeat over HTTPS, takeover only after N missed heartbeats and a
+  takeover note signed by the standby's key, the leader yields to a verified note, no automatic fail-back; the **foreign-reading fence**
+  (a keeper adopts on-chain readings it did not write when the units match and holds its sends when they do not) closes a double-count a
+  second keeper would otherwise cause. Alerts `bt-foreign-reading`, `bt-keeper-yielded`, `bt-keeper-takeover`, `bt-snapshot-failed`.
+  Failure modes written down in the runbook ("Keeper redundancy").
+- **Source-outage drill**: `scripts/burnticker-drill.mts --feed <id> --mode down|disagree|stale|--all`; monthly checklist in the runbook.
+- **Bring your own attester**: `docs/burnticker/ATTESTERS.md`, `scripts/burnticker-attester.mts keygen|read|status|propose|apply`; the
+  trust page lists every coin's attesters with key prefixes and seniority dates. No program change.
+- **Incident policy**: `docs/burnticker/INCIDENTS.md` + `incidents/TEMPLATE.md`; the append-only log moved from `incidents.md` to
+  `incidents/LOG.md` (it held no entries); linked from the trust page and SECURITY.md.
+- **Launch-day load test + static fallback**: `scripts/ops/loadtest.sh` (dependency-free), the first run against the box (50 RPS mixed:
+  p95 198 ms, 0 5xx; most API calls answered by the per-client limiter, which keys on the Cloudflare edge — a launch-day risk written up
+  in `docs/burnticker/LOADTEST.md` with the fix), Cloudflare cache rules for the owner to apply, Caddy capping app page shells at 60 s at the
+  edge (Next sends one year), and `site/burnticker/fallback/` served with 503 when the app is down or a page answers 5xx.
+
+## 2026-10-10 — growth batch: badges, league pages, bot starter kit, mint verification, clone watch (no publish, no deploy)
+
+Owner-approved ("build them all"). Public API **1.7.0**, which adds to the product batch's 1.6.0.
+
+- **Receipt badge.** `GET /api/burnticker/v1/badge/{TICKER}.svg|.png|.json` and `/badge/pairs/{pairId}.*`: a receipt-slip card with
+  the ticker, the one-liner, the last burn, the receipts this season and "verify →". It is cached 60 s and carries no market data.
+  `/burnticker/embed/{TICKER}` and `/embed/pairs/{pairId}` serve the same card with a live next-settlement line. Each is a route
+  handler with CSP `frame-ancestors *`, hashed inline style and script, and no cookies; Caddy serves it through `security_embed`,
+  without X-Frame-Options. Every coin and pair page has an "Embed this coin" box.
+- **League pages.** `/burnticker/leagues` and `/burnticker/leagues/{league}/{season}`:
+  - the scoreboard cards from `seasons.ts`, with champion only after the season ends;
+  - the teams, with launch links;
+  - the games the league's coins settled in the last seven days, with the recorded source line and the ESPN link only;
+  - JSON-LD, OpenGraph and a generated OG image.
+
+  `/burnticker/sitemap.xml` is served at `/sitemap.xml`.
+- **Bot starter kit.** `packages/burnticker-bot-starter/` (follow, launch preview that never signs, post queue with no X API) is in
+  the public-repo allowlist.
+- **Verify a mint.** `/burnticker/verify` and `GET /v1/verify-mint/{mint}` compare the program's TokenConfig with the registry. Coin
+  pages show "verified by program · mint …".
+- **Lookalike refusal and no adoption.** The launch handler refuses a ticker or name that reads as an existing coin (409
+  `lookalike`) and a mint that already exists (409 `mint-exists`). Two tests changed their second ticker because of this: `$BUCS2`
+  became `$TAMPA`, and `$BRONCOS` became `$DENVER`. Both old tickers are lookalikes of a coin in their own fixture.
+- **Clone watch.** `scripts/burnticker-clone-watch.mts` runs every 15 minutes from `mct-burnticker-clonewatch.timer`. It searches
+  DexScreener (keyless), checks the program, reads the holder-stack signal and tracks LP pulls, and writes append-only
+  `clone_observations` and `clone_scans` rows. `/burnticker/not-burnticker` and `GET /v1/clones` show the evidence only.
+- **Runbook.** Launch day step 11: the canonical mint and program id in the pinned first post; the DexScreener, Solscan and Jupiter
+  verification requests; the clone watch turned on; impersonator accounts reported the same day.
+
 ## 2026-10-10 — publish from 27f02976211e
 
 - monorepo commit: `27f02976211e0c9516beffd9804faa5fca357a29` (the working tree had uncommitted changes when this tag was written)
@@ -409,10 +468,10 @@ publish script.
 - allowlist sha256 (config/public-repo.allowlist): `346810d696d2b14b4c7c3f69c89b86580d105a7ebbb8a700e99dfe564e2d6818`
 - files published: 864
 
-## 2026-10-10 — publish from 27f02976211e
+## 2026-10-10 — publish from e294d37b3d4e
 
-- monorepo commit: `27f02976211e0c9516beffd9804faa5fca357a29` (the working tree had uncommitted changes when this tag was written)
+- monorepo commit: `e294d37b3d4e5ea0ff642b6803925ccbfce3491f` (the working tree had uncommitted changes when this tag was written)
 - program hash: `f3812ce47ff86e8c0bc8dcaae856e0e2c8523850afb19bda9de05ce559c775d0` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
-- allowlist sha256 (config/public-repo.allowlist): `346810d696d2b14b4c7c3f69c89b86580d105a7ebbb8a700e99dfe564e2d6818`
-- files published: 864
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 939

@@ -8,6 +8,9 @@ import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { defaultName, defaultTicker, sha256HexWeb, tileHashInput, tileRule, type TileChoice } from "@/lib/burnticker/derby/tile";
+import { PAIR_CURVE_REVIEW_LINE, postPairLaunch, venueFrom409, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
+import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
+import { PairCurveSign } from "./PairCurveSign";
 
 /**
  * "COIN VS COIN" — the Burn Derby wizard tile (2026-10-10). Self-contained: the choose screen renders it under the other tiles (one
@@ -58,7 +61,7 @@ function CoinPicker({ label, value, onPick, exclude, initial }: { label: string;
   );
 }
 
-export function CoinVsCoinTile() {
+export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = {}) {
   const wallet = useWallet();
   const [open, setOpen] = useState(false);
   // `/burnticker/launch?derby=1&a=WIF&b=SHIB` (the Burn Derby page and the search card) opens the tile with both searches filled in.
@@ -86,15 +89,19 @@ export function CoinVsCoinTile() {
   const ruleB: BurnRule | null = model?.rule ? { ...model.rule, binary: { onYes: null, onNo: model.rule.binary!.onYes } } : null;
   const card = (nm: string, tk: string, r: BurnRule | null) => <CoinCard href={null} c={{ ticker: tk || "TICKER", name: nm || "Name", imageUrl: null, oneLiner: r ? ruleOneLiner(r) : "pick two coins", oracle: "derby", status: "draft", phase: null, progressPct: 0, raised: null, threshold: null, quote: "SOL", burns: 0, lastBurnAt: null, nextAt: null, launchedAt: null, curveNote: "a new coin starts at 0% of its bonding curve" }} />;
 
+  // review N6: the venue this host uses for a pair (catalogue venues.pairCurve, passed down by the page; a 409 corrects a stale read
+  // and waits for a second press so the review line the creator saw is the venue that is built)
+  const [venue, setVenue] = useState<PairVenue>(pairCurve ? "pair-curve" : "launchlab");
+  useEffect(() => { setVenue(pairCurve ? "pair-curve" : "launchlab"); }, [pairCurve]);
+  const [pcOut, setPcOut] = useState<{ pairId: string; pc: PairCurveLaunchBundle; keys: { a: string; b: string } | null; notes: string[] } | null>(null);
   const launch = async () => {
     if (!model?.rule) return;
-    setBusy(true); setErr(null); setOut(null);
+    setBusy(true); setErr(null); setOut(null); setPcOut(null);
     try {
-      const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ creator, ticker: names.ta.toUpperCase(), name: names.a, description: model.sentence, imageUrl: null, links: [], rule: model.rule, firstBuySol: "0", acknowledgements: { ruleLocked: ackLocked, noReturns: ackNoReturns }, pair: { ticker: names.tb.toUpperCase(), name: names.b, description: model.sentence, imageUrl: null, links: [] } }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? r.statusText);
-      setOut({ pairId: j.pair.pairId, a: j.bundles.a, b: j.bundles.b, notes: j.pair.notes ?? [] });
-    } catch (e) { setErr(String((e as Error).message ?? e)); } finally { setBusy(false); }
+      const j = await postPairLaunch((u, init) => fetch(u, init), { creator, ticker: names.ta.toUpperCase(), name: names.a, description: model.sentence, imageUrl: null, links: [], rule: model.rule, firstBuySol: "0", acknowledgements: { ruleLocked: ackLocked, noReturns: ackNoReturns }, pair: { ticker: names.tb.toUpperCase(), name: names.b, description: model.sentence, imageUrl: null, links: [] } }, venue);
+      if (j.venue === "pair-curve") setPcOut({ pairId: j.pair.pairId, pc: j.pairCurve, keys: j.mintSecretKeys, notes: j.pair.notes ?? [] });
+      else setOut({ pairId: j.pair.pairId, a: j.bundles.a as Bundle, b: j.bundles.b as Bundle, notes: j.pair.notes ?? [] });
+    } catch (e) { const v = venueFrom409(e); if (v) setVenue(v); setErr(String((e as Error).message ?? e)); } finally { setBusy(false); }
   };
 
   const tileButton = (
@@ -135,7 +142,7 @@ export function CoinVsCoinTile() {
         <div className="bt-preview-frame">{card(names.a, names.ta, model?.rule ?? null)}</div>
         <div className="bt-preview-frame">{card(names.b, names.tb, ruleB)}</div>
       </div>
-      {model && <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm"><div className="text-xs text-neutral-400 mb-1">Review</div><p>{model.sentence}</p>{model.problems.length > 0 && <ul className="mt-2 text-xs text-red-400 list-disc pl-4">{model.problems.map((x) => <li key={x}>{x}</li>)}</ul>}<p className="mt-2 text-xs text-neutral-500">A tie burns neither coin (a receipt still posts). If the independent cross-read disagrees by more than 2 points, that window is withheld: no reading, no burn. Both or neither: burns start once both coins have a pool; if one has none by the void date, the pair voids.</p></div>}
+      {model && <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm"><div className="text-xs text-neutral-400 mb-1">Review</div><p>{model.sentence}</p><p className="mt-1 text-xs text-neutral-300" data-venue={venue}>launch venue: {venue === "pair-curve" ? PAIR_CURVE_REVIEW_LINE : "two LaunchLab curves · each coin graduates on its own"}</p>{model.problems.length > 0 && <ul className="mt-2 text-xs text-red-400 list-disc pl-4">{model.problems.map((x) => <li key={x}>{x}</li>)}</ul>}<p className="mt-2 text-xs text-neutral-500">A tie burns neither coin (a receipt still posts). If the independent cross-read disagrees by more than 2 points, that window is withheld: no reading, no burn. Both or neither: burns start once both coins have a pool; if one has none by the void date, the pair voids.</p></div>}
       <div className="space-y-2 text-sm">
         {!wallet.publicKey && <label className="block text-xs text-neutral-400">Creator wallet (public key)<FieldHelp id="wallet-paste" /><input data-help="wallet-paste" className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="connect a wallet above, or paste a public key" /></label>}
         <label className="flex items-center gap-2 text-xs"><FieldHelp id="ack-locked" /><input data-help="ack-locked" type="checkbox" checked={ackLocked} onChange={(e) => setAckLocked(e.target.checked)} /> I understand the rules cannot be changed by anyone, including me</label>
@@ -143,6 +150,8 @@ export function CoinVsCoinTile() {
         <button disabled={!model?.rule || !creator || !ackLocked || !ackNoReturns || busy || !names.ta || !names.tb} onClick={launch} className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950 disabled:opacity-50">{busy ? "Building…" : "Build both coins"}</button>
         {err && <p className="text-xs text-red-400">{err}</p>}
       </div>
+      {pcOut && <PairCurveSign pc={pcOut.pc} mintKeys={pcOut.keys} creator={creator || null} tickers={{ a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }} notes={pcOut.notes} />}
+      {pcOut && <p className="text-xs"><a className="underline" href={`/burnticker/p/${pcOut.pairId}`}>Open the pair page →</a></p>}
       {out && <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-xs space-y-1"><div>Pair <code>{out.pairId}</code>: ${out.a.ticker} + ${out.b.ticker} — unsigned bundles built; sign A first, then B.</div>{[out.a, out.b].map((x) => <div key={x.mint}>${x.ticker} · mint <code>{x.mint}</code> · rules sha256 {x.rules.sha256.slice(0, 12)}… {x.ready ? "" : `· not signable yet: ${x.pending.join("; ")}`}</div>)}{out.notes.map((n) => <div key={n} className="text-neutral-500">{n}</div>)}<a className="underline" href={`/burnticker/p/${out.pairId}`}>Open the pair page →</a></div>}
     </section>
   );
