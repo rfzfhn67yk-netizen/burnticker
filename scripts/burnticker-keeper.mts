@@ -38,7 +38,8 @@ import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRow
 import { buildOpsJson, publishOps } from "../src/lib/burnticker/checkin.ts";
 import { writeOwnTokensGenerated } from "../src/lib/burnticker/ownTokensSync.ts";
 import { readMarket, type MarketReader } from "../src/lib/burnticker/market.ts";
-import { nativeSourceById } from "../src/lib/burnticker/sources/native.ts";
+import { nativeSourceById, setNativeClients } from "../src/lib/burnticker/sources/native.ts";
+import { envGameDeps, polymarketGameReaders } from "../src/lib/burnticker/sources/gameSettle.ts";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "../src/lib/burnticker/venues.ts";
 import { DECIMALS, TOTAL_SUPPLY } from "../src/lib/burnticker/rules.ts";
 import { crankPairCurves, pairCurveEnabled, PAIR_CURVE_FLAG } from "../src/lib/burnKeeper/pairCurveCrank.ts";
@@ -68,6 +69,8 @@ const kalshi = new KalshiClient();
 // Polymarket (2026-10-10): Gamma for discovery, the Polygon CTF payout vector for results; the refuse list over every market question.
 const polygonRpcs = (process.env.BURNTICKER_POLYGON_RPC_URLS ?? "").split(",").map((x) => x.trim()).filter((x) => /^https:\/\//.test(x));
 const polymarket = new PolymarketClient({ refuse: (titles) => [...new Set(refusalsFor(loadRefuseList(), { titles }).map((r) => r.reason))], ...(polygonRpcs.length ? { rpcUrls: polygonRpcs } : {}) });
+// team coins: each game settles on its on-chain payout where a moneyline market exists, else TheSportsDB (commercial); never ESPN
+setNativeClients({ games: { ...envGameDeps(process.env), ...polymarketGameReaders(polymarket) } });
 const PROGRAM_ID = process.env.BURNTICKER_PROGRAM_ID?.trim() || null;
 
 /** The real client when the program id, an RPC and the keeper's key exist; the fake otherwise (nothing sent). */

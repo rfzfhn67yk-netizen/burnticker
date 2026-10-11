@@ -1,6 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, espnSeriesTitle, espnSettled, gamesFor, outcomeOf, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
+import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
+import { CROSS_LABEL, crossAvailable, crossIdOf, envGameDeps, settleGame, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
 import { NwsClient, crossCheck, iemFor, nwsSeriesTitle, nwsSettled, parseNwsSeries, qualifies, stationByCode, type NwsSeries } from "@/lib/burnticker/sources/nws";
 
@@ -35,40 +36,49 @@ export interface NativePreflight {
 
 let espn: EspnClient | null = null, nws: NwsClient | null = null, fec: FecClient | null = null;
 /** For tests (and the keeper): the clients the native sources read through. */
-export function setNativeClients(c: { espn?: EspnClient | null; nws?: NwsClient | null; fec?: FecClient | null }): void { if (c.espn !== undefined) espn = c.espn; if (c.nws !== undefined) nws = c.nws; if (c.fec !== undefined) fec = c.fec; }
+let games: GameDeps | null = null;
+export function setNativeClients(c: { espn?: EspnClient | null; nws?: NwsClient | null; fec?: FecClient | null; games?: GameDeps | null }): void { if (c.espn !== undefined) espn = c.espn; if (c.nws !== undefined) nws = c.nws; if (c.fec !== undefined) fec = c.fec; if (c.games !== undefined) games = c.games; }
+/** How games settle on this host (gameSettle.ts): the licensed keys from the environment and the Polymarket game-market readers the server registers. */
+export const gameDeps = (): GameDeps => games ?? envGameDeps();
 /** The shared clients (one polite, cached reader per process). */
 export const espnClient = (): EspnClient => (espn ??= new EspnClient());
 export const nwsClient = (): NwsClient => (nws ??= new NwsClient());
 export const fecClient = (): FecClient => (fec ??= new FecClient());
 
 function espnSource(id: string, s: EspnSeries): NativeSource {
-  const L = LEAGUES[s.league], t = teamByAbbr(s.league, s.abbr)!;
+  const t = teamByAbbr(s.league, s.abbr)!, cid = crossIdOf(s.league), crossLabel = CROSS_LABEL[cid];
+  const deps = () => gameDeps();
+  const settles = "settled on the game's on-chain payout where a market exists, else on a licensed final score";
   return {
-    id, family: s.kind === "team" ? "espn.team" : "espn.game", title: espnSeriesTitle(s), sourceName: `ESPN scoreboard · first-party, cross-read with ${L.crossLabel}`,
-    sourceUrl: `https://www.espn.com/${s.league}/team/_/name/${t.abbr.toLowerCase()}`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
-    unit: { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, read ≥ 6 h after the start and only once ${L.crossLabel} agrees on the final score; a tie counts as neither` },
+    id, family: s.kind === "team" ? "espn.team" : "espn.game", title: espnSeriesTitle(s), sourceName: `${settles}; confirmed by ${crossLabel}`,
+    sourceUrl: `https://www.thesportsdb.com/`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
+    unit: { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
-    flags: ["unofficial public endpoint (ESPN does not document it); terms unchecked", L.cross === "thesportsdb" ? "cross-read: TheSportsDB (free test key unless BURNTICKER_THESPORTSDB_KEY is set)" : `cross-read: ${L.crossLabel} (league official)`],
-    launchable: { ok: true, why: null }, crossRead: L.crossLabel, descriptorId: "espn.scoreboard", crossReadId: L.cross === "nhl" ? "nhl.score" : L.cross === "mlb" ? "mlb.statsapi" : "thesportsdb.events",
-    settledSince: (_rule, sinceIso, o = {}) => espnSettled(espnClient(), s, sinceIso, o),
+    flags: ["the game list (which games, when) comes from ESPN's scoreboard: discovery only, never a settlement input", "primary B needs BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial licence)", cid === "apisports.games" ? "cross-read: API-Sports (needs BURNTICKER_APISPORTS_KEY; without it the cross-read is missing)" : `cross-read: ${crossLabel} (league official)`],
+    launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "thesportsdb.v2", crossReadId: cid,
+    settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps()),
     preflight: async (nowMs) => {
-      const c = espnClient();
+      const c = espnClient(), d = deps();
+      const none = { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "" };
+      if (!crossAvailable(s.league, d)) return { ...none, problem: { code: "cross-read-unreadable", reason: `${LEAGUES[s.league].label}: cross-read missing — no official league feed is configured and BURNTICKER_APISPORTS_KEY (a second licensed provider) is not set` } };
       let games;
-      try { games = await gamesFor(c, s); } catch (e) { return { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "", problem: { code: "primary-unreadable", reason: `ESPN could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
-      if (s.kind === "game" && !games.length) return { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "", problem: { code: "primary-unreadable", reason: `ESPN does not list game ${s.eventId} for ${t.name}` } };
+      try { games = await gamesFor(c, s); } catch (e) { return { ...none, problem: { code: "primary-unreadable", reason: `the game list could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
+      if (s.kind === "game" && !games.length) return { ...none, problem: { code: "primary-unreadable", reason: `game ${s.eventId} is not listed for ${t.name}` } };
       const next = games.find((g) => !g.completed && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS) ?? null;
-      const nextAt = next?.startsAt ?? null, nextBasis = next ? `the next game's start (ESPN): ${next.name}` : "no scheduled game listed";
-      const tid = s.kind === "team" ? s.teamId : null;
-      const done = games.filter((g) => outcomeOf(g, s.abbr, tid) !== null && Date.parse(g.startsAt) + SETTLE_AFTER_START_MS <= nowMs);
+      const nextAt = next?.startsAt ?? null, nextBasis = next ? `the next game's start (schedule): ${next.name}` : "no scheduled game listed";
+      const done = games.filter((g) => g.completed && Date.parse(g.startsAt) + SETTLE_AFTER_START_MS <= nowMs);
       const lastGame = done[done.length - 1] ?? null;
-      if (!lastGame) return { last: null, crossLast: null, agreement: null, basis: "no completed game yet: the cross-read compares at the first one", nextAt, nextBasis, problem: null };
-      const v = await c.crossRead(lastGame);
-      const out = outcomeOf(lastGame, s.abbr, tid);
-      const last = { id: lastGame.date, value: `${lastGame.away.abbr} ${lastGame.away.score} @ ${lastGame.home.abbr} ${lastGame.home.score} (${out})`, at: lastGame.startsAt };
-      if (v.verdict === "unavailable") return { last, crossLast: null, agreement: null, basis: v.detail, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: `${L.crossLabel} could not confirm ${t.name}'s latest final (${lastGame.name}): ${v.detail}` } };
-      const crossLast = { id: lastGame.date, value: v.detail, at: lastGame.startsAt };
-      if (v.verdict === "disagree") return { last, crossLast, agreement: false, basis: v.detail, nextAt, nextBasis, problem: { code: "disagreement", reason: `ESPN and ${L.crossLabel} disagree on ${lastGame.name}: ${v.detail}` } };
-      return { last, crossLast, agreement: true, basis: `${lastGame.date}: ESPN ${lastGame.away.score}–${lastGame.home.score} = ${v.detail}`, nextAt, nextBasis, problem: null };
+      if (!lastGame) {
+        // no game played yet: a primary must exist for the next one (its market, or the licensed final)
+        const m = next && d.market ? await d.market(next).catch(() => null) : null;
+        if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: "no primary: no moneyline market for the next game and BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial licence) is not set" } };
+        return { ...none, basis: "no completed game yet: both reads are compared at the first one", nextAt, nextBasis, problem: null };
+      }
+      const v = await settleGame(c, lastGame, d);
+      if (v.kind === "held") return { ...none, nextAt, nextBasis, basis: v.why, problem: { code: /no primary/.test(v.why) ? "primary-unreadable" : /cross-read/.test(v.why) ? "cross-read-unreadable" : "disagreement", reason: `${lastGame.name}: ${v.why}` } };
+      if (v.kind === "awaiting") return { ...none, nextAt, nextBasis, basis: v.why, problem: { code: "cross-read-unreadable", reason: `${lastGame.name}: ${v.why}` } };
+      const last = { id: lastGame.date, value: `${lastGame.name}: ${v.winner} (settled on: ${v.settledOn})`, at: lastGame.startsAt };
+      return { last, crossLast: { id: lastGame.date, value: `confirmed by ${v.confirmedBy}`, at: lastGame.startsAt }, agreement: true, basis: `${lastGame.date}: ${v.detail}`, nextAt, nextBasis, problem: null };
     },
   };
 }

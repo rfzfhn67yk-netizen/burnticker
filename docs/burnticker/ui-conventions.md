@@ -154,13 +154,20 @@ defence in depth, and `test/burntickerSearch.test.ts` scans the search, election
 Off: the Polymarket search, back-test, Browse group, elections flow and search suggestions are withheld. Settlement reads the on-chain
 payout regardless.
 
-**Team coins and matchups never depend on a market.** They run on the ESPN scoreboard (`sources/espn.ts`). Each final counts only once
-a second read from another operator agrees on the score:
-- NHL: the league's own score feed
-- MLB: the league's own StatsAPI
-- NFL and NBA: TheSportsDB, a second public scoreboard (no keyless league feed exists for either)
+**Team coins and matchups — final sourcing (owner: "good to go on the sports sources").** ESPN's scoreboard is discovery only: it lists
+the games and shows the next game and the record, and it is never a settlement input. Each game settles on:
+- **primary A:** the game's on-chain payout (Polymarket moneyline market → the CTF payout vector on Polygon), where a market exists;
+- **primary B:** TheSportsDB v2 under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`), otherwise;
+- **neither:** the game is held and the coin is refused at creation.
 
-The venue badge reads "ESPN scoreboard · first-party".
+It counts only once a cross-read from another operator agrees on the final:
+- MLB: MLB StatsAPI
+- NHL: the NHL score feed
+- NBA: the NBA's cdn schedule feed
+- every other league: API-Sports (`BURNTICKER_APISPORTS_KEY`); without that key the cross-read is missing and the coin is refused
+
+Each reading says which source settled it: "settled on: on-chain payout · confirmed by MLB StatsAPI". The venue badge reads
+"On-chain payout or TheSportsDB · games listed by ESPN".
 
 ### FEC — the smallest gate change to propose
 
@@ -189,7 +196,7 @@ The same path, guided: Browse → Elections & Politics → US Senate → Michiga
 
 The other test cases (they rotate across sports on purpose — no league comes first by habit):
 - "Rays win the World Series" → two cards: the one-shot on Polymarket's 2026 World Series market (the Rays outcome's condition id;
-  10 % once, ends Oct 31) and the recurring Rays coin for this season (2 % per win, ESPN + MLB StatsAPI). No matchup card yet: the
+  10 % once, ends Oct 31) and the recurring Rays coin for this season (2 % per win; each game on its on-chain payout or TheSportsDB, confirmed by MLB StatsAPI). No matchup card yet: the
   Rays' next opponent is still TBD on the frozen schedule.
 - "Lakers win tonight", "Oilers lose", "Arsenal win", "Inter Miami draw" → each league's team card (soccer offers win / loss / draw)
 - "US debt rises $1B" → the Treasury feed · "CPI above 3%" → the CPI feed
@@ -233,7 +240,7 @@ When a window ends (frozen-fixture tested), the keeper records the rule end and 
 
 **Every league.** The pickers and the search cover every team-sport league ESPN's scoreboard serves: baseball, basketball (NBA, WNBA,
 college), hockey, soccer (MLS, NWSL, the Premier League, La Liga, Serie A, the Bundesliga, Ligue 1, the UEFA cups, Liga MX and more),
-football (NFL, college). Each league has an independent cross-read: MLB StatsAPI, the NHL feed, or TheSportsDB. The league picker is a
+football (NFL, college). ESPN's scoreboard lists their games. Settlement is the on-chain payout or TheSportsDB, confirmed by MLB StatsAPI, the NHL feed, the NBA feed, or API-Sports. The league picker is a
 searchable list grouped by sport. The per-league verdicts are in SETTLEMENT-COVERAGE.md.
 
 **The description is generated and locked** (a deliberate choice: anti-misrepresentation). There is no free-text description.

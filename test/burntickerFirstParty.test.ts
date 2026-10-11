@@ -12,7 +12,7 @@ import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { fx } from "./burntickerHelpers.ts";
 
-import { CLI, ESPN_NOW, F, IEM, TSDB, espnFixtureClient, nwsFixtureClient } from "./burntickerFirstPartyHelpers.ts";
+import { CLI, ESPN_NOW, F, IEM, TSDB, espnFixtureClient, fakeGameDeps, nwsFixtureClient } from "./burntickerFirstPartyHelpers.ts";
 
 describe("the ESPN scoreboard adapter", () => {
   test("the static team table per league, with ESPN's abbreviations; free-text team lookup", () => {
@@ -121,10 +121,13 @@ describe("native sources in the catalogue", () => {
   test("the adapter dispatches native series to their own reader; the unit/baseline/direction are fixed", async () => {
     setNativeClients({ espn: espnFixtureClient(), nws: nwsFixtureClient() });
     const cat = new CatalogueAdapter();
-    const r = await cat.settledSince(nativeRule(teamSeries("nfl", "PHI", "loss")), null);
-    assert.equal(r.events[0]?.value, "1");
-    const info = await cat.seriesInfo(teamSeries("nfl", "PHI", "win"));
-    assert.match(info!.settlementSource!.name, /ESPN scoreboard · first-party, cross-read with TheSportsDB/);
+    setNativeClients({ games: fakeGameDeps() });
+    const r = await cat.settledSince(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), "2026-09-30");
+    assert.deepEqual(r.events.map((e) => [e.id, e.value]), [["2026-10-03", "1"], ["2026-10-06", "1"], ["2026-10-08", "1"]], "the three Rays postseason wins");
+    assert.match(r.events[0].title ?? "", /settled on the game's on-chain payout · confirmed by MLB's official feed · see this game on ESPN → https:\/\/www\.espn\.com\/mlb\/game\/_\/gameId\/401907985/);
+    const info = await cat.seriesInfo(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 }));
+    assert.match(info!.settlementSource!.name, /on-chain payout .* confirmed by MLB's official feed/); assert.doesNotMatch(info!.settlementSource!.name, /ESPN/);
+    setNativeClients({ games: null });
     const src = nativeSourceById(nwsSeries("high", "DEN", 85))!;
     assert.deepEqual(nativeRuleProblems(src, { ...nativeRule(src.id), scalar: { unit: 2, perUnit: { fractionOfPool: 0.01 }, baseline: 0, direction: "up" } } as never), ["unit must be 1 (1 qualifying day) for nws.high:DEN-85"]);
     await assert.rejects(cat.settledSince({ ...nativeRule(src.id), scalar: { unit: 1, perUnit: { fractionOfPool: 0.01 }, baseline: 5, direction: "up" } } as never, null), /baseline must be 0/);
@@ -135,31 +138,45 @@ describe("native sources in the catalogue", () => {
 });
 
 describe("the creation preflight passes team coins, matchups and weather rules (coverage gate)", () => {
-  test("a team coin and a one-game matchup coin pass: primary espn.scoreboard, independent cross-read, latest final confirmed", async () => {
+  test("a team coin passes: the game list from the schedule, primary A (the game's on-chain payout) confirmed by MLB's official feed", async () => {
     const { preflightSelector } = await import("@/lib/burnticker/coverage/preflight");
-    setNativeClients({ espn: espnFixtureClient(), nws: nwsFixtureClient() });
-    const team = await preflightSelector(nativeRule(teamSeries("nfl", "PHI", "loss")), { now: ESPN_NOW });
+    setNativeClients({ espn: espnFixtureClient(), nws: nwsFixtureClient(), games: fakeGameDeps() });
+    const team = await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
     assert.equal(team.ok, true, JSON.stringify(team.refusal));
-    assert.equal(team.primary.operator, "ESPN (Disney)"); assert.equal(team.crossRead?.id, "thesportsdb.events"); assert.equal(team.agreement, true);
-    assert.equal(team.nextExpectedAt, "2026-10-11T13:30:00Z", "the JAX game");
-    const game = await preflightSelector(nativeRule(gameSeries("nfl", "401872981", "PHI", "loss")), { now: ESPN_NOW });
-    assert.equal(game.ok, true, JSON.stringify(game.refusal)); assert.equal(game.agreement, null, "the game has not been played: compared at the final");
+    assert.equal(team.primary.operator, "TheSportsDB (commercial licence)", "the descriptor of record is the licensed primary; the game at hand settled on its payout");
+    assert.equal(team.crossRead?.id, "mlb.statsapi"); assert.equal(team.agreement, true);
+    assert.match(team.primary.lastReading?.value ?? "", /settled on: on-chain payout/);
     const wx = await preflightSelector(nativeRule(nwsSeries("high", "DEN", 85)), { now: ESPN_NOW });
     assert.equal(wx.ok, true, JSON.stringify(wx.refusal)); assert.equal(wx.crossRead?.operator, "Iowa Environmental Mesonet (Iowa State University)"); assert.equal(wx.agreement, true);
-    setNativeClients({ espn: null, nws: null });
+    setNativeClients({ espn: null, nws: null, games: null });
   });
 
-  test("refusals: a cross-read that cannot confirm the latest final, a disagreement, a stale station", async () => {
+  test("primary B: no market → TheSportsDB's licensed final, compared score for score with MLB's official feed", async () => {
     const { preflightSelector } = await import("@/lib/burnticker/coverage/preflight");
-    const lar = parseGames("nfl", F("espn/nfl.phi.schedule.json").body).find((g) => g.eventId === "401872970")!;
-    setNativeClients({ espn: espnFixtureClient({ [tsdbUrl("123", lar)]: { event: null } }) });
-    const r1 = await preflightSelector(nativeRule(teamSeries("nfl", "PHI", "win")), { now: ESPN_NOW });
-    assert.equal(r1.refusal?.code, "cross-read-unreadable");
-    setNativeClients({ espn: espnFixtureClient({ [tsdbUrl("123", lar)]: { event: [{ intHomeScore: "21", intAwayScore: "24", strStatus: "FT" }] } }) });
-    assert.equal((await preflightSelector(nativeRule(teamSeries("nfl", "PHI", "win")), { now: ESPN_NOW })).refusal?.code, "disagreement");
+    const { tsdbV2Url } = await import("@/lib/burnticker/sources/gameSettle");
+    const ev = (h: string, a: string) => ({ events: [{ strEvent: "New York Yankees vs Tampa Bay Rays", dateEvent: "2026-10-08", intHomeScore: h, intAwayScore: a, strStatus: "FT" }] });
+    const url = tsdbV2Url(["New York Yankees", "Tampa Bay Rays"]);
+    setNativeClients({ espn: espnFixtureClient({ [url]: ev("3", "4") }), games: fakeGameDeps({ marketFor: () => false, tsdbKey: "TEST" }) });
+    const ok = await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
+    assert.equal(ok.ok, true, JSON.stringify(ok.refusal)); assert.match(ok.primary.lastReading?.value ?? "", /settled on: TheSportsDB/);
+    setNativeClients({ espn: espnFixtureClient({ [url]: ev("3", "5") }), games: fakeGameDeps({ marketFor: () => false, tsdbKey: "TEST" }) });
+    assert.equal((await preflightSelector(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW })).refusal?.code, "disagreement");
+    setNativeClients({ espn: null, games: null });
+  });
+
+  test("refusals: no primary; a payout that disagrees with the official feed; a league whose cross-read is missing; a stale station", async () => {
+    const { preflightSelector } = await import("@/lib/burnticker/coverage/preflight");
+    const TB = nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 }));
+    setNativeClients({ espn: espnFixtureClient(), games: fakeGameDeps({ marketFor: () => false }) });
+    assert.equal((await preflightSelector(TB, { now: ESPN_NOW })).refusal?.code, "primary-unreadable", "no market and no TheSportsDB key: never read from ESPN");
+    setNativeClients({ games: fakeGameDeps({ winner: () => "New York Yankees" }) });
+    assert.equal((await preflightSelector(TB, { now: ESPN_NOW })).refusal?.code, "disagreement");
+    setNativeClients({ games: fakeGameDeps() });
+    const nfl = await preflightSelector(nativeRule(teamSeries("nfl", "PHI", "win", { kind: "season", year: 2026 })), { now: ESPN_NOW });
+    assert.equal(nfl.refusal?.code, "cross-read-unreadable"); assert.match(nfl.refusal!.reason, /cross-read missing .*BURNTICKER_APISPORTS_KEY/);
     setNativeClients({ nws: nwsFixtureClient() });
     assert.equal((await preflightSelector(nativeRule(nwsSeries("high", "DEN", 85)), { now: ESPN_NOW + 30 * 86_400_000 })).refusal?.code, "stale-primary");
-    setNativeClients({ espn: null, nws: null });
+    setNativeClients({ espn: null, nws: null, games: null });
   });
 });
 

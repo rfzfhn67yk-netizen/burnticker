@@ -165,8 +165,10 @@ locked `derby` block (`src/lib/burnticker/derby/spec.ts`); design note: [DERBY.m
   outcomes, end date, resolution rules and condition id only (`scrubMarketData`, tested on every discovery payload). Settlement always
   reads the Polymarket payout on chain.
 - **Native first-party sources** (`src/lib/burnticker/sources/native.ts`): catalogue series with their own reader — `espn.team:<league>-<ABBR>-win|loss`,
-  `espn.game:<league>-<event>-<ABBR>-win|loss` (ESPN scoreboard; NHL / MLB official feeds or TheSportsDB as the cross-read; a game is read
-  ≥ 6 h after its start and only when both agree), `nws.high:<ST>-<°F>`, `nws.rain:<ST>-<in>`, `nws.snow:<ST>` (NWS CLI final reports;
+  `espn.game:<league>-<event>-<ABBR>-win|loss` (the games listed by ESPN's scoreboard, discovery only; each game settles on its on-chain payout where a Polymarket
+  moneyline market exists, else on TheSportsDB v2 under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`), confirmed by the
+  league's official feed — MLB StatsAPI, NHL, NBA cdn — or API-Sports (`BURNTICKER_APISPORTS_KEY`); a game is read ≥ 6 h after its
+  start and only when both agree; src/lib/burnticker/sources/gameSettle.ts), `nws.high:<ST>-<°F>`, `nws.rain:<ST>-<in>`, `nws.snow:<ST>` (NWS CLI final reports;
   the Iowa Environmental Mesonet as the cross-read), `fec.beats:<A>-<B>` (OpenFEC receipts per report; same-operator cross-read, refused
   by the coverage gate). Scalar, unit 1, baseline 0, direction up. Their descriptors (kind `native`) in `config/burnticker/sources.json`
   feed the coverage matrix and the creation preflight.

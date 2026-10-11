@@ -14,7 +14,7 @@ A **primary** is a first-party source adapter: kind attested-http or on-chain, t
 
 | Category | Verdict | Primaries | Independent cross-reads | Polymarket tags |
 |---|---|---|---|---|
-| Sports | **settleable** | `espn.scoreboard` | `nhl.score` (of `espn.scoreboard`), `mlb.statsapi` (of `espn.scoreboard`), `thesportsdb.events` (of `espn.scoreboard`) | sports |
+| Sports | **settleable** | `polymarket.gamepayout`, `thesportsdb.v2` | `thesportsdb.v2` (of `polymarket.gamepayout`), `nhl.score` (of `polymarket.gamepayout`), `mlb.statsapi` (of `polymarket.gamepayout`), `nba.cdn` (of `polymarket.gamepayout`), `apisports.games` (of `polymarket.gamepayout`), `polymarket.gamepayout` (of `thesportsdb.v2`), `nhl.score` (of `thesportsdb.v2`), `mlb.statsapi` (of `thesportsdb.v2`), `nba.cdn` (of `thesportsdb.v2`), `apisports.games` (of `thesportsdb.v2`) | sports |
 | Elections & Politics | adjudicated-only (Polymarket) | `fedreg.finalRules`, `fec.reports` | none | elections, politics |
 | Economics | **settleable** | `treasury.debt`, `fred.UNRATE`, `fred.CPIAUCSL`, `fred.GFDEBTN`, `bls.eggs` | `fred.GFDEBTN` (of `treasury.debt`), `bls.LNS14000000` (of `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `treasury.debt` (of `fred.GFDEBTN`), `fred.APU0000708111` (of `bls.eggs`) | economy |
 | Financial markets | **settleable** | `pyth.equity`, `pyth.fx`, `pyth.metal`, `pyth.commodity`, `pyth.rates` | `redstone.equity` (of `pyth.equity`), `redstone.fx` (of `pyth.fx`), `redstone.metal` (of `pyth.metal`), `redstone.commodity` (of `pyth.commodity`) | finance |
@@ -28,25 +28,27 @@ A **primary** is a first-party source adapter: kind attested-http or on-chain, t
 
 ## Sports — settleable
 
-primary with an independent cross-read: espn.scoreboard ↔ nhl.score, espn.scoreboard ↔ mlb.statsapi, espn.scoreboard ↔ thesportsdb.events.
+primary with an independent cross-read: polymarket.gamepayout ↔ thesportsdb.v2, polymarket.gamepayout ↔ nhl.score, polymarket.gamepayout ↔ mlb.statsapi, polymarket.gamepayout ↔ nba.cdn, polymarket.gamepayout ↔ apisports.games, thesportsdb.v2 ↔ nhl.score, thesportsdb.v2 ↔ mlb.statsapi, thesportsdb.v2 ↔ nba.cdn, thesportsdb.v2 ↔ apisports.games.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
-| `espn.scoreboard` | primary | ESPN (Disney) | espn.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
-| `nhl.score` | cross-read of `espn.scoreboard` | National Hockey League | nhle.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
-| `mlb.statsapi` | cross-read of `espn.scoreboard` | MLB Advanced Media | mlb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
-| `thesportsdb.events` | cross-read of `espn.scoreboard` | TheSportsDB | thesportsdb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
+| `polymarket.gamepayout` | primary; cross-read of `thesportsdb.v2` | Polymarket / UMA (Conditional Tokens on Polygon) | polygonscan.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
+| `thesportsdb.v2` | primary; cross-read of `polymarket.gamepayout` | TheSportsDB (commercial licence) | thesportsdb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
+| `nhl.score` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | National Hockey League | nhle.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
+| `mlb.statsapi` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | MLB Advanced Media | mlb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
+| `nba.cdn` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | National Basketball Association | nba.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
+| `apisports.games` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | API-Sports | api-sports.io | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 
-Mapped here but not a primary: `espn.nfl` (not launchable: launchable once the endpoint's terms are checked and an independent cross-read of the same results is configured; until then NFL results settle only on Polymarket game markets (Kalshi is not a settlement input: owner decision 2026-10-10)).
+Mapped here but not a primary: `espn.nfl` (not launchable: launchable once the endpoint's terms are checked and an independent cross-read of the same results is configured; until then NFL results settle only on Polymarket game markets (Kalshi is not a settlement input: owner decision 2026-10-10)); `espn.scoreboard` (not launchable: Team coins and matchups list their games from here; each game settles on its on-chain payout or TheSportsDB (commercial) and is confirmed by the league's official feed or API-Sports.).
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: espn.scoreboard ↔ nhl.score, espn.scoreboard ↔ mlb.statsapi, espn.scoreboard ↔ thesportsdb.events |
+| Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: polymarket.gamepayout ↔ thesportsdb.v2, polymarket.gamepayout ↔ nhl.score, polymarket.gamepayout ↔ mlb.statsapi, polymarket.gamepayout ↔ nba.cdn, polymarket.gamepayout ↔ apisports.games, thesportsdb.v2 ↔ nhl.score, thesportsdb.v2 ↔ mlb.statsapi, thesportsdb.v2 ↔ nba.cdn, thesportsdb.v2 ↔ apisports.games |
 | Any market → a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | Polymarket tag(s) sports: the result is the CTF payout vector on Polygon; no primary source here is binary |
 | Any market → one market (`one-shot`) | adjudicated-only (Polymarket) | Polymarket tag(s) sports: the result is the CTF payout vector on Polygon; no primary source here is binary |
-| Team coin (`team-coin`) | **settleable** | ESPN scoreboard game results in every team-sport league it serves (baseball, basketball, hockey, soccer, football, college), each confirmed by the league's own feed (MLB, NHL) or TheSportsDB (every other league) before it counts (src/lib/burnticker/sources/espn.ts; per league below) |
-| Matchup pair → this game only (`matchup-game`) | **settleable** | two coins on one game, one per team (espn.game:…-loss), settled on the ESPN final score confirmed by the league's cross-read |
-| Matchup pair → every game this season (`matchup-season`) | **settleable** | two team coins on the ESPN scoreboard, each game confirmed by its league's cross-read |
+| Team coin (`team-coin`) | **settleable** | every game of the team (listed by ESPN's scoreboard, discovery only) settles on its on-chain payout where a Polymarket moneyline market exists, else on TheSportsDB's final under its commercial licence, confirmed by the league's official feed (MLB, NHL, NBA) or API-Sports (src/lib/burnticker/sources/gameSettle.ts; per league below) |
+| Matchup pair → this game only (`matchup-game`) | **settleable** | two coins on one game, one per team (espn.game:…-loss): the game settles on its on-chain payout where a moneyline market exists, else TheSportsDB's licensed final, confirmed by the league's cross-read |
+| Matchup pair → every game this season (`matchup-season`) | **settleable** | two team coins, each game settled on its on-chain payout or TheSportsDB's final and confirmed by its league's cross-read |
 
 Kalshi categories mapped here (Sports) are discovery only: never a settlement input.
 
@@ -261,34 +263,34 @@ No primary source maps to this category.
 
 ## Per league — team coins and matchups
 
-Every team-sport league the ESPN scoreboard adapter serves, its independent cross-read, and the verdict. A league without a keyless cross-read is listed as **cross-read missing** and refused at creation (never dropped).
+ESPN's scoreboard lists the games (which, when, the next game and the record) and is never a settlement input. Each game settles on **primary A**, the game's on-chain payout where a Polymarket moneyline market exists, else **primary B**, TheSportsDB's final under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`). The game is confirmed by the league's official feed, or by API-Sports where no official feed exists (`BURNTICKER_APISPORTS_KEY`). Without that key the league's cross-read is missing and its coins are refused at creation.
 
-| League | Sport | Teams | Draws | Primary | Cross-read | Verdict |
-| --- | --- | ---: | :---: | --- | --- | --- |
-| MLB (`mlb`) | baseball | 30 | — | espn.scoreboard | mlb.statsapi (MLB Advanced Media) | settleable |
-| NBA (`nba`) | basketball | 30 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| NCAA men's basketball (`mcbb`) | basketball | 362 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| NCAA women's basketball (`wcbb`) | basketball | 362 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| WNBA (`wnba`) | basketball | 15 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| College football (`cfb`) | football | 756 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| NFL (`nfl`) | football | 32 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| NHL (`nhl`) | hockey | 32 | — | espn.scoreboard | nhl.score (National Hockey League) | settleable |
-| Argentine Primera (`arg.1`) | soccer | 29 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Brasileirão (`bra.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Bundesliga (`ger.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| EFL Championship (`eng.2`) | soccer | 24 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Eredivisie (`ned.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| La Liga (`esp.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Liga MX (`mex.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Ligue 1 (`fra.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| MLS (`usa.1`) | soccer | 30 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| NWSL (`usa.nwsl`) | soccer | 16 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Premier League (`eng.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Primeira Liga (`por.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Scottish Premiership (`sco.1`) | soccer | 11 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| Serie A (`ita.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| UEFA Champions League (`uefa.champions`) | soccer | 36 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| UEFA Conference League (`uefa.europa.conf`) | soccer | 36 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
-| UEFA Europa League (`uefa.europa`) | soccer | 35 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| League | Sport | Teams | Draws | Primary A | Primary B | Cross-read | Verdict |
+| --- | --- | ---: | :---: | --- | --- | --- | --- |
+| MLB (`mlb`) | baseball | 30 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | mlb.statsapi (MLB Advanced Media) | settleable |
+| NBA (`nba`) | basketball | 30 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | nba.cdn (National Basketball Association) | settleable |
+| NCAA men's basketball (`mcbb`) | basketball | 362 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| NCAA women's basketball (`wcbb`) | basketball | 362 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| WNBA (`wnba`) | basketball | 15 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| College football (`cfb`) | football | 756 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| NFL (`nfl`) | football | 32 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| NHL (`nhl`) | hockey | 32 | — | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | nhl.score (National Hockey League) | settleable |
+| Argentine Primera (`arg.1`) | soccer | 29 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Brasileirão (`bra.1`) | soccer | 20 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Bundesliga (`ger.1`) | soccer | 18 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| EFL Championship (`eng.2`) | soccer | 24 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Eredivisie (`ned.1`) | soccer | 18 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| La Liga (`esp.1`) | soccer | 20 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Liga MX (`mex.1`) | soccer | 18 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Ligue 1 (`fra.1`) | soccer | 18 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| MLS (`usa.1`) | soccer | 30 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| NWSL (`usa.nwsl`) | soccer | 16 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Premier League (`eng.1`) | soccer | 20 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Primeira Liga (`por.1`) | soccer | 18 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Scottish Premiership (`sco.1`) | soccer | 11 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| Serie A (`ita.1`) | soccer | 20 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| UEFA Champions League (`uefa.champions`) | soccer | 36 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| UEFA Conference League (`uefa.europa.conf`) | soccer | 36 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
+| UEFA Europa League (`uefa.europa`) | soccer | 35 | yes | on-chain payout (where a market exists) | TheSportsDB commercial (needs `BURNTICKER_THESPORTSDB_KEY`) | apisports.games (API-Sports) — needs `BURNTICKER_APISPORTS_KEY`, else missing | settleable with a key |
 
-25 of 25 leagues settleable.
+3 of 25 leagues have a keyless official cross-read; 22 need the API-Sports key for theirs. Games without a market need the TheSportsDB key in every league.

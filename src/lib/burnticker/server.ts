@@ -1,4 +1,5 @@
 import "server-only";
+import { envGameDeps, polymarketGameReaders } from "@/lib/burnticker/sources/gameSettle";
 import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
 import path from "node:path";
 import { openRegistry, readingMatches, REGISTRY_FILE, type Registry, type TokenRow } from "@/lib/burnticker/registry";
@@ -22,7 +23,7 @@ import { HermesClient } from "@/lib/burnticker/derby/pyth";
 import { DerbyAdapter } from "@/lib/burnticker/derby/adapter";
 import { readMarket, type MarketReader } from "@/lib/burnticker/market";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "@/lib/burnticker/venues";
-import { nativeSourceById } from "@/lib/burnticker/sources/native";
+import { nativeSourceById, setNativeClients } from "@/lib/burnticker/sources/native";
 import { derbyTitle } from "@/lib/burnticker/api/handlers";
 
 /**
@@ -99,6 +100,8 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const derbyPools = connectionPoolPort(new Connection((env.BURNTICKER_DERBY_RPC_URL ?? "").trim() || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true }));
   const derbyHermes = (env.BURNTICKER_PYTH_API_KEY ?? "").trim() ? HermesClient.fromEnv(env) : null;
   const derby = new DerbyAdapter({ registry, hermes: derbyHermes, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now() });
+  // Team coins: games settle on their Polymarket on-chain payout where a moneyline market exists, else TheSportsDB (gameSettle.ts).
+  setNativeClients({ games: { ...envGameDeps(env), ...(polymarketDiscoveryEnabled(env) ? polymarketGameReaders(polymarket) : { market: null, payout: null }) } });
   cached = {
     registry, derbyPools, derbyHermes,
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, kalshi, polymarket, program, launchLab, cluster,

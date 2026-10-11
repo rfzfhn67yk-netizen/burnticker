@@ -14,6 +14,7 @@ nothing is deployed on mainnet and no mainnet key exists.
 | Mainnet rehearsal coin | not done | `docs/burnticker/REHEARSAL-RUNSHEET.md` |
 | `pair_curve` program (rivalry pairs: both coins graduate or neither; Anchor 1.2.1) | built 2026-10-10; LiteSVM suite and TS fixtures pass; devnet rehearsal run (one pair graduated to two CPMM pools and registered, one pair voided and sold back); not on mainnet; not reviewed | `docs/burnticker/PAIR-CURVE.md`, `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md` |
 | Program deployment, program id, verifiable hash | devnet: deployed 2026-10-10 (`AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM`, upgrade authority a Squads 2-of-3 vault); mainnet: not done | `docs/burnkeeper/devnet-run.md` §4, `docs/burn-receipts/README.md` §5.4 |
+| Team-coin and matchup settlement (sports) | each game settles on its Polymarket on-chain payout where a moneyline market exists, else on TheSportsDB v2 (commercial licence; `BURNTICKER_THESPORTSDB_KEY` not yet set), confirmed by MLB StatsAPI / the NHL feed / the NBA feed, or API-Sports (`BURNTICKER_APISPORTS_KEY` not yet set); ESPN only lists the games | `src/lib/burnticker/sources/gameSettle.ts`, `docs/burnticker/SETTLEMENT-COVERAGE.md` |
 | Second, independent attester | not built | `config/burnticker/transparency.json` (`switchboard-down`, `quorum-1`) |
 | Public repository | public | https://github.com/rfzfhn67yk-netizen/burnticker |
 | Operator contact | set: contact@burnticker.com; security@burnticker.com for reports | `src/lib/burnticker/fees.ts` (`OPERATOR_LINE`), `config/public-repo/overlay/SECURITY.md` |
@@ -139,8 +140,9 @@ same fact; **adjudicated-only** when Polymarket's binary markets are the only ro
 90-day dry run: readings its schedule expected against readings produced, the median latency from the period's end to the keeper's
 first sighting, and the rate at which the primary and its cross-read disagree.
 
-On the frozen fixtures of 2026-10-10 five of eleven categories are settleable (`docs/burnticker/SETTLEMENT-COVERAGE.md`): Sports (the
-ESPN scoreboard ↔ the NHL's and MLB's own feeds, or TheSportsDB), Economics (`fred.UNRATE` ↔ BLS `LNS14000000`, `fred.CPIAUCSL` ↔ BLS
+On the frozen fixtures of 2026-10-10 five of eleven categories are settleable (`docs/burnticker/SETTLEMENT-COVERAGE.md`): Sports (each game
+settles on its Polymarket on-chain payout where a moneyline market exists, else on TheSportsDB under its commercial licence,
+confirmed by the league's own feed — MLB, NHL, NBA — or API-Sports; ESPN's scoreboard only lists the games), Economics (`fred.UNRATE` ↔ BLS `LNS14000000`, `fred.CPIAUCSL` ↔ BLS
 `CUSR0000SA0`, `bls.eggs` ↔ FRED `APU0000708111`, `treasury.debt` ↔ FRED `GFDEBTN` at quarter ends; 0 disagreements on every shared
 month), Financial markets (Pyth ↔ RedStone), Weather & Climate (the NWS climate report ↔ the Iowa Environmental Mesonet) and Crypto &
 On-chain (`bitcoin.blockHeight` ↔ blockstream.info; Pyth ↔ RedStone or the pool TWAP). The other six are adjudicated-only; none is

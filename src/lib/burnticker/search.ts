@@ -19,7 +19,8 @@ import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
  *
  *   a TEAM is named  ALWAYS both shapes, plus the matchup when a live game exists:
  *                    (a) recurring "Burns 2% every time the <Team> win a game — <the rest of the regular season | this postseason>"
- *                        (ESPN final score; the league's own feed or TheSportsDB as the cross-read)
+ *                        (each game: its on-chain payout where a moneyline market exists, else TheSportsDB's licensed final; the league's
+ *                        official feed or API-Sports as the cross-read; ESPN only lists the games)
  *                    (b) one-shot "Burns 10% once, if the <Team> win the <championship>" (Polymarket's winner market found through
  *                        Gamma → the team's outcome → its conditionId, settled on the on-chain payout; the league's official results as
  *                        the cross-check) — and when the market lists no outcome for the team, the card SAYS so instead of vanishing
@@ -97,10 +98,12 @@ function derbyCard(q: string, href: string | null): Suggestion | null {
 /** The query names the team itself (nickname, abbreviation or an alternative), not only its city. */
 export const namesTeam = (q: string, t: EspnTeam): boolean => { const n = norm(q); return (t.strictKeys ?? [t.nickname, t.abbr, ...t.alt]).some((k) => k.length >= 2 && n.includes(` ${k.toLowerCase().replace(/[^a-z0-9$.]+/g, " ").trim()} `)); };
 const CHAMP_WORDS = /\b(world series|championship|champions?|title|super ?bowl|stanley cup|finals|pennant|ring)\b/i;
-const CROSS_NAME_: Partial<Record<LeagueId, string>> = { nhl: "the NHL's own score feed", mlb: "MLB's own StatsAPI", nfl: "TheSportsDB", nba: "TheSportsDB" };
+/** Who settles a team coin's game, in words (gameSettle.ts): never ESPN. */
+export const SPORTS_SETTLEMENT = "the game's on-chain payout where a market exists, else a licensed final score";
+const CROSS_NAME_: Partial<Record<LeagueId, string>> = { nhl: "NHL's official scores", mlb: "MLB's official feed", nba: "NBA's official feed" };
 const OFFICIAL_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official postseason results (statsapi.mlb.com)", nba: "the NBA's official results (nba.com)", nhl: "the NHL's official results (nhl.com)", nfl: "the league's official results" };
 const OFFICIAL_SHORT_: Partial<Record<LeagueId, string>> = { mlb: "MLB's official results", nba: "the NBA's official results", nhl: "the NHL's official results", nfl: "the league's official results" };
-const CROSS_NAME = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => CROSS_NAME_[lg as LeagueId] ?? (LEAGUES[lg as LeagueId]?.cross === "thesportsdb" ? "TheSportsDB" : "a second scoreboard") });
+const CROSS_NAME = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => CROSS_NAME_[lg as LeagueId] ?? "a second licensed provider" });
 const OFFICIAL = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => OFFICIAL_[lg as LeagueId] ?? `the ${LEAGUES[lg as LeagueId]?.label ?? "league"}'s official results` });
 const OFFICIAL_SHORT = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => OFFICIAL_SHORT_[lg as LeagueId] ?? "the league's official results" });
 /** Friendlier names and tickers for the common feeds (else the title's first word). */
@@ -141,9 +144,9 @@ function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "lo
   const series = def.rule.series!, src = nativeSourceById(series)!;
   const descCtx = { endsAt: w.endsAt };
   return {
-    ...base, id: `espn:${series}`, venue: "espn", venueLabel: "ESPN scoreboard · first-party", shape: "recurring",
+    ...base, id: `espn:${series}`, venue: "espn", venueLabel: "On-chain payout · league's official feed", shape: "recurring",
     title: def.title, subtitle: `${t.name} (${LEAGUES[t.league].label})`,
-    settlement: "ESPN's final score", crossRead: CROSS_NAME[t.league], nextAt: w.next?.startsAt ?? null, settleAt: w.next?.startsAt ?? null, endAt: w.endsAt, endText: def.endText,
+    settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: w.next?.startsAt ?? null, settleAt: w.next?.startsAt ?? null, endAt: w.endsAt, endText: def.endText,
     howSettles: src.unit.definition, rule: def.rule, pick: { oracle: "catalogue", series, market: null, title: src.title }, source: { unit: src.unit, baseline: 0, direction: "up" },
     text: def.text, descCtx, badge: def.text.badge, windows, seasonYear: w.year, suggestedName: def.text.name, suggestedTicker: def.text.ticker, score: 3,
   };
@@ -182,8 +185,8 @@ function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Sugges
   const side = (s: Game["home"]): MatchupSide => ({ abbr: s.abbr, name: s.name, nickname: s.nickname || s.abbr, ticker: tickerFrom(s.nickname || s.abbr, "LOSE"), series: gameSeries(t.league, g.eventId, s.abbr, "loss") });
   const a = side(g.away), b = side(g.home);
   return {
-    ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: "ESPN scoreboard · first-party", shape: "pair",
-    title: `Two coins on ${g.name}: the loser's coin burns`, subtitle: g.detail || g.startsAt, settlement: "ESPN's final score", crossRead: CROSS_NAME[t.league],
+    ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: "On-chain payout · league's official feed", shape: "pair",
+    title: `Two coins on ${g.name}: the loser's coin burns`, subtitle: g.detail || g.startsAt, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league],
     nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game", howSettles: "One coin per team; each burns once if its team loses. A tie burns neither.",
     matchup: { league: t.league, eventId: g.eventId, title: g.name, startsAt: g.startsAt, a, b }, score: 2.8,
   };

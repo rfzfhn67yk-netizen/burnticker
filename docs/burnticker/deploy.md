@@ -180,3 +180,19 @@ The ship step is "The host runs the public tree" above: publish, then `BURNTICKE
 `--restart-keepers` to bounce the two keepers between cycles). Units changed in `deploy/systemd/` are re-installed by the ship through
 `install-burnticker-units.sh`. The keepers run from source and pick a change up on their next restart — restart them deliberately, between
 cycles, never mid-crank (runbook §start/stop).
+
+## Owner TODO — keys the launch and the sports settlement wait for (2026-10-10)
+
+None of these are in the repository. Each one goes into the host's environment file:
+
+- **`BURNTICKER_UPLOAD_PAYER`**: the ops wallet that pays Irys to pin each coin's metadata JSON and receipt-art PNG on Arweave
+  (about $0.01–0.05 per coin). It is a base58 Solana secret key, used only for uploads, and it is never the keeper's signer. Fund it
+  with a small balance and top it up. The Irys client (`@irys/upload`, `@irys/upload-solana`) is in `package.json`, so `npm ci` installs it.
+  **Until this key is set, every launch is refused**, because a coin's metadata is never hosted on a server that could change it.
+  Devnet scripts may set `BURNTICKER_ALLOW_HOSTED_METADATA=1` instead.
+- **`BURNTICKER_THESPORTSDB_KEY`**: TheSportsDB under a commercial licence (the v2 API). It is primary B for every game that has no
+  Polymarket moneyline market. Until it is set, such games are held and the coin is refused at creation. Pages that show its data
+  carry the attribution "data: TheSportsDB" (the sources table and the trust page).
+- **`BURNTICKER_APISPORTS_KEY`**: API-Sports, the second licensed provider. It is the cross-read for every league without an official
+  feed of its own: WNBA, NFL, college, and all the soccer leagues. Until it is set, those leagues' cross-read is missing and their coins
+  are refused. MLB, the NHL and the NBA are cross-read by their own official feeds and need no key.

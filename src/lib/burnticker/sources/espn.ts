@@ -292,13 +292,14 @@ export class EspnClient {
     this.fetchImpl = o.fetchImpl ?? (fetch as unknown as FetchLike); this.now = o.now ?? (() => Date.now()); this.minInterval = o.minIntervalMs ?? 250; this.ttl = o.ttlMs ?? 600_000;
     this.tsdbKey = (o.tsdbKey ?? process.env.BURNTICKER_THESPORTSDB_KEY ?? "").trim() || "123";
   }
-  async get(url: string): Promise<unknown> {
+  /** GET with the shared politeness and cache; `headers` carry a licensed reader's key (never cached into the key, never logged). */
+  async get(url: string, headers: Record<string, string> = {}): Promise<unknown> {
     const hit = this.cache.get(url);
     if (hit && this.now() - hit.at < this.ttl) return hit.body;
     const run = async () => {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.lastAt = this.now(); this.requests.push(url);
-      const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA } });
+      const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers } });
       if (!res.ok) throw new Error(`HTTP ${res.status} for ${url.replace(/\/json\/[^/]+\//, "/json/<key>/").slice(0, 120)}`);
       const body = await res.json(); this.cache.set(url, { at: this.now(), body }); return body;
     };

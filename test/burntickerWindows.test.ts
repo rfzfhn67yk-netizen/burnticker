@@ -133,12 +133,12 @@ describe("every league, draws and shoot-outs", () => {
     assert.ok(findTeams("Georgia Bulldogs").some((t) => t.league === "cfb" && t.abbr === "UGA"));
   });
 
-  test("the per-league coverage: every league the adapter serves is listed with a primary and an independent cross-read", () => {
+  test("the per-league coverage: every league listed with its primaries (payout → TheSportsDB) and whether its cross-read exists", () => {
     const rows = leagueCoverage(loadSourceEntries());
     assert.deepEqual(rows.map((r) => r.id).sort(), Object.keys(LEAGUES).sort());
-    for (const r of rows) { assert.equal(r.verdict, "settleable", `${r.label}: ${r.verdict}`); assert.notEqual(r.crossRead?.operator, "ESPN (Disney)"); assert.ok(r.teams > 0, r.label); }
-    assert.equal(rows.find((r) => r.id === "mlb")!.crossRead!.id, "mlb.statsapi");
-    assert.equal(rows.find((r) => r.id === "eng.1")!.crossRead!.id, "thesportsdb.events");
+    for (const r of rows) { assert.equal(r.primaryA, "polymarket.gamepayout", r.label); assert.deepEqual(r.primaryB, { id: "thesportsdb.v2", needsKey: "BURNTICKER_THESPORTSDB_KEY" }); assert.ok(r.teams > 0, r.label); assert.notEqual(r.crossRead?.operator, "ESPN (Disney)"); }
+    assert.deepEqual(rows.filter((r) => r.verdict === "settleable").map((r) => [r.id, r.crossRead!.id]).sort(), [["mlb", "mlb.statsapi"], ["nba", "nba.cdn"], ["nhl", "nhl.score"]]);
+    for (const r of rows.filter((x) => !["mlb", "nba", "nhl"].includes(x.id))) { assert.equal(r.verdict, "settleable with a key", r.label); assert.equal(r.crossRead!.needsKey, "BURNTICKER_APISPORTS_KEY"); }
     assert.ok(rows.filter((r) => r.draws).every((r) => r.sport === "soccer"));
   });
 });

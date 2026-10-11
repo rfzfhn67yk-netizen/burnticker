@@ -23,7 +23,22 @@ export const ESPN_TABLE: Record<string, unknown> = {
   [scheduleUrl("mlb", "TB", 2, 2025)]: F("espn/mlb.30.schedule.2025.2.json").body,
   [scheduleUrl("mlb", "TB", 3, 2025)]: F("espn/mlb.30.schedule.2025.3.json").body,
   ...Object.fromEntries(["20261010", "20261011", "20261012"].map((d) => [scoreboardUrl("mlb", d), F(`espn/mlb.scoreboard.${d}.json`).body])),
+  // MLB StatsAPI (the official cross-read) for the Rays' three postseason games so far (Oct 3, Oct 6 [listed on the 5th's date], Oct 8 [the 7th's])
+  ...Object.fromEntries(["20261003", "20261005", "20261007", "20261008"].map((d) => { const f = F(`espn/mlb.schedule.${d}.json`); return [f.url, f.body]; })),
 };
+/**
+ * PRIMARY A as a fake (gameSettle.ts): a moneyline market for every Rays–Yankees game, paying the named winner (null: unresolved).
+ * `tsdbKey` switches primary B on for games without a market (`marketFor` false).
+ */
+export function fakeGameDeps(o: { winner?: (g: { date: string }) => "Tampa Bay Rays" | "New York Yankees" | null; marketFor?: (g: { date: string }) => boolean; tsdbKey?: string | null; apiSportsKey?: string | null } = {}) {
+  const winner = o.winner ?? (() => "Tampa Bay Rays"), has = o.marketFor ?? (() => true);
+  const markets = new Map<string, string>();
+  return {
+    tsdbKey: o.tsdbKey ?? null, apiSportsKey: o.apiSportsKey ?? null,
+    market: async (g: { date: string; eventId: string; home: { name: string }; away: { name: string } }) => { if (!has(g) || !/Rays|Yankees/.test(g.home.name + g.away.name)) return null; const id = `0x${g.eventId.padStart(64, "0")}`; markets.set(id, g.date); return { conditionId: id, question: `${g.away.name} vs. ${g.home.name}`, outcomes: ["Tampa Bay Rays", "New York Yankees"] as [string, string], url: `https://polymarket.com/event/mlb-${g.eventId}` }; },
+    payout: async (id: string) => { const w = winner({ date: markets.get(id) ?? "" }); return w === null ? { resolved: false, outcome: null } : { resolved: true, outcome: w === "Tampa Bay Rays" ? 0 : 1 }; },
+  };
+}
 /** Gamma: each league's championship search and the matching events (config/burnticker/fixtures/polymarket/championships.json). */
 export const CHAMPIONSHIPS = (fx("polymarket/championships.json") as { search: Record<string, unknown> }).search;
 export const TSDB = F("espn/tsdb.phi-lar.20261004.json");

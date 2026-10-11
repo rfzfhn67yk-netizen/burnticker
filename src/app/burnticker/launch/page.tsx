@@ -521,7 +521,7 @@ export default function LaunchWizard() {
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">Launch a coin {cluster === "devnet" && <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-sky-500/40" title="BURNTICKER_CLUSTER=devnet: test network, no real money">Devnet</span>}</h1>
-          <p className="text-neutral-400 text-sm"><Link className="underline" href="/burnticker">Burnticker</Link> · settles on primary sources (ESPN, BLS, Treasury, NWS…) or on an on-chain Polymarket payout; prediction markets are for discovery · the rule is locked at launch · <Link className="underline" href="/burnticker/trust">what the operator can and cannot do</Link></p>
+          <p className="text-neutral-400 text-sm"><Link className="underline" href="/burnticker">Burnticker</Link> · settles on primary sources (BLS, Treasury, NWS, league feeds…) or on an on-chain Polymarket payout; prediction markets are for discovery · the rule is locked at launch · <Link className="underline" href="/burnticker/trust">what the operator can and cannot do</Link></p>
         </div>
         {step !== "choose" && <button className="text-xs text-neutral-500 underline" onClick={startOver}>start over</button>}
       </header>
@@ -584,7 +584,7 @@ export default function LaunchWizard() {
           <h2 className="text-lg font-medium">…or pick a starting point</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {([
-              ["team", "Team coin", "One team in any league — baseball, basketball, hockey, soccer, football, college. Burns on every win, loss or draw — you pick. Results from the ESPN scoreboard, each confirmed by a second read.", "e.g. $RAYS26 burns every time the Rays win · $ARSENAL every Arsenal win", false],
+              ["team", "Team coin", "One team in any league — baseball, basketball, hockey, soccer, football, college. Burns on every win, loss or draw — you pick. Each game settles on the game's on-chain payout where a market exists, confirmed by the league&apos;s official feed.", "e.g. $RAYS26 burns every time the Rays win · $ARSENAL every Arsenal win", false],
               ["browse", "Browse everything", "Weather, elections, economics, space, culture… pick a category, then a source.", "e.g. the U.S. national debt, Denver's high, a launch count", false],
               ["pair", "Matchup pair", "Two teams, two coins. This game only, this season, or perpetual.", "e.g. $LAKERS vs $CELTICS — the loser burns", false],
               ["single", "Any market", "Search adjudicated markets by name: an election, a show, an award.", "e.g. the Michigan Senate race, the Oscars", true],
@@ -614,7 +614,7 @@ export default function LaunchWizard() {
           {leagueSeries && (
             <div className={card + " space-y-3"}>
               <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick your team</h2><input className={input + " w-64"} placeholder="Rays, Lakers, Oilers, Arsenal, Inter Miami…" value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
-              {teamsBusy && <p className="text-sm text-neutral-500">Loading teams from the ESPN scoreboard…</p>}
+              {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}
               {!teamsBusy && !teams.length && <p className="text-sm text-neutral-500">No teams found for this league right now.</p>}
               <div className="grid gap-2 sm:grid-cols-2">{teams.filter(teamFilter).map((t) => (
                 <button key={t.abbr} onClick={() => chooseTeam(t)} className={`flex items-center gap-3 rounded-lg border p-2 text-left hover:border-amber-400 ${team?.abbr === t.abbr ? "border-amber-400" : "border-neutral-800"}`}>
@@ -622,7 +622,7 @@ export default function LaunchWizard() {
                   <div className="min-w-0"><div className="font-medium truncate">{t.name}</div><div className="text-xs text-neutral-400">{t.recordText === null ? "record —" : `${record(t)} this season`}{t.next ? ` · next: ${t.next.opponent ? `vs ${t.next.opponent}` : t.next.title}, result ~${denver(t.next.expectedAt)}` : ""}</div></div>
                 </button>
               ))}</div>
-              <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">ESPN scoreboard · first-party</span>Teams, records and next games come from ESPN&apos;s scoreboard; every result is confirmed by a second, independent read (the league&apos;s own feed for MLB and the NHL, TheSportsDB for the other leagues) before it counts. Times are Denver time.</p>
+              <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">on-chain payout · league&apos;s official feed</span>Each game settles on the game&apos;s on-chain payout where a market exists, else on a licensed final score, confirmed by the league&apos;s official feed (MLB&apos;s official feed, NHL&apos;s official scores, NBA&apos;s official feed) or a second licensed provider. Times are Denver time.</p>
             </div>
           )}
           {navRow(null)}
@@ -632,7 +632,7 @@ export default function LaunchWizard() {
       {flow === "team" && step === "name" && team && (
         <section className="space-y-4">
           {team.recordText !== null && (() => { const sideNow = rule ? dialsFor(rule, dialCtx).side?.value : "loss"; const n = sideNow === "win" ? team.record.w : team.record.l; return <p className="text-sm text-neutral-300">{team.name} this season so far: {record(team)} → {n} burn{n === 1 ? "" : "s"} would have happened.</p>; })()}
-          {createGrid("catalogue", <p className="text-xs text-neutral-400">Generated selector: <code>{rule?.series}</code> — the team pinned by its ESPN id; each result counts once its final score is confirmed by the second read. Spend floor $1 (smaller spends wait), 0.02 SOL reserve; a tie counts as neither.</p>)}
+          {createGrid("catalogue", <p className="text-xs text-neutral-400">Generated selector: <code>{rule?.series}</code> — the team pinned by its ESPN id; each game settles on the game&apos;s on-chain payout or a licensed final score, counted once the league's official feed agrees. Spend floor $1 (smaller spends wait), 0.02 SOL reserve; a tie counts as neither.</p>)}
           {navRow("Next: review →", !createOk)}
         </section>
       )}
@@ -644,7 +644,7 @@ export default function LaunchWizard() {
           {leagueSeries && (
             <div className={card + " space-y-3"}>
               <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick the game</h2><input className={input + " w-64"} placeholder="search a team: Lakers, Oilers, Arsenal…" value={gameQ} onChange={(e) => setGameQ(e.target.value)} /></div>
-              {gamesBusy && <p className="text-sm text-neutral-500">Loading games from the ESPN scoreboard…</p>}
+              {gamesBusy && <p className="text-sm text-neutral-500">Loading games…</p>}
               {!gamesBusy && !games.length && <p className="text-sm text-neutral-500">No upcoming games{gameQ ? ` matching “${gameQ}”` : ""}.</p>}
               <ul className="divide-y divide-neutral-800">{games.map((g) => (
                 <li key={g.eventTicker}><button onClick={() => chooseGame(g)} className="flex w-full items-center gap-3 py-2 text-left hover:bg-neutral-800/40">
@@ -666,7 +666,7 @@ export default function LaunchWizard() {
               <button key={m} onClick={() => setPairMode(m)} className={`rounded-lg border p-3 text-left ${pairMode === m ? "border-amber-400 ring-1 ring-amber-400" : "border-neutral-700 hover:border-neutral-500"}`}><div className="font-medium">{title}{m === "game" && <span className="ml-2 text-xs text-neutral-400">(default)</span>}</div><div className="text-xs text-neutral-400 mt-1">{body}</div></button>
             ))}</div>
             {pairMode !== "game" && <p className="text-xs text-amber-300">A season pair = two coins, each on its OWN team&apos;s games. They only meet when these two teams play each other (then exactly one burns); the rest of the time each coin keeps its own record, so they are launched as two coins, not as one registered pair.</p>}
-            {pairMode === "game" && <p className="text-xs text-neutral-400">Two coins on this game: each burns once if its team loses, read from the ESPN final score once the cross-read agrees. A tie burns neither.</p>}
+            {pairMode === "game" && <p className="text-xs text-neutral-400">Two coins on this game: each burns once if its team loses — settled on the game&apos;s on-chain payout where a market exists, else a licensed final score, once the league&apos;s official feed agrees. A tie burns neither.</p>}
           </div>
           <div className="grid gap-3 md:grid-cols-2">{([["A", sideA, name, setName, ticker, setTicker, imageUrl, setImageUrl], ["B", sideB, nameB, setNameB, tickerB, setTickerB, imageB, setImageB]] as const).map(([k, sd, nm, setNm, tk, setTk, img, setImg]) => (
             <div key={k} className={card + " space-y-2 text-sm"}>
@@ -686,7 +686,7 @@ export default function LaunchWizard() {
 
       {flow === "pair" && step === "rule" && sideA && sideB && (
         <section className="space-y-4">
-          {btBusy && <p className="text-sm text-neutral-500">Back-testing both sides on this season&apos;s ESPN results…</p>}
+          {btBusy && <p className="text-sm text-neutral-500">Back-testing both sides on this season&apos;s results…</p>}
           {btErr && <p className="text-sm text-red-400">{btErr}</p>}
           {btFresh && bt && btB && (
             <div className="grid md:grid-cols-2 gap-2 text-sm">
@@ -696,7 +696,7 @@ export default function LaunchWizard() {
               {(bt.refusals.length > 0 || btB.refusals.length > 0) && <p className="md:col-span-2 text-red-400">REFUSED: {[...bt.refusals, ...btB.refusals].map((r) => r.reason).join("; ")}</p>}
             </div>
           )}
-          <p className={card + " text-xs text-neutral-400"}>${ticker}: <code>{rule?.series}</code> · ${tickerB}: <code>{ruleB?.series}</code> · each burn spends {rule ? pct(dialsFor(rule, dialCtx).fraction) : "—"} of that coin&apos;s burn pool (change it on the previous step). Final scores from the ESPN scoreboard, each confirmed by a second read before it counts. $1 spend floor, 0.02 SOL reserve.</p>
+          <p className={card + " text-xs text-neutral-400"}>${ticker}: <code>{rule?.series}</code> · ${tickerB}: <code>{ruleB?.series}</code> · each burn spends {rule ? pct(dialsFor(rule, dialCtx).fraction) : "—"} of that coin&apos;s burn pool (change it on the previous step). Each game settles on the game&apos;s on-chain payout or a licensed final score, confirmed by the league&apos;s official feed before it counts. $1 spend floor, 0.02 SOL reserve.</p>
           {navRow("Next: review →", !btFresh || !bt || !btB || bt.refusals.length > 0 || btB.refusals.length > 0)}
         </section>
       )}
@@ -964,7 +964,7 @@ export default function LaunchWizard() {
                   : `When ${game?.title} is final, the loser's coin burns: if the ${sideA.nickname ?? sideA.name} lose, $${ticker} buys itself back with its own fees and burns it; if the ${sideB.nickname ?? sideB.name} lose, $${tickerB} does. A tie burns neither.`}</p>
                 <p>Rules locked forever. You earn nothing from fees. All LP burned.</p>
               </> : <><p className="text-base">{plainSentence(rule, ticker, pick?.title ?? bt?.seriesTitle ?? null)}</p>{settleNote && <p className="text-sm text-neutral-400">Settled by: {settleNote}</p>}<p>Rule locked forever. You earn nothing from fees. All LP burned.</p></>}
-            {flow === "team" && team && team.recordText !== null && <p className="text-neutral-400">This season so far the {team.nickname ?? team.name} are {record(team)}: that would have been {(rule ? dialsFor(rule, dialCtx).side?.value : "loss") === "win" ? team.record.w : team.record.l} burn(s).{btFresh && bt ? ` This season on the ESPN scoreboard: ${bt.backtest.totals.burnEvents} burn(s) in ${bt.backtest.totals.events} game day(s).` : ""}</p>}
+            {flow === "team" && team && team.recordText !== null && <p className="text-neutral-400">This season so far the {team.nickname ?? team.name} are {record(team)}: that would have been {(rule ? dialsFor(rule, dialCtx).side?.value : "loss") === "win" ? team.record.w : team.record.l} burn(s).{btFresh && bt ? ` This season so far (settled readings): ${bt.backtest.totals.burnEvents} burn(s) in ${bt.backtest.totals.events} game day(s).` : ""}</p>}
             {btFresh && bt?.refusals.length ? <p className="text-red-400">REFUSED: {bt.refusals.map((r) => r.reason).join("; ")}</p> : null}
           </div>
           <details className={card}><summary className="cursor-pointer text-neutral-300">Details: the exact rule{pairOn ? "s" : ""}, the receipt format, fees</summary>

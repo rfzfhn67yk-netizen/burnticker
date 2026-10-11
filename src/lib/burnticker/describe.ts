@@ -65,7 +65,7 @@ const possessive = (n: string) => (n.endsWith("s") ? `${n}'` : `${n}'s`);
 export const shortDate = (iso: string | null | undefined): string | null => (iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00Z` : iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" }) : null);
 const day = shortDate;
 export const tickerFrom = (s: string, suffix = ""): string => { const base = s.toUpperCase().replace(/[^A-Z0-9]/g, ""); return (base.slice(0, Math.max(2, 10 - suffix.length)) + suffix).slice(0, 10); };
-const CROSS: Record<string, string> = { nhl: "the NHL's own score feed", mlb: "MLB's own StatsAPI", nfl: "TheSportsDB", nba: "TheSportsDB" };
+const CROSS: Record<string, string> = { nhl: "NHL's official scores", mlb: "MLB's official feed", nba: "NBA's official feed" };
 const CHAMP_CODE: Record<string, string> = { mlb: "WS", nfl: "SB", nba: "TITLE", nhl: "CUP" };
 const yy = (league: LeagueId, year: number) => String(seasonStartYear(league, year) % 100).padStart(2, "0");
 const nextSeason = (league: LeagueId, year: number) => seasonLabel(league, year + 1);
@@ -110,7 +110,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const verb = o === "win" ? "win" : o === "draw" ? "draw" : "lose", noun = o === "win" ? "win" : o === "draw" ? "draw" : "loss";
   const other = o === "win" ? `a loss or a ${tie}` : o === "draw" ? "a win or a loss" : `a win or a ${tie}`;
   const sfx = o === "win" ? "" : o === "draw" ? "D" : "L", Noun = o === "win" ? "Wins" : o === "draw" ? "Draws" : "Losses";
-  const cross = CROSS[s.league] ?? (L0.cross === "thesportsdb" ? "TheSportsDB" : "a second scoreboard");
+  const cross = CROSS[s.league] ?? "a second licensed provider";
   const badge = windowBadge(r, c);
   const mk = (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]): CoinText => {
     const ruleBlock = `${rules} ${windowSentence}${leagueSentence(r)} ${CLOSER}`;
@@ -118,7 +118,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   };
   if (s.kind === "team") {
     const w: Window = s.window;
-    const settle = `Settled on ESPN's final score, cross-checked against ${cross}. Nothing happens on ${other}.`;
+    const settle = `Each game settles on the game's on-chain payout where a market exists, else on a licensed final score, confirmed by ${cross}. Nothing happens on ${other}.`;
     const oneLiner = `burns when ${ref} ${verb}`;
     const every = (scope: string) => `Every ${nick} ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}`;
     if (w.kind === "season") {
@@ -145,9 +145,9 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
       w.scope === "post" ? `This coin covers ${poss} current postseason only. After ${poss} last playoff game ${BURN_DOWN}.` : `This coin covers the current ${nick} season only (regular season and playoffs). After ${poss} last game ${BURN_DOWN}.`, w.scope === "post" ? "post" : "season", "recurring");
   }
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
-  const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : ` in ESPN game ${s.eventId}`;
+  const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : ` in game ${s.eventId}`;
   const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " that game"}`;
-  return mk(`${nick} ${o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tickerFrom(nick, o === "win" ? "WIN" : o === "draw" ? "DRAW" : "LOSE"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. Settled on ESPN's final score, cross-checked against ${cross}. Nothing happens otherwise${o === "draw" ? "" : `, and a ${tie} burns nothing`}.`,
+  return mk(`${nick} ${o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tickerFrom(nick, o === "win" ? "WIN" : o === "draw" ? "DRAW" : "LOSE"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. Settled on the game's on-chain payout where a market exists, else on a licensed final score, confirmed by ${cross}. Nothing happens otherwise${o === "draw" ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
 }
 

@@ -76,7 +76,7 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
 
   test("'Eagles win' → an ESPN team card; 'US debt rises $1B' → Treasury; 'Detroit high above 90' → NWS; 'WIF vs SHIB' → the Coin vs Coin tile", async () => {
     const eagles = await universalSearch("Eagles win", deps());
-    assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026", "this season by default, the team pinned by its ESPN id"); assert.equal(eagles.cards[0].venueLabel, "ESPN scoreboard · first-party");
+    assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026", "this season by default, the team pinned by its ESPN id"); assert.equal(eagles.cards[0].venueLabel, "On-chain payout · league's official feed"); assert.doesNotMatch(eagles.cards[0].settlement, /ESPN/);
     assert.ok(eagles.cards.some((c) => c.matchup?.eventId === "401872981" && c.matchup.a.series === "espn.game:nfl-401872981-PHI-loss"), "the next game (at JAX) as a matchup card");
     assert.ok(!eagles.cards.some((c) => c.venue === "kalshi"));
     const debt = await universalSearch("US debt rises $1B", deps());
