@@ -96,29 +96,29 @@
           "deployed": false,
           "executableHash": null,
           "buildHash": "2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3",
-          "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": false,
           "executableHash": null,
           "buildHash": "82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4",
-          "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
         }
       },
       "launchlabPlatform": "TODO_MAINNET_PLATFORM_ID",
       "squads": {
-        "vault": "TODO_MAINNET_SQUADS_VAULT",
-        "multisig": "TODO_MAINNET_SQUADS_MULTISIG",
+        "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+        "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
         "timeLock": "48 h"
       },
       "wallets": {
-        "dev-fee": "TODO_MAINNET_DEV_FEE_WALLET",
+        "dev-fee": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
         "keeper": "TODO_MAINNET_KEEPER",
         "deployer": "TODO_MAINNET_DEPLOYER",
         "platform-admin": "TODO_MAINNET_PLATFORM_ADMIN",
-        "squads-vault": "TODO_MAINNET_SQUADS_VAULT",
+        "squads-vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "squads-member-1": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ",
         "squads-member-2": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt",
         "squads-member-3": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG",
