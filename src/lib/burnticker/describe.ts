@@ -51,8 +51,34 @@ const CLOSER = "Creator earns nothing; LP locked forever, its fees fund the burn
  * prize / reward / payout / "win fees" out of every pair sentence.
  */
 export const PAIR_DESCRIPTION_SENTENCE = "Paired with a rival coin: fees from both coins burn the winner's supply (the coin whose rule a result fires).";
+/**
+ * THE ONE FACTUAL PAIR SENTENCE (review 2 F6, 2026-10-11): every surface that explains a registered rivalry pair — the templates gallery,
+ * the landing page (site/burnticker/index.html, pinned by test/burntickerTemplates.test.ts), the review card, the Burn Derby page and the
+ * pair pages — carries exactly this sentence, so no page can say the losing coin burns or that one pool cannot pay the other. It is the
+ * rule semantics the keeper runs (multiKeeper.planToken: the coin whose rule maps the result to a burn is "won", the other "lost" and
+ * forward_to_winner moves its share to the winner's fee PDA); `pairWinnerOf` computes the winner from the two rules and a result so a
+ * named fixture can check the sentence against the engine.
+ */
+export const PAIR_BURN_SENTENCE = "Winner takes the burn: fees from both coins burn the coin whose rule the result fires (the winner); the losing coin's share goes to the winner's burn pool, never to a holder.";
 /** The review card's line for a registered rivalry pair (Coin vs Coin, a shared-selector matchup, an election pair). */
-export const PAIR_REVIEW_LINE = "Winner takes the burn: fees from both coins burn the winner's supply — the winner is the coin whose rule a result fires. The other coin's fuel for that result moves to the winner's burn pool; nobody is paid, and a draw or a void moves nothing.";
+export const PAIR_REVIEW_LINE = `${PAIR_BURN_SENTENCE} A draw or a void moves nothing.`;
+/** Does this binary rule map the result to a burn? (A scalar or a rule without a mapping for it: no.) */
+const firesOn = (r: Pick<BurnRule, "kind" | "binary">, result: "yes" | "no"): boolean => r.kind === "binary" && !!r.binary && ((result === "yes" ? r.binary.onYes : r.binary.onNo)?.fractionOfPool ?? 0) > 0;
+/**
+ * The winner of one result in a registered pair, from the two LOCKED RULES: the coin whose rule the result fires. null when neither or
+ * both fire (a draw: nothing moves). Binary rules only (every registered pair today: one shared selector, inverted mappings).
+ */
+export function pairWinnerOf<T extends { ticker: string; rule: Pick<BurnRule, "kind" | "binary"> }>(a: T, b: T, result: "yes" | "no"): { winner: T; loser: T } | null {
+  const fa = firesOn(a.rule, result), fb = firesOn(b.rule, result);
+  if (fa === fb) return null;
+  return fa ? { winner: a, loser: b } : { winner: b, loser: a };
+}
+/** PAIR_BURN_SENTENCE with the two coins named, for one result ("… burn $CHIEFS …; $BRONCOS's share goes to $CHIEFS's burn pool …"). */
+export function pairResultSentence(a: { ticker: string; rule: Pick<BurnRule, "kind" | "binary"> }, b: { ticker: string; rule: Pick<BurnRule, "kind" | "binary"> }, result: "yes" | "no"): string {
+  const w = pairWinnerOf(a, b, result);
+  if (!w) return `A ${result.toUpperCase()} fires both rules or neither: a draw, and nothing moves between $${a.ticker} and $${b.ticker}.`;
+  return `Winner takes the burn: fees from both coins burn $${w.winner.ticker}, the coin whose rule the result fires (the winner); $${w.loser.ticker}'s share goes to $${w.winner.ticker}'s burn pool, never to a holder.`;
+}
 const pairSentence = (r: BurnRule): string => (r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn ? ` ${PAIR_DESCRIPTION_SENTENCE}` : "");
 const BURN_DOWN = "it burns down whatever is left over four weeks and retires";
 export const PERPETUAL_SENTENCE = "No end date — this coin does not retire.";

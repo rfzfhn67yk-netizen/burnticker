@@ -6,6 +6,8 @@ import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { dateRange } from "@/lib/burnticker/seasons";
 import { LEAGUES_PATH, leagueSeasonPage, resolveLeagueSeason, type LeagueSeasonPage } from "@/lib/burnticker/leagues";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
+import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
+import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,10 @@ export default async function LeagueSeasonRoute({ params }: Params) {
   if (!p) notFound();
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const withCoins = p.teams.filter((t) => t.coins.length > 0), rest = p.teams.filter((t) => t.coins.length === 0);
+  // review 2 §2: no launch invitation while creator launches are closed (one availability state: creatorLaunches.ts)
+  let cluster: string | null = null;
+  try { cluster = platform().cluster; } catch { cluster = null; }
+  const launch = launchAvailability(process.env, cluster);
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8 text-sm">
       {p.jsonLd.map((j, k) => <script key={k} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(j).replace(/</g, "\\u003c") }} />)}
@@ -60,8 +66,9 @@ export default async function LeagueSeasonRoute({ params }: Params) {
 
       <section className="space-y-3" aria-label="scoreboard">
         <h2 className="text-lg font-medium">Scoreboard</h2>
+        <p className="text-xs text-neutral-500">{NO_WALLET_LINE}{launch.open ? "" : ` ${launch.closedLine}`}</p>
         {p.champions.map((c) => <p key={c.board} className="text-xs"><span className="bt-chip bt-chip-window">champion</span> <span className="font-mono">${c.ticker}</span> — {c.board}: the most receipts once the season ended. A stat, not a prize.</p>)}
-        {p.boards.length === 0 ? <p className="text-neutral-400 border border-neutral-800 rounded p-4">No {p.leagueLabel} team coins for {p.seasonLabel} yet. Pick a team below to launch one.</p> : (
+        {p.boards.length === 0 ? <p className="text-neutral-400 border border-neutral-800 rounded p-4">No team-coin receipts for this season yet. This page tracks processed coin receipts, not every game.{launch.open ? " Pick a team below to launch one." : ""}</p> : (
           <div className="grid gap-3 md:grid-cols-2">{p.boards.map((b) => (
             <article key={b.key} className={card} aria-label={b.label}>
               <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-medium">{b.label}</h3><span className="text-xs text-neutral-500">{dateRange(b.from, b.to)}{b.ended ? " · season over" : ""}</span></div>
@@ -89,10 +96,10 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       <section className="space-y-2" aria-label="teams">
         <h2 className="text-lg font-medium">Teams</h2>
         {withCoins.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{withCoins.map((t) => (
-          <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span><Link className="text-xs underline" href={t.launchHref}>launch a coin for this team</Link></li>
+          <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{launch.open && <Link className="text-xs underline" href={t.launchHref}>launch a coin for this team</Link>}</li>
         ))}</ul>}
         <details open={withCoins.length === 0 && rest.length <= 40} className="text-xs"><summary className="cursor-pointer text-neutral-400">{withCoins.length ? "Teams with no coin this season" : "Every team"} ({rest.length})</summary>
-          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span><Link className="underline" href={t.launchHref}>launch a coin for this team</Link></li>)}</ul>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span>{launch.open && <Link className="underline" href={t.launchHref}>launch a coin for this team</Link>}</li>)}</ul>
         </details>
       </section>
       <p className="text-neutral-500 text-xs">Memecoins. Each rule says what its supply does, not what price does. Team names are used to describe the result a rule reads. Not affiliated with any team, league, candidate, agency or market.</p>

@@ -192,7 +192,7 @@ function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Sugges
   const a = side(g.away), b = side(g.home);
   return {
     ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: "On-chain payout · league's official feed", shape: "pair",
-    title: `Two coins on ${g.name}: the loser's coin burns`, subtitle: g.detail || g.startsAt, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league],
+    title: `Two coins on ${g.name}: the losing team's coin burns`, subtitle: g.detail || g.startsAt, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league],
     nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game", howSettles: "One coin per team; each burns once if its team loses. A tie burns neither.",
     matchup: { league: t.league, eventId: g.eventId, title: g.name, startsAt: g.startsAt, a, b }, score: 2.8,
   };

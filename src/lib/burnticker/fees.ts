@@ -97,11 +97,15 @@ export function capPool(spendableLamports: bigint, capLamports: bigint = PRE_AUD
 export const OPERATOR_LINE = "Operated by one independent operator (United States) — contact: contact@burnticker.com";
 export const OPERATOR_CONTACT_TODO = "TODO_CONTACT_ADDRESS";
 export const USE_OF_FEES = "Burnticker's 25 bps of curve volume and the operator's 20% of post-graduation LP fees (fixed in code; the other 80% goes to each coin's burn pool) fund attesters, hosting, the security reviews and bounty, and the operator. The platform never buys back any coin, including its own.";
-/** Attester #2 (Switchboard On-Demand) is scheduled within 14 days of the first launch. */
+/**
+ * The attester line on the trust page (review 2 §2, 2026-10-11): the present fact, not a schedule — Switchboard ended its services and no
+ * independent second attester exists. `dueBy` (14 days after the first launch) stays as the owner's internal check-in date only.
+ */
+export const ATTESTER_STATUS_LINE = "One operator attester is configured; no independent second attester is live.";
 export const ATTESTER2_DAYS_AFTER_FIRST_LAUNCH = 14;
 export function attesterStatusLine(firstLaunchAtMs: number | null): { line: string; dueBy: string | null } {
   const dueBy = firstLaunchAtMs === null ? null : new Date(firstLaunchAtMs + ATTESTER2_DAYS_AFTER_FIRST_LAUNCH * 86_400_000).toISOString().slice(0, 10);
-  return { line: `quorum 1 — operator only; Switchboard On-Demand attester #2 scheduled within ${ATTESTER2_DAYS_AFTER_FIRST_LAUNCH} days of first launch${dueBy ? ` (due by ${dueBy})` : " (no launch yet)"}`, dueBy };
+  return { line: `${ATTESTER_STATUS_LINE} Quorum 1.`, dueBy };
 }
 
 /** Creators keep nothing from fees in v1: a constant, not a setting. No referral codes, no discounts, no per-launch dials. */

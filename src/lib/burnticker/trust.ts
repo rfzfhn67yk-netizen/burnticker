@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PublicKey } from "@solana/web3.js";
+import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
+import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
 import { lpLockPolicyJson, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
 import { compareLivePlatform, CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
@@ -35,6 +37,10 @@ export function loadPowersRegister(env: Readonly<Record<string, string | undefin
   if (fs.existsSync(file)) {
     const j = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<PowersRegister>;
     if (j.schema === "burnticker.powers/v1" && Array.isArray(j.powers)) return { schema: "burnticker.powers/v1", placeholder: false, generatedAt: String(j.generatedAt ?? ""), powers: j.powers as Power[] };
+    // Review 2 §2 (2026-10-11): the register the program ships (programs/burn-receipts/scripts/powers-register.mjs) has its own schema;
+    // it was never recognised here, so the trust page showed the env placeholder with "placeholder until … ships" although it ships.
+    const shipped = registerPowersFromShipped(j as unknown as ShippedRegister);
+    if (shipped) return { schema: "burnticker.powers/v1", placeholder: false, generatedAt: String((j as { generatedAt?: string }).generatedAt ?? ""), powers: shipped };
   }
   const key = (name: string): string | null => { const v = (env[name] ?? "").trim(); return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? v : null; };
   return {
@@ -46,6 +52,28 @@ export function loadPowersRegister(env: Readonly<Record<string, string | undefin
       { id: "program-upgrade-authority", power: "upgrade the burn_receipts program", holder: key("BURNTICKER_UPGRADE_AUTHORITY"), holderKind: key("BURNTICKER_UPGRADE_AUTHORITY") ? "multisig" : "none", timelock: "Squads multisig (planned), then renounced after audit", sunset: "renounce after audit (LAUNCHPAD-PATH §2)", canDo: ["deploy new program code"], cannotDo: ["anything without a new deployment, which is public"], source: "placeholder: BURNTICKER_UPGRADE_AUTHORITY; the program is not deployed yet" },
     ],
   };
+}
+
+/** docs/burn-receipts/powers-register.json as the program's generator writes it (schema burn-receipts.powers-register/v1). */
+interface ShippedRegister {
+  schema: string;
+  roles?: Record<string, string>;
+  instructions?: { name: string; class: string; signers?: { role: string }[]; can?: string; cannot?: string; timelock?: string | null; sunset?: string | null }[];
+  upgrade_authority?: { power?: string; holder_at_launch?: string; sunset?: string };
+  external_powers?: { power?: string; holder?: string; timelock?: string; can?: string }[];
+}
+/** The shipped register as Power rows: every privileged instruction, the upgrade authority and the external powers; null if not that schema. */
+export function registerPowersFromShipped(j: ShippedRegister): Power[] | null {
+  if (j?.schema !== "burn-receipts.powers-register/v1" || !Array.isArray(j.instructions)) return null;
+  const src = "docs/burn-receipts/powers-register.json";
+  const kind = (role: string): Power["holderKind"] => (/squads|multisig|vault/i.test(j.roles?.[role] ?? "") ? "multisig" : role === "anyone" ? "none" : "key");
+  const rows: Power[] = j.instructions.filter((i) => i.class === "privileged").map((i) => {
+    const role = (i.signers ?? []).map((x) => x.role).find((r) => r !== "anyone") ?? "anyone";
+    return { id: i.name, power: i.name.replace(/_/g, " "), holder: role, holderKind: kind(role), timelock: i.timelock ?? null, sunset: i.sunset ?? null, canDo: i.can ? [i.can] : [], cannotDo: i.cannot ? [i.cannot] : [], source: `${src} → instructions.${i.name}` };
+  });
+  if (j.upgrade_authority) rows.push({ id: "program-upgrade-authority", power: j.upgrade_authority.power ?? "program upgrade authority", holder: "upgrade_authority", holderKind: "multisig", timelock: j.upgrade_authority.holder_at_launch ?? null, sunset: j.upgrade_authority.sunset ?? null, canDo: ["deploy new program code (a public, time-locked proposal)"], cannotDo: [], source: `${src} → upgrade_authority` });
+  for (const [k, e] of (j.external_powers ?? []).entries()) rows.push({ id: `external-${k}`, power: e.power ?? "external power", holder: e.holder ?? null, holderKind: "key", timelock: e.timelock ?? null, sunset: null, canDo: e.can ? [e.can] : [], cannotDo: [], source: `${src} → external_powers[${k}]` });
+  return rows.length ? rows : null;
 }
 
 /** What the operator can and cannot do — the block on every token page. Derived from the register, not free text. */
@@ -235,19 +263,37 @@ export function buildTransparency(root = process.cwd(), env: Readonly<Record<str
 
 // ---- the program ----
 
-export interface ProgramFacts { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[] }
-export function programFacts(env: Readonly<Record<string, string | undefined>> = process.env): ProgramFacts {
+/**
+ * Review 2 §2 (2026-10-11): "Program id not deployed" on a host that is simply not wired to the program contradicted "deployed on devnet".
+ * Three separate facts now: `hostWiring` (does THIS host's environment name a program — BURNTICKER_PROGRAM_ID), `chain` (where each
+ * program is deployed, from config/burnticker/verified-build.json's read-back) and `compiled` (the id compiled into the IDL).
+ */
+export interface ProgramChainFact { library: string; programId: string; devnet: string; mainnet: string }
+export interface ProgramFacts { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[]; hostWiring: string; chain: ProgramChainFact[]; compiled: string }
+export function programFacts(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd()): ProgramFacts {
   const id = (env.BURNTICKER_PROGRAM_ID ?? "").trim();
   const deployed = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id);
   const out: ProgramFacts = {
     programId: deployed ? id : null, deployed, buildHash: (env.BURNTICKER_PROGRAM_HASH ?? "").trim() || null,
+    hostWiring: deployed ? `this host reads burn_receipts ${id}` : "this host is not wired to a burn_receipts program (BURNTICKER_PROGRAM_ID unset): its pages use the in-memory stand-in and send nothing",
+    chain: chainFacts(root),
+    compiled: `burn_receipts ${BURN_RECEIPTS_IDL.address} (the id compiled into the program and its IDL)`,
     verify: deployed
       ? [`solana program dump ${id} program.so`, "sha256sum program.so   # compare with the build hash above", "anchor verify / solana-verify against the tagged source (repository link in the register when published)", `solana program show ${id}   # the upgrade authority must match the register`]
-      : ["the burn_receipts program is not deployed yet; this section fills in when it is (program id, build hash, upgrade authority)"],
+      : ["this host is not wired to the program; the chain deployment and its read-back hashes are listed above (config/burnticker/verified-build.json, docs/burnticker/VERIFIED-BUILD.md)"],
   };
   // every coin's metadata, whatever the program's state (pin.ts; verify.ts verifyPinnedMetadata does the same three checks)
   out.verify.push("metadata: curl -s <coin>/status.json | jq .pinned   # metadataUri (arweave), metadataSha256, expectedDescription", "curl -s <pinned.metadataUri> | sha256sum   # must equal pinned.metadataSha256", "curl -s <pinned.metadataUri> | jq -r .description   # must equal pinned.expectedDescription byte for byte (the generated text)");
   return out;
+}
+
+/** Where each program is deployed, from the verified-build read-back (never from this host's environment). */
+function chainFacts(root: string): ProgramChainFact[] {
+  try {
+    return loadVerifiedBuild(root).programs.map((p) => ({ library: p.library, programId: p.programId,
+      devnet: p.deployed.devnet ? `deployed (read ${p.deployed.devnet.readAt}${p.deployed.devnet.matchesBuild ? ", bytes match the recorded build" : ", bytes DO NOT match the recorded build"})` : "not deployed",
+      mainnet: p.deployed.mainnet ? `deployed (read ${p.deployed.mainnet.readAt})` : "not deployed" }));
+  } catch { return []; }
 }
 
 // ---- the audit (scripts/burnticker-audit.mts writes it) ----
@@ -288,7 +334,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     designedFees: { curve: CURVE_FEES, postGraduation: POST_GRADUATION_FEES, devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: LP_FEES_TO_BURN_POOL_BPS, operatorBps: LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
     lpLock: lpLockPolicyJson(i.cluster ?? ((env.BURNTICKER_CLUSTER ?? "").trim() || "devnet"), (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null),
     feeLedger: await readFeeLedger(i.reader, devFeeWallet(env)),
-    team: teamWallets(env, root), attesters: i.attesters, program: programFacts(env), incidents: readIncidents(root), audit: readAudit(i.siteDir),
+    team: teamWallets(env, root), attesters: i.attesters, program: programFacts(env, root), incidents: readIncidents(root), audit: readAudit(i.siteDir),
     transparency,
     statements: [
       `LP locked forever at graduation: ${LP_LOCKED_PCT}% (platformScale 1,000,000, creatorScale 0, burnScale 0; Raydium's LP lock, never withdrawable) — not creator-configurable. The Fee Key is owned by the burn program's fee-keys PDA and the permissionless claim_lock_fees splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury, fixed in code; the coin side is burned. The program's own LP floor for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,

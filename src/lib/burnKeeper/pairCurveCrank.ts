@@ -1,8 +1,9 @@
 import { type Keypair, PublicKey } from "@solana/web3.js";
 import type { PairAccount } from "@/lib/pairCurve/accounts";
-import { LP_LOCK_FALLBACK_SECS } from "@/lib/pairCurve/client";
+import { CLAIM_THRESHOLD_LAMPORTS, LP_LOCK_FALLBACK_SECS, registeredSides } from "@/lib/pairCurve/client";
 import { fetchPairs, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
 import { assertPairCurveCluster, crankPair, simulateAndSend, type CrankStep, type PairCurveContext, type SendResult } from "@/lib/pairCurve/client";
+import { feeKeyRecordPda } from "@/lib/burnReceipts/pda";
 import { fetchPairLink, linkPairIx, PAIR_STATE_UNLINKED, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
 import { fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { pairErrorSentence } from "@/lib/burnticker/pairForward";
@@ -15,8 +16,10 @@ import { pairErrorSentence } from "@/lib/burnticker/pairForward";
  *
  *   Open, ready, before the deadline  → graduate(A), graduate(B) (normally a trade already committed the pair)
  *   Graduating                        → the missing side; ≥ 3 days after the commit, void_pair (accepted only if Raydium blocks it)
- *   Graduating / Graduated ≤ 7 days   → register_pair_pool for any side not registered yet; a dust swap on a pool with no oracle
- *                                       observation (blind review 2 L-4)
+ *   Graduating / Graduated            → register_pair_pool for any side not registered yet; a dust swap on a pool with no oracle
+ *                                       observation (blind review 2 L-4). A Graduated pair older than 7 days stays in the scan while any
+ *                                       work is outstanding (review 2 F2): an unlocked side, an unregistered pool, a missing Fee Key
+ *                                       record or a developer accrual to claim; only a fully complete old pair ages out
  *   Open at/after the deadline        → void_pair
  *   any                               → claim_developer_fee once the accrual reaches 0.01 SOL
  *   right after init_pair, first     → link_pair (LAUNCHPAD-PATH §40, winner takes the burn) when both TokenConfigs exist and the two
@@ -80,6 +83,21 @@ export function linkPairDue(pair: Pick<PairAccount, "mints" | "status" | "refund
   return !(ok(links[0], pair.mints[1]) && ok(links[1], pair.mints[0]));
 }
 
+/**
+ * Review 2 F2: is anything still to do on a graduated pair? An unlocked side (lock_lp / the 30-day burn_lp fallback), a side whose pool
+ * is not registered in burn_receipts, a side whose Fee Key record is missing, or a developer accrual over the claim threshold. Reads the
+ * two TokenConfigs and the two FeeKeyRecords only when the Pair account alone does not already say "work left".
+ */
+export async function graduatedPairWorkOutstanding(ctx: Pick<PairCurveContext, "connection" | "burnReceiptsProgramId">, pair: PairAccount): Promise<boolean> {
+  const sides = ([0, 1] as const).filter((s) => !pair.pools[s].equals(PublicKey.default));
+  if (sides.some((s) => pair.lp_locked[s] === BigInt(0))) return true;
+  if (pair.dev_accrued >= CLAIM_THRESHOLD_LAMPORTS) return true;
+  const registered = await registeredSides(ctx as PairCurveContext, pair);
+  if (sides.some((s) => !registered[s])) return true;
+  for (const s of sides) if (!(await ctx.connection.getAccountInfo(feeKeyRecordPda(ctx.burnReceiptsProgramId, pair.mints[s]), "confirmed"))) return true;
+  return false;
+}
+
 export interface PairCurveCycle { scanned: number; acted: { pair: string; steps: CrankStep[] }[]; errors: string[]; links?: { pair: string; result: SendResult }[] }
 
 export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveCycle> {
@@ -93,7 +111,15 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
     out.errors.push(`scan: ${(e as Error).message.slice(0, 160)}`);
     return out;
   }
-  pairs = pairs.filter(({ pair }) => pair.status !== STATUS_GRADUATED || now - Number(pair.graduated_at) <= RECENT_GRADUATION_SECS);
+  // Recent graduations are always scanned; an older Graduated pair only while work is outstanding (review 2 F2: the 7-day cut used to run
+  // before unlockedSides and crankPair, so a side whose lock kept refusing vanished from retries and alerts and never reached burn_lp).
+  const kept: typeof pairs = [];
+  for (const x of pairs) {
+    if (x.pair.status !== STATUS_GRADUATED || now - Number(x.pair.graduated_at) <= RECENT_GRADUATION_SECS) { kept.push(x); continue; }
+    try { if (await graduatedPairWorkOutstanding(d.ctx, x.pair)) kept.push(x); }
+    catch (e) { kept.push(x); out.errors.push(`${x.address.toBase58().slice(0, 8)}…: work check: ${(e as Error).message.slice(0, 120)}`); }   // unreadable: keep it (fail toward retrying)
+  }
+  pairs = kept;
   out.scanned = pairs.length;
   for (const u of unlockedSides(pairs, now)) {
     const text = `pair ${u.pair.slice(0, 8)}… side ${u.side} graduated ${u.days} day(s) ago and its LP is still not locked (lock_lp has not succeeded)${u.fallbackDue ? "; the 30-day burn_lp fallback is due" : `; burn_lp opens after ${LP_LOCK_FALLBACK_SECS / 86_400} days`}`;

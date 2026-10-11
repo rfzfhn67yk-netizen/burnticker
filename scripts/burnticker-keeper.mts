@@ -38,7 +38,7 @@ import { FakeBurnProgram, programPageBlock, type BurnProgramClient } from "../sr
 import { ProgramBurnClient } from "../src/lib/burnticker/programClient.ts";
 import { clusterOfGenesis } from "../src/lib/burnKeeper/solana.ts";
 import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
-import { runCycle, type KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
+import type { KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
 import { lpLockBlock } from "../src/lib/burnticker/lpLockPage.ts";
 import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairCounterpartFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
@@ -176,17 +176,16 @@ log(`burnticker keeper starting — ${registry.tokens("live").length} live token
 while (!stopping) {
   const paused = fs.existsSync(PAUSE);
   if (paused && !DRY) log(`  ${PAUSE} present — cranks held, reading and publishing go on`);
-  deps.dryRun = DRY || paused;
-  const gate = await ops.beforeCycle(deps);
-  deps.dryRun = DRY || paused || !gate.sendsAllowed;
-  let cycleReport: Awaited<ReturnType<typeof runCycle>> | null = null;
-  try {
-    const r = cycleReport = await runCycle(deps);
+  // The role, then runCycle: fetch, plan, the foreign-reading fence (after planning, before the first attestation — review 2 F1), execute.
+  const { gate, report: cycleReport, error: cycleError } = await ops.cycle(deps, { dryRun: DRY || paused });
+  if (cycleReport) {
+    const r = cycleReport;
     tracker.note(r);
     const f = r.fetched.filter((x) => !x.skipped);
     if (f.length || r.planned.length || r.executed.length) log(`cycle: ${f.length} fetch(es), ${r.planned.length} planned, ${r.executed.length} executed${r.errors.length ? ` · errors: ${r.errors.slice(0, 3).join(" | ")}` : ""}`);
     registry.setStatus("lastCycle", { at: Date.now(), fetched: f.length, planned: r.planned.length, executed: r.executed.length, errors: r.errors.slice(0, 5), refusals: r.fetched.flatMap((x) => x.refusals).slice(0, 10) });
-  } catch (e) { log(`cycle failed: ${(e as Error).message.slice(0, 200)}`); }
+  } else log(`cycle failed: ${(cycleError ?? "").slice(0, 200)}`);
+  if (!gate.sendsAllowed) deps.dryRun = true;
   // Rivalry pairs on the pair curve (2026-10-10, docs/burnticker/PAIR-CURVE.md): graduate both sides / register / void — program
   // mode only, behind BURNTICKER_PAIR_CURVE_ENABLED. Permissionless cranks; the keeper key pays transaction fees only.
   if (built.chain && pairCurveEnabled(process.env) && gate.sendsAllowed) {

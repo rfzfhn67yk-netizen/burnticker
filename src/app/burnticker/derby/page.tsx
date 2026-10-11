@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { platform } from "@/lib/burnticker/server";
 import { derbyPairJson, tournamentSummaries, type DerbyPairJson } from "@/lib/burnticker/derby/page";
+import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Burn Derby", description: "Coin vs Coin pairs and brackets: each day the coin on the winning side burns part of its own pool. The receipts are the scoreboard." };
+export const metadata: Metadata = { title: "Burn Derby", description: "Coin vs Coin pairs and brackets. In a pair, fees from both coins burn the coin whose rule the day's result fires. The receipts are the scoreboard." };
 
 /**
  * BURN DERBY — THE INDEX (2026-10-10): open coin-vs-coin pairs (score as a receipt tally, the last days as a strip, the season end), active
@@ -48,7 +50,9 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Burn Derby</h1>
-        <p className="text-neutral-400 text-sm max-w-3xl">Two coins people already hold, compared each UTC day (or week) on Pyth&apos;s feeds or a pool&apos;s time-weighted value, checked by an independent operator. The coin on the winning side burns part of its own pool; a tie burns neither. The receipts are the scoreboard.</p>
+        <p className="text-neutral-400 text-sm max-w-3xl">Two coins people already hold, compared each UTC day (or week) on Pyth&apos;s feeds or a pool&apos;s time-weighted value, checked by an independent operator. A tie burns neither. The receipts are the scoreboard.</p>
+        <p className="text-amber-200 text-sm max-w-3xl" aria-label="pair rule">{PAIR_BURN_SENTENCE}</p>
+        <p className="text-neutral-500 text-xs">{NO_WALLET_LINE}</p>
         <Link className="inline-block rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={`/burnticker/launch?derby=1${want ? `&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}` : ""}`}>Coin vs Coin →</Link>
       </header>
       {err && <p className="text-red-400 text-sm">Registry unavailable: {err}</p>}

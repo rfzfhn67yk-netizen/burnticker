@@ -204,7 +204,7 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
   fetch("status.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (s) {
     if (s.schema !== "burnticker.ops-status/v1") throw new Error("not a status document");
     window.renderStatus(s);
-  }).catch(function (e) { var n = $("loadnote"); n.className = "small err"; n.textContent = "status.json could not be read (" + e.message + "). The keeper may be between cycles, or down; the trust page and the receipts are unaffected."; });
+  }).catch(function (e) { var n = $("loadnote"); n.className = "small err"; n.textContent = "status.json could not be read (" + e.message + "). Current automation status is unavailable."; });
 })();
 </script>
 </body>

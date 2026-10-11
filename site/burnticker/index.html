@@ -68,6 +68,10 @@ section.lead{border-top:0}
 .door p{margin:0;color:var(--dim);font-size:.95rem}
 .door .ex{font:600 .85rem/1.45 var(--mono);color:var(--ink);background:var(--panel2);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere}
 .door .go{margin-top:auto;align-self:flex-start;font:700 .9rem var(--sans);padding:9px 14px;border-radius:8px;border:1px solid var(--line)}
+html:not(.launches-open) [data-launch-cta]{display:none!important}
+.launches-open [data-launches-closed]{display:none}
+.state{color:var(--dim);font-size:.95rem;margin:.25rem 0 0}
+.terms{margin:.75rem 0 0;font-size:.8rem;color:var(--muted)}.terms div{margin:.1rem 0}.terms dt{display:inline;color:var(--dim);font-weight:600}.terms dd{display:inline;margin:0}
 .door.launch .go{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
 .door.launch h3{color:var(--amber)}
 .guard{list-style:none;margin:0;padding:12px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font:600 .78rem/1.35 var(--mono);color:var(--dim)}
@@ -239,9 +243,9 @@ footer .links a{color:var(--dim)}
       <a href="/burnticker/rivalries">Seasons</a>
       <a class="sec" href="/burnticker/trust">Trust</a>
       <a href="whitepaper.html">Whitepaper</a>
-      <a class="sec" href="#deficit">$DEFICIT</a>
+      <a class="sec" href="https://deficit.burnticker.com/">$DEFICIT</a>
       <a class="sec" href="https://x.com/BurnTicker" rel="me noopener" target="_blank">@BurnTicker</a>
-      <a class="btn amber" href="/burnticker/launch">Launch</a>
+      <a class="btn amber" href="/burnticker/launch" data-launch-cta>Launch</a>
     </nav>
   </div>
 </header>
@@ -249,10 +253,11 @@ footer .links a{color:var(--dim)}
 <main>
   <section class="hero wrap lead">
     <h1>Coins that burn on real-world results — <em>with receipts.</em></h1>
-    <p class="sub">Launch one. Follow the season.</p>
+    <p class="sub"><span data-launch-cta>Launch one. </span>Follow the season.</p>
+    <p class="state" data-launches-closed>Creator launches are closed.<span data-cluster-line></span></p>
     <p class="def">A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought. The transaction is the receipt.</p>
     <div class="doors">
-      <a class="door launch" href="/burnticker/launch">
+      <a class="door launch" href="/burnticker/launch" data-launch-cta>
         <span class="k">door 1 · the engine</span>
         <h3>Launch</h3>
         <p>Write the result in one sentence, pick how much burns, launch. The rule locks; the coin's own trading fees pay for every burn.</p>
@@ -271,7 +276,7 @@ footer .links a{color:var(--dim)}
     </div>
     <ul class="guard" aria-label="Guardrails on every coin">
       <li>settled on primary sources</li>
-      <li>signed readings (one attester at launch; second attester scheduled, not live)</li>
+      <li>signed readings (one operator attester; no independent second attester is live)</li>
       <li>program-run burns</li>
       <li>receipts anyone can recompute</li>
       <li>open source</li>
@@ -282,6 +287,15 @@ footer .links a{color:var(--dim)}
       <li>LP locked forever, its fees fund the burn</li>
       <li>rules locked at launch</li>
     </ul>
+    <dl class="terms" aria-label="Words used here" data-glossary>
+      <div><dt>burn</dt> <dd>— A burn destroys tokens held by the program and lowers the coin's total supply; it never touches the tokens in your wallet.</dd></div>
+      <div><dt>receipt</dt> <dd>— A receipt records the source result, the rule's calculation and the transaction; checking one can be complete, partial or unavailable.</dd></div>
+      <div><dt>burn pool</dt> <dd>— The SOL set aside for one coin's programmed buybacks; nobody can withdraw it, and in a registered pair the losing coin's share moves to the winner's burn pool.</dd></div>
+      <div><dt>attester</dt> <dd>— A key that signs a reported source value; the signature proves who signed it, not that the value is true.</dd></div>
+      <div><dt>locked LP</dt> <dd>— The trading pool's liquidity position, locked with Raydium's permanent lock so its principal cannot be withdrawn.</dd></div>
+      <div><dt>automation</dt> <dd>— The keeper: software that submits the program instructions that are due; the program can still refuse or defer each one.</dd></div>
+      <div><dd>No wallet is needed to read results or receipts.</dd></div>
+    </dl>
   </section>
   <div class="tape" aria-label="A ticker of example burn receipts" role="marquee">
     <div class="reel" id="reel">
@@ -409,7 +423,7 @@ footer .links a{color:var(--dim)}
       <div class="derby">
         <div>
           <h3>Burn Derby · coin vs coin, and brackets</h3>
-          <p>Two coins on one matchup between two other coins over a day or a week — "WIF out-gains SHIB" — read from Pyth with a cross-read; the coin on the winning side burns part of its own pool, and a tie burns neither. Brackets of 8 or 16 run the same daily matchups round by round. The Derby page shows each pair's tally and its last days as a strip.</p>
+          <p>Two coins on one matchup between two other coins over a day or a week — "WIF out-gains SHIB" — read from Pyth with a cross-read; the pair follows the winner-takes-the-burn rule below, and a tie burns neither. Brackets of 8 or 16 run the same daily matchups round by round. The Derby page shows each pair's tally and its last days as a strip.</p>
         </div>
         <div class="strip" aria-label="Example day-by-day strip: which side burned each day">
           <span>last 7 days</span><b class="a">A</b><b class="b">B</b><b class="a">A</b><b>–</b><b class="a">A</b><b class="b">B</b><b class="a">A</b>
@@ -420,7 +434,7 @@ footer .links a{color:var(--dim)}
       <a class="btn amber" href="/burnticker/rivalries">Open the rivalries</a>
       <a class="btn" href="/burnticker/derby">Burn Derby</a>
       <a class="btn" href="/burnticker">All coins</a>
-      <p>A rivalry is two coins on one matchup, launched together from the wizard: one game, or every game of the season. Each side has its own locked rule and its own burn pool; neither pool can pay the other side.</p>
+      <p>A rivalry is two coins on one matchup, launched together from the wizard: one game, or every game of the season. Each side has its own locked rule and its own burn pool. Two coins on two separate results stay separate, each burning its own pool. Two coins on one shared settled result are a registered pair: <span data-pair-sentence>Winner takes the burn: fees from both coins burn the coin whose rule the result fires (the winner); the losing coin's share goes to the winner's burn pool, never to a holder.</span></p>
     </div>
   </section>
 
@@ -517,7 +531,7 @@ footer .links a{color:var(--dim)}
 <footer class="wrap">
   <div class="links">
     <a href="/burnticker">Coins</a>
-    <a href="/burnticker/launch">Launch</a>
+    <a href="/burnticker/launch" data-launch-cta>Launch</a>
     <a href="/burnticker/rivalries">Seasons</a>
     <a href="/burnticker/trust">Trust</a>
     <a href="whitepaper.html">Whitepaper</a>
@@ -527,6 +541,15 @@ footer .links a{color:var(--dim)}
   <div>Burnticker runs the keeper, the catalogue and the pages. The sources named above (U.S. Treasury, BLS, NOAA / NWS, ESPN, MLB, the NHL, TheSportsDB, Polymarket, JPL, Wikimedia and others) are not affiliated with and do not endorse any coin. Coins that burn on real-world results — with receipts.</div>
 </footer>
 <script>
+(function () {
+  // ONE AVAILABILITY STATE (review 2): launch CTAs are hidden until the host's catalogue says creator launches are open; unreadable = closed.
+  var root = document.documentElement;
+  fetch("/api/burnticker/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    if (j && j.launches && j.launches.creators === true) root.classList.add("launches-open");
+    var line = document.querySelector("[data-cluster-line]");
+    if (line && j && typeof j.cluster === "string") line.textContent = " This host currently shows " + j.cluster + " information.";
+  }).catch(function () { /* closed */ });
+})();
 (function () {
   // Duplicate the reel once so the CSS loop is seamless (translateX(-50%) lands on the copy's first item).
   var reel = document.getElementById("reel");

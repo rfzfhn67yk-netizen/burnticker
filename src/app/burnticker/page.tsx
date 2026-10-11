@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CoinCard, ago, type CoinCardData } from "./_components/CoinCard";
+import { useLaunchAvailability } from "./_components/useLaunchAvailability";
+import { auditBadgeView } from "@/lib/burnticker/auditBadge";
+import { GLOSSARY, NO_WALLET_LINE } from "@/lib/burnticker/glossary";
+import { Term } from "./_components/Term";
 
 /**
  * THE COINS PAGE (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md): a grid of coin cards like pump.fun / bonk.fun /
@@ -20,7 +24,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "new", label: "New", hint: "newest launches first" },
   { id: "next", label: "Next to settle", hint: "soonest result first" },
   { id: "graduating", label: "About to graduate", hint: "past half of the bonding curve" },
-  { id: "graduated", label: "Graduated", hint: "curve complete, trading on Raydium" },
+  { id: "graduated", label: "Moved to trading pool", hint: GLOSSARY.graduation.short },
   { id: "pairs", label: "Pairs", hint: "two coins, one matchup" },
 ];
 const fmt = (s: string) => s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -51,16 +55,20 @@ export default function BurntickerIndex() {
   }, [ix, tab, q]);
   const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => { const s = q.trim().toLowerCase(); return !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s); }), [ix, q]);
   const curveRead = !!ix?.tokens.some((t) => t.progressPct !== null || t.phase !== null);
+  const audit = auditBadgeView(ix?.audit ?? null);
+  const launch = useLaunchAvailability();
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-5 space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Coins</h1>
-          <p className="text-sm text-neutral-400">Memecoins whose supply burns when a settled, public result says so. Every burn is a receipt.</p>
+          <p className="text-sm text-neutral-400">Memecoins whose supply <Term id="burn">burns</Term> when a settled, public result says so. Every burn is a <Term id="receipt" />.</p>
         </div>
-        <Link href="/burnticker/launch" className="bt-launch-btn">Launch a coin</Link>
+        {launch.open && <Link href="/burnticker/launch" className="bt-launch-btn">Launch a coin</Link>}
       </header>
+      {!launch.open && <p className="text-sm text-neutral-300" data-launches-closed>{launch.closedLine} {NO_WALLET_LINE}</p>}
+      {launch.open && <p className="text-xs text-neutral-500">{NO_WALLET_LINE}</p>}
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div className="bt-tabs" role="tablist" aria-label="Filter coins">
@@ -75,8 +83,8 @@ export default function BurntickerIndex() {
       {ix && tab !== "pairs" && (
         coins.length === 0 ? (
           <div className="rounded-lg border border-dashed border-neutral-700 p-6 text-center text-sm text-neutral-400">
-            {q ? <>No coin matches “{q}”.</> : tab === "graduating" ? <>No coin is past half its bonding curve.{!curveRead && " Curve progress is not read on this host, so this list stays empty."}</> : tab === "graduated" ? <>No coin has graduated yet.</> : tab === "next" ? <>No scheduled result is known for any coin.</> : <>No coins yet.</>}
-            <div className="mt-3"><Link href="/burnticker/launch" className="underline">Launch the first one →</Link></div>
+            {q ? <>No coin matches “{q}”.</> : tab === "graduating" ? <>No coin is past half its bonding curve.{!curveRead && " Curve progress is not read on this host, so this list stays empty."}</> : tab === "graduated" ? <>No coin has moved to a trading pool yet.</> : tab === "next" ? <>No scheduled result is known for any coin.</> : <>No coins yet.</>}
+            {launch.open && <div className="mt-3"><Link href="/burnticker/launch" className="underline">Launch the first one →</Link></div>}
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -86,7 +94,7 @@ export default function BurntickerIndex() {
       )}
 
       {ix && tab === "pairs" && (
-        pairs.length === 0 ? <div className="rounded-lg border border-dashed border-neutral-700 p-6 text-center text-sm text-neutral-400">No rivalry pairs yet. <Link className="underline" href="/burnticker/launch?pair=1">Launch a pair →</Link></div> : (
+        pairs.length === 0 ? <div className="rounded-lg border border-dashed border-neutral-700 p-6 text-center text-sm text-neutral-400">No rivalry pairs yet.{launch.open && <> <Link className="underline" href="/burnticker/launch?pair=1">Launch a pair →</Link></>}</div> : (
           <div className="grid gap-3 md:grid-cols-2">
             {pairs.map((p) => (
               <Link key={p.pairId} href={`/burnticker/p/${encodeURIComponent(p.pairId)}`} className="bt-coin-card block">
@@ -105,8 +113,8 @@ export default function BurntickerIndex() {
 
       {ix && (
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4 pt-2" aria-label="Platform totals">
-          {[["Live coins", String(ix.totals.live)], ["Burns", String(ix.totals.burns)], ["Tokens burned", fmt(ix.totals.burnedTokens)], ["Public audit", ix.audit ? (ix.audit.ok ? "all receipts recompute" : `${ix.audit.mismatches} mismatch(es)`) : "not run yet"]].map(([k, v]) => (
-            <div key={k} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><div className="text-xs text-neutral-400">{k}</div><div className={`text-lg font-semibold ${k === "Public audit" ? (ix.audit?.ok ? "text-emerald-400" : ix.audit ? "text-red-400" : "text-neutral-400") : ""}`}>{v}</div>{k === "Public audit" && ix.audit && <div className="text-xs text-neutral-500">{ix.audit.receipts} receipt(s) · {ix.audit.chainChecked ? "source + chain" : "source only"}</div>}</div>
+          {[["Live coins", String(ix.totals.live)], ["Burns", String(ix.totals.burns)], ["Tokens burned", fmt(ix.totals.burnedTokens)], ["Public audit", audit.text]].map(([k, v]) => (
+            <div key={k} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><div className="text-xs text-neutral-400">{k}</div><div className={`${k === "Public audit" && audit.tone === "muted" ? "text-sm" : "text-lg"} font-semibold ${k === "Public audit" ? (audit.tone === "ok" ? "text-emerald-400" : audit.tone === "bad" ? "text-red-400" : "text-neutral-400") : ""}`}>{v}</div>{k === "Public audit" && audit.sub && <div className="text-xs text-neutral-500">{audit.sub}</div>}</div>
           ))}
         </section>
       )}

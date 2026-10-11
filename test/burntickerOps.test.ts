@@ -250,7 +250,7 @@ describe("the morning check's Burnticker block", () => {
     assert.match(text, /^- burns last 24 h: 0 \(0\.0000 SOL spent\) · all time 0 · per token: \$BRONCO 0\/0$/m);
     assert.match(text, /^- cranks: 1 pending · 1 failing — \$BRONCO KXNFLGAME-26OCT04DENSF-DEN ×2 \(RPC\/program error: timeout\)$/m);
     assert.match(text, /^- pools: 26\.000 SOL across 1 fee PDA\(s\) · queued above the pre-audit cap: \$BRONCO 1\.0 SOL$/m);
-    assert.match(text, /^- attesters: \$BRONCO 1 active \(0 independent\) quorum 1 · quorum 1 — operator only; .*due by 2026-10-21\)$/m);
+    assert.match(text, /^- attesters: \$BRONCO 1 active \(0 independent\) quorum 1 · One operator attester is configured; no independent second attester is live\. Quorum 1\. \(owner check: a second attester was due by 2026-10-21\)$/m);
     assert.match(text, /^- audit badge: OK — every receipt recomputes · 1 receipt\(s\) · source only · ran 30 min ago$/m);
     assert.match(text, /^- dev fee wallet: 2\.750 SOL \(sampled 0 min ago\) · Δ \+0\.7500 SOL since 2026-10-08T15:00Z$/m);
     assert.match(text, /^- keeper: last cycle 1 min ago · errors: \$BRONCO: execute: timeout · key balance 0\.250 SOL$/m);

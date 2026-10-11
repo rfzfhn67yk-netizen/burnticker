@@ -1,6 +1,6 @@
 import { type Connection, type Keypair, PublicKey } from "@solana/web3.js";
 import { fetchTokenConfig } from "@/lib/burnReceipts/accounts";
-import { MODE_BUYBACK } from "@/lib/burnReceipts/constants";
+import { BURNTICKER_PLATFORM as PROGRAM_BURNTICKER_PLATFORM, MODE_BUYBACK } from "@/lib/burnReceipts/constants";
 import { memoFromTransaction } from "@/lib/burnReceipts/crank";
 import { initializeTokenIx, operatorAttester } from "@/lib/burnReceipts/instructions";
 import { configPda, vaultAddress } from "@/lib/burnReceipts/pda";
@@ -33,6 +33,8 @@ export interface ProgramBurnClientOpts {
   solUsd: () => Promise<number>;
   allowMainnet?: boolean;
   launchLabProgram?: PublicKey | null;
+  /** The LaunchLab platform initialize_token names (BURNTICKER_PLATFORM_ID); default = the BURNTICKER_PLATFORM pin compiled for the cluster. */
+  launchLabPlatform?: PublicKey | null;
   cpmmProgram?: PublicKey | null;
   log?: (s: string) => void;
 }
@@ -67,7 +69,10 @@ export class ProgramBurnClient implements BurnProgramClient {
     const c = counterRule(i.rule, i.ticker, i.selectorKey, { floorLamports });
     const mint = new PublicKey(i.mint), creator = new PublicKey(i.creator);
     if (!/^[0-9a-f]{64}$/.test(i.rulesSha256)) throw new Error("initialize_token: rulesSha256 must be 64 hex characters");
-    const ix = initializeTokenIx({ programId: this.o.programId, payer: creator, creator, mint, args: {
+    // policies 0 and 2: the program refuses unless launchlab_platform == BURNTICKER_PLATFORM (round 2) — pass the host's or the pinned one
+    const pin = PROGRAM_BURNTICKER_PLATFORM[programClusterOf(this.o.cluster)];
+    const launchlabPlatform = this.o.launchLabPlatform ?? (pin && !pin.equals(PublicKey.default) ? pin : undefined);
+    const ix = initializeTokenIx({ programId: this.o.programId, payer: creator, creator, mint, ...(launchlabPlatform ? { launchlabPlatform } : {}), args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: i.attesters.map((a) => operatorAttester(new PublicKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
     }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });

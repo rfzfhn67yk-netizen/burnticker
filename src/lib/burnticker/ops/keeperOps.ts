@@ -1,18 +1,19 @@
 import type { Registry } from "@/lib/burnticker/registry";
-import type { CycleReport, KeeperDeps } from "@/lib/burnticker/multiKeeper";
+import { runCycle, type CycleReport, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import type { AlertSink } from "@/lib/burnticker/alerts";
 import type { PinUploader } from "@/lib/burnticker/pin";
 import { loadVerifiedBuild, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { computeFeedHealth, observeCycle, raiseFeedAlerts, type FeedHealth } from "@/lib/burnticker/ops/feedHealth";
 import { hostIdHash, LeaderLock, roleConfigFromEnv, type FetchJson, type RoleDecision } from "@/lib/burnticker/ops/leaderLock";
-import { readingFence, type FenceReport } from "@/lib/burnticker/ops/readingFence";
+import type { FenceReport } from "@/lib/burnticker/ops/readingFence";
 import { latestSnapshot, snapshotIfDue } from "@/lib/burnticker/ops/snapshot";
 import { buildOpsStatus, programStatuses, writeOpsStatus, type OpsStatusJson } from "@/lib/burnticker/ops/status";
 
 /**
  * THE KEEPER'S TRUST-OPS HOOKS (2026-10-10 night), so scripts/burnticker-keeper.mts needs four lines:
  *
- *   beforeCycle   the role decision (leaderLock.ts) and the foreign-reading fence (readingFence.ts) → may this cycle send?
+ *   cycle         the role decision (leaderLock.ts), then runCycle — which runs the foreign-reading fence (readingFence.ts) after
+ *                 planning and before the first attestation (review 2 F1) → did this cycle send, or hold?
  *   afterCycle    fold the cycle's fetch reports into the feed observations, take the day's registry snapshot when due (active
  *                 keeper only), write status/status.json
  *   alerts        the feed alerts (down / disagree / stale) and the fence's hold, through the keeper's sink (every 5 minutes)
@@ -41,17 +42,31 @@ export class KeeperOps {
     const c = this.lock.cfg;
     return `role ${c.role}${c.peerStatusUrl ? ` (peer ${c.peerStatusUrl})` : ""} · host ${this.hostId} · snapshots ${!this.o.snapshots ? "off (dry run)" : this.o.uploader ? `pinned via ${this.o.uploader.name}` : "REFUSED (no BURNTICKER_UPLOAD_PAYER)"}`;
   }
-  /** Call at the top of every cycle. `sendsAllowed` false = run the cycle as a dry run (read, plan, publish; sign and send nothing). */
-  async beforeCycle(deps: Pick<KeeperDeps, "registry" | "program" | "log" | "dryRun">): Promise<{ active: boolean; sendsAllowed: boolean; role: RoleDecision; fence: FenceReport | null }> {
+  /**
+   * The role decision at the top of every cycle. `sendsAllowed` false = run the cycle as a dry run (read, plan, publish; sign and send
+   * nothing). The foreign-reading fence is NOT here any more (review 2 F1): it runs inside runCycle, after planning and before the first
+   * attestation, so it sees the receipts this cycle is about to count — a cold standby's included.
+   */
+  async beforeCycle(): Promise<{ active: boolean; sendsAllowed: boolean; role: RoleDecision }> {
     const role = await this.lock.tick();
     if (!this.role || this.role.active !== role.active || this.role.reason.split(":")[0] !== role.reason.split(":")[0]) this.o.log(`  [role] ${role.role} ${role.active ? "ACTIVE" : "PASSIVE"} — ${role.reason}`);
     this.role = role;
-    let fence: FenceReport | null = null;
-    if (role.active) {
-      try { fence = await readingFence({ ...deps, dryRun: deps.dryRun }); } catch (e) { this.o.log(`  [fence] check failed: ${(e as Error).message.slice(0, 160)} — sends held this cycle`); fence = { held: [{ mint: "", ticker: "*", why: `fence check failed: ${(e as Error).message.slice(0, 120)}` }], adopted: [], checked: 0 }; }
-    }
-    this.fence = fence;
-    return { active: role.active, sendsAllowed: role.active && !(fence && fence.held.length), role, fence };
+    return { active: role.active, sendsAllowed: role.active, role };
+  }
+  /**
+   * THE PRODUCTION ORCHESTRATION of one keeper cycle (scripts/burnticker-keeper.mts calls exactly this; the tests call it too, so the
+   * order the tests prove is the order the keeper runs): the role decides whether this keeper may send; runCycle fetches, plans, FENCES
+   * (after planning, before the first attestation) and executes. `gate.sendsAllowed` is false when the role is passive or the fence held.
+   */
+  async cycle(deps: KeeperDeps, base: { dryRun: boolean }): Promise<{ gate: { active: boolean; sendsAllowed: boolean; role: RoleDecision; fence: FenceReport | null }; report: CycleReport | null; error: string | null }> {
+    const g = await this.beforeCycle();
+    deps.dryRun = base.dryRun || !g.sendsAllowed;
+    let report: CycleReport | null = null, error: string | null = null;
+    try { report = await runCycle({ ...deps, fence: true }); } catch (e) { error = (e as Error).message; }
+    // A cycle that threw has no fence result: treat it as held (fail closed) for the sends that follow it (the pair-curve crank).
+    this.fence = report?.fence ?? (g.active ? { held: [{ mint: "", ticker: "*", why: `the cycle failed before the fence finished: ${(error ?? "no report").slice(0, 120)}` }], adopted: [], checked: 0 } : null);
+    const held = !!this.fence && this.fence.held.length > 0;
+    return { gate: { active: g.active, sendsAllowed: g.active && !held, role: g.role, fence: this.fence }, report, error };
   }
   /** Call after the cycle and the publish. Never throws. */
   async afterCycle(report: CycleReport | null, paused: boolean, sink?: AlertSink | null): Promise<OpsStatusJson | null> {

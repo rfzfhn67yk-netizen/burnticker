@@ -10,11 +10,11 @@ import path from "node:path";
 import { Keypair } from "@solana/web3.js";
 import { openRegistry, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { FakeBurnProgram } from "@/lib/burnticker/program";
-import { buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
-import { lockRule } from "@/lib/burnticker/rules";
+import { buildLaunchBundle, buildPairBundles, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
+import { DEFAULT_ON_END, lockRule } from "@/lib/burnticker/rules";
 import { CatalogueAdapter, feedById, loadFixture } from "@/lib/burnticker/catalogue";
 import { runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
-import { KalshiClient, fixtureFetch } from "@/lib/burnticker/oracle/kalshi";
+import { KalshiClient, fixtureFetch, openMarketsUrl, seriesApiUrl, settledMarketsUrl } from "@/lib/burnticker/oracle/kalshi";
 import { FakePinUploader } from "@/lib/burnticker/pin";
 import { registryAlertSink } from "@/lib/burnticker/alerts";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
@@ -37,7 +37,7 @@ import { limiter } from "@/lib/burnticker/api/http";
 import { verifyAttestation } from "@/lib/burnReceipts/attestation";
 import { PublicKey } from "@solana/web3.js";
 import { API, callRoute, validateSchema } from "./burntickerApiHelpers.ts";
-import { DEBT_RULE, NOW, treasuryAndCrossFetch } from "./burntickerHelpers.ts";
+import { BRONCOS, DEBT_RULE, NOW, fx, treasuryAndCrossFetch } from "./burntickerHelpers.ts";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const CREATOR = "CreatorWa11et111111111111111111111111111111";
@@ -372,7 +372,7 @@ describe("5b · the foreign-reading fence: two keepers on one chain never count 
     const after = (await program.port(t.mint).config())!;
     assert.ok(after.lastValue > BigInt(1), "keeper A attested and cranked");
     clock += DAY;
-    await runCycle(depsFor(b, program));   // B: no fence
+    await runCycle({ ...depsFor(b, program), fence: false });   // B: the fence switched off
     const doubled = (await program.port(t.mint).config())!;
     assert.ok(doubled.lastValue > after.lastValue, `the counter rose again (${after.lastValue} → ${doubled.lastValue}) for receipts A already counted: the double-count the fence exists for`);
   });
@@ -412,12 +412,115 @@ describe("5b · the foreign-reading fence: two keepers on one chain never count 
     const fence = await readingFence(depsB);
     assert.equal(fence.held.length, 1);
     assert.match(fence.held[0].why, /counted \d+ unit\(s\); this registry's unassigned receipts through that day carry \d+ — reconcile/);
-    // the KeeperOps hook turns the hold into a dry-run cycle and an alert
+    // the production cycle (KeeperOps.cycle → runCycle's fence) turns the hold into a dry-run cycle and an alert
     const ops = new KeeperOps({ registry: b, siteDir: tmp("bt-fence-"), cluster: "devnet", env: {}, log: () => {}, uploader: null, root: ROOT, hostId: "b" });
-    const gate = await ops.beforeCycle(depsB);
+    const before = (await program.port(t.mint).config())!.lastValue;
+    const { gate } = await ops.cycle(depsB, { dryRun: false });
     assert.equal(gate.active, true); assert.equal(gate.sendsAllowed, false);
+    assert.equal((await program.port(t.mint).config())!.lastValue, before, "nothing attested while held");
     const raised = await ops.alerts(registryAlertSink(b), NOW);
     assert.ok(raised.some((r) => r.startsWith("bt-foreign-reading")));
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// REVIEW 2 F1 (ChatGPT/Codex, 2026-10-11): the fence ran in beforeCycle, BEFORE runCycle planned anything, so a cold standby (empty pending
+// set) checked zero tokens, planned the receipts the leader had already counted and attested them again on the next date (counter 63 → 125).
+// These run the PRODUCTION orchestration (KeeperOps.cycle, which scripts/burnticker-keeper.mts calls) and compare a failover with the same two
+// days run by one keeper: the counters, the fee pools and the supplies must be identical — single coin, an active pair (attest-only pass) and
+// a wind-down (receipts planned inside the execution pass).
+describe("5c · review 2 F1: the fence runs after planning, before the first attestation (production order, cold standby)", () => {
+  const KX = { [settledMarketsUrl("KXNFLGAME")]: fx("kalshi/KXNFLGAME.settled.json"), [seriesApiUrl("KXNFLGAME")]: fx("kalshi/series.KXNFLGAME.json"), [openMarketsUrl("KXNFLGAME")]: { cursor: "", markets: [] } };
+  const BRONCOS_LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } }, pair: null };
+  const kdeps = (reg: Registry, program: FakeBurnProgram): KeeperDeps => ({ ...depsFor(reg, program), oracles: { kalshi: new KalshiClient({ fetchImpl: fixtureFetch(KX), now: () => clock, minIntervalMs: 0 }), catalogue: new CatalogueAdapter({ fetchImpl: treasuryAndCrossFetch(treasuryBody), now: () => clock }) } });
+  async function launchPairInto(regs: Registry[], program: FakeBurnProgram): Promise<string[]> {
+    const inputA = { creator: CREATOR, ticker: "BRONCOS", name: "BRONCOS", description: "", imageUrl: null, links: [], rule: BRONCOS_LOSE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" as const };
+    const pr = await buildPairBundles({ a: inputA, b: { ticker: "CHIEFS", name: "CHIEFS", description: "", imageUrl: null, links: [] }, voidBy: "2026-11-30" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m: string) => `https://x/${m}.json` });
+    for (const reg of regs) {
+      for (const [b, ticker] of [[pr.a, "BRONCOS"], [pr.b, "CHIEFS"]] as const) {
+        reg.register({ mint: b.mint, ticker, name: b.name, creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: null, tokenConfig: null, poolId: null, launchTx: null, cluster: "devnet", platformId: null, baselineAt: "2026-09-01T00:00:00Z", status: "draft" }, clock);
+        reg.markLaunched(b.mint, `launch${ticker}`, null, "2026-09-01T00:00:00Z");
+      }
+      reg.registerPair(pr.pairId, pr.a.mint, pr.b.mint);
+    }
+    for (const b of [pr.a, pr.b]) { program.deposit(b.mint, BigInt(5_000_000_000)); program.supplies.set(b.mint, BigInt("1000000000000000")); }
+    return [pr.a.mint, pr.b.mint];
+  }
+  const ended = (regs: Registry[], mint: string) => { for (const r of regs) r.markRuleEnded(mint, "winddown", "test: the window ended", Date.parse("2026-10-05T12:00:00Z")); };
+  type Setup = (regs: Registry[], program: FakeBurnProgram) => Promise<string[]>;
+  const snap = async (program: FakeBurnProgram, mints: string[]) => Promise.all(mints.map(async (m) => ({ counter: (await program.port(m).config())!.lastValue, pool: await program.feePdaBalanceLamports(m), supply: program.supplies.get(m) })));
+  /** World 1: one keeper runs day 1 and day 2. World 2: keeper A runs day 1; a COLD standby B (same coins, empty pending set) runs day 2 through KeeperOps.cycle. */
+  async function failover(setup: Setup) {
+    clock = NOW;
+    const p1 = new FakeBurnProgram("devnet"); p1.now = () => clock;
+    const r1 = openRegistry(":memory:");
+    const m1 = await setup([r1], p1);
+    await runCycle(kdeps(r1, p1));
+    clock += DAY;
+    await runCycle(kdeps(r1, p1));
+    const single = await snap(p1, m1);
+    clock = NOW;
+    const p2 = new FakeBurnProgram("devnet"); p2.now = () => clock;
+    const a = openRegistry(":memory:"), b = openRegistry(":memory:");
+    const m2 = await setup([a, b], p2);
+    await runCycle(kdeps(a, p2));
+    const afterA = await snap(p2, m2);
+    assert.ok(m2.every((m) => b.pending(m).length === 0), "the standby starts cold: nothing pending in its registry");
+    clock += DAY;
+    const lines: string[] = [];
+    const depsB = { ...kdeps(b, p2), log: (s: string) => lines.push(s) };
+    const ops = new KeeperOps({ registry: b, siteDir: tmp("bt-f1-"), cluster: "devnet", env: {}, log: () => {}, uploader: null, root: ROOT, hostId: "b" });
+    const { gate, report, error } = await ops.cycle(depsB, { dryRun: false });
+    assert.equal(error, null);
+    assert.equal(gate.active, true);
+    return { single, afterA, failover: await snap(p2, m2), report, lines, b, mints: m2 };
+  }
+
+  test("single coin: the standby adopts the leader's readings instead of counting the same source events again (the report's 63 → 125)", async () => {
+    const r = await failover(async (regs, program) => [(await launchInto(regs, program, DEBT_RULE, "DEBT", "2026-10-01T00:00:00Z")).mint]);
+    assert.ok(r.afterA[0].counter > BigInt(1), "keeper A attested");
+    assert.equal(r.failover[0].counter, r.single[0].counter, `counter after failover ${r.failover[0].counter} vs one keeper ${r.single[0].counter}`);
+    assert.equal(r.failover[0].pool, r.single[0].pool, "no second spend from the burn pool");
+    assert.equal(r.failover[0].supply, r.single[0].supply);
+    assert.ok(r.report!.fence!.adopted.length > 0, "the fence ran after planning and adopted");
+    assert.deepEqual(r.report!.fence!.held, []);
+  });
+
+  test("an active pair (the attest-only pass): neither coin's counter or pool moves twice", async () => {
+    const r = await failover(launchPairInto);
+    for (let i = 0; i < 2; i++) {
+      assert.equal(r.failover[i].counter, r.single[i].counter, `coin ${i}: counter`);
+      assert.equal(r.failover[i].pool, r.single[i].pool, `coin ${i}: pool`);
+      assert.equal(r.failover[i].supply, r.single[i].supply, `coin ${i}: supply`);
+    }
+  });
+
+  test("a wind-down (end receipts planned inside the execution pass): fenced before they are attested", async () => {
+    const r = await failover(async (regs, program) => { const t = await launchInto(regs, program, { ...DEBT_RULE, onEnd: DEFAULT_ON_END }, "WIND", "2026-10-01T00:00:00Z"); ended(regs, t.mint); return [t.mint]; });
+    assert.ok(r.afterA[0].counter > BigInt(1), "keeper A attested wind-down days");
+    assert.equal(r.failover[0].counter, r.single[0].counter, `counter after failover ${r.failover[0].counter} vs one keeper ${r.single[0].counter}`);
+    assert.equal(r.failover[0].pool, r.single[0].pool);
+    assert.equal(r.failover[0].supply, r.single[0].supply);
+  });
+
+  test("fail closed: a TokenConfig that cannot be read holds the cycle's sends (nothing attested) and says why", async () => {
+    clock = NOW;
+    const program = new FakeBurnProgram("devnet"); program.now = () => clock;
+    const a = openRegistry(":memory:"), b = openRegistry(":memory:");
+    const t = await launchInto([a, b], program, DEBT_RULE, "DEBT", "2026-10-01T00:00:00Z");
+    await runCycle(depsFor(a, program));
+    const before = (await program.port(t.mint).config())!.lastValue;
+    clock += DAY;
+    const fk = program.fake(t.mint), real = fk.config.bind(fk);
+    let calls = 0;
+    fk.config = async () => { if (++calls === 1) throw new Error("RPC 503"); return real(); };
+    const ops = new KeeperOps({ registry: b, siteDir: tmp("bt-f1-"), cluster: "devnet", env: {}, log: () => {}, uploader: null, root: ROOT, hostId: "b" });
+    const { report } = await ops.cycle(depsFor(b, program), { dryRun: false });
+    assert.equal(report!.fence!.held.length, 1);
+    assert.match(report!.fence!.held[0].why, /TokenConfig could not be read/);
+    assert.equal((await program.port(t.mint).config())!.lastValue, before, "nothing attested while held");
+    const raised = await ops.alerts(registryAlertSink(b), clock);
+    assert.ok(raised.some((x) => x.startsWith("bt-foreign-reading")), "the hold reaches the alert sink");
   });
 });
 
@@ -535,7 +638,8 @@ describe("4 · incident policy, the trust page section, the static fallback", ()
     const landing = fs.readFileSync(path.join(ROOT, "site/burnticker/index.html"), "utf8");
     const shared = html.slice(html.indexOf(":root{"), html.indexOf("/* END shared tokens */"));
     assert.ok(landing.includes(shared), "the fallback's tokens are the landing's, verbatim");
-    assert.match(html, /The app is catching up\. Receipts and the program are unaffected/);
+    assert.match(html, /The app is catching up\. Burns are run by the program on chain/);
+    assert.doesNotMatch(html, /unaffected/, "review 2 §3.10: an outage page does not assert what it has not checked");
     const wk = JSON.parse(fs.readFileSync(path.join(ROOT, "site/burnticker/.well-known/burnticker.json"), "utf8"));
     for (const p of Object.values(wk.clusters.devnet.programs) as { programId: string }[]) assert.ok(html.includes(`https://solscan.io/account/${p.programId}?cluster=devnet`), p.programId);
     const lint = lintCopy(staticText(html), loadCopyLintConfig(ROOT));

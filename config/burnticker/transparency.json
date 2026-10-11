@@ -17,7 +17,7 @@
     "aiAssisted": true,
     "statement": "The program, the keeper, the platform and this page were written with AI assistance (Claude Code) under the operator's direction and review. Three independent blind Claude reviews and one re-check of the burn_receipts program were completed on 2026-10-09/10 and are published in full; two blind Claude reviews of the pair_curve program were completed on 2026-10-10 and are published in full, their High findings not fixed yet; an adversarial ChatGPT/Codex PR review was completed on 2026-10-10 and is published in full with a per-finding response. No security firm has audited any of it.",
     "firmAudit": false,
-    "firmAuditStatement": "Not independently audited by a security firm. Reviewed by three independent blind AI reviews and one re-check of burn_receipts and two blind AI reviews of pair_curve (all published), an adversarial ChatGPT/Codex PR review (published with its response) and, once published, a public bounty.",
+    "firmAuditStatement": "Not independently audited by a security firm. Reviewed by three independent blind AI reviews and one re-check of burn_receipts and two blind AI reviews of pair_curve (all published), two adversarial ChatGPT/Codex reviews (each published with its response) and, once published, a public bounty.",
     "reviews": [
       {
         "id": "claude-blind-1",
@@ -50,6 +50,12 @@
         "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-blind-2.md"
       },
       {
+        "id": "paircurve-recheck",
+        "reviewer": "a fresh Claude agent re-checking the pair_curve blind-review fixes (commit 4eda2e3d): every High fixed, R2 M-1 only partly fixed (a curve sell after the deadline and before void_pair), one new Low; residual tests committed (review_pc3.rs). Not listed here before review 2 (2026-10-11) counted ten report files",
+        "status": "completed 2026-10-10",
+        "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-recheck.md"
+      },
+      {
         "id": "lp-lock-blind",
         "reviewer": "a fresh Claude agent reviewing the LP-lock release blind (register_fee_key, claim_lock_fees, lock_lp; both programs; the real Raydium lock binary loaded in place of the mock): 0 Critical/High, 2 Medium, 3 Low, 8 Info; exploit tests committed (#[ignore]d), fixes in progress",
         "status": "completed 2026-10-11; findings open",
@@ -72,6 +78,12 @@
         "reviewer": "ChatGPT/Codex, adversarial PR review against the same pre-registered checklist (reviewed public commit 58d43eae: 2 High, 5 Medium new findings plus checklist mismatches and pair_curve residuals; each answered in docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md)",
         "status": "completed 2026-10-10",
         "reportPath": "docs/burnticker/reviews/2026-10-10-chatgpt-pr-review.md"
+      },
+      {
+        "id": "chatgpt-adversarial-2",
+        "reviewer": "ChatGPT/Codex, second adversarial code review + live-site UX audit against the same checklist (reviewed public commit 07b7b4f5): 3 P1 (F1 keeper fence order, F2 old unlocked pairs left the scan, F5 = pair-forward RN-1/RN-2), 3 P2 (F3 launch confirmation, F4 signing recovery, F6 reversed pair wording), UX cuts and ten explanation mismatches; each answered in docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2-response.md (F5 in pair round 3)",
+        "status": "completed 2026-10-11",
+        "reportPath": "docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2.md"
       }
     ],
     "tooling": [
@@ -85,7 +97,7 @@
     "reviewsDir": "docs/burnticker/reviews",
     "reviewsRule": "Every report is published in full in docs/burnticker/reviews/ as delivered, with every finding; fixes and their closing tests are in docs/burn-receipts/CHANGELOG.md; nothing is edited out.",
     "bounty": {
-      "status": "not published",
+      "status": "funded 2026-10-11",
       "rangeSol": [
         5,
         10
@@ -94,7 +106,7 @@
       "termsPath": "SECURITY.md in the public repository",
       "contact": "security@burnticker.com",
       "wallet": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u",
-      "walletTodo": "funding (5–10 SOL) pending — docs/burnticker/TODO-OWNER.md row 4",
+      "walletTodo": "top-ups from the developer fee",
       "howReportsArePaid": "config/public-repo/overlay/SECURITY.md § Bounty wallet",
       "reports": {
         "paid": [],
@@ -200,7 +212,7 @@
     {
       "id": "switchboard-down",
       "status": "not available",
-      "text": "Switchboard Technology Labs ended all oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. The planned replacements — a Reclaim zkTLS proof of the source response posted by a relayer key, and/or a second human operator running the reader on another machine — are not live. The 'attester #2 within 14 days' line on this page is the schedule, not a built thing."
+      "text": "Switchboard Technology Labs ended all oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. The planned replacements — a Reclaim zkTLS proof of the source response posted by a relayer key, and/or a second human operator running the reader on another machine — are not live. One operator attester is configured; no independent second attester is live, and who runs one and when is an open owner decision."
     },
     {
       "id": "kalshi-terms",
@@ -210,7 +222,7 @@
     {
       "id": "one-shot",
       "status": "live design",
-      "text": "One-shot markets are allowed: a coin bound to a single market resolves once, on that market's close, and its supply is fixed after that. The token page says so."
+      "text": "One-shot markets are allowed: a coin bound to a single market resolves once, on that market's close. What happens after is its rule's onEnd schedule, not a fixed supply: a YES at 100% drains the burn pool one unit a day under the spend cap; any other end winds the pool down over 28 days (enough daily units to spend at least 99%), then the coin retires, and a retired coin's pool is swept again when new fees pass the sweep threshold, at most once a week. The token page shows the schedule."
     },
     {
       "id": "cap-25",
@@ -239,8 +251,8 @@
     },
     {
       "id": "no-systemd-unit",
-      "status": "not built",
-      "text": "deploy/ has a unit for the $DEFICIT keeper only; the multi-token Burnticker keeper and the hourly audit timer have no systemd units yet."
+      "status": "units supplied; installation on this host not verified",
+      "text": "deploy/systemd supplies units for the multi-token Burnticker keeper (mct-burnticker-keeper.service), the web app, the hourly public audit (mct-burnticker-audit.timer), the publish and clone-watch timers and the $DEFICIT keeper. Units supplied; installation on this host not verified: a file in the repository does not prove it is installed or running — the status page's keeper heartbeat is the live signal."
     },
     {
       "id": "rpc-dependent",
@@ -259,8 +271,8 @@
     },
     {
       "id": "bounty-wallet",
-      "status": "wallet set 2026-10-11; funding pending",
-      "text": "The bounty wallet is HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator (not the Squads vault — payouts are plain transfers by the operator, each posted in the report thread). Funding of 5–10 SOL is pending; the trust page shows its live balance."
+      "status": "funded 2026-10-11",
+      "text": "The bounty wallet is HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator (not the Squads vault — payouts are plain transfers by the operator, each posted in the report thread). The owner funded it with 5 SOL on 2026-10-11; top-ups come from the developer fee; the trust page reads its balance live from chain."
     },
     {
       "id": "entity",

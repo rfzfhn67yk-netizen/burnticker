@@ -75,7 +75,14 @@ interface FrozenTeam { id: string; abbr: string; name: string; short: string; lo
 const FROZEN = (ESPN_TEAMS as unknown as { leagues: Record<string, FrozenTeam[]> }).leagues;
 
 export interface EspnTeam { league: LeagueId; abbr: string; city: string; nickname: string; name: string; ticker: string; alt: string[]; id?: string | null; colors?: [string, string] | null; /** a college team is named only by its full name or its mascot ("Michigan" alone is a state, not a team) */ strictKeys?: string[] | null }
-const toTeam = (league: LeagueId, a: TeamAlias): EspnTeam => ({ league, abbr: ESPN_ABBR[LEAGUES[league].alias!][a.abbr] ?? a.abbr, city: a.city, nickname: a.nickname, name: `${a.city} ${a.nickname}`, ticker: a.nickname.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10), alt: [a.abbr, ...a.alt] });
+/**
+ * The alias table disambiguates shared cities with a letter ("Chicago C", "New York Y") and names the Athletics by nickname alone; review 2
+ * §2 (2026-10-11) saw "Chicago C Cubs" and "Athletics Athletics" on the league pages. The display city drops the letter; a city equal to
+ * the nickname is not repeated. The alias table itself (matching) is unchanged.
+ */
+export const displayCity = (city: string): string => city.replace(/\s+[A-Z]{1,2}$/, "");
+export const displayTeamName = (city: string, nickname: string): string => { const c = displayCity(city).trim(); return !c || c === nickname ? nickname : `${c} ${nickname}`; };
+const toTeam = (league: LeagueId, a: TeamAlias): EspnTeam => ({ league, abbr: ESPN_ABBR[LEAGUES[league].alias!][a.abbr] ?? a.abbr, city: displayCity(a.city), nickname: a.nickname, name: displayTeamName(a.city, a.nickname), ticker: a.nickname.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10), alt: [a.abbr, ...a.alt] });
 /** A frozen ESPN team: the short name ("Arsenal", "Inter Miami", "Georgia") is what people say; the nickname alone is ambiguous in college. */
 /** "Inter Miami CF" → "Inter Miami", "AFC Bournemouth" → "Bournemouth": the club name people say. */
 export const clubName = (n: string): string => n.replace(/^(AFC|FC|CF|SC|CD|CA|AC|AS|SS|SSC|US|RC|RCD)\s+|\s+(FC|CF|SC|AFC)$/g, "").trim() || n;

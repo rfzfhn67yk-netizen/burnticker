@@ -409,6 +409,29 @@ function verify() {
 // ---------------------------------------------------------------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------------------------------------------------------------
+/**
+ * CASE-ONLY RENAMES IN THE PUBLIC REPOSITORY'S INDEX (review 2, 2026-10-11: the public clone failed test/burntickerTrustOps.test.ts
+ * "migrated into the folder"). The public tree is published on a case-insensitive filesystem with git's core.ignorecase on, so a file the
+ * monorepo renamed by case only (docs/burnticker/incidents.md → INCIDENTS.md) is written with the new name on disk while the public
+ * repo's index keeps the old one — and every fresh clone checks out the old name. Listed here with the command that fixes the index (the
+ * owner runs it in the public repository; this script never commits). A warning, not a failure: the file contents are right.
+ */
+function caseOnlyRenames(manifest) {
+  if (!fs.existsSync(path.join(OUT, ".git"))) return [];
+  let tracked;
+  try { tracked = execFileSync("git", ["-C", OUT, "ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean); } catch { return []; }
+  const want = new Map([...manifest.keys(), "package.json"].map((k) => [k.toLowerCase(), k]));
+  const out = [];
+  for (const t of tracked) { const w = want.get(t.toLowerCase()); if (w && w !== t) out.push({ tracked: t, published: w }); }
+  return out;
+}
+function reportCaseOnlyRenames(manifest) {
+  const r = caseOnlyRenames(manifest);
+  if (!r.length) return;
+  console.log(`warning: ${r.length} file(s) are tracked in ${OUT} under a name that differs from the published one only in case; a fresh clone gets the old name. Fix the public repo's index:`);
+  for (const x of r) console.log(`  git -C ${OUT} mv -f ${x.tracked} ${x.published}`);
+}
+
 function main() {
   if (cmd !== "check" && cmd !== "publish") { console.error("usage: public-repo-lib.mjs check|publish [--out D] [--tag] [--verify] [--link-node-modules]"); process.exit(2); }
   const { manifest, warnings, provenance } = buildManifest();
@@ -439,7 +462,7 @@ function main() {
   // "CHECK FAILED: N import, M leak findings" (a provenance refusal above prints "CHECK FAILED: K provenance, 0 import, 0 leak
   // findings"). Exit status agrees (0 / 1). Nothing is written on a failure or in --check.
   if (violations.length || hits.length) { console.log(`\nnothing written.\nCHECK FAILED: ${violations.length} import, ${hits.length} leak findings`); process.exit(1); }
-  if (cmd === "check") { console.log("nothing written (dry run).\nCHECK PASSED"); return; }
+  if (cmd === "check") { reportCaseOnlyRenames(manifest); console.log("nothing written (dry run).\nCHECK PASSED"); return; }
 
   if (flag("tag")) { const t = appendTag(manifest); console.log(`tagged ${CHANGELOG_SRC}: ${t.date} commit ${t.commit.slice(0, 12)}${t.dirty ? " (dirty)" : ""}, program ${t.prog.hash ?? "not built here"}, IDL ${t.idl.slice(0, 16)}…`); }
   // an unchanged lockfile keeps its old mtime, so the host's `npm ci` (run when the lockfile is newer than node_modules) is not repeated for nothing
@@ -462,6 +485,7 @@ function main() {
   }
   console.log(`staged output: ${staged.count} regular files, no symlink, nothing outside the manifest, leak scan clean`);
   if (oldLock && fs.existsSync(oldLockPath) && fs.readFileSync(oldLockPath).equals(oldLock.buf)) fs.utimesSync(oldLockPath, oldLock.mtime, oldLock.mtime);
+  reportCaseOnlyRenames(manifest);
   if (flag("verify")) { const ok = verify(); if (!ok) process.exit(1); }
 }
 

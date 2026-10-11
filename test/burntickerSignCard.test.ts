@@ -6,9 +6,10 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { Keypair, type Transaction } from "@solana/web3.js";
+import { createRequire } from "node:module";
+import { Keypair, Transaction } from "@solana/web3.js";
 import { limiter } from "@/lib/burnticker/api/http";
-import { confirmPlan, launchlabPlan, planConfirmations, planProblems, signAndSendPlan, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
+import { browserPlanStorage, listStoredLaunches, memoryPlanStorage, recoverStoredLaunch, storedLaunchSentence, confirmPlan, failureSentence, launchlabPlan, loadPlanRecord, planConfirmations, planProblems, planStepStates, planStorageKey, reconcilePending, recordFailureSentence, signAndSendPlan, stepStatusText, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { gameSeries, teamSeries } from "@/lib/burnticker/sources/espn";
@@ -85,14 +86,15 @@ describe("one signing plan for every launch path", () => {
   });
 });
 
-describe("failures: never half-signed, resume at the failed step, plain sentences", () => {
-  const bundle = (): LaunchlabBundleLike => {
-    const mint = Keypair.generate();
-    const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B58 = BigInt(58); let x = BigInt("0x" + Buffer.from(mint.secretKey).toString("hex")), secret = ""; while (x > Z) { secret = A[Number(x % B58)] + secret; x /= B58; }
-    const ix = (signer: string) => ({ programId: "11111111111111111111111111111111", label: "test", dataBase64: Buffer.from([2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]).toString("base64"), keys: [{ pubkey: CREATOR, isSigner: true, isWritable: true }, { pubkey: signer, isSigner: true, isWritable: true }] });
-    return { mint: mint.publicKey.toBase58(), ticker: "TEST", ready: true, pending: [], mintSecretKey: secret, transactions: [{ label: "create", signers: ["creator", "mint"], instructions: [ix(mint.publicKey.toBase58())] }, { label: "first buy", signers: ["creator"], instructions: [ix(CREATOR)] }] };
-  };
+/** A two-step LaunchLab bundle with a real fresh mint key: "create" (creator + mint) then "first buy" (creator). */
+const bundle = (): LaunchlabBundleLike => {
+  const mint = Keypair.generate();
+  const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const Z = BigInt(0), B58 = BigInt(58); let x = BigInt("0x" + Buffer.from(mint.secretKey).toString("hex")), secret = ""; while (x > Z) { secret = A[Number(x % B58)] + secret; x /= B58; }
+  const ix = (signer: string) => ({ programId: "11111111111111111111111111111111", label: "test", dataBase64: Buffer.from([2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]).toString("base64"), keys: [{ pubkey: CREATOR, isSigner: true, isWritable: true }, { pubkey: signer, isSigner: true, isWritable: true }] });
+  return { mint: mint.publicKey.toBase58(), ticker: "TEST", ready: true, pending: [], mintSecretKey: secret, transactions: [{ label: "create", signers: ["creator", "mint"], instructions: [ix(mint.publicKey.toBase58())] }, { label: "first buy", signers: ["creator"], instructions: [ix(CREATOR)] }] };
+};
 
+describe("failures: never half-signed, resume at the failed step, plain sentences", () => {
   test("a missing or wrong mint key is refused before anything reaches the wallet", async () => {
     const b = bundle();
     assert.ok(planProblems(launchlabPlan([{ ...b, mintSecretKey: null }]), CREATOR).some((p) => /did not hand over the mint key/.test(p)));
@@ -139,5 +141,199 @@ describe("the page and the tile reach the same signing card", () => {
     assert.ok(!fs.existsSync(path.join(ROOT, "src/app/burnticker/launch/PairCurveSign.tsx")));
     assert.match(card, /signAndSendPlan\(/); assert.match(card, /confirmPlan\(/);
     assert.ok(!/odds|price|chance/i.test(card.replace(/\/\*[\s\S]*?\*\//g, "")), "no odds or prices on the signing card");
+  });
+});
+
+// ---- review-2 F4: a send that lands while its confirmation is lost ---------------------------------------------------------------
+// sendRaw lands the create; confirm throws (an RPC timeout). The signed transaction is persisted BEFORE it is sent, the step stays
+// "sent" (outcome unknown) with its signature, and a resumed run (a second press, or a reload with only the stored record) checks the
+// ORIGINAL signature first: confirmed → adopted (no second create); failed on chain → rebuilt; absent → rebuilt only once the
+// blockhash is proven expired (block height past lastValidBlockHeight), otherwise it stays sent / unknown and nothing new is built.
+describe("an ambiguous confirmation keeps the sent transaction and recovers it (review-2 F4)", () => {
+  const b58 = (() => { const m = createRequire(import.meta.url)("bs58") as { encode?(b: Uint8Array): string; default?: { encode(b: Uint8Array): string } }; return (b: Uint8Array) => (m.encode ?? m.default!.encode)(b); })();
+  const sigOf = (raw: Uint8Array) => b58(Transaction.from(Buffer.from(raw)).signatures[0].signature!);
+  const memStore = () => { const m = new Map<string, string>(); return { m, get: (k: string) => m.get(k) ?? null, set: (k: string, v: string) => { m.set(k, v); }, remove: (k: string) => { m.delete(k); } }; };
+  const TIMEOUT = "TransactionExpiredTimeoutError: Transaction was not confirmed in 30.00 seconds. It is unknown if it succeeded or failed.";
+  /** A mocked chain: every sent signature is recorded; `landed` decides what the status query reports for it. */
+  const chain = (o: { confirmThrows?: boolean; height?: number; status?: (sig: string) => { err: unknown; confirmationStatus: string } | null; store?: ReturnType<typeof memStore> }) => {
+    const sent: string[] = [], pendingAtSend: (string | null)[] = [];
+    const deps = {
+      latestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 100 }),
+      signTransaction: async (tx: Transaction) => { tx.partialSign(creatorKp); return tx; },
+      sendRaw: async (raw: Uint8Array) => {
+        const sig = sigOf(raw);
+        const rec = o.store ? [...o.store.m.values()].map((v) => JSON.parse(v) as { pending: { signature: string } | null })[0] : null;
+        pendingAtSend.push(rec?.pending?.signature ?? null);
+        sent.push(sig); return sig;
+      },
+      confirm: async () => { if (o.confirmThrows) throw new Error(TIMEOUT); return { err: null }; },
+      getSignatureStatus: async (sig: string) => (o.status ? o.status(sig) : null),
+      getBlockHeight: async () => o.height ?? 50,
+      storage: o.store,
+    };
+    return { deps, sent, pendingAtSend };
+  };
+  const confirmedStatus = () => ({ err: null, confirmationStatus: "confirmed" });
+
+  test("send lands, confirm times out: the signature is persisted before the send and kept as \"sent\"; a resumed run adopts it once confirmed — no second create", async () => {
+    const plan = launchlabPlan([bundle()]), store = memStore();
+    const one = chain({ confirmThrows: true, store });
+    const first = await signAndSendPlan(plan, CREATOR, one.deps);
+    assert.equal(one.sent.length, 1);
+    assert.deepEqual(one.pendingAtSend, [one.sent[0]], "the signed transaction's signature was in storage before sendRaw ran");
+    assert.equal(first.failedAt, 0); assert.equal(first.state, "sent"); assert.equal(first.signature, one.sent[0]);
+    assert.match(first.error!, /Sent; confirmation unavailable — signature /);
+    const rec = loadPlanRecord(store, plan)!;
+    assert.equal(rec.pending!.signature, one.sent[0]); assert.equal(rec.pending!.step, 0);
+    // the original transaction is now confirmed on chain: the resume adopts it and sends only step 2
+    const two = chain({ store, status: (sig) => (sig === one.sent[0] ? confirmedStatus() : null) });
+    const steps: [number, string][] = [];
+    const again = await signAndSendPlan(plan, CREATOR, two.deps, (i, s) => steps.push([i, s]), first.signatures);
+    assert.equal(again.error, null);
+    assert.equal(again.signatures[0], one.sent[0], "step 1 is the original signature");
+    assert.equal(two.sent.length, 1, "only the first buy was sent; the create was not sent a second time");
+    assert.deepEqual(steps.map((s) => s[0]), [0, 1]);
+    assert.equal(loadPlanRecord(store, plan)!.pending, null);
+  });
+
+  test("status absent and the blockhash proven expired (block height past lastValidBlockHeight): the resume rebuilds and sends a fresh transaction", async () => {
+    const plan = launchlabPlan([bundle()]), store = memStore();
+    const one = chain({ confirmThrows: true, store, height: 50 });
+    const first = await signAndSendPlan(plan, CREATOR, one.deps);
+    assert.equal(first.state, "sent", "absent but still within its blockhash: unknown, not rebuilt");
+    const two = chain({ store, height: 101 });
+    const again = await signAndSendPlan(plan, CREATOR, two.deps, undefined, first.signatures);
+    assert.equal(again.error, null);
+    assert.equal(two.sent.length, 2, "a fresh create and the first buy");
+    assert.notEqual(two.sent[0], one.sent[0], "the create was rebuilt with a fresh blockhash");
+    assert.equal(again.signatures[0], two.sent[0]);
+  });
+
+  test("status absent but the block height NOT past lastValidBlockHeight: nothing is rebuilt; the step stays sent / unknown", async () => {
+    const plan = launchlabPlan([bundle()]), store = memStore();
+    const first = await signAndSendPlan(plan, CREATOR, chain({ confirmThrows: true, store }).deps);
+    const two = chain({ store, height: 100 });
+    const again = await signAndSendPlan(plan, CREATOR, two.deps, undefined, first.signatures);
+    assert.equal(two.sent.length, 0, "no new transaction while the first can still land");
+    assert.deepEqual([again.failedAt, again.state, again.signature], [0, "sent", first.signature]);
+    assert.ok(again.error!.includes(`Sent; confirmation unavailable — signature ${first.signature}`));
+    // a status the chain has seen but not yet confirmed ("processed") is unknown too
+    const three = chain({ store, height: 101, status: () => ({ err: null, confirmationStatus: "processed" }) });
+    assert.equal((await signAndSendPlan(plan, CREATOR, three.deps)).state, "sent"); assert.equal(three.sent.length, 0);
+  });
+
+  test("status shows an on-chain error: the step is failed and rebuilding is allowed", async () => {
+    const plan = launchlabPlan([bundle()]), store = memStore();
+    const failedOnChain = () => ({ err: { InstructionError: [0, "Custom"] }, confirmationStatus: "confirmed" });
+    const one = chain({ confirmThrows: true, store, status: failedOnChain });
+    const first = await signAndSendPlan(plan, CREATOR, one.deps);
+    assert.deepEqual([first.failedAt, first.state, first.signature], [0, "failed", one.sent[0]]);
+    assert.match(first.error!, /the chain rejected it/);
+    assert.equal(loadPlanRecord(store, plan)!.pending, null, "nothing left pending: the next press may build afresh");
+    const two = chain({ store });
+    const again = await signAndSendPlan(plan, CREATOR, two.deps, undefined, first.signatures);
+    assert.equal(again.error, null); assert.equal(two.sent.length, 2);
+  });
+
+  test("the pure reconciliation: confirmed / failed / expired only on a proven absence past lastValidBlockHeight / otherwise unknown", () => {
+    const p = { lastValidBlockHeight: 100 };
+    assert.equal(reconcilePending(p, { err: null, confirmationStatus: "finalized" }, 10), "confirmed");
+    assert.equal(reconcilePending(p, { err: { x: 1 }, confirmationStatus: "confirmed" }, 10), "failed");
+    assert.equal(reconcilePending(p, null, 101), "expired");
+    assert.equal(reconcilePending(p, null, 100), "unknown");
+    assert.equal(reconcilePending(p, null, null), "unknown", "no block height: expiry is not proven");
+    assert.equal(reconcilePending(p, undefined, 101), "unknown", "the status query failed: absence is not proven");
+    assert.equal(reconcilePending(p, { err: null, confirmationStatus: "processed" }, 101), "unknown");
+  });
+
+  test("reload: a fresh run holding only the stored record (sessionStorage format, same key) recovers the pending signature and adopts it", async () => {
+    const plan = launchlabPlan([bundle()]), before = memStore();
+    const one = chain({ confirmThrows: true, store: before });
+    await signAndSendPlan(plan, CREATOR, one.deps);
+    const key = planStorageKey(plan);
+    assert.equal(key, `burnticker.signplan.${plan.confirms[0].mint}`);
+    const raw = before.get(key)!;
+    const parsed = JSON.parse(raw) as Record<string, unknown> & { pending: Record<string, unknown> };
+    assert.deepEqual(Object.keys(parsed).sort(), ["confirmed", "confirms", "failed", "mints", "pending", "recorded", "steps", "updatedAt", "v"]);
+    assert.deepEqual(Object.keys(parsed.pending).sort(), ["blockhash", "lastValidBlockHeight", "sentAt", "signature", "step", "tx"]);
+    assert.equal(sigOf(Buffer.from(parsed.pending.tx as string, "base64")), one.sent[0], "the stored bytes are the transaction that was sent");
+    // the page reloads: a new storage object holding only that string, no `prior`, new deps
+    const after = memStore(); after.set(key, raw);
+    const two = chain({ store: after, status: (sig) => (sig === one.sent[0] ? confirmedStatus() : null) });
+    const r = await signAndSendPlan(plan, CREATOR, two.deps);
+    assert.equal(r.error, null); assert.equal(r.signatures[0], one.sent[0]); assert.equal(two.sent.length, 1, "only the first buy");
+  });
+
+  test("reload WITHOUT the plan (the launch page's recovery notice): the stored launch is listed, the landed create adopted from storage alone — no send — and the draft recorded; an expired one says to start again", async () => {
+    // a single LaunchLab coin has two steps (initialize + create, first buy); the create landed, its confirmation was lost, then the page reloaded
+    const plan = launchlabPlan([bundle()]), before = memStore();
+    const one = chain({ confirmThrows: true, store: before });
+    await signAndSendPlan(plan, CREATOR, one.deps);
+    const key = planStorageKey(plan);
+    const page = memoryPlanStorage(); page.set(key, before.get(key)!);
+    const listed = listStoredLaunches(page);
+    assert.equal(listed.length, 1);
+    assert.match(storedLaunchSentence(listed[0]), /step 1 of 2 — Sent; confirmation unavailable — signature /);
+    assert.doesNotMatch(storedLaunchSentence(listed[0]), /Nothing was sent/);
+    // the chain says the create is confirmed: adopted; step 2 was never sent, so nothing is recorded yet and the sentence says how to finish
+    const posts: string[] = [];
+    const fetchFn = async (_u: string, init: { body: string }) => { posts.push(init.body); return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}) }; };
+    const r = await recoverStoredLaunch(page, listed[0], { getSignatureStatus: async (sig) => (sig === one.sent[0] ? confirmedStatus() : null), getBlockHeight: async () => 50 }, fetchFn, () => "refused");
+    assert.equal(r.done, false); assert.deepEqual(r.rec.confirmed, [one.sent[0]]); assert.equal(r.rec.pending, null);
+    assert.match(r.text, /1 of 2 step\(s\) confirmed on chain/);
+    assert.equal(posts.length, 0, "not recorded while a step is missing");
+    // a fully confirmed set (both steps landed before the reload): recorded with the transaction the mint signed, then the record is gone
+    const done = memoryPlanStorage();
+    done.set(key, JSON.stringify({ ...JSON.parse(before.get(key)!), confirmed: ["SIGSTEP1", "SIGSTEP2"], pending: null }));
+    const fin = await recoverStoredLaunch(done, listStoredLaunches(done)[0], {}, fetchFn, () => "refused");
+    assert.equal(fin.done, true);
+    assert.deepEqual(JSON.parse(posts[0]), { action: "launched", mint: plan.confirms[0].mint, launchTx: "SIGSTEP1" });
+    assert.equal(done.get(key), null); assert.deepEqual(listStoredLaunches(done), []);
+    // provably expired and absent: failed, and the sentence says start again from the review (no keys to rebuild with)
+    const exp = memoryPlanStorage(); exp.set(key, before.get(key)!);
+    const x = await recoverStoredLaunch(exp, listStoredLaunches(exp)[0], { getSignatureStatus: async () => null, getBlockHeight: async () => 101 }, fetchFn, () => "refused");
+    assert.match(x.text, /did not take effect .* start the launch again from the review/);
+    // the launch page mounts the notice; it reads storage after mount and never signs or sends
+    const src = fs.readFileSync(path.join(import.meta.dirname, "..", "src/app/burnticker/launch/LaunchRecovery.tsx"), "utf8");
+    assert.match(fs.readFileSync(path.join(import.meta.dirname, "..", "src/app/burnticker/launch/page.tsx"), "utf8"), /<LaunchRecovery \/>/);
+    assert.doesNotMatch(src, /sendRawTransaction|signTransaction/);
+    assert.match(src, /useEffect\(\(\) => \{ setItems\(listStoredLaunches\(storage\)\); \}/);
+  });
+
+  test("the browser storage wraps sessionStorage and survives its absence", () => {
+    const s = browserPlanStorage();
+    assert.doesNotThrow(() => { s.set("k", "v"); s.get("k"); s.remove("k"); }, "no window here: falls back to memory without throwing");
+    s.set("k", "v"); assert.equal(s.get("k"), "v");
+  });
+
+  test('"launched": a transport failure (fetch throws) is a plain sentence that keeps the chain progress; the card clears busy in finally', async () => {
+    const plan = launchlabPlan([bundle()]);
+    const r = await confirmPlan(async () => { throw new TypeError("Failed to fetch"); }, plan, ["sig1", "sig2"], launchedErrorMessage, { sleep: async () => {} });
+    assert.deepEqual(r.confirmed, []); assert.ok(r.error); assert.equal(r.transport, true);
+    assert.ok(lintCopy(r.error!, loadCopyLintConfig()).ok, r.error!);
+    const card = read("src/app/burnticker/launch/SignCard.tsx");
+    assert.match(card, /finally\s*\{\s*setBusy\(false\)/, "busy is cleared whatever happens");
+    // a 5xx while recording does not tell the creator nothing was sent
+    const r500 = await confirmPlan(async () => ({ ok: false, status: 500, headers: { get: () => null }, json: async () => { throw new SyntaxError("not json"); } }), plan, ["sig1", "sig2"], (st, bd, ra) => recordFailureSentence(st, bd, ra, launchedErrorMessage), { sleep: async () => {} });
+    assert.doesNotMatch(r500.error!, /Nothing was sent/); assert.match(r500.error!, /could not record/);
+    const r503 = recordFailureSentence(503, null, null, launchedErrorMessage);
+    assert.doesNotMatch(r503, /Nothing was sent/);
+  });
+
+  test('the card\'s sentences: a sent / unknown step reads "Sent; confirmation unavailable — signature …", never "Nothing was sent"', () => {
+    const cfg = loadCopyLintConfig();
+    const sig = "5".repeat(88);
+    const sent = failureSentence({ signatures: [], failedAt: 0, error: `step 1 of 2: Sent; confirmation unavailable — signature ${sig}`, state: "sent", signature: sig }, 2);
+    assert.ok(sent.includes(`Sent; confirmation unavailable — signature ${sig}`)); assert.doesNotMatch(sent, /Nothing was sent/);
+    assert.ok(lintCopy(sent, cfg).ok, sent);
+    const failed = failureSentence({ signatures: [], failedAt: 0, error: "step 1 of 2 failed: the chain rejected it (x)", state: "failed", signature: sig }, 2);
+    assert.doesNotMatch(failed, /Nothing was sent/);
+    assert.match(failureSentence({ signatures: [], failedAt: 0, error: "step 1 of 2 was not signed in the wallet", state: "not-sent" }, 2), /Nothing was sent\./);
+    assert.match(failureSentence({ signatures: ["a"], failedAt: 1, error: "step 2 of 2 was not signed in the wallet", state: "not-sent" }, 2), /steps before it are confirmed/);
+    assert.equal(stepStatusText("sent", sig), `Sent; confirmation unavailable — signature ${sig}`);
+    assert.match(stepStatusText("confirmed", sig), /^confirmed /);
+    const states = planStepStates(3, ["a"], { failedAt: 1, state: "sent" });
+    assert.deepEqual(states, ["confirmed", "sent", "not-sent"]);
+    for (const st of ["confirmed", "sent", "failed", "not-sent"] as const) assert.ok(lintCopy(stepStatusText(st, sig), cfg).ok, st);
   });
 });

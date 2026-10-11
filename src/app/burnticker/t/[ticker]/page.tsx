@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useLaunchAvailability } from "../../_components/useLaunchAvailability";
+import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago, until } from "../../_components/CoinCard";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
@@ -55,11 +57,13 @@ function CopyButton({ text, label = "copy" }: { text: string; label?: string }) 
 export default function TokenPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const [d, setD] = useState<Data | null>(null);
+  const launch = useLaunchAvailability();
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  if (err) return <main className="p-6 text-red-400">{err}</main>;
+  // review 2 §2: a ticker this host has no record of explains itself (and $DEFICIT links its served page) instead of a bare error line
+  if (err) return /no token/i.test(err) ? <NotRegistered ticker={ticker} /> : <main className="p-6 text-red-400">{err}</main>;
   if (!d) return <main className="p-6 text-neutral-400">Loading…</main>;
   const s = d.status, m = s.market, prof = s.profile;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -87,7 +91,7 @@ export default function TokenPage() {
           {prof?.description && <p className="text-sm text-neutral-200 max-w-2xl leading-relaxed">{prof.description}</p>}
           {prof?.note && <div className="max-w-2xl rounded border border-neutral-700 p-2 text-xs text-neutral-300"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note — not part of the rule</div>{prof.note}</div>}
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "Not affiliated with any team, league, candidate, agency or market."}</p>
-          <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>
+          {launch.open && <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>}
           <PinnedCheck pinned={s.pinned} />
         </div>
       </header>
@@ -173,7 +177,7 @@ export default function TokenPage() {
             <p className="mt-2 text-[11px] text-neutral-500 break-all">sha256 {s.rules.sha256}</p>
             <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
               <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>
-              <p className="mt-1 text-neutral-500">From the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>{s.trust.operator.placeholder ? " (placeholder until the program is deployed)" : ""}. Creator cash from fees {s.trust.creatorCashBps} bps · LP locked {s.trust.lpLockedPct ?? 100}% (fees 80% burn pool / 20% operator) · team allocation {s.trust.teamAllocationPct}%.</p>
+              <p className="mt-1 text-neutral-500">From the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>{s.trust.operator.placeholder ? " (the register file is not on this host: rows from its environment)" : ""}. Creator cash from fees {s.trust.creatorCashBps} bps · LP locked {s.trust.lpLockedPct ?? 100}% (fees 80% burn pool / 20% operator) · team allocation {s.trust.teamAllocationPct}%.</p>
             </details>
           </section>
 
@@ -224,5 +228,18 @@ function LpLockCard({ lp, card }: { lp: LpBlock; card: string }) {
       <p className="mt-2 text-[11px] text-neutral-400">{lp.lastClaim ? <>{lp.lastClaim.txUrl ? <a className="underline" href={lp.lastClaim.txUrl}>{lp.lastClaim.line}</a> : lp.lastClaim.line} · {lp.totals.claims} claim(s), {lp.totals.toBurnPool} SOL to the burn pool, {lp.totals.toOperator} SOL to the operator</> : "No LP-fee claim yet."}</p>
       {lp.note && <p className="mt-1 text-[11px] text-neutral-500">{lp.note}</p>}
     </section>
+  );
+}
+
+/** A ticker with no record on this host: say so plainly; $DEFICIT's own page is served at DEFICIT_SITE until it is registered here. */
+function NotRegistered({ ticker }: { ticker: string }) {
+  const t = ticker.toUpperCase();
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-6 space-y-2 text-sm" data-not-registered>
+      <h1 className="text-xl font-semibold">${t}</h1>
+      <p className="text-neutral-300">No coin with the ticker ${t} is registered on this host, so there is no rule, receipt or reading to show here.</p>
+      {t === "DEFICIT" ? <p><a className="underline" href={DEFICIT_SITE}>The $DEFICIT page</a> is served on its own site until the coin is registered here; its rule, receipts and status are published there.</p> : null}
+      <p><Link className="underline" href="/burnticker">All coins on this host</Link> · <Link className="underline" href="/burnticker/verify">Check a token address</Link></p>
+    </main>
   );
 }
