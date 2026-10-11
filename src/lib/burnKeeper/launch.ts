@@ -27,6 +27,11 @@ import { WSOL_MINT } from "@/lib/burnKeeper/launchlab";
  * LP / protocol / fund) plus AmmConfig.creatorFeeRate to pool_creator (= the launch creator while PlatformConfig.platformCpCreator is the
  * default pubkey), less AmmConfig.creatorFeeShareRate to the protocol at collection. The locked-LP fee right goes to the PLATFORM's NFT
  * wallet (platformScale + creatorScale of the LP), the burnScale share to nobody.
+ *
+ * LP LOCKED FOREVER (owner decision 2026-10-10, supersedes "all LP burned"): the Burnticker platform locks 100 % of the graduation LP
+ * (platformScale 1,000,000 / creatorScale 0 / burnScale 0) and its lock-NFT wallet is the burn_receipts program's FEE-KEYS PDA, so the
+ * Fee Key NFT is owned by the program and the permissionless claim_lock_fees splits the LP fees 80 % → the coin's burn pool / 20 % →
+ * the operator treasury (compiled constants; src/lib/burnticker/lockFees.ts). `lpLockProblems` is the platform-side check.
  */
 
 export const PPM = BigInt(1_000_000);
@@ -101,6 +106,10 @@ export function feeSplit(i: {
   /** @deprecated the pre-H-2 name (the creator was the keeper then); read as creatorIsBurnPool so older callers (src/lib/burnticker) keep working. */
   creatorIsKeeper?: boolean;
   shareFeeRate?: bigint;
+  /** LP locked forever (2026-10-10): the burn program's fee-keys PDA; when it is the platform's lock-NFT wallet the locked leg splits 80/20. */
+  feeKeysPda?: PublicKey;
+  /** Where claim_lock_fees pays the operator's 20 % (the Squads vault), for the leg's label; null/absent = "operator treasury". */
+  operatorTreasury?: PublicKey | null;
 }): FeeSplit {
   const creatorIsBurnPool = i.creatorIsBurnPool ?? i.creatorIsKeeper ?? false;
   const share = i.shareFeeRate ?? BigInt(0);
@@ -122,12 +131,24 @@ export function feeSplit(i: {
   const creatorToProtocol = i.amm.creatorFeeRate - creatorNet;
   const cpCreatorDefault = i.platform.platformCpCreator.equals(PublicKey.default);
   const burnPoolCpmm = cpCreatorDefault ? (creatorIsBurnPool ? "burn pool (pool_creator = the launch creator = the fee PDA; CPMM collect_creator_fee_permissionless)" : "the launch creator (pool_creator; NOT the burn pool's fee PDA)") : `PlatformConfig.platformCpCreator ${i.platform.platformCpCreator.toBase58()} (NOT the launch creator)`;
+  const lockedDial = `AmmConfig.tradeFeeRate × (1 − protocol − fund) × (platformScale + creatorScale)/1e6 — cpConfigId + migrateCpLockNftScale`;
+  const programHoldsKey = !!i.feeKeysPda && i.platform.platformLockNftWallet.equals(i.feeKeysPda);
+  // claim_lock_fees: the operator's 20 % is floor(x × 2,000 / 10,000), the burn pool gets the rest (the odd unit included).
+  const lockedOperator = lockedToPlatform * BigInt(2_000) / BigInt(10_000);
+  // Leg positions stay stable for readers: [0] locked LP (→ the burn pool's 80 % when the program holds the Fee Key), [1] burned LP,
+  // [2] Raydium, [3] creator fee → burn pool, [4] Raydium's creator-fee share, and — only when the program holds the Fee Key — [5] the
+  // operator's 20 % of the locked LP's fees.
+  const lockedLeg = programHoldsKey
+    ? leg(lockedToPlatform - lockedOperator, `burn pool (80 % of the locked LP's fees: the Fee Key is owned by the burn program's fee-keys PDA ${i.feeKeysPda!.toBase58()}; permissionless claim_lock_fees; the coin side is burned)`, `${lockedDial} × 80 % — LOCK_FEE_BURN_BPS 8,000, compiled into the program`)
+    : leg(lockedToPlatform, `platform Fee Key holder ${i.platform.platformLockNftWallet.toBase58()} (LP-Lock harvest, not the keeper)`, lockedDial);
+  const operatorLeg = programHoldsKey ? [leg(lockedOperator, `operator treasury ${i.operatorTreasury ? i.operatorTreasury.toBase58() : "(the Squads vault)"} (20 % of the locked LP's SOL-side fees via claim_lock_fees)`, `${lockedDial} × 20 % — LOCK_FEE_OPERATOR_BPS 2,000, compiled into the program`)] : [];
   const post: FeeLeg[] = [
-    leg(lockedToPlatform, `platform Fee Key holder ${i.platform.platformLockNftWallet.toBase58()} (LP-Lock harvest, not the keeper)`, `AmmConfig.tradeFeeRate × (1 − protocol − fund) × (platformScale + creatorScale)/1e6 — cpConfigId + migrateCpLockNftScale`),
+    lockedLeg,
     leg(lpBurned, "nobody (burned LP's share of LP fees stays in the pool, unclaimable)", "burnScale/1e6 of the LP share"),
     leg(protocol + fund, "Raydium (protocol + fund shares of the trade fee)", "AmmConfig.protocolFeeRate + fundFeeRate of the trade fee — fixed per tier"),
     leg(creatorNet, burnPoolCpmm, "AmmConfig.creatorFeeRate × (1 − creatorFeeShareRate) — fixed per tier (5 bps − 5% on mainnet tier 0); the platform cannot raise it"),
     leg(creatorToProtocol, "Raydium (protocol share of the creator fee, at collection)", "AmmConfig.creatorFeeShareRate (or a CreatorFeeShare PDA)"),
+    ...operatorLeg,
   ];
   const postTotal = i.amm.tradeFeeRate + i.amm.creatorFeeRate;
   return {
@@ -304,7 +325,7 @@ export interface PlatformInput {
   feeRatePpm: bigint;
   /** Creator fee = the burn pool's slot, ppm: 0..5,000 (50 bps is the program's MAX_CREATOR_FEE_RATE). */
   creatorFeeRatePpm: bigint;
-  /** LP at graduation: platformScale → the platform's Fee Key, burnScale burned; creatorScale must be 0 (program assert). Sum 1e6. */
+  /** LP at graduation: platformScale → the platform's Fee Key, burnScale burned; creatorScale must be 0 (program assert). Sum 1e6. Burnticker: 1,000,000 (LP locked 100 %, 2026-10-10). */
   platformScalePpm: bigint;
   name: string; web: string; img: string;
 }
@@ -337,11 +358,26 @@ export function platformProblems(p: PlatformInput): string[] {
   return out;
 }
 
+/** The Burnticker LP policy (owner decision 2026-10-10): 100 % of the graduation LP locked to the platform's Fee Key, nothing burned. */
+export const LP_LOCK_PLATFORM_SCALE_PPM = PPM;
+
+/**
+ * LP LOCKED FOREVER — the platform-side check (2026-10-10): platformScale must be 1,000,000 (creatorScale 0 / burnScale 0 follow from
+ * buildPlatformTx) and the lock-NFT wallet must be the burn program's fee-keys PDA, so the Fee Key is owned by the program and only
+ * the permissionless claim_lock_fees (80 % burn pool / 20 % operator, compiled) can collect the LP fees. Empty = the policy holds.
+ */
+export function lpLockProblems(p: Pick<PlatformInput, "platformScalePpm" | "lockNftWallet">, feeKeysPda: PublicKey): string[] {
+  const out: string[] = [];
+  if (p.platformScalePpm !== LP_LOCK_PLATFORM_SCALE_PPM) out.push(`LP to the platform's Fee Key is ${p.platformScalePpm} ppm — the Burnticker policy locks 100 % (1,000,000 ppm; creator 0, burn 0)`);
+  if (!p.lockNftWallet.equals(feeKeysPda)) out.push(`the platform lock-NFT wallet is ${p.lockNftWallet.toBase58()}, not the burn program's fee-keys PDA ${feeKeysPda.toBase58()} — the Fee Key must be owned by the program`);
+  return out;
+}
+
 export function buildPlatformTx(p: PlatformInput): { platformId: PublicKey; tx: PlannedTx } {
   const platformId = getPdaPlatformId(p.programId, p.admin).publicKey;
   const ix = sdkCreatePlatformConfig(p.programId, p.admin, p.claimFeeWallet, p.lockNftWallet, p.vestingWallet, platformId, p.cpConfigId, PublicKey.default,
     { platformScale: bn(p.platformScalePpm), creatorScale: new BN(0), burnScale: bn(PPM - p.platformScalePpm) }, bn(p.feeRatePpm), bn(p.creatorFeeRatePpm), p.name, p.web, p.img, new BN(0));
-  const d = describe("LaunchLab create_platform_config", ix, ["platform admin (signer)", "platform claim-fee wallet (BURNTICKER_FEE_WALLET)", "platform lock-NFT wallet", "platform_config PDA", "cpmm AmmConfig (cpConfigId)", "system program", "transfer-fee extension authority (unused: default)", "platform vesting wallet"],
+  const d = describe("LaunchLab create_platform_config", ix, ["platform admin (signer)", "platform claim-fee wallet (BURNTICKER_FEE_WALLET)", "platform lock-NFT wallet (the Fee Key owner: the burn program's fee-keys PDA)", "platform_config PDA", "cpmm AmmConfig (cpConfigId)", "system program", "transfer-fee extension authority (unused: default)", "platform vesting wallet"],
     { feeRate: p.feeRatePpm.toString(), creatorFeeRate: p.creatorFeeRatePpm.toString(), platformScale: p.platformScalePpm.toString(), creatorScale: 0, burnScale: (PPM - p.platformScalePpm).toString(), platformVestingScale: 0, name: p.name, web: p.web, img: p.img, platformCpCreator: "default (left unset → the launch creator is the CPMM pool creator)" });
   return { platformId, tx: { label: "create the Burnticker platform config", signers: ["platform admin"], instructions: [d] } };
 }

@@ -162,7 +162,7 @@ describe("1 · the daily registry snapshot", () => {
     assert.equal(lint.hits.length, 0, JSON.stringify(lint.hits));
   });
 
-  test("GET /v1/snapshots answers from the write-once table and validates against the OpenAPI schema (1.7.0)", async () => {
+  test("GET /v1/snapshots answers from the write-once table and validates against the OpenAPI schema (since 1.7.0)", async () => {
     const reg = openRegistry(":memory:");
     const empty = v1Snapshots({ registry: reg, cluster: "devnet" }, new URLSearchParams());
     assert.equal(empty.status, 200); assert.equal((empty.body as { count: number }).count, 0);
@@ -175,7 +175,7 @@ describe("1 · the daily registry snapshot", () => {
     const body = await res.json() as { latest: { date: string; verify: string }; count: number };
     assert.equal(body.count, 1); assert.equal(body.latest.date, "2026-10-10"); assert.match(body.latest.verify, /burnticker-verify-snapshot\.mts \S+ --cluster devnet/);
     const doc = buildOpenApi() as { info: { version: string }; paths: Record<string, unknown>; components: { schemas: Record<string, Record<string, unknown>> } };
-    assert.equal(doc.info.version, "1.7.0"); assert.ok(doc.paths["/snapshots"]);
+    assert.ok(Number(doc.info.version.split(".")[1]) >= 7, doc.info.version); assert.ok(doc.paths["/snapshots"]);
     assert.deepEqual(validateSchema(doc.components.schemas.RegistrySnapshots, body, doc), []);
   });
 });

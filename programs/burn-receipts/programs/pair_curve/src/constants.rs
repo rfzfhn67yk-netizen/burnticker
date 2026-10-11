@@ -9,6 +9,13 @@ pub const VAULT_SEED: &[u8] = b"vault";
 /// The graduated CPMM pool accounts: ["pool", pair, [side]] — pair_curve PDAs that CPMM's `initialize` accepts as a signing
 /// ("random account") pool address. Only pair_curve can sign for them, so nobody can squat the address graduation needs.
 pub const POOL_SEED: &[u8] = b"pool";
+/// The Fee Key NFT mint of a side's LP lock: ["fee_nft", pair, [side]] — a pair_curve PDA, so lock_lp needs no keypair signer and the
+/// address is known before the lock exists (LAUNCHPAD-PATH §35).
+pub const FEE_NFT_SEED: &[u8] = b"fee_nft";
+/// Metaplex Token Metadata (an account of the lock program's instruction; pair_curve locks with with_metadata = false).
+pub const METADATA_PROGRAM_ID: Pubkey = pubkey!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+/// lock_cp_liquidity (SDK src/raydium/cpmm/instruction.ts anchorDataBuf.lockCpLiquidity).
+pub const LOCK_CP_LIQUIDITY_DISCRIMINATOR: [u8; 8] = [216, 157, 29, 78, 38, 51, 31, 26];
 
 pub const SIDE_A: u8 = 0;
 pub const SIDE_B: u8 = 1;

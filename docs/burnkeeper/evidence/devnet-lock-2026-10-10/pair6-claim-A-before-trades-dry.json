@@ -1,0 +1,16 @@
+{
+  "command": "claim-lock-fees",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "CUVutu3wjP74ic1RxVhgHYevAmrCLgq6aAd3d9gNLWYi",
+  "side": "A",
+  "treasury": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+  "result": {
+    "ok": true,
+    "signature": null,
+    "error": null,
+    "unitsConsumed": 160955,
+    "txBytes": 1118
+  }
+}

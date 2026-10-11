@@ -74,6 +74,21 @@ pub fn pin_launchlab_platform(acc: &AccountInfo, fee_pda: &Pubkey) -> Result<(Pu
     Ok((*acc.key, cp_config, scales))
 }
 
+/// LAUNCHPAD-PATH §35, policy 0 (LaunchLab migrations): the platform must lock 100 % of the migrated LP (platformScale =
+/// 1,000,000, creatorScale = burnScale = 0) and send the Fee Key to this program's FEE_KEYS PDA (platformLockNftWallet), so
+/// claim_lock_fees can collect the LP fees. The platform admin can change these fields later (D-3): the launch gate
+/// (verify-platform-pins) re-reads them immediately before LaunchLab's create.
+pub fn require_platform_locks_to_fee_keys(acc: &AccountInfo) -> Result<()> {
+    let d = acc.try_borrow_data()?;
+    let u64_at = |at: usize| u64::from_le_bytes(d[at..at + 8].try_into().expect("8 bytes"));
+    let nft_wallet = Pubkey::new_from_array(d[LL_PLATFORM_LOCK_NFT_WALLET..LL_PLATFORM_LOCK_NFT_WALLET + 32].try_into().expect("32 bytes"));
+    let (fee_keys, _) = Pubkey::find_program_address(&[FEE_KEYS_SEED], &crate::ID);
+    require_keys_eq!(nft_wallet, fee_keys, BurnError::PlatformNotAllowed);
+    require!(u64_at(LL_PLATFORM_SCALES) == REQUIRED_LL_PLATFORM_SCALE_PPM, BurnError::PlatformNotAllowed);
+    require!(u64_at(LL_PLATFORM_SCALES + 8) == 0 && u64_at(LL_PLATFORM_SCALES + 16) == 0, BurnError::PlatformNotAllowed);
+    Ok(())
+}
+
 fn ascii_text(s: &str, max: usize) -> bool {
     !s.is_empty() && s.len() <= max && s.bytes().all(|b| (0x20..0x7f).contains(&b) && b != b'|')
 }
@@ -170,7 +185,11 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
         let Some(p) = ctx.accounts.launchlab_platform.as_ref() else {
             return err!(BurnError::LaunchLabPlatformRequired);
         };
-        pin_launchlab_platform(&p.to_account_info(), &ctx.accounts.fee_vault.key())?
+        let pins = pin_launchlab_platform(&p.to_account_info(), &ctx.accounts.fee_vault.key())?;
+        if args.rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA {
+            require_platform_locks_to_fee_keys(&p.to_account_info())?;
+        }
+        pins
     } else {
         (Pubkey::default(), Pubkey::default(), 0)
     };

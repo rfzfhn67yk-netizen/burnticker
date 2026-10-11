@@ -37,6 +37,7 @@ export const TRUSTPACK_SCHEMAS: Record<string, Schema> = {
     entries: arr(obj({ signature: str, slot: int, blockTime: nstr, month: nstr, deltaLamports: str, direction: { enum: ["in", "out"] }, counterparty: nstr, err: bool }, ["signature", "deltaLamports", "direction"])),
     expenses: obj({ whatTheFeePaysFor: str, items: arr(obj({ id: str, label: str, cadence: str, usd: { type: ["number", "null"] }, placeholder: bool, todo: nstr, note: str }, ["id", "label", "usd", "placeholder"])) }, ["whatTheFeePaysFor", "items"]),
     placeholders: arr(str), served: str,
+    lpFees: obj({ title: str, treasury: { anyOf: [PUBKEY, { type: "null" }] }, treasuryPinned: bool, split: obj({ burnBps: int, operatorBps: int }), claims: int, solLamports: str, toOperatorLamports: str, toBurnPoolLamports: str, source: { enum: ["keeper records", "none"] }, note: str }, ["title", "treasury", "claims", "toOperatorLamports"], { description: "since 1.8.0: the operator's 20 % of post-graduation LP fees (claim_lock_fees), paid to the operator treasury (LP locked forever, 2026-10-10)" }),
   }, ["schema", "cluster", "wallet", "source", "totals", "months", "entries", "expenses"], { description: "Every lamport the developer fee wallet (pinned in config/burnticker/operator.json for the platform's cluster) received or sent, read from chain, by UTC month; and the expenses the fee pays (placeholders marked)." }),
   OperatorView: obj({
     schema: { const: "burnticker.operator-view/v1" }, cluster: str, operator: { type: "object" }, links: { type: "object" }, clusters: { type: "object" },

@@ -43,6 +43,8 @@ export interface ReviewCardProps {
 
 const pctLabel = (f: number) => `${Math.round(f * 1000) / 10}%`;
 export const RECEIPTS_LINE = "Every burn posts a public receipt: the reading it settled on, the amount and the transaction, on the coin's page.";
+/** LP locked forever (owner decision 2026-10-10), on the receipts line. */
+export const LP_LINE = "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code).";
 export const ACK_LINE = "Launching confirms the rule is locked for good — no one can change it, including you — and that you make no promises to anyone about this coin.";
 const okTicker = (t: string) => /^[A-Z0-9]{2,10}$/.test(t);
 
@@ -75,7 +77,7 @@ export function ReviewCard(p: ReviewCardProps) {
       </div>
       <p className="text-base text-neutral-100" data-summary>{p.sentence}</p>
       {p.ends && <p className="text-xs text-neutral-300">Ends: {p.ends}</p>}
-      <p className="text-xs text-neutral-400">{RECEIPTS_LINE}</p>
+      <p className="text-xs text-neutral-400">{RECEIPTS_LINE} {LP_LINE}</p>
       <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="How much burns">
         {p.shares.options.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
         {p.durations && p.durations.options.length > 1 && <span className="mx-1 text-neutral-600" aria-hidden="true">·</span>}

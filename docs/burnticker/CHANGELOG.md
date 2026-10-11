@@ -476,6 +476,21 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 939
 
+## 2026-10-10 — LP locked forever, its fees fund the burn (client side; no publish, no deploy)
+
+- Owner decision (decisions.md 2026-10-10): graduation LP is 100 % locked with Raydium's LP lock, the Fee Key is owned by burn_receipts'
+  `["fee_keys"]` PDA, and the permissionless `claim_lock_fees` pays 80 % of the SOL side to the coin's burn pool and 20 % to the operator
+  treasury (compiled constants); the coin side is burned. The program change, its IDL and the verified build are a separate entry.
+- Keeper: a `register_fee_key` / `claim_lock_fees` crank per coin ahead of the buyback cranks (`src/lib/burnticker/lockFeesKeeper.ts`),
+  append-only `lock_fee_claims` rows, alerts on refusal, a Fee Key held elsewhere, an unpinned treasury or a skewed split.
+- Platform config and launch gate: `platformScale` 1,000,000 / creator 0 / burn 0 and the lock-NFT wallet = the fee-keys PDA are pinned
+  (`src/lib/burnticker/lpLockPins.ts`; `verify-platform-pins`); a mainnet launch also needs the operator treasury compiled in.
+- API 1.8.0 (additive): `status.lp`, `/trust` `lpLock`, `/fees/ledger` `lpFees`; `trust.lpBurnedPct` is 0 from now on. SDK: the lock
+  helpers and types. Pages: the coin and pair pages show "LP locked forever · fees fund the burn" with the addresses; the trust page
+  section and the fee ledger's operator LP-fee line.
+- `config/burnkeeper/deficit.rules.json` is unchanged (the LP policy is not in the rules hash): sha256
+  `78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58`.
+
 ## 2026-10-10 — publish from 372bca22ce73
 
 - monorepo commit: `372bca22ce7318493d735a0b516560d5a65bee86` (the working tree had uncommitted changes when this tag was written)
@@ -491,3 +506,11 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 944
+
+## 2026-10-10 — publish from 296f2d429111
+
+- monorepo commit: `296f2d429111e54c9ba22eb14e37ff660bb19ef3` (the working tree had uncommitted changes when this tag was written)
+- program hash: `0b5180e3bde9d5e9d3f56061b63898a7ac58fa92da735eaf91a8208297fed5f6` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `c60141372d28924c7f49c9436afccab883ee99093dbf2021e0331ea750d12501`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 997

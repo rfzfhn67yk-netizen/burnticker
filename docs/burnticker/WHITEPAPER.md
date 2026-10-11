@@ -287,7 +287,7 @@ unchanged.*
 4. at least 50 % of its live LP supply is burned or held by Raydium's LP lock (`ATA(LOCK_CPMM_AUTH, lp_mint)`). This is a minimum under
    the provenance proof: to block registration a griefer must deposit more than the whole migrated liquidity and leave it there.
 
-The mint must have no mint authority and no freeze authority. Burnticker's platform burns 100 % of graduation LP (§6), so a correct
+The mint must have no mint authority and no freeze authority. Burnticker's platform locks 100 % of graduation LP (§6), so a correct
 migration passes with margin. **Not yet confirmed:** that the real LaunchLab migration passes the creator through, creates the pool at
 the `cpConfigId` PDA and locks or burns LP as its SDK says. LaunchLab is closed source; this is a devnet-rehearsal gate.
 
@@ -436,8 +436,9 @@ curves under the rules-level "both or neither" clause of §5.1.
 - **Graduation** needs the combined raise to reach the pair's threshold with each side holding a minimum share of it (default 25 %, at
   most 40 %), before the deadline, and both sides able to pay for their pools. The trade that meets this commits the pair on the spot
   (both curves close; it can no longer void); each `graduate` call then creates its side's CPMM
-  pool at a `pair_curve` address nobody else can sign for, with SOL and tokens in the curve's closing ratio, and burns 100 % of the LP and every token the pool
-  did not need. Two transactions, because both pools in one would sit at Solana's 64-entry instruction-trace cap and a griefer could
+  pool at a `pair_curve` address nobody else can sign for, with SOL and tokens in the curve's closing ratio, and burns every token the pool
+  did not need; a permissionless `lock_lp` then locks 100 % of the LP with Raydium's LP lock, the Fee Key owned by `burn_receipts`' fee-keys
+  PDA (LP locked forever, §6). Two transactions, because both pools in one would sit at Solana's 64-entry instruction-trace cap and a griefer could
   push them over it.
 - **Void**: at the deadline without graduation, buys close and each coin's holders share what that side raised (its curve SOL plus the
   75 bps held for its fee PDA) pro rata, with no fee and no advantage in leaving first. Once nothing circulates the pair's accounts
@@ -445,7 +446,7 @@ curves under the rules-level "both or neither" clause of §5.1.
   into the same pro-rata exit, alone. Once the deadline has passed nobody can leave along the curve ahead of the others.
 - **Registration**: `burn_receipts` gained registration policy 2 and `register_pair_pool`, which accepts only the pool `pair_curve`
   recorded for that mint, at its `pair_curve` address, created by the pair's vault on the pinned cpConfigId, with ≥ 90 % of the creation
-  LP burned (§4.7).
+  LP burned or locked (§4.7).
 - **Powers**: none over funds. No admin, no parameter update, no withdraw; the upgrade authority is the same Squads vault as
   `burn_receipts`, to be finalised before the first public pair (`docs/burn-receipts/pair-curve-powers-register.md`). Two blind reviews
   (2026-10-10) found five High issues in the first version; all are fixed and re-run on devnet (`docs/burn-receipts/CHANGELOG.md`).
@@ -454,15 +455,21 @@ curves under the rules-level "both or neither" clause of §5.1.
 Fee dials were read from the pinned Raydium SDK, Raydium's documentation and the live config accounts (`docs/burnkeeper/fees.md`;
 designed values in `src/lib/burnticker/fees.ts`).
 
-| Phase, per unit of volume | Raydium | Burnticker (developer) | Burn pool (fee PDA) | Nobody |
+| Phase, per unit of volume | Raydium | Burnticker (developer / operator) | Burn pool (fee PDA) | Nobody |
 |---|---|---|---|---|
 | Bonding curve (LaunchLab) | 25 bps | 25 bps (platform `feeRate` 2,500 ppm) | 50 bps (`creatorFeeRate` 5,000 ppm, the maximum) | none |
-| After graduation (CPMM tier 0, 25 bps trade fee) | 4 bps of trade fee + 0.25 bp (5 % of the creator fee) | 0 | 4.75 bps (Raydium's fixed 5 bps creator fee, less 5 %) | 21 bps (the burned LP's share of LP fees) |
+| After graduation (CPMM tier 0, 25 bps trade fee) | 4 bps of trade fee (3 RAY buyback + 1 treasury) + 0.25 bp (5 % of the creator fee) | 4.2 bps (20 % of the locked LP's 21 bps, by `claim_lock_fees`) | 16.8 bps (80 % of the locked LP's fees) + 4.75 bps (Raydium's fixed 5 bps creator fee, less 5 %) | none |
 | Pair curve (`pair_curve`, §5.4) | 0 | 25 bps | 75 bps | none |
-| Pair coin after graduation (CPMM public `initialize`, creator fee off) | 4 bps of trade fee | 0 | **0** (public pool creation cannot turn the creator fee on) | 21 bps |
+| Pair coin after graduation (CPMM public `initialize`, creator fee off) | 4 bps of trade fee | 4.2 bps (20 % of the locked LP's fees) | 16.8 bps (80 % of the locked LP's fees; public pool creation cannot turn the creator fee on) | none |
 
-- **All graduation LP is burned** for every coin (`platformScale 0`, not creator-configurable), so the developer's post-graduation take
-  is 0.
+- **LP locked forever; its fees fund the burn** (owner decision 2026-10-10, replacing "all graduation LP is burned"). 100 % of every
+  coin's graduation LP is locked with Raydium's LP lock (LaunchLab `platformScale` 1,000,000, creator 0, burn 0; pair coins through
+  `lock_lp`), never withdrawable and not creator-configurable. The Fee Key NFT is owned by `burn_receipts`' `["fee_keys"]` PDA. The
+  permissionless `claim_lock_fees` splits the SOL side of the LP fees by compiled constants — `LOCK_FEE_BURN_BPS` 8,000 to the coin's
+  burn pool, `LOCK_FEE_OPERATOR_BPS` 2,000 to the operator treasury (the Squads vault) — and burns the coin side; no admin key or config
+  field can change the split. Per swap after graduation that is ≈ 21.55 bps toward the burn (16.8 + 4.75; it was 4.75 with the LP
+  burned) and 4.2 bps to the operator: **the operator earns 20 % of post-graduation LP fees.** On mainnet the treasury is not compiled
+  in yet; until it is, every claim refuses `TreasuryNotPinned` and the fees stay in the lock.
 - **Creators earn no cash from fees.** The creator-fee slot pays the burn pool, 100 %, by construction: the fee PDA is the creator.
 - **No team allocation** on any coin. The program has no mint path; supply is LaunchLab's fixed 1,000,000,000 at 6 decimals.
 - **Seed deposits are gifts.** $DEFICIT's planned 3 SOL seed to its burn pool is disclosed and carries no claim.
@@ -653,7 +660,7 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 - **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
   `crankers[3]`, `cranker_count`, reserved.
 
-### 13.3 Instructions (24, generated from `src/lib/burnReceipts/idl.ts`)
+### 13.3 Instructions (26, generated from `src/lib/burnReceipts/idl.ts`)
 
 | Instruction | Arguments | Signers | Class |
 |---|---|---|---|
@@ -666,6 +673,8 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 | `claim_launchlab_creator_fee` | — | payer | permissionless |
 | `register_pool` | — | registrar | permissionless |
 | `register_pair_pool` | — | registrar | permissionless |
+| `register_fee_key` | — | payer | permissionless |
+| `claim_lock_fees` | lp_fee_amount | cranker (allowlist while the cap is in force) | permissionless |
 | `check_pool_health` | — | caller | permissionless |
 | `replace_pool` | — | caller | permissionless |
 | `apply_attester_change` | — | caller | permissionless |
@@ -682,15 +691,17 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 | `renounce_platform_authority` | — | authority | privileged |
 | `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
 
-Events (26): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound,
-BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, LaunchLabCreatorFeeClaimed,
-PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged,
+Events (28): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound,
+BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered,
+LaunchLabCreatorFeeClaimed, LockFeesClaimed, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged,
 ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed,
-SpendCapBound, SpendCarried, TokenInitialized. Error codes: 69.
+SpendCapBound, SpendCarried, TokenInitialized. Error codes: 74.
 
 `pair_curve` (`src/lib/pairCurve/idl.ts`): `init_pair` (args; payer, creator — creation), the two curve-trade instructions (side, an
-amount, a slippage bound; the trader signs), `graduate` (side; cranker), `void_pair` (caller), `close_pair` (caller) — every one after
-`init_pair` permissionless. Events (5): PairInitialized, Trade, SideGraduated, PairVoided, PairClosed.
+amount, a slippage bound; the trader signs), `graduate` (side; cranker), `lock_lp` (side; cranker — locks the side's LP forever, Fee
+Key to burn_receipts' fee-keys PDA), `claim_developer_fee` (caller), `void_pair` (caller), `close_pair` (caller) — every one after
+`init_pair` permissionless. Events (8): PairInitialized, Trade, PairCommitted, SideGraduated, LpLocked, DeveloperFeeClaimed, PairVoided,
+PairClosed.
 
 ### 13.4 Memo grammars
 

@@ -10,6 +10,7 @@ import { DEFAULT_ON_END, lockRule } from "@/lib/burnticker/rules";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { PLACEHOLDER_PROGRAM_ID } from "@/lib/burnticker/program";
 import { PLACEHOLDER_BLOCKHASH } from "@/lib/burnticker/transactions";
+import { claimLockFeesFor } from "@/lib/burnticker/lockFeesKeeper";
 import { API, CREATOR, HOST, POST_HEADERS, ROUTE_MODULES, callRoute, makeWorld, validateSchema, type World } from "./burntickerApiHelpers.ts";
 import { BRONCOS, DENVER_HIGH, DEBT_RULE } from "./burntickerHelpers.ts";
 
@@ -100,6 +101,35 @@ describe("v1 read endpoints", () => {
     assert.equal(fees.designed.devFeeBps, 25); assert.equal(fees.designed.creatorCashBps, 0); assert.equal(fees.live.found, false);
     assert.equal(body.rpcConfigured, false);
     assert.ok((body.cannot as string[]).some((s) => /adopt an existing token/.test(s)));
+  });
+  test("GET /tokens/{ticker}: the lp block (since 1.8.0) — locked forever, the Fee Key at the fee-keys PDA, the last claim_lock_fees receipt", async () => {
+    const before = await call("getToken", { ticker: "DEFICIT2" });
+    const lp0 = (before.body.status as { lp: { policy: string; feeKey: string | null; lockedPct: number; lastClaim: unknown; split: { burnBps: number; operatorBps: number } } }).lp;
+    assert.deepEqual([lp0.policy, lp0.feeKey, lp0.lockedPct, lp0.lastClaim, lp0.split.burnBps, lp0.split.operatorBps], ["locked-forever", null, 100, null, 8000, 2000]);
+    const port = w.program.lockFees.port(w.deficit.mint).graduate().accrue(BigInt(1234567));
+    const r = await claimLockFeesFor({ registry: w.registry, lockFees: w.program.lockFees, log: () => {}, now: () => Date.UTC(2026, 9, 11, 12), dryRun: false }, w.deficit);
+    assert.equal(r.outcome, "claimed");
+    const { body } = await call("getToken", { ticker: "DEFICIT2" });
+    const st = body.status as { trust: { lpBurnedPct: number; lpLockedPct: number; lpPolicy: string }; lp: { feeKey: string; feeKeyOwner: string; lockProgram: string; lastClaim: { sol: string; toBurnPool: string; toOperator: string; line: string; txUrl: string }; totals: { claims: number }; urls: { feeKey: string } } };
+    assert.deepEqual([st.trust.lpBurnedPct, st.trust.lpLockedPct, st.trust.lpPolicy], [0, 100, "locked-forever"]);
+    assert.equal(st.lp.feeKey, port.feeKey);
+    assert.equal(st.lp.feeKeyOwner, w.program.lockFees.feeKeysPda());
+    assert.equal(st.lp.lockProgram, "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX");
+    assert.deepEqual([st.lp.lastClaim.sol, st.lp.lastClaim.toBurnPool, st.lp.lastClaim.toOperator], ["0.001234567", "0.000987654", "0.000246913"]);
+    assert.match(st.lp.lastClaim.line, /^LP fees claimed: 0\.001234567 SOL → 80% burn pool/);
+    assert.match(st.lp.urls.feeKey, /^https:\/\/solscan\.io\/account\/.+\?cluster=devnet$/);
+    assert.equal(st.lp.totals.claims, 1);
+  });
+  test("GET /trust: the lpLock policy block (since 1.8.0) and the designed fees say locked, not burned", async () => {
+    const { body } = await call("getTrust");
+    const lp = body.lpLock as { policy: string; treasuryPinned: boolean; operatorTreasury: string; split: { burnBps: number; operatorBps: number }; perSwapAfterGraduationBps: { toBurnPool: number; toOperator: number; burnedTotal: number } };
+    assert.equal(lp.policy, "locked-forever");
+    assert.deepEqual([lp.split.burnBps, lp.split.operatorBps], [8000, 2000]);
+    assert.deepEqual([lp.perSwapAfterGraduationBps.toBurnPool, lp.perSwapAfterGraduationBps.toOperator, lp.perSwapAfterGraduationBps.burnedTotal], [16.8, 4.2, 21.55]);
+    assert.equal(lp.operatorTreasury, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
+    const d = (body.fees as { designed: { lpBurnedPct: number; lpLockedPct: number } }).designed;
+    assert.deepEqual([d.lpBurnedPct, d.lpLockedPct], [0, 100]);
+    assert.ok((body.statements as string[]).some((x) => /The operator earns 20% of post-graduation LP fees/.test(x)));
   });
   test("GET /openapi.json: the generated document", async () => {
     const { body, res } = await call("getOpenApi");

@@ -77,9 +77,9 @@ describe("three decisions to a coin", () => {
     for (const phrase of ["Season (days)", "one-shot flippening", "League mode", "Adjust", "launch venue", "graduate", "dialPanel", "Optional first buy", "Add social links"]) assert.ok(!rendered.includes(phrase), `"${phrase}" is still on the launch UI`);
   });
 
-  test("the review card's own sentences pass the copy lint (the acknowledgement line, the receipts line)", () => {
+  test("the review card's own sentences pass the copy lint (the acknowledgement line, the receipts line, the LP line)", () => {
     const src = read(REVIEW), cfg = loadCopyLintConfig();
-    for (const k of ["ACK_LINE", "RECEIPTS_LINE"]) { const t = new RegExp(`export const ${k} = "([^"]+)"`).exec(src)![1]; const r = lintCopy(t, cfg); assert.ok(r.ok, `${k}: ${r.hits.map((h) => h.phrase).join(", ")}`); }
+    for (const k of ["ACK_LINE", "RECEIPTS_LINE", "LP_LINE"]) { const t = new RegExp(`export const ${k} = "([^"]+)"`).exec(src)![1]; const r = lintCopy(t, cfg); assert.ok(r.ok, `${k}: ${r.hits.map((h) => h.phrase).join(", ")}`); }
   });
 
   test("Coin vs Coin: 'Runs for' days, never 'season'; the preview is the generated art without live rows", () => {

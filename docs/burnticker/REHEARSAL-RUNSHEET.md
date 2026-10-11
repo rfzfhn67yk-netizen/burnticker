@@ -279,7 +279,7 @@ starting around 08:00 Denver. If the migration crank (K3) is prompt, the run tak
 | A7 | either | Upgrade authority → vault | blocks A7a–A7b | `Authority: <VAULT>` | gate 12 rehearsal |
 | A8 | either | Devnet rules copy with the devnet mint | block A8 | `"mint"` = the devnet mint | — |
 | A9 | either | Rules sha | block A9 | `sha256 <64 hex>`; record it | §4 "rules sha" |
-| A10 | either | Our devnet LaunchLab platform (25/50, LP burned) | blocks A10a–A10b | dials 2,500 / 5,000 ppm, `problems: []`; record `platformId` | — |
+| A10 | either | Our devnet LaunchLab platform (25/50, LP 100% locked, Fee Key → the fee-keys PDA) | blocks A10a–A10b | dials 2,500 / 5,000 ppm, `lpToPlatformPpm "1000000"`, `lockNftWallet` = `feeKeysPda`, `problems: []`; record `platformId` | — |
 | A11 | either | `initialize_token` | blocks A11a–A11b | read-back: sha = A9, attesters = [keeper], quorum 1, admin = vault, genesis = devnet `EtWTRABZ…`, rule twap 300/1200, floor 1,000,000 | §4 "initialize_token" |
 | A12 | either | LaunchLab create, creator = fee PDA (dry run, then send) | blocks A12a–A12c | `creator == burnPool.feePda`, `creatorIsFeePda: true`, `programIdIsLocalnetPlaceholder: false`, `platformId` = A10, `problems: []`, simulation null | §4 "LaunchLab create" |
 | A13 | Claude | **K1** mint and freeze authority | block P (probe) | see K1 | — |
@@ -294,6 +294,7 @@ starting around 08:00 Denver. If the migration crank (K3) is prompt, the run tak
 | A22 | either | Keeper loop (program mode) | block A22 | `check_pool_health`, a `TwapUnavailable` wait, then `CRANKED · burned` | §4 "check_pool_health", "deferred", "crank_buyback" |
 | A23 | Claude | Receipt recomputes | blocks A23a–A23c | `verified: true`, `.health.unverified == 0`, memo on chain = the row's | gate 1 |
 | A24 | Claude | CPMM creator-fee collect (`[fees] cpmm`) | log + probe | fee WSOL grows | §4 "CPMM creator-fee claim" |
+| A24L | Claude | **K3-lock** LP locked, Fee Key at the program PDA, one claim + one burn | log + probe | `register_fee_key` confirmed; `[lp-fees] … LP fees claimed: X SOL → 80% burn pool / 20% operator`; the burn pool's next crank burns | LP locked forever (2026-10-10) |
 | A25 | either | *(recommended)* Rehearse finalisation through Squads | block A25 | `Authority: none` on the devnet program | rehearses gate 14 |
 | A26 | Claude | Fill devnet-run.md §4, save the evidence, commit | — | table filled with explorer links | **gate 1** |
 
@@ -520,15 +521,15 @@ there is still no pool 2 h after `status` reaches 1. Raydium's devnet migration 
 new mint, or accept that gap.
 
 **A19 · K4, pool provenance (README §3, F5).** Run the probe with `POOL=<the existing candidate>`. *Pass:* `cpmm.creatorIsFeePda: true`, and
-`lpBurnedPct + lpLockedPct ≥ 90` (a rehearsal bar stricter than the program: our platform burns 100%; `register_pool` itself needs ≥ 50 % at
-registration, ≥ 90 % for the fallback pool), and the pool is the candidate PDA (`exists: true` on the derived address), and
-K1 passes. *Fail:* any one of these (under 90 % means the platform config is not burning the LP). `register_pool` would refuse
+`lpLockedPct ≥ 99` with `lpBurnedPct` ≈ 0 (LP locked forever, owner decision 2026-10-10: our platform locks 100%; `register_pool` itself
+needs ≥ 50 % burned or locked at registration, ≥ 90 % for the fallback pool), and the pool is the candidate PDA (`exists: true` on the derived
+address), and K1 passes. *Fail:* any one of these (under 99 % locked means the platform config is not locking the LP to the Fee Key). `register_pool` would refuse
 (`NotMigrationPool` / `PoolCreatorMismatch` / the LP check under 50 %), and the readings wait
 forever (the 30-day unblock does not apply to an unregistered pool). Stop.
 
 Evidence so far, from a real mainnet migration (pool `CheJUx…cPvH`, read-only, 2026-10-10): `pool_creator` = the LaunchLab creator; the pool
-equals the `["pool", ammConfig, token0, token1]` PDA; 99.99% of the LP sits in Raydium's LP-lock ATA. Under **our** platform it must show as
-burned, not locked.
+equals the `["pool", ammConfig, token0, token1]` PDA; 99.99% of the LP sits in Raydium's LP-lock ATA. Under **our** platform it must show the same: locked (≈ 100 %),
+with the Fee Key NFT held at ATA(fee-keys PDA, Fee Key mint).
 
 ### A20. `register_pool` (anyone; here the keeper key)
 
@@ -537,6 +538,16 @@ ACTION=register_pool CLUSTER=devnet RPC="$DEVNET_RPC" PROGRAM_ID=$BURNTICKER_PRO
 ```
 
 Then the same with `SEND=1`.
+
+### A20L. K3-lock: the LP is locked, the Fee Key is the program's, one claim and one burn (LP locked forever, 2026-10-10)
+
+The keeper runs this itself ahead of the buyback crank (`src/lib/burnticker/lockFeesKeeper.ts`): `register_fee_key` once, then
+`claim_lock_fees` whenever fees have accrued. *Pass:* (1) the Raydium `LockedCpLiquidityState` (`["locked_liquidity", <Fee Key mint>]` under
+the devnet lock program `DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX`) names the pool and holds ≈ 100 % of the LP; (2) the Fee Key NFT sits
+in ATA(fee-keys PDA, Fee Key mint); (3) `register_fee_key` confirms; (4) after A21's trades one `claim_lock_fees` confirms with the memo
+`<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|burned=…|nft=…|v1`, `operator` = floor(wsol × 2,000 / 10,000), the burn pool's WSOL grows by
+the rest, the devnet treasury `A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD` by the operator share; (5) the next `crank_buyback` burns.
+*Fail:* the Fee Key is anywhere else (`lock-fee-key-owner` alert), the split is not exactly 80/20 (`lock-fees-split`), or the claim refuses.
 
 ### A21. K5: TWAP history (window 1,200 s)
 
@@ -625,7 +636,7 @@ platform config and program. B10–B20 are the rehearsal coin itself.
 | B6 | owner | *(optional, D-6)* `initialize_platform` | — |
 | B7 | owner | Upgrade authority → vault | `Authority: <VAULT>`; gate 12 |
 | B8 | owner | Drain the deployer | `solana balance` ≈ 0; gate 12 |
-| B9 | owner | Real LaunchLab platform config (25 / 50 / LP 100% burned) | `platformId`; dials read from the chain |
+| B9 | owner | Real LaunchLab platform config (25 / 50 / LP 100% locked, Fee Key → the fee-keys PDA) | `platformId`; dials read from the chain |
 | B10 | either | $REHEARSAL mint keypair + rules file | `"mint"` set |
 | B11 | either | Rules sha | — |
 | B12 | Claude | Refuse lists + trust page entry, shipped **before** the create | own-tokens + transparency.json committed |
@@ -781,8 +792,10 @@ Dry run. `--admin` is the encrypted file, so unlock it with `read -rs BURNKEEPER
 R scripts/burnkeeper-launch.mts platform --cluster mainnet --rpc "$MAINNET_RPC" --admin "$M/platform-admin.enc.json" --fee-wallet <DEV_FEE_HW_PUBKEY> --web https://burnticker.com --img https://burnticker.com/icon.png > /tmp/platform-dry.json; jq '{platformId, admin, feeWallet, dials, problems, sim: .simulation.err, feeSplit}' /tmp/platform-dry.json
 ```
 
-*Read:* `platformFeeBps 25`, `burnPoolFeeBps 50`, `lpToPlatformPpm "0"`, `cpConfig.index 0`, `tradeFeeBps 25`, `creatorFeeBps 5`, `problems: []`, and a
-null simulation error. Then send:
+*Read:* `platformFeeBps 25`, `burnPoolFeeBps 50`, `lpToPlatformPpm "1000000"` (LP locked forever), `lockNftWallet` = `feeKeysPda`, `cpConfig.index 0`,
+`tradeFeeBps 25`, `creatorFeeBps 5`, `problems: []`, and a null simulation error. `problems` names "operator treasury is not pinned" until the
+owner compiles the mainnet Squads vault into burn_receipts (TODO-OWNER): without it every claim refuses `TreasuryNotPinned` and the LP fees
+stay in the lock. Then send:
 
 ```bash
 BURNKEEPER_MAINNET=1 R scripts/burnkeeper-launch.mts platform --cluster mainnet --rpc "$MAINNET_RPC" --admin "$M/platform-admin.enc.json" --fee-wallet <DEV_FEE_HW_PUBKEY> --web https://burnticker.com --img https://burnticker.com/icon.png --send --i-understand-this-spends-real-sol > /tmp/platform.json; jq '{platformId, sent, explorer}' /tmp/platform.json
@@ -892,7 +905,7 @@ prove. Commit it and the B12 files, ship the build (`sh scripts/ops/deploy-burnt
 | Proven on mainnet | Not proven (devnet only, gate 1) |
 |---|---|
 | The program deploys, the verifiable hash matches, and Squads holds the upgrade authority | `register_pool` (no graduation below a 24 SOL raise) |
-| Platform dials read live: 25 bps dev, 50 bps burn pool, LP 100% burned | `crank_buyback`: swap, burn, memo |
+| Platform dials read live: 25 bps dev, 50 bps burn pool, LP 100% locked to the fee-keys PDA | `crank_buyback`: swap, burn, memo |
 | creator = fee PDA; curve fees accrue to the right vaults | `collect_creator_fee_permissionless` (CPMM) |
 | `claim_launchlab_creator_fee` against the real mainnet LaunchLab | the TWAP guard on a real mainnet pool |
 | `initialize_token` with mainnet genesis binding; `submit_reading` attested by the host key; the status page | the mainnet CPMM program id compiled into the build (see D-1) |

@@ -108,7 +108,7 @@ burns exactly one side; the receipts are the scoreboard.
 model in `docs/burnticker/PAIR-CURVE.md`) is the launch program for rivalry pairs: one `Pair` account, two path-independent
 virtual-reserve curves, one SOL vault, 100 bps per trade (25 developer, 75 the traded coin's burn pool), graduation only when the
 combined raise hits the target with each side at its minimum share (default 25 %), both CPMM pools created at pair_curve addresses with
-all LP burned, or a void at the deadline after which every holder sells back. No admin, no withdraw.
+the LP locked forever (its fees fund the burn: 80 % burned, 20 % operator, fixed in code), or a void at the deadline after which every holder sells back. No admin, no withdraw.
 
 - **Flag:** `BURNTICKER_PAIR_CURVE_ENABLED=1` (default off) makes the wizard's matchup / election pair launch through pair_curve:
   `src/lib/burnticker/pairCurveLaunch.ts` turns `buildPairBundles`' two LaunchLab bundles into three transactions (mint A + its
@@ -452,7 +452,7 @@ See [Rivalry pairs](#rivalry-pairs--two-coins-one-matchup-owner-approved-10-09-n
 `/burnticker/launch`: connect a wallet (wallet-adapter, already a dependency; Wallet Standard discovery, nothing added) or paste a
 pubkey → pick an event (live Kalshi search, or a first-party card with its tier and fixture preview) → define the mapping with sliders
 and run the back-test → name it → review the rule text and hash, the receipt format, the fee split per 1 SOL (pre/post graduation),
-"LP burned at graduation: 100 %", "creator cash from fees: 0", "team allocation: 0 %", what the operator can and cannot do; tick the
+"LP locked forever; its fees fund the burn (80 % burned, 20 % operator, fixed in code)", "creator cash from fees: 0", "team allocation: 0 %", what the operator can and cannot do; tick the
 two boxes → the API builds the unsigned bundle (`initialize_token` + LaunchLab create under our platform config with the burn pool as
 the creator-fee recipient, optional first buy) and registers a DRAFT. The bundle says `ready: false` until the Receipts program and the
 LaunchLab adapter are live; nothing is sent until it says `ready`. `action: "launched"` with the landed tx takes the draft live and
@@ -562,8 +562,9 @@ Sources: [Unchained](https://unchainedcrypto.com/kalshi-powered-tokenized-predic
 ## 9. Owner decisions baked in (2026-10-09)
 
 Developer slice 25 bps of curve volume via the platform slot to `BURNTICKER_FEE_WALLET`; creators earn no cash from fees (creator-fee
-slot → burn pool, 100 %, 50 bps cap); LP burned 100 % at graduation (developer post-graduation take 0; burn pool gets Raydium's fixed
-4.75 bps/SOL CPMM creator fee); no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
+slot → burn pool, 100 %, 50 bps cap); graduation LP 100 % locked forever since 2026-10-10 (was: burned) — its Fee Key is owned by the burn program and
+claim_lock_fees pays 80 % of the LP fees to the burn pool and 20 % to the operator (fixed in code), plus Raydium's fixed 4.75 bps/SOL CPMM
+creator fee to the burn pool; no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
 keeper-enforced today, program-enforced later — that seam is open); refuse list as above with elections allowed; anonymous creators
 allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behind Caddy.
 

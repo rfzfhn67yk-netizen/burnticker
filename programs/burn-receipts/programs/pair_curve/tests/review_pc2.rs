@@ -22,6 +22,8 @@
 
 #[path = "../../burn_receipts/tests/common/mod.rs"]
 mod common;
+mod lock_common;
+use lock_common::*;
 
 use anchor_lang::prelude::Pubkey;
 use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
@@ -54,6 +56,7 @@ fn read_so(rel: &str) -> Vec<u8> {
 fn new_env() -> Env {
     let mut env = Env::new();
     env.svm.add_program(pair_curve::ID, &read_so("target/deploy-localnet/pair_curve.so")).unwrap();
+    add_lock_program(&mut env);
     env
 }
 
@@ -113,7 +116,7 @@ fn fee_receiver(env: &mut Env) {
 
 /// The test LaunchLab platform with `cp_config` and the developer wallet (platformClaimFeeWallet @16).
 fn platform_with_dev(env: &mut Env, cp_config: &Pubkey, dev: &Pubkey) {
-    let mut acc = bcpmm::platform_account(env, cp_config, &Pubkey::default(), [0, 0, 1_000_000]);
+    let mut acc = bcpmm::platform_account(env, cp_config, &Pubkey::default(), [1_000_000, 0, 0]);
     acc.data[16..48].copy_from_slice(dev.as_ref());
     env.svm.set_account(TEST_LAUNCHLAB_PLATFORM, acc).unwrap();
 }
@@ -314,9 +317,18 @@ fn ix_graduate(p: &P, cranker: &Pubkey, side: u8) -> Instruction {
 
 /// One side's graduate (+ `extra` instructions, e.g. that side's register_pair_pool) in a LEGACY transaction (size-asserted).
 fn graduate_side(env: &mut Env, p: &P, cranker: &Keypair, side: u8, extra: &[Instruction]) -> TxResult {
-    let mut ixs = vec![ix_graduate(p, &cranker.pubkey(), side)];
-    ixs.extend_from_slice(extra);
-    env.send(&ixs, &[cranker])
+    // LAUNCHPAD-PATH §35: graduate keeps the LP; lock_lp (its own transaction) locks it forever; registration (`extra`) follows.
+    let r = env.send(&[ix_graduate(p, &cranker.pubkey(), side)], &[cranker]);
+    if r.is_ok() {
+        let pool = pool_of(p, side);
+        if let Err(e) = env.send(&[ix_lock_lp(&p.pair, &p.vault, &p.mint(side), &pool, &cranker.pubkey(), side)], &[cranker]) {
+            panic!("lock_lp({side}) failed: {:?}\n{}", e.err, e.meta.logs.join("\n"));
+        }
+        if !extra.is_empty() {
+            env.send(extra, &[cranker])?;
+        }
+    }
+    r
 }
 
 fn graduate_both(env: &mut Env, p: &P, cranker: &Keypair) -> [litesvm::types::TransactionMetadata; 2] {
@@ -363,23 +375,6 @@ fn ix_close(p: &P, caller: &Pubkey) -> Instruction {
     )
 }
 
-fn ix_register_pair(registrar: &Pubkey, mint: &Pubkey, pool: &Pubkey, lp_mint: &Pubkey, pair: &Pubkey) -> Instruction {
-    Instruction::new_with_bytes(
-        burn_receipts::ID,
-        &burn_receipts::instruction::RegisterPairPool {}.data(),
-        burn_receipts::accounts::RegisterPairPool {
-            registrar: *registrar,
-            config: config_pda(mint),
-            mint: *mint,
-            pool_state: *pool,
-            lp_mint: *lp_mint,
-            pair: *pair,
-            event_authority: event_authority(),
-            program: burn_receipts::ID,
-        }
-        .to_account_metas(None),
-    )
-}
 
 fn pair_state(env: &Env, p: &P) -> Pair {
     let a = env.svm.get_account(&p.pair).expect("pair");
@@ -488,7 +483,7 @@ fn pc2_close_pair_front_runs_registration() {
     fill(&mut env, &p, 50 * SOL, 40 * SOL);
     let pa = pool_of(&p, 0);
     graduate_side(&mut env, &p, &keeper, 0, &[ix_register_pair(&keeper.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)]).unwrap();
-    expect_anchor_err(graduate_side(&mut env, &p, &attacker, 1, &[ix_close(&p, &attacker.pubkey())]), "NotClosable");
+    expect_anchor_err(env.send(&[ix_graduate(&p, &attacker.pubkey(), 1), ix_close(&p, &attacker.pubkey())], &[&attacker]), "NotClosable");
     graduate_side(&mut env, &p, &attacker, 1, &[]).unwrap();
     expect_anchor_err(env.send(&[ix_close(&p, &attacker.pubkey())], &[&attacker]), "NotClosable");
     let pb = pool_of(&p, 1);

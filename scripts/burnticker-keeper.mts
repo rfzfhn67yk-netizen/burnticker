@@ -6,6 +6,13 @@
 // ProgramBurnClient is used; without them the chain is the FakeBurnProgram (nothing is sent; the pages say so). Mainnet is refused
 // unless BURNTICKER_MAINNET=1. No environment file is read or printed by this script.
 //
+// LP LOCKED FOREVER (owner decision 2026-10-10): every cycle, per coin and AHEAD of the buyback cranks, the keeper runs the permissionless
+// register_fee_key (once per mint) and claim_lock_fees (when the locked LP has accrued fees) — src/lib/burnticker/lockFeesKeeper.ts over
+// the program client's lockFees port (lockFeesChain.ts; the FakeBurnProgram's in-memory lock without a deployment). Each claim is a receipt
+// line "LP fees claimed: X SOL → 80% burn pool / 20% operator; coin side burned" in the registry (lock_fee_claims), the coin's
+// status.json (lp.lastClaim) and the daily post; a refusal, a Fee Key held elsewhere, an unpinned operator treasury or a split that is
+// not the compiled 80/20 raises an alert.
+//
 //   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-keeper.mts [--once] [--dry-run]
 //
 //   BURNTICKER_DB (data/burnticker.db) · BURNTICKER_PUBLISH_DIR (data/burnticker-site) · BURNTICKER_KEEPER_PUBKEY (the attester's
@@ -32,6 +39,7 @@ import { ProgramBurnClient } from "../src/lib/burnticker/programClient.ts";
 import { clusterOfGenesis } from "../src/lib/burnKeeper/solana.ts";
 import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
 import { runCycle, type KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
+import { lpLockBlock } from "../src/lib/burnticker/lpLockPage.ts";
 import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairCounterpartFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
 import { CrankFailureTracker, devFeeDelta, recordBalanceSample, registryAlertRows, registryAlertSink, rpcBalanceLamports, runBurntickerAlertCheck, sinkFromEnv } from "../src/lib/burnticker/alerts.ts";
@@ -95,6 +103,7 @@ async function buildProgram(): Promise<{ program: BurnProgramClient; real: boole
 }
 const built = await buildProgram();
 const program = built.program;
+log(`claim_lock_fees crank: ${program.lockFees ? `on (fee-keys PDA ${program.lockFees.feeKeysPda()}, operator treasury ${program.lockFees.operatorTreasury() ?? "NOT PINNED on this cluster — claims wait, the fees stay in the lock"})` : "off (no lock-fee client)"}`);
 // BURN DERBY (2026-10-10): Pyth on Solana (keyless) / Hermes (BURNTICKER_PYTH_API_KEY), pool TWAPs and mint supplies are MAINNET facts
 // (BURNTICKER_DERBY_RPC_URL, else the public RPC), cross-reads from Jupiter / DexScreener / RedStone. Withheld windows raise an alert.
 const derbyPools = connectionPoolPort(new Connection(process.env.BURNTICKER_DERBY_RPC_URL?.trim() || "https://api.mainnet-beta.solana.com", { commitment: "confirmed", disableRetryOnRateLimit: true }));
@@ -127,6 +136,7 @@ async function publishAll(now: number): Promise<void> {
         chain: { cluster, programId: program.programId, supplyRaw: await program.supplyRaw(t.mint), feePdaLamports: await program.feePdaBalanceLamports(t.mint), vaultRaw: locked.mode === "vault" ? await program.vaultBalanceRaw(t.mint) : null, program: await programPageBlock(program, t.mint, registry.lastProgramTx(t.mint, "reading")) },
         now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0, operator, lifecycle: lifecycleFrom(registry, t, locked.rule, null), pair: await pairCounterpartFrom(registry, (m) => program.supplyRaw(m), t, async (m) => { try { return (await program.port(m).config())?.poolRegistered ?? null; } catch { return null; } }),
         // the coin card's curve progress + top holders (read-only, the same RPC); without an RPC status.json says "not read" and the card shows —
+        lp: await lpLockBlock(registry, program, cluster, t.mint),
         market: marketReader && t.status !== "draft" && t.status !== "expired" ? await readMarket(marketReader, { cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: (await program.supplyRaw(t.mint).catch(() => null)) ?? BigInt(TOTAL_SUPPLY) * BigInt(10) ** BigInt(DECIMALS), decimals: DECIMALS }, now).catch(() => null) : null };
       const receipts = buildReceiptsJson(input);
       const status = buildTokenStatus(input, receipts);

@@ -22,7 +22,7 @@ show (seasons, rivalries, derbies — scoreboards of burns). Nothing is ever won
 ## 2. Who we talk to, and what we say (one proof link each)
 | Audience | The pitch | Proof |
 |---|---|---|
-| Memecoin traders & communities | Coins that burn on real-world results. Every burn has a receipt you can recompute. No team wallet, no creator cash, LP burned. | a live receipt + the verifier |
+| Memecoin traders & communities | Coins that burn on real-world results. Every burn has a receipt you can recompute. No team wallet, no creator cash, LP locked forever — its fees fund the burn. | a live receipt + the verifier |
 | Sports communities (every league) | A coin for your team's season that burns every time they win — settled on the final score, ended with the season, nothing left behind. | Launch → Team coin, the window sentence |
 | Prediction-market users | Any resolved outcome can have a coin that reacts on-chain, the payout read from the chain. Not odds, not a bet — a burn with a receipt. | Elections flow, El-Sayed/Rogers pair page |
 | Fiscal / debt-clock audience | Every $1B the national debt rises, 2 % of $DEFICIT's pool buys and burns it. Treasury's own number. Receipts daily. | deficit.burnticker.com, the Treasury feed |
@@ -61,7 +61,7 @@ by us, with the transaction.
 
 ## 5. Content system (what gets written, by whom)
 Fixed formats from the generator, lint-refused if they drift: `receipt` (one per burn), `scoreboard` (daily, all leagues), `season-card`
-(a coin's window and rule), `explainer` (how a burn happens; what a receipt is; why LP is burned; why creators earn nothing),
+(a coin's window and rule), `explainer` (how a burn happens; what a receipt is; why LP is locked and its fees burn; why creators earn nothing),
 `launch-thread`, `teaser`. Humans write only: outreach messages (from drafts) and replies. Visuals: receipt art generated per coin;
 screenshots of real receipts; the bracket page.
 

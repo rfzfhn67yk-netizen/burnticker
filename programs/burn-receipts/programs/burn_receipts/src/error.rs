@@ -140,4 +140,14 @@ pub enum BurnError {
     PairNotGraduated,
     #[msg("the pool is not the pair_curve pool of this mint (Pair record, pair_curve PDA or pinned cpConfigId)")]
     NotPairPool,
+    #[msg("the operator treasury is not compiled into this build (mainnet placeholder): claim_lock_fees is disabled; the fees stay in the lock")]
+    TreasuryNotPinned,
+    #[msg("the account is not the lock program's LockedCpLiquidityState for this pool / Fee Key (owner, discriminator, PDA, pool or LP mint)")]
+    InvalidLockAccount,
+    #[msg("the Fee Key NFT is not held by the program's fee_keys PDA")]
+    FeeKeyNotHeld,
+    #[msg("the lock position holds no majority of the pool's LP")]
+    LockNotMajority,
+    #[msg("the Fee Key account, lock position or pool does not match this mint's registered record")]
+    FeeKeyMismatch,
 }

@@ -89,12 +89,16 @@ tier (up to 84 bps × share on the 100 bps tier), harvested through the Fee Key,
 Developer (Burnticker) take in this case: **0**. The owner can still launch this way with nothing to set up (no platform config), at
 the cost of the burn pool getting 5 bps on the curve instead of 50 and Raydium's platform keeping 75.
 
-### B. $DEFICIT launched under **our platform** (the CLI's defaults: dev 25 bps, burn pool 50 bps, LP 100% burned)
+### B. $DEFICIT launched under **our platform** (the CLI's defaults since 2026-10-10: dev 25 bps, burn pool 50 bps, LP 100% locked to the burn program's fee-keys PDA)
 
-| Phase | Raydium | **Burnticker (platform wallet)** | **Burn pool (fee PDA)** | Nobody |
+| Phase | Raydium | **Burnticker (platform wallet / operator treasury)** | **Burn pool (fee PDA)** | Nobody |
 |---|---|---|---|---|
 | Curve, per 1 SOL | 25 bps | **25 bps (0.0025 SOL)** | **50 bps (0.005 SOL)** | — |
-| CPMM, per 1 SOL | 4 bps + 0.25 bp | **0** (LP burned) — or 21 bps × the locked share if `--lp-platform-pct` > 0 | **4.75 bps** | 21 bps (if all LP is burned) |
+| CPMM, per 1 SOL | 4 bps + 0.25 bp | **4.2 bps** (20 % of the locked LP's 21 bps, by `claim_lock_fees`, to the operator treasury) | **4.75 bps + 16.8 bps** (the creator fee + 80 % of the locked LP's fees) | — |
+
+LP locked forever (owner decision 2026-10-10; the earlier design burned it all and sent 21 bps to nobody): `platformScale` 1,000,000 puts
+the whole LP behind one Fee Key, the platform's lock-NFT wallet is the burn_receipts `["fee_keys"]` PDA, and the permissionless
+`claim_lock_fees` splits what the Fee Key collects 80/20 by compiled constants (`src/lib/burnticker/lockFees.ts`).
 
 Total curve fee: **100 bps**, the LaunchLab norm (Raydium's own is 105). The CLI prints exactly these legs from the live configs.
 
@@ -113,9 +117,8 @@ Total curve fee: **100 bps**, the LaunchLab norm (Raydium's own is 105). The CLI
 
 **Recommendation to decide on:** `feeRate` 2,500 (25 bps, the owner's number), `creatorFeeRate` 5,000 (the 50 bps cap: the burn pool is
 the largest curve slice — twice the developer's and Raydium's), `cpConfigId` tier 0 (25 bps; the curve crowd expects the cheap tier
-after graduation), `platformScale` 0 (all LP burned — the strongest "no insiders" line; the trade-off is the developer forgoes 21 bps
-× share of post-graduation LP fees; 100,000 = 10% would mirror Raydium's own split and pay the developer 2.1 bps of CPMM volume via
-the Fee Key).
+after graduation), `platformScale` 1,000,000 with the lock-NFT wallet = the burn program's fee-keys PDA (owner decision 2026-10-10,
+replacing `platformScale` 0: LP locked forever, its fees fund the burn — 80 % to the burn pool, 20 % to the operator, fixed in code).
 
 ## 4. What the keeper does with each slot (the keeper only PAYS; the fee PDA receives)
 
@@ -137,7 +140,9 @@ the Fee Key).
   successor for the swap-and-burn leg; since 2026-10-10 the keeper drives it (`BURNKEEPER_EXECUTION=program`) and the Jupiter leg is
   deprecated (README-execution.md §1).
 - **Platform fee** (the developer's): claimed by `BURNTICKER_FEE_WALLET`'s owner through Raydium's UI or `claim_platform_fee_from_vault`;
-  not the keeper's business. **Locked-LP fees**: harvested by the Fee Key holder in Raydium's "Burn & Earn" UI; not the keeper's business.
+  not the keeper's business. **Locked-LP fees** (since 2026-10-10): the Fee Key holder is the burn program's fee-keys PDA, so nobody harvests them in Raydium's UI;
+  the keeper cranks the permissionless `register_fee_key` once and `claim_lock_fees` ahead of each buyback crank
+  (`src/lib/burnticker/lockFeesKeeper.ts`): 80 % lands in the fee PDA (spent by the next crank), 20 % in the operator treasury.
 
 ## 5. Verified how
 

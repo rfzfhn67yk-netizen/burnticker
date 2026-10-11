@@ -64,6 +64,14 @@ pub fn swap_ref(pool: &Pubkey) -> String {
     pool.to_string().chars().take(12).collect()
 }
 
+/// The LP-fee claim receipt line (LAUNCHPAD-PATH §35), written by claim_lock_fees in the same instruction as the split and the burn:
+///   DEBT|lockfees|wsol=<lamports claimed>|burnpool=<to the fee PDA>|operator=<to the treasury>|burned=<raw tokens burned>|nft=<12>|v1
+/// `nft=` carries the first 12 base58 characters of the Fee Key NFT mint.
+pub fn format_lock_fees(prefix: &str, wsol: u64, burn_pool: u64, operator: u64, burned_raw: u64, fee_nft_mint: &Pubkey) -> String {
+    let nft = fee_nft_mint.to_string();
+    format!("{prefix}|lockfees|wsol={wsol}|burnpool={burn_pool}|operator={operator}|burned={burned_raw}|nft={}|v1", &nft[..12.min(nft.len())])
+}
+
 pub fn emit_memo<'info>(memo_program: &AccountInfo<'info>, memo: &str) -> Result<()> {
     require_keys_eq!(*memo_program.key, MEMO_PROGRAM_ID, BurnError::InvalidMemoProgram);
     require!(memo.len() <= MEMO_MAX_BYTES, BurnError::MemoTooLong);

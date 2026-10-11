@@ -30,7 +30,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.7.0";
+export const API_VERSION = "1.8.0";
 export const API_PREFIX = "/api/burnticker/v1";
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
@@ -58,6 +58,25 @@ export const SCHEMAS: Record<string, Schema> = {
   ...BADGE_SCHEMAS,
   ...OPS_SCHEMAS,
   Error: obj({ error: str, code: str, problems: arr(str), retryAfterSec: int }, ["error"]),
+  // LP LOCKED FOREVER (since 1.8.0; owner decision 2026-10-10): graduation LP is 100 % locked with Raydium's LP lock, the Fee Key NFT is
+  // owned by the burn program's fee-keys PDA, and the permissionless claim_lock_fees splits the SOL side 80 % burn pool / 20 % operator.
+  LpLock: obj({
+    policy: { const: "locked-forever" }, lockProgram: { ...PUBKEY, description: "Raydium's CPMM LP lock program for the cluster" },
+    feeKey: { ...nullable(PUBKEY), description: "the Fee Key NFT mint (the locked position); null before graduation" },
+    feeKeyOwner: { ...nullable(PUBKEY), description: "who holds the Fee Key: the burn_receipts PDA [\"fee_keys\"]" },
+    lockedLiquidity: { ...nullable(PUBKEY), description: "Raydium's LockedCpLiquidityState [\"locked_liquidity\", feeKey]" },
+    feeKeyRecord: { ...nullable(PUBKEY), description: "burn_receipts FeeKeyRecord [\"fee_key\", mint] (written by register_fee_key)" },
+    feeKeyRegistered: bool, lockedPct: num,
+    split: obj({ burnBps: { const: 8000 }, operatorBps: { const: 2000 }, coinSide: { const: "burned" }, fixedInCode: { const: true } }, ["burnBps", "operatorBps"]),
+    operatorTreasury: { ...nullable(PUBKEY), description: "where claim_lock_fees pays the 20 % (the Squads vault compiled into the program); null = not pinned on this cluster (claims refuse TreasuryNotPinned and the fees stay in the lock)" },
+    lastClaim: nullable(obj({ at: str, signature: str, sol: str, toBurnPool: str, toOperator: str, tokenBurnedRaw: str, txUrl: nstr, line: str }, ["at", "signature", "sol", "toBurnPool", "toOperator", "line"])),
+    totals: obj({ claims: int, sol: str, toBurnPool: str, toOperator: str, tokenBurnedRaw: str }, ["claims", "sol", "toBurnPool", "toOperator"]),
+    urls: { type: "object" }, line: str, note: nstr,
+  }, ["policy", "lockProgram", "feeKey", "feeKeyOwner", "lockedPct", "lastClaim"], { description: "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code). Since 1.8.0." }),
+  LpLockPolicy: obj({
+    policy: { const: "locked-forever" }, line: str, lockedPct: num, lockProgram: PUBKEY, lockAuthority: PUBKEY, feeKeysPda: nullable(PUBKEY), operatorTreasury: nullable(PUBKEY), treasuryPinned: bool,
+    split: { type: "object" }, perSwapAfterGraduationBps: obj({ lpFees: num, toBurnPool: num, toOperator: num, creatorFeeToBurnPool: num, burnedTotal: num }), instructions: obj({ register: str, claim: str }), urls: { type: "object" },
+  }, ["policy", "lockProgram", "split"], { description: "The platform-wide LP policy (since 1.8.0)." }),
   BurnMapping: obj({ fractionOfPool: { type: "number", minimum: 0.01, maximum: 1, description: "buyback: fraction of the burn pool spent buying the token at market, all of it burned (≤ 0.10 for recurring rules; a one-shot may go to 1.00 since 1.4.0)" }, tokens: { type: "integer", minimum: 1, description: "vault: tokens burned from the vesting vault" } }, [], { description: "Exactly one key." }),
   Rule: obj({
     schema: { const: "burnticker.rules/v1" },
@@ -207,7 +226,8 @@ export const SCHEMAS: Record<string, Schema> = {
     rules: obj({ sha256: str, sha12: str, statement: str, file: str, oneShot: bool }, ["sha256", "statement"]), addresses: { type: "object" },
     supply: obj({ initial: str, current: str, source: str }), burned: obj({ total: str, pctOfSupply: num, count: int, last30d: str }), pool: { type: "object" },
     next: obj({ nextCheckAt: nstr, impliedChance: { type: ["number", "null"], description: "always null: no odds or prices are shown for any coin (owner decision 2026-10-10); kept for schema compatibility" }, impliedBasis: nstr, nextMarket: nstr, nextCloseTime: nstr, awaitingFinal: int }, ["impliedChance"]),
-    feed: { type: "object" }, attesters: arr({ type: "object" }), quorum: int, fees: { type: "object" }, health: { type: "object" }, disclosure: { type: "object" }, trust: { type: "object" },
+    feed: { type: "object" }, attesters: arr({ type: "object" }), quorum: int, fees: { type: "object" }, health: { type: "object" }, disclosure: { type: "object" }, trust: { type: "object", description: "lpBurnedPct is 0 since 1.8.0 (LP locked forever): lpLockedPct and lpPolicy say what happens to the LP" },
+    lp: { ...ref("LpLock"), description: "since 1.8.0: the coin's LP lock (policy, lock program, Fee Key and its owner, the last claim_lock_fees receipt, totals)" },
     profile: obj({ imageUrl: nstr, description: str, links: arr(obj({ label: str, url: str }, ["label", "url"])), oneLiner: { ...str, description: "the coin card's few words, derived from the locked rule (\"burns when the Rays win\")" }, badge: { ...str, description: "the window badge: 2026 SEASON / POSTSEASON 2026 / NEXT 5 GAMES / PERPETUAL / ONE-SHOT · <date>" } }, ["oneLiner"]),
     market: obj({
       phase: { enum: ["curve", "migrating", "graduated", null], description: "LaunchLab pool status (0 curve, 1 migrating, 2 graduated); null when not read" },
@@ -237,7 +257,8 @@ export const SCHEMAS: Record<string, Schema> = {
   }, ["schema", "generatedAt", "mode", "rule", "categories", "uncovered", "summary"], { description: "The settlement-coverage matrix: per category and selector kind, the primary sources, their independent cross-reads, the 90-day dry run and the verdict (settleable / adjudicated-only on Polymarket / uncovered). Kalshi is never an input." }),
   Trust: obj({
     generatedAt: str, cluster: str, powers: { type: "object" }, operator: { type: "object" },
-    fees: obj({ designed: obj({ curve: ref("FeeSplit"), postGraduation: ref("FeeSplit"), devFeeBps: num, lpBurnedPct: num, creatorCashBps: { const: 0 }, teamAllocationPct: { const: 0 } }, ["curve", "postGraduation", "devFeeBps"]), live: { type: "object" } }, ["designed", "live"]),
+    fees: obj({ designed: obj({ curve: ref("FeeSplit"), postGraduation: ref("FeeSplit"), devFeeBps: num, lpBurnedPct: { ...num, description: "0 since 1.8.0 (LP locked forever)" }, lpLockedPct: { ...num, description: "since 1.8.0" }, lpFeeSplit: { type: "object", description: "since 1.8.0: { burnPoolBps 16.8, operatorBps 4.2, ofLpBps { burnPool 8000, operator 2000 } }" }, creatorCashBps: { const: 0 }, teamAllocationPct: { const: 0 } }, ["curve", "postGraduation", "devFeeBps"]), live: { type: "object" } }, ["designed", "live"]),
+    lpLock: { ...ref("LpLockPolicy"), description: "since 1.8.0" },
     program: { type: "object" }, attesters: arr({ type: "object" }), audit: {}, statements: arr(str), operatorLine: str, useOfFees: str, preAuditCapSol: num, cannot: arr(str), rpcConfigured: bool, stubs: arr(str),
   }, ["powers", "fees", "program", "statements"]),
 };

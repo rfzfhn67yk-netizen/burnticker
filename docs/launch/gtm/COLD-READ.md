@@ -39,7 +39,7 @@ memecoin, or what "burn" means — that comes from the receipt section 50 lines 
 | G2 | index.html 291–309 (the $RAYS receipt) | $RAYS is a live coin; receipt #5 happened; "RECOMPUTED ✓ CHAIN = SOURCE" | it is an illustration with no "example" label — the scoreboard (340) and rivalry (368) carry one, this does not. No platform coin is live (`/api/burnticker/v1/tokens` → 0, devnet) |
 | G3 | index.html 256 (Seasons door) | $OILERS 6 · $RAYS 5 · … are live counts | unlabelled example numbers |
 | G4 | index.html 266 ("reviewed" chip) | "reviewed" = audited? | the page says "not audited" only at line 473 |
-| G5 | index.html 465 ("the platform's share of post-graduation LP fees") | the platform takes a cut after graduation | false: LP is 100 % burned and the developer's post-graduation take is 0 (decisions.md 2026-10-09 "LP"; `fees.ts` `PLATFORM_SCALE_PPM = 0`); it also contradicts "all LP burned" in the same sentence |
+| G5 | index.html 465 ("the platform's share of post-graduation LP fees") | the platform takes a cut after graduation | false: LP is 100 % burned and the developer's post-graduation take is 0 (decisions.md 2026-10-09 "LP"; `fees.ts` `PLATFORM_SCALE_PPM = 0`); it also contradicts "all LP burned" in the same sentence. **Superseded 2026-10-10 (owner decision, LP locked forever):** the LP is now locked, not burned, and the operator does take 20 % of post-graduation LP fees; the index line was rewritten to say exactly that |
 | G6 | index.html 435 ("If we disappear, the public readings and the program keep working") | burns continue without the operator | false at quorum 1: every reading needs the operator's attester key, so if the operator stops, readings stop and burns stop (`transparency.json` `quorum-1`). This is the one sentence that reads as a promise the code does not keep |
 | G7 | index.html 395, 413, 435 ("anyone can crank") | always permissionless | true after the pre-audit window; during it a PlatformConfig may carry a cranker list of up to 3 keys for at most 90 days (Powers Register "Cranker allowlist") |
 | G8 | index.html 436 ("the plan is a 2-of-3 multisig … set to none after review") | a commitment about the future | policy `nothing-coming-soon`: state who holds it today; plans live on the trust page |
@@ -112,6 +112,12 @@ The program can still be upgraded; who holds the upgrade authority today, and un
 
 ```text edit
 A platform fee of 25 bps of curve volume, set in the LaunchLab platform config and read live on the trust page. Nothing after graduation: all LP is burned, so there is no platform share of LP fees. Nothing from burn pools, ever. The platform never buys any coin launched here.
+```
+
+Update 2026-10-10 (LP locked forever, owner decision), the line as it now reads on the site:
+
+```text edit
+A platform fee of 25 bps of curve volume, set in the LaunchLab platform config and read live on the trust page. After graduation the LP is locked forever and its fees are split by code: 80% to the coin's burn pool, 20% to the operator. Nothing from burn pools, ever. The platform never buys any coin launched here.
 ```
 
 **E10 · line 434** — "a second, independent attester is not built yet." → "a second, independent attester is not built."

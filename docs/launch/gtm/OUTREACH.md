@@ -50,7 +50,8 @@ trading tips"), any KOL, any boost, any trending-bar ad.
   platform appears there automatically is not documented (`api-v3.raydium.io/launchlab/platforms` returned 404). UNVERIFIED: a
   2025-04 Raydium X post says LaunchLab platforms "appear on the LaunchLab UI" (search snippet).
 - **Why them:** Burnticker *is* a LaunchLab platform (its own PlatformConfig: 25 bps to the developer, 50 bps to each coin's burn
-  pool, LP 100 % burned). Every coin graduates to a Raydium CPMM pool.
+  pool, LP 100 % locked with Raydium's LP lock, its Fee Key owned by our burn program: 80 % of the LP fees to the coin's burn pool, 20 % to
+  the operator, fixed in code). Every coin graduates to a Raydium CPMM pool.
 - **Ask:** how a platform gets onto platforms-v2 / the LaunchLab UI, and a look at our PlatformConfig for anything wrong.
 - **When:** after the mainnet PlatformConfig exists (T-7). Today only the devnet platform exists (`GvSKpe5p…`, devnet-run.md §4).
 - **Do NOT offer:** fees, tokens, a revenue share, a co-marketing swap.
@@ -104,7 +105,7 @@ Project: $DEFICIT (Burnticker). Mint: {DEFICIT_MINT}. Website: https://deficit.b
 - **Ask:** a listing. **Status field:** "in development" until $DEFICIT is live on mainnet; then "live".
 
 ```text draft
-Burnticker — coins that burn on real-world results, with receipts. A Raydium LaunchLab platform on Solana: each coin carries one locked rule (a settled result, a unit, a share of its fee pool), and the open-source burn_receipts program buys the coin on its own pool and burns everything bought, with a memo anyone can recompute. Creators earn nothing from fees; all LP is burned; the platform never buys any coin. Keyless API and open source: https://github.com/rfzfhn67yk-netizen/burnticker
+Burnticker — coins that burn on real-world results, with receipts. A Raydium LaunchLab platform on Solana: each coin carries one locked rule (a settled result, a unit, a share of its fee pool), and the open-source burn_receipts program buys the coin on its own pool and burns everything bought, with a memo anyone can recompute. Creators earn nothing from fees; the LP is locked forever and its fees fund the burn (80% burned, 20% operator, fixed in code); the platform never buys any coin. Keyless API and open source: https://github.com/rfzfhn67yk-netizen/burnticker
 ```
 
 ## 6. Helius — guest blog

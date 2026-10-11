@@ -95,14 +95,18 @@ belongs to the side's holders (§5.3), not to a fee PDA that will never have a p
 
 **After graduation.** The pools are created through CPMM's public `initialize` (the permissioned path LaunchLab uses needs a Raydium
 permission PDA we do not have), which sets `enable_creator_fee = false`: the burn pool earns **nothing** from post-graduation CPMM
-volume on a pair coin (a LaunchLab coin earns 4.75 bps there). The CPMM trade fee's LP share accrues to the burned LP (nobody), Raydium
-keeps its protocol and fund shares. This is the main economic difference from a LaunchLab coin; the whitepaper's fee table states it.
+volume on a pair coin (a LaunchLab coin earns 4.75 bps there). The CPMM trade fee's LP share accrues to the pool's LP, which is
+**locked forever** in Raydium's CPMM lock (LAUNCHPAD-PATH §35, owner decision 2026-10-10; §5.1 step 6): its Fee Key NFT is held by
+burn_receipts' FEE_KEYS PDA, and burn_receipts' permissionless `claim_lock_fees` collects those fees and splits the SOL side 80 % to
+the side's burn pool and 20 % to the operator treasury (compiled constants, no admin) and burns the coin side. Raydium keeps its
+protocol and fund shares.
 
 ## 5. Lifecycle
 
 ```
             buy/sell (both sides)    the trade that meets the condition commits the pair (or graduate(first side) does)
-   Open ──────────────────────────────▶ Graduating ──graduate(A), graduate(B)──▶ Graduated  (two CPMM pools, 100 % of LP burned)
+   Open ──────────────────────────────▶ Graduating ──graduate(A), graduate(B)──▶ Graduated  (two CPMM pools; lock_lp per side: 100 % of
+                                                                                          the LP locked forever, Fee Key → FEE_KEYS)
     │                                       │
     │ void_pair — permissionless,           │ void_pair — a missing side goes into redemption (refunding[side]) ≥ 3 days
     │ at/after the deadline, never committed│ after the commit if Raydium blocks it, ≥ 30 days after it whatever the reason
@@ -170,8 +174,14 @@ Each call, for its side:
    (above its rent; blind review 2 H-1 — CPMM's `create_or_allocate_account` keeps them and WSOL's `InitializeAccount` counts them as
    balance, so the first version's exact check reverted forever; the excess now simply joins the pool and is reported in the
    `SideGraduated` event as `prefunded_wsol`); the vault's LP account holds `lp_supply − 100` (CPMM keeps 100 units unminted).
-6. **Burn 100 % of the LP** with SPL `burn` (the LP mint supply drops to 0; CPMM's `lp_supply` keeps counting it, which is how
-   `burn_receipts` measures "burned"), close the LP account, record `lp_supply_at_creation[side]` and `lp_burned[side]`.
+6. Record `lp_supply_at_creation[side]` and leave the LP (`lp_supply − 100`, event `SideGraduated.lp_minted`) in the vault's LP account.
+   **`lock_lp(side)`** — a separate permissionless instruction, its own transaction — then moves ALL of it into Raydium's CPMM lock
+   program (`lock_cp_liquidity`; permanent, never withdrawable), with the Fee Key NFT's mint at the pair_curve PDA
+   `["fee_nft", pair, [side]]` and `fee_nft_owner` = burn_receipts' FEE_KEYS PDA; it checks afterwards that the vault kept every lamport
+   and is still the System account, that no LP is left in the vault, that the lock's LP account grew by exactly the LP, that FEE_KEYS
+   holds the one NFT and that the lock state names this pool and NFT; it records `lp_locked[side]` (the field formerly `lp_burned`,
+   same offset) and closes the emptied LP account (rent to the side's burn pool). The cranker pays the lock's rents (≈ 0.0065 SOL).
+   *Before LAUNCHPAD-PATH §35 this step burned 100 % of the LP; pairs graduated then keep their burn record in the same field.*
 7. Burn every token left in the side's token vault (unsold curve tokens and any reserve the price match did not need), close the WSOL
    account (the account is synced before it is first read, so lamports somebody sent to an existing vault WSOL account without
 `SyncNative` are just residue — PR review, Low), and send to this side's burn pool everything above what the vault must keep — its rent minimum, the developer accrual, and
@@ -195,9 +205,16 @@ pool (blind review 2 I-4: aggregators may route there; the site links only the r
 3. the pool is the one the Pair records for that side **and** the pair_curve PDA `["pool", pair, [side]]` (only pair_curve can have
    created it), is a CPMM PoolState of WSOL / this mint on SPL Token, its `pool_creator` is the pair's SOL vault PDA and its AmmConfig is
    the cpConfigId pinned in the TokenConfig;
-4. **LP**: the Pair's record says ≥ 90 % of the LP that existed at creation was burned, **and** the chain agrees: CPMM `lp_supply − LP
-   mint supply` (everything ever burned plus the 100 never-minted units) is at least the recorded burn. Measured against the creation
-   supply, not the live one, so a later depositor cannot dilute the ratio and block registration (the class of blind-review-3 M-2).
+4. **LP**: the Pair's record says ≥ 90 % of the LP that existed at creation was locked by `lock_lp` (or burned, for pairs graduated
+   before LAUNCHPAD-PATH §35), **and** the chain agrees: the LP in Raydium's lock account ATA(LOCK_CPMM_AUTHORITY, lp_mint) plus CPMM
+   `lp_supply − LP mint supply` (everything ever burned plus the 100 never-minted units) is at least the record. Measured against the
+   creation supply, not the live one, so a later depositor cannot dilute the ratio and block registration (the class of blind-review-3
+   M-2). A pool whose LP is not locked yet is refused (`LpNotLocked`).
+5. **The Fee Key** (LAUNCHPAD-PATH §35): after registration, burn_receipts' permissionless `register_fee_key` records the side's lock
+   position (the lock program's LockedCpLiquidityState for the registered pool, holding a majority of its LP, whose NFT FEE_KEYS holds)
+   in a FeeKeyRecord; `claim_lock_fees` then collects the LP fees with the FEE_KEYS signature — SOL 80 % to the side's burn pool, 20 %
+   to the compiled operator treasury (parked in the record while the treasury cannot receive it), the coin side burned, a receipt memo.
+   The keeper's order per side: graduate → lock_lp → register_pair_pool → register_fee_key → seed swap → claim_lock_fees on its cadence.
 
 Nothing else in `burn_receipts` changed: `register_pool` (LaunchLab, policy 0), `replace_pool`, the fixed-pool fallback and every
 post-CPI guard are untouched; `crank_buyback` only needs `pool_verified` and the registered address, which `register_pair_pool` sets.
@@ -271,14 +288,16 @@ on an undescribed instruction or signer):
 |---|---|---|
 | `init_pair` | payer + the creator recorded in both TokenConfigs | create the pair once (Burnticker's compiled-in platform only); mint the supplies into the vaults; revoke mint authority |
 | `buy` / `sell` | anyone, for their own wallet | trade along the curve at the formula's price while Open (the trade that meets the condition commits the pair); after a void, redeem pro rata, no fee |
-| `graduate` | anyone | once per side on a committed pair; creates its side's pool, burns the LP and leftovers, pays the side's escrowed burn share |
+| `graduate` | anyone | once per side on a committed pair; creates its side's pool, burns the leftover tokens, pays the side's escrowed burn share; the LP stays in the vault for lock_lp |
+| `lock_lp` | anyone | once per side after graduate: locks ALL of the pool's LP in Raydium's CPMM lock forever, Fee Key NFT to burn_receipts' FEE_KEYS PDA (LAUNCHPAD-PATH §35) |
 | `void_pair` | anyone | after the deadline if never committed; on a committed pair, each missing side ≥ 3 days after the commit while Raydium blocks it, or ≥ 30 days after it whatever the reason |
 | `claim_developer_fee` | anyone | pay the accrued 25 bps to the developer wallet recorded at init |
 | `close_pair` | anyone | Voided pairs with nothing circulating; burn the returned supplies; rent to the recorded creator; residue (and an accrual the developer wallet cannot receive) to the burn pools |
 
 There is **no** admin, no authority field, no pause, no parameter update, no withdraw / sweep / transfer-out of the SOL vault or the
 token vaults except: a seller's own exit (formula price or pro-rata redemption), the developer claim (the accrual, fixed recipient),
-the CPMM deposit at graduation (formula amounts, into pools whose LP is burned in the same instruction), and escrow plus residue to
+the CPMM deposit at graduation (formula amounts, into pools whose LP lock_lp then locks forever with the Fee Key at burn_receipts'
+FEE_KEYS PDA), and escrow plus residue to
 the side's own burn pool. The **program upgrade authority** is the one power above all of this, exactly as for `burn_receipts`
 (blind review 1 M-2): an upgrade could change any rule above for pairs already raising. It sits with the Squads 2-of-3 vault and its
 time lock. A time lock longer than the longest pair (up to 90 days, §6) is not practical, so the mainnet plan is to finalise the
@@ -348,18 +367,26 @@ a migration instruction and run it before anything else**; burn_receipts reads o
    the new fields were appended after offset 236).
 6. **Residual liveness.** Pre-funded or pre-created accounts anywhere else in `init_pair` / `graduate`; the 64-entry trace; a
    developer wallet or creator that cannot be credited (claim and close must stay independent of trading).
+7. **The LP lock (LAUNCHPAD-PATH §35).** `lock_lp` lends the SOL vault's signature (as the LP's owner) and the Fee Key mint PDA's
+   signature to Raydium's lock program, whose source is not public. Can a hostile or upgraded lock program take vault lamports, leave
+   LP behind, mint the Fee Key elsewhere, or leave a state that burn_receipts' `register_fee_key` would accept for another pool? And
+   in burn_receipts: can `claim_lock_fees` be made to pay anyone but the side's fee PDA and the compiled treasury, touch the locked
+   principal or the Fee Key, or be blocked (an unfunded treasury parks the operator share in the FeeKeyRecord instead)?
+
 
 ## 9. Sizes and compute (measured)
 
 | | value | where measured |
 |---|---|---|
-| program size | 365,824 B mainnet build / 365,880 B devnet build (opt-level "z" for this package only) — devnet rent ≈ 1.86 SOL | `target/deploy/pair_curve.so`, devnet upgrade 2026-10-10 20:02 (round 2) |
+| program size | 393,488 B mainnet build / 393,544 B devnet build (opt-level "z") — devnet rent ≈ 2.0 SOL | `target/deploy/pair_curve.so`, devnet upgrade 2026-10-10 21:56 (LP-lock release, vault transaction 7) |
 | `Pair` account | 946 B (8 + 938) | LiteSVM, devnet |
 | `init_pair` | 110–125 k CU (PDA bump searches vary) | devnet 121,967 / 112,479 |
 | `buy` | 34–55 k CU (the top end creates the buyer's token account) | devnet 33,977–55,130 |
 | `sell` (curve) / redemption | ≈ 30 k / ≈ 29 k CU | devnet 30,004 / 28,830–29,200 |
 | `graduate(side)` | 163–172 k CU on devnet; instruction trace 45–47 of 64 with every created address pre-funded | devnet 172,203 (WSOL vault pre-funded) / 162,739; LiteSVM |
-| `register_pair_pool` (own transaction) | 22–24 k CU | devnet 23,691 / 22,196 |
+| `lock_lp(side)` (real devnet lock program `DRay25Us…`) | 140–158 k CU, 946 B | devnet 158,245 / 140,245 (pair 6); LiteSVM 117 k with the test-only lock stand-in |
+| `register_pair_pool` (own transaction) | 22–36 k CU | devnet 33,959 / 35,497 (LP-lock release) |
+| burn_receipts `register_fee_key` / `claim_lock_fees` on a pair pool | 37–43 k / 235–252 k CU (1,118 B) | devnet pair 6 (`docs/burnkeeper/evidence/devnet-lock-2026-10-10/`) |
 | `claim_developer_fee` | ≈ 23 k CU | devnet 22,579 |
 | `void_pair` | ≈ 20 k CU | devnet 20,150 |
 | `close_pair` (voided, burns both supplies, pays the accrual) | ≈ 34 k CU | devnet 33,771 |
@@ -370,4 +397,8 @@ Tests: `programs/burn-receipts/programs/pair_curve/src/math.rs` (11 unit tests, 
 `tests/lifecycle.rs` (16 LiteSVM tests against the real CPMM and burn_receipts, plus a hostile CPMM stand-in), `tests/review_pc1.rs` (10) and
 `tests/review_pc2.rs` (9), `tests/review_pc3.rs` (7) — the reviewers' exploits inverted into regressions —, `test/pairCurvePricing.test.ts`,
 `test/pairCurveClient.test.ts`, `test/pairCurveLaunch.test.ts`. Devnet: `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md`
-(first rehearsal at 17:00, re-rehearsal of the fixed program at 18:32, round-2 spot check at 19:58–20:10).
+(first rehearsal at 17:00, re-rehearsal of the fixed program at 18:32, round-2 spot check at 19:58–20:10) and the LP-lock run in
+`docs/burnkeeper/evidence/devnet-lock-2026-10-10/` (21:38–22:08: both programs upgraded, pair 6 graduated + locked + registered +
+claimed, a LaunchLab coin migrated with 100 % of its LP locked to FEE_KEYS and claimed). The lock program's source is not public: the
+LiteSVM suites use a TEST-ONLY stand-in (`mocks/cpmm_lock_mock`) built to the SDK's account orders and the on-chain
+LockedCpLiquidityState layout; the devnet run exercises the real program.

@@ -60,6 +60,16 @@ pub mod burn_receipts {
         instructions::register_pool::handle_register_pool(ctx)
     }
 
+    /// LAUNCHPAD-PATH §35: record the coin's permanent LP lock position (Fee Key held by the FEE_KEYS PDA). Permissionless, once.
+    pub fn register_fee_key(ctx: Context<RegisterFeeKey>) -> Result<()> {
+        instructions::lock_fees::handle_register_fee_key(ctx)
+    }
+
+    /// LAUNCHPAD-PATH §35: collect the locked LP's fees; SOL 80 % burn pool / 20 % operator treasury (compiled), coin side burned.
+    pub fn claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -> Result<()> {
+        instructions::lock_fees::handle_claim_lock_fees(ctx, lp_fee_amount)
+    }
+
     /// Registration policy 2 (2026-10-10): the CPMM pool pair_curve's `graduate` created for this token (src/pair_curve.rs).
     pub fn register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
         instructions::register_pair_pool::handle_register_pair_pool(ctx)

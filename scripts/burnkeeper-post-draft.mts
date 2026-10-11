@@ -143,11 +143,17 @@ function main(): void {
     const ix = readJson<PlatformIndexJson>(path.join(platformDir, "index.json"));
     if (!ix) { console.error(`no index.json in ${platformDir} (pass --platform-dir=…)`); process.exit(2); }
     const receiptsByTicker: Record<string, ReceiptJson[]> = {};
-    for (const t of ix.tokens) receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
+    const lpClaims: { ticker: string; at: string; line: string }[] = [];
+    for (const t of ix.tokens) {
+      receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
+      // LP locked forever (2026-10-10): the coin's last claim_lock_fees receipt line, from its status.json
+      const last = readJson<{ lp?: { lastClaim?: { at: string; line: string } | null } | null }>(path.join(platformDir, "t", t.ticker, "status.json"))?.lp?.lastClaim;
+      if (last) lpClaims.push({ ticker: t.ticker, at: last.at, line: last.line });
+    }
     const day = args.get("date") ?? new Date(now).toISOString().slice(0, 10);
     // footer: the latest registry snapshot on Arweave (status/status.json, written by the keeper every cycle; trust ops 2026-10-10)
     const snap = snapshotLine(readJson<{ snapshot?: { date: string; sha256: string; arweaveTxId: string } | null }>(path.join(platformDir, "status", "status.json"))?.snapshot ?? null);
-    emit([platformDailyText({ index: ix, receiptsByTicker, day, site }), snap].filter(Boolean).join("\n"), `platform · ${day}`);
+    emit([platformDailyText({ index: ix, receiptsByTicker, day, site, lpClaims }), snap].filter(Boolean).join("\n"), `platform · ${day}`);
     return;
   }
 

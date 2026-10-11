@@ -2,7 +2,8 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import { LAUNCHLAB_PROGRAM, launchLabPoolId, WSOL_MINT } from "@/lib/burnKeeper/launchlab";
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
-import { CURVE_FEES, POST_GRADUATION_FEES, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
+import { CURVE_FEES, POST_GRADUATION_FEES, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, LP_LOCKED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
+import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
 import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
 
@@ -106,7 +107,7 @@ export interface LaunchBundle {
   rules: { text: string; sha256: string; sha12: string; statement: string; mode: string };
   /** feePda = the burn pool = LaunchLab's recorded creator; feeWsol = its WSOL ATA, where the program's claim of curve fees lands. */
   addresses: { tokenConfig: string; feePda: string; feeWsol: string; vault: string | null; poolId: string; platformId: string; configId: string };
-  allocation: { supply: string; curve: string; locked: string; reserve: string; vestDays: number | null; cliffDays: number | null; lpBurnedPct: number; teamAllocationPct: 0 };
+  allocation: { supply: string; curve: string; locked: string; reserve: string; vestDays: number | null; cliffDays: number | null; /** 0 since 2026-10-10: the LP is locked, not burned */ lpBurnedPct: number; /** 100: LP locked forever (owner decision 2026-10-10) */ lpLockedPct: number; teamAllocationPct: 0 };
   fees: { curve: FeeSplit; postGraduation: FeeSplit; creatorSliceBps: 0; sentence: string; devFeeWallet: string | null };
   /** LaunchLab's recorded creator = the burn program's fee PDA for the mint (review finding H-2). The human creator pays and signs; the keeper only pays gas. */
   burnPoolAuthority: string;
@@ -201,11 +202,11 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
     creator: input.creator, mint, mintSecretKey: kp ? base58Encode(kp.secretKey) : null, ticker: input.ticker, name: input.name.trim(), description,
     rules: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule), mode: locked.mode },
     addresses: { tokenConfig: init.tokenConfig, feePda, feeWsol: pool.feeWsol, vault, poolId: create.poolId, platformId: deps.launchLab.platformId, configId: create.configId },
-    allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), vestDays: alloc.vestDays, cliffDays: alloc.cliffDays, lpBurnedPct: LP_BURNED_PCT, teamAllocationPct: 0 },
+    allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), vestDays: alloc.vestDays, cliffDays: alloc.cliffDays, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, teamAllocationPct: 0 },
     fees: { curve: CURVE_FEES, postGraduation: POST_GRADUATION_FEES, creatorSliceBps: CREATOR_FEE_SLICE_BPS, sentence: feeSplitSentence(), devFeeWallet: deps.devFeeWallet },
     burnPoolAuthority,
     transactions: [{ label: "initialize_token + LaunchLab create" + (Number(input.firstBuySol) > 0 ? " + first buy" : ""), signers: ["creator", "mint"], instructions: [...init.instructions, ...create.instructions] }],
-    notes: [...create.notes, `LaunchLab's recorded creator is the burn program's fee PDA ${burnPoolAuthority} (its WSOL ATA ${pool.feeWsol} receives the claimed curve fees), not the human creator and not the keeper — the keeper only pays gas; the creator-fee slot pays the burn pool 100% (owner, 2026-10-09; review finding H-2)`, `LP burned at graduation: ${LP_BURNED_PCT}% (platform config, not creator-configurable); team allocation 0%`, "the first burn needs fee income or a seed deposit into the burn pool; anyone can deposit, nobody can withdraw", "no referral code, fee discount or hidden parameter exists: every parameter is in rules.json"],
+    notes: [...create.notes, `LaunchLab's recorded creator is the burn program's fee PDA ${burnPoolAuthority} (its WSOL ATA ${pool.feeWsol} receives the claimed curve fees), not the human creator and not the keeper — the keeper only pays gas; the creator-fee slot pays the burn pool 100% (owner, 2026-10-09; review finding H-2)`, `${LP_POLICY_LINE}: ${LP_LOCKED_PCT}% of the graduation LP locked with Raydium's LP lock and its Fee Key owned by the burn program (platform config, not creator-configurable); team allocation 0%`, "the first burn needs fee income or a seed deposit into the burn pool; anyone can deposit, nobody can withdraw", "no referral code, fee discount or hidden parameter exists: every parameter is in rules.json"],
   };
 }
 

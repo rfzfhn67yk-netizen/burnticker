@@ -125,7 +125,7 @@ export async function buildPairCurveLaunch(pair: PairBundles, creator: string, d
     version: "burnticker.pair-curve-launch/v1", ready: pending.length === 1, pending, badge: PAIR_CURVE_BADGE, pairId: pair.pairId, pair: pairAddress.toBase58(), vault: vault.toBase58(),
     mints: { a: mintA.toBase58(), b: mintB.toBase58() },
     params: { virtualSolLamports: p.virtualSolLamports.toString(), virtualTokenAmount: p.virtualTokenAmount.toString(), curveSupply: p.curveSupply.toString(), reserveSupply: (TOTAL_SUPPLY - p.curveSupply).toString(), targetRaiseLamports: p.targetRaiseLamports.toString(), minSideShareBps: p.minSideShareBps, deadline: p.deadline },
-    fees: "100 bps on every curve trade: 25 bps to the developer wallet, 75 bps to the traded coin's burn pool. After graduation the CPMM pools pay no creator fee (public initialize); all LP is burned.",
+    fees: "100 bps on every curve trade: 25 bps to the developer wallet, 75 bps to the traded coin's burn pool. After graduation the CPMM pools pay no creator fee (public initialize); the LP is locked forever (lock_lp) and its fees fund the burn: 80% to the coin's burn pool, 20% to the operator, fixed in code.",
     transactions: txs,
     notes: [
       `both or neither: graduation needs ${p.targetRaiseLamports} lamports combined with each side ≥ ${p.minSideShareBps / 100} % of it before ${new Date(p.deadline * 1000).toISOString()}; otherwise the pair voids and every holder can sell back on the curve`,

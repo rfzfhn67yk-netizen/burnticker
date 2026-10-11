@@ -114,3 +114,31 @@ wallet to "the operator of burnticker.com" rather than to a person. The identity
 the entity, when formed, becomes the named party on /burnticker/operator. Nothing else about the trust pack changes: the wallets,
 the never-buys monitor, the reviews, the bounty and the verified build are unchanged. Tests pin the absence of the name on the
 operator line and in generated posts.
+
+## 2026-10-10 — LP locked forever, its fees fund the burn (reverses 2026-10-09 "LP: all graduation LP is burned")
+
+Owner: *"do what you recommend"* (after *"if 80% of the fees get burned as part of the program, that's not bad"*), ~20:55 Denver. For
+every platform coin and for `pair_curve`: graduation LP is **100 % permanently locked** with Raydium's LP lock (Burn & Earn; LaunchLab
+`platformScale` 1,000,000 / `creatorScale` 0 / `burnScale` 0; pair coins through the permissionless `lock_lp`), never withdrawable.
+The Fee Key NFT is owned by the burn_receipts PDA `["fee_keys"]` (the platform's lock-NFT wallet), not a person. A permissionless
+`claim_lock_fees` collects the LP fees: the SOL side goes **80 % to the coin's burn pool** (fee PDA `["fee", mint]`) and **20 % to the
+operator treasury** (the Squads vault); the coin side is burned. `LOCK_FEE_BURN_BPS` 8,000 / `LOCK_FEE_OPERATOR_BPS` 2,000 are
+compiled constants: no admin key, no config field. `initialize_token` and every buyback crank refuse a platform whose lock-NFT wallet or
+LP scales differ. Curve fees unchanged (Raydium 25 / Burnticker 25 / burn pool 50 bps); the 0.05 SOL launch fee unchanged. The mainnet
+build has no operator treasury compiled in yet: until the owner pins the vault, mainnet claims refuse (`TreasuryNotPinned`) and the fees
+stay in the lock.
+
+| Per swap after graduation (CPMM tier 0, 25 bps trade fee) | bps of volume | goes to |
+|---|---|---|
+| LP fees (84 % of the trade fee) | 21 | the locked LP's Fee Key → `claim_lock_fees` |
+| · 80 % of the LP fees | 16.8 | the coin's burn pool → bought back and burned |
+| · 20 % of the LP fees | 4.2 | the operator treasury (Squads vault) |
+| RAY buyback (12 % of the trade fee) | 3 | Raydium |
+| Raydium treasury (4 % of the trade fee) | 1 | Raydium |
+| Creator fee (5 bps, less Raydium's 5 % share) | 4.75 | the coin's burn pool → bought back and burned |
+| **Toward the burn, per swap** | **≈ 21.55** | (4.75 before this decision) |
+
+Plainly: the operator now earns 20 % of every coin's post-graduation LP fees (4.2 bps of volume), on top of the 25 bps developer
+slice on the curve; it is on the trust page, in the fee tables and on `/fees/ledger`. Each coin's lock program, Fee Key and claims are on
+its page, in `/v1` and the SDK; `.well-known/burnticker.json` names the lock per cluster. The pre-registered review checklist carries a
+dated erratum (not an edit). A fresh blind review and the verified-build table follow the program change.

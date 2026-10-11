@@ -5,8 +5,8 @@ import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 /**
  * THE AUTO-GENERATED COIN TEXT (2026-10-10, the owner thinks in sentences): from the LOCKED RULE, by deterministic templates — no model —
  * a name, a ticker, a one-liner ("burns when the Rays win") and a 3–4 sentence paragraph: what it tracks, exactly when and how much it
- * burns, the settlement source and its cross-read, what happens on the other outcome, the end, and "Creator earns nothing; all LP
- * burned." Every template is built from words the copy lint (config/launch/copy-lint.json) allows; test/burntickerDescribe.test.ts
+ * burns, the settlement source and its cross-read, what happens on the other outcome, the end, and "Creator earns nothing; LP locked
+ * forever, its fees fund the burn." (LP policy: owner decision 2026-10-10) Every template is built from words the copy lint (config/launch/copy-lint.json) allows; test/burntickerDescribe.test.ts
  * generates the text for every fixture rule and lints it.
  *
  *   flavour   "$RAYS26 — burns when the Rays win."         editable on the create screen
@@ -44,7 +44,7 @@ export interface DescribeCtx {
 export type WindowKind = "season" | "post" | "next" | "perpetual" | "one-shot";
 export interface CoinText { name: string; ticker: string; oneLiner: string; flavour: string; ruleBlock: string; windowSentence: string; windowKind: WindowKind; badge: string; paragraph: string; shape: "recurring" | "one-shot" }
 
-const CLOSER = "Creator earns nothing; all LP burned.";
+const CLOSER = "Creator earns nothing; LP locked forever, its fees fund the burn.";
 const BURN_DOWN = "it burns down whatever is left over four weeks and retires";
 export const PERPETUAL_SENTENCE = "No end date — this coin does not retire.";
 /** One pattern per window kind; a description matches exactly one of them, exactly once (test/burntickerDescribe.test.ts). */

@@ -62,4 +62,8 @@ pub enum PairError {
     NotStuck,
     #[msg("an account passed does not match the pair")]
     AccountMismatch,
+    #[msg("lock_lp: the side has no pool yet, or its LP is already locked")]
+    NothingToLock,
+    #[msg("lock_lp: the lock program did not leave the expected lock (LP moved, Fee Key held by FEE_KEYS, state account)")]
+    LockMismatch,
 }

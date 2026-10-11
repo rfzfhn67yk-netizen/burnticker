@@ -20,7 +20,8 @@ mod off {
     pub const MINTS: usize = 12;
     pub const POOLS: usize = 76;
     pub const LP_SUPPLY_AT_CREATION: usize = 140;
-    pub const LP_BURNED: usize = 156;
+    /// lp_locked (named lp_burned before LAUNCHPAD-PATH §35; same offset): the LP pair_curve's lock_lp moved into the lock.
+    pub const LP_LOCKED: usize = 156;
     pub const CP_CONFIG: usize = 172;
     pub const VAULT: usize = 204;
     pub const MIN_LEN: usize = 236;
@@ -32,7 +33,7 @@ pub struct PairView {
     pub mints: [Pubkey; 2],
     pub pools: [Pubkey; 2],
     pub lp_supply_at_creation: [u64; 2],
-    pub lp_burned: [u64; 2],
+    pub lp_locked: [u64; 2],
     pub cp_config: Pubkey,
     pub vault: Pubkey,
 }
@@ -54,7 +55,7 @@ impl PairView {
             mints: [pk(&d, off::MINTS), pk(&d, off::MINTS + 32)],
             pools: [pk(&d, off::POOLS), pk(&d, off::POOLS + 32)],
             lp_supply_at_creation: [u64_at(&d, off::LP_SUPPLY_AT_CREATION), u64_at(&d, off::LP_SUPPLY_AT_CREATION + 8)],
-            lp_burned: [u64_at(&d, off::LP_BURNED), u64_at(&d, off::LP_BURNED + 8)],
+            lp_locked: [u64_at(&d, off::LP_LOCKED), u64_at(&d, off::LP_LOCKED + 8)],
             cp_config: pk(&d, off::CP_CONFIG),
             vault: pk(&d, off::VAULT),
         };

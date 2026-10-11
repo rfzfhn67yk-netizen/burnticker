@@ -5,13 +5,14 @@ import type { UnsignedTx } from "@/lib/burnticker/transactions";
 import type { VerifyResult } from "@/lib/burnticker/verify";
 import type { Backtest } from "@/lib/burnticker/oracle/backtest";
 import type { ReceiptJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
+import type { LpLockJson, LpLockPolicyJson } from "@/lib/burnticker/lockFees";
 
 /**
  * The public API's JSON shapes, as the SDK returns them. The OpenAPI document (GET /api/burnticker/v1/openapi.json) is the
  * language-neutral version of the same contract; the route tests validate every response against it.
  */
 
-export type { BurnRule, RuleMode, FeeSplit, SerializedIx, UnsignedTx, VerifyResult, Backtest, ReceiptJson, TokenStatusJson };
+export type { BurnRule, RuleMode, FeeSplit, SerializedIx, UnsignedTx, VerifyResult, Backtest, ReceiptJson, TokenStatusJson, LpLockJson, LpLockPolicyJson };
 
 /** One resolution source (GET /catalogue). */
 export interface SourceCard {
@@ -64,7 +65,7 @@ export interface LaunchReview {
   /** The exact receipt format every burn of this coin will write on chain. */
   receiptFormat: string;
   addresses: { tokenConfig: string; feePda: string; vault: string | null; poolId: string; platformId: string; configId: string };
-  allocation: { supply: string; curve: string; locked: string; reserve: string; vestDays: number | null; cliffDays: number | null; lpBurnedPct: number; teamAllocationPct: 0 };
+  allocation: { supply: string; curve: string; locked: string; reserve: string; vestDays: number | null; cliffDays: number | null; lpBurnedPct: number; /** since 1.8.0: 100 (LP locked forever; lpBurnedPct is 0) */ lpLockedPct?: number; teamAllocationPct: 0 };
   fees: { curve: FeeSplit; postGraduation: FeeSplit; creatorSliceBps: 0; sentence: string; devFeeWallet: string | null };
   /** LaunchLab's recorded creator: the burn program's fee PDA for the mint (never a person, never the keeper). */
   burnPoolAuthority: string;
@@ -81,8 +82,10 @@ export interface ServerVerification extends VerifyResult { receipt: ReceiptJson;
 export interface Trust {
   generatedAt: string; cluster: string; powers: { schema: string; placeholder: boolean; powers: { id: string; power: string; holder: string | null; holderKind: string; timelock: string | null; sunset: string | null; canDo: string[]; cannotDo: string[] }[] };
   operator: { can: string[]; cannot: string[]; placeholder: boolean };
-  fees: { designed: { curve: FeeSplit; postGraduation: FeeSplit; devFeeBps: number; lpBurnedPct: number; creatorCashBps: 0; teamAllocationPct: 0 }; live: { platformId: string; found: boolean; readAt: string; error: string | null; fields: Record<string, { designed: string; live: string; matches: boolean }> | null } };
+  fees: { designed: { curve: FeeSplit; postGraduation: FeeSplit; devFeeBps: number; lpBurnedPct: number; lpLockedPct?: number; lpFeeSplit?: { burnPoolBps: number; operatorBps: number; ofLpBps: { burnPool: number; operator: number } }; creatorCashBps: 0; teamAllocationPct: 0 }; live: { platformId: string; found: boolean; readAt: string; error: string | null; fields: Record<string, { designed: string; live: string; matches: boolean }> | null } };
   program: { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[] }; attesters: unknown[]; audit: unknown; statements: string[]; cannot: string[]; rpcConfigured: boolean; stubs: string[];
+  /** since 1.8.0: LP locked forever — the lock program, the fee-keys PDA (Fee Key owner), the operator treasury, the compiled 80/20 split. */
+  lpLock?: LpLockPolicyJson;
 }
 
 /** One decoded program event (Anchor emit_cpi), from a confirmed transaction. */

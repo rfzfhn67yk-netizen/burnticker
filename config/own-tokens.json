@@ -13,7 +13,7 @@
       "chain": "solana",
       "address": null,
       "status": "planned",
-      "note": "The platform's mainnet rehearsal coin (a throwaway under the real platform config to prove fee routing and burns; LP burned; not for trading). Set address to the mint when it is created. Listed on the trust page under rehearsals."
+      "note": "The platform's mainnet rehearsal coin (a throwaway under the real platform config to prove fee routing and burns; LP locked forever; not for trading). Set address to the mint when it is created. Listed on the trust page under rehearsals."
     }
   ]
 }

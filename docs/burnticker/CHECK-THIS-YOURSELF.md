@@ -18,6 +18,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | burn_receipts | `cancel_registration_policy` | config_authority | **none** | None. |
 | burn_receipts | `check_pool_health` | anyone | **none** | None. |
 | burn_receipts | `claim_launchlab_creator_fee` | anyone | **fees into the burn pool** | LaunchLab creator vault (fee PDA, WSOL) → the fee PDA's WSOL account. |
+| burn_receipts | `claim_lock_fees` | anyone | **the locked LP's fees → 80 % to the burn pool, 20 % to the operator treasury (compiled); the coin side burned** | Raydium lock (accrued LP fees) → FEE_KEYS → fee PDA (80 % of the SOL) and OPERATOR_TREASURY (20 %); the coin side is burned. |
 | burn_receipts | `clear_cranker_allowlist` | platform_authority_or_listed_cranker | **none** | None. |
 | burn_receipts | `crank_buyback` | anyone | **burn pool SOL → swap → every token received is burned** | Fee PDA SOL → its WSOL account → CPMM pool vault; tokens received → burned (supply reduced). |
 | burn_receipts | `crank_no_units` | anyone | **none** | None. |
@@ -26,6 +27,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | burn_receipts | `initialize_token` | anyone + creator + mint_keypair | **rent only (the caller pays it)** | Payer → fee PDA: the reserve only (rent for the PDA). |
 | burn_receipts | `propose_attesters` | config_authority | **none** | None. |
 | burn_receipts | `propose_cap_raise` | platform_authority | **none** | None. |
+| burn_receipts | `register_fee_key` | anyone | **rent only (the caller pays it)** | Payer → the record's rent. |
 | burn_receipts | `register_pair_pool` | anyone | **none** | None. |
 | burn_receipts | `register_pool` | anyone | **none** | None. |
 | burn_receipts | `renounce_admin` | config_authority | **none** | None. |
@@ -37,18 +39,20 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | pair_curve | `buy` | trader | **the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault** | Buyer → SOL vault (curve cost + fee); token vault → buyer (tokens). |
 | pair_curve | `claim_developer_fee` | anyone | **the accrued 25 bps → the developer wallet fixed at init** | SOL vault → developer wallet (the accrual only). |
 | pair_curve | `close_pair` | anyone | **voided pairs only: residue → burn pools; account rent → the creator who paid it** | Developer accrual → developer wallet (or the burn pools); SOL vault residue → burn pools; account rent → the creator. |
-| pair_curve | `graduate` | anyone | **curve SOL → the Raydium pool (LP burned); leftover tokens burned; the side's escrowed fees and residue → its burn pool** | SOL vault → its WSOL account → the side's CPMM pool (and CPMM's create-pool fee + rents); token vault → the pool; LP → burned; leftover tokens → burned; residue → the side's burn pool. |
+| pair_curve | `graduate` | anyone | **curve SOL → the Raydium pool (its LP then locked forever by lock_lp); leftover tokens burned; the side's escrowed fees and residue → its burn pool** | SOL vault → its WSOL account → the side's CPMM pool (and CPMM's create-pool fee + rents); token vault → the pool; LP → the vault's LP account (until lock_lp); leftover tokens → burned; residue → the side's burn pool. |
 | pair_curve | `init_pair` | anyone + pair_creator | **rent only (the caller pays it)** | Payer → the Pair, the two token vaults (rent) and the SOL vault's rent minimum. |
+| pair_curve | `lock_lp` | anyone | **the pool's LP → Raydium's lock, forever (the Fee Key held by burn_receipts)** | Vault LP → Raydium's lock (forever); Fee Key → FEE_KEYS; emptied LP account's rent → the side's burn pool; cranker → the lock's rents. |
 | pair_curve | `sell` | trader | **the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault** | Seller → token vault (tokens); SOL vault → seller (proceeds less fee, or the redemption). |
 | pair_curve | `void_pair` | anyone | **none** | None. |
 
 What does not exist (the registers' own list):
 
 - (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned); tokens leave only by burn.
-- (burn_receipts) No account is ever closed, so no rent is ever refunded to anyone; it stays where it is.
+- (burn_receipts) No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it.
 - (burn_receipts) No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.
 - (burn_receipts) No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.
-- (burn_receipts) No fee is charged by the program, so there is no fee to change.
+- (burn_receipts) No fee is charged by the program, so there is no fee to change. The LP-fee split of claim_lock_fees (80 % burn pool / 20 % operator) and the operator treasury are compiled constants: no instruction, config field or key changes them (LAUNCHPAD-PATH §35).
+- (burn_receipts) No instruction moves the locked LP principal or the Fee Key NFT: the lock is Raydium's permanent lock, and FEE_KEYS signs only collect_cp_fees inside claim_lock_fees.
 - (burn_receipts) No instruction updates the burn rule (RuleParams), the feed id, the memo text, the rules hash, the mint, the creator record or the registered pool.
 - (burn_receipts) No instruction edits or deletes a reading; readings are append-only and quorum-checked.
 - (burn_receipts) The quorum can never be lowered (nor exceed 3), the attester set can never be smaller than the quorum, and one proposal must keep at least `quorum` of the current keys and add fewer new keys than the new quorum; keys are added only on the strength of kept keys ≥ 7 days old.
@@ -56,7 +60,7 @@ What does not exist (the registers' own list):
 - (burn_receipts) No PlatformConfig is required: without one, the hard-coded default cap (25 SOL until 2027-10-01) applies, so a lost or finalised upgrade authority cannot wedge buybacks.
 - (pair_curve) No admin, authority, owner or operator field exists in the program; no instruction takes a privileged signer after init_pair.
 - (pair_curve) No instruction updates a pair's parameters (virtual reserves, curve supply, target, minimum share, deadline, fee, fee recipients, AmmConfig) after init_pair.
-- (pair_curve) No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts, LP burned in the same instruction) and residue to the burn pools.
+- (pair_curve) No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts; the LP is then locked forever by lock_lp, LAUNCHPAD-PATH §35) and residue to the burn pools.
 - (pair_curve) No pause or freeze exists. Buys end at the deadline; nothing can stop sells on an open or voided pair.
 - (pair_curve) No mint authority survives init_pair and no freeze authority ever exists; the program never mints after init.
 - (pair_curve) The pair program holds the 75 bps burn share only in escrow: it reaches the side's burn_receipts fee PDA when the pool is created, or goes back to that side's holders on a void.
@@ -88,8 +92,8 @@ Upgrade authority (outside the programs' interfaces — the one power above ever
 
 Powers outside the programs that they depend on:
 
-- (burn_receipts) **LaunchLab platform admin (Raydium LaunchLab PlatformConfig, outside burn_receipts)** — holder: the key that created the LaunchLab platform — not transferable (no admin-change instruction; the platform PDA is seeded by the admin key). updatePlatformConfig: fee rate and wallets, cpConfigId, platformCpCreator, LP lock/burn scales (migrateCpLockNftScale), vesting, curve rules — for launches that have not migrated yet.
-- (pair_curve) **Raydium CPMM admin (outside the program)** — holder: Raydium. Before the first graduate: graduation can fail (InsufficientPoolSol / CPMM refusal) and the pair voids at its deadline — every holder can sell back. Between the two sides: the second side waits; after 3 days its holders may sell back on its curve. A hostile CPMM upgrade cannot re-assign the vault or its token accounts or take more than the pool costs (post-CPI checks; tests/lifecycle.rs with mocks/evil_cpmm_init).
+- (burn_receipts) **LaunchLab platform admin (Raydium LaunchLab PlatformConfig, outside burn_receipts)** — holder: the key that created the LaunchLab platform — not transferable (no admin-change instruction; the platform PDA is seeded by the admin key). updatePlatformConfig: fee rate and wallets — including platformLockNftWallet, which receives every migration's Fee Key (LAUNCHPAD-PATH §35: burn_receipts' FEE_KEYS PDA) — cpConfigId, platformCpCreator, LP lock/burn scales (migrateCpLockNftScale; Burnticker: 1,000,000 / 0 / 0, all LP locked), vesting, curve rules — for launches that have not migrated yet.
+- (pair_curve) **Raydium CPMM admin (outside the program)** — holder: Raydium. Before the first graduate: graduation can fail (InsufficientPoolSol / CPMM refusal) and the pair voids at its deadline — every holder can sell back. Between the two sides: the second side waits; a side Raydium blocks for 3 days after the commit, or any side still missing 30 days after it, is refunded pro rata to its holders. A hostile CPMM upgrade cannot re-assign the vault or its token accounts or take more than the pool costs (post-CPI checks; tests/lifecycle.rs with mocks/evil_cpmm_init).
 - (pair_curve) **LaunchLab platform admin (outside the program)** — holder: the key that created the pinned LaunchLab platform. None on an existing pair: init_pair copies the developer wallet and the cpConfigId (from the TokenConfigs' pins) into the Pair.
 
 ## 3. What is locked
@@ -98,7 +102,7 @@ Powers outside the programs that they depend on:
 - **Readings and receipts** — Readings are append-only and quorum-checked on chain; no instruction edits or deletes one. Off chain, the registry refuses updates and deletes with SQL triggers. *Where:* docs/burn-receipts/powers-register.json → submit_reading
 - **Where a burn pool can trade** — The pool is registered once (provenance-checked) and frozen; replacing a dead pool needs 7 days of continuous recorded untradeability and the same checks. *Where:* docs/burn-receipts/powers-register.json → register_pool, replace_pool
 - **Supply** — Neither program holds a mint authority after creation; pair coins have their mint authority revoked inside init_pair and no freeze authority ever. The only token instruction either program runs on a coin is Burn. *Where:* docs/burn-receipts/powers-register.json, docs/burn-receipts/pair-curve-powers-register.json → non_powers
-- **Liquidity** — LP is burned at graduation: 100% on LaunchLab migrations under the platform config, 100% inside pair_curve's graduate. *Where:* docs/burn-receipts/pair-curve-powers-register.json → graduate; src/lib/burnticker/fees.ts LP_BURNED_PCT
+- **Liquidity** — LP is locked forever at graduation: 100% on LaunchLab migrations under the platform config and 100% through pair_curve's lock_lp, with Raydium's LP lock (never withdrawable). The Fee Key is owned by the burn_receipts fee-keys PDA; the permissionless claim_lock_fees pays 80% of the SOL-side fees to the coin's burn pool and 20% to the operator treasury, compiled constants; the coin side is burned. *Where:* docs/burn-receipts/powers-register.json → claim_lock_fees; docs/burn-receipts/pair-curve-powers-register.json → lock_lp; src/lib/burnticker/lockFees.ts
 - **A pair's terms** — Curve parameters, the combined raise that graduates the pair, the minimum share, the deadline, the fee and the fee recipients are fixed at init_pair; pair_curve has no admin field at all. *Where:* docs/burn-receipts/pair-curve-powers-register.json → non_powers
 - **Coin metadata** (arweave at launch (built; first upload pending)) — Each coin's metadata JSON (name, ticker, the generated description byte for byte, the image) and its art are uploaded to Arweave at launch and the token URI is the Arweave URL; LaunchLab creates the metadata with is_mutable = false, and a launch whose upload fails is refused (src/lib/burnticker/pin.ts). Not exercised yet: the Irys client packages and the upload payer are owner steps, and the devnet rehearsal coins predate it, so their metadata is server-hosted. The rule, the mint and the burns never depended on it. *Where:* config/burnticker/transparency.json → trustPack.metadataUri
 
@@ -116,7 +120,8 @@ Powers outside the programs that they depend on:
 - **no systemd unit** (not built) — deploy/ has a unit for the $DEFICIT keeper only; the multi-token Burnticker keeper and the hourly audit timer have no systemd units yet. *Where:* config/burnticker/transparency.json → limitations.no-systemd-unit
 - **signed operator message** (not done) — The operator's signed statement (a message signed by the developer fee wallet, verifiable on /burnticker/operator) is not signed yet: the mainnet wallet does not exist. *Where:* config/burnticker/transparency.json → limitations.signed-operator-message
 - **paircurve findings open** (not done) — The two pair_curve reviews (2026-10-10) found High-severity issues (close_pair could strand the burn-pool registration, a pre-funded pool vault or a pre-created token account could block graduation or init_pair, an executable developer wallet could freeze trades). All findings are fixed or accepted in writing (docs/burn-receipts/CHANGELOG.md, code fa8627a4), the reviewers' exploit tests now assert each attack fails, and the fixed program was re-rehearsed on devnet (docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md §R2). An independent re-check confirmed the fixes and found five residuals (a post-deadline curve-sell race, a stuck-side lock without an AmmConfig signal, a close blocked by an executable developer wallet, the upgrade script's hash check, an unsynced WSOL donation); all fixed in fcda14eb and spot-checked on devnet (§R3). Not yet done: a review of the round-2 code. Pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until it is done. *Where:* config/burnticker/transparency.json → limitations.paircurve-findings-open
-- **Mainnet rehearsal coin $REHEARSAL** (not done) — $REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP burned; not for trading. Its mint and the date go here when it happens; until then: not done. *Where:* config/burnticker/transparency.json → rehearsals
+- **operator treasury mainnet** (not done) — The operator treasury is not compiled into the mainnet burn_receipts build yet (the devnet build pays the devnet Squads vault). Until the owner compiles the mainnet vault in, every mainnet claim_lock_fees refuses (TreasuryNotPinned) and the LP fees stay in the lock; nothing is lost, nothing is claimed. *Where:* config/burnticker/transparency.json → limitations.operator-treasury-mainnet
+- **Mainnet rehearsal coin $REHEARSAL** (not done) — $REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP locked forever; not for trading. Its mint and the date go here when it happens; until then: not done. *Where:* config/burnticker/transparency.json → rehearsals
 
 ## 5. Is the deployed code this code?
 
@@ -124,10 +129,10 @@ Kind: **interim-local**. INTERIM: built with cargo build-sbf on the operator's M
 
 | Program | Build | Features | Executable hash | Deployed (devnet) |
 |---|---|---|---|---|
-| burn_receipts | mainnet | default | `3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f` | — |
-| burn_receipts | devnet | devnet | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` = build |
-| pair_curve | mainnet | default | `9ef38e0d8954f6c8242d8157dccdc8a2b169dbd987b13f588c5096ee280ec006` | — |
-| pair_curve | devnet | devnet | `91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9` | `91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9` = build |
+| burn_receipts | mainnet | default | `088c0b1d5967a0ede42945abb916532e41835a5ba725ecb6439f620f5347024f` | — |
+| burn_receipts | devnet | devnet | `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151` | `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151` = build |
+| pair_curve | mainnet | default | `8587c45adf033bfb0d45d7b7ab36ed224fe87a38a279af98316b440971ab3ff0` | — |
+| pair_curve | devnet | devnet | `e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` | `e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` = build |
 
 How to reproduce: docs/burnticker/VERIFIED-BUILD.md.
 

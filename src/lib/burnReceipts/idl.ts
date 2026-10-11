@@ -778,6 +778,235 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "args": []
     },
     {
+      "name": "claim_lock_fees",
+      "docs": [
+        "LAUNCHPAD-PATH §35: collect the locked LP's fees; SOL 80 % burn pool / 20 % operator treasury (compiled), coin side burned."
+      ],
+      "discriminator": [
+        124,
+        239,
+        249,
+        173,
+        58,
+        218,
+        123,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_key",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  107,
+                  101,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_keys",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  107,
+                  101,
+                  121,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "operator_treasury",
+          "writable": true,
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "mint",
+          "writable": true
+        },
+        {
+          "name": "wsol_mint",
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "fee_keys_wsol",
+          "writable": true
+        },
+        {
+          "name": "fee_keys_token",
+          "writable": true
+        },
+        {
+          "name": "fee_nft_account",
+          "writable": true
+        },
+        {
+          "name": "locked_liquidity",
+          "writable": true
+        },
+        {
+          "name": "lock_program",
+          "address": "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE"
+        },
+        {
+          "name": "lock_authority",
+          "address": "3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH"
+        },
+        {
+          "name": "cpmm_program",
+          "address": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+        },
+        {
+          "name": "cpmm_authority"
+        },
+        {
+          "name": "pool_state",
+          "writable": true
+        },
+        {
+          "name": "lp_mint",
+          "writable": true
+        },
+        {
+          "name": "token_0_vault",
+          "writable": true
+        },
+        {
+          "name": "token_1_vault",
+          "writable": true
+        },
+        {
+          "name": "lock_lp_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "memo_program",
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "lp_fee_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "clear_cranker_allowlist",
       "discriminator": [
         245,
@@ -1740,6 +1969,120 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "register_fee_key",
+      "docs": [
+        "LAUNCHPAD-PATH §35: record the coin's permanent LP lock position (Fee Key held by the FEE_KEYS PDA). Permissionless, once."
+      ],
+      "discriminator": [
+        175,
+        155,
+        60,
+        49,
+        28,
+        172,
+        99,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_key",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  107,
+                  101,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_keys",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  95,
+                  107,
+                  101,
+                  121,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_state"
+        },
+        {
+          "name": "fee_nft_mint"
+        },
+        {
+          "name": "fee_nft_account"
+        },
+        {
+          "name": "locked_liquidity"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "register_pair_pool",
       "docs": [
         "Registration policy 2 (2026-10-10): the CPMM pool pair_curve's `graduate` created for this token (src/pair_curve.rs)."
@@ -1803,6 +2146,12 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         },
         {
           "name": "pair"
+        },
+        {
+          "name": "lp_lock_vault",
+          "docs": [
+            "exist (then nothing is locked)."
+          ]
         },
         {
           "name": "event_authority"
@@ -2370,6 +2719,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
   ],
   "accounts": [
     {
+      "name": "FeeKeyRecord",
+      "discriminator": [
+        46,
+        6,
+        200,
+        179,
+        123,
+        52,
+        23,
+        66
+      ]
+    },
+    {
       "name": "PlatformConfig",
       "discriminator": [
         160,
@@ -2541,6 +2903,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "FeeKeyRegistered",
+      "discriminator": [
+        144,
+        156,
+        252,
+        139,
+        235,
+        147,
+        138,
+        81
+      ]
+    },
+    {
       "name": "LaunchLabCreatorFeeClaimed",
       "discriminator": [
         238,
@@ -2551,6 +2926,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         74,
         246,
         143
+      ]
+    },
+    {
+      "name": "LockFeesClaimed",
+      "discriminator": [
+        62,
+        236,
+        105,
+        119,
+        94,
+        81,
+        57,
+        135
       ]
     },
     {
@@ -3094,6 +3482,31 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6068,
       "name": "NotPairPool",
       "msg": "the pool is not the pair_curve pool of this mint (Pair record, pair_curve PDA or pinned cpConfigId)"
+    },
+    {
+      "code": 6069,
+      "name": "TreasuryNotPinned",
+      "msg": "the operator treasury is not compiled into this build (mainnet placeholder): claim_lock_fees is disabled; the fees stay in the lock"
+    },
+    {
+      "code": 6070,
+      "name": "InvalidLockAccount",
+      "msg": "the account is not the lock program's LockedCpLiquidityState for this pool / Fee Key (owner, discriminator, PDA, pool or LP mint)"
+    },
+    {
+      "code": 6071,
+      "name": "FeeKeyNotHeld",
+      "msg": "the Fee Key NFT is not held by the program's fee_keys PDA"
+    },
+    {
+      "code": 6072,
+      "name": "LockNotMajority",
+      "msg": "the lock position holds no majority of the pool's LP"
+    },
+    {
+      "code": 6073,
+      "name": "FeeKeyMismatch",
+      "msg": "the Fee Key account, lock position or pool does not match this mint's registered record"
     }
   ],
   "types": [
@@ -3399,6 +3812,146 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "FeeKeyRecord",
+      "docs": [
+        "LAUNCHPAD-PATH §35: the coin's permanent LP lock (Raydium's CPMM lock program) and its Fee Key, held by the FEE_KEYS PDA.",
+        "Created once by register_fee_key; claim_lock_fees reads it and keeps the running totals. [\"fee_key\", mint]."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "docs": [
+              "The registered CPMM pool (TokenConfig.cpmm_pool at registration)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_nft_mint",
+            "docs": [
+              "The Fee Key NFT mint and the FEE_KEYS PDA's account holding it."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_nft_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "locked_liquidity",
+            "docs": [
+              "The lock program's LockedCpLiquidityState [\"locked_liquidity\", fee_nft_mint]."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "locked_lp_at_registration",
+            "type": "u64"
+          },
+          {
+            "name": "registered_at",
+            "type": "i64"
+          },
+          {
+            "name": "claims",
+            "type": "u32"
+          },
+          {
+            "name": "total_wsol_claimed",
+            "type": "u64"
+          },
+          {
+            "name": "total_to_burn_pool",
+            "type": "u64"
+          },
+          {
+            "name": "total_to_operator",
+            "type": "u64"
+          },
+          {
+            "name": "total_tokens_burned",
+            "type": "u64"
+          },
+          {
+            "name": "last_claim_at",
+            "type": "i64"
+          },
+          {
+            "name": "operator_pending",
+            "docs": [
+              "Operator share collected but not yet delivered (the treasury could not receive it yet), held as lamports of this account."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                56
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeKeyRegistered",
+      "docs": [
+        "register_fee_key: the coin's permanent LP lock and its Fee Key, now held by the FEE_KEYS PDA (LAUNCHPAD-PATH §35)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_nft_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_nft_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "locked_liquidity",
+            "type": "pubkey"
+          },
+          {
+            "name": "locked_lp",
+            "type": "u64"
+          },
+          {
+            "name": "registrar",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "InitializeTokenArgs",
       "type": {
         "kind": "struct",
@@ -3495,6 +4048,61 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "caller",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LockFeesClaimed",
+      "docs": [
+        "claim_lock_fees: what the lock paid out and where it went. to_burn_pool + to_operator = wsol_claimed; tokens_burned = the coin side."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_nft_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          },
+          {
+            "name": "wsol_claimed",
+            "type": "u64"
+          },
+          {
+            "name": "to_burn_pool",
+            "type": "u64"
+          },
+          {
+            "name": "to_operator",
+            "type": "u64"
+          },
+          {
+            "name": "tokens_burned",
+            "type": "u64"
+          },
+          {
+            "name": "operator_paid",
+            "docs": [
+              "Operator share delivered to the treasury by this claim (this claim's and any earlier pending share), and what still waits",
+              "in the FeeKeyRecord because the treasury could not receive it yet (below its rent-exempt minimum)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "operator_pending",
+            "type": "u64"
           }
         ]
       }

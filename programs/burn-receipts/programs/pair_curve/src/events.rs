@@ -60,13 +60,15 @@ pub struct SideGraduated {
     pub pool_sol: u64,
     pub pool_tokens: u64,
     pub lp_supply_at_creation: u64,
-    pub lp_burned: u64,
+    /// The LP CPMM minted to the vault (everything but its 100 never-minted units). It stays in the vault's LP account until lock_lp
+    /// locks it (LAUNCHPAD-PATH §35).
+    pub lp_minted: u64,
     pub tokens_burned: u64,
     /// The side's escrowed 75 bps burn share, paid to its burn pool now.
     pub burn_escrow_paid: u64,
     /// Rent refunds, rounding dust and donations above what the vault must keep, sent to this side's burn pool too.
     pub residue_lamports: u64,
-    /// Lamports someone had pre-funded into the pool's WSOL vault address (now pool liquidity, LP burned) — blind review 2 H-1.
+    /// Lamports someone had pre-funded into the pool's WSOL vault address (now pool liquidity) — blind review 2 H-1.
     pub prefunded_wsol: u64,
     /// True when this call completed the second side (status Graduated).
     pub pair_graduated: bool,
@@ -110,4 +112,18 @@ pub struct PairClosed {
     /// Developer accrual the wallet could not receive (executable, or the payment would leave it below rent), sent to the burn pools
     /// with the residue instead of blocking the close (re-check RC-5). Included in `residue_lamports`.
     pub dev_accrual_to_burn_pools: u64,
+}
+
+/// lock_lp: the side's LP moved into Raydium's CPMM lock forever; its Fee Key NFT is held by burn_receipts' FEE_KEYS PDA, whose
+/// claim_lock_fees splits the LP fees 80 % burn pool / 20 % operator (LAUNCHPAD-PATH §35).
+#[event]
+pub struct LpLocked {
+    pub pair: Pubkey,
+    pub side: u8,
+    pub cranker: Pubkey,
+    pub pool: Pubkey,
+    pub lp_amount: u64,
+    pub fee_nft_mint: Pubkey,
+    pub fee_nft_account: Pubkey,
+    pub locked_liquidity: Pubkey,
 }

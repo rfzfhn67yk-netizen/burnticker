@@ -3,6 +3,8 @@
 // the burn_receipts entrypoint count (item 1: 24, not 23), the "no market cap anywhere" UI rule (Burn Derby compares OTHER coins'
 // market caps as a rule input), and the devnet evidence's 2026-10-08 row (item 16: planned, not executed). These tests pin the copy to
 // the source so the numbers cannot drift again, and keep the pre-registered checklist immutable (corrections go in its erratum).
+// A second dated erratum (2026-10-10, owner decision) records that graduation LP is now LOCKED forever, not burned: its fees fund the
+// burn (80 % burn pool, 20 % operator, compiled) — the copy sentence moved from "burns 100 %" to "locks 100 %".
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -21,9 +23,11 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const BR = "programs/burn-receipts/programs/burn_receipts/src";
 const CHECKLIST = "docs/burnticker/reviews/checklist.md";
 const ERRATUM = "## Erratum 2026-10-10 (after the ChatGPT/Codex review)";
+/** Every dated erratum, in the order they were appended (each one after the last; the pre-registered text before the first never changes). */
+const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)"];
 /** sha256 of the pre-registered checklist exactly as reviewed (everything before the erratum). It must never change. */
 const CHECKLIST_PREREGISTERED_SHA256 = "7af9866eb64157d77205e63b34e4695aa9d1ecac6b12c4cbff58c5a068ff5f3b";
-const LP_SENTENCE = "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform burns 100 % at graduation";
+const LP_SENTENCE = "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation";
 const UI_RULE = "no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence";
 
 function walk(dir: string, exts: RegExp, acc: string[] = []): string[] {
@@ -34,11 +38,12 @@ function walk(dir: string, exts: RegExp, acc: string[] = []): string[] {
   return acc;
 }
 
-function erratumSection(): string {
+function erratumSection(heading = ERRATUM): string {
   const text = read(CHECKLIST);
-  const i = text.indexOf(ERRATUM);
-  assert.ok(i >= 0, `${CHECKLIST} must carry "${ERRATUM}"`);
-  return text.slice(i);
+  const i = text.indexOf(heading);
+  assert.ok(i >= 0, `${CHECKLIST} must carry "${heading}"`);
+  const next = ERRATA.map((h) => text.indexOf(h)).filter((j) => j > i).sort((a, b) => a - b)[0];
+  return text.slice(i, next ?? text.length);
 }
 
 describe("checklist: pre-registered text is immutable, corrections go in the erratum", () => {
@@ -48,6 +53,17 @@ describe("checklist: pre-registered text is immutable, corrections go in the err
     assert.ok(i > 0, "erratum present");
     const before = text.slice(0, i).replace(/\n+$/, "\n");
     assert.equal(crypto.createHash("sha256").update(before).digest("hex"), CHECKLIST_PREREGISTERED_SHA256, "the pre-registered checklist text was edited — append to the erratum instead");
+  });
+  test("every dated erratum is present, once, in the order appended", () => {
+    const text = read(CHECKLIST);
+    const at = ERRATA.map((h) => text.indexOf(h));
+    assert.ok(at.every((i) => i > 0), JSON.stringify(at));
+    assert.deepEqual([...at].sort((a, b) => a - b), at);
+    for (const h of ERRATA) assert.equal(text.split(h).length, 2, `${h} appears once`);
+  });
+  test("the LP-lock erratum states the policy, the compiled split and the unchanged item-8 floor", () => {
+    const e = erratumSection(ERRATA[1]);
+    for (const re of [/100 % of the graduation LP is \*\*locked\*\*/, /\["fee_keys"\]/, /LOCK_FEE_BURN_BPS = 8000/, /LOCK_FEE_OPERATOR_BPS = 2000/, /TreasuryNotPinned/, /claim_lock_fees/, /our platform locks 100 % at graduation/, /16\.8 bps burn pool \+ 4\.2 bps/]) assert.match(e, re);
   });
 });
 
@@ -99,7 +115,7 @@ describe("burn_receipts entrypoint count matches the copy (review item 1)", () =
   }
   const n = programEntrypoints().length;
   test("lib.rs, the IDL and the Powers Register agree", () => {
-    assert.equal(n, 24, "24 entrypoints in the #[program] module today — update the copy below if this changes");
+    assert.equal(n, 26, "26 entrypoints in the #[program] module today (24 + register_fee_key + claim_lock_fees, LP locked forever) — update the copy below if this changes");
     assert.equal(BURN_RECEIPTS_IDL.instructions.length, n);
     assert.deepEqual([...BURN_RECEIPTS_IDL.instructions.map((x) => x.name)].sort(), [...programEntrypoints()].sort());
     assert.equal((JSON.parse(read("docs/burn-receipts/powers-register.json")) as { instructions: unknown[] }).instructions.length, n);
@@ -113,8 +129,8 @@ describe("burn_receipts entrypoint count matches the copy (review item 1)", () =
     const rows = section.split("\n").filter((l) => /^\| `[a-z_0-9]+` \|/.test(l));
     assert.equal(rows.length, n);
   });
-  test("the checklist erratum states the real count", () => {
-    assert.match(erratumSection(), new RegExp(`\\b${n} entrypoints\\b`));
+  test("the latest checklist erratum states the real count", () => {
+    assert.match(erratumSection(ERRATA[ERRATA.length - 1]), new RegExp(`\\b${n} entrypoints\\b`));
   });
 });
 

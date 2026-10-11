@@ -19,8 +19,8 @@ use crate::state::Pair;
 ///
 /// The FIRST call (status Open) is the decision: it requires the combined raise at target, each side at its minimum share and
 /// `now < deadline`, and moves the pair to Graduating — from that instant both curves are closed to buys and sells and the pair can no
-/// longer void, so the second side is committed. Each call then creates the CPMM pool of ITS side, burns 100 % of that pool's LP and
-/// every token the pool did not need. The call that completes the second side sets Graduated.
+/// longer void, so the second side is committed. Each call then creates the CPMM pool of ITS side and burns every token the pool did
+/// not need; the pool's LP stays in the vault's LP account until `lock_lp` locks it forever (LAUNCHPAD-PATH §35). The call that completes the second side sets Graduated.
 ///
 /// Why two transactions and not one: Solana caps a transaction's instruction trace at 64 (top level + every CPI). One side costs
 /// ~26 trace entries, ~35 if a griefer pre-funds the addresses CPMM creates (each create_account becomes transfer + allocate +
@@ -211,17 +211,8 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
     let lp = require_token_account_intact(&vault_lp, &vault.key(), &pool.lp_mint)?;
     require!(lp.checked_add(CPMM_LOCKED_LP) == Some(pool.lp_supply) && mint_supply(&lp_mint)? == lp, PairError::PoolMismatch);
 
-    // ---- burn 100 % of the LP, close the LP account, burn the tokens the pool did not need, close the WSOL account ----
-    token::burn(
-        CpiContext::new_with_signer(token::ID, token::Burn { mint: lp_mint.clone(), from: vault_lp.clone(), authority: vault.clone() }, &[vault_seeds]),
-        lp,
-    )?;
-    require!(mint_supply(&lp_mint)? == 0, PairError::PoolMismatch);
-    token::close_account(CpiContext::new_with_signer(
-        token::ID,
-        token::CloseAccount { account: vault_lp.clone(), destination: vault.clone(), authority: vault.clone() },
-        &[vault_seeds],
-    ))?;
+    // ---- the LP stays in the vault's LP account until lock_lp moves it into Raydium's CPMM lock (LAUNCHPAD-PATH §35: locked
+    // forever, never burned); burn the tokens the pool did not need, close the WSOL account ----
     if tokens_left > 0 {
         token::burn(
             CpiContext::new_with_signer(token::ID, token::Burn { mint: mint.clone(), from: token_vault.clone(), authority: vault.clone() }, &[vault_seeds]),
@@ -257,7 +248,7 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
     p.sol[s] = 0;
     p.burn_escrow[s] = 0;
     p.lp_supply_at_creation[s] = pool.lp_supply;
-    p.lp_burned[s] = lp;
+    p.lp_locked[s] = 0;
     p.pool_sol[s] = pool_sol;
     p.pool_tokens[s] = pool_tokens;
     p.tokens_burned[s] = tokens_left;
@@ -275,7 +266,7 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
         pool_sol,
         pool_tokens,
         lp_supply_at_creation: pool.lp_supply,
-        lp_burned: lp,
+        lp_minted: lp,
         tokens_burned: tokens_left,
         burn_escrow_paid,
         residue_lamports: residue.saturating_sub(burn_escrow_paid),
