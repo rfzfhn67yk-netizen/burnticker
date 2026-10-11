@@ -62,6 +62,12 @@
         "reportPath": "docs/burnticker/reviews/2026-10-11-pair-forward-blind.md"
       },
       {
+        "id": "pair-forward-recheck",
+        "reviewer": "a fresh Claude agent re-checking the pair-forward round-2 fixes: H-1 and the Lows closed, M-1 residual open (a losing side's attesters can withhold its losses), one new High (the 30-day unlink evidence could unlink a healthy open pair), one new Medium; exploit tests committed (#[ignore]d), round 3 in progress",
+        "status": "completed 2026-10-11; findings open",
+        "reportPath": "docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md"
+      },
+      {
         "id": "chatgpt-adversarial",
         "reviewer": "ChatGPT/Codex, adversarial PR review against the same pre-registered checklist (reviewed public commit 58d43eae: 2 High, 5 Medium new findings plus checklist mismatches and pair_curve residuals; each answered in docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md)",
         "status": "completed 2026-10-10",
