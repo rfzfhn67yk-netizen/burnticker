@@ -52,5 +52,8 @@ if (flag("dry-run")) {
   console.log(JSON.stringify({ dryRun: true, cluster, mint: r.mint, ticker, name, rulesSha256: loaded.sha256, imageBytes: png.length, imageSha256: sha256Hex(png), metadataJson: JSON.parse(json) }, null, 2));
   process.exit(0);
 }
+// literal specifiers so the public-tree publisher declares the Irys client (pin.ts loads it through variables to keep it out of the Next bundle)
+await import("@irys/upload").catch(() => die("the Irys client (@irys/upload) is not installed on this host: npm ci"));
+await import("@irys/upload-solana").catch(() => die("the Irys client (@irys/upload-solana) is not installed on this host: npm ci"));
 const uploader = uploaderFromEnv(process.env, cluster) ?? die("BURNTICKER_UPLOAD_PAYER is not set in this environment (the host's upload wallet)");
 pin(uploader).then((out) => { console.log(JSON.stringify({ cluster, mint: r.mint, ticker, name, rulesSha256: loaded.sha256, ...out, metadataJson: JSON.parse(out.metadataJson) }, null, 2)); }).catch((e) => die(`pin failed: ${(e as Error).message}`));
