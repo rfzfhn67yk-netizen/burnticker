@@ -20,8 +20,8 @@ describe("transparency.json", () => {
     const roles = cfg.wallets.map((w) => w.role);
     for (const r of ["ops", "deployer", "keeper", "dev-fee", "squads-vault", "squads-member-1", "squads-member-2", "squads-member-3", "mint-deficit"]) assert.ok(roles.includes(r), `wallet role ${r}`);
     assert.ok(cfg.howBuilt.aiAssisted && !cfg.howBuilt.firmAudit, "written with AI assistance; not audited by a firm — both stated");
-    assert.equal(cfg.howBuilt.reviews.length, 4, "three blind Claude reviews (the third with its re-check) + the pending ChatGPT review");
-    assert.deepEqual(cfg.howBuilt.reviews.filter((r) => r.reportPath).map((r) => r.id), ["claude-blind-1", "claude-blind-2", "claude-blind-3"]);
+    assert.equal(cfg.howBuilt.reviews.length, 6, "three blind Claude reviews of burn_receipts (the third with its re-check) + two blind pair_curve reviews + the pending ChatGPT review");
+    assert.deepEqual(cfg.howBuilt.reviews.filter((r) => r.reportPath).map((r) => r.id), ["claude-blind-1", "claude-blind-2", "claude-blind-3", "paircurve-blind-1", "paircurve-blind-2"]);
     assert.equal(cfg.howBuilt.reviews.find((r) => r.id === "chatgpt-adversarial")?.status, "pending");
     const keeper = cfg.wallets.find((w) => w.role === "keeper")!;
     assert.ok(/recorded creator is the program's fee PDA/.test(keeper.description) && !/is LaunchLab's recorded creator/.test(keeper.description), "review H-2: the fee PDA, not the keeper, is the LaunchLab creator");
@@ -93,7 +93,7 @@ describe("buildTransparency / buildTrustPage", () => {
     assert.ok(t.whoRunsThis.operatorLine.includes("the Burnticker operator"));
     assert.equal(t.whoRunsThis.refuseListPresent, true);
     assert.equal(t.howBuilt.reviewsReadmePresent, true);
-    assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), [true, true, true, false], "the three Claude reports exist; the ChatGPT review has none yet and the page says so");
+    assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), [true, true, true, true, true, false], "the five Claude reports exist; the ChatGPT review has none yet and the page says so");
     assert.equal(t.walletsTodo, t.wallets.length);
     assert.ok(t.decisions.entries >= 9 && t.changelog.entries >= 1);
   });

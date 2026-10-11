@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import CoverageSection from "./CoverageSection";
+import TrustPackSection from "./TrustPackSection";
 
 /**
  * THE TRUST PAGE (the owner, 2026-10-09: no room for suspicion). Rendered from /api/burnticker/trust: the Powers Register, the LIVE
@@ -28,6 +29,7 @@ export default function TrustPage() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold">Trust</h1><p className="text-neutral-400 text-xs">What the operator can and cannot do, read from the chain and the config where it can be; placeholders say so. Generated {t.generatedAt} · {t.cluster} · RPC {t.rpcConfigured ? "configured" : "not configured on this host"}.</p></header>
       <section className={card}><p>{t.operatorLine}{t.contactIsTodo && <span className="text-amber-400 text-xs"> (contact address: TODO, owner to fill in)</span>}</p><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">Attesters: {t.attesterStatus.line}</p></section>
+      <TrustPackSection card={card} />
       <section className={card}><h2 className="font-medium">Standing facts</h2><ul className="list-disc pl-5">{t.statements.map((s) => <li key={s}>{s}</li>)}</ul></section>
       <section className={card}><h2 className="font-medium">Powers Register {t.powers.placeholder && <span className="text-amber-400 text-xs">(placeholder until docs/burn-receipts/powers-register.json ships with the program)</span>}</h2>
         <div className="overflow-x-auto"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Power</th><th className="p-2">Holder</th><th className="p-2">Timelock</th><th className="p-2">Sunset</th><th className="p-2">Can</th><th className="p-2">Cannot</th><th className="p-2">Source</th></tr></thead><tbody>{t.powers.powers.map((p) => <tr key={p.id} className="border-t border-neutral-800 align-top"><td className="p-2">{p.power}</td><td className="p-2 break-all"><code>{p.holder ?? "unset"}</code> <span className="text-neutral-500">({p.holderKind})</span></td><td className="p-2">{p.timelock ?? "—"}</td><td className="p-2">{p.sunset ?? "—"}</td><td className="p-2">{p.canDo.join("; ")}</td><td className="p-2">{p.cannotDo.join("; ")}</td><td className="p-2 text-neutral-500">{p.source}</td></tr>)}</tbody></table></div>

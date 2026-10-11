@@ -1,0 +1,48 @@
+# Owner to-do — every placeholder and every open owner step
+
+Trust pack, 2026-10-10. The owner's decision that night: "build all of them, keep placeholders for the info we don't have and add them
+to our to-do list." This is that list. Every placeholder the trust pack left (a value starting with `TODO_`) is here with the file and
+line where it lives; `test/burntickerTrustPack.test.ts` fails if a `TODO_` placeholder in the trust-pack files is missing from this page
+or if a `file:line` below no longer points at its placeholder. Nothing here is hidden from visitors: each open item is also listed as
+not done on the trust page, `/burnticker/check` or `/burnticker/operator`.
+
+**How to hand anything to me:** paste the value in chat (public keys, names, amounts, dates, signatures — never a secret key, seed
+phrase or password), or edit the named file yourself and say "done". For each, I update the file, regenerate what depends on it
+(`scripts/burnticker-trustpack.mts well-known --write` and `check-doc --write`), run the tests and commit.
+
+## Before mainnet launch
+
+| # | What | Why | Where the placeholder lives | How to hand it to me |
+|---|---|---|---|---|
+| 1 | **Third Squads signer** — name and public key | The vault is 2-of-3 with a trusted third party; without them it cannot be created as designed, and the page names them only with consent | `config/burnticker/operator.json:77` (`TODO_THIRD_SIGNER_NAME`, `TODO_THIRD_SIGNER_ADDRESS`); `config/burnticker/transparency.json:146` (`squads-member-3`) | their name (as they agree to have it shown) and their Solana public key |
+| 2 | **Squads members 1 and 2** — your two keys (hardware key + second key) | The vault's other two signers | `config/burnticker/operator.json:75` (`TODO_SQUADS_MEMBER_1`), `config/burnticker/operator.json:76` (`TODO_SQUADS_MEMBER_2`); `config/burnticker/transparency.json:132` (`squads-member-1`), `config/burnticker/transparency.json:139` (`squads-member-2`) | the two public keys |
+| 3 | **Mainnet wallets + ~15 SOL** — developer fee wallet, keeper, deployer, LaunchLab platform admin, ops wallet; the Squads vault and multisig addresses once created; the LaunchLab platform id | Every operator wallet is shown on `/burnticker/operator` and `/.well-known/burnticker.json`; the deploy (program rent ≈ 3.6 + 1.8 SOL), the platform config, the keeper's fees and the rehearsal coin need the SOL | `config/burnticker/operator.json:61` (`TODO_MAINNET_PLATFORM_ID`), `:63` (`TODO_MAINNET_SQUADS_VAULT`), `:64` (`TODO_MAINNET_SQUADS_MULTISIG`), `:70` (`TODO_MAINNET_DEV_FEE_WALLET`), `:71` (`TODO_MAINNET_KEEPER`), `:72` (`TODO_MAINNET_DEPLOYER`), `:73` (`TODO_MAINNET_PLATFORM_ADMIN`); `config/burnticker/transparency.json:92`–`:162` (`pubkey`: null until set) | public keys only, as you create them; fund from your exchange account yourself |
+| 4 | **Bounty wallet + funding (5–10 SOL)** | SECURITY.md promises a bounty paid from a known wallet; the trust page shows its balance live once it is set | `config/public-repo/overlay/SECURITY.md:12` (`TODO_BOUNTY_WALLET`); `config/burnticker/transparency.json:79` (`TODO_BOUNTY_WALLET`; set `wallet` to the address) | the vault address (it is the mainnet Squads vault) and the funding transaction; also the exact severity tiers for SECURITY.md |
+| 5 | **Signed operator statement** | A message signed by the developer fee wallet ties your name to the wallets; the page verifies it with ed25519 | `config/burnticker/operator.json:83` (`TODO_SIGNED_MESSAGE`; the text to sign is on line 86) | after item 3: sign the text (with `{PUBKEY}` and `{DATE}` filled in) as a raw message from the developer fee wallet, paste the base58 signature |
+| 6 | **Legal entity (LLC: yes/no)** | The operator page says who stands behind the platform; until decided it is you as an individual, and it says so | `config/burnticker/operator.json:11` (`TODO_ENTITY`) | the decision; if yes, the LLC's exact registered name once filed |
+| 7 | **Second attester operator — who and when** | Quorum 1 at launch means the keeper key alone attests; strangers launching needs an independent second attester | `config/burnticker/transparency.json:178` (`quorum-1`); `config/burnticker/expenses.json:12` (`TODO_EXPENSE_ATTESTER2`) | the person or service, the date they start, and the monthly cost if any |
+| 8 | **DexScreener Enhanced Token Info, $299, on launch morning** | The $DEFICIT listing shows the site, the X account and the rule only after the paid update | `config/burnticker/expenses.json:11` (`dexscreener`; amount known, not paid yet) | pay it yourself on launch morning; tell me the date so the note changes to "paid" |
+| 9 | **X account email and avatar** | The @BurnTicker profile needs its recovery email set and the avatar uploaded (`site/burnticker/brand/avatar.png`) | `docs/launch/x-burnticker-profile.md:22` (`Avatar`), `docs/launch/x-burnticker-profile.md:19` (`TODO`: the website field) | do it in the X settings yourself; say "done" |
+| 10 | **ChatGPT review — hand the report over** | The fourth review is pending; every report is published in full | `config/burnticker/transparency.json:55` (`pending`; `reportPath` null) | paste or attach the report; I commit it to `docs/burnticker/reviews/` and update the entry |
+| 11 | **Licence split + trademark** | Code and docs are MIT; the brand assets are not licensed for reuse — the split needs your final word, and whether to file a trademark for the name/mark | `config/public-repo/overlay/LICENSE:25` (`brand`) | your decision on the split (as written, or changes) and on a trademark filing |
+| 12 | **GitHub organisation** | The public repository lives under a personal account; an organisation keeps it separate from you and lets a second maintainer in later | `config/burnticker/operator.json:19` (`TODO_GITHUB_ORG`) | create the organisation in the browser, transfer the repository, give me the new URL |
+| 13 | **Expense amounts** — hosting, RPC, domains, mail | The fee ledger shows what the developer fee pays for; unknown amounts show as placeholders, never zero | `config/burnticker/expenses.json:7` (`TODO_EXPENSE_HOSTING`), `:8` (`TODO_EXPENSE_RPC`), `:9` (`TODO_EXPENSE_DOMAINS`), `:10` (`TODO_EXPENSE_EMAIL`) | the monthly (or yearly) dollar amounts from your invoices |
+| 14 | **Hermes (Pyth) API key decision** | Burn Derby reads Pyth's Hermes only with a key; without one, a coin with no Solana feed falls back to RedStone | `docs/burnticker/DERBY.md:38` (`BURNTICKER_PYTH_API_KEY`) | yes/no; if yes, put the key in the host's environment file yourself (never in chat) and tell me it is set |
+| 15 | **RedStone: email dev@redstone.finance** | Settling on RedStone's public gateway: their intent is unconfirmed (no API terms published) | `docs/burnticker/DERBY.md:164` (`dev@redstone.finance`) | send the question yourself; paste their answer |
+| 16 | **Arweave metadata: Irys packages and the upload payer** | Launches refuse without pinned metadata (`src/lib/burnticker/pin.ts`); the Irys client is not installed and the ops wallet that pays it is not set | `src/lib/burnticker/pin.ts:32` (`BURNTICKER_UPLOAD_PAYER`) | approve installing the two packages; fund the ops wallet and set the variable on the host yourself |
+| 17 | **pair_curve High findings — fix before any mainnet pair** | Both pair_curve reviews found High issues (exploit tests committed, no fixes yet); pair launches stay off for mainnet until fixed and re-reviewed | `config/burnticker/transparency.json:263` (`paircurve-findings-open`) | say "go" and I schedule the fix round and a re-check |
+| 18 | **Event-contract venue consent email (optional)** | Only if you want that venue as a settlement input one day: its terms require written consent (see the limitation) | `config/burnticker/transparency.json:188` (`terms`) | send it yourself if you want to; paste any answer |
+
+## After the mainnet deploy
+
+| # | What | Why | Where | How |
+|---|---|---|---|---|
+| 19 | **Docker verified build on a Linux host** | The table on `docs/burnticker/VERIFIED-BUILD.md` is interim (local Mac build); the reproducible Docker build is the one anyone can run | `config/burnticker/verified-build.json:5` (`interim-local`) | rent a throwaway Linux VM (or let me use one you approve), run `bash scripts/ops/verified-build.sh --docker --write`, commit the table |
+| 20 | **OtterSec verified-builds registry submission** | Explorers show "Verified" only for programs in the registry; mainnet only, and the verification PDA must come from the upgrade authority (the Squads vault) | `docs/burnticker/VERIFIED-BUILD.md` § "The OtterSec verified-builds registry" | for each program: `solana-verify export-pda-tx … --uploader <MAINNET_SQUADS_VAULT>` → import into Squads → two signers approve → execute → `solana-verify remote submit-job --program-id <ID> --uploader <MAINNET_SQUADS_VAULT>` (exact commands on that page) |
+| 21 | **Fill the mainnet program facts** | The verified-build table's `deployed.mainnet` and the trust page's program block | `config/burnticker/verified-build.json` (`deployed.mainnet: null`) | after deploy, tell me; I run `bash scripts/ops/verified-build.sh --onchain mainnet` and record it |
+
+## Already resolved (kept for the record)
+
+- Operator contact: contact@burnticker.com, security@burnticker.com (2026-10-10).
+- Public repository: https://github.com/rfzfhn67yk-netizen/burnticker (organisation still item 12).
+- Devnet rehearsal: done 2026-10-10 (docs/burnkeeper/devnet-run.md).

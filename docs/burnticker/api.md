@@ -52,6 +52,12 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/tokens/{ticker}/receipts` | 30 s | read | every receipt, recomputed at request time (`verify.verified`) |
 | GET | `/tokens/{ticker}/verify/{id}` | 60 s | heavy | rules / memo / source / units / spend / chain checks for one receipt |
 | GET | `/trust` | 60 s | read | the Powers Register, designed fees vs the LIVE LaunchLab platform config (when the host has an RPC), program facts, statements |
+| GET | `/check` | 600 s | read | the sceptic's checklist (API 1.5.0, trust pack; `src/lib/burnticker/trustpack/checklist.ts`): every instruction of burn_receipts and pair_curve with the only place it can move funds, every privileged power (none over funds), what is locked, what is not done, the verified-build table; `docs/burnticker/CHECK-THIS-YOURSELF.md` is rendered from the same object |
+| GET | `/check/receipts` | 600 s | read | the devnet receipts the `/burnticker/check` verifier offers (from the rehearsal evidence), each token's exact rules text |
+| GET | `/check/receipts/{signature}` | 300 s | heavy | the browser verifier's ten checks run on the server: transaction, program, memo, the program's Reading + TokenConfig accounts, rules hash, the Treasury source (URL hashed against `source_url_hash`), units, spend, burn — `ok` true / false / null with the reason |
+| GET | `/fees/ledger` | 600 s | read | the pinned developer fee wallet's ledger from chain, by UTC month, and the expenses the fee pays (`config/burnticker/expenses.json`, placeholders marked) |
+| GET | `/operator` | 60 s | read | who runs this, every operator wallet per cluster (TODO placeholders listed), the signed-statement check (ed25519), the never-buys monitor's last report |
+| GET | `/bounty` | 60 s | read | the bounty wallet (null until the mainnet Squads vault exists; `walletTodo` says so), its live balance once set, the decided reports |
 | GET | `/openapi.json` | 3600 s | read | the OpenAPI 3.1 document |
 
 ### `POST /launch/bundle`

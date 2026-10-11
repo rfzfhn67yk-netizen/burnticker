@@ -276,3 +276,32 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
 - allowlist sha256 (config/public-repo.allowlist): `4846d807d7f41728915e06d9dfb2d938c4df44f6d33d725cff0507506cc2b701`
 - files published: 731
+
+## 2026-10-10 — trust pack (no publish, no deploy)
+
+- `/burnticker/check` + `docs/burnticker/CHECK-THIS-YOURSELF.md` (generated): every instruction of burn_receipts and pair_curve with
+  its outflow (swap → burn, burn, into the burn pool, the trader's own funds, rent, or none), every privileged power (none over funds
+  in either program), what is locked, what is not done; and a receipt verifier that runs in the browser — it fetches the transaction and
+  the program's Reading and TokenConfig accounts from the public devnet RPC and both Treasury values, and recomputes units, spend and
+  the burn. All seven devnet receipts ($DEFICIT ×2, $PCA ×2, $PCB ×3) verify, the two below-the-spend-floor ones included.
+- Verified build (`scripts/ops/verified-build.sh`, `config/burnticker/verified-build.json`, `docs/burnticker/VERIFIED-BUILD.md`):
+  INTERIM — a local `cargo build-sbf` (no Docker on the operator's Mac); the devnet builds equal the deployed devnet bytes of both
+  programs. Executable hashes (trailing zeros stripped, solana-verify's definition): burn_receipts mainnet `3ecae91b…`, devnet
+  `5ad3dd54…`; pair_curve mainnet `9b20156f…`, devnet `2fa91c04…`. (The publish entries above record the plain sha256 of the same
+  default build, `f3812ce4…`.) The Docker build and the OtterSec registry entry are owner steps.
+- `/burnticker/fees/ledger` (developer fee wallet from chain, by month; `config/burnticker/expenses.json`), `/burnticker/operator`
+  (`config/burnticker/operator.json`: operator, entity TODO, devnet wallets from the rehearsal records, mainnet TODO, signed-statement
+  slot with a live ed25519 check, the never-buys monitor — devnet: rehearsal trades only, each matched to its evidence file),
+  `/.well-known/burnticker.json`, the trust page's "Check it yourself" section with the bounty wallet (TODO until the mainnet vault).
+- API 1.5.0: `GET /check`, `/check/receipts`, `/check/receipts/{signature}`, `/fees/ledger`, `/operator`, `/bounty`.
+- SECURITY.md: the bounty wallet line (TODO), how a valid report is paid, the published list of reports; three blind reviews + re-check,
+  two pair_curve reviews, ChatGPT pending (cold read R3). transparency.json: the cold-read corrections T1–T4, the two pair_curve
+  reviews with their open High findings, the new not-done items. Every placeholder: `docs/burnticker/TODO-OWNER.md`.
+
+## 2026-10-10 — publish from 5e6f20bdcfca
+
+- monorepo commit: `5e6f20bdcfcacf279e2d1bd88669648eb5d4c756` (the working tree had uncommitted changes when this tag was written)
+- program hash: `f3812ce47ff86e8c0bc8dcaae856e0e2c8523850afb19bda9de05ce559c775d0` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
+- allowlist sha256 (config/public-repo.allowlist): `8c2075b16cd7e8e2c171b97662c26bfc1ebc94d99ef0da553bdde9a1c33efd8d`
+- files published: 769

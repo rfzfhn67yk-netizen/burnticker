@@ -29,6 +29,12 @@ is either public already (in the monorepo paths named, and in the public reposit
 | Tests and fixtures | `test/burn*`, `test/burnticker*`, the four fixtures they read | same paths | — |
 | The carve-out itself (allowlist, leak patterns, script, overlay) | `config/public-repo.allowlist`, `config/public-repo.denypatterns`, `config/public-repo/overlay/`, `scripts/ops/publish-public-repo.sh`, `scripts/ops/public-repo-lib.mjs` | same paths | "Who runs this" names the repo |
 | Public README, LICENSE (MIT; brand assets excluded), SECURITY.md (bounty terms placeholder) | `config/public-repo/overlay/` | repo root | — |
+| The sceptic's checklist (money flows per instruction, powers, locks, gaps, build hashes) and the browser receipt verifier | `src/lib/burnticker/trustpack/`, `docs/burnticker/CHECK-THIS-YOURSELF.md` | same paths | linked: `/burnticker/check` |
+| The verified build (program hashes, how to reproduce, the registry step) | `scripts/ops/verified-build.sh`, `config/burnticker/verified-build.json`, `docs/burnticker/VERIFIED-BUILD.md` | same paths | `/burnticker/check` § build |
+| The developer fee ledger by month and the expenses it pays | read from chain; `config/burnticker/expenses.json` | same path | linked: `/burnticker/fees/ledger` |
+| The operator, every operator wallet per cluster, the signed statement, the never-buys monitor | `config/burnticker/operator.json`, `src/lib/burnticker/trustpack/neverBuys.ts` | same paths | linked: `/burnticker/operator` |
+| Cross-links (site, repository, X, program ids, Squads vault, wallets) | `public/.well-known/burnticker.json`, `site/burnticker/.well-known/burnticker.json` | same paths | `/.well-known/burnticker.json` |
+| Every open owner step and placeholder | `docs/burnticker/TODO-OWNER.md` | same path | — |
 
 What never leaves the monorepo: the trading platform (its library directories, its runner and collector scripts, the arms, their
 signers, the host wrappers that read the keychain and the host's environment file). The leak patterns name its directories;

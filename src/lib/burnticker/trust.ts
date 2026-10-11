@@ -131,14 +131,22 @@ export interface TransparencyRehearsal { symbol: string; date: string | null; mi
 export const GATE_POLICY_IDS = ["no-telegram-discord", "failure-definition"] as const;
 export interface TransparencyConfig {
   schema: "burnticker.transparency/v1"; updatedAt: string;
-  publicRepo: { url: string | null; todo: string; whatIsPublished: string };
+  publicRepo: { url: string | null; todo?: string; whatIsPublished: string };
   whoRunsThis: { alsoRuns: string; refusal: string; refuseListCode: string; refuseListConfig: string; holdingsRule: string };
-  howBuilt: { aiAssisted: boolean; statement: string; firmAudit: boolean; firmAuditStatement: string; reviews: TransparencyReview[]; tooling: string[]; toolingStatus: string; reviewsDir: string; reviewsRule: string; bounty: { status: string; rangeSol: [number, number]; fundedFrom: string; termsPath: string; contact: string | null } };
+  howBuilt: { aiAssisted: boolean; statement: string; firmAudit: boolean; firmAuditStatement: string; reviews: TransparencyReview[]; tooling: string[]; toolingStatus: string; reviewsDir: string; reviewsRule: string; bounty: TransparencyBounty };
   wallets: TransparencyWallet[];
   /** Throwaway coins created under the REAL platform config to prove fee routing and burns (the owner's $REHEARSAL); each is also on the refuse list. */
   rehearsals: TransparencyRehearsal[];
   limitations: { id: string; status: string; text: string }[];
   policies: { id: string; text: string }[];
+  /** The trust pack (2026-10-10): the sceptic's pages, the verified build, the owner's to-do (src/lib/burnticker/trustpack/). */
+  trustPack?: { note: string; pages: { path: string; title: string; what: string; doc: string }[]; verifiedBuild: string; wellKnown: string; ownerTodo: string; metadataUri?: { status: string; text: string } };
+}
+/** The bounty block; `wallet` is null until the mainnet Squads vault exists (walletTodo says so), `reports` lists every decided report. */
+export interface TransparencyBounty {
+  status: string; rangeSol: [number, number]; fundedFrom: string; termsPath: string; contact: string | null;
+  wallet?: string | null; walletTodo?: string; howReportsArePaid?: string;
+  reports?: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string };
 }
 /** A wallet row as rendered: the pubkey from the file, else from the named environment variable, else TODO. */
 export interface WalletRow extends TransparencyWallet { resolved: string | null; source: "file" | "env" | "todo" }
@@ -162,6 +170,8 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
   if (!j.publicRepo || typeof j.publicRepo.whatIsPublished !== "string") out.push("publicRepo.whatIsPublished missing");
   if (!j.whoRunsThis || typeof j.whoRunsThis.refusal !== "string" || typeof j.whoRunsThis.refuseListCode !== "string") out.push("whoRunsThis.refusal / refuseListCode missing");
   if (!j.howBuilt || typeof j.howBuilt.aiAssisted !== "boolean" || typeof j.howBuilt.firmAudit !== "boolean" || !Array.isArray(j.howBuilt.reviews)) out.push("howBuilt.aiAssisted / firmAudit / reviews missing");
+  const bw = j.howBuilt?.bounty?.wallet;
+  if (bw !== undefined && bw !== null && !PUBKEY_RE.test(String(bw))) out.push("howBuilt.bounty.wallet must be a base58 public key or null (TODO_BOUNTY_WALLET until the vault exists)");
   if (!Array.isArray(j.wallets) || j.wallets.length === 0) out.push("wallets must be a non-empty array");
   else {
     const roles = new Set<string>();

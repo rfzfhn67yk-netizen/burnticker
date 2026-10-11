@@ -101,4 +101,7 @@ config/public-repo/overlay
 scripts/ops/publish-public-repo.sh
 scripts/ops/public-repo-lib.mjs
 scripts/ops/verify-evidence-signatures.mjs
+scripts/ops/verified-build.sh
+public/.well-known/burnticker.json
+test/fixtures/burnticker-trustpack/**
 test/fixtures/burnticker-season/**

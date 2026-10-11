@@ -430,8 +430,17 @@ incident log. Every token page carries "what the operator can and cannot do", de
 at the SQL level (triggers refuse rule/identity changes, reading updates and deletes, receipt-fact changes, and any change to a final
 receipt). There are no referral codes, fee discounts or hidden parameters in the wizard.
 
-Operated by one independent operator (United States) — contact: TODO (a clearly marked constant, `OPERATOR_CONTACT_TODO`). Use of fees: "Burnticker's
-25 bps funds attesters, hosting, the audit, and the operator. The platform never buys back any coin, including its own."
+Operated by one independent operator (United States) — contact: contact@burnticker.com (security reports: security@burnticker.com). Use of fees:
+"Burnticker's 25 bps funds attesters, hosting, the security reviews and bounty, and the operator. The platform never buys back any
+coin, including its own."
+
+**The trust pack (2026-10-10)** — three pages that read only public files and the chain, linked from the trust page:
+`/burnticker/check` (where money can go per instruction, who can do what, what is locked, what is not done, the build hashes, and a
+receipt verifier that runs in the visitor's browser against the public RPC and the Treasury API — docs/burnticker/CHECK-THIS-YOURSELF.md),
+`/burnticker/fees/ledger` (the developer fee wallet from chain by month, and what the fee pays) and `/burnticker/operator` (the
+operator, every operator wallet, the signed-statement slot, the never-buys monitor). The verified build is docs/burnticker/VERIFIED-BUILD.md
+(interim: a local build that matches the devnet deployment byte for byte; the Docker build is an owner step), the cross-links are
+`/.well-known/burnticker.json`, and every placeholder the pack left is on docs/burnticker/TODO-OWNER.md.
 
 ### Kalshi on Solana — the level-3 path for Kalshi selectors (research, 10-09; not confirmed from primary sources)
 
