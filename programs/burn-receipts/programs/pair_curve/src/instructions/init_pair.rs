@@ -207,7 +207,7 @@ pub fn handle_init_pair(ctx: Context<InitPair>, args: InitPairArgs) -> Result<()
     p.mints = [mint_a, mint_b];
     p.pools = [Pubkey::default(); 2];
     p.lp_supply_at_creation = [0; 2];
-    p.lp_burned = [0; 2];
+    p.lp_locked = [0; 2];
     p.cp_config = ca.ll_cp_config;
     p.vault = vault;
     p.creator = creator;

@@ -64,3 +64,11 @@ trust page), each with the date, the severity, the decision and the transaction 
 - **Low** — everything else that is a real defect.
 
 Please report privately first. We do not take legal action against good-faith research that respects users' funds and data.
+
+## Incidents and postmortems
+
+A confirmed report, and anything else that went wrong in production (a wrong or doubled burn, the public audit red, a key event, two
+keepers active at once, a snapshot that does not verify …), is an incident under the incident policy:
+[`docs/burnticker/INCIDENTS.md`](docs/burnticker/INCIDENTS.md). The short version: a log line as soon as it is known, a full public
+postmortem within 48 hours (template: [`docs/burnticker/incidents/TEMPLATE.md`](docs/burnticker/incidents/TEMPLATE.md)), published in
+`docs/burnticker/incidents/` and on the trust page, signed by the operator. A security report is published once it is safe to do so.

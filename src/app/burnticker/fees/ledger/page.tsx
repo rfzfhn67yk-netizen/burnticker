@@ -15,6 +15,8 @@ interface Ledger {
   months: { month: string; inLamports: string; outLamports: string; txIn: number; txOut: number }[];
   entries: { signature: string; blockTime: string | null; deltaLamports: string; direction: "in" | "out"; counterparty: string | null; err: boolean }[];
   expenses: { whatTheFeePaysFor: string; items: { id: string; label: string; cadence: string; usd: number | null; placeholder: boolean; todo: string | null; note: string }[] };
+  /** LP locked forever (2026-10-10): the operator's 20 % of post-graduation LP fees, paid by claim_lock_fees to the operator treasury. */
+  lpFees?: { title: string; treasury: string | null; treasuryPinned: boolean; split: { burnBps: number; operatorBps: number }; claims: number; solLamports: string; toOperatorLamports: string; toBurnPoolLamports: string; source: string; note: string };
 }
 
 const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -47,6 +49,11 @@ export default function FeeLedgerPage() {
             <tbody>{l.months.map((m) => <tr key={m.month} className="border-t border-neutral-800"><td className="p-2">{m.month}</td><td className="p-2 text-right tabular-nums">{sol(m.inLamports)}</td><td className="p-2 text-right tabular-nums">{sol(m.outLamports)}</td><td className="p-2 text-right">{m.txIn} / {m.txOut}</td></tr>)}
               <tr className="border-t border-neutral-700 font-medium"><td className="p-2">total</td><td className="p-2 text-right tabular-nums">{sol(l.totals.inLamports)}</td><td className="p-2 text-right tabular-nums">{sol(l.totals.outLamports)}</td><td className="p-2 text-right">{l.totals.transactions}{l.totals.complete ? "" : " (partial)"}</td></tr></tbody></table></div>}
         </section>
+        {l.lpFees && <section className={card} aria-label="Operator LP-fee line">
+          <h2 className="font-medium">{l.lpFees.title}</h2>
+          <p className="text-xs text-neutral-300">{l.lpFees.note}</p>
+          <p className="text-xs mt-1">Operator treasury: {l.lpFees.treasury ? <a className="underline break-all" href={explorer(l.lpFees.treasury, "address")}><code>{l.lpFees.treasury}</code></a> : <span className="text-amber-400">not pinned on this cluster</span>} · {l.lpFees.claims} claim(s) · {sol(l.lpFees.solLamports)} SOL of LP fees claimed: {sol(l.lpFees.toOperatorLamports)} SOL to the operator ({l.lpFees.split.operatorBps / 100}%), {sol(l.lpFees.toBurnPoolLamports)} SOL to burn pools ({l.lpFees.split.burnBps / 100}%) · source: {l.lpFees.source}</p>
+        </section>}
         <section className={card}>
           <h2 className="font-medium">{LEDGER_COPY.expensesTitle}</h2>
           <p className="text-xs text-neutral-300">{l.expenses.whatTheFeePaysFor}</p>

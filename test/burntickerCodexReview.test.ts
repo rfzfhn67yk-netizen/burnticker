@@ -356,8 +356,8 @@ describe("N4 — the legacy wizard route is metered like the public API, and pai
 });
 
 describe("N6 — with the pair curve enabled the wizard route never hands out two independent LaunchLab launches", () => {
-  const LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } } };
-  const pairBody = (extra: Record<string, unknown> = {}) => ({ creator: CREATOR, ticker: "BRONCOS", name: "Broncos", description: "", imageUrl: null, links: [], rule: LOSE, acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: "CHIEFS", name: "Chiefs" }, ...extra });
+  const LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } } };   // side A is $DENVER, not $BRONCOS: one letter from the world's $BRONCO is a lookalike (lookalike.ts, growth batch)
+  const pairBody = (extra: Record<string, unknown> = {}) => ({ creator: CREATOR, ticker: "DENVER", name: "Denver", description: "", imageUrl: null, links: [], rule: LOSE, acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: "CHIEFS", name: "Chiefs" }, ...extra });
   const legacy = async (body: unknown) => {
     const { POST } = await import("../src/app/api/burnticker/launch/route.ts");
     return POST(new Request("http://bt.test/api/burnticker/launch", { method: "POST", headers: { host: "bt.test", origin: "http://bt.test", "content-type": "application/json", "x-forwarded-for": `203.0.113.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body) }));
@@ -371,7 +371,7 @@ describe("N6 — with the pair curve enabled the wizard route never hands out tw
     const j = await r.json() as { code: string; bundles?: unknown };
     assert.equal(j.code, "pair-curve-required");
     assert.equal(j.bundles, undefined);
-    assert.equal(w.registry.tokenByTicker("BRONCOS"), null);
+    assert.equal(w.registry.tokenByTicker("DENVER"), null);
     assert.equal(w.registry.tokenByTicker("CHIEFS"), null);
   });
   test("flag on, venue pair-curve: the response carries the pair-curve transaction set and NOT the LaunchLab bundles; drafts carry no LaunchLab pool", async () => {
@@ -390,7 +390,7 @@ describe("N6 — with the pair curve enabled the wizard route never hands out tw
       assert.equal(Keypair.fromSecretKey(Buffer.from(base58DecodeSk(sk!))).publicKey.toBase58(), j.pairCurve!.mints[side]);
     }
     assert.deepEqual(j.pairCurve!.transactions.map((t) => t.signers), [["creator", "mintA"], ["creator", "mintB"], ["creator"]]);
-    const a = w.registry.tokenByTicker("BRONCOS")!, b = w.registry.tokenByTicker("CHIEFS")!;
+    const a = w.registry.tokenByTicker("DENVER")!, b = w.registry.tokenByTicker("CHIEFS")!;
     assert.deepEqual([a.mint, b.mint], [j.pairCurve!.mints.a, j.pairCurve!.mints.b], "the drafts are the pair's mints");
     assert.equal(a.poolId, null); assert.equal(b.poolId, null);
   });
@@ -407,7 +407,7 @@ describe("N6 — with the pair curve enabled the wizard route never hands out tw
     };
     const verifierFor = (t: (typeof j.pairCurve.transactions)[number]) => connectionLaunchVerifier({ getTransaction: async () => landed(t) } as never, { burnProgramId: w.p.program.programId });
     const [tx1, tx2, tx3] = j.pairCurve.transactions;
-    const a = w.registry.tokenByTicker("BRONCOS")!, b = w.registry.tokenByTicker("CHIEFS")!;
+    const a = w.registry.tokenByTicker("DENVER")!, b = w.registry.tokenByTicker("CHIEFS")!;
     const exp = (t: typeof a) => ({ mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt });
     assert.equal((await verifierFor(tx1).verify("s", exp(a))).ok, true, "tx 1 is side A's launch");
     assert.equal((await verifierFor(tx2).verify("s", exp(b))).ok, true, "tx 2 is side B's launch");

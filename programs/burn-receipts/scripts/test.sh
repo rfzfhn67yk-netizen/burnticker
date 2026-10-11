@@ -51,6 +51,16 @@ if [ ! -f "$ecpmm_so" ] || [ -n "$(find "$ecpmm_src/src" "$ecpmm_src/Cargo.toml"
   echo "fixtures/evil_cpmm_init.so built (test-only hostile CPMM initialize)"
 fi
 
+# The CPMM liquidity-lock stand-in for LAUNCHPAD-PATH §35 (Raydium's lock program source is not public); test-only, local build,
+# loaded at the real lock program id by the lock-fee suites.
+lock_so="$here/fixtures/cpmm_lock_mock.so"
+lock_src="$here/mocks/cpmm_lock_mock"
+if [ ! -f "$lock_so" ] || [ -n "$(find "$lock_src/src" "$lock_src/Cargo.toml" -newer "$lock_so" -print -quit)" ]; then
+  cargo-build-sbf --manifest-path "$lock_src/Cargo.toml"
+  cp "$lock_src/target/deploy/cpmm_lock_mock.so" "$lock_so"
+  echo "fixtures/cpmm_lock_mock.so built (test-only Raydium CPMM lock stand-in)"
+fi
+
 # The local-validator build (review-3 I-1: binds the localnet genesis tag, never mainnet's) used by the opt-in TS localnet test.
 cargo-build-sbf --manifest-path "$here/programs/burn_receipts/Cargo.toml" --features localnet --sbf-out-dir "$here/target/deploy-localnet"
 # Re-check R3-6: say where it went — the TS localnet suite loads it from there and skips without it.

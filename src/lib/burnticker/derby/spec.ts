@@ -248,20 +248,21 @@ const windowText = (w: DerbyWindow): string => (w === "daily" ? "every day" : "e
 const boundary = (w: DerbyWindow): string => (w === "daily" ? "00:00 UTC" : "Monday 00:00 UTC");
 
 /**
- * The review sentence, e.g. "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. 30 days."
+ * The review sentence, e.g. "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. Runs for 30 days, then winds down."
  * `tickerB` null = a single coin (side A only).
  */
 export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | null, fraction: number): string {
   const src = d.a.pyth && d.b.pyth ? "Pyth" : `${sourceText(d.a)} / ${sourceText(d.b)}`;
   if (d.flip) {
     const a = `$${tickerA} burns ${pctText(fraction)} once, the first ${d.window === "daily" ? "day" : "week"} ${d.a.symbol}'s market cap passes ${d.b.symbol}'s (${src} × circulating supply, ${boundary(d.window)}).`;
-    const b = tickerB ? ` $${tickerB} burns ${pctText(fraction)} once if the season ends without it.` : "";
-    return `${a}${b} ${d.season.days} days, then the pair retires.`;
+    const b = tickerB ? ` $${tickerB} burns ${pctText(fraction)} once if the run ends without it.` : "";
+    return `${a}${b} Runs for ${d.season.days} days, then winds down.`;
   }
   const verb = d.measure === "mcap" ? `${d.a.symbol} out-gains ${d.b.symbol} by market cap` : `${d.a.symbol} out-gains ${d.b.symbol}`;
   const a = `$${tickerA} burns ${pctText(fraction)} ${windowText(d.window)} ${verb} (${src}, ${boundary(d.window)}).`;
   const b = tickerB ? ` $${tickerB} burns when ${d.b.symbol} wins.` : "";
-  return `${a}${b} ${d.season.days} days.`;
+  // "Runs for N days" (the owner, 2026-10-10: "in the coin vs coin it reads as seasons for the duration")
+  return `${a}${b} Runs for ${d.season.days} days, then winds down.`;
 }
 
 /** The rule paragraph for the token page (rules.ts ruleStatement delegates here for oracle "derby"). */

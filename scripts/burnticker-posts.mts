@@ -10,7 +10,7 @@
  *
  *   all --fixtures --print                      every format from the fixtures (the dry run the owner reads first)
  *   teaser [--topic=devnet-receipt|the-rule|reviews|open-source|coverage]   pre-launch posts that are true today
- *   explainer [--topic=how-a-burn-happens|what-a-receipt-is|why-lp-is-burned|why-creators-earn-nothing]
+ *   explainer [--topic=how-a-burn-happens|what-a-receipt-is|why-lp-is-locked|why-creators-earn-nothing]
  *   launch-thread --kind=deficit|platform|coin [--ticker=T] [--launch-tx=URL]
  *   receipt [--ticker=T|--deficit] [--day=YYYY-MM-DD] [--all]   confirmed burns only (default: the day before --now, UTC)
  *   scoreboard [--day=YYYY-MM-DD] [--league=NHL] [--season=…] [--season-over] [--pair=<pairId>]   (one post per league + the count line)

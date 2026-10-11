@@ -1,10 +1,10 @@
 import { type AccountMeta, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, LAUNCHLAB_PROGRAM_ID, MEMO_PROGRAM_ID, NATIVE_MINT, SYSVAR_INSTRUCTIONS_ID, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, LAUNCHLAB_PROGRAM_ID, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, MEMO_PROGRAM_ID, NATIVE_MINT, OPERATOR_TREASURY, SYSVAR_INSTRUCTIONS_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import type { BuybackPoolAccounts } from "@/lib/burnReceipts/cpmm";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { encodeInstruction } from "@/lib/burnReceipts/idlCoder";
 import type { RuleParams } from "@/lib/burnReceipts/math";
-import { configPda, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
+import { associatedTokenAddress, configPda, cpmmAuthority, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lockedLiquidityPda, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
 
 /**
  * Instruction builders. Data comes from the IDL coder; account ORDER and writable/signer flags come from the IDL too (each builder
@@ -102,8 +102,67 @@ export function registerPoolIx(o: { programId: PublicKey; registrar: PublicKey; 
  * register_pair_pool (2026-10-10, registration policy 2): the CPMM pool pair_curve's `graduate` created for this mint. Permissionless;
  * `pair` is the pair_curve Pair account (src/lib/pairCurve/accounts.ts pairPda), `pool` the side's pool (poolPda), `lpMint` its LP mint.
  */
-export function registerPairPoolIx(o: { programId: PublicKey; registrar: PublicKey; mint: PublicKey; pool: PublicKey; lpMint: PublicKey; pair: PublicKey }): TransactionInstruction {
-  return build(o.programId, "register_pair_pool", { registrar: o.registrar, config: configPda(o.programId, o.mint), mint: o.mint, pool_state: o.pool, lp_mint: o.lpMint, pair: o.pair }, {});
+export function registerPairPoolIx(o: { programId: PublicKey; registrar: PublicKey; mint: PublicKey; pool: PublicKey; lpMint: PublicKey; pair: PublicKey; cluster: Cluster }): TransactionInstruction {
+  return build(o.programId, "register_pair_pool", { registrar: o.registrar, config: configPda(o.programId, o.mint), mint: o.mint, pool_state: o.pool, lp_mint: o.lpMint, pair: o.pair, lp_lock_vault: lpLockVault(o.cluster, o.lpMint) }, {});
+}
+
+/**
+ * register_fee_key (LAUNCHPAD-PATH §35) — permissionless, once per mint: records the coin's lock position (Raydium's CPMM lock
+ * program state for the registered pool, majority of its LP) whose Fee Key NFT the FEE_KEYS PDA holds, in FeeKeyRecord ["fee_key", mint].
+ */
+export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mint: PublicKey; pool: PublicKey; feeNftMint: PublicKey; cluster: Cluster }): TransactionInstruction {
+  return build(o.programId, "register_fee_key", {
+    payer: o.payer,
+    config: configPda(o.programId, o.mint),
+    fee_key: feeKeyRecordPda(o.programId, o.mint),
+    fee_keys: feeKeysPda(o.programId),
+    pool_state: o.pool,
+    fee_nft_mint: o.feeNftMint,
+    fee_nft_account: feeNftAccount(o.programId, o.feeNftMint),
+    locked_liquidity: lockedLiquidityPda(o.cluster, o.feeNftMint),
+    system_program: SystemProgram.programId,
+  }, {});
+}
+
+/** The CPMM pool accounts claim_lock_fees needs (all from the PoolState): vaults and LP mint. */
+export interface LockFeePoolAccounts { pool: PublicKey; lpMint: PublicKey; token0Vault: PublicKey; token1Vault: PublicKey }
+
+/**
+ * claim_lock_fees(lp_fee_amount) (LAUNCHPAD-PATH §35) — permissionless (the cranker allowlist applies while the cap is in force).
+ * Collects the locked LP's fees with the FEE_KEYS signature; the SOL side goes 80 % to the fee PDA and 20 % to the compiled
+ * OPERATOR_TREASURY, the coin side is burned. `lpFeeAmount` defaults to u64::MAX ("everything accrued"). The cranker pays (and gets
+ * back) two ATA rents.
+ */
+export function claimLockFeesIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; feeNftMint: PublicKey; pool: LockFeePoolAccounts; cluster: Cluster; lpFeeAmount?: bigint; treasury?: PublicKey }): TransactionInstruction {
+  const fk = feeKeysPda(o.programId);
+  return build(o.programId, "claim_lock_fees", {
+    cranker: o.cranker,
+    config: configPda(o.programId, o.mint),
+    fee_key: feeKeyRecordPda(o.programId, o.mint),
+    fee_keys: fk,
+    fee_vault: feePda(o.programId, o.mint),
+    operator_treasury: o.treasury ?? OPERATOR_TREASURY[o.cluster],
+    mint: o.mint,
+    wsol_mint: NATIVE_MINT,
+    fee_keys_wsol: associatedTokenAddress(fk, NATIVE_MINT),
+    fee_keys_token: associatedTokenAddress(fk, o.mint),
+    fee_nft_account: associatedTokenAddress(fk, o.feeNftMint),
+    locked_liquidity: lockedLiquidityPda(o.cluster, o.feeNftMint),
+    lock_program: LOCK_CPMM_PROGRAM_ID[o.cluster],
+    lock_authority: LOCK_CPMM_AUTHORITY[o.cluster],
+    cpmm_program: CPMM_PROGRAM_ID[o.cluster],
+    cpmm_authority: cpmmAuthority(CPMM_PROGRAM_ID[o.cluster]),
+    pool_state: o.pool.pool,
+    lp_mint: o.pool.lpMint,
+    token_0_vault: o.pool.token0Vault,
+    token_1_vault: o.pool.token1Vault,
+    lock_lp_vault: lpLockVault(o.cluster, o.pool.lpMint),
+    token_program: TOKEN_PROGRAM_ID,
+    token_2022_program: TOKEN_2022_PROGRAM_ID,
+    memo_program: MEMO_PROGRAM_ID,
+    associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
+    system_program: SystemProgram.programId,
+  }, { lp_fee_amount: o.lpFeeAmount ?? BigInt("18446744073709551615") });
 }
 
 /** SPL Token SyncNative (instruction 17) — the client prepends it for the fee PDA's WSOL account before every buyback (review-2 F3). */

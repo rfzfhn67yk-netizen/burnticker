@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burnticker — catching up</title>
+<meta name="description" content="The Burnticker app is catching up. Receipts and the program are unaffected.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0a0c">
+<meta name="robots" content="noindex">
+<style>
+/* BEGIN shared tokens (copied verbatim from site/burnticker/index.html; test/burntickerTrustOps.test.ts keeps them equal) */
+:root{
+  --bg:#0a0a0c;--panel:#131317;--panel2:#1a1a20;--line:#26262d;--ink:#f6f4ee;--dim:#b8b6ae;--muted:#7f7e78;
+  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#0a0a0c;--ok:#5ad38f;--tape:#141418;--violet:#8f73e0;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
+}
+:root[data-theme="light"]{--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);overflow-x:hidden}
+a{color:var(--amber);text-decoration:none}a:hover{text-decoration:underline}
+.mono,code,pre{font-family:var(--mono)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.muted{color:var(--muted)}.dim{color:var(--dim)}
+h2{font:700 .82rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin:0 0 14px}
+h2::before{content:"▮ ";color:var(--ember)}
+section{padding:44px 0;border-top:1px solid var(--line)}
+section.lead{border-top:0}
+.okmark{color:var(--ok)}
+.small{font-size:.86rem}
+.lede{font-size:1.1rem;color:var(--dim);max-width:62ch;margin:0 0 22px}
+
+/* END shared tokens */
+/* thermal receipts (B1 identity: paper #f2eee4, thermal black #1b1916, stamp violet #5b3fa3) */
+.slipwrap{filter:drop-shadow(0 8px 12px rgba(0,0,0,.45));transform:rotate(-1.2deg);min-width:0}
+.slipwrap.b{transform:rotate(1deg);margin-top:10px}
+.slip{position:relative;background:#f2eee4;color:#1b1916;font:12px/1.45 var(--mono);padding:18px 12px 18px;overflow:hidden;
+  background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.03) 0 1px,transparent 1px 3px),linear-gradient(90deg,transparent 0 63%,rgba(255,255,255,.55) 63% 63.8%,transparent 63.8%);
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/10px 51% repeat-x;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/10px 51% repeat-x}
+.slip .sh{font:700 1.15rem/1.1 var(--mono);letter-spacing:.04em;overflow-wrap:anywhere}
+.slip .ss{font-size:.66rem;letter-spacing:.16em;color:#4a443c;margin:3px 0 0}
+.slip .dash{border-top:2px dashed #2a2622;margin:8px 0 6px}
+.slip .row{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:6px}
+.slip .row span{color:#4a443c}
+.slip .row b{margin-left:auto;text-align:right;font-weight:700;overflow-wrap:anywhere}
+.slip .motto{margin:10px 0 0;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:#4a443c;text-align:center}
+.slip.hit{padding-bottom:44px}
+.slip .stamp{position:absolute;right:10px;bottom:16px;transform:rotate(-8deg);color:#5b3fa3;border:2px solid #5b3fa3;border-radius:3px;padding:0 5px;font:700 .82rem/1.2 var(--mono);letter-spacing:.12em;opacity:.82;mix-blend-mode:multiply;pointer-events:none}
+.mocknote{margin:8px 0 0;font:.7rem/1.4 var(--mono);letter-spacing:.06em;color:var(--muted);text-align:center}
+
+
+main{padding:40px 0 60px}
+.box{max-width:560px;margin:0 auto}
+.box .slip{font-size:12.5px;padding:22px 16px}
+.box .slip .sh{font-size:1.35rem}
+.box .slip a{color:#1b1916;text-decoration:underline}
+.box p.note{color:var(--dim);margin:18px 0 0}
+.box ul{color:var(--dim);padding-left:18px}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="box">
+    <div class="slipwrap"><div class="slip hit">
+      <div class="sh">BURNTICKER</div><div class="ss">THE APP IS CATCHING UP</div>
+      <div class="dash"></div>
+      <p>The app is catching up. Receipts and the program are unaffected: burns are run by the program on chain and every receipt stays on the static site and on chain.</p>
+      <div class="dash"></div>
+      <div id="programs">
+<div class="row"><span>burn_receipts</span><b><a href="https://solscan.io/account/AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM?cluster=devnet">AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM</a> (devnet)</b></div>
+<div class="row"><span>pair_curve</span><b><a href="https://solscan.io/account/2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN?cluster=devnet">2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN</a> (devnet)</b></div>
+      </div>
+      <div class="dash"></div>
+      <div id="coins"><div class="row"><span>coins</span><b>see the static list below</b></div></div>
+      <div class="dash"></div>
+      <p class="motto">supply, not price</p>
+      <div class="stamp">CATCHING UP</div>
+    </div></div>
+    <p class="note">While the app is back in a minute or two, these pages are static and keep working:</p>
+    <ul>
+      <li><a href="/tokens.html">every coin and its receipts</a> (the keeper's own static index)</li>
+      <li><a href="/status/">keeper status</a> — heartbeat, sources, alerts</li>
+      <li><a href="/whitepaper.html">whitepaper</a> · <a href="/.well-known/burnticker.json">every program id and wallet</a></li>
+    </ul>
+  </div>
+</main>
+<script>
+(function () {
+  "use strict";
+  function el(tag, attrs, kids) { var e = document.createElement(tag); for (var k in (attrs || {})) { if (k === "text") e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); } (kids || []).forEach(function (c) { e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); }); return e; }
+  var B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  function solscan(addr, cluster) { return "https://solscan.io/account/" + addr + (cluster === "mainnet" ? "" : "?cluster=" + cluster); }
+  function row(label, addr, cluster) { return el("div", { class: "row" }, [el("span", { text: label }), el("b", null, [el("a", { href: solscan(addr, cluster), text: addr }), " (" + cluster + ")"])]); }
+  fetch("/.well-known/burnticker.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (wk) {
+    var box = document.getElementById("programs"), rows = [];
+    ["mainnet", "devnet"].forEach(function (c) { var cl = wk.clusters && wk.clusters[c]; if (!cl || !cl.programs) return; Object.keys(cl.programs).forEach(function (n) { var p = cl.programs[n]; if (p && p.deployed && B58.test(p.programId)) rows.push(row(n, p.programId, c)); }); });
+    if (rows.length) { box.textContent = ""; rows.forEach(function (x) { box.appendChild(x); }); }
+  }).catch(function () {});
+  var cl = fetch("/status/status.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (st) { return st && st.keeper && st.keeper.cluster === "mainnet" ? "mainnet" : "devnet"; }).catch(function () { return "devnet"; });
+  Promise.all([fetch("/index.json", { cache: "no-store" }).then(function (r) { return r.json(); }), cl]).then(function (x) {
+    var ix = x[0], cluster = x[1], box = document.getElementById("coins"), toks = (ix.tokens || []).filter(function (t) { return t.status === "live" && B58.test(t.mint); }).slice(0, 12);
+    if (!toks.length) return;
+    box.textContent = "";
+    toks.forEach(function (t) { box.appendChild(row("$" + String(t.ticker).slice(0, 12), t.mint, cluster)); });
+  }).catch(function () {});
+})();
+</script>
+</body>
+</html>

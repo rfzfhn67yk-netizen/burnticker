@@ -83,7 +83,7 @@ Every post below passes the copy lint (test/burntickerCopy.test.ts lints this se
 > Nothing is ever won here. Things are only burned. One scoreboard per league; when its season ends, the coin with the most receipts is its champion: a stat, not a prize.
 
 **5/6 — the guardrails**
-> Settled on primary sources · signed readings (one attester at launch; second attester scheduled, not live) · program-run burns · receipts anyone can recompute · open source · three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
+> Settled on primary sources · signed readings (one attester at launch; second attester scheduled, not live) · program-run burns · receipts anyone can recompute · open source · three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform never buys any coin · LP locked forever, its fees fund the burn · rules locked at launch.
 
 **6/6 — the first coin, and the line**
 > First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.
@@ -116,7 +116,7 @@ below passes the copy lint (test/dailyPost.test.ts lints this section).
 > Rule files: {SITE_URL}/t/{TICKER_A}/rules.json and {SITE_URL}/t/{TICKER_B}/rules.json
 
 **4/5 — same terms**
-> Same terms on both sides: one fee split, each coin with its own burn pool, LP burned at graduation, no creator cash from fees, no team allocation.
+> Same terms on both sides: one fee split, each coin with its own burn pool, LP locked forever at graduation (its fees fund the burn), no creator cash from fees, no team allocation.
 >
 > Neither pool can pay the other side. Anyone can deposit into either; nobody can withdraw.
 

@@ -139,6 +139,41 @@ export const LOCK_CPMM_AUTHORITY: Record<Cluster, PublicKey> = {
 };
 
 /**
+ * LAUNCHPAD-PATH §35 (2026-10-10): graduation LP is LOCKED forever in Raydium's CPMM lock program ("Burn & Earn"), the Fee Key NFT is
+ * held by burn_receipts' FEE_KEYS PDA, and claim_lock_fees splits the LP fees 80 % burn pool / 20 % operator treasury (compiled).
+ * Lock program ids: SDK src/common/programId.ts LOCK_CPMM_PROGRAM / DEVNET LOCK_CPMM_PROGRAM. Its authority (above) is its PDA
+ * ["lock_cp_authority_seed"].
+ */
+export const LOCK_CPMM_PROGRAM_ID: Record<Cluster, PublicKey> = {
+  mainnet: new PublicKey("LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE"),
+  devnet: new PublicKey("DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX"),
+  localnet: new PublicKey("LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE"),
+};
+export const LOCK_CP_AUTHORITY_SEED = Buffer.from("lock_cp_authority_seed", "utf8");
+/** The lock program's per-position state ["locked_liquidity", fee_nft_mint] (LockedCpLiquidityState, 256 B; offsets from devnet). */
+export const LOCKED_LIQUIDITY_SEED = Buffer.from("locked_liquidity", "utf8");
+export const LOCKED_LIQUIDITY_OFFSETS = { lockedLp: 8, claimedLp: 16, unclaimedLp: 24, lastLp: 32, lastK: 40, epoch: 56, pool: 64, feeNftMint: 96, owner: 128, lpMint: 160 } as const;
+export const SEED_FEE_KEYS = Buffer.from("fee_keys", "utf8");
+export const SEED_FEE_KEY = Buffer.from("fee_key", "utf8");
+/** The fixed split (program constants LOCK_FEE_BURN_BPS / LOCK_FEE_OPERATOR_BPS): operator = floor(x·2000/10000), burn pool = the rest. */
+export const LOCK_FEE_BURN_BPS = 8_000;
+export const LOCK_FEE_OPERATOR_BPS = 2_000;
+/**
+ * The operator treasury compiled into each build (program constant OPERATOR_TREASURY): devnet = the Squads vault; the default
+ * (mainnet) build carries the all-zero placeholder and refuses claims (TreasuryNotPinned) until the owner's mainnet vault is compiled
+ * in; localnet = the LiteSVM suites' test treasury.
+ */
+export const OPERATOR_TREASURY: Record<Cluster, PublicKey> = {
+  mainnet: PublicKey.default,
+  devnet: new PublicKey("A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"),
+  localnet: new PublicKey(Buffer.alloc(32, 0x7e)),
+};
+/** PlatformConfig.platformLockNftWallet (LaunchLab layout.ts) and the policy-0 requirement: platformScale 1,000,000, the others 0. */
+export const LL_PLATFORM_LOCK_NFT_WALLET = 48;
+export const REQUIRED_LL_PLATFORM_SCALES_PPM: readonly [bigint, bigint, bigint] = [BigInt(1_000_000), BigInt(0), BigInt(0)];
+export const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+
+/**
  * Genesis hashes, for the cluster-consistency check (review L-6) and the signed message's cluster binding (review-2 F12: the
  * program's default build binds mainnet's, its `devnet` build devnet's; each TokenConfig stores the one it enforces).
  */

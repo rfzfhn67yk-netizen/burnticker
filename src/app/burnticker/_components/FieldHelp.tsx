@@ -6,7 +6,8 @@ import { helpFor } from "@/lib/burnticker/fieldHelp";
 /**
  * FIELD HELP (ui-conventions.md pattern #27): a small "?" after a label. It opens on hover and on keyboard focus, toggles on tap (phones),
  * closes on Escape, on blur and on a tap outside, and is announced through aria-describedby. Two lines from fieldHelp.ts: what to
- * enter, and what it does to the rule or the coin. Inside a <label> the click is stopped so the "?" never toggles the field.
+ * enter, and what it does to the rule or the coin. Inside a <label> the click is stopped so the "?" never toggles the field. The "?" is
+ * drawn by CSS (::before), not text, so a copied label never reads "Burn per winning window: 5%?" (the owner's paste, 2026-10-10).
  */
 export function FieldHelp({ id }: { id: string }) {
   const h = helpFor(id);
@@ -27,7 +28,7 @@ export function FieldHelp({ id }: { id: string }) {
         className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-neutral-600 font-mono text-[10px] leading-none text-neutral-300 hover:border-amber-400 hover:text-amber-300 focus:border-amber-400 focus:outline-none"
         onMouseEnter={() => setOpen(true)} onMouseLeave={() => { if (!pinned) setOpen(false); }}
         onFocus={() => setOpen(true)} onBlur={() => { if (!pinned) setOpen(false); }}
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPinned(!pinned || !open); setOpen(!(pinned && open)); }}>?</button>
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPinned(!pinned || !open); setOpen(!(pinned && open)); }}><span aria-hidden="true" className="select-none before:content-['?']" /></button>
       <span id={tipId} role="tooltip" hidden={!open}
         className="absolute left-0 top-5 z-50 w-64 max-w-[80vw] rounded-md border border-neutral-700 bg-neutral-950 p-2 text-left text-xs font-normal normal-case tracking-normal text-neutral-200 shadow-lg">
         <span className="block"><b className="text-amber-300">Enter:</b> {h.what}</span>

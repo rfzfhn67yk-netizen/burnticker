@@ -211,11 +211,12 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
   const reader = rpc ? await web3ChainReader(rpc).catch(() => null) : null;
   const attesters = p.registry.tokens().map((t) => { const a = p.registry.attesters(t.mint).filter((x) => x.active); return { ticker: t.ticker, attesters: a.length, independent: a.filter((x) => x.role === "independent").length, quorum: Math.max(1, Math.min(1, a.length)) }; });
   const live = p.registry.tokens("live");
-  const page = await buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null });
+  const page = await buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster });
   const liveBps = page.livePlatform.found ? Object.fromEntries(page.livePlatform.comparison.map((r) => [r.field, { designed: r.designed, live: r.live, matches: r.matches }])) : null;
   return ok({
     generatedAt: page.generatedAt, cluster: p.cluster, powers: page.powers, operator: page.operator,
     fees: { designed: page.designedFees, live: { platformId: page.livePlatform.platformId, found: page.livePlatform.found, readAt: page.livePlatform.readAt, error: page.livePlatform.error, fields: liveBps } },
+    lpLock: page.lpLock,
     program: page.program, attesters: page.attesters, audit: page.audit, statements: page.statements, operatorLine: page.operatorLine, useOfFees: page.useOfFees, preAuditCapSol: page.preAuditCapSol,
     cannot: ["change any token's rule (a different rule is a different token)", "claim, redirect or discount any fee through this API", "adopt an existing token (the program needs the new mint's signature at init)", "sign, send or hold a key for you"],
     rpcConfigured: !!rpc, stubs: p.stubs,

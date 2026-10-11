@@ -34,9 +34,11 @@ export const OUTFLOW = {
   swapBurn: "burn pool SOL → swap → every token received is burned",
   burn: "vault tokens → burned",
   trade: "the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault",
-  graduate: "curve SOL → the Raydium pool (LP burned); leftover tokens burned; the side's escrowed fees and residue → its burn pool",
+  graduate: "curve SOL → the Raydium pool (its LP then locked forever by lock_lp); leftover tokens burned; the side's escrowed fees and residue → its burn pool",
   close: "voided pairs only: residue → burn pools; account rent → the creator who paid it",
   devClaim: "the accrued 25 bps → the developer wallet fixed at init",
+  lockFees: "the locked LP's fees → 80 % to the burn pool, 20 % to the operator treasury (compiled); the coin side burned",
+  lock: "the pool's LP → Raydium's lock, forever (the Fee Key held by burn_receipts)",
 } as const;
 export type OutflowClass = keyof typeof OUTFLOW;
 
@@ -44,12 +46,12 @@ export type OutflowClass = keyof typeof OUTFLOW;
 export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowClass>> = {
   burn_receipts: {
     apply_attester_change: "none", apply_cap_raise: "none", apply_registration_policy: "none", cancel_attester_change: "none", cancel_cap_raise: "none",
-    cancel_registration_policy: "none", check_pool_health: "none", claim_launchlab_creator_fee: "intoPool", clear_cranker_allowlist: "none",
+    cancel_registration_policy: "none", check_pool_health: "none", claim_launchlab_creator_fee: "intoPool", claim_lock_fees: "lockFees", clear_cranker_allowlist: "none",
     crank_buyback: "swapBurn", crank_no_units: "none", crank_vault: "burn", initialize_platform: "rent", initialize_token: "rent", propose_attesters: "none",
-    propose_cap_raise: "none", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
+    propose_cap_raise: "none", register_fee_key: "rent", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
     set_registration_policy: "none", submit_reading: "rent", veto_registration_policy: "none",
   },
-  pair_curve: { buy: "trade", sell: "trade", graduate: "graduate", close_pair: "close", init_pair: "rent", void_pair: "none", claim_developer_fee: "devClaim" },
+  pair_curve: { buy: "trade", sell: "trade", graduate: "graduate", close_pair: "close", init_pair: "rent", void_pair: "none", claim_developer_fee: "devClaim", lock_lp: "lock" },
 };
 
 export interface MoneyRow { program: ProgramName; instruction: string; class: string; signers: string; outflow: string; outflowClass: OutflowClass; funds: string }
@@ -92,7 +94,7 @@ export function buildChecklist(root = process.cwd()): Checklist {
     { id: "readings", title: "Readings and receipts", text: "Readings are append-only and quorum-checked on chain; no instruction edits or deletes one. Off chain, the registry refuses updates and deletes with SQL triggers.", where: `${REGISTER_FILES.burn_receipts} → submit_reading` },
     { id: "pools", title: "Where a burn pool can trade", text: "The pool is registered once (provenance-checked) and frozen; replacing a dead pool needs 7 days of continuous recorded untradeability and the same checks.", where: `${REGISTER_FILES.burn_receipts} → register_pool, replace_pool` },
     { id: "mint", title: "Supply", text: "Neither program holds a mint authority after creation; pair coins have their mint authority revoked inside init_pair and no freeze authority ever. The only token instruction either program runs on a coin is Burn.", where: `${REGISTER_FILES.burn_receipts}, ${REGISTER_FILES.pair_curve} → non_powers` },
-    { id: "lp", title: "Liquidity", text: "LP is burned at graduation: 100% on LaunchLab migrations under the platform config, 100% inside pair_curve's graduate.", where: `${REGISTER_FILES.pair_curve} → graduate; src/lib/burnticker/fees.ts LP_BURNED_PCT` },
+    { id: "lp", title: "Liquidity", text: "LP is locked forever at graduation: 100% on LaunchLab migrations under the platform config and 100% through pair_curve's lock_lp, with Raydium's LP lock (never withdrawable). The Fee Key is owned by the burn_receipts fee-keys PDA; the permissionless claim_lock_fees pays 80% of the SOL-side fees to the coin's burn pool and 20% to the operator treasury, compiled constants; the coin side is burned.", where: `${REGISTER_FILES.burn_receipts} → claim_lock_fees; ${REGISTER_FILES.pair_curve} → lock_lp; src/lib/burnticker/lockFees.ts` },
     { id: "pair-params", title: "A pair's terms", text: "Curve parameters, the combined raise that graduates the pair, the minimum share, the deadline, the fee and the fee recipients are fixed at init_pair; pair_curve has no admin field at all.", where: `${REGISTER_FILES.pair_curve} → non_powers` },
     { id: "metadata", title: "Coin metadata", text: t.trustPack?.metadataUri?.text ?? "Server-hosted until then.", where: `${TRANSPARENCY_FILE} → trustPack.metadataUri`, status: t.trustPack?.metadataUri?.status ?? "server-hosted" },
   ];

@@ -16,6 +16,11 @@ opt-level = 3
 incremental = false
 codegen-units = 1
 
-# pair_curve (2026-10-10): optimise the program for size — its deploy rent is ~7 SOL per MB; burn_receipts is unaffected.
+# pair_curve (2026-10-10): optimise the program for size — its deploy rent is ~5 SOL per MB.
 [profile.release.package.pair_curve]
+opt-level = "z"
+
+# burn_receipts (2026-10-10, LP-lock release): optimised for size too — the upgrade buffer is rent (≈ 5,080 lamports per byte), and the
+# behaviour is pinned by the same LiteSVM suites at either opt-level.
+[profile.release.package.burn_receipts]
 opt-level = "z"

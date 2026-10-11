@@ -8,7 +8,7 @@ use crate::math::CurveParams;
 /// LAYOUT CONTRACT: burn_receipts reads the first fields of this account BY BYTE OFFSET (register_pair_pool, burn_receipts
 /// src/pair_curve.rs). Do not reorder or resize anything before `vault`:
 ///   version @8, bump @9, vault_bump @10, status @11, mints @12/@44, pools @76/@108, lp_supply_at_creation @140/@148,
-///   lp_burned @156/@164, cp_config @172, vault @204 (236 bytes).
+///   lp_locked @156/@164 (named lp_burned before LAUNCHPAD-PATH §35), cp_config @172, vault @204 (236 bytes).
 /// tests/lifecycle.rs pins these offsets against a real account.
 #[account]
 #[derive(InitSpace)]
@@ -24,8 +24,9 @@ pub struct Pair {
     pub pools: [Pubkey; 2],
     /// PoolState.lp_supply right after `initialize` (all LP that ever existed at creation, incl. CPMM's 100 unminted units).
     pub lp_supply_at_creation: [u64; 2],
-    /// LP burned by graduate (everything the vault received).
-    pub lp_burned: [u64; 2],
+    /// The LP lock_lp moved into Raydium's CPMM lock (0 until then). Pairs graduated before LAUNCHPAD-PATH §35 burned their LP and
+    /// this field (then `lp_burned`, same offset) recorded the burn.
+    pub lp_locked: [u64; 2],
     /// The CPMM AmmConfig both pools use — the cpConfigId pinned in both mints' burn_receipts TokenConfigs.
     pub cp_config: Pubkey,
     /// The SOL vault PDA ["vault", pair] (also the CPMM pool_creator).

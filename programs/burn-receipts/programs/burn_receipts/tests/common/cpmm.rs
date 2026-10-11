@@ -152,17 +152,19 @@ pub fn launchlab_state(env: &mut Env, mint: &Pubkey, creator: &Pubkey, cp_config
 
 /// Points TEST_LAUNCHLAB_PLATFORM's cpConfigId at `cp_config` (what LaunchLab's updateCpConfigId does).
 pub fn set_platform_cp_config(env: &mut Env, cp_config: &Pubkey) {
-    set_platform(env, cp_config, &Pubkey::default(), [500_000, 400_000, 100_000]);
+    set_platform(env, cp_config, &Pubkey::default(), [1_000_000, 0, 0]);
 }
 
-/// The test LaunchLab PlatformConfig (SDK layout): cpConfigId, platformCpCreator and the LP lock/burn scales (platform, creator,
-/// burn; 10⁻⁶).
+/// The test LaunchLab PlatformConfig (SDK layout): platformLockNftWallet (= FEE_KEYS), cpConfigId, platformCpCreator and the LP
+/// lock/burn scales (platform, creator, burn; 10⁻⁶).
 pub fn set_platform(env: &mut Env, cp_config: &Pubkey, cp_creator: &Pubkey, scales: [u64; 3]) {
     env.svm.set_account(TEST_LAUNCHLAB_PLATFORM, platform_account(env, cp_config, cp_creator, scales)).unwrap();
 }
 
 pub fn platform_account(env: &Env, cp_config: &Pubkey, cp_creator: &Pubkey, scales: [u64; 3]) -> solana_account::Account {
     let mut platform = vec![0u8; 944];
+    // LAUNCHPAD-PATH §35: the platform's Fee Key wallet is burn_receipts' FEE_KEYS PDA.
+    platform[LL_PLATFORM_LOCK_NFT_WALLET..LL_PLATFORM_LOCK_NFT_WALLET + 32].copy_from_slice(fee_keys_pda().as_ref());
     platform[LL_PLATFORM_CP_CONFIG_ID..LL_PLATFORM_CP_CONFIG_ID + 32].copy_from_slice(cp_config.as_ref());
     platform[LL_PLATFORM_CP_CREATOR..LL_PLATFORM_CP_CREATOR + 32].copy_from_slice(cp_creator.as_ref());
     for (i, v) in scales.iter().enumerate() {
@@ -170,6 +172,11 @@ pub fn platform_account(env: &Env, cp_config: &Pubkey, cp_creator: &Pubkey, scal
     }
     let lamports = env.svm.minimum_balance_for_rent_exemption(platform.len());
     litesvm_account(lamports, platform, LAUNCHLAB_PROGRAM_ID)
+}
+
+/// burn_receipts' FEE_KEYS PDA ["fee_keys"] (LAUNCHPAD-PATH §35).
+pub fn fee_keys_pda() -> Pubkey {
+    Pubkey::find_program_address(&[FEE_KEYS_SEED], &burn_receipts::ID).0
 }
 
 /// AmmConfig index 0's address (deterministic) — the test LaunchLab platform's cpConfigId.

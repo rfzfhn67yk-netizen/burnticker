@@ -58,7 +58,7 @@ describe("the generated description", () => {
       const n = (t.paragraph.match(new RegExp(re.source, "g")) ?? []).length;
       assert.equal(n, k === f.kind ? 1 : 0, `${f.label}: ${n} × ${k} window sentence\n${t.paragraph}`);
     }
-    assert.ok(t.paragraph.endsWith("Creator earns nothing; all LP burned."));
+    assert.ok(t.paragraph.endsWith("Creator earns nothing; LP locked forever, its fees fund the burn."));
     assert.ok(t.paragraph.startsWith(`$${t.ticker} — `));
     assert.equal(t.badge, windowBadge(f.rule, f.ctx));
   });
@@ -66,7 +66,7 @@ describe("the generated description", () => {
   test("the Rays' season coin, word for word (the owner's target, with the window sentence and the year in the ticker)", () => {
     const t = describeRule(team("mlb", "TB", "win", S(2026)), { ticker: "" });
     assert.equal(t.ticker, "RAYS26"); assert.equal(t.badge, "2026 SEASON");
-    assert.equal(t.paragraph, "$RAYS26 — burns when the Rays win. Every Rays win in the 2026 season, the burn pool spends 2% buying $RAYS26 on Raydium and burns it, with a receipt on chain. Each game settles on the game's on-chain payout where a market exists, else on a licensed final score, confirmed by MLB's official feed. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only (regular season and playoffs). After the Rays' last game it burns down whatever is left over four weeks and retires; it does not continue into 2027. Creator earns nothing; all LP burned.");
+    assert.equal(t.paragraph, "$RAYS26 — burns when the Rays win. Every Rays win in the 2026 season, the burn pool spends 2% buying $RAYS26 on Raydium and burns it, with a receipt on chain. Each game settles on the game's on-chain payout where a market exists, else on a licensed final score, confirmed by MLB's official feed. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only (regular season and playoffs). After the Rays' last game it burns down whatever is left over four weeks and retires; it does not continue into 2027. Creator earns nothing; LP locked forever, its fees fund the burn.");
     const e = describeRule(team("nfl", "PHI", "win", S(2026)), { ticker: "" });
     assert.equal(e.ticker, "EAGLES26");
     assert.match(e.windowSentence, /^This coin covers the 2026 Eagles season only \(regular season and playoffs\)\. After the Eagles' last game it burns down whatever is left over four weeks and retires; it does not continue into 2027\.$/);

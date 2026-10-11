@@ -50,9 +50,16 @@ const POWERS = {
   graduate: {
     class: "permissionless",
     signers: { cranker: "anyone" },
-    can: "Once per side. The first call (combined raise ≥ target, each side ≥ its minimum share, before the deadline) commits the pair and closes both curves. Each call wraps that side's raise less CPMM's fee and rents, creates the side's Raydium CPMM pool at the pair_curve PDA [\"pool\", pair, [side]] with the vault as creator and the pinned AmmConfig, at the curve's last price, burns 100 % of the LP and every token the pool did not need, and sends rent refunds and dust to the side's burn pool.",
-    cannot: "Graduate before the condition holds or after the deadline (first call); pick the amounts, the price, the pool address or the AmmConfig; keep any LP; send SOL anywhere but the pool, CPMM's fee/rents and the burn pool; leave the vault re-assigned or a vault token account delegated or close-authorised (re-checked after the CPI, hard errors).",
-    timelock: null, sunset: "Once per side.", funds: "SOL vault → its WSOL account → the side's CPMM pool (and CPMM's create-pool fee + rents); token vault → the pool; LP → burned; leftover tokens → burned; residue → the side's burn pool.",
+    can: "Once per side. The first call (combined raise ≥ target, each side ≥ its minimum share, before the deadline) commits the pair and closes both curves. Each call wraps that side's raise less CPMM's fee and rents, creates the side's Raydium CPMM pool at the pair_curve PDA [\"pool\", pair, [side]] with the vault as creator and the pinned AmmConfig, at the curve's last price, burns every token the pool did not need, keeps the pool's LP in the vault's LP account for lock_lp, and sends the side's escrowed burn share, rent refunds and dust to the side's burn pool.",
+    cannot: "Graduate before the condition holds or after the deadline (first call); pick the amounts, the price, the pool address or the AmmConfig; send the LP anywhere (it stays in the vault until lock_lp); send SOL anywhere but the pool, CPMM's fee/rents and the burn pool; leave the vault re-assigned or a vault token account delegated or close-authorised (re-checked after the CPI, hard errors).",
+    timelock: null, sunset: "Once per side.", funds: "SOL vault → its WSOL account → the side's CPMM pool (and CPMM's create-pool fee + rents); token vault → the pool; LP → the vault's LP account (until lock_lp); leftover tokens → burned; residue → the side's burn pool.",
+  },
+  lock_lp: {
+    class: "permissionless",
+    signers: { cranker: "anyone" },
+    can: "LAUNCHPAD-PATH §35: once per side, after graduate — move ALL of the side's pool LP from the vault into Raydium's CPMM lock program (lock_cp_liquidity; permanent, never withdrawable), its Fee Key NFT (mint = the pair_curve PDA [\"fee_nft\", pair, [side]]) minted to burn_receipts' FEE_KEYS PDA, so burn_receipts' claim_lock_fees splits the pool's LP fees 80 % burn pool / 20 % operator and burns the coin side; close the emptied LP account (rent to the side's burn pool). The cranker pays the lock's rents.",
+    cannot: "Lock less than all of the LP, lock twice, lock before the pool exists; send the Fee Key anywhere but FEE_KEYS; let the lock program take lamports from the vault, re-assign it, or leave LP in the vault (all re-checked after the CPI, hard errors).",
+    timelock: null, sunset: "Once per side.", funds: "Vault LP → Raydium's lock (forever); Fee Key → FEE_KEYS; emptied LP account's rent → the side's burn pool; cranker → the lock's rents.",
   },
   void_pair: {
     class: "permissionless",
@@ -82,7 +89,7 @@ const POWERS = {
 const NON_POWERS = [
   "No admin, authority, owner or operator field exists in the program; no instruction takes a privileged signer after init_pair.",
   "No instruction updates a pair's parameters (virtual reserves, curve supply, target, minimum share, deadline, fee, fee recipients, AmmConfig) after init_pair.",
-  "No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts, LP burned in the same instruction) and residue to the burn pools.",
+  "No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts; the LP is then locked forever by lock_lp, LAUNCHPAD-PATH §35) and residue to the burn pools.",
   "No pause or freeze exists. Buys end at the deadline; nothing can stop sells on an open or voided pair.",
   "No mint authority survives init_pair and no freeze authority ever exists; the program never mints after init.",
   "The pair program holds the 75 bps burn share only in escrow: it reaches the side's burn_receipts fee PDA when the pool is created, or goes back to that side's holders on a void.",
@@ -102,7 +109,7 @@ const EXTERNAL = [
     power: "Raydium CPMM admin (outside the program)",
     holder: "Raydium",
     can: "Change the pinned AmmConfig's create-pool fee or disable pool creation on it; upgrade the CPMM program.",
-    effect: "Before the first graduate: graduation can fail (InsufficientPoolSol / CPMM refusal) and the pair voids at its deadline — every holder can sell back. Between the two sides: the second side waits; after 3 days its holders may sell back on its curve. A hostile CPMM upgrade cannot re-assign the vault or its token accounts or take more than the pool costs (post-CPI checks; tests/lifecycle.rs with mocks/evil_cpmm_init).",
+    effect: "Before the first graduate: graduation can fail (InsufficientPoolSol / CPMM refusal) and the pair voids at its deadline — every holder can sell back. Between the two sides: the second side waits; a side Raydium blocks for 3 days after the commit, or any side still missing 30 days after it, is refunded pro rata to its holders. A hostile CPMM upgrade cannot re-assign the vault or its token accounts or take more than the pool costs (post-CPI checks; tests/lifecycle.rs with mocks/evil_cpmm_init).",
   },
   {
     power: "LaunchLab platform admin (outside the program)",

@@ -190,6 +190,50 @@ pub const CPMM_POOL_SEED: &[u8] = b"pool";
 pub const LOCK_CPMM_AUTHORITY: Pubkey = pubkey!("3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH");
 #[cfg(feature = "devnet")]
 pub const LOCK_CPMM_AUTHORITY: Pubkey = pubkey!("7qWVV8UY2bRJfDLP4s37YzBPKUkVB46DStYJBpYbQzu3");
+/// Raydium's CPMM liquidity-lock program ("Burn & Earn"; @raydium-io/raydium-sdk-v2 0.2.74-alpha src/common/programId.ts
+/// LOCK_CPMM_PROGRAM / DEVNET LOCK_CPMM_PROGRAM). Its authority above is its PDA ["lock_cp_authority_seed"]. Owner decision
+/// 2026-10-10 (LAUNCHPAD-PATH §35): graduation LP is LOCKED here forever instead of burned, the Fee Key NFT is held by this
+/// program's FEE_KEYS PDA, and claim_lock_fees splits the LP fees 80 / 20.
+#[cfg(not(feature = "devnet"))]
+pub const LOCK_CPMM_PROGRAM_ID: Pubkey = pubkey!("LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE");
+#[cfg(feature = "devnet")]
+pub const LOCK_CPMM_PROGRAM_ID: Pubkey = pubkey!("DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX");
+/// The lock program's per-position state: PDA ["locked_liquidity", fee_nft_mint], Anchor account `LockedCpLiquidityState` (256 B).
+/// Field offsets read from live devnet accounts (the program's source is not public): locked_lp_amount @8, claimed @16,
+/// unclaimed @24, last_lp @32, last_k u128 @40, recent_epoch @56, pool_id @64, fee_nft_mint @96, owner @128, lp_mint @160.
+pub const LOCKED_LIQUIDITY_SEED: &[u8] = b"locked_liquidity";
+pub const LOCKED_LIQUIDITY_DISCRIMINATOR: [u8; 8] = [0x19, 0x0a, 0xee, 0xc5, 0xcf, 0xea, 0x49, 0x16];
+pub const LOCKED_LIQUIDITY_MIN_LEN: usize = 192;
+pub const LL_LOCKED_LP_AMOUNT: usize = 8;
+pub const LL_LOCKED_POOL: usize = 64;
+pub const LL_LOCKED_FEE_NFT_MINT: usize = 96;
+pub const LL_LOCKED_LP_MINT: usize = 160;
+/// collect_cp_fees (SDK src/raydium/cpmm/instruction.ts anchorDataBuf.collectCpFee).
+pub const LOCK_COLLECT_CP_FEES_DISCRIMINATOR: [u8; 8] = [8, 30, 51, 199, 209, 184, 247, 133];
+/// The program's Fee Key holder: one global, data-less PDA. It is the LaunchLab platform's platformLockNftWallet, so every
+/// migration's Fee Key NFT lands in its associated token account, and pair_curve names it fee_nft_owner when it locks a pair pool.
+/// Global because LaunchLab's NFT wallet is a platform-level field (one address for every coin of the platform).
+pub const FEE_KEYS_SEED: &[u8] = b"fee_keys";
+/// Per-mint record of the coin's lock position: ["fee_key", mint].
+pub const FEE_KEY_SEED: &[u8] = b"fee_key";
+/// The fixed split of every claim's SOL side (compiled; no admin, no config field): 80 % to the coin's burn pool (fee PDA), 20 % to
+/// the operator treasury. The operator share is floor(wsol · 2000 / 10000); the burn pool receives the rest (rounding favours the
+/// burn). The coin side of every claim is burned in the same instruction.
+pub const LOCK_FEE_BURN_BPS: u64 = 8_000;
+pub const LOCK_FEE_OPERATOR_BPS: u64 = 2_000;
+/// The operator treasury that receives the 20 % (the Squads vault), compiled per cluster like CLUSTER_GENESIS_HASH. The mainnet
+/// build carries the placeholder (all zeros) until the owner's mainnet Squads vault is compiled in: claim_lock_fees then refuses with
+/// TreasuryNotPinned and the fees stay in the lock (nothing is lost). Localnet = the test treasury of the LiteSVM suites.
+#[cfg(not(any(feature = "devnet", feature = "localnet")))]
+pub const OPERATOR_TREASURY: Pubkey = Pubkey::new_from_array([0u8; 32]);
+#[cfg(feature = "devnet")]
+pub const OPERATOR_TREASURY: Pubkey = pubkey!("A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
+#[cfg(all(feature = "localnet", not(feature = "devnet")))]
+pub const OPERATOR_TREASURY: Pubkey = Pubkey::new_from_array([0x7e; 32]);
+/// A position registered with register_fee_key must hold a strict majority of the pool's LP at registration: only one position can,
+/// so a griefer who locks dust with its Fee Key sent to FEE_KEYS cannot take the coin's slot (registration is once per mint).
+pub const FEE_KEY_MIN_LOCKED_LP_BPS: u128 = 5_000;
+
 /// Review-3 M-2: at registration at least this share of the pool's CURRENT LP (pool.lp_supply) must be burned (lp_supply − LP mint
 /// supply, incl. CPMM's 100 never-minted units) or locked (the lock authority's LP account). Under policy 0 the provenance proof
 /// (LaunchLab pool PDA + creator + migrate target, the pinned cpConfigId's pool PDA, fee-PDA pool_creator) is the primary check and
@@ -206,6 +250,9 @@ pub const FALLBACK_MIN_LOCKED_LP_BPS: u128 = 9_000;
 /// launchpad.ts "max: 1_000_000 = 100%") must cover at least this share at initialize_token.
 pub const MIN_LL_LOCK_SCALE_PPM: u64 = 500_000;
 pub const LL_SCALE_DENOMINATOR: u64 = 1_000_000;
+/// LAUNCHPAD-PATH §35: a policy-0 (LaunchLab) token's platform must lock 100 % of the migrated LP with the Fee Key to FEE_KEYS —
+/// platformScale = 1,000,000, creatorScale = 0, burnScale = 0 — and name FEE_KEYS as its platformLockNftWallet.
+pub const REQUIRED_LL_PLATFORM_SCALE_PPM: u64 = 1_000_000;
 
 /// LaunchLab account layouts (SDK src/raydium/launchpad/layout.ts, borsh-packed, 8-byte discriminator first):
 ///   LaunchpadPool  ["pool", mintA, mintB] (pda.ts getPdaLaunchpadPoolId): migrateType @20, platformId @173, mintA @205, mintB @237,
@@ -221,6 +268,8 @@ pub const LL_POOL_CREATOR: usize = 333;
 pub const LL_POOL_MIN_LEN: usize = 365;
 pub const LL_PLATFORM_CP_CONFIG_ID: usize = 688;
 /// PlatformConfig.platformScale / creatorScale / burnScale (u64 each) and platformCpCreator (review-3 M-3; SDK offsetOf).
+/// PlatformConfig.platformLockNftWallet (u64 epoch @8, platformClaimFeeWallet @16, platformLockNftWallet @48 — SDK layout.ts).
+pub const LL_PLATFORM_LOCK_NFT_WALLET: usize = 48;
 pub const LL_PLATFORM_SCALES: usize = 80;
 pub const LL_PLATFORM_CP_CREATOR: usize = 800;
 pub const LL_PLATFORM_MIN_LEN: usize = 832;

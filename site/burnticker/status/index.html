@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burnticker status</title>
+<meta name="description" content="Burnticker keeper status: heartbeat, sources, open alerts, wind-downs, the latest registry snapshot on Arweave, and the programs. Read from status.json, rewritten every minute.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0a0c">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" sizes="64x64" href="https://burnticker.com/brand/favicon.png">
+<style>
+/* BEGIN shared tokens (copied verbatim from site/burnticker/index.html; test/burntickerTrustOps.test.ts keeps them equal) */
+:root{
+  --bg:#0a0a0c;--panel:#131317;--panel2:#1a1a20;--line:#26262d;--ink:#f6f4ee;--dim:#b8b6ae;--muted:#7f7e78;
+  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#0a0a0c;--ok:#5ad38f;--tape:#141418;--violet:#8f73e0;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
+}
+:root[data-theme="light"]{--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);overflow-x:hidden}
+a{color:var(--amber);text-decoration:none}a:hover{text-decoration:underline}
+.mono,code,pre{font-family:var(--mono)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+.muted{color:var(--muted)}.dim{color:var(--dim)}
+h2{font:700 .82rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin:0 0 14px}
+h2::before{content:"▮ ";color:var(--ember)}
+section{padding:44px 0;border-top:1px solid var(--line)}
+section.lead{border-top:0}
+.okmark{color:var(--ok)}
+.small{font-size:.86rem}
+.lede{font-size:1.1rem;color:var(--dim);max-width:62ch;margin:0 0 22px}
+
+/* END shared tokens */
+/* top */
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink)}
+.brand svg{width:30px;height:30px}
+.brand b{font:700 1.05rem/1 var(--mono);letter-spacing:.12em}
+.nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.nav a{font-size:.84rem;color:var(--dim);padding:7px 10px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
+.nav a:hover{text-decoration:none;border-color:var(--amber);color:var(--ink)}
+.btn{display:inline-block;padding:12px 18px;border-radius:8px;border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:.95rem}
+.btn:hover{text-decoration:none;border-color:var(--amber)}
+.btn.amber{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
+.nav .btn{padding:7px 12px;font-size:.84rem;border-radius:999px}
+@media (max-width:639px){.nav a.sec{display:none}}
+
+/* thermal receipts (B1 identity: paper #f2eee4, thermal black #1b1916, stamp violet #5b3fa3) */
+.slipwrap{filter:drop-shadow(0 8px 12px rgba(0,0,0,.45));transform:rotate(-1.2deg);min-width:0}
+.slipwrap.b{transform:rotate(1deg);margin-top:10px}
+.slip{position:relative;background:#f2eee4;color:#1b1916;font:12px/1.45 var(--mono);padding:18px 12px 18px;overflow:hidden;
+  background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.03) 0 1px,transparent 1px 3px),linear-gradient(90deg,transparent 0 63%,rgba(255,255,255,.55) 63% 63.8%,transparent 63.8%);
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/10px 51% repeat-x;
+  mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/10px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/10px 51% repeat-x}
+.slip .sh{font:700 1.15rem/1.1 var(--mono);letter-spacing:.04em;overflow-wrap:anywhere}
+.slip .ss{font-size:.66rem;letter-spacing:.16em;color:#4a443c;margin:3px 0 0}
+.slip .dash{border-top:2px dashed #2a2622;margin:8px 0 6px}
+.slip .row{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:6px}
+.slip .row span{color:#4a443c}
+.slip .row b{margin-left:auto;text-align:right;font-weight:700;overflow-wrap:anywhere}
+.slip .motto{margin:10px 0 0;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:#4a443c;text-align:center}
+.slip.hit{padding-bottom:44px}
+.slip .stamp{position:absolute;right:10px;bottom:16px;transform:rotate(-8deg);color:#5b3fa3;border:2px solid #5b3fa3;border-radius:3px;padding:0 5px;font:700 .82rem/1.2 var(--mono);letter-spacing:.12em;opacity:.82;mix-blend-mode:multiply;pointer-events:none}
+.mocknote{margin:8px 0 0;font:.7rem/1.4 var(--mono);letter-spacing:.06em;color:var(--muted);text-align:center}
+
+footer{padding:28px 0 48px;color:var(--muted);font-size:.84rem}
+footer .links{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 10px}
+/* the status page */
+.lead{padding:22px 0 6px}
+.lead h1{font:700 clamp(1.5rem,5vw,2.4rem)/1.05 var(--mono);letter-spacing:-.01em;margin:0 0 6px;text-transform:uppercase}
+.lead p{margin:0;color:var(--dim);max-width:70ch}
+.grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;padding:18px 0 8px}
+@media (min-width:820px){.grid{grid-template-columns:minmax(0,340px) 1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0;margin:0 0 14px}
+.panel h3{margin:0 0 8px;font:700 .78rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.panel p{margin:4px 0;color:var(--dim);font-size:.9rem}
+table.t{width:100%;border-collapse:collapse;font:12.5px/1.4 var(--mono)}
+table.t th{text-align:left;font-weight:600;color:var(--muted);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;padding:5px 6px;border-bottom:1px solid var(--line)}
+table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);vertical-align:top;overflow-wrap:anywhere}
+.scroll{overflow-x:auto}
+.st{display:inline-block;font:700 .66rem/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase;border:1.5px solid currentColor;border-radius:3px;padding:2px 5px;white-space:nowrap}
+.st.ok{color:var(--ok)}.st.bad{color:var(--ember)}.st.warn{color:var(--amber)}.st.idle{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.err{color:var(--ember)}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <div class="top">
+    <a class="brand" href="https://burnticker.com/" aria-label="Burnticker">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><radialGradient id="bt-scorch" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1f1c19"/><stop offset=".46" stop-color="#1f1c19"/><stop offset=".56" stop-color="#0e0b08"/><stop offset=".66" stop-color="#3a2411"/><stop offset=".78" stop-color="#8a5a24"/><stop offset=".9" stop-color="#cfa65c" stop-opacity=".6"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/></radialGradient></defs><rect width="64" height="64" rx="12" fill="#1f1c19"/><g transform="rotate(-5 32 32)"><path d="M14 11 L17.5 7.5 L21 11 L24.5 7.5 L28 11 L31.5 7.5 L35 11 L38.5 7.5 L42 11 L45.5 7.5 L49 11 L49 55 L45.5 58.5 L42 55 L38.5 58.5 L35 55 L31.5 58.5 L28 55 L24.5 58.5 L21 55 L17.5 58.5 L14 55 Z" fill="#f2eee4"/><rect x="18" y="15" width="25" height="4" fill="#1b1916"/><rect x="18" y="22" width="14" height="1.6" fill="#4a443c"/><path d="M18 27 H45" stroke="#2a2622" stroke-width="1.2" stroke-dasharray="2 1.5"/><rect x="18" y="31" width="9" height="1.6" fill="#1b1916"/><rect x="34" y="31" width="11" height="1.6" fill="#1b1916"/><rect x="18" y="36" width="8" height="1.6" fill="#1b1916"/><path d="M28.5 45.5 C28 40.5 32 37.5 36.5 38 C41.5 37.5 45.5 41 44.5 45.5 C44 50 40 52.5 36 52 C31.5 52.5 29 49.5 28.5 45.5 Z" fill="url(#bt-scorch)" transform="translate(36.5 45) scale(1.45) translate(-36.5 -45)"/><path d="M33 44.5 C33 42 35 40.8 37 41.2 C39.5 41 40.6 43 40.2 45 C40 47.2 38.2 48.6 36.2 48.3 C34.2 48.4 33 46.8 33 44.5 Z" fill="#1f1c19"/></g></svg>
+      <b>BURNTICKER</b>
+    </a>
+    <nav class="nav" aria-label="Links">
+      <a href="https://burnticker.com/burnticker">Coins</a>
+      <a href="https://burnticker.com/burnticker/trust">Trust</a>
+      <a class="sec" href="status.json">status.json</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <section class="lead">
+    <h1>Status</h1>
+    <p>What the keeper is doing right now, read from <a href="status.json">status.json</a> (rewritten about once a minute). When a source is down, disagrees with its cross-read or goes stale, its reading is withheld and nothing burns until it is right; this page says which.</p>
+    <p id="loadnote" class="small muted">Loading status.json…</p>
+  </section>
+  <div class="grid">
+    <div>
+      <div class="slipwrap"><div class="slip" id="slip" aria-live="polite">
+        <div class="sh">KEEPER</div><div class="ss" id="slip-sub">STATUS RECEIPT</div>
+        <div class="dash"></div>
+        <div id="slip-rows"></div>
+        <div class="dash"></div>
+        <p class="motto">supply, not price</p>
+      </div></div>
+    </div>
+    <div>
+      <div class="panel"><h3>Sources</h3><div class="scroll"><table class="t" id="feeds"><thead><tr><th>Selector</th><th>Coins</th><th>State</th><th>Last good read</th><th>Cross-read</th><th>Newest reading</th></tr></thead><tbody></tbody></table></div><p class="small muted" id="feeds-note"></p></div>
+      <div class="panel"><h3>Open alerts (24 h)</h3><p id="alerts"></p></div>
+      <div class="panel"><h3>Wind-downs and retired coins</h3><div id="ends"></div></div>
+      <div class="panel"><h3>Registry snapshot on Arweave</h3><div id="snapshot"></div></div>
+      <div class="panel"><h3>Programs</h3><div class="scroll"><table class="t" id="programs"><thead><tr><th>Program</th><th>Id</th><th>Cluster</th><th>Verified build</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="panel"><h3>Keepers</h3><div id="keepers"></div></div>
+    </div>
+  </div>
+</main>
+<footer class="wrap">
+  <div class="links">
+    <a href="https://burnticker.com/burnticker">Coins</a>
+    <a href="https://burnticker.com/burnticker/trust">Trust</a>
+    <a href="https://burnticker.com/api/burnticker/v1/snapshots">Snapshots API</a>
+    <a href="status.json">status.json</a>
+  </div>
+  <div>This page shows the keeper and its sources, not any coin's market. Coins that burn on real-world results — with receipts.</div>
+</footer>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) { if (k === "class") e.className = attrs[k]; else if (k === "text") e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function ago(ms, now) { if (ms === null || ms === undefined) return "never"; var s = Math.max(0, Math.round((now - ms) / 1000)); if (s < 90) return s + " s ago"; if (s < 5400) return Math.round(s / 60) + " min ago"; if (s < 172800) return Math.round(s / 3600) + " h ago"; return Math.round(s / 86400) + " days ago"; }
+  function badge(state) { var cls = state === "ok" ? "ok" : state === "never-read" ? "idle" : state === "stale" || state === "withheld" ? "warn" : "bad"; return el("span", { class: "st " + cls, text: state }); }
+  function row(label, value) { return el("div", { class: "row" }, [el("span", { text: label }), el("b", { text: value })]); }
+  function safeHref(u) { return /^https:\/\//.test(String(u || "")) ? u : null; }
+  window.renderStatus = function (s, now) {
+    now = now || Date.now();
+    var k = s.keeper;
+    var rows = $("slip-rows"); rows.textContent = "";
+    $("slip-sub").textContent = (k.role + " · " + (k.active ? "active" : "passive") + " · " + k.cluster).toUpperCase();
+    rows.appendChild(row("heartbeat", ago(k.lastCycleAt, now)));
+    rows.appendChild(row("host", k.hostIdHash));
+    rows.appendChild(row("cranks", k.paused ? "held (paused)" : k.active ? "running" : "held (passive)"));
+    if (k.lastCycle) rows.appendChild(row("last cycle", k.lastCycle.fetched + " read · " + k.lastCycle.planned + " planned · " + k.lastCycle.executed + " executed" + (k.lastCycle.errors ? " · " + k.lastCycle.errors + " error(s)" : "")));
+    var bad = s.feeds.filter(function (f) { return f.state !== "ok"; }).length;
+    rows.appendChild(row("sources", s.feeds.length + " · " + (bad ? bad + " not ok" : "all ok")));
+    rows.appendChild(row("open alerts", String(s.alerts.open)));
+    rows.appendChild(row("wind-downs", String(s.windDowns.pending)));
+    rows.appendChild(row("retired", String(s.retired.count)));
+    rows.appendChild(row("snapshot", s.snapshot ? s.snapshot.date + " · " + s.snapshot.sha256.slice(0, 12) + "…" : "none yet"));
+    if (s.fence && s.fence.held.length) rows.appendChild(row("fence", "HOLD: " + s.fence.held.map(function (h) { return "$" + h.ticker; }).join(", ")));
+    var slip = $("slip"); var old = slip.querySelector(".stamp"); if (old) old.remove();
+    var stamp = !k.active ? "PASSIVE" : bad ? "WITHHELD" : "OK";
+    slip.classList.add("hit"); slip.appendChild(el("div", { class: "stamp", text: stamp }));
+    var tb = $("feeds").querySelector("tbody"); tb.textContent = "";
+    if (!s.feeds.length) tb.appendChild(el("tr", null, [el("td", { colspan: "6", text: "no live coins, so no sources to read" })]));
+    s.feeds.forEach(function (f) {
+      var cr = f.crossRead.agreement === true ? "agrees" : f.crossRead.agreement === false ? "DISAGREES" : "—";
+      var newest = f.staleness.lastReadingId ? f.staleness.lastReadingId + (f.staleness.stale ? " (stale)" : "") : "none";
+      tb.appendChild(el("tr", null, [el("td", { class: "mono", text: f.selectorKey }), el("td", { text: f.tickers.map(function (t) { return "$" + t; }).join(" ") }), el("td", null, [badge(f.state), el("div", { class: "small muted", text: f.why })]), el("td", { text: ago(f.lastOkAt, now) }), el("td", { text: cr }), el("td", { text: newest })]));
+    });
+    $("feeds-note").textContent = "down = the source did not answer; disagree = its independent cross-read disagreed; withheld = held for another reason (the cross-read could not be read, a value is not final); stale = nothing new for longer than its cadence allows. Each one withholds the reading.";
+    var kinds = Object.keys(s.alerts.kinds);
+    $("alerts").textContent = s.alerts.open ? s.alerts.open + " alert(s): " + kinds.map(function (x) { return x + " × " + s.alerts.kinds[x]; }).join(", ") + " (kinds only; the operator reads the text)" : "none";
+    var ends = $("ends"); ends.textContent = "";
+    s.windDowns.coins.forEach(function (w) { ends.appendChild(el("p", { text: "$" + w.ticker + " · " + w.mode + " since " + w.endedAt.slice(0, 10) + " · " + w.daysDone + (w.windDownDays ? " of " + w.windDownDays : "") + " day(s) done · " + w.reason })); });
+    s.retired.coins.forEach(function (r) { ends.appendChild(el("p", { text: "$" + r.ticker + " · retired" + (r.retiredAt ? " " + r.retiredAt.slice(0, 10) : "") + " · last sweep " + (r.lastSweepDate || "none") })); });
+    if (!ends.childNodes.length) ends.appendChild(el("p", { text: "none" }));
+    var sn = $("snapshot"); sn.textContent = "";
+    if (s.snapshot) {
+      var href = safeHref(s.snapshot.url);
+      sn.appendChild(el("p", null, ["Latest: " + s.snapshot.date + " · ", href ? el("a", { href: href, text: s.snapshot.arweaveTxId }) : el("span", { text: s.snapshot.arweaveTxId })]));
+      sn.appendChild(el("p", { class: "mono small", text: "sha256 " + s.snapshot.sha256 }));
+      sn.appendChild(el("p", { class: "small muted", text: Object.keys(s.snapshot.rowCounts).map(function (t) { return t + " " + s.snapshot.rowCounts[t]; }).join(" · ") }));
+    } else sn.appendChild(el("p", { text: "No snapshot pinned yet." }));
+    var pt = $("programs").querySelector("tbody"); pt.textContent = "";
+    s.programs.forEach(function (p) { pt.appendChild(el("tr", null, [el("td", { text: p.name }), el("td", { class: "mono", text: p.programId }), el("td", { text: p.cluster }), el("td", null, [badge(p.verified === "matches" ? "ok" : p.verified === "not-deployed" ? "never-read" : "down"), el("span", { class: "small muted", text: " " + (p.verified === "matches" ? "deployed bytes = build (" + p.buildKind + ")" : p.verified === "not-deployed" ? "not deployed on this cluster" : "deployed bytes differ from the build") })])])); });
+    var kp = $("keepers"); kp.textContent = "";
+    kp.appendChild(el("p", { text: "This keeper: " + k.role + ", " + (k.active ? "active" : "passive") + " — " + k.reason }));
+    if (k.peer && k.peer.url) kp.appendChild(el("p", { text: "Peer: " + (k.peer.reachable ? (k.peer.role || "?") + ", " + (k.peer.active ? "active" : "passive") + ", last cycle " + ago(k.peer.lastCycleAt, now) : "unreachable (" + (k.peer.error || "no answer") + ")") }));
+    if (k.takeover) kp.appendChild(el("p", { class: "mono small", text: "Takeover note: " + k.takeover.at + " by host " + k.takeover.by + ", signed by " + k.takeover.signer.slice(0, 8) + "… — " + k.takeover.reason }));
+    $("loadnote").textContent = "status.json written " + ago(Date.parse(s.generatedAt), now) + " (" + s.generatedAt + ")";
+  };
+  if (document.currentScript && document.currentScript.dataset.noFetch === "1") return;
+  fetch("status.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (s) {
+    if (s.schema !== "burnticker.ops-status/v1") throw new Error("not a status document");
+    window.renderStatus(s);
+  }).catch(function (e) { var n = $("loadnote"); n.className = "small err"; n.textContent = "status.json could not be read (" + e.message + "). The keeper may be between cycles, or down; the trust page and the receipts are unaffected."; });
+})();
+</script>
+</body>
+</html>

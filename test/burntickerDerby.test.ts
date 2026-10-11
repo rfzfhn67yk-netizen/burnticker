@@ -52,7 +52,7 @@ describe("the selector and its rule", () => {
 
   test("the review sentence (the owner's example), the statement and the coin card are lint-clean", () => {
     const s = derbySentence(SEASON, "TEAMWIF", "TEAMSHIB", 0.01);
-    assert.equal(s, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. 7 days.");
+    assert.equal(s, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. Runs for 7 days, then winds down.");
     assert.deepEqual(lint(s), []);
     const flip = derbySentence({ ...SEASON, a: WIF, b: BONK, measure: "mcap", flip: true }, "TEAMWIF", "TEAMBONK", 0.02);
     assert.deepEqual(lint(flip), [], flip);
@@ -312,7 +312,7 @@ describe("the Coin vs Coin tile's model", () => {
     assert.deepEqual(m.problems, []);
     assert.equal(m.spec.season.start, "2026-10-11");
     assert.equal(lockRule(m.rule).rule.series, coinvsRule({ ...SEASON, season: { start: "2026-10-11", days: 30 } }).series);
-    assert.equal(m.sentence, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. 30 days.");
+    assert.equal(m.sentence, "$TEAMWIF burns 1% every day WIF out-gains SHIB (Pyth, 00:00 UTC). $TEAMSHIB burns when SHIB wins. Runs for 30 days, then winds down.");
     assert.deepEqual(lint(m.sentence), []);
     const bad = tileRule({ ...choice, flip: true }, "0".repeat(64), { a: "TEAMWIF", b: "TEAMSHIB" });
     assert.match(bad.problems.join(";"), /both coins need a mint/);

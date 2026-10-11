@@ -123,7 +123,12 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/fees\/ledger$/, "fees/ledger", []],
   [/^\/operator$/, "operator", []],
   [/^\/bounty$/, "bounty", []],
+  [/^\/snapshots$/, "snapshots", []],
   [/^\/openapi\.json$/, "openapi.json", []],
+  [/^\/badge\/pairs\/([^/]+)$/, "badge/pairs/[file]", ["file"]],
+  [/^\/badge\/([^/]+)$/, "badge/[file]", ["file"]],
+  [/^\/verify-mint\/([^/]+)$/, "verify-mint/[mint]", ["mint"]],
+  [/^\/clones$/, "clones", []],
 ];
 export const ROUTE_MODULES = ROUTES.map((r) => r[1]);
 

@@ -3,6 +3,15 @@
 Design items for the next program review cycle (to be built with the pair_curve review, not now). Nothing here is deployed; every
 item names what the keeper does today instead, so no coin waits on it.
 
+## Done — `claim_lock_fees` + `register_fee_key` (LP-lock release, 2026-10-10, LAUNCHPAD-PATH §35)
+
+No longer a candidate: shipped in burn_receipts `d54664ed` / `3d82b6b5` and deployed on devnet through the Squads vault (vault
+transactions 6 and 8; `docs/burnkeeper/devnet-lock-run-log-2026-10-10.md`). Graduation LP is locked forever in Raydium's CPMM lock, the
+Fee Key NFT is held by the FEE_KEYS PDA (LaunchLab's platformLockNftWallet; pair_curve's lock_lp), and the permissionless claim splits
+the LP fees by compiled constants — SOL 80 % to the coin's burn pool, 20 % to the operator treasury (parked in the FeeKeyRecord while
+the treasury cannot receive it) — and burns the coin side. Design and threat notes: `docs/burnticker/PAIR-CURVE.md` §5.1–§5.2 and §8,
+Powers Register entries `register_fee_key` / `claim_lock_fees`.
+
 ## 1. `sweep_retired` — a permissionless instruction
 
 **Why.** A retired coin's fee PDA keeps receiving the 4.75 bps post-graduation creator fee from Raydium trading, so its burn pool

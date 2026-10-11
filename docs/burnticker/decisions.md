@@ -53,7 +53,7 @@ $DEFICIT: fractionPerUnit 1%; a 3 SOL seed to the burn pool, a disclosed gift; n
 metadata name/symbol DEFICIT, description = rule sentence + disclaimer + rules hash. Platform: refuse list as above; elections
 allowed; anonymous creators allowed with the creator wallet always shown; one-shot markets allowed; pre-audit cap 25 SOL per burn
 pool with the excess queued, on the register with a sunset. Custody: Squads 2-of-3 (owner hardware key, owner second key, a trusted
-third), 48 h timelock on fee changes and upgrades. Operator line: real name, one independent operator (United States), with a contact address (which
+third), 48 h timelock on fee changes and upgrades. Operator line: a contact address (the real name and state were removed on 2026-10-10 — exposure; see that entry) (which
 one: TODO). A use-of-fees statement on the trust page (attesters, hosting, audit, operator; the platform never buys back any coin).
 Sequencing: launch at level 1 (quorum 1), attester #2 within 14 days with the due date on the register; hosting on one VPS behind
 Caddy with Cloudflare DNS; a devnet rehearsal the first weekday morning after the program merges. No platform coin until at least
@@ -104,3 +104,41 @@ Why 2 and not more: total burned over the coin's life equals fee income plus the
 buffer (≈ 9 days of inflow at 2 % with ~6 units/day, versus ≈ 17 at 1 % and ≈ 2 at 10 %) and how strongly a big debt day out-burns a
 small one. The devnet rehearsal coin stays at 1 % (`deficit.devnet.rules.json`); it was launched with that hash. Immutable once the
 mainnet token is initialised.
+
+## 2026-10-10 (late) — the operator's name and state leave every public surface
+
+Owner decision ("too much exposure"). The operator line, the whitepaper, the operator page and `.well-known`, the README, the licence,
+the incident template, the GTM drafts and the post generator now say "one independent operator (United States) — contact:
+contact@burnticker.com"; security reports go to security@burnticker.com. The signed operator statement binds the developer-fee
+wallet to "the operator of burnticker.com" rather than to a person. The identity is held privately until a legal entity exists;
+the entity, when formed, becomes the named party on /burnticker/operator. Nothing else about the trust pack changes: the wallets,
+the never-buys monitor, the reviews, the bounty and the verified build are unchanged. Tests pin the absence of the name on the
+operator line and in generated posts.
+
+## 2026-10-10 — LP locked forever, its fees fund the burn (reverses 2026-10-09 "LP: all graduation LP is burned")
+
+Owner: *"do what you recommend"* (after *"if 80% of the fees get burned as part of the program, that's not bad"*), ~20:55 Denver. For
+every platform coin and for `pair_curve`: graduation LP is **100 % permanently locked** with Raydium's LP lock (Burn & Earn; LaunchLab
+`platformScale` 1,000,000 / `creatorScale` 0 / `burnScale` 0; pair coins through the permissionless `lock_lp`), never withdrawable.
+The Fee Key NFT is owned by the burn_receipts PDA `["fee_keys"]` (the platform's lock-NFT wallet), not a person. A permissionless
+`claim_lock_fees` collects the LP fees: the SOL side goes **80 % to the coin's burn pool** (fee PDA `["fee", mint]`) and **20 % to the
+operator treasury** (the Squads vault); the coin side is burned. `LOCK_FEE_BURN_BPS` 8,000 / `LOCK_FEE_OPERATOR_BPS` 2,000 are
+compiled constants: no admin key, no config field. `initialize_token` and every buyback crank refuse a platform whose lock-NFT wallet or
+LP scales differ. Curve fees unchanged (Raydium 25 / Burnticker 25 / burn pool 50 bps); the 0.05 SOL launch fee unchanged. The mainnet
+build has no operator treasury compiled in yet: until the owner pins the vault, mainnet claims refuse (`TreasuryNotPinned`) and the fees
+stay in the lock.
+
+| Per swap after graduation (CPMM tier 0, 25 bps trade fee) | bps of volume | goes to |
+|---|---|---|
+| LP fees (84 % of the trade fee) | 21 | the locked LP's Fee Key → `claim_lock_fees` |
+| · 80 % of the LP fees | 16.8 | the coin's burn pool → bought back and burned |
+| · 20 % of the LP fees | 4.2 | the operator treasury (Squads vault) |
+| RAY buyback (12 % of the trade fee) | 3 | Raydium |
+| Raydium treasury (4 % of the trade fee) | 1 | Raydium |
+| Creator fee (5 bps, less Raydium's 5 % share) | 4.75 | the coin's burn pool → bought back and burned |
+| **Toward the burn, per swap** | **≈ 21.55** | (4.75 before this decision) |
+
+Plainly: the operator now earns 20 % of every coin's post-graduation LP fees (4.2 bps of volume), on top of the 25 bps developer
+slice on the curve; it is on the trust page, in the fee tables and on `/fees/ledger`. Each coin's lock program, Fee Key and claims are on
+its page, in `/v1` and the SDK; `.well-known/burnticker.json` names the lock per cluster. The pre-registered review checklist carries a
+dated erratum (not an edit). A fresh blind review and the verified-build table follow the program change.

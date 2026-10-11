@@ -75,13 +75,7 @@ pub fn verify_pool_provenance(
     // LP: burned (lp_supply − mint supply) + locked (the lock authority's account) ≥ 50 % of CPMM's live lp_supply (review-3 M-2).
     require_keys_eq!(lp_mint.key(), pool.lp_mint, BurnError::InvalidCpmmAccount);
     require_keys_eq!(*lp_lock_vault.key, get_associated_token_address(&LOCK_CPMM_AUTHORITY, &pool.lp_mint), BurnError::InvalidCpmmAccount);
-    let locked = if lp_lock_vault.owner == &token::ID && lp_lock_vault.data_len() >= 72 {
-        let d = lp_lock_vault.try_borrow_data()?;
-        require!(d[..32] == pool.lp_mint.to_bytes()[..] && d[32..64] == LOCK_CPMM_AUTHORITY.to_bytes()[..], BurnError::InvalidCpmmAccount);
-        u64::from_le_bytes(d[64..72].try_into().map_err(|_| BurnError::InvalidCpmmAccount)?)
-    } else {
-        0
-    };
+    let locked = lock_vault_amount(lp_lock_vault, &pool.lp_mint)?;
     let locked_bps = cpmm::locked_lp_bps(pool.lp_supply, lp_mint.supply, locked);
     require!(locked_bps >= MIN_LOCKED_LP_BPS, BurnError::LpNotLocked);
 
@@ -136,4 +130,16 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
     let config = c.key();
     emit_cpi!(PoolRegistered { config, pool: pool_key, registrar: ctx.accounts.registrar.key() });
     Ok(())
+}
+
+/// The LP held by Raydium's lock authority in ATA(LOCK_CPMM_AUTHORITY, lp_mint) (the caller address-checks the account), or 0 when
+/// that account does not exist.
+pub fn lock_vault_amount(lp_lock_vault: &AccountInfo, lp_mint: &Pubkey) -> Result<u64> {
+    if lp_lock_vault.owner == &token::ID && lp_lock_vault.data_len() >= 72 {
+        let d = lp_lock_vault.try_borrow_data()?;
+        require!(d[..32] == lp_mint.to_bytes()[..] && d[32..64] == LOCK_CPMM_AUTHORITY.to_bytes()[..], BurnError::InvalidCpmmAccount);
+        Ok(u64::from_le_bytes(d[64..72].try_into().map_err(|_| BurnError::InvalidCpmmAccount)?))
+    } else {
+        Ok(0)
+    }
 }

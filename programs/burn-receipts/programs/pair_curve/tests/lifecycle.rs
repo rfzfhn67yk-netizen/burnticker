@@ -7,6 +7,8 @@
 
 #[path = "../../burn_receipts/tests/common/mod.rs"]
 mod common;
+mod lock_common;
+use lock_common::*;
 
 use anchor_lang::prelude::Pubkey;
 use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
@@ -39,6 +41,7 @@ fn read_so(rel: &str) -> Vec<u8> {
 fn new_env() -> Env {
     let mut env = Env::new();
     env.svm.add_program(pair_curve::ID, &read_so("target/deploy-localnet/pair_curve.so")).unwrap();
+    add_lock_program(&mut env);
     env
 }
 
@@ -98,7 +101,7 @@ fn fee_receiver(env: &mut Env) {
 
 /// The test LaunchLab platform with `cp_config` and the developer wallet (platformClaimFeeWallet @16).
 fn platform_with_dev(env: &mut Env, cp_config: &Pubkey, dev: &Pubkey) {
-    let mut acc = bcpmm::platform_account(env, cp_config, &Pubkey::default(), [0, 0, 1_000_000]);
+    let mut acc = bcpmm::platform_account(env, cp_config, &Pubkey::default(), [1_000_000, 0, 0]);
     acc.data[16..48].copy_from_slice(dev.as_ref());
     env.svm.set_account(TEST_LAUNCHLAB_PLATFORM, acc).unwrap();
 }
@@ -299,9 +302,18 @@ fn ix_graduate(p: &P, cranker: &Pubkey, side: u8) -> Instruction {
 
 /// One side's graduate (+ `extra` instructions, e.g. that side's register_pair_pool) in a LEGACY transaction (size-asserted).
 fn graduate_side(env: &mut Env, p: &P, cranker: &Keypair, side: u8, extra: &[Instruction]) -> TxResult {
-    let mut ixs = vec![ix_graduate(p, &cranker.pubkey(), side)];
-    ixs.extend_from_slice(extra);
-    env.send(&ixs, &[cranker])
+    // LAUNCHPAD-PATH §35: graduate keeps the LP; lock_lp (its own transaction) locks it forever; registration (`extra`) follows.
+    let r = env.send(&[ix_graduate(p, &cranker.pubkey(), side)], &[cranker]);
+    if r.is_ok() {
+        let pool = pool_of(p, side);
+        if let Err(e) = env.send(&[ix_lock_lp(&p.pair, &p.vault, &p.mint(side), &pool, &cranker.pubkey(), side)], &[cranker]) {
+            panic!("lock_lp({side}) failed: {:?}\n{}", e.err, e.meta.logs.join("\n"));
+        }
+        if !extra.is_empty() {
+            env.send(extra, &[cranker])?;
+        }
+    }
+    r
 }
 
 fn graduate_both(env: &mut Env, p: &P, cranker: &Keypair) -> [litesvm::types::TransactionMetadata; 2] {
@@ -365,23 +377,6 @@ fn ix_claim_dev(p: &P, caller: &Pubkey) -> Instruction {
     )
 }
 
-fn ix_register_pair(registrar: &Pubkey, mint: &Pubkey, pool: &Pubkey, lp_mint: &Pubkey, pair: &Pubkey) -> Instruction {
-    Instruction::new_with_bytes(
-        burn_receipts::ID,
-        &burn_receipts::instruction::RegisterPairPool {}.data(),
-        burn_receipts::accounts::RegisterPairPool {
-            registrar: *registrar,
-            config: config_pda(mint),
-            mint: *mint,
-            pool_state: *pool,
-            lp_mint: *lp_mint,
-            pair: *pair,
-            event_authority: event_authority(),
-            program: burn_receipts::ID,
-        }
-        .to_account_metas(None),
-    )
-}
 
 fn pair_state(env: &Env, p: &P) -> Pair {
     let a = env.svm.get_account(&p.pair).expect("pair");
@@ -571,7 +566,7 @@ fn graduation_needs_target_and_minimum_share_then_creates_both_pools_and_burns_a
     let receiver_before = env.lamports(&CREATE_POOL_FEE_RECEIVER);
 
     let metas = graduate_both(&mut env, &p, &cranker);
-    println!("graduate CU: side A (decision + pool + LP burn) {}, side B {}", metas[0].compute_units_consumed, metas[1].compute_units_consumed);
+    println!("graduate CU: side A (decision + pool) {}, side B {}", metas[0].compute_units_consumed, metas[1].compute_units_consumed);
     let evs: Vec<pair_curve::events::SideGraduated> = metas.iter().map(pc_event).collect();
     assert!(!evs[0].pair_graduated && evs[1].pair_graduated);
     let g = pair_state(&env, &p);
@@ -597,9 +592,16 @@ fn graduation_needs_target_and_minimum_share_then_creates_both_pools_and_burns_a
         let s_res = curve.virtual_sol as u128 + s.sol[s_] as u128;
         let t_res = (curve.virtual_token - s.sold[s_]) as u128;
         assert!(r_sol as u128 * t_res >= s_res * r_tok as u128);
-        // 100 % of the LP burned: LP mint supply 0, CPMM still counts it
-        assert_eq!(env.mint_supply(&pool.lp_mint), 0);
-        assert_eq!(g.lp_burned[s_] + 100, g.lp_supply_at_creation[s_]);
+        // LAUNCHPAD-PATH §35: 100 % of the LP locked forever in Raydium's CPMM lock (lock_lp ran after graduate), the Fee Key NFT at
+        // burn_receipts' FEE_KEYS PDA; nothing burned, the vault's emptied LP account closed
+        assert_eq!(evs[s_].lp_minted + 100, g.lp_supply_at_creation[s_]);
+        assert_eq!(g.lp_locked[s_], evs[s_].lp_minted);
+        assert_eq!(env.token_amount(&lock_lp_vault(&pool.lp_mint)), g.lp_locked[s_]);
+        assert_eq!(env.mint_supply(&pool.lp_mint), g.lp_locked[s_], "locked, not burned");
+        let nft = fee_nft_mint(&p.pair, side);
+        assert_eq!(env.token_amount(&get_associated_token_address(&fee_keys(), &nft)), 1);
+        let ll = env.svm.get_account(&locked_liquidity(&nft)).unwrap();
+        assert_eq!((ll.owner, &ll.data[64..96], &ll.data[96..128]), (LOCK_CPMM_PROGRAM_ID, pool.pool.as_ref(), nft.as_ref()));
         assert!(env.svm.get_account(&get_associated_token_address(&p.vault, &pool.lp_mint)).map(|a| a.lamports == 0).unwrap_or(true), "LP account closed");
         // every token the pool did not need was burned; the token vault is empty
         assert_eq!(env.token_amount(&get_associated_token_address(&p.vault, &p.mint(side))), 0);
@@ -610,7 +612,8 @@ fn graduation_needs_target_and_minimum_share_then_creates_both_pools_and_burns_a
     assert_eq!(env.lamports(&p.vault), vault_rent(&env) + g.dev_accrued);
     assert!(env.svm.get_account(&get_associated_token_address(&p.vault, &NATIVE_MINT)).map(|a| a.lamports == 0).unwrap_or(true), "WSOL account closed");
     let got = [env.lamports(&fee_pda(&p.mint(0))) - fee_before[0], env.lamports(&fee_pda(&p.mint(1))) - fee_before[1]];
-    assert_eq!(got, [evs[0].burn_escrow_paid + evs[0].residue_lamports, evs[1].burn_escrow_paid + evs[1].residue_lamports], "each side's escrow + residue went to its own burn pool");
+    let lp_rent = env.svm.minimum_balance_for_rent_exemption(165);
+    assert_eq!(got, [evs[0].burn_escrow_paid + evs[0].residue_lamports + lp_rent, evs[1].burn_escrow_paid + evs[1].residue_lamports + lp_rent], "each side's escrow + residue (+ the emptied LP account's rent, at lock_lp) went to its own burn pool");
     assert_eq!([evs[0].burn_escrow_paid, evs[1].burn_escrow_paid], s.burn_escrow, "the 75 bps escrow, paid at graduation");
     assert!(evs[0].residue_lamports < SOL / 100 && evs[1].residue_lamports < SOL / 100, "residue is rent refunds and dust only");
     env.ok(&[ix_claim_dev(&p, &cranker.pubkey())], &[&cranker]);
@@ -960,14 +963,14 @@ fn the_idl_has_no_admin_withdraw_or_parameter_update() {
     let names: Vec<String> = idl["instructions"].as_array().unwrap().iter().map(|i| i["name"].as_str().unwrap().to_string()).collect();
     let mut sorted = names.clone();
     sorted.sort();
-    assert_eq!(sorted, ["buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "sell", "void_pair"]);
+    assert_eq!(sorted, ["buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "lock_lp", "sell", "void_pair"]);
     for ix in idl["instructions"].as_array().unwrap() {
         let signers: Vec<&str> = ix["accounts"].as_array().unwrap().iter().filter(|a| a["signer"].as_bool().unwrap_or(false)).map(|a| a["name"].as_str().unwrap()).collect();
         let expected: &[&str] = match ix["name"].as_str().unwrap() {
             "init_pair" => &["payer", "creator"],
             "buy" => &["buyer"],
             "sell" => &["seller"],
-            "graduate" => &["cranker"],
+            "graduate" | "lock_lp" => &["cranker"],
             "void_pair" | "close_pair" | "claim_developer_fee" => &["caller"],
             n => panic!("undescribed instruction {n}"),
         };
@@ -1142,4 +1145,69 @@ fn an_unsynced_lamport_donation_to_the_vault_wsol_account_does_not_block_graduat
     }
     assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
     assert_eq!(env.lamports(&p.vault), vault_rent(&env) + pair_state(&env, &p).dev_accrued);
+}
+
+/// LAUNCHPAD-PATH §35 on pair_curve: graduate keeps the LP in the vault; lock_lp (permissionless, once, only after graduate) locks all
+/// of it in Raydium's CPMM lock with the Fee Key at burn_receipts' FEE_KEYS PDA; register_pair_pool refuses the pool until then;
+/// burn_receipts' register_fee_key + claim_lock_fees then serve the pair pool exactly as a LaunchLab pool: 80 % of the SOL side to the
+/// side's burn pool, 20 % to the compiled treasury, the coin side burned.
+#[test]
+fn graduation_lp_is_locked_forever_and_its_fees_are_claimed_80_20_with_the_coin_side_burned() {
+    let mut env = new_env();
+    use_localnet_burn_receipts(&mut env);
+    let treasury = Pubkey::new_from_array([0x7e; 32]);
+    env.fund(&treasury, SOL);
+    let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
+    let c = trader(&mut env, 2 * SOL);
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    let pa = pool_of(&p, 0);
+    expect_anchor_err(env.send(&[ix_lock_lp(&p.pair, &p.vault, &p.mint(0), &pa, &c.pubkey(), 0)], &[&c]), "NothingToLock");
+    // graduate alone: the LP is in the vault's LP account, not burned, not yet locked
+    let m = env.ok(&[ix_graduate(&p, &c.pubkey(), 0)], &[&c]);
+    let ev: pair_curve::events::SideGraduated = pc_event(&m);
+    let vault_lp = get_associated_token_address(&p.vault, &pa.lp_mint);
+    assert_eq!(env.token_amount(&vault_lp), ev.lp_minted);
+    assert_eq!(pair_state(&env, &p).lp_locked[0], 0);
+    expect_anchor_err(env.send(&[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)], &[&c]), "LpNotLocked");
+    // lock_lp: everything into the lock, the Fee Key to FEE_KEYS, the vault keeps every lamport
+    let vault_before = env.lamports(&p.vault);
+    let m = env.ok(&[ix_lock_lp(&p.pair, &p.vault, &p.mint(0), &pa, &c.pubkey(), 0)], &[&c]);
+    println!("lock_lp CU: {}", m.compute_units_consumed);
+    let lk: pair_curve::events::LpLocked = pc_event(&m);
+    let nft = fee_nft_mint(&p.pair, 0);
+    assert_eq!((lk.lp_amount, lk.fee_nft_mint, lk.locked_liquidity), (ev.lp_minted, nft, locked_liquidity(&nft)));
+    assert_eq!(env.lamports(&p.vault), vault_before);
+    assert_eq!(env.token_amount(&lock_lp_vault(&pa.lp_mint)), ev.lp_minted);
+    assert_eq!(pair_state(&env, &p).lp_locked[0], ev.lp_minted);
+    expect_anchor_err(env.send(&[ix_lock_lp(&p.pair, &p.vault, &p.mint(0), &pa, &c.pubkey(), 0)], &[&c]), "NothingToLock");
+    env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)], &[&c]);
+    graduate_side(&mut env, &p, &c, 1, &[]).unwrap();
+
+    // trading on the pair pool accrues LP fees; the claim splits them
+    let now = env.now();
+    env.set_time(now + 60);
+    let t = trader(&mut env, 50 * SOL);
+    env.create_ata(&t.pubkey(), &p.mint(0));
+    for _ in 0..4 {
+        env.wrap_sol(&t, 2 * SOL);
+        bcpmm::swap(&mut env, &t, &pa, &p.mint(0), true, 2 * SOL).unwrap();
+        let got = env.token_amount(&get_associated_token_address(&t.pubkey(), &p.mint(0)));
+        bcpmm::swap(&mut env, &t, &pa, &p.mint(0), false, got).unwrap();
+    }
+    env.ok(&[ix_register_fee_key(&c.pubkey(), &p.mint(0), &pa.pool, &nft)], &[&c]);
+    let (fee0, tre0, supply0) = (env.lamports(&fee_pda(&p.mint(0))), env.lamports(&treasury), env.mint_supply(&p.mint(0)));
+    let m = env.ok(&[ix_claim_lock_fees(&c.pubkey(), &p.mint(0), &pa, &nft, &treasury, u64::MAX)], &[&c]);
+    let cl: burn_receipts::events::LockFeesClaimed = pc_event_br(&m);
+    println!("claim_lock_fees on a pair pool: {} CU; wsol {} → {} / {}; burned {}", m.compute_units_consumed, cl.wsol_claimed, cl.to_burn_pool, cl.to_operator, cl.tokens_burned);
+    assert!(cl.wsol_claimed > 0 && cl.tokens_burned > 0);
+    assert_eq!(cl.to_operator, cl.wsol_claimed / 5);
+    assert_eq!(env.lamports(&fee_pda(&p.mint(0))) - fee0, cl.to_burn_pool);
+    assert_eq!(env.lamports(&treasury) - tre0, cl.to_operator);
+    assert_eq!(supply0 - env.mint_supply(&p.mint(0)), cl.tokens_burned);
+    // the LP stays locked (only the fee portion of LP left the lock); nobody can take the principal
+    assert!(env.token_amount(&lock_lp_vault(&pa.lp_mint)) < ev.lp_minted && env.token_amount(&lock_lp_vault(&pa.lp_mint)) > ev.lp_minted * 99 / 100);
+}
+
+fn pc_event_br<E: Discriminator + AnchorDeserialize>(meta: &litesvm::types::TransactionMetadata) -> E {
+    events(meta).into_iter().find(|(d, _)| d[..] == E::DISCRIMINATOR[..]).map(|(_, p)| E::try_from_slice(&p).unwrap()).expect("burn_receipts event")
 }

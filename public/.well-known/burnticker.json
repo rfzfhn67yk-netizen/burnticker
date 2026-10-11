@@ -28,15 +28,15 @@
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": true,
-          "executableHash": "5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d",
-          "buildHash": "5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d",
+          "executableHash": "f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151",
+          "buildHash": "f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": true,
-          "executableHash": "91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9",
-          "buildHash": "91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9",
+          "executableHash": "e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5",
+          "buildHash": "e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         }
       },
@@ -56,6 +56,33 @@
         "squads-member-1": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
         "squads-member-2": "58w9pN56qGxuNcnhUrTXgte2mbRNNf4QSAun3ASaLwxd",
         "squads-member-3": "Bymx5VmL5Fi1A1EBJWXrcoeNUKARUvYjxKkHAqJ3H4wQ"
+      },
+      "lpLock": {
+        "policy": "locked-forever",
+        "line": "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)",
+        "lockedPct": 100,
+        "lockProgram": "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX",
+        "lockAuthority": "7qWVV8UY2bRJfDLP4s37YzBPKUkVB46DStYJBpYbQzu3",
+        "feeKeysPda": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+        "operatorTreasury": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "treasuryPinned": true,
+        "split": {
+          "burnBps": 8000,
+          "operatorBps": 2000,
+          "coinSide": "burned",
+          "fixedInCode": true
+        },
+        "perSwapAfterGraduationBps": {
+          "lpFees": 21,
+          "toBurnPool": 16.8,
+          "toOperator": 4.2,
+          "creatorFeeToBurnPool": 4.75,
+          "burnedTotal": 21.55
+        },
+        "instructions": {
+          "register": "register_fee_key",
+          "claim": "claim_lock_fees"
+        }
       }
     },
     "mainnet": {
@@ -65,14 +92,14 @@
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f",
+          "buildHash": "088c0b1d5967a0ede42945abb916532e41835a5ba725ecb6439f620f5347024f",
           "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "9ef38e0d8954f6c8242d8157dccdc8a2b169dbd987b13f588c5096ee280ec006",
+          "buildHash": "8587c45adf033bfb0d45d7b7ab36ed224fe87a38a279af98316b440971ab3ff0",
           "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
         }
       },
@@ -92,6 +119,33 @@
         "squads-member-1": "TODO_SQUADS_MEMBER_1",
         "squads-member-2": "TODO_SQUADS_MEMBER_2",
         "squads-member-3": "TODO_THIRD_SIGNER_ADDRESS"
+      },
+      "lpLock": {
+        "policy": "locked-forever",
+        "line": "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)",
+        "lockedPct": 100,
+        "lockProgram": "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE",
+        "lockAuthority": "3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH",
+        "feeKeysPda": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+        "operatorTreasury": null,
+        "treasuryPinned": false,
+        "split": {
+          "burnBps": 8000,
+          "operatorBps": 2000,
+          "coinSide": "burned",
+          "fixedInCode": true
+        },
+        "perSwapAfterGraduationBps": {
+          "lpFees": 21,
+          "toBurnPool": 16.8,
+          "toOperator": 4.2,
+          "creatorFeeToBurnPool": 4.75,
+          "burnedTotal": 21.55
+        },
+        "instructions": {
+          "register": "register_fee_key",
+          "claim": "claim_lock_fees"
+        }
       }
     }
   },
@@ -108,7 +162,7 @@
     "operator": "https://burnticker.com/burnticker/operator",
     "verifiedBuild": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/VERIFIED-BUILD.md",
     "verifiedBuildKind": "interim-local",
-    "sourceCommit": "fcda14eb4fe21d7e0f096c24a141cec0e2630ba9",
+    "sourceCommit": "3d82b6b5d4beb771467462ac753673d9f0626f33",
     "powersRegisters": [
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/powers-register.md",
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/pair-curve-powers-register.md"

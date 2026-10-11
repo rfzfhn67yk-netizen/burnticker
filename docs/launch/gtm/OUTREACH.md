@@ -50,7 +50,8 @@ trading tips"), any KOL, any boost, any trending-bar ad.
   platform appears there automatically is not documented (`api-v3.raydium.io/launchlab/platforms` returned 404). UNVERIFIED: a
   2025-04 Raydium X post says LaunchLab platforms "appear on the LaunchLab UI" (search snippet).
 - **Why them:** Burnticker *is* a LaunchLab platform (its own PlatformConfig: 25 bps to the developer, 50 bps to each coin's burn
-  pool, LP 100 % burned). Every coin graduates to a Raydium CPMM pool.
+  pool, LP 100 % locked with Raydium's LP lock, its Fee Key owned by our burn program: 80 % of the LP fees to the coin's burn pool, 20 % to
+  the operator, fixed in code). Every coin graduates to a Raydium CPMM pool.
 - **Ask:** how a platform gets onto platforms-v2 / the LaunchLab UI, and a look at our PlatformConfig for anything wrong.
 - **When:** after the mainnet PlatformConfig exists (T-7). Today only the devnet platform exists (`GvSKpe5p…`, devnet-run.md §4).
 - **Do NOT offer:** fees, tokens, a revenue share, a co-marketing swap.
@@ -58,7 +59,7 @@ trading tips"), any KOL, any boost, any trending-bar ad.
   outreach, not a Burnticker channel; if that reads wrong to the owner, use the X DM instead.
 
 ```text draft
-Hi Raydium team. I run Burnticker, a LaunchLab platform: PlatformConfig {PLATFORM_ID} on mainnet. Each coin's creator-fee slot pays that coin's burn pool, 100%; the platform takes 25 bps; LP is 100% burned at graduation. A coin burns when a real-world result settles, with an on-chain receipt. Two questions: how does a platform get listed on platforms-v2 and the LaunchLab UI, and would someone look over our config? Code: https://github.com/rfzfhn67yk-netizen/burnticker — the Burnticker operator, contact@burnticker.com
+Hi Raydium team. I run Burnticker, a LaunchLab platform: PlatformConfig {PLATFORM_ID} on mainnet. Each coin's creator-fee slot pays that coin's burn pool, 100%; the platform takes 25 bps; LP is 100% burned at graduation. A coin burns when a real-world result settles, with an on-chain receipt. Two questions: how does a platform get listed on platforms-v2 and the LaunchLab UI, and would someone look over our config? Code: https://github.com/rfzfhn67yk-netizen/burnticker — Burnticker (contact@burnticker.com)
 ```
 
 ## 2. Jupiter — Verify (standard) and the launchpad DM
@@ -73,7 +74,7 @@ Hi Raydium team. I run Burnticker, a LaunchLab platform: PlatformConfig {PLATFOR
 - **Do NOT offer:** JUP, Express fees, tokens, likes campaigns ("Smart Likes" must be organic).
 
 ```text draft
-Hi Jupiter Verify. Burnticker is a new Raydium LaunchLab platform (Solana): coins that burn on real-world results, with receipts. We would like our org linked as a launchpad so the standard queue can see our launches; we are not using Express. First coin: $DEFICIT, mint {DEFICIT_MINT}, which burns when Treasury's Debt to the Penny rises $1B. Open source: https://github.com/rfzfhn67yk-netizen/burnticker — one independent operator (United States), contact@burnticker.com
+Hi Jupiter Verify. Burnticker is a new Raydium LaunchLab platform (Solana): coins that burn on real-world results, with receipts. We would like our org linked as a launchpad so the standard queue can see our launches; we are not using Express. First coin: $DEFICIT, mint {DEFICIT_MINT}, which burns when Treasury's Debt to the Penny rises $1B. Open source: https://github.com/rfzfhn67yk-netizen/burnticker — Burnticker (contact@burnticker.com)
 ```
 
 ## 3. Solscan — token info update
@@ -104,7 +105,7 @@ Project: $DEFICIT (Burnticker). Mint: {DEFICIT_MINT}. Website: https://deficit.b
 - **Ask:** a listing. **Status field:** "in development" until $DEFICIT is live on mainnet; then "live".
 
 ```text draft
-Burnticker — coins that burn on real-world results, with receipts. A Raydium LaunchLab platform on Solana: each coin carries one locked rule (a settled result, a unit, a share of its fee pool), and the open-source burn_receipts program buys the coin on its own pool and burns everything bought, with a memo anyone can recompute. Creators earn nothing from fees; all LP is burned; the platform never buys any coin. Keyless API and open source: https://github.com/rfzfhn67yk-netizen/burnticker
+Burnticker — coins that burn on real-world results, with receipts. A Raydium LaunchLab platform on Solana: each coin carries one locked rule (a settled result, a unit, a share of its fee pool), and the open-source burn_receipts program buys the coin on its own pool and burns everything bought, with a memo anyone can recompute. Creators earn nothing from fees; the LP is locked forever and its fees fund the burn (80% burned, 20% operator, fixed in code); the platform never buys any coin. Keyless API and open source: https://github.com/rfzfhn67yk-netizen/burnticker
 ```
 
 ## 6. Helius — guest blog
@@ -128,7 +129,7 @@ Pitch: "Recomputable burn receipts on Raydium LaunchLab." How an Anchor program 
 - **Ask:** a look; nothing else. **Do NOT offer:** an ad buy, an exclusive in exchange for coverage, tokens.
 
 ```text draft
-Hi Awais. Burnticker is an open-source Raydium LaunchLab platform: coins that burn on real-world results, with receipts. A coin's own fees buy it back on its own pool and a program burns all of it when a settled result says so; the memo on that transaction is the receipt. First coin, $DEFICIT, burns when Treasury's Debt to the Penny rises $1B. Not audited by a security firm; three blind AI reviews are published in full. Trust page: https://burnticker.com/burnticker/trust — one independent operator (United States)
+Hi Awais. Burnticker is an open-source Raydium LaunchLab platform: coins that burn on real-world results, with receipts. A coin's own fees buy it back on its own pool and a program burns all of it when a settled result says so; the memo on that transaction is the receipt. First coin, $DEFICIT, burns when Treasury's Debt to the Penny rises $1B. Not audited by a security firm; three blind AI reviews are published in full. Trust page: https://burnticker.com/burnticker/trust — Burnticker (contact@burnticker.com)
 ```
 
 ## 8. Superteam Earn (+ Superteam USA) — the bounty
@@ -179,7 +180,7 @@ Hi {NAME}. Burnticker's Anchor program (burn_receipts) is open source and not au
   endorsement; never tag them in a coin post.
 
 ```text draft
-Hello. I read Debt to the Penny (tot_pub_debt_out_amt) through the Fiscal Data API each business day. When a published figure for a past record date is revised, does the API replace that row in place, and is there a field or notice that marks the revision? Thank you. — one independent operator (United States)
+Hello. I read Debt to the Penny (tot_pub_debt_out_amt) through the Fiscal Data API each business day. When a published figure for a past record date is revised, does the API replace that row in place, and is there a field or notice that marks the revision? Thank you. — Burnticker (contact@burnticker.com)
 ```
 
 ## 12. Breakpoint 2026 (London, Nov 15–17) — optional
@@ -204,7 +205,7 @@ Hello. I read Debt to the Penny (tot_pub_debt_out_amt) through the Fiscal Data A
   "official".
 
 ```text draft
-Hi mods. Before posting anything I wanted to ask. I run Burnticker, an open-source Solana launchpad where a fan can launch a coin that burns on each {TEAM} loss (or win), read from the final score and checked against MLB StatsAPI. Nothing is won; the creator earns nothing; it is a memecoin, and nobody here promises anything about it. Is a post explaining it allowed here? If not, no problem, thanks for reading. — the Burnticker operator
+Hi mods. Before posting anything I wanted to ask. I run Burnticker, an open-source Solana launchpad where a fan can launch a coin that burns on each {TEAM} loss (or win), read from the final score and checked against MLB StatsAPI. Nothing is won; the creator earns nothing; it is a memecoin, and nobody here promises anything about it. Is a post explaining it allowed here? If not, no problem, thanks for reading. — Burnticker (contact@burnticker.com)
 ```
 
 ## 14. Blockworks / Lightspeed — skip for now

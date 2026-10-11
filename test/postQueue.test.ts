@@ -56,7 +56,7 @@ describe("every format from the fixtures", () => {
   });
   test("the platform thread names the operator, says 'not audited', and its review line comes from transparency.json", () => {
     const t = platformLaunchThread(facts.reviews, site).posts.join("\n");
-    assert.match(t, /one independent operator (United States)/); assert.match(t, /Not audited by a security firm/); assert.ok(t.includes(reviewLine(facts.reviews)));
+    assert.match(t, /one independent operator/); assert.doesNotMatch(t, /Shane|Cassidy|Colorado/); assert.match(t, /Not audited by a security firm/); assert.ok(t.includes(reviewLine(facts.reviews)));
     assert.match(reviewLine({ blindDone: 3, chatgptDone: false, bountyPublished: false, firmAudit: false }), /^three blind AI reviews published in full, the adversarial ChatGPT review pending, the public bounty not published$/);
     assert.match(reviewLine({ blindDone: 3, chatgptDone: true, bountyPublished: true, firmAudit: false }), /an adversarial ChatGPT review published, a public bounty$/);
   });

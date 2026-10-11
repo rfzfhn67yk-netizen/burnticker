@@ -34,7 +34,7 @@ export default function SeasonsPage() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Seasons</h1>
-        <p className="text-neutral-400 text-sm max-w-3xl">One scoreboard per league and season. Each card ranks only that league&apos;s team coins, by receipts, then by the share of supply burned. Leagues are never ranked against each other.</p>
+        <p className="text-neutral-400 text-sm max-w-3xl">One scoreboard per league and season. Each card ranks only that league&apos;s team coins, by receipts, then by the share of supply burned. Leagues are never ranked against each other. One page per league and season: <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
         {!err && <p className="text-sm text-neutral-300" aria-label="across all leagues">Yesterday ({yday}) across all leagues: {yesterday} coin{yesterday === 1 ? "" : "s"} burned.</p>}
       </header>
       {err && <p className="text-red-400 text-sm">Registry unavailable: {err}</p>}

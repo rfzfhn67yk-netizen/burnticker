@@ -187,7 +187,7 @@ export function weeklyText(status: StatusJson, burns: readonly BurnJson[], day: 
 }
 
 // ---- the platform daily (@burnticker) ----
-export interface PlatformDailyInput { index: PlatformIndexJson; receiptsByTicker: Record<string, readonly ReceiptJson[]>; day: string; site?: string | null }
+export interface PlatformDailyInput { index: PlatformIndexJson; receiptsByTicker: Record<string, readonly ReceiptJson[]>; day: string; site?: string | null; /** LP locked forever (2026-10-10): each coin's last claim_lock_fees (status.json lp.lastClaim). */ lpClaims?: { ticker: string; at: string; line: string }[] }
 
 /** A receipt "happened" on a day when its settlement (the reading's period / settled time) falls on that UTC day. */
 const onDay = (r: ReceiptJson, day: string) => r.settledAt.slice(0, 10) === day || r.eventId === day;
@@ -205,6 +205,7 @@ export function platformDailyText(i: PlatformDailyInput): string {
       else if (r.status === "skipped") today.push(`$${t.ticker} — ${t.seriesTitle ?? t.selectorKey} ${r.eventId}, ${plural(r.units, "unit")}, nothing bought (${r.skippedReason ?? "under the floor"})`);
     }
   }
+  const lpClaims = (i.lpClaims ?? []).filter((c) => c.at.slice(0, 10) === i.day);
   const launches = ix.tokens.filter((t) => t.launchedAt && t.launchedAt.slice(0, 10) === i.day).map((t) => `$${t.ticker} — ${t.seriesTitle ?? t.selectorKey} (${t.oracle === "kalshi" ? "Kalshi" : t.oracle === "polymarket" ? "Polymarket" : t.selectorKey.replace(/^catalogue:/, "")})`);
   const a = ix.audit;
   const audit = a ? (a.ok ? `all ${a.receipts} receipts recompute (${a.chainChecked ? "source + chain" : "source only"}) · ran ${a.ranAt.slice(0, 16).replace("T", " ")}Z` : `${a.mismatches} of ${a.receipts} receipts do not recompute — on the trust page, with the reason`) : "not run yet";
@@ -213,10 +214,14 @@ export function platformDailyText(i: PlatformDailyInput): string {
     `Coins live: ${live.length} · burns on the tape today: ${burnsToday} (all-time ${ix.totals.burns}) · tokens burned all-time: ${fmtInt(ix.totals.burnedTokens)}`,
     today.length ? `Today:\n${today.join("\n")}` : `Today: no burn on any coin.`,
     `New launches: ${launches.length ? launches.join("; ") : "none"}`,
+    ...(lpClaims.length ? [`LP fees claimed today: ${lpClaims.map((c) => `$${c.ticker} ${c.line.replace(/^LP fees claimed: /, "")}`).join("; ")}`] : []),
     `Audit: ${audit}`,
     `${PLATFORM_DISCLAIMER} ${siteOf(i.site)}`,
   ].join("\n");
 }
+
+/** The daily post footer's registry-snapshot line (trust ops, 2026-10-10 night): the latest Arweave snapshot's date, sha256 and transaction id; null when none is pinned. */
+export const snapshotLine = (s: { date: string; sha256: string; arweaveTxId: string } | null | undefined): string | null => (s ? `Ledger snapshot ${s.date}: sha256 ${s.sha256.slice(0, 16)}… · arweave ${s.arweaveTxId}` : null);
 
 // ---- incidents ----
 export interface IncidentInput { at: number; what: string; affects: string; action: string; status: string; notAffected?: string }
@@ -257,7 +262,19 @@ export function launchDayText(s: Pick<TokenStatusJson, "ticker"> & { profile?: {
 /** The footer line with the coin's window tag ("… not what price does · 2026 SEASON"): every token post carries its window. */
 export const withTag = (footer: string, tag: string | null | undefined): string => (tag ? `${footer} · ${tag}` : footer);
 
+/** The LP-fee receipt line for a day (LP locked forever, 2026-10-10): the coin's last claim_lock_fees, when it landed that UTC day. */
+export const lpClaimLineOn = (s: Pick<TokenStatusJson, "lp">, day: string): string | null => (s.lp?.lastClaim && s.lp.lastClaim.at.slice(0, 10) === day ? s.lp.lastClaim.line : null);
+
 export function tokenDayText(s: TokenStatusJson, receipts: readonly ReceiptJson[], day: string): string {
+  const body = tokenDayBody(s, receipts, day);
+  const lp = lpClaimLineOn(s, day);
+  if (!lp) return body;
+  // the LP-fee line goes right above the footer (the footer is always the last line)
+  const lines = body.split("\n");
+  return [...lines.slice(0, -1), lp, lines[lines.length - 1]].join("\n");
+}
+
+function tokenDayBody(s: TokenStatusJson, receipts: readonly ReceiptJson[], day: string): string {
   if (!receipts.length) { const first = launchDayText(s); if (first) return first; }
   const todays = receipts.filter((r) => onDay(r, day));
   const confirmed = todays.filter((r) => r.status === "confirmed" && Number(r.burned ?? 0) > 0);

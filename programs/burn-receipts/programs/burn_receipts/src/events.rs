@@ -272,3 +272,32 @@ pub struct RegistrationPolicyApplied {
     pub policy: u8,
     pub pool: Pubkey,
 }
+
+/// register_fee_key: the coin's permanent LP lock and its Fee Key, now held by the FEE_KEYS PDA (LAUNCHPAD-PATH §35).
+#[event]
+pub struct FeeKeyRegistered {
+    pub mint: Pubkey,
+    pub pool: Pubkey,
+    pub fee_nft_mint: Pubkey,
+    pub fee_nft_account: Pubkey,
+    pub locked_liquidity: Pubkey,
+    pub locked_lp: u64,
+    pub registrar: Pubkey,
+}
+
+/// claim_lock_fees: what the lock paid out and where it went. to_burn_pool + to_operator = wsol_claimed; tokens_burned = the coin side.
+#[event]
+pub struct LockFeesClaimed {
+    pub mint: Pubkey,
+    pub pool: Pubkey,
+    pub fee_nft_mint: Pubkey,
+    pub cranker: Pubkey,
+    pub wsol_claimed: u64,
+    pub to_burn_pool: u64,
+    pub to_operator: u64,
+    pub tokens_burned: u64,
+    /// Operator share delivered to the treasury by this claim (this claim's and any earlier pending share), and what still waits
+    /// in the FeeKeyRecord because the treasury could not receive it yet (below its rent-exempt minimum).
+    pub operator_paid: u64,
+    pub operator_pending: u64,
+}

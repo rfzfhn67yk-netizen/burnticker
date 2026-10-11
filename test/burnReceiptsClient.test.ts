@@ -9,12 +9,12 @@ import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { accountDiscriminator, encodeInstruction, encodeType } from "../src/lib/burnReceipts/idlCoder.ts";
 import { attestationMessage, attestReading, ed25519SharedMessageInstruction, ed25519VerifyInstruction, signAttestation, sourceUrlHash, verifyAttestation } from "../src/lib/burnReceipts/attestation.ts";
 import { bs58, decodeReading, decodeTokenConfig, READING_OFFSET_CONFIG, READING_OFFSET_PREV_DATE, READING_OFFSET_RECORD_DATE } from "../src/lib/burnReceipts/accounts.ts";
-import { configPda, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress, associatedTokenAddress } from "../src/lib/burnReceipts/pda.ts";
-import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, clearCrankerAllowlistIx, crankBuybackIx, crankVaultIx, eventAuthority, initializePlatformIx, initializeTokenIx, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx, syncNativeIx, zktlsRelayerAttester } from "../src/lib/burnReceipts/instructions.ts";
+import { configPda, feeKeyRecordPda, feeKeysPda, feePda, feeTokenAddress, lockedLiquidityPda, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress, associatedTokenAddress } from "../src/lib/burnReceipts/pda.ts";
+import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, clearCrankerAllowlistIx, crankBuybackIx, crankVaultIx, eventAuthority, initializePlatformIx, initializeTokenIx, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx, syncNativeIx, zktlsRelayerAttester } from "../src/lib/burnReceipts/instructions.ts";
 import { buybackPoolAccounts, decodeCpmmPool, POOL_STATE_DISCRIMINATOR } from "../src/lib/burnReceipts/cpmm.ts";
 import { anchorErrorName, assertClusterAllowed, buildSizedTransaction, DEFERRABLE_ERRORS, memoFromLogs, memoFromTransaction, readingLookupTableAddresses, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { checkPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
-import { assertSignableGenesis, BURN_RECEIPTS_LOCALNET_PROGRAM_ID, CPMM_PROGRAM_ID, DEFAULT_BURN_POOL_CAP_LAMPORTS, GENESIS_HASH, LOCALNET_GENESIS_TAG, LAUNCHLAB_PROGRAM_ID, LOCK_CPMM_AUTHORITY, MAX_QUORUM, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, PACKET_DATA_SIZE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
+import { assertSignableGenesis, BURN_RECEIPTS_LOCALNET_PROGRAM_ID, CPMM_PROGRAM_ID, DEFAULT_BURN_POOL_CAP_LAMPORTS, GENESIS_HASH, LOCALNET_GENESIS_TAG, LAUNCHLAB_PROGRAM_ID, LOCK_CP_AUTHORITY_SEED, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, MAX_QUORUM, OPERATOR_TREASURY, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, PACKET_DATA_SIZE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 
 const PID = BURN_RECEIPTS_LOCALNET_PROGRAM_ID;
@@ -45,7 +45,36 @@ describe("burnReceipts client — IDL", () => {
   });
   test("no instruction can withdraw, close or sweep", () => {
     const names = BURN_RECEIPTS_IDL.instructions.map((i) => i.name).sort();
-    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_registration_policy", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "check_pool_health", "claim_launchlab_creator_fee", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_vault", "initialize_platform", "initialize_token", "propose_attesters", "propose_cap_raise", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_reading", "veto_registration_policy"]);
+    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_registration_policy", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_vault", "initialize_platform", "initialize_token", "propose_attesters", "propose_cap_raise", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_reading", "veto_registration_policy"]);
+  });
+});
+
+describe("burnReceipts client — LP lock and fee split (LAUNCHPAD-PATH §35)", () => {
+  test("the split, the lock program ids and the seeds match the program", () => {
+    assert.equal(LOCK_FEE_BURN_BPS + LOCK_FEE_OPERATOR_BPS, 10_000);
+    assert.deepEqual([LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS], [8_000, 2_000]);
+    for (const cluster of ["mainnet", "devnet"] as const) {
+      const auth = PublicKey.findProgramAddressSync([LOCK_CP_AUTHORITY_SEED], LOCK_CPMM_PROGRAM_ID[cluster])[0];
+      assert.ok(auth.equals(LOCK_CPMM_AUTHORITY[cluster]), cluster);
+    }
+    assert.ok(OPERATOR_TREASURY.mainnet.equals(PublicKey.default), "the mainnet build carries no treasury until the owner compiles it in");
+    assert.equal(OPERATOR_TREASURY.devnet.toBase58(), "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
+    assert.ok(!feeKeysPda(PID).equals(feeKeyRecordPda(PID, MINT)));
+  });
+  test("claim_lock_fees / register_fee_key follow the IDL and pin the treasury, lock program and FEE_KEYS accounts", () => {
+    const order = (n: string) => BURN_RECEIPTS_IDL.instructions.find((i) => i.name === n)!.accounts.map((a) => a.name);
+    const nft = Keypair.generate().publicKey, pool = { pool: Keypair.generate().publicKey, lpMint: Keypair.generate().publicKey, token0Vault: Keypair.generate().publicKey, token1Vault: Keypair.generate().publicKey };
+    const ix = claimLockFeesIx({ programId: PID, cranker: Keypair.generate().publicKey, mint: MINT, feeNftMint: nft, pool, cluster: "devnet" });
+    const at = (n: string) => ix.keys[order("claim_lock_fees").indexOf(n)];
+    assert.equal(ix.keys.length, order("claim_lock_fees").length);
+    assert.ok(at("operator_treasury").pubkey.equals(OPERATOR_TREASURY.devnet) && at("operator_treasury").isWritable);
+    assert.ok(at("lock_program").pubkey.equals(LOCK_CPMM_PROGRAM_ID.devnet) && at("lock_authority").pubkey.equals(LOCK_CPMM_AUTHORITY.devnet));
+    assert.ok(at("fee_nft_account").pubkey.equals(associatedTokenAddress(feeKeysPda(PID), nft)));
+    assert.ok(at("locked_liquidity").pubkey.equals(lockedLiquidityPda("devnet", nft)));
+    assert.ok(at("fee_vault").pubkey.equals(feePda(PID, MINT)) && at("cranker").isSigner);
+    assert.equal(ix.data.readBigUInt64LE(8), BigInt("18446744073709551615"), "lp_fee_amount defaults to everything accrued");
+    const r = registerFeeKeyIx({ programId: PID, payer: Keypair.generate().publicKey, mint: MINT, pool: pool.pool, feeNftMint: nft, cluster: "devnet" });
+    assert.ok(r.keys[order("register_fee_key").indexOf("fee_key")].pubkey.equals(feeKeyRecordPda(PID, MINT)));
   });
 });
 
@@ -420,6 +449,13 @@ describe("burnReceipts client — re-check after round 3", () => {
     bad(checkPlatformPins(null, pinned, "mainnet"), /does not exist/);
     bad(checkPlatformPins({ owner: ll, data: Buffer.alloc(100) }, pinned, "mainnet"), /bytes/);
     bad(checkPlatformPins(null, { ...pinned, platform: PublicKey.default }, "mainnet"), /no LaunchLab platform is pinned/);
+    // LAUNCHPAD-PATH §35 (policy 0): the Fee Key wallet must be FEE_KEYS and the scales exactly 1000000/0/0
+    const fk = feeKeysPda(PID);
+    const withWallet = (wallet: PublicKey, scales: [number, number, number]) => { const d = data(cp, PublicKey.default, scales); wallet.toBuffer().copy(d, 48); return d; };
+    const p0 = { ...pinned, feeKeys: fk };
+    assert.equal(checkPlatformPins({ owner: ll, data: withWallet(fk, [1_000_000, 0, 0]) }, p0, "mainnet").ok, true);
+    bad(checkPlatformPins({ owner: ll, data: withWallet(Keypair.generate().publicKey, [1_000_000, 0, 0]) }, p0, "mainnet"), /platformLockNftWallet/);
+    bad(checkPlatformPins({ owner: ll, data: withWallet(fk, [500_000, 400_000, 100_000]) }, p0, "mainnet"), /required 1000000\/0\/0/);
   });
   test("R3-5: the admin CLI prints the RPC as scheme + host only", () => {
     assert.equal(redactRpcUrl("https://mainnet.helius-rpc.com/?api-key=SECRET"), "https://mainnet.helius-rpc.com");

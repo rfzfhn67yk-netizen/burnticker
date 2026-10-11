@@ -185,3 +185,17 @@ file it needs, and `test/burntickerSdkLeak.test.ts` keeps that list current and 
 path, and compiles it to `dist/` (ESM + `.d.ts`). `prepublishOnly` refuses a stale closure manifest. Before the first `npm publish`,
 the owner chooses the license; `package.json` says `UNLICENSED` until then. Versioning follows the API's policy
 ([api.md](api.md) §6): semver, additive within a major.
+
+## 10. The bot starter kit
+
+`packages/burnticker-bot-starter/` (growth batch, 2026-10-10) holds three small bots on this SDK. Copy and rename them:
+
+| Script | What it does |
+|---|---|
+| `follow.ts` | Polls a coin's receipts and prints each new one with its verifier call (`verifyOnServer`, or `--verify local` → `verifyReceipt`) |
+| `launch.ts` | Previews a launch bundle for a catalogue rule. Prints the server's unsigned transactions and the rules sha256, checked against the local hash. Never signs |
+| `post.ts` | Renders a receipt post, season card or one-league scoreboard through the platform's own post generator, runs the copy lint, and appends the post to a local queue file. A person posts it by hand. There is no X API |
+
+The kit imports the SDK through one line, `src/sdk.ts`, which you swap for the npm package once the SDK is published. Its README covers
+setup, the keyless API and the rules (no price talk, no auto-posting). `test/burntickerBotStarter.test.ts` runs all three scripts against
+the real API handlers.

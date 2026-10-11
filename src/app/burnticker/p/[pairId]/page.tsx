@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
 
 /**
@@ -11,7 +12,7 @@ import { likeHref } from "@/lib/burnticker/templates";
  * by the API), both receipts tables stacked, both rules. The receipts are the scoreboard. The static twin is tokenPage.ts renderPairHtml.
  */
 interface Receipt { eventId: string; settledAt: string; result: string | null; value: string | null; units: number; status: string; burned: string | null; txUrl: string | null; signature: string | null; verify?: { verified: boolean; checks: string[] } }
-interface Side { status: { ticker: string; name: string; mint: string; supply: { current: string; initial: string }; burned: { total: string; count: number; pctOfSupply: number }; rules: { statement: string; sha256: string }; next: { impliedChance: number | null; nextMarket: string | null }; status: string }; receipts: Receipt[] }
+interface Side { status: { ticker: string; name: string; mint: string; supply: { current: string; initial: string }; burned: { total: string; count: number; pctOfSupply: number }; rules: { statement: string; sha256: string }; next: { impliedChance: number | null; nextMarket: string | null }; status: string; lp?: { lockedPct: number; feeKey: string | null; feeKeyOwner: string | null; lockProgram: string; split: { burnBps: number; operatorBps: number }; urls: { feeKey: string | null; feeKeyOwner: string | null; lockProgram: string | null }; lastClaim: { line: string; txUrl: string | null } | null } | null }; receipts: Receipt[] }
 interface Tally {
   burnsA: number; burnsB: number; burnedA: string; burnedB: string; supplyA: string; supplyB: string; supplyPctA: number; supplyPctB: number; settlements: number; voids: number;
   lastSettlement: { eventId: string; settledAt: string; burnedSide: "A" | "B" | null; result: string | null; value: string | null; burned: string | null } | null;
@@ -90,11 +91,24 @@ export default function PairPage() {
 
       {receiptsTable(d.a)}
       {receiptsTable(d.b)}
+      {d.a.status.status !== "draft" && d.b.status.status !== "draft" && <EmbedSnippet kind="pair" id={d.pair.pairId} label={`$${A} vs $${B}`} />}
 
       <section className="grid md:grid-cols-2 gap-3">{([[d.a, "A"], [d.b, "B"]] as const).map(([s, side]) => (
-        <div className={card} key={side}><div className="text-xs text-neutral-400">side {side}</div><h2 className="font-medium"><Link className="underline" href={`/burnticker/t/${s.status.ticker}`}>${s.status.ticker}</Link> <span className="text-neutral-400 font-normal">{s.status.name}</span></h2><p className="text-xs text-neutral-400 mt-1">{s.status.rules.statement}</p><p className="text-xs text-neutral-500 mt-1 break-all">rules sha256 {s.status.rules.sha256}</p></div>
+        <div className={card} key={side}><div className="text-xs text-neutral-400">side {side}</div><h2 className="font-medium"><Link className="underline" href={`/burnticker/t/${s.status.ticker}`}>${s.status.ticker}</Link> <span className="text-neutral-400 font-normal">{s.status.name}</span></h2><p className="text-xs text-neutral-400 mt-1">{s.status.rules.statement}</p><p className="text-xs text-neutral-500 mt-1 break-all">rules sha256 {s.status.rules.sha256}</p>{s.status.lp && <LpLine lp={s.status.lp} />}</div>
       ))}</section>
       <footer className="text-xs text-neutral-500">A memecoin pair. Each rule says what its supply does, not what either price does. Nobody is promised anything.{d.stubs.length ? ` On this host: ${d.stubs.join(" · ")}` : ""}</footer>
     </main>
+  );
+}
+
+/** LP locked forever (2026-10-10): each side's lock, Fee Key and owner (Solscan), and its last LP-fee claim. */
+function LpLine({ lp }: { lp: NonNullable<Side["status"]["lp"]> }) {
+  const a = (addr: string | null, url: string | null, empty: string) => (addr ? (url ? <a className="underline font-mono" href={url}>{addr.slice(0, 4)}…{addr.slice(-4)}</a> : <span className="font-mono">{addr.slice(0, 4)}…{addr.slice(-4)}</span>) : <span>{empty}</span>);
+  return (
+    <div className="text-xs text-neutral-400 mt-2">
+      <p className="font-mono uppercase tracking-widest text-[11px]">LP locked forever · fees fund the burn</p>
+      <p className="mt-1">{lp.lockedPct}% locked · fees {lp.split.burnBps / 100}% burn pool / {lp.split.operatorBps / 100}% operator (fixed in code) · lock {a(lp.lockProgram, lp.urls.lockProgram, "—")} · Fee Key {a(lp.feeKey, lp.urls.feeKey, "at graduation")} · owner {a(lp.feeKeyOwner, lp.urls.feeKeyOwner, "—")}</p>
+      {lp.lastClaim && <p className="mt-1">{lp.lastClaim.txUrl ? <a className="underline" href={lp.lastClaim.txUrl}>{lp.lastClaim.line}</a> : lp.lastClaim.line}</p>}
+    </div>
   );
 }

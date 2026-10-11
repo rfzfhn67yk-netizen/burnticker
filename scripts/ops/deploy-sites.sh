@@ -6,6 +6,11 @@
 #   sh scripts/ops/deploy-sites.sh                 brand pages + keeper files (after a change to site/, or the first time)
 #   sh scripts/ops/deploy-sites.sh --publish-only  keeper files only — what mct-burnticker-publish.timer runs every minute
 #   sh scripts/ops/deploy-sites.sh --check         dry run: print what would change, touch nothing
+#   sh scripts/ops/deploy-sites.sh --pages-only    only the two pages Caddy serves on its own (trust ops, 2026-10-10 night):
+#                                                  site/burnticker/status/ → $BURNTICKER_WWW/status/ (the public status page; the keeper writes
+#                                                  status/status.json beside it, served at https://status.burnticker.com/ and /status/) and
+#                                                  site/burnticker/fallback/ → $BURNTICKER_WWW/fallback/ (Caddy's static page while the app is
+#                                                  down). --publish-only ships them too, so the timer keeps them in place after every ship.
 #
 # Layout (site/deficit/README.md "deploy"): the brand page's index.html is the root; the keeper's own index.html is kept beside it as
 # status.html ($DEFICIT) / tokens.html (Burnticker's platform index with the audit badge) because its links (t/<ticker>/, trust/) are
@@ -16,8 +21,8 @@ set -eu
 cd "$(dirname "$0")/../.."
 . ./scripts/load-env.sh
 load_env_local .
-CHECK=0; PUBLISH_ONLY=0
-for a in "$@"; do case "$a" in --check) CHECK=1 ;; --publish-only) PUBLISH_ONLY=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
+CHECK=0; PUBLISH_ONLY=0; PAGES_ONLY=0
+for a in "$@"; do case "$a" in --check) CHECK=1 ;; --publish-only) PUBLISH_ONLY=1 ;; --pages-only) PAGES_ONLY=1 ;; *) echo "unknown flag $a"; exit 2 ;; esac; done
 DEFICIT_WWW="${DEFICIT_WWW:-/var/www/deficit}"
 BURNTICKER_WWW="${BURNTICKER_WWW:-/var/www/burnticker}"
 BK_PUB="${BURNKEEPER_PUBLISH_DIR:-data/burnkeeper-site}"
@@ -54,10 +59,23 @@ site() {   # site <label> <brand dir> <publish dir> <www> <keeper index name>
     [ "$PUBLISH_ONLY" = 1 ] || add "  $label publish: $pub does not exist yet (the keeper writes it on its first cycle)"
   fi
 }
-site deficit site/deficit "$BK_PUB" "$DEFICIT_WWW" status.html
-site burnticker site/burnticker "$BT_PUB" "$BURNTICKER_WWW" tokens.html
+pages() {   # the status page and the app-down fallback: small, and Caddy needs both in place whatever else ships
+  for p in status fallback; do
+    if [ -d "site/burnticker/$p" ]; then
+      [ "$CHECK" = 1 ] || [ -d "$BURNTICKER_WWW/$p" ] || install -d -m 755 "$BURNTICKER_WWW/$p"
+      add "$($RS "site/burnticker/$p/" "$BURNTICKER_WWW/$p/" | sed "s|^|  burnticker $p page: |")"
+    fi
+  done
+}
+if [ "$PAGES_ONLY" = 1 ]; then
+  pages
+else
+  site deficit site/deficit "$BK_PUB" "$DEFICIT_WWW" status.html
+  site burnticker site/burnticker "$BT_PUB" "$BURNTICKER_WWW" tokens.html
+  [ "$PUBLISH_ONLY" = 1 ] && pages
+fi
 
 if [ -n "$OUT" ]; then
-  echo "[$(stamp)] deploy-sites$([ "$CHECK" = 1 ] && echo ' (check — nothing written)')$([ "$PUBLISH_ONLY" = 1 ] && echo ' (publish only)'):"
+  echo "[$(stamp)] deploy-sites$([ "$CHECK" = 1 ] && echo ' (check — nothing written)')$([ "$PUBLISH_ONLY" = 1 ] && echo ' (publish only)')$([ "$PAGES_ONLY" = 1 ] && echo ' (pages only)'):"
   printf '%s' "$OUT"
 fi

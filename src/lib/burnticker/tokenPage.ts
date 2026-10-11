@@ -1,7 +1,7 @@
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
-import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
+import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { badgeFromText } from "@/lib/burnticker/describe";
 import type { TokenMeta } from "@/lib/burnticker/registry";
@@ -19,6 +19,7 @@ import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type MarketInput } from "@/lib/burnticker/market";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
+import { LP_POLICY_BADGE, buildLpLockJson, feeKeysPda, operatorTreasuryFor, solscanUrl, type LpLockJson } from "@/lib/burnticker/lockFees";
 
 /**
  * THE TOKEN PAGE (LAUNCHPAD-PATH §6; 2026-10-09), generalised from the $DEFICIT status page to N tokens: supply and burned, the feed
@@ -49,6 +50,8 @@ export interface TokenPageInput {
   lifecycle?: LifecycleJson | null;
   /** The LaunchLab pool and top holders as read this cycle (market.ts readMarket); absent/null on a host without an RPC → the page shows "—". */
   market?: MarketInput | null;
+  /** LP locked forever (2026-10-10): the lock as read + recorded claims (lpLockPage.ts lpLockBlock); absent → the policy alone. */
+  lp?: LpLockJson | null;
 }
 
 // PairSideSummary / PairCounterpart live in pageTypes.ts with the JSON shapes that carry them.
@@ -74,7 +77,7 @@ export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" 
   return { ticker: s.ticker, name: s.name, mint: s.mint, burns: s.burned.count, burned: s.burned.total, supply: s.supply.current, lastBurnAt: last?.settledAt ?? null };
 }
 
-export const FEE_FLOW_LINE = "creator fees → burn pool → burned; LP fees → locked in the pool forever.";
+export const FEE_FLOW_LINE = "creator fees → burn pool → burned; LP locked forever, its fees → 80% burn pool / 20% operator (fixed in code).";
 
 /** The lifecycle block from the registry (pure over its reads): ended, wind-down progress, the last sweep, the page's one line. */
 export function lifecycleFrom(reg: Pick<Registry, "ruleEnd" | "receipts" | "getStatus">, t: Pick<TokenRow, "mint" | "status">, rule: Pick<LockedRule["rule"], "onEnd" | "binary" | "scalar" | "kind">, poolLamports: bigint | null = null): LifecycleJson {
@@ -278,7 +281,8 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     fees: { curve: CURVE_FEES, postGraduation: POST_GRADUATION_FEES, sentence: feeSplitSentence(), creatorSliceBps: 0 },
     health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
-    trust: { lpBurnedPct: LP_BURNED_PCT, creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
+    trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
+    lp: i.lp ?? defaultLp(i),
     program,
     profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
     pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
@@ -286,6 +290,23 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     lifecycle: i.lifecycle ?? null,
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
   };
+}
+
+/** The policy block without a chain read (no claim recorded, Fee Key unknown until graduation). */
+function defaultLp(i: TokenPageInput): LpLockJson {
+  let keys: string | null = null;
+  try { keys = i.chain.programId ? feeKeysPda(i.chain.programId).toBase58() : null; } catch { keys = null; }
+  return buildLpLockJson({ cluster: i.chain.cluster, mint: i.token.mint, programId: i.chain.programId || null, state: null, feeKeysPda: keys, operatorTreasury: operatorTreasuryFor(i.chain.cluster), claims: [], explorer: (id, kind) => solscanUrl(i.chain.cluster, id, kind) });
+}
+
+/** The coin page's LP block: "LP locked forever · fees fund the burn", the addresses (Solscan) and the last claim. */
+export function lpLockHtml(lp: LpLockJson | null | undefined): string {
+  if (!lp) return "";
+  const a = (addr: string | null, url: string | null) => (addr ? (url ? `<a href="${esc(url)}"><code>${esc(addr)}</code></a>` : `<code>${esc(addr)}</code>`) : "<em>appears at graduation</em>");
+  return `<h2>${esc(LP_POLICY_BADGE)}</h2>
+<p>${esc(lp.line)}. ${lp.lockedPct}% of the graduation LP is locked with Raydium's LP lock and can never be withdrawn; the Fee Key is owned by the burn program, and anyone can call claim_lock_fees: ${lp.split.burnBps / 100}% of the SOL side to this coin's burn pool, ${lp.split.operatorBps / 100}% to the operator treasury, the coin side burned.</p>
+<p class="muted">Lock program ${a(lp.lockProgram, lp.urls.lockProgram)} · Fee Key ${a(lp.feeKey, lp.urls.feeKey)} · Fee Key owner ${a(lp.feeKeyOwner, lp.urls.feeKeyOwner)}${lp.lockedLiquidity ? ` · locked liquidity ${a(lp.lockedLiquidity, lp.urls.lockedLiquidity)}` : ""} · operator treasury ${lp.operatorTreasury ? a(lp.operatorTreasury, lp.urls.operatorTreasury) : "<em>not pinned on this cluster</em>"}</p>
+<p class="muted">${lp.lastClaim ? `Last claim ${esc(lp.lastClaim.at.slice(0, 16).replace("T", " "))}Z: ${lp.lastClaim.txUrl ? `<a href="${esc(lp.lastClaim.txUrl)}">${esc(lp.lastClaim.line)}</a>` : esc(lp.lastClaim.line)} · ${lp.totals.claims} claim(s), ${esc(lp.totals.sol)} SOL in all (${esc(lp.totals.toBurnPool)} to the burn pool, ${esc(lp.totals.toOperator)} to the operator)` : "No LP-fee claim yet."}${lp.note ? ` · ${esc(lp.note)}` : ""}</p>`;
 }
 
 const ATTESTER_KIND: Record<number, string> = { 0: "operator", 1: "zkTLS relayer", 2: "oracle" };
@@ -397,9 +418,10 @@ ${programSection(s.program)}
 <p>${esc(s.fees.sentence)}</p>
 <div class="scroll">${feeTable(s.fees.curve)}</div>
 <div class="scroll" style="margin-top:8px">${feeTable(s.fees.postGraduation)}</div>
-<p class="muted">Creator fee slice: ${s.fees.creatorSliceBps} bps (creators earn no cash from fees; the creator-fee slot pays the burn pool). LP burned at graduation: ${s.trust.lpBurnedPct}%, so the developer's post-graduation take is 0 and the burn pool's 4.75 bps there is Raydium's fixed CPMM creator fee. Sources: docs/burnkeeper/fees.md.</p>
+<p class="muted">Creator fee slice: ${s.fees.creatorSliceBps} bps (creators earn no cash from fees; the creator-fee slot pays the burn pool). LP locked forever at graduation (${s.trust.lpLockedPct ?? LP_LOCKED_PCT}%): its fees fund the burn — 16.8 bps of every swap to the burn pool and 4.2 bps to the operator (80/20, fixed in code) — plus Raydium's fixed 4.75 bps CPMM creator fee to the burn pool. Sources: docs/burnkeeper/fees.md.</p>
+${lpLockHtml(s.lp)}
 <h2>What the operator can and cannot do</h2>
-<p class="muted">Derived from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>${s.trust.operator.placeholder ? " (placeholder until the program is deployed)" : ""}. LP burned at graduation ${s.trust.lpBurnedPct}% · creator cash from fees ${s.trust.creatorCashBps} bps · team allocation ${s.trust.teamAllocationPct}%.</p>
+<p class="muted">Derived from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>${s.trust.operator.placeholder ? " (placeholder until the program is deployed)" : ""}. LP locked forever (${s.trust.lpLockedPct ?? LP_LOCKED_PCT}%; fees 80% burn pool / 20% operator) · creator cash from fees ${s.trust.creatorCashBps} bps · team allocation ${s.trust.teamAllocationPct}%.</p>
 <div class="rule"><strong>Can:</strong> ${s.trust.operator.can.map(esc).join("; ")}.<br><strong>Cannot:</strong> ${s.trust.operator.cannot.map(esc).join("; ")}.</div>
 <p class="muted">${esc(OPERATOR_LINE)} · ${esc(USE_OF_FEES)} · Creator wallet shown above (anonymous creators are allowed; the wallet is always displayed).${s.mode === "buyback" ? ` · ${esc(s.pool.queuedNote)}` : ""}</p>
 <h2>Attesters</h2>
@@ -531,6 +553,8 @@ ${table(b, receiptsB)}
 <h2>The two rules</h2>
 ${rule(a, "A")}
 ${rule(b, "B")}
+${a.lp || b.lp ? `<h2>${esc(LP_POLICY_BADGE)}</h2>
+${[a, b].map((x) => (x.lp ? `<h3>$${esc(x.ticker)}</h3>${lpLockHtml(x.lp).replace(/^<h2>[^<]*<\/h2>\n/, "")}` : "")).join("\n")}` : ""}
 ${a.disclosure.eventContract ? `<p class="rule">${esc(a.disclosure.eventContract)}</p>` : ""}
 <footer>A memecoin pair. Each rule says what its supply does, not what either price does. Nobody is promised anything. ${esc(a.disclosure.disclaimer)}</footer>
 </main></body></html>

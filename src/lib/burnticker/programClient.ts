@@ -6,9 +6,10 @@ import { initializeTokenIx, operatorAttester } from "@/lib/burnReceipts/instruct
 import { configPda, vaultAddress } from "@/lib/burnReceipts/pda";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
-import { solanaProgramPort } from "@/lib/burnKeeper/programAdapter";
+import { programClusterOf, solanaProgramPort } from "@/lib/burnKeeper/programAdapter";
 import type { Cluster } from "@/lib/burnKeeper/solana";
 import { counterRule, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
+import { ChainLockFees } from "@/lib/burnticker/lockFeesChain";
 
 /**
  * THE REAL burn_receipts CLIENT FOR BURNTICKER (2026-10-10) — see program.ts for the interface and the unit counter. Per-token
@@ -43,11 +44,14 @@ export class ProgramBurnClient implements BurnProgramClient {
   readonly canSign: boolean;
   private readonly o: ProgramBurnClientOpts;
   private ports = new Map<string, ProgramPort>();
+  /** LP locked forever (2026-10-10): register_fee_key / claim_lock_fees and the lock reads (lockFeesChain.ts); read-only without a payer. */
+  readonly lockFees: ChainLockFees;
   constructor(o: ProgramBurnClientOpts) {
     this.o = o;
     this.programId = o.programId.toBase58();
     this.cluster = o.cluster;
     this.canSign = !!o.payer;
+    this.lockFees = new ChainLockFees({ connection: o.connection, programId: o.programId, cluster: programClusterOf(o.cluster), payer: o.payer, allowMainnet: o.allowMainnet });
   }
   async initializeToken(i: InitializeTokenInput) {
     if (!i.rule) throw new Error("initialize_token: the locked rule is required (the counter mapping reads its fractions)");

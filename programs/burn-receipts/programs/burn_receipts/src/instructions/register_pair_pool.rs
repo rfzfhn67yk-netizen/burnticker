@@ -18,9 +18,11 @@ use crate::state::TokenConfig;
 ///     for that address, so only its `graduate` can have created a pool there);
 ///   * the pool is a CPMM PoolState of WSOL / this mint on SPL Token, on the cpConfigId pinned at initialize_token (= the Pair's), and
 ///     its `pool_creator` is the pair's SOL vault PDA ["vault", pair];
-///   * LP: the Pair records ≥ 90 % of the LP that existed at creation as burned, and CPMM agrees — lp_supply − LP mint supply (every
-///     burn plus the 100 never-minted units) is at least that recorded burn. Measured against the CREATION supply, so a later
-///     depositor cannot dilute the ratio and block registration (the blind-review-3 M-2 class).
+///   * LP: the Pair records ≥ 90 % of the LP that existed at creation as locked (pair_curve's lock_lp moves it into Raydium's CPMM
+///     lock — LAUNCHPAD-PATH §35; pairs graduated before that burned it, and the same field then records the burn), and the chain
+///     agrees — burned (lp_supply − LP mint supply: every burn plus the 100 never-minted units) + locked (the LP in the lock
+///     authority's account ATA(LOCK_CPMM_AUTHORITY, lp_mint)) is at least that record. Measured against the CREATION supply, so a
+///     later depositor cannot dilute the ratio and block registration (the blind-review-3 M-2 class).
 #[event_cpi]
 #[derive(Accounts)]
 pub struct RegisterPairPool<'info> {
@@ -37,6 +39,9 @@ pub struct RegisterPairPool<'info> {
     pub lp_mint: Box<Account<'info, Mint>>,
     /// CHECK: the pair_curve Pair account (owner, discriminator, PDA and status checked in the handler).
     pub pair: UncheckedAccount<'info>,
+    /// CHECK: Raydium's LP-lock account for this LP mint: ATA(LOCK_CPMM_AUTHORITY, lp_mint), address-checked in the handler; it may not
+    /// exist (then nothing is locked).
+    pub lp_lock_vault: UncheckedAccount<'info>,
 }
 
 pub fn handle_register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
@@ -71,10 +76,13 @@ pub fn handle_register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
 
     // LP: ≥ 90 % of the creation supply burned per the Pair's record, and the burn is real on chain.
     require_keys_eq!(a.lp_mint.key(), pool.lp_mint, BurnError::InvalidCpmmAccount);
-    let (created, burned) = (pair.lp_supply_at_creation[side], pair.lp_burned[side]);
-    require!(created > 0 && (burned as u128) * BPS_DENOMINATOR >= PAIR_MIN_BURNED_LP_BPS * created as u128, BurnError::LpNotLocked);
+    let (created, recorded) = (pair.lp_supply_at_creation[side], pair.lp_locked[side]);
+    require!(created > 0 && (recorded as u128) * BPS_DENOMINATOR >= PAIR_MIN_BURNED_LP_BPS * created as u128, BurnError::LpNotLocked);
     let burned_on_chain = pool.lp_supply.saturating_sub(a.lp_mint.supply);
-    require!(pool.lp_supply >= created && burned_on_chain >= burned, BurnError::LpNotLocked);
+    let lock_vault = a.lp_lock_vault.to_account_info();
+    require_keys_eq!(*lock_vault.key, anchor_spl::associated_token::get_associated_token_address(&LOCK_CPMM_AUTHORITY, &pool.lp_mint), BurnError::InvalidCpmmAccount);
+    let locked_on_chain = crate::instructions::register_pool::lock_vault_amount(&lock_vault, &pool.lp_mint)?;
+    require!(pool.lp_supply >= created && (burned_on_chain as u128) + (locked_on_chain as u128) >= recorded as u128, BurnError::LpNotLocked);
 
     let c = &mut ctx.accounts.config;
     c.cpmm_pool = pool_key;

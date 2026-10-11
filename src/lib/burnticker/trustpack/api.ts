@@ -5,7 +5,7 @@ import { buildChecklist } from "@/lib/burnticker/trustpack/checklist";
 import { sampleReceipts, DEVNET_PROGRAM_ID } from "@/lib/burnticker/trustpack/samples";
 import { checkReceiptTx, jsonRpc, PUBLIC_RPC, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
 import { isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
-import { buildFeeLedgerDoc, loadExpenses, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
+import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
 import { loadOperator, pinnedDevFeeWallet, placeholders, signedMessageView, type Cluster } from "@/lib/burnticker/trustpack/operator";
 import { readNeverBuys } from "@/lib/burnticker/trustpack/neverBuys";
 import { NEVER_BUYS_STATUS } from "@/lib/burnticker/trustpack/copy";
@@ -40,7 +40,16 @@ let ledgerCache: { at: number; key: string; doc: FeeLedgerDoc } | null = null;
 export const LEDGER_TTL_MS = 3_600_000;
 export function resetLedgerCache(): void { ledgerCache = null; }
 
-export async function v1FeeLedger(p: Pick<Platform, "cluster" | "publishDir">, o: { rpc?: Rpc; root?: string; now?: number; env?: Readonly<Record<string, string | undefined>> } = {}): Promise<ApiResult> {
+export async function v1FeeLedger(p: Pick<Platform, "cluster" | "publishDir"> & Partial<Pick<Platform, "registry">>, o: { rpc?: Rpc; root?: string; now?: number; env?: Readonly<Record<string, string | undefined>> } = {}): Promise<ApiResult> {
+  const r = await feeLedgerInner(p, o);
+  if (r.status !== 200) return r;
+  // LP locked forever (2026-10-10): the operator's LP-fee line is always fresh (the keeper's claim records), whichever copy served the rest.
+  let claims = null;
+  try { claims = p.registry ? p.registry.lockFeeClaims() : null; } catch { claims = null; }
+  return ok({ ...(r.body as Record<string, unknown>), lpFees: lpFeeLine(pageCluster(p), claims) });
+}
+
+async function feeLedgerInner(p: Pick<Platform, "cluster" | "publishDir">, o: { rpc?: Rpc; root?: string; now?: number; env?: Readonly<Record<string, string | undefined>> } = {}): Promise<ApiResult> {
   const now = o.now ?? Date.now(), cluster = pageCluster(p);
   const op = loadOperator(o.root), expenses = loadExpenses(o.root);
   const wallet = pinnedDevFeeWallet(op, cluster);

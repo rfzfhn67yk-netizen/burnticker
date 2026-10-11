@@ -54,19 +54,27 @@ export class ProductStore {
     for (const r of rows) { const x = by.get(r.query) ?? { query: r.query, misses: 0, noCard: 0, noClick: 0, lastHour: r.hour }; x.misses++; if (r.reason === "no-card") x.noCard++; else x.noClick++; x.lastHour = r.hour; by.set(r.query, x); }
     return { since, total: rows.length, noCard: rows.filter((r) => r.reason === "no-card").length, noClick: rows.filter((r) => r.reason === "no-click").length, queries: [...by.values()].sort((a, b) => b.misses - a.misses || a.query.localeCompare(b.query)).slice(0, top) };
   }
-  /** Stores a draft's step durations once (seconds); returns the stored durations, or null when nothing valid was sent. */
+  /**
+   * Stores a draft's step durations once (seconds), with the screens shown and the decisions made from landing to Launch when the page
+   * sent them (the owner's "three decisions" before / after, 2026-10-10); returns the durations, or null when nothing valid was sent.
+   */
   putTimings(mint: string, raw: unknown, now = Date.now()): Partial<Record<Step, number>> | null {
     const d = stepDurations(raw, now);
-    if (!d) return null;
-    this.db.prepare("INSERT OR IGNORE INTO launch_timings (mint, created_at, steps_json) VALUES (?,?,?)").run(mint, now, JSON.stringify(d));
-    return d;
+    const f = flowCounts(raw);
+    if (!d && !f) return null;
+    this.db.prepare("INSERT OR IGNORE INTO launch_timings (mint, created_at, steps_json) VALUES (?,?,?)").run(mint, now, JSON.stringify({ ...(d ?? {}), ...(f ?? {}) }));
+    return d ?? {};
   }
-  timings(mint: string): Partial<Record<Step, number>> | null { const r = this.db.prepare("SELECT steps_json FROM launch_timings WHERE mint=?").get(mint) as { steps_json: string } | undefined; return r ? JSON.parse(r.steps_json) : null; }
-  timingSummary(sinceMs: number): { since: string; drafts: number; steps: { step: Step; label: string; n: number; p50Sec: number | null; p90Sec: number | null }[]; total: { n: number; p50Sec: number | null; p90Sec: number | null } } {
+  timings(mint: string): Partial<Record<Step, number>> | null { const r = this.db.prepare("SELECT steps_json FROM launch_timings WHERE mint=?").get(mint) as { steps_json: string } | undefined; if (!r) return null; const { screens: _s, decisions: _d, ...steps } = JSON.parse(r.steps_json) as Record<string, number>; return steps; }
+  /** The screens shown and decisions made for a draft, when the page sent them. */
+  flow(mint: string): { screens: number; decisions: number } | null { const r = this.db.prepare("SELECT steps_json FROM launch_timings WHERE mint=?").get(mint) as { steps_json: string } | undefined; if (!r) return null; const j = JSON.parse(r.steps_json) as Record<string, number>; return typeof j.screens === "number" && typeof j.decisions === "number" ? { screens: j.screens, decisions: j.decisions } : null; }
+  timingSummary(sinceMs: number): { since: string; drafts: number; steps: { step: Step; label: string; n: number; p50Sec: number | null; p90Sec: number | null }[]; total: { n: number; p50Sec: number | null; p90Sec: number | null }; flow: { n: number; screensP50: number | null; screensP90: number | null; decisionsP50: number | null; decisionsP90: number | null } } {
     const rows = (this.db.prepare("SELECT steps_json FROM launch_timings WHERE created_at >= ?").all(sinceMs) as { steps_json: string }[]).map((r) => JSON.parse(r.steps_json) as Partial<Record<Step, number>>);
     const steps = STEPS.slice(1).map((s) => { const xs = rows.map((r) => r[s]).filter((x): x is number => typeof x === "number"); return { step: s, label: STEP_LABEL[s], n: xs.length, p50Sec: pct(xs, 50), p90Sec: pct(xs, 90) }; });
     const totals = rows.map((r) => STEPS.slice(1).reduce((a, s) => a + (r[s] ?? 0), 0)).filter((x) => x > 0);
-    return { since: new Date(sinceMs).toISOString(), drafts: rows.length, steps, total: { n: totals.length, p50Sec: pct(totals, 50), p90Sec: pct(totals, 90) } };
+    const fl = rows.map((r) => r as unknown as Record<string, number>).filter((r) => typeof r.screens === "number" && typeof r.decisions === "number");
+    const sc = fl.map((r) => r.screens), dc = fl.map((r) => r.decisions);
+    return { since: new Date(sinceMs).toISOString(), drafts: rows.length, steps, total: { n: totals.length, p50Sec: pct(totals, 50), p90Sec: pct(totals, 90) }, flow: { n: fl.length, screensP50: pct(sc, 50), screensP90: pct(sc, 90), decisionsP50: pct(dc, 50), decisionsP90: pct(dc, 90) } };
   }
 }
 
@@ -83,6 +91,14 @@ export function stepDurations(raw: unknown, now = Date.now()): Partial<Record<St
   let prev: number | null = null;
   for (const s of STEPS) { const v = at[s]; if (v === undefined) continue; if (prev !== null) { if (v < prev) return Object.keys(out).length ? out : null; out[s] = Math.round((v - prev) / 1000); } prev = v; }
   return Object.keys(out).length ? out : null;
+}
+
+/** The page's flow counts (screens shown, decisions made), each a whole number 1–50; null when absent or out of range. */
+export function flowCounts(raw: unknown): { screens: number; decisions: number } | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const t = raw as Record<string, unknown>, sc = Number(t.screens), dc = Number(t.decisions);
+  const ok = (n: number) => Number.isInteger(n) && n >= 1 && n <= 50;
+  return ok(sc) && ok(dc) ? { screens: sc, decisions: dc } : null;
 }
 
 const stores = new WeakMap<DatabaseSync, ProductStore>();

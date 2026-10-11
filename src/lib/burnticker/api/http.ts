@@ -14,8 +14,9 @@ import { endpoint, RATE_LIMITS, API_VERSION, type Bucket } from "@/lib/burnticke
  *   errors       JSON { error, code? , problems? }, never cached; an unexpected throw is a 500 with the message, never a stack.
  */
 
-export interface ApiResult { status: number; body: unknown; headers?: Record<string, string> }
+export interface ApiResult { status: number; body: unknown; headers?: Record<string, string>; /** a non-JSON 200 (the badge's SVG / PNG, growth batch 2026-10-10): sent as-is with its own type; errors stay JSON */ raw?: { body: Uint8Array | string; type: string } }
 export const ok = (body: unknown): ApiResult => ({ status: 200, body });
+export const okRaw = (body: Uint8Array | string, type: string, headers: Record<string, string> = {}): ApiResult => ({ status: 200, body: null, raw: { body, type }, headers });
 export const fail = (status: number, error: string, extra: Record<string, unknown> = {}): ApiResult => ({ status, body: { error, ...extra } });
 
 export class RateLimiter {
@@ -73,6 +74,7 @@ export async function runV1(operationId: string, req: Request, handler: () => Pr
   let r: ApiResult;
   try { r = await handler(); } catch (e) { r = fail(500, `internal error: ${(e as Error).message.slice(0, 200)}`, { code: "internal" }); }
   const cache = ep.method === "GET" && r.status === 200 && ep.cacheSec > 0 ? `public, max-age=${ep.cacheSec}, s-maxage=${ep.cacheSec}, stale-while-revalidate=${ep.cacheSec}` : "no-store";
+  if (r.raw && r.status === 200) return new Response(r.raw.body as BodyInit, { status: 200, headers: { "content-type": r.raw.type, "x-burnticker-api": API_VERSION, "x-content-type-options": "nosniff", ...cors, ...rlHeaders, "cache-control": cache, ...(r.headers ?? {}) } });
   return json(r, { ...cors, ...rlHeaders, "cache-control": cache });
 }
 

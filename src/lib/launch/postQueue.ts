@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BurnJson, StatusJson } from "@/lib/burnKeeper/statusPage";
 import type { PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
-import { BURN_POOL_CURVE_BPS, BURNTICKER_DEV_FEE_BPS, LP_BURNED_PCT } from "@/lib/burnticker/fees";
+import { BURN_POOL_CURVE_BPS, BURNTICKER_DEV_FEE_BPS, LP_LOCKED_PCT, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { LEAGUES } from "@/lib/burnticker/sources/espn";
 import { formatHits, lintCopy, loadCopyLintConfig, xLength, type CopyLintConfig, type CopyLintHit } from "@/lib/launch/copyLint";
 import { DISCLAIMER, SHORT_DISCLAIMER, allLeaguesLine, dailyText, fmtInt, fmtPct, pairDailyText, receiptPostText, scoreboardLeagues, scoreboardText } from "@/lib/launch/dailyPost";
@@ -17,7 +17,7 @@ import { DISCLAIMER, SHORT_DISCLAIMER, allLeaguesLine, dailyText, fmtInt, fmtPct
  *   scoreboard     one league, one season per post (dailyPost.ts scoreboardText) — never a ranking across leagues; across leagues only the
  *                  count line (allLeaguesLine) — or a pair (pairDailyText)
  *   season-card    one coin's rule, its window (only what status.json says), receipts so far, the locked hash
- *   explainer      how a burn happens · what a receipt is · why LP is burned · why creators earn nothing (numbers from fees.ts)
+ *   explainer      how a burn happens · what a receipt is · why LP is locked · why creators earn nothing (numbers from fees.ts)
  *   launch-thread  $DEFICIT (from its rule file), the platform (guardrails derived from transparency.json), or any coin
  *   teaser         pre-launch, true today: the devnet receipt, the $DEFICIT rule, the reviews, open source, settlement coverage
  *
@@ -198,7 +198,7 @@ export function seasonCardDraft(s: Pick<TokenStatusJson, "ticker" | "seriesTitle
 }
 
 // ---- (4) explainers ----
-export const EXPLAINER_TOPICS = ["how-a-burn-happens", "what-a-receipt-is", "why-lp-is-burned", "why-creators-earn-nothing"] as const;
+export const EXPLAINER_TOPICS = ["how-a-burn-happens", "what-a-receipt-is", "why-lp-is-locked", "why-creators-earn-nothing"] as const;
 export type ExplainerTopic = (typeof EXPLAINER_TOPICS)[number];
 
 /** Fixed explainers. Numbers come from fees.ts so they move with the code; each sentence is checked against the program's Powers Register. */
@@ -212,8 +212,8 @@ export function explainerDraft(topic: ExplainerTopic, site: string): Draft {
     "what-a-receipt-is": [
       `A Burnticker receipt is the memo on the burn transaction: date, source, previous and current reading, units, pool, spent, got, burned, the rule hash.\n\nRecompute it from the public source and the coin's rules.json, or call the API's verify route:\n${S}/api/burnticker/v1/openapi.json`,
     ],
-    "why-lp-is-burned": [
-      `Why LP is burned: when a Burnticker coin graduates, its liquidity moves to a Raydium CPMM pool and ${LP_BURNED_PCT}% of the LP tokens are burned. That is the platform config, not a creator choice: nobody can pull that liquidity. The pool's creator fee goes to the burn pool.`,
+    "why-lp-is-locked": [
+      `Why LP is locked: when a Burnticker coin graduates, its liquidity moves to a Raydium CPMM pool and ${LP_LOCKED_PCT}% of the LP is locked forever. Nobody can pull it. The Fee Key is held by the burn program: ${LOCK_FEE_BURN_BPS / 100}% of the LP fees go to the burn pool, ${LOCK_FEE_OPERATOR_BPS / 100}% to the operator, fixed in code.`,
     ],
     "why-creators-earn-nothing": [
       `Why creators earn nothing: the creator-fee slot (${BURN_POOL_CURVE_BPS} bps of curve volume) pays the coin's burn pool, 100%. Zero team allocation. The platform's ${BURNTICKER_DEV_FEE_BPS} bps goes to one public developer wallet; the platform never buys any coin, including its own.\n${S}/burnticker/trust`,
@@ -243,7 +243,7 @@ export function deficitLaunchThread(f: DeficitRuleFacts, site: string, launchTxU
       `The rule: each business day, every full ${dollarsB(f.unitUsd)} added to Treasury's Debt to the Penny since the previous reading is one unit. Spend = pool × (1 − ${keepOf(f.fractionPerUnit)}^units).\n\nLocked at launch. Rule hash sha256:${f.sha256.slice(0, 12)}`,
       `The source: ${f.feedName}, posted each business-day afternoon ET, cross-read against FRED's quarterly copy of the same figure. Nothing happens until the debt rises: the first reading after launch is the baseline.`,
       `Until the bonding curve graduates there is no pool for the burn: readings are signed and wait in line, then burn in order once the pool is registered. Each burn day gets one post: the figure, units → ${T} burned, supply, the transaction.${launchTxUrl ? `\nLaunch: ${launchTxUrl}` : ""}`,
-      `Creators earn nothing: the creator fee goes to the burn pool, 100%. All LP burned at graduation. The platform never buys any coin.\n\nReceipts: ${S}\n${DISCLAIMER}`,
+      `Creators earn nothing: the creator fee goes to the burn pool, 100%. LP locked forever; its fees fund the burn (80% burned, 20% operator). The platform never buys any coin.\n\nReceipts: ${S}\n${DISCLAIMER}`,
     ],
   };
 }
@@ -280,9 +280,9 @@ export function platformLaunchThread(rf: ReviewFacts, site: string): Draft {
       `Launch: pick a result ("${ex[0]} lose", "Denver high above 90", "US debt rises $1B"), set the share of the coin's fee pool each burn spends, lock the rule. The rule is hashed at launch and enforced by a program, not a promise.`,
       `When the result settles on its primary source and an independent publisher agrees, the reading is signed on chain and the program spends the coin's own fees buying it on its own pool and burning all of it. The memo is the receipt.`,
       `Follow the season: team coins across ${lg.map((x) => x.label).join(", ")} (${lg.map((x) => x.team).join(", ")}), scored in receipts. Nothing is won here. Things are only burned.`,
-      `Guardrails: creators earn nothing · zero team allocation · the platform never buys any coin · all LP burned · rules locked at launch · every receipt recomputable from its public source.`,
+      `Guardrails: creators earn nothing · zero team allocation · the platform never buys any coin · LP locked forever, its fees fund the burn · rules locked at launch · every receipt recomputable from its public source.`,
       `Open source: ${PUBLIC_REPO}\nReviewed: ${reviewLine(rf)}. Not audited by a security firm.`,
-      `First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.\n\nOperated by one independent operator (United States).\nMemecoins: the rule says what supply does, not what price does. ${S}`,
+      `First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.\n\nOperated by one independent operator.\nMemecoins: the rule says what supply does, not what price does. ${S}`,
     ],
   };
 }
@@ -331,7 +331,7 @@ export function teaserDraft(topic: TeaserTopic, c: TeaserContext): Draft {
     "devnet-receipt": () => { const d = need(c.devnet, "the devnet evidence file"); return { account: "@BurnTicker", posts: [`Devnet rehearsal, ${d.date}: Treasury's debt figure counted ${d.units} units. The burn_receipts program spent ${d.spentSol} SOL of a test coin's fee pool, bought ${fmtInt(d.burned)} test $DEFICIT on its own pool and burned all of it, memo on chain.\n${d.txUrl}\nLog: ${d.log}`] }; },
     "the-rule": () => { const f = need(c.deficit, "the $DEFICIT rule file"); return { account: "@USA_DEFICIT", posts: [`$${f.ticker}'s rule: every full ${dollarsB(f.unitUsd)} added to Treasury's Debt to the Penny is one unit; each unit spends ${pctOf(f.fractionPerUnit)} of the burn pool buying $${f.ticker} on its own pool, and the program burns all of it.\nRule file sha256:${f.sha256.slice(0, 12)}\n${SHORT_DISCLAIMER}`] }; },
     reviews: () => { const r = need(c.reviews, "transparency.json review facts"); return { account: "@BurnTicker", posts: [`Burnticker's program and keeper: ${reviewLine(r)}. Every finding is in the reports with its fix. Not audited by a security firm.\n\n${REPO_TREE("docs/burnticker/reviews")}`] }; },
-    "open-source": () => ({ account: "@BurnTicker", posts: [`Everything Burnticker runs is public: the on-chain program, the keeper, the pages, the tests. The operator's trading bots refuse every platform coin, in code, and that file is public too.\n\nOperated by one independent operator (United States).\n${PUBLIC_REPO}`] }),
+    "open-source": () => ({ account: "@BurnTicker", posts: [`Everything Burnticker runs is public: the on-chain program, the keeper, the pages, the tests. The operator's trading bots refuse every platform coin, in code, and that file is public too.\n\nOperated by one independent operator.\n${PUBLIC_REPO}`] }),
     coverage: () => { const k = need(c.coverage, "the coverage counts"); return { account: "@BurnTicker", posts: [`What Burnticker can settle today, category by category, with the primary source and its independent cross-read: ${k.settleable} settleable · ${k.adjudicatedOnly} on an on-chain payout only · ${k.uncovered} uncovered.\n\n${REPO_FILE("docs/burnticker/SETTLEMENT-COVERAGE.md")}\n${S}/burnticker/trust`] }; },
   };
   const t = text[topic]();

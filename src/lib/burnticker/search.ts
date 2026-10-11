@@ -6,9 +6,10 @@ import { findTeams, gameSeries, teamSeries, LEAGUES, SCHEDULE_NEEDS_KEY, Schedul
 import { findStations, nwsSeries, nwsSeriesTitle, parseNwsSeries, type NwsMetric } from "@/lib/burnticker/sources/nws";
 import { nativeRule, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { loadRaces, outcomeCardTitle, outcomeSettlesNote, searchRaces, tokens, type Race } from "@/lib/burnticker/elections";
-import { searchHits, parseEventsBody, searchUrl, type GammaEvent, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
+import { eventPageUrl, parseEventsBody, searchUrl, type GammaEvent, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
 import { scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { looksLikePerson, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
+import { matchPolymarket, plainQuestion, outcomeLabel, outcomeTicker, searchQueries, splitQuery, type PickerOutcome } from "@/lib/burnticker/polySearch";
 import { championshipCode, describeRule, tickerFrom, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 
@@ -69,6 +70,8 @@ export interface Suggestion {
   matchup: { league: string; eventId: string; title: string; startsAt: string; a: MatchupSide; b: MatchupSide } | null;
   /** When a card cannot offer its rule, why ("market lists no Rays outcome"). */
   note: string | null;
+  /** An event card (polySearch.ts): pick one of the event's named outcomes, then the normal dials. No numbers. */
+  picker?: { slug: string; title: string; noun: string; outcomes: PickerOutcome[] } | null;
   href: string | null; suggestedName: string | null; suggestedTicker: string | null; refused: string[]; score: number;
 }
 export interface WindowOption { kind: WindowKind; label: string; title: string; rule: BurnRule; text: CoinText; endText: string }
@@ -284,7 +287,9 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
   const errors: string[] = []; const cards: Suggestion[] = [];
   const derby = derbyCard(query, d.derbyHref);
   if (derby) return { query, cards: [derby], empty: false, errors };
-  const person = looksLikePerson(query);
+  // a query carrying an event phrase ("spider man oscar", "spider-man best picture") is never read as a person's name
+  const split = splitQuery(query);
+  const person = looksLikePerson(query) && !split.phrase;
   const team = findTeams(query).find((t) => namesTeam(query, t) && nameMatch(query, [t.name, t.nickname, ...t.alt]).nameHits > 0) ?? null;
   // a person-looking query ("lakers tonight" is not one; "el sayed" is) goes to the people only when a candidate's name matches it
   let personHit = false;
@@ -296,17 +301,25 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
   }
   cards.push(...weatherCards(query), ...feedCards(query, d.feeds));
   if (d.venues.polymarket && d.polyGet) {
-    try { cards.push(...raceCards(await loadRaces(d.polyGet, d.refuse), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); }
+    // an award / event phrase ("oscars", "best picture", "emmys") is never a race query: no candidate cards for it
+    if (!split.phrase) { try { cards.push(...raceCards(await loadRaces(d.polyGet, d.refuse), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); } }
     if (!cards.some((c) => c.score >= 1.5) && !person) {
       try {
-        const hits = searchHits(parseEventsBody(await d.polyGet(searchUrl(query.replace(/\b(wins?|will|above|over)\b/gi, " ").replace(/\s+/g, " ").trim(), "open", 8))), { refuse: d.refuse, status: "open", perEvent: 4 });
-        for (const e of hits.events.slice(0, 3)) for (const m of e.markets.slice(0, 1)) {
+        // polySearch.ts: the whole query, the event phrase and the entity; EVERY market of every hit event is read (not markets[0])
+        const events: GammaEvent[] = [];
+        for (const sq of searchQueries(split)) { try { events.push(...parseEventsBody(await d.polyGet(searchUrl(sq, "open", 8)))); } catch (e) { errors.push(`polymarket: ${(e as Error).message.slice(0, 80)}`); } }
+        const found = matchPolymarket(split, events, d.refuse);
+        for (const mm of found.markets) {
+          const { event: e, market: m } = mm;
           if (cards.some((c) => c.pick?.market === m.conditionId)) continue;
-          if (!nameMatch(query, [m.outcome ?? "", m.question, e.title]).all) continue;   // every meaningful token must name the market
-          const label = m.outcome ?? m.question, rule = polyRule(m.conditionId);
-          const descCtx = { eventPhrase: m.outcome ? `${m.outcome} — ${e.title}` : "this market resolves YES", endsAt: m.endDate };
-          const text = describeRule(rule, { ticker: "", ...descCtx });
-          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns 10% once, if ${m.outcome ? `${label} — ${e.title}` : m.question.replace(/\?$/, "").replace(/^will\s+/i, "")} resolves YES`, subtitle: `YES = ${m.yes}, NO = ${m.no}`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.yes}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }, text, href: e.url, refused: e.refused, score: 0.6 + overlap(query, `${m.question} ${label} ${e.title}`) });
+          const label = outcomeLabel(m), sentence = plainQuestion(m.question), rule = polyRule(m.conditionId);
+          const descCtx = { eventPhrase: sentence, endsAt: m.endDate };
+          const text = describeRule(rule, { ticker: outcomeTicker(label), ...descCtx });
+          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns 10% once, if ${sentence} resolves YES`, subtitle: `${e.title} · YES = ${m.outcomes[0] ?? "Yes"}, NO = ${m.outcomes[1] ?? "No"}`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.outcomes[0] ?? "Yes"}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" }, text, descCtx, suggestedTicker: outcomeTicker(label), suggestedName: label.slice(0, 32), href: eventPageUrl(e.slug), score: mm.score });
+        }
+        for (const em of found.events) {
+          const e = em.event;
+          cards.push({ ...base, id: `polyevent:${e.slug}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: em.noun === "outcome" ? `Pick one: ${e.title.trim()} — your coin burns 10% once if your pick wins` : `Pick a ${em.noun}: ${e.title.trim()} — your coin burns 10% once if it wins`, subtitle: `${em.outcomes.length} named ${em.noun === "outcome" ? "outcomes" : `${em.noun}s`}; each is its own yes/no market`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: e.endDate, settleAt: e.endDate, endAt: e.endDate, endText: "ends when the market resolves", howSettles: "Settles on the market for the outcome you pick resolving YES; every other outcome is ignored.", note: em.note, href: eventPageUrl(e.slug), picker: { slug: e.slug, title: e.title.trim(), noun: em.noun, outcomes: em.outcomes }, score: em.score });
         }
       } catch (e) { errors.push(`polymarket: ${(e as Error).message.slice(0, 80)}`); }
     }
@@ -348,6 +361,8 @@ export function dedupeTickers(cards: Suggestion[], taken: (t: string) => boolean
     if (c.suggestedTicker) { const u = pick(c.suggestedTicker); if (u !== c.suggestedTicker) out = { ...out, suggestedTicker: u, text: out.text ? renameText(out.text, out.text.ticker, u) : null }; }
     if (c.windows) out = { ...out, windows: c.windows.map((w, i) => { if (i === 0 && out.text) return { ...w, text: out.text }; const u = pick(w.text.ticker); return u === w.text.ticker ? w : { ...w, text: renameText(w.text, w.text.ticker, u) }; }) };
     if (c.matchup) out = { ...out, matchup: { ...c.matchup, a: { ...c.matchup.a, ticker: pick(c.matchup.a.ticker) }, b: { ...c.matchup.b, ticker: pick(c.matchup.b.ticker) } } };
+    // an event card's outcomes: each suggested ticker free against the registry, the refuse list and each other ($SPIDER, $DUNE, …)
+    if (c.picker) out = { ...out, picker: { ...c.picker, outcomes: c.picker.outcomes.map((o) => ({ ...o, ticker: pick(o.ticker) })) } };
     return out;
   });
 }

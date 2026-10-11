@@ -8,6 +8,7 @@ import { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { solToLamports } from "@/lib/burnKeeper/rules";
 import { DECIMALS, TOTAL_SUPPLY, ruleMappings, type BurnRule, type RuleMode } from "@/lib/burnticker/rules";
+import { FakeLockFees, fakeLockAddress, operatorTreasuryFor, type LockFeesClient } from "@/lib/burnticker/lockFees";
 
 /**
  * THE RECEIPTS PROGRAM, FROM THE BURNTICKER KEEPER'S SIDE (2026-10-10). Every registered token runs on the deployed burn_receipts
@@ -72,6 +73,11 @@ export interface BurnProgramClient {
   port(mint: string): ProgramPort;
   /** A confirmed program transaction for this mint whose memo starts with `key` (the audit), or null. */
   findReceiptOnChain(mint: string, key: string): Promise<{ signature: string; slot: number | null; memo: string } | null>;
+  /**
+   * LP LOCKED FOREVER (2026-10-10, lockFees.ts): the claim_lock_fees path — the locked LP's Fee Key at the program's fee-keys PDA and
+   * the permissionless 80/20 claim. Optional: absent until the program change is bound, and the keeper then skips the claim crank.
+   */
+  readonly lockFees?: LockFeesClient;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -168,7 +174,9 @@ export class FakeBurnProgram implements BurnProgramClient {
   /** The fake registers each buyback token's CPMM pool at init so the crank path runs; false exercises "waiting for the pool". */
   autoRegisterPool = true;
   now: () => number = () => Date.now();
-  constructor(cluster = "localnet") { this.cluster = cluster; }
+  /** The locked-LP fee claims in memory (lockFees.ts FakeLockFees): a claim's 80 % lands in the coin's fake fee PDA. */
+  readonly lockFees: FakeLockFees;
+  constructor(cluster = "localnet") { this.cluster = cluster; this.lockFees = new FakeLockFees(this.programId, cluster, operatorTreasuryFor(cluster) ?? fakeLockAddress("fake operator treasury"), (mint, l) => { this.tokens.get(mint)?.deposit(l); }); }
 
   /** Creator fees / a seed arriving in the token's fee PDA. */
   deposit(mint: string, lamports: bigint): void { this.fake(mint).deposit(lamports); }
@@ -192,6 +200,7 @@ export class FakeBurnProgram implements BurnProgramClient {
           valueDecimals: 0, unitValue: BigInt(1), carryRule: CARRY_NONE, maxAbsDelta: c.rule.max_abs_delta, fractionPerUnitBps: c.rule.fraction_per_unit_bps, floorLamports: c.rule.floor_lamports,
           reserveLamports: c.rule.reserve_lamports, tokensPerUnit: c.rule.tokens_per_unit, vaultAllocation: c.rule.vault_allocation, attesters: i.attesters, quorum: i.quorum, heldKeys: this.heldKeys ?? i.attesters, decimals: DECIMALS, now: () => this.now() }));
         if (i.mode === "buyback" && this.autoRegisterPool) this.tokens.get(i.mint)!.registerPool();
+        this.lockFees.port(i.mint).memoPrefix = c.memoPrefix;
       } catch { /* not expressible: no on-chain config (the keeper reports why) */ }
     }
     return { tokenConfig, instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (placeholder program id — nothing is sent)", keys: [{ pubkey: i.creator, isSigner: true, isWritable: true }, { pubkey: i.mint, isSigner: true, isWritable: false }, { pubkey: tokenConfig, isSigner: false, isWritable: true }, { pubkey: this.feePdaFor(i.mint), isSigner: false, isWritable: true }], dataBase64: Buffer.from(JSON.stringify({ ix: "initialize_token", rulesSha256: i.rulesSha256, selectorKey: i.selectorKey, mode: i.mode, quorum: i.quorum, attesters: i.attesters }), "utf8").toString("base64") }] };

@@ -13,6 +13,7 @@ import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { solToLamports } from "@/lib/burnKeeper/rules";
 import { derbyProofHash } from "@/lib/burnticker/derby/adapter";
 import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type BurnProgramClient } from "@/lib/burnticker/program";
+import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFeesKeeper";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -66,7 +67,7 @@ export interface FetchReport { key: string; written: number; refusals: string[];
 export type ExecOutcome =
   | { mint: string; eventId: string; outcome: "confirmed"; signature: string; burnRaw: bigint; adopted: boolean }
   | { mint: string; eventId: string; outcome: "skipped" | "exhausted" | "waiting" | "error" | "dry-run"; why: string };
-export interface CycleReport { fetched: FetchReport[]; planned: { mint: string; eventId: string; status: string }[]; executed: ExecOutcome[]; errors: string[] }
+export interface CycleReport { fetched: FetchReport[]; planned: { mint: string; eventId: string; status: string }[]; executed: ExecOutcome[]; errors: string[]; /** claim_lock_fees per coin this cycle (LP locked forever, 2026-10-10); absent on a keeper without the client. */ lpFees?: LockFeesOutcome[] }
 
 const oracleFor = (d: KeeperDeps, key: string): OracleAdapter => {
   if (key.startsWith("catalogue:")) return d.oracles.catalogue;
@@ -581,7 +582,7 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
   const gates = await pairGates(d).catch((e: Error) => { errors.push(`pair gates: ${e.message.slice(0, 160)}`); return new Map<string, { gate: PairGate; pairId: string; side: "A" | "B" }>(); });
   // Retired coins stay in the loop when their rule ended under onEnd: the wind-down's last cranks and the retired-coin sweep.
   const tokens = [...live, ...d.registry.tokens("retired").filter((t) => gates.get(t.mint)?.gate.state === "voided" || d.registry.ruleEnd(t.mint) !== null)];
-  const planned: CycleReport["planned"] = [], executed: ExecOutcome[] = [];
+  const planned: CycleReport["planned"] = [], executed: ExecOutcome[] = [], lpFees: LockFeesOutcome[] = [];
   for (const t of tokens) {
     let locked: LockedRule;
     try { locked = d.registry.lockedRule(t); } catch (e) { errors.push(`$${t.ticker}: rule unreadable: ${(e as Error).message}`); continue; }
@@ -589,12 +590,15 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     const gate = gates.get(t.mint)?.gate ?? null;
     if (locked.rule.oracle === "kalshi" && d.kalshiEnabled === false) continue;   // venue disabled: held (fetchDue raised the alert)
     try { if (t.status === "live" && !d.registry.ruleEnd(t.mint)) planned.push(...planToken(d, t, locked, gate)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
+    // LP LOCKED FOREVER (2026-10-10): claim the locked LP's fees AHEAD of the buyback cranks, so the 80 % share is in the pool they spend.
+    if (d.program.lockFees) lpFees.push(await claimLockFeesFor({ registry: d.registry, lockFees: d.program.lockFees, log: d.log, now: d.now, dryRun: d.dryRun }, t));
     try { executed.push(...await executePending(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
     // After the day's cranks: the end of the rule (drain / wind-down / retirement / sweep) is planned from what the program just did.
     try { planned.push(...await planRuleEnd(d, t, locked, gate)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); }
     try { executed.push(...await executePending(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
   }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
+  for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }
-  return { fetched, planned, executed, errors };
+  return { fetched, planned, executed, errors, ...(d.program.lockFees ? { lpFees } : {}) };
 }

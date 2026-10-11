@@ -49,10 +49,18 @@ export function sidePoolAccounts(cluster: Cluster, pair: PublicKey, side: 0 | 1,
   };
 }
 
+/** LAUNCHPAD-PATH §35: a side's Fee Key NFT mint, the pair_curve PDA ["fee_nft", pair, [side]]. */
+export const feeNftMintPda = (pair: PublicKey, side: 0 | 1, programId: PublicKey = PAIR_CURVE_PROGRAM_ID): PublicKey =>
+  PublicKey.findProgramAddressSync([Buffer.from("fee_nft", "utf8"), pair.toBuffer(), Buffer.from([side])], programId)[0];
+export const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+export const metadataPda = (mint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([Buffer.from("metadata", "utf8"), METADATA_PROGRAM_ID.toBuffer(), mint.toBuffer()], METADATA_PROGRAM_ID)[0];
+
 /** The decoded Pair (IDL field names, snake_case). */
 export interface PairAccount {
   version: number; bump: number; vault_bump: number; status: number;
-  mints: PublicKey[]; pools: PublicKey[]; lp_supply_at_creation: bigint[]; lp_burned: bigint[];
+  mints: PublicKey[]; pools: PublicKey[]; lp_supply_at_creation: bigint[];
+  /** LP lock_lp moved into Raydium's CPMM lock (0 until then; pairs graduated before LAUNCHPAD-PATH §35 record their burn here). */
+  lp_locked: bigint[];
   cp_config: PublicKey; vault: PublicKey; creator: PublicKey; dev_wallet: PublicKey; ll_platform: PublicKey;
   fee_vaults: PublicKey[]; token_vaults: PublicKey[]; vault_wsol: PublicKey; pool_bumps: Uint8Array;
   pair_id: Uint8Array; rules_sha256_a: Uint8Array; rules_sha256_b: Uint8Array;

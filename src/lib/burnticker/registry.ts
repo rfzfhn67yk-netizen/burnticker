@@ -1,3 +1,4 @@
+import type { LockFeeClaimRow } from "@/lib/burnticker/lockFees";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
@@ -113,6 +114,10 @@ CREATE TABLE IF NOT EXISTS pair_outcomes (pair_id TEXT PRIMARY KEY, state TEXT N
 CREATE TABLE IF NOT EXISTS rule_ends (mint TEXT PRIMARY KEY, mode TEXT NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL);
 -- What was pinned for a coin at launch (2026-10-10, "nothing about a coin can change after launch"): the creator's note (≤ 140, linted,
 -- never part of the description) and the Arweave copies of the metadata JSON and the receipt-art PNG with their sha256. Written once.
+-- LP LOCKED FOREVER, ITS FEES FUND THE BURN (owner decision 2026-10-10): one row per confirmed claim_lock_fees — what the program moved
+-- (SOL side → 80 % burn pool / 20 % operator, coin side burned), read from chain after confirmation. Append-only.
+CREATE TABLE IF NOT EXISTS lock_fee_claims (signature TEXT PRIMARY KEY, mint TEXT NOT NULL, at INTEGER NOT NULL, slot INTEGER, sol_lamports TEXT NOT NULL, burn_pool_lamports TEXT NOT NULL, operator_lamports TEXT NOT NULL, token_burned_raw TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS lock_fee_claims_by_mint ON lock_fee_claims (mint, at);
 CREATE TABLE IF NOT EXISTS token_meta (mint TEXT PRIMARY KEY, creator_note TEXT NOT NULL DEFAULT '', metadata_uri TEXT, metadata_tx TEXT, metadata_sha256 TEXT, image_uri TEXT, image_tx TEXT, image_sha256 TEXT, hosted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
 `;
 
@@ -164,6 +169,8 @@ CREATE TRIGGER IF NOT EXISTS token_meta_no_update BEFORE UPDATE ON token_meta BE
 CREATE TRIGGER IF NOT EXISTS token_meta_no_delete BEFORE DELETE ON token_meta BEGIN SELECT RAISE(ABORT, 'token_meta: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS tokens_text_immutable BEFORE UPDATE OF name, description, image_url, links_json ON tokens
   BEGIN SELECT RAISE(ABORT, 'tokens: the name, description, image and links are fixed at launch'); END;
+CREATE TRIGGER IF NOT EXISTS lock_fee_claims_no_update BEFORE UPDATE ON lock_fee_claims BEGIN SELECT RAISE(ABORT, 'lock_fee_claims: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS lock_fee_claims_no_delete BEFORE DELETE ON lock_fee_claims BEGIN SELECT RAISE(ABORT, 'lock_fee_claims: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS rule_ends_no_delete BEFORE DELETE ON rule_ends BEGIN SELECT RAISE(ABORT, 'rule_ends: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS burns_voided_frozen BEFORE UPDATE ON burns WHEN OLD.status = 'voided'
   BEGIN SELECT RAISE(ABORT, 'burns: a voided receipt is final'); END;
@@ -420,6 +427,16 @@ export class Registry {
       this.db.prepare("INSERT INTO signatures (signature, mint, event_id, memo, burn_raw, spend_lamports, blockhash, last_valid_block_height, sent_at, status) VALUES (?,?,?,?,?,?,?,?,?,'sent')").run(s.signature, s.mint, s.eventId, s.memo, s.burnRaw.toString(), s.spendLamports.toString(), s.blockhash, s.lastValidBlockHeight, s.sentAt);
       this.db.prepare("UPDATE burns SET status='sending', attempts=attempts+1, updated_at=? WHERE mint=? AND event_id=?").run(s.sentAt, s.mint, s.eventId);
     });
+  }
+  /** A confirmed claim_lock_fees (lockFeesKeeper.ts), written once from the program's facts; false if already recorded. */
+  recordLockFeeClaim(c: LockFeeClaimRow): boolean {
+    return Number(this.db.prepare("INSERT OR IGNORE INTO lock_fee_claims (signature, mint, at, slot, sol_lamports, burn_pool_lamports, operator_lamports, token_burned_raw) VALUES (?,?,?,?,?,?,?,?)")
+      .run(c.signature, c.mint, c.at, c.slot, c.solLamports.toString(), c.toBurnPoolLamports.toString(), c.toOperatorLamports.toString(), c.tokenBurnedRaw.toString()).changes) > 0;
+  }
+  /** Recorded claims, oldest first — one coin's, or every coin's. */
+  lockFeeClaims(mint?: string): LockFeeClaimRow[] {
+    const rows = (mint ? this.db.prepare("SELECT * FROM lock_fee_claims WHERE mint=? ORDER BY at, signature").all(mint) : this.db.prepare("SELECT * FROM lock_fee_claims ORDER BY at, signature").all()) as Row[];
+    return rows.map((r) => ({ signature: String(r.signature), mint: String(r.mint), at: Number(r.at), slot: numOrNull(r.slot), solLamports: BigInt(String(r.sol_lamports)), toBurnPoolLamports: BigInt(String(r.burn_pool_lamports)), toOperatorLamports: BigInt(String(r.operator_lamports)), tokenBurnedRaw: BigInt(String(r.token_burned_raw)) }));
   }
   signatures(mint: string, eventId: string): SignatureRow[] { return (this.db.prepare("SELECT * FROM signatures WHERE mint=? AND event_id=? ORDER BY sent_at").all(mint, eventId) as Row[]).map(toSig); }
   setSignatureStatus(signature: string, status: SignatureRow["status"], err: string | null, slot: number | null): void { this.db.prepare("UPDATE signatures SET status=?, err=?, slot=COALESCE(?, slot) WHERE signature=?").run(status, err, slot, signature); }

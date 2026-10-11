@@ -720,6 +720,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "cancel_registration_policy",
             "check_pool_health",
             "claim_launchlab_creator_fee",
+            "claim_lock_fees",
             "clear_cranker_allowlist",
             "crank_buyback",
             "crank_no_units",
@@ -728,6 +729,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "initialize_token",
             "propose_attesters",
             "propose_cap_raise",
+            "register_fee_key",
             "register_pair_pool",
             "register_pool",
             "renounce_admin",
@@ -740,7 +742,9 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
     );
     for n in &names {
         // (claim_launchlab_creator_fee claims INTO the fee PDA's own WSOL account; tested in launchlab.rs)
-        let bads: &[&str] = if n == "claim_launchlab_creator_fee" {
+        // (claim_lock_fees, LAUNCHPAD-PATH §35, claims the locked LP's fees INTO the fee PDA (80 %) and the compiled treasury (20 %) and
+        // burns the coin side; tested in lock_fees.rs)
+        let bads: &[&str] = if n == "claim_launchlab_creator_fee" || n == "claim_lock_fees" {
             &["withdraw", "close", "sweep", "transfer"]
         } else if n == "set_registration_policy" {
             // review-3 M-3: the 48 h timelocked stranding-recovery switch (register: temporary power, sunsets with the cap)

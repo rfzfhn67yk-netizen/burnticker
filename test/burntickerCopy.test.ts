@@ -7,6 +7,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { door2Html, withDoor2 } from "@/lib/burnticker/landingDoors";
+import { leagueIndex } from "@/lib/burnticker/leagues";
+import { NAV } from "../src/app/burnticker/_components/nav.ts";
 import path from "node:path";
 import { formatHits, lintCopy, loadCopyLintConfig, xLength } from "@/lib/launch/copyLint";
 import { allLeaguesLine, fmtDay, fmtRange, receiptPostText, scoreboardLeagues, scoreboardText, seasonLabel, teamLeagueOf, SCOREBOARD_FOOTER, SCOREBOARD_FOOTER_FINAL, SHORT_DISCLAIMER } from "@/lib/launch/dailyPost";
@@ -16,7 +19,7 @@ const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
 const SENTENCE = "Coins that burn on real-world results — with receipts.";
 const SUBLINE = "Launch one. Follow the season.";
-const GUARDRAILS = ["settled on primary sources", "signed readings (one attester at launch; second attester scheduled, not live)", "program-run burns", "receipts anyone can recompute", "open source", "three blind AI reviews, not a firm audit", "creators earn nothing", "no team buy", "the platform never buys any coin", "all LP burned", "rules locked at launch"];
+const GUARDRAILS = ["settled on primary sources", "signed readings (one attester at launch; second attester scheduled, not live)", "program-run burns", "receipts anyone can recompute", "open source", "three blind AI reviews, not a firm audit", "creators earn nothing", "no team buy", "the platform never buys any coin", "LP locked forever, its fees fund the burn", "rules locked at launch"];
 const LEAGUE = "(?:NFL|MLB|NBA|NHL|WNBA|MLS)";
 
 /** The words a visitor reads: meta descriptions + the body without style, script and the inline SVG, tags stripped. */
@@ -42,11 +45,20 @@ describe("the landing page (site/burnticker/index.html)", () => {
     assert.match(html, /<p class="sub">Launch one\. Follow the season\.<\/p>/);
     assert.match(html, /<meta name="description" content="Coins that burn on real-world results — with receipts\. Launch one\. Follow the season\./);
   });
+  test("door 2 is generated from the leagues index: every league, never NFL-first, soccer included, no drift", () => {
+    assert.equal(html, withDoor2(html), "site/burnticker/index.html door 2 differs from the leagues index: run scripts/burnticker-door2.mts");
+    const block = door2Html();
+    assert.doesNotMatch(block, /MLB, NBA, NHL, NFL|NFL 2026/, "no hand-written league list");
+    assert.match(block, /Soccer \(\d+\)/); assert.match(block, new RegExp(`${leagueIndex([], Date.now()).totals.leagues} leagues`));
+    assert.ok(!/^[^—]*\bNFL\b/.test(block.split("<span class=\"ex\">")[1] ?? ""), "the chips do not open on the NFL");
+  });
+
   test("two doors above the fold — Launch and Seasons — before the tape, each a link to a page that exists", () => {
     const hero = html.slice(html.indexOf('<section class="hero'), html.indexOf('<div class="tape"'));
     const doors = [...hero.matchAll(/<a class="door[^"]*" href="([^"]+)">[\s\S]*?<h3>([^<]+)<\/h3>/g)].map((m) => [m[2], m[1]]);
-    assert.deepEqual(doors, [["Launch", "/burnticker/launch"], ["Seasons", "/burnticker/rivalries"]]);
-    assert.ok(fs.existsSync("src/app/burnticker/launch/page.tsx") && fs.existsSync("src/app/burnticker/rivalries/page.tsx"));
+    assert.deepEqual(doors, [["Launch", "/burnticker/launch"], ["Seasons", "/burnticker/leagues"]]);
+    assert.ok(fs.existsSync("src/app/burnticker/launch/page.tsx") && fs.existsSync("src/app/burnticker/leagues/page.tsx"));
+    assert.equal(NAV.find((n) => n.label === "Seasons")?.href, "/burnticker/leagues", "the Seasons door and the nav land on the same page");
     assert.match(html, /\.doors\{display:grid;grid-template-columns:1fr;/, "one column on a phone");
   });
   test("the guardrail strip: the eleven guardrails, in order, inside the hero", () => {
@@ -95,8 +107,8 @@ describe("the landing page (site/burnticker/index.html)", () => {
     assert.match(text, /example receipt · illustrative numbers, not a live coin/);
     assert.match(text, /a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts/);
     assert.match(text, /if the operator stops, readings stop and burns stop\. Holders keep their coins/);
-    assert.match(text, /all LP is burned, so there is no platform share of LP fees/);
-    for (const gone of [/anyone can crank/i, /if we disappear/i, /keep working/i, /set to none after review/i, /not built yet/i, /share of post-graduation LP fees/i, /within 14 days/i, /nothing to trust/i, /<li>reviewed<\/li>/]) assert.doesNotMatch(html, gone, String(gone));
+    assert.match(text, /After graduation the LP is locked forever and its fees are split by code: 80% to the coin's burn pool, 20% to the operator/);
+    for (const gone of [/anyone can crank/i, /if we disappear/i, /keep working/i, /set to none after review/i, /not built yet/i, /within 14 days/i, /nothing to trust/i, /<li>reviewed<\/li>/]) assert.doesNotMatch(html, gone, String(gone));
   });
   test("mobile-safe and linked: viewport meta, no horizontal scroll, the whitepaper linked", () => {
     assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);

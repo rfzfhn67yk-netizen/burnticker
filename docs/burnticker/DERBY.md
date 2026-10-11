@@ -137,10 +137,10 @@ post says "Pair live" or "Pair voided — both pools wind down over four weeks".
   reading with units and spends at most 2 % of the pool's WSOL reserve, carrying the rest, so after the YES the keeper attests one `drain`
   unit a day (each one's rule spend is exactly the whole pool: 1 − (1 − 1)^1 = 1) while the program's last crank still carried spend;
   then the coin retires. Every amount is the program's, on the receipts.
-- **Retired-coin sweep.** A retired coin's fee PDA keeps receiving the 4.75 bps post-graduation creator fee; when its spendable balance
+- **Retired-coin sweep.** A retired coin's fee PDA keeps receiving the 4.75 bps post-graduation creator fee (and 80 % of its locked LP's fees, by claim_lock_fees); when its spendable balance
   passes `sweepThresholdLamports` the keeper attests one `sweep` reading of full-spend units (≥ 99 % in one reading), continued daily while
   the cap carries spend, at most one sweep start per 7 days. The coin page shows "retired · swept <date> · pool ≈ 0" and every coin page
-  "creator fees → burn pool → burned; LP fees → locked in the pool forever." The permissionless `sweep_retired` instruction is queued
+  "creator fees → burn pool → burned; LP locked forever, its fees → 80% burn pool / 20% operator (fixed in code)." The permissionless `sweep_retired` instruction is queued
   (PROGRAM-UPGRADE-QUEUE.md §1).
 - **Outcome sets** (`set: { id, outcome, forwardBps }`, opt-in, in the hash): the forward-to-winner design is queued
   (PROGRAM-UPGRADE-QUEUE.md §2); until it exists the whole leftover winds down on the coin itself, and the description says so.

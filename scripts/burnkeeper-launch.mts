@@ -31,7 +31,9 @@
 // platform — the Burnticker platform config (one per admin key; the fee dials, see docs/burnkeeper/fees.md):
 //   --admin <keypath> | --simulate-as <pubkey>     --fee-wallet <pubkey> (default env BURNTICKER_FEE_WALLET — a pubkey, never a key)
 //   --platform-fee-bps 25 (the developer slice; 0–500)  --burn-pool-fee-bps 50 (the creator slot = the burn pool; 0–50)
-//   --lp-platform-pct 0 (share of the graduation LP locked to the platform's Fee Key; the rest is burned)  --cp-config <pubkey>
+//   --lp-platform-pct 100 (share of the graduation LP locked to the platform's Fee Key; owner decision 2026-10-10: 100 — LP locked forever)
+//   --lock-nft-wallet <pubkey> (default: the burn program's fee-keys PDA under --program / BURNTICKER_PROGRAM_ID — the Fee Key owner;
+//                                anything else, or a pct other than 100, is a PROBLEM and --send refuses)  --cp-config <pubkey>
 //   --name Burnticker --web <https url> --img <https url>   (both REQUIRED for --send: create_platform_config writes them on chain; no default)
 //
 // Output: one JSON document on stdout (mint, pool id, creator-fee vault, platform fee vault, the predicted CPMM pool, the rules hash,
@@ -46,11 +48,13 @@ import { ComputeBudgetProgram } from "@solana/web3.js";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 import { base58Encode, clusterOfGenesis, explorerUrl, type Cluster } from "../src/lib/burnKeeper/solana.ts";
 import { LAUNCHLAB_PROGRAM, WSOL_MINT } from "../src/lib/burnKeeper/launchlab.ts";
-import { buildCreateTx, buildPlatformTx, platformSiteRefusal, PLATFORM_SITE_UNSET, buildVestingTx, decodeAmmConfig, decodeGlobalConfig, decodePlatform, DEFAULT_PLATFORM, DEFAULT_SOL_CONFIG, feeSplit, launchRefusal, planLaunch, platformProblems, platformViewOf, type DescribedIx, type LaunchInput, type PlannedTx, type PlatformInput } from "../src/lib/burnKeeper/launch.ts";
+import { buildCreateTx, buildPlatformTx, platformSiteRefusal, PLATFORM_SITE_UNSET, buildVestingTx, decodeAmmConfig, decodeGlobalConfig, decodePlatform, DEFAULT_PLATFORM, DEFAULT_SOL_CONFIG, feeSplit, launchRefusal, lpLockProblems, planLaunch, platformProblems, platformViewOf, type DescribedIx, type LaunchInput, type PlannedTx, type PlatformInput } from "../src/lib/burnKeeper/launch.ts";
 import { getCpmmPdaAmmConfigId } from "@raydium-io/raydium-sdk-v2";
 import { CPMM_PROGRAM_ID } from "../src/lib/burnKeeper/launchlab.ts";
 import { burnPoolFor, isLocalnetProgramId } from "../src/lib/burnKeeper/burnPool.ts";
 import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
+import { feeKeysPda } from "../src/lib/burnticker/lockFees.ts";
+import { checkLpLockPins } from "../src/lib/burnticker/lpLockPins.ts";
 
 const args = process.argv.slice(2);
 const MODE = args[0] === "launch" || args[0] === "platform" ? args[0] : null;
@@ -136,10 +140,12 @@ if (MODE === "platform") {
   const platformWarnings: string[] = [];
   if (!opt("web") || !opt("img")) platformWarnings.push(`--web / --img not given: this dry run shows ${PLATFORM_SITE_UNSET}; --send refuses until both are explicit https URLs (they are written on chain)`);
   const cpConfigId = pubkeyArg(opt("cp-config"), "--cp-config") ?? getCpmmPdaAmmConfigId(CPMM_PROGRAM_ID[flagCluster], 0).publicKey;
-  const p: PlatformInput = { programId, admin, claimFeeWallet: feeWallet, lockNftWallet: pubkeyArg(opt("lock-nft-wallet"), "--lock-nft-wallet") ?? feeWallet, vestingWallet: feeWallet, cpConfigId,
-    feeRatePpm: BigInt(Math.round(Number(opt("platform-fee-bps") ?? 25) * 100)), creatorFeeRatePpm: BigInt(Math.round(Number(opt("burn-pool-fee-bps") ?? 50) * 100)), platformScalePpm: BigInt(Math.round(Number(opt("lp-platform-pct") ?? 0) * 10_000)),
+  // LP LOCKED FOREVER (owner decision 2026-10-10): the Fee Key goes to the burn program's fee-keys PDA, 100 % of the LP locked.
+  const feeKeysOwner = feeKeysPda(pubkeyArg(opt("program") ?? process.env.BURNTICKER_PROGRAM_ID, "--program") ?? BURN_RECEIPTS_LOCALNET_PROGRAM_ID);
+  const p: PlatformInput = { programId, admin, claimFeeWallet: feeWallet, lockNftWallet: pubkeyArg(opt("lock-nft-wallet"), "--lock-nft-wallet") ?? feeKeysOwner, vestingWallet: feeWallet, cpConfigId,
+    feeRatePpm: BigInt(Math.round(Number(opt("platform-fee-bps") ?? 25) * 100)), creatorFeeRatePpm: BigInt(Math.round(Number(opt("burn-pool-fee-bps") ?? 50) * 100)), platformScalePpm: BigInt(Math.round(Number(opt("lp-platform-pct") ?? 100) * 10_000)),
     name: opt("name") ?? "Burnticker", web: opt("web") ?? PLATFORM_SITE_UNSET, img: opt("img") ?? PLATFORM_SITE_UNSET };
-  const problems = platformProblems(p);
+  const problems = [...platformProblems(p), ...lpLockProblems(p, feeKeysOwner)];
   const ammAcc = await getAccount(cpConfigId);
   if (!ammAcc) problems.push(`CPMM AmmConfig ${cpConfigId.toBase58()} does not exist on ${cluster}`);
   const amm = ammAcc ? decodeAmmConfig(ammAcc.data) : null;
@@ -148,9 +154,9 @@ if (MODE === "platform") {
   if (existing) problems.push(`platform config ${platformId.toBase58()} already exists for admin ${admin.toBase58()} (one per admin key; use updatePlatformConfig to change it)`);
   const globalAcc = await getAccount(DEFAULT_SOL_CONFIG[flagCluster]);
   const global = globalAcc ? decodeGlobalConfig(globalAcc.data) : null;
-  const split = global && amm ? feeSplit({ global, platform: platformViewOf(p), amm, creatorIsBurnPool: true }) : null;
+  const split = global && amm ? feeSplit({ global, platform: platformViewOf(p), amm, creatorIsBurnPool: true, feeKeysPda: feeKeysOwner }) : null;
   const out: Record<string, unknown> = { mode: "platform", cluster, dryRun: DRY, rpc, programId: programId.toBase58(), platformId: platformId.toBase58(), admin: admin.toBase58(), feeWallet: feeWallet.toBase58(),
-    dials: { platformFeePpm: p.feeRatePpm.toString(), platformFeeBps: Number(p.feeRatePpm) / 100, burnPoolFeePpm: p.creatorFeeRatePpm.toString(), burnPoolFeeBps: Number(p.creatorFeeRatePpm) / 100, lpToPlatformPpm: p.platformScalePpm.toString(), cpConfigId: cpConfigId.toBase58(), cpConfig: amm ? { index: amm.index, tradeFeeBps: Number(amm.tradeFeeRate) / 100, creatorFeeBps: Number(amm.creatorFeeRate) / 100, creatorFeeShareToProtocolPct: Number(amm.creatorFeeShareRate) / 10_000 } : null },
+    dials: { platformFeePpm: p.feeRatePpm.toString(), platformFeeBps: Number(p.feeRatePpm) / 100, burnPoolFeePpm: p.creatorFeeRatePpm.toString(), burnPoolFeeBps: Number(p.creatorFeeRatePpm) / 100, lpToPlatformPpm: p.platformScalePpm.toString(), lpLockedPct: Number(p.platformScalePpm) / 10_000, lockNftWallet: p.lockNftWallet.toBase58(), feeKeysPda: feeKeysOwner.toBase58(), cpConfigId: cpConfigId.toBase58(), cpConfig: amm ? { index: amm.index, tradeFeeBps: Number(amm.tradeFeeRate) / 100, creatorFeeBps: Number(amm.creatorFeeRate) / 100, creatorFeeShareToProtocolPct: Number(amm.creatorFeeShareRate) / 10_000 } : null },
     feeSplit: split, warnings: platformWarnings, problems, transactions: [printable(tx)] };
   if (!problems.length) {
     const vtx = await compile(admin, tx.instructions.map((d) => d.ix));
@@ -204,6 +210,10 @@ const global = decodeGlobalConfig((globalAcc ?? die(`LaunchLab config ${configId
 const platform = decodePlatform((platformAcc ?? die(`platform config ${platformId.toBase58()} not found on ${cluster}`)).data);
 const ammAcc = await getAccount(platform.cpConfigId);
 const amm = ammAcc ? decodeAmmConfig(ammAcc.data) : null;
+// LP LOCKED FOREVER (owner decision 2026-10-10) — the launch gate on the platform's LP pins: 100 % locked (1,000,000 / 0 / 0 ppm) and the
+// Fee Key to the burn program's fee-keys PDA; on mainnet also the operator treasury compiled into the program (TreasuryNotPinned otherwise).
+const lpPins = checkLpLockPins(platformAcc!.data, { programId: burnProgram, cluster: flagCluster, requireTreasury: flagCluster === "mainnet" });
+for (const m of lpPins.problems) (SEND ? problems : warnings).push(`LP lock pin: ${m}`);
 const sol = (s: string | undefined, d: number) => BigInt(Math.round(Number(s ?? d) * LAMPORTS_PER_SOL));
 const input: LaunchInput = { cluster: flagCluster, programId, platformId, configId, global, platform, payer, creator, mint: mintKp.publicKey,
   name: opt("name") ?? "DEFICIT", symbol: opt("symbol") ?? rules.rules.ticker, uri: opt("uri") ?? "", decimals: rules.rules.decimals, supplyTokens: BigInt(rules.rules.totalSupply),

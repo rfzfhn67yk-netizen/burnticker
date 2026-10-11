@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, BPF_LOADER_UPGRADEABLE_ID, type Cluster, CPMM_AUTH_SEED, LAUNCHLAB_CREATOR_FEE_VAULT_AUTH_SEED, LAUNCHLAB_POOL_SEED, LOCK_CPMM_AUTHORITY, NATIVE_MINT, SEED_CONFIG, SEED_FEE, SEED_PLATFORM, SEED_READING, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, BPF_LOADER_UPGRADEABLE_ID, type Cluster, CPMM_AUTH_SEED, LAUNCHLAB_CREATOR_FEE_VAULT_AUTH_SEED, LAUNCHLAB_POOL_SEED, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCKED_LIQUIDITY_SEED, NATIVE_MINT, SEED_CONFIG, SEED_FEE, SEED_FEE_KEY, SEED_FEE_KEYS, SEED_PLATFORM, SEED_READING, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 
 /** PDA derivation for burn_receipts (seeds in programs/burn-receipts/.../constants.rs). */
 
@@ -49,3 +49,11 @@ export const launchlabPoolPda = (launchlabProgramId: PublicKey, mint: PublicKey)
 
 /** Raydium's LP-lock account for an LP mint: the lock authority's ATA (SDK makeCpmmLockInstruction lockLpVault). */
 export const lpLockVault = (cluster: Cluster, lpMint: PublicKey): PublicKey => associatedTokenAddress(LOCK_CPMM_AUTHORITY[cluster], lpMint);
+
+/** LAUNCHPAD-PATH §35: the global Fee Key holder (LaunchLab platformLockNftWallet) and the per-mint FeeKeyRecord. */
+export const feeKeysPda = (programId: PublicKey): PublicKey => PublicKey.findProgramAddressSync([SEED_FEE_KEYS], programId)[0];
+export const feeKeyRecordPda = (programId: PublicKey, mint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([SEED_FEE_KEY, mint.toBuffer()], programId)[0];
+/** The lock program's LockedCpLiquidityState for a Fee Key NFT, and its authority PDA. */
+export const lockedLiquidityPda = (cluster: Cluster, feeNftMint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([LOCKED_LIQUIDITY_SEED, feeNftMint.toBuffer()], LOCK_CPMM_PROGRAM_ID[cluster])[0];
+/** FEE_KEYS's account holding a Fee Key NFT. */
+export const feeNftAccount = (programId: PublicKey, feeNftMint: PublicKey): PublicKey => associatedTokenAddress(feeKeysPda(programId), feeNftMint);

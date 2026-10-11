@@ -8,7 +8,7 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
     "name": "pair_curve",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Burnticker pair curve: two coins on two virtual-reserve bonding curves in one account; both graduate to Raydium CPMM pools together (LP burned) or the pair voids and every holder can sell back. No admin, no withdraw path."
+    "description": "Burnticker pair curve: two coins on two virtual-reserve bonding curves in one account; both graduate to Raydium CPMM pools together (LP locked forever, its fees fund the burn) or the pair voids and every holder redeems pro rata. No admin, no withdraw path."
   },
   "instructions": [
     {
@@ -806,6 +806,142 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "lock_lp",
+      "discriminator": [
+        236,
+        140,
+        2,
+        95,
+        1,
+        131,
+        251,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pair.mints [0]",
+                "account": "Pair"
+              },
+              {
+                "kind": "account",
+                "path": "pair.mints [1]",
+                "account": "Pair"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "pool_state"
+        },
+        {
+          "name": "lp_mint"
+        },
+        {
+          "name": "vault_lp",
+          "writable": true
+        },
+        {
+          "name": "fee_vault",
+          "writable": true
+        },
+        {
+          "name": "fee_nft_mint",
+          "writable": true
+        },
+        {
+          "name": "fee_nft_account",
+          "writable": true
+        },
+        {
+          "name": "fee_keys"
+        },
+        {
+          "name": "locked_liquidity",
+          "writable": true
+        },
+        {
+          "name": "lock_lp_vault",
+          "writable": true
+        },
+        {
+          "name": "token_0_vault",
+          "writable": true
+        },
+        {
+          "name": "token_1_vault",
+          "writable": true
+        },
+        {
+          "name": "metadata_account",
+          "writable": true
+        },
+        {
+          "name": "lock_program",
+          "address": "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE"
+        },
+        {
+          "name": "lock_authority",
+          "address": "3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH"
+        },
+        {
+          "name": "metadata_program",
+          "address": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "side",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "sell",
       "discriminator": [
         51,
@@ -982,6 +1118,19 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
         196,
         80,
         167
+      ]
+    },
+    {
+      "name": "LpLocked",
+      "discriminator": [
+        231,
+        255,
+        40,
+        229,
+        17,
+        147,
+        106,
+        125
       ]
     },
     {
@@ -1213,6 +1362,16 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
       "code": 6029,
       "name": "AccountMismatch",
       "msg": "an account passed does not match the pair"
+    },
+    {
+      "code": 6030,
+      "name": "NothingToLock",
+      "msg": "lock_lp: the side has no pool yet, or its LP is already locked"
+    },
+    {
+      "code": 6031,
+      "name": "LockMismatch",
+      "msg": "lock_lp: the lock program did not leave the expected lock (LP moved, Fee Key held by FEE_KEYS, state account)"
     }
   ],
   "types": [
@@ -1297,6 +1456,50 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "LpLocked",
+      "docs": [
+        "lock_lp: the side's LP moved into Raydium's CPMM lock forever; its Fee Key NFT is held by burn_receipts' FEE_KEYS PDA, whose",
+        "claim_lock_fees splits the LP fees 80 % burn pool / 20 % operator (LAUNCHPAD-PATH §35)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pair",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": "u8"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_nft_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_nft_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "locked_liquidity",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "Pair",
       "docs": [
         "One rivalry pair. Parameters are written once by init_pair and never again (no instruction takes a `&mut` to them).",
@@ -1304,7 +1507,7 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
         "LAYOUT CONTRACT: burn_receipts reads the first fields of this account BY BYTE OFFSET (register_pair_pool, burn_receipts",
         "src/pair_curve.rs). Do not reorder or resize anything before `vault`:",
         "version @8, bump @9, vault_bump @10, status @11, mints @12/@44, pools @76/@108, lp_supply_at_creation @140/@148,",
-        "lp_burned @156/@164, cp_config @172, vault @204 (236 bytes).",
+        "lp_locked @156/@164 (named lp_burned before LAUNCHPAD-PATH §35), cp_config @172, vault @204 (236 bytes).",
         "tests/lifecycle.rs pins these offsets against a real account."
       ],
       "type": {
@@ -1366,9 +1569,10 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             }
           },
           {
-            "name": "lp_burned",
+            "name": "lp_locked",
             "docs": [
-              "LP burned by graduate (everything the vault received)."
+              "The LP lock_lp moved into Raydium's CPMM lock (0 until then). Pairs graduated before LAUNCHPAD-PATH §35 burned their LP and",
+              "this field (then `lp_burned`, same offset) recorded the burn."
             ],
             "type": {
               "array": [
@@ -1969,7 +2173,11 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             "type": "u64"
           },
           {
-            "name": "lp_burned",
+            "name": "lp_minted",
+            "docs": [
+              "The LP CPMM minted to the vault (everything but its 100 never-minted units). It stays in the vault's LP account until lock_lp",
+              "locks it (LAUNCHPAD-PATH §35)."
+            ],
             "type": "u64"
           },
           {
@@ -1993,7 +2201,7 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           {
             "name": "prefunded_wsol",
             "docs": [
-              "Lamports someone had pre-funded into the pool's WSOL vault address (now pool liquidity, LP burned) — blind review 2 H-1."
+              "Lamports someone had pre-funded into the pool's WSOL vault address (now pool liquidity) — blind review 2 H-1."
             ],
             "type": "u64"
           },

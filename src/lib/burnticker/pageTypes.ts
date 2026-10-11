@@ -1,3 +1,4 @@
+import type { LpLockJson } from "@/lib/burnticker/lockFees";
 import type { FeeSplit } from "@/lib/burnticker/fees";
 import type { BurnMapping } from "@/lib/burnticker/rules";
 
@@ -84,7 +85,14 @@ export interface TokenStatusJson {
   fees: { curve: FeeSplit; postGraduation: FeeSplit; sentence: string; creatorSliceBps: 0 };
   health: { pending: number; unverified: number; lastError: string | null };
   disclosure: { disclaimer: string; eventContract: string | null };
-  trust: { lpBurnedPct: number; creatorCashBps: 0; teamAllocationPct: 0; operator: { can: string[]; cannot: string[]; placeholder: boolean }; registerUrl: string };
+  /** lpBurnedPct is 0 since 2026-10-10 (LP locked forever): read lpLockedPct / lpPolicy and the `lp` block. */
+  trust: { lpBurnedPct: number; lpLockedPct?: number; lpPolicy?: "locked-forever"; creatorCashBps: 0; teamAllocationPct: 0; operator: { can: string[]; cannot: string[]; placeholder: boolean }; registerUrl: string };
+  /**
+   * LP LOCKED FOREVER (owner decision 2026-10-10): the policy, Raydium's lock program, the Fee Key (NFT mint) and its owner (the burn
+   * program's fee-keys PDA), the locked-liquidity account, the 80/20 split, the last claim_lock_fees receipt and the totals. Absent on
+   * status files written before the decision.
+   */
+  lp?: LpLockJson | null;
   /** The burn_receipts program: attestation, the queue (unattested days, cranks waiting, carried spend), pool health. Null with no program config read. */
   program: TokenProgramJson | null;
   /** The coin card: image, description, socials, the rule's one-liner. */

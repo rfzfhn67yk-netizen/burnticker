@@ -1,4 +1,5 @@
 import "server-only";
+import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
 import { envGameDeps, polymarketGameReaders } from "@/lib/burnticker/sources/gameSettle";
 import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
@@ -147,6 +148,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     : null;
   return {
     market,
+    lp: await lpLockBlock(p.registry, p.program, p.cluster, t.mint),
     pair: await pairCounterpart(p, t),
     lifecycle: lifecycleFrom(p.registry, t, locked.rule, feePdaLamports),
     meta: p.registry.tokenMeta(t.mint),

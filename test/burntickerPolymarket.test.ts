@@ -288,8 +288,9 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
     assert.equal((cat.sources as { id: string; launchable: { ok: boolean } }[]).find((x) => x.id === "polymarket")!.launchable.ok, true);
   });
   test("v1 launch: a Polymarket one-shot builds a bundle (refuse list on the question, binary check); a tag series passes the weekly density check", async () => {
+    // (the second coin on the same market is $TAMPA, not $BUCS2: since the growth batch a copycat suffix of an existing ticker is refused — lookalike.ts)
     const mint = () => Keypair.generate().publicKey.toBase58();
-    const res = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "BUCS2", name: "bucs two", rule: PM_BUCS, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
+    const res = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: mint(), ticker: "TAMPA", name: "tampa bay one shot", rule: PM_BUCS, register: false, acknowledgements: { ruleLocked: true, noReturns: true } }) });
     const body = await res.json() as { review: { seriesTitle: string; receiptFormat: string; disclosure: { eventContract: string } } };
     assert.equal(res.status, 200, JSON.stringify(body).slice(0, 300));
     assert.equal(body.review.seriesTitle, "Buccaneers vs. Cowboys");

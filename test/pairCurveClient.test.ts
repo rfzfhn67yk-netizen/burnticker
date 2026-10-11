@@ -8,10 +8,10 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import { PAIR_CURVE_IDL } from "../src/lib/pairCurve/idl.ts";
 import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { accountDiscriminator, encodeType } from "../src/lib/burnReceipts/idlCoder.ts";
-import { CPMM_PROGRAM_ID, NATIVE_MINT, PAIR_CURVE_PROGRAM_ID, POOL_POLICY_PAIR_CURVE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
-import { configPda, feePda } from "../src/lib/burnReceipts/pda.ts";
-import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, decodePair, pairPda, poolPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda, type PairAccount } from "../src/lib/pairCurve/accounts.ts";
-import { buyIx, CLAIM_THRESHOLD_LAMPORTS, claimDeveloperFeeIx, closePairIx, createPairMintIxs, graduateIx, initPairIx, pairCurveEventAuthority, planPairCrank, registerSideIx, seedObservationIxs, sellIx, syncNativeIx, voidPairIx } from "../src/lib/pairCurve/client.ts";
+import { CPMM_PROGRAM_ID, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, PAIR_CURVE_PROGRAM_ID, POOL_POLICY_PAIR_CURVE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
+import { configPda, feeKeysPda, feePda, lockedLiquidityPda, lpLockVault } from "../src/lib/burnReceipts/pda.ts";
+import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, decodePair, feeNftMintPda, pairPda, poolPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda, type PairAccount } from "../src/lib/pairCurve/accounts.ts";
+import { buyIx, lockLpIx, CLAIM_THRESHOLD_LAMPORTS, claimDeveloperFeeIx, closePairIx, createPairMintIxs, graduateIx, initPairIx, pairCurveEventAuthority, planPairCrank, registerSideIx, seedObservationIxs, sellIx, syncNativeIx, voidPairIx } from "../src/lib/pairCurve/client.ts";
 
 const anchorDisc = (kind: "global" | "account", name: string) => crypto.createHash("sha256").update(`${kind}:${name}`).digest().subarray(0, 8);
 const BR = new PublicKey("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
@@ -30,8 +30,8 @@ describe("pairCurve client — IDL and registers", () => {
     assert.ok(BURN_RECEIPTS_IDL.instructions.some((i) => i.name === "register_pair_pool"));
     assert.equal(POOL_POLICY_PAIR_CURVE, 2);
   });
-  test("seven instructions, no admin, no withdraw; the generated Powers Register is current and lists no privileged power", () => {
-    assert.deepEqual(PAIR_CURVE_IDL.instructions.map((i) => i.name).sort(), ["buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "sell", "void_pair"]);
+  test("eight instructions, no admin, no withdraw; the generated Powers Register is current and lists no privileged power", () => {
+    assert.deepEqual(PAIR_CURVE_IDL.instructions.map((i) => i.name).sort(), ["buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "lock_lp", "sell", "void_pair"]);
     const r = spawnSync(process.execPath, [path.join(import.meta.dirname, "..", "programs", "burn-receipts", "scripts", "pair-curve-powers-register.mjs"), "--check"], { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     const reg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "..", "docs", "burn-receipts", "pair-curve-powers-register.json"), "utf8"));
@@ -47,7 +47,7 @@ function pairFixture(over: Partial<PairAccount> = {}): { address: PublicKey; pai
   const address = pairPda(ma, mb);
   const vault = vaultPda(address);
   const pair: PairAccount = {
-    version: 1, bump: 255, vault_bump: 254, status: STATUS_OPEN, mints: [ma, mb], pools: [PublicKey.default, PublicKey.default], lp_supply_at_creation: [B(0), B(0)], lp_burned: [B(0), B(0)],
+    version: 1, bump: 255, vault_bump: 254, status: STATUS_OPEN, mints: [ma, mb], pools: [PublicKey.default, PublicKey.default], lp_supply_at_creation: [B(0), B(0)], lp_locked: [B(0), B(0)],
     cp_config: Keypair.generate().publicKey, vault, creator: Keypair.generate().publicKey, dev_wallet: Keypair.generate().publicKey, ll_platform: Keypair.generate().publicKey,
     fee_vaults: [feePda(BR, ma), feePda(BR, mb)], token_vaults: [ata(vault, ma), ata(vault, mb)], vault_wsol: ata(vault, NATIVE_MINT), pool_bumps: Uint8Array.from([253, 252]),
     pair_id: new Uint8Array(32).fill(7), rules_sha256_a: new Uint8Array(32).fill(1), rules_sha256_b: new Uint8Array(32).fill(2),
@@ -63,7 +63,7 @@ function pairFixture(over: Partial<PairAccount> = {}): { address: PublicKey; pai
 
 describe("pairCurve client — accounts", () => {
   test("Pair round-trips through the IDL coder, and its first fields sit at the offsets burn_receipts reads", () => {
-    const { pair } = pairFixture({ status: STATUS_GRADUATING, lp_supply_at_creation: [B(1234), B(5678)], lp_burned: [B(1134), B(5578)] });
+    const { pair } = pairFixture({ status: STATUS_GRADUATING, lp_supply_at_creation: [B(1234), B(5678)], lp_locked: [B(1134), B(5578)] });
     const data = Buffer.concat([accountDiscriminator(PAIR_CURVE_IDL, "Pair"), encodeType(PAIR_CURVE_IDL, { defined: { name: "Pair" } }, { ...pair, reserved: new Uint8Array(64) })]);
     const back = decodePair(data);
     assert.ok(back.mints[1].equals(pair.mints[1]));
@@ -133,6 +133,20 @@ describe("pairCurve client — instruction builders follow the IDL", () => {
     assert.ok(ix.programId.equals(TOKEN_PROGRAM_ID) && ix.keys[0].pubkey.equals(pair.vault_wsol) && ix.keys[0].isWritable && !ix.keys[0].isSigner);
     assert.deepEqual([...ix.data], [17]);
   });
+  test("lock_lp: the Fee Key mint is the pair_curve PDA, its account and the lock state are FEE_KEYS's / the lock program's", () => {
+    for (const cluster of ["mainnet", "devnet"] as const) {
+      const ix = lockLpIx({ cranker: user, pairAddress: address, pair, side: 1, cluster, burnReceiptsProgramId: BR });
+      const at = (n: string) => ix.keys[order("lock_lp").indexOf(n)];
+      assert.equal(ix.keys.length, order("lock_lp").length);
+      const nft = feeNftMintPda(address, 1);
+      assert.ok(at("fee_nft_mint").pubkey.equals(nft) && at("fee_nft_mint").isWritable && !at("fee_nft_mint").isSigner);
+      assert.ok(at("fee_keys").pubkey.equals(feeKeysPda(BR)));
+      assert.ok(at("fee_nft_account").pubkey.equals(ata(feeKeysPda(BR), nft)));
+      assert.ok(at("locked_liquidity").pubkey.equals(lockedLiquidityPda(cluster, nft)));
+      assert.ok(at("lock_program").pubkey.equals(LOCK_CPMM_PROGRAM_ID[cluster]) && at("lock_lp_vault").pubkey.equals(lpLockVault(cluster, at("lp_mint").pubkey)));
+      assert.ok(at("fee_vault").pubkey.equals(pair.fee_vaults[1]) && at("cranker").isSigner);
+    }
+  });
   test("seed: a dust CPMM swap_base_input into the side's pool that writes its observation", () => {
     const ixs = seedObservationIxs({ cluster: "devnet", payer: user, pairAddress: address, pair, side: 0 });
     const swap = ixs.find((i) => i.programId.equals(CPMM_PROGRAM_ID.devnet))!;
@@ -169,26 +183,28 @@ describe("pairCurve client — instruction builders follow the IDL", () => {
 
 describe("pairCurve client — crank planner", () => {
   const kinds = (a: ReturnType<typeof planPairCrank>) => a.map((x) => [x.kind, "side" in x ? x.side : null]);
-  test("open + ready (a trade did not commit it) → graduate A, B as separate actions; past deadline → void; thin side → wait", () => {
+  test("open + ready (a trade did not commit it) → graduate then lock_lp per side as separate actions; past deadline → void; thin side → wait", () => {
     const { pair } = pairFixture({ sol: [B(50_000_000_000), B(40_000_000_000)] });
-    assert.deepEqual(kinds(planPairCrank(pair, 1_950_000_000, [false, false])), [["graduate", 0], ["graduate", 1]]);
+    assert.deepEqual(kinds(planPairCrank(pair, 1_950_000_000, [false, false])), [["graduate", 0], ["lock", 0], ["graduate", 1], ["lock", 1]]);
     assert.equal(planPairCrank(pair, 2_000_000_000, [false, false])[0].kind, "void");
     const { pair: thin } = pairFixture({ sol: [B(80_000_000_000), B(10_000_000_000)] });
     assert.equal(planPairCrank(thin, 1_950_000_000, [false, false])[0].kind, "wait");
   });
-  test("graduating → the missing side, then the existing side's registration and seed as their own actions", () => {
+  test("graduating → the missing side (graduate + lock_lp), then the existing side's lock, registration, Fee Key record and seed as their own actions", () => {
     const pool = Keypair.generate().publicKey;
-    const { pair } = pairFixture({ status: STATUS_GRADUATING, pools: [pool, PublicKey.default], graduation_started_at: B(2_000_000_000) });
-    assert.deepEqual(kinds(planPairCrank(pair, 2_000_000_100, [true, false])), [["graduate", 1]]);
-    assert.deepEqual(kinds(planPairCrank(pair, 2_000_000_100, [false, false], [false, true])), [["graduate", 1], ["register", 0], ["seed", 0]]);
+    const { pair } = pairFixture({ status: STATUS_GRADUATING, pools: [pool, PublicKey.default], graduation_started_at: B(2_000_000_000), lp_locked: [B(1_000), B(0)] });
+    assert.deepEqual(kinds(planPairCrank(pair, 2_000_000_100, [true, false])), [["graduate", 1], ["lock", 1]]);
+    assert.deepEqual(kinds(planPairCrank(pair, 2_000_000_100, [false, false], [false, true], [false, true])), [["graduate", 1], ["lock", 1], ["register", 0], ["fee_key", 0], ["seed", 0]]);
+    const { pair: unlocked } = pairFixture({ status: STATUS_GRADUATING, pools: [pool, PublicKey.default], graduation_started_at: B(2_000_000_000) });
+    assert.deepEqual(kinds(planPairCrank(unlocked, 2_000_000_100, [false, false])), [["graduate", 1], ["lock", 1], ["lock", 0], ["register", 0]], "an unlocked pool is locked before it is registered");
     // 3 days on: still try the graduate, then the stuck-side void (the program refuses it unless Raydium really blocks the side)
-    assert.deepEqual(kinds(planPairCrank(pair, 2_000_000_000 + 3 * 86_400, [true, false])), [["graduate", 1], ["void", null]]);
-    const { pair: refunding } = pairFixture({ status: STATUS_GRADUATING, pools: [pool, PublicKey.default], refunding: [false, true] });
+    assert.deepEqual(kinds(planPairCrank(pair, 2_000_000_000 + 3 * 86_400, [true, false])), [["graduate", 1], ["lock", 1], ["void", null]]);
+    const { pair: refunding } = pairFixture({ status: STATUS_GRADUATING, pools: [pool, PublicKey.default], refunding: [false, true], lp_locked: [B(1), B(0)] });
     assert.deepEqual(kinds(planPairCrank(refunding, 2_100_000_000, [true, false])), [["wait", null]]);
   });
   test("graduated → missing registrations / seeds; voided → wait; a developer accrual over the threshold → claim", () => {
     const pool = Keypair.generate().publicKey;
-    const { pair: g } = pairFixture({ status: STATUS_GRADUATED, pools: [pool, pool] });
+    const { pair: g } = pairFixture({ status: STATUS_GRADUATED, pools: [pool, pool], lp_locked: [B(1), B(1)] });
     assert.deepEqual(planPairCrank(g, 0, [true, false]).map((a) => a.kind), ["register"]);
     assert.equal(planPairCrank(g, 0, [true, true])[0].kind, "wait");
     const { pair: v } = pairFixture({ status: STATUS_VOIDED });

@@ -1,12 +1,12 @@
 import { type AccountMeta, ComputeBudgetProgram, type Connection, type Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, NATIVE_MINT, PACKET_DATA_SIZE, PAIR_CURVE_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, PACKET_DATA_SIZE, PAIR_CURVE_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { bs58, decodeTokenConfig } from "@/lib/burnReceipts/accounts";
 import { encodeInstruction } from "@/lib/burnReceipts/idlCoder";
-import { registerPairPoolIx } from "@/lib/burnReceipts/instructions";
-import { configPda, feePda } from "@/lib/burnReceipts/pda";
+import { registerFeeKeyIx, registerPairPoolIx } from "@/lib/burnReceipts/instructions";
+import { configPda, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, lockedLiquidityPda, lpLockVault } from "@/lib/burnReceipts/pda";
 import { anchorErrorName, confirmByPolling } from "@/lib/burnReceipts/crank";
 import { PAIR_CURVE_IDL } from "@/lib/pairCurve/idl";
-import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, fetchPair, type PairAccount, pairPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda } from "@/lib/pairCurve/accounts";
+import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, feeNftMintPda, fetchPair, METADATA_PROGRAM_ID, metadataPda, type PairAccount, pairPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda } from "@/lib/pairCurve/accounts";
 import { GRADUATION_STUCK_SECS, graduationReady, TOKEN_DECIMALS } from "@/lib/pairCurve/pricing";
 
 /**
@@ -122,7 +122,32 @@ export function closePairIx(o: { caller: PublicKey; pairAddress: PublicKey; pair
 /** burn_receipts.register_pair_pool for one side (the pool and LP mint derived from the pair). */
 export function registerSideIx(o: { registrar: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; cluster: Cluster; burnReceiptsProgramId: PublicKey; programId?: PublicKey }): TransactionInstruction {
   const s = sidePoolAccounts(o.cluster, o.pairAddress, o.side, o.pair.mints[o.side], o.programId ?? PAIR_CURVE_ID);
-  return registerPairPoolIx({ programId: o.burnReceiptsProgramId, registrar: o.registrar, mint: o.pair.mints[o.side], pool: s.pool, lpMint: s.lpMint, pair: o.pairAddress });
+  return registerPairPoolIx({ programId: o.burnReceiptsProgramId, registrar: o.registrar, mint: o.pair.mints[o.side], pool: s.pool, lpMint: s.lpMint, pair: o.pairAddress, cluster: o.cluster });
+}
+
+/**
+ * lock_lp(side) (LAUNCHPAD-PATH §35) — permissionless, once per side after graduate: all of the vault's LP into Raydium's CPMM lock
+ * forever, Fee Key NFT (mint = the pair_curve PDA ["fee_nft", pair, [side]]) to burn_receipts' FEE_KEYS PDA. The cranker pays the
+ * lock's rents (≈ 0.0065 SOL); the emptied LP account's rent goes to the side's burn pool.
+ */
+export function lockLpIx(o: { cranker: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; cluster: Cluster; burnReceiptsProgramId: PublicKey; programId?: PublicKey }): TransactionInstruction {
+  const programId = o.programId ?? PAIR_CURVE_ID;
+  const s = sidePoolAccounts(o.cluster, o.pairAddress, o.side, o.pair.mints[o.side], programId);
+  const nft = feeNftMintPda(o.pairAddress, o.side, programId);
+  return build(programId, "lock_lp", {
+    cranker: o.cranker, pair: o.pairAddress, vault: o.pair.vault, pool_state: s.pool, lp_mint: s.lpMint, vault_lp: s.vaultLp,
+    fee_vault: o.pair.fee_vaults[o.side], fee_nft_mint: nft, fee_nft_account: feeNftAccount(o.burnReceiptsProgramId, nft), fee_keys: feeKeysPda(o.burnReceiptsProgramId),
+    locked_liquidity: lockedLiquidityPda(o.cluster, nft), lock_lp_vault: lpLockVault(o.cluster, s.lpMint), token_0_vault: s.poolVault0, token_1_vault: s.poolVault1,
+    metadata_account: metadataPda(nft), lock_program: LOCK_CPMM_PROGRAM_ID[o.cluster], lock_authority: LOCK_CPMM_AUTHORITY[o.cluster], metadata_program: METADATA_PROGRAM_ID,
+    system_program: SystemProgram.programId, token_program: TOKEN_PROGRAM_ID, associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
+  }, { side: o.side });
+}
+
+/** burn_receipts.register_fee_key for a pair side (its Fee Key is the pair_curve PDA ["fee_nft", pair, [side]]). */
+export function registerSideFeeKeyIx(o: { payer: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; cluster: Cluster; burnReceiptsProgramId: PublicKey; programId?: PublicKey }): TransactionInstruction {
+  const programId = o.programId ?? PAIR_CURVE_ID;
+  const s = sidePoolAccounts(o.cluster, o.pairAddress, o.side, o.pair.mints[o.side], programId);
+  return registerFeeKeyIx({ programId: o.burnReceiptsProgramId, payer: o.payer, mint: o.pair.mints[o.side], pool: s.pool, feeNftMint: feeNftMintPda(o.pairAddress, o.side, programId), cluster: o.cluster });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -131,7 +156,9 @@ export function registerSideIx(o: { registrar: PublicKey; pairAddress: PublicKey
 
 export type CrankAction =
   | { kind: "graduate"; side: 0 | 1; why: string }
+  | { kind: "lock"; side: 0 | 1; why: string }
   | { kind: "register"; side: 0 | 1; why: string }
+  | { kind: "fee_key"; side: 0 | 1; why: string }
   | { kind: "void"; why: string }
   | { kind: "claim"; why: string }
   | { kind: "seed"; side: 0 | 1; why: string }
@@ -144,30 +171,33 @@ export const CLAIM_THRESHOLD_LAMPORTS = BigInt(10_000_000);
  * The next actions for a pair, in order; the keeper sends EACH AS ITS OWN TRANSACTION (blind review 2 L-3: a failing registration
  * must never block a graduation). `registered[side]` = that mint's TokenConfig already has a verified pool; `seeded[side]` = the side's
  * CPMM pool has at least one oracle observation (blind review 2 L-4 — the keeper seeds it with a dust swap).
- *   Open, ready, before the deadline   → graduate A, graduate B (normally a trade already committed the pair)
+ *   Open, ready, before the deadline   → graduate A, graduate B (normally a trade already committed the pair), each followed by lock_lp
  *   Open at/after the deadline         → void
  *   Graduating                         → graduate the missing side(s); a side missing ≥ 3 days after the commit → void (the program
  *                                         accepts it only if Raydium really blocks the side); registrations; seeds
- *   Graduated                          → registrations still missing; seeds
+ *   Graduated                          → lock_lp where the LP is not locked yet (LAUNCHPAD-PATH §35), registrations still missing,
+ *                                         register_fee_key where the coin has no FeeKeyRecord, seeds
  *   any                                → claim the developer accrual above the threshold
  */
-export function planPairCrank(p: PairAccount, now: number, registered: [boolean, boolean], seeded: [boolean, boolean] = [true, true]): CrankAction[] {
+export function planPairCrank(p: PairAccount, now: number, registered: [boolean, boolean], seeded: [boolean, boolean] = [true, true], feeKeys: [boolean, boolean] = [true, true]): CrankAction[] {
   const deadline = Number(p.deadline);
   const missingPool = (s: 0 | 1) => p.pools[s].equals(PublicKey.default);
   const out: CrankAction[] = [];
   const tail = () => {
     for (const s of [0, 1] as const) {
       if (missingPool(s)) continue;
+      if (p.lp_locked[s] === BigInt(0)) out.push({ kind: "lock", side: s, why: "the pool's LP is still in the vault: lock_lp locks it forever (Fee Key to FEE_KEYS)" });
       if (!registered[s]) out.push({ kind: "register", side: s, why: "the pool exists but is not registered in burn_receipts" });
+      if (!feeKeys[s]) out.push({ kind: "fee_key", side: s, why: "the coin's lock position is not recorded yet (register_fee_key)" });
       if (!seeded[s]) out.push({ kind: "seed", side: s, why: "the pool has no oracle observation yet: a dust swap seeds the TWAP" });
     }
   };
   if (p.status === STATUS_OPEN) {
     if (now >= deadline) out.push({ kind: "void", why: `the deadline ${new Date(deadline * 1000).toISOString()} passed without graduation` });
-    else if (graduationReady(p.sol[0], p.sol[1], p.target_raise_lamports, p.min_side_share_bps)) for (const s of [0, 1] as const) out.push({ kind: "graduate", side: s, why: "combined raise at target and both sides at their minimum share" });
+    else if (graduationReady(p.sol[0], p.sol[1], p.target_raise_lamports, p.min_side_share_bps)) for (const s of [0, 1] as const) out.push({ kind: "graduate", side: s, why: "combined raise at target and both sides at their minimum share" }, { kind: "lock", side: s, why: "lock the new pool's LP forever" });
     else out.push({ kind: "wait", why: `raise ${p.sol[0] + p.sol[1]} of ${p.target_raise_lamports} lamports (or a side under ${p.min_side_share_bps} bps)` });
   } else if (p.status === STATUS_GRADUATING) {
-    for (const s of [0, 1] as const) if (missingPool(s) && !p.refunding[s]) out.push({ kind: "graduate", side: s, why: "graduation committed; this side's pool is still to create" });
+    for (const s of [0, 1] as const) if (missingPool(s) && !p.refunding[s]) out.push({ kind: "graduate", side: s, why: "graduation committed; this side's pool is still to create" }, { kind: "lock", side: s, why: "lock the new pool's LP forever" });
     if ((([0, 1] as const).some((s) => missingPool(s) && !p.refunding[s])) && now >= Number(p.graduation_started_at) + GRADUATION_STUCK_SECS) out.push({ kind: "void", why: "a side is still missing 3 days after the commit: refunded if Raydium blocks it (unconditionally after 30 days)" });
     tail();
   } else if (p.status === STATUS_GRADUATED) {
@@ -288,7 +318,9 @@ export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAdd
   if (!p) return [{ action: { kind: "wait", why: "no Pair account" }, result: null }];
   const seeded: [boolean, boolean] = [true, true];
   for (const s of [0, 1] as const) if (!p.pools[s].equals(PublicKey.default)) seeded[s] = await poolSeeded(ctx.connection, sidePoolAccounts(ctx.cluster, pairAddress, s, p.mints[s], ctx.programId ?? PAIR_CURVE_ID).observation);
-  const actions = planPairCrank(p, now, await registeredSides(ctx, p), seeded);
+  const feeKeys: [boolean, boolean] = [true, true];
+  for (const s of [0, 1] as const) if (!p.pools[s].equals(PublicKey.default)) feeKeys[s] = !!(await ctx.connection.getAccountInfo(feeKeyRecordPda(ctx.burnReceiptsProgramId, p.mints[s]), "confirmed"));
+  const actions = planPairCrank(p, now, await registeredSides(ctx, p), seeded, feeKeys);
   let graduateFailed = false;
   for (const action of actions) {
     if (action.kind === "wait") { steps.push({ action, result: null }); continue; }
@@ -297,6 +329,11 @@ export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAdd
     let ixs: TransactionInstruction[] = [];
     if (action.kind === "void") ixs = [voidPairIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
     if (action.kind === "graduate") ixs = [...(await syncVaultWsolIxs(ctx.connection, p)), graduateIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, programId: ctx.programId })];
+    if (action.kind === "lock") {
+      if (p.pools[action.side].equals(PublicKey.default) || p.lp_locked[action.side] !== BigInt(0)) continue;
+      ixs = [lockLpIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
+    }
+    if (action.kind === "fee_key") ixs = [registerSideFeeKeyIx({ payer: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
     if (action.kind === "register") ixs = [registerSideIx({ registrar: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
     if (action.kind === "claim") ixs = [claimDeveloperFeeIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
     if (action.kind === "seed") ixs = seedObservationIxs({ cluster: ctx.cluster, payer: cranker.publicKey, pairAddress, pair: p, side: action.side, programId: ctx.programId });

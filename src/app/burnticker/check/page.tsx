@@ -82,6 +82,7 @@ export default function CheckPage() {
         </section>
       </>}
       <ReceiptVerifier card={card} />
+      <p className="text-xs text-neutral-400">The verifier refuses a transaction for a mint the burn_receipts program does not know. To ask about a mint itself — is it a Burnticker coin at all — use <a className="underline" href="/burnticker/verify">Verify a mint</a>; lookalikes are listed on <a className="underline" href="/burnticker/not-burnticker">Not Burnticker</a>.</p>
       <p className="text-xs text-neutral-500">JSON: <code>/api/burnticker/v1/check</code> · <code>/api/burnticker/v1/check/receipts</code> · <code>/api/burnticker/v1/check/receipts/&lt;signature&gt;</code> · doc: docs/burnticker/CHECK-THIS-YOURSELF.md</p>
     </main>
   );

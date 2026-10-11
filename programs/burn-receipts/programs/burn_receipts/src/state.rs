@@ -160,6 +160,44 @@ impl TokenConfig {
     }
 }
 
+/// LAUNCHPAD-PATH §35: the coin's permanent LP lock (Raydium's CPMM lock program) and its Fee Key, held by the FEE_KEYS PDA.
+/// Created once by register_fee_key; claim_lock_fees reads it and keeps the running totals. ["fee_key", mint].
+#[account]
+#[derive(InitSpace)]
+pub struct FeeKeyRecord {
+    pub version: u8,
+    pub bump: u8,
+    pub mint: Pubkey,
+    /// The registered CPMM pool (TokenConfig.cpmm_pool at registration).
+    pub pool: Pubkey,
+    pub lp_mint: Pubkey,
+    /// The Fee Key NFT mint and the FEE_KEYS PDA's account holding it.
+    pub fee_nft_mint: Pubkey,
+    pub fee_nft_account: Pubkey,
+    /// The lock program's LockedCpLiquidityState ["locked_liquidity", fee_nft_mint].
+    pub locked_liquidity: Pubkey,
+    pub locked_lp_at_registration: u64,
+    pub registered_at: i64,
+    pub claims: u32,
+    pub total_wsol_claimed: u64,
+    pub total_to_burn_pool: u64,
+    pub total_to_operator: u64,
+    pub total_tokens_burned: u64,
+    pub last_claim_at: i64,
+    /// Operator share collected but not yet delivered (the treasury could not receive it yet), held as lamports of this account.
+    pub operator_pending: u64,
+    pub reserved: [u8; 56],
+}
+
+impl FeeKeyRecord {
+    pub fn operator_pending(&self) -> u64 {
+        self.operator_pending
+    }
+    pub fn set_operator_pending(&mut self, v: u64) {
+        self.operator_pending = v;
+    }
+}
+
 /// The program-wide PlatformConfig (["platform"]): the temporary pre-audit burn-pool cap and its authority (instructions/platform.rs).
 #[account]
 #[derive(InitSpace)]

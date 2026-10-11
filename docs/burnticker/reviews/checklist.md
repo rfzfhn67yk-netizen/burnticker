@@ -86,3 +86,25 @@ The text above is pre-registered and stays as written. The review (`2026-10-10-c
 - **"No market cap anywhere" (UI trust rules).** Burn Derby's one-shot flippening compares two OTHER coins' market caps as the rule's
   input. The rule is now: no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown
   only as the rule sentence. Derby admission refuses any Burnticker platform coin as an input (`src/lib/burnticker/derby/admission.ts`).
+
+## Erratum 2026-10-10 (LP locked forever, owner decision)
+
+The text above stays as written. After it was registered the owner changed the LP policy (LAUNCHPAD-PATH §35, `docs/burnticker/decisions.md`
+2026-10-10 "LP locked forever, its fees fund the burn"), so the scope line "All graduation LP is burned (platform …" no longer describes
+the platform. The facts a reviewer checks instead:
+
+- **LP at graduation.** 100 % of the graduation LP is **locked** with Raydium's LP lock (LaunchLab `platformScale` 1,000,000 /
+  `creatorScale` 0 / `burnScale` 0), never withdrawable; nothing is burned. The Fee Key NFT is owned by the burn_receipts PDA
+  `["fee_keys"]` (the platform's `platformLockNftWallet`); `initialize_token` and the buyback cranks refuse a platform whose lock-NFT
+  wallet or LP scales differ. pair_curve's `graduate` no longer burns LP; the permissionless `lock_lp` locks it with the same Fee Key owner.
+- **LP fees.** The permissionless `claim_lock_fees` collects the lock's fees and splits the SOL side by compiled constants:
+  `LOCK_FEE_BURN_BPS = 8000` to the coin's fee PDA (the burn pool), `LOCK_FEE_OPERATOR_BPS = 2000` to `OPERATOR_TREASURY` (the Squads
+  vault; the mainnet build is unpinned and refuses `TreasuryNotPinned` until the owner compiles the vault in); the coin side is burned.
+  No admin key or config field changes the split.
+- **Item 8 floor.** Unchanged: `register_pool` still needs ≥ 50 % of the pool's live LP burned or locked (≥ 90 % for the fallback pool);
+  public copy now reads "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation".
+- **Instruction count (item 1).** With `register_fee_key` and `claim_lock_fees` burn_receipts has **26 entrypoints** in its
+  `#[program]` module; the IDL, the Powers Register and the whitepaper's §13.3 list 26. pair_curve gains `lock_lp`.
+- **Economics a reviewer can recompute.** Per swap after graduation (CPMM tier 0, 25 bps): 21 bps LP fees → 16.8 bps burn pool + 4.2 bps
+  operator; 3 bps RAY buyback + 1 bp Raydium treasury; plus the 4.75 bps creator fee to the burn pool. The operator earns 20 % of the
+  post-graduation LP fees; this is new income for the operator and is stated on the trust page and in the fee tables.

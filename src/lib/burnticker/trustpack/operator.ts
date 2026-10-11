@@ -22,7 +22,7 @@ export interface ClusterConfig {
 }
 export interface OperatorConfig {
   schema: "burnticker.operator/v1"; updatedAt: string; note: string;
-  operator: { name: string; state: string; country: string; contact: string; security: string; entity: string; entityPending: string };
+  operator: { name: string; state?: string | null; country: string; contact: string; security: string; entity: string; entityPending: string };
   links: { site: string; app: string; deficitSite: string; github: string; githubOrg: string; x: string[] };
   clusters: Record<Cluster, ClusterConfig>;
   signedMessage: { status: string; signerRole: string; cluster: Cluster; message: string; signature: string | null; how: string };
@@ -34,7 +34,7 @@ const isKeyOrTodo = (v: unknown) => typeof v === "string" && (isPubkey(v) || TOD
 export function operatorProblems(j: Partial<OperatorConfig> | null): string[] {
   const out: string[] = [];
   if (!j || j.schema !== "burnticker.operator/v1") return ["schema must be burnticker.operator/v1"];
-  if (!j.operator?.name || !j.operator.state || !/@burnticker\.com$/.test(j.operator.contact ?? "")) out.push("operator.name / state / contact (an @burnticker.com address) required");
+  if (!j.operator?.name || !/@burnticker\.com$/.test(j.operator.contact ?? "")) out.push("operator.name / contact (an @burnticker.com address) required");
   if (!isKeyOrTodo(j.operator?.entity) && !/LLC/.test(String(j.operator?.entity))) out.push("operator.entity is TODO_ENTITY or the entity's name");
   for (const c of ["devnet", "mainnet"] as Cluster[]) {
     const cl = j.clusters?.[c];

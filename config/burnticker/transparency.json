@@ -50,6 +50,12 @@
         "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-blind-2.md"
       },
       {
+        "id": "lp-lock-blind",
+        "reviewer": "a fresh Claude agent reviewing the LP-lock release blind (register_fee_key, claim_lock_fees, lock_lp; both programs; the real Raydium lock binary loaded in place of the mock): 0 Critical/High, 2 Medium, 3 Low, 8 Info; exploit tests committed (#[ignore]d), fixes in progress",
+        "status": "completed 2026-10-11; findings open",
+        "reportPath": "docs/burnticker/reviews/2026-10-11-lp-lock-blind.md"
+      },
+      {
         "id": "chatgpt-adversarial",
         "reviewer": "ChatGPT/Codex, adversarial PR review against the same pre-registered checklist (reviewed public commit 58d43eae: 2 High, 5 Medium new findings plus checklist mismatches and pair_curve residuals; each answered in docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md)",
         "status": "completed 2026-10-10",
@@ -119,7 +125,7 @@
       "label": "LaunchLab platform admin",
       "pubkey": null,
       "envVar": "BURNTICKER_PLATFORM_ADMIN",
-      "description": "May change the platform fee bps, the claim wallet, cpConfigId, platformCpCreator and the LP split for launches not yet migrated. Holder: a dedicated encrypted key held by the operator; it cannot be transferred to the Squads vault (Raydium derives the platform id from the admin key) — disclosed as an untimelocked power (Powers Register, 'Powers outside the program'). Any change shows on this page within one cycle; initialize_token pins cpConfigId, platformCpCreator and the LP scales, and the launch gate re-reads them immediately before each create."
+      "description": "May change the platform fee bps, the claim wallet, cpConfigId, platformCpCreator and the LP split for launches not yet migrated (burn_receipts refuses initialize_token and every buyback crank for a platform whose LP is not 100 % locked to the fee-keys PDA, so a changed split strands no Fee Key with a person). Holder: a dedicated encrypted key held by the operator; it cannot be transferred to the Squads vault (Raydium derives the platform id from the admin key) — disclosed as an untimelocked power (Powers Register, 'Powers outside the program'). Any change shows on this page within one cycle; initialize_token pins cpConfigId, platformCpCreator and the LP scales, and the launch gate re-reads them immediately before each create."
     },
     {
       "role": "squads-vault",
@@ -170,7 +176,7 @@
       "date": null,
       "mint": null,
       "status": "not done",
-      "text": "$REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP burned; not for trading. Its mint and the date go here when it happens; until then: not done."
+      "text": "$REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP locked forever; not for trading. Its mint and the date go here when it happens; until then: not done."
     }
   ],
   "limitations": [
@@ -247,7 +253,7 @@
     {
       "id": "entity",
       "status": "not done",
-      "text": "No company stands behind the platform yet: it is operated by the individual named on /burnticker/operator. A LLC is an open owner decision (TODO_ENTITY)."
+      "text": "No company stands behind the platform yet: it is operated by one independent individual, whose identity is held privately, described on /burnticker/operator. An LLC is an open owner decision (TODO_ENTITY)."
     },
     {
       "id": "third-signer",
@@ -263,6 +269,11 @@
       "id": "paircurve-findings-open",
       "status": "not done",
       "text": "The two pair_curve reviews (2026-10-10) found High-severity issues (close_pair could strand the burn-pool registration, a pre-funded pool vault or a pre-created token account could block graduation or init_pair, an executable developer wallet could freeze trades). All findings are fixed or accepted in writing (docs/burn-receipts/CHANGELOG.md, code fa8627a4), the reviewers' exploit tests now assert each attack fails, and the fixed program was re-rehearsed on devnet (docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md §R2). An independent re-check confirmed the fixes and found five residuals (a post-deadline curve-sell race, a stuck-side lock without an AmmConfig signal, a close blocked by an executable developer wallet, the upgrade script's hash check, an unsynced WSOL donation); all fixed in fcda14eb and spot-checked on devnet (§R3). Not yet done: a review of the round-2 code. Pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until it is done."
+    },
+    {
+      "id": "operator-treasury-mainnet",
+      "status": "not done",
+      "text": "The operator treasury is not compiled into the mainnet burn_receipts build yet (the devnet build pays the devnet Squads vault). Until the owner compiles the mainnet vault in, every mainnet claim_lock_fees refuses (TreasuryNotPinned) and the LP fees stay in the lock; nothing is lost, nothing is claimed."
     }
   ],
   "policies": [
@@ -293,6 +304,10 @@
     {
       "id": "no-creator-cash",
       "text": "Creators receive no cash from fees; the creator-fee slot pays the burn pool, 100%. Zero team allocation on any coin. Seed deposits to a burn pool are gifts with no claim."
+    },
+    {
+      "id": "lp-locked-forever",
+      "text": "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code). At graduation 100 % of every coin's LP is locked with Raydium's LP lock and can never be withdrawn; the Fee Key NFT is owned by the burn_receipts PDA [\"fee_keys\"], not a person. Anyone can call claim_lock_fees: the SOL side goes 80 % to the coin's burn pool and 20 % to the operator treasury (the Squads vault), the coin side is burned; the split is compiled into the program (LOCK_FEE_BURN_BPS 8000, LOCK_FEE_OPERATOR_BPS 2000), with no admin key or config field. The operator earns 20 % of post-graduation LP fees: 4.2 bps of every swap after graduation, next to 16.8 bps to the burn pool. Owner decision 2026-10-10 (decisions.md), replacing the 2026-10-09 burned-LP policy."
     },
     {
       "id": "no-return-marketing",

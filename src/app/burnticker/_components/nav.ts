@@ -8,7 +8,9 @@ export interface NavItem { label: string; href: string; external?: boolean; /** 
 export const NAV: NavItem[] = [
   { label: "Launch", href: "/burnticker/launch", match: ["/burnticker/templates", "/burnticker/me"] },
   { label: "Coins", href: "/burnticker", match: ["/burnticker/t/"] },
-  { label: "Seasons", href: "/burnticker/rivalries", match: ["/burnticker/p/"] },
+  // "Seasons" lands on the per-league index (the owner, 2026-10-10: the landing door and the nav go to the same place); the all-seasons
+  // scoreboard (/burnticker/rivalries), league pages and pair pages belong to it
+  { label: "Seasons", href: "/burnticker/leagues", match: ["/burnticker/rivalries", "/burnticker/p/"] },
   { label: "Trust", href: "/burnticker/trust" },
   { label: "$DEFICIT", href: "https://deficit.burnticker.com", external: true },
   { label: "Docs/API", href: "/burnticker/docs" },
@@ -40,7 +42,7 @@ export interface TabItem { label: string; href: string; glyph: string }
 export const TABS: TabItem[] = [
   { label: "Coins", href: "/burnticker", glyph: "▦" },
   { label: "Launch", href: "/burnticker/launch", glyph: "+" },
-  { label: "Seasons", href: "/burnticker/rivalries", glyph: "⇄" },
+  { label: "Seasons", href: "/burnticker/leagues", glyph: "⇄" },
   { label: "Trust", href: "/burnticker/trust", glyph: "✓" },
 ];
 

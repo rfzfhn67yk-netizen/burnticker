@@ -9,7 +9,7 @@ import { claimCreatorFee as sdkClaimCreatorFee, claimVestedToken as sdkClaimVest
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, associatedTokenAddress, closeAccountIx, syncNativeIx } from "@/lib/burnKeeper/solana";
 import { claimCreatorFeeIxs, claimVestedTokenIx, CPMM_PROGRAM_ID, LAUNCHLAB_PROGRAM, launchLabCreatorFeeVault, launchLabVault, WSOL_MINT } from "@/lib/burnKeeper/launchlab";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
-import { buildCreateTx, buildPlatformTx, buildVestingTx, CPMM_PROGRAM, decodeAmmConfig, decodeGlobalConfig, decodePlatform, DEFAULT_PLATFORM, feeSplit, LAUNCHLAB_PROGRAM_SDK, launchRefusal, planLaunch, platformProblems, platformSiteRefusal, PLATFORM_SITE_UNSET, platformViewOf, ppmLamportsPerSol, ppmToBps, STANDARD_TOTAL_SELL_RAW, totalSellForLock, type AmmConfigView, type GlobalConfigView, type LaunchInput, type PlatformInput, type PlatformView } from "@/lib/burnKeeper/launch";
+import { buildCreateTx, buildPlatformTx, buildVestingTx, CPMM_PROGRAM, decodeAmmConfig, decodeGlobalConfig, decodePlatform, DEFAULT_PLATFORM, feeSplit, LAUNCHLAB_PROGRAM_SDK, launchRefusal, lpLockProblems, LP_LOCK_PLATFORM_SCALE_PPM, planLaunch, platformProblems, platformSiteRefusal, PLATFORM_SITE_UNSET, platformViewOf, ppmLamportsPerSol, ppmToBps, STANDARD_TOTAL_SELL_RAW, totalSellForLock, type AmmConfigView, type GlobalConfigView, type LaunchInput, type PlatformInput, type PlatformView } from "@/lib/burnKeeper/launch";
 
 const same = (a: TransactionInstruction, b: TransactionInstruction) => {
   assert.equal(a.programId.toBase58(), b.programId.toBase58(), "program");
@@ -195,7 +195,7 @@ describe("the Burnticker platform config (the owner's dials)", () => {
     const d = Buffer.from(ix.dataHex, "hex");
     assert.equal(d.readBigUInt64LE(8), BigInt(100_000)); assert.equal(d.readBigUInt64LE(16), BigInt(0)); assert.equal(d.readBigUInt64LE(24), BigInt(900_000)); assert.equal(d.readBigUInt64LE(32), BigInt(2500));
   });
-  test("under our platform (25 dev + 50 burn + 25 Raydium): 100 bps on the curve; after graduation the burn pool still gets 4.75 bps and the dev wallet 21 × platformScale", () => {
+  test("under our platform (25 dev + 50 burn + 25 Raydium): 100 bps on the curve; after graduation the burn pool still gets 4.75 bps and the Fee Key 21 × platformScale", () => {
     const view = platformViewOf(P({ platformScalePpm: BigInt(1_000_000) }));
     const s = feeSplit({ global: MAINNET_GLOBAL, platform: view, amm: AMM0, creatorIsBurnPool: true });
     assert.equal(s.preGraduation.totalBps, 100);
@@ -205,6 +205,29 @@ describe("the Burnticker platform config (the owner's dials)", () => {
     assert.equal(s.postGraduation.legs[3].bps, 4.75);
     const burnAll = feeSplit({ global: MAINNET_GLOBAL, platform: platformViewOf(P()), amm: AMM0, creatorIsBurnPool: true });
     assert.equal(burnAll.postGraduation.legs[0].bps, 0); assert.equal(burnAll.postGraduation.legs[1].bps, 21);
+  });
+  test("LP LOCKED FOREVER (2026-10-10): with the Fee Key at the burn program's fee-keys PDA the locked 21 bps split 16.8 burn pool / 4.2 operator; nothing burned", () => {
+    const feeKeys = Keypair.generate().publicKey, treasury = Keypair.generate().publicKey;
+    const s = feeSplit({ global: MAINNET_GLOBAL, platform: platformViewOf(P({ platformScalePpm: BigInt(1_000_000), lockNftWallet: feeKeys })), amm: AMM0, creatorIsBurnPool: true, feeKeysPda: feeKeys, operatorTreasury: treasury });
+    const post = s.postGraduation.legs;
+    assert.deepEqual(post.map((l) => l.bps), [16.8, 0, 4, 4.75, 0.25, 4.2]);
+    assert.match(post[0].to, /burn pool \(80 %/); assert.match(post[0].to, new RegExp(feeKeys.toBase58()));
+    assert.match(post[5].to, new RegExp(`operator treasury ${treasury.toBase58()}`));
+    assert.equal(BigInt(post[0].lamportsPer1Sol) + BigInt(post[5].lamportsPer1Sol), BigInt(2_100_000), "21 bps of 1 SOL, every lamport accounted for");
+    assert.equal(s.postGraduation.totalBps, 30);
+    // burned per swap after graduation: 16.8 (LP fees) + 4.75 (creator fee) = 21.55 bps; operator 4.2 bps
+    assert.equal(Math.round((post[0].bps + post[3].bps) * 100) / 100, 21.55);
+  });
+  test("lpLockProblems: 100 % to the Fee Key and the lock-NFT wallet at the fee-keys PDA, or the platform is refused", () => {
+    const feeKeys = Keypair.generate().publicKey;
+    assert.deepEqual(lpLockProblems(P({ platformScalePpm: LP_LOCK_PLATFORM_SCALE_PPM, lockNftWallet: feeKeys }), feeKeys), []);
+    assert.match(lpLockProblems(P({ platformScalePpm: BigInt(0), lockNftWallet: feeKeys }), feeKeys).join(";"), /locks 100 %/);
+    assert.match(lpLockProblems(P({ platformScalePpm: LP_LOCK_PLATFORM_SCALE_PPM }), feeKeys).join(";"), /not the burn program's fee-keys PDA/);
+    const { tx } = buildPlatformTx(P({ platformScalePpm: LP_LOCK_PLATFORM_SCALE_PPM, lockNftWallet: feeKeys }));
+    const ix = tx.instructions[0];
+    assert.deepEqual([ix.args.platformScale, ix.args.creatorScale, ix.args.burnScale], ["1000000", 0, "0"]);
+    assert.equal(ix.accounts[2].pubkey, feeKeys.toBase58());
+    assert.match(ix.accounts[2].role, /fee-keys PDA/);
   });
 });
 

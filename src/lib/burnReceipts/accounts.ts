@@ -56,6 +56,32 @@ export interface PlatformConfigAccount {
   crankers: PublicKey[]; cranker_count: number;
 }
 
+/** LAUNCHPAD-PATH §35: a coin's lock position and the running claim totals (["fee_key", mint]). */
+export interface FeeKeyRecordAccount {
+  version: number; bump: number; mint: PublicKey; pool: PublicKey; lp_mint: PublicKey; fee_nft_mint: PublicKey; fee_nft_account: PublicKey;
+  locked_liquidity: PublicKey; locked_lp_at_registration: bigint; registered_at: bigint; claims: number;
+  total_wsol_claimed: bigint; total_to_burn_pool: bigint; total_to_operator: bigint; total_tokens_burned: bigint; last_claim_at: bigint;
+}
+
+export function decodeFeeKeyRecord(data: Buffer | Uint8Array): FeeKeyRecordAccount {
+  return decodeAccount<FeeKeyRecordAccount>(BURN_RECEIPTS_IDL, "FeeKeyRecord", data);
+}
+
+export async function fetchFeeKeyRecord(connection: Connection, programId: PublicKey, mint: PublicKey): Promise<{ address: PublicKey; record: FeeKeyRecordAccount } | null> {
+  const address = PublicKey.findProgramAddressSync([Buffer.from("fee_key", "utf8"), mint.toBuffer()], programId)[0];
+  const info = await connection.getAccountInfo(address, "confirmed");
+  return info ? { address, record: decodeFeeKeyRecord(info.data) } : null;
+}
+
+/** Raydium's LockedCpLiquidityState (lock program; offsets read from live accounts). */
+export interface LockedLiquidityView { lockedLp: bigint; claimedLp: bigint; unclaimedLp: bigint; lastLp: bigint; pool: PublicKey; feeNftMint: PublicKey; owner: PublicKey; lpMint: PublicKey }
+export function decodeLockedLiquidity(data: Buffer | Uint8Array): LockedLiquidityView {
+  const d = Buffer.from(data);
+  if (d.length < 192) throw new Error("burnReceipts: not a LockedCpLiquidityState (too short)");
+  const pk = (o: number) => new PublicKey(d.subarray(o, o + 32));
+  return { lockedLp: d.readBigUInt64LE(8), claimedLp: d.readBigUInt64LE(16), unclaimedLp: d.readBigUInt64LE(24), lastLp: d.readBigUInt64LE(32), pool: pk(64), feeNftMint: pk(96), owner: pk(128), lpMint: pk(160) };
+}
+
 export function decodePlatformConfig(data: Buffer | Uint8Array): PlatformConfigAccount {
   return decodeAccount<PlatformConfigAccount>(BURN_RECEIPTS_IDL, "PlatformConfig", data);
 }
