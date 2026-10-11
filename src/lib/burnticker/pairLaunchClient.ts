@@ -1,5 +1,5 @@
-import { Buffer } from "buffer";
-import { Keypair, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
+import type { Transaction } from "@solana/web3.js";
+import { buildStepTx, confirmPlan, pairCurvePlan, planProblems, signAndSendPlan, type ConfirmResult, type SendDeps, type SendResult } from "@/lib/burnticker/signPlan";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 
 /**
@@ -81,83 +81,19 @@ export async function postPairLaunch(fetchFn: FetchLike, body: Record<string, un
   return send(venue);
 }
 
-const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-/** base58 → bytes (a mint secret key from the launch response). */
-export function base58ToBytes(s: string): Uint8Array {
-  const bytes: number[] = [0];
-  for (const ch of s) {
-    let carry = B58.indexOf(ch);
-    if (carry < 0) throw new Error("not base58");
-    for (let i = 0; i < bytes.length; i++) { carry += bytes[i] * 58; bytes[i] = carry & 0xff; carry >>= 8; }
-    while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8; }
-  }
-  for (const ch of s) { if (ch !== "1") break; bytes.push(0); }
-  return Uint8Array.from(bytes.reverse());
-}
+// ---- signing: the shared plan (signPlan.ts); these wrappers keep the pair-curve names the tests and older callers use ----------------
+export { base58ToBytes, type SendDeps, type SendResult, type ConfirmResult } from "@/lib/burnticker/signPlan";
 
 /** Why the pair-curve set cannot be signed in this browser, or [] when it can. */
-export function pairCurveSignProblems(pc: PairCurveLaunchBundle, creator: string | null, keys: { a: string; b: string } | null): string[] {
-  const out: string[] = [];
-  if (!pc.ready) out.push(...pc.pending.filter((p) => !/^Metaplex metadata/.test(p)));
-  if (!creator) out.push("connect the wallet that is the creator");
-  const needs = new Set(pc.transactions.flatMap((t) => t.signers));
-  if ((needs.has("mintA") || needs.has("mintB")) && !keys) out.push("the server did not hand over the two mint keys, so the mint transactions cannot be signed here");
-  if (keys) {
-    for (const [side, k, want] of [["A", keys.a, pc.mints.a], ["B", keys.b, pc.mints.b]] as const) {
-      try { if (Keypair.fromSecretKey(base58ToBytes(k)).publicKey.toBase58() !== want) out.push(`mint key ${side} does not match mint ${want}`); } catch { out.push(`mint key ${side} is not a valid key`); }
-    }
-  }
-  return out;
-}
-
+export const pairCurveSignProblems = (pc: PairCurveLaunchBundle, creator: string | null, keys: { a: string; b: string } | null): string[] => planProblems(pairCurvePlan(pc, keys), creator);
 /** One pair-curve transaction, built and signed by the mint keypair(s) it names (the wallet signs after). */
-export function buildPairCurveTx(t: PairCurveLaunchBundle["transactions"][number], creator: string, keys: { a: string; b: string } | null, recentBlockhash: string): Transaction {
-  const tx = new Transaction({ feePayer: new PublicKey(creator), recentBlockhash });
-  for (const ix of t.instructions) tx.add(new TransactionInstruction({ programId: new PublicKey(ix.programId), keys: ix.keys.map((k) => ({ pubkey: new PublicKey(k.pubkey), isSigner: k.isSigner, isWritable: k.isWritable })), data: Buffer.from(ix.dataBase64, "base64") }));
-  const mintSigners = t.signers.filter((s) => s !== "creator").map((s) => {
-    const k = s === "mintA" ? keys?.a : keys?.b;
-    if (!k) throw new Error(`${t.label}: needs the ${s} key`);
-    return Keypair.fromSecretKey(base58ToBytes(k));
-  });
-  if (mintSigners.length) tx.partialSign(...mintSigners);
-  return tx;
-}
+export const buildPairCurveTx = (t: PairCurveLaunchBundle["transactions"][number], creator: string, keys: { a: string; b: string } | null, recentBlockhash: string): Transaction =>
+  buildStepTx({ label: t.label, signers: [...t.signers], instructions: t.instructions }, creator, { mintA: keys?.a, mintB: keys?.b }, recentBlockhash);
+/** The three transactions in order (signAndSendPlan); `prior` resumes at the failed step. */
+export const signAndSendPairCurve = (pc: PairCurveLaunchBundle, creator: string, keys: { a: string; b: string } | null, d: SendDeps, onStep?: (i: number, sig: string) => void, prior: string[] = []): Promise<SendResult> =>
+  signAndSendPlan(pairCurvePlan(pc, keys), creator, d, onStep, prior);
 
-export interface SendDeps {
-  latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }>;
-  signTransaction(tx: Transaction): Promise<Transaction>;
-  sendRaw(raw: Uint8Array): Promise<string>;
-  confirm(sig: string, bh: { blockhash: string; lastValidBlockHeight: number }): Promise<{ err: unknown }>;
-}
-export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null }
-
-/**
- * The three transactions in order: build → mint keys sign → wallet signs → send → confirmed, then the next. Stops at the first failure;
- * `prior` (the signatures already confirmed) resumes at the failed step, so a confirmed step is never sent twice.
- */
-export async function signAndSendPairCurve(pc: PairCurveLaunchBundle, creator: string, keys: { a: string; b: string } | null, d: SendDeps, onStep?: (i: number, sig: string) => void, prior: string[] = []): Promise<SendResult> {
-  const signatures: string[] = prior.slice(0, pc.transactions.length);
-  for (let i = signatures.length; i < pc.transactions.length; i++) {
-    try {
-      const bh = await d.latestBlockhash();
-      const signed = await d.signTransaction(buildPairCurveTx(pc.transactions[i], creator, keys, bh.blockhash));
-      const sig = await d.sendRaw(signed.serialize());
-      const c = await d.confirm(sig, bh);
-      if (c.err) throw new Error(`the chain rejected it (${JSON.stringify(c.err).slice(0, 120)})`);
-      signatures.push(sig); onStep?.(i, sig);
-    } catch (e) {
-      const m = (e as Error).message ?? String(e);
-      return { signatures, failedAt: i, error: /reject|denied|cancel/i.test(m) && !/chain rejected/.test(m) ? `step ${i + 1} of ${pc.transactions.length} was not signed in the wallet` : `step ${i + 1} of ${pc.transactions.length} failed: ${m.slice(0, 200)}` };
-    }
-  }
-  return { signatures, failedAt: null, error: null };
-}
-
-/**
- * Which transaction confirms which draft (`action: "launched"`): tx 1 for side A, tx 2 for side B (the fix agent, commit 04c7bc4e:
- * launchVerify wants a successful transaction signed by that coin's mint and its creator that calls burn_receipts and landed after the
- * draft; init_pair is refused because no mint signs it). Burns stay pending-pair until both pools exist, so confirming A first is safe.
- */
+/** Which transaction confirms which draft: tx 1 for side A, tx 2 for side B (launchVerify, the fix agent's 04c7bc4e). */
 export const PAIR_CURVE_LAUNCHED_TX: { a: number; b: number } = { a: 0, b: 1 };
 export const launchedSignatures = (pc: PairCurveLaunchBundle, sigs: string[], map: { a: number; b: number } = PAIR_CURVE_LAUNCHED_TX): { mint: string; launchTx: string }[] =>
   sigs[map.a] && sigs[map.b] ? [{ mint: pc.mints.a, launchTx: sigs[map.a] }, { mint: pc.mints.b, launchTx: sigs[map.b] }] : [];
@@ -170,24 +106,6 @@ export function launchedErrorMessage(status: number, body: LaunchErrorBody | nul
   return launchErrorMessage(status, body, retryAfterHeader);
 }
 
-export interface ConfirmResult { confirmed: string[]; error: string | null }
-/**
- * Confirms each side with the launch route, A then B. A 404 (the transaction is not visible to the server yet) is retried `retries`
- * times, `waitMs` apart; any other failure stops with a plain sentence. Mints in `already` are skipped (a re-press never re-sends them;
- * the server would answer replay anyway). Two of the client's ten writes an hour.
- */
-export async function confirmLaunched(fetchFn: FetchLike, pc: PairCurveLaunchBundle, sigs: string[], o: { already?: string[]; retries?: number; waitMs?: number; sleep?: (ms: number) => Promise<void>; url?: string } = {}): Promise<ConfirmResult> {
-  const confirmed = [...(o.already ?? [])];
-  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  for (const l of launchedSignatures(pc, sigs)) {
-    if (confirmed.includes(l.mint)) continue;
-    for (let attempt = 0; ; attempt++) {
-      const r = await fetchFn(o.url ?? "/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "launched", mint: l.mint, launchTx: l.launchTx }) });
-      if (r.ok) { confirmed.push(l.mint); break; }
-      const j = (await r.json().catch(() => null)) as LaunchErrorBody | null;
-      if (r.status === 404 && attempt < (o.retries ?? 5)) { await sleep(o.waitMs ?? 4000); continue; }
-      return { confirmed, error: launchedErrorMessage(r.status, j, r.headers.get("retry-after")) };
-    }
-  }
-  return { confirmed, error: null };
-}
+/** Confirms each pair-curve draft (confirmPlan): A then B; 404 retried; other failures a plain sentence. */
+export const confirmLaunched = (fetchFn: FetchLike, pc: PairCurveLaunchBundle, sigs: string[], o: { already?: string[]; retries?: number; waitMs?: number; sleep?: (ms: number) => Promise<void>; url?: string } = {}): Promise<ConfirmResult> =>
+  confirmPlan(fetchFn, pairCurvePlan(pc, null), sigs, (st, b, ra) => launchedErrorMessage(st, b, ra), o);

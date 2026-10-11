@@ -10,7 +10,9 @@ import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { defaultName, defaultTicker, sha256HexWeb, tileHashInput, tileRule, tileSpec, type TileChoice } from "@/lib/burnticker/derby/tile";
 import { postPairLaunch, venueFrom409, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
-import { PairCurveSign } from "./PairCurveSign";
+import { SignCard } from "./SignCard";
+import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
+import type { SerializedIx } from "@/lib/burnticker/program";
 
 /**
  * "COIN VS COIN" — the Burn Derby wizard tile (2026-10-10; cut to presets the same day, the owner: "the UI needs to be simpler, even if it
@@ -22,7 +24,7 @@ import { PairCurveSign } from "./PairCurveSign";
  */
 
 interface Hit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null }
-interface Bundle { mint: string; ticker: string; ready: boolean; pending: string[]; rules: { sha256: string; statement: string } }
+interface Bundle { mint: string; ticker: string; ready: boolean; pending: string[]; mintSecretKey: string | null; rules: { sha256: string; statement: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[] }
 
 function CoinPicker({ label, value, onPick, exclude, initial }: { label: string; value: Hit | null; onPick: (h: Hit | null) => void; exclude: string | null; initial?: string }) {
   const [q, setQ] = useState(initial ?? ""), [hits, setHits] = useState<Hit[]>([]), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
@@ -144,9 +146,8 @@ export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = 
           onLaunch={() => { void launch(); }}
         />
       )}
-      {pcOut && <PairCurveSign pc={pcOut.pc} mintKeys={pcOut.keys} creator={creator || null} tickers={{ a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }} notes={pcOut.notes} />}
-      {pcOut && <p className="text-xs"><a className="underline" href={`/burnticker/p/${pcOut.pairId}`}>Open the pair page →</a></p>}
-      {out && <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-xs space-y-1"><div>Pair <code>{out.pairId}</code>: ${out.a.ticker} + ${out.b.ticker} — both coins are built; sign A first, then B.</div>{[out.a, out.b].map((x) => <div key={x.mint}>${x.ticker} · mint <code>{x.mint}</code> {x.ready ? "" : `· not signable yet: ${x.pending.join("; ")}`}</div>)}<a className="underline" href={`/burnticker/p/${out.pairId}`}>Open the pair page →</a></div>}
+      {(pcOut || out) && <SignCard plan={pcOut ? pairCurvePlan(pcOut.pc, pcOut.keys, { a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }) : launchlabPlan([out!.a, out!.b])} creator={creator || null} title={`Launch $${names.ta.toUpperCase()} and $${names.tb.toUpperCase()}`} coinHref={(t) => `/burnticker/t/${t}`} />}
+      {(pcOut || out) && <p className="text-xs"><a className="underline" href={`/burnticker/p/${(pcOut ?? out)!.pairId}`}>Open the pair page →</a></p>}
     </section>
   );
 }
