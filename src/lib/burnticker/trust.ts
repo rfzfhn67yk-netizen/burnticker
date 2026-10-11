@@ -175,6 +175,8 @@ export interface TransparencyConfig {
 export interface TransparencyBounty {
   status: string; rangeSol: [number, number]; fundedFrom: string; termsPath: string; contact: string | null;
   wallet?: string | null; walletTodo?: string; howReportsArePaid?: string;
+  /** what the operator recorded funding the wallet with — shown beside, never instead of, the live balance (UX report 3 item 5) */
+  recordedFunding?: { sol: number; date: string; transaction: string | null; source: string } | null;
   reports?: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string };
 }
 /** A wallet row as rendered: the pubkey from the file, else from the named environment variable, else TODO. */
@@ -338,7 +340,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     transparency,
     statements: [
       `LP locked forever at graduation: ${LP_LOCKED_PCT}% (platformScale 1,000,000, creatorScale 0, burnScale 0; Raydium's LP lock, never withdrawable) — not creator-configurable. The Fee Key is owned by the burn program's fee-keys PDA and the permissionless claim_lock_fees splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury, fixed in code; the coin side is burned. The program's own LP floor for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `The operator earns 20% of post-graduation LP fees: ${LP_FEES_TO_OPERATOR_BPS} bps of every swap after graduation, paid to the operator treasury (the Squads vault); ${LP_FEES_TO_BURN_POOL_BPS} bps goes to the coin's burn pool. On the curve the developer slice is ${BURNTICKER_DEV_FEE_BPS} bps. No admin key can change the 80/20 split.`,
+      `The operator earns 20% of post-graduation LP fees: ${LP_FEES_TO_OPERATOR_BPS} bps of every swap after graduation, paid to the operator treasury (the developer fee wallet, not the Squads vault, which holds no fee stream); ${LP_FEES_TO_BURN_POOL_BPS} bps goes to the coin's burn pool. On the curve the developer slice is ${BURNTICKER_DEV_FEE_BPS} bps. No admin key can change the 80/20 split.`,
       "Creator cash from fees: 0 bps. The creator-fee slot pays the token's burn pool, 100%.",
       "Team allocation: 0%. No presale, no private round, no airdrop to insiders; the platform holds no tokens at launch.",
       "Rules, readings and receipts are append-only: SQL triggers refuse updates and deletes; a rule change is a new token.",

@@ -483,7 +483,7 @@ pair made since carries `pair.winnerTakesBurn: true` in both sides' canonical ru
   burns spend it. The loser's
   reading is processed with outcome 6 (forwarded). The winner's ordinary cranks then spend its pool on
   the winner's coin and burn what they get.
-- **What does not happen.** The loser's supply is untouched and nobody is paid: SOL moves between two program PDAs that have no withdraw
+- **What does not happen.** The loser's supply is untouched and nothing is paid to holders: SOL moves between two program PDAs that have no withdraw
   path. A draw or a void forwards nothing; each coin burns its own fuel. With no result 72 h after a reading, or a LOST period whose
   forward never landed within 72 h, the coin cranks as unpaired (`PairResultMissing` / `PairForwardMissing`) and that period can no longer
   forward — `forward_to_winner` is refused after the window (`ForwardWindowClosed`), so there is no race with the crank (the planner switches from the forward to the paired buyback at that point; the keeper does not repeat the time-out); the keeper

@@ -6,6 +6,8 @@ import { coinsBurnedOn, dateRange, seasonBoards, type SeasonBoard, type SeasonCo
 import { derbyStore } from "@/lib/burnticker/derby/store";
 import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
+import { EmptyState } from "../_components/EmptyState";
+import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Seasons", description: "Burnticker seasons: one scoreboard per league and season, ranked by receipts; rivalry pairs and Burn Derby brackets below." };
@@ -33,15 +35,24 @@ export default function SeasonsPage() {
     try { brackets = derbyStore(p.registry.db).tournaments().map((r) => { let title = r.id; try { title = (JSON.parse(r.json) as { title?: string }).title ?? r.id; } catch { /* keep the id */ } return { id: r.id, title, createdAt: r.createdAt }; }); } catch { brackets = []; }
   } catch (e) { err = e instanceof Error ? e.message : String(e); }
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
+  // UX report 3 item 3: no scoreboard, no pair and no bracket → one explanation and one evidence link, not three empty sections
+  const empty = !err && boards.length === 0 && pairs.length === 0 && brackets.length === 0;
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Seasons</h1>
         <p className="text-neutral-400 text-sm max-w-3xl">One scoreboard per league and season. Each card ranks only that league&apos;s team coins, by receipts, then by the share of supply burned. Leagues are never ranked against each other. One page per league and season: <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
-        {!err && <p className="text-sm text-neutral-300" aria-label="across all leagues">Yesterday ({yday}) across all leagues: {yesterday} coin{yesterday === 1 ? "" : "s"} burned.</p>}
+        {!err && !empty && <p className="text-sm text-neutral-300" aria-label="across all leagues">Yesterday ({yday}) across all leagues: {yesterday} coin{yesterday === 1 ? "" : "s"} burned.</p>}
       </header>
-      {err && <p className="text-red-400 text-sm">Registry unavailable: {err}</p>}
+      {err && <EmptyState kind="unavailable" body="The coin registry could not be read just now, so the scoreboards, rivalries and brackets are not shown." details={err} />}
+      {empty && (
+        <EmptyState kind="not-launched" body={<>No team coin, rivalry pair or Burn Derby bracket is registered on this host yet, so there is no scoreboard to show. Each fills from the coins&apos; own receipts. {launch.open ? null : launch.closedLine} {NO_WALLET_LINE}</>}>
+          <p className="mt-3" data-empty-evidence><Link className="underline" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link> <span className="text-xs text-neutral-500">— {EXPLORE_VERIFIED_BURN.blurb}</span></p>
+          <p className="mt-1 text-xs text-neutral-500">An example scoreboard, clearly labelled, is on <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
+        </EmptyState>
+      )}
 
+      {!empty && !err && <>
       <section className="space-y-3" aria-label="season scoreboards">
         {!err && boards.length === 0 && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-4">No team coins yet.{launch.open ? <> A team coin is launched from the <Link className="underline" href="/burnticker/launch">wizard</Link> in any league: baseball, basketball, hockey, soccer, football, college.</> : ` ${launch.closedLine}`} {NO_WALLET_LINE}</p>}
         <div className="grid gap-3 md:grid-cols-2">{boards.map((b) => (
@@ -70,6 +81,7 @@ export default function SeasonsPage() {
           <li key={t.id} className="p-3 flex flex-wrap items-baseline gap-x-4"><Link className="underline" href={`/burnticker/derby/${encodeURIComponent(t.id)}`}>{t.title}</Link><span className="text-xs text-neutral-500">since {new Date(t.createdAt).toISOString().slice(0, 10)}</span></li>
         ))}</ul>}
       </section>
+      </>}
       <p className="text-neutral-500 text-xs">Memecoins. Each rule says what its supply does, not what a price does. Not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );

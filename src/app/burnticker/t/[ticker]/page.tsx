@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HostDiagnostics } from "../../_components/HostDiagnostics";
 import Link from "next/link";
 import { useLaunchAvailability } from "../../_components/useLaunchAvailability";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
@@ -214,7 +215,8 @@ export default function TokenPage() {
       {s.disclosure.eventContract && <p className={card + " border-l-4 border-l-orange-500 text-xs"}>{s.disclosure.eventContract}</p>}
       {/* No burn pool is ever left behind (2026-10-10): the coin's lifecycle line and the fee flow. */}
       <p className="text-xs text-neutral-400">{s.lifecycle ? `${s.lifecycle.line} · ` : ""}creator fees → burn pool → burned; LP locked forever, its fees → 80% burn pool / 20% operator (fixed in code).</p>
-      <footer className="text-xs text-neutral-500">{s.disclosure.disclaimer} Health: {s.health.pending} pending, {s.health.unverified} unverified{s.health.lastError ? ` · last error: ${s.health.lastError}` : ""}.{m?.readAt ? ` Curve read ${m.readAt}.` : ""}{d.stubs.length ? ` On this host: ${d.stubs.join(" · ")}` : ""}</footer>
+      <footer className="text-xs text-neutral-500">{s.disclosure.disclaimer} Health: {s.health.pending} pending, {s.health.unverified} unverified{s.health.lastError ? ` · last error: ${s.health.lastError}` : ""}.{m?.readAt ? ` Curve read ${m.readAt}.` : ""}</footer>
+      <HostDiagnostics stubs={d.stubs} />
     </main>
   );
 }

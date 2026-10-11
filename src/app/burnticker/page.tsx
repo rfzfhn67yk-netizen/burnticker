@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { HostDiagnostics } from "./_components/HostDiagnostics";
 import Link from "next/link";
 import { EmptyState } from "./_components/EmptyState";
 import { CoinCard, ago, type CoinCardData } from "./_components/CoinCard";
@@ -8,6 +9,7 @@ import { useLaunchAvailability } from "./_components/useLaunchAvailability";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { GLOSSARY, NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { Term } from "./_components/Term";
+import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 
 /**
  * THE COINS PAGE (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md): a grid of coin cards like pump.fun / bonk.fun /
@@ -58,6 +60,8 @@ export default function BurntickerIndex() {
   const curveRead = !!ix?.tokens.some((t) => t.progressPct !== null || t.phase !== null);
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
+  // UX report 3 item 3: with no coin and no pair on this host there is nothing to filter — one explanation and one evidence link instead
+  const empty = !!ix && ix.tokens.length === 0 && ix.pairs.length === 0;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-5 space-y-5">
@@ -71,17 +75,25 @@ export default function BurntickerIndex() {
       {!launch.open && <p className="text-sm text-neutral-300" data-launches-closed>{launch.closedLine} {NO_WALLET_LINE}</p>}
       {launch.open && <p className="text-xs text-neutral-500">{NO_WALLET_LINE}</p>}
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+      {!empty && <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div className="bt-tabs" role="tablist" aria-label="Filter coins">
           {TABS.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} title={t.hint} className={`bt-tab${tab === t.id ? " is-active" : ""}`} onClick={() => pick(t.id)}>{t.label}{t.id === "pairs" && ix ? <span className="bt-tab-count">{ix.pairs.length}</span> : null}</button>)}
         </div>
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search coins: name, $TICKER, team, mint…" aria-label="Search coins" className="md:ml-auto w-full md:w-72 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm" />
-      </div>
+      </div>}
 
       {err && <EmptyState kind="unavailable" body="The coin list could not be read just now." details={err} />}
       {!ix && !err && <EmptyState kind="loading" body="Reading the coin list." />}
 
-      {ix && tab !== "pairs" && (
+      {empty && (
+        <EmptyState kind="not-launched" body={<>No coin is registered on this host yet. That is a fact about this host&apos;s coin list; whether the programs are deployed is separate, on the <Link className="underline" href="/burnticker/trust">Trust page</Link>.</>}>
+          <p className="mt-3" data-empty-evidence><Link href={EXPLORE_VERIFIED_BURN.href} className="bt-launch-btn">{EXPLORE_VERIFIED_BURN.label}</Link></p>
+          <p className="mt-2 text-xs text-neutral-500">{EXPLORE_VERIFIED_BURN.blurb}</p>
+          {launch.open && <div className="mt-3"><Link href="/burnticker/launch" className="underline">Launch the first one →</Link></div>}
+        </EmptyState>
+      )}
+
+      {ix && !empty && tab !== "pairs" && (
         coins.length === 0 ? (
           <EmptyState kind={!q && tab === "new" && ix.tokens.length === 0 ? "not-launched" : "no-activity"} body={q ? <>No coin matches “{q}”.</> : tab === "graduating" ? <>No coin is past half its bonding curve.{!curveRead && " Curve progress is not read on this host, so this list stays empty."}</> : tab === "graduated" ? <>No coin has moved to a trading pool yet.</> : tab === "next" ? <>No scheduled result is known for any coin.</> : <>No coin is launched on this host yet.</>}>
             {launch.open && <div className="mt-3"><Link href="/burnticker/launch" className="underline">Launch the first one →</Link></div>}
@@ -93,7 +105,7 @@ export default function BurntickerIndex() {
         )
       )}
 
-      {ix && tab === "pairs" && (
+      {ix && !empty && tab === "pairs" && (
         pairs.length === 0 ? <EmptyState kind={ix.tokens.length === 0 ? "not-launched" : "no-activity"} body="No rivalry pair is launched on this host yet.">{launch.open && <p className="mt-2"><Link className="underline" href="/burnticker/launch?pair=1">Launch a pair →</Link></p>}</EmptyState> : (
           <div className="grid gap-3 md:grid-cols-2">
             {pairs.map((p) => (
@@ -111,14 +123,15 @@ export default function BurntickerIndex() {
         )
       )}
 
-      {ix && (
+      {ix && !empty && (
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4 pt-2" aria-label="Platform totals">
           {[["Live coins", String(ix.totals.live)], ["Burns", String(ix.totals.burns)], ["Tokens burned", fmt(ix.totals.burnedTokens)], ["Public audit", audit.text]].map(([k, v]) => (
             <div key={k} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3"><div className="text-xs text-neutral-400">{k}</div><div className={`${k === "Public audit" && audit.tone === "muted" ? "text-sm" : "text-lg"} font-semibold ${k === "Public audit" ? (audit.tone === "ok" ? "text-emerald-400" : audit.tone === "bad" ? "text-red-400" : "text-neutral-400") : ""}`}>{v}</div>{k === "Public audit" && audit.sub && <div className="text-xs text-neutral-500">{audit.sub}</div>}</div>
           ))}
         </section>
       )}
-      {ix && <p className="text-xs text-neutral-500">{ix.cluster} · {ix.stubs.length ? `On this host: ${ix.stubs.join(" · ")}` : ""} <Link className="underline" href="/burnticker/trust">What the operator can and cannot do</Link></p>}
+      {ix && <p className="text-xs text-neutral-500">This host reads {ix.cluster}. <Link className="underline" href="/burnticker/trust">What the operator can and cannot do</Link></p>}
+      {ix && <HostDiagnostics stubs={ix.stubs} />}
       <p className="text-xs text-neutral-500">A memecoin. The rule says what the supply does, not what the price does. Nobody is promised anything.</p>
     </main>
   );

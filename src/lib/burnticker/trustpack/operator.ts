@@ -106,7 +106,7 @@ export function signedMessageView(cfg: OperatorConfig): SignedMessageView {
   const s = cfg.signedMessage;
   const signer = walletOf(cfg, s.cluster, s.signerRole);
   const message = s.message.replace("{PUBKEY}", signer ?? "{PUBKEY}");
-  if (!s.signature || TODO_RE.test(s.status) || !signer) return { status: "todo", signer, message, signature: null, verified: null, how: s.how, detail: `${s.status}: not signed yet (${signer ? "signature missing" : `the ${s.cluster} ${s.signerRole} wallet does not exist yet`})` };
+  if (!s.signature || TODO_RE.test(s.status) || !signer) return { status: "todo", signer, message, signature: null, verified: null, how: s.how, detail: signer ? `${s.cluster} ${s.signerRole} address configured; statement not signed` : `${s.cluster} ${s.signerRole} address not configured; statement not signed` };
   const ok = /\{DATE\}/.test(message) ? false : verifySignedMessage(message, s.signature, signer);
   return { status: ok ? "signed" : "invalid", signer, message, signature: s.signature, verified: ok, how: s.how, detail: ok ? `ed25519 signature by ${signer} over the exact text above: valid` : "the signature does not verify against the text and the signer (or {DATE} is still unfilled)" };
 }

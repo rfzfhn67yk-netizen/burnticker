@@ -3,6 +3,8 @@ import path from "node:path";
 import { b58encode, base64ToBytes } from "@/lib/burnticker/trustpack/base58";
 import { jsonRpc, PUBLIC_RPC, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
 import { CURRENT_STATUS_FILE, readStatusFile } from "@/lib/burnticker/deficitPrelaunch";
+import type { AuthoritySource } from "@/lib/burnticker/currentStatusText";
+export { upgradeAuthorityText, type AuthoritySource } from "@/lib/burnticker/currentStatusText";
 
 /**
  * ONE AUTHORITATIVE CURRENT STATUS (website brief 2026-10-11 §4). Every repeated "what is true now" claim on the homepage, the trust,
@@ -36,7 +38,13 @@ export function decodeSquadsMultisig(d: Uint8Array): SquadsRead | null {
 }
 /** Upgradeable-loader Program account → its ProgramData address; ProgramData → the upgrade authority (null = none). */
 export const programDataOf = (d: Uint8Array): string | null => (d.length >= 36 && d[0] === 2 ? b58encode(d.subarray(4, 36)) : null);
-export const upgradeAuthorityOf = (d: Uint8Array): string | null | undefined => (d.length >= 13 && d[0] === 3 ? (d[12] === 1 && d.length >= 45 ? b58encode(d.subarray(13, 45)) : null) : undefined);
+/** undefined = not decodable (wrong type, truncated, an option tag other than 0/1, or Some with its key cut off) — never read as "none". */
+export const upgradeAuthorityOf = (d: Uint8Array): string | null | undefined => {
+  if (d.length < 13 || d[0] !== 3) return undefined;
+  if (d[12] === 0) return null;
+  if (d[12] === 1 && d.length >= 45) return b58encode(d.subarray(13, 45));
+  return undefined;
+};
 
 export const fmtSecs = (s: number): string => (s === 0 ? "0 (none)" : s % 3600 === 0 ? `${s / 3600} h` : s % 60 === 0 ? `${s / 60} min` : `${s} s`);
 
@@ -45,7 +53,14 @@ async function accounts(rpc: Rpc, keys: string[]): Promise<(Acct | null)[]> {
   return (await rpc.call<{ value: (Acct | null)[] }>("getMultipleAccounts", [keys, { encoding: "base64", commitment: "confirmed" }])).value;
 }
 
-export interface ChainFacts { cluster: Cluster; readAt: string; error: string | null; squads: SquadsRead | null; programs: Record<string, { deployed: boolean; upgradeAuthority: string | null }> }
+/**
+ * One program's upgrade-authority read (F1, 2026-10-11). "decoded" means the ProgramData account was fetched, owned by the upgradeable
+ * loader and decoded — only then does `upgradeAuthority: null` mean "no upgrade authority". A failed, partial or malformed read is
+ * "unavailable" and its `upgradeAuthority` carries no meaning.
+ */
+export type AuthorityRead = "decoded" | "unavailable";
+export interface ProgramRead { deployed: boolean; upgradeAuthority: string | null; authorityRead: AuthorityRead }
+export interface ChainFacts { cluster: Cluster; readAt: string; error: string | null; squads: SquadsRead | null; programs: Record<string, ProgramRead> }
 
 export async function readChainFacts(cluster: Cluster, rpc: Rpc, multisig: string | null, programIds: string[], now = Date.now()): Promise<ChainFacts> {
   const out: ChainFacts = { cluster, readAt: new Date(now).toISOString(), error: null, squads: null, programs: {} };
@@ -55,10 +70,15 @@ export async function readChainFacts(cluster: Cluster, rpc: Rpc, multisig: strin
     if (multisig) { const m = a[0]; out.squads = m && m.owner === SQUADS_PROGRAM ? decodeSquadsMultisig(base64ToBytes(m.data[0])) : null; }
     const progs = a.slice(multisig ? 1 : 0);
     const pd: { id: string; pd: string }[] = [];
-    programIds.forEach((id, i) => { const p = progs[i]; const x = p && p.owner === UPGRADEABLE_LOADER ? programDataOf(base64ToBytes(p.data[0])) : null; out.programs[id] = { deployed: !!x, upgradeAuthority: null }; if (x) pd.push({ id, pd: x }); });
+    programIds.forEach((id, i) => { const p = progs[i]; const x = p && p.owner === UPGRADEABLE_LOADER ? programDataOf(base64ToBytes(p.data[0])) : null; out.programs[id] = { deployed: !!x, upgradeAuthority: null, authorityRead: "unavailable" }; if (x) pd.push({ id, pd: x }); });
     if (pd.length) {
       const b = await accounts(rpc, pd.map((x) => x.pd));
-      pd.forEach((x, i) => { const acc = b[i]; const auth = acc ? upgradeAuthorityOf(base64ToBytes(acc.data[0])) : undefined; out.programs[x.id].upgradeAuthority = auth ?? null; });
+      pd.forEach((x, i) => {
+        const acc = b?.[i];
+        // a missing account, a foreign owner or bytes that do not decode stay "unavailable" — never read as "no upgrade authority"
+        const auth = acc && acc.owner === UPGRADEABLE_LOADER && Array.isArray(acc.data) ? upgradeAuthorityOf(base64ToBytes(acc.data[0])) : undefined;
+        if (auth !== undefined) out.programs[x.id] = { deployed: true, upgradeAuthority: auth, authorityRead: "decoded" };
+      });
     }
   } catch (e) { out.error = (e as Error).message.slice(0, 200); }
   return out;
@@ -79,7 +99,7 @@ interface StatusFileFull {
   design: string[]; historical: { label: string; path: string }[];
   deficit: { firstBurnPath: { doc: string; line: string } };
 }
-interface VerifiedBuild { kind: string; programs: { library: string; programId: string; builds: Record<Cluster, { hash: string }>; deployed: Record<Cluster, { hash: string; matchesBuild: boolean; upgradeAuthority: string } | null> }[] }
+interface VerifiedBuild { kind: string; programs: { library: string; programId: string; builds: Record<Cluster, { hash: string }>; deployed: Record<Cluster, { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string } | null> }[] }
 interface OperatorFile { clusters: Record<Cluster, { squads: { vault: string; multisig: string; threshold: string } }> }
 
 export interface CurrentStatus {
@@ -87,13 +107,34 @@ export interface CurrentStatus {
   phase: { label: string; line: string };
   host: { cluster: string; programIdWired: boolean; creatorLaunchesOpen: boolean; line: string };
   networks: { cluster: Cluster; role: string; deployment: string; since: string | null }[];
-  programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: "chain" | "verified-build" }; mainnet: { deployed: boolean; line: string } }[];
+  programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt: string | null; recordedUpgradeAuthority: string | null }; mainnet: { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string } }[];
   upgradeAuthority: { cluster: Cluster; vault: string; multisig: string; threshold: string; members: number | null; timeLockSecs: number | null; timeLockSource: "chain" | "unavailable"; plannedTimeLockSecs: number; plannedFrom: string | null; why: string; line: string }[];
   attesters: StatusFileFull["attesters"]; settlement: StatusFileFull["settlement"]; reviews: StatusFileFull["reviews"];
   releaseRequirements: StatusFileFull["releaseRequirements"]; design: string[]; historical: StatusFileFull["historical"];
   /** the $DEFICIT prerequisite chain (docs/burnticker/FIRST-BURN-PATH.md) and its one line */
   firstBurnPath: { doc: string; line: string };
   lines: string[];
+}
+
+/** A program's devnet authority from the live read (when one was made) or the verified-build record. */
+export function devnetAuthority(live: ProgramRead | undefined, recorded: string | null | undefined, readFailed = false): { upgradeAuthority: string | null; authoritySource: AuthoritySource } {
+  if (live?.deployed) return live.authorityRead === "decoded" ? { upgradeAuthority: live.upgradeAuthority, authoritySource: "chain" } : { upgradeAuthority: null, authoritySource: "unavailable" };
+  // a live read was made and did not reach this program: unavailable (the dated verified-build record is still shown beside it)
+  if (readFailed) return { upgradeAuthority: null, authoritySource: "unavailable" };
+  return { upgradeAuthority: recorded ?? null, authoritySource: "verified-build" };
+}
+
+/**
+ * A program's mainnet deployment as a known/unknown state (F1's second instance): "deployed" from the verified-build record or a
+ * successful chain read; "not deployed" only when the read succeeded (or no read was made and the record says so); "unknown" when a
+ * read was made and failed before it reached this program.
+ */
+export function mainnetDeployment(recorded: boolean, facts: ChainFacts | undefined, programId: string): { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string } {
+  const live = facts?.programs[programId];
+  if (recorded || live?.deployed) return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: "deployed on mainnet" };
+  if (live) return { deployed: false, source: "chain", line: "not deployed on mainnet yet" };
+  if (facts) return { deployed: null, source: "unavailable", line: "mainnet deployment unknown (the chain read failed)" };
+  return { deployed: false, source: "verified-build", line: "not deployed on mainnet yet" };
 }
 
 const isKey = (s: string): boolean => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
@@ -117,12 +158,11 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   const programs = vb.programs.map((p) => {
     const meta = st.programs.find((x) => x.name === p.library) ?? { version: "—", note: "" };
     const dev = p.deployed.devnet, liveDev = i.chain.devnet?.programs[p.programId];
-    const liveMain = i.chain.mainnet?.programs[p.programId];
-    const mainDeployed = !!p.deployed.mainnet || !!liveMain?.deployed;
+    const devReadFailed = !!i.chain.devnet && !liveDev;
     return {
       name: p.library, programId: p.programId, version: meta.version, note: meta.note, verifiedBuild: vb.kind,
-      devnet: { deployed: liveDev ? liveDev.deployed : !!dev, matchesBuild: dev ? dev.matchesBuild : null, upgradeAuthority: liveDev?.deployed ? liveDev.upgradeAuthority : dev?.upgradeAuthority ?? null, authoritySource: (liveDev?.deployed ? "chain" : "verified-build") as "chain" | "verified-build" },
-      mainnet: { deployed: mainDeployed, line: mainDeployed ? "deployed on mainnet" : "not deployed on mainnet yet" },
+      devnet: { deployed: liveDev ? liveDev.deployed : !!dev, matchesBuild: dev ? dev.matchesBuild : null, ...devnetAuthority(liveDev, dev?.upgradeAuthority, devReadFailed), recordedAt: dev?.readAt ?? null, recordedUpgradeAuthority: dev?.upgradeAuthority ?? null },
+      mainnet: mainnetDeployment(!!p.deployed.mainnet, i.chain.mainnet, p.programId),
     };
   });
   const upgradeAuthority = (["mainnet", "devnet"] as Cluster[]).map((c) => {
@@ -131,20 +171,21 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   });
   const mainTL = upgradeAuthority.find((u) => u.cluster === "mainnet")!;
   const releaseRequirements = st.releaseRequirements.map((r) => (r.derivedFromChain === "mainnet-time-lock" && mainTL.timeLockSecs !== null ? { ...r, status: (mainTL.timeLockSecs >= mainTL.plannedTimeLockSecs ? "done" : "open") as "open" | "done" } : r));
-  const anyMain = programs.some((p) => p.mainnet.deployed);
+  const anyMain = programs.some((p) => p.mainnet.deployed === true), mainUnknown = !anyMain && programs.some((p) => p.mainnet.deployed === null);
   const lines = [
     st.phase.line,
     st.deficit.firstBurnPath.line,
     `Programs: ${programs.map((p) => `${p.name} ${p.devnet.deployed ? "deployed on devnet" : "not on devnet"}${p.devnet.matchesBuild ? " (bytes match this repository's build)" : ""}, ${p.mainnet.line}`).join("; ")}.`,
     `Signing: ${st.attesters.line}`,
     `Upgrades: the 2-of-3 Squads vault holds the upgrade authority. ${mainTL.line}`,
+    "Money: the operator earns 25 bps of curve volume and 20% of post-graduation LP SOL fees; the other 80% of those SOL fees and the token side go to each coin's burn pool. Creators take no cash from fees.",
     `Reviews: no security firm audit; ${st.reviews.reduce((n, r) => n + r.findings.filter((f) => /not done|not re-checked/.test(f.recheck)).length, 0)} fixed findings still wait for an independent re-check.`,
-    `Open before release: ${releaseRequirements.filter((r) => r.status === "open").length} requirement(s)${anyMain ? "" : ", starting with the mainnet deployment"}.`,
+    `Open before release: ${releaseRequirements.filter((r) => r.status === "open").length} requirement(s)${anyMain || mainUnknown ? "" : ", starting with the mainnet deployment"}.`,
   ];
   const readAt = Object.values(i.chain).map((c) => c?.readAt).filter(Boolean).sort().pop() ?? new Date(now).toISOString();
   return {
     schema: "burnticker.current-status/v1", checkedAt: st.checkedAt, readAt, source: CURRENT_STATUS_FILE, phase: st.phase, host,
-    networks: (["devnet", "mainnet"] as Cluster[]).map((c) => ({ cluster: c, role: st.networks[c].role, deployment: c === "mainnet" && anyMain ? "deployed" : st.networks[c].deployment, since: st.networks[c].since })),
+    networks: (["devnet", "mainnet"] as Cluster[]).map((c) => ({ cluster: c, role: st.networks[c].role, deployment: c === "mainnet" && anyMain ? "deployed" : c === "mainnet" && mainUnknown ? "unknown (the chain read failed)" : st.networks[c].deployment, since: st.networks[c].since })),
     programs, upgradeAuthority, attesters: st.attesters, settlement: st.settlement, reviews: st.reviews, releaseRequirements, design: st.design, historical: st.historical, firstBurnPath: st.deficit.firstBurnPath, lines,
   };
 }

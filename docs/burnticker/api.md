@@ -243,7 +243,7 @@ history) still parse, and `lp.lastClaim.line` names any operator amount still ow
 ## Winner takes the burn (API 1.10.0)
 
 Rivalry pairs since 2026-10-11 (owner decision, LAUNCHPAD-PATH §40): fees from both coins burn the winner's supply — at each result the
-losing coin's fuel moves to the winning coin's burn pool (`forward_to_winner`); nobody is paid and the loser's supply is untouched. All
+losing coin's fuel moves to the winning coin's burn pool (`forward_to_winner`); nothing is paid to holders and the loser's supply is untouched. All
 additions, nothing removed:
 
 - `Receipt.status` may be `forwarded` (this coin lost the period; `spent` is the SOL moved; nothing of this coin was bought or burned),
@@ -282,3 +282,8 @@ Burnticker that is the operator's keeper alone at quorum 1." Errors 6094–6099 
 `GET /current-status` is the single source every page uses for "what is true now" (`config/burnticker/current-status.json` joined with
 `config/burnticker/verified-build.json`, `config/burnticker/operator.json`, the host's environment and live chain reads, cached five
 minutes). A chain read that fails reports `timeLockSource: "unavailable"`, never a guessed value.
+The same rule holds per program (code review 3, F1, 2026-10-11): `devnet.authoritySource` is `chain` only when the ProgramData account was
+read and decoded — then, and only then, a null `upgradeAuthority` means no upgrade authority — `unavailable` when the read failed, came back
+partial or did not decode (the dated `verified-build.json` record is carried beside it as `recordedUpgradeAuthority` / `recordedAt`), and
+`verified-build` when no live read was made. `mainnet.deployed` is `true`, `false` or `null` (`source: "unavailable"`, line "mainnet
+deployment unknown (the chain read failed)") — a failed lookup never reads as "not deployed".

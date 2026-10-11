@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { checkReceiptTx, jsonRpc, PUBLIC_RPC, type ReceiptCheckResult } from "@/lib/burnticker/trustpack/receiptCheck";
 import { CHECK_COPY } from "@/lib/burnticker/trustpack/copy";
 import { verdictOf, type CheckStatus } from "@/lib/burnticker/verificationStatus";
+import { EmptyState } from "../_components/EmptyState";
 
 /**
  * THE RECEIPT VERIFIER, IN THE VISITOR'S BROWSER (trust pack, 2026-10-10). The sample list and the rules texts come from our API
@@ -25,8 +26,10 @@ export default function ReceiptVerifier({ card }: { card: string }) {
   const [res, setRes] = useState<ReceiptCheckResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
+  const [wantDemo, setWantDemo] = useState(false);
   // website brief §5: /burnticker/check?demo=1 pre-selects the featured devnet receipt (current-status.json `demo`) and runs the check
   useEffect(() => { fetch("/api/burnticker/v1/check/receipts").then((r) => r.json()).then((j: Samples) => { setSamples(j); const want = new URLSearchParams(window.location.search).get("demo") === "1"; const f = j.featured && j.receipts.some((r) => r.signature === j.featured) ? j.featured : j.receipts[0]?.signature; if (f) setSig(f); if (want && f) setDemo(true); }).catch((e) => setErr(String(e))); }, []);
+  useEffect(() => { setWantDemo(new URLSearchParams(window.location.search).get("demo") === "1"); }, []);
   useEffect(() => { if (demo && sig && samples && !busy && !res) { setDemo(false); void run(); } }, [demo, sig, samples]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function run() {
@@ -45,25 +48,12 @@ export default function ReceiptVerifier({ card }: { card: string }) {
   }
 
   return (
-    <section className={card} id="verify">
+    // UX report 3 item 7: the example's outcome and its three evidence layers come first; the signature, receipt picker and RPC fields
+    // sit under "Check another receipt". scroll-mt clears the sticky mobile header when /check?demo=1#verify lands here.
+    <section className={`${card} scroll-mt-24`} id="verify">
       <h2 className="font-medium">{CHECK_COPY.verifierTitle}</h2>
-      <p className="text-xs text-neutral-300">{CHECK_COPY.verifierIntro}</p>
-      <div className="mt-2 grid gap-2 text-xs">
-        <label className="grid gap-1"><span className="text-neutral-400">Devnet receipt</span>
-          <select className="rounded border border-neutral-700 bg-neutral-950 p-2" value={samples?.receipts.some((r) => r.signature === sig) ? sig : ""} onChange={(e) => setSig(e.target.value)}>
-            <option value="">— paste a signature below —</option>
-            {samples?.receipts.map((r) => <option key={r.signature} value={r.signature}>${r.ticker} · reading {r.recordDate} · {r.units} unit(s) · {r.status}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1"><span className="text-neutral-400">Transaction signature</span>
-          <input className="rounded border border-neutral-700 bg-neutral-950 p-2 font-mono break-all" value={sig} onChange={(e) => setSig(e.target.value)} spellCheck={false} placeholder="88 base58 characters" />
-        </label>
-        <label className="grid gap-1"><span className="text-neutral-400">RPC endpoint (any devnet RPC you trust)</span>
-          <input className="rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
-        </label>
-        <div><button type="button" disabled={busy || !sig.trim()} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
-        <p className="text-neutral-500">{CHECK_COPY.verifierPrivacy} {CHECK_COPY.verifierScope}</p>
-      </div>
+      <p className="text-xs text-neutral-300">{wantDemo ? CHECK_COPY.verifierDemoIntro : CHECK_COPY.verifierIntro}</p>
+      {wantDemo && !res && !err && <div className="mt-3" data-verdict="checking"><EmptyState compact kind="loading" body="Checking the featured devnet receipt in this browser." /></div>}
       {err && <p className="mt-2 text-xs text-amber-300">Could not check: {err}. This is not evidence that the receipt is invalid; try again or use another RPC.</p>}
       {res && (() => { const v = verdictOf(res.checks); return (
         <div className="mt-3 text-xs" data-verdict={v.verdict}>
@@ -77,6 +67,26 @@ export default function ReceiptVerifier({ card }: { card: string }) {
             <p className="mt-1 text-neutral-500 break-all">Reading <code>{res.facts.readingAddress ?? "—"}</code> · TokenConfig <code>{res.facts.configAddress ?? "—"}</code> · mint <code>{res.facts.mint ?? "—"}</code>{res.facts.sourceUrl && <> · source <a className="underline break-all" href={res.facts.sourceUrl} target="_blank" rel="noreferrer">{res.facts.recordDate}</a> / <a className="underline" href={res.facts.prevSourceUrl ?? "#"} target="_blank" rel="noreferrer">{res.facts.prevDate}</a></>}</p>
           </details>
         </div>); })()}
+      <p className="mt-2 text-xs text-neutral-500" data-signer-caveat>{CHECK_COPY.verifierCaveat}</p>
+      <details className="mt-3" open={!wantDemo} data-check-another>
+        <summary className="cursor-pointer text-xs text-neutral-300">{CHECK_COPY.checkAnotherTitle}</summary>
+        <div className="mt-2 grid gap-2 text-xs">
+          <label className="grid gap-1"><span className="text-neutral-400">Devnet receipt</span>
+            <select className="rounded border border-neutral-700 bg-neutral-950 p-2" value={samples?.receipts.some((r) => r.signature === sig) ? sig : ""} onChange={(e) => setSig(e.target.value)}>
+              <option value="">— paste a signature below —</option>
+              {samples?.receipts.map((r) => <option key={r.signature} value={r.signature}>${r.ticker} · reading {r.recordDate} · {r.units} unit(s) · {r.status}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1"><span className="text-neutral-400">Transaction signature</span>
+            <input className="rounded border border-neutral-700 bg-neutral-950 p-2 font-mono break-all" value={sig} onChange={(e) => setSig(e.target.value)} spellCheck={false} placeholder="88 base58 characters" />
+          </label>
+          <label className="grid gap-1"><span className="text-neutral-400">RPC endpoint (any devnet RPC you trust)</span>
+            <input className="rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
+          </label>
+          <div><button type="button" disabled={busy || !sig.trim()} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
+          <p className="text-neutral-500">{CHECK_COPY.verifierPrivacy} {CHECK_COPY.verifierScope}</p>
+        </div>
+      </details>
     </section>
   );
 }

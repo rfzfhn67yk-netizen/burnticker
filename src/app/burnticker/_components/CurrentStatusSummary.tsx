@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CurrentStatus } from "@/lib/burnticker/currentStatus";
+import { upgradeAuthorityText } from "@/lib/burnticker/currentStatusText";
 import { EmptyState } from "./EmptyState";
 
 /**
@@ -22,7 +23,7 @@ export function CurrentStatusSummary({ card }: { card: string }) {
       <ul className="mt-1 list-disc pl-5 text-xs text-neutral-200 space-y-0.5">{s.lines.map((l) => <li key={l}>{l}</li>)}</ul>
       <p className="mt-1 text-xs text-neutral-500">{s.host.line}</p>
       <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">Deployed: programs and upgrade authority</summary>
-        <ul className="mt-1 space-y-1">{s.programs.map((p) => <li key={p.name}><code>{p.name}</code> <code className="text-neutral-500 break-all">{p.programId}</code> · {p.version} · devnet: {p.devnet.deployed ? `deployed${p.devnet.matchesBuild ? ", bytes = build" : ""}, upgrade authority ${p.devnet.upgradeAuthority ?? "none"} (${p.devnet.authoritySource})` : "not deployed"} · {p.mainnet.line}</li>)}</ul>
+        <ul className="mt-1 space-y-1">{s.programs.map((p) => <li key={p.name}><code>{p.name}</code> <code className="text-neutral-500 break-all">{p.programId}</code> · {p.version} · devnet: {p.devnet.deployed ? `deployed${p.devnet.matchesBuild ? ", bytes = build" : ""}, ${upgradeAuthorityText(p.devnet)}` : "not deployed"} · {p.mainnet.line}</li>)}</ul>
         <ul className="mt-1 space-y-1">{s.upgradeAuthority.map((u) => <li key={u.cluster}>{u.line} Vault <code className="break-all">{u.vault}</code>, {u.threshold}. <span className="text-neutral-500">{u.why}</span></li>)}</ul>
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">Settlement providers ({s.settlement.length})</summary>

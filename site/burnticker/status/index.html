@@ -121,7 +121,7 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
       </div></div>
     </div>
     <div>
-      <div class="panel"><h3>Current status</h3><div class="cs" data-current-status aria-live="polite"><p class="cs-head">Loading</p><p>Reading the current status.</p></div></div>
+      <div class="panel"><h3>Current status</h3><div class="cs" data-current-status aria-live="polite"><p class="cs-head">Loading</p><p>Reading the current status.</p></div><p class="small muted" data-config-scope>This summary is the deployment and configuration record. It is separate from the automation data below and does not show whether burns are being processed now.</p></div>
       <div class="panel"><h3>Sources</h3><div class="scroll"><table class="t" id="feeds"><thead><tr><th>Selector</th><th>Coins</th><th>State</th><th>Last good read</th><th>Cross-read</th><th>Newest reading</th></tr></thead><tbody></tbody></table></div><p class="small muted" id="feeds-note"></p></div>
       <div class="panel"><h3>Open alerts (24 h)</h3><p id="alerts"></p></div>
       <div class="panel"><h3>Wind-downs and retired coins</h3><div id="ends"></div></div>
@@ -217,11 +217,25 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
     if (k.takeover) kp.appendChild(el("p", { class: "mono small", text: "Takeover note: " + k.takeover.at + " by host " + k.takeover.by + ", signed by " + k.takeover.signer.slice(0, 8) + "… — " + k.takeover.reason }));
     $("loadnote").textContent = "status.json written " + ago(Date.parse(s.generatedAt), now) + " (" + s.generatedAt + ")";
   };
+  // UX report 3 items 4/8: a missing status.json is MISSING evidence — every group it feeds says "unavailable", never an empty table
+  // or "none" that could read as zero problems. The current-status summary is separate and does not show whether burns are processed.
+  window.renderUnavailable = function (why) {
+    var n = $("loadnote"); n.className = "small err";
+    n.textContent = "Current automation data could not be read (status.json: " + why + "). The current-status summary is separate and does not establish whether burns are being processed now.";
+    $("slip-sub").textContent = "STATUS RECEIPT · UNAVAILABLE";
+    var rows = $("slip-rows"); rows.textContent = ""; ["heartbeat", "cranks", "sources", "open alerts"].forEach(function (l) { rows.appendChild(row(l, "unavailable")); });
+    var say = "unavailable: status.json could not be read";
+    var tb = $("feeds").querySelector("tbody"); tb.textContent = ""; tb.appendChild(el("tr", null, [el("td", { colspan: "6", text: say })]));
+    $("feeds-note").textContent = "";
+    $("alerts").textContent = say; $("ends").textContent = say; $("snapshot").textContent = say; $("keepers").textContent = say;
+    var pt = $("programs").querySelector("tbody"); pt.textContent = ""; pt.appendChild(el("tr", null, [el("td", { colspan: "4", text: say + " (the current-status summary lists the programs)" })]));
+    document.documentElement.setAttribute("data-status-feed", "unavailable");
+  };
   if (document.currentScript && document.currentScript.dataset.noFetch === "1") return;
   fetch("status.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (s) {
     if (s.schema !== "burnticker.ops-status/v1") throw new Error("not a status document");
     window.renderStatus(s);
-  }).catch(function (e) { var n = $("loadnote"); n.className = "small err"; n.textContent = "status.json could not be read (" + e.message + "). Current automation status is unavailable."; });
+  }).catch(function (e) { window.renderUnavailable(e && e.message || String(e)); });
 })();
 </script>
 </body>

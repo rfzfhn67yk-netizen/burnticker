@@ -227,7 +227,7 @@ export const SCHEMAS: Record<string, Schema> = {
   PairForward: obj({
     recordDate: str, from: { ...str, description: "the losing coin's ticker" }, to: { ...str, description: "the winning coin's ticker" }, fromMint: PUBKEY, toMint: PUBKEY,
     sol: { ...str, description: "SOL moved from the loser's burn pool to the winner's (the program's amount: buyback_spend of the loser's pool at its units and fraction)" }, units: int, signature: str, txUrl: nstr,
-  }, ["recordDate", "from", "to", "sol", "signature"], { description: "Since 1.10.0 (winner takes the burn): one forward_to_winner. Nobody is paid; the loser's supply is untouched." }),
+  }, ["recordDate", "from", "to", "sol", "signature"], { description: "Since 1.10.0 (winner takes the burn): one forward_to_winner. Nothing is paid to holders; the loser's supply is untouched." }),
   PairInfo: obj({
     pairId: str, side: { enum: ["A", "B"] }, counterpart: { type: "object" }, clause: { anyOf: [{ type: "object" }, { type: "null" }] },
     winnerTakesBurn: { ...bool, description: "since 1.10.0: fees from both coins burn the winner's supply (the coin whose rule a result fires); false for pairs made before 2026-10-11" },

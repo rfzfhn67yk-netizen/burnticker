@@ -31,6 +31,10 @@ const flowTone: Record<string, string> = { none: "text-neutral-500", rent: "text
 export default function CheckPage() {
   const [c, setC] = useState<Check | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // UX report 3 item 7: /check?demo=1#verify puts the verifier first, under the header, so the checklist loading above it cannot push
+  // the anchored result off screen; without ?demo=1 it stays after the checklist. null until the URL is read (no double mount).
+  const [verifierAt, setVerifierAt] = useState<"top" | "bottom" | null>(null);
+  useEffect(() => { setVerifierAt(new URLSearchParams(window.location.search).get("demo") === "1" ? "top" : "bottom"); }, []);
   useEffect(() => { fetch("/api/burnticker/v1/check").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setC(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
@@ -40,6 +44,7 @@ export default function CheckPage() {
         <p className="text-neutral-300">{CHECK_COPY.intro}</p>
         <p className="text-xs text-neutral-500 mt-1"><a className="underline" href="#money">{CHECK_COPY.moneyTitle}</a> · <a className="underline" href="#powers">{CHECK_COPY.powersTitle}</a> · <a className="underline" href="#locked">{CHECK_COPY.lockedTitle}</a> · <a className="underline" href="#not-done">{CHECK_COPY.notDoneTitle}</a> · <a className="underline" href="#build">{CHECK_COPY.buildTitle}</a> · <a className="underline" href="#verify">{CHECK_COPY.verifierTitle}</a></p>
       </header>
+      {verifierAt === "top" && <ReceiptVerifier card={card} />}
       {err && <EmptyState kind="unavailable" body="The checklist could not be read just now." details={err} />}
       {!c && !err && <EmptyState kind="loading" />}
       {c && <>
@@ -83,7 +88,7 @@ export default function CheckPage() {
           <p className="text-xs text-neutral-500 mt-1">Reproduce: <code>bash scripts/ops/verified-build.sh --local</code> (or <code>--docker</code> on Linux), then <code>--onchain devnet</code>. Steps: docs/burnticker/VERIFIED-BUILD.md.</p>
         </section>
       </>}
-      <ReceiptVerifier card={card} />
+      {verifierAt === "bottom" && <ReceiptVerifier card={card} />}
       <BurnMath />
       <p className="text-xs text-neutral-400">The verifier refuses a transaction for a mint the burn_receipts program does not know. To ask about a mint itself — is it a Burnticker coin at all — use <a className="underline" href="/burnticker/verify">Verify a mint</a>; lookalikes are listed on <a className="underline" href="/burnticker/not-burnticker">Not Burnticker</a>.</p>
       <p className="text-xs text-neutral-500">JSON: <code>/api/burnticker/v1/check</code> · <code>/api/burnticker/v1/check/receipts</code> · <code>/api/burnticker/v1/check/receipts/&lt;signature&gt;</code> · doc: docs/burnticker/CHECK-THIS-YOURSELF.md</p>

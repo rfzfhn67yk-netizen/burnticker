@@ -54,7 +54,7 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     sourceUrl: `https://www.thesportsdb.com/`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
     unit: { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
-    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial licence) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent operators must read every game and agree"],
+    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial licence) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent sources must read every game and agree (a source check; one operator attester signs the reading)"],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",
     settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps()),
     preflight: async (nowMs) => {

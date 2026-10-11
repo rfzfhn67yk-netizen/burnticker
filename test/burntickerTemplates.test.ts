@@ -43,7 +43,7 @@ describe("review 2 F6 — one factual pair sentence, checked against the engine"
     const w = pairWinnerOf(sides.a, sides.b, "yes")!;
     assert.deepEqual([w.winner.ticker, w.loser.ticker], ["CHIEFS", "BRONCOS"]);
     const named = pairResultSentence(sides.a, sides.b, "yes");
-    assert.equal(named, "Winner takes the burn: fees from both coins burn $CHIEFS, the coin whose rule the result fires (the winner); $BRONCOS's share goes to $CHIEFS's burn pool, never to a holder.");
+    assert.equal(named, "This result fires $CHIEFS's rule: eligible fees from both coins fund $CHIEFS's burn, and $BRONCOS's share for it moves to $CHIEFS's burn pool. Nothing is paid to holders.");
     assert.deepEqual(lint(named), []);
     // the engine: run the keeper over the settled games and read the roles and the forward it recorded for that game
     const table = { [settledMarketsUrl("KXNFLGAME")]: fx("kalshi/KXNFLGAME.settled.json"), [seriesApiUrl("KXNFLGAME")]: fx("kalshi/series.KXNFLGAME.json"), [openMarketsUrl("KXNFLGAME")]: { cursor: "", markets: [] } };

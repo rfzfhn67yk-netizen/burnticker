@@ -23,7 +23,7 @@ export function v1ListDerby(p: Platform, now = Date.now()): ApiResult {
     const j = derbyPairJson(p.registry, pr, p.registry.receipts(pr.mintA).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units })), p.registry.receipts(pr.mintB).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units })), now);
     return { pairId: pr.pairId, a: a?.ticker ?? pr.mintA, b: b?.ticker ?? pr.mintB, series: pr.selectorKey.replace(/^derby:/, ""), selector: j?.selector ?? "coinvs", season: j ? { start: j.season.start, days: j.season.days, endsOn: j.season.endsOn } : { start: "", days: 0, endsOn: "" }, score: j ? { a: j.score.a, b: j.score.b, ties: j.score.ties } : { a: 0, b: 0, ties: 0 }, page: `/burnticker/p/${pr.pairId}` };
   });
-  return ok({ tournaments: tournamentSummaries(p.registry, now), pairs, note: "Burn Derby: the winner's coin burns each window; readings from Pyth (Solana accounts, or Hermes with a key) or a pool TWAP, cross-checked by an independent operator — a disagreement withholds the window (no reading, no burn)" });
+  return ok({ tournaments: tournamentSummaries(p.registry, now), pairs, note: "Burn Derby: the winner's coin burns each window; readings from Pyth (Solana accounts, or Hermes with a key) or a pool TWAP, cross-checked against a second data publisher (one operator attester signs every reading) — a disagreement withholds the window (no reading, no burn)" });
 }
 
 /** A derby pair's block + the latest decided day's post (the pair page and GET /derby/{id} share it). */

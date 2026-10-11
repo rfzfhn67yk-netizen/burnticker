@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HostDiagnostics } from "../_components/HostDiagnostics";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
 import { TermNote } from "../_components/Term";
@@ -31,10 +32,17 @@ export default function TrustPage() {
   const sol = (l: string) => (Number(l) / 1e9).toFixed(4);
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
-      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold">Trust</h1><p className="text-neutral-400 text-xs">What the operator can and cannot do, read from the chain and the config where it can be; placeholders say so. Generated {t.generatedAt} · {t.cluster} · RPC {t.rpcConfigured ? "configured" : "not configured on this host"}.</p><div className="mt-2"><TermNote ids={["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"]} /></div></header>
+      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold">Trust</h1><p className="text-neutral-400 text-xs">What the operator can and cannot do, read from the chain and the config where it can be; placeholders say so. Generated {t.generatedAt} · {t.cluster} · RPC {t.rpcConfigured ? "configured" : "not configured on this host"}.</p><div className="mt-2"></div></header>
       <CurrentStatusSummary card={card} />
       <section className={card}><p>{t.operatorLine}{t.contactIsTodo && <span className="text-amber-400 text-xs"> (contact address: TODO, owner to fill in)</span>}</p><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">Attesters: {t.attesterStatus.line}</p></section>
       <TrustPackSection card={card} />
+      {/* UX report 3 item 5: one current summary above (status, control, money, operator, bounty); every long disclosure below sits
+          behind one disclosure as the evidence for it, so no limit is stated twice in competing words. */}
+      <details className="space-y-6" data-trust-evidence>
+        <summary className="cursor-pointer text-sm text-neutral-300">Evidence behind the summary: standing facts, LP lock and fee split, powers, live platform config, fee ledger, wallets, attesters, program, audit, coverage, operations, reviews and logs</summary>
+        <div className="mt-4 space-y-6">
+          {/* UX report 3 item 10: the words the evidence below uses, beside it rather than front-loaded in the page header */}
+          <TermNote ids={["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"]} />
       <section className={card}><h2 className="font-medium">Standing facts</h2><ul className="list-disc pl-5">{t.statements.map((s) => <li key={s}>{s}</li>)}</ul></section>
       <section className={card}><h2 className="font-medium">LP locked forever · fees fund the burn</h2>
         <p>{t.lpLock.line}.</p>
@@ -56,7 +64,7 @@ export default function TrustPage() {
         <p className="text-xs text-neutral-500 mt-2">Designed: developer {t.designedFees.devFeeBps} bps of curve volume · LP locked {t.designedFees.lpLockedPct ?? t.lpLock.lockedPct}% (its fees: {t.lpLock.split.burnBps / 100}% burn pool, {t.lpLock.split.operatorBps / 100}% operator) · creator cash {t.designedFees.creatorCashBps} bps · team allocation {t.designedFees.teamAllocationPct}%.</p>
         {[t.designedFees.curve, t.designedFees.postGraduation].map((f, k) => <div key={k} className="overflow-x-auto mt-2"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "curve" : "post-graduation"}</th><th className="p-2 text-right">bps</th><th className="p-2">to</th><th className="p-2">dial</th></tr></thead><tbody>{f.legs.map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}</tbody></table></div>)}
       </section>
-      <section className={card}><h2 className="font-medium">Developer fee wallet and ledger</h2><p className="text-xs">Wallet <code>{t.feeLedger.wallet ?? "BURNTICKER_FEE_WALLET unset"}</code> · source: {t.feeLedger.source} · {t.feeLedger.note}</p>
+      <section className={card}><h2 className="font-medium">Developer fee wallet and ledger</h2><p className="text-xs">Wallet <code>{t.feeLedger.wallet ?? "not configured on this host"}</code> · source: {t.feeLedger.source} · {t.feeLedger.note}</p>
         {t.feeLedger.entries.length > 0 && <div className="overflow-x-auto mt-2"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Time</th><th className="p-2">Direction</th><th className="p-2 text-right">SOL</th><th className="p-2">Counterparty</th><th className="p-2">Memo</th><th className="p-2">Tx</th></tr></thead><tbody>{t.feeLedger.entries.map((e) => <tr key={e.signature} className="border-t border-neutral-800"><td className="p-2">{e.blockTime ?? "—"}</td><td className="p-2">{e.direction}</td><td className="p-2 text-right tabular-nums">{sol(e.delta)}</td><td className="p-2 break-all"><code>{e.counterparty ?? "—"}</code></td><td className="p-2">{e.memo ?? ""}</td><td className="p-2"><code>{e.signature.slice(0, 12)}…</code></td></tr>)}</tbody></table><p className="text-xs text-neutral-500">in {sol(t.feeLedger.totalIn)} SOL · out {sol(t.feeLedger.totalOut)} SOL</p></div>}
       </section>
       <section className={card}><h2 className="font-medium">Team wallets and the bots&apos; refuse rule</h2><ul className="text-xs">{t.team.wallets.map((w) => <li key={w.pubkey}>{w.label}: <code>{w.pubkey}</code></li>)}{t.team.wallets.length === 0 && <li className="text-neutral-500">no team wallet pubkeys are set in this host&apos;s environment</li>}</ul><p className="text-xs mt-1">{t.team.refusalRule} List: <code>{t.team.ownTokensFile}</code> ({t.team.ownTokensPresent ? "present" : "not present on this host"}).</p></section>
@@ -98,7 +106,9 @@ export default function TrustPage() {
       <section className={card}><h2 className="font-medium">Changelog ({x.changelog.entries} entries)</h2>{x.changelog.present ? <pre className="text-xs whitespace-pre-wrap">{x.changelog.markdown}</pre> : <p className="text-xs text-amber-400">{x.changelog.file} is not present on this host.</p>}</section>
       <p className="text-xs text-neutral-500">Transparency data: <code>{x.file}</code>, updated {x.updatedAt}.</p>
       </>); })()}
-      {t.stubs.length > 0 && <p className="text-xs text-neutral-500">On this host: {t.stubs.join(" · ")}</p>}
+        </div>
+      </details>
+      <HostDiagnostics stubs={t.stubs} cluster={t.cluster} />
     </main>
   );
 }

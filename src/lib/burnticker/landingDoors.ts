@@ -15,7 +15,7 @@ export function door2Html(ix: LeagueIndex = leagueIndex([], Date.UTC(2026, 9, 10
   const sports = [...ix.sports].sort((a, b) => a.label.localeCompare(b.label)).map((s) => `${s.label} (${s.leagues.length})`);
   return [
     `      <a class="door" href="${LEAGUES_PATH}">`,
-    `        <span class="k">door 2 · the show</span>`,
+    `        <span class="k">the show</span>`,
     `        <h3>Seasons</h3>`,
     `        <p>One scoreboard per league and season — every league Burnticker covers, from the ${esc(all[0])} to the ${esc(all[all.length - 1])} — ranking that league's team coins by receipts. Rivalries and the Burn Derby keep a running tally of burns.</p>`,
     `        <span class="ex">${esc(sports.join(" · "))} — ${ix.totals.leagues} leagues, one scoreboard each</span>`,

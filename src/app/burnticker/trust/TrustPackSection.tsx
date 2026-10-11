@@ -9,7 +9,7 @@ import { TRUSTPACK_SECTION_COPY } from "@/lib/burnticker/trustpack/copy";
  * /burnticker/operator, the never-buys monitor's status line (GET /api/burnticker/v1/operator), and the bounty wallet with its live
  * balance once it exists (GET /api/burnticker/v1/bounty; TODO_BOUNTY_WALLET until then), with the decided reports.
  */
-interface Bounty { wallet: string | null; walletTodo: string | null; balanceLamports: string | null; error: string | null; rangeSol: number[]; status: string; reports: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string } }
+interface Bounty { wallet: string | null; walletTodo: string | null; balanceLamports: string | null; error: string | null; recordedFunding?: { sol: number; date: string; transaction: string | null } | null; rangeSol: number[]; status: string; reports: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string } }
 interface Op { cluster: string; neverBuys: { line: string; status: string } }
 
 const PAGES = [
@@ -34,7 +34,10 @@ export default function TrustPackSection({ card }: { card: string }) {
       {op && <p className={`text-xs mt-2 ${tone}`}>Never buys a platform coin ({op.cluster}): {op.neverBuys.line}</p>}
       <h3 className="text-xs font-medium mt-3">{TRUSTPACK_SECTION_COPY.bountyTitle}</h3>
       {!b ? <p className="text-xs text-neutral-500">Loading…</p> : b.wallet
-        ? <p className="text-xs"><code className="break-all">{b.wallet}</code> · balance {b.balanceLamports !== null ? `${(Number(b.balanceLamports) / 1e9).toFixed(4)} SOL (live, mainnet)` : `unavailable${b.error ? `: ${b.error}` : ""}`} · {b.status}</p>
+        ? <ul className="text-xs space-y-0.5" data-bounty><li><code className="break-all">{b.wallet}</code> (mainnet)</li>
+            {/* UX report 3 item 5: the recorded funding and the live read are two separate facts; neither stands in for the other */}
+            <li>recorded funding: {b.recordedFunding ? `${b.recordedFunding.sol} SOL (${b.recordedFunding.date})` : "not recorded"} · funding transaction: {b.recordedFunding?.transaction ? <a className="underline" href={`https://explorer.solana.com/tx/${b.recordedFunding.transaction}`}><code>{b.recordedFunding.transaction.slice(0, 12)}…</code></a> : "not recorded here"}</li>
+            <li>live balance: {b.balanceLamports !== null ? `${(Number(b.balanceLamports) / 1e9).toFixed(4)} SOL (read from mainnet just now)` : `unavailable${b.error ? ` (${b.error})` : ""}`}</li></ul>
         : <p className="text-xs text-amber-400">{TRUSTPACK_SECTION_COPY.bountyTodo}</p>}
       {b && (b.reports.paid.length + b.reports.rejected.length === 0
         ? <p className="text-xs text-neutral-500">{TRUSTPACK_SECTION_COPY.bountyReports}</p>

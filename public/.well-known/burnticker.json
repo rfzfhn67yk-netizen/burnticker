@@ -1,7 +1,7 @@
 {
   "schema": "burnticker.well-known/v1",
   "name": "Burnticker",
-  "updatedAt": "2026-10-10",
+  "updatedAt": "2026-10-11",
   "operator": {
     "name": "Burnticker operator (one independent individual; identity held privately until a legal entity is formed)",
     "state": null,
@@ -89,7 +89,7 @@
       }
     },
     "mainnet": {
-      "status": "not deployed: the programs, the platform config, the Squads vault and every mainnet wallet are created by the owner on launch week",
+      "status": "programs not deployed on mainnet yet; the platform config, Squads vault and wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
       "programs": {
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
