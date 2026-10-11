@@ -9,14 +9,14 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { formatHits, lintCopy, loadCopyLintConfig, xLength } from "@/lib/launch/copyLint";
-import { receiptPostText, scoreboardText, teamLeagueOf, SCOREBOARD_FOOTER, SHORT_DISCLAIMER } from "@/lib/launch/dailyPost";
+import { allLeaguesLine, fmtDay, fmtRange, receiptPostText, scoreboardLeagues, scoreboardText, seasonLabel, teamLeagueOf, SCOREBOARD_FOOTER, SCOREBOARD_FOOTER_FINAL, SHORT_DISCLAIMER } from "@/lib/launch/dailyPost";
 import { COPY_SITE, RAYS_RECEIPTS, RAYS_STATUS, SEASON_DIR, SEASON_INDEX, SEASON_RECEIPTS, rc } from "./burntickerCopyFixture.ts";
 
 const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
 const SENTENCE = "Coins that burn on real-world results — with receipts.";
 const SUBLINE = "Launch one. Follow the season.";
-const GUARDRAILS = ["settled on primary sources", "signed readings (one attester at launch, a second within 14 days)", "program-run burns", "receipts anyone can recompute", "open source", "reviewed", "creators earn nothing", "no team buy", "the platform never buys any coin", "all LP burned", "rules locked at launch"];
+const GUARDRAILS = ["settled on primary sources", "signed readings (one attester at launch; second attester scheduled, not live)", "program-run burns", "receipts anyone can recompute", "open source", "three blind AI reviews, not a firm audit", "creators earn nothing", "no team buy", "the platform never buys any coin", "all LP burned", "rules locked at launch"];
 const LEAGUE = "(?:NFL|MLB|NBA|NHL|WNBA|MLS)";
 
 /** The words a visitor reads: meta descriptions + the body without style, script and the inline SVG, tags stripped. */
@@ -72,8 +72,31 @@ describe("the landing page (site/burnticker/index.html)", () => {
     if (!fs.existsSync(path.join("src", "app", "burnticker", "derby", "page.tsx"))) assert.doesNotMatch(text, /derby/i);
     else assert.match(html, /href="\/burnticker\/derby"/, "the Derby index exists on main: Seasons links it");
     assert.doesNotMatch(text, /coming soon/i);
-    assert.match(text, /a champion is the coin with the most receipts: a stat on a scoreboard, never a recipient of anything/);
+    assert.match(text, /Only when a league's season ends is the coin with the most receipts its champion: a stat on a scoreboard, never a recipient of anything/);
     assert.match(text, /Nothing is ever won here — things are only burned\./);
+  });
+  test("Seasons: one scoreboard per league and season, dated not numbered by week, no cross-league table, no champion mid-season, an example-data tag", () => {
+    const sec = html.slice(html.indexOf('<section class="wrap" id="seasons">'), html.indexOf('<section class="wrap" id="layers">'));
+    const boards = [...sec.matchAll(/<div class="board">([\s\S]*?)\n      <\/div>/g)].map((m) => m[1]);
+    assert.deepEqual(boards.map((b) => /<p class="bh"><b>([^<]+)<\/b> <span>([^<]+)<\/span>/.exec(b)!.slice(1)), [
+      ["NHL 2026–27", "Oct 3 – 9 · 4 team coins"], ["MLB 2026 postseason", "Oct 3 – 9 · 4 team coins"], ["NBA 2026–27", "Oct 3 – 9 · 3 team coins"], ["NFL 2026", "Oct 3 – 9 · 4 team coins"],
+    ]);
+    for (const b of boards) { assert.doesNotMatch(b, /<th[^>]*>league<\/th>|champion/i, "no league column, no champion during the season"); assert.ok((b.match(/most receipts so far/g) ?? []).length <= 1); }
+    const sv = visibleText(sec);
+    assert.doesNotMatch(sv, /\bweek \d|across \d+ leagues/i, "dates, not weeks; no cross-league tally line");
+    assert.match(sv, /Yesterday \(Oct 9\) across all leagues: 5 team coins burned\./, "the only cross-league line is a count");
+    assert.match(sec, /<span class="extag">example data<\/span>/);
+    assert.match(sv, /\$OILERS most receipts so far/, "the marker is its own word, never glued to the ticker");
+    assert.match(sec, /\$OILERS <span class="mark">most receipts so far<\/span>/);
+    clean(sv, "seasons");
+  });
+  test("the cold read's edits (docs/launch/gtm/COLD-READ.md): the one-line definition, labelled examples, nothing the code does not do", () => {
+    assert.match(html, /<p class="def">A Solana memecoin launchpad\. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought\. The transaction is the receipt\.<\/p>/);
+    assert.match(text, /example receipt · illustrative numbers, not a live coin/);
+    assert.match(text, /a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts/);
+    assert.match(text, /if the operator stops, readings stop and burns stop\. Holders keep their coins/);
+    assert.match(text, /all LP is burned, so there is no platform share of LP fees/);
+    for (const gone of [/anyone can crank/i, /if we disappear/i, /keep working/i, /set to none after review/i, /not built yet/i, /share of post-graduation LP fees/i, /within 14 days/i, /nothing to trust/i, /<li>reviewed<\/li>/]) assert.doesNotMatch(html, gone, String(gone));
   });
   test("mobile-safe and linked: viewport meta, no horizontal scroll, the whitepaper linked", () => {
     assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
@@ -118,7 +141,7 @@ describe("the thread templates (docs/launch/x-threads.md)", () => {
     const ex = [...sec.matchAll(/```text\n([\s\S]*?)\n```/g)].map((m) => m[1]);
     assert.equal(ex.length, 2);
     assert.equal(ex[0], receiptPostText(RAYS_STATUS, RAYS_RECEIPTS, RAYS_RECEIPTS[4], COPY_SITE));
-    assert.equal(ex[1], scoreboardText({ index: SEASON_INDEX, receiptsByTicker: SEASON_RECEIPTS, day: "2026-10-09", week: 6 }));
+    assert.equal(ex[1], scoreboardText({ index: SEASON_INDEX, receiptsByTicker: SEASON_RECEIPTS, league: "NHL", day: "2026-10-09" }));
     for (const e of ex) clean(e, e.slice(0, 40));
   });
 });
@@ -141,30 +164,41 @@ describe("the two @BurnTicker formats (src/lib/launch/dailyPost.ts)", () => {
   test("receipt: a skipped, void or unburned row has no receipt post", () => {
     for (const r of [rc({ status: "skipped", burned: null }), rc({ status: "void", burned: null }), rc({ burned: "0" }), rc({ status: "planned" })]) assert.throws(() => receiptPostText(RAYS_STATUS, RAYS_RECEIPTS, r, COPY_SITE), /not a confirmed burn/);
   });
-  test("scoreboard: the header counts live team coins, leagues and yesterday's burns; ranked by receipts; the leader is champion; ≤ 280 without the link", () => {
-    const t = scoreboardText({ index: SEASON_INDEX, receiptsByTicker: SEASON_RECEIPTS, day: "2026-10-09", week: 6 });
-    assert.equal(t, [
-      "Week 6 · 14 team coins across 4 leagues · 9 burned yesterday",
-      "1. $OILERS 6 receipts, 2.94% burned · NHL · champion",
-      "2. $RAYS 5 receipts, 2.41% burned · MLB",
-      "3. $LAKERS 4 receipts, 1.96% burned · NBA",
+  test("scoreboard: one league, one season — that league's coins only, ranked by receipts, the leader 'most receipts so far'; ≤ 280; lint-clean", () => {
+    const sb = (league: string, extra: Partial<Parameters<typeof scoreboardText>[0]> = {}) => scoreboardText({ index: SEASON_INDEX, receiptsByTicker: SEASON_RECEIPTS, league, day: "2026-10-09", ...extra });
+    const nhl = sb("NHL");
+    assert.equal(nhl, [
+      "NHL 2026–27 · Oct 9 · 4 team coins · 2 burned yesterday",
+      "1. $OILERS 2 receipts, 0.98% burned · most receipts so far",
+      "2. $BRUINS 1 receipt, 0.51% burned",
+      "3. $FLAMES 1 receipt, 0.49% burned",
       SCOREBOARD_FOOTER,
     ].join("\n"));
-    assert.ok(xLength(t) <= 280, String(xLength(t))); clean(t, "scoreboard");
-    assert.doesNotMatch(t, /DEFICIT|COYOTES/, "not a team coin / not live");
-    const linked = scoreboardText({ index: SEASON_INDEX, receiptsByTicker: SEASON_RECEIPTS, day: "2026-10-09", week: 6, site: COPY_SITE });
-    assert.ok(linked.endsWith(`${SCOREBOARD_FOOTER} https://burnticker.com/`)); clean(linked, "scoreboard linked");
+    assert.equal(sb("mlb").split("\n")[0], "MLB 2026 postseason · Oct 9 · 4 team coins · 2 burned yesterday");
+    assert.equal(sb("NBA"), ["NBA 2026–27 · Oct 9 · 3 team coins · 0 burned yesterday", "No receipts this season so far.", SCOREBOARD_FOOTER].join("\n"));
+    assert.match(sb("NFL"), /^NFL 2026 · Oct 9 · 4 team coins · 0 burned yesterday\n1\. \$JAGUARS 3 receipts, 1\.46% burned · most receipts so far\n/);
+    for (const lg of scoreboardLeagues(SEASON_INDEX)) {
+      const x = sb(lg);
+      assert.ok(xLength(x) <= 280, `${lg} ${xLength(x)}`); clean(x, lg);
+      assert.doesNotMatch(x, /champion|DEFICIT|COYOTES|\bweek\b/i, `${lg}: no champion mid-season, no non-team or retired coin, no weeks`);
+      for (const other of scoreboardLeagues(SEASON_INDEX).filter((o) => o !== lg)) for (const t of SEASON_INDEX.tokens.filter((t) => teamLeagueOf(t.selectorKey) === other)) assert.ok(!x.includes(`$${t.ticker} `), `${lg} shows no ${other} coin`);
+    }
+    assert.deepEqual(scoreboardLeagues(SEASON_INDEX), ["NHL", "MLB", "NBA", "NFL"], "a fixed rotation that never starts with the NFL");
+    assert.ok(sb("NHL", { site: COPY_SITE }).endsWith(`${SCOREBOARD_FOOTER} https://burnticker.com/`));
   });
-  test("scoreboard: ties (shared champion), Week of <Monday>, top N, an empty season, no team coins — all factual and lint-clean", () => {
-    const tied = { ...SEASON_INDEX, tokens: SEASON_INDEX.tokens.map((t) => (t.ticker === "RAYS" ? { ...t, burns: 6 } : t)) };
-    const a = scoreboardText({ index: tied, receiptsByTicker: SEASON_RECEIPTS, day: "2026-10-09", top: 5 });
-    assert.match(a, /^Week of 2026-10-05 · 14 team coins/); assert.equal(a.split("\n").filter((l) => /^\d\. /.test(l)).length, 5);
-    assert.doesNotMatch(a, /· champion/); assert.match(a, /\nChampion: tied at 6 receipts \(\$OILERS, \$RAYS\)\n/); clean(a, "tied");
-    const zero = { ...SEASON_INDEX, tokens: SEASON_INDEX.tokens.map((t) => ({ ...t, burns: 0, pctOfSupply: 0 })) };
-    const z = scoreboardText({ index: zero, receiptsByTicker: {}, day: "2026-10-09", week: 1 });
-    assert.match(z, /· 0 burned yesterday\n/); assert.match(z, /No receipts this season so far: no champion\./); assert.doesNotMatch(z, /champion\n|· champion/); clean(z, "zero");
-    const none = scoreboardText({ index: { ...SEASON_INDEX, tokens: SEASON_INDEX.tokens.filter((t) => t.ticker === "DEFICIT") }, receiptsByTicker: {}, day: "2026-10-09", week: 2 });
-    assert.match(none, /^Week 2 · 0 team coins across 0 leagues · 0 burned yesterday\nNo team coin is live\./); clean(none, "none");
+  test("scoreboard: champion only once the season is over (inside its league), ties say so, --season overrides, an empty league; the cross-league line is a count", () => {
+    const sb = (extra: Partial<Parameters<typeof scoreboardText>[0]>) => scoreboardText({ index: SEASON_INDEX, receiptsByTicker: SEASON_RECEIPTS, league: "NHL", day: "2027-04-20", ...extra });
+    const fin = sb({ seasonOver: true });
+    assert.match(fin, /^NHL 2026–27 · Apr 20 · /); assert.match(fin, /\$OILERS 2 receipts, 0\.98% burned · champion\n/); assert.ok(fin.endsWith(SCOREBOARD_FOOTER_FINAL)); clean(fin, "final");
+    const tied = { ...SEASON_INDEX, tokens: SEASON_INDEX.tokens.map((t) => (t.ticker === "BRUINS" ? { ...t, burns: 2 } : t)) };
+    const tieMid = scoreboardText({ index: tied, receiptsByTicker: SEASON_RECEIPTS, league: "NHL", day: "2026-10-09" });
+    assert.equal(tieMid.match(/most receipts so far \(tied\)/g)?.length, 2); clean(tieMid, "tie mid");
+    assert.equal(scoreboardText({ index: tied, receiptsByTicker: SEASON_RECEIPTS, league: "NHL", day: "2027-04-20", seasonOver: true }).match(/champion \(tied\)/g)?.length, 2);
+    assert.match(sb({ season: "2026–27 regular season", top: 1 }), /^NHL 2026–27 regular season · Apr 20 · 4 team coins · 0 burned yesterday\n1\. \$OILERS[^\n]*\nReceipt counts/);
+    assert.match(scoreboardText({ index: SEASON_INDEX, receiptsByTicker: {}, league: "MLS", day: "2026-10-09" }), /^MLS 2026 · Oct 9 · 0 team coins · 0 burned yesterday\nNo MLS team coin is live\./);
+    assert.equal(allLeaguesLine(SEASON_INDEX, SEASON_RECEIPTS, "2026-10-09"), "Yesterday (Oct 9) across all leagues: 4 team coins burned.");
+    assert.equal(seasonLabel("NHL", "2027-03-01"), "2026–27"); assert.equal(seasonLabel("NFL", "2027-01-15"), "2026"); assert.equal(seasonLabel("MLB", "2026-06-01"), "2026"); assert.equal(seasonLabel("NBA", "2026-10-09"), "2026–27");
+    assert.equal(fmtDay("2026-10-09"), "Oct 9"); assert.equal(fmtRange("2026-10-03", "2026-10-09"), "Oct 3 – 9"); assert.equal(fmtRange("2026-09-28", "2026-10-04"), "Sep 28 – Oct 4");
   });
   test("teamLeagueOf reads the league from ESPN team and game selectors only", () => {
     assert.equal(teamLeagueOf("catalogue:espn.team:nhl-EDM-loss"), "NHL"); assert.equal(teamLeagueOf("espn.game:nfl-401772510-JAX-loss"), "NFL");

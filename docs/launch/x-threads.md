@@ -80,10 +80,10 @@ Every post below passes the copy lint (test/burntickerCopy.test.ts lints this se
 **4/6 — the show**
 > Follow the season: team coins across MLB, NBA, NHL and NFL, scored in receipts. Rivalries keep a running tally of burns.
 >
-> Nothing is ever won here. Things are only burned. The champion is the coin with the most receipts: a stat, not a prize.
+> Nothing is ever won here. Things are only burned. One scoreboard per league; when its season ends, the coin with the most receipts is its champion: a stat, not a prize.
 
 **5/6 — the guardrails**
-> Settled on primary sources · signed readings (one attester at launch, a second within 14 days) · program-run burns · receipts anyone can recompute · open source · reviewed · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
+> Settled on primary sources · signed readings (one attester at launch; second attester scheduled, not live) · program-run burns · receipts anyone can recompute · open source · three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
 
 **6/6 — the first coin, and the line**
 > First coin: $DEFICIT (@USA_DEFICIT) — every $1B the U.S. national debt rises, it buys itself back with its own fees and burns it.
@@ -156,18 +156,18 @@ tx https://solscan.io/tx/5QmRays · page https://burnticker.com/t/RAYS/
 a memecoin — supply, not price.
 ```
 
-**Scoreboards** — `scoreboardText({ index, receiptsByTicker, day, week, top, site })`. The season as receipt counts across every
-league the platform reads. Team coins are the live coins on an ESPN team or game series. The header counts them, their leagues and how
-many burned on `day` (yesterday, for a morning post). The ranked lines (default 3) order them by receipts, then by share of supply
-burned. The leader is marked champion; a tie names every leader. Every number is a receipt count or a burned share. The link is
-optional, because it costs 24 of the 280 characters.
+**Scoreboards** — `scoreboardText({ index, receiptsByTicker, league, season, day, seasonOver, top, site })`. One league, one season
+per post — never a ranking across leagues. The header names the league and season, the day, the league's live team coins and how many
+burned yesterday; the ranked lines (default 3) order them by receipts, then by share of supply burned. During the season the leader is
+"most receipts so far"; "champion" appears only after the season ends (`seasonOver`). Across leagues only a count is posted
+(`allLeaguesLine`: "Yesterday (Oct 9) across all leagues: 4 team coins burned."). The link is optional (24 of the 280 characters).
 
 ```text
-Week 6 · 14 team coins across 4 leagues · 9 burned yesterday
-1. $OILERS 6 receipts, 2.94% burned · NHL · champion
-2. $RAYS 5 receipts, 2.41% burned · MLB
-3. $LAKERS 4 receipts, 1.96% burned · NBA
-Champion = most receipts, not a prize. Memecoins — supply, not price.
+NHL 2026–27 · Oct 9 · 4 team coins · 2 burned yesterday
+1. $OILERS 2 receipts, 0.98% burned · most receipts so far
+2. $BRUINS 1 receipt, 0.51% burned
+3. $FLAMES 1 receipt, 0.49% burned
+Receipt counts — nothing is won. Memecoins — supply, not price.
 ```
 
 The receipt format replaces B1 (§3) for @BurnTicker; the draft script prints both formats (`--template=receipt`, `--template=scoreboard`; docs/launch/daily-post.md §(g), §(h)). The rivalry post (`pairDailyText`, §2b) stays the format for a pair's own

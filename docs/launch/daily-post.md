@@ -229,24 +229,28 @@ tx https://solscan.io/tx/5QmRays · page https://burnticker.com/t/RAYS/
 a memecoin — supply, not price.
 ```
 
-## (h) SCOREBOARD — `scoreboard` (@BurnTicker, the season)
+## (h) SCOREBOARD — `scoreboard` (@BurnTicker, one league, one season)
 
-A season is a scoreboard of burns. From `index.json` and each token's `receipts.json`: the live team coins (an ESPN team or game
-selector), how many leagues they span, how many burned on `--date` (default: the day before `--now`, UTC — "yesterday" for a morning
-post), and the top `--top` (default 3) ranked by receipts, then by share of supply burned. The leader is marked champion; a tie names
-every leader. Every number is a receipt count or a burned share. `--site` appends the link (24 of the 280 characters).
-`scoreboardText` in `src/lib/launch/dailyPost.ts`.
+A season is a scoreboard of burns — one per league, never a ranking across leagues. From `index.json` and each token's
+`receipts.json`: the league's live team coins (an ESPN team or game selector), how many burned on `--date` (default: the day before
+`--now`, UTC — "yesterday" for a morning post), and the top `--top` (default 3) ranked by receipts, then by share of supply burned.
+During a season the leader is marked "most receipts so far"; "champion" appears only with `--season-over`, inside its league
+(a tie says so). The season label defaults to the league's calendar (`seasonLabel`: NHL/NBA "2026–27", NFL "2026", MLB "2026" or
+"2026 postseason" in October and November); `--season=…` overrides it. A league whose coins have no receipt yet says "No receipts this
+season so far." Without `--league` the script prints one post per league (NHL, MLB, NBA, NFL order), then the only cross-league line
+allowed — a count: `Yesterday (Oct 9) across all leagues: 4 team coins burned.` `--site` appends the link (24 of the 280 characters).
+`scoreboardText` / `allLeaguesLine` in `src/lib/launch/dailyPost.ts`.
 
 ```
---template=scoreboard --platform-dir=test/fixtures/burnticker-season --week=6 --now=2026-10-10T14:00:00Z
+--template=scoreboard --platform-dir=test/fixtures/burnticker-season --league=NHL --now=2026-10-10T14:00:00Z
 ```
 
 ```text
-Week 6 · 14 team coins across 4 leagues · 9 burned yesterday
-1. $OILERS 6 receipts, 2.94% burned · NHL · champion
-2. $RAYS 5 receipts, 2.41% burned · MLB
-3. $LAKERS 4 receipts, 1.96% burned · NBA
-Champion = most receipts, not a prize. Memecoins — supply, not price.
+NHL 2026–27 · Oct 9 · 4 team coins · 2 burned yesterday
+1. $OILERS 2 receipts, 0.98% burned · most receipts so far
+2. $BRUINS 1 receipt, 0.51% burned
+3. $FLAMES 1 receipt, 0.49% burned
+Receipt counts — nothing is won. Memecoins — supply, not price.
 ```
 
 `test/copyLint.test.ts` runs both commands above and requires the two examples to equal the script's output.

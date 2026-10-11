@@ -26,23 +26,25 @@ const tok = (ticker: string, selectorKey: string, burns: number, pct: number, st
   imageUrl: null, oneLiner: "", lastBurnAt: null, nextMarket: null, nextCloseTime: null, oneShot: false, phase: null, progressPct: null, raised: null, threshold: null, quote: null,
 });
 
-/** Fourteen live team coins across four leagues, plus $DEFICIT (not a team coin) and a retired team coin (not counted). */
+/** Fifteen live team coins in four leagues (NBA's regular season has not started: no receipts), plus $DEFICIT (not a team coin) and a
+ *  retired NHL coin (not counted). Small counts: the coins launched in late September. */
 export const SEASON_INDEX: PlatformIndexJson = {
   schema: "burnticker.index/v1", generatedAt: "2026-10-10T14:00:00Z", audit: null, pairs: [],
   tokens: [
-    tok("OILERS", "catalogue:espn.team:nhl-EDM-loss", 6, 2.94), tok("RAYS", "catalogue:espn.team:mlb-TB-loss", 5, 2.41), tok("LAKERS", "catalogue:espn.team:nba-LAL-loss", 4, 1.96),
-    tok("EAGLES", "catalogue:espn.team:nfl-PHI-loss", 3, 1.47), tok("BRUINS", "catalogue:espn.team:nhl-BOS-loss", 3, 1.12), tok("FLAMES", "catalogue:espn.team:nhl-CGY-loss", 3, 0.98),
-    tok("DODGERS", "catalogue:espn.team:mlb-LAD-win", 2, 0.99), tok("CELTICS", "catalogue:espn.team:nba-BOS-win", 2, 0.97), tok("CHIEFS", "catalogue:espn.team:nfl-KC-loss", 2, 0.66),
-    tok("CUBS", "catalogue:espn.team:mlb-CHC-loss", 1, 0.5), tok("KNICKS", "catalogue:espn.team:nba-NY-loss", 1, 0.49), tok("RANGERS", "catalogue:espn.team:nhl-NYR-win", 1, 0.48),
-    tok("JAGUARS", "catalogue:espn.game:nfl-401772510-JAX-loss", 1, 1.0), tok("MARINERS", "catalogue:espn.team:mlb-SEA-loss", 0, 0),
+    tok("OILERS", "catalogue:espn.team:nhl-EDM-loss", 2, 0.98), tok("FLAMES", "catalogue:espn.team:nhl-CGY-loss", 1, 0.49), tok("BRUINS", "catalogue:espn.team:nhl-BOS-loss", 1, 0.51), tok("RANGERS", "catalogue:espn.team:nhl-NYR-win", 0, 0),
+    tok("RAYS", "catalogue:espn.team:mlb-TB-loss", 5, 2.41), tok("DODGERS", "catalogue:espn.team:mlb-LAD-win", 2, 0.99), tok("CUBS", "catalogue:espn.team:mlb-CHC-loss", 1, 0.5), tok("MARINERS", "catalogue:espn.team:mlb-SEA-loss", 0, 0),
+    tok("LAKERS", "catalogue:espn.team:nba-LAL-loss", 0, 0), tok("CELTICS", "catalogue:espn.team:nba-BOS-win", 0, 0), tok("KNICKS", "catalogue:espn.team:nba-NY-loss", 0, 0),
+    tok("JAGUARS", "catalogue:espn.team:nfl-JAX-loss", 3, 1.46), tok("EAGLES", "catalogue:espn.team:nfl-PHI-loss", 2, 0.98), tok("CHIEFS", "catalogue:espn.team:nfl-KC-loss", 2, 0.97), tok("BILLS", "catalogue:espn.game:nfl-401772510-BUF-loss", 1, 1.0),
     tok("DEFICIT", "catalogue:treasury.debt", 235, 6.45), tok("COYOTES", "catalogue:espn.team:nhl-ARI-loss", 4, 2.0, "retired"),
   ],
-  totals: { tokens: 16, live: 15, burns: 273, burnedTokens: "0", pairs: 0 },
+  totals: { tokens: 17, live: 16, burns: 254, burnedTokens: "0", pairs: 0 },
 };
 const burnOn = (day: string) => [rc({ eventId: day, settledAt: day })];
-/** Nine team coins burned on 2026-10-09 (the "yesterday" of a post on 10-10); $DEFICIT burned too and is not counted. */
+/** Four team coins burned on 2026-10-09 (the "yesterday" of a post on 10-10): $RAYS, $DODGERS, $OILERS, $BRUINS. $DEFICIT burned too
+ *  and is not a team coin; $KNICKS' row was skipped; $FLAMES and $CHIEFS burned on 10-08. */
 export const SEASON_RECEIPTS: Record<string, ReceiptJson[]> = Object.fromEntries([
   ["RAYS", RAYS_RECEIPTS],
-  ...["OILERS", "LAKERS", "EAGLES", "BRUINS", "FLAMES", "DODGERS", "CELTICS", "CUBS"].map((t) => [t, burnOn("2026-10-09")]),
-  ["KNICKS", [rc({ status: "skipped", burned: null, skippedReason: "spend under $1" })]], ["DEFICIT", burnOn("2026-10-09")], ["CHIEFS", burnOn("2026-10-08")],
+  ...["OILERS", "BRUINS", "DODGERS"].map((t) => [t, burnOn("2026-10-09")]),
+  ["FLAMES", burnOn("2026-10-08")], ["CHIEFS", burnOn("2026-10-08")], ["EAGLES", burnOn("2026-10-05")],
+  ["KNICKS", [rc({ status: "skipped", burned: null, skippedReason: "spend under $1" })]], ["DEFICIT", burnOn("2026-10-09")],
 ]);

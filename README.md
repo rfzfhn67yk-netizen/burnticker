@@ -13,11 +13,12 @@ rule is hashed on chain at create and can never change. A keeper reads the settl
 the event, the source, the reading, the amounts and the rule hash. The rule is enforced by a program, not a promise.
 
 **The show.** Team coins across MLB, NBA, NHL and NFL and rivalry pairs, scored by the same receipts. A season is a scoreboard of
-burns; its champion is the coin with the most receipts, a stat and never a recipient. The token page recomputes every receipt from the
+burns, one per league and season; when a season ends, the coin with the most receipts is its league's champion, a stat and never a
+recipient. The token page recomputes every receipt from the
 source. The audit script does it for every token and exits non-zero on a mismatch, and the trust page shows the result.
 
-**Guardrails.** Settled on primary sources · signed readings (one attester at launch, a second within 14 days) · program-run burns · receipts anyone can recompute · open source ·
-reviewed · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
+**Guardrails.** Settled on primary sources · signed readings (one attester at launch; second attester scheduled, not live) · program-run burns · receipts anyone can recompute · open source ·
+three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform never buys any coin · all LP burned · rules locked at launch.
 
 **Operated by one independent operator (United States).** This repository is the public, buildable copy of everything the platform runs: the on-chain
 program, the keeper, the platform, the sites, the deploy files, the docs, the tests. It is carved out of a private monorepo by an
@@ -38,8 +39,10 @@ programs/burn-receipts/     the Anchor program: initialize_token, submit_reading
 src/lib/burnReceipts/       the TypeScript client of the program (accounts, PDAs, instructions, memo, math, IDL coder)
 src/lib/burnKeeper/         the $DEFICIT keeper: Treasury feed, rules, plan, cycle, LaunchLab builders, attesters (zkTLS, Polymarket
                             on-chain; the Switchboard attester is built against a pinned SDK of a service that has shut down)
-src/lib/burnticker/         the platform: rules (selector + mapping), units, receipts, Kalshi oracle, catalogue of first-party
-                            sources, append-only registry (SQLite triggers), multi-token keeper, token pages, fees, trust page, audit
+src/lib/burnticker/         the platform: rules (selector + mapping), units, receipts, catalogue of first-party
+                            sources, prediction-market discovery adapters (one for a US prediction exchange: not used; its terms do
+                            not permit it), append-only registry (SQLite triggers), multi-token keeper, token pages, fees, trust page,
+                            audit
 src/app/burnticker/         the Next.js pages: index, launch wizard, token page, trust page
 src/app/api/burnticker/     the API routes the pages call
 src/lib/ownTokens.ts        THE REFUSE LIST reader the operator's trading bots use — they refuse every platform coin by mint and ticker
@@ -57,13 +60,16 @@ test/                       node:test suites on real fixtures; nothing touches a
 
 ## How to verify a receipt
 
-Every burn writes a memo: `BT|TICKER|id|oracle=|market=|result=|settled=|src=|value=|units=|pool=|spent=|got=|burn=|swap=|rules=sha256:|v3`
-(`src/lib/burnticker/receipt.ts`). To check one yourself:
+Every burn writes a memo on chain, from the program (`programs/burn-receipts/programs/burn_receipts/src/memo.rs`): v2 for a buyback,
+`<PREFIX>|<date>|src=|prev=|now=|delta=|units=|pool=|spent=|got=|burn=|swap=|rules=sha256:<12>|v2`, and v1 for a vault burn. The
+platform also publishes a per-event receipt line on each token page, `BT|TICKER|id|oracle=|market=|result=|settled=|src=|value=|…|v3`
+(`src/lib/burnticker/receipt.ts`); the current program does not write that one on chain. To check a burn yourself:
 
 1. Open the transaction on an explorer and read the memo.
 2. Fetch the rule: the token page serves `rules.json`; `sha256` of its canonical bytes must equal the `rules=` field
    (`src/lib/burnticker/rules.ts`, `rulesSha256`).
-3. Fetch the source named in `src=` (the first-party API, or the on-chain Polymarket payout) and confirm `result=` / `value=`.
+3. Fetch the source named in `src=` (the first-party API, or the on-chain Polymarket payout) and confirm the reading (`prev=` /
+   `now=` in the memo; `result=` / `value=` on the page's v3 receipt).
 4. Recompute the units from the rule and the reading (`src/lib/burnticker/units.ts`), then the spend:
    `spent = pool × (1 − (1 − f)^units)` with the integer formula in `src/lib/burnKeeper/rules.ts` (`buybackSpend`).
 5. Confirm from the transaction's token balances that every token the fee PDA received was burned.
@@ -103,7 +109,8 @@ repository with `solana-verify` / `anchor verify`; `CHANGELOG.md` records the co
   sunset. Generated from the IDL; `npm run powers-register` proves it is current. "What does not exist" is the section to read first.
 - **Money**: `docs/burnkeeper/fees.md` and `src/lib/burnticker/fees.ts` — the designed split; the trust page compares it with the
   live `PlatformConfig` decoded from chain and lists the developer wallet's full ledger from chain.
-- **Readings**: settled results only; prices are never read into a rule (`src/lib/burnticker/oracle/polymarket.ts`, `oracle/kalshi.ts` — discovery only, behind a flag; tests in
+- **Readings**: settled results only; prices are never read into a rule (`src/lib/burnticker/oracle/polymarket.ts`; the
+  US prediction exchange's adapter in `oracle/` is not used — its terms do not permit it — and stays behind a flag that is off; tests in
   `test/burntickerOracle.test.ts`). The registry refuses updates and deletes at the SQL level (`src/lib/burnticker/registry.ts`).
 - **Operator**: `config/burnticker/transparency.json` and `docs/burnticker/decisions.md`.
 - **Reviews and bounty**: `docs/burnticker/reviews/` and `SECURITY.md`.

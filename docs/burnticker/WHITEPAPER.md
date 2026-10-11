@@ -3,17 +3,20 @@
 Technical paper, draft 1, 2026-10-10. Written from the code and documents of the Burnticker repository at commit `76b9caa`. Every
 statement names its source file; where a component does not exist, this paper says "not built" or "not done".
 
-**Status at the time of writing.** Nothing is deployed on devnet or mainnet and no real key exists.
+**Status at the time of writing.** The program is deployed on devnet (the 2026-10-10 rehearsal, `docs/burnkeeper/devnet-run.md`);
+nothing is deployed on mainnet and no mainnet key exists.
 
 | Component | State | Source |
 |---|---|---|
-| `burn_receipts` program (Anchor 1.2.1) | built; 82 Rust tests and the TS suites pass; localnet only | `docs/burn-receipts/README.md`, `CHANGELOG.md` |
+| `burn_receipts` program (Anchor 1.2.1) | built; 82 Rust tests and the TS suites pass; deployed on devnet, not on mainnet | `docs/burn-receipts/README.md`, `CHANGELOG.md` |
 | $DEFICIT keeper and Burnticker multi-token keeper | built; run against the program in a local end-to-end test; pages run on `FakeBurnProgram` | `docs/burnkeeper/README-execution.md` |
-| Devnet rehearsal, mainnet rehearsal coin | not done | `docs/burnticker/REHEARSAL-RUNSHEET.md` |
+| Devnet rehearsal | done 2026-10-10 | `docs/burnkeeper/devnet-run.md` §4 |
+| Mainnet rehearsal coin | not done | `docs/burnticker/REHEARSAL-RUNSHEET.md` |
 | `pair_curve` program (rivalry pairs: both coins graduate or neither; Anchor 1.2.1) | built 2026-10-10; LiteSVM suite and TS fixtures pass; devnet rehearsal run (one pair graduated to two CPMM pools and registered, one pair voided and sold back); not on mainnet; not reviewed | `docs/burnticker/PAIR-CURVE.md`, `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md` |
-| Program deployment, program id, verifiable hash | not done | `docs/burn-receipts/README.md` §5.4 |
+| Program deployment, program id, verifiable hash | devnet: deployed 2026-10-10 (`AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM`, upgrade authority a Squads 2-of-3 vault); mainnet: not done | `docs/burnkeeper/devnet-run.md` §4, `docs/burn-receipts/README.md` §5.4 |
 | Second, independent attester | not built | `config/burnticker/transparency.json` (`switchboard-down`, `quorum-1`) |
-| Public repository | not created | `docs/burnticker/transparency.md` §3 |
+| Public repository | public | https://github.com/rfzfhn67yk-netizen/burnticker |
+| Operator contact | set: contact@burnticker.com; security@burnticker.com for reports | `src/lib/burnticker/fees.ts` (`OPERATOR_LINE`), `config/public-repo/overlay/SECURITY.md` |
 | Bug bounty | terms drafted, not published | `config/public-repo/overlay/SECURITY.md` |
 | Security firm audit | none, by decision | `docs/burnticker/decisions.md` (2026-10-09, Audit) |
 
@@ -31,9 +34,10 @@ also writes a memo with the reading, the arithmetic and the rule hash. Anyone ca
 published rule.
 
 The platform has two layers. The engine is the launchpad and the program: rules locked at launch, readings signed before use, burns run
-by a program rather than promised by a person. The show is built from the same receipts: team coins scored by burns across the
-leagues, rivalry pairs (§5) whose pages keep the tally, and Burn Derby pairs and brackets (§5.2). A season is a scoreboard of burns.
-Its champion is the coin with the most receipts — a stat, never a recipient: no coin pays anything on any outcome.
+by a program rather than promised by a person. The show is built from the same receipts: team coins scored by burns league by
+league, rivalry pairs (§5) whose pages keep the tally, and Burn Derby pairs and brackets (§5.2). A season is a scoreboard of burns.
+There is one per league and season, never a ranking across leagues; when a season ends, the coin with the most receipts is its
+league's champion — a stat, never a recipient: no coin pays anything on any outcome.
 
 Burnticker is run by one independent operator, reachable at contact@burnticker.com; the operator’s identity is held privately until a legal entity is formed. It is not an investment product: a coin holds no position in any
 market, and the rule says what the supply does, not what the price does. The program is not audited by a security firm.
@@ -135,11 +139,12 @@ same fact; **adjudicated-only** when Polymarket's binary markets are the only ro
 90-day dry run: readings its schedule expected against readings produced, the median latency from the period's end to the keeper's
 first sighting, and the rate at which the primary and its cross-read disagree.
 
-On the frozen fixtures of 2026-10-10 two of eleven categories are settleable: Economics (`fred.UNRATE` ↔ BLS `LNS14000000`,
-`fred.CPIAUCSL` ↔ BLS `CUSR0000SA0`, `bls.eggs` ↔ FRED `APU0000708111`, `treasury.debt` ↔ FRED `GFDEBTN` at quarter ends; 0
-disagreements on every shared month) and Crypto & On-chain (`bitcoin.blockHeight` ↔ blockstream.info). The other nine are
-adjudicated-only; none is uncovered. Settled numbers outside those two categories (index closes, daily temperatures and the other
-strike ladders), team coins and season matchups cannot be settled today. The pair catches a broken endpoint, a parser error or a
+On the frozen fixtures of 2026-10-10 five of eleven categories are settleable (`docs/burnticker/SETTLEMENT-COVERAGE.md`): Sports (the
+ESPN scoreboard ↔ the NHL's and MLB's own feeds, or TheSportsDB), Economics (`fred.UNRATE` ↔ BLS `LNS14000000`, `fred.CPIAUCSL` ↔ BLS
+`CUSR0000SA0`, `bls.eggs` ↔ FRED `APU0000708111`, `treasury.debt` ↔ FRED `GFDEBTN` at quarter ends; 0 disagreements on every shared
+month), Financial markets (Pyth ↔ RedStone), Weather & Climate (the NWS climate report ↔ the Iowa Environmental Mesonet) and Crypto &
+On-chain (`bitcoin.blockHeight` ↔ blockstream.info; Pyth ↔ RedStone or the pool TWAP). The other six are adjudicated-only; none is
+uncovered. The pair catches a broken endpoint, a parser error or a
 tampered response; when the cross-read is a mirror (FRED republishes BLS), it does not catch an error in the original release.
 
 Creation runs the selector live once first (`preflightSelector`, wired into the launch pipeline): the primary and its cross-read are
@@ -586,8 +591,8 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
   from the first trade.
 - **Per-outcome fractions unsupported.** A rule paying different fractions per outcome cannot be expressed on the current program.
 - **Burns wait on the curve.** No buyback runs before graduation and pool registration.
-- **Not built:** program deployment, devnet rehearsal, second attester, the audit's chain leg, systemd units for the multi-token keeper
-  and audit timer, the public repository, the operator contact address.
+- **Not built:** mainnet program deployment, second attester, the audit's chain leg, systemd units for the multi-token keeper and
+  audit timer.
 
 ## 12. Open source and transparency
 

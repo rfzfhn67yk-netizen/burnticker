@@ -32,7 +32,7 @@ export function SiteFooter() {
         <div className="bt-rule" />
         <nav className="bt-slip-links" aria-label="Footer">
           {NAV.map((n) => n.external ? <a key={n.href} href={n.href} rel="noopener">{n.label}</a> : <Link key={n.href} href={n.href}>{n.label}</Link>)}
-          <a href={X_HREF} rel="me noopener" target="_blank">X · @burnticker</a>
+          <a href={X_HREF} rel="me noopener" target="_blank">X · @BurnTicker</a>
         </nav>
         <p className="bt-slip-end">— {year} · KEEP THIS RECEIPT —</p>
       </div>

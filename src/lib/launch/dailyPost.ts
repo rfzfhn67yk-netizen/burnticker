@@ -18,8 +18,9 @@ import { BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
  *             which side burned), the next scheduled market, the scoreboard link — from the pair's tally (tokenPage.ts pairTally)
  *   receipt   @BurnTicker RECEIPT (2026-10-10, "the receipt is the product"): one post per confirmed burn, plain and numeric — receipt
  *             number, ticker, settled day, the reading, units → tokens burned, supply, tx + page link. Nothing else.
- *   scoreboard @BurnTicker SCOREBOARD (2026-10-10, "a season is a scoreboard of burns"): "Week 6 · 14 team coins across 5 leagues · 9
- *             burned yesterday", then the team coins ranked by receipts. The leader is the champion: a stat, never a recipient.
+ *   scoreboard @BurnTicker SCOREBOARD (2026-10-10, "a season is a scoreboard of burns"): ONE LEAGUE, ONE SEASON per post — "NHL 2026–27
+ *             · Oct 9 · 4 team coins · 3 burned yesterday", then that league's coins ranked by receipts. The leader is "most receipts so
+ *             far"; "champion" only once the season has ended. Never a cross-league ranking: across leagues only a count (`allLeaguesLine`).
  *
  * `pickTemplate` chooses by the day's state on Treasury's clock (America/New_York) and the owner's clock (America/Denver, Sunday =
  * weekly). The same text is rendered on the $DEFICIT page (site/deficit/index.html #today — its JS mirrors `dailyText`, pinned by a
@@ -302,7 +303,9 @@ export function pairDailyText(t: PairTally, site?: string | null): string {
 // ---- the two @BurnTicker formats (owner, 2026-10-10): receipts and scoreboards, visibly different on the timeline ----
 /** The short disclaimer the @BurnTicker posts carry (fits the 280-character budget). */
 export const SHORT_DISCLAIMER = "a memecoin — supply, not price.";
-export const SCOREBOARD_FOOTER = "Champion = most receipts, not a prize. Memecoins — supply, not price.";
+/** The scoreboard footer: during a season (no champion yet) and after it ends (the champion line is a stat, never a prize). */
+export const SCOREBOARD_FOOTER = "Receipt counts — nothing is won. Memecoins — supply, not price.";
+export const SCOREBOARD_FOOTER_FINAL = "Champion = most receipts, not a prize. Memecoins — supply, not price.";
 
 /** The league of a team coin from its selector (`catalogue:espn.team:<league>-<ABBR>-…` or `…espn.game:<league>-…`); null for any other coin. */
 export function teamLeagueOf(selectorKey: string): string | null {
@@ -330,39 +333,79 @@ export function receiptPostText(s: Pick<TokenStatusJson, "ticker" | "seriesTitle
   ].join("\n");
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-10-09" → "Oct 9". */
+export const fmtDay = (day: string): string => `${MONTHS[Number(day.slice(5, 7)) - 1]} ${Number(day.slice(8, 10))}`;
+/** A date range the way the scoreboards print it: "Oct 3 – 9", "Sep 28 – Oct 4". */
+export function fmtRange(from: string, to: string): string {
+  return from.slice(0, 7) === to.slice(0, 7) ? `${fmtDay(from)} – ${Number(to.slice(8, 10))}` : `${fmtDay(from)} – ${fmtDay(to)}`;
+}
+
+/**
+ * The default season label for a league on a day (the caller may pass its own): leagues whose season spans the new year read
+ * "2026–27" (NHL, NBA: from July), the NFL reads its starting year (through February), MLB reads "2026", or "2026 postseason" in
+ * October and November. Any other league reads the calendar year.
+ */
+export function seasonLabel(league: string, day: string): string {
+  const y = Number(day.slice(0, 4)), m = Number(day.slice(5, 7));
+  switch (league.toUpperCase()) {
+    case "NHL": case "NBA": return m >= 7 ? `${y}–${String((y + 1) % 100).padStart(2, "0")}` : `${y - 1}–${String(y % 100).padStart(2, "0")}`;
+    case "NFL": return String(m >= 3 ? y : y - 1);
+    case "MLB": return m >= 10 ? `${y} postseason` : String(y);
+    default: return String(y);
+  }
+}
+
 export interface ScoreboardInput {
   index: PlatformIndexJson; receiptsByTicker: Record<string, readonly ReceiptJson[]>;
+  /** The league this scoreboard covers (NHL, MLB, …, as `teamLeagueOf` reads it). Required: there is no cross-league scoreboard. */
+  league: string;
+  /** The season label; default `seasonLabel(league, day)`. */
+  season?: string | null;
   /** The day the "burned yesterday" count reads (UTC date of the settlements) — the post goes out the day after. */
   day: string;
-  /** The season's week number when the caller knows it; otherwise the header reads "Week of <Monday>". */
-  week?: number | null;
-  /** How many ranked lines (default 3, which keeps the post inside 280 characters without a link). */
+  /** True once the league's season is over: the leader becomes "champion". During the season it is "most receipts so far". */
+  seasonOver?: boolean;
+  /** How many ranked lines (default 3). */
   top?: number;
   /** Appended to the footer when given (a link costs 24 of the 280 characters; the profile carries the site anyway). */
   site?: string | null;
 }
 
+const burnedOn = (receipts: readonly ReceiptJson[] | undefined, day: string) => (receipts ?? []).some((r) => onDay(r, day) && r.status === "confirmed" && Number(r.burned ?? 0) > 0);
+const teamCoins = (ix: PlatformIndexJson) => ix.tokens.filter((t) => t.status === "live" && teamLeagueOf(t.selectorKey) !== null);
+/** The leagues that have live team coins, in a fixed rotation that never starts with the NFL. */
+export function scoreboardLeagues(ix: PlatformIndexJson): string[] {
+  const order = ["NHL", "MLB", "NBA", "NFL"];
+  const have = [...new Set(teamCoins(ix).map((t) => teamLeagueOf(t.selectorKey)!))];
+  return have.sort((a, b) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b)) || a.localeCompare(b));
+}
+
 /**
- * (h) SCOREBOARD — the season as a count of receipts across every league: the header line, the team coins ranked by receipts (ties by
- * the share of supply burned, then ticker), the leader marked champion. Every number is a receipt count or a burned share — never a
- * price, never a pot. Team coins are the live coins whose selector is an ESPN team or game series (`teamLeagueOf`).
+ * (h) SCOREBOARD — one league, one season: the header, that league's live team coins ranked by receipts (ties by the share of supply
+ * burned, then ticker), the leader marked "most receipts so far" — or "champion" once `seasonOver`. Every number is a receipt count or
+ * a burned share — never a price, never a pot, never a ranking across leagues.
  */
 export function scoreboardText(i: ScoreboardInput): string {
-  const team = i.index.tokens.filter((t) => t.status === "live" && teamLeagueOf(t.selectorKey) !== null);
-  const leagues = new Set(team.map((t) => teamLeagueOf(t.selectorKey)!));
-  const burnedOnDay = team.filter((t) => (i.receiptsByTicker[t.ticker] ?? []).some((r) => onDay(r, i.day) && r.status === "confirmed" && Number(r.burned ?? 0) > 0)).length;
-  const ranked = [...team].sort((a, b) => b.burns - a.burns || b.pctOfSupply - a.pctOfSupply || a.ticker.localeCompare(b.ticker));
-  const top = ranked.slice(0, Math.max(1, i.top ?? 3));
+  const league = i.league.toUpperCase();
+  const coins = teamCoins(i.index).filter((t) => teamLeagueOf(t.selectorKey) === league);
+  const burned = coins.filter((t) => burnedOn(i.receiptsByTicker[t.ticker], i.day)).length;
+  const ranked = [...coins].sort((a, b) => b.burns - a.burns || b.pctOfSupply - a.pctOfSupply || a.ticker.localeCompare(b.ticker));
   const lead = ranked[0]?.burns ?? 0;
-  const champions = lead > 0 ? ranked.filter((t) => t.burns === lead) : [];
-  const head = `${i.week ? `Week ${i.week}` : `Week of ${weekOf(i.day).from}`} · ${plural(team.length, "team coin")} across ${plural(leagues.size, "league")} · ${burnedOnDay} burned yesterday`;
-  const lines = top.map((t, k) => `${k + 1}. $${t.ticker} ${plural(t.burns, "receipt")}, ${fmtPct(t.pctOfSupply)} burned · ${teamLeagueOf(t.selectorKey)}${champions.length === 1 && champions[0] === t ? " · champion" : ""}`);
-  const tie = champions.length > 1 ? `Champion: tied at ${plural(lead, "receipt")} (${champions.map((t) => `$${t.ticker}`).join(", ")})` : null;
+  const leaders = lead > 0 ? ranked.filter((t) => t.burns === lead) : [];
+  const mark = i.seasonOver ? (leaders.length > 1 ? "champion (tied)" : "champion") : (leaders.length > 1 ? "most receipts so far (tied)" : "most receipts so far");
+  const head = `${league} ${i.season ?? seasonLabel(league, i.day)} · ${fmtDay(i.day)} · ${plural(coins.length, "team coin")} · ${burned} burned yesterday`;
+  const lines = ranked.slice(0, Math.max(1, i.top ?? 3)).map((t, k) => `${k + 1}. $${t.ticker} ${plural(t.burns, "receipt")}, ${fmtPct(t.pctOfSupply)} burned${leaders.includes(t) ? ` · ${mark}` : ""}`);
+  const footer = i.seasonOver ? SCOREBOARD_FOOTER_FINAL : SCOREBOARD_FOOTER;
   return [
     head,
-    team.length ? lines.join("\n") : "No team coin is live.",
-    tie,
-    lead === 0 && team.length ? "No receipts this season so far: no champion." : null,
-    i.site && i.site.trim() ? `${SCOREBOARD_FOOTER} ${siteOf(i.site)}/` : SCOREBOARD_FOOTER,
-  ].filter((x): x is string => x !== null).join("\n");
+    coins.length ? (lead === 0 ? "No receipts this season so far." : lines.join("\n")) : `No ${league} team coin is live.`,
+    i.site && i.site.trim() ? `${footer} ${siteOf(i.site)}/` : footer,
+  ].join("\n");
+}
+
+/** The one cross-league line allowed: a count, never a table — "Yesterday (Oct 9) across all leagues: 9 team coins burned." */
+export function allLeaguesLine(ix: PlatformIndexJson, receiptsByTicker: Record<string, readonly ReceiptJson[]>, day: string): string {
+  const n = teamCoins(ix).filter((t) => burnedOn(receiptsByTicker[t.ticker], day)).length;
+  return `Yesterday (${fmtDay(day)}) across all leagues: ${plural(n, "team coin")} burned.`;
 }

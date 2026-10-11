@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { lintCopy, loadCopyLintConfig, xLength } from "@/lib/launch/copyLint";
 import {
   EXPLAINER_TOPICS, POST_FORMATS, PostRefused, QUEUE_SCHEMA, TEASER_TOPICS, THREAD_MAX, appendQueue, asThread, checkDraft, coinLaunchThread, deficitLaunchThread,
-  deficitReceiptDraft, draftId, explainerDraft, pairScoreboardDraft, platformLaunchThread, readLeagues, readQueue, receiptDraft, reviewLine, scoreboardDraft,
+  deficitReceiptDraft, draftId, explainerDraft, pairScoreboardDraft, platformLaunchThread, readLeagues, readQueue, receiptDraft, reviewLine, scoreboardDraft, scoreboardDrafts,
   seasonCardDraft, teaserDraft, type Draft,
 } from "@/lib/launch/postQueue";
 import * as F from "./postQueueFixtures.ts";
@@ -27,7 +27,7 @@ function everyDraft(): Draft[] {
   return [
     receiptDraft(F.RAYS_STATUS, F.RAYS_RECEIPTS, F.RAYS_RECEIPTS[4], site),
     deficitReceiptDraft(sample.status, deficitBurns, lastConfirmed, F.FIXTURE_DEFICIT_SITE),
-    scoreboardDraft({ index: F.SEASON_INDEX, receiptsByTicker: F.SEASON_RECEIPTS, day: F.FIXTURE_DAY, site }),
+    ...scoreboardDrafts({ index: F.SEASON_INDEX, receiptsByTicker: F.SEASON_RECEIPTS, day: F.FIXTURE_DAY, site }),
     pairScoreboardDraft(F.PAIR_TALLY, site),
     seasonCardDraft(F.RAYS_STATUS, site), seasonCardDraft(F.ONESHOT_STATUS, site),
     ...EXPLAINER_TOPICS.map((t) => explainerDraft(t, site)),
@@ -69,10 +69,15 @@ describe("every format from the fixtures", () => {
     const t = [...deficitLaunchThread(facts.deficit, F.FIXTURE_DEFICIT_SITE).posts, ...teaserDraft("the-rule", { site, deficit: facts.deficit }).posts].join("\n");
     assert.match(t, /2% of its burn pool/); assert.match(t, /0\.98\^units/); assert.match(t, /sha256:78f4c327552e/);
   });
-  test("the scoreboard (the copy agent's scoreboardText) ranks live team coins only (retired and non-team coins left out) and fits one post", () => {
-    const p = scoreboardDraft({ index: F.SEASON_INDEX, receiptsByTicker: F.SEASON_RECEIPTS, day: F.FIXTURE_DAY, site, top: 5 }).posts;
-    assert.equal(p.length, 1); assert.match(p[0], /5 team coins across 4 leagues · 2 burned yesterday/); assert.match(p[0], /1\. \$OILERS 6 receipts.* champion/);
-    assert.doesNotMatch(p[0], /\$DEFICIT|\$COYOTES/); assert.ok(xLength(p[0]) <= 280);
+  test("the scoreboard (the copy agent's scoreboardText): one post per league, live team coins only, then the cross-league count — never a ranking across leagues", () => {
+    const d = scoreboardDrafts({ index: F.SEASON_INDEX, receiptsByTicker: F.SEASON_RECEIPTS, day: F.FIXTURE_DAY, site, top: 5 });
+    assert.deepEqual(d.map((x) => x.subject), ["NHL season 2026-10-09", "MLB season 2026-10-09", "NBA season 2026-10-09", "NFL season 2026-10-09", "all leagues 2026-10-09"]);
+    const mlb = d[1].posts[0];
+    assert.match(mlb, /^MLB 2026 postseason · Oct 9 · 2 team coins · 1 burned yesterday\n1\. \$RAYS 5 receipts, 2\.41% burned · most receipts so far\n2\. \$MARINERS 0 receipts/);
+    for (const x of d) { assert.equal(x.posts.length, 1); assert.doesNotMatch(x.posts[0], /\$DEFICIT|\$COYOTES|champion/); assert.ok(xLength(x.posts[0]) <= 280); }
+    assert.doesNotMatch(d[0].posts[0], /\$RAYS|\$LAKERS|\$EAGLES/, "the NHL post shows NHL coins only");
+    assert.equal(d[4].posts[0], "Yesterday (Oct 9) across all leagues: 2 team coins burned.");
+    assert.equal(scoreboardDraft({ index: F.SEASON_INDEX, receiptsByTicker: F.SEASON_RECEIPTS, day: F.FIXTURE_DAY, site, league: "NHL" }).posts.length, 1);
   });
 });
 

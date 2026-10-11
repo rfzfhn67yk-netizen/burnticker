@@ -223,3 +223,40 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
 - allowlist sha256 (config/public-repo.allowlist): `4846d807d7f41728915e06d9dfb2d938c4df44f6d33d725cff0507506cc2b701`
 - files published: 698
+
+## 2026-10-10 — scoreboards per league and season (no publish, no deploy)
+
+- Owner feedback on the landing page: the example scoreboard ranked NHL, MLB, NBA and NFL coins in one table with a "champion" badge
+  glued to the ticker. Scoreboards are now one per league and season ("NHL 2026–27", "MLB 2026 postseason", "NBA 2026–27", "NFL
+  2026"), dated ("Oct 3 – 9") instead of numbered by week, each ranking only its league's coins by receipts and burned share. During a
+  season the leader is "most receipts so far"; "champion" appears only after a season ends, inside its league. Across leagues only a
+  count ("Yesterday (Oct 9) across all leagues: 5 team coins burned."). The landing sample carries an "example data" tag; the marker is
+  its own element with a real space.
+- `scoreboardText` takes a required `league` (plus `season`, `seasonOver`); `allLeaguesLine` is the count line; `seasonLabel`,
+  `fmtDay`, `fmtRange`. `burnkeeper-post-draft --template=scoreboard` takes `--league` (or prints one post per league, then the count),
+  `--season`, `--season-over`. The copy lint lets a month date ("Apr 20") past the APR rule.
+- The sample season (`test/fixtures/burnticker-season`) now has realistic early-season counts; docs/launch/daily-post.md §(h), x-threads
+  §2c, the X profile, the whitepaper abstract and both README openings say per league, per season.
+
+## 2026-10-10 — cold-read edits (docs/launch/gtm/COLD-READ.md; no publish, no deploy)
+
+- Landing: a one-line definition under the hero (E1); the $RAYS receipt labelled as an example (E4); the "reviewed" chip reads
+  "three blind AI reviews, not a firm audit" (E3); "anyone can crank" replaced by the permissionless instruction with its pre-audit
+  cranker list (up to three keys, at most 90 days, until the cap lifts) (E5/E6); the crank card says honestly that at quorum 1 burns stop
+  if the operator stops, holders keep their coins and the retired-coin sweep is queued (E7); the upgrade-authority plan sentence is
+  replaced by "who holds it today is on the trust page" (E8); the "burnticker" fee card no longer claims a post-graduation LP share — LP
+  is 100 % burned (E9); "not built yet" → "not built" (E10); "nothing to trust" dropped.
+- Guardrail strip (landing, public README, announcement thread): "signed readings (one attester at launch; second attester scheduled,
+  not live)" (E14) and "three blind AI reviews, not a firm audit".
+- Whitepaper status table: devnet deployed and rehearsed, public repository, operator contact; §3.4 five of eleven categories settleable;
+  §11's not-built list updated (W1–W5). html regenerated.
+- Public README: the on-chain memo is v1/v2 from the program; `BT|…|v3` is the platform's published receipt line (R1); the remaining
+  named venue is "a US prediction exchange (not used; its terms do not permit it)" (R2). App footer: @BurnTicker (E12).
+
+## 2026-10-10 — publish from 30dc7997d73d
+
+- monorepo commit: `30dc7997d73dc8c321190ba7fd289356bf39526e` (the working tree had uncommitted changes when this tag was written)
+- program hash: `f3812ce47ff86e8c0bc8dcaae856e0e2c8523850afb19bda9de05ce559c775d0` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
+- allowlist sha256 (config/public-repo.allowlist): `4846d807d7f41728915e06d9dfb2d938c4df44f6d33d725cff0507506cc2b701`
+- files published: 699

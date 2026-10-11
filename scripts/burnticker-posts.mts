@@ -13,7 +13,7 @@
  *   explainer [--topic=how-a-burn-happens|what-a-receipt-is|why-lp-is-burned|why-creators-earn-nothing]
  *   launch-thread --kind=deficit|platform|coin [--ticker=T] [--launch-tx=URL]
  *   receipt [--ticker=T|--deficit] [--day=YYYY-MM-DD] [--all]   confirmed burns only (default: the day before --now, UTC)
- *   scoreboard [--day=YYYY-MM-DD] [--week=N] [--pair=<pairId>]
+ *   scoreboard [--day=YYYY-MM-DD] [--league=NHL] [--season=…] [--season-over] [--pair=<pairId>]   (one post per league + the count line)
  *   season-card --ticker=T
  *
  * Flags: --fixtures (test/postQueueFixtures.ts instead of data dirs) · --print (show every post) · --dry-run (write nothing) ·
@@ -30,7 +30,7 @@ import type { PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from 
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import {
   DEVNET_EVIDENCE, EXPLAINER_TOPICS, POST_FORMATS, PostRefused, QUEUE_FILE, TEASER_TOPICS, appendQueue, checkDraft, coinLaunchThread, coverageCounts, deficitFacts, deficitLaunchThread,
-  deficitReceiptDraft, devnetReceipt, explainerDraft, pairScoreboardDraft, platformLaunchThread, printDraft, receiptDraft, reviewFacts, scoreboardDraft, seasonCardDraft, teaserDraft,
+  deficitReceiptDraft, devnetReceipt, explainerDraft, pairScoreboardDraft, platformLaunchThread, printDraft, receiptDraft, reviewFacts, scoreboardDrafts, seasonCardDraft, teaserDraft,
   type Draft, type ExplainerTopic, type PostFormat, type QueuedPost, type TeaserTopic,
 } from "@/lib/launch/postQueue";
 
@@ -138,7 +138,7 @@ function build(f: PostFormat, data: Data): Draft[] {
           const receiptsByTicker: Record<string, ReceiptJson[]> = {};
           for (const t of data.index.tokens) receiptsByTicker[t.ticker] = data.receipts(t.ticker);
           const sbDay = all && fixtures ? "2026-10-09" : day;
-          out.push(scoreboardDraft({ index: data.index, receiptsByTicker, day: sbDay, week: args.has("week") ? Number(args.get("week")) : null, site }));
+          out.push(...scoreboardDrafts({ index: data.index, receiptsByTicker, day: sbDay, league: args.get("league") ?? null, season: args.get("season") ?? null, seasonOver: args.has("season-over"), site }));
         }
       }
       return out;

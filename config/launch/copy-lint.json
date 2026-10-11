@@ -70,6 +70,7 @@
     { "id": "treasury-posts", "pattern": "treasury (posts|publishes)", "note": "a statement of Treasury's schedule, not a promise" },
     { "id": "on-chain-payout", "pattern": "\\b(on-chain payouts?( vectors?)?|payout vectors?|payouts? (is |are )?on (chain|polygon)|50-50 payouts?|payoutNumerators|payoutDenominator)\\b", "note": "Polymarket's adjudicated settlement on Polygon, named the one way the owner allows" },
     { "id": "no-prize", "pattern": "\\b(no|not|never|nor|without|nothing is)( an?| the| any| its| a market'?s| a)? (prizes?|pay-?outs?|jackpots?|pots?|rewards?|stakes?|staking|bets?|betting|wagers?|odds|winnings)\\b", "note": "saying what does not exist" },
+    { "id": "month-day", "pattern": "\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \\d{1,2}\\b", "note": "a scoreboard date ('Apr 20', 'Oct 3 – 9'); the APR rule must not read the month" },
     { "id": "no-team-buy", "pattern": "\\bno team buys?\\b", "note": "the guardrail: the team never buys at launch (team allocation 0%)" },
     { "id": "drift-bet", "pattern": "\\bdrift[- ]bet\\b", "note": "a venue/parser name in the rules schema (Drift BET)" },
     { "id": "derby-input", "pattern": "(?<![$\\w])[A-Z0-9]{1,12} out-gains (?!\\$)[A-Z0-9]{1,12}( by market cap)?\\b", "note": "Burn Derby (2026-10-10): ANOTHER coin's move named as the rule's input ('WIF out-gains SHIB'); a $TICKER (our coins) never matches, so talk about our own coins still fails" },

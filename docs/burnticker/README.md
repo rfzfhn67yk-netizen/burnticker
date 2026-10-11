@@ -2,7 +2,8 @@
 
 **Positioning (owner-approved 2026-10-10 night).** One sentence everywhere: **"Coins that burn on real-world results — with
 receipts."** Sub-line: **"Launch one. Follow the season."** The receipt is the product; a season is a scoreboard of burns; nothing is
-ever won — things are only burned, and a champion is the coin with the most receipts, never a recipient of anything. Four surfaces
+ever won — things are only burned, and scoreboards are per league and per season — when a season ends, the coin with the most receipts is its league's champion,
+never a recipient of anything. Four surfaces
 with plain names: **Coins** (the grid), **Launch** (the sentence box and the dials), **Seasons** (scoreboards: team coins and
 rivalries, every number a receipt count or a burned share — today the rivalries page, `/burnticker/rivalries`) and **Trust**
 (sources, the coverage table, reviews, the receipts audit). Two layers, shown by example: the engine (a launchpad with locked rules;

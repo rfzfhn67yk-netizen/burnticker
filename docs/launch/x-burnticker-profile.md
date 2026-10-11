@@ -48,15 +48,18 @@ docs/launch/x-threads.md §2 instead.)
 - **Receipts** — plain and numeric, one per burn: receipt number, ticker, day, the reading, units → tokens burned, supply, the
   transaction and the coin's page. `receiptPostText()` in `src/lib/launch/dailyPost.ts`; template and a filled example in
   docs/launch/x-threads.md §2c.
-- **Scoreboards** — the season as receipt counts: "Week 6 · 14 team coins across 4 leagues · 9 burned yesterday", then the team
-  coins ranked by receipts with the champion marked. `scoreboardText()` in the same file; template and example in §2c.
+- **Scoreboards** — one league, one season per post: "NHL 2026–27 · Oct 9 · 4 team coins · 2 burned yesterday", then that league's
+  coins ranked by receipts, the leader marked "most receipts so far" ("champion" only after the season ends). Never a ranking across
+  leagues; across leagues only a count ("Yesterday (Oct 9) across all leagues: 4 team coins burned."). `scoreboardText()` and
+  `allLeaguesLine()` in the same file; template and example in §2c.
 
 ## Voice rules for the account
 
 - Report, do not promote. Every post about a burn states the reading, the units and the receipt. Nothing about price, ever.
 - Nothing is ever won — things are only burned. No prize, pot, payout, jackpot, reward, stake, bet, wager or odds; nobody "wins
-  money" or "gets paid", and holders never "earn". A champion is the coin with the most receipts: a stat on a scoreboard, never a
-  recipient of anything.
+  money" or "gets paid", and holders never "earn". Scoreboards are per league and per season; during a season the leader is "most
+  receipts so far", and only when the season ends is the coin with the most receipts its league's champion — a stat on a scoreboard,
+  never a recipient of anything.
 - Never: "guaranteed", "moon", "100x", "early", "don't miss", "pump", "buy now", price targets, countdowns to a listing.
 - Never a call to buy. "Trade" links appear on the pages, not in posts.
 - Every league, no league first. Examples rotate across sports — Rays, Lakers, Oilers, Eagles — and a list of leagues never starts

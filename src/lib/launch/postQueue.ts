@@ -6,7 +6,7 @@ import type { PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from 
 import { BURN_POOL_CURVE_BPS, BURNTICKER_DEV_FEE_BPS, LP_BURNED_PCT } from "@/lib/burnticker/fees";
 import { LEAGUES } from "@/lib/burnticker/sources/espn";
 import { formatHits, lintCopy, loadCopyLintConfig, xLength, type CopyLintConfig, type CopyLintHit } from "@/lib/launch/copyLint";
-import { DISCLAIMER, SHORT_DISCLAIMER, dailyText, fmtInt, fmtPct, pairDailyText, receiptPostText, scoreboardText } from "@/lib/launch/dailyPost";
+import { DISCLAIMER, SHORT_DISCLAIMER, allLeaguesLine, dailyText, fmtInt, fmtPct, pairDailyText, receiptPostText, scoreboardLeagues, scoreboardText } from "@/lib/launch/dailyPost";
 
 /**
  * THE POST QUEUE (go-to-market pack, 2026-10-10; plan of record docs/launch/gtm/PLAN.md §3 and §5). Builds X posts in six fixed
@@ -14,7 +14,8 @@ import { DISCLAIMER, SHORT_DISCLAIMER, dailyText, fmtInt, fmtPct, pairDailyText,
  * file the owner reads, edits nothing in, and posts BY HAND. Nothing here posts, signs in or opens a network connection.
  *
  *   receipt        one per confirmed burn — @BurnTicker (dailyPost.ts receiptPostText, the copy agent's format) or @USA_DEFICIT (dailyText)
- *   scoreboard     the season as receipt counts across every league the platform reads (dailyPost.ts scoreboardText), or a pair (pairDailyText)
+ *   scoreboard     one league, one season per post (dailyPost.ts scoreboardText) — never a ranking across leagues; across leagues only the
+ *                  count line (allLeaguesLine) — or a pair (pairDailyText)
  *   season-card    one coin's rule, its window (only what status.json says), receipts so far, the locked hash
  *   explainer      how a burn happens · what a receipt is · why LP is burned · why creators earn nothing (numbers from fees.ts)
  *   launch-thread  $DEFICIT (from its rule file), the platform (guardrails derived from transparency.json), or any coin
@@ -156,14 +157,22 @@ export function deficitReceiptDraft(status: StatusJson, burns: readonly BurnJson
 }
 
 // ---- (2) scoreboard ----
-export interface ScoreboardInput { index: PlatformIndexJson; receiptsByTicker: Record<string, readonly ReceiptJson[]>; day: string; week?: number | null; top?: number; site: string }
+export interface ScoreboardInput { index: PlatformIndexJson; receiptsByTicker: Record<string, readonly ReceiptJson[]>; day: string; league?: string | null; season?: string | null; seasonOver?: boolean; top?: number; site: string }
 
-/** The season — the copy agent's scoreboard format (dailyPost.ts scoreboardText), with as many ranked lines as fit one post (`top`, default 3, down to 1). */
-export function scoreboardDraft(i: ScoreboardInput): Draft {
+/** One league's season — the copy agent's scoreboard format (dailyPost.ts scoreboardText), with as many ranked lines as fit one post (`top`, default 3, down to 1). */
+export function scoreboardDraft(i: ScoreboardInput & { league: string }): Draft {
   let top = Math.max(1, i.top ?? 3);
-  let text = scoreboardText({ ...i, top, site: siteOf(i.site) });
-  while (top > 1 && xLength(text) > 280) text = scoreboardText({ ...i, top: --top, site: siteOf(i.site) });
-  return { format: "scoreboard", account: "@BurnTicker", subject: `season ${i.day}`, posts: [text] };
+  const sb = (n: number) => scoreboardText({ ...i, top: n, site: siteOf(i.site) });
+  let text = sb(top);
+  while (top > 1 && xLength(text) > 280) text = sb(--top);
+  return { format: "scoreboard", account: "@BurnTicker", subject: `${i.league.toUpperCase()} season ${i.day}`, posts: [text] };
+}
+
+/** One post per league (never a ranking across leagues), then the one cross-league line allowed — a count. With `league`: that league only. */
+export function scoreboardDrafts(i: ScoreboardInput): Draft[] {
+  const leagues = i.league ? [i.league] : scoreboardLeagues(i.index);
+  const per = leagues.map((league) => scoreboardDraft({ ...i, league }));
+  return i.league ? per : [...per, { format: "scoreboard", account: "@BurnTicker", subject: `all leagues ${i.day}`, posts: [allLeaguesLine(i.index, i.receiptsByTicker, i.day)] }];
 }
 
 /** A rivalry pair's running score — the pair post's own template (dailyPost.ts pairDailyText). */

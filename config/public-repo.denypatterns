@@ -19,10 +19,11 @@
 
 # local env FILES (.env, .env.local …; `process.env.X` is code, not a file) and the private RPC variable (the public code reads
 # BURNKEEPER_RPC_URL / BURNTICKER_RPC_URL only). .gitignore must ignore env files in the public repo too — the one place the name is wanted
-/(^|[^A-Za-z0-9_.])\.env(\.[A-Za-z0-9_-]+)?\b/ allow: .gitignore config/public-repo/overlay/.gitignore test/burntickerOps.test.ts docs/burnticker/deploy.md docs/burnticker/runbook.md docs/burnticker/REHEARSAL-RUNSHEET.md deploy/systemd/mct-burnticker-keeper.service deploy/systemd/mct-burnticker-web.service scripts/load-env.sh scripts/service/run-burnkeeper.sh scripts/service/run-burnticker-keeper.sh scripts/service/run-burnticker-web.sh scripts/ops/install-burnticker-units.sh
+/(^|[^A-Za-z0-9_.])\.env(\.[A-Za-z0-9_-]+)?\b/ allow: .gitignore config/public-repo/overlay/.gitignore test/burntickerOps.test.ts docs/burnticker/deploy.md docs/burnticker/runbook.md docs/burnticker/REHEARSAL-RUNSHEET.md deploy/systemd/mct-burnticker-keeper.service deploy/systemd/mct-burnticker-web.service scripts/load-env.sh scripts/service/run-burnkeeper.sh scripts/service/run-burnticker-keeper.sh scripts/service/run-burnticker-web.sh scripts/ops/install-burnticker-units.sh docs/burnticker/reviews/2026-10-10-pair-curve-blind-1.md
 # (the host's units and entrypoints READ that host's env file by name — load-env.sh is the reader; none of them contains a value)
 # (operator docs name the host's env FILE so the owner knows where variables go; they never contain a value — the trading repo's env files are never published)
 # (the ops test ASSERTS that the keeper never reads an env file and that the ship script excludes them — the names appear only inside those assertions)
+# (blind review 1 of pair_curve states, as a scope note, that no env FILE was touched — a sentence about the method, no value)
 /SOLANA_RPC_URL/
 
 # key material and private key paths

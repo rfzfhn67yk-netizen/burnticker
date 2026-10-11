@@ -12,8 +12,10 @@
  *   … --template=incident --what=… --affects=… --action=… --status=… [--not-affected=…] [--at=ISO]   # (e) incident frame
  *   … --template=receipt --platform-dir=… --ticker=RAYS [--event=<eventId>|--date=YYYY-MM-DD]   # (g) @BurnTicker receipt: one post per
  *                                                   confirmed burn (latest, the named event, or every burn settled on --date)
- *   … --template=scoreboard --platform-dir=… [--date=YYYY-MM-DD] [--week=6] [--top=3] [--site=…]   # (h) @BurnTicker scoreboard: team
- *                                                   coins ranked by receipts; --date is the "yesterday" counted (default: the day before --now, UTC)
+ *   … --template=scoreboard --platform-dir=… [--league=NHL] [--season=2026–27] [--season-over] [--date=YYYY-MM-DD] [--top=3] [--site=…]
+ *                                                   # (h) @BurnTicker scoreboard, ONE LEAGUE per post: that league's team coins ranked by
+ *                                                   receipts. Without --league: one post per league, then the cross-league count line.
+ *                                                   --date is the "yesterday" counted (default: the day before --now, UTC)
  *   … --template=T2                               # the evergreen set T1–T10 (docs/launch/x-threads.md §3) still works; B1 is replaced by `receipt`
  *   … lint "some text" | lint path/to/file.txt | lint -   # lint anything (stdin with -); exit 3 on a hit
  *
@@ -30,7 +32,7 @@ import path from "node:path";
 import type { BurnJson, StatusJson } from "@/lib/burnKeeper/statusPage";
 import type { PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
-import { dailyText, dayState, incidentText, noBurnText, pickTemplate, platformDailyText, receiptPostText, scoreboardText, weeklyText, type DailyTemplate, type NoBurnReason } from "@/lib/launch/dailyPost";
+import { allLeaguesLine, dailyText, dayState, incidentText, noBurnText, pickTemplate, platformDailyText, receiptPostText, scoreboardLeagues, scoreboardText, weeklyText, type DailyTemplate, type NoBurnReason } from "@/lib/launch/dailyPost";
 import { dateIn } from "@/lib/burnKeeper/schedule";
 
 const positional: string[] = [];
@@ -170,9 +172,11 @@ function main(): void {
     const receiptsByTicker: Record<string, ReceiptJson[]> = {};
     for (const t of ix.tokens) receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
     const day = args.get("date") ?? new Date(now - 86_400_000).toISOString().slice(0, 10);
-    const week = args.has("week") ? Number(args.get("week")) : null;
     const top = args.has("top") ? Number(args.get("top")) : undefined;
-    emit(scoreboardText({ index: ix, receiptsByTicker, day, week: week && Number.isFinite(week) ? week : null, top, site: args.get("site") ?? null }), `scoreboard · ${day}`);
+    const leagues = args.has("league") ? [args.get("league")!.toUpperCase()] : scoreboardLeagues(ix);
+    if (!leagues.length) { console.error(`no live team coins in ${platformDir}`); process.exit(1); }
+    for (const league of leagues) emit(scoreboardText({ index: ix, receiptsByTicker, league, season: args.get("season") ?? null, day, seasonOver: args.has("season-over"), top, site: args.get("site") ?? null }), `scoreboard · ${league} · ${day}`);
+    if (!args.has("league")) emit(allLeaguesLine(ix, receiptsByTicker, day), `scoreboard · all leagues (a count, never a table) · ${day}`);
     return;
   }
 

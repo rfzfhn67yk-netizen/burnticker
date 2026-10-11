@@ -57,7 +57,8 @@ section.lead{border-top:0}
 .hero{padding:26px 0 8px}
 .hero h1{font:700 clamp(1.85rem,6vw,3.6rem)/1.04 var(--mono);letter-spacing:-.02em;margin:0 0 12px;text-transform:uppercase;max-width:20ch;overflow-wrap:anywhere}
 .hero h1 em{font-style:normal;color:var(--amber)}
-.hero .sub{font:700 clamp(1.05rem,3.2vw,1.35rem)/1.3 var(--mono);color:var(--dim);margin:0 0 22px;letter-spacing:.02em}
+.hero .sub{font:700 clamp(1.05rem,3.2vw,1.35rem)/1.3 var(--mono);color:var(--dim);margin:0 0 10px;letter-spacing:.02em}
+.hero .def{margin:0 0 20px;max-width:68ch;color:var(--dim);font-size:.98rem}
 .doors{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 18px}
 @media (min-width:700px){.doors{grid-template-columns:repeat(2,1fr)}}
 .door{display:flex;flex-direction:column;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;color:var(--ink);min-width:0}
@@ -72,7 +73,7 @@ section.lead{border-top:0}
 .guard{list-style:none;margin:0;padding:12px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font:600 .78rem/1.35 var(--mono);color:var(--dim)}
 .guard li{white-space:nowrap}
 .guard li::before{content:"✓ ";color:var(--ok)}
-@media (max-width:519px){.guard li{white-space:normal}.hero{padding-top:14px}.hero .sub{margin-bottom:14px}.doors{gap:10px}.door{padding:14px 14px 12px;gap:6px}.door h3{font-size:1.4rem}.door .ex{display:none}}
+@media (max-width:519px){.guard li{white-space:normal}.hero{padding-top:14px}.hero .sub{margin-bottom:8px}.hero .def{font-size:.9rem;margin-bottom:14px}.doors{gap:10px}.door{padding:14px 14px 12px;gap:6px}.door h3{font-size:1.4rem}.door .ex{display:none}}
 
 /* ticker tape */
 .tape{position:relative;background:var(--tape);border-top:3px solid var(--amber);border-bottom:3px solid var(--amber);overflow:hidden;width:100%;margin-top:22px}
@@ -119,16 +120,25 @@ section.lead{border-top:0}
 .never b{color:var(--ink)}
 
 /* seasons: the scoreboard + rivalries */
-.board{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
-.board .bh{font:700 .95rem/1.4 var(--mono);color:var(--ink);margin:0 0 10px;overflow-wrap:anywhere}
+.exhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}
+.extag{font:700 .68rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ember);border:1.5px dashed var(--ember);border-radius:4px;padding:5px 8px}
+.exhead p{margin:0;color:var(--muted);font-size:.84rem}
+.boards{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 12px}
+@media (min-width:700px){.boards{grid-template-columns:repeat(2,1fr)}}
+.board{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
+.board .bh{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 10px;margin:0 0 8px}
+.board .bh b{font:700 1rem/1.3 var(--mono);color:var(--ink)}
+.board .bh span{font:.78rem/1.3 var(--mono);color:var(--muted)}
 .board table{width:100%;border-collapse:collapse;font:13px/1.4 var(--mono)}
-.board th{text-align:left;font-weight:600;color:var(--muted);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;padding:6px 6px;border-bottom:1px solid var(--line)}
-.board td{padding:7px 6px;border-bottom:1px dashed var(--line);color:var(--dim)}
+.board th{text-align:left;font-weight:600;color:var(--muted);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;padding:5px 6px;border-bottom:1px solid var(--line)}
+.board td{padding:7px 6px;border-bottom:1px dashed var(--line);color:var(--dim);vertical-align:top}
 .board td.t{color:var(--ink);font-weight:700}
-.board td.n{text-align:right;color:var(--ink)}
-.board th.n{text-align:right}
-.board .champ{display:inline-block;margin-left:6px;font:700 .62rem/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--violet);border:1.5px solid var(--violet);border-radius:3px;padding:2px 4px;vertical-align:1px}
-@media (max-width:519px){.board .hide-s{display:none}.board table{font-size:12px}}
+.board td.n,.board th.n{text-align:right}
+.board td.n{color:var(--ink)}
+.board .mark{display:inline-block;margin:0 0 0 8px;font:700 .6rem/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--violet);border:1.5px solid var(--violet);border-radius:3px;padding:2px 5px;vertical-align:1px;white-space:nowrap}
+.board .none{margin:6px 0 2px;font:.85rem/1.4 var(--mono);color:var(--dim)}
+@media (max-width:519px){.board .mark{display:block;width:max-content;margin:4px 0 0}.board table{font-size:12px}}
+.allcount{margin:0 0 18px;font:600 .9rem/1.4 var(--mono);color:var(--dim)}
 .seasons{display:grid;grid-template-columns:1fr;gap:16px}
 @media (min-width:900px){.seasons{grid-template-columns:repeat(2,1fr)}}
 .match{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 14px 14px;min-width:0}
@@ -139,8 +149,7 @@ section.lead{border-top:0}
 .score{margin:16px 0 4px;font:700 1.05rem/1.4 var(--mono);color:var(--ink);text-align:center}
 .score i{font-style:normal;color:var(--muted);font-weight:400}
 .ruleline{margin:6px 0 0;font-size:.9rem;color:var(--dim);text-align:center}
-.derby{grid-column:1/-1;display:grid;grid-template-columns:1fr;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
-@media (min-width:760px){.derby{grid-template-columns:1fr auto}}
+.derby{display:grid;grid-template-columns:1fr;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
 .derby h3{margin:0 0 6px;font:700 1.05rem/1.3 var(--mono);text-transform:uppercase;letter-spacing:.04em}
 .derby p{margin:0;color:var(--dim);font-size:.92rem}
 .strip{display:flex;gap:4px;align-items:center;font:700 .7rem/1 var(--mono);color:var(--muted)}
@@ -241,6 +250,7 @@ footer .links a{color:var(--dim)}
   <section class="hero wrap lead">
     <h1>Coins that burn on real-world results — <em>with receipts.</em></h1>
     <p class="sub">Launch one. Follow the season.</p>
+    <p class="def">A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought. The transaction is the receipt.</p>
     <div class="doors">
       <a class="door launch" href="/burnticker/launch">
         <span class="k">door 1 · the engine</span>
@@ -252,18 +262,18 @@ footer .links a{color:var(--dim)}
       <a class="door" href="/burnticker/rivalries">
         <span class="k">door 2 · the show</span>
         <h3>Seasons</h3>
-        <p>Team coins across MLB, NBA, NHL and NFL, scored in receipts. Rivalries and the Burn Derby keep a running tally of burns.</p>
-        <span class="ex">$OILERS 6 · $RAYS 5 · $LAKERS 4 · $EAGLES 3 receipts</span>
+        <p>One scoreboard per league and season — MLB, NBA, NHL, NFL — ranking that league's team coins by receipts. Rivalries and the Burn Derby keep a running tally of burns.</p>
+        <span class="ex">NHL 2026–27 · MLB 2026 postseason · NBA 2026–27 · NFL 2026 — one scoreboard each</span>
         <span class="go">Follow the season</span>
       </a>
     </div>
     <ul class="guard" aria-label="Guardrails on every coin">
       <li>settled on primary sources</li>
-      <li>signed readings (one attester at launch, a second within 14 days)</li>
+      <li>signed readings (one attester at launch; second attester scheduled, not live)</li>
       <li>program-run burns</li>
       <li>receipts anyone can recompute</li>
       <li>open source</li>
-      <li>reviewed</li>
+      <li>three blind AI reviews, not a firm audit</li>
       <li>creators earn nothing</li>
       <li>no team buy</li>
       <li>the platform never buys any coin</li>
@@ -291,7 +301,7 @@ footer .links a{color:var(--dim)}
     <h2>The receipt is the product</h2>
     <div class="product">
       <div class="slipwrap"><div class="slip hit">
-        <div class="sh">$RAYS</div><div class="ss">BURN RECEIPT #5 · 2026-10-09</div>
+        <div class="sh">$RAYS</div><div class="ss">BURN RECEIPT #3 · 2026-10-09</div>
         <div class="dash"></div>
         <div class="row"><span>SOURCE</span><b>ESPN SCOREBOARD</b></div>
         <div class="row"><span>CROSS-READ</span><b>MLB STATSAPI · AGREES</b></div>
@@ -307,7 +317,7 @@ footer .links a{color:var(--dim)}
         <div class="row"><span>RECOMPUTED</span><b>✓ CHAIN = SOURCE</b></div>
         <p class="motto">nothing won · only burned</p>
         <span class="stamp" aria-hidden="true">BURNED ON-CHAIN</span>
-      </div></div>
+      </div><p class="mocknote">example receipt · illustrative numbers, not a live coin</p></div>
       <div>
         <p class="lede">A Burnticker coin is a rule and its receipts. The rule says which settled result burns the coin and how much of its fee pool each burn spends. The receipt shows that it happened, in numbers anyone can check.</p>
         <ol>
@@ -316,29 +326,56 @@ footer .links a{color:var(--dim)}
           <li><b>The program burns.</b> <code>burn_receipts</code> spends the share the rule names from the coin's own fee pool, buys the coin on its own pool and burns every token it receives, in one instruction.</li>
           <li><b>The memo is the receipt:</b> source, reading, units, pool, spent, got, burned, the swap and the rule hash. Each coin's page recomputes it from the source and shows <span class="okmark">✓</span> only when chain and feed agree.</li>
         </ol>
-        <p class="never"><b>Nothing is ever won here — things are only burned.</b> A coin pays nothing on any result. A season is a scoreboard of burns, and a champion is the coin with the most receipts: a stat on a scoreboard, never a recipient of anything.</p>
+        <p class="never"><b>Nothing is ever won here — things are only burned.</b> A coin pays nothing on any result. A season is a scoreboard of burns, one per league. Only when a league's season ends is the coin with the most receipts its champion: a stat on a scoreboard, never a recipient of anything.</p>
       </div>
     </div>
   </section>
 
   <section class="wrap" id="seasons">
     <h2>Seasons · a scoreboard of burns</h2>
-    <p class="lede">Team coins from every league we read — MLB, NBA, NHL and NFL, each final confirmed by a second scoreboard — counted the only way Burnticker counts: in receipts. Every number below is a receipt count or a share of supply burned.</p>
-    <div class="seasons">
+    <p class="lede">One scoreboard per league and season, each ranking only that league's team coins by receipts and share of supply burned. Each final counts once a second scoreboard agrees. There is no ranking across leagues, and a champion is named only when a league's season ends.</p>
+    <div class="exhead"><span class="extag">example data</span><p>illustrative coins and counts, not live · receipts are season to date</p></div>
+    <div class="boards">
       <div class="board">
-        <p class="bh">Week 6 · 14 team coins across 4 leagues · 9 burned yesterday</p>
+        <p class="bh"><b>NHL 2026–27</b> <span>Oct 3 – 9 · 4 team coins</span></p>
         <table>
-          <thead><tr><th>#</th><th>coin</th><th class="hide-s">league</th><th class="n">receipts</th><th class="n">burned</th></tr></thead>
+          <thead><tr><th>#</th><th>coin</th><th class="n">receipts</th><th class="n">burned</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td class="t">$OILERS<span class="champ">champion</span></td><td class="hide-s">NHL</td><td class="n">6</td><td class="n">2.94%</td></tr>
-            <tr><td>2</td><td class="t">$RAYS</td><td class="hide-s">MLB</td><td class="n">5</td><td class="n">2.41%</td></tr>
-            <tr><td>3</td><td class="t">$LAKERS</td><td class="hide-s">NBA</td><td class="n">4</td><td class="n">1.96%</td></tr>
-            <tr><td>4</td><td class="t">$EAGLES</td><td class="hide-s">NFL</td><td class="n">3</td><td class="n">1.47%</td></tr>
-            <tr><td>5</td><td class="t">$BRUINS</td><td class="hide-s">NHL</td><td class="n">3</td><td class="n">1.12%</td></tr>
+            <tr><td>1</td><td class="t">$OILERS <span class="mark">most receipts so far</span></td><td class="n">2</td><td class="n">0.98%</td></tr>
+            <tr><td>2</td><td class="t">$BRUINS</td><td class="n">1</td><td class="n">0.51%</td></tr>
+            <tr><td>3</td><td class="t">$FLAMES</td><td class="n">1</td><td class="n">0.49%</td></tr>
           </tbody>
         </table>
-        <p class="mocknote">example scoreboard · illustrative counts, not live coins · champion = most receipts</p>
       </div>
+      <div class="board">
+        <p class="bh"><b>MLB 2026 postseason</b> <span>Oct 3 – 9 · 4 team coins</span></p>
+        <table>
+          <thead><tr><th>#</th><th>coin</th><th class="n">receipts</th><th class="n">burned</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td class="t">$RAYS <span class="mark">most receipts so far</span></td><td class="n">3</td><td class="n">1.47%</td></tr>
+            <tr><td>2</td><td class="t">$DODGERS</td><td class="n">2</td><td class="n">0.99%</td></tr>
+            <tr><td>3</td><td class="t">$CUBS</td><td class="n">1</td><td class="n">0.50%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="board">
+        <p class="bh"><b>NBA 2026–27</b> <span>Oct 3 – 9 · 3 team coins</span></p>
+        <p class="none">Regular season not started: no receipts this season so far.</p>
+      </div>
+      <div class="board">
+        <p class="bh"><b>NFL 2026</b> <span>Oct 3 – 9 · 4 team coins</span></p>
+        <table>
+          <thead><tr><th>#</th><th>coin</th><th class="n">receipts</th><th class="n">burned</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td class="t">$JAGUARS <span class="mark">most receipts so far</span></td><td class="n">3</td><td class="n">1.46%</td></tr>
+            <tr><td>2</td><td class="t">$EAGLES</td><td class="n">2</td><td class="n">0.98%</td></tr>
+            <tr><td>3</td><td class="t">$CHIEFS</td><td class="n">2</td><td class="n">0.97%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="allcount">Yesterday (Oct 9) across all leagues: 5 team coins burned.</p>
+    <div class="seasons">
       <article class="match" aria-label="Example rivalry: $OILERS vs $FLAMES">
         <p class="mk">rivalry · <b>ESPN scoreboard</b> · Oilers–Flames, every game this season</p>
         <div class="slips">
@@ -349,7 +386,7 @@ footer .links a{color:var(--dim)}
             <div class="row"><span>BURNS ON</span><b>EACH EDM LOSS</b></div>
             <div class="dash"></div>
             <div class="row"><span>BURNS</span><b>2</b></div>
-            <div class="row"><span>SUPPLY</span><b>98.0%</b></div>
+            <div class="row"><span>SUPPLY</span><b>99.0%</b></div>
           </div></div>
           <div class="vs" aria-hidden="true">VS</div>
           <div class="slipwrap b"><div class="slip hit">
@@ -358,12 +395,12 @@ footer .links a{color:var(--dim)}
             <div class="row"><span>CROSS-READ</span><b>NHL FEED</b></div>
             <div class="row"><span>BURNS ON</span><b>EACH CGY LOSS</b></div>
             <div class="dash"></div>
-            <div class="row"><span>BURNS</span><b>3</b></div>
-            <div class="row"><span>SUPPLY</span><b>97.1%</b></div>
+            <div class="row"><span>BURNS</span><b>1</b></div>
+            <div class="row"><span>SUPPLY</span><b>99.5%</b></div>
             <span class="stamp" aria-hidden="true">BURNED ON-CHAIN</span>
           </div></div>
         </div>
-        <p class="score">$OILERS 2 <i>:</i> 3 $FLAMES <i>·</i> supply 98.0% <i>:</i> 97.1%</p>
+        <p class="score">$OILERS 2 <i>:</i> 1 $FLAMES <i>·</i> supply 99.0% <i>:</i> 99.5%</p>
         <p class="ruleline">An Edmonton loss burns $OILERS; a Calgary loss burns $FLAMES. When they meet, exactly one side burns; a tie burns neither. Each final counts once a second scoreboard agrees.</p>
         <p class="mocknote">example rivalry · illustrative tally, not a live coin</p>
       </article>
@@ -392,7 +429,7 @@ footer .links a{color:var(--dim)}
         <div class="k">the engine</div>
         <h3>A launchpad with locked rules</h3>
         <p>One sentence becomes a rule: a settled result, a unit, and the share of the coin's fee pool each burn spends (1–10%). The rule is hashed at launch and written into the coin's on-chain config; a different rule is a different coin.</p>
-        <p><b>The rule is enforced by a program, not a promise.</b> The fee pool has no withdraw instruction, and anyone can crank a burn the rule computes.</p>
+        <p><b>The rule is enforced by a program, not a promise.</b> The fee pool has no withdraw instruction, and the program computes every burn from the rule and the signed reading: nobody chooses the amount.</p>
       </div>
       <div class="layer">
         <div class="k">the show</div>
@@ -410,7 +447,7 @@ footer .links a{color:var(--dim)}
       <div class="step"><div class="n">02</div><h3>Set the dial, lock the rule</h3><p>Choose what burns: a YES (or NO) result, or every full unit of a settled number (<code>$1B of debt</code>, <code>one qualifying day</code>), and the share of the fee pool each burn spends, 1–10%. <b>Rules are locked at launch.</b></p></div>
       <div class="step"><div class="n">03</div><h3>Launch</h3><p>One wallet approval creates the coin on Raydium LaunchLab with its burn pool as the creator-fee recipient and registers the rule and its hash. You pay the venue's creation cost and gas; nothing to us up front.</p></div>
     </div>
-    <p class="then"><b>Then burns happen, with receipts.</b> When the result is in and its cross-read agrees, the reading is signed on chain, anyone can crank the burn, and the pool buys the coin at market and burns everything received in one transaction whose memo carries the result, the arithmetic and the rule hash. Nothing to run, nothing to trust, nothing to withdraw.</p>
+    <p class="then"><b>Then burns happen, with receipts.</b> When the result is in and its cross-read agrees, the reading is signed on chain, the burn is cranked — a permissionless instruction, except that a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts — and the pool buys the coin at market and burns everything received in one transaction whose memo carries the result, the arithmetic and the rule hash. Nothing for a holder to run, nothing to withdraw.</p>
   </section>
 
   <section class="wrap" id="feeds">
@@ -431,9 +468,9 @@ footer .links a{color:var(--dim)}
     <h2>Why you can trust a burn</h2>
     <div class="trust">
       <div class="t"><h3>Locked rules</h3><p>The rule and its SHA-256 are written into the coin's config at launch and into every receipt. There is no instruction to change them. A different rule is a different coin.</p></div>
-      <div class="t"><h3>Signed readings</h3><p>Each reading is signed on chain as a <code>Reading</code> record before any burn uses it, by the attester quorum: one key at launch (the operator's data key); a second, independent attester is not built yet. Attesters are added under a 48-hour timelock, never removed below quorum.</p></div>
-      <div class="t"><h3>Permissionless crank</h3><p><code>crank_buyback</code> is callable by anyone. It computes the amount from the rule and the pool, swaps on the coin's own pool and burns in the same instruction. If we disappear, the public readings and the program keep working.</p></div>
-      <div class="t"><h3>No withdraw instruction</h3><p>The fee pool is a program-derived account. Trading fees flow in; anyone may deposit; the only way out is the burn. The program can still be upgraded: the plan is a 2-of-3 multisig with a 48-hour lock, set to none after review, and the trust page shows who holds it today.</p></div>
+      <div class="t"><h3>Signed readings</h3><p>Each reading is signed on chain as a <code>Reading</code> record before any burn uses it, by the attester quorum: one key at launch (the operator's data key); a second, independent attester is not built. Attesters are added under a 48-hour timelock, never removed below quorum.</p></div>
+      <div class="t"><h3>The crank</h3><p><code>crank_buyback</code> computes the amount from the rule and the pool, swaps on the coin's own pool and burns in the same instruction; nobody chooses the amount. The instruction is permissionless, except that a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts (on the Powers Register). Readings need the attester quorum — one key at launch, the operator's — so if the operator stops, readings stop and burns stop. Holders keep their coins, nothing can be withdrawn, every past receipt stays checkable, and a retired-coin sweep instruction is queued for the next program upgrade.</p></div>
+      <div class="t"><h3>No withdraw instruction</h3><p>The fee pool is a program-derived account. Trading fees flow in; anyone may deposit; the only way out is the burn. The program can still be upgraded; who holds the upgrade authority today, and under what time lock, is on the trust page.</p></div>
       <div class="t"><h3>Receipts anyone can recompute</h3><p>One memo per burn, in a fixed order: date, source, previous and current reading, delta, units, pool, spent, got, burned, the swap signature, the rule hash. The trust page carries the sources, the coverage table, the reviews and the public receipts audit.</p></div>
       <div class="t"><h3>Holders are never touched</h3><p>No permanent delegate, no transfer hook, no mint authority. Burns consume only what the pool bought. A coin that stops trading simply stops burning.</p></div>
     </div>
@@ -462,7 +499,7 @@ footer .links a{color:var(--dim)}
     <div class="econ">
       <div class="e"><div class="k">the coin</div><p>Its creator-fee share flows to its burn pool, which is the burn budget. Days with no trading are days with small burns. There is no team allocation and no team buy at launch.</p></div>
       <div class="e"><div class="k">the creator</div><p>Pays the venue's creation cost and gas, and earns nothing in cash from fees: the creator's slice is fixed at 0. What a creator gets is a coin whose burns are funded by its own trading. The review screen says this plainly.</p></div>
-      <div class="e"><div class="k">burnticker</div><p>A platform fee on curve volume and the platform's share of post-graduation LP fees, program-enforced. Nothing from burn pools, ever. The platform never buys any coin launched here; all LP is burned at graduation.</p></div>
+      <div class="e"><div class="k">burnticker</div><p>A platform fee of 25 bps of curve volume, set in the LaunchLab platform config and read live on the trust page. Nothing after graduation: all LP is burned, so there is no platform share of LP fees. Nothing from burn pools, ever. The platform never buys any coin launched here.</p></div>
     </div>
   </section>
 
