@@ -158,15 +158,7 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           }
         },
         {
-          "name": "fee_vault",
-          "docs": [
-            "The side's burn pool: the burn_receipts fee PDA [\"fee\", mint] recorded at init."
-          ],
-          "writable": true
-        },
-        {
-          "name": "dev_wallet",
-          "writable": true
+          "name": "amm_config"
         },
         {
           "name": "token_program",
@@ -201,6 +193,71 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "claim_developer_fee",
+      "discriminator": [
+        190,
+        159,
+        191,
+        33,
+        162,
+        53,
+        18,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pair.mints [0]",
+                "account": "Pair"
+              },
+              {
+                "kind": "account",
+                "path": "pair.mints [1]",
+                "account": "Pair"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "dev_wallet",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
     },
     {
       "name": "close_pair",
@@ -276,6 +333,10 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
         },
         {
           "name": "fee_vault_b",
+          "writable": true
+        },
+        {
+          "name": "dev_wallet",
           "writable": true
         },
         {
@@ -519,6 +580,11 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
         },
         {
           "name": "token_vault_a",
+          "docs": [
+            "ATA(vault, mint A). `init_if_needed`: anyone can create this ATA as soon as tx 1 reveals the vault (it is the mint authority),",
+            "and a plain `init` would then fail forever (blind review 2 H-3). The handler requires it empty, with no delegate and no close",
+            "authority (only the vault could set either)."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -800,12 +866,7 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           "writable": true
         },
         {
-          "name": "fee_vault",
-          "writable": true
-        },
-        {
-          "name": "dev_wallet",
-          "writable": true
+          "name": "amm_config"
         },
         {
           "name": "token_program",
@@ -882,6 +943,9 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           }
         },
         {
+          "name": "amm_config"
+        },
+        {
           "name": "event_authority"
         },
         {
@@ -908,6 +972,19 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
   ],
   "events": [
     {
+      "name": "DeveloperFeeClaimed",
+      "discriminator": [
+        74,
+        235,
+        198,
+        162,
+        171,
+        196,
+        80,
+        167
+      ]
+    },
+    {
       "name": "PairClosed",
       "discriminator": [
         44,
@@ -918,6 +995,19 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
         41,
         87,
         136
+      ]
+    },
+    {
+      "name": "PairCommitted",
+      "discriminator": [
+        247,
+        70,
+        77,
+        26,
+        241,
+        53,
+        129,
+        235
       ]
     },
     {
@@ -1096,11 +1186,60 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
     },
     {
       "code": 6024,
+      "name": "PlatformNotPinned",
+      "msg": "this build has no Burnticker LaunchLab platform compiled in (mainnet: set BURNTICKER_PLATFORM before deploying)"
+    },
+    {
+      "code": 6025,
+      "name": "VaultAccountTampered",
+      "msg": "the token vault already holds tokens, a delegate or a close authority"
+    },
+    {
+      "code": 6026,
+      "name": "NothingToClaim",
+      "msg": "nothing to claim, or the developer wallet cannot receive it (executable, or the payment would leave it below rent)"
+    },
+    {
+      "code": 6027,
+      "name": "OtherSideCannotGraduate",
+      "msg": "the other side cannot pay for its pool at the current AmmConfig (fee or disabled pool creation)"
+    },
+    {
+      "code": 6028,
+      "name": "NotStuck",
+      "msg": "the stuck-side refund needs 3 days since the commit and a pool Raydium actually blocks"
+    },
+    {
+      "code": 6029,
       "name": "AccountMismatch",
       "msg": "an account passed does not match the pair"
     }
   ],
   "types": [
+    {
+      "name": "DeveloperFeeClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pair",
+            "type": "pubkey"
+          },
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
     {
       "name": "InitPairArgs",
       "type": {
@@ -1396,7 +1535,8 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           {
             "name": "sol",
             "docs": [
-              "Lamports each curve holds = F(sold) (invariant; zeroed at graduation when the SOL moves into the pools)."
+              "Lamports owed to each side: while Open/Graduating = F(sold) (invariant; zeroed when the side's pool is created); once the side is",
+              "in redemption (Voided, or a refunding side) = what its remaining holders will receive, pro rata."
             ],
             "type": {
               "array": [
@@ -1499,6 +1639,61 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             }
           },
           {
+            "name": "burn_escrow",
+            "docs": [
+              "The 75 bps burn share of each side, ESCROWED in the SOL vault until that side's pool exists (then paid to its burn pool); on a",
+              "void it is returned to that side's holders with the curve SOL (blind review 2 M-1)."
+            ],
+            "type": {
+              "array": [
+                "u64",
+                2
+              ]
+            }
+          },
+          {
+            "name": "dev_accrued",
+            "docs": [
+              "The 25 bps developer share, accrued in the SOL vault and paid by the permissionless `claim_developer_fee` (blind review 1 H-2:",
+              "trades never credit the developer wallet, so an executable or emptied wallet cannot block them)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "redeem_pool",
+            "docs": [
+              "Redemption snapshot per side (Voided, or a refunding side): the lamports and the raw tokens outstanding when redemption began.",
+              "Each sell then pays amount × pool / supply (no fee); the last holder receives the remainder (blind review 2 M-1)."
+            ],
+            "type": {
+              "array": [
+                "u64",
+                2
+              ]
+            }
+          },
+          {
+            "name": "redeem_supply",
+            "type": {
+              "array": [
+                "u64",
+                2
+              ]
+            }
+          },
+          {
+            "name": "refunding",
+            "docs": [
+              "A side whose pool Raydium blocked after the commit: its holders redeem pro rata (blind review 1 L-2/L-3)."
+            ],
+            "type": {
+              "array": [
+                "bool",
+                2
+              ]
+            }
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
@@ -1543,6 +1738,34 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           {
             "name": "residue_lamports",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairCommitted",
+      "docs": [
+        "The first trade that left the pair ready committed it (status Graduating); graduate then creates the pools."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pair",
+            "type": "pubkey"
+          },
+          {
+            "name": "by",
+            "type": "pubkey"
+          },
+          {
+            "name": "raise",
+            "type": {
+              "array": [
+                "u64",
+                2
+              ]
+            }
           }
         ]
       }
@@ -1652,6 +1875,9 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
     },
     {
       "name": "PairVoided",
+      "docs": [
+        "A void (whole pair, `side` = 2) or a stuck side put into refund (`side` = 0/1): from here its holders redeem pro rata, no fee."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -1664,7 +1890,14 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             "type": "pubkey"
           },
           {
-            "name": "sol",
+            "name": "side",
+            "type": "u8"
+          },
+          {
+            "name": "redeem_pool",
+            "docs": [
+              "Per side: lamports to redeem (curve SOL + the escrowed burn share) and raw tokens outstanding."
+            ],
             "type": {
               "array": [
                 "u64",
@@ -1673,7 +1906,7 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             }
           },
           {
-            "name": "sold",
+            "name": "redeem_supply",
             "type": {
               "array": [
                 "u64",
@@ -1736,9 +1969,23 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             "type": "u64"
           },
           {
+            "name": "burn_escrow_paid",
+            "docs": [
+              "The side's escrowed 75 bps burn share, paid to its burn pool now."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "residue_lamports",
             "docs": [
-              "Rent refunds, rounding dust and donations above what the vault must keep, sent to this side's burn pool."
+              "Rent refunds, rounding dust and donations above what the vault must keep, sent to this side's burn pool too."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "prefunded_wsol",
+            "docs": [
+              "Lamports someone had pre-funded into the pool's WSOL vault address (now pool liquidity, LP burned) — blind review 2 H-1."
             ],
             "type": "u64"
           },
@@ -1797,9 +2044,9 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             "type": "u64"
           },
           {
-            "name": "dev_fee_redirected",
+            "name": "redemption",
             "docs": [
-              "The developer slice went to the burn pool because the developer wallet could not hold it (below rent)."
+              "A redemption (Voided pair or refunding side): pro rata, no fee."
             ],
             "type": "bool"
           },

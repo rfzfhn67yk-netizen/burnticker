@@ -1,7 +1,8 @@
 //! pair_curve blind review 2 (2026-10-10, commit reviewed 547558fa) — EXPLOIT TESTS for
 //! docs/burnticker/reviews/2026-10-10-pair-curve-blind-2.md. The harness below is a verbatim copy of tests/lifecycle.rs's harness
-//! (lines 1–397); the review's tests follow it. Each test ASSERTS THAT THE ATTACK WORKS at 547558fa, so a test that starts failing
-//! after a fix is the expected signal — invert its assertion into a regression test then.
+//! (lines 1–397); the review's tests follow it. Each test asserted that the attack worked at 547558fa; after the fixes on
+//! burnticker/pair-curve (docs/burn-receipts/CHANGELOG.md, "pair_curve review round") each one is INVERTED into a regression test:
+//! the attack must fail. The budget test stays a bound.
 //!
 //!   H-1  pc2_prefunded_wsol_pool_vault_blocks_graduation_forever   pre-funded WSOL pool vaults → every graduate PoolMismatch → void
 //!   H-1  pc2_prefund_after_first_side_strands_the_second           same, second side only → pair stuck Graduating
@@ -52,7 +53,7 @@ fn read_so(rel: &str) -> Vec<u8> {
 
 fn new_env() -> Env {
     let mut env = Env::new();
-    env.svm.add_program(pair_curve::ID, &read_so("target/deploy/pair_curve.so")).unwrap();
+    env.svm.add_program(pair_curve::ID, &read_so("target/deploy-localnet/pair_curve.so")).unwrap();
     env
 }
 
@@ -223,8 +224,7 @@ fn ix_buy(p: &P, buyer: &Pubkey, side: u8, max_in: u64, min_out: u64) -> Instruc
             mint,
             token_vault: get_associated_token_address(&p.vault, &mint),
             buyer_token: get_associated_token_address(buyer, &mint),
-            fee_vault: fee_pda(&mint),
-            dev_wallet: p.dev,
+            amm_config: p.amm,
             token_program: spl_token::ID,
             associated_token_program: anchor_spl::associated_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
@@ -247,8 +247,7 @@ fn ix_sell(p: &P, seller: &Pubkey, side: u8, amount: u64, min_out: u64) -> Instr
             mint,
             token_vault: get_associated_token_address(&p.vault, &mint),
             seller_token: get_associated_token_address(seller, &mint),
-            fee_vault: fee_pda(&mint),
-            dev_wallet: p.dev,
+            amm_config: p.amm,
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: pc_event_authority(),
@@ -335,7 +334,7 @@ fn ix_void(p: &P, caller: &Pubkey) -> Instruction {
     Instruction::new_with_bytes(
         pair_curve::ID,
         &pair_curve::instruction::VoidPair {}.data(),
-        pair_curve::accounts::VoidPair { caller: *caller, pair: p.pair, event_authority: pc_event_authority(), program: pair_curve::ID }.to_account_metas(None),
+        pair_curve::accounts::VoidPair { caller: *caller, pair: p.pair, amm_config: p.amm, event_authority: pc_event_authority(), program: pair_curve::ID }.to_account_metas(None),
     )
 }
 
@@ -354,6 +353,7 @@ fn ix_close(p: &P, caller: &Pubkey) -> Instruction {
             token_vault_b: get_associated_token_address(&p.vault, &p.mint(1)),
             fee_vault_a: fee_pda(&p.mint(0)),
             fee_vault_b: fee_pda(&p.mint(1)),
+            dev_wallet: p.dev,
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: pc_event_authority(),
@@ -426,58 +426,43 @@ fn logs_of(r: TxResult) -> String {
     }
 }
 
-/// LIVENESS: 2 × (token-account rent + 1) lamports sent to the two CPMM WSOL pool-vault PDAs (derivable from the Pair address) make
-/// every graduate call fail forever: CPMM's create_or_allocate_account keeps the extra lamports, InitializeAccount3 on the native
-/// mint turns them into WSOL `amount`, and graduate's strict `token_amount(pool_vault) == amt` check reverts. The pair voids.
+/// H-1 REGRESSION: 2 × (token-account rent + 1) lamports sent to the two CPMM WSOL pool-vault PDAs used to make every graduate fail
+/// forever (PoolMismatch). Now the excess WSOL is accepted as pool liquidity (graduate.rs `prefunded_wsol`); both sides graduate.
 #[test]
 fn pc2_prefunded_wsol_pool_vault_blocks_graduation_forever() {
     let mut env = new_env();
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
     let c = trader(&mut env, SOL);
-    let (ba, bb) = fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
     let rent165 = env.svm.minimum_balance_for_rent_exemption(165);
     for side in 0..2u8 {
         env.transfer_sol(&wsol_pool_vault(&p, side), rent165 + 1);
     }
-    println!("griefer cost: {} lamports for both sides", 2 * (rent165 + 1));
     for side in 0..2u8 {
-        let r = graduate_side(&mut env, &p, &c, side, &[]);
-        let l = logs_of(r);
-        assert!(l.starts_with("ERR"), "{l}");
-        assert!(l.contains("PoolMismatch"), "{l}");
+        let m = match graduate_side(&mut env, &p, &c, side, &[]) { Ok(m) => m, Err(e) => panic!("FIX REGRESSED: {:?}\n{}", e.err, e.meta.logs.join("\n")) };
+        let ev: pair_curve::events::SideGraduated = pc_event(&m);
+        assert_eq!(ev.prefunded_wsol, 1, "the extra lamport became pool WSOL");
     }
-    let s = pair_state(&env, &p);
-    assert_eq!(s.status, pair_curve::STATUS_OPEN);
-    // The lamports cannot be removed by anyone (a CPMM-derived address only CPMM's initialize with pair_curve's pool signature can use).
-    env.set_time(s.deadline);
-    env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
-    // Everyone exits paying the 1 % sell fee; the burn pools keep 75 bps of every trade with no pool ever registrable.
-    let fee_before = [env.lamports(&fee_pda(&p.mint(0))), env.lamports(&fee_pda(&p.mint(1)))];
-    for (k, side) in [(&ba, 0u8), (&bb, 1u8)] {
-        let held = env.token_amount(&get_associated_token_address(&k.pubkey(), &p.mint(side)));
-        env.ok(&[ix_sell(&p, &k.pubkey(), side, held, 1)], &[k]);
+    assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
+    for side in 0..2u8 {
+        let pl = pool_of(&p, side);
+        env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(side), &pl.pool, &pl.lp_mint, &p.pair)], &[&c]);
     }
-    let fee_after = [env.lamports(&fee_pda(&p.mint(0))), env.lamports(&fee_pda(&p.mint(1)))];
-    println!("burn pools after void exits: {:?} (was {:?}) — stranded, no pool can be registered for a voided pair", fee_after, fee_before);
-    let pa = pool_of(&p, 0);
-    let l = logs_of(env.send(&[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)], &[&c]));
-    assert!(l.starts_with("ERR"));
 }
 
-/// Same, second side only (after A graduated): B is committed but can never graduate; after 3 days B's sells reopen; the pair can
-/// never reach Graduated, never closes; B's burn pool can never be registered.
+/// H-1 REGRESSION (second side, pre-funded after the first graduated, and before init_pair too): B still graduates.
 #[test]
 fn pc2_prefund_after_first_side_strands_the_second() {
     let mut env = new_env();
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
     let c = trader(&mut env, SOL);
+    let rent165 = env.svm.minimum_balance_for_rent_exemption(165);
+    env.transfer_sol(&wsol_pool_vault(&p, 0), rent165 + 777); // derivable from the mint keys before any trade
     fill(&mut env, &p, 50 * SOL, 40 * SOL);
     graduate_side(&mut env, &p, &c, 0, &[]).unwrap();
-    let rent165 = env.svm.minimum_balance_for_rent_exemption(165);
     env.transfer_sol(&wsol_pool_vault(&p, 1), rent165 + 1);
-    let l = logs_of(graduate_side(&mut env, &p, &c, 1, &[]));
-    assert!(l.contains("PoolMismatch"), "{l}");
-    assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATING);
+    graduate_side(&mut env, &p, &c, 1, &[]).unwrap();
+    assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
 }
 
 /// Control: the vault's own WSOL ATA pre-funded above rent does NOT block (wsol_before absorbs it).
@@ -492,9 +477,8 @@ fn pc2_prefunded_vault_wsol_above_rent_does_not_block() {
     assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
 }
 
-/// GRIEFING: close_pair right after the second graduate (permissionless, even in the same transaction) deletes the Pair account;
-/// register_pair_pool needs it, so the side(s) not yet registered can never be registered: the burn pool's SOL is stranded and the
-/// token's buyback never runs.
+/// H-2 REGRESSION: [graduate(B), close_pair] in one transaction used to delete the Pair before register_pair_pool(B). close_pair now
+/// refuses any pair that is not Voided (NotClosable), so the attacker's transaction reverts and both sides register.
 #[test]
 fn pc2_close_pair_front_runs_registration() {
     let mut env = new_env();
@@ -502,43 +486,36 @@ fn pc2_close_pair_front_runs_registration() {
     let attacker = trader(&mut env, SOL);
     let keeper = trader(&mut env, SOL);
     fill(&mut env, &p, 50 * SOL, 40 * SOL);
-    // The keeper graduates + registers A (one transaction, as crankPair does) ...
     let pa = pool_of(&p, 0);
     graduate_side(&mut env, &p, &keeper, 0, &[ix_register_pair(&keeper.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)]).unwrap();
-    // ... the attacker lands graduate(B) + close_pair atomically first.
-    let m = graduate_side(&mut env, &p, &attacker, 1, &[ix_close(&p, &attacker.pubkey())]);
-    let m = match m { Ok(m) => m, Err(e) => panic!("{:?}\n{}", e.err, e.meta.logs.join("\n")) };
-    println!("graduate(B)+close_pair in one tx: {} CU", m.compute_units_consumed);
-    assert!(env.svm.get_account(&p.pair).map(|a| a.lamports == 0).unwrap_or(true), "pair closed");
+    expect_anchor_err(graduate_side(&mut env, &p, &attacker, 1, &[ix_close(&p, &attacker.pubkey())]), "NotClosable");
+    graduate_side(&mut env, &p, &attacker, 1, &[]).unwrap();
+    expect_anchor_err(env.send(&[ix_close(&p, &attacker.pubkey())], &[&attacker]), "NotClosable");
     let pb = pool_of(&p, 1);
-    let l = logs_of(env.send(&[ix_register_pair(&keeper.pubkey(), &p.mint(1), &pb.pool, &pb.lp_mint, &p.pair)], &[&keeper]));
-    assert!(l.starts_with("ERR"), "{l}");
-    println!("register_pair_pool(B) after close: {}", l.lines().take(6).collect::<Vec<_>>().join(" | "));
-    let cfg = env.config(&config_pda(&p.mint(1)));
-    assert_eq!(cfg.cpmm_pool, Pubkey::default());
-    println!("B burn pool stranded: {} lamports", env.lamports(&fee_pda(&p.mint(1))));
+    env.ok(&[ix_register_pair(&keeper.pubkey(), &p.mint(1), &pb.pool, &pb.lp_mint, &p.pair)], &[&keeper]);
+    assert_eq!(env.config(&config_pda(&p.mint(1))).cpmm_pool, pb.pool);
 }
 
-/// LAUNCH LIVENESS: after tx 1 (mint A with mint authority = the pair's vault PDA, readable from the mint), anyone creates
-/// ATA(vault, mint A). init_pair's `init` on token_vault_a then fails forever; the mints (authority = vault) and TokenConfigs are dead.
+/// H-3 REGRESSION: ATA(vault, mint A) created by an observer of tx 1 used to make init_pair fail forever (IllegalOwner). The token
+/// vaults are now `init_if_needed` + checked empty / no delegate / no close authority, so init_pair succeeds.
 #[test]
 fn pc2_precreated_token_vault_blocks_init_pair() {
     let mut env = new_env();
     let p = prepare(&mut env, MAINNET_POOL_FEE);
-    // read the vault from the mint's authority, as an observer of tx 1 would
     let m = env.svm.get_account(&p.ma.pubkey()).unwrap();
     let mint = <spl_token::state::Mint as anchor_lang::solana_program::program_pack::Pack>::unpack(&m.data).unwrap();
     let vault: Pubkey = mint.mint_authority.unwrap();
     assert_eq!(vault, p.vault);
     env.create_ata(&vault, &p.ma.pubkey());
+    env.create_ata(&vault, &p.mb.pubkey());
     let args = default_args(env.now());
     let ix = ix_init_pair(&env, &p, args);
-    let l = logs_of(env.send(&[ix], &[&p.creator]));
-    assert!(l.starts_with("ERR"), "{l}");
-    println!("init_pair after a griefer created ATA(vault, mint A): {}", l.lines().take(8).collect::<Vec<_>>().join(" | "));
+    env.ok(&[ix], &[&p.creator]);
+    assert_eq!(env.mint_supply(&p.ma.pubkey()), pair_curve::TOTAL_SUPPLY);
 }
 
-/// LIVENESS (close): a holder burns 1 raw token after a void — sold can never return to 0, close_pair is refused forever.
+/// L-1 REGRESSION: a holder burns 1 raw token after the void. close_pair now counts circulating tokens from the mint supply (burned
+/// tokens are gone), so it succeeds; the burned token's lamport goes to the burn pools as residue.
 #[test]
 fn pc2_burned_dust_blocks_close_after_void() {
     let mut env = new_env();
@@ -554,38 +531,52 @@ fn pc2_burned_dust_blocks_close_after_void() {
     let held = env.token_amount(&ata);
     env.ok(&[ix_sell(&p, &t.pubkey(), 0, held, 0)], &[&t]);
     let st = pair_state(&env, &p);
-    println!("after full exit: sold {:?} sol {:?}", st.sold, st.sol);
-    expect_anchor_err(env.send(&[ix_close(&p, &t.pubkey())], &[&t]), "NotClosable");
+    assert_eq!(st.sold, [1, 0], "one raw token is gone for good");
+    env.ok(&[ix_close(&p, &t.pubkey())], &[&t]);
+    assert!(env.svm.get_account(&p.pair).map(|a| a.lamports == 0).unwrap_or(true));
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
 }
 
-/// VALUE EXTRACTION in the void: the curve exit is first-come. An early (cheap) buyer who sells first takes the top of the curve
-/// from late buyers. Here B stays under its minimum share so the pair voids.
+/// M-1 REGRESSION: the void used to be a first-come race on the curve with the 1 % fee. It is now a pro-rata redemption at the void
+/// snapshot with no fee: a holder's payout does not depend on who exits first, and the side's escrowed 75 bps comes back too.
+/// (Pro rata is by tokens: a cheap early buyer redeems at the same per-token rate as a late one — PAIR-CURVE.md §5.3 says so.)
 #[test]
 fn pc2_void_is_a_race_not_a_refund() {
-    let mut env = new_env();
-    let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
-    let early = trader(&mut env, 10 * SOL);
-    let late = trader(&mut env, 60 * SOL);
-    let b = trader(&mut env, 10 * SOL);
-    let w = |env: &Env, k: &Keypair| env.lamports(&k.pubkey());
-    let (e0, l0) = (w(&env, &early), w(&env, &late));
-    env.ok(&[ix_buy(&p, &early.pubkey(), 0, 2 * SOL, 1)], &[&early]);
-    env.ok(&[ix_buy(&p, &late.pubkey(), 0, 40 * SOL, 1)], &[&late]);
-    env.ok(&[ix_buy(&p, &b.pubkey(), 1, 5 * SOL, 1)], &[&b]);
-    let s = pair_state(&env, &p);
-    assert!(!pair_curve::math::graduation_ready(s.sol[0], s.sol[1], s.target_raise_lamports, s.min_side_share_bps));
-    env.set_time(s.deadline);
-    // early sells first (void_pair + sell in one transaction is possible; sells are open at the deadline even before the void)
-    let he = env.token_amount(&get_associated_token_address(&early.pubkey(), &p.mint(0)));
-    env.ok(&[ix_void(&p, &early.pubkey()), ix_sell(&p, &early.pubkey(), 0, he, 1)], &[&early]);
-    let hl = env.token_amount(&get_associated_token_address(&late.pubkey(), &p.mint(0)));
-    env.ok(&[ix_sell(&p, &late.pubkey(), 0, hl, 1)], &[&late]);
-    let (e1, l1) = (w(&env, &early), w(&env, &late));
-    println!("early: paid ~2 SOL, net {:+} lamports; late: paid ~40 SOL, net {:+} lamports", e1 as i128 - e0 as i128, l1 as i128 - l0 as i128);
-    assert!(e1 > e0 + 5 * SOL && l1 + 7 * SOL < l0);
+    fn run(early_first: bool) -> (u64, u64, u64) {
+        let mut env = new_env();
+        let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
+        let early = trader(&mut env, 10 * SOL);
+        let late = trader(&mut env, 60 * SOL);
+        let b = trader(&mut env, 10 * SOL);
+        env.ok(&[ix_buy(&p, &early.pubkey(), 0, 2 * SOL, 1)], &[&early]);
+        env.ok(&[ix_buy(&p, &late.pubkey(), 0, 40 * SOL, 1)], &[&late]);
+        env.ok(&[ix_buy(&p, &b.pubkey(), 1, 5 * SOL, 1)], &[&b]);
+        let s = pair_state(&env, &p);
+        assert!(!pair_curve::math::graduation_ready(s.sol[0], s.sol[1], s.target_raise_lamports, s.min_side_share_bps));
+        env.set_time(s.deadline);
+        env.ok(&[ix_void(&p, &early.pubkey())], &[&early]);
+        let v = pair_state(&env, &p);
+        let order: [&Keypair; 2] = if early_first { [&early, &late] } else { [&late, &early] };
+        let mut got = [0u64; 2];
+        for k in order {
+            let h = env.token_amount(&get_associated_token_address(&k.pubkey(), &p.mint(0)));
+            let before = env.lamports(&k.pubkey());
+            let meta = env.ok(&[ix_sell(&p, &k.pubkey(), 0, h, 0)], &[k]);
+            let ev: pair_curve::events::Trade = pc_event(&meta);
+            assert!(ev.redemption && ev.fee == 0);
+            got[if k.pubkey() == early.pubkey() { 0 } else { 1 }] = env.lamports(&k.pubkey()) - before;
+        }
+        assert_eq!(got[0] + got[1], v.redeem_pool[0], "side A redeemed exactly its curve SOL + escrowed burn share");
+        (got[0], got[1], v.redeem_pool[0])
+    }
+    let (e1, l1, pool1) = run(true);
+    let (e2, l2, pool2) = run(false);
+    assert_eq!(pool1, pool2);
+    // order-independent up to the last holder's rounding remainder (< 1 lamport per raw token of rounding)
+    assert!(e1.abs_diff(e2) <= 1 && l1.abs_diff(l2) <= 1, "early {e1} vs {e2}, late {l1} vs {l2}");
 }
 
-/// GRIEFING via the minimum-share rule: a B holder sells just before the graduate lands; graduation fails; re-buying costs only fees.
+/// L-2 REGRESSION: the buy that makes the pair ready commits it in the same instruction, so a weak-side sell can no longer un-meet it.
 #[test]
 fn pc2_share_flip_blocks_graduation() {
     let mut env = new_env();
@@ -593,13 +584,20 @@ fn pc2_share_flip_blocks_graduation() {
     let c = trader(&mut env, SOL);
     let (_ba, bb) = fill(&mut env, &p, 64_500_000_000, 22_500_000_000);
     let s = pair_state(&env, &p);
-    assert!(pair_curve::math::graduation_ready(s.sol[0], s.sol[1], s.target_raise_lamports, s.min_side_share_bps), "{:?}", s.sol);
+    assert_eq!(s.status, pair_curve::STATUS_GRADUATING, "committed by the readying buy");
     let held = env.token_amount(&get_associated_token_address(&bb.pubkey(), &p.mint(1)));
-    env.ok(&[ix_sell(&p, &bb.pubkey(), 1, held / 20, 1)], &[&bb]);
-    expect_anchor_err(graduate_side(&mut env, &p, &c, 0, &[]), "NotReadyToGraduate");
+    expect_anchor_err(env.send(&[ix_sell(&p, &bb.pubkey(), 1, held / 20, 1)], &[&bb]), "SellsClosed");
+    graduate_both(&mut env, &p, &c);
+    // and the 5,000 bps share (both raises equal to the lamport) can no longer be configured
+    let mut env2 = new_env();
+    let q = prepare(&mut env2, MAINNET_POOL_FEE);
+    let mut args = default_args(env2.now());
+    args.min_side_share_bps = 5_000;
+    let ix = ix_init_pair(&env2, &q, args);
+    expect_anchor_err(env2.send(&[ix], &[&q.creator]), "InvalidParams");
 }
 
-/// Keeper transaction (graduate + register_pair_pool) with every derived address pre-funded: CU and instruction trace.
+/// Budget bound (no finding): the keeper's graduate+register with every derived address pre-funded (WSOL vaults above rent too).
 #[test]
 fn pc2_keeper_tx_budget_under_prefunding() {
     let mut env = new_env();
@@ -611,8 +609,9 @@ fn pc2_keeper_tx_budget_under_prefunding() {
         let pool = pool_of(&p, side);
         targets.extend([pool.pool, pool.lp_mint, pool.token_0_vault, pool.token_1_vault, pool.observation, get_associated_token_address(&p.vault, &pool.lp_mint)]);
     }
+    let above = env.svm.minimum_balance_for_rent_exemption(165) + 1_000;
     for t in &targets {
-        env.transfer_sol(t, 1_000_000);
+        env.transfer_sol(t, above);
     }
     for side in 0..2u8 {
         let pl = pool_of(&p, side);
@@ -620,5 +619,6 @@ fn pc2_keeper_tx_budget_under_prefunding() {
         let m = match graduate_side(&mut env, &p, &c, side, &[reg]) { Ok(m) => m, Err(e) => panic!("{:?}\n{}", e.err, e.meta.logs.join("\n")) };
         let trace: usize = 2 + m.inner_instructions.iter().map(|v| v.len()).sum::<usize>() + 1;
         println!("keeper tx side {side}: {} CU (keeper limit 600,000), trace ≈ {trace} of 64", m.compute_units_consumed);
+        assert!(m.compute_units_consumed < 400_000 && trace < 56, "budget: {} CU, trace {trace}", m.compute_units_consumed);
     }
 }

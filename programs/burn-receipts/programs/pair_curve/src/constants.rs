@@ -18,10 +18,21 @@ pub const STATUS_GRADUATED: u8 = 1;
 pub const STATUS_VOIDED: u8 = 2;
 /// Between the first and the second side's `graduate`: both curves closed, the pair committed (it can no longer void).
 pub const STATUS_GRADUATING: u8 = 3;
-/// If the second side's pool still cannot be created this long after the first (only Raydium's admin can cause that: raising the
-/// create-pool fee above the side's raise, or disabling pool creation on the pinned AmmConfig), sells reopen on THAT side's curve so
-/// its holders are never locked in. Graduation of that side stays possible.
+/// If the second side's pool still cannot be created this long after the commit AND Raydium is actually blocking it (the pinned
+/// AmmConfig disables pool creation, or its create-pool fee leaves the side no liquidity), `void_pair` puts THAT side into pro-rata
+/// redemption so its holders are never locked in. Mere inactivity never triggers it (blind review 1 L-3).
 pub const GRADUATION_STUCK_SECS: i64 = 3 * 24 * 60 * 60;
+
+/// The LaunchLab PlatformConfig every pair must pin (blind review 1 M-1: the developer wallet is read from it, so it cannot be a
+/// creator's own platform). Per build: devnet = Burnticker's devnet platform (docs/burnkeeper/devnet-run-log-2026-10-10.md A10);
+/// `localnet` (LiteSVM suite) = the harness's test platform; the default (mainnet) build is UNSET (all zeros) until the owner creates
+/// the mainnet platform — init_pair refuses (`PlatformNotPinned`) until it is compiled in (runbook "Pair program gates" P0).
+#[cfg(feature = "devnet")]
+pub const BURNTICKER_PLATFORM: Pubkey = pubkey!("GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf");
+#[cfg(all(feature = "localnet", not(feature = "devnet")))]
+pub const BURNTICKER_PLATFORM: Pubkey = Pubkey::new_from_array([0x5a; 32]);
+#[cfg(not(any(feature = "devnet", feature = "localnet")))]
+pub const BURNTICKER_PLATFORM: Pubkey = Pubkey::new_from_array([0u8; 32]);
 
 /// Each coin: 1,000,000,000 tokens at 6 decimals, all minted into the side's token vault at init_pair.
 pub const TOKEN_DECIMALS: u8 = 6;
@@ -45,7 +56,8 @@ pub const MIN_VIRTUAL_SOL_LAMPORTS: u64 = 10_000_000;
 pub const MIN_RESERVE_BPS: u64 = 1_000;
 pub const MAX_RESERVE_BPS: u64 = 5_000;
 pub const MIN_SIDE_SHARE_BPS: u16 = 1_000;
-pub const MAX_SIDE_SHARE_BPS: u16 = 5_000;
+/// Blind review 2 L-2: at 5,000 both raises had to be equal to the lamport.
+pub const MAX_SIDE_SHARE_BPS: u16 = 4_000;
 pub const MIN_TARGET_RAISE_LAMPORTS: u64 = 100_000_000;
 /// Each side's minimum raise (target × share) must cover its graduation costs plus this much pool liquidity.
 pub const MIN_POOL_LIQUIDITY_LAMPORTS: u64 = 10_000_000;

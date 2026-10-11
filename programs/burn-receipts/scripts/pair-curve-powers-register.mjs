@@ -34,17 +34,19 @@ const POWERS = {
   buy: {
     class: "permissionless",
     signers: { buyer: "trader" },
-    can: "While Open and before the deadline: pay F(sold + t) − F(sold) plus the 100 bps fee for t tokens of one side (the largest t the budget affords, capped at the curve supply); the fee goes 25 bps to the developer wallet recorded at init (or to the burn pool if that wallet cannot hold it) and 75 bps to that mint's burn_receipts fee PDA.",
-    cannot: "Buy after the deadline, during or after graduation, or after a void; pay any other recipient; move anyone else's funds; change the price formula.",
-    timelock: null, sunset: "The deadline (or graduation).", funds: "Buyer → SOL vault (curve cost), → developer wallet (25 bps), → burn pool (75 bps); token vault → buyer (tokens).",
+    can: "While Open and before the deadline: pay F(sold + t) − F(sold) plus the 100 bps fee for t tokens of one side (the largest t the budget affords, capped at the curve supply), all into the SOL vault — the fee is accounted there: 75 bps escrowed for that side's burn pool (paid when its pool exists, returned to its holders on a void), 25 bps accrued for the developer wallet (claim_developer_fee). The trade that leaves the pair ready (target, minimum share, both pools affordable at the current AmmConfig) commits it.",
+    cannot: "Buy after the deadline, once committed, or after a void; pay any other account; move anyone else's funds; change the price formula; get tokens for 0 lamports.",
+    timelock: null, sunset: "The deadline (or the commit).", funds: "Buyer → SOL vault (curve cost + fee); token vault → buyer (tokens).",
   },
+
   sell: {
     class: "permissionless",
     signers: { seller: "trader" },
-    can: "While Open (also after the deadline) and after a void: return t tokens of one side for F(sold) − F(sold − t) less the 100 bps fee (same split). If the second side's pool is blocked for 3 days after graduation started, that side's holders may sell too.",
-    cannot: "Sell once graduation has started (except the stuck-second-side rule); sell more than the curve sold; receive more than the formula; touch the other side's SOL.",
-    timelock: null, sunset: "Graduation.", funds: "Seller → token vault (tokens); SOL vault → seller (proceeds less fee), → developer wallet, → burn pool.",
+    can: "While Open (also after the deadline): return t tokens of one side for F(sold) − F(sold − t) less the 100 bps fee (accounted in the vault like a buy's). After a void, or on a side refunded after a Raydium block: a pro-rata redemption at the snapshot (curve SOL + the escrowed burn share), no fee, the same rate whatever the order of exits.",
+    cannot: "Sell once graduation is committed (except a refunding side); sell more than is outstanding; receive more than the formula or the pro-rata share; touch the other side's SOL.",
+    timelock: null, sunset: "The commit.", funds: "Seller → token vault (tokens); SOL vault → seller (proceeds less fee, or the redemption).",
   },
+
   graduate: {
     class: "permissionless",
     signers: { cranker: "anyone" },
@@ -55,17 +57,26 @@ const POWERS = {
   void_pair: {
     class: "permissionless",
     signers: { caller: "anyone" },
-    can: "At or after the deadline, if graduation never started: mark the pair Voided — buys stay closed, sells stay open on the same curves so every holder can exit to the SOL vault.",
-    cannot: "Void before the deadline, a graduating or graduated pair, or twice; move any funds.",
-    timelock: "The pair's deadline.", sunset: "Single use.", funds: "None.",
+    can: "At or after the deadline, if never committed: mark the pair Voided and snapshot each side's redemption pool (curve SOL + escrowed burn share). Or, ≥ 3 days after the commit, if Raydium actually blocks the missing side's pool (creation disabled, or the fee leaves no liquidity): put that side alone into redemption.",
+    cannot: "Void before the deadline, a committed pair (except the blocked side), or twice; refund a side because nobody cranked it; move any funds.",
+    timelock: "The pair's deadline; 3 days after the commit for a blocked side.", sunset: "Single use per pair / side.", funds: "None.",
   },
+
   close_pair: {
     class: "permissionless",
     signers: { caller: "anyone" },
-    can: "When nothing is owed (Graduated with empty token vaults, or Voided with every curve token sold back — then the returned supplies are burned): send the SOL vault's lamports above its rent minimum to the two burn pools, close the token vaults and the Pair with their rent to the recorded creator.",
-    cannot: "Close while tokens are in circulation on a voided pair, while graduating, or while any SOL is owed; send residue anywhere but the burn pools; send rent anywhere but the creator who paid it.",
-    timelock: null, sunset: "Single use.", funds: "SOL vault residue → burn pools; account rent → the creator.",
+    can: "Voided pairs only, once no token of either coin circulates outside the vault (burned tokens count as gone): burn the returned supplies, pay the developer accrual, send the SOL vault's lamports above its rent minimum to the two burn pools, close the token vaults and the Pair with their rent to the recorded creator (to burn pool A if that address is executable).",
+    cannot: "Close a committed or graduated pair (its Pair account is what burn_receipts' register_pair_pool reads); close while tokens circulate; send residue anywhere but the burn pools or rent anywhere but the creator (or burn pool A).",
+    timelock: null, sunset: "Single use.", funds: "Developer accrual → developer wallet; SOL vault residue → burn pools; account rent → the creator.",
   },
+  claim_developer_fee: {
+    class: "permissionless",
+    signers: { caller: "anyone" },
+    can: "Pay the accrued 25 bps developer share to the developer wallet recorded at init (from the pinned Burnticker platform).",
+    cannot: "Pay any other account; pay more than the accrual; run while the wallet cannot receive (executable, or below rent) — and its failure affects nothing else.",
+    timelock: null, sunset: "None.", funds: "SOL vault → developer wallet (the accrual only).",
+  },
+
 };
 
 const NON_POWERS = [
@@ -74,8 +85,10 @@ const NON_POWERS = [
   "No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts, LP burned in the same instruction) and residue to the burn pools.",
   "No pause or freeze exists. Buys end at the deadline; nothing can stop sells on an open or voided pair.",
   "No mint authority survives init_pair and no freeze authority ever exists; the program never mints after init.",
-  "The pair program never holds burn-pool money: the 75 bps go straight to the burn_receipts fee PDA in the trade itself.",
-  "The developer wallet cannot block a trade: when it could not hold its slice (below rent), the slice goes to the burn pool.",
+  "The pair program holds the 75 bps burn share only in escrow: it reaches the side's burn_receipts fee PDA when the pool is created, or goes back to that side's holders on a void.",
+  "No trade credits any account but the SOL vault and the trader: the developer's 25 bps accrue in the vault (claim_developer_fee) and the 75 bps burn share is escrowed there until the side's pool exists — so neither the developer wallet nor a burn pool can block a trade or an exit.",
+  "The developer wallet is the claim wallet of the ONE LaunchLab platform compiled into the build (BURNTICKER_PLATFORM); a creator cannot route the 25 bps elsewhere.",
+  "A committed or graduated pair is never closed, so burn_receipts can always register its pools.",
 ];
 
 const UPGRADE = {

@@ -262,7 +262,7 @@
     {
       "id": "paircurve-findings-open",
       "status": "not done",
-      "text": "The two pair_curve reviews (2026-10-10) found High-severity issues that are not fixed yet: close_pair can strand the burn-pool registration, a pre-funded pool vault or a pre-created token account can block graduation or init_pair, and an executable developer wallet can freeze trades. The exploit tests are committed; the fixes are not. The devnet pair_curve deployment carries these issues; pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until they are fixed and re-reviewed."
+      "text": "The two pair_curve reviews (2026-10-10) found High-severity issues (close_pair could strand the burn-pool registration, a pre-funded pool vault or a pre-created token account could block graduation or init_pair, an executable developer wallet could freeze trades). All findings are fixed or accepted in writing (docs/burn-receipts/CHANGELOG.md, code fa8627a4), the reviewers' exploit tests now assert each attack fails, and the fixed program was re-rehearsed on devnet (docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md §R2). Not yet done: a re-review of the fixed program. Pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until it is done."
     }
   ],
   "policies": [

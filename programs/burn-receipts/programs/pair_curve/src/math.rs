@@ -64,14 +64,17 @@ pub struct BuyQuote {
 
 /// The largest net budget N with N + fee(N) ≤ max_in (fee rounds down, so N ≥ floor(max_in · 10,000 / 10,100)).
 pub fn net_budget(max_in: u64) -> u64 {
-    let mut n = ((max_in as u128 * BPS_DENOMINATOR as u128) / (BPS_DENOMINATOR + FEE_BPS) as u128) as u64;
-    while n < max_in && n + 1 + fee_split(n + 1).fee <= max_in {
+    // u128 throughout: `max_in` may be anything a caller passes, up to u64::MAX (blind review 1 I-2).
+    let fee = |x: u128| x * FEE_BPS as u128 / BPS_DENOMINATOR as u128;
+    let m = max_in as u128;
+    let mut n = m * BPS_DENOMINATOR as u128 / (BPS_DENOMINATOR + FEE_BPS) as u128;
+    while n < m && n + 1 + fee(n + 1) <= m {
         n += 1;
     }
-    while n > 0 && n + fee_split(n).fee > max_in {
+    while n > 0 && n + fee(n) > m {
         n -= 1;
     }
-    n
+    n as u64
 }
 
 pub fn quote_buy(p: &CurveParams, sold: u64, max_in: u64) -> Result<BuyQuote> {
@@ -82,6 +85,8 @@ pub fn quote_buy(p: &CurveParams, sold: u64, max_in: u64) -> Result<BuyQuote> {
     require!(tokens_out > 0, PairError::ZeroOutput);
     let sol_after = sol_at(p, target)?;
     let cost = sol_after - f0;
+    // Blind review 1 I-1: after a sell leaves `sold` inside a ceil step, a zero-budget buy could take the rest of the step for free.
+    require!(cost > 0, PairError::ZeroOutput);
     let fees = fee_split(cost);
     let total = cost.checked_add(fees.fee).ok_or(PairError::MathOverflow)?;
     // F(target) ≤ f0 + n by construction, and fee is monotone, so total ≤ n + fee(n) ≤ max_in.
@@ -108,6 +113,18 @@ pub fn quote_sell(p: &CurveParams, sold: u64, amount: u64) -> Result<SellQuote> 
     let gross = f0 - sol_after;
     let fees = fee_split(gross);
     Ok(SellQuote { gross, fees, net: gross - fees.fee, sold_after, sol_after })
+}
+
+/// Pro-rata redemption (a Voided pair, or a refunding side): `amount` of the `outstanding` raw tokens is worth
+/// floor(amount × pool / supply) of the snapshot, never more than what is left; the holder of the LAST outstanding tokens receives
+/// exactly what is left, so the side drains to 0 whatever the order of exits. No fee.
+pub fn quote_redeem(pool: u64, supply: u64, outstanding: u64, left: u64, amount: u64) -> Result<u64> {
+    require!(amount > 0 && amount <= outstanding && supply > 0, PairError::SellExceedsSold);
+    if amount == outstanding {
+        return Ok(left);
+    }
+    let v = (amount as u128).checked_mul(pool as u128).ok_or(PairError::MathOverflow)? / supply as u128;
+    Ok((v as u64).min(left))
 }
 
 /// sol_A + sol_B ≥ target AND each side ≥ min_side_share_bps of the combined raise.
@@ -168,6 +185,34 @@ mod tests {
         let sold = quote_buy(&p, 0, 3_000_000_000).unwrap().sold_after;
         let s = quote_sell(&p, sold, sold / 2).unwrap();
         assert_eq!((s.gross, s.fees.fee, s.fees.dev, s.fees.burn), (1_555_202_690, 15_552_026, 3_888_006, 11_664_020));
+    }
+
+    #[test]
+    fn net_budget_survives_u64_max() {
+        let n = net_budget(u64::MAX);
+        assert!(n as u128 + fee_split(n).fee as u128 <= u64::MAX as u128);
+    }
+
+    #[test]
+    fn redemption_is_order_independent_and_drains_exactly() {
+        // three holders of 7, 11 and 13 tokens share 1,000,003 lamports; every exit order pays the same and leaves exactly 0
+        let (pool, supply) = (1_000_003u64, 31u64);
+        for order in [[7u64, 11, 13], [13, 11, 7], [11, 7, 13]] {
+            let (mut out, mut left) = (supply, pool);
+            let mut paid = std::collections::BTreeMap::new();
+            for amt in order {
+                let x = quote_redeem(pool, supply, out, left, amt).unwrap();
+                out -= amt;
+                left -= x;
+                paid.insert(amt, x);
+            }
+            assert_eq!((out, left), (0, 0));
+            for (amt, x) in paid {
+                let fair = amt * pool / supply;
+                assert!(x >= fair && x <= fair + 2, "{amt}: {x} vs {fair}");
+            }
+        }
+        assert!(quote_redeem(pool, supply, supply, pool, supply + 1).is_err());
     }
 
     #[test]

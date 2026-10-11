@@ -1,6 +1,6 @@
 import type { Keypair } from "@solana/web3.js";
 import { fetchPairs, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN } from "@/lib/pairCurve/accounts";
-import { crankPair, type CrankStep, type PairCurveContext } from "@/lib/pairCurve/client";
+import { assertPairCurveCluster, crankPair, type CrankStep, type PairCurveContext } from "@/lib/pairCurve/client";
 
 /**
  * THE KEEPER'S PAIR-CURVE CRANK (2026-10-10; docs/burnticker/PAIR-CURVE.md §5). Program mode only, behind
@@ -8,10 +8,15 @@ import { crankPair, type CrankStep, type PairCurveContext } from "@/lib/pairCurv
  * discriminator and a status filter — no registry needed; every action is permissionless, so the keeper cranks any pair, not only
  * ours) and, per pair, sends what `planPairCrank` says:
  *
- *   Open, ready, before the deadline  → graduate(A) + register_pair_pool(A), then graduate(B) + register_pair_pool(B)
- *   Graduating                        → the missing side (and its registration)
- *   Graduated ≤ 7 days ago            → any registration still missing (a third-party cranker may have graduated without it)
+ *   Open, ready, before the deadline  → graduate(A), graduate(B) (normally a trade already committed the pair)
+ *   Graduating                        → the missing side; ≥ 3 days after the commit, void_pair (accepted only if Raydium blocks it)
+ *   Graduating / Graduated ≤ 7 days   → register_pair_pool for any side not registered yet; a dust swap on a pool with no oracle
+ *                                       observation (blind review 2 L-4)
  *   Open at/after the deadline        → void_pair
+ *   any                               → claim_developer_fee once the accrual reaches 0.01 SOL
+ *
+ * Each action is its own transaction (blind review 2 L-3: a refused registration never blocks a graduation); the genesis hash is checked
+ * once per cycle, not per pair (blind review 2 I-1).
  *
  * Each transaction is simulated first; a refusal is logged and retried next cycle (graduation can be un-met by a trade between the
  * scan and the send — that is a wait, not an error). The keeper's key pays only transaction fees: every rent and fee is paid from
@@ -37,6 +42,7 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
   const out: PairCurveCycle = { scanned: 0, acted: [], errors: [] };
   let pairs: Awaited<ReturnType<typeof fetchPairs>> = [];
   try {
+    await assertPairCurveCluster(d.ctx);
     for (const status of [STATUS_OPEN, STATUS_GRADUATING, STATUS_GRADUATED]) pairs.push(...(await fetchPairs(d.ctx.connection, { programId: d.ctx.programId, status })));
   } catch (e) {
     out.errors.push(`scan: ${(e as Error).message.slice(0, 160)}`);
@@ -46,7 +52,7 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
   out.scanned = pairs.length;
   for (const { address } of pairs) {
     try {
-      const steps = await crankPair(d.ctx, d.cranker, address, { now, dryRun: d.dryRun, log: d.log });
+      const steps = await crankPair(d.ctx, d.cranker, address, { now, dryRun: d.dryRun, log: d.log, skipClusterCheck: true });
       if (steps.some((s) => s.result)) out.acted.push({ pair: address.toBase58(), steps });
     } catch (e) {
       out.errors.push(`${address.toBase58().slice(0, 8)}…: ${(e as Error).message.slice(0, 160)}`);

@@ -1,0 +1,23 @@
+{
+  "command": "claim",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "dryRun": true,
+  "pair": "5LUZ63F62Wwq6Ma2pPiMqiEftFaRFYuckU9xsiaQJpiZ",
+  "result": {
+    "ok": false,
+    "signature": null,
+    "error": "NothingToClaim",
+    "unitsConsumed": 15260,
+    "txBytes": 384,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN invoke [1]",
+      "Program log: Instruction: ClaimDeveloperFee",
+      "Program log: AnchorError thrown in programs/pair_curve/src/instructions/void_pair.rs:98. Error Code: NothingToClaim. Error Number: 6026. Error Message: nothing to claim, or the developer wallet cannot receive it (executable, or the payment would leave it below rent).",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN consumed 15110 of 599850 compute units",
+      "Program 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN failed: custom program error: 0x178a"
+    ]
+  }
+}

@@ -34,11 +34,12 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | burn_receipts | `set_registration_policy` | config_authority | **none** | None. |
 | burn_receipts | `submit_reading` | anyone | **rent only (the caller pays it)** | Payer pays the reading account's rent (kept forever; readings are never closed). |
 | burn_receipts | `veto_registration_policy` | attester_key | **none** | None. |
-| pair_curve | `buy` | trader | **the trader's own funds, at the formula; fee legs to fixed recipients** | Buyer → SOL vault (curve cost), → developer wallet (25 bps), → burn pool (75 bps); token vault → buyer (tokens). |
-| pair_curve | `close_pair` | anyone | **residue → burn pools; account rent → the creator who paid it** | SOL vault residue → burn pools; account rent → the creator. |
-| pair_curve | `graduate` | anyone | **curve SOL → the Raydium pool (LP burned); leftover tokens burned; residue → burn pool** | SOL vault → its WSOL account → the side's CPMM pool (and CPMM's create-pool fee + rents); token vault → the pool; LP → burned; leftover tokens → burned; residue → the side's burn pool. |
+| pair_curve | `buy` | trader | **the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault** | Buyer → SOL vault (curve cost + fee); token vault → buyer (tokens). |
+| pair_curve | `claim_developer_fee` | anyone | **the accrued 25 bps → the developer wallet fixed at init** | SOL vault → developer wallet (the accrual only). |
+| pair_curve | `close_pair` | anyone | **voided pairs only: residue → burn pools; account rent → the creator who paid it** | Developer accrual → developer wallet; SOL vault residue → burn pools; account rent → the creator. |
+| pair_curve | `graduate` | anyone | **curve SOL → the Raydium pool (LP burned); leftover tokens burned; the side's escrowed fees and residue → its burn pool** | SOL vault → its WSOL account → the side's CPMM pool (and CPMM's create-pool fee + rents); token vault → the pool; LP → burned; leftover tokens → burned; residue → the side's burn pool. |
 | pair_curve | `init_pair` | anyone + pair_creator | **rent only (the caller pays it)** | Payer → the Pair, the two token vaults (rent) and the SOL vault's rent minimum. |
-| pair_curve | `sell` | trader | **the trader's own funds, at the formula; fee legs to fixed recipients** | Seller → token vault (tokens); SOL vault → seller (proceeds less fee), → developer wallet, → burn pool. |
+| pair_curve | `sell` | trader | **the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault** | Seller → token vault (tokens); SOL vault → seller (proceeds less fee, or the redemption). |
 | pair_curve | `void_pair` | anyone | **none** | None. |
 
 What does not exist (the registers' own list):
@@ -58,8 +59,10 @@ What does not exist (the registers' own list):
 - (pair_curve) No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts, LP burned in the same instruction) and residue to the burn pools.
 - (pair_curve) No pause or freeze exists. Buys end at the deadline; nothing can stop sells on an open or voided pair.
 - (pair_curve) No mint authority survives init_pair and no freeze authority ever exists; the program never mints after init.
-- (pair_curve) The pair program never holds burn-pool money: the 75 bps go straight to the burn_receipts fee PDA in the trade itself.
-- (pair_curve) The developer wallet cannot block a trade: when it could not hold its slice (below rent), the slice goes to the burn pool.
+- (pair_curve) The pair program holds the 75 bps burn share only in escrow: it reaches the side's burn_receipts fee PDA when the pool is created, or goes back to that side's holders on a void.
+- (pair_curve) No trade credits any account but the SOL vault and the trader: the developer's 25 bps accrue in the vault (claim_developer_fee) and the 75 bps burn share is escrowed there until the side's pool exists — so neither the developer wallet nor a burn pool can block a trade or an exit.
+- (pair_curve) The developer wallet is the claim wallet of the ONE LaunchLab platform compiled into the build (BURNTICKER_PLATFORM); a creator cannot route the 25 bps elsewhere.
+- (pair_curve) A committed or graduated pair is never closed, so burn_receipts can always register its pools.
 
 ## 2. Who can do what
 
@@ -112,7 +115,7 @@ Powers outside the programs that they depend on:
 - **program not deployed** (devnet only) — burn_receipts (AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM) and pair_curve (2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN) are deployed on devnet, upgrade authority held by a 2-of-3 Squads vault; their bytes match a build of this repository (docs/burnticker/VERIFIED-BUILD.md). Neither is deployed on mainnet. Pages read the devnet programs where an RPC is configured; the launch wizard refuses mainnet and answers ready: false. *Where:* config/burnticker/transparency.json → limitations.program-not-deployed
 - **no systemd unit** (not built) — deploy/ has a unit for the $DEFICIT keeper only; the multi-token Burnticker keeper and the hourly audit timer have no systemd units yet. *Where:* config/burnticker/transparency.json → limitations.no-systemd-unit
 - **signed operator message** (not done) — The operator's signed statement (a message signed by the developer fee wallet, verifiable on /burnticker/operator) is not signed yet: the mainnet wallet does not exist. *Where:* config/burnticker/transparency.json → limitations.signed-operator-message
-- **paircurve findings open** (not done) — The two pair_curve reviews (2026-10-10) found High-severity issues that are not fixed yet: close_pair can strand the burn-pool registration, a pre-funded pool vault or a pre-created token account can block graduation or init_pair, and an executable developer wallet can freeze trades. The exploit tests are committed; the fixes are not. The devnet pair_curve deployment carries these issues; pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until they are fixed and re-reviewed. *Where:* config/burnticker/transparency.json → limitations.paircurve-findings-open
+- **paircurve findings open** (not done) — The two pair_curve reviews (2026-10-10) found High-severity issues (close_pair could strand the burn-pool registration, a pre-funded pool vault or a pre-created token account could block graduation or init_pair, an executable developer wallet could freeze trades). All findings are fixed or accepted in writing (docs/burn-receipts/CHANGELOG.md, code fa8627a4), the reviewers' exploit tests now assert each attack fails, and the fixed program was re-rehearsed on devnet (docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md §R2). Not yet done: a re-review of the fixed program. Pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until it is done. *Where:* config/burnticker/transparency.json → limitations.paircurve-findings-open
 - **Mainnet rehearsal coin $REHEARSAL** (not done) — $REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP burned; not for trading. Its mint and the date go here when it happens; until then: not done. *Where:* config/burnticker/transparency.json → rehearsals
 
 ## 5. Is the deployed code this code?
@@ -123,8 +126,8 @@ Kind: **interim-local**. INTERIM: built with cargo build-sbf on the operator's M
 |---|---|---|---|---|
 | burn_receipts | mainnet | default | `3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f` | — |
 | burn_receipts | devnet | devnet | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` = build |
-| pair_curve | mainnet | default | `9b20156f30b35eb7e31733fd32b40b40bbd38d1f2acca821f012f2dc59b31f34` | — |
-| pair_curve | devnet | devnet | `2fa91c047dcefd459e7dc7e8b723d61f6308695a8ae6d94f09af840714ca2341` | `2fa91c047dcefd459e7dc7e8b723d61f6308695a8ae6d94f09af840714ca2341` = build |
+| pair_curve | mainnet | default | `40584764553fb869589d0f5194f7e90a2c9ee1b7db2bcddd125f1cbcdf2e3594` | — |
+| pair_curve | devnet | devnet | `35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1` | `35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1` = build |
 
 How to reproduce: docs/burnticker/VERIFIED-BUILD.md.
 

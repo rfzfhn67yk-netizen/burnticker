@@ -22,6 +22,8 @@ custom-heap = []
 custom-panic = []
 # Devnet build: Raydium's devnet CPMM / LaunchLab ids (taken from burn_receipts' own `devnet` constants — one source of truth).
 devnet = ["burn_receipts/devnet"]
+# The LiteSVM suite's build (scripts/test.sh → target/deploy-localnet): pins the harness's test LaunchLab platform as BURNTICKER_PLATFORM.
+localnet = []
 
 [dependencies]
 anchor-lang = { version = "=1.2.1", features = ["init-if-needed", "event-cpi"] }

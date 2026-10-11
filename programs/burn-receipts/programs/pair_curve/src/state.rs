@@ -61,7 +61,8 @@ pub struct Pair {
     // ----- state -----
     /// Raw tokens each curve has sold (net of sells).
     pub sold: [u64; 2],
-    /// Lamports each curve holds = F(sold) (invariant; zeroed at graduation when the SOL moves into the pools).
+    /// Lamports owed to each side: while Open/Graduating = F(sold) (invariant; zeroed when the side's pool is created); once the side is
+    /// in redemption (Voided, or a refunding side) = what its remaining holders will receive, pro rata.
     pub sol: [u64; 2],
     /// Gross curve SOL traded per side (cost of buys + proceeds of sells).
     pub volume_lamports: [u64; 2],
@@ -77,6 +78,19 @@ pub struct Pair {
     /// When the first side's graduate ran (the decision), and the two raises at that moment.
     pub graduation_started_at: i64,
     pub raise_at_graduation: [u64; 2],
+    // ----- review round 1+2 (2026-10-10 night) -----
+    /// The 75 bps burn share of each side, ESCROWED in the SOL vault until that side's pool exists (then paid to its burn pool); on a
+    /// void it is returned to that side's holders with the curve SOL (blind review 2 M-1).
+    pub burn_escrow: [u64; 2],
+    /// The 25 bps developer share, accrued in the SOL vault and paid by the permissionless `claim_developer_fee` (blind review 1 H-2:
+    /// trades never credit the developer wallet, so an executable or emptied wallet cannot block them).
+    pub dev_accrued: u64,
+    /// Redemption snapshot per side (Voided, or a refunding side): the lamports and the raw tokens outstanding when redemption began.
+    /// Each sell then pays amount × pool / supply (no fee); the last holder receives the remainder (blind review 2 M-1).
+    pub redeem_pool: [u64; 2],
+    pub redeem_supply: [u64; 2],
+    /// A side whose pool Raydium blocked after the commit: its holders redeem pro rata (blind review 1 L-2/L-3).
+    pub refunding: [bool; 2],
     pub reserved: [u8; 64],
 }
 
@@ -86,6 +100,14 @@ impl Pair {
     }
     pub fn total_sol(&self) -> u64 {
         self.sol[0].saturating_add(self.sol[1])
+    }
+    /// Lamports the SOL vault owes beyond its rent minimum: both sides' SOL, the escrowed burn shares, the developer accrual.
+    pub fn owed(&self) -> u64 {
+        self.sol[0].saturating_add(self.sol[1]).saturating_add(self.burn_escrow[0]).saturating_add(self.burn_escrow[1]).saturating_add(self.dev_accrued)
+    }
+    /// Is side `s` in pro-rata redemption?
+    pub fn redeeming(&self, s: usize) -> bool {
+        self.status == STATUS_VOIDED || self.refunding[s]
     }
 }
 

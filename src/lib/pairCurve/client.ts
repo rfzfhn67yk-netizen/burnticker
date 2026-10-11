@@ -6,8 +6,8 @@ import { registerPairPoolIx } from "@/lib/burnReceipts/instructions";
 import { configPda, feePda } from "@/lib/burnReceipts/pda";
 import { anchorErrorName, confirmByPolling } from "@/lib/burnReceipts/crank";
 import { PAIR_CURVE_IDL } from "@/lib/pairCurve/idl";
-import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, fetchPair, type PairAccount, pairPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, vaultPda } from "@/lib/pairCurve/accounts";
-import { graduationReady, TOKEN_DECIMALS } from "@/lib/pairCurve/pricing";
+import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, fetchPair, type PairAccount, pairPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda } from "@/lib/pairCurve/accounts";
+import { GRADUATION_STUCK_SECS, graduationReady, TOKEN_DECIMALS } from "@/lib/pairCurve/pricing";
 
 /**
  * pair_curve TypeScript client: instruction builders driven by the program's IDL (src/lib/pairCurve/idl.ts — account order and flags
@@ -69,11 +69,13 @@ export function initPairIx(o: { payer: PublicKey; creator: PublicKey; mintA: Pub
   }, { args: o.args });
 }
 
+/** buy: every lamport goes to the SOL vault (cost + fee; the fee is accounted there — escrow for the burn pool, accrual for the
+ * developer). `amm_config` is read for the commit rule (the trade that leaves the pair ready commits it). */
 export function buyIx(o: { buyer: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; maxLamportsIn: bigint; minTokensOut: bigint; programId?: PublicKey }): TransactionInstruction {
   const mint = o.pair.mints[o.side];
   return build(o.programId ?? PAIR_CURVE_ID, "buy", {
     buyer: o.buyer, pair: o.pairAddress, vault: o.pair.vault, mint, token_vault: o.pair.token_vaults[o.side], buyer_token: ata(o.buyer, mint),
-    fee_vault: o.pair.fee_vaults[o.side], dev_wallet: o.pair.dev_wallet,
+    amm_config: o.pair.cp_config,
   }, { side: o.side, max_lamports_in: o.maxLamportsIn, min_tokens_out: o.minTokensOut });
 }
 
@@ -81,7 +83,7 @@ export function sellIx(o: { seller: PublicKey; pairAddress: PublicKey; pair: Pai
   const mint = o.pair.mints[o.side];
   return build(o.programId ?? PAIR_CURVE_ID, "sell", {
     seller: o.seller, pair: o.pairAddress, vault: o.pair.vault, mint, token_vault: o.pair.token_vaults[o.side], seller_token: ata(o.seller, mint),
-    fee_vault: o.pair.fee_vaults[o.side], dev_wallet: o.pair.dev_wallet,
+    amm_config: o.pair.cp_config,
   }, { side: o.side, amount: o.amount, min_lamports_out: o.minLamportsOut });
 }
 
@@ -99,14 +101,21 @@ export function graduateIx(o: { cranker: PublicKey; pairAddress: PublicKey; pair
   }, { side: o.side });
 }
 
-export function voidPairIx(o: { caller: PublicKey; pairAddress: PublicKey; programId?: PublicKey }): TransactionInstruction {
-  return build(o.programId ?? PAIR_CURVE_ID, "void_pair", { caller: o.caller, pair: o.pairAddress }, {});
+/** void_pair: the whole pair after the deadline, or a stuck side Raydium blocks ≥ 3 days after the commit (the AmmConfig is the evidence). */
+export function voidPairIx(o: { caller: PublicKey; pairAddress: PublicKey; pair: PairAccount; programId?: PublicKey }): TransactionInstruction {
+  return build(o.programId ?? PAIR_CURVE_ID, "void_pair", { caller: o.caller, pair: o.pairAddress, amm_config: o.pair.cp_config }, {});
+}
+
+/** claim_developer_fee: pays the accrued 25 bps to the developer wallet recorded at init (permissionless). */
+export function claimDeveloperFeeIx(o: { caller: PublicKey; pairAddress: PublicKey; pair: PairAccount; programId?: PublicKey }): TransactionInstruction {
+  return build(o.programId ?? PAIR_CURVE_ID, "claim_developer_fee", { caller: o.caller, pair: o.pairAddress, vault: o.pair.vault, dev_wallet: o.pair.dev_wallet, system_program: SystemProgram.programId }, {});
 }
 
 export function closePairIx(o: { caller: PublicKey; pairAddress: PublicKey; pair: PairAccount; programId?: PublicKey }): TransactionInstruction {
   return build(o.programId ?? PAIR_CURVE_ID, "close_pair", {
     caller: o.caller, pair: o.pairAddress, creator: o.pair.creator, vault: o.pair.vault, mint_a: o.pair.mints[0], mint_b: o.pair.mints[1],
     token_vault_a: o.pair.token_vaults[0], token_vault_b: o.pair.token_vaults[1], fee_vault_a: o.pair.fee_vaults[0], fee_vault_b: o.pair.fee_vaults[1],
+    dev_wallet: o.pair.dev_wallet,
   }, {});
 }
 
@@ -121,40 +130,88 @@ export function registerSideIx(o: { registrar: PublicKey; pairAddress: PublicKey
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 export type CrankAction =
-  | { kind: "graduate"; side: 0 | 1; register: boolean; why: string }
+  | { kind: "graduate"; side: 0 | 1; why: string }
   | { kind: "register"; side: 0 | 1; why: string }
   | { kind: "void"; why: string }
+  | { kind: "claim"; why: string }
+  | { kind: "seed"; side: 0 | 1; why: string }
   | { kind: "wait"; why: string };
 
+/** The developer accrual the keeper pays out once it reaches this much (claim_developer_fee is permissionless; anyone may call it sooner). */
+export const CLAIM_THRESHOLD_LAMPORTS = BigInt(10_000_000);
+
 /**
- * The next actions for a pair, in order. `registered[side]` = that mint's TokenConfig already has a verified pool. Open + ready +
- * before the deadline → graduate both sides (each with its register_pair_pool in the same transaction); Graduating → the missing side;
- * Graduated → any registration still missing; Open at/after the deadline → void. Everything else waits.
+ * The next actions for a pair, in order; the keeper sends EACH AS ITS OWN TRANSACTION (blind review 2 L-3: a failing registration
+ * must never block a graduation). `registered[side]` = that mint's TokenConfig already has a verified pool; `seeded[side]` = the side's
+ * CPMM pool has at least one oracle observation (blind review 2 L-4 — the keeper seeds it with a dust swap).
+ *   Open, ready, before the deadline   → graduate A, graduate B (normally a trade already committed the pair)
+ *   Open at/after the deadline         → void
+ *   Graduating                         → graduate the missing side(s); a side missing ≥ 3 days after the commit → void (the program
+ *                                         accepts it only if Raydium really blocks the side); registrations; seeds
+ *   Graduated                          → registrations still missing; seeds
+ *   any                                → claim the developer accrual above the threshold
  */
-export function planPairCrank(p: PairAccount, now: number, registered: [boolean, boolean]): CrankAction[] {
+export function planPairCrank(p: PairAccount, now: number, registered: [boolean, boolean], seeded: [boolean, boolean] = [true, true]): CrankAction[] {
   const deadline = Number(p.deadline);
   const missingPool = (s: 0 | 1) => p.pools[s].equals(PublicKey.default);
-  if (p.status === STATUS_OPEN) {
-    if (now >= deadline) return [{ kind: "void", why: `the deadline ${new Date(deadline * 1000).toISOString()} passed without graduation` }];
-    if (graduationReady(p.sol[0], p.sol[1], p.target_raise_lamports, p.min_side_share_bps)) {
-      return [0, 1].map((s) => ({ kind: "graduate" as const, side: s as 0 | 1, register: !registered[s], why: "combined raise at target and both sides at their minimum share" }));
-    }
-    return [{ kind: "wait", why: `raise ${p.sol[0] + p.sol[1]} of ${p.target_raise_lamports} lamports (or a side under ${p.min_side_share_bps} bps)` }];
-  }
-  if (p.status === STATUS_GRADUATING) {
-    const out: CrankAction[] = [];
+  const out: CrankAction[] = [];
+  const tail = () => {
     for (const s of [0, 1] as const) {
-      if (missingPool(s)) out.push({ kind: "graduate", side: s, register: !registered[s], why: "graduation started; this side's pool is still to create" });
-      else if (!registered[s]) out.push({ kind: "register", side: s, why: "this side's pool exists but is not registered in burn_receipts" });
+      if (missingPool(s)) continue;
+      if (!registered[s]) out.push({ kind: "register", side: s, why: "the pool exists but is not registered in burn_receipts" });
+      if (!seeded[s]) out.push({ kind: "seed", side: s, why: "the pool has no oracle observation yet: a dust swap seeds the TWAP" });
     }
-    return out;
+  };
+  if (p.status === STATUS_OPEN) {
+    if (now >= deadline) out.push({ kind: "void", why: `the deadline ${new Date(deadline * 1000).toISOString()} passed without graduation` });
+    else if (graduationReady(p.sol[0], p.sol[1], p.target_raise_lamports, p.min_side_share_bps)) for (const s of [0, 1] as const) out.push({ kind: "graduate", side: s, why: "combined raise at target and both sides at their minimum share" });
+    else out.push({ kind: "wait", why: `raise ${p.sol[0] + p.sol[1]} of ${p.target_raise_lamports} lamports (or a side under ${p.min_side_share_bps} bps)` });
+  } else if (p.status === STATUS_GRADUATING) {
+    for (const s of [0, 1] as const) if (missingPool(s) && !p.refunding[s]) out.push({ kind: "graduate", side: s, why: "graduation committed; this side's pool is still to create" });
+    if ((([0, 1] as const).some((s) => missingPool(s) && !p.refunding[s])) && now >= Number(p.graduation_started_at) + GRADUATION_STUCK_SECS) out.push({ kind: "void", why: "a side is still missing 3 days after the commit: refund it if Raydium blocks it" });
+    tail();
+  } else if (p.status === STATUS_GRADUATED) {
+    tail();
   }
-  if (p.status === STATUS_GRADUATED) {
-    const out: CrankAction[] = [];
-    for (const s of [0, 1] as const) if (!registered[s]) out.push({ kind: "register", side: s, why: "graduated; the pool is not registered in burn_receipts yet" });
-    return out.length ? out : [{ kind: "wait", why: "graduated and registered — nothing to do" }];
-  }
-  return [{ kind: "wait", why: "voided — holders sell back on the curve; nothing to crank" }];
+  if (p.dev_accrued >= CLAIM_THRESHOLD_LAMPORTS) out.push({ kind: "claim", why: `developer accrual ${p.dev_accrued} lamports` });
+  return out.length ? out : [{ kind: "wait", why: p.status === STATUS_VOIDED ? "voided — holders redeem pro rata; nothing to crank" : "nothing to do" }];
+}
+
+/** Does the side's CPMM pool have an oracle observation? (ObservationState: newest index u16 @9, observations of 40 bytes @43.) */
+export async function poolSeeded(connection: Connection, observation: PublicKey): Promise<boolean> {
+  const a = await connection.getAccountInfo(observation, "confirmed");
+  if (!a || a.data.length < 43 + 40 * 100) return false;
+  const idx = a.data.readUInt16LE(9);
+  return idx < 100 && a.data.readBigUInt64LE(43 + idx * 40) > BigInt(0);
+}
+
+/**
+ * A dust swap (WSOL → token) on a pair pool, from `payer`: creates the payer's WSOL and token accounts (idempotent), wraps `lamports`,
+ * swaps them with min-out 0, and closes the WSOL account. It writes the pool's first oracle observation so burn_receipts'
+ * crank_buyback has a TWAP to read (blind review 2 L-4). The payer keeps the dust tokens.
+ */
+export function seedObservationIxs(o: { cluster: Cluster; payer: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; lamports?: bigint; programId?: PublicKey }): TransactionInstruction[] {
+  const mint = o.pair.mints[o.side];
+  const s = sidePoolAccounts(o.cluster, o.pairAddress, o.side, mint, o.programId ?? PAIR_CURVE_ID);
+  const wsol = ata(o.payer, NATIVE_MINT), tok = ata(o.payer, mint);
+  const amount = o.lamports ?? BigInt(10_000);
+  const createAta = (owner: PublicKey, m: PublicKey, addr: PublicKey) => new TransactionInstruction({ programId: ASSOCIATED_TOKEN_PROGRAM_ID, data: Buffer.from([1]), keys: [
+    { pubkey: o.payer, isSigner: true, isWritable: true }, { pubkey: addr, isSigner: false, isWritable: true }, { pubkey: owner, isSigner: false, isWritable: false },
+    { pubkey: m, isSigner: false, isWritable: false }, { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false } ] });
+  const [inVault, outVault] = s.wsolIsToken0 ? [s.poolVault0, s.poolVault1] : [s.poolVault1, s.poolVault0];
+  const data = Buffer.alloc(24);
+  Buffer.from([143, 190, 90, 218, 196, 30, 51, 222]).copy(data, 0);
+  data.writeBigUInt64LE(amount, 8);
+  data.writeBigUInt64LE(BigInt(0), 16);
+  const swap = new TransactionInstruction({ programId: CPMM_PROGRAM_ID[o.cluster], data, keys: [
+    { pubkey: o.payer, isSigner: true, isWritable: false }, { pubkey: s.cpmmAuthority, isSigner: false, isWritable: false }, { pubkey: o.pair.cp_config, isSigner: false, isWritable: false },
+    { pubkey: s.pool, isSigner: false, isWritable: true }, { pubkey: wsol, isSigner: false, isWritable: true }, { pubkey: tok, isSigner: false, isWritable: true },
+    { pubkey: inVault, isSigner: false, isWritable: true }, { pubkey: outVault, isSigner: false, isWritable: true }, { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, { pubkey: NATIVE_MINT, isSigner: false, isWritable: false }, { pubkey: mint, isSigner: false, isWritable: false },
+    { pubkey: s.observation, isSigner: false, isWritable: true } ] });
+  const close = new TransactionInstruction({ programId: TOKEN_PROGRAM_ID, data: Buffer.from([9]), keys: [{ pubkey: wsol, isSigner: false, isWritable: true }, { pubkey: o.payer, isSigner: false, isWritable: true }, { pubkey: o.payer, isSigner: true, isWritable: false }] });
+  return [createAta(o.payer, NATIVE_MINT, wsol), createAta(o.payer, mint, tok), SystemProgram.transfer({ fromPubkey: o.payer, toPubkey: wsol, lamports: amount }),
+    new TransactionInstruction({ programId: TOKEN_PROGRAM_ID, data: Buffer.from([17]), keys: [{ pubkey: wsol, isSigner: false, isWritable: true }] }), swap, close];
 }
 
 export interface PairCurveContext {
@@ -207,25 +264,36 @@ export async function registeredSides(ctx: PairCurveContext, p: PairAccount): Pr
 
 export interface CrankStep { action: CrankAction; result: SendResult | null }
 
-/** Plans and executes one pair's crank (graduate per side with its registration, register, or void). Stops at the first failure. */
-export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAddress: PublicKey, o: { now?: number; dryRun?: boolean; log?: (s: string) => void } = {}): Promise<CrankStep[]> {
-  await assertPairCurveCluster(ctx);
+/**
+ * Plans and executes one pair's crank, ONE TRANSACTION PER ACTION. A refusal is recorded and the next action still runs when it is
+ * independent (a failed registration or seed never stops a graduation, blind review 2 L-3); everything is retried next cycle.
+ * `skipClusterCheck`: the caller already checked the genesis this cycle (blind review 2 I-1).
+ */
+export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAddress: PublicKey, o: { now?: number; dryRun?: boolean; log?: (s: string) => void; skipClusterCheck?: boolean } = {}): Promise<CrankStep[]> {
+  if (!o.skipClusterCheck) await assertPairCurveCluster(ctx);
   const steps: CrankStep[] = [];
   const now = o.now ?? Math.floor(Date.now() / 1000);
   let p = await fetchPair(ctx.connection, pairAddress);
   if (!p) return [{ action: { kind: "wait", why: "no Pair account" }, result: null }];
-  const actions = planPairCrank(p, now, await registeredSides(ctx, p));
+  const seeded: [boolean, boolean] = [true, true];
+  for (const s of [0, 1] as const) if (!p.pools[s].equals(PublicKey.default)) seeded[s] = await poolSeeded(ctx.connection, sidePoolAccounts(ctx.cluster, pairAddress, s, p.mints[s], ctx.programId ?? PAIR_CURVE_ID).observation);
+  const actions = planPairCrank(p, now, await registeredSides(ctx, p), seeded);
+  let graduateFailed = false;
   for (const action of actions) {
     if (action.kind === "wait") { steps.push({ action, result: null }); continue; }
+    if (action.kind === "graduate" && graduateFailed) continue;
     p = (await fetchPair(ctx.connection, pairAddress)) ?? p;
-    const ixs: TransactionInstruction[] = [];
-    if (action.kind === "void") ixs.push(voidPairIx({ caller: cranker.publicKey, pairAddress, programId: ctx.programId }));
-    if (action.kind === "graduate") ixs.push(graduateIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, programId: ctx.programId }));
-    if (action.kind === "register" || (action.kind === "graduate" && action.register)) ixs.push(registerSideIx({ registrar: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId }));
+    let ixs: TransactionInstruction[] = [];
+    if (action.kind === "void") ixs = [voidPairIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
+    if (action.kind === "graduate") ixs = [graduateIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, programId: ctx.programId })];
+    if (action.kind === "register") ixs = [registerSideIx({ registrar: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
+    if (action.kind === "claim") ixs = [claimDeveloperFeeIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
+    if (action.kind === "seed") ixs = seedObservationIxs({ cluster: ctx.cluster, payer: cranker.publicKey, pairAddress, pair: p, side: action.side, programId: ctx.programId });
     const result = await simulateAndSend(ctx, ixs, [cranker], { dryRun: o.dryRun });
     o.log?.(`  [pair-curve] ${pairAddress.toBase58().slice(0, 8)}… ${action.kind}${"side" in action ? `(${action.side === 0 ? "A" : "B"})` : ""}: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${result.error}`}${result.units ? ` · ${result.units} CU` : ""}`);
     steps.push({ action, result });
-    if (!result.ok || o.dryRun) break;
+    if (action.kind === "graduate" && !result.ok) graduateFailed = true;
+    if (o.dryRun && action.kind === "graduate") break;
   }
   return steps;
 }
