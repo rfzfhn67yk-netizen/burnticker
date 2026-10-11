@@ -169,7 +169,8 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
         if (s.err !== null) continue;
         const t = await parsedTx(s.signature);
         const logs = t?.meta?.logMessages ?? null;
-        if (logs && logs.some((l) => /Instruction: Crank(Buyback|Vault|NoUnits)/.test(l))) return { signature: s.signature, slot: s.slot ?? null, memo: memoFromTransaction(t, o.programId, recordDate) };
+        // a crank, or (winner takes the burn) the forward_to_winner that processed this reading — review RL-1
+        if (logs && logs.some((l) => /Instruction: (Crank(Buyback|Vault|NoUnits)|ForwardToWinner)/.test(l))) return { signature: s.signature, slot: s.slot ?? null, memo: memoFromTransaction(t, o.programId, recordDate) };
       }
       return null;
     },

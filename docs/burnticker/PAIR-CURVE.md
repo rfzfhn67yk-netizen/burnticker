@@ -237,8 +237,8 @@ pool (blind review 2 I-4: aggregators may route there; the site links only the r
    is posted, the loser's `forward_to_winner` lands, then the winner cranks — receipts `forwarded`, the append-only `pair_forwards`
    table, the receipt line "forwarded from $LOSER: N SOL → $WINNER burn pool". The keeper posts only the true result (a draw only for a
    true draw; a win it cannot record is an alert, never a substitute draw), attests a flat 0-unit winner reading when the winner had nothing
-   to read that day, and follows `planCrank` for the 72 h time-out (the forward until then, the paired buyback after) — a lost period never
-   burns the losing coin; against a dead winner the forward moves 0 lamports and the fuel waits in the loser's pool.
+   to read that day, and follows `planCrank` for the 72 h time-out (the forward until then, the paired buyback after) — a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published. Against a dead winner the forward moves 0 lamports: the fuel stays in the loser's pool, where the loser's own later
+   burns spend it.
    `claim_lock_fees` always collects everything accrued (no amount argument, r2 L-3) against the FeeKeyRecord's pool (r2 L-1).
 6. **Fallback if the lock cannot be made** (r2 L-2): `lock_lp` depends on Raydium's upgradeable lock program. If a graduated side's LP
    is still unlocked 30 days (`LP_LOCK_FALLBACK_SECS`) after the graduation decision, anyone may call pair_curve's `burn_lp(side)`: it

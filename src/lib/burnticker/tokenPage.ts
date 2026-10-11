@@ -76,6 +76,8 @@ export interface PairTally {
    * (from the forwarded receipts), and every forward (oldest first). "burned on A / burned on B / forwarded A→B / B→A" on the pair page.
    */
   winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string; forwards?: PairForwardJson[];
+  /** The attester fact, stated plainly while one key attests both coins (pair-forward re-check): see PAIR_SOLE_ATTESTER_LINE. */
+  attesterLine?: string | null;
   /** Round 2: the pair was unlinked on chain (reason in words); "unpaired (reason)" on the page. */
   unpaired?: { reason: string; at: string; signature: string | null } | null;
 }
@@ -128,7 +130,17 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
     winnerTakesBurn: !!(a.pair?.winnerTakesBurn || b.pair?.winnerTakesBurn), forwardedAtoB: forwardedSol(receiptsA), forwardedBtoA: forwardedSol(receiptsB),
     forwards: a.pair?.forwards ?? b.pair?.forwards ?? forwardsFromReceipts(a, b, receiptsA, receiptsB),
     unpaired: a.pair?.unpaired ?? b.pair?.unpaired ?? null,
+    attesterLine: soleAttester(a, b) ? PAIR_SOLE_ATTESTER_LINE : null,
   };
+}
+
+/** The pair page's attester fact while a second attester does not exist (the pair-forward re-check asked for it in plain words). */
+export const PAIR_SOLE_ATTESTER_LINE = "On this platform the operator's keeper is the sole attester (quorum 1) for both coins of a pair.";
+/** True when both coins have exactly one active attester, the same key, at quorum 1. */
+export function soleAttester(a: Pick<TokenStatusJson, "attesters" | "quorum">, b: Pick<TokenStatusJson, "attesters" | "quorum">): boolean {
+  const act = (s: Pick<TokenStatusJson, "attesters">) => (s.attesters ?? []).filter((x) => x.active);
+  const [xa, xb] = [act(a), act(b)];
+  return a.quorum === 1 && b.quorum === 1 && xa.length === 1 && xb.length === 1 && xa[0].pubkey === xb[0].pubkey;
 }
 
 /** The SOL a side's forwarded receipts moved (the lead receipt of each reading carries the program's amount). */
@@ -576,6 +588,7 @@ ${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("
     tile("Supply", `${tally.supplyPctA.toFixed(2)}% <span class="muted">:</span> ${tally.supplyPctB.toFixed(2)}%`, `${fmt(tally.supplyA)} : ${fmt(tally.supplyB)} of ${fmt(a.supply.initial)} each`),
     tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? `settled ${esc((ls.result ?? ls.value ?? "—").toUpperCase())} · ${esc(ls.settledAt.slice(0, 16).replace("T", " "))}Z → ${sideTicker(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)}` : ""}` : "the first settlement after launch burns one side"),
     tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "the next settlement after launch"}`),
+    ...(tally.attesterLine ? [tile("Attesters", "1 key, quorum 1", esc(tally.attesterLine))] : []),
     ...(tally.unpaired ? [tile("Pair", "unpaired", `${esc(tally.unpaired.reason)} · ${esc(tally.unpaired.at.slice(0, 10))} — two plain coins now; nothing forwards between them`)] : []),
     ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `burned on $${A} ${fmt(tally.burnedA)} <span class="muted">/</span> burned on $${B} ${fmt(tally.burnedB)}`, `forwarded $${A}→$${B} ${esc(tally.forwardedAtoB ?? "0")} SOL · $${B}→$${A} ${esc(tally.forwardedBtoA ?? "0")} SOL — ${esc(WINNER_TAKES_BURN_LINE)}`)] : []),
   ].join("\n");

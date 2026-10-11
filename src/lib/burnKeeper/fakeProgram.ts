@@ -39,6 +39,7 @@ export const readingTxBytes = (signatures: number, messageBytes: number): number
 type Payload =
   | { kind: "reading"; recordDate: number; prevDate: number; value: bigint; keys: string[] }
   | { kind: "crank"; crank: "no_units" | "vault" | "buyback"; recordDate: number }
+  | { kind: "forward"; recordDate: number }
   | { kind: "other" };
 
 const Z = BigInt(0);
@@ -295,7 +296,8 @@ export class FakeProgram implements ProgramPort {
   async blockHeight() { return this.height; }
   async memoOf(sig: string) { return this.landed.get(sig)?.memo ?? null; }
   async findCrankTx(D: number) {
-    for (const [signature, l] of this.landed) if (!l.err && l.payload.kind === "crank" && l.payload.recordDate === D) return { signature, slot: l.slot, memo: l.memo };
+    // a crank, or (winner takes the burn) a forward_to_winner that processed this reading — review RL-1
+    for (const [signature, l] of this.landed) if (!l.err && (l.payload.kind === "crank" || l.payload.kind === "forward") && l.payload.recordDate === D) return { signature, slot: l.slot, memo: l.memo };
     return null;
   }
   /** Someone else cranks the next reading (permissionless). Returns the signature. */

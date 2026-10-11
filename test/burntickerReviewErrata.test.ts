@@ -24,7 +24,7 @@ const BR = "programs/burn-receipts/programs/burn_receipts/src";
 const CHECKLIST = "docs/burnticker/reviews/checklist.md";
 const ERRATUM = "## Erratum 2026-10-10 (after the ChatGPT/Codex review)";
 /** Every dated erratum, in the order they were appended (each one after the last; the pre-registered text before the first never changes). */
-const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)"];
+const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)", "## Erratum 2026-10-11 (pair-forward round-2 re-check, RI-2 wording)"];
 /** sha256 of the pre-registered checklist exactly as reviewed (everything before the erratum). It must never change. */
 const CHECKLIST_PREREGISTERED_SHA256 = "7af9866eb64157d77205e63b34e4695aa9d1ecac6b12c4cbff58c5a068ff5f3b";
 const LP_SENTENCE = "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation";
@@ -78,6 +78,12 @@ describe("checklist: pre-registered text is immutable, corrections go in the err
   test("the round-2 pair erratum states 30 entrypoints, the no-wedge rules, the loser's consent, unlink and the ordering fixes", () => {
     const e = erratumSection(ERRATA[4]);
     for (const re of [/\*\*30 entrypoints\*\*/, /unlink_pair/, /PairResultNotServable/, /0 lamports/, /PairForwardMissing/, /loser's attester quorum/, /PairStillLive/, /PairHasReadings/, /PairDateBeforePairing/]) assert.match(e, re);
+  });
+  test("the re-check erratum corrects the 'never burns the losing coin' sentence (RI-2) and the whitepaper says the same", () => {
+    const e = erratumSection(ERRATA[5]);
+    assert.match(e, /unless no forward lands within 72 hours, in which case it burns as a plain period and a `PairForwardMissing` event is published/);
+    assert.ok(read("docs/burnticker/WHITEPAPER.md").includes("a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published"));
+    assert.ok(!/a lost period never burns the losing coin[;.]/.test(read("docs/burnticker/WHITEPAPER.md")));
   });
   test("the LP-lock erratum states the policy, the compiled split and the unchanged item-8 floor", () => {
     const e = erratumSection(ERRATA[1]);

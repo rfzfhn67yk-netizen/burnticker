@@ -199,16 +199,21 @@ export function forwardMissingAlert(reg: Registry, t: Pick<TokenRow, "mint" | "t
  * a voided pair curve, a refunding side, or one coin still without a verified pool 30 days after the pairing. Both coins are plain
  * afterwards (new receipts carry no pair role); the pages say "unpaired (reason)". A pair someone else unlinked is recorded too.
  */
-export async function pairUnlinkStep(reg: Registry, program: Pick<BurnProgramClient, "pairForward">, now: number, dryRun: boolean, log: (s: string) => void): Promise<{ pairId: string; reason: UnlinkReason | null; signature: string | null }[]> {
+export async function pairUnlinkStep(reg: Registry, program: Pick<BurnProgramClient, "pairForward">, now: number, dryRun: boolean, log: (s: string) => void, o: { send?: boolean } = {}): Promise<{ pairId: string; reason: UnlinkReason | null; signature: string | null }[]> {
   const out: { pairId: string; reason: UnlinkReason | null; signature: string | null }[] = [];
   if (!program.pairForward) return out;
   for (const pr of reg.pairs()) {
-    if (reg.getStatus(unlinkedKey(pr.pairId)) !== null) continue;
     const a = reg.token(pr.mintA), b = reg.token(pr.mintB);
     if (!a || !b) continue;
     const port = program.pairForward.port(pr.mintA, pr.mintB);
     let l: Awaited<ReturnType<PairForwardPort["links"]>>;
     try { l = await port.links(); } catch { continue; }
+    // review RL-2: the chain is read every cycle, never the record alone — a pair recorded unlinked that the chain says is paired again
+    // (a re-link) is an alert, not something to fight over.
+    if (reg.getStatus(unlinkedKey(pr.pairId)) !== null) {
+      if (l.paired) alert(reg, now, log, "pair-unlink-drift", `pair-unlink-drift:${pr.pairId}`, `pair ${pr.pairId} ($${a.ticker} / $${b.ticker}) is recorded unlinked but the chain says paired again — the pages say "unpaired"; check who re-linked it`, { pairId: pr.pairId });
+      continue;
+    }
     if (!l.paired) {
       // unlinked by someone else: both links closed, both coins plain — recorded once the pair had acted as a pair here
       const wasPaired = [...reg.receipts(pr.mintA), ...reg.receipts(pr.mintB)].some((r) => r.pairRole !== null);
@@ -223,6 +228,7 @@ export async function pairUnlinkStep(reg: Registry, program: Pick<BurnProgramCli
     try { ev = await port.unlinkEvidence(now); } catch { continue; }
     if (!ev) continue;
     const text = UNLINK_REASON_TEXT[ev.reason];
+    if (!o.send) { log(`  [pair] ${pr.pairId}: unlink evidence holds (${text}) — not sent: unlink_pair is off until the round-3 evidence set is bound`); continue; }
     if (dryRun) { log(`  [dry-run] pair ${pr.pairId}: would unlink_pair (${text})`); continue; }
     const tx = await port.buildUnlink({ pair: ev.pair });
     const sim = await port.simulate(tx.raw);

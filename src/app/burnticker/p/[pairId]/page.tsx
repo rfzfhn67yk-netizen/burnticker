@@ -19,6 +19,8 @@ interface Tally {
   next: { market: string | null; closeTime: string | null; chanceA: number | null; chanceB: number | null };
   /** Winner takes the burn (API 1.10.0): fees from both coins burn the winner's supply; forwarded SOL each way. */
   winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string;
+  /** The attester fact while one key attests both coins (tokenPage.ts PAIR_SOLE_ATTESTER_LINE). */
+  attesterLine?: string | null;
   /** Round 2: unlinked on chain — two plain coins now. */
   unpaired?: { reason: string; at: string } | null;
 }
@@ -56,6 +58,7 @@ export default function PairPage() {
 
       <section className={card + " space-y-3"} aria-label="Scoreboard">
         <div className="text-center"><div className="text-xs text-neutral-400">burns</div><div className="text-4xl font-semibold tabular-nums">${A} {t.burnsA} <span className="text-neutral-500 text-2xl">:</span> {t.burnsB} ${B}</div><div className="text-xs text-neutral-500">{t.settlements} settlement(s){t.voids ? `, ${t.voids} void` : ""} · burned {fmt(t.burnedA)} : {fmt(t.burnedB)}</div></div>
+        {t.attesterLine && <div className="text-center text-xs text-neutral-400" aria-label="Attesters">{t.attesterLine}</div>}
         {t.unpaired && <div className="text-center text-xs text-neutral-300" aria-label="Unpaired">unpaired ({t.unpaired.reason}) · {t.unpaired.at.slice(0, 10)} — two plain coins now; nothing forwards between them</div>}
         {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="Burned and forwarded">burned on ${A} {fmt(t.burnedA)} / burned on ${B} {fmt(t.burnedB)} / forwarded ${A}→${B} {t.forwardedAtoB ?? "0"} SOL / ${B}→${A} {t.forwardedBtoA ?? "0"} SOL · winner takes the burn: fees from both coins burn the winner&apos;s supply</div>}
         <div className="grid md:grid-cols-3 gap-2">

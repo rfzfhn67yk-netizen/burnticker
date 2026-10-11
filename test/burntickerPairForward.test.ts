@@ -22,7 +22,7 @@ import { logEventsFrom } from "../packages/burnticker-sdk/src/events.ts";
 import { PAIR_DESCRIPTION_SENTENCE, PAIR_REVIEW_LINE, describeRule } from "@/lib/burnticker/describe";
 import { FIELD_HELP } from "@/lib/burnticker/fieldHelp";
 import { TEMPLATES } from "@/lib/burnticker/templates";
-import { pairCounterpartFrom, pairForwardsJson, forwardedSol } from "@/lib/burnticker/tokenPage";
+import { pairCounterpartFrom, pairForwardsJson, forwardedSol, soleAttester, PAIR_SOLE_ATTESTER_LINE } from "@/lib/burnticker/tokenPage";
 import { buildOpsStatus } from "@/lib/burnticker/ops/status";
 import { Keypair } from "@solana/web3.js";
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
@@ -301,6 +301,11 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     await runCycle(deps);
     assert.equal(reg.getStatus(`pair.unlinked.${pairId}`), null, "no evidence: PairStillLive, nothing sent");
     port.unlinkReason = 2;
+    // re-check RN-1/RN-2: sending is OFF by default — the evidence is logged, nothing is sent
+    await runCycle(deps);
+    assert.equal(port.unlinked, null, "off by default");
+    assert.ok(logs.some((l) => /unlink evidence holds .* not sent/.test(l)));
+    deps.pairUnlink = true;
     await runCycle(deps);
     assert.ok(port.unlinked, "unlink_pair landed");
     const cp = (await pairCounterpartFrom(reg, async () => null, a))!;
@@ -315,6 +320,30 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     p2.unlinked = { reason: 0 }; p2.paired = false;
     await runCycle(deps);
     assert.match(reg.getStatus(`pair.unlinked.${o.pairId}`) ?? "", /unlinked on chain/);
+    // review RL-2: recorded unlinked but the chain says paired again → an alert, re-read every cycle
+    port.unlinked = null; port.paired = true;
+    await runCycle(deps);
+    assert.ok(reg.alertsSince(0).some((x) => x.kind === "pair-unlink-drift"));
+  });
+
+  test("r3 RL-1: a forward the keeper did not send (another cranker's) is adopted from the chain — receipts forwarded, pair_forwards row, nothing held", async () => {
+    const { a, b, pairId } = await launchPair();
+    program.now = () => clock;
+    const port = program.pairForward.port(a.mint, b.mint);
+    port.forwardErr = "OutOfOrder";
+    await runCycle(deps);
+    const loserMint = [a.mint, b.mint].find((m) => reg.pending(m).some((r) => r.pairRole === "lost" && r.readingDate !== null))!;
+    const D = reg.pending(loserMint).find((r) => r.pairRole === "lost" && r.readingDate !== null)!.readingDate!;
+    // a stranger lands the forward (permissionless) — the keeper holds no signature for it
+    port.forwardErr = null;
+    const tx = await port.buildForward({ loserMint, recordDate: D }); await port.send(tx.raw);
+    assert.equal(program.fake(loserMint).readings.get(D)!.outcome, "forwarded");
+    logs.length = 0;
+    await runCycle(deps);
+    assert.ok(reg.receiptsForReading(loserMint, D).every((r) => r.status === "forwarded"), "adopted");
+    assert.ok(reg.pairForwards(pairId).some((f) => f.signature === tx.signature));
+    assert.ok(!logs.some((l) => /transaction is not found yet/.test(l)));
+    assert.ok(logs.some((l) => /a forward already on chain .* adopted/.test(l)));
   });
 
   test("an unpaired LaunchLab pair raises pair-unmatched until its second coin names the first back", async () => {
@@ -349,12 +378,15 @@ describe("pairing on chain: the pairing window, link_pair, the launch's pair_min
   test("link_pair is due right after init_pair (both TokenConfigs, links not naming each other), never for a voided Pair", () => {
     const [m1, m2] = [new PublicKey(Buffer.alloc(32, 1)), new PublicKey(Buffer.alloc(32, 2))];
     const link = (mint: PublicKey, other: PublicKey, paired: boolean) => ({ mint, pair_mint: other, paired } as unknown as PairLinkAccount);
-    const pair = (status: number) => ({ status, mints: [m1, m2] });
+    const pair = (status: number, refunding = [false, false]) => ({ status, mints: [m1, m2], refunding });
     assert.equal(linkPairDue(pair(0), [true, true], [null, null]), true, "open, no pool yet: link now (before any reading)");
     assert.equal(linkPairDue(pair(0), [true, false], [null, null]), false, "side B has no TokenConfig yet");
     assert.equal(linkPairDue(pair(1), [true, true], [link(m1, m2, true), link(m2, m1, false)]), true, "half-linked");
     assert.equal(linkPairDue(pair(1), [true, true], [link(m1, m2, true), link(m2, m1, true)]), false, "already paired (a no-op)");
     assert.equal(linkPairDue(pair(2), [true, true], [null, null]), false, "voided: never");
+    // review RL-2: never re-link a pair with a refunding side, or one the registry records as unlinked
+    assert.equal(linkPairDue(pair(1, [false, true]), [true, true], [null, null]), false, "a side is refunding");
+    assert.equal(linkPairDue(pair(1), [true, true], [null, null], true), false, "recorded unlinked");
   });
 
   test("a launched pair names its partner in initialize_token: A provisional, B completes the pairing; a single coin's instruction is unchanged", async () => {
@@ -496,5 +528,16 @@ describe("r2: initialize_token at launch always carries the partner's PairLink (
     assert.deepEqual([slot(Bx.keys, "partner_link"), slot(Bx.keys, "partner_config")], [pairLinkPda(programId, new PublicKey(mA)).toBase58(), configPda(programId, new PublicKey(mA)).toBase58()]);
     const single = (await client.initializeToken({ ...base, mint: mA })).instructions[0];
     for (const n of ["pair_mint", "pair_link", "partner_link", "partner_config"]) assert.equal(slot(single.keys, n), programId.toBase58(), n);
+  });
+});
+
+describe("the pair page states the attester fact plainly (pair-forward re-check)", () => {
+  test("one key at quorum 1 for both coins → the sentence; a second attester or a different key → none; lint-clean", () => {
+    const st = (keys: string[], quorum = 1) => ({ quorum, attesters: keys.map((pubkey) => ({ pubkey, role: "data-key", active: true })) });
+    assert.equal(soleAttester(st(["K"]), st(["K"])), true);
+    assert.equal(soleAttester(st(["K", "X"], 2), st(["K"])), false);
+    assert.equal(soleAttester(st(["K"]), st(["J"])), false);
+    assert.equal(PAIR_SOLE_ATTESTER_LINE, "On this platform the operator's keeper is the sole attester (quorum 1) for both coins of a pair.");
+    assert.deepEqual(lintCopy(PAIR_SOLE_ATTESTER_LINE, loadCopyLintConfig()).hits, []);
   });
 });

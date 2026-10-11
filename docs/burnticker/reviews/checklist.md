@@ -163,3 +163,11 @@ reviewer checks for paired coins only:
   (`PairDateBeforePairing`); `initialize_token` with `pair_mint` always takes the partner's PairLink address; WSOL is measured as lamports
   minus rent after a sync.
 
+## Erratum 2026-10-11 (pair-forward round-2 re-check, RI-2 wording)
+
+The text above and the earlier errata stay as written; one sentence of the round-2 erratum is corrected here. burn_receipts still has
+**30 entrypoints**. Where the round-2 erratum says "so a lost period never burns the losing coin", read: a lost period never burns the losing
+coin unless no forward lands within 72 hours, in which case it burns as a plain period and a `PairForwardMissing` event is published.
+Against a side without a verified pool the forward moves 0 lamports and the fuel stays in the loser's pool, where the loser's own later burns
+spend it. The whitepaper's §5.5, PAIR-CURVE.md and ATTESTERS.md carry the same wording.
+
