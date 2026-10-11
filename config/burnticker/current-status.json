@@ -14,6 +14,10 @@
       "cluster": "devnet",
       "date": "2026-10-10",
       "note": "The devnet rehearsal coin ran at 1% per $1B (the mainnet rule is 2%); its two executed burns are real devnet transactions anyone can check."
+    },
+    "firstBurnPath": {
+      "doc": "docs/burnticker/FIRST-BURN-PATH.md",
+      "line": "Nothing burns until the curve fills and the debt rises: $DEFICIT must graduate at 85 SOL raised and have its pool registered and verified before a Treasury reading with at least one full $1B unit can start a burn."
     }
   },
   "demo": {

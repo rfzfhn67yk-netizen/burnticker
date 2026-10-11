@@ -77,6 +77,7 @@ interface StatusFileFull {
   reviews: { id: string; report: string; label: string; findings: Finding[] }[];
   releaseRequirements: { id: string; text: string; status: "open" | "done"; derivedFromChain?: string }[];
   design: string[]; historical: { label: string; path: string }[];
+  deficit: { firstBurnPath: { doc: string; line: string } };
 }
 interface VerifiedBuild { kind: string; programs: { library: string; programId: string; builds: Record<Cluster, { hash: string }>; deployed: Record<Cluster, { hash: string; matchesBuild: boolean; upgradeAuthority: string } | null> }[] }
 interface OperatorFile { clusters: Record<Cluster, { squads: { vault: string; multisig: string; threshold: string } }> }
@@ -90,6 +91,8 @@ export interface CurrentStatus {
   upgradeAuthority: { cluster: Cluster; vault: string; multisig: string; threshold: string; members: number | null; timeLockSecs: number | null; timeLockSource: "chain" | "unavailable"; plannedTimeLockSecs: number; plannedFrom: string | null; why: string; line: string }[];
   attesters: StatusFileFull["attesters"]; settlement: StatusFileFull["settlement"]; reviews: StatusFileFull["reviews"];
   releaseRequirements: StatusFileFull["releaseRequirements"]; design: string[]; historical: StatusFileFull["historical"];
+  /** the $DEFICIT prerequisite chain (docs/burnticker/FIRST-BURN-PATH.md) and its one line */
+  firstBurnPath: { doc: string; line: string };
   lines: string[];
 }
 
@@ -131,6 +134,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   const anyMain = programs.some((p) => p.mainnet.deployed);
   const lines = [
     st.phase.line,
+    st.deficit.firstBurnPath.line,
     `Programs: ${programs.map((p) => `${p.name} ${p.devnet.deployed ? "deployed on devnet" : "not on devnet"}${p.devnet.matchesBuild ? " (bytes match this repository's build)" : ""}, ${p.mainnet.line}`).join("; ")}.`,
     `Signing: ${st.attesters.line}`,
     `Upgrades: the 2-of-3 Squads vault holds the upgrade authority. ${mainTL.line}`,
@@ -141,7 +145,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   return {
     schema: "burnticker.current-status/v1", checkedAt: st.checkedAt, readAt, source: CURRENT_STATUS_FILE, phase: st.phase, host,
     networks: (["devnet", "mainnet"] as Cluster[]).map((c) => ({ cluster: c, role: st.networks[c].role, deployment: c === "mainnet" && anyMain ? "deployed" : st.networks[c].deployment, since: st.networks[c].since })),
-    programs, upgradeAuthority, attesters: st.attesters, settlement: st.settlement, reviews: st.reviews, releaseRequirements, design: st.design, historical: st.historical, lines,
+    programs, upgradeAuthority, attesters: st.attesters, settlement: st.settlement, reviews: st.reviews, releaseRequirements, design: st.design, historical: st.historical, firstBurnPath: st.deficit.firstBurnPath, lines,
   };
 }
 

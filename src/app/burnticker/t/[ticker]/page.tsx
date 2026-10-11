@@ -6,6 +6,9 @@ import { useLaunchAvailability } from "../../_components/useLaunchAvailability";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { DeficitPrelaunch } from "./DeficitPrelaunch";
 import { EmptyState } from "../../_components/EmptyState";
+import { ReadinessPanel } from "../../_components/ReadinessPanel";
+import { readinessFromStatus } from "@/lib/burnticker/readiness";
+import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago, until } from "../../_components/CoinCard";
@@ -96,6 +99,7 @@ export default function TokenPage() {
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "Not affiliated with any team, league, candidate, agency or market."}</p>
           {launch.open && <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>}
           <PinnedCheck pinned={s.pinned} />
+          <ReadinessPanel r={readinessFromStatus(s as unknown as Parameters<typeof readinessFromStatus>[0], d.receipts as unknown as Parameters<typeof readinessFromStatus>[1])} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
         </div>
       </header>
 
