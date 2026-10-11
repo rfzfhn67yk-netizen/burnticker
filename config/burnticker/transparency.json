@@ -50,6 +50,12 @@
         "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-blind-2.md"
       },
       {
+        "id": "lp-lock-blind",
+        "reviewer": "a fresh Claude agent reviewing the LP-lock release blind (register_fee_key, claim_lock_fees, lock_lp; both programs; the real Raydium lock binary loaded in place of the mock): 0 Critical/High, 2 Medium, 3 Low, 8 Info; exploit tests committed (#[ignore]d), fixes in progress",
+        "status": "completed 2026-10-11; findings open",
+        "reportPath": "docs/burnticker/reviews/2026-10-11-lp-lock-blind.md"
+      },
+      {
         "id": "chatgpt-adversarial",
         "reviewer": "ChatGPT/Codex, adversarial PR review against the same pre-registered checklist (reviewed public commit 58d43eae: 2 High, 5 Medium new findings plus checklist mismatches and pair_curve residuals; each answered in docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md)",
         "status": "completed 2026-10-10",
