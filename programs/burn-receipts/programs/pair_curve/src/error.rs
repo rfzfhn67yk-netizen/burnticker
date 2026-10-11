@@ -50,6 +50,16 @@ pub enum PairError {
     NotClosable,
     #[msg("this side's pool already exists")]
     SideAlreadyGraduated,
+    #[msg("this build has no Burnticker LaunchLab platform compiled in (mainnet: set BURNTICKER_PLATFORM before deploying)")]
+    PlatformNotPinned,
+    #[msg("the token vault already holds tokens, a delegate or a close authority")]
+    VaultAccountTampered,
+    #[msg("nothing to claim, or the developer wallet cannot receive it (executable, or the payment would leave it below rent)")]
+    NothingToClaim,
+    #[msg("the other side cannot pay for its pool at the current AmmConfig (fee or disabled pool creation)")]
+    OtherSideCannotGraduate,
+    #[msg("the stuck-side refund needs 3 days since the commit and a pool Raydium actually blocks")]
+    NotStuck,
     #[msg("an account passed does not match the pair")]
     AccountMismatch,
 }

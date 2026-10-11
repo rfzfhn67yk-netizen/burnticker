@@ -6,14 +6,18 @@
 //! Instruction set (there is deliberately NO admin, NO authority field, NO parameter update and NO withdraw / sweep path):
 //!   init_pair    payer + the creator recorded in both mints' burn_receipts TokenConfigs, once per pair: mint the supplies into the
 //!                vaults, revoke the mint authority, fix every parameter
-//!   buy / sell   permissionless, for the trader's own wallet: along the curve at the formula's price; 100 bps fee (25 → the
-//!                developer wallet pinned from the LaunchLab platform, 75 → the mint's burn_receipts fee PDA)
+//!   buy / sell   permissionless, for the trader's own wallet: along the curve at the formula's price; 100 bps fee accounted in the
+//!                SOL vault (75 escrowed for the side's burn pool, 25 accrued for the developer); the trade that leaves the pair ready
+//!                commits it; after a void (or for a refunding side) sells are a pro-rata redemption with no fee
+//!   claim_developer_fee  permissionless: pays the accrued 25 bps to the developer wallet pinned at init
 //!   graduate     permissionless crank, once per side: the first call (combined raise at target, each side ≥ its minimum share,
 //!                before the deadline) commits the pair and closes both curves; each call creates its side's CPMM pool, burns 100 %
 //!                of the LP and the leftover tokens; the second completes the pair
-//!   void_pair    permissionless: at/after the deadline if not graduated; sells stay open so everyone can exit
-//!   close_pair   permissionless: close empty accounts (rent → the creator), residue → the burn pools
+//!   void_pair    permissionless: at/after the deadline if not committed (whole pair), or a stuck side Raydium blocks 3 days after
+//!                the commit; its holders then redeem pro rata (curve SOL + escrowed burn share), no fee
+//!   close_pair   permissionless, voided pairs only, once nothing circulates: rent → the creator, residue → the burn pools
 
+pub mod commit;
 pub mod constants;
 pub mod cpmm;
 pub mod error;
@@ -57,5 +61,9 @@ pub mod pair_curve {
 
     pub fn close_pair(ctx: Context<ClosePair>) -> Result<()> {
         instructions::void_pair::handle_close(ctx)
+    }
+
+    pub fn claim_developer_fee(ctx: Context<ClaimDeveloperFee>) -> Result<()> {
+        instructions::void_pair::handle_claim_developer_fee(ctx)
     }
 }

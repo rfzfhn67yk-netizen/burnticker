@@ -218,7 +218,7 @@ describe("/.well-known/burnticker.json", () => {
     assert.equal(w.links.github, loadTransparency(ROOT).publicRepo.url);
     assert.deepEqual(w.links.x, ["https://x.com/burnticker", "https://x.com/USA_DEFICIT"]);
     assert.equal(w.clusters.devnet.programs.burn_receipts.programId, "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
-    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "2fa91c047dcefd459e7dc7e8b723d61f6308695a8ae6d94f09af840714ca2341");
+    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1"); // the review-fix upgrade of 2026-10-10 18:38 Denver
     assert.equal(w.clusters.devnet.squads.vault, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     assert.equal(w.clusters.mainnet.squads.vault, "TODO_MAINNET_SQUADS_VAULT");
     assert.equal(w.security.bountyWallet, "TODO_BOUNTY_WALLET");

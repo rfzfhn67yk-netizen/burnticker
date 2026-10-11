@@ -1,6 +1,6 @@
 # Devnet rehearsal run log — pair_curve, 2026-10-10 (Saturday evening)
 
-Run by Claude (agent) on the Mac, worktree `mct-wt-PAIRCURVE`, branch `burnticker/pair-curve`. Devnet only: every command carried
+Run by Claude (agent) on the Mac, worktree `mct-wt-PAIRCURVE`, branch `burnticker/pair-curve`. **The fixed program (after two blind reviews) was re-rehearsed at 18:32–19:22: §R2 at the end.** Devnet only: every command carried
 `-u devnet` / `--cluster devnet`, and every CLI checked the RPC's genesis hash (`EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG`). Keys:
 the throwaway devnet keys in `~/.config/meme-coin-trader/devnet/` (four new mint keys `pc{1,2}-mint-{a,b}.json`); the pair_curve
 program keypair in `~/.config/meme-coin-trader/mainnet-keys/pair_curve-program.json` (generated today, mode 600, one id for devnet and
@@ -173,3 +173,137 @@ pair_curve program rent, 0.105 program extension, ≈ 0.66 into pair 1's curves 
 create-pool fee, the rest rents and burn-pool fees), ≈ 0.13 rents (four mints, four TokenConfigs and fee-PDA reserves, two Pairs, reading
 accounts; pair 2's Pair and token-vault rent came back at close), ≈ 0.02 transaction fees and the TWAP trades. The 5.02 SOL upgrade buffer
 came back to the deployer.
+
+---
+
+# §R2 — re-rehearsal of the fixed program after the two blind reviews (18:32–19:22)
+
+The first version above was reviewed blind twice (`docs/burnticker/reviews/2026-10-10-pair-curve-blind-{1,2}.md`); every finding was
+fixed or accepted in writing (`docs/burn-receipts/CHANGELOG.md`, "late evening"; code commit `fa8627a4`). This run upgrades the devnet
+program through the Squads vault and repeats both pairs on the fixed code, adding the reviewers' attacks where they can be staged on a
+real cluster: a pre-funded WSOL pool vault (R2 H-1), a pre-created vault token account (R2 H-3), the commit latch against a late sell
+(R2 L-2), a developer claim instead of per-trade payments (R1 H-2), a fee-free pro-rata redemption (R2 M-1), and a close after a holder
+burned one raw unit (R2 L-1). Evidence files carry the prefix `r2-` in the same folder. burn_receipts was not changed in this round.
+
+## R2-U — pair_curve upgraded through the Squads vault (18:32–18:39)
+
+| step | signature / result |
+|---|---|
+| build: `cargo-build-sbf --features devnet --sbf-out-dir target/deploy-devnet` → 365,240 B, sha256 `1ab6b1c9405b5d5fbdc0548143dc2a0e30e29ef6bc1da1d1168347ff44a17fa0` (mainnet build 365,184 B, `567b1f85…e06e482`) | — |
+| `solana program extend 2jQo…ELkN 20600` (deployer) | `2eDopGLA7mTqhRjZEMTs7g6DN1qGCi1sbzirHK7HR9QPeMuhz8P8ybVthUgr6aY34Qyc7paKeC3m7RhVSdHmAgNZ` |
+| `solana program write-buffer` → buffer `CHW1bHRiuio4FStE3QeL8Uhhi3WFrD3WXaatLYeKNS1U` | |
+| the hardened proposal script refuses while the buffer is still the deployer's (R2 M-2 check 2) | `r2-squads-refusals.log` #1 |
+| `set-buffer-authority` → the vault | `2yjj2E9g5BjffPcqvXEbHHmVzGzstPhy9BXSz9NyctNE3tFeGiAzmXWrbQCQCy2vJ8m3QSqz65z36P5WP2Zfkovs` |
+| refusals: `--expect-file` = the mainnet build (hash ≠ buffer), `--expect-sha256` ≠ the file, spill = the deployer (not a member), `--vault-index 256` | `r2-squads-refusals.log` #2–#5, each `exit 2` |
+| **proposal** (vault transaction 3, member squads-a, spill squads-a, memo "pair_curve: blind reviews PC-1/PC-2 fixes (fa8627a4)"); the `checks` block printed buffer sha256 = local sha256 = `1ab6b1c9…`, buffer authority = program authority = vault `A8VV…MqffD`, spill "a multisig member" | **`32dyoAwvP4P5FzZLq3C31GaH81jvHVy8xV61rGq6XabW7MGZYsbyvDFpzCbQ5y9pnmNWo6HVRBL4Xd4T51ZxMpke`** (`r2-squads-upgrade-propose.json`) |
+| approve squads-a / squads-b (18:35:54 / 18:36:24) | `4gc3EHxG3GrY6Zs5YV5cvg19B2xMwsYbZgQhsjnSX4pG1H54wF9V7cWRoyQRkztBdCidTH258gkTwgMmNBFDxczY`, `rWCYPniug2UPwLSTDvvizkPenJmTJK7EfTibquhReCbzhdSMgWWqgx3i6oJ3un1eKa8Z2p1zh3WRq3B6KaifqUA` |
+| execute at 18:36:59 → refused `TimeLockNotReleased` (the 60 s lock works) | simulation only |
+| **execute** (18:38:10) | **`27ZQn9ATnKYiJza3yhktSGAzymXLba2EBSNW4252vepb8oeJEVDj4ebPLdVkuWTTuy25R7W25WX6UxArHRPcFpi8`** |
+
+`solana program show`: authority still the vault, data length 365,288, last deployed slot 509,723,606. `solana program dump`: the first
+365,240 bytes hash to `1ab6b1c9…` and the rest are zero — **the deployed bytes are the devnet build of `fa8627a4`**. (solana-verify executable hash `35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1`, `scripts/ops/verified-build.sh --onchain devnet` → MATCH.) The buffer's
+≈ 1.857 SOL went to the spill (squads-a) and was moved back to the payer (1.0) and keeper (0.6):
+`3HyybgFXtMRaNBuB8rJ6DfoZTiT87QRvMFKGbdDwgofibqHXDT3GTF2zHHW6ioGEXVbkDQ18zNDsshqwj4hPrjBS`, `2ZBDoh8kkwS2Qa2irMn1xs9z1dkr6o73k1Tm5DPZMx7PiJQ5GP4rkye2KvMXWtMV4uGUbYJ6bQ1pYRzg6bhsnKZT`.
+
+## R2-P3 — pair 3 ($PCRA vs $PCRB): latch, pre-funded vault, graduate and register separately, claim, seed, crank (18:40–19:22)
+
+Parameters (`r2-pair3-init.json`): virtual SOL 0.3, target **0.5 SOL combined**, minimum share **4,000 bps** (the new maximum), deadline
++24 h, platform `GvSKpe5p…` (= the compiled-in `BURNTICKER_PLATFORM`), cpConfig `5MxLgy9o…` (create-pool fee 0.15 SOL), side overhead
+0.182258 SOL. Rules `config/burnkeeper/paircurve-devnet-3{a,b}.rules.json`, sha256 `f11a515f…5f78` / `aaa93022…6de3`.
+**Pair `5LUZ63F62Wwq6Ma2pPiMqiEftFaRFYuckU9xsiaQJpiZ`**, vault `yAF15bpvtuyWVVa69qQioKDiwN4mHP1bkPqdZGnpiGZ`.
+
+| step | signature | CU | state after |
+|---|---|---|---|
+| mint A + config (policy 2) | `MuCh8Zoe2eA6BuCdHLu8BLP9K3MLcvPo9Vtkwi7CvoRvG9SL9tn1owyRYxUGnTiAEPBxdmxwGA9GCvGBrWjb3Br` | 30,440 | |
+| mint B + config | `ihzHy5FfEgx2zruagm7ab82DnCPT8gKcorMZywdtUANQj4cCvGsfvY884gRKsY1gBmfnnG9pTRUMZbrKPm3vSvV` | 34,940 | |
+| `init_pair` | `PVsqrtCL55vmbwPjpEZi5xgZBn7x5HJzqfGo42yJRKJpNmUqidFepCxunBYMrAV6ycuDCSEcEhygcGLFx28kKqT` | 121,967 | vault 650,240 (rent) |
+| buy A 0.20 (payer) | `4LQwDNeRm9NJrCrW6YNxHydF6n1cgrGSsrSEuKSy7tFFoxPX2YZ1kmb8zMaJ1UxsDhittLx9z91B8H4sPG91vjr2` | 50,630 | A 0.198020; **vault 200,650,240 = rent + curve + the 1 % fee, all in the vault** |
+| buy B 0.12 (keeper) | `2iKmihvKSDThdyhe223WxNhV4p3S5AT9sdffWertMPAQwp1disbNhRn81G7jvpSsNie33jrXfccZset9JJKPBmq8` | 55,130 | B 0.118812 |
+| buy A 0.10 (payer) | `5iM2GNLWJW5gKMR4rW6S1aDkw35jQpqbT1dHJ8U5JrqZRnXZVNGtDLiZuPVaqQgxyQqg6QzUHHp4k15aqw2asi6Z` | 33,977 | A 0.297030 |
+| buy B 0.07 (keeper) | `5rsdwCC2jysuQZBg2763iJ4nh6yGKgYQLWBG8qGrm3qGvKy5sRjofrsskTnV3MR2XgNfFNzTzemW1zHfX9dTYgCN` | 35,477 | 0.485 SOL, not ready |
+| sell 5 % of A (payer) | `4QWGUYG3WhAbe3kitmepq4LW4fB7DrvVBbGTbk8YgnWQPT7dBx6snWKeXaAZ8wyeS7PWKMkCVSya1KvuVsDRGf4f` | 30,004 | A 0.268868 (0.457 total) |
+| `graduate(A)` simulated → `NotReadyToGraduate` (`r2-pair3-graduate-not-ready-dry.json`) | — | — | |
+| **buy B 0.05 (keeper) → commits the pair** (0.5065 SOL, B 46.9 %): status Graduating in the same instruction (R2 L-2) | **`4mkLixEZYGDS3n6CP49vyXs6xctceaHXieiVanZ9ZbTWp8UG4pHoQJJ5sj5tA3a7onf55i6AifZvALeNgCBYyJsb`** | 42,359 | graduating |
+| sell after the commit (simulated) → `SellsClosed`; buy → `NotOpen` (`r2-pair3-{sell,buy}-after-commit-dry.json`) | — | — | |
+| **pre-fund side A's future WSOL pool vault** `AJZpVSbK4LEuzW63ET1XCqJC83dvttkArbtxGLNMuQ4V` with 0.0025 SOL (R2 H-1; the first version could never graduate after this) | `56ateEY6ymDJWDWdbTa3CbVbATEvw7a9asYLPqZVTGcrkPr9KL2E8C4Y7mvxkmvwt1SPcj97bCRz8ch7esvsbmB1` | | |
+| **`graduate(A)`** alone (keeper) | **`46uhtuzdaW44FvxQHDaGj2EJGS4uRyLT2HMYQeHTNPC9Pz7hrZqo21N2aLgVoR1VTCqiigoRT4Dp1LEowC2YC8EF`** | 172,203 (946 B) | pool `cix9ZfHG…`; its WSOL vault holds 87,621,485 = pool_sol 86,609,925 + the 1,011,560 pre-funded above rent |
+| **`graduate(B)`** alone | **`hB6baNZkjgd7nk81DUZr7d9xw2BdoXvnhk1oyMK2VY6zDDyzLzR8FLvNvsGFxdRo795Pq43p8LB4wutn1GPPDWN`** | 162,739 (946 B) | graduated; **vault 2,057,275 = rent + the developer accrual 1,407,035** |
+| `register_pair_pool(A)` (own transaction, R2 L-3) | `53HgvikhkjeCQvpYbY67dKD9MsQWMMhETokJyjgxYx1u3oaupyuCHg2KQ1nNdWgX87gizLLjtAW74ZYReEoTyAJF` | 23,691 | |
+| `register_pair_pool(B)` | `4eU4HWhDfnWMhrAQfna1mrqFUdYNi2cpc7UU4AUppg3MyWgTH4UbBrzNCXKEHWRadM68pJuz5y8Q2hWZrCijLNtF` | 22,196 | |
+| **`claim_developer_fee`** (keeper, permissionless; R1 H-2) | **`1UCWQfb84HovVmDMrLKxvc8djj2KgECimqqQS8ERZAE6YkQFKNAJUXXyKsjarrsztxszRvWFzXRQFTarzFMfL4`** | 22,579 | devfee +1,407,035; vault 650,240 = rent |
+| claim again (simulated) → `NothingToClaim` | — | — | |
+| keeper crank: planner sees two unseeded pools → `seed(A)`, `seed(B)` (10,000-lamport swaps; R2 L-4) | `3BJ9y9fNgMTiPGS7yTN639EAGe8JucipxKoeFyqSktBDVabYGwyne2xDWRLbJuTsw5ieQWHRetL17bMTneSnFNyB`, `3Z8PWYGqDTommTPT3nTD3MpyLKz3gDgF1RnnH5fT6MLe5psjM6wQ4vRcpdr7eLXESkK9G9dK8c9AaT7UruMnJNey` | 48,602 / 41,023 | `r2-pair3-crank-seed.json` |
+
+The graduation (`r2-pair3-status-after-graduation.json`):
+
+| | side A ($PCRA) | side B ($PCRB) |
+|---|---|---|
+| raise at commit | 268,867,925 | 237,623,764 |
+| CPMM pool (pair_curve PDA) | **`cix9ZfHG9Q6Um23AScu3yPVZHSFYGrHEcfs3EV8ST3e`** | **`33w6tp8A5p49gCjYCeZV2XnbjYNV9y7unVQLYGhwSkbN`** |
+| pool SOL / tokens | 86,609,925 (+1,011,560 pre-funded) / 86,152,075.604568 | 55,365,764 / 61,660,261.131480 |
+| LP at creation / burned | 86,883,673,957 / 86,883,673,857 | 58,428,310,483 / 58,428,310,383 |
+| tokens burned at graduation | 406,708,620.887362 | 464,085,593.413745 |
+| burn pool after graduation | 26,904,257 (0.02 reserve + escrow 2,438,937 + residue) | 24,759,058 (escrow 1,782,178) |
+| developer accrual (claimed) | 812,977 | 594,058 |
+
+TWAP history: `burnticker-devnet-trader.mts cpmm-swap` alternating a 0.001 SOL buy and a 700,000-token sell on both pools every 150 s
+from 18:45 (`r2-twap-trades.log`).
+
+**One burn_receipts crank per side** (single-token keeper `scripts/burn-keeper.mts --devnet --once`, program execution, one ledger per
+coin, the Treasury feed from the 10-05 baseline; logs `r2-keeper-once-3{a,b}.log`, `r2-keeper-crank-3a.log`, the keeper's published
+`r2-pcr{a,b}-{burns,status}.json`):
+
+| | $PCRA | $PCRB |
+|---|---|---|
+| readings 10-05…10-08 | `2BDDpkPzsACaiLqRhUjCmRWmXiqoCfteJm7aiPFLAk3rZ9fWVK693BSHRLDcqK3Pi8ABGAdMCtoCq99HfaeVfeN2`, `5tSnNqQNbcUwz9psPPu6ZnNtkeb1sM2cA9vpZ6WWHyKG1Z3fEnjCHWcsaMcsRZXHiq3tdrdvxNHd5RekWiN9ss4g`, `JdpNtfaEespmejcUwBibNVVEHopCLApJgpLmFzQC9KL9iCtqubiUekbPFkvB9mEBFXuNTkttQEQFzsg8RTKknAJ`, `Sb8xDVvLsK8w9RnsqFtUTmnAnBbvoJEd9StZJz4PH5D8Vsn2q3HYnixPSPXmm4nQG4C7MgwgtyL3JKU1RW6dUYf` | `EnGfxDFUXBAUFQYzsdRWTvmwaJJEhjRJkNCAKQzWQcdBfNMXJuTZA2fFDaE18yJf5pcXGXCo2k8RKPPVybKVjdq`, `2ismE6vBiMKriYZqvefMXkHwMitdevZ8A168sYgVqG3jKrmRY3wxnQRSS2Yjh9h6hLneDvrtr4qidDw7FvGcLbZu`, `4tBA5bPRPTERkiD81V4xmqQKsjttYyQUo75LBZJc26NuoEVFb64MoedZZg6rRtyx5Zr9KnWcxdGWKiDfntHRB2W8`, `4kR1wMb1fHfyMqjoTGXiBpBZH8rGtGngcTdF1hZDKGvYvSfocMgrtxh61rfhfMgsg61LLo5zCBtV2o7Kf5TRFTZt` |
+| `check_pool_health` (pair pool tradeable) | `3p5scRBzGJjRmpQdNsebq2kMW9msh4SABqqhax2z15SMY9wwvRGdA6kGGpqGnw4UjQqotCKsotbHGQSz2VxTLhuk` (+3 later cycles) | `3AdHFZEt5Ur5Hs2A7mB1Eo5gTRP1EttC1geXS2Eci2UGhk6RFAxpxgECvzvKp5seMvcoUmn7gdLMc3qps3oNL5kr` |
+| 18:51 | 10-06 deferred `TwapUnavailable` (seeded 7 minutes earlier; the rule's window is 600 s) | 10-06, 10-07, 10-08 cranked **below floor** (spendable burn pool 0.00476 SOL; 1 − 0.99^23 of it = 0.00098 SOL < the 0.001 SOL floor — the rule keeps the SOL): `52YTyu228nh2XhKxtEfGe69QpFHdZv5UAa3AKcRw224Pqi3H1bZuG4KVsMPFgM1fhmn5kynS7acRjhYi9eD7XdYi`, `4LWbKh95ntJ5n9CPiCd4FGusjz6gVmhhV5r7X4Zva7pFaEEaRM81Dp9q1Q34kn15NdUVVcoRFZCnTCRzVVsvrVDd`, `2yBaWGk5oSmpaGJ1kK19q48hzT5z9iuVQej26gEieRyHsVGiQ6h4cU1JN5uGPxHYS32y9ge7AtALZeffS771aUZG` |
+| 19:01, 19:11 | 10-06 deferred `TwapDeviation` while the TWAP trades were still moving the pool (and two 0.002 SOL buys at 19:09 pushed it further) | — |
+| **19:22 (pool quiet ≥ 10 min)** | **10-06 burned** — spent 1,424,941 lamports, got and burned 1,283,876.587878 $PCRA on the pair pool — **`2vP8pqb1oYWMnGonNLhhCm65RfZiDEG6EGGuXHsJRQXuP1NNS9KSCejqWSUmb3ZH8kMkW1QeS3REgrvuzRJqMUNu`**; 10-07 below floor `58h3RdwkGPAJxrrYDTtWJFb3yRVs3Z7PtAGQ9Hp7ofHx5q7GfavGEMQyuE7cv8ujHsuetkSuxieNkSCdYuFCtvMj`; 10-08 deferred `TwapDeviation` (the 10-06 crank's own 1.6 % impact on a 0.089 SOL pool; retried by the keeper) | — |
+| receipt | 10-06 `verified: true`; memo `PCRA|2026-10-06|…|pool=6904257|spent=1424941|…|swap=cix9ZfHG9Q6U|rules=sha256:f11a515f8187|v2` | three `skipped` (below floor) receipts, memo `…|swap=none|…` |
+
+The burn pools hold only the curve fees' 75 bps (released at graduation) plus the 0.02 SOL reserves and residue, and rehearsal pools
+are 0.05–0.09 SOL deep: side B's pool cannot clear the 0.001 SOL floor at all, and side A's one burn moves its pool by 1.6 %. That is
+the rule working at toy size, not a defect; the first rehearsal (above) burned on both sides with twice the pool depth.
+
+## R2-P4 — pair 4 ($PCXA vs $PCXB): pre-created vault account, void, pro-rata redemption, dust burn, close (18:40–18:51)
+
+Same parameters, deadline +8 minutes (18:49:00). **Pair `8XGyJ9b3C5pjMQdXEKa7fJKzQWKwNu4GEm5LEtHPcZe3`**, vault
+`9aeTyFg37NSYzdNn9vSmmatjmkRZcSw9L9emQBL3t7zc`.
+
+| step | signature | result |
+|---|---|---|
+| mint A + config | `2TPk6w64dBZF6zeRQamsZErJ13dziR6DuKNtt27WDMB2kTifUbthgWndEmhEomW7kNEPMvcie6z2LU8fMSu3uBCU` | |
+| mint B + config **+ the payer creates the vault's token account for mint A** (`--pre-create-vault-ata`, R2 H-3) | `26Qn8w9qu7CbXHrJH83DRU98swvgiPUe6MFHYGvpJDh9QcfiM22u2QuUrV48rBxuEigR4Esjk9fExKeJJXhznUHC` | 1,020 B |
+| **`init_pair` over the pre-created account** (the first version failed here forever) | **`52bM6PEYafmmqvfGVQZVw8rfE2azCrQx5f1xGooWpvhHZBT8nRDYRVorjFX6QD7mNSDx5Uof1VobiUKTs4skT7eH`** | 112,479 CU |
+| buy A 0.02 (payer) / buy B 0.03 (payer) / buy A 0.015 (keeper) | `Gnz2VHW2MmLBcLkjF9MmN3wEuhXMoKGT3MjYbhhYmfpd2bGwEcDiWaoV3n1WyYo7X13xdte3atBxjN99HUcPfPz`, `3wLpMSs5s9VKDj7rVQhKgYaBa55mvxftKyXHe7ZJLgWv1eRDphgpfDGcHcLs8nGSahEqYV3r4mBtpvkfT6KoWqwe`, `5T62eREtTa2WHwxJSyteXtGoTGnj3EPoLaQB3whcymKAnp1jUw28xbNq3QEQhsVdLXpPfRYjUQneixzARMwPRg8S` | vault 65,650,240 = rent + curves 64,356,438 + fees 643,562 |
+| `void_pair` before the deadline (simulated) → `DeadlineNotReached`; buy after the deadline (simulated) → `DeadlinePassed` | — | |
+| **`void_pair`** (keeper, 18:49) | **`5zQoeEcnKTxM793Wawk9YLo1qpQr2Cp1BFHxDgJRj4dKWqJEJoZkwinxoUJ2fx3GyU1QmL3ZrrvwAcVq3EjdZtmj`** | 20,150 CU; redemption pools A 34,913,368 (= curve 34,653,467 + escrow 259,901), B 29,925,743 (= 29,702,971 + 222,772) |
+| buy after the void → `NotOpen`; `close_pair` while tokens circulate → `NotClosable` (simulated) | — | |
+| the payer burns **one raw unit** of $PCXA (R2 L-1) | `3zBiM3pqmT8HQvx32f6mMyFACyHFYZoLAhZJmYK4XvN4x1VX6jHL65oXJ3hf8YfFEdyDuUbvXXnNrux8tHhaZf5z` | |
+| redeem all B (payer) — the only B holder | `25EoVE5qa5xLoUK8CfRb1AmRBBoQq9oXtrf6FANZ4HwNMbruP2Zukqz4PMPMem6Pskgmw7WKWaepthNkbMrLM2qE` | received 29,925,743 = B's whole redemption pool, no fee |
+| redeem all A (keeper, 40.20 % of A) | `4qZmzRG6bdNUsSLv2fb5jG4FeQUvoD8PV43F9Uuxj6ijnigziKQVn4CwKKBJWV1vkNSjrzGxoC2K56oZToja1pRd` | received 14,036,378 = floor(44,669,841,200,994 × 34,913,368 / 111,109,472,208,157) |
+| redeem all A (payer, holding all but the burned unit) | `5btGC4BuGmfvMsEWCRFmra9jDxNeAf9FFcoMBKwoS3ZruqeJLXTT3rms1PQPHTvdtLfXkPagdKRBbVH5a3pGcdAZ` | received 20,876,989; A left at sold 1 / sol 1 (the burned unit); vault 811,130 = rent + accrual 160,889 + 1 |
+| **`close_pair`** (keeper) | **`yz16UprnRW4seW9PQ5WVrVtZyB2mZSWfmJheCyapiLNWPthg3pLp1PwiscoiLGcUz7czhhbVzgJ6cJGUCv7s6kB`** | 33,771 CU; Pair closed; both supplies burned (0 / 0); developer wallet +160,889; creator +8,432,800 (Pair and both token-vault rents, including the pre-created account's); vault 650,240 = rent; the 1-lamport residue to the burn pools |
+
+## R2 checkpoints
+
+| | checkpoint | verdict | evidence |
+|---|---|---|---|
+| R2-1 | pair_curve upgraded through the vault with the hardened script; its four refusals fire; deployed bytes = the devnet build of `fa8627a4` | **PASS** | `27ZQn9AT…`, `r2-squads-*.{log,json}`, dump sha256 `1ab6b1c9…` |
+| R2-2 | a pre-created vault token account does not block `init_pair` (R2 H-3) | **PASS** | `26Qn8w9q…`, `52bM6PEY…` |
+| R2-3 | the trade that meets the condition commits the pair; later sells and buys are refused (R2 L-2) | **PASS** | `4mkLixEZ…`, `r2-pair3-*-after-commit-dry.json` |
+| R2-4 | a pre-funded WSOL pool vault does not block graduation; the excess joins the pool (R2 H-1) | **PASS** | `56ateEY6…`, `46uhtuzd…` |
+| R2-5 | graduate and register in separate transactions; both pools registered (R2 L-3) | **PASS** | `46uhtuzd…`, `hB6baNZk…`, `53Hgvikh…`, `4eU4HWhD…` |
+| R2-6 | trades pay nobody but the vault; the developer share is claimed permissionlessly and exactly once (R1 H-2) | **PASS** | vault balances in `r2-pair3-trade-*`, `1UCWQfb8…` |
+| R2-7 | the keeper seeds the first oracle observation of never-traded pools (R2 L-4) | **PASS** | `3BJ9y9fN…`, `3Z8PWYGq…` |
+| R2-8 | one burn_receipts crank per side on the pair pools, receipts posted | **PASS** (A burned; B cranked below the rule's floor — the pool is too small to spend) | `2vP8pqb1…`, `52YTyu22…`; `r2-pcr{a,b}-burns.json` |
+| R2-9 | void → fee-free pro-rata redemption, order-independent; a burned raw unit does not block `close_pair`; close pays the accrual (R2 M-1, L-1) | **PASS** | `5zQoeEcn…`, three redemptions, `3zBiM3pq…`, `yz16Uprn…` |
+
+## R2 SOL spent (devnet)
+
+Start (18:30) 3.167 SOL across deployer / payer / keeper / squads-a / squads-b / devfee; end (19:25) 2.385 → **≈ 0.78 SOL spent**: 0.105
+program extension (20,600 B), ≈ 0.51 into pair 3's curves (0.142 now in the two pools, 0.30 to Raydium's create-pool fee, the rest
+burn-pool fees and rents), ≈ 0.12 rents and burn-pool reserves (four mints, four TokenConfigs, fee-PDA reserves 4 × 0.02, Pair 3,
+reading accounts), the 0.0025 pre-fund, ≈ 0.02 transaction fees and TWAP trades. Pair 4's Pair and token-vault rents came back to the
+creator at close; the ≈ 1.857 SOL upgrade buffer came back to squads-a.

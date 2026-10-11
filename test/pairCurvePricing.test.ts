@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_TARGET_RAISE_LAMPORTS, defaultCurve, feeSplit, graduationCosts, graduationReady, initParamProblems, netBudget, pairPhase, priceMatchedTokens, quoteBuy, quoteSell, rentExempt, sideCosts, solAt, soldForSol, TOTAL_SUPPLY, type CurveParams } from "../src/lib/pairCurve/pricing.ts";
+import { DEFAULT_TARGET_RAISE_LAMPORTS, defaultCurve, feeSplit, graduationCosts, graduationReady, initParamProblems, netBudget, pairPhase, priceMatchedTokens, quoteBuy, quoteRedeem, quoteSell, rentExempt, MAX_SIDE_SHARE_BPS, sideCosts, solAt, soldForSol, TOTAL_SUPPLY, type CurveParams } from "../src/lib/pairCurve/pricing.ts";
 
 /**
  * Fixture math for the pair curve (docs/burnticker/PAIR-CURVE.md §3). The reference numbers below were computed independently (Python
@@ -148,6 +148,7 @@ describe("pair curve — graduation", () => {
     assert.deepEqual(initParamProblems(good, now, B(150_000_000)), []);
     assert.match(initParamProblems({ ...good, deadline: now + 30 }, now, B(0)).join(), /deadline/);
     assert.match(initParamProblems({ ...good, minSideShareBps: 900 }, now, B(0)).join(), /share/);
+    assert.match(initParamProblems({ ...good, minSideShareBps: MAX_SIDE_SHARE_BPS + 1 }, now, B(0)).join(), /share/);
     assert.match(initParamProblems({ ...good, targetRaiseLamports: B(500) * SOL }, now, B(0)).join(), /unreachable/);
     assert.match(initParamProblems({ ...good, targetRaiseLamports: SOL / B(2) }, now, B(150_000_000)).join(), /TargetTooSmall/);
     assert.match(initParamProblems({ ...good, curveSupply: B(950_000_000) * B(1_000_000) }, now, B(0)).join(), /reserve/);
@@ -165,3 +166,28 @@ describe("pair curve — graduation", () => {
     assert.equal(pairPhase({ ...base, status: 2 }, 1_000), "voided");
   });
 });
+
+describe("pairCurve pricing — redemption and bounds (blind reviews)", () => {
+  test("pro-rata redemption is order-independent and drains the side exactly (no first-seller race, no fee)", () => {
+    const pool = B(7_777_777_777), supply = B(123_456_789_012);
+    const holdings = [B(1), B(50_000_000_000), B(3_333_333_333), B(70_123_455_678)];
+    for (const order of [[0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]]) {
+      let outstanding = supply, left = pool;
+      const paid: bigint[] = [];
+      for (const i of order) { const x = quoteRedeem(pool, supply, outstanding, left, holdings[i]); paid[i] = x; outstanding -= holdings[i]; left -= x; }
+      assert.equal(left, B(0));
+      for (const i of order.slice(0, 3)) assert.equal(paid[i], (holdings[i] * pool) / supply);
+    }
+    assert.throws(() => quoteRedeem(pool, supply, B(10), pool, B(11)));
+  });
+  test("the minimum side share is capped at 40% (a 50% share would make graduation a knife-edge)", () => {
+    assert.equal(MAX_SIDE_SHARE_BPS, 4_000);
+  });
+  test("no tokens for free: a zero budget is refused, the smallest buy pays at least one lamport of curve cost", () => {
+    assert.throws(() => quoteBuy(defaultCurve(), B(0), B(0)));
+    const q = quoteBuy(defaultCurve(), B(0), B(1));
+    assert.equal(q.cost, B(1));
+    assert.ok(q.tokensOut > B(0) && solAt(defaultCurve(), q.soldAfter) === B(1));
+  });
+});
+

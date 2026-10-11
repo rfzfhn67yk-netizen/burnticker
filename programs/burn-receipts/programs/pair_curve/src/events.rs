@@ -40,8 +40,8 @@ pub struct Trade {
     pub fee: u64,
     pub dev_fee: u64,
     pub burn_fee: u64,
-    /// The developer slice went to the burn pool because the developer wallet could not hold it (below rent).
-    pub dev_fee_redirected: bool,
+    /// A redemption (Voided pair or refunding side): pro rata, no fee.
+    pub redemption: bool,
     pub sold_after: u64,
     pub sol_after: u64,
     pub sol_total_after: u64,
@@ -62,18 +62,41 @@ pub struct SideGraduated {
     pub lp_supply_at_creation: u64,
     pub lp_burned: u64,
     pub tokens_burned: u64,
-    /// Rent refunds, rounding dust and donations above what the vault must keep, sent to this side's burn pool.
+    /// The side's escrowed 75 bps burn share, paid to its burn pool now.
+    pub burn_escrow_paid: u64,
+    /// Rent refunds, rounding dust and donations above what the vault must keep, sent to this side's burn pool too.
     pub residue_lamports: u64,
+    /// Lamports someone had pre-funded into the pool's WSOL vault address (now pool liquidity, LP burned) — blind review 2 H-1.
+    pub prefunded_wsol: u64,
     /// True when this call completed the second side (status Graduated).
     pub pair_graduated: bool,
 }
 
+/// A void (whole pair, `side` = 2) or a stuck side put into refund (`side` = 0/1): from here its holders redeem pro rata, no fee.
 #[event]
 pub struct PairVoided {
     pub pair: Pubkey,
     pub caller: Pubkey,
-    pub sol: [u64; 2],
-    pub sold: [u64; 2],
+    pub side: u8,
+    /// Per side: lamports to redeem (curve SOL + the escrowed burn share) and raw tokens outstanding.
+    pub redeem_pool: [u64; 2],
+    pub redeem_supply: [u64; 2],
+}
+
+#[event]
+pub struct DeveloperFeeClaimed {
+    pub pair: Pubkey,
+    pub caller: Pubkey,
+    pub dev_wallet: Pubkey,
+    pub lamports: u64,
+}
+
+/// The first trade that left the pair ready committed it (status Graduating); graduate then creates the pools.
+#[event]
+pub struct PairCommitted {
+    pub pair: Pubkey,
+    pub by: Pubkey,
+    pub raise: [u64; 2],
 }
 
 #[event]

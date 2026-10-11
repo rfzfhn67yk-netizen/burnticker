@@ -11,6 +11,7 @@ use crate::cpmm::{self, InitializeAccounts};
 use crate::error::PairError;
 use crate::events::SideGraduated;
 use crate::guards::{mint_supply, require_token_account_intact, require_vault_intact, token_amount};
+use crate::commit::{read_amm, side_can_graduate, try_commit};
 use crate::math::{graduation_costs, graduation_ready, price_matched_tokens, side_costs};
 use crate::state::Pair;
 
@@ -88,31 +89,28 @@ pub struct Graduate<'info> {
 pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
     let s = side as usize;
+    let rent = Rent::get()?;
+    let vault_rent = rent.minimum_balance(0);
+    let amm_view = read_amm(&ctx.accounts.amm_config.to_account_info())?;
+    let create_pool_fee = amm_view.create_pool_fee;
     {
         let p = &mut ctx.accounts.pair;
         match p.status {
             STATUS_OPEN => {
+                // Normally a trade already committed the pair (commit.rs); this branch covers a pair that became ready while Raydium's
+                // fee was too high. Same rule: ready, before the deadline, and BOTH sides able to pay for their pools now.
                 require!(now < p.deadline, PairError::GraduationClosed);
                 require!(graduation_ready(p.sol[0], p.sol[1], p.target_raise_lamports, p.min_side_share_bps), PairError::NotReadyToGraduate);
-                p.status = STATUS_GRADUATING;
-                p.graduation_started_at = now;
-                p.raise_at_graduation = p.sol;
+                require!(side_can_graduate(p, 1 - s, &amm_view, &rent), PairError::OtherSideCannotGraduate);
+                require!(try_commit(p, now, &amm_view, &rent), PairError::InsufficientPoolSol);
             }
-            STATUS_GRADUATING => require!(p.pools[s] == Pubkey::default(), PairError::SideAlreadyGraduated),
+            STATUS_GRADUATING => require!(p.pools[s] == Pubkey::default() && !p.refunding[s], PairError::SideAlreadyGraduated),
             _ => return err!(PairError::NotOpen),
         }
     }
 
-    let rent = Rent::get()?;
-    let vault_rent = rent.minimum_balance(0);
     let a = &ctx.accounts;
     let amm = a.amm_config.to_account_info();
-    let create_pool_fee = {
-        require_keys_eq!(*amm.owner, CPMM_PROGRAM_ID, PairError::InvalidAmmConfig);
-        let d = amm.try_borrow_data()?;
-        require!(d.len() >= burn_receipts::cpmm::AMM_CONFIG_LEN && d[..8] == burn_receipts::cpmm::AMM_CONFIG_DISCRIMINATOR, PairError::InvalidAmmConfig);
-        u64::from_le_bytes(d[AMM_CONFIG_CREATE_POOL_FEE..AMM_CONFIG_CREATE_POOL_FEE + 8].try_into().expect("8 bytes"))
-    };
     // CPMM's own take (the bound the post-CPI guard enforces) and the side's whole overhead (plus the WSOL account's rent).
     let costs = graduation_costs(&rent, create_pool_fee);
     let overhead = side_costs(&rent, create_pool_fee);
@@ -158,6 +156,11 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
     } else {
         (mint.clone(), a.wsol_mint.to_account_info(), pool_tokens, pool_sol, token_vault.clone(), vault_wsol.clone())
     };
+    // Blind review 2 H-1: lamports anyone pre-funded into the WSOL pool-vault address become WSOL in it when CPMM initialises it
+    // (InitializeAccount on the native mint: amount = lamports − rent). They are a donation to the pool, never a reason to fail.
+    let wsol_pool_vault = if wsol_first { &pool_vault_0 } else { &pool_vault_1 };
+    let prefunded_wsol = if wsol_pool_vault.data_is_empty() { wsol_pool_vault.lamports().saturating_sub(rent.minimum_balance(SPL_ACCOUNT_LEN)) } else { 0 };
+    let (want0, want1) = if wsol_first { (amt0 + prefunded_wsol, amt1) } else { (amt0, amt1 + prefunded_wsol) };
     let lamports_before = vault.lamports();
     let side_byte = [side];
     let pool_bump = [p.pool_bumps[s]];
@@ -200,7 +203,7 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
     require!(pool.token_0_program == token::ID && pool.token_1_program == token::ID, PairError::PoolMismatch);
     require!(pool.token_0_vault == pool_vault_0.key() && pool.token_1_vault == pool_vault_1.key(), PairError::PoolMismatch);
     require!(pool.lp_mint == lp_mint.key() && pool.observation_key == observation.key(), PairError::PoolMismatch);
-    require!(token_amount(&pool_vault_0)? == amt0 && token_amount(&pool_vault_1)? == amt1, PairError::PoolMismatch);
+    require!(token_amount(&pool_vault_0)? == want0 && token_amount(&pool_vault_1)? == want1, PairError::PoolMismatch);
     let lp = require_token_account_intact(&vault_lp, &vault.key(), &pool.lp_mint)?;
     require!(lp.checked_add(CPMM_LOCKED_LP) == Some(pool.lp_supply) && mint_supply(&lp_mint)? == lp, PairError::PoolMismatch);
 
@@ -229,8 +232,11 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
 
     // Everything above the vault's rent minimum and the OTHER side's still-owed raise is residue (rent refunds, rounding, any
     // donation) — it goes to this side's burn pool.
-    let other_owed = if p.pools[1 - s] == Pubkey::default() { p.sol[1 - s] } else { 0 };
-    let keep = vault_rent.checked_add(other_owed).ok_or(PairError::MathOverflow)?;
+    // Keep: the rent minimum, the developer accrual, and the other side's SOL and escrow while its pool does not exist. Everything else
+    // — this side's escrowed burn share, rent refunds, dust, donations — goes to this side's burn pool.
+    let other_owed = if p.pools[1 - s] == Pubkey::default() { p.sol[1 - s].saturating_add(p.burn_escrow[1 - s]) } else { 0 };
+    let keep = vault_rent.checked_add(other_owed).and_then(|x| x.checked_add(p.dev_accrued)).ok_or(PairError::MathOverflow)?;
+    let burn_escrow_paid = p.burn_escrow[s];
     require_vault_intact(&vault, keep)?;
     let residue = vault.lamports() - keep;
     if residue > 0 {
@@ -245,6 +251,7 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
     let p = &mut ctx.accounts.pair;
     p.pools[s] = pool_key;
     p.sol[s] = 0;
+    p.burn_escrow[s] = 0;
     p.lp_supply_at_creation[s] = pool.lp_supply;
     p.lp_burned[s] = lp;
     p.pool_sol[s] = pool_sol;
@@ -266,7 +273,9 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
         lp_supply_at_creation: pool.lp_supply,
         lp_burned: lp,
         tokens_burned: tokens_left,
-        residue_lamports: residue,
+        burn_escrow_paid,
+        residue_lamports: residue.saturating_sub(burn_escrow_paid),
+        prefunded_wsol,
         pair_graduated: done,
     };
     emit_cpi!(ev);

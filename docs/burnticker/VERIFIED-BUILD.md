@@ -25,15 +25,15 @@ replace this table (`kind: docker`). The OtterSec verified-builds registry entry
 
 The executable hash is solana-verify's definition: sha256 of the program bytes with trailing zero bytes removed — the number
 `solana-verify get-executable-hash <file.so>` prints for a build and `solana-verify get-program-hash <PROGRAM_ID>` prints for the
-deployed program. Source: monorepo commit `43dfcb7fe90b4f22b6d3cf1d9a73e012c3d6ef90`, the last commit that changed the compiled
+deployed program. Source: monorepo commit `fa8627a49e90d55691eaba2f916566a10af64bf8`, the last commit that changed the compiled
 program sources (later commits under `programs/burn-receipts` add exploit tests only).
 
 | Program | Program id | Build | Features | Bytes | Executable hash | Deployed on devnet |
 |---|---|---|---|---|---|---|
 | burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 721,096 | `3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f` | — (not deployed on mainnet) |
 | burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 721,096 | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` = build |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 344,688 | `9b20156f30b35eb7e31733fd32b40b40bbd38d1f2acca821f012f2dc59b31f34` | — (not deployed on mainnet) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 344,688 | `2fa91c047dcefd459e7dc7e8b723d61f6308695a8ae6d94f09af840714ca2341` | `2fa91c047dcefd459e7dc7e8b723d61f6308695a8ae6d94f09af840714ca2341` = build |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 365,184 | `40584764553fb869589d0f5194f7e90a2c9ee1b7db2bcddd125f1cbcdf2e3594` | — (not deployed on mainnet) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 365,240 | `35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1` | `35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1` = build (upgraded through the Squads vault 2026-10-10 18:38 Denver, after the pair_curve blind-review fixes) |
 
 The publish entries in `docs/burnticker/CHANGELOG.md` record the plain sha256 of `target/deploy/burn_receipts.so` (`f3812ce4…` for
 the same default build); the executable hash differs only because it strips the file's 15 trailing zero bytes.

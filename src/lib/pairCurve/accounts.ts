@@ -61,6 +61,7 @@ export interface PairAccount {
   sold: bigint[]; sol: bigint[]; volume_lamports: bigint[]; burn_fees_lamports: bigint[]; dev_fees_lamports: bigint[]; trades: number[];
   graduated_at: bigint; voided_at: bigint; pool_sol: bigint[]; pool_tokens: bigint[]; tokens_burned: bigint[];
   graduation_started_at: bigint; raise_at_graduation: bigint[];
+  burn_escrow: bigint[]; dev_accrued: bigint; redeem_pool: bigint[]; redeem_supply: bigint[]; refunding: boolean[];
 }
 
 export const decodePair = (data: Buffer | Uint8Array): PairAccount => decodeAccount<PairAccount>(PAIR_CURVE_IDL, "Pair", data);

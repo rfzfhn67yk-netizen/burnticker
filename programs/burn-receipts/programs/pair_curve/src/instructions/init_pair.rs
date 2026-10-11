@@ -47,9 +47,12 @@ pub struct InitPair<'info> {
     /// The SOL vault (System-owned, no data). Funded here with its rent minimum.
     #[account(mut, seeds = [VAULT_SEED, pair.key().as_ref()], bump)]
     pub vault: SystemAccount<'info>,
-    #[account(init, payer = payer, associated_token::mint = mint_a, associated_token::authority = vault)]
+    /// ATA(vault, mint A). `init_if_needed`: anyone can create this ATA as soon as tx 1 reveals the vault (it is the mint authority),
+    /// and a plain `init` would then fail forever (blind review 2 H-3). The handler requires it empty, with no delegate and no close
+    /// authority (only the vault could set either).
+    #[account(init_if_needed, payer = payer, associated_token::mint = mint_a, associated_token::authority = vault)]
     pub token_vault_a: Box<Account<'info, TokenAccount>>,
-    #[account(init, payer = payer, associated_token::mint = mint_b, associated_token::authority = vault)]
+    #[account(init_if_needed, payer = payer, associated_token::mint = mint_b, associated_token::authority = vault)]
     pub token_vault_b: Box<Account<'info, TokenAccount>>,
     /// CHECK: burn_receipts TokenConfig of mint A — owner, PDA, discriminator, mode, policy and creator checked in the handler.
     pub config_a: UncheckedAccount<'info>,
@@ -131,6 +134,11 @@ pub fn handle_init_pair(ctx: Context<InitPair>, args: InitPairArgs) -> Result<()
     require_fresh_mint(&a.mint_a, &vault)?;
     require_fresh_mint(&a.mint_b, &vault)?;
 
+    for tv in [&a.token_vault_a, &a.token_vault_b] {
+        require!(tv.amount == 0 && tv.delegate.is_none() && tv.close_authority.is_none(), PairError::VaultAccountTampered);
+    }
+    // Blind review 1 M-1: only Burnticker's own LaunchLab platform (compiled in per build) — the developer wallet is read from it.
+    require!(BURNTICKER_PLATFORM != Pubkey::default(), PairError::PlatformNotPinned);
     let ca = load_config(&a.config_a, &a.mint_a.key())?;
     let cb = load_config(&a.config_b, &a.mint_b.key())?;
     let (fee_a, fee_b) = (ca.fee, cb.fee);
@@ -140,6 +148,7 @@ pub fn handle_init_pair(ctx: Context<InitPair>, args: InitPairArgs) -> Result<()
     // The developer wallet: the pinned LaunchLab platform's platformClaimFeeWallet.
     let plat = a.launchlab_platform.to_account_info();
     require_keys_eq!(plat.key(), ca.ll_platform, PairError::PlatformMismatch);
+    require_keys_eq!(plat.key(), BURNTICKER_PLATFORM, PairError::PlatformMismatch);
     require_keys_eq!(*plat.owner, br::LAUNCHLAB_PROGRAM_ID, PairError::PlatformMismatch);
     let dev_wallet = {
         let d = plat.try_borrow_data()?;

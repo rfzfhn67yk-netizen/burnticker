@@ -38,7 +38,7 @@ fn read_so(rel: &str) -> Vec<u8> {
 
 fn new_env() -> Env {
     let mut env = Env::new();
-    env.svm.add_program(pair_curve::ID, &read_so("target/deploy/pair_curve.so")).unwrap();
+    env.svm.add_program(pair_curve::ID, &read_so("target/deploy-localnet/pair_curve.so")).unwrap();
     env
 }
 
@@ -209,8 +209,7 @@ fn ix_buy(p: &P, buyer: &Pubkey, side: u8, max_in: u64, min_out: u64) -> Instruc
             mint,
             token_vault: get_associated_token_address(&p.vault, &mint),
             buyer_token: get_associated_token_address(buyer, &mint),
-            fee_vault: fee_pda(&mint),
-            dev_wallet: p.dev,
+            amm_config: p.amm,
             token_program: spl_token::ID,
             associated_token_program: anchor_spl::associated_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
@@ -233,8 +232,7 @@ fn ix_sell(p: &P, seller: &Pubkey, side: u8, amount: u64, min_out: u64) -> Instr
             mint,
             token_vault: get_associated_token_address(&p.vault, &mint),
             seller_token: get_associated_token_address(seller, &mint),
-            fee_vault: fee_pda(&mint),
-            dev_wallet: p.dev,
+            amm_config: p.amm,
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: pc_event_authority(),
@@ -321,7 +319,7 @@ fn ix_void(p: &P, caller: &Pubkey) -> Instruction {
     Instruction::new_with_bytes(
         pair_curve::ID,
         &pair_curve::instruction::VoidPair {}.data(),
-        pair_curve::accounts::VoidPair { caller: *caller, pair: p.pair, event_authority: pc_event_authority(), program: pair_curve::ID }.to_account_metas(None),
+        pair_curve::accounts::VoidPair { caller: *caller, pair: p.pair, amm_config: p.amm, event_authority: pc_event_authority(), program: pair_curve::ID }.to_account_metas(None),
     )
 }
 
@@ -340,7 +338,25 @@ fn ix_close(p: &P, caller: &Pubkey) -> Instruction {
             token_vault_b: get_associated_token_address(&p.vault, &p.mint(1)),
             fee_vault_a: fee_pda(&p.mint(0)),
             fee_vault_b: fee_pda(&p.mint(1)),
+            dev_wallet: p.dev,
             token_program: spl_token::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+            event_authority: pc_event_authority(),
+            program: pair_curve::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+fn ix_claim_dev(p: &P, caller: &Pubkey) -> Instruction {
+    Instruction::new_with_bytes(
+        pair_curve::ID,
+        &pair_curve::instruction::ClaimDeveloperFee {}.data(),
+        pair_curve::accounts::ClaimDeveloperFee {
+            caller: *caller,
+            pair: p.pair,
+            vault: p.vault,
+            dev_wallet: p.dev,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: pc_event_authority(),
             program: pair_curve::ID,
@@ -451,8 +467,10 @@ fn trades_follow_the_curve_and_split_fees_exactly() {
     assert_eq!(env.token_amount(&get_associated_token_address(&alice.pubkey(), &p.mint(0))), q1.tokens_out);
     let ata_rent = env.svm.minimum_balance_for_rent_exemption(165);
     assert_eq!(a0 - env.lamports(&alice.pubkey()), q1.total + ata_rent, "buyer pays cost + fee + its ATA rent (the harness payer pays the tx fee)");
-    assert_eq!(env.lamports(&p.dev) - dev0, q1.fees.dev);
-    assert_eq!(env.lamports(&fa) - fa0, q1.fees.burn);
+    // the fee stays in the SOL vault, accounted: nothing reaches the developer wallet or the burn pool during trading
+    assert_eq!((env.lamports(&p.dev), env.lamports(&fa)), (dev0, fa0));
+    let s1 = pair_state(&env, &p);
+    assert_eq!((s1.burn_escrow[0], s1.dev_accrued), (q1.fees.burn, q1.fees.dev));
 
     let q2 = quote_buy(&curve, q1.sold_after, 2 * SOL).unwrap();
     let meta = env.ok(&[ix_buy(&p, &bob.pubkey(), 0, 2 * SOL, 1)], &[&bob]);
@@ -475,39 +493,43 @@ fn trades_follow_the_curve_and_split_fees_exactly() {
     expect_anchor_err(env.send(&[ix_buy(&p, &alice.pubkey(), 1, SOL, u64::MAX)], &[&alice]), "SlippageExceeded");
     expect_anchor_err(env.send(&[ix_buy(&p, &alice.pubkey(), 2, SOL, 1)], &[&alice]), "InvalidSide");
 
-    // Invariant: the vault holds exactly rent + F(sold_A) + F(sold_B); fee legs add up exactly.
+    // Invariant: the vault holds exactly rent + F(sold_A) + F(sold_B) + the escrowed burn shares + the developer accrual.
     let s = pair_state(&env, &p);
     assert_eq!(s.sol, [sol_at(&curve, s.sold[0]).unwrap(), sol_at(&curve, s.sold[1]).unwrap()]);
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + s.sol[0] + s.sol[1]);
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + s.owed());
     let fees_a = fee_split(q1.cost).fee + fee_split(q2.cost).fee + qs.fees.fee;
     assert_eq!(s.burn_fees_lamports[0] + s.dev_fees_lamports[0], fees_a);
     assert_eq!(s.burn_fees_lamports[1] + s.dev_fees_lamports[1], qb.fees.fee);
-    assert_eq!(env.lamports(&fa) - fa0, s.burn_fees_lamports[0]);
-    assert_eq!(env.lamports(&fb) - fb0, s.burn_fees_lamports[1]);
-    assert_eq!(env.lamports(&p.dev) - dev0, s.dev_fees_lamports[0] + s.dev_fees_lamports[1]);
+    assert_eq!(s.burn_escrow, s.burn_fees_lamports);
+    assert_eq!(s.dev_accrued, s.dev_fees_lamports[0] + s.dev_fees_lamports[1]);
+    assert_eq!((env.lamports(&fa), env.lamports(&fb)), (fa0, fb0));
+    // claim_developer_fee pays the accrual to the pinned wallet, permissionlessly
+    let meta = env.ok(&[ix_claim_dev(&p, &bob.pubkey())], &[&bob]);
+    println!("claim_developer_fee CU: {}", meta.compute_units_consumed);
+    assert_eq!(env.lamports(&p.dev) - dev0, s.dev_accrued);
+    assert_eq!(pair_state(&env, &p).dev_accrued, 0);
+    expect_anchor_err(env.send(&[ix_claim_dev(&p, &bob.pubkey())], &[&bob]), "NothingToClaim");
     // per trade: dev = floor(fee / 4), burn = fee − dev
     assert_eq!(s.dev_fees_lamports[0], fee_split(q1.cost).dev + fee_split(q2.cost).dev + qs.fees.dev);
     assert_eq!(s.dev_fees_lamports[1], qb.fees.dev);
 }
 
 #[test]
-fn a_drained_developer_wallet_cannot_block_trades_its_slice_goes_to_the_burn_pool() {
+fn a_drained_developer_wallet_cannot_block_trades_or_exits() {
     let mut env = new_env();
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
-    // The developer empties the wallet to 0: a sub-rent credit would now fail the System transfer.
+    // The developer empties the wallet to 0: trades never credit it, so nothing changes for traders; only the claim waits.
     env.svm.set_account(p.dev, litesvm_account(0, vec![], anchor_lang::solana_program::system_program::ID)).unwrap();
     let alice = trader(&mut env, 10 * SOL);
-    let fa0 = env.lamports(&fee_pda(&p.mint(0)));
-    let meta = env.ok(&[ix_buy(&p, &alice.pubkey(), 0, SOL / 10, 1)], &[&alice]);
-    let ev: pair_curve::events::Trade = pc_event(&meta);
-    assert!(ev.dev_fee_redirected);
-    assert_eq!((ev.dev_fee, ev.burn_fee), (0, ev.fee));
-    assert_eq!(env.lamports(&fee_pda(&p.mint(0))) - fa0, ev.fee);
-    assert_eq!(env.lamports(&p.dev), 0);
-    // and the exit works too
+    env.ok(&[ix_buy(&p, &alice.pubkey(), 0, SOL / 10, 1)], &[&alice]);
     let held = env.token_amount(&get_associated_token_address(&alice.pubkey(), &p.mint(0)));
     env.ok(&[ix_sell(&p, &alice.pubkey(), 0, held, 1)], &[&alice]);
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env), "everything sold back: the vault holds exactly its rent minimum");
+    let s = pair_state(&env, &p);
+    assert_eq!(s.sol, [0, 0]);
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + s.burn_escrow[0] + s.dev_accrued, "curve SOL drained exactly; only the fee accounts remain");
+    // a sub-rent accrual cannot be paid to a 0-lamport wallet: the claim is refused, nothing else is affected
+    expect_anchor_err(env.send(&[ix_claim_dev(&p, &alice.pubkey())], &[&alice]), "NothingToClaim");
+    assert_eq!(env.lamports(&p.dev), 0);
 }
 
 #[test]
@@ -527,10 +549,14 @@ fn graduation_needs_target_and_minimum_share_then_creates_both_pools_and_burns_a
     let s = pair_state(&env, &p);
     assert!(s.sol[1] * 10_000 < 2_500 * (s.sol[0] + s.sol[1]));
     expect_anchor_err(graduate_side(&mut env, &p, &cranker, 0, &[]), "NotReadyToGraduate");
-    // B to ≥ 25 %.
-    env.ok(&[ix_buy(&p, &b1.pubkey(), 1, 8 * SOL, 1)], &[&b1]);
+    // B to ≥ 25 %: that buy COMMITS the pair in the same instruction (blind review 2 L-2: no window for a flip).
+    let meta = env.ok(&[ix_buy(&p, &b1.pubkey(), 1, 8 * SOL, 1)], &[&b1]);
+    let c: pair_curve::events::PairCommitted = pc_event(&meta);
     let s = pair_state(&env, &p);
+    assert_eq!((s.status, c.raise), (pair_curve::STATUS_GRADUATING, s.sol));
     assert!(s.sol[1] * 10_000 >= 2_500 * (s.sol[0] + s.sol[1]) && s.sol[0] + s.sol[1] >= s.target_raise_lamports);
+    let held_b = env.token_amount(&get_associated_token_address(&b1.pubkey(), &p.mint(1)));
+    expect_anchor_err(env.send(&[ix_sell(&p, &b1.pubkey(), 1, held_b / 20, 1)], &[&b1]), "SellsClosed");
 
     let rent = anchor_lang::prelude::Rent::default();
     assert_eq!(rent.minimum_balance(0), vault_rent(&env), "LiteSVM runs the default rent");
@@ -580,12 +606,15 @@ fn graduation_needs_target_and_minimum_share_then_creates_both_pools_and_burns_a
         assert_eq!(env.mint_supply(&p.mint(side)), supply_before[s_] - g.tokens_burned[s_]);
         assert_eq!(g.tokens_burned[s_], pair_curve::TOTAL_SUPPLY - s.sold[s_] - expect_tokens[s_]);
     }
-    // the vault is back to its rent minimum; the residue went to the burn pools
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
+    // the vault keeps only its rent minimum and the developer accrual; the escrowed burn shares and the residue went to the burn pools
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + g.dev_accrued);
     assert!(env.svm.get_account(&get_associated_token_address(&p.vault, &NATIVE_MINT)).map(|a| a.lamports == 0).unwrap_or(true), "WSOL account closed");
     let got = [env.lamports(&fee_pda(&p.mint(0))) - fee_before[0], env.lamports(&fee_pda(&p.mint(1))) - fee_before[1]];
-    assert_eq!(got, [evs[0].residue_lamports, evs[1].residue_lamports], "each side's residue went to its own burn pool");
-    assert!(got[0] < SOL / 100 && got[1] < SOL / 100, "residue is rent refunds and dust only: {got:?}");
+    assert_eq!(got, [evs[0].burn_escrow_paid + evs[0].residue_lamports, evs[1].burn_escrow_paid + evs[1].residue_lamports], "each side's escrow + residue went to its own burn pool");
+    assert_eq!([evs[0].burn_escrow_paid, evs[1].burn_escrow_paid], s.burn_escrow, "the 75 bps escrow, paid at graduation");
+    assert!(evs[0].residue_lamports < SOL / 100 && evs[1].residue_lamports < SOL / 100, "residue is rent refunds and dust only");
+    env.ok(&[ix_claim_dev(&p, &cranker.pubkey())], &[&cranker]);
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
 
     // Closed curves: no buys, no sells, no second graduation, no void.
     expect_anchor_err(env.send(&[ix_buy(&p, &whale.pubkey(), 0, SOL, 1)], &[&whale]), "NotOpen");
@@ -752,8 +781,12 @@ fn void_after_the_deadline_lets_every_holder_exit_and_the_vault_drains_exactly()
     expect_anchor_err(env.send(&[ix_buy(&p, &holders[1].pubkey(), 1, SOL, 1)], &[&holders[1]]), "NotOpen");
     expect_anchor_err(env.send(&[ix_close(&p, &cranker.pubkey())], &[&cranker]), "NotClosable");
 
-    // Everyone sells everything back, in an arbitrary order.
-    let curve = s.curve();
+    // The void snapshot: each side redeems its curve SOL plus its escrowed burn share, pro rata, with no fee.
+    let v = pair_state(&env, &p);
+    assert_eq!(v.redeem_pool, [s.sol[0] + s.burn_escrow[0], s.sol[1] + s.burn_escrow[1]]);
+    assert_eq!((v.redeem_supply, v.burn_escrow), (s.sold, [0, 0]));
+    // Everyone sells everything back, in an arbitrary order: the same rate for everyone (blind review 2 M-1), the last holder of a side
+    // gets exactly what is left.
     for side in [1u8, 0] {
         for h in holders.iter().rev() {
             let ata = get_associated_token_address(&h.pubkey(), &p.mint(side));
@@ -762,15 +795,18 @@ fn void_after_the_deadline_lets_every_holder_exit_and_the_vault_drains_exactly()
                 continue;
             }
             let st = pair_state(&env, &p);
-            let q = quote_sell(&curve, st.sold[side as usize], amt).unwrap();
+            let s_ = side as usize;
+            let expect = if amt == st.sold[s_] { st.sol[s_] } else { (amt as u128 * v.redeem_pool[s_] as u128 / v.redeem_supply[s_] as u128) as u64 };
             let before = env.lamports(&h.pubkey());
-            env.ok(&[ix_sell(&p, &h.pubkey(), side, amt, q.net)], &[h]);
-            assert_eq!(env.lamports(&h.pubkey()) - before, q.net);
+            let meta = env.ok(&[ix_sell(&p, &h.pubkey(), side, amt, expect)], &[h]);
+            let ev: pair_curve::events::Trade = pc_event(&meta);
+            assert!(ev.redemption && ev.fee == 0);
+            assert_eq!(env.lamports(&h.pubkey()) - before, expect);
         }
     }
     let e = pair_state(&env, &p);
     assert_eq!((e.sold, e.sol), ([0, 0], [0, 0]));
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env), "the SOL vault drained to exactly its rent minimum");
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + e.dev_accrued, "the SOL vault drained to exactly its rent minimum + the developer accrual");
 
     // close_pair: burns the returned supplies, closes the accounts, rent to the creator.
     let creator_before = env.lamports(&p.creator.pubkey());
@@ -780,32 +816,28 @@ fn void_after_the_deadline_lets_every_holder_exit_and_the_vault_drains_exactly()
     assert_eq!(env.mint_supply(&p.mint(0)), 0);
     assert_eq!(env.mint_supply(&p.mint(1)), 0);
     assert!(env.lamports(&p.creator.pubkey()) > creator_before);
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env), "close paid the developer accrual too");
     // A pair can never be re-created on those mints (no mint authority left).
     let ix = ix_init_pair(&env, &p, default_args(env.now()));
     expect_anchor_err(env.send(&[ix], &[&p.creator]), "InvalidMint");
 }
 
+/// Blind review 2 H-2 / review 1 H-1: a graduated (or graduating) pair is never closed — burn_receipts' register_pair_pool reads it.
 #[test]
-fn close_after_graduation_returns_rent_and_keeps_the_vault_at_rent_minimum() {
+fn a_graduated_pair_can_never_be_closed() {
     let mut env = new_env();
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
     let c = trader(&mut env, SOL);
-    let (ba, _) = fill(&mut env, &p, 50 * SOL, 40 * SOL);
-    graduate_both(&mut env, &p, &c);
-    // someone donates to the vault afterwards: close_pair sends it to the burn pools
-    env.transfer_sol(&p.vault, 12_345);
-    // ... and sends tokens back into a token vault: close_pair burns them (a donation cannot block the close)
-    let tv = get_associated_token_address(&p.vault, &p.mint(0));
-    let ix = spl_token::instruction::transfer(&spl_token::ID, &get_associated_token_address(&ba.pubkey(), &p.mint(0)), &tv, &ba.pubkey(), &[], 1_000).unwrap();
-    env.ok(&[ix], &[&ba]);
-    let supply = env.mint_supply(&p.mint(0));
-    let fa = env.lamports(&fee_pda(&p.mint(0)));
-    env.ok(&[ix_close(&p, &c.pubkey())], &[&c]);
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
-    assert_eq!(env.lamports(&fee_pda(&p.mint(0))) - fa, 12_345 / 2);
-    assert_eq!(env.mint_supply(&p.mint(0)), supply - 1_000);
-    assert!(env.svm.get_account(&tv).map(|a| a.lamports == 0).unwrap_or(true));
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    expect_anchor_err(env.send(&[ix_close(&p, &c.pubkey())], &[&c]), "NotClosable");
+    graduate_side(&mut env, &p, &c, 0, &[]).unwrap();
+    expect_anchor_err(env.send(&[ix_close(&p, &c.pubkey())], &[&c]), "NotClosable");
+    graduate_side(&mut env, &p, &c, 1, &[]).unwrap();
+    expect_anchor_err(env.send(&[ix_close(&p, &c.pubkey())], &[&c]), "NotClosable");
+    for side in 0..2u8 {
+        let pl = pool_of(&p, side);
+        env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(side), &pl.pool, &pl.lp_mint, &p.pair)], &[&c]);
+    }
 }
 
 #[test]
@@ -883,7 +915,7 @@ fn graduate_reverts_when_the_cpmm_callee_abuses_the_vault_signature() {
     // authority on one · 5 create no pool (the wrapped SOL never left the vault's WSOL account)
     for mode in 1u8..=5 {
         let mut env = Env::new();
-        env.svm.add_program(pair_curve::ID, &read_so("target/deploy/pair_curve.so")).unwrap();
+        env.svm.add_program(pair_curve::ID, &read_so("target/deploy-localnet/pair_curve.so")).unwrap();
         env.svm.add_program(CPMM_PROGRAM_ID, &read_so("fixtures/evil_cpmm_init.so")).unwrap();
         // A CPMM-owned AmmConfig with the mode in its padding (byte 200).
         let amm = Pubkey::new_unique();
@@ -917,7 +949,8 @@ fn graduate_reverts_when_the_cpmm_callee_abuses_the_vault_signature() {
         let r = graduate_side(&mut env, &p, &c, 0, &[]);
         expect_anchor_err(r, "VaultTampered");
         assert_eq!(env.lamports(&p.vault), before, "mode {mode}: nothing left the vault");
-        assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_OPEN, "mode {mode}: still open (and voidable at the deadline)");
+        let st = pair_state(&env, &p);
+        assert_eq!((st.status, st.pools), (pair_curve::STATUS_GRADUATING, [Pubkey::default(); 2]), "mode {mode}: committed by the last buy, no pool created");
     }
 }
 
@@ -927,7 +960,7 @@ fn the_idl_has_no_admin_withdraw_or_parameter_update() {
     let names: Vec<String> = idl["instructions"].as_array().unwrap().iter().map(|i| i["name"].as_str().unwrap().to_string()).collect();
     let mut sorted = names.clone();
     sorted.sort();
-    assert_eq!(sorted, ["buy", "close_pair", "graduate", "init_pair", "sell", "void_pair"]);
+    assert_eq!(sorted, ["buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "sell", "void_pair"]);
     for ix in idl["instructions"].as_array().unwrap() {
         let signers: Vec<&str> = ix["accounts"].as_array().unwrap().iter().filter(|a| a["signer"].as_bool().unwrap_or(false)).map(|a| a["name"].as_str().unwrap()).collect();
         let expected: &[&str] = match ix["name"].as_str().unwrap() {
@@ -935,7 +968,7 @@ fn the_idl_has_no_admin_withdraw_or_parameter_update() {
             "buy" => &["buyer"],
             "sell" => &["seller"],
             "graduate" => &["cranker"],
-            "void_pair" | "close_pair" => &["caller"],
+            "void_pair" | "close_pair" | "claim_developer_fee" => &["caller"],
             n => panic!("undescribed instruction {n}"),
         };
         assert_eq!(signers, expected, "{}", ix["name"]);
@@ -955,8 +988,10 @@ fn prefunded_addresses_do_not_block_graduation() {
         let pool = pool_of(&p, side);
         targets.extend([pool.pool, pool.lp_mint, pool.token_0_vault, pool.token_1_vault, pool.observation, get_associated_token_address(&p.vault, &pool.lp_mint)]);
     }
+    // above the token-account rent, so the WSOL pool vaults turn the excess into WSOL (blind review 2 H-1) — accepted as pool liquidity
+    let above_rent = env.svm.minimum_balance_for_rent_exemption(165) + 1_000_000;
     for t in &targets {
-        env.transfer_sol(t, 1_000_000);
+        env.transfer_sol(t, above_rent);
     }
     let metas = graduate_both(&mut env, &p, &c);
     for m in &metas {
@@ -967,14 +1002,15 @@ fn prefunded_addresses_do_not_block_graduation() {
     let evs: Vec<pair_curve::events::SideGraduated> = metas.iter().map(pc_event).collect();
     assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
     assert!(evs[0].residue_lamports >= 1_000_000 && evs[1].residue_lamports >= 1_000_000, "the donations came back as residue");
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + pair_state(&env, &p).dev_accrued);
+    assert!(evs.iter().all(|e| e.prefunded_wsol == 1_000_000), "the pre-funded WSOL became pool liquidity");
 }
 
-/// Between the two graduate calls: the pair is committed — both curves closed, no void, side A registrable, side B still to create
-/// (even after the deadline). If Raydium blocks side B for 3 days (here: the create-pool fee raised above B's raise), B's holders
-/// may sell back on B's curve; A's curve stays closed.
+/// Between the two graduate calls the pair is committed: curves closed, no void, side A registrable, side B still to create (even after
+/// the deadline). Inactivity alone never refunds B (blind review 1 L-3); only a Raydium block lasting 3 days lets `void_pair` put B into
+/// pro-rata redemption (review 1 L-2: a terminal state for B), and then B can no longer graduate.
 #[test]
-fn graduating_commits_the_pair_and_a_blocked_second_side_reopens_its_sells_after_three_days() {
+fn graduating_commits_the_pair_and_only_a_real_raydium_block_refunds_the_second_side() {
     let mut env = new_env();
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
     let c = trader(&mut env, SOL);
@@ -989,25 +1025,97 @@ fn graduating_commits_the_pair_and_a_blocked_second_side_reopens_its_sells_after
     let (pa, pb) = (pool_of(&p, 0), pool_of(&p, 1));
     expect_anchor_err(env.send(&[ix_register_pair(&c.pubkey(), &p.mint(1), &pb.pool, &pb.lp_mint, &p.pair)], &[&c]), "AccountNotInitialized");
     env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)], &[&c]);
-    env.set_time(s.deadline + 10);
-    expect_anchor_err(env.send(&[ix_void(&p, &c.pubkey())], &[&c]), "NotOpen");
-
-    // Raydium raises the create-pool fee above side B's raise.
+    // 3 days of inactivity, no Raydium block: no refund
+    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS + 10);
+    expect_anchor_err(env.send(&[ix_void(&p, &c.pubkey())], &[&c]), "NotStuck");
+    // Raydium raises the create-pool fee above side B's raise: still 3 days are needed from the commit (already passed here) — refund
     let mut cfg = env.svm.get_account(&p.amm).unwrap();
     cfg.data[36..44].copy_from_slice(&(100 * SOL).to_le_bytes());
     env.svm.set_account(p.amm, cfg.clone()).unwrap();
     expect_anchor_err(graduate_side(&mut env, &p, &c, 1, &[]), "InsufficientPoolSol");
-    expect_anchor_err(env.send(&[ix_sell(&p, &bb.pubkey(), 1, held_b / 2, 1)], &[&bb]), "SellsClosed");
-    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS);
-    env.ok(&[ix_sell(&p, &bb.pubkey(), 1, held_b / 2, 1)], &[&bb]);
+    let before = pair_state(&env, &p);
+    let meta = env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
+    let ev: pair_curve::events::PairVoided = pc_event(&meta);
+    assert_eq!(ev.side, 1);
+    let r = pair_state(&env, &p);
+    assert!(r.refunding[1] && !r.refunding[0]);
+    assert_eq!(r.redeem_pool[1], before.sol[1] + before.burn_escrow[1]);
+    let b0 = env.lamports(&bb.pubkey());
+    env.ok(&[ix_sell(&p, &bb.pubkey(), 1, held_b, 0)], &[&bb]);
+    assert_eq!(env.lamports(&bb.pubkey()) - b0, r.redeem_pool[1], "B's only holder redeems the whole side: curve SOL + its burn escrow, no fee");
     let held_a = env.token_amount(&get_associated_token_address(&ba.pubkey(), &p.mint(0)));
     expect_anchor_err(env.send(&[ix_sell(&p, &ba.pubkey(), 0, held_a, 1)], &[&ba]), "SellsClosed");
-    // Raydium relents: side B graduates on what is left.
+    // Raydium relents: B is refunding, it can no longer graduate; the pair keeps its record (A stays registered)
     cfg.data[36..44].copy_from_slice(&MAINNET_POOL_FEE.to_le_bytes());
     env.svm.set_account(p.amm, cfg).unwrap();
-    graduate_side(&mut env, &p, &c, 1, &[ix_register_pair(&c.pubkey(), &p.mint(1), &pb.pool, &pb.lp_mint, &p.pair)]).unwrap();
+    expect_anchor_err(graduate_side(&mut env, &p, &c, 1, &[]), "SideAlreadyGraduated");
+    expect_anchor_err(env.send(&[ix_close(&p, &c.pubkey())], &[&c]), "NotClosable");
     let e = pair_state(&env, &p);
-    assert_eq!(e.status, pair_curve::STATUS_GRADUATED);
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
-    assert_eq!(env.config(&config_pda(&p.mint(1))).cpmm_pool, pb.pool);
+    assert_eq!((e.sold[1], e.sol[1]), (0, 0));
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + e.dev_accrued);
+}
+
+/// The review items without a reviewer-written test: R1 L-1 (the commit needs BOTH sides payable at the current AmmConfig), R2 H-3's
+/// refusal half (a pre-created vault account that is not pristine), R1 H-2's claim side (refused while the wallet cannot receive,
+/// nothing else affected) and R1 I-3 (an executable creator cannot block close_pair: the rent goes to burn pool A).
+#[test]
+fn review_followups_commit_needs_both_sides_payable_tampered_vault_claim_and_executable_creator() {
+    // R2 H-3 refusal half: a pre-created vault ATA with a delegate (only reachable by forging the account) is refused
+    let mut env = new_env();
+    let p = prepare(&mut env, MAINNET_POOL_FEE);
+    let ata = env.create_ata(&p.vault, &p.ma.pubkey());
+    let clean = env.svm.get_account(&ata).unwrap();
+    let mut forged = clean.clone();
+    forged.data[72..76].copy_from_slice(&1u32.to_le_bytes());
+    forged.data[76..108].copy_from_slice(Pubkey::new_unique().as_ref());
+    env.svm.set_account(ata, forged).unwrap();
+    expect_anchor_err(env.send(&[ix_init_pair(&env, &p, default_args(env.now()))], &[&p.creator]), "VaultAccountTampered");
+    env.svm.set_account(ata, clean).unwrap();
+    env.ok(&[ix_init_pair(&env, &p, default_args(env.now()))], &[&p.creator]);
+
+    // R1 L-1: Raydium's fee rises so side B could not pay for its pool — no trade commits, and graduate(A) is refused
+    let mut cfg = env.svm.get_account(&p.amm).unwrap();
+    let raised = 45 * SOL;
+    cfg.data[36..44].copy_from_slice(&raised.to_le_bytes());
+    env.svm.set_account(p.amm, cfg.clone()).unwrap();
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    let s = pair_state(&env, &p);
+    assert_eq!(s.status, pair_curve::STATUS_OPEN, "ready by raise and share, but B cannot pay at the current fee: not committed");
+    let c = trader(&mut env, SOL);
+    expect_anchor_err(graduate_side(&mut env, &p, &c, 0, &[]), "OtherSideCannotGraduate");
+    cfg.data[36..44].copy_from_slice(&MAINNET_POOL_FEE.to_le_bytes());
+    env.svm.set_account(p.amm, cfg).unwrap();
+    graduate_side(&mut env, &p, &c, 0, &[]).unwrap();
+    graduate_side(&mut env, &p, &c, 1, &[]).unwrap();
+    assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
+
+    // R1 H-2 claim side: an executable developer wallet only defers the claim; the accrual stays, then pays exactly once
+    let accrued = pair_state(&env, &p).dev_accrued;
+    assert!(accrued > 0);
+    let wallet = env.svm.get_account(&p.dev).unwrap();
+    // a copy of a deployed program account placed at the developer-wallet address (as in review_pc1)
+    let program_acc = env.svm.get_account(&burn_receipts::ID).unwrap();
+    env.svm.set_account(p.dev, program_acc.clone()).unwrap();
+    expect_anchor_err(env.send(&[ix_claim_dev(&p, &c.pubkey())], &[&c]), "NothingToClaim");
+    assert_eq!(pair_state(&env, &p).dev_accrued, accrued);
+    env.svm.set_account(p.dev, wallet).unwrap();
+    let d0 = env.lamports(&p.dev);
+    env.ok(&[ix_claim_dev(&p, &c.pubkey())], &[&c]);
+    assert_eq!(env.lamports(&p.dev) - d0, accrued);
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env), "after both pools and the claim the vault holds only its rent minimum");
+    expect_anchor_err(env.send(&[ix_claim_dev(&p, &c.pubkey())], &[&c]), "NothingToClaim");
+
+    // R1 I-3: a voided pair whose creator is executable still closes; the rent goes to burn pool A
+    let mut env = new_env();
+    let p = setup(&mut env, MAINNET_POOL_FEE, |a| a.deadline = a.deadline - 86_400 + 600);
+    let c = trader(&mut env, SOL);
+    env.set_time(pair_state(&env, &p).deadline);
+    env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
+    let program_acc = env.svm.get_account(&burn_receipts::ID).unwrap();
+    env.svm.set_account(p.creator.pubkey(), program_acc).unwrap();
+    let (creator0, burn_a0) = (env.lamports(&p.creator.pubkey()), env.lamports(&fee_pda(&p.mint(0))));
+    let rent_back = env.lamports(&p.pair) + env.lamports(&get_associated_token_address(&p.vault, &p.mint(0))) + env.lamports(&get_associated_token_address(&p.vault, &p.mint(1)));
+    env.ok(&[ix_close(&p, &c.pubkey())], &[&c]);
+    assert_eq!(env.lamports(&p.creator.pubkey()), creator0);
+    assert_eq!(env.lamports(&fee_pda(&p.mint(0))) - burn_a0, rent_back);
 }

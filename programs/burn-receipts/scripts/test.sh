@@ -59,5 +59,8 @@ echo "  (run it from the repo root with BURN_RECEIPTS_LOCALNET=1; it starts sola
 
 cd "$here"
 cargo test -p burn_receipts -- --test-threads=1
-# pair_curve (2026-10-10): its LiteSVM suite loads target/deploy/pair_curve.so + burn_receipts.so + the CPMM fixture.
+# pair_curve (2026-10-10): its LiteSVM suites load target/deploy-localnet/pair_curve.so (--features localnet: the harness's test
+# LaunchLab platform compiled in as BURNTICKER_PLATFORM — the default build is the mainnet build, which pins no platform yet and
+# refuses init_pair) + target/deploy/burn_receipts.so + the CPMM fixture.
+cargo-build-sbf --manifest-path "$here/programs/pair_curve/Cargo.toml" --features localnet --sbf-out-dir "$here/target/deploy-localnet"
 cargo test -p pair_curve -- --test-threads=1

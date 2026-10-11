@@ -8,13 +8,16 @@
 //   init-pair   --mint-a <keypath> --mint-b <keypath> --creator <keypath> --admin <pubkey> --attester <pubkey> --launchlab-platform <pubkey>
 //               --rules-a <file> --rules-b <file> --pair-id <string> [--cp-config <pubkey>] [--virtual-sol 30] [--target-sol 85]
 //               [--share-bps 2500] [--deadline-secs 86400 | --deadline <ISO>] [--floor-lamports 1000000] [--twap-window 600]
-//               [--twap-deviation-bps 300]
+//               [--twap-deviation-bps 300] [--pre-create-vault-ata]
+//               (--pre-create-vault-ata: REHEARSAL ONLY — tx 2 also creates the vault's token account for mint A from the payer before
+//               init_pair, the blind-review-2 H-3 grief; init_pair must accept it.)
 //               Three transactions: (1) mint A (6 decimals, no freeze authority, mint authority = the pair's SOL vault) + its
 //               burn_receipts initialize_token with registration policy 2; (2) the same for B; (3) init_pair. A dry run simulates (1).
 //   buy         --pair <pubkey> --side A|B --sol <amount> [--min-tokens <raw>]       (quotes with src/lib/pairCurve/pricing.ts first)
-//   sell        --pair <pubkey> --side A|B --amount all|<pct>%|<raw> [--min-lamports <n>]
-//   crank       --pair <pubkey>        what the keeper does: graduate each side + register_pair_pool, or register, or void_pair
-//   graduate    --pair <pubkey> --side A|B [--no-register]
+//   sell        --pair <pubkey> --side A|B --amount all|<pct>%|<raw> [--min-lamports <n>]   (Voided / refunding side: pro-rata redemption, no fee)
+//   crank       --pair <pubkey>        what the keeper does, one transaction per action: graduate, register, void, seed, claim
+//   graduate    --pair <pubkey> --side A|B [--with-register]      (registration is a separate transaction by default)
+//   claim       --pair <pubkey>                                    (claim_developer_fee: the accrued 25 bps → the developer wallet)
 //   register    --pair <pubkey> --side A|B                                         (burn_receipts.register_pair_pool)
 //   void        --pair <pubkey>
 //   close       --pair <pubkey>
@@ -31,9 +34,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { Connection, Keypair, PublicKey, type TransactionInstruction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
-import { type Cluster, GENESIS_HASH, POOL_POLICY_PAIR_CURVE } from "../src/lib/burnReceipts/constants.ts";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, type Cluster, GENESIS_HASH, POOL_POLICY_PAIR_CURVE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
 import { initializeTokenIx, operatorAttester } from "../src/lib/burnReceipts/instructions.ts";
 import { configPda, feePda } from "../src/lib/burnReceipts/pda.ts";
 import { decodeTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
@@ -41,11 +44,11 @@ import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import { redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 import { ata, curveOf, fetchPair, pairPda, sidePoolAccounts, STATUS_NAMES, vaultPda } from "../src/lib/pairCurve/accounts.ts";
-import { buyIx, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
-import { initParamProblems, pairPhase, quoteBuy, quoteSell, sideCosts, DEFAULT_CURVE_SUPPLY, DEFAULT_VIRTUAL_TOKEN_AMOUNT } from "../src/lib/pairCurve/pricing.ts";
+import { buyIx, claimDeveloperFeeIx, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
+import { initParamProblems, pairPhase, quoteBuy, quoteRedeem, quoteSell, sideCosts, DEFAULT_CURVE_SUPPLY, DEFAULT_VIRTUAL_TOKEN_AMOUNT } from "../src/lib/pairCurve/pricing.ts";
 
 const args = process.argv.slice(2);
-const COMMANDS = ["init-pair", "buy", "sell", "crank", "graduate", "register", "void", "close", "status"] as const;
+const COMMANDS = ["init-pair", "buy", "sell", "crank", "graduate", "register", "void", "close", "claim", "status"] as const;
 type Command = (typeof COMMANDS)[number];
 const CMD = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : null;
 const flag = (n: string) => args.includes(`--${n}`);
@@ -92,9 +95,9 @@ async function statusOf(pair: PublicKey): Promise<Record<string, unknown>> {
   const cfg = async (m: PublicKey) => { const a = await connection.getAccountInfo(configPda(burnReceipts, m), "confirmed"); if (!a) return null; const c = decodeTokenConfig(a.data); return { registrationPolicy: c.registration_policy, cpmmPool: c.cpmm_pool.toBase58(), poolVerified: c.pool_verified, burns: c.burns, totalBurned: c.total_burned }; };
   return {
     pair: pair.toBase58(), exists: true, status: STATUS_NAMES[p.status], phase: pairPhase({ status: p.status, solA: p.sol[0], solB: p.sol[1], target: p.target_raise_lamports, shareBps: p.min_side_share_bps, deadline: Number(p.deadline) }, now),
-    deadline: new Date(Number(p.deadline) * 1000).toISOString(), vault: p.vault.toBase58(), vaultLamports: await bal(p.vault), devWallet: p.dev_wallet.toBase58(),
+    deadline: new Date(Number(p.deadline) * 1000).toISOString(), vault: p.vault.toBase58(), vaultLamports: await bal(p.vault), devWallet: p.dev_wallet.toBase58(), devAccrued: p.dev_accrued, devWalletLamports: await bal(p.dev_wallet),
     sides: await Promise.all([0, 1].map(async (s) => ({ side: s === 0 ? "A" : "B", mint: p.mints[s].toBase58(), supplyRaw: await supply(p.mints[s]), sold: p.sold[s], sol: p.sol[s], burnPool: p.fee_vaults[s].toBase58(), burnPoolLamports: await bal(p.fee_vaults[s]),
-      burnFees: p.burn_fees_lamports[s], devFees: p.dev_fees_lamports[s], trades: p.trades[s], pool: p.pools[s].toBase58(), poolSol: p.pool_sol[s], poolTokens: p.pool_tokens[s], lpSupplyAtCreation: p.lp_supply_at_creation[s], lpBurned: p.lp_burned[s], tokensBurned: p.tokens_burned[s], tokenConfig: await cfg(p.mints[s]) }))),
+      burnFees: p.burn_fees_lamports[s], devFees: p.dev_fees_lamports[s], burnEscrow: p.burn_escrow[s], refunding: p.refunding[s], redeemPool: p.redeem_pool[s], redeemSupply: p.redeem_supply[s], trades: p.trades[s], pool: p.pools[s].toBase58(), poolSol: p.pool_sol[s], poolTokens: p.pool_tokens[s], lpSupplyAtCreation: p.lp_supply_at_creation[s], lpBurned: p.lp_burned[s], tokensBurned: p.tokens_burned[s], tokenConfig: await cfg(p.mints[s]) }))),
     params: { virtualSol: p.virtual_sol_lamports, virtualToken: p.virtual_token_amount, curveSupply: p.curve_supply, reserve: p.reserve_supply, targetRaise: p.target_raise_lamports, minSideShareBps: p.min_side_share_bps },
   };
 }
@@ -137,6 +140,9 @@ if (CMD === "init-pair") {
     args: { pair_id: Uint8Array.from(crypto.createHash("sha256").update(pairId, "utf8").digest()), virtual_sol_lamports: params.virtualSolLamports, virtual_token_amount: params.virtualTokenAmount, curve_supply: params.curveSupply, target_raise_lamports: params.targetRaiseLamports, min_side_share_bps: params.minSideShareBps, deadline: BigInt(deadline) } });
   const tx1 = [...createPairMintIxs({ payer: payer.publicKey, mint: mintA.publicKey, vault, rentLamports: rent }), a.ix];
   const tx2 = [...createPairMintIxs({ payer: payer.publicKey, mint: mintB.publicKey, vault, rentLamports: rent }), b.ix];
+  if (flag("pre-create-vault-ata")) tx2.push(new TransactionInstruction({ programId: ASSOCIATED_TOKEN_PROGRAM_ID, data: Buffer.from([1]), keys: [
+    { pubkey: payer.publicKey, isSigner: true, isWritable: true }, { pubkey: ata(vault, mintA.publicKey), isSigner: false, isWritable: true }, { pubkey: vault, isSigner: false, isWritable: false },
+    { pubkey: mintA.publicKey, isSigner: false, isWritable: false }, { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false } ] }));
   const plan = { pair: pair.toBase58(), vault: vault.toBase58(), mints: { a: mintA.publicKey.toBase58(), b: mintB.publicKey.toBase58() }, rulesSha256: { a: a.sha, b: b.sha }, pairId, cpConfig: cpConfig.toBase58(), createPoolFee, sideCosts: sideCosts(createPoolFee, rentOf), params, burnPools: { a: feePda(burnReceipts, mintA.publicKey).toBase58(), b: feePda(burnReceipts, mintB.publicKey).toBase58() } };
   const steps: Record<string, unknown> = {};
   const r1 = await simulateAndSend(ctx, tx1, [payer, creator, mintA], { dryRun: !SEND });
@@ -168,17 +174,19 @@ if (CMD === "sell") {
   const held = BigInt((await connection.getTokenAccountBalance(ata(payer.publicKey, p.mints[side]), "confirmed")).value.amount);
   const a = opt("amount") ?? "all";
   const amt = a === "all" ? held : /^\d+(\.\d+)?%$/.test(a) ? (held * BigInt(Math.round(Number(a.slice(0, -1)) * 100))) / BigInt(10_000) : BigInt(a);
-  const q = quoteSell(curveOf(p), p.sold[side], amt);
+  const redeeming = p.status === 2 || p.refunding[side];
+  const q = redeeming ? { redemption: true, net: quoteRedeem(p.redeem_pool[side], p.redeem_supply[side], p.sold[side], p.sol[side], amt) } : quoteSell(curveOf(p), p.sold[side], amt);
   await send([sellIx({ seller: payer.publicKey, pairAddress: pairKey, pair: p, side, amount: amt, minLamportsOut: opt("min-lamports") ? BigInt(opt("min-lamports")!) : q.net })], { side: side === 0 ? "A" : "B", amount: amt, quote: q });
 }
 if (CMD === "graduate") {
   const side = sideOf();
   const ixs = [graduateIx({ cranker: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster })];
-  if (!flag("no-register")) ixs.push(registerSideIx({ registrar: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts }));
+  if (flag("with-register")) ixs.push(registerSideIx({ registrar: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts }));
   await send(ixs, { side: side === 0 ? "A" : "B", pool: sidePoolAccounts(cluster, pairKey, side, p.mints[side]).pool });
 }
 if (CMD === "register") { const side = sideOf(); await send([registerSideIx({ registrar: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts })], { side: side === 0 ? "A" : "B" }); }
-if (CMD === "void") await send([voidPairIx({ caller: payer.publicKey, pairAddress: pairKey })]);
+if (CMD === "void") await send([voidPairIx({ caller: payer.publicKey, pairAddress: pairKey, pair: p })]);
+if (CMD === "claim") await send([claimDeveloperFeeIx({ caller: payer.publicKey, pairAddress: pairKey, pair: p })]);
 if (CMD === "close") await send([closePairIx({ caller: payer.publicKey, pairAddress: pairKey, pair: p })]);
 if (CMD === "crank") {
   const steps = await crankPair(ctx, payer, pairKey, { dryRun: !SEND, log: say });

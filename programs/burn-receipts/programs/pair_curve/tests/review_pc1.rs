@@ -1,7 +1,7 @@
 //! BLIND REVIEW PC-1 (2026-10-10) — exploit tests for docs/burnticker/reviews/2026-10-10-pair-curve-blind-1.md, reviewed commit 547558fa.
 //!
-//! Every `pc1_*` test below ASSERTS THAT THE ATTACK SUCCEEDS at 547558fa. Each one is a regression test to INVERT once its finding is
-//! fixed (the comment on each test says what the fixed behaviour should be). The harness above the marker line is a verbatim copy of the
+//! Every `pc1_*` test below asserted that the attack succeeded at 547558fa. After the fixes on burnticker/pair-curve they are INVERTED
+//! into regression tests (the attack must fail); the two controls stay as they were. The harness above the marker line is a verbatim copy of the
 //! first 400 lines of tests/lifecycle.rs (run with scripts/test.sh's fixtures: `cargo test -p pair_curve --test review_pc1`).
 //!
 //!   H-1  pc1_h1_close_pair_after_second_graduate_strands_registration   graduate(B)+close_pair in one tx → register_pair_pool(B) impossible
@@ -21,7 +21,7 @@
 //!
 //! Requires `anchor build` (target/deploy/{pair_curve,burn_receipts}.so) and scripts/test.sh's fixtures. Reuses burn_receipts' harness.
 
-#![allow(clippy::result_large_err, clippy::too_many_arguments)]
+#![allow(clippy::result_large_err, clippy::too_many_arguments, dead_code, unused_imports)]
 
 #[path = "../../burn_receipts/tests/common/mod.rs"]
 mod common;
@@ -56,7 +56,7 @@ fn read_so(rel: &str) -> Vec<u8> {
 
 fn new_env() -> Env {
     let mut env = Env::new();
-    env.svm.add_program(pair_curve::ID, &read_so("target/deploy/pair_curve.so")).unwrap();
+    env.svm.add_program(pair_curve::ID, &read_so("target/deploy-localnet/pair_curve.so")).unwrap();
     env
 }
 
@@ -227,8 +227,7 @@ fn ix_buy(p: &P, buyer: &Pubkey, side: u8, max_in: u64, min_out: u64) -> Instruc
             mint,
             token_vault: get_associated_token_address(&p.vault, &mint),
             buyer_token: get_associated_token_address(buyer, &mint),
-            fee_vault: fee_pda(&mint),
-            dev_wallet: p.dev,
+            amm_config: p.amm,
             token_program: spl_token::ID,
             associated_token_program: anchor_spl::associated_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
@@ -251,8 +250,7 @@ fn ix_sell(p: &P, seller: &Pubkey, side: u8, amount: u64, min_out: u64) -> Instr
             mint,
             token_vault: get_associated_token_address(&p.vault, &mint),
             seller_token: get_associated_token_address(seller, &mint),
-            fee_vault: fee_pda(&mint),
-            dev_wallet: p.dev,
+            amm_config: p.amm,
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: pc_event_authority(),
@@ -339,7 +337,7 @@ fn ix_void(p: &P, caller: &Pubkey) -> Instruction {
     Instruction::new_with_bytes(
         pair_curve::ID,
         &pair_curve::instruction::VoidPair {}.data(),
-        pair_curve::accounts::VoidPair { caller: *caller, pair: p.pair, event_authority: pc_event_authority(), program: pair_curve::ID }.to_account_metas(None),
+        pair_curve::accounts::VoidPair { caller: *caller, pair: p.pair, amm_config: p.amm, event_authority: pc_event_authority(), program: pair_curve::ID }.to_account_metas(None),
     )
 }
 
@@ -358,6 +356,7 @@ fn ix_close(p: &P, caller: &Pubkey) -> Instruction {
             token_vault_b: get_associated_token_address(&p.vault, &p.mint(1)),
             fee_vault_a: fee_pda(&p.mint(0)),
             fee_vault_b: fee_pda(&p.mint(1)),
+            dev_wallet: p.dev,
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: pc_event_authority(),
@@ -421,8 +420,7 @@ fn fill(env: &mut Env, p: &P, budget_a: u64, budget_b: u64) -> (Keypair, Keypair
 // blind review PC-1 attack tests (2026-10-10) — each asserts the attack SUCCEEDS at 547558fa; invert after the fix
 // ================================================================================================================================
 
-/// H-1. Keeper graduates+registers A; the attacker bundles graduate(B) + close_pair. FIXED: close_pair must refuse (or keep the Pair),
-/// or register_pair_pool(B) must still succeed afterwards.
+/// H-1 REGRESSION: close_pair refuses a non-Voided pair, so [graduate(B), close_pair] reverts and register_pair_pool(B) succeeds.
 #[test]
 fn pc1_h1_close_pair_after_second_graduate_strands_registration() {
     let mut env = new_env();
@@ -432,13 +430,13 @@ fn pc1_h1_close_pair_after_second_graduate_strands_registration() {
     let (pa, pb) = (pool_of(&p, 0), pool_of(&p, 1));
     graduate_side(&mut env, &p, &c, 0, &[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)]).unwrap();
     let atk = trader(&mut env, SOL);
-    env.ok(&[ix_graduate(&p, &atk.pubkey(), 1), ix_close(&p, &atk.pubkey())], &[&atk]);
-    assert!(env.svm.get_account(&p.pair).map(|a| a.lamports == 0).unwrap_or(true), "ATTACK: the Pair account is gone");
-    expect_anchor_err(env.send(&[ix_register_pair(&c.pubkey(), &p.mint(1), &pb.pool, &pb.lp_mint, &p.pair)], &[&c]), "InvalidPairAccount");
-    assert_eq!(env.config(&config_pda(&p.mint(1))).cpmm_pool, Pubkey::default(), "ATTACK: side B can never register");
+    expect_anchor_err(env.send(&[ix_graduate(&p, &atk.pubkey(), 1), ix_close(&p, &atk.pubkey())], &[&atk]), "NotClosable");
+    env.ok(&[ix_graduate(&p, &atk.pubkey(), 1)], &[&atk]);
+    env.ok(&[ix_register_pair(&c.pubkey(), &p.mint(1), &pb.pool, &pb.lp_mint, &p.pair)], &[&c]);
+    assert_eq!(env.config(&config_pda(&p.mint(1))).cpmm_pool, pb.pool);
 }
 
-/// H-1 (both sides). FIXED: both registrations still possible, or close_pair refused while unregistered.
+/// H-1 REGRESSION (both sides): nobody registered yet, the attacker graduates both and tries to close — refused; both register.
 #[test]
 fn pc1_h1_close_pair_blocks_both_registrations() {
     let mut env = new_env();
@@ -446,11 +444,13 @@ fn pc1_h1_close_pair_blocks_both_registrations() {
     let atk = trader(&mut env, SOL);
     fill(&mut env, &p, 50 * SOL, 40 * SOL);
     graduate_side(&mut env, &p, &atk, 0, &[]).unwrap();
-    env.ok(&[ix_graduate(&p, &atk.pubkey(), 1), ix_close(&p, &atk.pubkey())], &[&atk]);
+    expect_anchor_err(env.send(&[ix_graduate(&p, &atk.pubkey(), 1), ix_close(&p, &atk.pubkey())], &[&atk]), "NotClosable");
+    env.ok(&[ix_graduate(&p, &atk.pubkey(), 1)], &[&atk]);
+    expect_anchor_err(env.send(&[ix_close(&p, &atk.pubkey())], &[&atk]), "NotClosable");
     for side in 0..2u8 {
         let pl = pool_of(&p, side);
-        expect_anchor_err(env.send(&[ix_register_pair(&atk.pubkey(), &p.mint(side), &pl.pool, &pl.lp_mint, &p.pair)], &[&atk]), "InvalidPairAccount");
-        assert_eq!(env.config(&config_pda(&p.mint(side))).cpmm_pool, Pubkey::default());
+        env.ok(&[ix_register_pair(&atk.pubkey(), &p.mint(side), &pl.pool, &pl.lp_mint, &p.pair)], &[&atk]);
+        assert_eq!(env.config(&config_pda(&p.mint(side))).cpmm_pool, pl.pool);
     }
 }
 
@@ -468,7 +468,8 @@ fn expect_lamport_spend(r: TxResult, what: &str) {
     }
 }
 
-/// H-2. The dev wallet becomes executable after init: buys and the void exit fail. FIXED: both succeed (dev slice redirected or accrued).
+/// H-2 REGRESSION: trades never credit the developer wallet (the 25 bps accrue in the SOL vault), so an executable wallet cannot freeze
+/// buys or void exits; only claim_developer_fee waits (NothingToClaim) while the wallet cannot receive.
 #[test]
 fn pc1_h2_executable_dev_wallet_freezes_buys_and_void_exits() {
     let mut env = new_env();
@@ -476,13 +477,21 @@ fn pc1_h2_executable_dev_wallet_freezes_buys_and_void_exits() {
     let alice = trader(&mut env, 10 * SOL);
     env.ok(&[ix_buy(&p, &alice.pubkey(), 0, SOL, 1)], &[&alice]);
     make_dev_executable(&mut env, &p, true);
-    expect_lamport_spend(env.send(&[ix_buy(&p, &alice.pubkey(), 0, SOL, 1)], &[&alice]), "ATTACK: buy frozen");
+    env.ok(&[ix_buy(&p, &alice.pubkey(), 0, SOL, 1)], &[&alice]);
     let s = pair_state(&env, &p);
     env.set_time(s.deadline + 1);
     env.ok(&[ix_void(&p, &alice.pubkey())], &[&alice]);
     let held = env.token_amount(&get_associated_token_address(&alice.pubkey(), &p.mint(0)));
-    expect_lamport_spend(env.send(&[ix_sell(&p, &alice.pubkey(), 0, held, 1)], &[&alice]), "ATTACK: void exit frozen");
-    assert!(env.lamports(&p.vault) > vault_rent(&env), "ATTACK: the holder's SOL stays locked in the vault");
+    env.ok(&[ix_sell(&p, &alice.pubkey(), 0, held, 1)], &[&alice]);
+    let e = pair_state(&env, &p);
+    assert_eq!(e.sol, [0, 0]);
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + e.dev_accrued, "the holder got everything but the developer accrual");
+    let claim = Instruction::new_with_bytes(
+        pair_curve::ID,
+        &pair_curve::instruction::ClaimDeveloperFee {}.data(),
+        pair_curve::accounts::ClaimDeveloperFee { caller: alice.pubkey(), pair: p.pair, vault: p.vault, dev_wallet: p.dev, system_program: anchor_lang::solana_program::system_program::ID, event_authority: pc_event_authority(), program: pair_curve::ID }.to_account_metas(None),
+    );
+    expect_anchor_err(env.send(&[claim], &[&alice]), "NothingToClaim");
 }
 
 /// H-2 control: the executable flag alone is the cause (stays green after the fix).
@@ -498,25 +507,41 @@ fn pc1_h2_executable_flag_is_the_cause() {
     env.ok(&[ix_sell(&p, &alice.pubkey(), 0, held / 2, 1)], &[&alice]);
 }
 
-/// M-1. The creator pins its own LaunchLab platform and receives the 25 bps. FIXED: init_pair refuses a non-developer platform/wallet.
+/// M-1 REGRESSION: a creator pins its own LaunchLab platform (claim wallet = itself) in both TokenConfigs; init_pair refuses
+/// (PlatformMismatch) because only the platform compiled into the build (BURNTICKER_PLATFORM) is accepted.
 #[test]
 fn pc1_m1_creator_routes_dev_fee_to_itself() {
     let mut env = new_env();
-    let mut p = prepare(&mut env, MAINNET_POOL_FEE);
-    platform_with_dev(&mut env, &p.amm, &p.creator.pubkey());
-    p.dev = p.creator.pubkey();
-    let args = default_args(env.now());
-    env.ok(&[ix_init_pair(&env, &p, args)], &[&p.creator]);
-    assert_eq!(pair_state(&env, &p).dev_wallet, p.creator.pubkey(), "ATTACK: the creator is the developer wallet");
-    let alice = trader(&mut env, 10 * SOL);
-    let c0 = env.lamports(&p.creator.pubkey());
-    let meta = env.ok(&[ix_buy(&p, &alice.pubkey(), 0, SOL, 1)], &[&alice]);
-    let ev: pair_curve::events::Trade = pc_event(&meta);
-    assert!(ev.dev_fee > 0);
-    assert_eq!(env.lamports(&p.creator.pubkey()) - c0, ev.dev_fee, "ATTACK: the creator receives the 25 bps");
+    let (ma, mb, creator, attester) = (Keypair::new(), Keypair::new(), Keypair::new(), Keypair::new());
+    env.fund(&creator.pubkey(), 10 * SOL);
+    let amm = amm_config(&mut env, 0, MAINNET_POOL_FEE);
+    platform_with_dev(&mut env, &amm, &Pubkey::new_unique());
+    let rogue = Pubkey::new_unique();
+    let mut acc = bcpmm::platform_account(&env, &amm, &Pubkey::default(), [0, 0, 1_000_000]);
+    acc.data[16..48].copy_from_slice(creator.pubkey().as_ref());
+    env.svm.set_account(rogue, acc).unwrap();
+    let pair = pair_pda(&ma.pubkey(), &mb.pubkey());
+    let vault = vault_pda(&pair);
+    for m in [&ma, &mb] {
+        env.create_mint_full(m, &vault, None, 6);
+        let mut args = init_args(pair_rule(), vec![attester.pubkey()], 1);
+        args.admin = creator.pubkey();
+        let payer = env.payer.pubkey();
+        env.ok(&[ix_initialize_with_platform(&payer, &creator.pubkey(), &m.pubkey(), args, Some(rogue))], &[&creator, m]);
+    }
+    let p = P { ma, mb, creator, attester, pair, vault, dev: Pubkey::default(), amm };
+    let mut ix = ix_init_pair(&env, &p, default_args(env.now()));
+    for k in ix.accounts.iter_mut() {
+        if k.pubkey == TEST_LAUNCHLAB_PLATFORM {
+            k.pubkey = rogue;
+        }
+    }
+    expect_anchor_err(env.send(&[ix], &[&p.creator]), "PlatformMismatch");
 }
 
-/// L-2. Stuck side sold out under the 3-day rule → Graduating forever. FIXED: close_pair (or a terminal state) becomes reachable.
+/// L-2 REGRESSION: a blocked side now reaches a terminal state — after 3 days of a real Raydium block void_pair puts it into
+/// pro-rata redemption; its holders exit at the snapshot (no fee) and the side ends at sold = 0, sol = 0. The Pair is kept on purpose
+/// (side A's registration reads it), so close_pair stays refused.
 #[test]
 fn pc1_l2_graduating_forever_after_stuck_side_sells_out() {
     let mut env = new_env();
@@ -530,15 +555,18 @@ fn pc1_l2_graduating_forever_after_stuck_side_sells_out() {
     env.svm.set_account(p.amm, cfg.clone()).unwrap();
     env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS);
     let held_b = env.token_amount(&get_associated_token_address(&bb.pubkey(), &p.mint(1)));
+    expect_anchor_err(env.send(&[ix_sell(&p, &bb.pubkey(), 1, held_b, 1)], &[&bb]), "SellsClosed");
+    env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
     env.ok(&[ix_sell(&p, &bb.pubkey(), 1, held_b, 1)], &[&bb]);
     cfg.data[36..44].copy_from_slice(&MAINNET_POOL_FEE.to_le_bytes());
     env.svm.set_account(p.amm, cfg).unwrap();
-    expect_anchor_err(graduate_side(&mut env, &p, &c, 1, &[]), "InsufficientPoolSol");
+    expect_anchor_err(graduate_side(&mut env, &p, &c, 1, &[]), "SideAlreadyGraduated");
+    let e = pair_state(&env, &p);
+    assert!(e.refunding[1] && e.sold[1] == 0 && e.sol[1] == 0, "terminal: side B fully refunded");
     expect_anchor_err(env.send(&[ix_close(&p, &c.pubkey())], &[&c]), "NotClosable");
-    assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATING, "ATTACK: no terminal state");
 }
 
-/// L-3. No Raydium action at all; nobody cranks side B for 3 days → B's sells reopen. FIXED (if the rule is narrowed): SellsClosed.
+/// L-3 REGRESSION: inactivity alone (no Raydium block) never refunds side B: void_pair = NotStuck, sells stay closed.
 #[test]
 fn pc1_l3_three_day_rule_fires_without_raydium() {
     let mut env = new_env();
@@ -548,13 +576,13 @@ fn pc1_l3_three_day_rule_fires_without_raydium() {
     graduate_side(&mut env, &p, &c, 0, &[]).unwrap();
     let s = pair_state(&env, &p);
     let held_b = env.token_amount(&get_associated_token_address(&bb.pubkey(), &p.mint(1)));
+    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS + 1);
+    expect_anchor_err(env.send(&[ix_void(&p, &c.pubkey())], &[&c]), "NotStuck");
     expect_anchor_err(env.send(&[ix_sell(&p, &bb.pubkey(), 1, held_b, 1)], &[&bb]), "SellsClosed");
-    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS);
-    env.ok(&[ix_sell(&p, &bb.pubkey(), 1, held_b, 1)], &[&bb]);
-    assert_eq!(pair_state(&env, &p).sold[1], 0, "ATTACK: side B refunded although B was always graduatable");
+    graduate_side(&mut env, &p, &c, 1, &[]).unwrap();
 }
 
-/// I-1. A sell leaves `sold` mid-step; buy(max_in = 0) then delivers tokens for 0 lamports. FIXED: ZeroOutput (or a 1-lamport minimum).
+/// I-1 REGRESSION: a zero-cost buy (a sell left `sold` inside a ceil step) is refused (ZeroOutput).
 #[test]
 fn pc1_i1_zero_lamport_buy_after_mid_step_sell() {
     let mut env = new_env();
@@ -563,22 +591,14 @@ fn pc1_i1_zero_lamport_buy_after_mid_step_sell() {
     let bob = trader(&mut env, 10 * SOL);
     env.ok(&[ix_buy(&p, &alice.pubkey(), 0, SOL, 1)], &[&alice]);
     env.ok(&[ix_sell(&p, &alice.pubkey(), 0, 12_345, 0)], &[&alice]);
-    let (v0, b0) = (env.lamports(&p.vault), env.lamports(&bob.pubkey()));
-    env.ok(&[ix_buy(&p, &bob.pubkey(), 0, 0, 1)], &[&bob]);
-    let got = env.token_amount(&get_associated_token_address(&bob.pubkey(), &p.mint(0)));
-    assert!(got > 0, "ATTACK: tokens for nothing");
-    assert_eq!(env.lamports(&p.vault), v0, "the vault received 0 lamports");
-    let ata_rent = env.svm.minimum_balance_for_rent_exemption(165);
-    assert_eq!(b0 - env.lamports(&bob.pubkey()), ata_rent, "bob paid only his token-account rent");
-    let s = pair_state(&env, &p);
-    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + s.sol[0] + s.sol[1], "solvency invariant still holds");
+    expect_anchor_err(env.send(&[ix_buy(&p, &bob.pubkey(), 0, 0, 1)], &[&bob]), "ZeroOutput");
 }
 
-/// I-2. net_budget(u64::MAX) overflows. FIXED: returns a value (saturating / checked arithmetic).
+/// I-2 REGRESSION: net_budget(u64::MAX) returns (u128 arithmetic) instead of panicking.
 #[test]
 fn pc1_i2_net_budget_overflows_at_u64_max() {
-    assert!(std::panic::catch_unwind(|| pair_curve::math::net_budget(u64::MAX)).is_err(), "ATTACK: overflow panic");
-    assert!(std::panic::catch_unwind(|| pair_curve::math::net_budget(u64::MAX - 1)).is_ok());
+    let n = pair_curve::math::net_budget(u64::MAX);
+    assert!(n > 0 && n as u128 + pair_curve::math::fee_split(n).fee as u128 <= u64::MAX as u128);
 }
 
 /// Control (review §3, not a finding): the developer may trade its own pair (dev_wallet == buyer is an accepted duplicate).

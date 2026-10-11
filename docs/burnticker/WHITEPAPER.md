@@ -429,19 +429,25 @@ curves under the rules-level "both or neither" clause of §5.1.
   tokens, 793.1 M sellable, 206.9 M reserved for the pool), one System-owned SOL vault, 1,000,000,000 tokens per coin at 6 decimals,
   mint authority revoked at creation and no freeze authority. The curve is path-independent — the vault holds exactly
   `F(sold) = ceil(V_s · sold / (V_t − sold))` per side after any sequence of trades, so selling everything back drains it exactly.
-- **Fee: 100 bps of every trade**, 25 to the developer wallet (the LaunchLab platform's claim wallet, pinned at creation) and 75 to the
-  traded coin's `burn_receipts` fee PDA. No Raydium curve fee, no referral, no creator slice.
-- **Graduation** needs the combined raise to reach the pair's threshold with each side holding a minimum share of it (default 25 %), before the
-  deadline. The first `graduate` call commits the pair (both curves close; it can no longer void); each call creates its side's CPMM
+- **Fee: 100 bps of every curve trade**, 25 for the developer wallet (the claim wallet of Burnticker's own LaunchLab platform, compiled
+  into the program) and 75 for the traded coin's `burn_receipts` fee PDA. Both stay in the pair's vault until they are due: the 75 bps
+  reach the fee PDA when that coin's pool is created (or go back to its holders on a void), the 25 bps are paid by a permissionless
+  claim. No trade pays any other account, so no outside wallet can stop trading. No Raydium curve fee, no referral, no creator slice.
+- **Graduation** needs the combined raise to reach the pair's threshold with each side holding a minimum share of it (default 25 %, at
+  most 40 %), before the deadline, and both sides able to pay for their pools. The trade that meets this commits the pair on the spot
+  (both curves close; it can no longer void); each `graduate` call then creates its side's CPMM
   pool at a `pair_curve` address nobody else can sign for, with SOL and tokens in the curve's closing ratio, and burns 100 % of the LP and every token the pool
   did not need. Two transactions, because both pools in one would sit at Solana's 64-entry instruction-trace cap and a griefer could
   push them over it.
-- **Void**: at the deadline without graduation, buys close and sells stay open on the same curves; every holder can exit.
+- **Void**: at the deadline without graduation, buys close and each coin's holders share what that side raised (its curve SOL plus the
+  75 bps held for its fee PDA) pro rata, with no fee and no advantage in leaving first. Once nothing circulates the pair's accounts
+  close. A side Raydium still blocks three days after the commit is put into the same pro-rata exit, alone.
 - **Registration**: `burn_receipts` gained registration policy 2 and `register_pair_pool`, which accepts only the pool `pair_curve`
   recorded for that mint, at its `pair_curve` address, created by the pair's vault on the pinned cpConfigId, with ≥ 90 % of the creation
   LP burned (§4.7).
 - **Powers**: none over funds. No admin, no parameter update, no withdraw; the upgrade authority is the same Squads vault as
-  `burn_receipts` (`docs/burn-receipts/pair-curve-powers-register.md`).
+  `burn_receipts`, to be finalised before the first public pair (`docs/burn-receipts/pair-curve-powers-register.md`). Two blind reviews
+  (2026-10-10) found five High issues in the first version; all are fixed and re-run on devnet (`docs/burn-receipts/CHANGELOG.md`).
 ## 6. Economics
 
 Fee dials were read from the pinned Raydium SDK, Raydium's documentation and the live config accounts (`docs/burnkeeper/fees.md`;

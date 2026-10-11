@@ -26,7 +26,8 @@ export const MIN_VIRTUAL_SOL_LAMPORTS = BigInt(10_000_000);
 export const MIN_RESERVE_BPS = BigInt(1_000);
 export const MAX_RESERVE_BPS = BigInt(5_000);
 export const MIN_SIDE_SHARE_BPS = 1_000;
-export const MAX_SIDE_SHARE_BPS = 5_000;
+/** Blind review 2 L-2: at 5,000 both raises had to be equal to the lamport. */
+export const MAX_SIDE_SHARE_BPS = 4_000;
 export const MIN_TARGET_RAISE_LAMPORTS = BigInt(100_000_000);
 export const MIN_POOL_LIQUIDITY_LAMPORTS = BigInt(10_000_000);
 export const MIN_DURATION_SECS = 60;
@@ -97,6 +98,7 @@ export function quoteBuy(p: CurveParams, sold: bigint, maxIn: bigint): BuyQuote 
   if (tokensOut <= BigInt(0)) throw new Error("pairCurve: the buy would deliver nothing (ZeroOutput)");
   const solAfter = solAt(p, target);
   const cost = solAfter - f0;
+  if (cost <= BigInt(0)) throw new Error("pairCurve: the buy would cost nothing (ZeroOutput)");
   const fees = feeSplit(cost);
   return { tokensOut, cost, fees, total: cost + fees.fee, soldAfter: target, solAfter };
 }
@@ -110,6 +112,16 @@ export function quoteSell(p: CurveParams, sold: bigint, amount: bigint): SellQuo
   const gross = solAt(p, sold) - solAfter;
   const fees = feeSplit(gross);
   return { gross, fees, net: gross - fees.fee, soldAfter, solAfter };
+}
+
+/**
+ * Pro-rata redemption (a Voided pair, or a refunding side): floor(amount × pool / supply) of the snapshot, capped by what is left; the
+ * holder of the last outstanding tokens receives exactly what is left. No fee. Mirrors math.rs quote_redeem.
+ */
+export function quoteRedeem(pool: bigint, supply: bigint, outstanding: bigint, left: bigint, amount: bigint): bigint {
+  if (amount <= BigInt(0) || amount > outstanding || supply <= BigInt(0)) throw new Error("pairCurve: cannot redeem more than is outstanding (SellExceedsSold)");
+  if (amount === outstanding) return left;
+  return min((amount * pool) / supply, left);
 }
 
 /** The marginal price in lamports per WHOLE token (10^6 raw), as a float for display only. */
@@ -156,7 +168,7 @@ export function initParamProblems(a: InitParams, now: number, createPoolFee: big
   const reserve = TOTAL_SUPPLY - a.curveSupply;
   const reserveBps = (reserve * BPS) / TOTAL_SUPPLY;
   if (reserveBps < MIN_RESERVE_BPS || reserveBps > MAX_RESERVE_BPS) out.push("the liquidity reserve must be 10–50 % of supply");
-  if (a.minSideShareBps < MIN_SIDE_SHARE_BPS || a.minSideShareBps > MAX_SIDE_SHARE_BPS) out.push("minimum side share must be 1,000–5,000 bps");
+  if (a.minSideShareBps < MIN_SIDE_SHARE_BPS || a.minSideShareBps > MAX_SIDE_SHARE_BPS) out.push("minimum side share must be 1,000–4,000 bps");
   if (a.targetRaiseLamports < MIN_TARGET_RAISE_LAMPORTS) out.push("target raise below 0.1 SOL");
   const duration = a.deadline - now;
   if (duration < MIN_DURATION_SECS || duration > MAX_DURATION_SECS) out.push("deadline must be 60 s – 90 days from now");
