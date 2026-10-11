@@ -20,8 +20,8 @@ describe("transparency.json", () => {
     const roles = cfg.wallets.map((w) => w.role);
     for (const r of ["ops", "deployer", "keeper", "dev-fee", "squads-vault", "squads-member-1", "squads-member-2", "squads-member-3", "mint-deficit"]) assert.ok(roles.includes(r), `wallet role ${r}`);
     assert.ok(cfg.howBuilt.aiAssisted && !cfg.howBuilt.firmAudit, "written with AI assistance; not audited by a firm — both stated");
-    assert.equal(cfg.howBuilt.reviews.length, 8, "three blind Claude reviews of burn_receipts (the third with its re-check) + two blind pair_curve reviews + the ChatGPT/Codex PR review + the LP-lock blind review");
-    assert.deepEqual(cfg.howBuilt.reviews.filter((r) => r.reportPath).map((r) => r.id), ["claude-blind-1", "claude-blind-2", "claude-blind-3", "paircurve-blind-1", "paircurve-blind-2", "lp-lock-blind", "pair-forward-blind", "chatgpt-adversarial"]);
+    assert.equal(cfg.howBuilt.reviews.length, 9, "three blind Claude reviews of burn_receipts (the third with its re-check) + two blind pair_curve reviews + the ChatGPT/Codex PR review + the LP-lock blind review");
+    assert.deepEqual(cfg.howBuilt.reviews.filter((r) => r.reportPath).map((r) => r.id), ["claude-blind-1", "claude-blind-2", "claude-blind-3", "paircurve-blind-1", "paircurve-blind-2", "lp-lock-blind", "pair-forward-blind", "pair-forward-recheck", "chatgpt-adversarial"]);
     assert.match(cfg.howBuilt.reviews.find((r) => r.id === "chatgpt-adversarial")?.status ?? "", /^completed 2026-10-10/, "the ChatGPT/Codex report was delivered 2026-10-10 and is published as delivered");
     const keeper = cfg.wallets.find((w) => w.role === "keeper")!;
     assert.ok(/recorded creator is the program's fee PDA/.test(keeper.description) && !/is LaunchLab's recorded creator/.test(keeper.description), "review H-2: the fee PDA, not the keeper, is the LaunchLab creator");
@@ -93,7 +93,7 @@ describe("buildTransparency / buildTrustPage", () => {
     assert.ok(t.whoRunsThis.operatorLine.includes("contact@burnticker.com")); assert.ok(!/Shane|Cassidy|Colorado/.test(t.whoRunsThis.operatorLine));
     assert.equal(t.whoRunsThis.refuseListPresent, true);
     assert.equal(t.howBuilt.reviewsReadmePresent, true);
-    assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), [true, true, true, true, true, true, true, true], "the seven Claude reports and the ChatGPT/Codex report all exist");
+    assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), [true, true, true, true, true, true, true, true, true], "the eight Claude reports and the ChatGPT/Codex report all exist");
     assert.equal(t.walletsTodo, t.wallets.length);
     assert.ok(t.decisions.entries >= 9 && t.changelog.entries >= 1);
   });
