@@ -4,6 +4,7 @@
  * page, the $DEFICIT site, or the public API — never another app's route.
  */
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
+import { SEASONS_HREF } from "@/lib/burnticker/currentStatusLinks";
 
 export interface NavItem { label: string; href: string; external?: boolean; /** the header's active match: the href itself plus these prefixes */ match?: string[] }
 
@@ -12,7 +13,7 @@ export const NAV: NavItem[] = [
   { label: "Coins", href: "/burnticker", match: ["/burnticker/t/"] },
   // "Seasons" lands on the per-league index (the owner, 2026-10-10: the landing door and the nav go to the same place); the all-seasons
   // scoreboard (/burnticker/rivalries), league pages and pair pages belong to it
-  { label: "Seasons", href: "/burnticker/leagues", match: ["/burnticker/rivalries", "/burnticker/p/"] },
+  { label: "Seasons", href: SEASONS_HREF, match: ["/burnticker/rivalries", "/burnticker/p/"] },
   { label: "Trust", href: "/burnticker/trust" },
   { label: "$DEFICIT", href: DEFICIT_SITE, external: true },
   { label: "Docs/API", href: "/burnticker/docs" },
@@ -44,7 +45,7 @@ export interface TabItem { label: string; href: string; glyph: string }
 export const TABS: TabItem[] = [
   { label: "Coins", href: "/burnticker", glyph: "▦" },
   { label: "Launch", href: "/burnticker/launch", glyph: "+" },
-  { label: "Seasons", href: "/burnticker/leagues", glyph: "⇄" },
+  { label: "Seasons", href: SEASONS_HREF, glyph: "⇄" },
   { label: "Trust", href: "/burnticker/trust", glyph: "✓" },
 ];
 

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { EmptyState } from "../_components/EmptyState";
 import { OPERATOR_COPY } from "@/lib/burnticker/trustpack/copy";
+import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
 
 /**
  * /burnticker/operator — WHO RUNS THIS (trust pack, 2026-10-10). Rendered from GET /api/burnticker/v1/operator
@@ -39,8 +41,9 @@ export default function OperatorPage() {
         <h1 className="text-2xl font-semibold">{OPERATOR_COPY.title}</h1>
         <p className="text-neutral-300">{OPERATOR_COPY.intro}</p>
       </header>
-      {err && <p className="text-red-400">{err}</p>}
-      {!v && !err && <p className="text-neutral-400">Loading…</p>}
+      <CurrentStatusSummary card={card} />
+      {err && <EmptyState kind="unavailable" body="The operator data could not be read just now." details={err} />}
+      {!v && !err && <EmptyState kind="loading" />}
       {v && <>
         <section className={card}>
           <p className="text-base">{v.operator.name} · {v.operator.state ? `${v.operator.state}, ` : ""}{v.operator.country}</p>

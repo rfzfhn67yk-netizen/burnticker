@@ -10,7 +10,10 @@
 <meta name="theme-color" content="#e7e5df" media="(prefers-color-scheme: light)">
 <meta property="og:title" content="$DEFICIT — burns when the debt rises">
 <meta property="og:description" content="Every $1B the U.S. borrows buys back and burns $DEFICIT with its own trading fees. Receipts on chain. A memecoin: the rule says what supply does, not what price does.">
-<meta property="og:image" content="og.png">
+<meta property="og:image" content="https://deficit.burnticker.com/og.png">
+<meta property="og:url" content="https://deficit.burnticker.com/">
+<meta name="twitter:image" content="https://deficit.burnticker.com/og.png">
+<link rel="canonical" href="https://deficit.burnticker.com/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@USA_DEFICIT">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
@@ -95,6 +98,7 @@ section.hero{padding:8px 16px 32px;position:relative}
 .btn:hover{text-decoration:none;border-color:var(--hot)}
 .btn.red{background:var(--red);border-color:var(--red);color:var(--onred);font-weight:600}
 .btn.ghost{color:var(--dim)}
+.btn.off,.nav a.off{opacity:.55;cursor:not-allowed;border-style:dashed}.btn.off:hover,.nav a.off:hover{border-color:var(--line)}
 
 /* seven-segment component (from d1-debt-clock/seg.css, scoped under .seg7 and themed). Unlit segments stay faintly visible,
    lit ones carry an LED dot matrix. --w sizes a digit; everything else derives from it. */
@@ -215,7 +219,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
       <a href="#verify">Verify</a>
       <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>
       <a href="https://burnticker.com/" rel="noopener" target="_blank">Burnticker</a>
-      <a class="primary" id="tradeTop" href="#trade">Trade</a>
+      <a class="primary off" id="tradeTop" aria-disabled="true" data-trade-unavailable title="Not available until launch">Trade: not available</a>
     </nav>
   </div>
 </header>
@@ -237,7 +241,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
     </div>
     <p class="rule"><strong>The rule in one sentence:</strong> each business day Treasury publishes the national debt; every full $1B it rose since the previous reading is one unit, each unit spends 2% of the token's own burn pool (1 − 0.98<sup>units</sup> — the Fed's 2%, pointed the other way) buying $DEFICIT on its Raydium pool, and the on-chain program burns everything bought in the same instruction — with a receipt on chain.</p>
     <div class="cta">
-      <a class="btn red" id="tradeHero" href="#trade">Trade $DEFICIT</a>
+      <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
       <a class="btn" href="#receipts">Read the receipts</a>
       <a class="btn ghost" href="rules.json">rules.json</a>
     </div>
@@ -251,7 +255,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
       <div class="cell">
         <div class="k">U.S. total public debt outstanding</div>
         <div class="v num" id="debtNow">—</div>
-        <div class="s"><span class="mono num" id="debtExact">awaiting the keeper's status.json</span></div>
+        <div class="s"><span class="mono num" id="debtExact">Not launched: no reading yet</span></div>
       </div>
       <div class="cell">
         <div class="k">Last reading</div>
@@ -284,7 +288,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
 
   <section class="wrap" id="today">
     <h2><span>§2</span>Today</h2>
-    <pre class="today" id="todayText">awaiting the keeper's status.json</pre>
+    <pre class="today" id="todayText">Not launched: the daily report starts with the first reading after launch.</pre>
     <p class="todaysub">The day's report, in the same words as the post on <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>: filled from status.json and burns.json, never retyped (format: docs/launch/daily-post.md). <button type="button" id="copyToday" hidden>copy</button></p>
   </section>
 
@@ -296,7 +300,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
         <thead><tr>
           <th scope="col">Record date</th><th scope="col" class="r">Reading</th><th scope="col" class="r">Debt change</th><th scope="col" class="r">Units</th><th scope="col" class="r">Spent (SOL)</th><th scope="col" class="r">Bought</th><th scope="col" class="r">Burned</th><th scope="col">Swap tx</th><th scope="col">Burn tx</th><th scope="col">Check</th><th scope="col"></th>
         </tr></thead>
-        <tbody id="rows"><tr><td colspan="11" class="empty">No receipts loaded. The first reading after launch is the baseline; the first burn follows the first full $1B increase after it.</td></tr></tbody>
+        <tbody id="rows"><tr><td colspan="11" class="empty">Not launched: no receipts yet. The first reading after launch is the baseline; the first burn follows the first full $1B increase after it.</td></tr></tbody>
       </table>
       <div class="tfoot"><span id="count"></span><button type="button" id="more" hidden>Show every burn</button></div>
     </div>
@@ -360,12 +364,12 @@ burn  = every token the swap delivered</pre>
   <div class="links">
     <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">X · @USA_DEFICIT</a>
     <a href="https://burnticker.com/" rel="noopener" target="_blank">Launched on Burnticker</a>
-    <a id="tradeFoot" href="#trade">Trade</a>
+    <a id="tradeFoot" class="off" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
     <a href="status.json">status.json</a>
     <a href="burns.json">burns.json</a>
     <a href="rules.json">rules.json</a>
   </div>
-  <div id="trade" class="muted">Trade link: the curve / pool link is set at launch (see README). Until then the Trade buttons point here.</div>
+  <div id="trade" class="muted">Trading is not available: $DEFICIT is not launched yet, so no trade link exists. Any link that claims to trade $DEFICIT before this page shows one is not ours.</div>
   <div class="gap">Feed: U.S. Treasury, Fiscal Data, “Debt to the Penny” (tot_pub_debt_out_amt). The Treasury is not affiliated with and does not endorse this token. $DEFICIT has no relation to any other debt-themed token. Generated <span id="gen">—</span>.</div>
 </footer>
 
@@ -388,7 +392,11 @@ burn  = every token the swap delivered</pre>
   var short = function (sig) { return sig ? sig.slice(0, 8) + "…" : "—"; };
   var link = function (url, sig, fallback) { return url && sig ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(short(sig)) + "</a>" : esc(fallback || "—"); };
 
-  if (LINKS.trade) ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); a.href = LINKS.trade; a.target = "_blank"; a.rel = "noopener"; });
+  // Until LINKS.trade is set the three Trade controls are explicit "not available until launch" labels: no href, aria-disabled.
+  if (LINKS.trade) {
+    ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); a.href = LINKS.trade; a.target = "_blank"; a.rel = "noopener"; a.classList.remove("off"); a.removeAttribute("aria-disabled"); a.removeAttribute("data-trade-unavailable"); a.removeAttribute("title"); a.textContent = id === "tradeHero" ? "Trade $DEFICIT" : "Trade"; });
+    $("trade").textContent = "Trade link: " + LINKS.trade;
+  }
 
   var status = null, burns = [], readings = [];
 
@@ -654,7 +662,13 @@ burn  = every token the swap delivered</pre>
 
   // ------------------------------------------------------------------ load
   function getJson(name) { return fetch(base + name, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error(r.status + " " + name); return r.json(); }); }
-  function offline(msg) { var n = $("notice"); n.textContent = msg; n.classList.add("show"); draw(); }
+  // The four empty states (src/lib/burnticker/emptyState.ts headings, word for word): a missing status.json before launch is
+  // "Not launched"; any other failure is "Data unavailable", with the diagnostic behind a details disclosure.
+  function offline(msg, detail) {
+    var n = $("notice"); n.textContent = msg;
+    if (detail) { var d = document.createElement("details"), sm = document.createElement("summary"), p = document.createElement("span"); sm.textContent = "Details"; p.textContent = " " + detail; d.appendChild(sm); d.appendChild(p); n.appendChild(d); }
+    n.classList.add("show"); draw();
+  }
   if (!window.fetch) { offline("This browser cannot load the live figures; the receipts are in status.json and burns.json beside this page."); return; }
   getJson("status.json").then(function (s) {
     status = s; renderStatus(s);
@@ -665,8 +679,10 @@ burn  = every token the swap delivered</pre>
     renderBurns(); renderHero(); renderToday(); buildSeries(); draw();
     if (deep && $("r-" + deep[1])) $("r-" + deep[1]).scrollIntoView();
     fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
-  }).catch(function () {
-    offline("No status.json beside this page yet — the keeper publishes one every cycle into its publish directory (see README). Everything above fills in once it exists.");
+  }).catch(function (e) {
+    var missing = /^404 /.test(String(e && e.message));
+    offline(missing ? "Not launched: $DEFICIT is not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
+      : "Data unavailable: the live figures could not be read just now. This says nothing about the coin or its receipts; try again later.", String(e && e.message || e));
   });
 })();
 </script>

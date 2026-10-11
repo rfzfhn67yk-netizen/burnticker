@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { EmptyState } from "./_components/EmptyState";
 import { CoinCard, ago, type CoinCardData } from "./_components/CoinCard";
 import { useLaunchAvailability } from "./_components/useLaunchAvailability";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
@@ -77,15 +78,14 @@ export default function BurntickerIndex() {
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search coins: name, $TICKER, team, mint…" aria-label="Search coins" className="md:ml-auto w-full md:w-72 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm" />
       </div>
 
-      {err && <p className="text-red-400 text-sm">{err}</p>}
-      {!ix && !err && <p className="text-sm text-neutral-500">Loading coins…</p>}
+      {err && <EmptyState kind="unavailable" body="The coin list could not be read just now." details={err} />}
+      {!ix && !err && <EmptyState kind="loading" body="Reading the coin list." />}
 
       {ix && tab !== "pairs" && (
         coins.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-neutral-700 p-6 text-center text-sm text-neutral-400">
-            {q ? <>No coin matches “{q}”.</> : tab === "graduating" ? <>No coin is past half its bonding curve.{!curveRead && " Curve progress is not read on this host, so this list stays empty."}</> : tab === "graduated" ? <>No coin has moved to a trading pool yet.</> : tab === "next" ? <>No scheduled result is known for any coin.</> : <>No coins yet.</>}
+          <EmptyState kind={!q && tab === "new" && ix.tokens.length === 0 ? "not-launched" : "no-activity"} body={q ? <>No coin matches “{q}”.</> : tab === "graduating" ? <>No coin is past half its bonding curve.{!curveRead && " Curve progress is not read on this host, so this list stays empty."}</> : tab === "graduated" ? <>No coin has moved to a trading pool yet.</> : tab === "next" ? <>No scheduled result is known for any coin.</> : <>No coin is launched on this host yet.</>}>
             {launch.open && <div className="mt-3"><Link href="/burnticker/launch" className="underline">Launch the first one →</Link></div>}
-          </div>
+          </EmptyState>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {coins.map((t) => <CoinCard key={t.mint} now={now} href={`/burnticker/t/${t.ticker}`} c={{ ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, oneLiner: t.oneLiner, oracle: t.oracle, status: t.status, phase: t.phase, progressPct: t.progressPct, raised: t.raised, threshold: t.threshold, quote: t.quote, burns: t.burns, lastBurnAt: t.lastBurnAt, nextAt: nextOf(t), launchedAt: t.launchedAt, pairId: t.pairId, badge: t.badge ?? null }} />)}
@@ -94,7 +94,7 @@ export default function BurntickerIndex() {
       )}
 
       {ix && tab === "pairs" && (
-        pairs.length === 0 ? <div className="rounded-lg border border-dashed border-neutral-700 p-6 text-center text-sm text-neutral-400">No rivalry pairs yet.{launch.open && <> <Link className="underline" href="/burnticker/launch?pair=1">Launch a pair →</Link></>}</div> : (
+        pairs.length === 0 ? <EmptyState kind={ix.tokens.length === 0 ? "not-launched" : "no-activity"} body="No rivalry pair is launched on this host yet.">{launch.open && <p className="mt-2"><Link className="underline" href="/burnticker/launch?pair=1">Launch a pair →</Link></p>}</EmptyState> : (
           <div className="grid gap-3 md:grid-cols-2">
             {pairs.map((p) => (
               <Link key={p.pairId} href={`/burnticker/p/${encodeURIComponent(p.pairId)}`} className="bt-coin-card block">

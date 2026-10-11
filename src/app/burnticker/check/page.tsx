@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { EmptyState } from "../_components/EmptyState";
 import ReceiptVerifier from "./ReceiptVerifier";
+import { BurnMath } from "../_components/BurnMath";
 import { CHECK_COPY } from "@/lib/burnticker/trustpack/copy";
 
 /**
@@ -38,8 +40,8 @@ export default function CheckPage() {
         <p className="text-neutral-300">{CHECK_COPY.intro}</p>
         <p className="text-xs text-neutral-500 mt-1"><a className="underline" href="#money">{CHECK_COPY.moneyTitle}</a> · <a className="underline" href="#powers">{CHECK_COPY.powersTitle}</a> · <a className="underline" href="#locked">{CHECK_COPY.lockedTitle}</a> · <a className="underline" href="#not-done">{CHECK_COPY.notDoneTitle}</a> · <a className="underline" href="#build">{CHECK_COPY.buildTitle}</a> · <a className="underline" href="#verify">{CHECK_COPY.verifierTitle}</a></p>
       </header>
-      {err && <p className="text-red-400">{err}</p>}
-      {!c && !err && <p className="text-neutral-400">Loading…</p>}
+      {err && <EmptyState kind="unavailable" body="The checklist could not be read just now." details={err} />}
+      {!c && !err && <EmptyState kind="loading" />}
       {c && <>
         <section className={card} id="money">
           <h2 className="font-medium">{CHECK_COPY.moneyTitle}</h2>
@@ -82,6 +84,7 @@ export default function CheckPage() {
         </section>
       </>}
       <ReceiptVerifier card={card} />
+      <BurnMath />
       <p className="text-xs text-neutral-400">The verifier refuses a transaction for a mint the burn_receipts program does not know. To ask about a mint itself — is it a Burnticker coin at all — use <a className="underline" href="/burnticker/verify">Verify a mint</a>; lookalikes are listed on <a className="underline" href="/burnticker/not-burnticker">Not Burnticker</a>.</p>
       <p className="text-xs text-neutral-500">JSON: <code>/api/burnticker/v1/check</code> · <code>/api/burnticker/v1/check/receipts</code> · <code>/api/burnticker/v1/check/receipts/&lt;signature&gt;</code> · doc: docs/burnticker/CHECK-THIS-YOURSELF.md</p>
     </main>

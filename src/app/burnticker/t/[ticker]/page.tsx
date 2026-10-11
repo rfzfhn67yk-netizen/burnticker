@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useLaunchAvailability } from "../../_components/useLaunchAvailability";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
+import { DeficitPrelaunch } from "./DeficitPrelaunch";
+import { EmptyState } from "../../_components/EmptyState";
+import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago, until } from "../../_components/CoinCard";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
@@ -63,8 +66,8 @@ export default function TokenPage() {
   useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   // review 2 §2: a ticker this host has no record of explains itself (and $DEFICIT links its served page) instead of a bare error line
-  if (err) return /no token/i.test(err) ? <NotRegistered ticker={ticker} /> : <main className="p-6 text-red-400">{err}</main>;
-  if (!d) return <main className="p-6 text-neutral-400">Loading…</main>;
+  if (err) return /no token/i.test(err) ? <NotRegistered ticker={ticker} /> : <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="unavailable" body={`The page for $${ticker.toUpperCase()} could not be read just now.`} details={err} /></main>;
+  if (!d) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
   const s = d.status, m = s.market, prof = s.profile;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const rows = [...d.receipts].reverse();
@@ -130,7 +133,7 @@ export default function TokenPage() {
                     {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{[...new Set((b.title.match(/settled on [^·]+· confirmed by [^·]+/g) ?? []).map((x) => x.trim()))].join(" · ")}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN →</a>)}</div>}
                     <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
                       <span>{b.status === "confirmed" ? <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned · {b.units} unit(s){b.spent ? ` · spent ${b.spent}` : ""}</> : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{b.status}{b.skippedReason ? ` — ${b.skippedReason}` : ""}</span>}</span>
-                      <span className="flex gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>tx</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{b.verify.verified ? <span className="text-emerald-400" title="recomputed; matches the memo">✓ verified</span> : b.status === "confirmed" ? <span className="text-red-400" title={b.verify.checks.join("; ")}>! check</span> : null}</span>
+                      <span className="flex gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>tx</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{(() => { const v = receiptRowStatus(b); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title} data-receipt-status={v.status}>{v.status === "passed" ? "✓ " : v.status === "failed" ? "✗ " : ""}{v.label}</span>; })()}</span>
                     </div>
                   </li>
                 ))}
@@ -187,7 +190,7 @@ export default function TokenPage() {
 
       <section id="verify" className="scroll-mt-20">
         <h2 className="font-medium mb-2">Verify it yourself</h2>
-        {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt gets its curl, formula and memo here.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{b.settledAt.slice(0, 10)} · {b.market} — {b.result ?? b.value}, {b.units} unit(s), {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : b.status}{b.verify.verified ? " ✓" : ""}</summary>
+        {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt gets its curl, formula and memo here.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{b.settledAt.slice(0, 10)} · {b.market} — {b.result ?? b.value}, {b.units} unit(s), {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : b.status}{` · ${receiptRowStatus(b).label}`}</summary>
           <p className="mt-2">1. Read the settled result from the source:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.curl}</pre>{b.method && <p className="text-xs text-neutral-500">Value read by: {b.method}</p>}
           <p>2. Apply the rule:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.formula}</pre>
           <p>3. Expected: <strong>{b.verify.expected}</strong></p>
@@ -234,11 +237,12 @@ function LpLockCard({ lp, card }: { lp: LpBlock; card: string }) {
 /** A ticker with no record on this host: say so plainly; $DEFICIT's own page is served at DEFICIT_SITE until it is registered here. */
 function NotRegistered({ ticker }: { ticker: string }) {
   const t = ticker.toUpperCase();
+  // website brief §1: $DEFICIT gets a real pre-launch page (canonical: DEFICIT_SITE) instead of the one-line notice
+  if (t === "DEFICIT") return <DeficitPrelaunch fallbackSite={DEFICIT_SITE} />;
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-2 text-sm" data-not-registered>
       <h1 className="text-xl font-semibold">${t}</h1>
-      <p className="text-neutral-300">No coin with the ticker ${t} is registered on this host, so there is no rule, receipt or reading to show here.</p>
-      {t === "DEFICIT" ? <p><a className="underline" href={DEFICIT_SITE}>The $DEFICIT page</a> is served on its own site until the coin is registered here; its rule, receipts and status are published there.</p> : null}
+      <EmptyState kind="not-launched" compact body={`No coin with the ticker $${t} is registered on this host, so there is no rule, receipt or reading to show here.`} />
       <p><Link className="underline" href="/burnticker">All coins on this host</Link> · <Link className="underline" href="/burnticker/verify">Check a token address</Link></p>
     </main>
   );

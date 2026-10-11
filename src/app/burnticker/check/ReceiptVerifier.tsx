@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { checkReceiptTx, jsonRpc, PUBLIC_RPC, type ReceiptCheckResult } from "@/lib/burnticker/trustpack/receiptCheck";
 import { CHECK_COPY } from "@/lib/burnticker/trustpack/copy";
+import { verdictOf, type CheckStatus } from "@/lib/burnticker/verificationStatus";
 
 /**
  * THE RECEIPT VERIFIER, IN THE VISITOR'S BROWSER (trust pack, 2026-10-10). The sample list and the rules texts come from our API
@@ -10,10 +11,11 @@ import { CHECK_COPY } from "@/lib/burnticker/trustpack/copy";
  * and the Treasury API (src/lib/burnticker/trustpack/receiptCheck.ts — no Buffer, no web3.js, the same code the server route runs).
  */
 interface Sample { ticker: string; recordDate: string; units: number; status: string; signature: string; explorerUrl: string; evidence: string; rulesPath: string }
-interface Samples { cluster: "devnet"; programId: string; rpc: string; receipts: Sample[]; rules: Record<string, string> }
+interface Samples { cluster: "devnet"; programId: string; rpc: string; receipts: Sample[]; rules: Record<string, string>; featured?: string | null }
 
-const mark = (ok: boolean | null) => (ok === true ? "✓" : ok === false ? "✗" : "–");
-const tone = (ok: boolean | null) => (ok === true ? "text-emerald-400" : ok === false ? "text-red-400" : "text-neutral-500");
+const MARK: Record<CheckStatus, string> = { passed: "✓", failed: "✗", unavailable: "?", "not checked": "–" };
+const TONE: Record<CheckStatus, string> = { passed: "text-emerald-400", failed: "text-red-400", unavailable: "text-amber-300", "not checked": "text-neutral-500" };
+const VERDICT_TONE = { verified: "text-emerald-400", "partly verified": "text-emerald-300", "could not check": "text-amber-300", failed: "text-red-400" } as const;
 
 export default function ReceiptVerifier({ card }: { card: string }) {
   const [samples, setSamples] = useState<Samples | null>(null);
@@ -22,7 +24,10 @@ export default function ReceiptVerifier({ card }: { card: string }) {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<ReceiptCheckResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/burnticker/v1/check/receipts").then((r) => r.json()).then((j: Samples) => { setSamples(j); if (j.receipts[0]) setSig(j.receipts[0].signature); }).catch((e) => setErr(String(e))); }, []);
+  const [demo, setDemo] = useState(false);
+  // website brief §5: /burnticker/check?demo=1 pre-selects the featured devnet receipt (current-status.json `demo`) and runs the check
+  useEffect(() => { fetch("/api/burnticker/v1/check/receipts").then((r) => r.json()).then((j: Samples) => { setSamples(j); const want = new URLSearchParams(window.location.search).get("demo") === "1"; const f = j.featured && j.receipts.some((r) => r.signature === j.featured) ? j.featured : j.receipts[0]?.signature; if (f) setSig(f); if (want && f) setDemo(true); }).catch((e) => setErr(String(e))); }, []);
+  useEffect(() => { if (demo && sig && samples && !busy && !res) { setDemo(false); void run(); } }, [demo, sig, samples]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function run() {
     setBusy(true); setRes(null); setErr(null);
@@ -59,16 +64,19 @@ export default function ReceiptVerifier({ card }: { card: string }) {
         <div><button type="button" disabled={busy || !sig.trim()} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
         <p className="text-neutral-500">{CHECK_COPY.verifierPrivacy} {CHECK_COPY.verifierScope}</p>
       </div>
-      {err && <p className="mt-2 text-xs text-red-400">{err}</p>}
-      {res && (
-        <div className="mt-3 text-xs">
-          <p className={res.verified ? "text-emerald-400" : "text-red-400"}>{res.verified ? "✓ Verified: every check that could run here passed." : "✗ Not verified: see the failed or unrun checks."} <a className="underline" href={res.facts.explorerUrl} target="_blank" rel="noreferrer">explorer</a></p>
-          <ul className="mt-2 space-y-1">{res.checks.map((c) => <li key={c.id} className="grid grid-cols-[1.5rem_1fr] gap-1"><span className={`${tone(c.ok)} font-mono`}>{mark(c.ok)}</span><span><span className="text-neutral-200">{c.label}</span> — <span className="text-neutral-400 break-words">{c.detail}</span></span></li>)}</ul>
-          <p className="mt-2 text-neutral-500">{CHECK_COPY.legend}</p>
-          {res.facts.memo && <pre className="mt-2 whitespace-pre-wrap break-all rounded bg-neutral-950 p-2">{res.facts.memo}</pre>}
-          <p className="mt-1 text-neutral-500">Reading <code>{res.facts.readingAddress ?? "—"}</code> · TokenConfig <code>{res.facts.configAddress ?? "—"}</code> · mint <code>{res.facts.mint ?? "—"}</code>{res.facts.sourceUrl && <> · source <a className="underline break-all" href={res.facts.sourceUrl} target="_blank" rel="noreferrer">{res.facts.recordDate}</a> / <a className="underline" href={res.facts.prevSourceUrl ?? "#"} target="_blank" rel="noreferrer">{res.facts.prevDate}</a></>}</p>
-        </div>
-      )}
+      {err && <p className="mt-2 text-xs text-amber-300">Could not check: {err}. This is not evidence that the receipt is invalid; try again or use another RPC.</p>}
+      {res && (() => { const v = verdictOf(res.checks); return (
+        <div className="mt-3 text-xs" data-verdict={v.verdict}>
+          <p className={`text-sm ${VERDICT_TONE[v.verdict]}`}>{v.line} <a className="text-xs underline" href={res.facts.explorerUrl} target="_blank" rel="noreferrer">transaction</a></p>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-3">{v.layers.map((l) => { const st = l.checks.map((c) => c.status); const sum: CheckStatus = st.includes("failed") ? "failed" : st.length && st.every((x) => x === "passed") ? "passed" : st.includes("unavailable") ? "unavailable" : "not checked"; const partly = sum === "not checked" && st.includes("passed"); return (
+            <li key={l.layer} className="rounded border border-neutral-800 p-2" data-layer={l.layer}><div className={`font-medium ${TONE[sum]}`}>{MARK[sum]} {l.title} <span className="font-normal text-neutral-500">{partly ? "partly checked" : sum}</span></div><p className="mt-1 text-neutral-400">{l.what}</p><p className="mt-1 text-neutral-500">{l.checks.map((c) => `${c.label}: ${c.status}`).join(" · ") || "no check"}</p></li>); })}</ul>
+          <details className="mt-2"><summary className="cursor-pointer text-neutral-300">Every check, the memo and the accounts</summary>
+            <ul className="mt-2 space-y-1">{v.layers.flatMap((l) => l.checks).map((c) => <li key={c.id} className="grid grid-cols-[1.5rem_1fr] gap-1"><span className={`${TONE[c.status]} font-mono`} title={c.status}>{MARK[c.status]}</span><span><span className="text-neutral-200">{c.label}</span> <span className="text-neutral-500">({c.status})</span> — <span className="text-neutral-400 break-words">{c.detail}</span></span></li>)}</ul>
+            <p className="mt-2 text-neutral-500">{CHECK_COPY.legend} ✓ passed · ✗ failed · ? unavailable (a dependency did not answer) · – not checked on this page.</p>
+            {res.facts.memo && <pre className="mt-2 whitespace-pre-wrap break-all rounded bg-neutral-950 p-2">{res.facts.memo}</pre>}
+            <p className="mt-1 text-neutral-500 break-all">Reading <code>{res.facts.readingAddress ?? "—"}</code> · TokenConfig <code>{res.facts.configAddress ?? "—"}</code> · mint <code>{res.facts.mint ?? "—"}</code>{res.facts.sourceUrl && <> · source <a className="underline break-all" href={res.facts.sourceUrl} target="_blank" rel="noreferrer">{res.facts.recordDate}</a> / <a className="underline" href={res.facts.prevSourceUrl ?? "#"} target="_blank" rel="noreferrer">{res.facts.prevDate}</a></>}</p>
+          </details>
+        </div>); })()}
     </section>
   );
 }

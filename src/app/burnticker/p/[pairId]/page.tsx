@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { EmptyState } from "../../_components/EmptyState";
+import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
+import { PairFundsFlow } from "../../_components/PairFundsFlow";
+import { pairRuleVersion } from "@/lib/burnticker/pairFundsFlow";
 import { useLaunchAvailability } from "../../_components/useLaunchAvailability";
 import { useParams } from "next/navigation";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
@@ -43,8 +47,8 @@ export default function PairPage() {
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => { fetch(`/api/burnticker/pairs/${encodeURIComponent(pairId)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [pairId]);
-  if (err) return <main className="p-6 text-red-400">{err}</main>;
-  if (!d) return <main className="p-6 text-neutral-400">Loading…</main>;
+  if (err) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind={/no pair|not found|unknown pair/i.test(err) ? "not-launched" : "unavailable"} body={/no pair|not found|unknown pair/i.test(err) ? "No rivalry pair with this id is registered on this host." : "This pair could not be read just now."} details={err} /></main>;
+  if (!d) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const A = d.a.status.ticker, B = d.b.status.ticker, t = d.tally, ls = t.lastSettlement;
   const sideName = (x: "A" | "B" | null) => (x === "A" ? `$${A}` : x === "B" ? `$${B}` : "neither side");
@@ -53,7 +57,7 @@ export default function PairPage() {
       <h2 className="font-medium mb-2">Receipts — <Link className="underline" href={`/burnticker/t/${s.status.ticker}`}>${s.status.ticker}</Link> <span className="text-neutral-500 text-xs">({s.receipts.length})</span></h2>
       {s.receipts.length === 0 ? <p className="text-neutral-400 text-xs">No receipts yet for ${s.status.ticker}.</p> : (
         <div className="overflow-x-auto rounded-lg border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Settled</th><th className="p-2">Market</th><th className="p-2">Result</th><th className="p-2 text-right">Units</th><th className="p-2 text-right">Burned</th><th className="p-2">Status</th><th className="p-2">Tx</th><th className="p-2">Check</th></tr></thead>
-          <tbody>{[...s.receipts].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1)).map((r) => <tr key={r.eventId} className="border-t border-neutral-800"><td className="p-2">{r.settledAt.slice(0, 19).replace("T", " ")}</td><td className="p-2"><code>{r.eventId}</code></td><td className="p-2">{r.result ?? r.value ?? "—"}</td><td className="p-2 text-right tabular-nums">{r.units}</td><td className="p-2 text-right tabular-nums">{r.status === "confirmed" ? fmt(r.burned ?? "0") : r.status === "forwarded" ? <span className="text-amber-300">forwarded {r.spent ?? ""} SOL</span> : "—"}</td><td className="p-2">{r.status}</td><td className="p-2">{r.txUrl && r.signature ? <a className="underline" href={r.txUrl}>{r.signature.slice(0, 10)}…</a> : "—"}</td><td className="p-2">{r.verify ? (r.verify.verified ? <span className="text-emerald-400">✓</span> : r.status === "confirmed" ? <span className="text-red-400" title={r.verify.checks.join("; ")}>!</span> : "…") : "—"}</td></tr>)}</tbody></table></div>
+          <tbody>{[...s.receipts].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1)).map((r) => <tr key={r.eventId} className="border-t border-neutral-800"><td className="p-2">{r.settledAt.slice(0, 19).replace("T", " ")}</td><td className="p-2"><code>{r.eventId}</code></td><td className="p-2">{r.result ?? r.value ?? "—"}</td><td className="p-2 text-right tabular-nums">{r.units}</td><td className="p-2 text-right tabular-nums">{r.status === "confirmed" ? fmt(r.burned ?? "0") : r.status === "forwarded" ? <span className="text-amber-300">forwarded {r.spent ?? ""} SOL</span> : "—"}</td><td className="p-2">{r.status}</td><td className="p-2">{r.txUrl && r.signature ? <a className="underline" href={r.txUrl}>{r.signature.slice(0, 10)}…</a> : "—"}</td><td className="p-2">{(() => { const v = receiptRowStatus(r); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title}>{v.label}</span>; })()}</td></tr>)}</tbody></table></div>
       )}
     </section>
   );
@@ -61,6 +65,8 @@ export default function PairPage() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={`/burnticker/t/${A}`}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={`/burnticker/t/${B}`}>${B}</Link></h1>{launch.open && <p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this →</Link></p>}{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}<p className="text-neutral-400 text-xs">Rivalry pair <code>{d.pair.pairId}</code> · one selector <code>{d.pair.selectorKey}</code> · inverted mappings: each settlement burns exactly one side (a voided market burns neither). The receipts are the scoreboard.</p></header>
 
+      {/* website brief §2: where the money goes, labelled by the pair's rule version */}
+      {!t.unpaired && <PairFundsFlow version={pairRuleVersion(!!t.winnerTakesBurn)} tickers={{ a: A, b: B }} />}
       <section className={card + " space-y-3"} aria-label="Scoreboard">
         <div className="text-center"><div className="text-xs text-neutral-400">burns</div><div className="text-4xl font-semibold tabular-nums">${A} {t.burnsA} <span className="text-neutral-500 text-2xl">:</span> {t.burnsB} ${B}</div><div className="text-xs text-neutral-500">{t.settlements} settlement(s){t.voids ? `, ${t.voids} void` : ""} · burned {fmt(t.burnedA)} : {fmt(t.burnedB)}</div></div>
         {t.attesterLine && <div className="text-center text-xs text-neutral-400" aria-label="Attesters">{t.attesterLine}</div>}

@@ -9,7 +9,14 @@
 <meta name="theme-color" content="#0a0a0c">
 <meta property="og:title" content="Burnticker — coins that burn on real-world results, with receipts">
 <meta property="og:description" content="Launch one. Follow the season. Settled on primary sources, burned by a program, and every burn a receipt anyone can recompute.">
-<meta property="og:image" content="brand/og.png">
+<meta property="og:image" content="https://burnticker.com/brand/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://burnticker.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Burnticker">
+<meta name="twitter:image" content="https://burnticker.com/brand/og.png">
+<link rel="canonical" href="https://burnticker.com/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@BurnTicker">
 <link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
@@ -54,7 +61,7 @@ section.lead{border-top:0}
 @media (max-width:639px){.nav a.sec{display:none}}
 
 /* hero: one sentence, two doors, the guardrail strip */
-.hero{padding:26px 0 8px}
+.hero{padding:26px 16px 8px}
 .hero h1{font:700 clamp(1.85rem,6vw,3.6rem)/1.04 var(--mono);letter-spacing:-.02em;margin:0 0 12px;text-transform:uppercase;max-width:20ch;overflow-wrap:anywhere}
 .hero h1 em{font-style:normal;color:var(--amber)}
 .hero .sub{font:700 clamp(1.05rem,3.2vw,1.35rem)/1.3 var(--mono);color:var(--dim);margin:0 0 10px;letter-spacing:.02em}
@@ -69,22 +76,24 @@ section.lead{border-top:0}
 .door .ex{font:600 .85rem/1.45 var(--mono);color:var(--ink);background:var(--panel2);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere}
 .door .go{margin-top:auto;align-self:flex-start;font:700 .9rem var(--sans);padding:9px 14px;border-radius:8px;border:1px solid var(--line)}
 html:not(.launches-open) [data-launch-cta]{display:none!important}
+html:not(.launches-open) .doors{grid-template-columns:1fr}
 .launches-open [data-launches-closed]{display:none}
 .state{color:var(--dim);font-size:.95rem;margin:.25rem 0 0}
 .terms{margin:.75rem 0 0;font-size:.8rem;color:var(--muted)}.terms div{margin:.1rem 0}.terms dt{display:inline;color:var(--dim);font-weight:600}.terms dd{display:inline;margin:0}
 .door.launch .go{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
 .door.launch h3{color:var(--amber)}
 .guard{list-style:none;margin:0;padding:12px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font:600 .78rem/1.35 var(--mono);color:var(--dim)}
-.guard li{white-space:nowrap}
+.guard li{min-width:0;max-width:100%;overflow-wrap:anywhere}
 .guard li::before{content:"✓ ";color:var(--ok)}
-@media (max-width:519px){.guard li{white-space:normal}.hero{padding-top:14px}.hero .sub{margin-bottom:8px}.hero .def{font-size:.9rem;margin-bottom:14px}.doors{gap:10px}.door{padding:14px 14px 12px;gap:6px}.door h3{font-size:1.4rem}.door .ex{display:none}}
+@media (max-width:519px){.hero{padding-top:14px}.hero .sub{margin-bottom:8px}.hero .def{font-size:.9rem;margin-bottom:14px}.doors{gap:10px}.door{padding:14px 14px 12px;gap:6px}.door h3{font-size:1.4rem}.door .ex{display:none}}
 
 /* ticker tape */
 .tape{position:relative;background:var(--tape);border-top:3px solid var(--amber);border-bottom:3px solid var(--amber);overflow:hidden;width:100%;margin-top:22px}
 .tape::before,.tape::after{content:"";position:absolute;left:0;right:0;height:8px;background-image:radial-gradient(circle,var(--bg) 2.4px,transparent 2.6px);background-size:28px 8px;background-position:14px 0;opacity:.9}
 .tape::before{top:5px}.tape::after{bottom:5px}
 .reel{display:flex;width:max-content;animation:scroll 80s linear infinite;padding:22px 0}
-.tape:hover .reel{animation-play-state:paused}
+.tape:hover .reel,.tape:focus-within .reel,.tape:focus .reel{animation-play-state:paused}
+.tape:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .reel span{font:600 1rem/1 var(--mono);color:#ffb000;white-space:nowrap;padding:0 28px;letter-spacing:.02em}
 .reel span i{font-style:normal;color:#6d6c66;margin-right:10px}
 .reel span b{font-weight:600;color:#fff3c4}
@@ -229,6 +238,9 @@ html:not(.launches-open) [data-launch-cta]{display:none!important}
 footer{padding:28px 0 48px;color:var(--muted);font-size:.84rem}
 footer .links{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
 footer .links a{color:var(--dim)}
+.cs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:.92rem;color:var(--dim)}.cs ul{margin:0;padding-left:18px}.cs li{margin:0 0 4px}.cs .cs-head{font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}.cs .cs-meta{margin:8px 0 0;font:.74rem/1.4 var(--mono);color:var(--muted);overflow-wrap:anywhere}
+.verified{margin:16px 0 0;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 12px 12px 0;padding:14px 16px}.verified .vk{margin:0 0 6px;font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--violet)}.verified .vsum{margin:0 0 10px;color:var(--ink);font-size:.95rem;max-width:72ch}.verified .vg{margin:0;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.impl{display:block;border-top:1px solid var(--line);padding:22px 16px}.impl>summary{cursor:pointer;font:700 .82rem/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}.impl>section{padding-left:0;padding-right:0}
 </style>
 </head>
 <body>
@@ -240,7 +252,7 @@ footer .links a{color:var(--dim)}
     </a>
     <nav class="nav" aria-label="Links">
       <a href="/burnticker">Coins</a>
-      <a href="/burnticker/rivalries">Seasons</a>
+      <a href="/burnticker/leagues">Seasons</a>
       <a class="sec" href="/burnticker/trust">Trust</a>
       <a href="whitepaper.html">Whitepaper</a>
       <a class="sec" href="https://deficit.burnticker.com/">$DEFICIT</a>
@@ -296,16 +308,21 @@ footer .links a{color:var(--dim)}
       <div><dt>automation</dt> <dd>— The keeper: software that submits the program instructions that are due; the program can still refuse or defer each one.</dd></div>
       <div><dd>No wallet is needed to read results or receipts.</dd></div>
     </dl>
+    <div class="verified" id="verified-burn" data-demo-receipt>
+      <p class="vk">a real verified burn · devnet rehearsal · 2026-10-06</p>
+      <p class="vsum" data-demo-summary>Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06: 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool; one crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT and every token bought was burned in the same transaction; the rest carried to the next crank.</p>
+      <p class="vg"><a class="btn amber" href="/burnticker/check?demo=1#verify">Explore a verified burn</a> <span class="muted small">The check runs in your browser against the devnet chain and Treasury's own data. Devnet is a rehearsal network: nothing there has money value.</span></p>
+    </div>
   </section>
-  <div class="tape" aria-label="A ticker of example burn receipts" role="marquee">
+  <div class="tape" aria-label="A ticker of example burn receipts (pauses on hover or focus)" role="marquee" tabindex="0">
     <div class="reel" id="reel">
-      <span><i>ESPN.MLB</i>NYY 5 @ TB 2 final, MLB StatsAPI agrees → <b>$RAYS 1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>SPORTS.MLB</i>NYY 5 @ TB 2 final, MLB StatsAPI agrees → <b>$RAYS 1 unit</b> → burned <u>✓ receipt</u></span>
       <span><i>NWS.DEN</i>Denver high <b>91 °F</b> (≥ 90), cross-read 91 °F → 1 unit → burned <u>✓ receipt</u></span>
-      <span><i>ESPN.NBA</i>LAL 108 @ DEN 117 final, TheSportsDB agrees → <b>$LAKERS 1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>SPORTS.NBA</i>LAL 108 @ DEN 117 final, NBA feed agrees → <b>$LAKERS 1 unit</b> → burned <u>✓ receipt</u></span>
       <span><i>TREASURY.DEBT</i>2026-10-08 <b>+$21.28B</b> → 21 units → 146,702 $DEFICIT burned <u>✓ receipt</u></span>
-      <span><i>ESPN.NHL</i>EDM 2 @ CGY 4 final, NHL feed agrees → <b>$OILERS 1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>SPORTS.NHL</i>EDM 2 @ CGY 4 final, NHL feed agrees → <b>$OILERS 1 unit</b> → burned <u>✓ receipt</u></span>
       <span><i>POLYGON.CTF</i>one-shot race resolved, on-chain payout read → <b>10%</b> of the pool burned <u>✓ receipt</u></span>
-      <span><i>ESPN.NFL</i>PHI 20 @ DAL 24 final, TheSportsDB agrees → <b>$EAGLES 1 unit</b> → burned <u>✓ receipt</u></span>
+      <span><i>SPORTS.NFL</i>PHI 20 @ DAL 24 final, on-chain payout agrees → <b>$EAGLES 1 unit</b> → burned <u>✓ receipt</u></span>
       <span><i>BLS.CPI</i>CPI-U moved <b>1 index point</b>, FRED agrees → 1 unit → burned <u>✓ receipt</u></span>
       <span><i>NWS.NYC</i>Central Park rain <b>0.62 in</b> (≥ 0.50) → 1 unit → burned <u>✓ receipt</u></span>
       <span><i>TREASURY.DEBT</i>2025-07-07 <b>+$366.44B</b> → 366 units, the biggest day on the replay <u>✓ receipt</u></span>
@@ -319,7 +336,7 @@ footer .links a{color:var(--dim)}
       <div class="slipwrap"><div class="slip hit">
         <div class="sh">$RAYS</div><div class="ss">BURN RECEIPT #3 · 2026-10-09</div>
         <div class="dash"></div>
-        <div class="row"><span>SOURCE</span><b>ESPN SCOREBOARD</b></div>
+        <div class="row"><span>SOURCE</span><b>THESPORTSDB FINAL</b></div>
         <div class="row"><span>CROSS-READ</span><b>MLB STATSAPI · AGREES</b></div>
         <div class="row"><span>RESULT</span><b>NYY 5 @ TB 2 · FINAL</b></div>
         <div class="row"><span>RULE</span><b>EACH TB LOSS · 1% OF POOL</b></div>
@@ -343,6 +360,44 @@ footer .links a{color:var(--dim)}
           <li><b>The memo is the receipt:</b> source, reading, units, pool, spent, got, burned, the swap and the rule hash. Each coin's page recomputes it from the source and shows <span class="okmark">✓</span> only when chain and feed agree.</li>
         </ol>
         <p class="never"><b>Nothing is ever won here — things are only burned.</b> A coin pays nothing on any result. A season is a scoreboard of burns, one per league. Only when a league's season ends is the coin with the most receipts its champion: a stat on a scoreboard, never a recipient of anything.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="status">
+    <h2>Current status</h2>
+    <div class="cs" data-current-status aria-live="polite"><p class="cs-head">Loading</p><p>Reading the current status.</p></div>
+    <p class="small muted">One source for every page: <a href="/api/burnticker/v1/current-status">/api/burnticker/v1/current-status</a>. Details, review findings and history: <a href="/burnticker/trust">Trust</a>.</p>
+  </section>
+
+  <section class="wrap" id="trust">
+    <h2>Safeguards and limitations</h2>
+    <p class="lede">What protects a burn, and what is not done yet. The limits come from the same current-status source as the summary above.</p>
+    <div class="cs" data-current-limits aria-live="polite"><p class="cs-head">Loading</p><p>Reading the open requirements.</p></div>
+    <div class="trust">
+      <div class="t"><h3>Locked rules</h3><p>The rule and its SHA-256 are written into the coin's config at launch and into every receipt. There is no instruction to change them. A different rule is a different coin.</p></div>
+      <div class="t"><h3>Signed readings</h3><p>Each reading is signed on chain as a <code>Reading</code> record before any burn uses it, by the attester quorum: one key at launch (the operator's data key); a second, independent attester is not built. Attesters are added under a 48-hour timelock, never removed below quorum.</p></div>
+      <div class="t"><h3>The crank</h3><p><code>crank_buyback</code> computes the amount from the rule and the pool, swaps on the coin's own pool and burns in the same instruction; nobody chooses the amount. The instruction is permissionless, except that a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts (on the Powers Register). Readings need the attester quorum — one key at launch, the operator's — so if the operator stops, readings stop and burns stop. Holders keep their coins, nothing can be withdrawn, every past receipt stays checkable, and a retired-coin sweep instruction is queued for the next program upgrade.</p></div>
+      <div class="t"><h3>No withdraw instruction</h3><p>The fee pool is a program-derived account. Trading fees flow in; anyone may deposit; the only way out is the burn. The program can still be upgraded; who holds the upgrade authority today, and under what time lock, is on the trust page.</p></div>
+      <div class="t"><h3>Receipts anyone can recompute</h3><p>One memo per burn, in a fixed order: date, source, previous and current reading, delta, units, pool, spent, got, burned, the swap signature, the rule hash. The trust page carries the sources, the coverage table, the reviews and the public receipts audit.</p></div>
+      <div class="t"><h3>Holders are never touched</h3><p>No permanent delegate, no transfer hook, no mint authority. Burns consume only what the pool bought. A coin that stops trading simply stops burning.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" id="deficit">
+    <h2>The first coin</h2>
+    <div class="first">
+      <img src="deficit-avatar.png" alt="$DEFICIT avatar: a debt-clock board reading $1B, burns when America borrows" width="200" height="200">
+      <div>
+        <h3>$DEFICIT — burns when the U.S. national debt rises</h3>
+        <p>Every full $1,000,000,000 added to Treasury's Debt to the Penny since the previous business day is one unit; each unit spends 2% of the burn pool buying $DEFICIT at market, and everything bought is burned.</p>
+        <div class="stats">
+          <div><b>235</b><span>burn days</span></div>
+          <div><b>6,490</b><span>units</span></div>
+          <div><b>+$366B</b><span>biggest day · 2025-07-07</span></div>
+        </div>
+        <p class="muted small">Replay of the real Treasury series, 2025-01 → 2026-10-08 — what the rule would have counted, not a forecast. $DEFICIT reads Treasury's daily data directly. FRED's GFDEBTN series of the same debt is quarterly, so it is compared at quarter ends only: a series-level check, not a check of each day. A memecoin: the rule says what supply does, not what price does.</p>
+        <a class="btn" href="https://deficit.burnticker.com/" id="deficitLink">Open the $DEFICIT page →</a>
       </div>
     </div>
   </section>
@@ -393,7 +448,7 @@ footer .links a{color:var(--dim)}
     <p class="allcount">Yesterday (Oct 9) across all leagues: 5 team coins burned.</p>
     <div class="seasons">
       <article class="match" aria-label="Example rivalry: $OILERS vs $FLAMES">
-        <p class="mk">rivalry · <b>ESPN scoreboard</b> · Oilers–Flames, every game this season</p>
+        <p class="mk">rivalry · <b>licensed final score</b> · Oilers–Flames, every game this season</p>
         <div class="slips">
           <div class="slipwrap"><div class="slip">
             <div class="sh">$OILERS</div><div class="ss">SIDE A · BURN RECEIPT</div>
@@ -438,6 +493,8 @@ footer .links a{color:var(--dim)}
     </div>
   </section>
 
+  <details class="wrap impl" id="details">
+    <summary>Implementation details: the two layers, how a launch works, the sources, who gets what</summary>
   <section class="wrap" id="layers">
     <h2>Two layers</h2>
     <div class="layers">
@@ -455,7 +512,6 @@ footer .links a{color:var(--dim)}
       </div>
     </div>
   </section>
-
   <section class="wrap" id="how">
     <h2>How a launch works</h2>
     <div class="steps">
@@ -465,12 +521,11 @@ footer .links a{color:var(--dim)}
     </div>
     <p class="then"><b>Then burns happen, with receipts.</b> When the result is in and its cross-read agrees, the reading is signed on chain, the burn is cranked — a permissionless instruction, except that a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts — and the pool buys the coin at market and burns everything received in one transaction whose memo carries the result, the arithmetic and the rule hash. Nothing for a holder to run, nothing to withdraw.</p>
   </section>
-
   <section class="wrap" id="feeds">
     <h2>The sources · primary data, cross-read</h2>
     <p class="lede">Every coin settles on a primary source with an independent cross-read of the same fact — another operator on another domain — or on the on-chain payout of an adjudicated Polymarket market. Prediction markets are for discovery; Burnticker shows their questions and rules, never a price.</p>
     <div class="feeds">
-      <div class="feed"><div class="id">sports · ESPN scoreboard</div><div class="src">final scores: MLB · NBA · NHL · NFL</div><div class="meta">cross-read: MLB StatsAPI, the NHL's score feed, TheSportsDB for NBA and NFL</div><span class="tag">team coins · rivalries</span></div>
+      <div class="feed"><div class="id">sports · licensed final scores</div><div class="src">final scores: MLB · NBA · NHL · NFL · soccer</div><div class="meta">the game's Polymarket on-chain payout where one exists, else TheSportsDB's licensed final; confirmed by the league's own feed (MLB, NHL, NBA). No ESPN reads.</div><span class="tag">not available until the licence key is linked</span></div>
       <div class="feed"><div class="id">weather · NWS climate report</div><div class="src">daily high, rain, first snow at 22 stations</div><div class="meta">cross-read: the Iowa Environmental Mesonet</div><span class="tag">one reading a day</span></div>
       <div class="feed"><div class="id">economics · Treasury, BLS, FRED</div><div class="src">the national debt, CPI, unemployment, the cost of eggs</div><div class="meta">each cross-read by a second public publisher</div><span class="tag">settled numbers</span></div>
       <div class="feed"><div class="id">elections · on-chain payout</div><div class="src">Senate, House, governor races</div><div class="meta">the payout vector of the Conditional Tokens contract on Polygon; the state's certified result is the cross-check</div><span class="tag">one-shot</span></div>
@@ -479,37 +534,6 @@ footer .links a{color:var(--dim)}
     </div>
     <div class="rulesbox"><b>Admission rules.</b> A settled public result, never a market's odds, never the token's price · a primary source with an independent cross-read, or an adjudicated on-chain payout · unambiguous units · not controlled by anyone who can hold the coin · not a disaster. The <a href="/burnticker/trust">coverage table on the trust page</a> lists what can be settled today and what cannot.</div>
   </section>
-
-  <section class="wrap" id="trust">
-    <h2>Why you can trust a burn</h2>
-    <div class="trust">
-      <div class="t"><h3>Locked rules</h3><p>The rule and its SHA-256 are written into the coin's config at launch and into every receipt. There is no instruction to change them. A different rule is a different coin.</p></div>
-      <div class="t"><h3>Signed readings</h3><p>Each reading is signed on chain as a <code>Reading</code> record before any burn uses it, by the attester quorum: one key at launch (the operator's data key); a second, independent attester is not built. Attesters are added under a 48-hour timelock, never removed below quorum.</p></div>
-      <div class="t"><h3>The crank</h3><p><code>crank_buyback</code> computes the amount from the rule and the pool, swaps on the coin's own pool and burns in the same instruction; nobody chooses the amount. The instruction is permissionless, except that a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts (on the Powers Register). Readings need the attester quorum — one key at launch, the operator's — so if the operator stops, readings stop and burns stop. Holders keep their coins, nothing can be withdrawn, every past receipt stays checkable, and a retired-coin sweep instruction is queued for the next program upgrade.</p></div>
-      <div class="t"><h3>No withdraw instruction</h3><p>The fee pool is a program-derived account. Trading fees flow in; anyone may deposit; the only way out is the burn. The program can still be upgraded; who holds the upgrade authority today, and under what time lock, is on the trust page.</p></div>
-      <div class="t"><h3>Receipts anyone can recompute</h3><p>One memo per burn, in a fixed order: date, source, previous and current reading, delta, units, pool, spent, got, burned, the swap signature, the rule hash. The trust page carries the sources, the coverage table, the reviews and the public receipts audit.</p></div>
-      <div class="t"><h3>Holders are never touched</h3><p>No permanent delegate, no transfer hook, no mint authority. Burns consume only what the pool bought. A coin that stops trading simply stops burning.</p></div>
-    </div>
-  </section>
-
-  <section class="wrap" id="deficit">
-    <h2>The first coin</h2>
-    <div class="first">
-      <img src="deficit-avatar.png" alt="$DEFICIT avatar: a debt-clock board reading $1B, burns when America borrows" width="200" height="200">
-      <div>
-        <h3>$DEFICIT — burns when the U.S. national debt rises</h3>
-        <p>Every full $1,000,000,000 added to Treasury's Debt to the Penny since the previous business day is one unit; each unit spends 2% of the burn pool buying $DEFICIT at market, and everything bought is burned.</p>
-        <div class="stats">
-          <div><b>235</b><span>burn days</span></div>
-          <div><b>6,490</b><span>units</span></div>
-          <div><b>+$366B</b><span>biggest day · 2025-07-07</span></div>
-        </div>
-        <p class="muted small">Replay of the real Treasury series, 2025-01 → 2026-10-08 — what the rule would have counted, not a forecast. $DEFICIT reads Treasury's data directly, cross-read by FRED's series of the same debt. A memecoin: the rule says what supply does, not what price does.</p>
-        <a class="btn" href="https://deficit.burnticker.com/" id="deficitLink">Open the $DEFICIT page →</a>
-      </div>
-    </div>
-  </section>
-
   <section class="wrap" id="economics">
     <h2>Who gets what</h2>
     <div class="econ">
@@ -518,6 +542,20 @@ footer .links a{color:var(--dim)}
       <div class="e"><div class="k">burnticker</div><p>A platform fee of 25 bps of curve volume, set in the LaunchLab platform config and read live on the trust page. After graduation the LP is locked forever and its fees are split by code: 80% to the coin's burn pool, 20% to the operator. Nothing from burn pools, ever. The platform never buys any coin launched here.</p></div>
     </div>
   </section>
+  </details>
+
+  <section class="wrap" id="next">
+    <h2>What you can do now</h2>
+    <div class="paircta">
+      <a class="btn amber" href="/burnticker/check?demo=1#verify">Explore a verified burn</a>
+      <a class="btn" href="whitepaper.html">Read the whitepaper</a>
+      <a class="btn" href="/burnticker/leagues">Follow the season</a>
+      <a class="btn" href="/burnticker/trust">Current status and trust</a>
+      <a class="btn" href="/burnticker/launch" data-launch-cta>Launch a coin</a>
+      <p>No wallet is needed to read results, receipts or the checks. Creator launches open only when this host says so.</p>
+    </div>
+  </section>
+
 
   <section class="wrap">
     <div class="disc">
@@ -532,15 +570,32 @@ footer .links a{color:var(--dim)}
   <div class="links">
     <a href="/burnticker">Coins</a>
     <a href="/burnticker/launch" data-launch-cta>Launch</a>
-    <a href="/burnticker/rivalries">Seasons</a>
+    <a href="/burnticker/leagues">Seasons</a>
     <a href="/burnticker/trust">Trust</a>
     <a href="whitepaper.html">Whitepaper</a>
     <a href="https://deficit.burnticker.com/" id="deficitLink2">$DEFICIT</a>
     <a href="https://x.com/BurnTicker" rel="me noopener" target="_blank">X · @BurnTicker</a>
   </div>
-  <div>Burnticker runs the keeper, the catalogue and the pages. The sources named above (U.S. Treasury, BLS, NOAA / NWS, ESPN, MLB, the NHL, TheSportsDB, Polymarket, JPL, Wikimedia and others) are not affiliated with and do not endorse any coin. Coins that burn on real-world results — with receipts.</div>
+  <div>Burnticker runs the keeper, the catalogue and the pages. The sources named above (U.S. Treasury, BLS, NOAA / NWS, MLB, the NHL, the NBA, TheSportsDB, Polymarket, JPL, Wikimedia and others) are not affiliated with and do not endorse any coin. Coins that burn on real-world results — with receipts.</div>
 </footer>
 <script>
+(function () {
+  // THE ONE CURRENT-STATUS SOURCE (website brief §4): the summary lines come from GET /api/burnticker/v1/current-status
+  // (src/lib/burnticker/currentStatus.ts); this page only renders them. Headings: src/lib/burnticker/emptyState.ts.
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
+  var box = document.querySelector("[data-current-status]");
+  if (!box || !window.fetch) return;
+  var api = (/(^|\.)burnticker\.com$/.test(location.hostname) && location.hostname !== "burnticker.com" ? "https://burnticker.com" : "") + "/api/burnticker/v1/current-status";
+  function say(head, text, detail) { box.textContent = ""; var h = document.createElement("p"); h.className = "cs-head"; h.textContent = head; box.appendChild(h); var p = document.createElement("p"); p.textContent = text; box.appendChild(p); if (detail) { var d = document.createElement("details"), s = document.createElement("summary"); s.textContent = "Details"; d.appendChild(s); d.appendChild(document.createTextNode(" " + detail)); box.appendChild(d); } }
+  fetch(api, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (s) {
+    if (!s || s.schema !== "burnticker.current-status/v1" || !s.lines) throw new Error("not a current-status document");
+    box.textContent = "";
+    var ul = document.createElement("ul"); s.lines.forEach(function (l) { var li = document.createElement("li"); li.textContent = l; ul.appendChild(li); }); box.appendChild(ul);
+    var lim = document.querySelector("[data-current-limits]");
+    if (lim && s.releaseRequirements) { lim.textContent = ""; var lu = document.createElement("ul"); [s.attesters && s.attesters.line].concat((s.upgradeAuthority || []).filter(function (u) { return u.cluster === "mainnet"; }).map(function (u) { return u.line; })).concat(s.releaseRequirements.filter(function (r) { return r.status === "open"; }).map(function (r) { return "Not done: " + r.text + "."; })).filter(Boolean).forEach(function (t) { var li = document.createElement("li"); li.textContent = t; lu.appendChild(li); }); lim.appendChild(lu); }
+    var m = document.createElement("p"); m.className = "cs-meta"; m.textContent = "Checked " + s.checkedAt + " · chain read " + String(s.readAt).slice(0, 16).replace("T", " ") + " UTC · " + s.source; box.appendChild(m);
+  }).catch(function (e) { say("Data unavailable", "The current-status summary could not be read just now. This says nothing about the coins or their receipts.", String(e && e.message || e)); var lim = document.querySelector("[data-current-limits]"); if (lim) lim.textContent = "Data unavailable: the open requirements could not be read just now; the trust page lists them."; });
+})();
 (function () {
   // ONE AVAILABILITY STATE (review 2): launch CTAs are hidden until the host's catalogue says creator launches are open; unreadable = closed.
   var root = document.documentElement;

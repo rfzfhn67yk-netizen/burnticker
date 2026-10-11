@@ -156,7 +156,7 @@
       "label": "Squads 2-of-3 vault",
       "pubkey": null,
       "envVar": "BURNTICKER_UPGRADE_AUTHORITY",
-      "description": "Holds the program upgrade authority (48 h time lock), the platform authority (may only RAISE the pre-audit burn-pool cap, 48 h timelock) and each token's config authority (attester set only, 48 h timelock)."
+      "description": "Holds the program upgrade authority (Squads time lock 0 during launch week by owner decision 2026-10-11, 48 h planned from around 2026-10-23; the live value is read from chain on this page), the platform authority (may only RAISE the pre-audit burn-pool cap, 48 h timelock) and each token's config authority (attester set only, 48 h timelock)."
     },
     {
       "role": "squads-member-1",

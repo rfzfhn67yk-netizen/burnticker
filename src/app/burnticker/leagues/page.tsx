@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { EmptyState } from "../_components/EmptyState";
 import { platform } from "@/lib/burnticker/server";
 import { leagueIndex, type LeagueIndex } from "@/lib/burnticker/leagues";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
@@ -23,9 +24,19 @@ export default function LeaguesPage() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Leagues</h1>
-        <p className="text-neutral-400 max-w-3xl">{ix.totals.leagues} leagues, one page per season. Each page ranks that league&apos;s team coins by receipts, then by the share of supply burned. Leagues are listed by sport, alphabetically — never ranked against each other. All seasons together: <Link className="underline" href="/burnticker/rivalries">Seasons</Link>.</p>
+        <p className="text-neutral-400 max-w-3xl">{ix.totals.leagues} leagues, one page per season. Each page ranks that league&apos;s team coins by receipts, then by the share of supply burned. Leagues are listed by sport, alphabetically — never ranked against each other. Every league&apos;s scoreboard on one page, with rivalries and the Burn Derby: <Link className="underline" href="/burnticker/rivalries">all scoreboards</Link>.</p>
       </header>
-      {err && <p className="text-red-400 text-xs">Registry unavailable: {err}</p>}
+      {!err && ix.sports.every((sp) => sp.leagues.every((l) => l.coinsThisSeason === 0)) && (
+        <EmptyState kind="not-launched" body="No team coin is launched on this host yet, so every league page is empty for now. Each page fills from the coins' own receipts, never from a list of games.">
+          <div className="mt-3" data-demo-scoreboard>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-amber-300">Example data · illustrative coins and counts, not live</p>
+            <table className="mt-1 w-full max-w-md text-xs"><thead className="text-left text-neutral-400"><tr><th className="p-1">#</th><th className="p-1">coin</th><th className="p-1 text-right">receipts</th><th className="p-1 text-right">supply burned</th></tr></thead>
+              <tbody>{([["1", "$OILERS", "2", "0.98%"], ["2", "$BRUINS", "1", "0.51%"], ["3", "$FLAMES", "1", "0.49%"]] as const).map((r) => <tr key={r[1]} className="border-t border-neutral-800"><td className="p-1">{r[0]}</td><td className="p-1 font-mono">{r[1]}</td><td className="p-1 text-right">{r[2]}</td><td className="p-1 text-right">{r[3]}</td></tr>)}</tbody></table>
+            <p className="mt-1 text-neutral-500">How an NHL page reads once three team coins have receipts: ranked by receipts, then by the share of supply burned; a champion is named only when the season ends. No wallet is needed to read it.</p>
+          </div>
+        </EmptyState>
+      )}
+      {err && <EmptyState kind="unavailable" body="The coin registry could not be read just now, so every league shows no coins." details={err} />}
       {ix.sports.map((s) => (
         <section key={s.id} className="space-y-2" aria-label={s.label}>
           <h2 className="text-lg font-medium">{s.label}</h2>

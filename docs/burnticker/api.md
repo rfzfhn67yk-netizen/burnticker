@@ -59,6 +59,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/operator` | 60 s | read | who runs this, every operator wallet per cluster (TODO placeholders listed), the signed-statement check (ed25519), the never-buys monitor's last report |
 | GET | `/bounty` | 60 s | read | the bounty wallet (operator-held, funded 2026-10-11), its live balance read from chain, the decided reports |
 | GET | `/snapshots?limit=` | 60 s | read | (API 1.7.0, trust ops; `src/lib/burnticker/ops/snapshot.ts`) the daily registry snapshots pinned to Arweave, newest first: `{ date, sha256, arweaveTxId, url, rowCounts, bytes, capturedAt, verify }` — the append-only ledger (rules, readings, receipts, pairs, pair outcomes, rule ends, launch pins) as canonical JSONL; re-download and recompute with `scripts/burnticker-verify-snapshot.mts <txid>` |
+| GET | `/current-status` | 60 s | read | (API 1.13.0, website brief §4; `src/lib/burnticker/currentStatus.ts`) the one current-status summary: phase, network deployment, programs (devnet bytes = build, upgrade authority read from chain), attesters and quorum, each Squads vault's time lock read from chain beside the planned value, settlement providers, per-finding review status, open release requirements, design vs historical |
 | GET | `/openapi.json` | 3600 s | read | the OpenAPI 3.1 document |
 
 ### `POST /launch/bundle`
@@ -274,3 +275,10 @@ unpaired (no pair result). The pair page states who decides results: "Whoever ho
 Burnticker that is the operator's keeper alone at quorum 1." Errors 6094–6099 (`PairAttestersDiffer`, `ForwardWindowClosed`,
 `PairedAttesterChange`, `InvalidPairVoidBy`, `PairTerminal`, `PairPeriodUnpaired`) appear as plain sentences.
 
+
+
+## Current status (API 1.13.0)
+
+`GET /current-status` is the single source every page uses for "what is true now" (`config/burnticker/current-status.json` joined with
+`config/burnticker/verified-build.json`, `config/burnticker/operator.json`, the host's environment and live chain reads, cached five
+minutes). A chain read that fails reports `timeLockSource: "unavailable"`, never a guessed value.

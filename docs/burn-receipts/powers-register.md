@@ -57,7 +57,7 @@ Only **10** instructions need a privileged signer: `cancel_attester_change`, `ca
 - **creator** — The creator wallet recorded at init. Holds no power by itself; it is the initial config authority.
 - **config_authority** — TokenConfig.admin — initially the creator; can be renounced forever (renounce_admin). Powers: attester set only.
 - **attesters** — The quorum (N of M) of attester ed25519 keys named in the TokenConfig — kind-tagged operator / zktls-relayer / oracle (informational). Each signs (feed, period, value, sha256 of the source URL, zkTLS proof locator); the program verifies only signatures and the quorum.
-- **upgrade_authority** — The program's upgrade authority (BPF Upgradeable Loader). At launch: the Squads 2-of-3 vault with a 48 h time lock; set to none after the audit.
+- **upgrade_authority** — The program's upgrade authority (BPF Upgradeable Loader). At launch: the Squads 2-of-3 vault; its time lock is 0 during launch week (owner decision 2026-10-11) and 48 h is planned from around 2026-10-23 — the live value is read from chain on /burnticker/trust; set to none after the audit.
 - **platform_authority** — PlatformConfig.authority — intended: the Squads 2-of-3 vault. Power: RAISE the temporary burn-pool cap (48 h timelock). Renounceable; the cap sunsets by itself.
 - **attester_key** — Any ONE key of the token's CURRENT attester set, signing a transaction by itself (no quorum). Power: veto (clear) a pending registration-policy proposal — nothing else (re-check R3-2).
 - **platform_authority_or_listed_cranker** — PlatformConfig.authority (while not renounced) OR any key on the PlatformConfig's cranker allowlist (re-check R3-4). Power: clear the allowlist (back to permissionless) — never add a key.
@@ -79,7 +79,7 @@ Only **10** instructions need a privileged signer: `cancel_attester_change`, `ca
 ## Program upgrade authority
 
 - **power** — Program upgrade authority (BPF Upgradeable Loader) — outside the IDL, the one power that could change everything above.
-- **holder_at_launch** — The Squads v4 2-of-3 multisig vault with a 48 h time lock (SetTimeLock 172800), so every upgrade is proposed publicly and waits 48 h before it can execute. The same vault holds the platform authority and, per token, the config authority.
+- **holder_at_launch** — The Squads v4 2-of-3 multisig vault. Mainnet time lock: 0 during launch week (owner decision 2026-10-11, so deploy and config fixes are not delayed), 48 h (SetTimeLock 172800) planned from around 2026-10-23; once set, every upgrade is proposed publicly and waits 48 h before it can execute. The live value is read from chain (GET /api/burnticker/v1/current-status). The same vault holds the platform authority and, per token, the config authority.
 - **sunset** — Set to none (`solana program set-upgrade-authority <PROGRAM_ID> --final`, executed through the multisig) after the audit — the program then can never change.
 - **verify** — docs/burn-receipts/README.md § Deployment runbook: commands, `anchor verify` / `solana-verify` and the expected executable hash.
 
