@@ -12,7 +12,7 @@ import { TIER_LABEL } from "@/lib/burnticker/sources/types";
 import { validateRule } from "@/lib/burnticker/rules";
 import { unitSteps } from "@/lib/burnticker/units";
 import { debtStep, loadRules, usdToCents } from "@/lib/burnKeeper/rules";
-import { DEBT_RULE, NOW } from "./burntickerHelpers.ts";
+import { DEBT_RULE, NOW, treasuryAndCrossFetch } from "./burntickerHelpers.ts";
 
 const rule = (series: string, unit: number, direction: "up" | "abs", baseline: "previousSettlement" | number) => validateRule({ ...DEBT_RULE, series, scalar: { unit, perUnit: { fractionOfPool: 0.02 }, baseline, direction } });
 
@@ -90,7 +90,7 @@ describe("sources.json: every configured source", () => {
   test("the catalogue adapter reads through an injected fetch, filters by since, never returns a price", async () => {
     const f = feedById("treasury.debt")!;
     const body = loadFixture(f).body;
-    const a = new CatalogueAdapter({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }), now: () => NOW });
+    const a = new CatalogueAdapter({ fetchImpl: treasuryAndCrossFetch(body), now: () => NOW });
     const r = await a.settledSince(validateRule(DEBT_RULE), "2026-10-05");
     assert.deepEqual(r.events.map((e) => e.id), ["2026-10-06", "2026-10-07", "2026-10-08"]);
     assert.equal((await a.impliedChance()).chance, null);

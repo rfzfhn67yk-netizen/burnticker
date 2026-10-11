@@ -135,6 +135,8 @@ CREATE TRIGGER IF NOT EXISTS tokens_rule_immutable BEFORE UPDATE OF mint, ticker
 CREATE TRIGGER IF NOT EXISTS tokens_launch_once BEFORE UPDATE OF launch_tx ON tokens WHEN OLD.launch_tx IS NOT NULL AND NEW.launch_tx IS NOT OLD.launch_tx
   BEGIN SELECT RAISE(ABORT, 'tokens: the launch transaction is written once'); END;
 CREATE TRIGGER IF NOT EXISTS tokens_no_delete BEFORE DELETE ON tokens BEGIN SELECT RAISE(ABORT, 'tokens: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS tokens_baseline_fixed BEFORE UPDATE OF baseline_at ON tokens WHEN OLD.launch_tx IS NOT NULL AND NEW.baseline_at IS NOT OLD.baseline_at
+  BEGIN SELECT RAISE(ABORT, 'tokens: the baseline is fixed at launch'); END;
 CREATE TRIGGER IF NOT EXISTS tokens_expired_final BEFORE UPDATE OF status ON tokens WHEN OLD.status = 'expired' AND NEW.status <> 'expired'
   BEGIN SELECT RAISE(ABORT, 'tokens: an expired draft stays expired (build a fresh bundle)'); END;
 CREATE TRIGGER IF NOT EXISTS tokens_expire_drafts_only BEFORE UPDATE OF status ON tokens WHEN NEW.status = 'expired' AND OLD.status <> 'draft' AND OLD.status <> 'expired'
@@ -305,12 +307,20 @@ export class Registry {
   tokenByTicker(ticker: string): TokenRow | null { const r = this.db.prepare("SELECT * FROM tokens WHERE ticker=? ORDER BY (status = 'expired'), created_at DESC LIMIT 1").get(ticker.toUpperCase()) as Row | undefined; return r ? toToken(r) : null; }
   tokens(status?: TokenStatus): TokenRow[] { return (status ? this.db.prepare("SELECT * FROM tokens WHERE status=? ORDER BY created_at").all(status) : this.db.prepare("SELECT * FROM tokens ORDER BY created_at").all()).map((r) => toToken(r as Row)); }
   setTokenStatus(mint: string, status: TokenStatus): void { this.db.prepare("UPDATE tokens SET status=? WHERE mint=?").run(status, mint); }
-  /** The launch landed: record the tx and go live. Refuses to overwrite a different launch tx. */
-  markLaunched(mint: string, launchTx: string, poolId: string | null, baselineAt: string): void {
+  /**
+   * The launch landed: record the tx and go live — ONE atomic draft → live transition. The same signature again is a no-op (the
+   * baseline stays where the launch put it: ChatGPT/Codex review N1, a public replay must not move it); a different signature, or a
+   * token that is not a draft, is refused. The SQL trigger tokens_baseline_fixed is the second lock. Returns false on the no-op.
+   */
+  markLaunched(mint: string, launchTx: string, poolId: string | null, baselineAt: string): boolean {
     const t = this.token(mint); if (!t) throw new Error("no such token");
+    if (t.launchTx === launchTx) return false;
+    if (t.launchTx) throw new Error(`registry: ${mint} already launched in ${t.launchTx}`);
     if (t.status === "expired") throw new Error(`registry: the draft ${mint} expired (not launched within 24 h); build a fresh bundle`);
-    if (t.launchTx && t.launchTx !== launchTx) throw new Error(`registry: ${mint} already launched in ${t.launchTx}`);
-    this.db.prepare("UPDATE tokens SET launch_tx=?, pool_id=COALESCE(?, pool_id), baseline_at=?, status='live' WHERE mint=?").run(launchTx, poolId, baselineAt, mint);
+    if (t.status !== "draft") throw new Error(`registry: ${mint} is ${t.status}, not a draft: only a draft goes live`);
+    const r = this.db.prepare("UPDATE tokens SET launch_tx=?, pool_id=COALESCE(?, pool_id), baseline_at=?, status='live' WHERE mint=? AND status='draft' AND launch_tx IS NULL").run(launchTx, poolId, baselineAt, mint);
+    if (Number(r.changes) !== 1) throw new Error(`registry: ${mint} changed while it was being confirmed; read it again`);
+    return true;
   }
   lockedRule(t: TokenRow): LockedRule { return lockRule(JSON.parse(t.rulesJson)); }
 
@@ -346,7 +356,10 @@ export class Registry {
       const status: ReceiptStatus = base === "planned" && gated ? gated : base;
       this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(mint, e.id, e.at, e.result, e.value, step.units, step.mapping ? JSON.stringify(step.mapping) : null, step.kind, step.note, prev.value, prev.carryOut, step.carryOut, status, now, now);
-      this.setState(mint, { lastEventId: e.id, lastValue: scalar && e.value !== null && e.result !== "void" ? e.value : prev.value, carryOut: step.carryOut, lastSettledAt: e.at }, now);
+      // The cursor only moves forward: a late-final independent event (review N7) gets its receipt without rewinding the token's state.
+      const cur = this.state(mint);
+      const behind = cur.lastSettledAt !== null && (e.at < cur.lastSettledAt || (e.at === cur.lastSettledAt && cur.lastEventId !== null && e.id < cur.lastEventId));
+      if (!behind) this.setState(mint, { lastEventId: e.id, lastValue: scalar && e.value !== null && e.result !== "void" ? e.value : prev.value, carryOut: step.carryOut, lastSettledAt: e.at }, now);
       return true;
     });
   }

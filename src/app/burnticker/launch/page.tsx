@@ -10,11 +10,13 @@ import { aliasLookup } from "@/lib/burnticker/oracle/events";
 import { DEFAULT_FRACTION, firstPartyRule, teamCoinSentence } from "@/lib/burnticker/wizard";
 import { plainSentence, ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { CoinCard } from "../_components/CoinCard";
+import { FieldHelp } from "../_components/FieldHelp";
 import { CoinVsCoinTile } from "./CoinVsCoinTile";
-import { STATIONS, nwsSeries } from "@/lib/burnticker/sources/nws";
+import { STATIONS, nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
 import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
 import { describeRule, DESCRIPTION_MAX, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
-import { seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import { TEMPLATE_START, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { meaningful, queryTokens } from "@/lib/burnticker/textMatch";
 
@@ -156,6 +158,8 @@ export default function LaunchWizard() {
   const [pairOut, setPairOut] = useState<{ pairId: string | null; a: Bundle; b: Bundle; notes: string[] } | null>(null);
   // the dials (dials.ts): the rule as edited on the create screen, valid while the path's own rule is unchanged (key)
   const [draft, setDraft] = useState<{ key: string; a: BurnRule; b: BurnRule | null } | null>(null);
+  // "Launch one like this": the source coin's dials, applied once to the rule the new pick builds
+  const [pendingDials, setPendingDials] = useState<{ fraction: number; side: string | null; window: string | null; games: number | null; league: boolean; from: string } | null>(null);
   // the auto-generated description (describe.ts): the flavour line is editable (null = the template's), the rule block never is
   const [flavour, setFlavour] = useState<string | null>(null), [flavourB, setFlavourB] = useState<string | null>(null);
   const [cardCtx, setCardCtx] = useState<{ key: string; ctx: Omit<DescribeCtx, "ticker"> } | null>(null), [cardYear, setCardYear] = useState<number | null>(null), [cardSet, setCardSet] = useState<{ id: string; outcome: string } | null>(null);
@@ -187,6 +191,33 @@ export default function LaunchWizard() {
       set("nameB", setNameB); set("tickerB", setTickerB); set("descB", setDescB); set("imageB", setImageB); set("firstBuy", setFirstBuy); set("pasted", setPasted); set("q2", setQ2);
       set("draft", setDraft); set("flavour", setFlavour); set("flavourB", setFlavourB); set("cardCtx", setCardCtx); set("cardYear", setCardYear); set("cardSet", setCardSet); set("nameAuto", setNameAuto); set("tickerAuto", setTickerAuto); set("ownImage", setOwnImage); set("note", setNote);
     } else if (wantPair) { setFlow("pair"); setStep("pick"); }
+    const u = new URLSearchParams(window.location.search);
+    const tpl = u.get("template") as TemplateId | null, like = u.get("like");
+    if (tpl && TEMPLATE_START[tpl]) {
+      // "Start from this" (the templates gallery): the shape's own entry point; Coin vs Coin opens its tile (CoinVsCoinTile reads the same param)
+      try { sessionStorage.removeItem(STORE); } catch { /* ignore */ }
+      const st = TEMPLATE_START[tpl];
+      if (st.flow) { setFlow(st.flow); setStep(ORDER[st.flow][0]); }
+      else if (st.browse) { setFlow("browse"); setStep("pick"); setCat(st.browse); }
+      else { setFlow("team"); setStep("choose"); if (st.search) setUq(st.search); }
+    } else if (like) {
+      // "Launch one like this" (a coin or pair page): the same rule shape, the team / race / feed re-pickable, the dials copied
+      try { sessionStorage.removeItem(STORE); } catch { /* ignore */ }
+      fetch(`/api/burnticker/tokens/${encodeURIComponent(like)}`).then((r) => (r.ok ? r.json() : null)).then((j: { status?: { seriesTitle?: string | null; pair?: unknown }; rulesText?: string } | null) => {
+        if (!j?.rulesText) return;
+        let r: BurnRule; try { r = JSON.parse(j.rulesText) as BurnRule; } catch { return; }
+        const d = dialsFor(r, { nowMs: Date.now() });
+        const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
+        const n = r.oracle === "catalogue" && r.series ? parseNwsSeries(r.series) : null;
+        setPendingDials({ fraction: d.fraction, side: d.side?.value ?? null, window: d.window?.value ?? null, games: d.window?.games ?? null, league: !!d.league?.on, from: like.toUpperCase() });
+        if (e?.kind === "team") { setFlow("team"); setStep("team"); setLeagueSeries(e.league); }
+        else if (e?.kind === "game") { setFlow("pair"); setStep("pick"); setLeagueSeries(e.league); }
+        else if (n) { setFlow("browse"); setStep("pick"); setCat("weather"); setWx({ metric: n.metric, station: n.station, threshold: String(n.threshold ?? "") }); }
+        else if (r.oracle === "derby") { window.location.href = "/burnticker/launch?template=coin-vs-coin"; }
+        else if (r.oracle === "polymarket") { setFlow("single"); setStep("pick"); }
+        else { setFlow("team"); setStep("choose"); setUq(j.status?.seriesTitle ?? ""); }
+      }).catch(() => { /* the plain launch page */ });
+    }
     setReady(true);
   }, []);
   const snapshot = JSON.stringify({ flow, step, leagueSeries, team, winLose, game, swap, pairMode, pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn, fraction, name, ticker, description, imageUrl, link, xUrl, tg, cat, nameB, tickerB, descB, imageB, firstBuy, pasted, q2, draft, flavour, flavourB, cardCtx, cardYear, cardSet, nameAuto, tickerAuto, ownImage, note });
@@ -202,6 +233,20 @@ export default function LaunchWizard() {
   // the search box: 300 ms after the last keystroke, only for 3+ characters with at least one meaningful token, and only the response
   // to the LATEST query is shown (a sequence id discards a slow answer to an earlier keystroke); old results clear as soon as you type
   const useq = useRef(0);
+  // time-to-launch (productStore.ts): the page's own step timestamps, sent with the launch bundle request only
+  const stepTimes = useRef<Record<string, number>>({});
+  const mark = (k: "search" | "card" | "create" | "review" | "launch") => { if (!stepTimes.current[k] || k === "launch" || k === "review") stepTimes.current[k] = Date.now(); };
+  useEffect(() => { if (uq.trim()) mark("search"); }, [uq]);
+  useEffect(() => { if (step === "name") mark("create"); if (step === "review") mark("review"); }, [step]);
+  // search-miss telemetry: results with cards but no "Use this" before the next query or leaving the page (anonymous; productStore.ts)
+  const lastShown = useRef<{ q: string; cards: number; clicked: boolean; reported: boolean } | null>(null);
+  const reportNoClick = useCallback(() => {
+    const l = lastShown.current;
+    if (!l || l.clicked || l.reported || l.cards < 1) return;
+    l.reported = true;
+    try { void fetch(`${V1}/search/miss`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: l.q, cards: l.cards }), keepalive: true }); } catch { /* telemetry never breaks the page */ }
+  }, []);
+  useEffect(() => { const h = () => reportNoClick(); window.addEventListener("pagehide", h); return () => window.removeEventListener("pagehide", h); }, [reportNoClick]);
   const shortQuery = uq.trim().length > 0 && (uq.trim().length < 3 || !meaningful(queryTokens(uq)).length);
   useEffect(() => {
     const qv = uq.trim(), seq = ++useq.current;
@@ -210,7 +255,7 @@ export default function LaunchWizard() {
     setUbusy(true);
     const t = setTimeout(() => {
       getJson<{ cards: Suggestion[]; empty: boolean; categories: { id: string; label: string; blurb: string }[] }>(`${V1}/search?q=${encodeURIComponent(qv)}`)
-        .then((j) => { if (seq === useq.current) setUres(j); })
+        .then((j) => { if (seq === useq.current) { reportNoClick(); lastShown.current = { q: qv, cards: j.cards.filter((c) => c.rule || c.matchup).length, clicked: false, reported: false }; setUres(j); } })
         .catch(() => { if (seq === useq.current) setUres({ cards: [], empty: true, categories: [] }); })
         .finally(() => { if (seq === useq.current) setUbusy(false); });
     }, 300);
@@ -292,6 +337,20 @@ export default function LaunchWizard() {
   const rule: BurnRule | null = draft && draft.key === baseKey ? draft.a : baseRule;
   const ruleB: BurnRule | null = draft && draft.key === baseKey ? draft.b : baseRuleB;
   const dialCtx = { nowMs: Date.now(), seasonYear: cardYear ?? (leagueSeries ? seasonYearAt(leagueSeries as LeagueId, Date.now()) : null), set: cardSet };
+  useEffect(() => {
+    if (!pendingDials || step !== "name" || !baseRule) return;
+    const apply = (r0: BurnRule, withSide: boolean) => {
+      let r = r0;
+      const d0 = dialsFor(r, dialCtx);
+      if (withSide && pendingDials.side && d0.side?.options.some((o) => o.value === pendingDials.side)) r = applyDial(r, "side", pendingDials.side, dialCtx);
+      if (pendingDials.window && dialsFor(r, dialCtx).window) { r = applyDial(r, "window", pendingDials.window, dialCtx); if (pendingDials.games) r = applyDial(r, "games", pendingDials.games, dialCtx); }
+      r = applyDial(r, "fraction", pendingDials.fraction, dialCtx);
+      if (pendingDials.league && dialsFor(r, dialCtx).league) r = applyDial(r, "league", "on", dialCtx);
+      return r;
+    };
+    setDraft({ key: baseKey, a: apply(baseRule, true), b: baseRuleB ? apply(baseRuleB, false) : null });
+    setPendingDials(null);
+  }, [pendingDials, step, baseRule, baseRuleB, baseKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   /** One dial → the edited rule (both sides of a pair share the share and the window; the side stays each coin's own). */
   const setDial = (id: DialId, v: string | number) => {
     if (!rule) return;
@@ -352,7 +411,8 @@ export default function LaunchWizard() {
     if (!rule) return;
     setBusy(true); setLaunchErr(null);
     const post = async (body: Record<string, unknown>) => { const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); return j; };
-    const common = { creator, firstBuySol: firstBuy || "0", acknowledgements: { ruleLocked: ackLocked, noReturns: ackNoReturns } };
+    mark("launch");
+    const common = { creator, firstBuySol: firstBuy || "0", acknowledgements: { ruleLocked: ackLocked, noReturns: ackNoReturns }, timings: { ...stepTimes.current } };
     try {
       if (pairOn && ruleB) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
@@ -394,6 +454,8 @@ export default function LaunchWizard() {
   };
   /** A search card → the create screen: the window the card shows (team cards offer four), its text context, its suggested name. */
   const applySuggestion = (c: Suggestion, wi = 0) => {
+    if (lastShown.current) lastShown.current.clicked = true;
+    mark("card");
     setDraft(null); setFlavour(null); setFlavourB(null); setCardYear(c.seasonYear ?? null); setCardSet(c.leagueSet ?? null);
     if (c.matchup) {
       const m = c.matchup, side = (x: typeof m.a): Side => ({ abbr: x.abbr, marketTicker: x.series, label: x.name, nickname: x.nickname, name: x.name, ticker: x.ticker });
@@ -408,7 +470,7 @@ export default function LaunchWizard() {
     const auto = !!tx && tk === tx.ticker; setTickerAuto(auto); setNameAuto(auto);
     applyRule(r, { ...c.pick, series: r.series ?? c.pick.series, title: w ? w.title : c.pick.title }, { name: nm, ticker: tk, how: c.howSettles, settlement: c.settlement, source: c.source });
   };
-  const chooseTeam = (t: Team) => { setTeam(t); setName(t.name); setTicker(t.ticker); setDraft(null); setFlavour(null); setNameAuto(true); setTickerAuto(true); next(); };
+  const chooseTeam = (t: Team) => { mark("card"); setTeam(t); setName(t.name); setTicker(t.ticker); setDraft(null); setFlavour(null); setNameAuto(true); setTickerAuto(true); next(); };
   const chooseGame = (g: EventHit) => {
     if (!g.pair) return;
     setGame(g); setSwap(false); setPairMode("game"); setDraft(null); setFlavour(null); setFlavourB(null);
@@ -430,14 +492,14 @@ export default function LaunchWizard() {
   const leaguePicker = (
     <div className="space-y-2">
       {leagueErr && <p className="text-red-400 text-xs">The scoreboard is not answering right now ({leagueErr}).</p>}
-      <input className={input + " w-72"} placeholder="Search leagues: MLB, Premier League, WNBA, MLS, college…" value={leagueQ} onChange={(e) => setLeagueQ(e.target.value)} aria-label="search leagues" />
+      <FieldHelp id="league-search" /><input data-help="league-search" className={input + " w-72"} placeholder="Search leagues: MLB, Premier League, WNBA, MLS, college…" value={leagueQ} onChange={(e) => setLeagueQ(e.target.value)} aria-label="search leagues" />
       {!leagues.length && !leagueErr && <span className="text-sm text-neutral-500">Loading leagues…</span>}
       {(["baseball", "basketball", "football", "hockey", "soccer"] as const).map((sp) => {
         const ls = leagues.filter((l) => l.sport === sp && (!leagueQ.trim() || `${l.label} ${l.id} ${sp}`.toLowerCase().includes(leagueQ.trim().toLowerCase())));
         if (!ls.length) return null;
         return (
           <div key={sp} className="space-y-1">
-            <div className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{sp}</div>
+            <div className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{sp}{sp === "baseball" && <FieldHelp id="league-pick" />}</div>
             <div className="flex flex-wrap gap-2">{ls.map((l) => (
               <button key={l.id} onClick={() => { setLeagueSeries(l.id); setTeamQ(""); setGameQ(""); }} title={l.crossRead ? `cross-read: ${l.crossRead}` : "cross-read missing — refused at creation"} className={`rounded-full border px-3 py-1.5 text-sm ${leagueSeries === l.id ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{l.label}{!l.crossRead && <span className="ml-1 text-[10px] text-red-400">cross-read missing</span>}</button>
             ))}</div>
@@ -464,26 +526,28 @@ export default function LaunchWizard() {
    * THE RULE DIALS on the create screen (dials.ts): the same set for a rule however it was reached. Each change rewrites the rule; the
    * sentence, the badge, the description's rule block and the image follow.
    */
+  const sideHelpId = (d: { side: { options: { value: string }[] } | null }) => (d.side?.options.some((x) => x.value === "yes") ? "yesno" : "side");
   const dialPanel = (r: BurnRule, t: CoinText | null, o: { sides?: boolean; windows?: boolean } = {}) => {
     const d = dialsFor(r, dialCtx);
     return (
       <div className="rounded-lg border border-amber-400/50 bg-neutral-950 p-3 space-y-3" aria-label="Rule dials">
         <div className="flex flex-wrap items-center gap-2"><h3 className="font-medium">The rule</h3>{t && <span className="bt-chip bt-chip-window">{t.badge}</span>}<span className="text-xs text-neutral-500">editable until launch</span></div>
         {t && <p className="text-sm text-neutral-100">{t.ruleBlock.split(/(?<=\.)\s/)[0]}</p>}
+        {d.side && o.sides !== false && <div className="text-sm">Burns on<FieldHelp id={sideHelpId(d)} /></div>}
         {d.side && o.sides !== false && <div className={`grid gap-2 ${d.side.options.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>{d.side.options.map((x) => (
           <button key={x.value} onClick={() => setDial("side", x.value)} className={`rounded-lg border p-2 text-center text-sm ${d.side!.value === x.value ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{sideLabel(x.value === "loss" ? "lose" : x.value)}</button>
         ))}</div>}
         <label className="block text-sm">Each burn spends <b>{pct(d.fraction)}</b> of the burn pool
-          <input type="range" min={d.bounds.min} max={d.bounds.max} step={d.bounds.step} value={d.fraction} onChange={(e) => setDial("fraction", Number(e.target.value))} className="w-full" aria-label="share of the burn pool per burn" />
+          <FieldHelp id={d.bounds.max >= 1 ? "share-oneshot" : "share-recurring"} /><input data-help={d.bounds.max >= 1 ? "share-oneshot" : "share-recurring"} type="range" min={d.bounds.min} max={d.bounds.max} step={d.bounds.step} value={d.fraction} onChange={(e) => setDial("fraction", Number(e.target.value))} className="w-full" aria-label="share of the burn pool per burn" />
           <span className="text-xs text-neutral-500">{d.bounds.max >= 1 ? "a one-shot: 1–100 % (default 10 %)" : "recurring: 1–10 % per burn (default 2 %)"}</span></label>
-        {d.league && <div className="space-y-1 text-sm"><label><input type="checkbox" checked={d.league.on} onChange={(e) => setDial("league", e.target.checked ? "on" : "off")} /> League mode <span className="text-xs text-neutral-500">(off by default) — this coin joins set <code>{d.league.id}</code> as <code>{d.league.outcome}</code></span></label>
-          {d.league.on && <label className="block text-xs">Forward {Math.round(d.league.forwardBps) / 100}% of the leftover to the set&apos;s winning coin when the window ends <input type="range" min={0} max={10000} step={500} value={d.league.forwardBps} onChange={(e) => setDial("forward", Number(e.target.value))} className="w-full" /></label>}
+        {d.league && <div className="space-y-1 text-sm"><label><FieldHelp id="league-mode" /><input data-help="league-mode" type="checkbox" checked={d.league.on} onChange={(e) => setDial("league", e.target.checked ? "on" : "off")} /> League mode <span className="text-xs text-neutral-500">(off by default) — this coin joins set <code>{d.league.id}</code> as <code>{d.league.outcome}</code></span></label>
+          {d.league.on && <label className="block text-xs">Forward {Math.round(d.league.forwardBps) / 100}% of the leftover to the set&apos;s winning coin when the window ends <FieldHelp id="league-forward" /><input data-help="league-forward" type="range" min={0} max={10000} step={500} value={d.league.forwardBps} onChange={(e) => setDial("forward", Number(e.target.value))} className="w-full" /></label>}
           {d.league.on && <p className="text-xs text-neutral-400">Only if the program&apos;s forwarding instruction is live by season end; otherwise the leftover burns down on this coin (the description says so).</p>}</div>}
-        {d.window && o.windows !== false && <div className="space-y-2"><div className="text-sm">Window</div><div className="grid gap-2 sm:grid-cols-2">{d.window.options.map((x) => (
+        {d.window && o.windows !== false && <div className="space-y-2"><div className="text-sm">Window<FieldHelp id="window" /></div><div className="grid gap-2 sm:grid-cols-2">{d.window.options.map((x) => (
           <button key={x.value} onClick={() => setDial("window", x.value)} className={`rounded-lg border p-2 text-left text-xs ${d.window!.value === x.value ? "border-amber-400 ring-1 ring-amber-400" : "border-neutral-700 hover:border-neutral-500"}`}>{x.label}{x.value === "season" && <span className="ml-1 text-neutral-500">(default)</span>}</button>
         ))}</div>
-          {d.window.value === "next" && <label className="block text-sm">Games <input type="number" min={1} max={20} className={input + " inline w-20 ml-1"} value={d.window.games ?? 5} onChange={(e) => setDial("games", Number(e.target.value))} /></label>}</div>}
-        {d.threshold && <label className="block text-sm">{d.threshold.label} <input type="number" step={d.threshold.step} min={d.threshold.min} max={d.threshold.max} className={input + " inline w-24 ml-1"} value={d.threshold.value} onChange={(e) => setDial("threshold", Number(e.target.value))} /></label>}
+          {d.window.value === "next" && <label className="block text-sm">Games <FieldHelp id="next-games" /><input data-help="next-games" type="number" min={1} max={20} className={input + " inline w-20 ml-1"} value={d.window.games ?? 5} onChange={(e) => setDial("games", Number(e.target.value))} /></label>}</div>}
+        {d.threshold && <label className="block text-sm">{d.threshold.label} <FieldHelp id="nws-threshold" /><input data-help="nws-threshold" type="number" step={d.threshold.step} min={d.threshold.min} max={d.threshold.max} className={input + " inline w-24 ml-1"} value={d.threshold.value} onChange={(e) => setDial("threshold", Number(e.target.value))} /></label>}
         {d.fixedUnit && <p className="text-xs text-neutral-400">The unit is {d.fixedUnit}.</p>}
         {t && <p className="text-xs text-neutral-300">{t.windowSentence}</p>}
         <p className="text-xs font-medium text-amber-300">Locked at launch — a different rule is a different coin.</p>
@@ -496,24 +560,24 @@ export default function LaunchWizard() {
       <div className={card + " space-y-3 text-sm"}>
         <h2 className="font-medium">Create your coin</h2>
         {rule && dialPanel(rule, text)}
-        <div className="block">Image <span className="text-xs text-neutral-500">{ownImage ? "(an https link to a square image, 512×512 works best)" : "(generated receipt art from the rule — see the preview; it can't be swapped for another picture)"}</span>
-          {customImages && <label className="ml-2 text-xs"><input type="checkbox" checked={ownImage} onChange={(e) => setOwnImage(e.target.checked)} /> use my own image link</label>}
-          {ownImage && <input className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…/coin.png" aria-label="image link" />}
+        <div className="block">Image<FieldHelp id="image" /> <span className="text-xs text-neutral-500">{ownImage ? "(an https link to a square image, 512×512 works best)" : "(generated receipt art from the rule — see the preview; it can't be swapped for another picture)"}</span>
+          {customImages && <label className="ml-2 text-xs"><FieldHelp id="own-image-toggle" /><input data-help="own-image-toggle" type="checkbox" checked={ownImage} onChange={(e) => setOwnImage(e.target.checked)} /> use my own image link</label>}
+          {ownImage && <FieldHelp id="own-image-link" />}{ownImage && <input data-help="own-image-link" className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…/coin.png" aria-label="image link" />}
           {ownImage && !okUrl(imageUrl) && <span className="text-xs text-red-400">must be an https link</span>}</div>
-        <label className="block">Name <span className="float-right text-xs text-neutral-500">{name.length}/32</span><input className={input} maxLength={32} value={name} onChange={(e) => { setName(e.target.value); setNameAuto(false); }} placeholder="Coin name" /></label>
+        <label className="block">Name <span className="float-right text-xs text-neutral-500">{name.length}/32</span><FieldHelp id="name" /><input data-help="name" className={input} maxLength={32} value={name} onChange={(e) => { setName(e.target.value); setNameAuto(false); }} placeholder="Coin name" /></label>
         <label className="block">Ticker <span className="text-xs text-neutral-500">(2–10 letters or digits{tickerAuto && text ? "; suggested from the rule" : ""})</span>
-          <span className="flex items-center gap-1"><span className="font-mono text-neutral-400">$</span><input className={input + " font-mono uppercase"} maxLength={10} value={ticker} onChange={(e) => { setTicker(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")); setTickerAuto(false); }} placeholder="TICKER" /></span>
+          <span className="flex items-center gap-1"><span className="font-mono text-neutral-400">$</span><FieldHelp id="ticker" /><input data-help="ticker" className={input + " font-mono uppercase"} maxLength={10} value={ticker} onChange={(e) => { setTicker(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")); setTickerAuto(false); }} placeholder="TICKER" /></span>
           {ticker && !okTicker(ticker) && <span className="text-xs text-red-400">2–10 letters or digits</span>}</label>
         {text && <div className="block space-y-1">
           <div>Description <span className="text-xs text-neutral-500">(generated from the rule and locked — the same text goes into the token metadata, the coin page, the card and the first post)</span></div>
           <p className="rounded border border-dashed border-neutral-700 bg-neutral-950 p-2 text-xs text-neutral-200" aria-label="description, generated"><span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-neutral-500">locked · from the rule</span>{text.paragraph}</p>
         </div>}
         <label className="block">Creator&apos;s note <span className="text-xs text-neutral-500">(optional · shown in its own box, labelled &quot;creator&apos;s note — not part of the rule&quot; · no links, no claims of affiliation · can&apos;t be edited after launch)</span><span className="float-right text-xs text-neutral-500">{note.length}/140</span>
-          <textarea className={input} rows={2} maxLength={140} value={note} onChange={(e) => setNote(e.target.value)} aria-label="creator's note" />
+          <FieldHelp id="note" /><textarea data-help="note" className={input} rows={2} maxLength={140} value={note} onChange={(e) => setNote(e.target.value)} aria-label="creator's note" />
           {noteProblem && <span className="text-xs text-red-400">{noteProblem}</span>}</label>
         <details open={!!(link || xUrl || tg)}><summary className="cursor-pointer text-neutral-300">Add social links (optional)</summary>
           <div className="mt-2 space-y-2">{([["Website", link, setLink, "https://…"], ["X", xUrl, setXUrl, "https://x.com/…"], ["Telegram", tg, setTg, "https://t.me/…"]] as const).map(([lb, v, set, ph]) => (
-            <label key={lb} className="block">{lb}<input className={input} value={v} onChange={(e) => set(e.target.value)} placeholder={ph} />{!okUrl(v) && <span className="text-xs text-red-400">must be an https link</span>}</label>
+            <label key={lb} className="block">{lb}<FieldHelp id="socials" /><input data-help="socials" className={input} value={v} onChange={(e) => set(e.target.value)} placeholder={ph} />{!okUrl(v) && <span className="text-xs text-red-400">must be an https link</span>}</label>
           ))}</div>
         </details>
         {extra}
@@ -535,7 +599,7 @@ export default function LaunchWizard() {
           <h1 className="text-2xl font-semibold flex items-center gap-2">Launch a coin {cluster === "devnet" && <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-sky-500/40" title="BURNTICKER_CLUSTER=devnet: test network, no real money">Devnet</span>}</h1>
           <p className="text-neutral-400 text-sm"><Link className="underline" href="/burnticker">Burnticker</Link> · settles on primary sources (BLS, Treasury, NWS, league feeds…) or on an on-chain Polymarket payout; prediction markets are for discovery · the rule is locked at launch · <Link className="underline" href="/burnticker/trust">what the operator can and cannot do</Link></p>
         </div>
-        {step !== "choose" && <button className="text-xs text-neutral-500 underline" onClick={startOver}>start over</button>}
+        <span className="flex items-center gap-3 text-xs"><Link className="underline text-neutral-400" href="/burnticker/templates">Templates</Link><Link className="underline text-neutral-400" href="/burnticker/me">Your coins</Link>{step !== "choose" && <button className="text-neutral-500 underline" onClick={startOver}>start over</button>}</span>
       </header>
 
       {step !== "choose" && (
@@ -546,11 +610,13 @@ export default function LaunchWizard() {
       )}
 
 
+      {pendingDials && <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status">Launching one like ${pendingDials.from}: pick the {flow === "team" ? "team" : flow === "pair" ? "game" : flow === "browse" ? "source" : "market"} — the dials ({Math.round(pendingDials.fraction * 1000) / 10}% per burn{pendingDials.window ? `, ${pendingDials.window}` : ""}{pendingDials.side ? `, on ${pendingDials.side}` : ""}) are copied onto the new rule, and you can change them before launch.</p>}
+
       {step === "choose" && (
         <section className="space-y-3" aria-label="Describe the event">
           <label className="block">
             <span className="text-lg font-medium">Describe the event</span>
-            <input autoFocus className={input + " mt-1 text-base py-3"} value={uq} onChange={(e) => setUq(e.target.value)} placeholder="e.g. 'Rays win the World Series', 'Lakers win tonight', 'Arsenal win', 'Oilers lose', 'El-Sayed wins Michigan Senate', 'Detroit high above 90'" aria-label="Describe the event" />
+            <FieldHelp id="search" /><input data-help="search" autoFocus className={input + " mt-1 text-base py-3"} value={uq} onChange={(e) => setUq(e.target.value)} placeholder="e.g. 'Rays win the World Series', 'Lakers win tonight', 'Arsenal win', 'Oilers lose', 'El-Sayed wins Michigan Senate', 'Detroit high above 90'" aria-label="Describe the event" />
           </label>
           {shortQuery && <p className="text-sm text-neutral-500">Type a few more letters…</p>}
           {ubusy && <p className="text-sm text-neutral-500">Searching every source…</p>}
@@ -574,7 +640,7 @@ export default function LaunchWizard() {
                     {c.nextAt && <><dt className="text-neutral-500">next burn</dt><dd>{denver(c.nextAt)} (Denver) at the earliest</dd></>}
                     {(endText || c.endAt) && <><dt className="text-neutral-500">ends</dt><dd>{endText ?? ""}{c.endAt && (w?.kind ?? "season") !== "perpetual" ? ` · by ${c.endAt.slice(0, 10)}` : ""}</dd></>}
                   </dl>
-                  {c.windows && c.windows.length > 1 && <div className="mt-2 flex flex-wrap gap-1" role="radiogroup" aria-label="window">{c.windows.map((x, k) => (
+                  {c.windows && c.windows.length > 1 && <div className="mt-2 flex flex-wrap items-center gap-1" role="radiogroup" aria-label="window"><FieldHelp id="card-window" />{c.windows.map((x, k) => (
                     <button key={x.kind} role="radio" aria-checked={k === wi} onClick={() => setCardWin({ ...cardWin, [c.id]: k })} className={`rounded-full border px-2 py-0.5 text-[11px] ${k === wi ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{x.label.replace(/ \(.*\)$/, "")}</button>
                   ))}</div>}
                   {tx && <p className="mt-2 text-xs text-neutral-300"><span className="font-mono">${tx.ticker}</span> — {tx.oneLiner}.</p>}
@@ -628,7 +694,7 @@ export default function LaunchWizard() {
           </div>
           {leagueSeries && (
             <div className={card + " space-y-3"}>
-              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick your team</h2><input className={input + " w-64"} placeholder="Rays, Lakers, Oilers, Arsenal, Inter Miami…" value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
+              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick your team<FieldHelp id="team-pick" /></h2><FieldHelp id="team-search" /><input data-help="team-search" className={input + " w-64"} placeholder="Rays, Lakers, Oilers, Arsenal, Inter Miami…" value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
               {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}
               {scheduleNote && <p className="text-sm text-amber-300">This league&apos;s {scheduleNote}: teams are listed, next games are not.</p>}
               {!teamsBusy && !teams.length && <p className="text-sm text-neutral-500">No teams found for this league right now.</p>}
@@ -659,7 +725,7 @@ export default function LaunchWizard() {
           <div className={card + " space-y-3"}><h2 className="font-medium">1. Pick a league</h2>{leaguePicker}</div>
           {leagueSeries && (
             <div className={card + " space-y-3"}>
-              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick the game</h2><input className={input + " w-64"} placeholder="search a team: Lakers, Oilers, Arsenal…" value={gameQ} onChange={(e) => setGameQ(e.target.value)} /></div>
+              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick the game</h2><FieldHelp id="game-search" /><input data-help="game-search" className={input + " w-64"} placeholder="search a team: Lakers, Oilers, Arsenal…" value={gameQ} onChange={(e) => setGameQ(e.target.value)} /></div>
               {gamesBusy && <p className="text-sm text-neutral-500">Loading games…</p>}
               {scheduleNote && <p className="text-sm text-amber-300">This league&apos;s {scheduleNote}.</p>}
               {!gamesBusy && !games.length && <p className="text-sm text-neutral-500">No upcoming games{gameQ ? ` matching “${gameQ}”` : ""}.</p>}
@@ -678,7 +744,7 @@ export default function LaunchWizard() {
       {flow === "pair" && step === "name" && game && sideA && sideB && (
         <section className="space-y-4">
           <div className={card + " space-y-3"}>
-            <h2 className="font-medium">{game.title}</h2>
+            <h2 className="font-medium">{game.title}<FieldHelp id="pair-window" /></h2>
             <div className="grid gap-2 sm:grid-cols-3">{([["game", "This game only", `Settles once, ~${denver(game.expectedAt)}. Exactly one coin burns.`], ["season", "This season", `${sideA.name}: every loss this season burns. ${sideB.name}: the same. Two separate records; both retire after the season.`], ["perpetual", "Perpetual", "Every loss, every season, no end date — neither coin retires."]] as const).map(([m, title, body]) => (
               <button key={m} onClick={() => setPairMode(m)} className={`rounded-lg border p-3 text-left ${pairMode === m ? "border-amber-400 ring-1 ring-amber-400" : "border-neutral-700 hover:border-neutral-500"}`}><div className="font-medium">{title}{m === "game" && <span className="ml-2 text-xs text-neutral-400">(default)</span>}</div><div className="text-xs text-neutral-400 mt-1">{body}</div></button>
             ))}</div>
@@ -688,9 +754,9 @@ export default function LaunchWizard() {
           <div className="grid gap-3 md:grid-cols-2">{([["A", sideA, name, setName, ticker, setTicker, imageUrl, setImageUrl], ["B", sideB, nameB, setNameB, tickerB, setTickerB, imageB, setImageB]] as const).map(([k, sd, nm, setNm, tk, setTk, img, setImg]) => (
             <div key={k} className={card + " space-y-2 text-sm"}>
               <div className="flex items-center gap-2">{badge(sd.abbr)}<div className="text-xs text-neutral-400">burns when the {sd.nickname ?? sd.label} lose</div></div>
-              <label className="block">Name <input className={input} maxLength={32} value={nm} onChange={(e) => setNm(e.target.value)} /></label>
-              <label className="block">Ticker <input className={input} maxLength={10} value={tk} onChange={(e) => setTk(e.target.value.toUpperCase())} /></label>
-              {customImages && <label className="block">Image link (optional) <input className={input} value={img} onChange={(e) => setImg(e.target.value)} placeholder="https://…" /></label>}
+              <label className="block">Name <FieldHelp id="pair-name" /><input data-help="pair-name" className={input} maxLength={32} value={nm} onChange={(e) => setNm(e.target.value)} /></label>
+              <label className="block">Ticker <FieldHelp id="pair-ticker" /><input data-help="pair-ticker" className={input} maxLength={10} value={tk} onChange={(e) => setTk(e.target.value.toUpperCase())} /></label>
+              {customImages && <label className="block">Image link (optional) <FieldHelp id="pair-image" /><input data-help="pair-image" className={input} value={img} onChange={(e) => setImg(e.target.value)} placeholder="https://…" /></label>}
               {(k === "A" ? text : textB) && <p className="rounded border border-dashed border-neutral-700 bg-neutral-950 p-2 text-xs text-neutral-300"><span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-neutral-500">description · locked</span>{(k === "A" ? text : textB)!.paragraph}</p>}
             </div>
           ))}</div>
@@ -723,7 +789,7 @@ export default function LaunchWizard() {
         <section className="space-y-4">
           <div className={card + " space-y-3"}>
             <h2 className="font-medium">Search adjudicated markets by name</h2>
-            <input autoFocus className={input + " text-base py-2"} placeholder="a team, a player, a person, a show, a city, an election…" value={q2} onChange={(e) => setQ2(e.target.value)} />
+            <FieldHelp id="market-search" /><input data-help="market-search" autoFocus className={input + " text-base py-2"} placeholder="a team, a player, a person, a show, a city, an election…" value={q2} onChange={(e) => setQ2(e.target.value)} />
             {findBusy && <p className="text-sm text-neutral-500">Searching…</p>}
             {found && (() => {
               const evs = (
@@ -780,14 +846,14 @@ export default function LaunchWizard() {
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm text-neutral-400 flex-1 min-w-0">{cats.find((c) => c.id === cat)?.blurb ?? ""}</p>
-                <input className={input + " w-full sm:w-64"} placeholder="filter this category…" value={bq} onChange={(e) => setBq(e.target.value)} aria-label="Filter sources" />
+                <FieldHelp id="browse-filter" /><input data-help="browse-filter" className={input + " w-full sm:w-64"} placeholder="filter this category…" value={bq} onChange={(e) => setBq(e.target.value)} aria-label="Filter sources" />
               </div>
               {curCat?.adjudicatedOnly && <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">Adjudicated-only (Polymarket): no first-party source qualifies for this category, so only adjudicated markets are listed — each settled on Polymarket&apos;s on-chain payout.</p>}
               {curCat?.guided === "elections" && venues.polymarket && (
                 <div className={card + " space-y-3"} aria-label="Elections">
                   <h3 className="font-medium">Pick a race</h3>
-                  <div className="flex flex-wrap gap-2">{etypes.map((t) => <button key={t.id} className={`bt-tab${etype === t.id ? " is-active" : ""}`} onClick={() => { setEtype(t.id); setEstate(null); }}>{t.label} <span className="bt-tab-count">{t.races}</span></button>)}{!etypes.length && <span className="text-xs text-neutral-500">Loading races…</span>}</div>
-                  {etype && etype !== "control" && <label className="block text-sm">State <select className={input + " inline w-56 ml-1"} value={estate ?? ""} onChange={(e) => setEstate(e.target.value || null)}><option value="">choose a state…</option>{estates.map((x) => <option key={x.abbr} value={x.abbr}>{x.name} ({x.races})</option>)}</select></label>}
+                  <div className="flex flex-wrap items-center gap-2"><FieldHelp id="race-type" />{etypes.map((t) => <button key={t.id} className={`bt-tab${etype === t.id ? " is-active" : ""}`} onClick={() => { setEtype(t.id); setEstate(null); }}>{t.label} <span className="bt-tab-count">{t.races}</span></button>)}{!etypes.length && <span className="text-xs text-neutral-500">Loading races…</span>}</div>
+                  {etype && etype !== "control" && <label className="block text-sm">State <FieldHelp id="race-state" /><select data-help="race-state" className={input + " inline w-56 ml-1"} value={estate ?? ""} onChange={(e) => setEstate(e.target.value || null)}><option value="">choose a state…</option>{estates.map((x) => <option key={x.abbr} value={x.abbr}>{x.name} ({x.races})</option>)}</select></label>}
                   {ebusy && <p className="text-xs text-neutral-500">Loading…</p>}
                   {eraces?.length === 0 && <p className="text-xs text-neutral-500">No open race listed here.</p>}
                   {eraces?.map((r) => (
@@ -796,7 +862,7 @@ export default function LaunchWizard() {
                       <div className="text-xs text-neutral-500">Settled by: {r.settlement} — <a className="underline" href={r.sos.url} rel="noopener" target="_blank">{r.sos.name}</a>{r.hiddenPlaceholders ? ` · ${r.hiddenPlaceholders} unnamed placeholder outcome(s) hidden` : ""}</div>
                       {r.refused.length ? <p className="text-xs text-red-400">REFUSED: {r.refused.join("; ")}</p> : <ul className="mt-1 space-y-1">{r.outcomes.map((o) => (
                         <li key={o.conditionId} className="flex flex-wrap items-center justify-between gap-2">
-                          <label className="flex items-center gap-2"><input type="checkbox" checked={esel.includes(o.conditionId)} onChange={(e) => setEsel(e.target.checked ? [...esel.filter((x) => x !== o.conditionId), o.conditionId].slice(-2) : esel.filter((x) => x !== o.conditionId))} aria-label={`pair ${o.label}`} /><span className="font-medium">{o.label}</span></label>
+                          <label className="flex items-center gap-2"><FieldHelp id="race-outcome" /><input data-help="race-outcome" type="checkbox" checked={esel.includes(o.conditionId)} onChange={(e) => setEsel(e.target.checked ? [...esel.filter((x) => x !== o.conditionId), o.conditionId].slice(-2) : esel.filter((x) => x !== o.conditionId))} aria-label={`pair ${o.label}`} /><span className="font-medium">{o.label}</span></label>
                           <button className="text-xs underline text-amber-300" onClick={() => applyRule(o.rule, { oracle: "polymarket", series: null, market: o.conditionId, title: `${o.label} wins the ${r.title.replace(/ Election Winner$/, "")} race (resolves once)`, yes: o.yes, no: o.no }, { name: `${o.label.replace(/\s*\([A-Z]\)$/, "").split(" ").pop()} Wins`, ticker: (o.label.replace(/\s*\([A-Z]\)$/, "").split(" ").pop() ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10), how: `${o.settles}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, settlement: `${r.settlement} — ${r.sos.name}: ${r.sos.url}` })}>Use: {o.label} wins →</button>
                         </li>
                       ))}</ul>}
@@ -848,8 +914,8 @@ export default function LaunchWizard() {
                   </div>
                   {wx && c.configure?.kind === "weather" && c.configure.metric === wx.metric && (
                     <div className="mt-2 border-t border-neutral-800 pt-2 text-xs space-y-2">
-                      <label className="block">Station <select className={input + " inline w-56 ml-1"} value={wx.station} onChange={(e) => setWx({ ...wx, station: e.target.value })}>{STATIONS.map((x) => <option key={x.code} value={x.code}>{x.label} ({x.code})</option>)}</select></label>
-                      {wx.metric !== "snow" && <label className="block">{wx.metric === "high" ? "High at or above (°F)" : "Rain at or above (inches)"} <input className={input + " inline w-24 ml-1"} value={wx.threshold} onChange={(e) => setWx({ ...wx, threshold: e.target.value })} /></label>}
+                      <label className="block">Station <FieldHelp id="nws-station" /><select data-help="nws-station" className={input + " inline w-56 ml-1"} value={wx.station} onChange={(e) => setWx({ ...wx, station: e.target.value })}>{STATIONS.map((x) => <option key={x.code} value={x.code}>{x.label} ({x.code})</option>)}</select></label>
+                      {wx.metric !== "snow" && <label className="block">{wx.metric === "high" ? "High at or above (°F)" : "Rain at or above (inches)"} <FieldHelp id="nws-threshold" /><input data-help="nws-threshold" className={input + " inline w-24 ml-1"} value={wx.threshold} onChange={(e) => setWx({ ...wx, threshold: e.target.value })} /></label>}
                       <button className="underline text-amber-300" onClick={() => { const thr = wx.metric === "snow" ? null : Number(wx.threshold); if (thr !== null && !Number.isFinite(thr)) return; const series = nwsSeries(wx.metric, wx.station, thr); const st = STATIONS.find((x) => x.code === wx.station)!; applyRule(firstPartyRule(series, 0.01), { oracle: "catalogue", series, market: null, title: `${st.city} ${wx.metric === "high" ? `daily high ≥ ${thr} °F` : wx.metric === "rain" ? `rain day ≥ ${Number(thr).toFixed(2)} in` : "first snow of the season"} (NWS)` }, { name: `${st.city} ${wx.metric === "high" ? "Heat" : wx.metric === "rain" ? "Rain" : "Snow"}`, ticker: `${st.code}${wx.metric === "high" ? "HOT" : wx.metric === "rain" ? "RAIN" : "SNOW"}`, settlement: "NWS daily climate report · first-party, cross-read with the Iowa Environmental Mesonet", source: { unit: { size: 1, label: wx.metric === "snow" ? "the first snow" : "1 qualifying day", definition: "one burn per qualifying day, read from the final climate report once the cross-read agrees" }, baseline: 0, direction: "up" } }); }}>Use this rule →</button>
                     </div>
                   )}
@@ -877,12 +943,12 @@ export default function LaunchWizard() {
         <section className="space-y-4">
           <div className={card}>
             <h2 className="font-medium">Custom Kalshi selector (tier 1, settled results only)</h2>
-            <input className={input + " mt-2"} placeholder="search Kalshi series: MLB, CPI, Denver temperature, S&P, election…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <FieldHelp id="kalshi-series-search" /><input data-help="kalshi-series-search" className={input + " mt-2"} placeholder="search Kalshi series: MLB, CPI, Denver temperature, S&P, election…" value={q} onChange={(e) => setQ(e.target.value)} />
             <ul className="mt-2 divide-y divide-neutral-800 max-h-72 overflow-y-auto">{hits.map((h) => (
               <li key={h.ticker} className="py-2 flex items-start justify-between gap-2"><div><div className="text-sm"><code>{h.ticker}</code> {h.title}</div><div className="text-xs text-neutral-500">{h.category} · {h.frequency ?? "—"} · settles by {h.settlementSource?.name ?? "Kalshi"}{h.refused.length ? ` · REFUSED: ${h.refused.join("; ")}` : ""}</div></div>
                 {h.refused.length === 0 && <button className="text-xs underline" onClick={() => { setPick({ oracle: "kalshi", series: h.ticker, market: null, title: h.title }); next(); }}>every market in this series →</button>}</li>
             ))}</ul>
-            <p className="text-xs text-neutral-500 mt-2">One specific market instead? Paste its ticker: <input className={input + " inline w-80 ml-1"} placeholder="KXMLBGAME-26OCT13CLETB-TB" onKeyDown={(e) => { const v = (e.target as HTMLInputElement).value.trim().toUpperCase(); if (e.key === "Enter" && v) { setPick({ oracle: "kalshi", series: null, market: v, title: `market ${v} (resolves once)` }); next(); } }} /></p>
+            <p className="text-xs text-neutral-500 mt-2">One specific market instead? Paste its ticker: <FieldHelp id="kalshi-market-paste" /><input data-help="kalshi-market-paste" className={input + " inline w-80 ml-1"} placeholder="KXMLBGAME-26OCT13CLETB-TB" onKeyDown={(e) => { const v = (e.target as HTMLInputElement).value.trim().toUpperCase(); if (e.key === "Enter" && v) { setPick({ oracle: "kalshi", series: null, market: v, title: `market ${v} (resolves once)` }); next(); } }} /></p>
           </div>
           <div className={card}>
             <h2 className="font-medium">First-party feeds (tiers 3–5, for things no market covers)</h2>
@@ -904,34 +970,34 @@ export default function LaunchWizard() {
       {(flow === "single" || flow === "feed" || flow === "browse") && step === "rule" && pick && rule && (
         <section className="space-y-4">
           <div className={card}><div className="text-sm">Market: <strong>{pick.title}</strong>{pick.oracle !== "catalogue" && chip(pick.oracle)} <span className="text-neutral-500">({pick.oracle === "kalshi" ? (pick.market ? `market ${pick.market}` : `series ${pick.series}`) : pick.oracle === "polymarket" ? (pick.market ? `condition ${pick.market.slice(0, 10)}…` : pick.series) : `source ${pick.series}`})</span></div>
-            {pick.oracle === "kalshi" && !pick.market && <label className="block text-xs mt-2">Only markets whose ticker contains <input className={input + " inline w-40 ml-1"} placeholder="-DEN" value={filter} onChange={(e) => setFilter(e.target.value)} /> <span className="text-neutral-500">(optional; &quot;-DEN&quot; = Denver&apos;s own leg — the back-test lists what matched)</span></label>}
-            {pick.oracle === "polymarket" && !pick.market && <label className="block text-xs mt-2">Only markets whose question matches <input className={input + " inline w-56 ml-1 font-mono"} placeholder="^[^:]+ vs\. [^:]+$" value={filter} onChange={(e) => setFilter(e.target.value)} /> <span className="text-neutral-500">(optional regular expression; the back-test lists what matched)</span></label>}
+            {pick.oracle === "kalshi" && !pick.market && <label className="block text-xs mt-2">Only markets whose ticker contains <FieldHelp id="kalshi-filter" /><input data-help="kalshi-filter" className={input + " inline w-40 ml-1"} placeholder="-DEN" value={filter} onChange={(e) => setFilter(e.target.value)} /> <span className="text-neutral-500">(optional; &quot;-DEN&quot; = Denver&apos;s own leg — the back-test lists what matched)</span></label>}
+            {pick.oracle === "polymarket" && !pick.market && <label className="block text-xs mt-2">Only markets whose question matches <FieldHelp id="poly-filter" /><input data-help="poly-filter" className={input + " inline w-56 ml-1 font-mono"} placeholder="^[^:]+ vs\. [^:]+$" value={filter} onChange={(e) => setFilter(e.target.value)} /> <span className="text-neutral-500">(optional regular expression; the back-test lists what matched)</span></label>}
             {pick.oracle === "polymarket" && <p className="text-xs text-neutral-400 mt-2">{pick.market ? `YES = ${pick.yes ?? "the first outcome"}, NO = ${pick.no ?? "the second outcome"}.` : "YES = each market's first outcome, NO its second (for a game: the team its title lists first, which changes from game to game)."} The result is the payout Polygon&apos;s Conditional Tokens contract records; a 50-50 resolution burns nothing.</p>}
           </div>
           <div className={card + " space-y-3"}>
-            {pick.oracle !== "catalogue" && kind === "binary" && <div className="space-y-1"><div className="text-sm">When should ${ticker || "your coin"} burn?</div><div className="grid grid-cols-2 gap-2">{(["yes", "no"] as const).map((v) => (
+            {pick.oracle !== "catalogue" && kind === "binary" && <div className="space-y-1"><div className="text-sm">When should ${ticker || "your coin"} burn?<FieldHelp id="yesno" /></div><div className="grid grid-cols-2 gap-2">{(["yes", "no"] as const).map((v) => (
               <button key={v} onClick={() => setBurnOn(v)} className={`rounded-lg border p-3 text-center ${burnOn === v ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}><div className="font-semibold">When it settles {v.toUpperCase()}</div><div className="text-xs opacity-80">{v === "yes" ? (pick.yes ? `YES = ${pick.yes}` : "the thing happens") : (pick.no ? `NO = ${pick.no}` : "the thing does not happen")}</div></button>
             ))}</div></div>}
             {pick.oracle !== "catalogue" && kind === "binary" && <label className="block text-sm">Each burn spends {mode === "buyback" ? pct(onYes) : `${tokensYes.toLocaleString()} tokens`} {mode === "buyback" ? "of the burn pool" : ""}
-              {mode === "buyback" ? <input type="range" min={0.01} max={0.1} step={0.005} value={onYes} onChange={(e) => setOnYes(Number(e.target.value))} className="w-full" /> : <input type="range" min={100000} max={20000000} step={100000} value={tokensYes} onChange={(e) => setTokensYes(Number(e.target.value))} className="w-full" />}</label>}
+              <FieldHelp id="share-binary" />{mode === "buyback" ? <input data-help="share-binary" type="range" min={0.01} max={0.1} step={0.005} value={onYes} onChange={(e) => setOnYes(Number(e.target.value))} className="w-full" /> : <input data-help="share-binary" type="range" min={100000} max={20000000} step={100000} value={tokensYes} onChange={(e) => setTokensYes(Number(e.target.value))} className="w-full" />}</label>}
             {kind === "scalar" && pick.oracle === "kalshi" && <p className="text-xs text-neutral-400">This source settles to a number. Defaults: every 1 step above the previous settlement burns once — change the step, the direction or a fixed baseline under More options.</p>}
             <details className="text-sm" open={kind === "scalar" && pick.oracle === "kalshi"}><summary className="cursor-pointer text-neutral-300">More options</summary>
               <div className="mt-2 space-y-3">
                 <div className="flex gap-4 flex-wrap">
-                  {pick.oracle === "kalshi" && <label>Read the result as <select className={input + " inline w-32 ml-1"} value={kind} onChange={(e) => setKind(e.target.value as "binary" | "scalar")}><option value="binary">yes / no</option><option value="scalar">a number</option></select></label>}
-                  <label>Burn from <select className={input + " inline w-40 ml-1"} value={mode} onChange={(e) => setMode(e.target.value as "buyback" | "vault")}><option value="buyback">the fee pool (buyback)</option><option value="vault">a vesting vault</option></select></label>
+                  {pick.oracle === "kalshi" && <label>Read the result as <FieldHelp id="read-as" /><select data-help="read-as" className={input + " inline w-32 ml-1"} value={kind} onChange={(e) => setKind(e.target.value as "binary" | "scalar")}><option value="binary">yes / no</option><option value="scalar">a number</option></select></label>}
+                  <label>Burn from <FieldHelp id="burn-from" /><select data-help="burn-from" className={input + " inline w-40 ml-1"} value={mode} onChange={(e) => setMode(e.target.value as "buyback" | "vault")}><option value="buyback">the fee pool (buyback)</option><option value="vault">a vesting vault</option></select></label>
                 </div>
-                {mode === "vault" && <label className="block">Vault share of supply: {pct(vaultShare)} <input type="range" min={0.1} max={0.3} step={0.01} value={vaultShare} onChange={(e) => setVaultShare(Number(e.target.value))} className="w-full" /></label>}
-                {pick.oracle !== "catalogue" && kind === "binary" && <label className="block"><input type="checkbox" checked={onNoEnabled} onChange={(e) => setOnNoEnabled(e.target.checked)} /> also burn on {burnOn === "yes" ? "NO" : "YES"}{onNoEnabled && mode === "buyback" && <>: {pct(onNo)} <input type="range" min={0.01} max={0.1} step={0.005} value={onNo} onChange={(e) => setOnNo(Number(e.target.value))} className="w-full" /></>}</label>}
+                {mode === "vault" && <label className="block">Vault share of supply: {pct(vaultShare)} <FieldHelp id="vault-share" /><input data-help="vault-share" type="range" min={0.1} max={0.3} step={0.01} value={vaultShare} onChange={(e) => setVaultShare(Number(e.target.value))} className="w-full" /></label>}
+                {pick.oracle !== "catalogue" && kind === "binary" && <label className="block"><FieldHelp id="also-burn-other" /><input data-help="also-burn-other" type="checkbox" checked={onNoEnabled} onChange={(e) => setOnNoEnabled(e.target.checked)} /> also burn on {burnOn === "yes" ? "NO" : "YES"}{onNoEnabled && mode === "buyback" && <>: {pct(onNo)} <input data-help="also-burn-other" type="range" min={0.01} max={0.1} step={0.005} value={onNo} onChange={(e) => setOnNo(Number(e.target.value))} className="w-full" /></>}</label>}
                 {(kind === "scalar" || pick.oracle === "catalogue") && <>
                   {pick.oracle === "kalshi" && <>
-                    <label className="block">Unit size: <input className={input + " inline w-28 ml-1"} type="number" step="any" value={unit} onChange={(e) => setUnit(Number(e.target.value))} /></label>
-                    <label className="block">Baseline: <select className={input + " inline w-48 ml-1"} value={baseline === "previousSettlement" ? "prev" : "fixed"} onChange={(e) => setBaseline(e.target.value === "prev" ? "previousSettlement" : 0)}><option value="prev">the previous settlement</option><option value="fixed">a fixed number</option></select>{baseline !== "previousSettlement" && <input className={input + " inline w-28 ml-1"} type="number" step="any" value={baseline} onChange={(e) => setBaseline(Number(e.target.value))} />}</label>
-                    <label className="block">Direction: <select className={input + " inline w-40 ml-1"} value={direction} onChange={(e) => setDirection(e.target.value as "up" | "down" | "abs")}><option value="up">up (above)</option><option value="down">down (below)</option><option value="abs">either way</option></select></label>
+                    <label className="block">Unit size: <FieldHelp id="unit-size" /><input data-help="unit-size" className={input + " inline w-28 ml-1"} type="number" step="any" value={unit} onChange={(e) => setUnit(Number(e.target.value))} /></label>
+                    <label className="block">Baseline: <FieldHelp id="baseline" /><select data-help="baseline" className={input + " inline w-48 ml-1"} value={baseline === "previousSettlement" ? "prev" : "fixed"} onChange={(e) => setBaseline(e.target.value === "prev" ? "previousSettlement" : 0)}><option value="prev">the previous settlement</option><option value="fixed">a fixed number</option></select>{baseline !== "previousSettlement" && <input data-help="baseline" className={input + " inline w-28 ml-1"} type="number" step="any" value={baseline} onChange={(e) => setBaseline(Number(e.target.value))} />}</label>
+                    <label className="block">Direction: <FieldHelp id="direction" /><select data-help="direction" className={input + " inline w-40 ml-1"} value={direction} onChange={(e) => setDirection(e.target.value as "up" | "down" | "abs")}><option value="up">up (above)</option><option value="down">down (below)</option><option value="abs">either way</option></select></label>
                   </>}
                   {pick.oracle === "catalogue" && pick.source && <p className="text-xs text-neutral-400">Fixed by the source: unit {pick.source.unit?.label} ({pick.source.unit?.definition}); direction {pick.source.direction}; baseline {String(pick.source.baseline)}.</p>}
                   <label className="block">Per unit: {mode === "buyback" ? `spend ${pct(perUnit)} of the pool (compounding)` : `burn ${tokensYes.toLocaleString()} tokens`}
-                    {mode === "buyback" ? <input type="range" min={0.01} max={0.1} step={0.005} value={perUnit} onChange={(e) => setPerUnit(Number(e.target.value))} className="w-full" /> : <input type="range" min={100000} max={20000000} step={100000} value={tokensYes} onChange={(e) => setTokensYes(Number(e.target.value))} className="w-full" />}</label>
+                    <FieldHelp id="per-unit" />{mode === "buyback" ? <input data-help="per-unit" type="range" min={0.01} max={0.1} step={0.005} value={perUnit} onChange={(e) => setPerUnit(Number(e.target.value))} className="w-full" /> : <input data-help="per-unit" type="range" min={100000} max={20000000} step={100000} value={tokensYes} onChange={(e) => setTokensYes(Number(e.target.value))} className="w-full" />}</label>
                 </>}
               </div>
             </details>
@@ -970,7 +1036,12 @@ export default function LaunchWizard() {
               <div className="flex flex-wrap items-center gap-2"><span className="bt-chip bt-chip-window">{text.badge}</span><span className="text-xs text-neutral-400">the final description (token metadata, coin page, card, first post)</span></div>
               <p className="text-base">{finalDescription}</p>
               {pairOn && textB && <p className="text-base border-t border-neutral-800 pt-2">{finalDescriptionB}</p>}
-              <p className="font-mono text-xs text-neutral-300">rules sha256 {btFresh && bt ? bt.sha256 : "computing…"}{pairOn && ruleB ? ` · $${tickerB || "B"} ${btFresh && btB ? btB.sha256 : "computing…"}` : ""}</p>
+              <p className="font-mono text-xs text-neutral-300"><FieldHelp id="review-sha" /> rules sha256 {btFresh && bt ? bt.sha256 : "computing…"}{pairOn && ruleB ? ` · $${tickerB || "B"} ${btFresh && btB ? btB.sha256 : "computing…"}` : ""}</p>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-neutral-300" aria-label="review details">
+                <dt className="text-neutral-500">settled on<FieldHelp id="review-settlement" /></dt><dd>{settleNote ?? (rule.oracle === "catalogue" && /^espn\./.test(rule.series ?? "") ? "the game's on-chain payout where a market exists, else a licensed final score, confirmed by a second independent source" : rule.oracle === "polymarket" ? "the on-chain payout on Polygon" : pick?.source?.sourceName ?? "the rule's source")}</dd>
+                <dt className="text-neutral-500">next possible burn<FieldHelp id="review-next" /></dt><dd>{btFresh && bt?.backtest.oneShot?.resolvesOn ? bt.backtest.oneShot.resolvesOn : "the next settled reading after launch"}</dd>
+                <dt className="text-neutral-500">ends<FieldHelp id="review-end" /></dt><dd>{text.windowSentence}</dd>
+              </dl>
               {note.trim() && <div className="rounded border border-neutral-700 p-2 text-xs"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note — not part of the rule</div>{note.trim()}</div>}
               <p className="text-xs font-medium text-amber-300">Locked at launch — a different rule is a different coin. Nothing above can be changed afterwards.</p>
             </div>}
@@ -1000,10 +1071,10 @@ export default function LaunchWizard() {
             </div>
           </details>
           <div className={card + " space-y-2"}>
-            <div className="flex items-center gap-2 flex-wrap"><WalletMultiButton /><input className={input + " w-72"} placeholder="or paste your wallet address (sign later)" value={pasted} onChange={(e) => setPasted(e.target.value)} /></div>
-            <label className="block"><input type="checkbox" checked={ackLocked} onChange={(e) => setAckLocked(e.target.checked)} /> I understand {pairOn ? "neither rule can" : "the rule can never"} be changed, by anyone.</label>
-            <label className="block"><input type="checkbox" checked={ackNoReturns} onChange={(e) => setAckNoReturns(e.target.checked)} /> I won&apos;t promise anyone anything about price or returns.</label>
-            <details className="text-xs text-neutral-400"><summary className="cursor-pointer">Optional first buy</summary><label className="block mt-1">SOL (≤ 50): <input className={input + " inline w-28 ml-1"} value={firstBuy} onChange={(e) => setFirstBuy(e.target.value)} /></label></details>
+            <div className="flex items-center gap-2 flex-wrap"><WalletMultiButton /><FieldHelp id="wallet-paste" /><input data-help="wallet-paste" className={input + " w-72"} placeholder="or paste your wallet address (sign later)" value={pasted} onChange={(e) => setPasted(e.target.value)} /></div>
+            <label className="block"><FieldHelp id="ack-locked" /><input data-help="ack-locked" type="checkbox" checked={ackLocked} onChange={(e) => setAckLocked(e.target.checked)} /> I understand {pairOn ? "neither rule can" : "the rule can never"} be changed, by anyone.</label>
+            <label className="block"><FieldHelp id="ack-no-returns" /><input data-help="ack-no-returns" type="checkbox" checked={ackNoReturns} onChange={(e) => setAckNoReturns(e.target.checked)} /> I won&apos;t promise anyone anything about price or returns.</label>
+            <details className="text-xs text-neutral-400"><summary className="cursor-pointer">Optional first buy</summary><label className="block mt-1">SOL (≤ 50): <FieldHelp id="first-buy" /><input data-help="first-buy" className={input + " inline w-28 ml-1"} value={firstBuy} onChange={(e) => setFirstBuy(e.target.value)} /></label></details>
             {launchErr && <p className="text-red-400">{launchErr}</p>}
             <div className="flex items-center gap-3 pt-1"><button className="text-sm underline" onClick={back}>← Back</button><button className={primary} disabled={!ackLocked || !ackNoReturns || !creator || busy || (btFresh && !!bt?.refusals.length)} onClick={launch}>{busy ? "building…" : pairOn ? "Build both launch bundles" : "Build the launch bundle"}</button>{!creator && <span className="text-xs text-neutral-500">connect a wallet or paste an address first</span>}</div>
           </div>

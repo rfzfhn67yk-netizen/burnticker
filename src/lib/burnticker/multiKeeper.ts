@@ -58,7 +58,7 @@ export interface KeeperDeps {
   kalshiPollMs?: number;
   /** After a UTC day ends, wait this long (and for a fetch after it) before reading the day into the program (READING_GRACE_MS). */
   readingGraceMs?: number;
-  /** BURNTICKER_KALSHI_ENABLED (venues.ts). false: Kalshi is read only for coins already registered with a Kalshi rule, with a warning per read. Undefined = on. */
+  /** BURNTICKER_KALSHI_ENABLED (venues.ts). false: Kalshi is never read; coins with a Kalshi rule are held with a venue-disabled alert (C1, 2026-10-10). Undefined = on. */
   kalshiEnabled?: boolean;
 }
 
@@ -113,13 +113,31 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
     const last = d.registry.lastReading(key);
     const since = last ? new Date(Math.max(0, Date.parse(/^\d{4}-\d{2}(-\d{2})?$/.test(last.at) ? `${last.at.length === 7 ? `${last.at}-01` : last.at}T00:00:00Z` : last.at) - (d.overlapMs ?? 7 * 86_400_000))).toISOString() : null;
     // Feeds key readings by period strings ("2026-10-08"); compare in that space. Kalshi keys by ISO times.
-    const sinceKey = since && key.startsWith("catalogue:") ? (last!.at.length === 7 ? since.slice(0, 7) : since.slice(0, 10)) : since;
+    const sinceKey0 = since && key.startsWith("catalogue:") ? (last!.at.length === 7 ? since.slice(0, 7) : since.slice(0, 10)) : since;
+    // THE AWAITING ANCHOR (review N7): while the adapter reports events that closed but are not final yet, the read window does not move
+    // past where it stood when they were first seen — a market that resolves weeks after a later one settled is still read when it does.
+    const anchorKey = `fetch.awaiting-anchor.${key}`;
+    const anchorRaw = d.registry.getStatus(anchorKey);
+    const anchorObj = anchorRaw ? (JSON.parse(anchorRaw) as { since: string | null } | null) : null;
+    const anchor = anchorObj ? anchorObj.since : undefined;
+    const sinceKey = anchor === undefined ? sinceKey0 : anchor === null || sinceKey0 === null ? null : anchor < sinceKey0 ? anchor : sinceKey0;
+    // KALSHI FAILS CLOSED (owner decision 2026-10-10, after the ChatGPT/Codex review's C1): with BURNTICKER_KALSHI_ENABLED off, Kalshi is
+    // not read at all — not even for coins registered with a Kalshi rule. Those coins are HELD (no readings, nothing planned or attested)
+    // with a "venue disabled" alert; they resume when the venue is turned back on with written consent.
+    if (locked.rule.oracle === "kalshi" && d.kalshiEnabled === false) {
+      const msg = "venue disabled: BURNTICKER_KALSHI_ENABLED is off, so Kalshi is not read (the coin is held)";
+      const names = tokens.filter((x) => x.selectorKey === key).map((x) => `$${x.ticker}`).join(", ");
+      if (d.registry.recordAlert({ kind: "venue-disabled", key: `venue-disabled:${key}`, text: `${names}: ${msg}`, meta: { selectorKey: key } }, now)) d.log(`  [held] ${key} (${names}): ${msg}`);
+      d.registry.setFeedState({ selectorKey: key, lastFetchAt: st.lastFetchAt, lastOkAt: st.lastOkAt, failures: st.failures, lastError: msg, nextFetchAt: now + pollMsFor(d, locked.rule) });
+      out.push({ key, written: 0, refusals: [], awaitingFinal: 0, error: msg, skipped: false });
+      continue;
+    }
     try {
-      const isKalshi = !key.startsWith("catalogue:") && !key.startsWith("polymarket:");
-      if (isKalshi && d.kalshiEnabled === false) d.log(`  [warn] ${key}: Kalshi read for $${t.ticker}, a coin registered with a Kalshi rule — BURNTICKER_KALSHI_ENABLED is off, so only already-registered Kalshi coins are read`);
       const r = await oracleFor(d, key).settledSince(rule, sinceKey);
       const written = d.registry.putReadings(locked.rule.oracle, key, r.events, { settlementSourceUrl: r.settlementSourceUrl, attestedBy: [d.attester] }, now);
       recordWindowEnd(d, tokens.filter((x) => x.selectorKey === key), r);
+      if (r.awaitingFinal > 0 && anchor === undefined) d.registry.setStatus(anchorKey, { since: sinceKey }, now);
+      else if (r.awaitingFinal === 0 && anchor !== undefined) d.registry.setStatus(anchorKey, "", now);
       d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: now + pollMsFor(d, locked.rule) });
       if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new reading(s)${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });
@@ -134,13 +152,33 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
   return out;
 }
 
+/**
+ * INDEPENDENT vs ORDERED readings (ChatGPT/Codex review N7, 2026-10-10). A binary rule, or a scalar rule against a FIXED baseline with no
+ * carry, reads every event on its own: each one is identified by its event id, and any reading after the token's launch baseline that
+ * has no receipt is planned — however late it became final, whatever the cursor says. An ORDERED scalar rule (baseline =
+ * previousSettlement, or a carry across consecutive increases) measures each value against the last processed one, so a period that
+ * turns up behind the cursor is NOT re-applied against the newest value (its change is already inside the next processed delta, and
+ * re-applying it would corrupt the carry); it is surfaced as a `late-reading` alert instead, never silently.
+ */
+export function independentReadings(rule: BurnRule, carry: CarryPolicy): boolean {
+  return rule.kind === "binary" || (rule.kind === "scalar" && !!rule.scalar && rule.scalar.baseline !== "previousSettlement" && carry === "none");
+}
+
 /** New readings for one token through the engine → receipt rows. Pure apart from the registry writes. */
 export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null = null): { mint: string; eventId: string; status: string }[] {
   const state = d.registry.state(t.mint);
   const after = state.lastSettledAt ?? t.baselineAt;
-  const fresh: SettledEvent[] = d.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r) && (r.at > after || (r.at === after && state.lastEventId !== null && r.id > state.lastEventId)) && !d.registry.receipt(t.mint, r.id));
+  const carry = carryFor(locked.rule);
+  const independent = independentReadings(locked.rule, carry);
+  const ahead = (r: { at: string; id: string }) => r.at > after || (r.at === after && state.lastEventId !== null && r.id > state.lastEventId);
+  const unseen = d.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r) && !d.registry.receipt(t.mint, r.id));
+  const fresh: SettledEvent[] = independent ? unseen : unseen.filter(ahead);
+  if (!independent) for (const r of unseen.filter((x) => !ahead(x))) {
+    const text = `$${t.ticker} ${r.id} (${r.at}) arrived behind the settlement cursor (${after}); this rule measures each value against the last processed one, so the change through ${r.id} is already inside the next processed delta and is not applied again`;
+    if (d.registry.recordAlert({ kind: "late-reading", key: `late-reading:${t.mint}:${r.id}`, text, meta: { mint: t.mint, eventId: r.id, at: r.at, cursor: after } }, d.now())) d.log(`  [late] ${text}`);
+  }
   if (!fresh.length) return [];
-  const steps = unitSteps(locked.rule, fresh, carryFor(locked.rule), { value: state.lastValue, carryOut: state.carryOut });
+  const steps = unitSteps(locked.rule, fresh, carry, { value: state.lastValue, carryOut: state.carryOut });
   const out: { mint: string; eventId: string; status: string }[] = [];
   let prev = { value: state.lastValue, carryOut: state.carryOut };
   for (const { event, step } of steps) {
@@ -549,6 +587,7 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     try { locked = d.registry.lockedRule(t); } catch (e) { errors.push(`$${t.ticker}: rule unreadable: ${(e as Error).message}`); continue; }
     if (selectorKeyOf(locked.rule) !== t.selectorKey) { errors.push(`$${t.ticker}: selector key drifted (${t.selectorKey} ≠ ${selectorKeyOf(locked.rule)})`); continue; }
     const gate = gates.get(t.mint)?.gate ?? null;
+    if (locked.rule.oracle === "kalshi" && d.kalshiEnabled === false) continue;   // venue disabled: held (fetchDue raised the alert)
     try { if (t.status === "live" && !d.registry.ruleEnd(t.mint)) planned.push(...planToken(d, t, locked, gate)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
     try { executed.push(...await executePending(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
     // After the day's cranks: the end of the rule (drain / wind-down / retirement / sweep) is planned from what the program just did.

@@ -12,8 +12,10 @@ use crate::state::Pair;
 /// PERMISSIONLESS. Two cases, both turning trading into a race-free pro-rata redemption without a fee (blind review 2 M-1):
 ///   * Open, at or after the deadline: the pair is Voided. Each side's redemption pool = its curve SOL + its escrowed 75 bps burn share
 ///     (the burn share comes back to the holders — nothing is stranded in a burn pool that can never be registered).
-///   * Graduating, ≥ 3 days after the commit, and Raydium is actually blocking the missing side's pool (pool creation disabled on the
-///     pinned AmmConfig, or its fee leaves the side no liquidity): that side alone goes into redemption (blind review 1 L-2/L-3).
+///   * Graduating: each missing side goes into redemption alone when, since the commit, 3 days have passed and Raydium is actually
+///     blocking it (pool creation disabled on the pinned AmmConfig, or its fee leaves the side no liquidity — blind review 1 L-2/L-3),
+///     or 30 days have passed whatever the reason (re-check RC-2). Both sides are examined (RC-3). If neither pool exists and both
+///     sides end up refunding, the pair becomes Voided.
 #[event_cpi]
 #[derive(Accounts)]
 pub struct VoidPair<'info> {
@@ -48,13 +50,32 @@ pub fn handle_void(ctx: Context<VoidPair>) -> Result<()> {
             2u8
         }
         STATUS_GRADUATING => {
-            let m = (0..2).find(|&s| p.pools[s] == Pubkey::default() && !p.refunding[s]).ok_or(PairError::NotStuck)?;
-            require!(now >= p.graduation_started_at.saturating_add(GRADUATION_STUCK_SECS), PairError::NotStuck);
-            require!(!side_can_graduate(p, m, &amm, &rent), PairError::NotStuck);
-            p.refunding[m] = true;
+            // Every missing, not-yet-refunding side is examined (re-check RC-3: not only the first). A side is refunded when, since
+            // the commit, either GRADUATION_STUCK_SECS have passed and Raydium blocks it now (pool creation disabled on the pinned
+            // AmmConfig, or its fee leaves no liquidity), or GRADUATION_FALLBACK_SECS have passed whatever the reason (re-check RC-2).
+            let since = now.saturating_sub(p.graduation_started_at);
+            let mut hit = [false; 2];
+            for (s, h) in hit.iter_mut().enumerate() {
+                if p.pools[s] != Pubkey::default() || p.refunding[s] {
+                    continue;
+                }
+                let blocked = since >= GRADUATION_STUCK_SECS && !side_can_graduate(p, s, &amm, &rent);
+                *h = blocked || since >= GRADUATION_FALLBACK_SECS;
+            }
+            require!(hit[0] || hit[1], PairError::NotStuck);
+            for (s, h) in hit.iter().enumerate() {
+                if *h {
+                    p.refunding[s] = true;
+                    start_redemption(p, s);
+                }
+            }
             p.voided_at = now;
-            start_redemption(p, m);
-            m as u8
+            // Neither pool exists and both sides are refunding: nothing can ever be registered, so the pair is simply Voided (and
+            // closable once nothing circulates).
+            if p.refunding[0] && p.refunding[1] && p.pools[0] == Pubkey::default() && p.pools[1] == Pubkey::default() {
+                p.status = STATUS_VOIDED;
+            }
+            if hit[0] && hit[1] { 2u8 } else if hit[0] { 0u8 } else { 1u8 }
         }
         _ => return err!(PairError::NotOpen),
     };
@@ -109,7 +130,7 @@ pub fn handle_claim_developer_fee(ctx: Context<ClaimDeveloperFee>) -> Result<()>
 /// Pair account is what `burn_receipts.register_pair_pool` reads, so closing it could strand a burn pool forever). Allowed once no
 /// token of either coin circulates outside the vault (mint supply − vault balance = 0; tokens a holder burned count as gone, so dust
 /// burned after a void cannot block it — blind review 2 L-1). The vault's tokens are burned; the developer accrual is paid if the
-/// wallet can receive it (otherwise the close waits); any lamports above the SOL vault's rent minimum (dust left by burned tokens,
+/// wallet can receive it (otherwise it goes to the burn pools with the residue — re-check RC-5); any lamports above the SOL vault's rent minimum (dust left by burned tokens,
 /// donations) go to the two burn pools; the token-vault and Pair rent go to the creator who paid it — or, if that address is
 /// executable and cannot be credited, to burn pool A (blind review 1 I-3).
 #[event_cpi]
@@ -165,10 +186,16 @@ pub fn handle_close(ctx: Context<ClosePair>) -> Result<()> {
         }
         token::close_account(CpiContext::new_with_signer(token::ID, token::CloseAccount { account: tv.clone(), destination: rent_to.clone(), authority: vault.clone() }, &[seeds]))?;
     }
+    // The developer accrual is paid if the wallet can receive it; otherwise (an executable account, or a payment that would leave it
+    // below rent) it joins the residue to the burn pools rather than blocking the close (re-check RC-5).
     let dev = p.dev_accrued;
+    let mut dev_redirected = 0u64;
     if dev > 0 {
-        require!(can_receive(&a.dev_wallet, dev)?, PairError::NotClosable);
-        pay_dev(&vault, &a.dev_wallet.to_account_info(), seeds, dev)?;
+        if can_receive(&a.dev_wallet, dev)? {
+            pay_dev(&vault, &a.dev_wallet.to_account_info(), seeds, dev)?;
+        } else {
+            dev_redirected = dev;
+        }
     }
     let vault_rent = Rent::get()?.minimum_balance(0);
     require_vault_intact(&vault, vault_rent)?;
@@ -179,7 +206,7 @@ pub fn handle_close(ctx: Context<ClosePair>) -> Result<()> {
             system_program::transfer(CpiContext::new_with_signer(system_program::ID, system_program::Transfer { from: vault.clone(), to }, &[seeds]), amount)?;
         }
     }
-    let ev = PairClosed { pair: pair_key, caller: a.caller.key(), rent_to: rent_to.key(), status: STATUS_VOIDED, tokens_burned: burned, residue_lamports: residue };
+    let ev = PairClosed { pair: pair_key, caller: a.caller.key(), rent_to: rent_to.key(), status: STATUS_VOIDED, tokens_burned: burned, residue_lamports: residue, dev_accrual_to_burn_pools: dev_redirected };
     let p = &mut ctx.accounts.pair;
     p.dev_accrued = 0;
     p.sol = [0, 0];

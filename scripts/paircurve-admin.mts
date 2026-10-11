@@ -14,7 +14,8 @@
 //               Three transactions: (1) mint A (6 decimals, no freeze authority, mint authority = the pair's SOL vault) + its
 //               burn_receipts initialize_token with registration policy 2; (2) the same for B; (3) init_pair. A dry run simulates (1).
 //   buy         --pair <pubkey> --side A|B --sol <amount> [--min-tokens <raw>]       (quotes with src/lib/pairCurve/pricing.ts first)
-//   sell        --pair <pubkey> --side A|B --amount all|<pct>%|<raw> [--min-lamports <n>]   (Voided / refunding side: pro-rata redemption, no fee)
+//   sell        --pair <pubkey> --side A|B --amount all|<pct>%|<raw> [--min-lamports <n>] [--no-auto-void]
+//               (Voided / refunding side: pro-rata redemption, no fee; an Open pair past its deadline is voided in the same transaction)
 //   crank       --pair <pubkey>        what the keeper does, one transaction per action: graduate, register, void, seed, claim
 //   graduate    --pair <pubkey> --side A|B [--with-register]      (registration is a separate transaction by default)
 //   claim       --pair <pubkey>                                    (claim_developer_fee: the accrued 25 bps → the developer wallet)
@@ -44,7 +45,7 @@ import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import { redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 import { ata, curveOf, fetchPair, pairPda, sidePoolAccounts, STATUS_NAMES, vaultPda } from "../src/lib/pairCurve/accounts.ts";
-import { buyIx, claimDeveloperFeeIx, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
+import { buyIx, claimDeveloperFeeIx, syncVaultWsolIxs, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
 import { initParamProblems, pairPhase, quoteBuy, quoteRedeem, quoteSell, sideCosts, DEFAULT_CURVE_SUPPLY, DEFAULT_VIRTUAL_TOKEN_AMOUNT } from "../src/lib/pairCurve/pricing.ts";
 
 const args = process.argv.slice(2);
@@ -174,13 +175,21 @@ if (CMD === "sell") {
   const held = BigInt((await connection.getTokenAccountBalance(ata(payer.publicKey, p.mints[side]), "confirmed")).value.amount);
   const a = opt("amount") ?? "all";
   const amt = a === "all" ? held : /^\d+(\.\d+)?%$/.test(a) ? (held * BigInt(Math.round(Number(a.slice(0, -1)) * 100))) / BigInt(10_000) : BigInt(a);
-  const redeeming = p.status === 2 || p.refunding[side];
-  const q = redeeming ? { redemption: true, net: quoteRedeem(p.redeem_pool[side], p.redeem_supply[side], p.sold[side], p.sol[side], amt) } : quoteSell(curveOf(p), p.sold[side], amt);
-  await send([sellIx({ seller: payer.publicKey, pairAddress: pairKey, pair: p, side, amount: amt, minLamportsOut: opt("min-lamports") ? BigInt(opt("min-lamports")!) : q.net })], { side: side === 0 ? "A" : "B", amount: amt, quote: q });
+  // An Open pair at/after its deadline can only void: the program refuses curve sells there (re-check RC-1), so the CLI voids first in
+  // the same transaction and quotes the redemption the void will snapshot. --no-auto-void sends the bare sell (rehearsal: shows the refusal).
+  const expiredOpen = p.status === 0 && Math.floor(Date.now() / 1000) >= Number(p.deadline) && !flag("no-auto-void");
+  const redeeming = p.status === 2 || p.refunding[side] || expiredOpen;
+  const pool = expiredOpen ? p.sol[side] + p.burn_escrow[side] : p.redeem_pool[side];
+  const supply = expiredOpen ? p.sold[side] : p.redeem_supply[side];
+  const left = expiredOpen ? pool : p.sol[side];
+  const q = redeeming ? { redemption: true, voidsFirst: expiredOpen, net: quoteRedeem(pool, supply, p.sold[side], left, amt) } : quoteSell(curveOf(p), p.sold[side], amt);
+  const ixs = expiredOpen ? [voidPairIx({ caller: payer.publicKey, pairAddress: pairKey, pair: p })] : [];
+  ixs.push(sellIx({ seller: payer.publicKey, pairAddress: pairKey, pair: p, side, amount: amt, minLamportsOut: opt("min-lamports") ? BigInt(opt("min-lamports")!) : q.net }));
+  await send(ixs, { side: side === 0 ? "A" : "B", amount: amt, quote: q });
 }
 if (CMD === "graduate") {
   const side = sideOf();
-  const ixs = [graduateIx({ cranker: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster })];
+  const ixs = [...(await syncVaultWsolIxs(connection, p)), graduateIx({ cranker: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster })];
   if (flag("with-register")) ixs.push(registerSideIx({ registrar: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts }));
   await send(ixs, { side: side === 0 ? "A" : "B", pool: sidePoolAccounts(cluster, pairKey, side, p.mints[side]).pool });
 }

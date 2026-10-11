@@ -42,8 +42,8 @@ const POWERS = {
   sell: {
     class: "permissionless",
     signers: { seller: "trader" },
-    can: "While Open (also after the deadline): return t tokens of one side for F(sold) − F(sold − t) less the 100 bps fee (accounted in the vault like a buy's). After a void, or on a side refunded after a Raydium block: a pro-rata redemption at the snapshot (curve SOL + the escrowed burn share), no fee, the same rate whatever the order of exits.",
-    cannot: "Sell once graduation is committed (except a refunding side); sell more than is outstanding; receive more than the formula or the pro-rata share; touch the other side's SOL.",
+    can: "While Open and before the deadline: return t tokens of one side for F(sold) − F(sold − t) less the 100 bps fee (accounted in the vault like a buy's). After a void, or on a refunded side: a pro-rata redemption at the snapshot (curve SOL + the escrowed burn share), no fee, the same rate whatever the order of exits.",
+    cannot: "Sell on the curve at/after the deadline (the pair can only void then); sell once graduation is committed (except a refunding side); sell more than is outstanding; receive more than the formula or the pro-rata share; touch the other side's SOL.",
     timelock: null, sunset: "The commit.", funds: "Seller → token vault (tokens); SOL vault → seller (proceeds less fee, or the redemption).",
   },
 
@@ -57,17 +57,17 @@ const POWERS = {
   void_pair: {
     class: "permissionless",
     signers: { caller: "anyone" },
-    can: "At or after the deadline, if never committed: mark the pair Voided and snapshot each side's redemption pool (curve SOL + escrowed burn share). Or, ≥ 3 days after the commit, if Raydium actually blocks the missing side's pool (creation disabled, or the fee leaves no liquidity): put that side alone into redemption.",
-    cannot: "Void before the deadline, a committed pair (except the blocked side), or twice; refund a side because nobody cranked it; move any funds.",
-    timelock: "The pair's deadline; 3 days after the commit for a blocked side.", sunset: "Single use per pair / side.", funds: "None.",
+    can: "At or after the deadline, if never committed: mark the pair Voided and snapshot each side's redemption pool (curve SOL + escrowed burn share). On a committed pair: put each missing side into redemption once 3 days have passed and Raydium blocks it (creation disabled, or the fee leaves no liquidity), or once 30 days have passed whatever the reason; both sides refunded with no pool → Voided.",
+    cannot: "Void before the deadline, or twice; refund a side whose pool exists; refund a missing side within 30 days of the commit unless Raydium blocks it; move any funds.",
+    timelock: "The pair's deadline; 3 days after the commit for a blocked side; 30 days after the commit for any missing side.", sunset: "Single use per pair / side.", funds: "None.",
   },
 
   close_pair: {
     class: "permissionless",
     signers: { caller: "anyone" },
-    can: "Voided pairs only, once no token of either coin circulates outside the vault (burned tokens count as gone): burn the returned supplies, pay the developer accrual, send the SOL vault's lamports above its rent minimum to the two burn pools, close the token vaults and the Pair with their rent to the recorded creator (to burn pool A if that address is executable).",
+    can: "Voided pairs only, once no token of either coin circulates outside the vault (burned tokens count as gone): burn the returned supplies, pay the developer accrual (to the burn pools instead if the developer wallet cannot receive it), send the SOL vault's lamports above its rent minimum to the two burn pools, close the token vaults and the Pair with their rent to the recorded creator (to burn pool A if that address is executable).",
     cannot: "Close a committed or graduated pair (its Pair account is what burn_receipts' register_pair_pool reads); close while tokens circulate; send residue anywhere but the burn pools or rent anywhere but the creator (or burn pool A).",
-    timelock: null, sunset: "Single use.", funds: "Developer accrual → developer wallet; SOL vault residue → burn pools; account rent → the creator.",
+    timelock: null, sunset: "Single use.", funds: "Developer accrual → developer wallet (or the burn pools); SOL vault residue → burn pools; account rent → the creator.",
   },
   claim_developer_fee: {
     class: "permissionless",

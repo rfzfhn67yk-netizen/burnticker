@@ -69,3 +69,20 @@ For each item: PASS with evidence (file:line, test name) or a finding (severity,
 findings BEFORE reading the prior reports; then read `2026-10-09-claude-blind-1.md`, `2026-10-10-claude-blind-2.md`,
 `2026-10-10-claude-blind-3.md` and `docs/burn-receipts/CHANGELOG.md`, and finish with four lists: closed / still open / regressed /
 new. Name the commit you reviewed.
+
+## Erratum 2026-10-10 (after the ChatGPT/Codex review)
+
+The text above is pre-registered and stays as written. The review (`2026-10-10-chatgpt-pr-review.md`, checklist items 1 and 8, and
+"Claims and UI trust boundaries") found three statements in it that do not match the source; the correct facts are:
+
+- **LP threshold (scope line and item 8).** `register_pool`'s general floor is **50 %** of the pool's live LP burned or locked
+  (`MIN_LOCKED_LP_BPS = 5_000`, `programs/burn-receipts/programs/burn_receipts/src/constants.rs`); **90 %** applies only to a
+  stranding-recovery fallback pool chosen through `set_registration_policy` (`FALLBACK_MIN_LOCKED_LP_BPS = 9_000`), and
+  `register_pair_pool` requires 90 % of the pair pool's creation LP burned (`PAIR_MIN_BURNED_LP_BPS`). Public copy now reads: "≥ 50 % at
+  registration (≥ 90 % for the fallback pool); our platform burns 100 % at graduation". A pool's current LP share is not evidence that
+  all of its initial graduation LP was burned.
+- **Instruction count (item 1).** burn_receipts has **24 entrypoints** in its `#[program]` module (`.../burn_receipts/src/lib.rs`),
+  not 23; the IDL, the Powers Register and the whitepaper's §13.3 list 24. `test/burntickerReviewErrata.test.ts` pins the count.
+- **"No market cap anywhere" (UI trust rules).** Burn Derby's one-shot flippening compares two OTHER coins' market caps as the rule's
+  input. The rule is now: no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown
+  only as the rule sentence. Derby admission refuses any Burnticker platform coin as an input (`src/lib/burnticker/derby/admission.ts`).

@@ -518,8 +518,16 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     if (!o.register) return { pin: null };
     const registered = registeredDescription(sideRule, description);
     const uploader = p.uploader ?? null;
+    // THE HOST'S DAILY UPLOAD BUDGET (ChatGPT/Codex review N4, 2026-10-10): pins are paid by the platform before any wallet signs, so
+    // however the request arrives (the legacy wizard route or /v1, any number of clients) at most BURNTICKER_PIN_DAILY_CAP coins are
+    // pinned per UTC day on this host; past it the launch is refused before anything is uploaded or registered.
+    const budgetKey = `pin.budget.${new Date().toISOString().slice(0, 10)}`;
+    const used = Number(p.registry.getStatus(budgetKey) ?? 0) || 0;
+    const cap = p.pinDailyCap ?? DEFAULT_PIN_DAILY_CAP;
+    if (uploader && used >= cap) return { error: fail(429, `this host's daily upload budget (${cap} coins pinned per UTC day) is used up: try again after 00:00 UTC`, { code: "upload-budget" }) };
     try {
       if (!uploader) throw new Error("no Arweave uploader is configured on this host (BURNTICKER_UPLOAD_PAYER)");
+      p.registry.setStatus(budgetKey, String(used + 1));
       const pin = await pinCoin(uploader, { ticker, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl });
       pins.set(ticker, pin);
       return { pin };
@@ -530,8 +538,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   };
   const uriFor = (ticker: string) => (m: string) => { const pin = pins.get(ticker); return pin ? pin.metadataUri : o.register ? `${publicOrigin()}/api/burnticker/metadata/${m}` : "ar://pending-upload-at-launch"; };
   const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey };
-  const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[], creatorNote = ""): TokenRow => {
-    const token = p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId: bundle.addresses.poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
+  const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[], creatorNote = "", poolId: string | null = bundle.addresses.poolId): TokenRow => {
+    const token = p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
     if (p.keeperPubkey) p.registry.addAttester({ mint: token.mint, pubkey: p.keeperPubkey, role: "data-key", addedAt: Date.now(), timelockUntil: null });
     const pin = pins.get(ticker) ?? null;
     p.registry.putTokenMeta({ mint: token.mint, creatorNote, metadataUri: pin?.metadataUri ?? null, metadataTx: pin?.metadataTx ?? null, metadataSha256: pin?.metadataSha256 ?? null, imageUri: pin?.imageUri ?? null, imageTx: pin?.imageTx || null, imageSha256: pin?.imageSha256 || null, hosted: !pin });
@@ -559,11 +567,13 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
         if ("error" in r) return r;
       }
       const pair = await buildPairBundles({ a: input, b: side, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
-      const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note) : null;
-      const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links) : null;
-      const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
+      // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
+      // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).
       const pairCurve = pairCurveEnabled(process.env) ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
+      const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note, pairCurve ? null : pair.a.addresses.poolId) : null;
+      const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links, "", pairCurve ? null : pair.b.addresses.poolId) : null;
+      const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;
       return { pair: { pairId: pair.pairId, selector: pair.selector, notes: pair.notes, row, bundles: { a: pair.a, b: pair.b }, tokens: { a: tokenA, b: tokenB }, seriesTitle, preflight, ...(pairCurve ? { pairCurve } : {}) } };
     } catch (e) {
       return { error: fail(400, (e as Error).message) };
@@ -581,11 +591,25 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   }
 }
 
-/** `launched`: the landed launch transaction takes the draft live; the baseline is now. */
-export function markLaunched(p: Platform, mint: string, launchTx: string): ApiResult {
+/** Coins pinned on Arweave per UTC day per host when BURNTICKER_PIN_DAILY_CAP is not set (review N4). */
+export const DEFAULT_PIN_DAILY_CAP = 50;
+
+/**
+ * `launched`: the landed launch transaction takes the draft live. ChatGPT/Codex review N1 (2026-10-10): the transaction is verified on
+ * chain first (launchVerify.ts: successful, signed by the coin's mint and its creator, calls burn_receipts, landed after the draft) and
+ * the baseline is its BLOCK TIME; the same signature again is a no-op that leaves the baseline alone; a host without an RPC refuses.
+ */
+export async function markLaunched(p: Platform, mint: string, launchTx: string): Promise<ApiResult> {
   const t = p.registry.token(mint);
   if (!t) return fail(404, "no such draft");
   if (!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(launchTx)) return fail(400, "launchTx must be a transaction signature");
-  try { p.registry.markLaunched(mint, launchTx, t.poolId, new Date().toISOString()); } catch (e) { return fail(409, (e as Error).message); }
-  return ok({ ok: true, token: p.registry.token(mint), note: "the keeper verifies the launch transaction on its next cycle; the baseline is now — settlements after this moment count" });
+  if (t.launchTx === launchTx) return ok({ ok: true, token: t, replay: true, note: `already confirmed in this transaction; the baseline stays ${t.baselineAt} (fixed at launch)` });
+  if (t.launchTx) return fail(409, `registry: ${mint} already launched in ${t.launchTx}`);
+  if (t.status !== "draft") return fail(409, t.status === "expired" ? `registry: the draft ${mint} expired (not launched within 24 h); build a fresh bundle` : `registry: ${mint} is ${t.status}, not a draft`);
+  if (!p.launchVerifier) return fail(503, "this host cannot verify a launch transaction (no BURNTICKER_RPC_URL): a draft goes live only after its launch is read from the chain", { code: "launch-unverifiable" });
+  const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt });
+  if (!v.ok) return fail(v.status, v.reason, { code: "launch-unverified" });
+  const baselineAt = new Date(v.blockTimeMs).toISOString();
+  try { p.registry.markLaunched(mint, launchTx, t.poolId, baselineAt); } catch (e) { return fail(409, (e as Error).message); }
+  return ok({ ok: true, token: p.registry.token(mint), note: `the launch transaction was read from the chain; the baseline is its block time ${baselineAt} — settlements after this moment count` });
 }

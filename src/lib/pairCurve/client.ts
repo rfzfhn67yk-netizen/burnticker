@@ -168,7 +168,7 @@ export function planPairCrank(p: PairAccount, now: number, registered: [boolean,
     else out.push({ kind: "wait", why: `raise ${p.sol[0] + p.sol[1]} of ${p.target_raise_lamports} lamports (or a side under ${p.min_side_share_bps} bps)` });
   } else if (p.status === STATUS_GRADUATING) {
     for (const s of [0, 1] as const) if (missingPool(s) && !p.refunding[s]) out.push({ kind: "graduate", side: s, why: "graduation committed; this side's pool is still to create" });
-    if ((([0, 1] as const).some((s) => missingPool(s) && !p.refunding[s])) && now >= Number(p.graduation_started_at) + GRADUATION_STUCK_SECS) out.push({ kind: "void", why: "a side is still missing 3 days after the commit: refund it if Raydium blocks it" });
+    if ((([0, 1] as const).some((s) => missingPool(s) && !p.refunding[s])) && now >= Number(p.graduation_started_at) + GRADUATION_STUCK_SECS) out.push({ kind: "void", why: "a side is still missing 3 days after the commit: refunded if Raydium blocks it (unconditionally after 30 days)" });
     tail();
   } else if (p.status === STATUS_GRADUATED) {
     tail();
@@ -213,6 +213,17 @@ export function seedObservationIxs(o: { cluster: Cluster; payer: PublicKey; pair
   return [createAta(o.payer, NATIVE_MINT, wsol), createAta(o.payer, mint, tok), SystemProgram.transfer({ fromPubkey: o.payer, toPubkey: wsol, lamports: amount }),
     new TransactionInstruction({ programId: TOKEN_PROGRAM_ID, data: Buffer.from([17]), keys: [{ pubkey: wsol, isSigner: false, isWritable: true }] }), swap, close];
 }
+
+/**
+ * SPL Token SyncNative on the pair vault's WSOL account, when that account exists (permissionless; no signer). The program syncs before
+ * it samples the account (ChatGPT PR review, Low); the keeper also prepends it so an unsynced lamport donation never costs a retry.
+ */
+export async function syncVaultWsolIxs(connection: Connection, p: PairAccount): Promise<TransactionInstruction[]> {
+  const a = await connection.getAccountInfo(p.vault_wsol, "confirmed");
+  if (!a || !a.owner.equals(TOKEN_PROGRAM_ID) || a.data.length !== 165) return [];
+  return [syncNativeIx(p.vault_wsol)];
+}
+export const syncNativeIx = (account: PublicKey): TransactionInstruction => new TransactionInstruction({ programId: TOKEN_PROGRAM_ID, data: Buffer.from([17]), keys: [{ pubkey: account, isSigner: false, isWritable: true }] });
 
 export interface PairCurveContext {
   connection: Connection;
@@ -285,7 +296,7 @@ export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAdd
     p = (await fetchPair(ctx.connection, pairAddress)) ?? p;
     let ixs: TransactionInstruction[] = [];
     if (action.kind === "void") ixs = [voidPairIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
-    if (action.kind === "graduate") ixs = [graduateIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, programId: ctx.programId })];
+    if (action.kind === "graduate") ixs = [...(await syncVaultWsolIxs(ctx.connection, p)), graduateIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, programId: ctx.programId })];
     if (action.kind === "register") ixs = [registerSideIx({ registrar: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
     if (action.kind === "claim") ixs = [claimDeveloperFeeIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
     if (action.kind === "seed") ixs = seedObservationIxs({ cluster: ctx.cluster, payer: cranker.publicKey, pairAddress, pair: p, side: action.side, programId: ctx.programId });

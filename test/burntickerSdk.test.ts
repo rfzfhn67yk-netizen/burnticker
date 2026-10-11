@@ -16,7 +16,7 @@ import { encodeType } from "@/lib/burnReceipts/idlCoder";
 import { configPda, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
 import { MODE_VAULT } from "@/lib/burnReceipts/constants";
 import { base58Encode } from "@/lib/burnKeeper/solana";
-import { API, BLOCKHASH, CREATOR, FakeConnection, MAINNET_GENESIS, encodeAccount, makeWorld, routeFetch, upstreamFetch, zeroOf, type World } from "./burntickerApiHelpers.ts";
+import { API, BLOCKHASH, CREATOR, FakeConnection, MAINNET_GENESIS, encodeAccount, makeWorld, programReceiptTx, routeFetch, upstreamFetch, zeroOf, type World } from "./burntickerApiHelpers.ts";
 import { BRONCOS, DENVER_HIGH, NOW } from "./burntickerHelpers.ts";
 
 let w: World;
@@ -138,15 +138,17 @@ describe("buildLaunchBundle", () => {
 });
 
 describe("verifyReceipt (on the caller's machine)", () => {
-  const chainFor = (memo: string, sig: string) => { const c = new FakeConnection(); c.txs.set(sig, { slot: 1, meta: { err: null, logMessages: [`Program log: Memo (len ${memo.length}): "${memo}"`] }, transaction: { message: {} } }); return c; };
+  // review N3: the chain check needs the burn program's own instruction (Memo CPI + burn on the mint) and its processed Reading
+  const chainFor = (memo: string, sig: string) => { const c = new FakeConnection(); c.txs.set(sig, programReceiptTx(c, { programId: PLACEHOLDER_PROGRAM_ID, mint: w.bronco.mint, memo, burnedRaw: BigInt(1) })); return c; };
+  const prov = () => ({ programId: PLACEHOLDER_PROGRAM_ID, mint: w.bronco.mint });
   test("a Kalshi receipt: source re-read from Kalshi, units, spend formula, memo on chain — all green", async () => {
     const t = await client().token("BRONCO");
     const r = t.receipts.find((x) => x.status === "confirmed")!;
-    const v = await verifyReceipt(r, { ticker: "BRONCO", rulesText: t.rulesText, fetch: upstreamFetch, connection: chainFor(r.memo!, r.signature!) as never, now: NOW });
+    const v = await verifyReceipt(r, { ticker: "BRONCO", rulesText: t.rulesText, fetch: upstreamFetch, connection: chainFor(r.memo!, r.signature!) as never, ...prov(), now: NOW });
     assert.equal(v.verified, true, JSON.stringify(v.checks));
     assert.deepEqual(v.checks.map((c) => [c.id, c.ok]), [["rules", true], ["memo", true], ["source", true], ["units", true], ["spend", true], ["chain", true]]);
     // The client's convenience form fetches the receipt + rules itself.
-    const v2 = await client({ fetch: routeFetch, connection: chainFor(r.memo!, r.signature!) as never }).verifyReceipt("BRONCO", { eventId: r.eventId, now: NOW });
+    const v2 = await client({ fetch: routeFetch, connection: chainFor(r.memo!, r.signature!) as never, programId: PLACEHOLDER_PROGRAM_ID }).verifyReceipt("BRONCO", { eventId: r.eventId, now: NOW });
     assert.equal(v2.verified, true);
   });
   test("tampering fails the right check: units, a different memo on chain, a source that disagrees, a swapped rules.json", async () => {
@@ -156,7 +158,7 @@ describe("verifyReceipt (on the caller's machine)", () => {
     const bad = (v: Awaited<ReturnType<typeof verifyReceipt>>) => v.checks.filter((c) => c.ok === false).map((c) => c.id);
     // A program receipt (2026-10-10): the spend belongs to the reading (checked against the memo's unit count), so units tampering fails memo + units.
     assert.deepEqual(bad(await verifyReceipt({ ...r, units: 3 }, base)), ["memo", "units"]);
-    assert.deepEqual(bad(await verifyReceipt(r, { ...base, connection: chainFor(`${r.memo!} `, r.signature!) as never })), ["chain"]);
+    assert.deepEqual(bad(await verifyReceipt(r, { ...base, ...prov(), connection: chainFor(`${r.memo!} `, r.signature!) as never })), ["chain"]);
     const flipped = await verifyReceipt({ ...r, result: "no" }, { ...base, fetch: false });
     assert.ok(bad(flipped).includes("units"), "the program's memo carries no result field: a flipped result fails the unit recomputation (and the source check when fetched)");
     const other = await verifyReceipt(r, { ...base, rulesText: lockRule({ ...BRONCOS, binary: { onYes: { fractionOfPool: 0.03 }, onNo: null } }).text });
@@ -216,8 +218,8 @@ describe("subscribe", () => {
     ev.record_date = 20261008; ev.units = BigInt(3); ev.burned = BigInt(12345);
     const data = Buffer.concat([EVENT_IX_TAG, disc, encodeType(BURN_RECEIPTS_IDL, { defined: { name: "ReadingProcessed" } }, ev)]);
     assert.equal(decodeEventData(data)!.name, "ReadingProcessed");
-    const keys = [Keypair.generate().publicKey, programId];
-    const tx = (memo: string) => ({ slot: 9, blockTime: 1, meta: { err: null, logMessages: [`Program log: Memo (len 3): "${memo}"`], innerInstructions: [{ index: 0, instructions: [{ programIdIndex: 1, data: base58Encode(data) }, { programIdIndex: 0, data: base58Encode(data) }] }] }, transaction: { message: { getAccountKeys: () => ({ get: (i: number) => keys[i] }) } } });
+    const keys = [Keypair.generate().publicKey, programId, new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr")];
+    const tx = (memo: string) => ({ slot: 9, blockTime: 1, meta: { err: null, logMessages: [`Program log: Memo (len 3): "${memo}"`], innerInstructions: [{ index: 0, instructions: [{ programIdIndex: 1, data: base58Encode(data) }, { programIdIndex: 0, data: base58Encode(data) }, { programIdIndex: 2, data: base58Encode(Buffer.from(memo, "utf8")) }] }] }, transaction: { message: { getAccountKeys: () => ({ get: (i: number) => keys[i] }) } } });
     c.signatures.set(addr, [{ signature: "old1", slot: 1, err: null, blockTime: 1 }]); c.txs.set("old1", tx("old"));
     const got: BurntickerEvent[] = [];
     const sub = subscribe(mint, (e) => got.push(e), { connection: c as never, programId, pollMs: 60_000 });

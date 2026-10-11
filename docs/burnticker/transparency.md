@@ -86,3 +86,25 @@ The trust page no longer reads the trading treasury's environment variable for i
    the deployed hash and the deploy transaction; publish.
 8. **Reviews**: commit `docs/burnticker/reviews/checklist.md` BEFORE either review starts; add each report as delivered; update
    `howBuilt.reviews[].status/reportPath` and the bounty status in `transparency.json`; publish.
+
+## 4. Privacy — what the site records about the people using it
+
+Burnticker uses no third-party analytics, sets no tracking cookie and runs no fingerprinting. Two first-party records exist, both
+append-only, in the registry's own database (`src/lib/burnticker/productStore.ts`):
+
+- **Search misses** (`search_misses`). A search on the launch page that found no card is logged by the server. A search that showed
+  cards that nobody used before the next search or leaving the page is reported by the page. Each row holds:
+  - the query, folded to plain lowercase words (at most 80 characters; anything that looks like a wallet address, an e-mail address
+    or a long number is dropped first);
+  - how many cards it showed;
+  - the reason (no card / no click);
+  - the UTC hour.
+
+  There is no IP address, no user or session id, no wallet and no cookie.
+- **Time to launch** (`launch_timings`). When a creator asks for a launch bundle, the page sends how long each wizard step took.
+  The steps are: entered the search, chose a card, reached the create screen, reached the review, pressed Launch. They are stored
+  with the draft as seconds per step, never as clock times. They are sent with the bundle request only.
+
+The summary (p50 / p90 per step, misses by query) is admin-only: `GET /api/burnticker/v1/ops/search-misses` answers only on the
+operator's own network with the action PIN. A weekly markdown rollup comes from `scripts/burnticker-search-misses.mts`. Both exist to
+find the searches the product cannot answer yet and the steps where people get stuck.

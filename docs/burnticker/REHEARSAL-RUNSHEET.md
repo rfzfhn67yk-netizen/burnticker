@@ -520,8 +520,10 @@ there is still no pool 2 h after `status` reaches 1. Raydium's devnet migration 
 new mint, or accept that gap.
 
 **A19 · K4, pool provenance (README §3, F5).** Run the probe with `POOL=<the existing candidate>`. *Pass:* `cpmm.creatorIsFeePda: true`, and
-`lpBurnedPct + lpLockedPct ≥ 90` (our platform burns 100%), and the pool is the candidate PDA (`exists: true` on the derived address), and
-K1 passes. *Fail:* any one of these. `register_pool` would refuse (`NotMigrationPool` / `PoolCreatorMismatch` / LP check), and the readings wait
+`lpBurnedPct + lpLockedPct ≥ 90` (a rehearsal bar stricter than the program: our platform burns 100%; `register_pool` itself needs ≥ 50 % at
+registration, ≥ 90 % for the fallback pool), and the pool is the candidate PDA (`exists: true` on the derived address), and
+K1 passes. *Fail:* any one of these (under 90 % means the platform config is not burning the LP). `register_pool` would refuse
+(`NotMigrationPool` / `PoolCreatorMismatch` / the LP check under 50 %), and the readings wait
 forever (the 30-day unblock does not apply to an unregistered pool). Stop.
 
 Evidence so far, from a real mainnet migration (pool `CheJUx…cPvH`, read-only, 2026-10-10): `pool_creator` = the LaunchLab creator; the pool

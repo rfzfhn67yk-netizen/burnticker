@@ -218,7 +218,7 @@ describe("/.well-known/burnticker.json", () => {
     assert.equal(w.links.github, loadTransparency(ROOT).publicRepo.url);
     assert.deepEqual(w.links.x, ["https://x.com/burnticker", "https://x.com/USA_DEFICIT"]);
     assert.equal(w.clusters.devnet.programs.burn_receipts.programId, "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
-    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1"); // the review-fix upgrade of 2026-10-10 18:38 Denver
+    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9"); // the re-check round-2 upgrade of 2026-10-10 20:02 Denver
     assert.equal(w.clusters.devnet.squads.vault, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     assert.equal(w.clusters.mainnet.squads.vault, "TODO_MAINNET_SQUADS_VAULT");
     assert.equal(w.security.bountyWallet, "TODO_BOUNTY_WALLET");
@@ -255,8 +255,8 @@ describe("the six v1 routes (API 1.5.0)", () => {
   setPlatformForTests({ cluster: "devnet", publishDir: dir } as unknown as Platform);
   const doc = buildOpenApi() as Record<string, unknown> & { paths: Record<string, unknown>; components: { schemas: Record<string, Record<string, unknown>> } };
   const ok = (name: string, body: unknown) => assert.deepEqual(validateSchema(doc.components.schemas[name], body, doc), [], name);
-  test("API_VERSION is 1.5.0 and the six operations are in the document", () => {
-    assert.equal(API_VERSION, "1.5.0");
+  test("API_VERSION is 1.6.0 (the product batch after the trust pack) and the six trust-pack operations are in the document", () => {
+    assert.equal(API_VERSION, "1.6.0");
     const paths = Object.keys(doc.paths);
     for (const p of ["/check", "/check/receipts", "/check/receipts/{signature}", "/fees/ledger", "/operator", "/bounty"]) assert.ok(paths.includes(p), p);
   });

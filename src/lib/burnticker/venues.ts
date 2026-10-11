@@ -6,8 +6,11 @@
  * products. Kalshi stays behind this switch for an eventual written consent. Off (the default):
  *   · the public API's Kalshi routes (/kalshi/search, /kalshi/events, /kalshi/teams, /kalshi/categories) answer 503 "venue unavailable"
  *   · back-tests and launch bundles of a rule with oracle "kalshi" are refused (503)
- *   · Kalshi display reads (series titles, the market-implied chance) are not made by the app or the keeper's page publish
- *   · the keeper reads Kalshi ONLY for coins already registered with a Kalshi rule, logging a warning per read
+ *   · Kalshi display reads (series titles) are not made by the app or the keeper's page publish; no market-implied chance is read or
+ *     shown for ANY coin, flag on or off (owner decision 2026-10-10: no odds or prices anywhere)
+ *   · the keeper does NOT read Kalshi at all — not even for coins already registered with a Kalshi rule (owner decision 2026-10-10,
+ *     after the ChatGPT/Codex review's C1: the switch fails closed). Such coins are HELD: no readings, nothing planned or attested,
+ *     a "venue disabled" alert. No mainnet Kalshi coin exists; devnet rehearsal coins may stall.
  *   · Browse, the universal search and Any market list no Kalshi source; no default copy names Kalshi
  * Team coins and matchups never depend on it: they run on the ESPN scoreboard with a second cross-read (sources/espn.ts).
  *

@@ -6,7 +6,7 @@
 export interface NavItem { label: string; href: string; external?: boolean; /** the header's active match: the href itself plus these prefixes */ match?: string[] }
 
 export const NAV: NavItem[] = [
-  { label: "Launch", href: "/burnticker/launch" },
+  { label: "Launch", href: "/burnticker/launch", match: ["/burnticker/templates", "/burnticker/me"] },
   { label: "Coins", href: "/burnticker", match: ["/burnticker/t/"] },
   { label: "Seasons", href: "/burnticker/rivalries", match: ["/burnticker/p/"] },
   { label: "Trust", href: "/burnticker/trust" },

@@ -25,7 +25,7 @@ import { ruleOneLiner } from "@/lib/burnticker/coinCard";
  * chart with burn markers, the pool balance and the next-burn clock, the receipts table (oracle, market, result, settled time, source
  * URL, units, spent, bought, burned, tx, verify-it-yourself curl + formula), the rule and its hash, attesters and quorum, the creator,
  * the fee split (bps per 1 SOL, pre/post graduation, from fees.ts), the curve embed placeholder, the fixed disclaimer — and for
- * oracle-backed tokens the market-implied chance of the next burn (display only) and the event-contract disclosure line.
+ * oracle-backed tokens the next scheduled market (its ticker and close time, never a price or odds) and the event-contract disclosure line.
  *
  * Every number is recomputed from the recorded readings and the rule at render time; a receipt whose recomputation disagrees with its
  * on-chain memo renders red (verify.verified = false) and counts in health.unverified. Pure apart from `publishTokenSite`.
@@ -60,7 +60,7 @@ export interface PairTally {
   settlements: number; voids: number;
   /** The latest settlement: its market ticker, the settled result (or value), which side it burned and how much. */
   lastSettlement: { eventId: string; settledAt: string; burnedSide: "A" | "B" | null; result: string | null; value: string | null; burned: string | null } | null;
-  /** The next scheduled market and the Kalshi-implied chance that each side burns on it — DISPLAY ONLY, never read by either rule. */
+  /** The next scheduled market (ticker, close time). chanceA/chanceB are always null: no odds for any coin (owner decision 2026-10-10). */
   next: { market: string | null; closeTime: string | null; chanceA: number | null; chanceB: number | null };
   /** Both or neither (2026-10-10): the pair's state, void date and who it waits on (null for a pair made before the clause). */
   clause: PairClauseJson | null;
@@ -110,7 +110,7 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
     pairId: a.pair?.pairId ?? b.pair?.pairId ?? "", a: sa, b: sb, burnsA: sa.burns, burnsB: sb.burns, burnedA: sa.burned, burnedB: sb.burned, supplyA: sa.supply, supplyB: sb.supply,
     supplyPctA: left(a), supplyPctB: left(b), settlements: events.length, voids,
     lastSettlement: last ? { eventId: last[0], settledAt: last[1].settledAt, burnedSide: lastSide, result: lastRow?.result ?? null, value: lastRow?.value ?? null, burned: lastSide ? lastRow?.burned ?? null : null } : null,
-    next: { market: a.next.nextMarket ?? b.next.nextMarket, closeTime: a.next.nextCloseTime ?? b.next.nextCloseTime, chanceA: a.next.impliedChance, chanceB: b.next.impliedChance },
+    next: { market: a.next.nextMarket ?? b.next.nextMarket, closeTime: a.next.nextCloseTime ?? b.next.nextCloseTime, chanceA: null, chanceB: b.next.impliedChance },
     clause: a.pair?.clause ?? b.pair?.clause ?? null,
     curveA: a.market?.curve ?? null, curveB: b.market?.curve ?? null,
   };
@@ -271,7 +271,8 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     supply: { initial: TOTAL_SUPPLY, current: rawToTokens(current, DECIMALS), source: i.chain.supplyRaw !== null ? "chain" : "registry" },
     burned: { total: rawToTokens(totalRaw, DECIMALS), pctOfSupply: pct(totalRaw, supplyRaw), count: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, last30d: rawToTokens(last30, DECIMALS), lastAt: lastBurn?.settledAt ?? null },
     pool: (() => { const spendable = i.chain.feePdaLamports === null ? null : spendablePool(i.chain.feePdaLamports, rule.reserveSol); const c = spendable === null ? null : capPool(spendable); return { feePdaSol: sol(i.chain.feePdaLamports), spendableSol: c === null ? null : sol(c.pool), reserveSol: rule.reserveSol, vaultBalance: i.chain.vaultRaw === null ? null : rawToTokens(i.chain.vaultRaw, DECIMALS), vaultAllocation: allocation === null ? null : allocation.toString(), shortfallOutstanding: rawToTokens(lastFinal?.shortOutRaw ?? ZERO, DECIMALS), capSol: PRE_AUDIT_POOL_CAP_SOL, queuedSol: c === null ? null : sol(c.queued), queuedNote: `pre-audit cap: burns spend from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL; fee income above it is queued, released after audit (enforced by the keeper today; by the program once deployed)` }; })(),
-    next: { nextCheckAt: i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, impliedChance: i.implied?.chance ?? null, impliedBasis: i.implied?.basis ?? null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime: i.implied?.closeTime ?? null, awaitingFinal: i.selectorPending },
+    // NO ODDS FOR ANY COIN (owner decision 2026-10-10): impliedChance is always null — the field stays for schema compatibility only.
+    next: { nextCheckAt: i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, impliedChance: null, impliedBasis: i.implied?.chance == null ? (i.implied?.basis ?? null) : null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime: i.implied?.closeTime ?? null, awaitingFinal: i.selectorPending },
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
     fees: { curve: CURVE_FEES, postGraduation: POST_GRADUATION_FEES, sentence: feeSplitSentence(), creatorSliceBps: 0 },
@@ -341,13 +342,11 @@ export function renderTokenHtml(s: TokenStatusJson, receipts: readonly ReceiptJs
   const chart = (s.oracle === "kalshi" || s.oracle === "polymarket") && readings.every((r) => r.value === null)
     ? `<p class="muted">Binary selector: ${readings.length} settled market(s) read — ${readings.filter((r) => r.result === "yes").length} YES, ${readings.filter((r) => r.result === "no").length} NO, ${readings.filter((r) => r.result === "void").length} void.</p>`
     : seriesChartSvg(chartReadings, receipts.map((b) => ({ recordDate: b.settledAt, units: b.units, status: b.status })), { ariaLabel: `${s.seriesTitle ?? s.selectorKey}, with a marker on each burn`, tick: (v) => (Math.abs(v) >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : String(Number(v.toFixed(2)))) });
-  const implied = s.next.impliedChance === null ? "" : tile("Market-implied chance of the next burn", `${(s.next.impliedChance * 100).toFixed(0)}%`, `${esc(s.next.nextMarket ?? "")}${s.next.nextCloseTime ? ` · closes ${esc(s.next.nextCloseTime)}` : ""} · display only, never used by the rule`);
   const tiles = [
     tile("Supply", fmt(s.supply.current), `of ${fmt(s.supply.initial)} (${esc(s.supply.source)})`),
     tile("Burned", fmt(s.burned.total), `${s.burned.pctOfSupply.toFixed(2)}% of supply · ${s.burned.count} burn(s) · ${fmt(s.burned.last30d)} in 30 d`),
     s.mode === "buyback" ? tile("Burn pool (fee PDA)", s.pool.feePdaSol === null ? "—" : `${esc(s.pool.feePdaSol)} SOL`, `spendable ${esc(s.pool.spendableSol ?? "—")} SOL after a ${esc(s.pool.reserveSol)} SOL reserve${s.pool.queuedSol && s.pool.queuedSol !== "0" ? ` · ${esc(s.pool.queuedSol)} SOL queued, released after audit (${s.pool.capSol} SOL cap)` : ""}`) : tile("Vault", s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance), `allocation ${fmt(s.pool.vaultAllocation ?? "0")} · shortfall owed ${fmt(s.pool.shortfallOutstanding)}`),
     tile("Next possible burn", `<span id="next" data-at="${esc(s.next.nextCheckAt ?? "")}">${esc(s.next.nextCheckAt ?? (s.rules.oneShot ? "resolves once" : "—"))}</span>`, s.next.awaitingFinal ? `${s.next.awaitingFinal} settlement(s) awaiting the venue's finalisation` : "the next reading of the selector"),
-    implied,
   ].filter(Boolean).join("\n");
   const table = rows.length === 0 ? `<p class="muted">No receipts yet. The first settlement after launch${s.rules.oneShot ? "" : " (or the baseline, for a vs-previous rule)"} starts the record.</p>` : `<div class="scroll"><table>
 <thead><tr><th>Settled</th><th>Market / period</th><th>Result</th><th>Value</th><th>Units</th><th>Spent</th><th>Bought</th><th>Burned</th><th>Tx</th><th>Source</th><th>Check</th></tr></thead><tbody>
@@ -441,7 +440,7 @@ export function groupPairs(statuses: readonly TokenStatusJson[]): PlatformIndexJ
 export function indexToken(s: TokenStatusJson): PlatformIndexToken {
   const c = s.market?.curve ?? null;
   return {
-    ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: s.next.impliedChance, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
+    ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: null, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
     imageUrl: s.profile?.imageUrl ?? null, oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
     phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
   };
@@ -475,8 +474,8 @@ ${STATUS_CSS}
 ${ix.pairs.length ? `<h2>Rivalry pairs</h2>
 <div class="tiles">${ix.pairs.map((p) => `<div class="tile"><div class="label">${esc(p.seriesTitle ?? p.selectorKey)}</div><div class="value"><a href="t/${esc(p.a.ticker)}/">$${esc(p.a.ticker)}</a> ${p.a.burns} : ${p.b.burns} <a href="t/${esc(p.b.ticker)}/">$${esc(p.b.ticker)}</a></div><div class="sub">burned ${fmt(p.a.burned)} : ${fmt(p.b.burned)} · supply ${fmt(p.a.supply)} : ${fmt(p.b.supply)} · <a href="p/${esc(p.pairId)}/">pair page</a></div></div>`).join("")}</div>` : ""}
 <h2>Tokens</h2>
-${ix.tokens.length ? `<div class="scroll"><table><thead><tr><th>Ticker</th><th>Name</th><th>Event</th><th>Mode</th><th>Burned</th><th>Burns</th><th>Next-burn chance</th><th>Status</th></tr></thead><tbody>
-${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.ticker)}/">$${esc(t.ticker)}</a></td><td>${esc(t.name)}</td><td title="${esc(t.selectorKey)}">${esc(t.seriesTitle ?? t.selectorKey)}</td><td>${esc(t.mode)}</td><td class="num">${fmt(t.burned)} (${t.pctOfSupply.toFixed(2)}%)</td><td class="num">${t.burns}</td><td class="num">${t.impliedChance === null ? "—" : `${(t.impliedChance * 100).toFixed(0)}%`}</td><td>${esc(t.status)}</td></tr>`).join("\n")}
+${ix.tokens.length ? `<div class="scroll"><table><thead><tr><th>Ticker</th><th>Name</th><th>Event</th><th>Mode</th><th>Burned</th><th>Burns</th><th>Status</th></tr></thead><tbody>
+${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.ticker)}/">$${esc(t.ticker)}</a></td><td>${esc(t.name)}</td><td title="${esc(t.selectorKey)}">${esc(t.seriesTitle ?? t.selectorKey)}</td><td>${esc(t.mode)}</td><td class="num">${fmt(t.burned)} (${t.pctOfSupply.toFixed(2)}%)</td><td class="num">${t.burns}</td><td>${esc(t.status)}</td></tr>`).join("\n")}
 </tbody></table></div>` : `<p class="muted">No tokens yet.</p>`}
 <h2>How it works</h2>
 <ol><li>A creator picks an event source — a Kalshi series or market, or a first-party feed — and a rule: what each settled outcome burns. The rule is hashed and locked at launch.</li><li>The token launches on Raydium LaunchLab through Burnticker's platform config; its creator-fee slot pays its own burn pool, 100%.</li><li>When the event settles, the keeper reads the settled result (never a price), computes the units with the published rule, and cranks the Receipts program: it spends the rule's share of the pool buying the token at market and burns everything received — or burns from a vesting vault — and writes the receipt memo on chain.</li><li>Anyone can recompute every receipt from the source and the rule. If we stop, anyone can crank with the same public readings.</li></ol>
@@ -487,7 +486,7 @@ ${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.tick
 
 /**
  * THE PAIR PAGE (static; p/<pairId>/index.html beside pair.json). A scoreboard header — burns A : B, supply A : B, the last settlement
- * with its market ticker and result, the next scheduled market with its Kalshi-implied chance per side (display only) — the share line
+ * with its market ticker and result, the next scheduled market (ticker and close time only, no odds) — the share line
  * (pairDailyText), both receipts tables stacked, both rules with their hashes, the disclaimer. Pure over the two sides' pages.
  */
 export function renderPairHtml(tally: PairTally, a: TokenStatusJson, b: TokenStatusJson, receiptsA: readonly ReceiptJson[], receiptsB: readonly ReceiptJson[], site: string | null = null): string {
@@ -503,7 +502,7 @@ ${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("
     tile("Burns", `$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}`, `${tally.settlements} settlement(s)${tally.voids ? `, ${tally.voids} void` : ""} · burned ${fmt(tally.burnedA)} : ${fmt(tally.burnedB)}`),
     tile("Supply", `${tally.supplyPctA.toFixed(2)}% <span class="muted">:</span> ${tally.supplyPctB.toFixed(2)}%`, `${fmt(tally.supplyA)} : ${fmt(tally.supplyB)} of ${fmt(a.supply.initial)} each`),
     tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? `settled ${esc((ls.result ?? ls.value ?? "—").toUpperCase())} · ${esc(ls.settledAt.slice(0, 16).replace("T", " "))}Z → ${sideTicker(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)}` : ""}` : "the first settlement after launch burns one side"),
-    tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)} · ` : ""}Kalshi-implied chance $${A} burns ${chance(tally.next.chanceA)} : ${chance(tally.next.chanceB)} $${B} burns · display only, never used by either rule`),
+    tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "the next settlement after launch"}`),
   ].join("\n");
   const rule = (s: TokenStatusJson, side: "A" | "B") => `<div class="rule"><strong>Side ${side} — <a href="../../t/${esc(s.ticker)}/">$${esc(s.ticker)}</a></strong> ${esc(s.name)}. ${esc(s.rules.statement)}<br><span class="muted">Rule file: <a href="../../t/${esc(s.ticker)}/rules.json">rules.json</a> · sha256 <code>${esc(s.rules.sha256)}</code></span></div>`;
   return `<!doctype html>

@@ -47,7 +47,7 @@ the local env file in `~/meme-coin-trader` (user `mct`) on the Burnticker host, 
 | `BURNTICKER_FEE_WALLET` | the developer wallet, PUBLIC KEY (platform claim-fee wallet); its balance feeds the daily summary and the morning delta |
 | `BURNTICKER_PLATFORM_ADMIN`, `BURNTICKER_PLATFORM_ID` | the LaunchLab platform admin pubkey; the PlatformConfig PDA once created |
 | `BURNTICKER_PROGRAM_ID` / `BURNTICKER_PROGRAM_HASH` / `BURNTICKER_UPGRADE_AUTHORITY` | the Receipts program, once deployed |
-| `BURNTICKER_RPC_URL`, `NEXT_PUBLIC_BURNTICKER_RPC_URL` | an RPC for balance reads, the trust page's live reads and the on-chain source kind; the wizard's public endpoint |
+| `BURNTICKER_RPC_URL`, `NEXT_PUBLIC_BURNTICKER_RPC_URL` | an RPC for balance reads, the trust page's live reads and the on-chain source kind; the wizard's public endpoint. REQUIRED to take a draft live: a launch confirmation is read from the chain first (review N1); without it every confirmation answers 503 |
 | `BURNTICKER_ALERT_WEBHOOK`, `BURNTICKER_ALERT_WEBHOOK_TOKEN` | where ops alerts are POSTed (the trading VPS's alert-intake route over Tailscale: `http://<trading-host-tailnet-ip>:3001/<intake path>`) and its bearer token |
 | `OWN_TOKENS_GENERATED_PATH` | optional override of `data/own-tokens.generated.json` |
 
@@ -190,6 +190,9 @@ None of these are in the repository. Each one goes into the host's environment f
   with a small balance and top it up. The Irys client (`@irys/upload`, `@irys/upload-solana`) is in `package.json`, so `npm ci` installs it.
   **Until this key is set, every launch is refused**, because a coin's metadata is never hosted on a server that could change it.
   Devnet scripts may set `BURNTICKER_ALLOW_HOSTED_METADATA=1` instead.
+- **`BURNTICKER_PIN_DAILY_CAP`** (optional, default 50): the most coins this host pins on Arweave per UTC day. Pins are paid before
+  any wallet signs, so this caps the upload spend however requests arrive (ChatGPT/Codex review N4); past it a launch answers 429
+  `upload-budget`. Both launch routes (`/api/burnticker/launch` and `/v1/launch/*`) also share one per-client write bucket (10/hour).
 - **`BURNTICKER_THESPORTSDB_KEY`**: TheSportsDB under a commercial licence (the v2 API). It is primary B for every game that has no
   Polymarket moneyline market. Until it is set, such games are held and the coin is refused at creation. Pages that show its data
   carry the attribution "data: TheSportsDB" (the sources table and the trust page).

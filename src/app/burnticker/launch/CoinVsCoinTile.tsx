@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { CoinCard } from "../_components/CoinCard";
+import { FieldHelp } from "../_components/FieldHelp";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
@@ -40,7 +41,7 @@ function CoinPicker({ label, value, onPick, exclude, initial }: { label: string;
   );
   return (
     <div className="space-y-2">
-      <label className="block text-xs text-neutral-400">{label}<input className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" placeholder="a ticker, a name or a mint — WIF, BONK, SHIB…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+      <label className="block text-xs text-neutral-400">{label}<FieldHelp id="derby-coin" /><input data-help="derby-coin" className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" placeholder="a ticker, a name or a mint — WIF, BONK, SHIB…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
       {busy && <p className="text-xs text-neutral-500">Searching…</p>}
       {err && <p className="text-xs text-red-400">{err}</p>}
       <ul className="max-h-56 overflow-y-auto divide-y divide-neutral-800 rounded border border-neutral-800">
@@ -65,6 +66,9 @@ export function CoinVsCoinTile() {
   useEffect(() => {
     const u = new URLSearchParams(window.location.search);
     if (u.get("derby") === "1") { setOpen(true); setInitial({ a: (u.get("a") ?? "").slice(0, 12), b: (u.get("b") ?? "").slice(0, 12) }); }
+    // the templates gallery: coin-vs-coin, bracket (a Coin vs Coin season; the operator registers the bracket) and the flippening
+    const tpl = u.get("template");
+    if (tpl === "coin-vs-coin" || tpl === "bracket" || tpl === "flippening") { setOpen(true); if (tpl === "flippening") setFlip(true); }
   }, []);
   const [a, setA] = useState<Hit | null>(null), [b, setB] = useState<Hit | null>(null);
   const [window_, setWindow] = useState<"daily" | "weekly">("daily"), [seasonDays, setSeasonDays] = useState(30), [flip, setFlip] = useState(false), [fraction, setFraction] = useState(0.01);
@@ -114,16 +118,16 @@ export function CoinVsCoinTile() {
         <CoinPicker key={`b-${initial.b}`} initial={initial.b} label="Coin B (side B burns when it wins)" value={b} onPick={setB} exclude={a?.symbol ?? null} />
       </div>
       <div className="grid gap-3 md:grid-cols-4 text-sm">
-        <label className="text-xs text-neutral-400">Window<select className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={window_} onChange={(e) => setWindow(e.target.value as "daily" | "weekly")}><option value="daily">daily (00:00 → 00:00 UTC)</option><option value="weekly">weekly (Monday → Monday)</option></select></label>
-        <label className="text-xs text-neutral-400">Season (days)<input type="number" min={window_ === "weekly" ? 7 : 1} max={366} step={window_ === "weekly" ? 7 : 1} className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={seasonDays} onChange={(e) => setSeasonDays(Number(e.target.value) || 30)} /></label>
-        <label className="text-xs text-neutral-400">Burn per winning window: {(fraction * 100).toFixed(0)}%<input type="range" min={0.01} max={0.1} step={0.01} className="mt-2 w-full" value={fraction} onChange={(e) => setFraction(Number(e.target.value))} /></label>
-        <label className="text-xs text-neutral-400 flex items-center gap-2 mt-5"><input type="checkbox" checked={flip} onChange={(e) => setFlip(e.target.checked)} /> one-shot flippening (market cap; both coins need a Solana mint)</label>
+        <label className="text-xs text-neutral-400">Window<FieldHelp id="derby-window" /><select data-help="derby-window" className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={window_} onChange={(e) => setWindow(e.target.value as "daily" | "weekly")}><option value="daily">daily (00:00 → 00:00 UTC)</option><option value="weekly">weekly (Monday → Monday)</option></select></label>
+        <label className="text-xs text-neutral-400">Season (days)<FieldHelp id="derby-season" /><input data-help="derby-season" type="number" min={window_ === "weekly" ? 7 : 1} max={366} step={window_ === "weekly" ? 7 : 1} className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={seasonDays} onChange={(e) => setSeasonDays(Number(e.target.value) || 30)} /></label>
+        <label className="text-xs text-neutral-400">Burn per winning window: {(fraction * 100).toFixed(0)}%<FieldHelp id="derby-share" /><input data-help="derby-share" type="range" min={0.01} max={0.1} step={0.01} className="mt-2 w-full" value={fraction} onChange={(e) => setFraction(Number(e.target.value))} /></label>
+        <label className="text-xs text-neutral-400 flex items-center gap-2 mt-5"><FieldHelp id="derby-measure" /><input data-help="derby-measure" type="checkbox" checked={flip} onChange={(e) => setFlip(e.target.checked)} /> one-shot flippening (market cap; both coins need a Solana mint)</label>
       </div>
       <div className="grid gap-3 md:grid-cols-2 text-sm">
         {(["a", "b"] as const).map((k) => (
           <div key={k} className="grid grid-cols-2 gap-2">
-            <label className="text-xs text-neutral-400">Name {k.toUpperCase()}<input className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={names[k]} onChange={(e) => setNames({ ...names, [k]: e.target.value })} /></label>
-            <label className="text-xs text-neutral-400">Ticker {k.toUpperCase()}<input className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm uppercase" value={k === "a" ? names.ta : names.tb} onChange={(e) => setNames({ ...names, [k === "a" ? "ta" : "tb"]: e.target.value.toUpperCase() })} /></label>
+            <label className="text-xs text-neutral-400">Name {k.toUpperCase()}<FieldHelp id="derby-name" /><input data-help="derby-name" className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={names[k]} onChange={(e) => setNames({ ...names, [k]: e.target.value })} /></label>
+            <label className="text-xs text-neutral-400">Ticker {k.toUpperCase()}<FieldHelp id="derby-ticker" /><input data-help="derby-ticker" className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm uppercase" value={k === "a" ? names.ta : names.tb} onChange={(e) => setNames({ ...names, [k === "a" ? "ta" : "tb"]: e.target.value.toUpperCase() })} /></label>
           </div>
         ))}
       </div>
@@ -133,9 +137,9 @@ export function CoinVsCoinTile() {
       </div>
       {model && <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm"><div className="text-xs text-neutral-400 mb-1">Review</div><p>{model.sentence}</p>{model.problems.length > 0 && <ul className="mt-2 text-xs text-red-400 list-disc pl-4">{model.problems.map((x) => <li key={x}>{x}</li>)}</ul>}<p className="mt-2 text-xs text-neutral-500">A tie burns neither coin (a receipt still posts). If the independent cross-read disagrees by more than 2 points, that window is withheld: no reading, no burn. Both or neither: burns start once both coins have a pool; if one has none by the void date, the pair voids.</p></div>}
       <div className="space-y-2 text-sm">
-        {!wallet.publicKey && <label className="block text-xs text-neutral-400">Creator wallet (public key)<input className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="connect a wallet above, or paste a public key" /></label>}
-        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={ackLocked} onChange={(e) => setAckLocked(e.target.checked)} /> I understand the rules cannot be changed by anyone, including me</label>
-        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={ackNoReturns} onChange={(e) => setAckNoReturns(e.target.checked)} /> I am not promising anyone anything</label>
+        {!wallet.publicKey && <label className="block text-xs text-neutral-400">Creator wallet (public key)<FieldHelp id="wallet-paste" /><input data-help="wallet-paste" className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="connect a wallet above, or paste a public key" /></label>}
+        <label className="flex items-center gap-2 text-xs"><FieldHelp id="ack-locked" /><input data-help="ack-locked" type="checkbox" checked={ackLocked} onChange={(e) => setAckLocked(e.target.checked)} /> I understand the rules cannot be changed by anyone, including me</label>
+        <label className="flex items-center gap-2 text-xs"><FieldHelp id="ack-no-returns" /><input data-help="ack-no-returns" type="checkbox" checked={ackNoReturns} onChange={(e) => setAckNoReturns(e.target.checked)} /> I am not promising anyone anything</label>
         <button disabled={!model?.rule || !creator || !ackLocked || !ackNoReturns || busy || !names.ta || !names.tb} onClick={launch} className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950 disabled:opacity-50">{busy ? "Building…" : "Build both coins"}</button>
         {err && <p className="text-xs text-red-400">{err}</p>}
       </div>

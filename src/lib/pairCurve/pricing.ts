@@ -35,6 +35,8 @@ export const MAX_DURATION_SECS = 90 * 24 * 60 * 60;
 export const MAX_SIDE_RAISE_LAMPORTS = BigInt("1000000000000000000");
 /** Graduation runs once per side; if the second side's pool is blocked this long, that side's sells reopen (constants.rs). */
 export const GRADUATION_STUCK_SECS = 3 * 24 * 60 * 60;
+/** constants.rs GRADUATION_FALLBACK_SECS: a side still missing this long after the commit is refunded whatever the reason. */
+export const GRADUATION_FALLBACK_SECS = 30 * 24 * 60 * 60;
 
 /**
  * Account sizes CPMM `initialize` creates for one pool, and the rent model: lamports = (128 + size) × RENT_LAMPORTS_PER_BYTE. Mainnet and

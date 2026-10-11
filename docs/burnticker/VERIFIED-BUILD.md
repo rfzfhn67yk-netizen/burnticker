@@ -25,15 +25,19 @@ replace this table (`kind: docker`). The OtterSec verified-builds registry entry
 
 The executable hash is solana-verify's definition: sha256 of the program bytes with trailing zero bytes removed — the number
 `solana-verify get-executable-hash <file.so>` prints for a build and `solana-verify get-program-hash <PROGRAM_ID>` prints for the
-deployed program. Source: monorepo commit `fa8627a49e90d55691eaba2f916566a10af64bf8`, the last commit that changed the compiled
+deployed program. Source: monorepo commit `fcda14eb4fe21d7e0f096c24a141cec0e2630ba9`, the last commit that changed the compiled
 program sources (later commits under `programs/burn-receipts` add exploit tests only).
 
 | Program | Program id | Build | Features | Bytes | Executable hash | Deployed on devnet |
 |---|---|---|---|---|---|---|
 | burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 721,096 | `3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f` | — (not deployed on mainnet) |
 | burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 721,096 | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` | `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` = build |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 365,184 | `40584764553fb869589d0f5194f7e90a2c9ee1b7db2bcddd125f1cbcdf2e3594` | — (not deployed on mainnet) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 365,240 | `35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1` | `35b5b3e1c5080aa6c662616607e101fd2626a2f354dd75eba187572c7225d3d1` = build (upgraded through the Squads vault 2026-10-10 18:38 Denver, after the pair_curve blind-review fixes) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 365,824 | `9ef38e0d8954f6c8242d8157dccdc8a2b169dbd987b13f588c5096ee280ec006` | — (not deployed on mainnet) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 365,880 | `91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9` | `91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9` = build (upgraded through the Squads vault 2026-10-10 20:02 Denver, re-check round 2) |
+
+The pair_curve **mainnet** row is a build that can never open a pair: its `BURNTICKER_PLATFORM` is still the all-zero placeholder, so
+every `init_pair` fails with `PlatformNotPinned` (runbook gate P0). Pinning the owner's mainnet LaunchLab platform changes that hash;
+the table is rewritten then. `scripts/squads-program-upgrade.mts` refuses any buffer whose executable hash is not this table's.
 
 The publish entries in `docs/burnticker/CHANGELOG.md` record the plain sha256 of `target/deploy/burn_receipts.so` (`f3812ce4…` for
 the same default build); the executable hash differs only because it strips the file's 15 trailing zero bytes.

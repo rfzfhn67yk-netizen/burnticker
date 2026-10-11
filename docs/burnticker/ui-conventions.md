@@ -92,8 +92,11 @@ Sources: [docs: curve](https://docs.heaven.xyz/curve.md), [docs: fees](https://d
 
 ## Part 2 — the map to Burnticker
 
-The trust rules decide every row. We never talk about price. Market data is shown as data and never feeds a rule. The copy lint
-(`config/launch/copy-lint.json`) bans "market cap", "price", "moon", "target", urgency words and calls to buy.
+The trust rules decide every row. We never talk about price: no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence.
+(Burn Derby's one-shot flippening, "WIF's market cap passes SHIB's" — `coinCard.ts`, `launch/CoinVsCoinTile.tsx`; derby admission
+refuses any Burnticker platform coin as an input, `derby/admission.ts`; amended 2026-10-10 after the ChatGPT/Codex review.) The copy
+lint (`config/launch/copy-lint.json`) bans "market cap", "price", "moon", "target", urgency words and calls to buy; its only market-cap
+allowance is that rule sentence for two non-`$TICKER` symbols.
 
 | # | Pattern (who) | Verdict | Burnticker's version, and why |
 |---|---|---|---|
@@ -123,6 +126,9 @@ The trust rules decide every row. We never talk about price. Market data is show
 | 24 | Bottom tab bar on phones (Bags mobile web, pump.fun app) | **adopt** | **Coins · Launch · Rivalries · Trust** under 900 px, with Launch stamped violet. |
 | 25 | Category navigation (Kalshi, Polymarket) | **adapt** | The wizard's **Browse everything**: Burnticker's own taxonomy (`config/burnticker/categories.json`) on a left rail, or chips on a phone. Each category lists source cards from **every venue**: first-party feeds first, then Polymarket, then Kalshi when it is enabled. Each card shows venue, tier, cadence, next event and the "burns when …" example. |
 | 26 | Watchlist / favourites, quick-buy ⚡ (bonk.fun, Bags) | **reject** (for now) | Quick-buy is a call to buy. A watchlist needs accounts or local storage and is not a convention new users depend on. |
+| 27 | Hover help on every field (pump.fun's and bonk.fun's "?" tooltips on create) | **adopt** | Every input, toggle group and review row in the launch flow has a small **?** after its label (`_components/FieldHelp.tsx`). It opens on hover and on keyboard focus, toggles on tap on a phone, closes on Escape or a tap outside, and is announced through `aria-describedby`. It holds two lines from `src/lib/burnticker/fieldHelp.ts`: **what to enter** and **what it does** to the rule or the coin. Every string passes the copy lint. `test/burntickerFieldHelp.test.ts` fails when an input has no help. |
+| 28 | "Create similar" / templates (bonk.fun, Bags remix) | **adapt** | Every coin and pair page has **Launch one like this**: the create screen opens on the same rule shape, with the team / race / feed re-pickable and the dials copied (share, side, window, league mode). `/burnticker/templates` shows the twelve canonical shapes with an example sentence and "Start from this". |
+| 29 | Creator dashboard ("my coins", pump.fun profile) | **adapt** | `/burnticker/me`: connect a wallet (read-only, nothing signed) or paste an address. It lists that wallet's coins and pairs: state, queued units, next settlement, last reading with how many independent reads confirmed it, receipts, wind-down. **Copy today's post** copies the lint-checked text; nothing is posted for you. |
 
 ## Venues — what settles, what only helps you find (10-10)
 
@@ -138,7 +144,8 @@ Off (the default):
 - The `/kalshi/*` routes answer 503.
 - Kalshi back-tests and launch bundles are refused.
 - The app and the keeper's page publish make no Kalshi display reads (series titles, implied chance).
-- The keeper reads Kalshi only for coins already registered with a Kalshi rule, logging a warning per read.
+- No market-implied chance (odds) is read or shown for ANY coin, whatever the venue and whether or not `BURNTICKER_KALSHI_ENABLED` is on (owner decision 2026-10-10). A coin page shows only the factual venue label: the next market's ticker and close time. `status.json` keeps `next.impliedChance`, always null, for schema compatibility.
+- The keeper does not read Kalshi at all while the switch is off, not even for coins already registered with a Kalshi rule: those coins are held (no readings, nothing planned or attested) with a "venue disabled" alert (owner decision 2026-10-10, after the ChatGPT/Codex review's C1; it replaces "reads Kalshi only for already-registered coins").
 - No default copy names Kalshi.
 
 **Polymarket discovery — `BURNTICKER_POLYMARKET_DISCOVERY_ENABLED`, default ON, NO MARKET DATA.** Polymarket's terms restrict "market

@@ -143,6 +143,10 @@ pub fn handle_graduate(ctx: Context<Graduate>, side: u8) -> Result<()> {
         },
         &[vault_seeds],
     ))?;
+    // Sync first (ChatGPT PR review, Low): lamports sent to an already-created vault WSOL ATA without SyncNative are not yet in its
+    // token amount; sampling before syncing made the post-CPI equality below fail until someone synced. Synced, they are simply
+    // residue (closed back into the vault at the end and swept to this side's burn pool).
+    token::sync_native(CpiContext::new(token::ID, token::SyncNative { account: vault_wsol.clone() }))?;
     let wsol_before = require_token_account_intact(&vault_wsol, &vault.key(), &NATIVE_MINT)?;
     system_program::transfer(
         CpiContext::new_with_signer(system_program::ID, system_program::Transfer { from: vault.clone(), to: vault_wsol.clone() }, &[vault_seeds]),

@@ -23,6 +23,11 @@ pub const STATUS_GRADUATING: u8 = 3;
 /// redemption so its holders are never locked in. Mere inactivity never triggers it (blind review 1 L-3).
 pub const GRADUATION_STUCK_SECS: i64 = 3 * 24 * 60 * 60;
 
+/// Unconditional fallback (re-check RC-2): a side whose pool is still missing this long after the commit is put into pro-rata
+/// redemption whatever the reason — a CPMM-side refusal (an upgrade that changes `initialize`, a new check the pair's PDA-signed pool
+/// fails) leaves no trace in the AmmConfig, and a failed `graduate` reverts, so it cannot leave evidence on chain either.
+pub const GRADUATION_FALLBACK_SECS: i64 = 30 * 24 * 60 * 60;
+
 /// The LaunchLab PlatformConfig every pair must pin (blind review 1 M-1: the developer wallet is read from it, so it cannot be a
 /// creator's own platform). Per build: devnet = Burnticker's devnet platform (docs/burnkeeper/devnet-run-log-2026-10-10.md A10);
 /// `localnet` (LiteSVM suite) = the harness's test platform; the default (mainnet) build is UNSET (all zeros) until the owner creates

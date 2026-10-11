@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago, until } from "../../_components/CoinCard";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
+import { likeHref } from "@/lib/burnticker/templates";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; laid out like a launchpad coin page on 2026-10-10 — docs/burnticker/ui-conventions.md): the header
@@ -81,6 +82,7 @@ export default function TokenPage() {
           {prof?.description && <p className="text-sm text-neutral-200 max-w-2xl leading-relaxed">{prof.description}</p>}
           {prof?.note && <div className="max-w-2xl rounded border border-neutral-700 p-2 text-xs text-neutral-300"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note — not part of the rule</div>{prof.note}</div>}
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "Not affiliated with any team, league, candidate, agency or market."}</p>
+          <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>
           <PinnedCheck pinned={s.pinned} />
         </div>
       </header>
@@ -163,7 +165,6 @@ export default function TokenPage() {
               <div><dt className="text-neutral-500">{s.mode === "buyback" ? "burn pool" : "vault"}</dt><dd className="font-mono">{s.mode === "buyback" ? (s.pool.feePdaSol === null ? "—" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance))}</dd></div>
               <div><dt className="text-neutral-500">burned</dt><dd className="font-mono tabular-nums">{s.burned.pctOfSupply.toFixed(2)}%</dd></div>
             </dl>
-            {s.next.impliedChance !== null && <p className="mt-2 text-[11px] text-neutral-500">Market-implied chance of the next burn {(s.next.impliedChance * 100).toFixed(0)}% ({s.next.nextMarket ?? ""}) — display only, never used by the rule.</p>}
             <p className="mt-2 text-[11px] text-neutral-500 break-all">sha256 {s.rules.sha256}</p>
             <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
               <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>

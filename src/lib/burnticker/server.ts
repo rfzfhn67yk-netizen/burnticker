@@ -1,4 +1,5 @@
 import "server-only";
+import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
 import { envGameDeps, polymarketGameReaders } from "@/lib/burnticker/sources/gameSettle";
 import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
 import path from "node:path";
@@ -53,6 +54,10 @@ export interface Platform {
   customImages?: boolean;
   /** BURNTICKER_ALLOW_HOSTED_METADATA (default off; devnet scripts): a failed pin falls back to the hosted JSON, marked `hosted`. */
   allowHostedMetadata?: boolean;
+  /** BURNTICKER_PIN_DAILY_CAP: coins pinned on Arweave (paid by the platform) per UTC day on this host (review N4); absent = DEFAULT_PIN_DAILY_CAP. */
+  pinDailyCap?: number;
+  /** Reads a launch transaction from the chain before a draft goes live (launchVerify.ts; review N1). Null/absent (no RPC): confirmations are refused. */
+  launchVerifier?: LaunchVerifier | null;
 }
 
 let cached: Platform | null = null;
@@ -108,26 +113,30 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
     devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
     uploader: uploaderFromEnv(env, cluster), customImages: customImagesEnabled(env), allowHostedMetadata: allowHostedMetadata(env),
+    pinDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) : undefined,
+    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, "confirmed") as unknown as TxReader, { burnProgramId: programId || null }) : null,
   };
+  if (!rpc) stubs.push("launch confirmation: no BURNTICKER_RPC_URL on this host, so a launch transaction cannot be read and drafts are not taken live");
   return cached;
 }
 
 /** For tests: a platform over an in-memory registry and injected clients. */
 export function setPlatformForTests(p: Platform | null): void { cached = p; }
 
-/** Everything the token page needs, from the registry and the (fake or real) program, plus the display-only implied chance. */
+/** Everything the token page needs, from the registry and the (fake or real) program. No odds are read (owner decision 2026-10-10). */
 export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(), opts: { live?: boolean } = {}): Promise<TokenPageInput> {
   const locked = p.registry.lockedRule(t);
   const readings = p.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
   const state = p.registry.state(t.mint);
   const oracle = locked.rule.oracle === "catalogue" ? p.oracles.catalogue : locked.rule.oracle === "polymarket" ? p.oracles.polymarket : locked.rule.oracle === "derby" ? p.oracles.derby ?? derbyPageOracle : p.oracles.kalshi;
   // live: false (the receipts-only API route) skips the two oracle calls; the receipts do not depend on them. Venue display reads
-  // (venues.ts): no market-implied chance from Polymarket ever (no odds rendered), Kalshi's only with BURNTICKER_KALSHI_ENABLED on;
-  // series titles from Kalshi only when enabled, from Polymarket only with discovery on.
+  // (venues.ts): no market-implied chance for any coin (owner decision 2026-10-10); series titles from Kalshi only when enabled, from Polymarket only with discovery on.
   const isK = locked.rule.oracle === "kalshi", isP = locked.rule.oracle === "polymarket";
   const kOk = p.kalshiEnabled !== false, pOk = p.polymarketDiscovery !== false;
   const [implied, info] = opts.live === false ? ([null, null] as const) : await Promise.all([
-    !isK || !kOk ? Promise.resolve(null) : oracle.impliedChance(locked.rule, state.lastValue).catch((e: Error) => ({ chance: null, marketTicker: null, closeTime: null, basis: `unavailable: ${e.message.slice(0, 80)}` })),
+    // No odds for any coin (owner decision 2026-10-10): no market-implied chance is read for Kalshi or Polymarket; Burn Derby's call only
+    // gives the next window's close time (its chance is always null).
+    locked.rule.oracle !== "derby" ? Promise.resolve(null) : oracle.impliedChance(locked.rule, state.lastValue).catch(() => null),
     locked.rule.oracle === "derby" ? Promise.resolve({ title: derbyTitle(locked.rule) }) : locked.rule.oracle === "catalogue" || (isK && !kOk) || (isP && !pOk) ? Promise.resolve(null) : oracle.seriesInfo(locked.rule.oracle === "polymarket" ? (locked.rule.market ?? locked.rule.series!) : locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null),
   ]);
   const feedState = p.registry.feedState(t.selectorKey);

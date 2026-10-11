@@ -107,4 +107,7 @@ pub struct PairClosed {
     pub status: u8,
     pub tokens_burned: [u64; 2],
     pub residue_lamports: u64,
+    /// Developer accrual the wallet could not receive (executable, or the payment would leave it below rent), sent to the burn pools
+    /// with the residue instead of blocking the close (re-check RC-5). Included in `residue_lamports`.
+    pub dev_accrual_to_burn_pools: u64,
 }

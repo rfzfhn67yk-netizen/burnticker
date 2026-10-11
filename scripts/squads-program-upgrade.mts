@@ -7,12 +7,15 @@
 // prints the vault-transaction bytes for the owner's own signing tool and sends nothing. Prints no key.
 //
 //   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/squads-program-upgrade.mts --cluster devnet --multisig <pubkey>
-//     --program <pubkey> --buffer <pubkey> --expect-file <local .so> [--expect-sha256 <hex>] --spill <pubkey> --member <keypath>
+//     --program <pubkey> --buffer <pubkey> --spill <pubkey> --member <keypath> [--expect-file <local .so>] [--table <verified-build.json>]
 //     [--vault-index 0] [--memo <text>] [--send]
 //
 // Blind review 2 M-2: before proposing, the script REFUSES unless all four hold, and prints each for the voters:
-//   1. the buffer's code is the local build: sha256(buffer data[37 .. 37+len(file)]) == sha256(file) (and == --expect-sha256 when
-//      given — pass the verifiable-build hash), with every byte after it zero;
+//   1. the buffer's code is the published build: its EXECUTABLE HASH (sha256 of the program bytes with trailing zero bytes removed —
+//      solana-verify's definition, the number `scripts/ops/verified-build.sh` publishes) equals the hash for this program id and
+//      cluster in config/burnticker/verified-build.json (`builds.<cluster>.hash`; re-check of M-2: mandatory, never a plain-file
+//      sha256 the operator types). --expect-file adds a check that a local .so has the same executable hash; on localnet (no table
+//      row) --expect-file is required instead;
 //   2. the buffer's authority is the Squads vault (`solana program set-buffer-authority <BUFFER> --new-buffer-authority <VAULT>`);
 //   3. the program's CURRENT upgrade authority (its ProgramData) is the same vault;
 //   4. the spill address (which receives the buffer's rent) is the vault or a multisig member.
@@ -41,12 +44,21 @@ const multisig = pk("multisig"), program = pk("program"), buffer = pk("buffer"),
 const vaultIndexRaw = opt("vault-index") ?? "0";
 if (!/^\d{1,3}$/.test(vaultIndexRaw) || Number(vaultIndexRaw) > 255) die(`--vault-index ${vaultIndexRaw} must be an integer 0–255`);
 const vaultIndex = Number(vaultIndexRaw);
-const expectFile = opt("expect-file") ?? die("--expect-file <local .so> is required: the buffer is compared byte-for-byte with it");
-const localSo = fs.readFileSync(expectFile);
 const sha256 = (b: Uint8Array) => crypto.createHash("sha256").update(b).digest("hex");
-const localSha = sha256(localSo);
-const expectSha = opt("expect-sha256")?.toLowerCase();
-if (expectSha && expectSha !== localSha) die(`--expect-file hashes to ${localSha}, not the --expect-sha256 ${expectSha}`);
+const trimZeros = (b: Uint8Array) => { let n = b.length; while (n > 0 && b[n - 1] === 0) n--; return b.subarray(0, n); };
+const execHash = (b: Uint8Array) => sha256(trimZeros(b));
+if (opt("expect-sha256")) die("--expect-sha256 is gone: the script reads the executable hash from config/burnticker/verified-build.json");
+const tablePath = opt("table") ?? "config/burnticker/verified-build.json";
+type BuildTable = { programs: { library: string; programId: string; builds: Record<string, { hash: string; bytes: number }> }[] };
+const table = JSON.parse(fs.readFileSync(tablePath, "utf8")) as BuildTable;
+const row = table.programs.find((r) => r.programId === program.toBase58());
+const tableHash = row?.builds?.[cluster]?.hash?.toLowerCase();
+const expectFile = opt("expect-file");
+if (!tableHash && !(cluster === "localnet" && expectFile)) die(`${tablePath} has no ${cluster} build for ${program.toBase58()} — run scripts/ops/verified-build.sh --write and commit the table first`);
+const localSo = expectFile ? fs.readFileSync(expectFile) : null;
+const localExec = localSo ? execHash(localSo) : null;
+if (tableHash && localExec && localExec !== tableHash) die(`--expect-file executable hash ${localExec} ≠ the table's ${cluster} hash ${tableHash} (${row!.library})`);
+const wantHash = (tableHash ?? localExec)!;
 const memberPath = opt("member") ?? die("--member <keypath> is required (a multisig member with Initiate permission)");
 const member = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(memberPath, "utf8"))));
 
@@ -72,10 +84,9 @@ const optKey = (d: Buffer, at: number) => (d[at] === 1 ? new PublicKey(d.subarra
 const bufAcc = (await connection.getAccountInfo(buffer, "confirmed")) ?? die(`no buffer at ${buffer.toBase58()}`);
 if (!bufAcc.owner.equals(LOADER) || bufAcc.data.length < 37 || bufAcc.data.readUInt32LE(0) !== 1) die("the --buffer account is not an upgradeable-loader Buffer");
 const bufCode = bufAcc.data.subarray(37);
-if (bufCode.length < localSo.length) die(`the buffer holds ${bufCode.length} bytes, the local build ${localSo.length}`);
-const bufSha = sha256(bufCode.subarray(0, localSo.length));
-if (bufSha !== localSha) die(`buffer code sha256 ${bufSha} ≠ local build ${localSha} (${expectFile})`);
-if (bufCode.subarray(localSo.length).some((b) => b !== 0)) die("the buffer has non-zero bytes after the local build's length");
+const bufExec = execHash(bufCode);
+if (bufExec !== wantHash) die(`buffer executable hash ${bufExec} ≠ ${tableHash ? `the verified-build table's ${cluster} hash` : "the --expect-file build"} ${wantHash}`);
+const codeLen = trimZeros(bufCode).length;
 const bufAuthority = optKey(bufAcc.data, 4);
 if (!bufAuthority?.equals(vault)) die(`buffer authority ${bufAuthority?.toBase58() ?? "none (immutable)"} ≠ the vault ${vault.toBase58()}`);
 const programDataAddr = PublicKey.findProgramAddressSync([program.toBuffer()], LOADER)[0];
@@ -83,7 +94,7 @@ const pdAcc = (await connection.getAccountInfo(programDataAddr, "confirmed")) ??
 if (!pdAcc.owner.equals(LOADER) || pdAcc.data.readUInt32LE(0) !== 3) die("the program's ProgramData account is malformed");
 const programAuthority = optKey(pdAcc.data, 12);
 if (!programAuthority?.equals(vault)) die(`program upgrade authority ${programAuthority?.toBase58() ?? "none (immutable)"} ≠ the vault ${vault.toBase58()}`);
-if (pdAcc.data.length - 45 < localSo.length) die(`program data holds ${pdAcc.data.length - 45} bytes < the build's ${localSo.length}: run \`solana program extend\` first`);
+if (pdAcc.data.length - 45 < codeLen) die(`program data holds ${pdAcc.data.length - 45} bytes < the build's ${codeLen}: run \`solana program extend\` first`);
 if (!spill.equals(vault) && !members.some((m) => m.equals(spill))) die(`spill ${spill.toBase58()} is neither the vault nor a multisig member`);
 const transaction = PublicKey.findProgramAddressSync([Buffer.from("multisig"), multisig.toBuffer(), Buffer.from("transaction"), u64(index)], SQUADS)[0];
 const proposal = PublicKey.findProgramAddressSync([Buffer.from("multisig"), multisig.toBuffer(), Buffer.from("transaction"), u64(index), Buffer.from("proposal")], SQUADS)[0];
@@ -114,7 +125,8 @@ const sim = await connection.simulateTransaction(tx, { commitment: "confirmed" }
 const out: Record<string, unknown> = { cluster, multisig: multisig.toBase58(), vault: vault.toBase58(), timeLockSecs: timeLock, transactionIndex: index.toString(), transaction: transaction.toBase58(), proposal: proposal.toBase58(),
   upgrade: { program: program.toBase58(), programData: programData.toBase58(), buffer: buffer.toBase58(), spill: spill.toBase58() },
   checks: {
-    bufferCodeSha256: bufSha, localBuildSha256: localSha, localBuildFile: expectFile, localBuildBytes: localSo.length, expectSha256: expectSha ?? null,
+    bufferExecutableHash: bufExec, verifiedBuildTable: tablePath, tableHash: tableHash ?? null, tableLibrary: row?.library ?? null,
+    localBuildFile: expectFile ?? null, localBuildExecutableHash: localExec, codeBytes: codeLen,
     bufferAuthority: bufAuthority!.toBase58(), programUpgradeAuthority: programAuthority!.toBase58(), vault: vault.toBase58(),
     spill: spill.toBase58(), spillIs: spill.equals(vault) ? "the vault" : "a multisig member",
   },

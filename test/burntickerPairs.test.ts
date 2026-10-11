@@ -155,7 +155,7 @@ describe("a Broncos pair through the keeper", () => {
     assert.deepEqual({ ...t.lastSettlement!, burned: undefined }, { eventId: "KXNFLGAME-26OCT04DENSF-DEN", settledAt: t.lastSettlement!.settledAt, burnedSide: "A", result: "no", value: null, burned: undefined });
     assert.ok(Number(t.lastSettlement!.burned) > 0);
     assert.ok(t.supplyPctA < 100 && t.supplyPctB < 100 && Math.abs(t.supplyPctA - (100 - sa.burned.pctOfSupply)) < 1e-9);
-    assert.deepEqual(t.next, { market: "KXNFLGAME-26OCT12DENNYJ-DEN", closeTime: "2026-10-13T03:00:00Z", chanceA: 0.58, chanceB: 0.42 });
+    assert.deepEqual(t.next, { market: "KXNFLGAME-26OCT12DENNYJ-DEN", closeTime: "2026-10-13T03:00:00Z", chanceA: null, chanceB: null }, "no odds for any coin (owner decision 2026-10-10): the oracle's chance is not carried");
     // The share line and the pair post: a report, lint-clean.
     assert.equal(pairShareLine(t), "$BRONCOS 1 : 1 $CHIEFS — every loss burns");
     const post = pairDailyText(t, "https://burnticker.com");
@@ -172,7 +172,7 @@ describe("a Broncos pair through the keeper", () => {
     const html = renderPairHtml(t, sa, sb, recA, recB);
     assert.match(html, /<div class="score">\$BRONCOS 1 <span class="muted">:<\/span> 1 \$CHIEFS<\/div>/);
     assert.match(html, /Last settlement[\s\S]*KXNFLGAME-26OCT04DENSF-DEN[\s\S]*settled NO/);
-    assert.match(html, /Kalshi-implied chance \$BRONCOS burns 58% : 42% \$CHIEFS burns · display only/);
+    assert.doesNotMatch(html, /implied|58%|42%/, "no odds on the pair page"); assert.match(html, /closes 2026-10-13T03:00:00Z/);
     assert.ok(html.indexOf("<h2>Receipts — $BRONCOS</h2>") < html.indexOf("<h2>Receipts — $CHIEFS</h2>"), "A's table above B's");
     assert.match(html, /Scoreboard: this page/); assert.doesNotMatch(html, /\{SITE_URL\}/);
     assert.match(html, /href="\.\.\/\.\.\/t\/BRONCOS\/rules\.json"/);
