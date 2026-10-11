@@ -7,6 +7,8 @@ import path from "node:path";
 // Burnticker's creation preflight runs the selector LIVE (network) and is strict by default; the suite's launch tests run on
 // fixtures, so it is off inside test workers. The preflight tests (test/burntickerCoverage.test.ts) pass strict: true explicitly.
 if (process.env.NODE_TEST_CONTEXT) process.env.BURNTICKER_PREFLIGHT_STRICT ??= "false";
+// The launch tests post to the launch routes; the creator-launch gate (default off on a host) is opened for test workers only.
+if (process.env.NODE_TEST_CONTEXT) process.env.BURNTICKER_CREATOR_LAUNCHES_ENABLED ??= "1";
 
 const srcDir = path.resolve(import.meta.dirname, "../src");
 

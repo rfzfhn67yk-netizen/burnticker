@@ -106,7 +106,7 @@ export const SCHEMAS: Record<string, Schema> = {
     lastReading: nullable(obj({ id: str, value: nstr, at: str })), preview: {},
     config: { description: "attested-http sources: the selection config a verifier needs (request URL template, selection, period); header VALUES are withheld", anyOf: [{ type: "object" }, { type: "null" }] },
   }, ["id", "kind", "tier", "title", "sourceUrl", "launchable"]),
-  Catalogue: obj({ sources: arr(ref("Source")), tiers: { type: "object" }, admission: { type: "object" }, kalshi: obj({ search: str, note: str }), polymarket: obj({ search: str, note: str }) }, ["sources", "tiers", "admission"]),
+  Catalogue: obj({ sources: arr(ref("Source")), tiers: { type: "object" }, admission: { type: "object" }, launches: { ...obj({ creators: bool, note: str }, ["creators"]), description: "since 1.11.0: whether this host takes creator launches (BURNTICKER_CREATOR_LAUNCHES_ENABLED, default off); off, POST /launch/bundle and /launch/confirm refuse with 403 creator-launches-closed" }, kalshi: obj({ search: str, note: str }), polymarket: obj({ search: str, note: str }) }, ["sources", "tiers", "admission"]),
   SourcePreview: obj({
     id: str, title: str, tier: int, rule: ref("Rule"), sha256: str, statement: str, window: obj({ from: str, to: str }, ["from", "to"]),
     totals: { type: "object" }, rows: arr({ type: "object" }), lastReading: {}, fixtureFetchedAt: nstr, sentence: str, note: str,
