@@ -49,6 +49,8 @@ const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,
 /** A provider's team name matches a side when it contains the side's nickname, short name, location or full name (or the reverse). */
 export const sideMatches = (name: string, s: GameSide): boolean => { const a = norm(name); return [s.name, s.nickname, s.short ?? "", s.location ?? "", s.abbr].filter((k) => k && k.length >= 3).some((k) => { const b = norm(k); return a === b || a.includes(b) || b.includes(a); }); };
 
+/** v1's event search (a key v2 refuses; espn.ts tsdbRead): "Arsenal_vs_Coventry_City". */
+export const tsdbV1SearchUrl = (key: string, names: [string, string]): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/searchevents.php?e=${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_"))}`;
 export const tsdbV2Url = (names: [string, string]): string => `https://www.thesportsdb.com/api/v2/json/search/event/${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_").toLowerCase())}`;
 /** TheSportsDB v2 search/event: the event list under whichever key the API uses; the game's date (or the day before, UTC) and a final status. */
 export function finalFromTsdb(g: Game, body: unknown, url: string): Final | null {
@@ -164,7 +166,15 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
   // TheSportsDB (licensed)
   if (d.tsdbKey) {
     try {
-      const f = await firstFinal(client, tsdbNamePairs(g).map(tsdbV2Url), (b, u) => finalFromTsdb(g, b, u), { "X-API-KEY": d.tsdbKey });
+      // v2 with the key in the header; a key v2 refuses is read through v1 (espn.ts tsdbRead), the key never logged
+      let f: Final | null = null, any = false, err: Error | null = null;
+      for (const names of tsdbNamePairs(g)) {
+        let body: unknown;
+        try { body = await client.tsdbRead(d.tsdbKey, tsdbV2Url(names), (k) => [tsdbV1SearchUrl(k, names)]); any = true; } catch (e) { err = e as Error; continue; }
+        f = finalFromTsdb(g, body, tsdbV2Url(names));
+        if (f) break;
+      }
+      if (!any && err) throw err;
       if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url });
       else pending.push(f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet");
     } catch (e) { errors.push(`TheSportsDB: ${(e as Error).message.slice(0, 80)}`); }

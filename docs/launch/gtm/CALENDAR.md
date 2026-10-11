@@ -37,7 +37,7 @@ Today, Sat 2026-10-10, is T-16.
    `/burnticker/rivalries`; there is no `/burnticker/seasons` route on main, and the season window (this season / postseason) is on
    `agent/UI-2026-10-10`, not merged.
 6. **Verifier route.** PLAN §6 counts hits on `/v1/receipts/*/verify`; the route is `/api/burnticker/v1/tokens/{ticker}/verify/{id}`
-   (OpenAPI 1.4.0). Measure that one.
+   (OpenAPI 1.9.0). Measure that one.
 
 ---
 
@@ -48,7 +48,7 @@ Today, Sat 2026-10-10, is T-16.
 | T-14 Mon 10-12 | COLD-READ.md edits applied (copy agent): the unlabelled $RAYS receipt, the "If we disappear" line, the post-graduation LP line, the $DEFICIT page's 0.99 | — | none (no account yet) | X account: email attached, avatar, header re-rendered without the retired tagline and the venue line (x-burnticker-profile.md TODO) |
 | T-13 Tue 10-13 | transparency.json stale rows fixed (devnet rehearsal done; public repo exists; contact set) | Treasury Fiscal Data data question (OUTREACH §11) | — | ChatGPT review handed over (PLAN §7) |
 | T-12 Wed 10-14 | ChatGPT review report committed in `docs/burnticker/reviews/`; findings fixed or answered | — | — | decide licence split; GitHub org move (optional) |
-| T-11 Thu 10-15 | ESPN terms question answered (OUTREACH "Risks" 1): keep team coins on, or hold them | — | first teasers queued: `teaser --topic=open-source`, `--topic=devnet-receipt` | SECURITY.md out of draft (tiers, remove the placeholder line) |
+| T-11 Thu 10-15 | Sports sources settled (OUTREACH "Risks" 1: no ESPN reads; league feeds + TheSportsDB): set the commercial TheSportsDB key before soccer outreach | — | first teasers queued: `teaser --topic=open-source`, `--topic=devnet-receipt` | SECURITY.md out of draft (tiers, remove the placeholder line) |
 | T-10 Fri 10-16 | **go / no-go 1:** cold read passes; reviews published; coverage table live on trust page | — | `teaser --topic=reviews` (re-run after the ChatGPT report: its wording follows transparency.json) | Phantom address, third Squads signer named, ~15 SOL ready (PLAN §7) |
 | T-9 Sat 10-17 | pitches and outreach final (this folder) | — | `teaser --topic=coverage` | — |
 | T-8 Sun 10-18 | queue seeded with teasers true today | — | `teaser --topic=the-rule` (@USA_DEFICIT) | decide D-1 (finalise before announcing?) |
@@ -111,7 +111,7 @@ automatic.
 | GitHub repo → a `burnticker` org (optional) | open; today `rfzfhn67yk-netizen/burnticker` |
 | Optional consent email to the event-contract venue | optional; nothing waits on it (PLAN §7) |
 | Decide D-1 (finalise before announcing) | open (REHEARSAL-RUNSHEET) |
-| Decide: ESPN terms for team coins | open (OUTREACH "Risks" 1) |
+| Decide: ESPN terms for team coins | resolved 2026-10-10: no ESPN reads (league feeds + TheSportsDB; ESPN a human link only) |
 | Decide: publish `docs/launch/gtm/` in the public repo, or exclude it | open (OUTREACH "Risks" 3) |
 
 ## How "working" is measured (PLAN §6; none is price)

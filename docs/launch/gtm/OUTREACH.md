@@ -219,10 +219,11 @@ Hi mods. Before posting anything I wanted to ask. I run Burnticker, an open-sour
 
 ## Risks found while researching (for the owner, not for any message)
 
-1. **ESPN's terms.** Verified https://disneytermsofuse.com/english/ (2026-10-10; covers ESPN by name): no automated extraction "by
-   robot, spider, script", no commercial use. Team coins read the ESPN scoreboard as their primary source (cross-read by MLB StatsAPI,
-   the NHL feed, TheSportsDB). `docs/burnticker/README.md` §6 already says ESPN "stays not launchable until its terms are checked";
-   the coverage audit and the wizard treat it as live. This is the largest open question behind every sports pitch and the Seasons door.
+1. **ESPN's terms — resolved 2026-10-10.** Verified https://disneytermsofuse.com/english/ (covers ESPN by name): no automated
+   extraction, no commercial use. Burnticker therefore reads nothing from ESPN: schedules come from MLB's, the NHL's and the NBA's
+   official feeds and TheSportsDB (licensed); each game settles on its on-chain payout or a licensed final score confirmed by a second
+   independent operator (`src/lib/burnticker/sources/gameSettle.ts`). ESPN is only a plain "see this game on ESPN" link for people.
+   Open item instead: the TheSportsDB key on the host must be the commercial (v2) key for full soccer schedules.
 2. **The unnamed venue in published files.** The plan of record and the decision log name the event-contract venue whose terms ask for
    written approval before public mention; `docs/launch` (including this folder and PLAN.md) and `docs/burnticker` are on the
    public-repo allowlist, so they publish. Owner call: keep (transparency) or scrub/exclude.
