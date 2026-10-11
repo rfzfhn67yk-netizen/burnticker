@@ -515,6 +515,20 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 997
 
+## 2026-10-11 — Winner takes the burn (LAUNCHPAD-PATH §40), client side; no publish, no mainnet deploy
+
+- burn_receipts gains `link_pair`, `submit_pair_result` and `forward_to_winner` (29 entrypoints, 32 event types, 90 error codes); the
+  program builder's devnet upgrade, verified hash and pair-6 run are under `docs/burnkeeper/evidence/devnet-pair-forward-2026-10-11/`.
+- Rules: every new pair carries `pair.winnerTakesBurn: true` (a one-shot pair maps 100 %); the locked description adds "Paired with a rival
+  coin: fees from both coins burn the winner's supply (the coin whose rule a result fires)."; the copy lint gains `win-fees` (no-prizes).
+- Keeper: attest both coins, post the PairResult (both quorums), forward the loser's fuel before the winner's crank; `link_pair` before
+  `register_pair_pool`; alerts `pair-result-missing` (12 h after a reading), `pair-forward-pending`, `pair-forward-impossible`,
+  `pair-unmatched` (daily); a flagged pair inside its pairing window is held; append-only `pair_forwards`; `status/status.json`
+  `pairs[].lastForward`; the receipt line "forwarded from $LOSER: N SOL → $WINNER burn pool".
+- Pages and API 1.10.0 (additive): receipt status `forwarded` and `pairRole`; `status.pair.winnerTakesBurn` / `forwards[]`; the pair
+  page's "burned on A / burned on B / forwarded A→B / B→A"; the Burn Derby scoreboard's forwarded fuel; SDK types and the
+  `PairResultSubmitted` log event.
+
 ## 2026-10-11 — LP lock round 2: the blind review's RL-2 / RL-3 / L-1..L-3 fixes (client side; no publish, no deploy)
 
 - `register_fee_key` gains `lp_lock_vault` and identifies the position by its LOCKER (LaunchLab's vault_auth for policy 0, the pair vault for
@@ -543,3 +557,27 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `5ef0c6a3e43df0c7ebd061bf577e82821a6a5a32bb1c3e1316e273d075c7741d`
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 1012
+
+## 2026-10-11 — publish from 46501d7e5d82
+
+- monorepo commit: `46501d7e5d8285572035b608a40913899b98847a` (the working tree had uncommitted changes when this tag was written)
+- program hash: `d4f39b47f6135bebe316f0c6cf11f40eaebfa236832187798282b6ff3dce5bf2` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `5ef0c6a3e43df0c7ebd061bf577e82821a6a5a32bb1c3e1316e273d075c7741d`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1030
+
+## 2026-10-11 — publish from c9e812da196e
+
+- monorepo commit: `c9e812da196e62946d78035ad3c98c02dff7cf70` (the working tree had uncommitted changes when this tag was written)
+- program hash: `d4f39b47f6135bebe316f0c6cf11f40eaebfa236832187798282b6ff3dce5bf2` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `5ef0c6a3e43df0c7ebd061bf577e82821a6a5a32bb1c3e1316e273d075c7741d`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1032
+
+## 2026-10-11 — publish from 701655de6906
+
+- monorepo commit: `701655de69065d5f780bf90a49d5bbb24164b5a4` (the working tree had uncommitted changes when this tag was written)
+- program hash: `869a6b9ca9df52233e7a62c7cd998a2ed1607f020fcc93bf62f2def222ec5c22` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `f7a4eb92e5f00596226823f071a76c47f4fabfaa9cd95f2d7a230564f14ea12d`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1067

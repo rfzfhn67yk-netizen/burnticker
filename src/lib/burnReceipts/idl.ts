@@ -1332,6 +1332,17 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
         },
         {
+          "name": "pair_link",
+          "optional": true
+        },
+        {
+          "name": "pair_result",
+          "docs": [
+            "empty: then the crank waits PAIR_RESULT_GRACE_SECS after the reading)."
+          ],
+          "optional": true
+        },
+        {
           "name": "event_authority"
         },
         {
@@ -1561,6 +1572,234 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "memo_program",
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "record_date",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "forward_to_winner",
+      "docs": [
+        "LAUNCHPAD-PATH §40: the loser's fuel for the period → the winner's fee PDA. Permissionless, idempotent."
+      ],
+      "discriminator": [
+        21,
+        155,
+        180,
+        24,
+        203,
+        228,
+        190,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "loser_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "loser_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loser_fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "loser_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "loser_fee_wsol",
+          "writable": true
+        },
+        {
+          "name": "loser_reading",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  97,
+                  100,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "loser_config"
+              },
+              {
+                "kind": "arg",
+                "path": "record_date"
+              }
+            ]
+          }
+        },
+        {
+          "name": "winner_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "winner_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "winner_fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "winner_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "winner_fee_wsol",
+          "writable": true
+        },
+        {
+          "name": "winner_reading",
+          "docs": [
+            "The winner's reading for the same period (it exists: both coins read the period)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  97,
+                  100,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "winner_config"
+              },
+              {
+                "kind": "arg",
+                "path": "record_date"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pair_result",
+          "docs": [
+            "The period's PairResult (address checked in the handler: [\"pair_result\", mint_lo, mint_hi, record_date])."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         },
         {
           "name": "memo_program",
@@ -1830,6 +2069,52 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "optional": true
         },
         {
+          "name": "pair_mint",
+          "docs": [
+            "[\"pair_link\", mint] is written: provisional until the partner's initialize_token names this mint back within",
+            "PAIRING_WINDOW_SECS, or paired at once when the partner already did (then pass its PairLink and TokenConfig too)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "pair_link",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "partner_link",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "partner_config",
+          "docs": [
+            "The partner's TokenConfig — when the partner initialized first (its pair_state becomes PAIRED)."
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "partner_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
           "name": "event_authority"
         },
         {
@@ -1846,6 +2131,99 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           }
         }
       ]
+    },
+    {
+      "name": "link_pair",
+      "docs": [
+        "LAUNCHPAD-PATH §40: pair the two coins of a pair_curve Pair (the Pair is the witness). Permissionless, idempotent."
+      ],
+      "discriminator": [
+        168,
+        105,
+        1,
+        149,
+        51,
+        162,
+        39,
+        100
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pair"
+        },
+        {
+          "name": "config_a",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_a.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "config_b",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_b.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "link_a",
+          "writable": true
+        },
+        {
+          "name": "link_b",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
     },
     {
       "name": "propose_attesters",
@@ -2557,6 +2935,201 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "submit_pair_result",
+      "docs": [
+        "LAUNCHPAD-PATH §40: one period's pair result (winner mint, or Pubkey::default() for a draw), a quorum of each coin's attesters."
+      ],
+      "discriminator": [
+        176,
+        227,
+        38,
+        191,
+        190,
+        166,
+        230,
+        139
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config_lo",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_lo.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "config_hi",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_hi.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "link_lo",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114,
+                  95,
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_lo.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "link_hi",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114,
+                  95,
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_hi.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pair_result",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114,
+                  95,
+                  114,
+                  101,
+                  115,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_lo.mint",
+                "account": "TokenConfig"
+              },
+              {
+                "kind": "account",
+                "path": "config_hi.mint",
+                "account": "TokenConfig"
+              },
+              {
+                "kind": "arg",
+                "path": "record_date"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "record_date",
+          "type": "u32"
+        },
+        {
+          "name": "winner",
+          "type": "pubkey"
+        },
+        {
+          "name": "source_url_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "proof_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "submit_reading",
       "discriminator": [
         195,
@@ -2736,6 +3309,32 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         52,
         23,
         66
+      ]
+    },
+    {
+      "name": "PairLink",
+      "discriminator": [
+        227,
+        115,
+        48,
+        99,
+        249,
+        87,
+        29,
+        212
+      ]
+    },
+    {
+      "name": "PairResult",
+      "discriminator": [
+        100,
+        196,
+        35,
+        105,
+        205,
+        147,
+        155,
+        21
       ]
     },
     {
@@ -2923,6 +3522,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "ForwardedToWinner",
+      "discriminator": [
+        157,
+        93,
+        223,
+        89,
+        0,
+        168,
+        84,
+        148
+      ]
+    },
+    {
       "name": "LaunchLabCreatorFeeClaimed",
       "discriminator": [
         238,
@@ -2946,6 +3558,45 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         81,
         57,
         135
+      ]
+    },
+    {
+      "name": "PairLinked",
+      "discriminator": [
+        19,
+        30,
+        25,
+        111,
+        193,
+        109,
+        142,
+        18
+      ]
+    },
+    {
+      "name": "PairResultMissing",
+      "discriminator": [
+        32,
+        162,
+        206,
+        159,
+        199,
+        242,
+        229,
+        172
+      ]
+    },
+    {
+      "name": "PairResultSubmitted",
+      "discriminator": [
+        167,
+        136,
+        82,
+        150,
+        25,
+        33,
+        246,
+        81
       ]
     },
     {
@@ -3529,6 +4180,71 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6076,
       "name": "FeeKeyNotRegistered",
       "msg": "policy 0: register the coin's LP-lock Fee Key (register_fee_key) before register_pool — the pool is verified only when its LP fees reach the burn"
+    },
+    {
+      "code": 6077,
+      "name": "InvalidPairMint",
+      "msg": "pair: the partner mint is invalid (itself, empty, or a vault-mode token)"
+    },
+    {
+      "code": 6078,
+      "name": "PairMismatch",
+      "msg": "pair: the accounts do not form a pair (PairLink / partner config / pair_curve Pair do not name each other)"
+    },
+    {
+      "code": 6079,
+      "name": "PairingClosed",
+      "msg": "pair: the partner named this mint after its pairing window closed, or the coin is already linked to another partner"
+    },
+    {
+      "code": 6080,
+      "name": "NotPaired",
+      "msg": "pair: the two coins are not paired to each other"
+    },
+    {
+      "code": 6081,
+      "name": "PairNotLinked",
+      "msg": "pair: policy 2 — run link_pair (the pair_curve Pair witnesses both mints) before register_pair_pool"
+    },
+    {
+      "code": 6082,
+      "name": "PairOrder",
+      "msg": "pair result: pass the configs in byte order of their mints (mint_lo first)"
+    },
+    {
+      "code": 6083,
+      "name": "InvalidWinner",
+      "msg": "pair result: the winner must be one of the two mints, or Pubkey::default() for a draw"
+    },
+    {
+      "code": 6084,
+      "name": "ConflictingPairResult",
+      "msg": "pair result: a different result is already recorded for this period"
+    },
+    {
+      "code": 6085,
+      "name": "ForwardRequired",
+      "msg": "this coin LOST the period's pair result: its fuel goes to the winner with forward_to_winner, not crank_buyback"
+    },
+    {
+      "code": 6086,
+      "name": "PairResultPending",
+      "msg": "a paired coin's crank waits for the period's pair result (or PAIR_RESULT_GRACE_SECS after the reading); retry later"
+    },
+    {
+      "code": 6087,
+      "name": "InvalidPairResult",
+      "msg": "the account is not this period's PairResult for this pair"
+    },
+    {
+      "code": 6088,
+      "name": "NotWinner",
+      "msg": "forward_to_winner: the period's result is a draw (nothing is forwarded) or names the other coin"
+    },
+    {
+      "code": 6089,
+      "name": "PairSideNotLive",
+      "msg": "forward_to_winner: both coins must be live (a verified pool) — a voided or unregistered side forwards nothing"
     }
   ],
   "types": [
@@ -3975,6 +4691,56 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "ForwardedToWinner",
+      "docs": [
+        "LAUNCHPAD-PATH §40: the loser's fuel for a period moved to the winner's fee PDA (lamports = sol_lamports + wsol_lamports)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "loser_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "winner_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "type": "u32"
+          },
+          {
+            "name": "units",
+            "type": "u64"
+          },
+          {
+            "name": "pool_lamports",
+            "docs": [
+              "The loser's pool basis (min(spendable, cap)) the rule was applied to."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "lamports",
+            "type": "u64"
+          },
+          {
+            "name": "sol_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "wsol_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "InitializeTokenArgs",
       "type": {
         "kind": "struct",
@@ -4126,6 +4892,271 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "operator_pending",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairLink",
+      "docs": [
+        "LAUNCHPAD-PATH §40 — the coin's partner in a winner-takes-the-burn pair. [\"pair_link\", mint]. Written by initialize_token (the",
+        "creator names the partner mint; `paired` turns true when the partner's initialize_token names this mint back within",
+        "PAIRING_WINDOW_SECS) or by link_pair (a pair_curve Pair holds both mints). `pair_mint` never changes; once `paired`, it stays."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pair_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "paired",
+            "type": "bool"
+          },
+          {
+            "name": "witness",
+            "docs": [
+              "PAIR_WITNESS_INITIALIZE / PAIR_WITNESS_PAIR_CURVE."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "pairing_deadline",
+            "docs": [
+              "Provisional links only: the partner must answer by this time (0 for links written already paired)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "paired_at",
+            "type": "i64"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairLinked",
+      "docs": [
+        "LAUNCHPAD-PATH §40: a coin's PairLink was written (provisional: waiting for the partner; paired: both name each other)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pair_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "paired",
+            "type": "bool"
+          },
+          {
+            "name": "witness",
+            "type": "u8"
+          },
+          {
+            "name": "pairing_deadline",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairResult",
+      "docs": [
+        "LAUNCHPAD-PATH §40 — one period's result of a pair, attested by a quorum of EACH coin's attesters over",
+        "`BURNRECEIPTS-PAIR-v1|<genesis>|<program>|<mint_lo>|<mint_hi>|<YYYY-MM-DD>|winner=<mint|draw>|src=<hex>|proof=<hex>`.",
+        "[\"pair_result\", mint_lo, mint_hi, record_date LE]. Append-only like readings; forward_to_winner adds the forward record."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint_lo",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_hi",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "docs": [
+              "The period: the record_date of both coins' readings it decides."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "winner",
+            "docs": [
+              "The winning mint; Pubkey::default() = a draw (forwards nothing; each coin burns its own fuel)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "signers_mask_lo",
+            "type": "u8"
+          },
+          {
+            "name": "signers_mask_hi",
+            "type": "u8"
+          },
+          {
+            "name": "source_url_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "submitted_at",
+            "type": "i64"
+          },
+          {
+            "name": "forwarded",
+            "type": "bool"
+          },
+          {
+            "name": "forwarded_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "forwarded_at",
+            "type": "i64"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairResultMissing",
+      "docs": [
+        "LAUNCHPAD-PATH §40: a paired coin's crank ran without a pair result for the period, PAIR_RESULT_GRACE_SECS after the reading."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairResultSubmitted",
+      "docs": [
+        "LAUNCHPAD-PATH §40: one period's pair result (winner = Pubkey::default() for a draw)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint_lo",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_hi",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "type": "u32"
+          },
+          {
+            "name": "winner",
+            "type": "pubkey"
+          },
+          {
+            "name": "signers_mask_lo",
+            "type": "u8"
+          },
+          {
+            "name": "signers_mask_hi",
+            "type": "u8"
+          },
+          {
+            "name": "source_url_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "submitter",
+            "type": "pubkey"
           }
         ]
       }
@@ -5323,11 +6354,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
             "type": "i64"
           },
           {
+            "name": "pair_state",
+            "docs": [
+              "LAUNCHPAD-PATH §40: PAIR_STATE_NONE / _PROVISIONAL / _PAIRED (the partner is in PairLink [\"pair_link\", mint]). Taken from the",
+              "former reserved bytes, so configs created before §40 read as NONE."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                23
+                22
               ]
             }
           }
@@ -5450,6 +6489,112 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           }
         ]
       }
+    }
+  ],
+  "constants": [
+    {
+      "name": "OUTCOME_FORWARDED",
+      "docs": [
+        "LAUNCHPAD-PATH §40 (winner takes the burn): the coin LOST this period's pair result; forward_to_winner moved the fuel it would",
+        "have spent (Reading.rule_spend_lamports) to the winner's fee PDA. Nothing was bought or burned on this coin."
+      ],
+      "type": "u8",
+      "value": "6"
+    },
+    {
+      "name": "PAIRING_WINDOW_SECS",
+      "docs": [
+        "The second coin must initialize (naming the first) within this long of the first, or the first stays a plain coin for good."
+      ],
+      "type": "i64",
+      "value": "604800"
+    },
+    {
+      "name": "PAIR_ATTESTATION_DOMAIN",
+      "docs": [
+        "The pair-result attestation domain (the reading's is ATTESTATION_DOMAIN)."
+      ],
+      "type": "string",
+      "value": "\"BURNRECEIPTS-PAIR-v1\""
+    },
+    {
+      "name": "PAIR_LINK_SEED",
+      "docs": [
+        "PairLink [\"pair_link\", mint]: the coin's one partner (immutable once written)."
+      ],
+      "type": "bytes",
+      "value": "[112, 97, 105, 114, 95, 108, 105, 110, 107]"
+    },
+    {
+      "name": "PAIR_RESULT_DRAW",
+      "type": "u8",
+      "value": "3"
+    },
+    {
+      "name": "PAIR_RESULT_GRACE_SECS",
+      "docs": [
+        "A paired coin's crank waits this long after a reading's submission for the period's pair result; afterwards it burns its own",
+        "fuel as an unpaired coin would (a missing result never wedges the queue) and that period can no longer be forwarded."
+      ],
+      "type": "i64",
+      "value": "259200"
+    },
+    {
+      "name": "PAIR_RESULT_LOST",
+      "type": "u8",
+      "value": "2"
+    },
+    {
+      "name": "PAIR_RESULT_NONE",
+      "docs": [
+        "The per-coin view of a PairResult (pair_result_for): no result / this coin won / lost / draw (forwards nothing)."
+      ],
+      "type": "u8",
+      "value": "0"
+    },
+    {
+      "name": "PAIR_RESULT_SEED",
+      "docs": [
+        "PairResult [\"pair_result\", mint_lo, mint_hi, record_date (u32 LE)] — mint_lo < mint_hi (byte order)."
+      ],
+      "type": "bytes",
+      "value": "[112, 97, 105, 114, 95, 114, 101, 115, 117, 108, 116]"
+    },
+    {
+      "name": "PAIR_RESULT_WON",
+      "type": "u8",
+      "value": "1"
+    },
+    {
+      "name": "PAIR_STATE_NONE",
+      "docs": [
+        "TokenConfig.pair_state: not paired / provisional (initialize_token named a partner that has not answered yet) / paired."
+      ],
+      "type": "u8",
+      "value": "0"
+    },
+    {
+      "name": "PAIR_STATE_PAIRED",
+      "type": "u8",
+      "value": "2"
+    },
+    {
+      "name": "PAIR_STATE_PROVISIONAL",
+      "type": "u8",
+      "value": "1"
+    },
+    {
+      "name": "PAIR_WITNESS_INITIALIZE",
+      "docs": [
+        "PairLink.witness: how the pairing was proven — both initialize_token calls named each other, or a pair_curve Pair holds both mints."
+      ],
+      "type": "u8",
+      "value": "0"
+    },
+    {
+      "name": "PAIR_WITNESS_PAIR_CURVE",
+      "type": "u8",
+      "value": "1"
     }
   ]
 };

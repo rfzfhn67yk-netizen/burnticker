@@ -27,6 +27,8 @@ import type { VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
  *   snapshot                   { date, sha256, arweaveTxId, url, rowCounts, capturedAt } | null — the latest pinned registry snapshot
  *   programs[]                 { name, programId, cluster, deployedHash, buildHash, verified "matches"|"differs"|"not-deployed", buildKind, readAt }
  *   fence                      { held[] { ticker, why }, adopted (count this cycle) } — the foreign-reading fence (readingFence.ts)
+ *   pairs[]                    (since 2026-10-11, winner takes the burn) { pairId, a, b (tickers), winnerTakesBurn, forwards (count),
+ *                                lastForward { recordDate, from, to, lamports, signature, at } | null }
  */
 
 export const OPS_STATUS_SCHEMA = "burnticker.ops-status/v1";
@@ -49,6 +51,8 @@ export interface OpsStatusJson {
   snapshot: { date: string; sha256: string; arweaveTxId: string; url: string; rowCounts: Record<string, number>; capturedAt: string } | null;
   programs: ProgramStatus[];
   fence: { held: { ticker: string; why: string }[]; adopted: number };
+  /** Rivalry pairs (winner takes the burn): the latest forward_to_winner per pair. Absent on documents written before 2026-10-11. */
+  pairs?: { pairId: string; a: string; b: string; winnerTakesBurn: boolean; forwards: number; lastForward: { recordDate: string; from: string; to: string; lamports: string; signature: string; at: string } | null }[];
 }
 
 /** The program rows from config/burnticker/verified-build.json for the keeper's cluster (localnet shows devnet's). */
@@ -64,7 +68,7 @@ export function programStatuses(vb: VerifiedBuild | null, cluster: string): Prog
 const iso = (ms: number | null | undefined): string | null => (ms === null || ms === undefined || !Number.isFinite(ms) ? null : new Date(ms).toISOString());
 
 export interface OpsStatusInput {
-  now: number; registry: Pick<Registry, "tokens" | "getStatus" | "alertsSince" | "ruleEnd" | "receipts" | "lockedRule" | "pending">;
+  now: number; registry: Pick<Registry, "tokens" | "getStatus" | "alertsSince" | "ruleEnd" | "receipts" | "lockedRule" | "pending"> & Partial<Pick<Registry, "pairs" | "pairForwards" | "token">>;
   role: RoleDecision; hostIdHash: string; cluster: string; paused: boolean; startedAt: number;
   feeds: FeedHealth[]; snapshot: SnapshotRecord | null; programs: ProgramStatus[]; fence?: { held: { ticker: string; why: string }[]; adopted: number } | null;
   heartbeatEverySec?: number;
@@ -94,6 +98,18 @@ export function buildOpsStatus(i: OpsStatusInput): OpsStatusJson {
       windDowns.push({ ticker: t.ticker, mode: end.mode, reason: end.reason, endedAt: iso(end.at) ?? "", daysDone: rows.filter((b) => b.kind === end.mode && b.status !== "planned" && b.status !== "sending").length, windDownDays: end.mode === "winddown" ? onEnd?.windDownDays ?? null : null, receiptsPending: reg.pending(t.mint).length });
     }
   }
+  // Winner takes the burn: one row per pair, its latest forward (tickers and lamports; no prices).
+  const pairs: NonNullable<OpsStatusJson["pairs"]> = [];
+  if (reg.pairs && reg.pairForwards && reg.token) for (const pr of reg.pairs()) {
+    const ta = reg.token(pr.mintA), tb = reg.token(pr.mintB);
+    if (!ta || !tb) continue;
+    let wtb = false;
+    try { wtb = !!(reg.lockedRule(ta).rule.pair as { winnerTakesBurn?: boolean } | null | undefined)?.winnerTakesBurn; } catch { wtb = false; }
+    const fw = reg.pairForwards(pr.pairId), last = fw[fw.length - 1];
+    const tick = (m: string) => (m === ta.mint ? ta.ticker : m === tb.mint ? tb.ticker : m.slice(0, 6));
+    const ds = (d: number) => `${String(d).slice(0, 4)}-${String(d).slice(4, 6)}-${String(d).slice(6, 8)}`;
+    pairs.push({ pairId: pr.pairId, a: ta.ticker, b: tb.ticker, winnerTakesBurn: wtb, forwards: fw.length, lastForward: last ? { recordDate: ds(last.recordDate), from: tick(last.loserMint), to: tick(last.winnerMint), lamports: last.lamports.toString(), signature: last.signature, at: new Date(last.at).toISOString() } : null });
+  }
   const r = i.role;
   return {
     schema: OPS_STATUS_SCHEMA, generatedAt: new Date(i.now).toISOString(),
@@ -109,6 +125,7 @@ export function buildOpsStatus(i: OpsStatusInput): OpsStatusJson {
     snapshot: i.snapshot ? { date: i.snapshot.date, sha256: i.snapshot.sha256, arweaveTxId: i.snapshot.arweaveTxId, url: i.snapshot.url, rowCounts: i.snapshot.rowCounts, capturedAt: new Date(i.snapshot.capturedAt).toISOString() } : null,
     programs: i.programs,
     fence: i.fence ?? { held: [], adopted: 0 },
+    ...(pairs.length ? { pairs } : {}),
   };
 }
 

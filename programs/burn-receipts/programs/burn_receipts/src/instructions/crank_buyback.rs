@@ -99,6 +99,11 @@ pub struct CrankBuyback<'info> {
     /// CHECK: address-checked: the SPL Memo program.
     #[account(address = MEMO_PROGRAM_ID)]
     pub memo_program: UncheckedAccount<'info>,
+    /// CHECK: LAUNCHPAD-PATH §40, paired coins only: this coin's PairLink ["pair_link", mint] (address-checked in pair::crank_pair_gate).
+    pub pair_link: Option<UncheckedAccount<'info>>,
+    /// CHECK: paired coins only: the period's PairResult ["pair_result", mint_lo, mint_hi, record_date] (address-checked; may be
+    /// empty: then the crank waits PAIR_RESULT_GRACE_SECS after the reading).
+    pub pair_result: Option<UncheckedAccount<'info>>,
 }
 
 pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Result<()> {
@@ -114,6 +119,14 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
     };
     let units = ctx.accounts.reading.units;
     require_fixed_supply(&ctx.accounts.mint)?;
+    // LAUNCHPAD-PATH §40: a paired coin that LOST this period's result does not burn — forward_to_winner moves its fuel.
+    let pair_result_missing = crate::instructions::pair::crank_pair_gate(
+        &ctx.accounts.config,
+        &ctx.accounts.reading,
+        ctx.accounts.pair_link.as_ref().map(|a| a.as_ref()),
+        ctx.accounts.pair_result.as_ref().map(|a| a.as_ref()),
+        Clock::get()?.unix_timestamp,
+    )?;
     let fee_seeds: &[&[u8]] = &[FEE_SEED, mint_key.as_ref(), &[fee_bump]];
 
     // Review-2 F3: anyone can send lamports straight to the fee PDA's WSOL account without a SyncNative. Every amount below is
@@ -375,6 +388,9 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
             cap_lamports: cap.unwrap_or(0),
             spent_lamports: spent,
         });
+    }
+    if pair_result_missing {
+        emit_cpi!(crate::events::PairResultMissing { mint: mint_key, record_date: r.record_date });
     }
     emit_cpi!(ReadingProcessed {
         config: config_key,

@@ -123,3 +123,23 @@ The text above and the earlier errata stay as written. Round 2 (the review's RL-
 - **burn_lp.** pair_curve's fallback after 30 days of a refusing lock — the only path that destroys LP; it refuses before then and once
   `lock_lp` ran.
 
+## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)
+
+The text above and the earlier errata stay as written. The owner's §40 decision (a pair's loser fuels the winner's burn) adds three
+burn_receipts entrypoints and changes what a reviewer checks for paired coins only; a single coin's path is unchanged:
+
+- **Instruction count (item 1).** burn_receipts now has **29 entrypoints**: the 26 above plus `link_pair`, `submit_pair_result` and
+  `forward_to_winner`. The IDL, the Powers Register and the whitepaper's §13.3 list 29 (32 event types, 90 error codes).
+- **Pairing.** A TokenConfig names its partner (`pair_mint`) at `initialize_token`, and the pair is `paired` once the partner names it
+  back inside the 7-day pairing window, or by the permissionless `link_pair` (a pair_curve Pair holds both mints). For policy 2,
+  `link_pair` runs before `register_pair_pool` (`PairNotLinked` otherwise).
+- **Pair results.** `submit_pair_result` writes `["pair_result", mint_lo, mint_hi, date]`, signed by BOTH coins' attester quorums over
+  `BURNRECEIPTS-PAIR-v1|<genesis>|<program>|<lo>|<hi>|<date>|winner=<b58|draw>|src=<hex>|proof=<hex>`. Its event
+  `PairResultSubmitted` is a plain `emit!` log (not `emit_cpi!`). Two attester signatures fit a legacy transaction; quorums above
+  two need a v0 transaction with an address lookup table.
+- **The forward.** For the loser's period, `crank_buyback` refuses with `ForwardRequired`; `forward_to_winner` moves exactly what the
+  loser's own rule would have spent (`buyback_spend` of its pool at its units and fraction; a one-shot pair's 100 %) into the winner's
+  WSOL account, writes the forward memo and marks the loser's reading outcome 6 (forwarded). The loser's supply is untouched and
+  nobody is paid. A draw or a void forwards nothing. With no result the crank waits (`PairResultPending`) for up to 72 h, then burns
+  unpaired.
+

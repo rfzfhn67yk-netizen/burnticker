@@ -140,8 +140,10 @@ describe("WIF vs SHIB through the keeper and the program", () => {
     const ra = ev(w.registry.receipts(w.a.mint)), rb = ev(w.registry.receipts(w.b.mint));
     assert.equal(ra.length, 5); assert.equal(rb.length, 5);
     const st = (rs: typeof ra) => rs.map((r) => `${r.eventId.slice(0, 10)}:${r.status}:${r.units}`);
-    assert.deepEqual(st(ra), ["2026-10-05:confirmed:1", "2026-10-06:nothing:0", "2026-10-07:void:0", "2026-10-10:confirmed:1", "2026-10-11:void:0"]);
-    assert.deepEqual(st(rb), ["2026-10-05:nothing:0", "2026-10-06:confirmed:1", "2026-10-07:void:0", "2026-10-10:nothing:0", "2026-10-11:void:0"]);
+    // Winner takes the burn (2026-10-11): the loser's window forwards its fuel (the units it would have had) to the winner's burn pool.
+    assert.deepEqual(st(ra), ["2026-10-05:confirmed:1", "2026-10-06:forwarded:1", "2026-10-07:void:0", "2026-10-10:confirmed:1", "2026-10-11:void:0"]);
+    assert.deepEqual(st(rb), ["2026-10-05:forwarded:1", "2026-10-06:confirmed:1", "2026-10-07:void:0", "2026-10-10:forwarded:1", "2026-10-11:void:0"]);
+    assert.equal(w.registry.pairForwards(w.pairId).length, 3, "three forwards: B→A on 10-05 and 10-10, A→B on 10-06");
     assert.ok((ra[0].burnRaw ?? BigInt(0)) > BigInt(0) && (rb[1].burnRaw ?? BigInt(0)) > BigInt(0));
     // The event id carries the proof digest; the reading carries derby:sha256:<hex>; the signed attestation's proof= is that hash.
     assert.match(ra[0].eventId, /^2026-10-05:[0-9a-f]{16}$/);
@@ -245,11 +247,14 @@ describe("the fallback paths", () => {
     assert.match(rows[0].reason!, /^noflip/);
     const ra = ev(w.registry.receipts(w.a.mint));
     assert.equal(ra.length, 1); assert.match(ra[0].eventId, /^flip-2026-10-06:/); assert.equal(ra[0].status, "confirmed");
-    assert.equal(ev(w.registry.receipts(w.b.mint))[0].status, "nothing");
-    // The one-shot settled: both rules ENDED (a 1 % mapping, so no drain) and the wind-down starts the next day.
-    assert.match(w.registry.ruleEnd(w.a.mint)!.reason, /one-shot settled YES/); assert.equal(w.registry.ruleEnd(w.a.mint)!.mode, "winddown");
+    // Winner takes the burn (2026-10-11): a one-shot pair runs at 100 % — the loser's whole pool forwards to the winner.
+    const rbFlip = ev(w.registry.receipts(w.b.mint))[0];
+    assert.equal(rbFlip.status, "forwarded"); assert.equal(rbFlip.pairRole, "lost");
+    assert.equal(w.registry.pairForwards(w.pairId).length, 1);
+    assert.equal(JSON.parse(w.registry.token(w.a.mint)!.rulesJson).binary.onYes.fractionOfPool, 1, "a one-shot pair side maps 100 %");
+    // The one-shot settled at 100 %: side A's rule ends in a DRAIN (its pool, now including B's forwarded fuel, burns down across cranks).
+    assert.match(w.registry.ruleEnd(w.a.mint)!.reason, /one-shot settled YES/); assert.equal(w.registry.ruleEnd(w.a.mint)!.mode, "drain");
     assert.match(w.registry.ruleEnd(w.b.mint)!.reason, /one-shot settled/);
-    assert.deepEqual(w.registry.receipts(w.a.mint).filter((r) => r.kind === "winddown").map((r) => r.eventId), ["winddown-2026-10-07"]);
   });
 
   test("a single asset (AAPL on Pyth, RedStone cross-read): the window's % change counted in units of percentage points", async () => {
@@ -267,8 +272,9 @@ describe("the fallback paths", () => {
     w.clock.now = B(7) + 3 * 3600_000;
     await runCycle(w.deps); await runCycle(w.deps);
     // Side A counts rises (2.25% → 2 units), side B (inverted) counts falls (−2.689% → 2 units).
-    assert.deepEqual(ev(w.registry.receipts(w.a.mint)).map((r) => [r.value, r.units, r.status]), [["2.25", 2, "confirmed"], ["-2.689486", 0, "nothing"]]);
-    assert.deepEqual(ev(w.registry.receipts(w.b.mint)).map((r) => [r.value, r.units, r.status]), [["2.25", 0, "nothing"], ["-2.689486", 2, "confirmed"]]);
+    // Winner takes the burn: the window's loser carries the units it would have had and forwards that fuel to the winner.
+    assert.deepEqual(ev(w.registry.receipts(w.a.mint)).map((r) => [r.value, r.units, r.status]), [["2.25", 2, "confirmed"], ["-2.689486", 2, "forwarded"]]);
+    assert.deepEqual(ev(w.registry.receipts(w.b.mint)).map((r) => [r.value, r.units, r.status]), [["2.25", 2, "forwarded"], ["-2.689486", 2, "confirmed"]]);
   });
 });
 

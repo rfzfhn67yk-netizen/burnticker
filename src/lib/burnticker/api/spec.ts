@@ -30,7 +30,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.9.0";
+export const API_VERSION = "1.10.0";
 export const API_PREFIX = "/api/burnticker/v1";
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
@@ -220,9 +220,20 @@ export const SCHEMAS: Record<string, Schema> = {
   Receipt: obj({
     eventId: str, settledAt: str, oracle: str, market: str, result: nstr, value: nstr, title: nstr, method: nstr, sourceUrl: nstr, settlementSourceUrl: nstr,
     units: int, kind: str, note: str, prevValue: nstr, carryIn: str, mapping: nullable(ref("BurnMapping")),
-    pool: nstr, spent: nstr, got: nstr, burned: nstr, shortOut: nstr, status: { enum: ["planned", "sending", "confirmed", "skipped", "void", "exhausted", "nothing"] }, skippedReason: nstr, memo: nstr, signature: nstr, txUrl: nstr,
+    pool: nstr, spent: nstr, got: nstr, burned: nstr, shortOut: nstr, status: { enum: ["planned", "sending", "confirmed", "skipped", "void", "exhausted", "nothing", "pending-pair", "voided", "forwarded"], description: "forwarded (since 1.10.0): this coin lost the period and its fuel (spent, SOL) moved to the winning coin's burn pool by forward_to_winner; nothing of this coin was bought or burned" }, skippedReason: nstr, memo: nstr, signature: nstr, txUrl: nstr,
     verify: obj({ curl: str, formula: str, expected: str, checks: arr(str), verified: bool }, ["checks", "verified"]),
+    pairRole: { enum: ["won", "lost", "draw", null], description: "since 1.10.0, rivalry pairs: this receipt's role in its result; a lost receipt carries the units it would have had had it won (its own fraction)" },
   }, ["eventId", "settledAt", "units", "status", "verify"]),
+  PairForward: obj({
+    recordDate: str, from: { ...str, description: "the losing coin's ticker" }, to: { ...str, description: "the winning coin's ticker" }, fromMint: PUBKEY, toMint: PUBKEY,
+    sol: { ...str, description: "SOL moved from the loser's burn pool to the winner's (the program's amount: buyback_spend of the loser's pool at its units and fraction)" }, units: int, signature: str, txUrl: nstr,
+  }, ["recordDate", "from", "to", "sol", "signature"], { description: "Since 1.10.0 (winner takes the burn): one forward_to_winner. Nobody is paid; the loser's supply is untouched." }),
+  PairInfo: obj({
+    pairId: str, side: { enum: ["A", "B"] }, counterpart: { type: "object" }, clause: { anyOf: [{ type: "object" }, { type: "null" }] },
+    winnerTakesBurn: { ...bool, description: "since 1.10.0: fees from both coins burn the winner's supply (the coin whose rule a result fires); false for pairs made before 2026-10-11" },
+    forwards: { ...arr(ref("PairForward")), description: "since 1.10.0: every forward between the two coins, oldest first" },
+    tally: { type: "object" }, pageUrl: str,
+  }, ["pairId", "side", "counterpart"]),
   TokenStatus: obj({
     schema: { const: "burnticker.status/v1" }, generatedAt: str, ticker: str, name: str, mint: str, cluster: str, status: str, oracle: str, selectorKey: str, seriesTitle: nstr, mode: str,
     rules: obj({ sha256: str, sha12: str, statement: str, file: str, oneShot: bool }, ["sha256", "statement"]), addresses: { type: "object" },
@@ -230,6 +241,7 @@ export const SCHEMAS: Record<string, Schema> = {
     next: obj({ nextCheckAt: nstr, impliedChance: { type: ["number", "null"], description: "always null: no odds or prices are shown for any coin (owner decision 2026-10-10); kept for schema compatibility" }, impliedBasis: nstr, nextMarket: nstr, nextCloseTime: nstr, awaitingFinal: int }, ["impliedChance"]),
     feed: { type: "object" }, attesters: arr({ type: "object" }), quorum: int, fees: { type: "object" }, health: { type: "object" }, disclosure: { type: "object" }, trust: { type: "object", description: "lpBurnedPct is 0 since 1.8.0 (LP locked forever): lpLockedPct and lpPolicy say what happens to the LP" },
     lp: { ...ref("LpLock"), description: "since 1.8.0: the coin's LP lock (policy, lock program, Fee Key and its owner, the last claim_lock_fees receipt, totals)" },
+    pair: { ...nullable(ref("PairInfo")), description: "a rivalry pair's side, counterpart and tally; since 1.10.0 also winnerTakesBurn and forwards[]" },
     profile: obj({ imageUrl: nstr, description: str, links: arr(obj({ label: str, url: str }, ["label", "url"])), oneLiner: { ...str, description: "the coin card's few words, derived from the locked rule (\"burns when the Rays win\")" }, badge: { ...str, description: "the window badge: 2026 SEASON / POSTSEASON 2026 / NEXT 5 GAMES / PERPETUAL / ONE-SHOT · <date>" } }, ["oneLiner"]),
     market: obj({
       phase: { enum: ["curve", "migrating", "graduated", null], description: "LaunchLab pool status (0 curve, 1 migrating, 2 graduated); null when not read" },

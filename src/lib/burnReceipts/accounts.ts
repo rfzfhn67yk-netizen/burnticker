@@ -32,6 +32,8 @@ export interface TokenConfigAccount {
   pool_untradeable_candidate_at: bigint;
   /** Review-3 L-2: when each attester slot's key joined. */
   attester_added_at: bigint[];
+  /** LAUNCHPAD-PATH §40: 0 not paired / 1 provisional (partner not answered yet; behaves as a plain coin) / 2 paired (pairs.ts). */
+  pair_state: number;
   // conveniences
   feedId: string; memoPrefix: string; memoSource: string; activeAttesters: AttesterEntry[]; adminRenounced: boolean; poolRegistered: boolean;
 }

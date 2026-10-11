@@ -12,13 +12,15 @@ import { plainSentence, ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { CoinCard } from "../_components/CoinCard";
 import { FieldHelp } from "../_components/FieldHelp";
 import { CoinVsCoinTile } from "./CoinVsCoinTile";
-import { PairCurveSign } from "./PairCurveSign";
+import { SignCard } from "./SignCard";
+import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
+import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
 import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPairLaunch, venueFor, venueFrom409, type LaunchErrorBody, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { STATIONS, nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
 import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
-import { describeRule, DESCRIPTION_MAX, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATE_START, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
@@ -65,7 +67,7 @@ interface SourceCardT { id: string; venue: "feed" | "polymarket" | "kalshi"; ven
 interface Series { ticker: string; title: string; category: string | null; frequency: string | null; settlementSource: { name: string; url: string } | null; refused: string[] }
 interface Source { id: string; kind: string; tier: number; tierLabel: string; title: string; sourceName: string; sourceUrl: string; cadence: string; unit: { size: number; label: string; definition: string } | null; direction: "up" | "down" | "abs" | null; baseline: "previousSettlement" | number | null; flags: string[]; launchable: { ok: boolean; why: string | null }; param: string | null; lastReading: { id: string; value: string | null; at: string } | null; readings: { id: string; value: string | null }[]; preview: { window: { from: string; to: string }; units: number; burnEvents: number; poolFractionSpent: number | null } | null }
 interface Backtest { sentence: string; text: string; sha256: string; sha12: string; mode: string; statement: string; seriesTitle: string | null; refusals: { reason: string }[]; matched: number; backtest: { rows: { id: string; at: string; title: string | null; result: string | null; value: string | null; units: number; kind: string }[]; totals: { events: number; burnEvents: number; voids: number; units: number; poolFractionSpent: number | null; tokens: number | null }; oneShot: { resolvesOn: string | null } | null } }
-interface Bundle { ready: boolean; pending: string[]; mint: string; ticker: string; rules: { text: string; sha256: string; statement: string; mode: string }; addresses: { feePda: string; feeWsol: string; vault: string | null; poolId: string; platformId: string }; allocation: { curve: string; locked: string; reserve: string; lpBurnedPct: number; teamAllocationPct: number }; fees: { sentence: string; curve: { legs: { label: string; bps: number }[]; totalBps: number }; postGraduation: { legs: { label: string; bps: number }[]; totalBps: number } }; burnPoolAuthority: string; transactions: { label: string; signers: string[]; instructions: { label: string }[] }[]; notes: string[] }
+interface Bundle { ready: boolean; pending: string[]; mint: string; ticker: string; mintSecretKey: string | null; rules: { text: string; sha256: string; statement: string; mode: string }; addresses: { feePda: string; feeWsol: string; vault: string | null; poolId: string | null; platformId: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[]; notes: string[] }
 interface League { id: string; label: string; series: { ticker: string; title: string }[]; sport?: string; crossRead?: string | null; draws?: boolean }
 interface Team { abbr: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null } | null; record: { w: number; l: number; d: number; since: string }; series?: { win: string; loss: string }; recordText?: string | null }
 /** The sports pickers (GET /v1/sports/teams, /v1/sports/games): the leagues' own schedules or TheSportsDB, never ESPN. */
@@ -862,6 +864,7 @@ export default function LaunchWizard() {
             <ReviewCard
               coins={coins}
               sentence={sentence}
+              pairLine={pairOn && !ruleB ? PAIR_REVIEW_LINE : null}
               ends={endsLine(text)}
               shares={{ options: [...shareOptions], value: shareValue, onChange: (v) => { flowStats.current.decisions++; setDial("fraction", v); } }}
               durations={pairOn ? { options: [{ value: "game", label: "until the result" }, { value: "season", label: "this season" }], value: pairMode === "game" ? "game" : "season", onChange: (v) => { flowStats.current.decisions++; setPairMode(v === "game" ? "game" : "season"); } } : null}
@@ -879,30 +882,14 @@ export default function LaunchWizard() {
         );
       })()}
 
+      {/* ------------------------------------- LAUNCH: sign and send (SignCard: the same component for one coin, two coins and the pair curve) ------------------------------------- */}
       {step === "launch" && (bundle || pcOut) && (() => {
-        const bundleCard = (b: Bundle, label: string, order: string) => (
-          <div className={card} key={b.mint}>
-            <h2 className="font-medium">{order}Launch bundle for ${b.ticker ?? label}</h2>
-            <p>Mint <code>{b.mint}</code> · LaunchLab pool <code>{b.addresses.poolId}</code>{b.addresses.vault ? <> · vault <code>{b.addresses.vault}</code></> : null}</p>
-            <p className="text-xs">Burn pool = LaunchLab creator = the burn program&apos;s fee PDA <code>{b.addresses.feePda}</code> · its WSOL account (claimed curve fees land here) <code>{b.addresses.feeWsol}</code>. Your wallet pays and signs; the keeper only pays gas.</p>
-            <p className="text-xs text-neutral-500">{b.transactions.map((t) => `${t.label}: ${t.instructions.length} instruction(s), signers ${t.signers.join(" + ")}`).join(" · ")}</p>
-            {b.ready ? <p className="text-emerald-400">Ready to sign.</p> : <div className="text-amber-400"><p>Not signable yet. Pending:</p><ul className="list-disc pl-5 text-xs">{b.pending.map((p) => <li key={p}>{p}</li>)}</ul><p className="text-xs text-neutral-400 mt-1">The draft is registered (status: draft) with this exact rules.json and hash. When the pieces land, come back and sign; nothing is sent from this page until the bundle says ready.</p></div>}
-            <ul className="list-disc pl-5 text-xs text-neutral-400 mt-2">{b.notes.map((n) => <li key={n}>{n}</li>)}</ul>
-          </div>
-        );
+        const plan = pcOut ? pairCurvePlan(pcOut.pc, pcOut.keys, { a: ticker, b: tickerB }) : pairOut ? launchlabPlan([pairOut.a, pairOut.b]) : launchlabPlan([bundle!]);
+        const two = !!(pcOut || pairOut);
         return (
           <section className="space-y-3 text-sm">
-            {pcOut ? <>
-              <PairCurveSign pc={pcOut.pc} mintKeys={pcOut.keys} creator={creator || null} tickers={{ a: ticker, b: tickerB }} notes={pcOut.notes} />
-              <p><Link className="underline" href={`/burnticker/p/${pcOut.pairId}`}>Open the pair page →</Link> · <Link className="underline" href={`/burnticker/t/${ticker}`}>${ticker}</Link> · <Link className="underline" href={`/burnticker/t/${tickerB}`}>${tickerB}</Link></p>
-            </> : pairOut ? <>
-              <div className={card}><h2 className="font-medium">{pairOut.pairId ? <>Rivalry pair <code>{pairOut.pairId}</code></> : <>Two coins, every game this season</>}</h2><p className="text-xs text-neutral-400">{pairOut.pairId ? "Sign side A's bundle first, then side B's (B's rule names A's mint as counterpart)." : "Two independent launches: sign each bundle."}</p><ul className="list-disc pl-5 text-xs text-neutral-400">{pairOut.notes.map((n) => <li key={n}>{n}</li>)}</ul></div>
-              {bundleCard(pairOut.a, ticker, "1 · ")}{bundleCard(pairOut.b, tickerB, "2 · ")}
-              <p>{pairOut.pairId && <><Link className="underline" href={`/burnticker/p/${pairOut.pairId}`}>Open the pair page →</Link> · </>}<Link className="underline" href={`/burnticker/t/${ticker}`}>${ticker}</Link> · <Link className="underline" href={`/burnticker/t/${tickerB}`}>${tickerB}</Link></p>
-            </> : bundle ? <>
-              {bundleCard(bundle, ticker, "")}
-              <p><Link className="underline" href={`/burnticker/t/${ticker}`}>Open the token page →</Link> (it shows the draft; the receipts table fills itself once live)</p>
-            </> : null}
+            <SignCard plan={plan} creator={creator || null} title={two ? `Launch $${ticker} and $${tickerB}` : `Launch $${ticker}`} coinHref={(t) => `/burnticker/t/${t}`} />
+            <p className="text-xs text-neutral-500">The drafts are registered; they go live once the launch transaction{two ? "s are" : " is"} confirmed and read back from the chain.</p>
           </section>
         );
       })()}

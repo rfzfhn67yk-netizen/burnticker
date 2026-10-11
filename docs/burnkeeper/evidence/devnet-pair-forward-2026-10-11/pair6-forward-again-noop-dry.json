@@ -1,0 +1,150 @@
+{
+  "command": "forward-to-winner",
+  "cluster": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+  "dryRun": true,
+  "pairResult": "9z9C3kWf9R1562bFyLEBSxMaxDHrLwhcVdZ9a1gkkYWF",
+  "instructions": [
+    {
+      "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "instruction": "forward_to_winner",
+      "accounts": [
+        {
+          "name": "cranker",
+          "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+          "signer": true,
+          "writable": false
+        },
+        {
+          "name": "platform",
+          "pubkey": "EXz6enAb7mSUfC1bWJstF96uLZiCSdFcLLSQ9cwhhxx6",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "loser_config",
+          "pubkey": "5eY5PVP1p5eMPjrvSK9bVz4ueaqW5AvQqckZS5WGkrHz",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "loser_fee_vault",
+          "pubkey": "EzWnvfMsDr8My3QgwAK6xQAqLv9HPmYjreCejaXtfFbB",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "loser_fee_wsol",
+          "pubkey": "DprXKW1XF9N2Q4x6p5J7Uh8vpAwEURnsR6NTUHX7m8nG",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "loser_reading",
+          "pubkey": "25CJpojggtkjZiaX6DAdGQAGoSHZTPsmcXpD5UMsMMpc",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "winner_config",
+          "pubkey": "QAHUpRFQzz9EkWgrGBMJ69svY55GaDB1XSmGg6SMEmx",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "winner_fee_vault",
+          "pubkey": "HXEXbwJFENsRFv65XQqBKGuXbYK3jTAb9Am7YxW8S8cm",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "winner_fee_wsol",
+          "pubkey": "HPkh76YNNCD9ZU4Z6hPc36viNZaEeeziLV89oEmUQXWB",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "winner_reading",
+          "pubkey": "E3y8QtU8jQFpv5AnGkPs9c3Eyj36eGEJ44vKyN7CXLdD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "pair_result",
+          "pubkey": "9z9C3kWf9R1562bFyLEBSxMaxDHrLwhcVdZ9a1gkkYWF",
+          "signer": false,
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "system_program",
+          "pubkey": "11111111111111111111111111111111",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "memo_program",
+          "pubkey": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "event_authority",
+          "pubkey": "3XsZCTaW8nPykaMubVvYLr1ky87o7shL9NQjYiQP6TeD",
+          "signer": false,
+          "writable": false
+        },
+        {
+          "name": "program",
+          "pubkey": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": {
+        "record_date": 20261010
+      }
+    }
+  ],
+  "simulation": {
+    "err": null,
+    "unitsConsumed": 60915,
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+      "Program log: Instruction: ForwardToWinner",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 60765 of 399850 compute units",
+      "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+    ]
+  },
+  "resultingAccounts": [
+    {
+      "address": "EzWnvfMsDr8My3QgwAK6xQAqLv9HPmYjreCejaXtfFbB",
+      "kind": "lamports",
+      "state": {
+        "lamports": 24956626
+      }
+    },
+    {
+      "address": "HXEXbwJFENsRFv65XQqBKGuXbYK3jTAb9Am7YxW8S8cm",
+      "kind": "lamports",
+      "state": {
+        "lamports": 25404432
+      }
+    },
+    {
+      "address": "9z9C3kWf9R1562bFyLEBSxMaxDHrLwhcVdZ9a1gkkYWF",
+      "kind": "lamports",
+      "state": {
+        "lamports": 1833880
+      }
+    }
+  ]
+}

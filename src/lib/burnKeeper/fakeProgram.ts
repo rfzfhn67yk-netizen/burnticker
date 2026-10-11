@@ -84,6 +84,13 @@ export class FakeProgram implements ProgramPort {
   lookupTable = false;
   lastReadingBytes = 0;
   readonly retryableErrors: ReadonlySet<string> = new Set(["WsolBalanceMismatch"]);
+  /**
+   * WINNER TAKES THE BURN (2026-10-11): the paired-coin crank gate (installed by src/lib/burnticker/pairForward.ts's fake) — "lost" →
+   * ForwardRequired, "pending" → PairResultPending (until 72 h after the reading was submitted), "won" / "draw" / "missing" / null →
+   * the normal crank. `readingSubmittedAt` records when each reading landed (ms).
+   */
+  pairGate: ((recordDate: number, readingSubmittedAtMs: number | null) => "won" | "lost" | "draw" | "pending" | "missing" | null) | null = null;
+  readingSubmittedAt = new Map<number, number>();
 
   constructor(i: FakeProgramInit) {
     this.programId = i.programId ?? "BurnReceiptsFakeProgram11111111111111111111";
@@ -147,6 +154,9 @@ export class FakeProgram implements ProgramPort {
     if (next.units === 0) return { kind: "no_units", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "no_units", recordDate: D }) };
     if (this.cfg.mode === "vault") return { kind: "vault", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "vault", recordDate: D }) };
     if (!this.cfg.poolRegistered) return { status: "waiting-for-pool", recordDate: D };
+    // Like burnReceipts/crank.ts planCrank: a paired coin that LOST the period plans "forward" (the keeper runs forward_to_winner through
+    // its pair port; building it here as a crank is refused ForwardRequired, as on chain).
+    if (this.pairGate && this.pairGate(D, this.readingSubmittedAt.get(D) ?? null) === "lost") return { kind: "forward", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "buyback", recordDate: D }) };
     return { kind: "buyback", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "buyback", recordDate: D }) };
   }
 
@@ -179,6 +189,7 @@ export class FakeProgram implements ProgramPort {
     this.cfg = { ...this.cfg, hasBaseline: true, lastRecordDate: p.recordDate, lastValue: p.value, readings: this.cfg.readings + 1 };
     if (r.units === 0 && r.prevDate === this.cfg.crankCursor) { r.processed = true; r.outcome = "no-units"; this.cfg = { ...this.cfg, crankCursor: p.recordDate }; }
     this.readings.set(p.recordDate, r);
+    this.readingSubmittedAt.set(p.recordDate, this.now());
     return { memo: null };
   }
   private head(r: ProgramReadingView) {
@@ -211,6 +222,9 @@ export class FakeProgram implements ProgramPort {
     }
     if (this.cfg.mode !== "buyback") return { err: "WrongMode" };
     if (!this.cfg.poolRegistered) return { err: "PoolNotRegistered" };
+    const g = this.pairGate ? this.pairGate(D, this.readingSubmittedAt.get(D) ?? null) : null;
+    if (g === "lost") return { err: "ForwardRequired" };
+    if (g === "pending") return { err: "PairResultPending" };
     // Review-2 F3: the program measures the synced WSOL balance (stray lamports included) and syncs before the swap.
     if (commit && this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
     const poolActual = spendablePool(this.feeLamports, this.cfg.reserveLamports, this.wsol + this.strayWsolLamports);

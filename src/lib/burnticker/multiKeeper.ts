@@ -6,14 +6,15 @@ import { WAIT_REASONS, WAIT_RETRY_MS, type ProgramConfigView, type ProgramPort, 
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
-import { readingMatches, selectorKeyOf, wideRule, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
-import { DECIMALS, isOneShot, pairClause, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
-import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
+import { readingMatches, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
+import { DECIMALS, isOneShot, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { solToLamports } from "@/lib/burnKeeper/rules";
 import { derbyProofHash } from "@/lib/burnticker/derby/adapter";
 import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type BurnProgramClient } from "@/lib/burnticker/program";
 import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFeesKeeper";
+import { ensurePairResult, forwardLoss, pairCtxFor, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -166,7 +167,7 @@ export function independentReadings(rule: BurnRule, carry: CarryPolicy): boolean
 }
 
 /** New readings for one token through the engine → receipt rows. Pure apart from the registry writes. */
-export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null = null): { mint: string; eventId: string; status: string }[] {
+export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null = null, wtb: { otherTicker: string } | null = null): { mint: string; eventId: string; status: string }[] {
   const state = d.registry.state(t.mint);
   const after = state.lastSettledAt ?? t.baselineAt;
   const carry = carryFor(locked.rule);
@@ -182,8 +183,19 @@ export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: 
   const steps = unitSteps(locked.rule, fresh, carry, { value: state.lastValue, carryOut: state.carryOut });
   const out: { mint: string; eventId: string; status: string }[] = [];
   let prev = { value: state.lastValue, carryOut: state.carryOut };
-  for (const { event, step } of steps) {
-    const wrote = d.registry.applyStep(t.mint, event, step, prev, locked.rule.kind === "scalar", d.now(), gatedStatus(step, gate));
+  for (const { event, step: own } of steps) {
+    // WINNER TAKES THE BURN (2026-10-11): in a forwarding pair a result has a winner and a loser. The winner keeps its step; the loser
+    // gets the units it would have had had it won (the mirrored mapping = its own fraction) — its fuel for the result forwards to the
+    // winner's burn pool by forward_to_winner. Nothing on either side (a draw / a void) stays as it is.
+    let step = own, role: PairRole | null = null;
+    if (wtb && own.kind !== "void" && event.result !== "void") {
+      if (own.units > 0 && own.mapping) role = "won";
+      else {
+        const m = unitStep(pairMirrorRule(locked.rule), event, prev, carry);
+        if (m.units > 0 && m.mapping) { step = { ...own, units: m.units, mapping: m.mapping, note: `${own.note} · lost to $${wtb.otherTicker}: this coin's fuel for the result (${m.units} unit(s) at its own fraction) moves to $${wtb.otherTicker}'s burn pool — winner takes the burn` }; role = "lost"; }
+      }
+    }
+    const wrote = d.registry.applyStep(t.mint, event, step, prev, locked.rule.kind === "scalar", d.now(), gatedStatus(step, gate), role);
     const row = d.registry.receipt(t.mint, event.id)!;
     if (wrote) { out.push({ mint: t.mint, eventId: event.id, status: row.status }); d.log(`  [plan] $${t.ticker} ${event.id}: ${step.note}${row.status === "planned" ? " → receipt planned" : row.status === "pending-pair" ? " → pending-pair (both or neither: waiting for both pools)" : row.status === "voided" ? " → voided (the pair voided: no event burn)" : ""}`); }
     if (locked.rule.kind === "scalar" && event.value !== null && event.result !== "void") prev = { value: event.value, carryOut: step.carryOut };
@@ -233,7 +245,7 @@ async function resolveSent(d: KeeperDeps, port: ProgramPort, mint: string, key: 
  * (buyback); (3) adopt readings someone else already cranked; (4) crank in order, recording what the program did from its Reading
  * account. Waits (TWAP, no pool, day not over, quorum short) are outcomes, never errors.
  */
-export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedRule): Promise<ExecOutcome[]> {
+export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedRule, pairCtx: PairCtx | null = null, opts: { attestOnly?: boolean } = {}): Promise<ExecOutcome[]> {
   const reg = d.registry, mint = t.mint;
   const out: ExecOutcome[] = [];
   const pending = reg.pending(mint);
@@ -254,6 +266,7 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
   // 1. ATTEST the closed days.
   const r = await submitCounterReadings(d, t, port, cfg, out);
   cfg = r.cfg;
+  if (opts.attestOnly) return out;
 
   // 2. FEED THE POOL + POOL HEALTH (buyback; best-effort; only when something is waiting for a crank).
   const counted = reg.pending(mint).filter((b) => b.readingDate !== null);
@@ -300,6 +313,29 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     if ("waiting" in res) { hold(res.waiting, rows); break; }
     const lead = rows[0];
     if (lead && !d.dryRun && lead.nextAttemptAt && now < lead.nextAttemptAt) { hold(lead.waitReason ? `${lead.waitReason} (next try ${new Date(lead.nextAttemptAt).toISOString()})` : `backing off until ${new Date(lead.nextAttemptAt).toISOString()}`, rows); break; }
+    // WINNER TAKES THE BURN: a pair period needs its PairResult before either crank; the LOSER's reading is forwarded, never cranked.
+    // Every buyback period of a paired coin needs a PairResult (a clock day or a period with no result is posted as a draw — each coin
+    // burns its own fuel); without one the program waits PairResultPending for up to 72 h.
+    // The chain planner (burnReceipts/crank.ts) already returns kind "forward" for a LOST period; both kinds go through here so the
+    // forward is recorded (pair_forwards, receipt line) the same way.
+    if (pairCtx?.active && (plan.kind === "buyback" || plan.kind === "forward")) {
+      const pr = await ensurePairResult(pairCtx, reg, D, { now, dryRun: d.dryRun, log: d.log, winnerReading: () => winnerFlatReading(d, pairCtx, D) });
+      if ("waiting" in pr) { hold(`pair result for ${Ds}: ${pr.waiting}`, rows); break; }
+      if (pr.result.winner === pairCtx.other.mint) {
+        const fr = await forwardLoss(pairCtx, reg, port, D, { now, dryRun: d.dryRun, log: d.log });
+        if ("waiting" in fr) {
+          if (fr.error) { reg.noteReadingError(mint, D, fr.waiting, now + backoffMs(lead?.attempts ?? 0), now); hold(fr.waiting, rows, "error"); }
+          else hold(fr.waiting, rows);
+          break;
+        }
+        const rd0 = await port.reading(D);
+        if (!rd0?.processed) { hold(`forward ${fr.signature.slice(0, 12)}… confirmed; the reading is not processed yet`, rows); break; }
+        const rd = fr.facts ? { ...rd0, outcome: "forwarded", poolLamports: fr.facts.poolLamports, poolActualLamports: fr.facts.poolLamports, spentLamports: fr.facts.lamports, ruleSpendLamports: fr.facts.lamports, carriedInLamports: BigInt(0), carriedOutLamports: BigInt(0), got: BigInt(0), burned: BigInt(0) } : rd0;
+        recordCrank(d, t, cfg, D, rd, { signature: fr.signature, slot: fr.slot, memo: fr.memo }, false, out);
+        if (fr.facts) recordForward(reg, pairCtx, D, fr.facts, fr.signature, fr.slot, now, d.log);
+        continue;
+      }
+    }
     if (d.dryRun) { d.log(`  [dry-run] $${t.ticker} ${Ds}: would crank_${plan.kind} (the program computes the amounts)`); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "dry-run", why: `crank_${plan.kind} ${Ds}` }); break; }
     const fail = (why: string) => { reg.noteReadingError(mint, D, why, now + backoffMs(lead?.attempts ?? 0), now); d.log(`  [crank] $${t.ticker} ${Ds}: ${why} — retrying later`); hold(why, rows, "error"); };
     try {
@@ -513,7 +549,7 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
  *             continued day by day while the cap carries spend; at most one sweep START per SWEEP_EVERY_DAYS.
  * Buyback mode only (a vault rule has no pool to spend). Every amount is the program's, on the receipts.
  */
-export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null): Promise<{ mint: string; eventId: string; status: string }[]> {
+export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: PairGate | null, pairCtx: PairCtx | null = null): Promise<{ mint: string; eventId: string; status: string }[]> {
   const reg = d.registry, rule = locked.rule, out: { mint: string; eventId: string; status: string }[] = [];
   if (locked.mode !== "buyback") return out;
   const end = detectRuleEnd(d, t, locked, gate);
@@ -521,10 +557,17 @@ export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule
   const f = ruleMappings(rule)[0]?.mapping.fractionOfPool ?? 0;
   if (!(f > 0)) return out;
   const today = isoDay(d.now());
+  // WINNER TAKES THE BURN: a one-shot pair LOSER's end-of-rule days (wind-down, drain, sweep) forward to the winner while the winner is
+  // live — the same units at its own fraction, so the forward moves exactly what the wind-down would have burned. A retired winner, a
+  // draw or a void: the loser winds down on its own coin, as before.
+  const loserOf = (): boolean => !!pairCtx?.active && isOneShot(rule) && pairCtx.other.status === "live"
+    && reg.receipts(t.mint).some((b) => !END_KINDS.has(b.kind) && b.pairRole === "lost");
   const add = (kind: EndReceiptKind, date: string, units: number): void => {
     const id = `${kind}-${date}`;
-    const step = endStep(rule, kind, units);
-    if (reg.addEndReceipt(t.mint, kind, { id, at: `${date}T00:00:00Z` }, step, d.now())) { out.push({ mint: t.mint, eventId: id, status: "planned" }); d.log(`  [plan] $${t.ticker} ${id}: ${step.note} → receipt planned`); }
+    const base = endStep(rule, kind, units);
+    const role = loserOf() && base.units > 0 && base.mapping ? "lost" as const : null;
+    const step = role ? { ...base, note: `${base.note} · forwards to $${pairCtx!.other.ticker}'s burn pool — winner takes the burn` } : base;
+    if (reg.addEndReceipt(t.mint, kind, { id, at: `${date}T00:00:00Z` }, step, d.now(), role)) { out.push({ mint: t.mint, eventId: id, status: "planned" }); d.log(`  [plan] $${t.ticker} ${id}: ${step.note} → receipt planned`); }
   };
   const mine = (kind: EndReceiptKind) => reg.receipts(t.mint).filter((b) => b.kind === kind).map((b) => b.eventId.slice(kind.length + 1)).sort();
   const quiet = () => reg.pending(t.mint).length === 0;
@@ -573,6 +616,43 @@ export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule
   return out;
 }
 
+/**
+ * WINNER TAKES THE BURN: the WINNER's reading for day D, which forward_to_winner takes. On an event day both coins read the period, so it
+ * exists. On a one-shot loser's wind-down / drain / sweep day the winner may have nothing that day: the keeper attests a FLAT reading for
+ * it (the unit counter unchanged — 0 units, processed at once; the clock proof for D). "exists" / "submitted"; "cannot" when the winner
+ * has already read past D (the period then posts as a draw and the loser burns its own fuel); waiting while the winner still has
+ * receipts up to D to attest, or the day is not over.
+ */
+export async function winnerFlatReading(d: KeeperDeps, ctx: PairCtx, D: number): Promise<"exists" | "submitted" | "cannot" | { waiting: string }> {
+  const w = ctx.other, Ds = formatDate(D), now = d.now();
+  let port: ProgramPort;
+  try { port = d.program.port(w.mint); } catch (e) { return { waiting: `no program port for $${w.ticker}: ${(e as Error).message.slice(0, 80)}` }; }
+  if (await port.reading(D)) return "exists";
+  if (d.registry.pending(w.mint).some((b) => b.readingDate === null && receiptDay(b.settledAt) <= D)) return { waiting: `$${w.ticker} has receipts up to ${Ds} still to attest` };
+  const cfg = await port.config();
+  if (!cfg || !cfg.hasBaseline) return "cannot";
+  if (cfg.lastRecordDate >= D) return "cannot";
+  if (now < dayStartMs(D) + DAY_MS) return { waiting: `the flat reading for $${w.ticker} waits until ${Ds} is over (UTC)` };
+  if (d.dryRun) { d.log(`  [dry-run] $${w.ticker} ${Ds}: would attest a flat reading (unit counter ${cfg.lastValue}, 0 units) for the forward`); return { waiting: "dry run" }; }
+  const key = `reading:${Ds}`;
+  const res = await resolveSent(d, port, w.mint, key);
+  if ("waiting" in res) return { waiting: res.waiting };
+  if ("landed" in res) { d.registry.setSignatureStatus(res.landed.signature, "confirmed", null, res.landed.slot); return "submitted"; }
+  const mine = port.attesterKeys().filter((k) => cfg.attesters.some((a) => a.key === k));
+  if (mine.length < cfg.quorum) return { waiting: `quorum short for $${w.ticker}'s flat reading` };
+  const tx = await port.buildReading({ recordDate: D, prevDate: cfg.lastRecordDate, value: cfg.lastValue, sourceUrl: counterSourceUrl(w.ticker, Ds, []), feedId: cfg.feedId, valueDecimals: 0, proofHash: Buffer.from(clockProofHex(Ds, w.rulesSha), "hex") });
+  const sim = await port.simulate(tx.raw);
+  if (sim.err) return { waiting: `$${w.ticker}'s flat reading refused: ${sim.err}` };
+  d.registry.recordSignature({ signature: tx.signature, mint: w.mint, eventId: key, memo: JSON.stringify({ message: tx.message, events: [], value: cfg.lastValue.toString(), flat: `winner reading for $${ctx.me.ticker}'s forward` }), burnRaw: BigInt(0), spendLamports: BigInt(0), blockhash: tx.blockhash, lastValidBlockHeight: tx.lastValidBlockHeight, sentAt: now });
+  try { await port.send(tx.raw); } catch (e) { d.log(`  [pair] $${w.ticker} ${Ds}: flat reading send raised ${(e as Error).message.slice(0, 120)}`); }
+  const c = await port.confirm(tx);
+  if (c.status === "failed") { d.registry.setSignatureStatus(tx.signature, "failed", c.err, null); return { waiting: `$${w.ticker}'s flat reading failed: ${c.err}` }; }
+  if (c.status === "expired") return { waiting: `$${w.ticker}'s flat reading ${tx.signature.slice(0, 12)}… not confirmed yet` };
+  d.registry.setSignatureStatus(tx.signature, "confirmed", null, c.slot);
+  d.log(`  [pair] $${w.ticker} ${Ds}: flat reading attested (unit counter ${cfg.lastValue}, 0 units) so $${ctx.me.ticker}'s fuel can forward — ${tx.signature}`);
+  return "submitted";
+}
+
 /** One full cycle over every live token (and, for the fallback clock, every retired coin of a voided pair). */
 export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): Promise<CycleReport> {
   const live = d.registry.tokens("live");
@@ -583,20 +663,44 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
   // Retired coins stay in the loop when their rule ended under onEnd: the wind-down's last cranks and the retired-coin sweep.
   const tokens = [...live, ...d.registry.tokens("retired").filter((t) => gates.get(t.mint)?.gate.state === "voided" || d.registry.ruleEnd(t.mint) !== null)];
   const planned: CycleReport["planned"] = [], executed: ExecOutcome[] = [], lpFees: LockFeesOutcome[] = [];
+  // WINNER TAKES THE BURN (2026-10-11): each pair coin's pair context (its counterpart, the pair port, whether forwards apply).
+  const ctxs = new Map<string, PairCtx | null>();
+  for (const t of tokens) { try { ctxs.set(t.mint, await pairCtxFor(d.registry, d.program, t, d.now())); } catch (e) { ctxs.set(t.mint, null); errors.push(`$${t.ticker}: pair context: ${(e as Error).message.slice(0, 160)}`); } }
+  // Pass 1 — PLAN every token (both coins of a pair get their roles for a result before either executes).
+  const ready: { t: TokenRow; locked: LockedRule; gate: PairGate | null }[] = [];
   for (const t of tokens) {
     let locked: LockedRule;
     try { locked = d.registry.lockedRule(t); } catch (e) { errors.push(`$${t.ticker}: rule unreadable: ${(e as Error).message}`); continue; }
     if (selectorKeyOf(locked.rule) !== t.selectorKey) { errors.push(`$${t.ticker}: selector key drifted (${t.selectorKey} ≠ ${selectorKeyOf(locked.rule)})`); continue; }
     const gate = gates.get(t.mint)?.gate ?? null;
     if (locked.rule.oracle === "kalshi" && d.kalshiEnabled === false) continue;   // venue disabled: held (fetchDue raised the alert)
-    try { if (t.status === "live" && !d.registry.ruleEnd(t.mint)) planned.push(...planToken(d, t, locked, gate)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
+    const ctx = ctxs.get(t.mint) ?? null;
+    if (ctx?.hold) { d.log(`  [pair] $${t.ticker}: held this cycle — ${ctx.hold}`); continue; }
+    try { if (t.status === "live" && !d.registry.ruleEnd(t.mint)) planned.push(...planToken(d, t, locked, gate, ctx?.active ? { otherTicker: ctx.other.ticker } : null)); } catch (e) { errors.push(`$${t.ticker}: plan: ${(e as Error).message.slice(0, 160)}`); continue; }
+    // An active pair coin's end-of-rule days are planned BEFORE anything executes too, so a one-shot loser's forwarding day is on its
+    // receipts (and attested) when the winner settles the same day's pair result.
+    if (ctx?.active) { try { planned.push(...await planRuleEnd(d, t, locked, gate, ctx)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); } }
+    ready.push({ t, locked, gate });
+  }
+  // Pass 2 — EXECUTE, the coins with a lost period first: the forward lands before the winner's crank (the winner never waits for it).
+  const losing = (m: string) => d.registry.pending(m).some((b) => b.pairRole === "lost");
+  ready.sort((x, y) => Number(losing(y.t.mint)) - Number(losing(x.t.mint)));
+  // …and before that, every ACTIVE pair coin attests its closed days, so the winner's reading for a period exists when the loser forwards
+  // (forward_to_winner takes it). Single coins and inactive pairs skip this: their cycle is unchanged.
+  for (const { t, locked } of ready) {
+    if (!ctxs.get(t.mint)?.active) continue;
+    try { executed.push(...await executePending(d, t, locked, ctxs.get(t.mint) ?? null, { attestOnly: true })); } catch (e) { errors.push(`$${t.ticker}: attest: ${(e as Error).message.slice(0, 160)}`); }
+  }
+  for (const { t, locked, gate } of ready) {
+    const ctx = ctxs.get(t.mint) ?? null;
     // LP LOCKED FOREVER (2026-10-10): claim the locked LP's fees AHEAD of the buyback cranks, so the 80 % share is in the pool they spend.
     if (d.program.lockFees) lpFees.push(await claimLockFeesFor({ registry: d.registry, lockFees: d.program.lockFees, log: d.log, now: d.now, dryRun: d.dryRun }, t));
-    try { executed.push(...await executePending(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
+    try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
     // After the day's cranks: the end of the rule (drain / wind-down / retirement / sweep) is planned from what the program just did.
-    try { planned.push(...await planRuleEnd(d, t, locked, gate)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); }
-    try { executed.push(...await executePending(d, t, locked)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
+    try { planned.push(...await planRuleEnd(d, t, locked, gate, ctx)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); }
+    try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
   }
+  try { await pairUnmatchedAlerts(d.registry, d.program, d.now(), d.log); } catch (e) { errors.push(`pair links: ${(e as Error).message.slice(0, 160)}`); }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
   for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }

@@ -56,6 +56,28 @@ pub fn canonical_message(
     )
 }
 
+/// LAUNCHPAD-PATH §40 — the signed bytes of a pair result (one period, both coins):
+///
+///   BURNRECEIPTS-PAIR-v1|<cluster genesis hash>|<program id>|<mint_lo>|<mint_hi>|<YYYY-MM-DD>|winner=<mint or "draw">|src=<64 hex>|proof=<64 hex>
+///
+/// mint_lo < mint_hi in byte order. A quorum of EACH coin's attester set must sign these exact bytes.
+#[allow(clippy::too_many_arguments)]
+pub fn canonical_pair_message(program_id: &Pubkey, mint_lo: &Pubkey, mint_hi: &Pubkey, record_date: u32, winner: &Pubkey, source_url_hash: &[u8; 32], proof_hash: &[u8; 32]) -> String {
+    let w = if *winner == Pubkey::default() { String::from("draw") } else { winner.to_string() };
+    format!(
+        "{}|{}|{}|{}|{}|{}|winner={}|src={}|proof={}",
+        PAIR_ATTESTATION_DOMAIN,
+        CLUSTER_GENESIS_HASH,
+        program_id,
+        mint_lo,
+        mint_hi,
+        format_date(record_date),
+        w,
+        hex(source_url_hash),
+        hex(proof_hash)
+    )
+}
+
 fn hex(b: &[u8; 32]) -> String {
     let mut s = String::with_capacity(64);
     for x in b {

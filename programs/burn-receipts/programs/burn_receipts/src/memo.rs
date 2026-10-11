@@ -78,6 +78,17 @@ pub fn format_lock_fees(prefix: &str, wsol: u64, burn_pool: u64, operator: u64, 
     )
 }
 
+/// LAUNCHPAD-PATH §40 forward receipt: `<PREFIX>|forward|from=<loser mint 12>|to=<winner mint 12>|period=<YYYY-MM-DD>|lamports=N|v1`.
+pub fn format_forward(prefix: &str, from: &Pubkey, to: &Pubkey, record_date: u32, lamports: u64) -> String {
+    let (f, t) = (from.to_string(), to.to_string());
+    format!(
+        "{prefix}|forward|from={}|to={}|period={}|lamports={lamports}|v1",
+        &f[..12.min(f.len())],
+        &t[..12.min(t.len())],
+        crate::math::format_date(record_date)
+    )
+}
+
 pub fn emit_memo<'info>(memo_program: &AccountInfo<'info>, memo: &str) -> Result<()> {
     require_keys_eq!(*memo_program.key, MEMO_PROGRAM_ID, BurnError::InvalidMemoProgram);
     require!(memo.len() <= MEMO_MAX_BYTES, BurnError::MemoTooLong);

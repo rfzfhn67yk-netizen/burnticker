@@ -58,19 +58,21 @@ A coin for your team that burns every time they lose (or win), settled on the fi
 
 ```text pitch
 Rays, Lakers, Oilers, Eagles: pick your team, pick "burn when we lose" or "burn when we win", lock it.
-Each final is read from the ESPN scoreboard and counts only when the league's own feed or a second scoreboard agrees.
+Each game settles on its on-chain payout or a licensed final score, and counts only when a second independent source agrees.
 The season is a scoreboard of receipts. Nothing is won here; coins only burn.
 ```
 
 ```text pitch
-On Burnticker a fan community can launch a team coin in a few screens: league, team, one toggle — burn when we win, or when we lose — and the share of the coin's fee pool each burn spends. Every final is read from the ESPN scoreboard and counts only when a second source agrees (MLB StatsAPI, the NHL's score feed, TheSportsDB for the NBA and NFL); a tie burns nothing. Each burn is a receipt anyone can check, and the season is scored the only way Burnticker scores anything: in receipts. The creator earns nothing from fees and the rule cannot change after launch. A memecoin: the rule says what supply does, not what price does.
+On Burnticker a fan community can launch a team coin in a few screens: league, team, one toggle — burn when we win, or when we lose — and the share of the coin's fee pool each burn spends. Every game settles on its on-chain payout where a market exists, else a licensed final score, and counts only when a second independent source agrees (the league's official feed for MLB, the NHL and the NBA); a tie burns nothing. Each burn is a receipt anyone can check, and the season is scored the only way Burnticker scores anything: in receipts. The creator earns nothing from fees and the rule cannot change after launch. A memecoin: the rule says what supply does, not what price does.
 ```
 
 **Proof:** https://burnticker.com/burnticker/launch → Team coin (and `GET /api/burnticker/v1/sports/teams?league=mlb`, live).
-**Checked against:** `src/lib/burnticker/sources/espn.ts` (`LEAGUES` = MLB, NBA, NHL, NFL; cross-reads), `docs/burnticker/SETTLEMENT-COVERAGE.md`
-(team coin: settleable). **Gaps, so not claimed:** soccer (Arsenal, Inter Miami) is not in `LEAGUES` on main, so no pitch names a
-soccer club as launchable; the season window sentence ("this season", "postseason only") is on `agent/UI-2026-10-10`, not on main;
-ESPN's terms of use (see OUTREACH.md "Risks") are an open question for every team coin.
+**Checked against (2026-10-11):** `src/lib/burnticker/sources/espn.ts` (`LEAGUES`: 25 leagues incl. 17 soccer competitions; schedules
+from MLB's, the NHL's and the NBA's official feeds, every other league from TheSportsDB), `src/lib/burnticker/sources/gameSettle.ts`
+(each game read by two independent operators: the on-chain payout and TheSportsDB, with the league's official feed as a further read),
+`docs/burnticker/SETTLEMENT-COVERAGE.md`. **No ESPN read anywhere:** ESPN appears only as a plain "see this game on ESPN" link for
+people. **Gap, so not claimed:** soccer schedules need the TheSportsDB key on the host; a non-premium key lists only each league's next
+fixture (v1), so a pitch names a soccer club only once the commercial key is set.
 
 ## 3. Prediction-market users
 
@@ -124,15 +126,15 @@ The launchpad where the rule is enforced by a program, not a promise: open sourc
 
 ```text pitch
 Every Burnticker coin's rule, readings and receipts are public JSON; every launch is an unsigned transaction you sign yourself.
-Keyless HTTP API (OpenAPI 1.4.0) for search, back-tests, launch bundles and receipt verification.
+Keyless HTTP API (OpenAPI 1.10.0) for search, back-tests, launch bundles and receipt verification.
 The program, keeper, pages and tests are open source.
 ```
 
 ```text pitch
-Everything the Burnticker wizard does is available to a bot: search every settleable result, back-test a rule, build an unsigned launch bundle, read any coin's status and receipts, and verify one receipt against its source and the chain — through a keyless HTTP API under /api/burnticker/v1 (OpenAPI 1.4.0) or the TypeScript SDK in the repository. The wizard and the API share one pipeline, so a refusal, a hash or a fee can never differ between them. The on-chain program, the keeper, the pages and the tests are open source, with the Powers Register generated from the program's IDL.
+Everything the Burnticker wizard does is available to a bot: search every settleable result, back-test a rule, build an unsigned launch bundle, read any coin's status and receipts, and verify one receipt against its source and the chain — through a keyless HTTP API under /api/burnticker/v1 (OpenAPI 1.10.0) or the TypeScript SDK in the repository. The wizard and the API share one pipeline, so a refusal, a hash or a fee can never differ between them. The on-chain program, the keeper, the pages and the tests are open source, with the Powers Register generated from the program's IDL.
 ```
 
-**Proof:** https://github.com/rfzfhn67yk-netizen/burnticker and https://burnticker.com/api/burnticker/v1/openapi.json (live, 1.4.0).
+**Proof:** https://github.com/rfzfhn67yk-netizen/burnticker and https://burnticker.com/api/burnticker/v1/openapi.json (live, 1.10.0).
 **Checked against:** `docs/burnticker/api.md`, `docs/burnticker/sdk.md`, `src/lib/burnticker/api/spec.ts`. **Gap:** `@burnticker/sdk` is
 not on npm (`npm view` → 404; licence `UNLICENSED` until the owner decides), so the pitch says "the SDK in the repository", never
 "npm install".

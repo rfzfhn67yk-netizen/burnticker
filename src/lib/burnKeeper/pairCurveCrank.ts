@@ -2,7 +2,9 @@ import { type Keypair, PublicKey } from "@solana/web3.js";
 import type { PairAccount } from "@/lib/pairCurve/accounts";
 import { LP_LOCK_FALLBACK_SECS } from "@/lib/pairCurve/client";
 import { fetchPairs, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN } from "@/lib/pairCurve/accounts";
-import { assertPairCurveCluster, crankPair, type CrankStep, type PairCurveContext } from "@/lib/pairCurve/client";
+import { assertPairCurveCluster, crankPair, simulateAndSend, type CrankStep, type PairCurveContext, type SendResult } from "@/lib/pairCurve/client";
+import { configPda } from "@/lib/burnReceipts/pda";
+import { fetchPairLink, linkPairIx, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
 
 /**
  * THE KEEPER'S PAIR-CURVE CRANK (2026-10-10; docs/burnticker/PAIR-CURVE.md §5). Program mode only, behind
@@ -16,6 +18,9 @@ import { assertPairCurveCluster, crankPair, type CrankStep, type PairCurveContex
  *                                       observation (blind review 2 L-4)
  *   Open at/after the deadline        → void_pair
  *   any                               → claim_developer_fee once the accrual reaches 0.01 SOL
+ *   a side with a pool, before anything else → link_pair (LAUNCHPAD-PATH §40, winner takes the burn) when both TokenConfigs exist and the
+ *                                       two PairLinks do not name each other yet — permissionless, idempotent; register_pair_pool refuses
+ *                                       PairNotLinked without it. Its own transaction, before crankPair's register step.
  *   a graduated side with lp_locked 0 → lock_lp; from 30 days after the commit also burn_lp (LP-lock round 2: the fallback, the only
  *                                       path that destroys LP) — and an alert `pair-side-unlocked` every cycle the side stays unlocked
  *
@@ -55,7 +60,18 @@ export function unlockedSides(pairs: readonly { address: PublicKey; pair: Pick<P
   return out;
 }
 
-export interface PairCurveCycle { scanned: number; acted: { pair: string; steps: CrankStep[] }[]; errors: string[] }
+/**
+ * Winner takes the burn: link_pair is due for a pair once a side has a pool (register_pair_pool comes next), both mints have a TokenConfig,
+ * and the two PairLinks do not already name each other as paired. Pure.
+ */
+export function linkPairDue(pair: Pick<PairAccount, "pools" | "mints">, configs: [boolean, boolean], links: [PairLinkAccount | null, PairLinkAccount | null]): boolean {
+  if (pair.pools.every((p) => p.equals(PublicKey.default))) return false;
+  if (!configs[0] || !configs[1]) return false;
+  const ok = (l: PairLinkAccount | null, other: PublicKey) => !!l && l.paired && l.pair_mint.equals(other);
+  return !(ok(links[0], pair.mints[1]) && ok(links[1], pair.mints[0]));
+}
+
+export interface PairCurveCycle { scanned: number; acted: { pair: string; steps: CrankStep[] }[]; errors: string[]; links?: { pair: string; result: SendResult }[] }
 
 export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveCycle> {
   const now = Math.floor((d.now ?? Date.now)() / 1000);
@@ -75,8 +91,17 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
     d.alert?.("pair-side-unlocked", `pair-side-unlocked:${u.pair}:${u.side}`, text, { pair: u.pair, side: u.side, mint: u.mint, fallbackDue: u.fallbackDue });
     d.log(`  [pair-curve] ${text}`);
   }
-  for (const { address } of pairs) {
+  for (const { address, pair } of pairs) {
     try {
+      // link_pair BEFORE register_pair_pool (its own transaction; a refusal is logged and retried next cycle, crankPair still runs).
+      const B = d.ctx.burnReceiptsProgramId;
+      const configs = await Promise.all(pair.mints.map(async (m) => !!(await d.ctx.connection.getAccountInfo(configPda(B, m), "confirmed")))) as [boolean, boolean];
+      const links = await Promise.all(pair.mints.map((m) => fetchPairLink(d.ctx.connection, B, m))) as [PairLinkAccount | null, PairLinkAccount | null];
+      if (linkPairDue(pair, configs, links)) {
+        const result = await simulateAndSend(d.ctx, [linkPairIx({ programId: B, payer: d.cranker.publicKey, pair: address, mintA: pair.mints[0], mintB: pair.mints[1] })], [d.cranker], { dryRun: d.dryRun });
+        d.log(`  [pair-curve] ${address.toBase58().slice(0, 8)}… link_pair: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${result.error}`}`);
+        (out.links ??= []).push({ pair: address.toBase58(), result });
+      }
       const steps = await crankPair(d.ctx, d.cranker, address, { now, dryRun: d.dryRun, log: d.log, skipClusterCheck: true });
       if (steps.some((s) => s.result)) out.acted.push({ pair: address.toBase58(), steps });
     } catch (e) {

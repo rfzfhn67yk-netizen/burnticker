@@ -43,4 +43,6 @@ export interface AnchorIdl {
   events: { name: string; discriminator: number[] }[];
   errors: { code: number; name: string; msg?: string }[];
   types: IdlTypeDef[];
+  /** The program's `#[constant]`s (LAUNCHPAD-PATH §40 pair constants; value = Rust literal as text). */
+  constants?: { name: string; docs?: string[]; type: IdlType; value: string }[];
 }

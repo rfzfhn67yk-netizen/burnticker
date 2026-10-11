@@ -25,18 +25,27 @@ replace this table (`kind: docker`). The OtterSec verified-builds registry entry
 
 The executable hash is solana-verify's definition: sha256 of the program bytes with trailing zero bytes removed — the number
 `solana-verify get-executable-hash <file.so>` prints for a build and `solana-verify get-program-hash <PROGRAM_ID>` prints for the
-deployed program. Source: monorepo commit `40e13bf5b0739e9f011c4bfa76d6683c973146a9`, the last commit that changed the compiled program sources — the LP-lock
-blind review r2 fixes (docs/burnticker/reviews/2026-10-11-lp-lock-blind.md: the Fee Key position identified by its locker, the
-operator's LaunchLab platform compiled into burn_receipts, register_pool requiring the recorded Fee Key for policy 0, claims against the
-recorded pool with no amount argument, pair_curve's 30-day burn_lp fallback) on top of the LP-lock release (LAUNCHPAD-PATH §35). Both
+deployed program. Source: monorepo commit `c183407458863d6592bd8aa7216b0bd6781fd43c`, the last commit that changed the compiled program sources — LAUNCHPAD-PATH §40,
+winner takes the burn (burn_receipts: PairLink / PairResult, link_pair, submit_pair_result, forward_to_winner, the paired crank gate;
+pair_curve is unchanged in source but links burn_receipts' crate, so its bytes change too), on top of the LP-lock r2 fixes. Both
 programs are built at opt-level "z".
 
 | Program | Program id | Build | Features | Bytes | Executable hash | Deployed on devnet |
 |---|---|---|---|---|---|---|
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 643,144 | `d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac` | — (not deployed on mainnet) |
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 643,328 | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` = build (upgraded through the Squads vault 2026-10-10 23:41:33 Denver, vault transaction 9; docs/burnkeeper/devnet-lock-r2-run-log.md) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 406,624 | `a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d` | — (not deployed on mainnet) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 406,680 | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` = build (vault transaction 10, 23:42:06 Denver) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 729,048 | `7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22` | — (not deployed on mainnet) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 729,232 | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` = build (upgraded through the Squads vault 2026-10-11 10:04:56 Denver, vault transaction 11; docs/burnkeeper/devnet-pair-forward-run-log-2026-10-11.md) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 409,224 | `abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab` | — (not deployed on mainnet) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 409,280 | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` = build (vault transaction 12, 10:05:29 Denver) |
+
+**Bytecode version: sBPFv3 (SIMD-0500 checked 2026-10-11).** cargo-build-sbf 4.4.0 (Solana CLI 4.3.0, platform-tools v1.57, Anchor
+1.2.1) builds `--arch v3` by default, and all four rows above are sBPFv3 — ELF header `e_flags = 0x3` (`readelf -h <file>.so | grep
+Flags`), the same on the bytes read back from devnet. SIMD-0500 ("Disable deployment of SBPF v0, v1 and v2 programs", feature
+`B8JJXCy5amZyWG9r7EnUYLwzXSXTxG7GZ1qZ1qggo83g`) is still inactive on mainnet and devnet (`solana feature status`, 2026-10-11); once it is
+active it refuses deploys, upgrades and finalisations of v0–v2 bytes only. Deployment of v3 programs is already enabled on both clusters
+(SIMD-0178/0189/0377, feature `5cC3foj77CWun58pC51ebHFUWavHWKarWyR5UUik7dnC`: mainnet since epoch 993, devnet since epoch 1069) — the
+devnet upgrades of 2026-10-10 (r2) and 2026-10-11 (§40) are v3 bytes accepted under it. So these builds can be deployed on mainnet
+now, upgraded after SIMD-0500, and finalised (upgrade authority → none) later; no rebuild flag is needed. Source:
+https://solana.com/upgrades/sbpfv3-programs and the on-chain feature set.
 
 **Feature sets (lp-lock blind review I-7).** Only the two builds above are deployable: `default` (mainnet) and `devnet`. They differ
 in the Raydium ids, the genesis tag, OPERATOR_TREASURY and BURNTICKER_PLATFORM compiled in. `localnet` and `test-pins` builds exist
@@ -45,7 +54,10 @@ platform, and must never be deployed anywhere: a `localnet` build on mainnet wou
 `devnet` build on mainnet would route it to the devnet vault's address and would not match mainnet's Raydium ids. The upgrade script
 refuses any buffer whose executable hash is not one of this table's rows.
 
-**Previous builds (history, no longer deployed):** the LP-lock release (source `3d82b6b5`): burn_receipts mainnet
+**Previous builds (history, no longer deployed):** the LP-lock r2 fixes (source `40e13bf5`): burn_receipts mainnet `d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac` / devnet
+`b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` (643,144 / 643,328 B; vault transaction 9), pair_curve mainnet
+`a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d` / devnet `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796`
+(406,624 / 406,680 B; vault transaction 10). Before that, the LP-lock release (source `3d82b6b5`): burn_receipts mainnet
 `088c0b1d5967a0ede42945abb916532e41835a5ba725ecb6439f620f5347024f` / devnet `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151`
 (635,968 / 636,056 B; vault transaction 8), pair_curve mainnet `8587c45adf033bfb0d45d7b7ab36ed224fe87a38a279af98316b440971ab3ff0` / devnet
 `e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` (393,488 / 393,544 B; vault transaction 7). Before that: burn_receipts mainnet `3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f` /

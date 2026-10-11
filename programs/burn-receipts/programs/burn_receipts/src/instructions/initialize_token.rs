@@ -54,6 +54,19 @@ pub struct InitializeToken<'info> {
     /// CHECK: buyback + pool policy 0: the LaunchLab PlatformConfig the token launches on (owner LaunchLab). Its cpConfigId, LP
     /// lock/burn scales and platformCpCreator are read and PINNED here (review-3 M-3). Omitted otherwise.
     pub launchlab_platform: Option<UncheckedAccount<'info>>,
+    /// CHECK: LAUNCHPAD-PATH §40 (optional): the partner coin's mint ADDRESS (it need not exist yet). With it, this coin's PairLink
+    /// ["pair_link", mint] is written: provisional until the partner's initialize_token names this mint back within
+    /// PAIRING_WINDOW_SECS, or paired at once when the partner already did (then pass its PairLink and TokenConfig too).
+    pub pair_mint: Option<UncheckedAccount<'info>>,
+    /// CHECK: this coin's PairLink PDA ["pair_link", mint] (address-checked; created here). Required with pair_mint.
+    #[account(mut)]
+    pub pair_link: Option<UncheckedAccount<'info>>,
+    /// CHECK: the partner's PairLink ["pair_link", pair_mint] (address-checked) — when the partner initialized first.
+    #[account(mut)]
+    pub partner_link: Option<UncheckedAccount<'info>>,
+    /// The partner's TokenConfig — when the partner initialized first (its pair_state becomes PAIRED).
+    #[account(mut, seeds = [CONFIG_SEED, partner_config.mint.as_ref()], bump = partner_config.bump)]
+    pub partner_config: Option<Box<Account<'info, TokenConfig>>>,
 }
 
 /// Review-3 M-3: (platform, cpConfigId, lock+burn scales in 10⁻⁶) read from a LaunchLab PlatformConfig and checked: the AmmConfig is
@@ -281,7 +294,34 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
     c.pending_policy = 0;
     c.pending_policy_pool = Pubkey::default();
     c.pending_policy_eta = 0;
-    c.reserved = [0u8; 23];
+    c.pair_state = PAIR_STATE_NONE;
+    c.reserved = [0u8; 22];
+
+    // LAUNCHPAD-PATH §40: the partner coin (optional).
+    let pairing = match ctx.accounts.pair_mint.as_ref() {
+        Some(pm) => {
+            let link = ctx.accounts.pair_link.as_ref().ok_or(BurnError::PairMismatch)?;
+            let now = ctx.accounts.config.created_at;
+            let (state, l) = crate::instructions::pair::pair_at_initialize(
+                crate::instructions::pair::InitPairAccounts {
+                    payer: &ctx.accounts.payer.to_account_info(),
+                    system: &ctx.accounts.system_program.to_account_info(),
+                    pair_mint: &pm.to_account_info(),
+                    pair_link: &link.to_account_info(),
+                    partner_link: ctx.accounts.partner_link.as_ref().map(|a| a.as_ref()),
+                    partner_config: ctx.accounts.partner_config.as_deref_mut(),
+                },
+                &mint,
+                args.rule.mode,
+                args.rule.pool_policy,
+                now,
+            )?;
+            ctx.accounts.config.pair_state = state;
+            Some(l)
+        }
+        None => None,
+    };
+    let c = &mut ctx.accounts.config;
 
     let config_key = c.key();
     let creator = c.creator;
@@ -306,5 +346,11 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
         ll_platform,
         ll_cp_config,
     });
+    if let Some(l) = pairing {
+        emit_cpi!(crate::events::PairLinked { mint: l.mint, pair_mint: l.pair_mint, paired: l.paired, witness: l.witness, pairing_deadline: l.pairing_deadline });
+        if l.paired {
+            emit_cpi!(crate::events::PairLinked { mint: l.pair_mint, pair_mint: l.mint, paired: true, witness: l.witness, pairing_deadline: 0 });
+        }
+    }
     Ok(())
 }

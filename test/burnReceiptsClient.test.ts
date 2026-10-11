@@ -45,7 +45,7 @@ describe("burnReceipts client — IDL", () => {
   });
   test("no instruction can withdraw, close or sweep", () => {
     const names = BURN_RECEIPTS_IDL.instructions.map((i) => i.name).sort();
-    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_registration_policy", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_vault", "initialize_platform", "initialize_token", "propose_attesters", "propose_cap_raise", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_reading", "veto_registration_policy"]);
+    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_registration_policy", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_vault", "forward_to_winner", "initialize_platform", "initialize_token", "link_pair", "propose_attesters", "propose_cap_raise", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "veto_registration_policy"]);
   });
 });
 
@@ -104,10 +104,11 @@ describe("burnReceipts client — PDAs and accounts", () => {
       attesters: [operatorAttester(a1), ...Array.from({ length: 4 }, () => operatorAttester(PublicKey.default))], attester_count: 1, quorum: 1,
       pending_attesters: Array.from({ length: 5 }, () => operatorAttester(PublicKey.default)), pending_count: 0, pending_quorum: 0, pending_eta: BigInt(0),
       cpmm_pool: PublicKey.default, last_record_date: 20261008, last_value: BigInt("4030531621082972"), carry: BigInt(28006346253), crank_cursor: 20261007,
-      readings: 3, burns: 1, total_burned: BigInt(5), total_spent_lamports: BigInt(6), shortfall: BigInt(0), created_at: BigInt(1791547200), carried_spend_lamports: BigInt(11), pool_untradeable_since: BigInt(0), pool_untradeable_last_seen: BigInt(0), pool_verified: false, cluster_genesis: new PublicKey(G), registration_policy: 0, ll_platform: a1, ll_cp_config: PublicKey.default, ll_lock_scale_ppm: BigInt(1_000_000), pool_untradeable_candidate_at: BigInt(0), attester_added_at: [BigInt(1791547200), BigInt(0), BigInt(0), BigInt(0), BigInt(0)], pending_policy: 0, pending_policy_pool: PublicKey.default, pending_policy_eta: BigInt(0), reserved: new Uint8Array(23),
+      readings: 3, burns: 1, total_burned: BigInt(5), total_spent_lamports: BigInt(6), shortfall: BigInt(0), created_at: BigInt(1791547200), carried_spend_lamports: BigInt(11), pool_untradeable_since: BigInt(0), pool_untradeable_last_seen: BigInt(0), pool_verified: false, cluster_genesis: new PublicKey(G), registration_policy: 0, ll_platform: a1, ll_cp_config: PublicKey.default, ll_lock_scale_ppm: BigInt(1_000_000), pool_untradeable_candidate_at: BigInt(0), attester_added_at: [BigInt(1791547200), BigInt(0), BigInt(0), BigInt(0), BigInt(0)], pending_policy: 0, pending_policy_pool: PublicKey.default, pending_policy_eta: BigInt(0), pair_state: 2, reserved: new Uint8Array(22),
     };
     const data = Buffer.concat([accountDiscriminator(BURN_RECEIPTS_IDL, "TokenConfig"), encodeType(BURN_RECEIPTS_IDL, { defined: { name: "TokenConfig" } }, cfg)]);
     const back = decodeTokenConfig(data);
+    assert.equal(back.pair_state, 2, "LAUNCHPAD-PATH §40: pair_state took the first reserved byte");
     assert.equal(back.feedId, "treasury.debt_to_penny");
     assert.equal(back.memoSource, "fiscaldata.treasury.gov debt_to_penny");
     assert.equal(back.rule.fraction_per_unit_bps, 500);
@@ -193,10 +194,12 @@ describe("burnReceipts client — instructions", () => {
       { floorLamports: BigInt(0), maxTwapDeviationBps: 0, twapWindowSecs: 0 },
     );
     const init = initializeTokenIx({ programId: PID, payer, creator: payer, mint: MINT, args: { feed_id: "treasury.debt_to_penny", memo_prefix: "DEBT", memo_source: "src", rules_sha256: new Uint8Array(32), rule, attesters: [operatorAttester(payer)], quorum: 1, fixed_pool: PublicKey.default, admin: payer } });
-    assert.deepEqual(init.keys.map((k) => [k.isSigner, k.isWritable]), [[true, true], [true, false], [true, false], [false, true], [false, true], [false, false], [false, false], [false, false], [false, false]]);
-    assert.ok(init.keys[6].pubkey.equals(PID), "the omitted optional LaunchLab platform (vault mode)");
-    assert.ok(init.keys[7].pubkey.equals(eventAuthority(PID)), "event-CPI authority");
-    assert.ok(init.keys[8].pubkey.equals(PID), "the program itself (event self-CPI)");
+    // payer, creator, mint, config, fee_vault, system, launchlab_platform?, pair_mint?, pair_link?, partner_link?, partner_config?,
+    // event authority, program — every omitted optional is the program id, read-only.
+    assert.deepEqual(init.keys.map((k) => [k.isSigner, k.isWritable]), [[true, true], [true, false], [true, false], [false, true], [false, true], [false, false], [false, false], [false, false], [false, false], [false, false], [false, false], [false, false], [false, false]]);
+    assert.ok(init.keys.slice(6, 11).every((k) => k.pubkey.equals(PID)), "the omitted optional accounts (LaunchLab platform, the four pair accounts)");
+    assert.ok(init.keys[11].pubkey.equals(eventAuthority(PID)), "event-CPI authority");
+    assert.ok(init.keys[12].pubkey.equals(PID), "the program itself (event self-CPI)");
     assert.ok(init.keys[2].pubkey.equals(MINT));
     assert.ok(init.keys[3].pubkey.equals(configPda(PID, MINT)));
     assert.deepEqual(init.data.subarray(0, 8), anchorDisc("global", "initialize_token"));
@@ -230,7 +233,7 @@ describe("burnReceipts client — instructions", () => {
     assert.ok(acc.wsolVault.equals(view.token1Vault) && acc.tokenVault.equals(view.token0Vault));
     assert.throws(() => buybackPoolAccounts(view, Keypair.generate().publicKey, CPMM_PROGRAM_ID.mainnet));
     const ix = crankBuybackIx({ programId: PID, cranker: MINT, mint: MINT, recordDate: 20261008, pool: acc, cluster: "devnet" });
-    assert.equal(ix.keys.length, 21);
+    assert.equal(ix.keys.length, 23, "21 + the two optional pair accounts (program id when unpaired)");
     assert.ok(ix.keys.some((k) => k.pubkey.equals(platformPda(PID))), "the platform config (burn-pool cap) rides along");
     assert.ok(ix.keys[15].pubkey.equals(CPMM_PROGRAM_ID.devnet));
     assert.ok(ix.keys[9].pubkey.equals(pool) && ix.keys[9].isWritable);

@@ -10,7 +10,8 @@ import type { BurntickerEvent, ProgramEvent, ReceiptJson, Receipts } from "./typ
  * EVENTS. burn_receipts emits an Anchor event for every state change through `emit_cpi!` — a self-CPI whose instruction data is the
  * 8-byte event tag, the event's discriminator and the borsh fields (inner-instruction data, which logs cannot truncate): TokenInitialized,
  * PoolRegistered, ReadingSubmitted, ReadingProcessed (a burn, a below-floor skip, a vault burn…), BurnPoolCapBound, the attester and
- * cap governance events. subscribe() watches one mint's TokenConfig address:
+ * cap governance events — and, from "Program data:" log lines, the one plain `emit!` event, PairResultSubmitted (2026-10-11). subscribe()
+ * watches one mint's TokenConfig address:
  *
  *   chain mode   (a connection + the program id) — every new confirmed transaction touching the config is fetched and its events decoded
  *                from the inner instructions; with `websocket: true` a logs subscription triggers the fetch at once, and polling stays on
@@ -50,6 +51,33 @@ export function decodeEventData(data: Uint8Array): { name: string; data: Record<
   try { return { name: ev.name, data: decodeType(BURN_RECEIPTS_IDL, { defined: { name: ev.name } }, b, 16).value as Record<string, unknown> }; } catch { return { name: ev.name, data: { undecoded: b.subarray(16).toString("base64") } }; }
 }
 
+/**
+ * A plain `emit!` event's bytes from a "Program data: <base64>" log line: the event's discriminator and the borsh fields (no event tag).
+ * burn_receipts uses it for exactly one event, PairResultSubmitted (winner takes the burn, 2026-10-11): submit_pair_result carries both
+ * coins' attester signatures and has no room for emit_cpi!'s accounts. Null when it is not a burn_receipts event.
+ */
+export function decodeLogEventData(data: Uint8Array): { name: string; data: Record<string, unknown> } | null {
+  const b = Buffer.from(data);
+  if (b.length < 8) return null;
+  const ev = BURN_RECEIPTS_IDL.events.find((e) => Buffer.from(e.discriminator).equals(b.subarray(0, 8)));
+  if (!ev) return null;
+  try { return { name: ev.name, data: decodeType(BURN_RECEIPTS_IDL, { defined: { name: ev.name } }, b, 8).value as Record<string, unknown> }; } catch { return { name: ev.name, data: { undecoded: b.subarray(8).toString("base64") } }; }
+}
+
+/** "Program data:" events written by `programId` itself (the invoke stack in the logs decides who wrote each line). */
+export function logEventsFrom(logs: readonly string[], programId: PublicKey): { name: string; data: Record<string, unknown> }[] {
+  const stack: string[] = [], out: { name: string; data: Record<string, unknown> }[] = [], id = programId.toBase58();
+  for (const l of logs) {
+    let m = /^Program (\S+) invoke \[\d+\]$/.exec(l);
+    if (m) { stack.push(m[1]); continue; }
+    m = /^Program (\S+) (success|failed)/.exec(l);
+    if (m) { if (stack[stack.length - 1] === m[1]) stack.pop(); continue; }
+    m = /^Program data: (\S+)$/.exec(l);
+    if (m && stack[stack.length - 1] === id) { const ev = decodeLogEventData(Buffer.from(m[1], "base64")); if (ev) out.push(ev); }
+  }
+  return out;
+}
+
 interface TxLike {
   slot: number; blockTime?: number | null;
   meta: { err: unknown; logMessages?: string[] | null; innerInstructions?: { index: number; instructions: { programIdIndex: number; data: string }[] }[] | null; loadedAddresses?: unknown } | null;
@@ -77,6 +105,8 @@ export function eventsFromTransaction(tx: TxLike, programId: PublicKey, signatur
       if (ev) out.push({ kind: "program", name: ev.name, data: ev.data, signature, slot: tx.slot, blockTime: tx.blockTime ?? null, memo });
     }
   }
+  // PairResultSubmitted is a plain emit! event: read from the program's own "Program data:" log lines.
+  for (const ev of logEventsFrom(tx.meta.logMessages ?? [], programId)) out.push({ kind: "program", name: ev.name, data: ev.data, signature, slot: tx.slot, blockTime: tx.blockTime ?? null, memo: null });
   return out;
 }
 

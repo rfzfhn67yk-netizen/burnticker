@@ -142,3 +142,19 @@ Plainly: the operator now earns 20 % of every coin's post-graduation LP fees (4.
 slice on the curve; it is on the trust page, in the fee tables and on `/fees/ledger`. Each coin's lock program, Fee Key and claims are on
 its page, in `/v1` and the SDK; `.well-known/burnticker.json` names the lock per cluster. The pre-registered review checklist carries a
 dated erratum (not an edit). A fresh blind review and the verified-build table follow the program change.
+
+## 2026-10-11 — Rivalry pairs: winner takes the burn (LAUNCHPAD-PATH §40)
+
+Owner: *"the fees for both the winner and loser should burn the winner's supply."* For every rivalry pair, at each result the losing
+coin's fuel for that result — its own fraction of its own burn pool at its units for the result (a one-shot pair: 100 %) — moves to the
+winning coin's burn pool through burn_receipts' new permissionless `forward_to_winner`, and the winner's ordinary cranks buy and burn
+the winner's coin. The winner is the coin whose rule the result fires. The loser's supply is untouched, nobody is paid, the operator
+takes nothing from a forward, and a draw or a void forwards nothing. After a one-shot pair's result, the loser's end-of-rule burns and
+sweeps forward to the winner while the winner is live.
+
+How: every new pair's canonical rules carry `pair.winnerTakesBurn: true` (inside each hash; pairs made before keep their bytes and
+shas); a PairResult per period is signed by both coins' attester quorums; the loser's crank refuses `ForwardRequired`; with no result
+72 h after the reading the coin cranks as unpaired. LaunchLab pairs pair through `initialize_token` (`pair_mint`, a 7-day pairing
+window); pair_curve pairs through `link_pair`, which `register_pair_pool` now requires. burn_receipts goes from 26 to 29 entrypoints;
+the pre-registered checklist carries a dated erratum. Pairs ship behind their flags; a single coin's path is unchanged. Devnet pair 6
+(2026-10-11): one forward moved 79,306,876 lamports from side B to side A, whose paired cranks then burned its coin.

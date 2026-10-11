@@ -238,3 +238,20 @@ lock steps with the program error in plain words (`PlatformNotPinned`, `LockerMi
 not pinned, `initialize_token` refuses `PlatformNotPinned`) and `launchLabLocker`, and `lpLock.feeKeysPda` is never null (a fixed PDA of the
 program id). Claim memos are v2 — `<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|paid=…|pending=…|burned=…|nft=…|v2`; v1 memos (devnet
 history) still parse, and `lp.lastClaim.line` names any operator amount still owed. A claim that moves nothing writes no memo and no receipt.
+
+## Winner takes the burn (API 1.10.0)
+
+Rivalry pairs since 2026-10-11 (owner decision, LAUNCHPAD-PATH §40): fees from both coins burn the winner's supply — at each result the
+losing coin's fuel moves to the winning coin's burn pool (`forward_to_winner`); nobody is paid and the loser's supply is untouched. All
+additions, nothing removed:
+
+- `Receipt.status` may be `forwarded` (this coin lost the period; `spent` is the SOL moved; nothing of this coin was bought or burned),
+  and `Receipt.pairRole` is `won` / `lost` / `draw` on pair receipts (a lost receipt carries the units it would have had had it won).
+- `GET /tokens/{ticker}` → `status.pair.winnerTakesBurn` and `status.pair.forwards[]` (`PairForward`: recordDate, from, to, fromMint,
+  toMint, sol, units, signature, txUrl), oldest first. The app's pair endpoint (`/api/burnticker/pairs/{pairId}`) carries the same in
+  each side's status and in `tally` (`winnerTakesBurn`, `forwardedAtoB`, `forwardedBtoA`, `forwards`).
+- `GET /derby/{id}` → `pair.forwarded` { aToB, bToA, windows }.
+- `status/status.json` (ops) → `pairs[]` { pairId, a, b, winnerTakesBurn, forwards, lastForward }.
+- A forward's receipt is its memo, `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<YYYY-MM-DD>|lamports=N|v1`. The program's pair
+  refusals (6077–6089) appear as plain sentences in keeper alerts. The SDK reads `PairResultSubmitted` from "Program data:" logs.
+

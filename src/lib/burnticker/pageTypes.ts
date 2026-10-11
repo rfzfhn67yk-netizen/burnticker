@@ -15,7 +15,18 @@ export interface PairSideSummary { ticker: string; name: string; mint: string; b
  * `voided` when voidBy ended without both — no event burns ever, both coins on the fallback clock. Null for a pair made before the clause.
  */
 export interface PairClauseJson { voidBy: string; state: "live" | "waiting" | "voided"; waitingOn: ("A" | "B")[]; decidedAt: string | null; detail: string | null }
-export interface PairCounterpart { pairId: string; side: "A" | "B"; counterpart: PairSideSummary; clause?: PairClauseJson | null }
+/**
+ * WINNER TAKES THE BURN (owner decision 2026-10-11, API 1.10.0): one forward_to_winner — the loser's fuel for a result period moved to the
+ * winner's burn pool (SOL), from the registry's append-only pair_forwards table. `from` / `to` are tickers.
+ */
+export interface PairForwardJson { recordDate: string; from: string; to: string; fromMint: string; toMint: string; sol: string; units: number; signature: string; txUrl: string | null }
+export interface PairCounterpart {
+  pairId: string; side: "A" | "B"; counterpart: PairSideSummary; clause?: PairClauseJson | null;
+  /** Since 1.10.0: true when the pair runs winner-takes-the-burn (fees from both coins burn the winner's supply); false for older pairs. */
+  winnerTakesBurn?: boolean;
+  /** Since 1.10.0: every forward between the two coins, oldest first. */
+  forwards?: PairForwardJson[];
+}
 
 /** Market data for the coin card and the coin page (market.ts builds it; 2026-10-10). Read from chain as data, never a price claim. */
 export type CurvePhase = "curve" | "migrating" | "graduated";
@@ -47,7 +58,8 @@ export interface LifecycleJson {
   fees: string;
 }
 
-export type ReceiptStatusJson = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing" | "pending-pair" | "voided";
+/** `forwarded` (since 1.10.0): this coin lost the period and its fuel moved to the winner's burn pool — nothing of this coin was bought or burned. */
+export type ReceiptStatusJson = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing" | "pending-pair" | "voided" | "forwarded";
 
 export interface ReceiptJson {
   eventId: string; settledAt: string; oracle: string; market: string; result: string | null; value: string | null; title: string | null; method: string | null; sourceUrl: string | null; settlementSourceUrl: string | null;
@@ -56,6 +68,8 @@ export interface ReceiptJson {
   /** Program execution: the reading (YYYY-MM-DD) the units were counted into, whether this receipt carries the reading's amounts, why it waits, a partial day. */
   execution: "program" | null; readingDate: string | null; lead: boolean | null; waitReason: string | null; partial: string | null;
   verify: { curl: string; formula: string; expected: string; checks: string[]; verified: boolean };
+  /** Since 1.10.0, rivalry pairs: won / lost / draw for this result (a lost receipt carries the units it would have had had it won). */
+  pairRole?: "won" | "lost" | "draw" | null;
 }
 
 /** The burn_receipts program for one token: attestation (keys, quorum, last reading tx), the queue, pool health (2026-10-10). */

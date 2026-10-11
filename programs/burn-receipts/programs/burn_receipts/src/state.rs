@@ -139,7 +139,10 @@ pub struct TokenConfig {
     pub pending_policy_pool: Pubkey,
     /// 0 = nothing pending.
     pub pending_policy_eta: i64,
-    pub reserved: [u8; 23],
+    /// LAUNCHPAD-PATH §40: PAIR_STATE_NONE / _PROVISIONAL / _PAIRED (the partner is in PairLink ["pair_link", mint]). Taken from the
+    /// former reserved bytes, so configs created before §40 read as NONE.
+    pub pair_state: u8,
+    pub reserved: [u8; 22],
 }
 
 impl TokenConfig {
@@ -306,4 +309,85 @@ pub struct Reading {
     /// Buyback: the CPMM pool this reading was processed against (default when nothing was swapped against a pool), so the memo's
     /// `swap=` can be rebuilt after a pool replacement (review-2 F9).
     pub pool: Pubkey,
+}
+
+/// LAUNCHPAD-PATH §40 — the coin's partner in a winner-takes-the-burn pair. ["pair_link", mint]. Written by initialize_token (the
+/// creator names the partner mint; `paired` turns true when the partner's initialize_token names this mint back within
+/// PAIRING_WINDOW_SECS) or by link_pair (a pair_curve Pair holds both mints). `pair_mint` never changes; once `paired`, it stays.
+#[account]
+#[derive(InitSpace)]
+pub struct PairLink {
+    pub version: u8,
+    pub bump: u8,
+    pub mint: Pubkey,
+    pub pair_mint: Pubkey,
+    pub paired: bool,
+    /// PAIR_WITNESS_INITIALIZE / PAIR_WITNESS_PAIR_CURVE.
+    pub witness: u8,
+    pub created_at: i64,
+    /// Provisional links only: the partner must answer by this time (0 for links written already paired).
+    pub pairing_deadline: i64,
+    pub paired_at: i64,
+    pub reserved: [u8; 32],
+}
+
+/// LAUNCHPAD-PATH §40 — one period's result of a pair, attested by a quorum of EACH coin's attesters over
+/// `BURNRECEIPTS-PAIR-v1|<genesis>|<program>|<mint_lo>|<mint_hi>|<YYYY-MM-DD>|winner=<mint|draw>|src=<hex>|proof=<hex>`.
+/// ["pair_result", mint_lo, mint_hi, record_date LE]. Append-only like readings; forward_to_winner adds the forward record.
+#[account]
+#[derive(InitSpace)]
+pub struct PairResult {
+    pub version: u8,
+    pub bump: u8,
+    pub mint_lo: Pubkey,
+    pub mint_hi: Pubkey,
+    /// The period: the record_date of both coins' readings it decides.
+    pub record_date: u32,
+    /// The winning mint; Pubkey::default() = a draw (forwards nothing; each coin burns its own fuel).
+    pub winner: Pubkey,
+    pub signers_mask_lo: u8,
+    pub signers_mask_hi: u8,
+    pub source_url_hash: [u8; 32],
+    pub proof_hash: [u8; 32],
+    pub submitted_at: i64,
+    // ----- forward_to_winner -----
+    pub forwarded: bool,
+    pub forwarded_lamports: u64,
+    pub forwarded_at: i64,
+    pub reserved: [u8; 32],
+}
+
+impl PairResult {
+    pub fn is_draw(&self) -> bool {
+        self.winner == Pubkey::default()
+    }
+    /// The coin's view: PAIR_RESULT_WON / _LOST / _DRAW, or PAIR_RESULT_NONE if `mint` is not in the pair.
+    pub fn result_for(&self, mint: &Pubkey) -> u8 {
+        if *mint != self.mint_lo && *mint != self.mint_hi {
+            PAIR_RESULT_NONE
+        } else if self.is_draw() {
+            PAIR_RESULT_DRAW
+        } else if self.winner == *mint {
+            PAIR_RESULT_WON
+        } else {
+            PAIR_RESULT_LOST
+        }
+    }
+    pub fn other(&self, mint: &Pubkey) -> Pubkey {
+        if *mint == self.mint_lo { self.mint_hi } else { self.mint_lo }
+    }
+}
+
+/// (lo, hi) in byte order — the order of the PairResult seeds.
+pub fn pair_order(a: &Pubkey, b: &Pubkey) -> (Pubkey, Pubkey) {
+    if a.to_bytes() < b.to_bytes() { (*a, *b) } else { (*b, *a) }
+}
+
+pub fn pair_result_address(a: &Pubkey, b: &Pubkey, record_date: u32) -> (Pubkey, u8) {
+    let (lo, hi) = pair_order(a, b);
+    Pubkey::find_program_address(&[PAIR_RESULT_SEED, lo.as_ref(), hi.as_ref(), &record_date.to_le_bytes()], &crate::ID)
+}
+
+pub fn pair_link_address(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[PAIR_LINK_SEED, mint.as_ref()], &crate::ID)
 }

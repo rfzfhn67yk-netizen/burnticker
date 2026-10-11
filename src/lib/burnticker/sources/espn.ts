@@ -257,6 +257,18 @@ export function nbaGames(body: unknown): Game[] {
 export const TSDB_LEAGUE: Partial<Record<LeagueId, string>> = { wnba: "4516", mcbb: "4607", wcbb: "4608", nfl: "4391", cfb: "4479", "eng.1": "4328", "esp.1": "4335", "ita.1": "4332", "ger.1": "4331", "fra.1": "4334", "uefa.champions": "4480", "uefa.europa": "4481", "uefa.europa.conf": "5071", "usa.1": "4346", "usa.nwsl": "4521", "mex.1": "4350", "ned.1": "4337", "por.1": "4344", "eng.2": "4329", "sco.1": "4330", "bra.1": "4351", "arg.1": "4406", nba: "4387", mlb: "4424", nhl: "4380" };
 export const tsdbSeasonCode = (league: LeagueId, year: number): string => (LEAGUES[league].span === "single" ? String(year) : LEAGUES[league].span === "later" ? `${year - 1}-${year}` : `${year}-${year + 1}`);
 export const tsdbScheduleUrl = (league: LeagueId, year: number): string => `https://www.thesportsdb.com/api/v2/json/schedule/league/${TSDB_LEAGUE[league] ?? ""}/${tsdbSeasonCode(league, year)}`;
+/**
+ * TheSportsDB v1, the fallback for a key that v2 refuses (the live miss of 2026-10-10: v2 answers HTTP 400 "Invalid Premium API key"
+ * to a non-premium key, so every soccer schedule read failed). v1 takes the key in the path: the season's results, the league's last
+ * results and its next fixtures, merged. With a free key v1 lists few events (the next fixture per league); the commercial key unlocks
+ * the full v2 schedule.
+ */
+export const tsdbV1Urls = (key: string, league: LeagueId, year: number): string[] => {
+  const id = TSDB_LEAGUE[league] ?? "", b = `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}`;
+  return [`${b}/eventsseason.php?id=${id}&s=${tsdbSeasonCode(league, year)}`, `${b}/eventspastleague.php?id=${id}`, `${b}/eventsnextleague.php?id=${id}`];
+};
+/** A URL as it may be logged or shown: a v1 key in the path is replaced. */
+export const redactKey = (url: string): string => url.replace(/(thesportsdb\.com\/api\/v1\/json\/)[^/]+/, "$1<key>");
 export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[] {
   const lists = body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][]) : [];
   return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent)).map((e) => {
@@ -307,18 +319,38 @@ export class EspnClient {
     if (hit && this.now() - hit.at < this.ttl) return hit.body;
     const run = async () => {
       const wait = this.lastAt + this.minInterval - this.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      this.lastAt = this.now(); this.requests.push(url);
+      this.lastAt = this.now(); this.requests.push(redactKey(url));
       const res = await this.fetchImpl(url, { headers: { accept: "application/json", "user-agent": ESPN_UA, ...headers } });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url.slice(0, 120)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${redactKey(url).slice(0, 120)}`);
       const body = await res.json(); this.cache.set(url, { at: this.now(), body }); return body;
     };
     const p = this.chain.then(run, run); this.chain = p.then(() => undefined, () => undefined); return p;
   }
   /** Whether this host can read a league's schedule (the three free official feeds, or TheSportsDB with the key). */
   scheduleAvailable(league: LeagueId): boolean { return league === "mlb" || league === "nhl" || league === "nba" || !!this.tsdbKey; }
+  /** v2 refused this key (not a premium key): v1 from then on, for this process. */
+  tsdbV1 = false;
+  /**
+   * One TheSportsDB read with `key`: v2 with the key in the X-API-KEY header; when v2 refuses the key (HTTP 400 / 401 / 403) the v1
+   * URLs (key in the path, never logged) are read instead and their event lists merged by idEvent.
+   */
+  async tsdbRead(key: string, v2: string, v1: (key: string) => string[]): Promise<unknown> {
+    if (!this.tsdbV1) {
+      try { return await this.get(v2, { "X-API-KEY": key }); } catch (e) { if (!/HTTP (400|401|403)\b/.test((e as Error).message)) throw e; this.tsdbV1 = true; }
+    }
+    const seen = new Set<string>(), events: Record<string, unknown>[] = [];
+    let got = 0, last: Error | null = null;
+    for (const u of v1(key)) {
+      let body: unknown;
+      try { body = await this.get(u); got++; } catch (e) { last = e as Error; continue; }
+      for (const list of body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : []) for (const ev of list) { const id = String(ev?.idEvent ?? ""); if (id && !seen.has(id)) { seen.add(id); events.push(ev); } }
+    }
+    if (!got && last) throw last;
+    return { events };
+  }
   private async tsdb(league: LeagueId, year: number): Promise<Game[]> {
     if (!this.tsdbKey || !TSDB_LEAGUE[league]) throw new ScheduleUnavailable(`${LEAGUES[league].label}: ${SCHEDULE_NEEDS_KEY}`);
-    return tsdbGames(league, await this.get(tsdbScheduleUrl(league, year), { "X-API-KEY": this.tsdbKey }), year);
+    return tsdbGames(league, await this.tsdbRead(this.tsdbKey, tsdbScheduleUrl(league, year), (k) => tsdbV1Urls(k, league, year)), year);
   }
   /** A team's season (regular season and postseason): the current one, or season `year` (the league's own year naming, as ESPN's was). */
   async season(league: LeagueId, abbrOrId: string, year: number | null = null): Promise<Game[]> {

@@ -52,7 +52,12 @@ export interface ReadingRow extends SettledEvent { oracle: string; selectorKey: 
  * "pending-pair": a clause pair's event burn read before both coins had a registered pool (rules.ts PairField) — it waits, and becomes
  * "planned" (in order) when the second pool registers, or "voided" (final, never executed) if the pair voids.
  */
-export type ReceiptStatus = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing" | "pending-pair" | "voided";
+export type ReceiptStatus = "planned" | "sending" | "confirmed" | "skipped" | "void" | "exhausted" | "nothing" | "pending-pair" | "voided" | "forwarded";
+/**
+ * WINNER TAKES THE BURN (2026-10-11): a pair receipt's role for its result — "won" (this coin's fuel burns this coin), "lost" (this
+ * coin's fuel for the result forwards to the winner's burn pool: the units are the ones it would have had had it won), "draw".
+ */
+export type PairRole = "won" | "lost" | "draw";
 export interface ReceiptRow {
   mint: string; eventId: string; settledAt: string; result: string | null; value: string | null; units: number; mapping: BurnMapping | null; kind: string; note: string;
   prevValue: string | null; carryIn: string; carryOut: string;
@@ -66,6 +71,8 @@ export interface ReceiptRow {
    */
   execution: "program" | null; readingDate: number | null; waitReason: string | null; chainOutcome: string | null;
   ruleSpendLamports: bigint | null; carriedInLamports: bigint | null; carriedOutLamports: bigint | null; poolActualLamports: bigint | null; lead: boolean | null;
+  /** Winner takes the burn: the receipt's pair role (null outside a winner-takes-the-burn pair, and on receipts written before it). */
+  pairRole: PairRole | null;
 }
 
 export interface SignatureRow { signature: string; mint: string; eventId: string; memo: string; burnRaw: bigint; spendLamports: bigint; blockhash: string; lastValidBlockHeight: number; sentAt: number; status: "sent" | "confirmed" | "failed" | "expired"; err: string | null; slot: number | null }
@@ -118,11 +125,16 @@ CREATE TABLE IF NOT EXISTS rule_ends (mint TEXT PRIMARY KEY, mode TEXT NOT NULL,
 -- (SOL side → 80 % burn pool / 20 % operator, coin side burned), read from chain after confirmation. Append-only.
 CREATE TABLE IF NOT EXISTS lock_fee_claims (signature TEXT PRIMARY KEY, mint TEXT NOT NULL, at INTEGER NOT NULL, slot INTEGER, sol_lamports TEXT NOT NULL, burn_pool_lamports TEXT NOT NULL, operator_lamports TEXT NOT NULL, token_burned_raw TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS lock_fee_claims_by_mint ON lock_fee_claims (mint, at);
+-- WINNER TAKES THE BURN (owner decision 2026-10-11): one row per landed forward_to_winner — the loser's fuel for one result moved to the
+-- winner's burn pool (the program's facts from its memo / event, read after confirmation). Append-only.
+CREATE TABLE IF NOT EXISTS pair_forwards (signature TEXT PRIMARY KEY, pair_id TEXT NOT NULL, record_date INTEGER NOT NULL, loser_mint TEXT NOT NULL, winner_mint TEXT NOT NULL, units INTEGER NOT NULL, pool_lamports TEXT NOT NULL, lamports TEXT NOT NULL, sol_lamports TEXT NOT NULL, wsol_lamports TEXT NOT NULL, at INTEGER NOT NULL, slot INTEGER);
+CREATE UNIQUE INDEX IF NOT EXISTS pair_forwards_once ON pair_forwards (pair_id, record_date, loser_mint);
 CREATE TABLE IF NOT EXISTS token_meta (mint TEXT PRIMARY KEY, creator_note TEXT NOT NULL DEFAULT '', metadata_uri TEXT, metadata_tx TEXT, metadata_sha256 TEXT, image_uri TEXT, image_tx TEXT, image_sha256 TEXT, hosted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
 `;
 
 /** Columns added to burns for program execution (2026-10-10), added in place to an older registry file. */
 const BURN_PROGRAM_COLUMNS: [string, string][] = [
+  ["pair_role", "TEXT"],
   ["execution", "TEXT"], ["reading_date", "INTEGER"], ["wait_reason", "TEXT"], ["chain_outcome", "TEXT"], ["rule_spend_lamports", "TEXT"],
   ["carried_in_lamports", "TEXT"], ["carried_out_lamports", "TEXT"], ["pool_actual_lamports", "TEXT"], ["lead", "INTEGER"],
 ];
@@ -152,6 +164,12 @@ CREATE TRIGGER IF NOT EXISTS burns_facts_immutable BEFORE UPDATE OF mint, event_
   BEGIN SELECT RAISE(ABORT, 'burns: the facts of a receipt are immutable'); END;
 CREATE TRIGGER IF NOT EXISTS burns_plan_once BEFORE UPDATE OF memo, pool_lamports, spend_lamports ON burns WHEN OLD.memo IS NOT NULL AND (NEW.memo IS NOT OLD.memo OR NEW.pool_lamports IS NOT OLD.pool_lamports OR NEW.spend_lamports IS NOT OLD.spend_lamports) AND OLD.status <> 'sending' AND OLD.status <> 'planned'
   BEGIN SELECT RAISE(ABORT, 'burns: a fixed plan is not rewritten'); END;
+CREATE TRIGGER IF NOT EXISTS burns_forwarded_frozen BEFORE UPDATE ON burns WHEN OLD.status = 'forwarded'
+  BEGIN SELECT RAISE(ABORT, 'burns: a forwarded receipt is final'); END;
+CREATE TRIGGER IF NOT EXISTS burns_pair_role_once BEFORE UPDATE OF pair_role ON burns WHEN OLD.pair_role IS NOT NULL AND NEW.pair_role IS NOT OLD.pair_role
+  BEGIN SELECT RAISE(ABORT, 'burns: a receipt''s pair role is part of its facts'); END;
+CREATE TRIGGER IF NOT EXISTS pair_forwards_no_update BEFORE UPDATE ON pair_forwards BEGIN SELECT RAISE(ABORT, 'pair_forwards: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS pair_forwards_no_delete BEFORE DELETE ON pair_forwards BEGIN SELECT RAISE(ABORT, 'pair_forwards: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS burns_confirmed_frozen BEFORE UPDATE ON burns WHEN OLD.status IN ('confirmed', 'void', 'exhausted')
   BEGIN SELECT RAISE(ABORT, 'burns: a final receipt is frozen'); END;
 CREATE TRIGGER IF NOT EXISTS burns_no_delete BEFORE DELETE ON burns BEGIN SELECT RAISE(ABORT, 'burns: append-only'); END;
@@ -178,6 +196,7 @@ CREATE TRIGGER IF NOT EXISTS burns_pending_pair_moves BEFORE UPDATE OF status ON
   BEGIN SELECT RAISE(ABORT, 'burns: a pending-pair receipt becomes planned or voided'); END;
 `;
 
+export interface PairForwardRow { signature: string; pairId: string; recordDate: number; loserMint: string; winnerMint: string; units: number; poolLamports: bigint; lamports: bigint; solLamports: bigint; wsolLamports: bigint; at: number; slot: number | null }
 export interface PairRow { pairId: string; mintA: string; mintB: string; selectorKey: string; createdAt: number }
 
 const bigOrNull = (v: unknown): bigint | null => (v === null || v === undefined ? null : BigInt(String(v)));
@@ -196,7 +215,7 @@ const toReceipt = (r: Row): ReceiptRow => ({ mint: String(r.mint), eventId: Stri
   status: String(r.status) as ReceiptStatus, signature: strOrNull(r.signature), slot: numOrNull(r.slot), skippedReason: strOrNull(r.skipped_reason),
   attempts: Number(r.attempts), lastError: strOrNull(r.last_error), nextAttemptAt: numOrNull(r.next_attempt_at), createdAt: Number(r.created_at), updatedAt: Number(r.updated_at), confirmedAt: numOrNull(r.confirmed_at),
   execution: strOrNull(r.execution) === "program" ? "program" : null, readingDate: numOrNull(r.reading_date), waitReason: strOrNull(r.wait_reason), chainOutcome: strOrNull(r.chain_outcome),
-  ruleSpendLamports: bigOrNull(r.rule_spend_lamports), carriedInLamports: bigOrNull(r.carried_in_lamports), carriedOutLamports: bigOrNull(r.carried_out_lamports), poolActualLamports: bigOrNull(r.pool_actual_lamports), lead: r.lead === null || r.lead === undefined ? null : Number(r.lead) === 1 });
+  ruleSpendLamports: bigOrNull(r.rule_spend_lamports), carriedInLamports: bigOrNull(r.carried_in_lamports), carriedOutLamports: bigOrNull(r.carried_out_lamports), poolActualLamports: bigOrNull(r.pool_actual_lamports), lead: r.lead === null || r.lead === undefined ? null : Number(r.lead) === 1, pairRole: r.pair_role === null || r.pair_role === undefined ? null : (String(r.pair_role) as PairRole) });
 const toSig = (r: Row): SignatureRow => ({ signature: String(r.signature), mint: String(r.mint), eventId: String(r.event_id), memo: String(r.memo), burnRaw: BigInt(String(r.burn_raw)), spendLamports: BigInt(String(r.spend_lamports)), blockhash: String(r.blockhash), lastValidBlockHeight: Number(r.last_valid_block_height), sentAt: Number(r.sent_at), status: String(r.status) as SignatureRow["status"], err: strOrNull(r.err), slot: numOrNull(r.slot) });
 
 /**
@@ -357,14 +376,14 @@ export class Registry {
 
   // ---- receipts ----
   /** Records one planned step for a token (the receipt row + the cursor), in one transaction. Idempotent per (mint, event). */
-  applyStep(mint: string, e: SettledEvent, step: { units: number; mapping: BurnMapping | null; kind: string; note: string; carryOut: string; baseline: string | null }, prev: { value: string | null; carryOut: string }, scalar: boolean, now = Date.now(), gated: "pending-pair" | "voided" | null = null): boolean {
+  applyStep(mint: string, e: SettledEvent, step: { units: number; mapping: BurnMapping | null; kind: string; note: string; carryOut: string; baseline: string | null }, prev: { value: string | null; carryOut: string }, scalar: boolean, now = Date.now(), gated: "pending-pair" | "voided" | null = null, pairRole: PairRole | null = null): boolean {
     return this.tx(() => {
       if (this.db.prepare("SELECT 1 FROM burns WHERE mint=? AND event_id=?").get(mint, e.id)) return false;
       const base: ReceiptStatus = step.kind === "void" ? "void" : step.mapping && step.units > 0 ? "planned" : "nothing";
       // Both or neither: a burn read before both pools registered waits; on a voided pair it is recorded and never executed.
       const status: ReceiptStatus = base === "planned" && gated ? gated : base;
-      this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(mint, e.id, e.at, e.result, e.value, step.units, step.mapping ? JSON.stringify(step.mapping) : null, step.kind, step.note, prev.value, prev.carryOut, step.carryOut, status, now, now);
+      this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at, pair_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(mint, e.id, e.at, e.result, e.value, step.units, step.mapping ? JSON.stringify(step.mapping) : null, step.kind, step.note, prev.value, prev.carryOut, step.carryOut, status, now, now, pairRole);
       // The cursor only moves forward: a late-final independent event (review N7) gets its receipt without rewinding the token's state.
       const cur = this.state(mint);
       const behind = cur.lastSettledAt !== null && (e.at < cur.lastSettledAt || (e.at === cur.lastSettledAt && cur.lastEventId !== null && e.id < cur.lastEventId));
@@ -376,10 +395,11 @@ export class Registry {
    * An end-of-rule receipt (kind winddown / drain / sweep: no reading behind it — a date-based clock; the token's cursor is not moved).
    * Idempotent per (mint, id).
    */
-  addEndReceipt(mint: string, kind: "winddown" | "drain" | "sweep", e: { id: string; at: string }, step: { units: number; mapping: BurnMapping | null; note: string }, now = Date.now()): boolean {
+  /** `pairRole` "lost" (winner takes the burn): a one-shot pair loser's end-of-rule day whose fuel forwards to the live winner. */
+  addEndReceipt(mint: string, kind: "winddown" | "drain" | "sweep", e: { id: string; at: string }, step: { units: number; mapping: BurnMapping | null; note: string }, now = Date.now(), pairRole: PairRole | null = null): boolean {
     if (this.db.prepare("SELECT 1 FROM burns WHERE mint=? AND event_id=?").get(mint, e.id)) return false;
-    this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at) VALUES (?,?,?,NULL,NULL,?,?,?,?,NULL,'0','0',?,?,?)`)
-      .run(mint, e.id, e.at, step.units, step.mapping ? JSON.stringify(step.mapping) : null, kind, step.note, step.mapping && step.units > 0 ? "planned" : "nothing", now, now);
+    this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at, pair_role) VALUES (?,?,?,NULL,NULL,?,?,?,?,NULL,'0','0',?,?,?,?)`)
+      .run(mint, e.id, e.at, step.units, step.mapping ? JSON.stringify(step.mapping) : null, kind, step.note, step.mapping && step.units > 0 ? "planned" : "nothing", now, now, pairRole);
     return true;
   }
   /** The launch pins: the creator's note and the Arweave metadata / image (null for a coin made before them). */
@@ -479,7 +499,7 @@ export class Registry {
    * same reading carry zeros, the same signature and memo. burned / short → confirmed; below-floor / no-units → skipped; exhausted.
    */
   markProgramOutcome(mint: string, readingDate: number, f: { signature: string; slot: number | null; outcome: string; memo: string | null; poolLamports: bigint; poolActualLamports: bigint; spentLamports: bigint; ruleSpendLamports: bigint; carriedInLamports: bigint; carriedOutLamports: bigint; gotRaw: bigint; burnRaw: bigint; shortfallRaw: bigint; skippedReason: string | null }, now = Date.now()): void {
-    const status: ReceiptStatus = f.outcome === "burned" || f.outcome === "short" ? "confirmed" : f.outcome === "exhausted" ? "exhausted" : "skipped";
+    const status: ReceiptStatus = f.outcome === "burned" || f.outcome === "short" ? "confirmed" : f.outcome === "exhausted" ? "exhausted" : f.outcome === "forwarded" ? "forwarded" : "skipped";
     const rows = this.receiptsForReading(mint, readingDate).filter((b) => b.status === "planned" || b.status === "sending");
     this.tx(() => {
       rows.forEach((b, k) => {
@@ -492,6 +512,16 @@ export class Registry {
       });
       this.db.prepare("UPDATE signatures SET status='confirmed', slot=COALESCE(?, slot) WHERE signature=?").run(f.slot, f.signature);
     });
+  }
+
+  // ---- winner takes the burn: landed forwards (append-only) ----
+  recordPairForward(f: PairForwardRow): boolean {
+    return Number(this.db.prepare("INSERT OR IGNORE INTO pair_forwards (signature, pair_id, record_date, loser_mint, winner_mint, units, pool_lamports, lamports, sol_lamports, wsol_lamports, at, slot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(f.signature, f.pairId, f.recordDate, f.loserMint, f.winnerMint, f.units, f.poolLamports.toString(), f.lamports.toString(), f.solLamports.toString(), f.wsolLamports.toString(), f.at, f.slot).changes) > 0;
+  }
+  pairForwards(pairId?: string): PairForwardRow[] {
+    const rows = (pairId ? this.db.prepare("SELECT * FROM pair_forwards WHERE pair_id=? ORDER BY record_date, at").all(pairId) : this.db.prepare("SELECT * FROM pair_forwards ORDER BY record_date, at").all()) as Row[];
+    return rows.map((r) => ({ signature: String(r.signature), pairId: String(r.pair_id), recordDate: Number(r.record_date), loserMint: String(r.loser_mint), winnerMint: String(r.winner_mint), units: Number(r.units), poolLamports: BigInt(String(r.pool_lamports)), lamports: BigInt(String(r.lamports)), solLamports: BigInt(String(r.sol_lamports)), wsolLamports: BigInt(String(r.wsol_lamports)), at: Number(r.at), slot: numOrNull(r.slot) }));
   }
 
   // ---- feed state ----

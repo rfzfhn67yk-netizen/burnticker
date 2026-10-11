@@ -4,6 +4,7 @@ import { bs58, fetchNextReadingInLine, fetchReading, fetchTokenConfig, type Read
 import { assertSignableGenesis, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LL_POOL_PLATFORM_ID, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, OUTCOME_NAMES, PACKET_DATA_SIZE, POOL_POLICY_CREATOR_IS_FEE_PDA, SYSVAR_INSTRUCTIONS_ID } from "@/lib/burnReceipts/constants";
 import { type BuybackPoolAccounts, buybackPoolAccounts, decodeCpmmPool, fetchCpmmPool } from "@/lib/burnReceipts/cpmm";
 import { formatDate } from "@/lib/burnReceipts/math";
+import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
 import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
 import { configPda, cpmmAuthority, feePda, feeTokenAddress, feeWsolAddress, launchlabPoolPda, vaultAddress } from "@/lib/burnReceipts/pda";
 
@@ -265,11 +266,12 @@ export type CrankResult =
  * Errors that mean "not now", not "broken": the next run retries. WsolBalanceMismatch (review-2 F3): the fee PDA's WSOL balance moved
  * between the sync and the swap (the crank's own SyncNative normally prevents it) — retry.
  */
-export const DEFERRABLE_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch"]);
+export const DEFERRABLE_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "PairResultPending"]);
 /** Deferrals that are also untradeable observations: crankNext records them with check_pool_health (review-2 F6/F7 continuity). */
 export const UNTRADEABLE_ERRORS = new Set(["PoolNotTradable", "EmptyReserves"]);
 
-export interface PlannedCrank { kind: "no_units" | "vault" | "buyback"; recordDate: number; instructions: TransactionInstruction[]; config: TokenConfigAccount }
+/** `forward` (LAUNCHPAD-PATH §40): a paired coin that LOST the period — its reading is processed by forward_to_winner instead. */
+export interface PlannedCrank { kind: "no_units" | "vault" | "buyback" | "forward"; recordDate: number; instructions: TransactionInstruction[]; config: TokenConfigAccount }
 
 /** Builds (does not send) the instructions for the next reading in line, or explains why there is nothing to do. */
 export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promise<PlannedCrank | Exclude<CrankResult, { status: "processed" | "deferred" }>> {
@@ -286,6 +288,18 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
     return { kind: "vault", recordDate, config: c, instructions: [createAtaIdempotentIx({ payer: cranker, owner: config, mint: ctx.mint, ata: vaultAddress(ctx.programId, ctx.mint) }), crankVaultIx(base)] };
   }
   if (!c.poolRegistered) return { status: "waiting-for-pool", recordDate };
+  // LAUNCHPAD-PATH §40: a PAIRED coin passes its partner (PairLink + the period's PairResult); if it LOST the period, the reading is
+  // processed by forward_to_winner (its fuel → the winner's fee PDA) instead of a buyback.
+  let partner: PublicKey | undefined;
+  if (c.pair_state === PAIR_STATE_PAIRED) {
+    const link = await fetchPairLink(ctx.connection, ctx.programId, ctx.mint);
+    if (!link) throw new Error(`paired config ${ctx.mint.toBase58()} has no PairLink`);
+    partner = link.pair_mint;
+    const result = await fetchPairResult(ctx.connection, ctx.programId, ctx.mint, partner, recordDate);
+    if (pairResultFor(result, ctx.mint) === PAIR_RESULT_LOST) {
+      return { kind: "forward", recordDate, config: c, instructions: [forwardToWinnerIx({ programId: ctx.programId, cranker, loserMint: ctx.mint, winnerMint: partner, recordDate })] };
+    }
+  }
   const pool = await poolAccountsOrStandIns(ctx, c.cpmm_pool);
   const fee = feePda(ctx.programId, ctx.mint);
   const feeWsol = feeWsolAddress(ctx.programId, ctx.mint);
@@ -298,7 +312,7 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
       createAtaIdempotentIx({ payer: cranker, owner: fee, mint: ctx.mint, ata: feeTokenAddress(ctx.programId, ctx.mint) }),
       // Review-2 F3: fold any lamports sent straight to the fee PDA's WSOL account into its balance first (the program also does).
       syncNativeIx(feeWsol),
-      crankBuybackIx({ ...base, pool, cluster: ctx.cluster }),
+      crankBuybackIx({ ...base, pool, cluster: ctx.cluster, ...(partner ? { partner } : {}) }),
     ],
   };
 }

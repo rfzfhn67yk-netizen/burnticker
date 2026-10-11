@@ -36,7 +36,7 @@ const POWERS = {
   initialize_token: {
     class: "creation",
     signers: { payer: "anyone", creator: "creator", mint: "mint_keypair" },
-    can: "Create the ONE TokenConfig of a mint: the burn rule (immutable thereafter), the feed id, the memo text, the rules-file hash, the attester set and quorum; fund the fee PDA with the rule's reserve; for buyback policies 0 and 2, read and PIN the LaunchLab platform — only the operator's compiled BURNTICKER_PLATFORM (per cluster; the mainnet placeholder refuses: lp-lock blind review RL-3) — (its cpConfigId; platformCpCreator must be unset or the fee PDA) and, for policy 0, require it to lock 100 % of the migrated LP with the Fee Key to the program's FEE_KEYS PDA (platformLockNftWallet = FEE_KEYS, platformScale 1,000,000, creator and burn scale 0 — LAUNCHPAD-PATH §35).",
+    can: "Create the ONE TokenConfig of a mint: the burn rule (immutable thereafter), the feed id, the memo text, the rules-file hash, the attester set and quorum; fund the fee PDA with the rule's reserve; for buyback policies 0 and 2, read and PIN the LaunchLab platform — only the operator's compiled BURNTICKER_PLATFORM (per cluster; the mainnet placeholder refuses: lp-lock blind review RL-3) — (its cpConfigId; platformCpCreator must be unset or the fee PDA) and, for policy 0, require it to lock 100 % of the migrated LP with the Fee Key to the program's FEE_KEYS PDA (platformLockNftWallet = FEE_KEYS, platformScale 1,000,000, creator and burn scale 0 — LAUNCHPAD-PATH §35). Optionally (LAUNCHPAD-PATH §40, policies 0/1) name the partner mint of a winner-takes-the-burn pair: the coin's PairLink is written provisional, and both coins become paired only if the partner's initialize_token names this mint back within 7 days (an unanswered coin stays a plain coin for good).",
     cannot: "Run twice for a mint; be run by anyone without the mint keypair; change anything afterwards.",
     timelock: null, sunset: "Single use per mint.", funds: "Payer → fee PDA: the reserve only (rent for the PDA).",
   },
@@ -51,7 +51,7 @@ const POWERS = {
     class: "permissionless",
     signers: { registrar: "anyone" },
     can: "Registration policy 2 (2026-10-10, rivalry pairs): record the CPMM pool that the pair_curve program's graduate created for this token — the Pair account is pair_curve's (hard-coded id, discriminator, PDA [\"pair\", mint_a, mint_b]), Graduated (or Graduating with this side done) and names this mint; the pool is the one the Pair records for that side AND the pair_curve PDA [\"pool\", pair, [side]] (only pair_curve can sign for it), on the cpConfigId pinned at initialize_token, with the pair's SOL vault PDA as pool_creator; ≥ 90 % of the LP that existed at creation was LOCKED by pair_curve's lock_lp (or burned, for pairs graduated before LAUNCHPAD-PATH §35) — Pair record, confirmed on chain by the LP in Raydium's lock account plus CPMM lp_supply − LP mint supply.",
-    cannot: "Register a pool for a policy-0/1 token, a pool from another pair or side, a pool at any other address, on another AmmConfig or with its LP neither locked nor burned; register twice; change a registered pool. Later LP deposits cannot block it (the ratio is against the creation supply).",
+    cannot: "Register a pool for a policy-0/1 token, a pool from another pair or side, a pool at any other address, on another AmmConfig or with its LP neither locked nor burned; register a coin not yet paired by link_pair (LAUNCHPAD-PATH §40: every pair is winner-takes-the-burn); register twice; change a registered pool. Later LP deposits cannot block it (the ratio is against the creation supply).",
     timelock: null, sunset: "Once per token (then frozen).", funds: "None.",
   },
   register_fee_key: {
@@ -100,9 +100,31 @@ const POWERS = {
   crank_buyback: {
     class: "permissionless",
     signers: { cranker: "anyone" },
-    can: "Process the next reading in line (buyback mode): target = pool × (1 − (1 − f)^units) + carried spend; spend at most 2 % of the pool's WSOL reserve (rest carried); swap on the registered, provenance-checked CPMM pool behind a mandatory TWAP guard (≤ 3 % over 600–1,200 s) with a minimum output of max(spot quote, TWAP quote) less ≤ 3 % slippage; burn EVERY token the fee PDA holds; write memo v2. After 30 days of continuous pool untradeability, process the reading below-floor with its target carried.",
-    cannot: "Choose the amount, the pool, the price or the recipient; skip a reading; process one twice; send SOL or tokens anywhere except the pool (SOL→token) and the burn; let the CPMM call change the fee PDA's or its token accounts' owner, delegate or close authority (hard error); crank while the pre-audit cap is in force if a PlatformConfig cranker allowlist exists and the cranker is not on it.",
+    can: "Process the next reading in line (buyback mode): target = pool × (1 − (1 − f)^units) + carried spend; spend at most 2 % of the pool's WSOL reserve (rest carried); swap on the registered, provenance-checked CPMM pool behind a mandatory TWAP guard (≤ 3 % over 600–1,200 s) with a minimum output of max(spot quote, TWAP quote) less ≤ 3 % slippage; burn EVERY token the fee PDA holds; write memo v2. After 30 days of continuous pool untradeability, process the reading below-floor with its target carried. A PAIRED coin (LAUNCHPAD-PATH §40) cranks only with the period's pair result: won or draw → as above; no result → only 72 h after the reading (then as an unpaired coin).",
+    cannot: "Choose the amount, the pool, the price or the recipient; skip a reading; process one twice; send SOL or tokens anywhere except the pool (SOL→token) and the burn; let the CPMM call change the fee PDA's or its token accounts' owner, delegate or close authority (hard error); crank while the pre-audit cap is in force if a PlatformConfig cranker allowlist exists and the cranker is not on it; burn for a paired coin that LOST the period (its fuel goes to the winner through forward_to_winner).",
     timelock: null, sunset: "None.", funds: "Fee PDA SOL → its WSOL account → CPMM pool vault; tokens received → burned (supply reduced).",
+  },
+  link_pair: {
+    class: "permissionless",
+    signers: { payer: "anyone" },
+    can: "LAUNCHPAD-PATH §40: pair the two coins of a pair_curve Pair (the Pair account — pair_curve's, not Voided — names both mints; both TokenConfigs are policy 2): write or complete both coins' PairLink [\"pair_link\", mint] and set both configs paired. Idempotent; the payer pays the PairLink rent.",
+    cannot: "Pair coins the Pair does not name, a voided pair, a coin already linked to another partner, or non-policy-2 coins; unpair; change a partner.",
+    timelock: null, sunset: "Once per pair (then frozen).", funds: "Payer → the PairLinks' rent.",
+  },
+  submit_pair_result: {
+    class: "permissionless",
+    signers: { payer: "anyone" },
+    gated_by: "attesters",
+    can: "LAUNCHPAD-PATH §40: append one period's result of a pair — the winning mint or a draw — valid only with a quorum of EACH coin's attesters over BURNRECEIPTS-PAIR-v1 ‖ cluster genesis ‖ program ‖ both mints ‖ date ‖ winner ‖ source hash ‖ proof locator.",
+    cannot: "Change or replace a recorded result; post a result for coins that are not paired to each other, a future date, or a winner outside the pair; reuse a signature made for another cluster, pair or date.",
+    timelock: null, sunset: "None.", funds: "Payer pays the PairResult account's rent (kept forever).",
+  },
+  forward_to_winner: {
+    class: "permissionless",
+    signers: { cranker: "anyone" },
+    can: "LAUNCHPAD-PATH §40: for a period whose result names a winner, process the LOSER's reading by moving exactly what its own rule would have spent had it won — pool × (1 − (1 − f)^units) on min(spendable, the burn-pool cap), nothing under its floor — from the loser's fee PDA to the winner's fee PDA (SOL above the reserve first, then WSOL into the winner fee PDA's WSOL account); mark the reading forwarded, record the forward on the result, write memo `<PREFIX>|forward|…|v1`. A second call is a no-op.",
+    cannot: "Choose the amount or the recipient (only the winner's fee PDA, which spends only through crank_buyback); forward on a draw, to the losing coin, for coins not paired, out of the loser's reading order, below the loser's reserve, or when either coin has no verified pool (a voided side forwards nothing); touch either coin's supply; run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+    timelock: null, sunset: "None.", funds: "Loser fee PDA SOL / WSOL → winner fee PDA SOL / WSOL account (then burned by the winner's cranks).",
   },
   crank_vault: {
     class: "permissionless",
@@ -229,7 +251,7 @@ const POWERS = {
 };
 
 const NON_POWERS = [
-  "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned); tokens leave only by burn.",
+  "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) and inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period); tokens leave only by burn.",
   "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).",
   "No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.",
   "No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.",

@@ -86,7 +86,11 @@ export function toPairCurvePolicy(ix: SerializedIx, burnReceiptsProgramId: strin
   const args = decodeType(BURN_RECEIPTS_IDL, def.args[0].type, data, 8).value as { rule: { pool_policy: number } };
   args.rule.pool_policy = POOL_POLICY_PAIR_CURVE;
   const slot = def.accounts.findIndex((a) => a.name === "launchlab_platform");
-  const keys = ix.keys.map((k, i) => (i === slot ? { pubkey: launchlabPlatform, isSigner: false, isWritable: false } : k));
+  // LAUNCHPAD-PATH §40: a pair-curve coin pairs through link_pair (the Pair is the witness), never through initialize_token's pair_mint
+  // (the program refuses InvalidPairMint for policy 2) — the LaunchLab bundle's pair accounts become Anchor's "omitted" placeholder.
+  const PAIR_SLOTS = new Set(["pair_mint", "pair_link", "partner_link", "partner_config"]);
+  const omit = new Set(def.accounts.map((a, i) => (PAIR_SLOTS.has(a.name) ? i : -1)).filter((i) => i >= 0));
+  const keys = ix.keys.map((k, i) => (i === slot ? { pubkey: launchlabPlatform, isSigner: false, isWritable: false } : omit.has(i) ? { pubkey: burnReceiptsProgramId, isSigner: false, isWritable: false } : k));
   return { ...ix, keys, dataBase64: encodeInstruction(BURN_RECEIPTS_IDL, "initialize_token", { args }).toString("base64"), label: `${ix.label} — registration policy 2 (pair curve)` };
 }
 

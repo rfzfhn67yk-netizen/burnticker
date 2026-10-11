@@ -257,6 +257,12 @@
       "note": "'burn when we win' is a result, not money"
     },
     {
+      "id": "win-fees",
+      "category": "no-prizes",
+      "pattern": "\\b(win|wins|winning|won)( the| all| both| their| its)? (fees?|fuel)\\b",
+      "note": "winner takes the burn (2026-10-11): a pair's loser forwards its fuel to the winner's burn pool, where it burns the winner's supply; nobody wins fees"
+    },
+    {
       "id": "get-paid",
       "category": "no-prizes",
       "pattern": "\\b(get|gets|getting|got) paid\\b"

@@ -4,7 +4,7 @@ import type { BuybackPoolAccounts } from "@/lib/burnReceipts/cpmm";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { encodeInstruction } from "@/lib/burnReceipts/idlCoder";
 import type { RuleParams } from "@/lib/burnReceipts/math";
-import { associatedTokenAddress, configPda, cpmmAuthority, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lockedLiquidityPda, lpLockVault, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
+import { associatedTokenAddress, configPda, cpmmAuthority, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lockedLiquidityPda, lpLockVault, pairLinkPda, pairResultPda, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
 
 /**
  * Instruction builders. Data comes from the IDL coder; account ORDER and writable/signer flags come from the IDL too (each builder
@@ -15,6 +15,11 @@ const IDL = BURN_RECEIPTS_IDL;
 
 /** Anchor's event-CPI authority: every instruction carries it (and the program itself) so events ride in inner instructions. */
 export const eventAuthority = (programId: PublicKey): PublicKey => PublicKey.findProgramAddressSync([Buffer.from("__event_authority", "utf8")], programId)[0];
+
+/** Builds any burn_receipts instruction from the IDL (account order, optional accounts, args). Exported for pairs.ts. */
+export function buildIx(programId: PublicKey, name: string, accounts: Record<string, PublicKey>, args: Record<string, unknown>, remaining: AccountMeta[] = []): TransactionInstruction {
+  return build(programId, name, accounts, args, remaining);
+}
 
 function build(programId: PublicKey, name: string, accounts: Record<string, PublicKey>, args: Record<string, unknown>, remaining: AccountMeta[] = []): TransactionInstruction {
   const ix = IDL.instructions.find((i) => i.name === name);
@@ -67,7 +72,12 @@ export interface InitializeTokenArgs {
  * `launchlabPlatform` (the LaunchLab PlatformConfig the token launches on): its cpConfigId, LP lock/burn scales and
  * platformCpCreator are read and PINNED (review-3 M-3).
  */
-export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; creator: PublicKey; mint: PublicKey; args: InitializeTokenArgs; launchlabPlatform?: PublicKey }): TransactionInstruction {
+/**
+ * LAUNCHPAD-PATH §40: `pairMint` names the partner coin (policies 0/1; policy 2 pairs through link_pair). Its PairLink is written:
+ * provisional until the partner's initialize_token names this mint back within PAIRING_WINDOW_SECS; pass `partnerFirst: true` when
+ * the partner already initialized naming this mint (its PairLink and TokenConfig are then passed and both coins become paired).
+ */
+export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; creator: PublicKey; mint: PublicKey; args: InitializeTokenArgs; launchlabPlatform?: PublicKey; pairMint?: PublicKey; partnerFirst?: boolean }): TransactionInstruction {
   return build(o.programId, "initialize_token", {
     payer: o.payer,
     creator: o.creator,
@@ -75,6 +85,8 @@ export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; c
     config: configPda(o.programId, o.mint),
     fee_vault: feePda(o.programId, o.mint),
     ...(o.launchlabPlatform ? { launchlab_platform: o.launchlabPlatform } : {}),
+    ...(o.pairMint ? { pair_mint: o.pairMint, pair_link: pairLinkPda(o.programId, o.mint) } : {}),
+    ...(o.pairMint && o.partnerFirst ? { partner_link: pairLinkPda(o.programId, o.pairMint), partner_config: configPda(o.programId, o.pairMint) } : {}),
   }, { args: o.args });
 }
 
@@ -213,7 +225,8 @@ export function crankNoUnitsIx(o: { programId: PublicKey; cranker: PublicKey; mi
   return build(o.programId, "crank_no_units", { cranker: o.cranker, config, reading: readingPda(o.programId, config, o.recordDate) }, { record_date: o.recordDate });
 }
 
-export function crankBuybackIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; recordDate: number; pool: BuybackPoolAccounts; cluster: Cluster }): TransactionInstruction {
+/** `partner` (LAUNCHPAD-PATH §40): a PAIRED coin passes its partner mint — the PairLink and the period's PairResult are added. */
+export function crankBuybackIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; recordDate: number; pool: BuybackPoolAccounts; cluster: Cluster; partner?: PublicKey }): TransactionInstruction {
   const config = configPda(o.programId, o.mint);
   return build(o.programId, "crank_buyback", {
     cranker: o.cranker,
@@ -235,6 +248,7 @@ export function crankBuybackIx(o: { programId: PublicKey; cranker: PublicKey; mi
     token_program: TOKEN_PROGRAM_ID,
     system_program: SystemProgram.programId,
     memo_program: MEMO_PROGRAM_ID,
+    ...(o.partner ? { pair_link: pairLinkPda(o.programId, o.mint), pair_result: pairResultPda(o.programId, o.mint, o.partner, o.recordDate) } : {}),
   }, { record_date: o.recordDate });
 }
 

@@ -4,7 +4,7 @@
   "note": "Written by `sh scripts/ops/verified-build.sh --local --write` (or --docker --write on a Linux host with Docker). The hash is solana-verify's executable hash: sha256 of the program bytes with trailing zero bytes removed \u2014 the same number `solana-verify get-program-hash` prints for the deployed program and `solana-verify get-executable-hash` prints for a .so. docs/burnticker/VERIFIED-BUILD.md renders this table; test/burntickerVerifiedBuild.test.ts holds the two together and compares any built .so on the host.",
   "kind": "interim-local",
   "kindNote": "INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check.",
-  "sourceCommit": "40e13bf5b0739e9f011c4bfa76d6683c973146a9",
+  "sourceCommit": "c183407458863d6592bd8aa7216b0bd6781fd43c",
   "sourceCommitNote": "the last monorepo commit that changed the compiled program sources under programs/burn-receipts (later commits there add exploit tests only, which are not compiled into the programs); the public repository carries the same files at the commit its next publish records in docs/burnticker/CHANGELOG.md",
   "toolchain": {
     "solanaCli": "4.3.0",
@@ -12,7 +12,8 @@
     "platformTools": "v1.57",
     "rustc": "1.95.0-sbpf-solana-v1.57",
     "anchor": "1.2.1",
-    "host": "macOS (arm64)"
+    "host": "macOS (arm64)",
+    "sbpf": "v3 (cargo-build-sbf 4.4.0 default --arch v3; ELF e_flags 0x3 on all four builds)"
   },
   "workspace": "programs/burn-receipts",
   "programs": [
@@ -22,23 +23,23 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 643144,
-          "hash": "d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac"
+          "bytes": 729048,
+          "hash": "7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 643328,
-          "hash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3"
+          "bytes": 729232,
+          "hash": "b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3",
+          "hash": "b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5",
           "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
-          "readAt": "2026-10-10",
+          "readAt": "2026-10-11",
           "matchesBuild": true
         },
         "mainnet": null
@@ -50,23 +51,23 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 406624,
-          "hash": "a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d"
+          "bytes": 409224,
+          "hash": "abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 406680,
-          "hash": "7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796"
+          "bytes": 409280,
+          "hash": "f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796",
+          "hash": "f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7",
           "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
-          "readAt": "2026-10-10",
+          "readAt": "2026-10-11",
           "matchesBuild": true
         },
         "mainnet": null

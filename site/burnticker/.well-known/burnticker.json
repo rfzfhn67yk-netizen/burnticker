@@ -28,15 +28,15 @@
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": true,
-          "executableHash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3",
-          "buildHash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3",
+          "executableHash": "b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5",
+          "buildHash": "b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": true,
-          "executableHash": "7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796",
-          "buildHash": "7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796",
+          "executableHash": "f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7",
+          "buildHash": "f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         }
       },
@@ -95,14 +95,14 @@
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac",
+          "buildHash": "7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22",
           "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d",
+          "buildHash": "abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab",
           "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
         }
       },
@@ -168,7 +168,7 @@
     "operator": "https://burnticker.com/burnticker/operator",
     "verifiedBuild": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/VERIFIED-BUILD.md",
     "verifiedBuildKind": "interim-local",
-    "sourceCommit": "40e13bf5b0739e9f011c4bfa76d6683c973146a9",
+    "sourceCommit": "c183407458863d6592bd8aa7216b0bd6781fd43c",
     "powersRegisters": [
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/powers-register.md",
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/pair-curve-powers-register.md"

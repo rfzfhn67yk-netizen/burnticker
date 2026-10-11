@@ -4,7 +4,7 @@ import type { SerializedIx } from "@/lib/burnticker/program";
 import type { UnsignedTx } from "@/lib/burnticker/transactions";
 import type { VerifyResult } from "@/lib/burnticker/verify";
 import type { Backtest } from "@/lib/burnticker/oracle/backtest";
-import type { ReceiptJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
+import type { PairCounterpart, PairForwardJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
 import type { LpLockJson, LpLockPolicyJson } from "@/lib/burnticker/lockFees";
 
 /**
@@ -12,7 +12,7 @@ import type { LpLockJson, LpLockPolicyJson } from "@/lib/burnticker/lockFees";
  * language-neutral version of the same contract; the route tests validate every response against it.
  */
 
-export type { BurnRule, RuleMode, FeeSplit, SerializedIx, UnsignedTx, VerifyResult, Backtest, ReceiptJson, TokenStatusJson, LpLockJson, LpLockPolicyJson };
+export type { BurnRule, RuleMode, FeeSplit, SerializedIx, UnsignedTx, VerifyResult, Backtest, ReceiptJson, TokenStatusJson, LpLockJson, LpLockPolicyJson, PairCounterpart, PairForwardJson };
 
 /** One resolution source (GET /catalogue). */
 export interface SourceCard {

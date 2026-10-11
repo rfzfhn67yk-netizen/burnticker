@@ -468,6 +468,20 @@ pub fn ix_initialize_raw(payer: &Pubkey, creator: &Pubkey, mint: &Pubkey, args: 
 }
 
 pub fn ix_initialize_with_platform(payer: &Pubkey, creator: &Pubkey, mint: &Pubkey, args: burn_receipts::InitializeTokenArgs, launchlab_platform: Option<Pubkey>) -> Instruction {
+    ix_initialize_full(payer, creator, mint, args, launchlab_platform, None, false)
+}
+
+/// LAUNCHPAD-PATH §40: initialize_token naming `pair_mint` as the partner; `partner_first` = the partner initialized first (its
+/// PairLink and TokenConfig are passed so both become paired here).
+pub fn ix_initialize_full(
+    payer: &Pubkey,
+    creator: &Pubkey,
+    mint: &Pubkey,
+    args: burn_receipts::InitializeTokenArgs,
+    launchlab_platform: Option<Pubkey>,
+    pair_mint: Option<Pubkey>,
+    partner_first: bool,
+) -> Instruction {
     Instruction::new_with_bytes(
         burn_receipts::ID,
         &burn_receipts::instruction::InitializeToken { args }.data(),
@@ -479,11 +493,25 @@ pub fn ix_initialize_with_platform(payer: &Pubkey, creator: &Pubkey, mint: &Pubk
             fee_vault: fee_pda(mint),
             system_program: anchor_lang::solana_program::system_program::ID,
             launchlab_platform,
+            pair_mint,
+            pair_link: pair_mint.map(|_| pair_link_pda(mint)),
+            partner_link: pair_mint.filter(|_| partner_first).map(|m| pair_link_pda(&m)),
+            partner_config: pair_mint.filter(|_| partner_first).map(|m| config_pda(&m)),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }
         .to_account_metas(None),
     )
+}
+
+/// burn_receipts' PairLink ["pair_link", mint] (LAUNCHPAD-PATH §40).
+pub fn pair_link_pda(mint: &Pubkey) -> Pubkey {
+    burn_receipts::state::pair_link_address(mint).0
+}
+
+/// burn_receipts' PairResult ["pair_result", mint_lo, mint_hi, record_date].
+pub fn pair_result_pda(a: &Pubkey, b: &Pubkey, date: u32) -> Pubkey {
+    burn_receipts::state::pair_result_address(a, b, date).0
 }
 
 pub fn ix_submit(payer: &Pubkey, mint: &Pubkey, date: u32, value: u64) -> Instruction {
@@ -816,4 +844,78 @@ pub fn ix_claim_launchlab(caller: &Pubkey, mint: &Pubkey) -> Instruction {
         }
         .to_account_metas(None),
     )
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// LAUNCHPAD-PATH §40 — pairs (winner takes the burn)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// The pair-result message (attest.rs canonical_pair_message) for (a, b) in any order.
+pub fn pair_message(a: &Pubkey, b: &Pubkey, date: u32, winner: &Pubkey, src: [u8; 32], proof: [u8; 32]) -> Vec<u8> {
+    let (lo, hi) = burn_receipts::state::pair_order(a, b);
+    burn_receipts::attest::canonical_pair_message(&burn_receipts::ID, &lo, &hi, date, winner, &src, &proof).into_bytes()
+}
+
+pub fn ix_submit_pair_result(payer: &Pubkey, a: &Pubkey, b: &Pubkey, date: u32, winner: Pubkey, src: [u8; 32], proof: [u8; 32]) -> Instruction {
+    let (lo, hi) = burn_receipts::state::pair_order(a, b);
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::SubmitPairResult { record_date: date, winner, source_url_hash: src, proof_hash: proof }.data(),
+        burn_receipts::accounts::SubmitPairResult {
+            payer: *payer,
+            config_lo: config_pda(&lo),
+            config_hi: config_pda(&hi),
+            link_lo: pair_link_pda(&lo),
+            link_hi: pair_link_pda(&hi),
+            pair_result: pair_result_pda(&lo, &hi, date),
+            instructions: solana_instructions_sysvar::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// submit_pair_result signed by `signers` (one shared message; each key counts for whichever coin's set holds it).
+pub fn submit_pair_result(env: &mut Env, a: &Pubkey, b: &Pubkey, date: u32, winner: Pubkey, signers: &[&Keypair]) -> TxResult {
+    let msg = pair_message(a, b, date, &winner, src_hash(), [0u8; 32]);
+    let entries: Vec<_> = signers.iter().map(|k| (k.pubkey(), sign(k, &msg))).collect();
+    let payer = env.payer.pubkey();
+    env.send(&[ed25519_shared(&entries, &msg), ix_submit_pair_result(&payer, a, b, date, winner, src_hash(), [0u8; 32])], &[])
+}
+
+pub fn ix_forward_to_winner(cranker: &Pubkey, loser: &Pubkey, winner: &Pubkey, date: u32) -> Instruction {
+    let (lf, wf) = (fee_pda(loser), fee_pda(winner));
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::ForwardToWinner { record_date: date }.data(),
+        burn_receipts::accounts::ForwardToWinner {
+            cranker: *cranker,
+            platform: platform_pda(),
+            loser_config: config_pda(loser),
+            loser_fee_vault: lf,
+            loser_fee_wsol: get_associated_token_address(&lf, &NATIVE_MINT),
+            loser_reading: reading_pda(&config_pda(loser), date),
+            winner_config: config_pda(winner),
+            winner_fee_vault: wf,
+            winner_fee_wsol: get_associated_token_address(&wf, &NATIVE_MINT),
+            winner_reading: reading_pda(&config_pda(winner), date),
+            pair_result: pair_result_pda(loser, winner, date),
+            token_program: anchor_spl::token::spl_token::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+            memo_program: MEMO_PROGRAM_ID,
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+pub fn pair_link(env: &Env, mint: &Pubkey) -> Option<burn_receipts::state::PairLink> {
+    use anchor_lang::AccountDeserialize;
+    env.svm.get_account(&pair_link_pda(mint)).filter(|a| !a.data.is_empty()).map(|a| burn_receipts::state::PairLink::try_deserialize(&mut a.data.as_slice()).unwrap())
+}
+
+pub fn pair_result(env: &Env, a: &Pubkey, b: &Pubkey, date: u32) -> Option<burn_receipts::state::PairResult> {
+    use anchor_lang::AccountDeserialize;
+    env.svm.get_account(&pair_result_pda(a, b, date)).filter(|x| !x.data.is_empty()).map(|x| burn_receipts::state::PairResult::try_deserialize(&mut x.data.as_slice()).unwrap())
 }
