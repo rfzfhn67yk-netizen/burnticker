@@ -14,7 +14,18 @@ export const ESPN_TABLE: Record<string, unknown> = {
   [scheduleUrl("nfl", "PHI", 2)]: F("espn/nfl.phi.schedule.json").body,
   [scoreboardUrl("nfl", "20261011")]: F("espn/nfl.scoreboard.20261011.json").body,
   [scoreboardUrl("nfl", "20261004")]: F("espn/nfl.scoreboard.20261004.json").body,
+  [scheduleUrl("nfl", "PHI", 2, 2026)]: F("espn/nfl.phi.schedule.json").body,
+  [scheduleUrl("mlb", "TB", 2)]: F("espn/mlb.tb.schedule.json").body,
+  [scheduleUrl("mlb", "TB", 3)]: F("espn/mlb.tb.schedule.post.json").body,
+  // the same 2026 bodies asked for by season year (a season window pins its year), and the 2025 season (TB missed the playoffs)
+  [scheduleUrl("mlb", "TB", 2, 2026)]: F("espn/mlb.tb.schedule.json").body,
+  [scheduleUrl("mlb", "TB", 3, 2026)]: F("espn/mlb.tb.schedule.post.json").body,
+  [scheduleUrl("mlb", "TB", 2, 2025)]: F("espn/mlb.30.schedule.2025.2.json").body,
+  [scheduleUrl("mlb", "TB", 3, 2025)]: F("espn/mlb.30.schedule.2025.3.json").body,
+  ...Object.fromEntries(["20261010", "20261011", "20261012"].map((d) => [scoreboardUrl("mlb", d), F(`espn/mlb.scoreboard.${d}.json`).body])),
 };
+/** Gamma: each league's championship search and the matching events (config/burnticker/fixtures/polymarket/championships.json). */
+export const CHAMPIONSHIPS = (fx("polymarket/championships.json") as { search: Record<string, unknown> }).search;
 export const TSDB = F("espn/tsdb.phi-lar.20261004.json");
 export function espnFixtureClient(extra: Record<string, unknown> = {}): EspnClient {
   const g = parseGames("nfl", F("espn/nfl.phi.schedule.json").body).find((x) => x.eventId === "401872970")!;

@@ -1,5 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { TEAM_ALIASES, type TeamAlias } from "@/lib/burnticker/oracle/events";
+import { describeRule } from "@/lib/burnticker/describe";
 
 /**
  * THE COIN CARD'S ONE-LINER (2026-10-10): the few words a launchpad card has room for — "burns when the Eagles lose" — derived from
@@ -31,6 +32,7 @@ export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, 
   const title = (seriesTitle ?? "").trim();
   const all = oneShotAllLiner(rule, title || rule.market || rule.series || "the event", endDate ?? rule.pair?.voidBy ?? null);
   if (all) return all;
+  if (rule.oracle === "catalogue" && rule.series && /^(espn|nws)\./.test(rule.series)) { try { return describeRule(rule, { ticker: "COIN" }).oneLiner; } catch { /* an unknown team or station: the generic line */ } }
   if (rule.oracle === "catalogue") return `burns on the ${title || rule.series} feed`;
   // Burn Derby (2026-10-10): the input is another coin's (or asset's) move — named as the rule's input, never this coin's.
   if (rule.oracle === "derby" && rule.derby) {

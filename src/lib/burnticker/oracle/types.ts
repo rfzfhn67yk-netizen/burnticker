@@ -30,6 +30,9 @@ export interface ResolvedSelector {
   refusals: string[];
   /** The settlement-source URL recorded with every reading (the series' first settlement source, else the venue's market URL). */
   settlementSourceUrl: string | null;
+  /** A first-party series with a window (ESPN team coins): where the window stands — open, ended, its end. The rules-core wind-down
+   *  (onEnd) reads `ended`; a perpetual window never ends. */
+  window?: { perpetual: boolean; ended: boolean; endsAt: string | null; reason: string; lastGame?: unknown };
 }
 
 export interface ImpliedChance { chance: number | null; marketTicker: string | null; closeTime: string | null; basis: string }

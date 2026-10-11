@@ -5,6 +5,7 @@ import { driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnt
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import type { CategoryDef, CoverageMatrix, DryRunSummary, SourceDescriptor } from "@/lib/burnticker/coverage/types";
 import { coverageMatrix } from "@/lib/burnticker/coverage/matrix";
+import { leagueCoverage, renderLeagueCoverage, type LeagueCoverage } from "@/lib/burnticker/coverage/leagues";
 import { crossReadsOf, describeCard, describeEntry, describeOnchain, primaryEligibility } from "@/lib/burnticker/coverage/sources";
 import { historicalDryRun } from "@/lib/burnticker/coverage/dryRun";
 
@@ -120,7 +121,7 @@ function dryCells(d: DryRunSummary | null): string[] {
 }
 
 /** docs/burnticker/SETTLEMENT-COVERAGE.md from the matrix (the same object GET /v1/coverage serves). Copy-lint clean by test. */
-export function renderCoverageMarkdown(m: CoverageMatrix): string {
+export function renderCoverageMarkdown(m: CoverageMatrix, leagues: readonly LeagueCoverage[] = leagueCoverage(loadSourceEntries())): string {
   const L: string[] = [];
   const asOf = m.generatedAt.slice(0, 10);
   L.push("# Burnticker — settlement coverage", "");
@@ -175,5 +176,6 @@ export function renderCoverageMarkdown(m: CoverageMatrix): string {
   L.push("- **Kalshi** is excluded as a primary, as a cross-read and as a venue, whatever any config file says: its Developer Agreement and Data Terms forbid settling products on its data or redistributing it.");
   for (const n of m.notes) L.push(`- ${n}`);
   L.push("");
+  L.push(...renderLeagueCoverage(leagues));
   return L.join("\n");
 }

@@ -246,17 +246,29 @@ export function pickTemplate(status: StatusJson, burns: readonly BurnJson[], now
 
 // ---- the platform token page's "Today" (tokenPage.ts) ----
 /** One Burnticker token's day line, from its own status.json + receipts.json. */
+/**
+ * The FIRST post of a coin (2026-10-10): its auto-generated description (describe.ts — lint-clean by construction) as the launch-day
+ * text, until the first reading lands; then the daily receipt posts take over.
+ */
+export function launchDayText(s: Pick<TokenStatusJson, "ticker"> & { profile?: { description: string; badge?: string } | null }): string | null {
+  const d = s.profile?.description?.trim();
+  return d ? `${d}\n${withTag(DISCLAIMER, s.profile?.badge)}` : null;
+}
+/** The footer line with the coin's window tag ("… not what price does · 2026 SEASON"): every token post carries its window. */
+export const withTag = (footer: string, tag: string | null | undefined): string => (tag ? `${footer} · ${tag}` : footer);
+
 export function tokenDayText(s: TokenStatusJson, receipts: readonly ReceiptJson[], day: string): string {
+  if (!receipts.length) { const first = launchDayText(s); if (first) return first; }
   const todays = receipts.filter((r) => onDay(r, day));
   const confirmed = todays.filter((r) => r.status === "confirmed" && Number(r.burned ?? 0) > 0);
   if (confirmed.length) {
     const r = confirmed[confirmed.length - 1];
     const n = receipts.findIndex((x) => x.eventId === r.eventId && x.settledAt === r.settledAt) + 1;
-    return `Receipt #${n} · ${day}\n${s.seriesTitle ?? s.selectorKey}: ${r.value ?? r.result ?? r.eventId}${r.prevValue !== null ? ` (previous ${r.prevValue})` : ""}\n${plural(r.units, "unit")} → ${fmtInt(r.burned)} $${s.ticker} bought back and burned${r.spent ? ` (${fmtSol(r.spent)})` : ""}\nSupply now ${fmtInt(s.supply.current)}\n${r.txUrl ? `Receipt: ${r.txUrl}\n` : ""}${DISCLAIMER}`;
+    return `Receipt #${n} · ${day}\n${s.seriesTitle ?? s.selectorKey}: ${r.value ?? r.result ?? r.eventId}${r.prevValue !== null ? ` (previous ${r.prevValue})` : ""}\n${plural(r.units, "unit")} → ${fmtInt(r.burned)} $${s.ticker} bought back and burned${r.spent ? ` (${fmtSol(r.spent)})` : ""}\nSupply now ${fmtInt(s.supply.current)}\n${r.txUrl ? `Receipt: ${r.txUrl}\n` : ""}${withTag(DISCLAIMER, s.profile?.badge)}`;
   }
   const last = [...receipts].reverse().find((r) => r.status === "confirmed" && Number(r.burned ?? 0) > 0) ?? null;
   const why = todays.length ? `The ${plural(todays.length, "reading")} for today counted ${todays.reduce((a, r) => a + r.units, 0)} unit(s): ${todays.map((r) => r.status === "skipped" ? `nothing bought (${r.skippedReason ?? "under the floor"})` : r.status).join(", ")}.` : s.next.nextCheckAt ? `No settled reading for today yet; the next check is ${s.next.nextCheckAt.slice(0, 16).replace("T", " ")}Z.` : `No settled reading for today.`;
-  return `No burn today, ${day}\n${why}\n${last ? `Last receipt: ${last.eventId} · ${plural(last.units, "unit")} → ${fmtInt(last.burned)} $${s.ticker} burned` : "No receipt yet."}\nSupply ${fmtInt(s.supply.current)}\n${DISCLAIMER}`;
+  return `No burn today, ${day}\n${why}\n${last ? `Last receipt: ${last.eventId} · ${plural(last.units, "unit")} → ${fmtInt(last.burned)} $${s.ticker} burned` : "No receipt yet."}\nSupply ${fmtInt(s.supply.current)}\n${withTag(DISCLAIMER, s.profile?.badge)}`;
 }
 
 // ---- the rivalry pair (the pair page's share line and the @burnticker post) ----
@@ -281,7 +293,7 @@ export function pairStateLine(t: Pick<PairTally, "a" | "b" | "clause">): string 
   return `Waiting on ${who} (both or neither: settlements wait as pending; the pair voids if ${c.voidBy} ends without both)`;
 }
 
-export function pairDailyText(t: PairTally, site?: string | null): string {
+export function pairDailyText(t: PairTally, site?: string | null, tag?: string | null): string {
   const A = `$${t.a.ticker}`, B = `$${t.b.ticker}`;
   const ls = t.lastSettlement;
   const outcome = ls ? (ls.result ?? ls.value ?? "—").toUpperCase() : "";
@@ -296,7 +308,7 @@ export function pairDailyText(t: PairTally, site?: string | null): string {
     last,
     t.next.market ? `Next market: ${t.next.market}${t.next.closeTime ? ` (closes ${t.next.closeTime.slice(0, 16).replace("T", " ")}Z)` : ""}` : null,
     `Scoreboard: ${siteOf(site)}/p/${t.pairId}/`,
-    PAIR_DISCLAIMER,
+    withTag(PAIR_DISCLAIMER, tag),
   ].filter((x): x is string => x !== null).join("\n");
 }
 

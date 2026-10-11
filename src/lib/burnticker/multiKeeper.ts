@@ -1,4 +1,5 @@
 import { backoffMs } from "@/lib/burnKeeper/schedule";
+import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { formatDate, utcDate } from "@/lib/burnReceipts/math";
 import { WAIT_REASONS, WAIT_RETRY_MS, type ProgramConfigView, type ProgramPort, type ProgramReadingView } from "@/lib/burnKeeper/programChain";
@@ -77,6 +78,27 @@ const carryFor = (rule: BurnRule): CarryPolicy => (rule.oracle === "catalogue" &
 /** A selector's read cadence: the feed's pollEverySec, or the market poll (5 min; Kalshi and Polymarket alike). Exported for the ops alerts (a stall = 2× this with no fetch). */
 export const pollMsFor = (d: Pick<KeeperDeps, "kalshiPollMs">, rule: BurnRule): number => (rule.oracle === "catalogue" && rule.series ? (feedById(rule.series)?.pollEverySec ?? nativeSourceById(rule.series)?.pollEverySec ?? 3600) * 1000 : d.kalshiPollMs ?? 5 * 60_000);
 
+/**
+ * A WINDOWED SERIES THAT ENDED (an ESPN team coin's season, postseason or next-N games; sources/espn.ts windowStatus): the source says so
+ * in `window`, and every live coin on that selector gets its rule end recorded once (registry.markRuleEnded, mode winddown) — the
+ * wind-down starts the day after (detectRuleEnd / the end receipts). A perpetual window never ends; a rule made before the onEnd clause
+ * has no wind-down and is left alone. Returns the mints marked.
+ */
+export function recordWindowEnd(d: Pick<KeeperDeps, "registry" | "dryRun" | "log">, tokens: readonly TokenRow[], r: Pick<ResolvedSelector, "window">): string[] {
+  const w = r.window;
+  if (!w || w.perpetual || !w.ended || !w.endsAt) return [];
+  const at = Date.parse(w.endsAt);
+  const out: string[] = [];
+  for (const t of tokens) {
+    if (t.status !== "live" || d.registry.ruleEnd(t.mint)) continue;
+    if (!d.registry.lockedRule(t).rule.onEnd) continue;
+    if (!d.dryRun) d.registry.markRuleEnded(t.mint, "winddown", `the coin's window ended: ${w.reason}`, Number.isFinite(at) ? at : Date.now());
+    d.log(`  [end] $${t.ticker}: the window ended (${w.reason}) — the pool winds down from the next day`);
+    out.push(t.mint);
+  }
+  return out;
+}
+
 /** Readings for the live tokens' keys, each key once per schedule. */
 export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Promise<FetchReport[]> {
   const now = d.now();
@@ -97,6 +119,7 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       if (isKalshi && d.kalshiEnabled === false) d.log(`  [warn] ${key}: Kalshi read for $${t.ticker}, a coin registered with a Kalshi rule — BURNTICKER_KALSHI_ENABLED is off, so only already-registered Kalshi coins are read`);
       const r = await oracleFor(d, key).settledSince(rule, sinceKey);
       const written = d.registry.putReadings(locked.rule.oracle, key, r.events, { settlementSourceUrl: r.settlementSourceUrl, attestedBy: [d.attester] }, now);
+      recordWindowEnd(d, tokens.filter((x) => x.selectorKey === key), r);
       d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: now + pollMsFor(d, locked.rule) });
       if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new reading(s)${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });

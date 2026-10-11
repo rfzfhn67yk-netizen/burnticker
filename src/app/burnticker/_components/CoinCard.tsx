@@ -15,6 +15,8 @@ export interface CoinCardData {
   ticker: string; name: string; imageUrl: string | null; oneLiner: string; oracle: string; status: string;
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null;
   burns: number; lastBurnAt: string | null; nextAt: string | null; launchedAt: string | null; pairId?: string | null;
+  /** The window badge (describe.ts windowBadge): "2026 SEASON", "PERPETUAL", "ONE-SHOT · Oct 31, 2026". */
+  badge?: string | null;
   /** Why the curve shows "—" (hover text). */
   curveNote?: string;
 }
@@ -55,9 +57,12 @@ export function ReceiptThumb({ ticker, size = 88 }: { ticker: string; size?: num
   );
 }
 
-export function CoinThumb({ src, ticker, size = 88 }: { src: string | null; ticker: string; size?: number }) {
+export function CoinThumb({ src, ticker, size = 88, generated = false }: { src: string | null; ticker: string; size?: number; generated?: boolean }) {
   const [broken, setBroken] = useState(false);
-  if (!src || broken || !/^https:\/\//.test(src)) return <ReceiptThumb ticker={ticker} size={size} />;
+  // no image of its own: the coin's generated image (coinArt.ts, GET /burnticker/img/<TICKER>.png) when it is registered; else the receipt
+  const url = src && /^https:\/\//.test(src) ? src : generated && /^[A-Z0-9]{2,10}$/.test(ticker) ? `/burnticker/img/${ticker}.svg` : src && /^\/burnticker\/img\//.test(src) ? src : null;
+  if (!url || broken) return <ReceiptThumb ticker={ticker} size={size} />;
+  src = url;
   // eslint-disable-next-line @next/next/no-img-element -- creator images are arbitrary https URLs; no optimiser, no referrer
   return <img src={src} alt="" width={size} height={size} loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="shrink-0 rounded-md object-cover bg-neutral-900" style={{ width: size, height: size }} />;
 }
@@ -89,17 +94,19 @@ export function CoinCard({ c, href, now }: { c: CoinCardData; href: string | nul
   const body = (
     <article className="bt-coin-card">
       <div className="flex gap-3">
-        <CoinThumb src={c.imageUrl} ticker={c.ticker} />
+        <CoinThumb src={c.imageUrl} ticker={c.ticker} generated={!!href} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <VenueChip oracle={c.oracle} />
             {c.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}
             {c.status === "draft" && <span className="bt-chip bt-chip-draft" title="registered, not launched: nothing trades yet">draft</span>}
             {c.pairId && <span className="bt-chip">pair</span>}
+            {c.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{c.badge}</span>}
             <span className="ml-auto text-[11px] text-neutral-500" title={c.launchedAt ?? "not launched"}>{c.launchedAt ? ago(c.launchedAt, t) : "not launched"}</span>
           </div>
           <h3 className="mt-1 truncate text-base font-semibold leading-tight">{c.name || "Coin name"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>
           <p className="mt-0.5 line-clamp-2 text-sm text-neutral-300">{c.oneLiner}</p>
+          <p className="mt-0.5 text-[10px] leading-tight text-neutral-500">Not affiliated with any team, league, candidate, agency or market.</p>
         </div>
       </div>
       <div className="mt-3"><CurveBar c={c} compact /></div>

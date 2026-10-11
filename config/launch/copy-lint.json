@@ -4,76 +4,379 @@
   "maxChars": 280,
   "linkCountsAs": 23,
   "categories": {
-    "price-returns": { "ref": "x-burnticker-profile.md § Voice rules: 'Nothing about price, ever'; SPEC §9.2", "why": "a report says what supply did; it never says what price did or does" },
-    "promises": { "ref": "x-burnticker-profile.md § Voice rules: no promises; x-threads.md header", "why": "the rule is the only promise; everything else is a report of what already happened" },
-    "calls-to-buy": { "ref": "x-burnticker-profile.md § Voice rules: 'Never a call to buy'", "why": "trade links live on the pages, not in posts" },
-    "urgency": { "ref": "x-burnticker-profile.md § Voice rules: no countdowns to a listing, no urgency", "why": "urgency is a sales device; receipts have no deadline" },
-    "hype-punctuation": { "ref": "docs/launch/daily-post.md § Lint", "why": "three exclamation marks or a rocket is a promise in costume" },
-    "no-prizes": { "ref": "x-burnticker-profile.md § Voice rules: 'Nothing is ever won — things are only burned' (owner, 2026-10-10)", "why": "a burn is a receipt, not a prize; a season is a scoreboard of burns, a champion is a stat; nobody is paid on any result" }
+    "price-returns": {
+      "ref": "x-burnticker-profile.md § Voice rules: 'Nothing about price, ever'; SPEC §9.2",
+      "why": "a report says what supply did; it never says what price did or does"
+    },
+    "promises": {
+      "ref": "x-burnticker-profile.md § Voice rules: no promises; x-threads.md header",
+      "why": "the rule is the only promise; everything else is a report of what already happened"
+    },
+    "calls-to-buy": {
+      "ref": "x-burnticker-profile.md § Voice rules: 'Never a call to buy'",
+      "why": "trade links live on the pages, not in posts"
+    },
+    "urgency": {
+      "ref": "x-burnticker-profile.md § Voice rules: no countdowns to a listing, no urgency",
+      "why": "urgency is a sales device; receipts have no deadline"
+    },
+    "hype-punctuation": {
+      "ref": "docs/launch/daily-post.md § Lint",
+      "why": "three exclamation marks or a rocket is a promise in costume"
+    },
+    "no-prizes": {
+      "ref": "x-burnticker-profile.md § Voice rules: 'Nothing is ever won — things are only burned' (owner, 2026-10-10)",
+      "why": "a burn is a receipt, not a prize; a season is a scoreboard of burns, a champion is a stat; nobody is paid on any result"
+    },
+    "no-affiliation": {
+      "ref": "owner decision 2026-10-10 (anti-misrepresentation): a coin never claims a tie to anyone",
+      "why": "a creator's name, ticker or note must not suggest an official tie, an endorsement, a partnership or a guarantee by a team, league, candidate, agency or market",
+      "scope": "creator"
+    }
   },
   "rules": [
-    { "id": "price", "category": "price-returns", "pattern": "\\bprices?\\b", "note": "the token's price in any form; the disclaimer sentence is allowed (see allowed)" },
-    { "id": "pump", "category": "price-returns", "pattern": "\\bpump(s|ed|ing)?\\b", "note": "pump.fun as a venue name is allowed (see allowed)" },
-    { "id": "moon", "category": "price-returns", "pattern": "\\bmoon(s|ed|ing|shot)?\\b" },
-    { "id": "multiplier", "category": "price-returns", "pattern": "\\b[1-9]\\d{0,4}x\\b", "note": "10x, 100x, 1000x; hex addresses (0x…) do not match" },
-    { "id": "ath", "category": "price-returns", "pattern": "\\b(ath|all[- ]time[- ]high)\\b" },
-    { "id": "undervalued", "category": "price-returns", "pattern": "\\b(under|over)valued\\b" },
-    { "id": "cheap", "category": "price-returns", "pattern": "\\bcheap(er|est)?\\b" },
-    { "id": "floor", "category": "price-returns", "pattern": "\\bfloor\\b", "note": "a price floor; the rule's $1 spend floor and the floor() function are allowed (see allowed)" },
-    { "id": "target", "category": "price-returns", "pattern": "\\btargets?\\b" },
-    { "id": "bull-bear", "category": "price-returns", "pattern": "\\b(bullish|bearish|bull run|bear market)\\b" },
-    { "id": "accumulate", "category": "price-returns", "pattern": "\\baccumulat(e|ing|ion)\\b" },
-    { "id": "gem", "category": "price-returns", "pattern": "\\bgems?\\b" },
-    { "id": "early", "category": "price-returns", "pattern": "\\bearly\\b", "note": "'you're early' is a return pitch" },
-    { "id": "send-it", "category": "price-returns", "pattern": "\\bsend it\\b" },
-    { "id": "lfg", "category": "price-returns", "pattern": "\\b(lfg|wagmi|ngmi|wen)\\b" },
-    { "id": "next-big", "category": "price-returns", "pattern": "\\bnext (big|100x|pepe|doge|bonk)\\b" },
-    { "id": "profit", "category": "price-returns", "pattern": "\\b(profits?|gains?|returns?|roi|apy|apr|yield)\\b" },
-    { "id": "will-go", "category": "price-returns", "pattern": "\\b(will|gonna|going to|about to|set to) (go|hit|reach|rip|run|fly|print|explode|take off|break)\\b" },
-    { "id": "to-the", "category": "price-returns", "pattern": "\\bto the (moon|stars|sky|sun|top|mars|roof)\\b", "note": "narrow on purpose: 'Debt to the Penny' is data" },
-    { "id": "market-cap", "category": "price-returns", "pattern": "\\b(market ?cap|mcap|fdv|valuation)\\b", "note": "a price in disguise" },
-    { "id": "chart", "category": "price-returns", "pattern": "\\b(green candles?|red candles?|chart is|charts? look)\\b" },
-    { "id": "will", "category": "promises", "pattern": "\\bwill\\b", "note": "the only future tense allowed is the rule's own ('on each day with units the keeper spends…'); write what the rule does, not what will happen" },
-    { "id": "soon", "category": "promises", "pattern": "\\b(soon|shortly|coming|upcoming|stay tuned|big things|announcement)\\b" },
-    { "id": "guarantee", "category": "promises", "pattern": "\\bguarantee[ds]?\\b" },
-    { "id": "always", "category": "promises", "pattern": "\\b(always|never fails?|can'?t lose|risk[- ]free|safe bet)\\b" },
-    { "id": "buy-now", "category": "calls-to-buy", "pattern": "\\b(buy|ape|grab|load up|get in|get some|fill your bags?|bag)( now| in| before| the dip| this| it| some| early)?\\b(?! ?back)", "note": "'bought back' and 'buyback' are mechanics; 'buy' as a verb aimed at the reader is a call" },
-    { "id": "dont-miss", "category": "urgency", "pattern": "\\b(don'?t miss|last chance|hurry|act now|before it'?s too late|limited time|only \\d+ (left|spots?))\\b" },
-    { "id": "countdown", "category": "urgency", "pattern": "\\b(countdown|t-minus|\\d+ ?(h|hrs?|hours?|m|mins?|minutes?|d|days?) (left|to go|until|till)|launching in)\\b" },
-    { "id": "exclamation", "category": "hype-punctuation", "pattern": "(?:![^!\\n]*){3}", "note": "three or more exclamation marks on one line, together or apart" },
-    { "id": "emoji", "category": "hype-punctuation", "pattern": "[\\u{1F680}\\u{1F525}\\u{1F319}\\u{1F315}\\u{1F31D}\\u{1F4B0}\\u{1F4B8}\\u{1F4C8}\\u{1F48E}\\u{1F4AF}\\u{1F911}\\u{1F440}]", "note": "rocket, fire, moons, money bag, flying money, chart up, gem, 100, money face, eyes; the thread emoji 🧵 is fine" },
-    { "id": "prize", "category": "no-prizes", "pattern": "\\bprizes?\\b" },
-    { "id": "payout", "category": "no-prizes", "pattern": "\\bpay-?outs?\\b", "note": "Polymarket's settlement is named only as 'on-chain payout' / 'payout vector' (see allowed)" },
-    { "id": "jackpot", "category": "no-prizes", "pattern": "\\bjackpots?\\b" },
-    { "id": "winnings", "category": "no-prizes", "pattern": "\\bwinnings\\b" },
-    { "id": "pot", "category": "no-prizes", "pattern": "\\bpots?\\b", "note": "a season has no pot; 'honeypot' and 'spot' do not match" },
-    { "id": "reward", "category": "no-prizes", "pattern": "\\breward(s|ed|ing)?\\b" },
-    { "id": "stake", "category": "no-prizes", "pattern": "\\b(stak(e|es|ed|ing)|stakers?)\\b" },
-    { "id": "bet", "category": "no-prizes", "pattern": "\\b(bet|bets|betting|bettors?)\\b", "note": "'between' and 'better' do not match; the drift-bet parser name is allowed" },
-    { "id": "wager", "category": "no-prizes", "pattern": "\\bwager(s|ed|ing)?\\b" },
-    { "id": "odds", "category": "no-prizes", "pattern": "\\bodds\\b", "note": "saying we never show odds is allowed (see allowed)" },
-    { "id": "win-money", "category": "no-prizes", "pattern": "\\b(win|wins|winning|won) (money|cash|sol|usdc|crypto|big|something|it all)\\b", "note": "'burn when we win' is a result, not money" },
-    { "id": "get-paid", "category": "no-prizes", "pattern": "\\b(get|gets|getting|got) paid\\b" },
-    { "id": "holders-earn", "category": "no-prizes", "pattern": "\\b((holders?|you|your wallet|everyone|anyone|winners?|fans?|investors?)( can| could| also| all)? earns?|earn(s|ing)? (yield|interest|money|cash|sol|usdc|passive|rewards?|a share|income)|passive income)\\b", "note": "earning, said of holders; 'creators earn nothing' is a fact about the creator and passes" }
+    {
+      "id": "price",
+      "category": "price-returns",
+      "pattern": "\\bprices?\\b",
+      "note": "the token's price in any form; the disclaimer sentence is allowed (see allowed)"
+    },
+    {
+      "id": "pump",
+      "category": "price-returns",
+      "pattern": "\\bpump(s|ed|ing)?\\b",
+      "note": "pump.fun as a venue name is allowed (see allowed)"
+    },
+    {
+      "id": "moon",
+      "category": "price-returns",
+      "pattern": "\\bmoon(s|ed|ing|shot)?\\b"
+    },
+    {
+      "id": "multiplier",
+      "category": "price-returns",
+      "pattern": "\\b[1-9]\\d{0,4}x\\b",
+      "note": "10x, 100x, 1000x; hex addresses (0x…) do not match"
+    },
+    {
+      "id": "ath",
+      "category": "price-returns",
+      "pattern": "\\b(ath|all[- ]time[- ]high)\\b"
+    },
+    {
+      "id": "undervalued",
+      "category": "price-returns",
+      "pattern": "\\b(under|over)valued\\b"
+    },
+    {
+      "id": "cheap",
+      "category": "price-returns",
+      "pattern": "\\bcheap(er|est)?\\b"
+    },
+    {
+      "id": "floor",
+      "category": "price-returns",
+      "pattern": "\\bfloor\\b",
+      "note": "a price floor; the rule's $1 spend floor and the floor() function are allowed (see allowed)"
+    },
+    {
+      "id": "target",
+      "category": "price-returns",
+      "pattern": "\\btargets?\\b"
+    },
+    {
+      "id": "bull-bear",
+      "category": "price-returns",
+      "pattern": "\\b(bullish|bearish|bull run|bear market)\\b"
+    },
+    {
+      "id": "accumulate",
+      "category": "price-returns",
+      "pattern": "\\baccumulat(e|ing|ion)\\b"
+    },
+    {
+      "id": "gem",
+      "category": "price-returns",
+      "pattern": "\\bgems?\\b"
+    },
+    {
+      "id": "early",
+      "category": "price-returns",
+      "pattern": "\\bearly\\b",
+      "note": "'you're early' is a return pitch"
+    },
+    {
+      "id": "send-it",
+      "category": "price-returns",
+      "pattern": "\\bsend it\\b"
+    },
+    {
+      "id": "lfg",
+      "category": "price-returns",
+      "pattern": "\\b(lfg|wagmi|ngmi|wen)\\b"
+    },
+    {
+      "id": "next-big",
+      "category": "price-returns",
+      "pattern": "\\bnext (big|100x|pepe|doge|bonk)\\b"
+    },
+    {
+      "id": "profit",
+      "category": "price-returns",
+      "pattern": "\\b(profits?|gains?|returns?|roi|apy|apr|yield)\\b"
+    },
+    {
+      "id": "will-go",
+      "category": "price-returns",
+      "pattern": "\\b(will|gonna|going to|about to|set to) (go|hit|reach|rip|run|fly|print|explode|take off|break)\\b"
+    },
+    {
+      "id": "to-the",
+      "category": "price-returns",
+      "pattern": "\\bto the (moon|stars|sky|sun|top|mars|roof)\\b",
+      "note": "narrow on purpose: 'Debt to the Penny' is data"
+    },
+    {
+      "id": "market-cap",
+      "category": "price-returns",
+      "pattern": "\\b(market ?cap|mcap|fdv|valuation)\\b",
+      "note": "a price in disguise"
+    },
+    {
+      "id": "chart",
+      "category": "price-returns",
+      "pattern": "\\b(green candles?|red candles?|chart is|charts? look)\\b"
+    },
+    {
+      "id": "will",
+      "category": "promises",
+      "pattern": "\\bwill\\b",
+      "note": "the only future tense allowed is the rule's own ('on each day with units the keeper spends…'); write what the rule does, not what will happen"
+    },
+    {
+      "id": "soon",
+      "category": "promises",
+      "pattern": "\\b(soon|shortly|coming|upcoming|stay tuned|big things|announcement)\\b"
+    },
+    {
+      "id": "guarantee",
+      "category": "promises",
+      "pattern": "\\bguarantee[ds]?\\b"
+    },
+    {
+      "id": "always",
+      "category": "promises",
+      "pattern": "\\b(always|never fails?|can'?t lose|risk[- ]free|safe bet)\\b"
+    },
+    {
+      "id": "buy-now",
+      "category": "calls-to-buy",
+      "pattern": "\\b(buy|ape|grab|load up|get in|get some|fill your bags?|bag)( now| in| before| the dip| this| it| some| early)?\\b(?! ?back)",
+      "note": "'bought back' and 'buyback' are mechanics; 'buy' as a verb aimed at the reader is a call"
+    },
+    {
+      "id": "dont-miss",
+      "category": "urgency",
+      "pattern": "\\b(don'?t miss|last chance|hurry|act now|before it'?s too late|limited time|only \\d+ (left|spots?))\\b"
+    },
+    {
+      "id": "countdown",
+      "category": "urgency",
+      "pattern": "\\b(countdown|t-minus|\\d+ ?(h|hrs?|hours?|m|mins?|minutes?|d|days?) (left|to go|until|till)|launching in)\\b"
+    },
+    {
+      "id": "exclamation",
+      "category": "hype-punctuation",
+      "pattern": "(?:![^!\\n]*){3}",
+      "note": "three or more exclamation marks on one line, together or apart"
+    },
+    {
+      "id": "emoji",
+      "category": "hype-punctuation",
+      "pattern": "[\\u{1F680}\\u{1F525}\\u{1F319}\\u{1F315}\\u{1F31D}\\u{1F4B0}\\u{1F4B8}\\u{1F4C8}\\u{1F48E}\\u{1F4AF}\\u{1F911}\\u{1F440}]",
+      "note": "rocket, fire, moons, money bag, flying money, chart up, gem, 100, money face, eyes; the thread emoji 🧵 is fine"
+    },
+    {
+      "id": "prize",
+      "category": "no-prizes",
+      "pattern": "\\bprizes?\\b"
+    },
+    {
+      "id": "payout",
+      "category": "no-prizes",
+      "pattern": "\\bpay-?outs?\\b",
+      "note": "Polymarket's settlement is named only as 'on-chain payout' / 'payout vector' (see allowed)"
+    },
+    {
+      "id": "jackpot",
+      "category": "no-prizes",
+      "pattern": "\\bjackpots?\\b"
+    },
+    {
+      "id": "winnings",
+      "category": "no-prizes",
+      "pattern": "\\bwinnings\\b"
+    },
+    {
+      "id": "pot",
+      "category": "no-prizes",
+      "pattern": "\\bpots?\\b",
+      "note": "a season has no pot; 'honeypot' and 'spot' do not match"
+    },
+    {
+      "id": "reward",
+      "category": "no-prizes",
+      "pattern": "\\breward(s|ed|ing)?\\b"
+    },
+    {
+      "id": "stake",
+      "category": "no-prizes",
+      "pattern": "\\b(stak(e|es|ed|ing)|stakers?)\\b"
+    },
+    {
+      "id": "bet",
+      "category": "no-prizes",
+      "pattern": "\\b(bet|bets|betting|bettors?)\\b",
+      "note": "'between' and 'better' do not match; the drift-bet parser name is allowed"
+    },
+    {
+      "id": "wager",
+      "category": "no-prizes",
+      "pattern": "\\bwager(s|ed|ing)?\\b"
+    },
+    {
+      "id": "odds",
+      "category": "no-prizes",
+      "pattern": "\\bodds\\b",
+      "note": "saying we never show odds is allowed (see allowed)"
+    },
+    {
+      "id": "win-money",
+      "category": "no-prizes",
+      "pattern": "\\b(win|wins|winning|won) (money|cash|sol|usdc|crypto|big|something|it all)\\b",
+      "note": "'burn when we win' is a result, not money"
+    },
+    {
+      "id": "get-paid",
+      "category": "no-prizes",
+      "pattern": "\\b(get|gets|getting|got) paid\\b"
+    },
+    {
+      "id": "holders-earn",
+      "category": "no-prizes",
+      "pattern": "\\b((holders?|you|your wallet|everyone|anyone|winners?|fans?|investors?)( can| could| also| all)? earns?|earn(s|ing)? (yield|interest|money|cash|sol|usdc|passive|rewards?|a share|income)|passive income)\\b",
+      "note": "earning, said of holders; 'creators earn nothing' is a fact about the creator and passes"
+    },
+    {
+      "id": "affiliation",
+      "category": "no-affiliation",
+      "scope": "creator",
+      "pattern": "\\b(official(ly)?|endorsed|endorses|endorsement|partner(s|ed|ship)?|affiliated|affiliate|backed|guaranteed|insured|audited|verified|licensed|sponsored|sponsor)\\b",
+      "note": "creator-supplied text only (name, ticker, creator's note): the platform's own copy may say \"MLB's official results\" about a settlement source"
+    },
+    {
+      "id": "link",
+      "category": "no-affiliation",
+      "scope": "creator",
+      "pattern": "(https?://|www\\.|\\b[a-z0-9-]+\\.(com|io|xyz|fun|net|org|gg|app|co|tv)\\b|t\\.me/|@[A-Za-z0-9_]{3,})",
+      "note": "no links or handles in a creator's note, name or ticker"
+    }
   ],
   "allowed": [
-    { "id": "disclaimer", "pattern": "the rule says what supply does, not what price does", "note": "the fixed memecoin disclaimer" },
-    { "id": "disclaimer-short", "pattern": "supply, not price", "note": "the short disclaimer the T-templates carry" },
-    { "id": "not-price", "pattern": "\\b(not|never|nor)( what)?( a| the| its| the token'?s)? prices?( does)?\\b", "note": "saying what we do not do" },
-    { "id": "price-not-up", "pattern": "burning supply does not make a price go up", "note": "the site's disclaimer sentence" },
-    { "id": "says-it-will", "pattern": "nobody here says it will", "note": "the site's disclaimer sentence" },
-    { "id": "debt-to-the-penny", "pattern": "debt to the penny", "note": "Treasury's dataset name" },
-    { "id": "spend-floor", "pattern": "(\\$1(\\.00)? (spend )?floor|under the (\\$1 )?floor|spend floor|floor\\()", "note": "the rule's $1 spend floor and the floor() function" },
-    { "id": "pump-fun", "pattern": "pump\\.fun|pump-fun|pumpswap", "note": "venue names are facts" },
-    { "id": "dollar-figures", "pattern": "[-+−]?\\$[\\d,]+(\\.\\d+)?\\s?[KMBT]?\\b", "note": "debt figures and SOL/USD amounts are data" },
-    { "id": "buyback", "pattern": "\\b(buy ?backs?|bought back|buys? (it|itself) back|buy(s|ing)? \\$?[A-Za-z]{2,12} at market)\\b", "note": "the mechanic, not a call" },
-    { "id": "treasury-posts", "pattern": "treasury (posts|publishes)", "note": "a statement of Treasury's schedule, not a promise" },
-    { "id": "on-chain-payout", "pattern": "\\b(on-chain payouts?( vectors?)?|payout vectors?|payouts? (is |are )?on (chain|polygon)|50-50 payouts?|payoutNumerators|payoutDenominator)\\b", "note": "Polymarket's adjudicated settlement on Polygon, named the one way the owner allows" },
-    { "id": "no-prize", "pattern": "\\b(no|not|never|nor|without|nothing is)( an?| the| any| its| a market'?s| a)? (prizes?|pay-?outs?|jackpots?|pots?|rewards?|stakes?|staking|bets?|betting|wagers?|odds|winnings)\\b", "note": "saying what does not exist" },
-    { "id": "month-day", "pattern": "\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \\d{1,2}\\b", "note": "a scoreboard date ('Apr 20', 'Oct 3 – 9'); the APR rule must not read the month" },
-    { "id": "no-team-buy", "pattern": "\\bno team buys?\\b", "note": "the guardrail: the team never buys at launch (team allocation 0%)" },
-    { "id": "drift-bet", "pattern": "\\bdrift[- ]bet\\b", "note": "a venue/parser name in the rules schema (Drift BET)" },
-    { "id": "derby-input", "pattern": "(?<![$\\w])[A-Z0-9]{1,12} out-gains (?!\\$)[A-Z0-9]{1,12}( by market cap)?\\b", "note": "Burn Derby (2026-10-10): ANOTHER coin's move named as the rule's input ('WIF out-gains SHIB'); a $TICKER (our coins) never matches, so talk about our own coins still fails" },
-    { "id": "derby-flip", "pattern": "(?<![$\\w])[A-Z0-9]{1,12}'s market cap (never )?passes (?!\\$)[A-Z0-9]{1,12}'s", "note": "Burn Derby's one-shot flippening input ('WIF's market cap passes SHIB's'); never a $TICKER" }
+    {
+      "id": "disclaimer",
+      "pattern": "the rule says what supply does, not what price does",
+      "note": "the fixed memecoin disclaimer"
+    },
+    {
+      "id": "disclaimer-short",
+      "pattern": "supply, not price",
+      "note": "the short disclaimer the T-templates carry"
+    },
+    {
+      "id": "not-price",
+      "pattern": "\\b(not|never|nor)( what)?( a| the| its| the token'?s)? prices?( does)?\\b",
+      "note": "saying what we do not do"
+    },
+    {
+      "id": "price-not-up",
+      "pattern": "burning supply does not make a price go up",
+      "note": "the site's disclaimer sentence"
+    },
+    {
+      "id": "says-it-will",
+      "pattern": "nobody here says it will",
+      "note": "the site's disclaimer sentence"
+    },
+    {
+      "id": "debt-to-the-penny",
+      "pattern": "debt to the penny",
+      "note": "Treasury's dataset name"
+    },
+    {
+      "id": "spend-floor",
+      "pattern": "(\\$1(\\.00)? (spend )?floor|under the (\\$1 )?floor|spend floor|floor\\()",
+      "note": "the rule's $1 spend floor and the floor() function"
+    },
+    {
+      "id": "pump-fun",
+      "pattern": "pump\\.fun|pump-fun|pumpswap",
+      "note": "venue names are facts"
+    },
+    {
+      "id": "dollar-figures",
+      "pattern": "[-+−]?\\$[\\d,]+(\\.\\d+)?\\s?[KMBT]?\\b",
+      "note": "debt figures and SOL/USD amounts are data"
+    },
+    {
+      "id": "buyback",
+      "pattern": "\\b(buy ?backs?|bought back|buys? (it|itself) back|buy(s|ing)? \\$?[A-Za-z]{2,12} at market)\\b",
+      "note": "the mechanic, not a call"
+    },
+    {
+      "id": "treasury-posts",
+      "pattern": "treasury (posts|publishes)",
+      "note": "a statement of Treasury's schedule, not a promise"
+    },
+    {
+      "id": "on-chain-payout",
+      "pattern": "\\b(on-chain payouts?( vectors?)?|payout vectors?|payouts? (is |are )?on (chain|polygon)|50-50 payouts?|payoutNumerators|payoutDenominator)\\b",
+      "note": "Polymarket's adjudicated settlement on Polygon, named the one way the owner allows"
+    },
+    {
+      "id": "no-prize",
+      "pattern": "\\b(no|not|never|nor|without|nothing is)( an?| the| any| its| a market'?s| a)? (prizes?|pay-?outs?|jackpots?|pots?|rewards?|stakes?|staking|bets?|betting|wagers?|odds|winnings)\\b",
+      "note": "saying what does not exist"
+    },
+    {
+      "id": "month-day",
+      "pattern": "\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \\d{1,2}\\b",
+      "note": "a scoreboard date ('Apr 20', 'Oct 3 – 9'); the APR rule must not read the month"
+    },
+    {
+      "id": "no-team-buy",
+      "pattern": "\\bno team buys?\\b",
+      "note": "the guardrail: the team never buys at launch (team allocation 0%)"
+    },
+    {
+      "id": "drift-bet",
+      "pattern": "\\bdrift[- ]bet\\b",
+      "note": "a venue/parser name in the rules schema (Drift BET)"
+    },
+    {
+      "id": "derby-input",
+      "pattern": "(?<![$\\w])[A-Z0-9]{1,12} out-gains (?!\\$)[A-Z0-9]{1,12}( by market cap)?\\b",
+      "note": "Burn Derby (2026-10-10): ANOTHER coin's move named as the rule's input ('WIF out-gains SHIB'); a $TICKER (our coins) never matches, so talk about our own coins still fails"
+    },
+    {
+      "id": "derby-flip",
+      "pattern": "(?<![$\\w])[A-Z0-9]{1,12}'s market cap (never )?passes (?!\\$)[A-Z0-9]{1,12}'s",
+      "note": "Burn Derby's one-shot flippening input ('WIF's market cap passes SHIB's'); never a $TICKER"
+    },
+    {
+      "id": "cpi-dataset",
+      "pattern": "consumer price index",
+      "note": "the Bureau of Labor Statistics' dataset name (CPI), a feed title — not a token price"
+    }
   ]
 }

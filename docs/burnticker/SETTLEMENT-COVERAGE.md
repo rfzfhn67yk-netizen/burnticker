@@ -44,7 +44,7 @@ Mapped here but not a primary: `espn.nfl` (not launchable: launchable once the e
 | Advanced: first-party feed (`scalar`) | **settleable** | primary with an independent cross-read: espn.scoreboard ↔ nhl.score, espn.scoreboard ↔ mlb.statsapi, espn.scoreboard ↔ thesportsdb.events |
 | Any market → a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | Polymarket tag(s) sports: the result is the CTF payout vector on Polygon; no primary source here is binary |
 | Any market → one market (`one-shot`) | adjudicated-only (Polymarket) | Polymarket tag(s) sports: the result is the CTF payout vector on Polygon; no primary source here is binary |
-| Team coin (`team-coin`) | **settleable** | ESPN scoreboard game results, each confirmed by the league's own feed (NHL, MLB) or TheSportsDB (NFL, NBA) before it counts (src/lib/burnticker/sources/espn.ts) |
+| Team coin (`team-coin`) | **settleable** | ESPN scoreboard game results in every team-sport league it serves (baseball, basketball, hockey, soccer, football, college), each confirmed by the league's own feed (MLB, NHL) or TheSportsDB (every other league) before it counts (src/lib/burnticker/sources/espn.ts; per league below) |
 | Matchup pair → this game only (`matchup-game`) | **settleable** | two coins on one game, one per team (espn.game:…-loss), settled on the ESPN final score confirmed by the league's cross-read |
 | Matchup pair → every game this season (`matchup-season`) | **settleable** | two team coins on the ESPN scoreboard, each game confirmed by its league's cross-read |
 
@@ -258,3 +258,37 @@ No primary source maps to this category.
 - **Snapshots** (block heights, stars, players) have no publication schedule; their cross-read pairs only reads taken within minutes of each other, which the creation preflight does.
 - **Kalshi** is excluded as a primary, as a cross-read and as a venue, whatever any config file says: its Developer Agreement and Data Terms forbid settling products on its data or redistributing it.
 - offline: every dry run reads the source's frozen fixture and its window ends at that fixture's fetch time; Polymarket tags are taken from the taxonomy as written (the live run checks each on Gamma)
+
+## Per league — team coins and matchups
+
+Every team-sport league the ESPN scoreboard adapter serves, its independent cross-read, and the verdict. A league without a keyless cross-read is listed as **cross-read missing** and refused at creation (never dropped).
+
+| League | Sport | Teams | Draws | Primary | Cross-read | Verdict |
+| --- | --- | ---: | :---: | --- | --- | --- |
+| MLB (`mlb`) | baseball | 30 | — | espn.scoreboard | mlb.statsapi (MLB Advanced Media) | settleable |
+| NBA (`nba`) | basketball | 30 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| NCAA men's basketball (`mcbb`) | basketball | 362 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| NCAA women's basketball (`wcbb`) | basketball | 362 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| WNBA (`wnba`) | basketball | 15 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| College football (`cfb`) | football | 756 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| NFL (`nfl`) | football | 32 | — | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| NHL (`nhl`) | hockey | 32 | — | espn.scoreboard | nhl.score (National Hockey League) | settleable |
+| Argentine Primera (`arg.1`) | soccer | 29 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Brasileirão (`bra.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Bundesliga (`ger.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| EFL Championship (`eng.2`) | soccer | 24 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Eredivisie (`ned.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| La Liga (`esp.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Liga MX (`mex.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Ligue 1 (`fra.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| MLS (`usa.1`) | soccer | 30 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| NWSL (`usa.nwsl`) | soccer | 16 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Premier League (`eng.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Primeira Liga (`por.1`) | soccer | 18 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Scottish Premiership (`sco.1`) | soccer | 11 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| Serie A (`ita.1`) | soccer | 20 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| UEFA Champions League (`uefa.champions`) | soccer | 36 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| UEFA Conference League (`uefa.europa.conf`) | soccer | 36 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+| UEFA Europa League (`uefa.europa`) | soccer | 35 | yes | espn.scoreboard | thesportsdb.events (TheSportsDB) | settleable |
+
+25 of 25 leagues settleable.

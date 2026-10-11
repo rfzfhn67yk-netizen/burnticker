@@ -11,7 +11,7 @@ import { CoinCard, ago, type CoinCardData } from "./_components/CoinCard";
  * a search box, and "Launch a coin" where pump.fun puts "create coin". No market caps, no trending, no movers: the cards report what the
  * rule did and when the next result lands. The platform tiles (burns, audit) sit under the grid.
  */
-interface IndexToken { ticker: string; name: string; mint: string; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; status: string; launchedAt: string | null; burned: string; burns: number; pctOfSupply: number; nextCheckAt: string | null; nextCloseTime: string | null; pairId: string | null; imageUrl: string | null; oneLiner: string; lastBurnAt: string | null; phase: CoinCardData["phase"]; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null }
+interface IndexToken { ticker: string; name: string; mint: string; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; status: string; launchedAt: string | null; burned: string; burns: number; pctOfSupply: number; nextCheckAt: string | null; nextCloseTime: string | null; pairId: string | null; imageUrl: string | null; oneLiner: string; badge?: string | null; lastBurnAt: string | null; phase: CoinCardData["phase"]; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null }
 interface PairSide { ticker: string; name: string; burns: number; burned: string; supply: string; lastBurnAt: string | null }
 interface Index { tokens: IndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSide; b: PairSide }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean } | null; cluster: string; stubs: string[] }
 
@@ -80,7 +80,7 @@ export default function BurntickerIndex() {
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {coins.map((t) => <CoinCard key={t.mint} now={now} href={`/burnticker/t/${t.ticker}`} c={{ ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, oneLiner: t.oneLiner, oracle: t.oracle, status: t.status, phase: t.phase, progressPct: t.progressPct, raised: t.raised, threshold: t.threshold, quote: t.quote, burns: t.burns, lastBurnAt: t.lastBurnAt, nextAt: nextOf(t), launchedAt: t.launchedAt, pairId: t.pairId }} />)}
+            {coins.map((t) => <CoinCard key={t.mint} now={now} href={`/burnticker/t/${t.ticker}`} c={{ ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, oneLiner: t.oneLiner, oracle: t.oracle, status: t.status, phase: t.phase, progressPct: t.progressPct, raised: t.raised, threshold: t.threshold, quote: t.quote, burns: t.burns, lastBurnAt: t.lastBurnAt, nextAt: nextOf(t), launchedAt: t.launchedAt, pairId: t.pairId, badge: t.badge ?? null }} />)}
           </div>
         )
       )}

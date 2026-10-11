@@ -12,9 +12,13 @@ import { categoryCards, categoryList, loadCategories, type FeedCardInput } from 
 import { KALSHI_UNAVAILABLE, POLYMARKET_UNAVAILABLE, scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { espnClient, fecClient, nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { electionPairTemplate } from "@/lib/burnticker/electionPair";
-import { universalSearch, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
+import { publicOrigin } from "@/lib/burnticker/coinArt";
+import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx } from "@/lib/burnticker/coinText";
+import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
+import { describeRule } from "@/lib/burnticker/describe";
+import { universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
 import { BALLOT_NOTE, RACE_TYPES, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
-import { LEAGUES, gameSeries, isLeague, findTeams, teamSeries, teamsOf, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, SPORTS, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
@@ -175,7 +179,10 @@ export async function search(p: Platform, q: { q?: string | null }, now = Date.n
   const r = await universalSearch(q.q ?? "", { venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
   let categories: { id: string; label: string; blurb: string }[] = [];
   if (r.empty) { try { categories = loadCategories().map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })); } catch { categories = []; } }
-  return ok({ ...r, venues, categories, note: "ready-made rules; no prices, odds, volume or liquidity are returned" });
+  // suggested tickers: unique against the registry and clear of the refuse list's name patterns (RAYS26 → RAYS262 when taken)
+  const list = loadRefuseList();
+  const cards = dedupeTickers(r.cards, (t) => { try { return p.registry.tokenByTicker(t) !== null; } catch { return false; } }, (t) => nameRefusals(list, "", t).length > 0);
+  return ok({ ...r, cards, venues, categories, note: "ready-made rules; no prices, odds, volume or liquidity are returned" });
 }
 
 /** GET /v1/elections?type=&state= — the guided Elections & Politics flow (src/lib/burnticker/elections.ts), from Polymarket's open midterm races. */
@@ -223,16 +230,17 @@ const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league
 /** GET /v1/sports/teams?league= — the team picker for team coins (ESPN scoreboard): the static team table with each team's next game and record. No league → the leagues. */
 export async function sportsTeams(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
-  if (!league) return ok({ leagues: Object.values(LEAGUES).map((l) => ({ id: l.id, label: l.label, crossRead: l.crossLabel })), source: "ESPN scoreboard · first-party" });
+  if (!league) return ok({ leagues: Object.values(LEAGUES).map((l) => ({ id: l.id, label: l.label, sport: l.sport, crossRead: l.cross ? l.crossLabel : null, crossReadMissing: !l.cross, draws: l.draws, teams: teamsOf(l.id).length })), sports: SPORTS, source: "ESPN scoreboard · first-party" });
   if (!isLeague(league)) return fail(400, `league must be one of ${Object.keys(LEAGUES).join(", ")}`);
   const games = await espnClient().upcoming(league, 8).catch(() => [] as Game[]);
+  const year = seasonYearAt(league, Date.now());
   const needle = (q.q ?? "").trim();
   const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
-  const teams = teamsOf(league).filter((t) => !named || named.has(t.abbr) || t.name.toLowerCase().includes(needle.toLowerCase())).map((t) => {
+  const teams = teamsOf(league).filter((t) => !named || named.has(t.abbr) || t.name.toLowerCase().includes(needle.toLowerCase())).slice(0, needle ? 200 : 400).map((t) => {
     const g = games.filter((x) => x.home.abbr === t.abbr || x.away.abbr === t.abbr).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
     const opp = g ? (g.home.abbr === t.abbr ? g.away : g.home) : null;
     const me = g ? (g.home.abbr === t.abbr ? g.home : g.away) : null;
-    return { abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league, series: { win: teamSeries(league, t.abbr, "win"), loss: teamSeries(league, t.abbr, "loss") }, record: me?.record ?? null, next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr } : null };
+    return { abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league, series: { win: teamSeries(league, t.abbr, "win", { kind: "season", year }), loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, record: me?.record ?? null, next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr } : null };
   });
   return ok({ league, label: LEAGUES[league].label, source: `ESPN scoreboard · first-party, cross-read with ${LEAGUES[league].crossLabel}`, teams });
 }
@@ -432,6 +440,15 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   let seriesTitle: string | null = null;
+  let feedText: { title: string; sourceName: string; unitLabel: string } | null = null;
+  // THE CREATOR'S TEXT (owner decision 2026-10-10): the name, the ticker and the optional note pass the copy lint with the creator scope
+  // (every platform rule + no-affiliation: official, endorsed, partner…, links, handles) — a hit refuses with the category named.
+  const note = typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note).trim() : "";
+  if (note.length > NOTE_MAX) return { error: fail(400, `the creator's note is at most ${NOTE_MAX} characters`) };
+  const textProblems = creatorTextProblems({ name: input.name, ticker: input.ticker, note });
+  if (textProblems.length) return { error: fail(403, `refused: ${textProblems.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(textProblems.map((x) => x.category))], problems: textProblems.map((x) => x.reason) }) };
+  // THE IMAGE IS THE GENERATED RECEIPT ART (owner decision 2026-10-10); a creator's own image only with BURNTICKER_CUSTOM_IMAGES_ENABLED.
+  if (input.imageUrl && !p.customImages) return { error: fail(400, "a custom image is off on this host: every coin's image is its generated receipt art (BURNTICKER_CUSTOM_IMAGES_ENABLED)", { code: "custom-image-off" }) };
   const native = locked.rule.oracle === "catalogue" ? nativeSourceById(locked.rule.series!) : null;
   if (native) {
     const np = nativeRuleProblems(native, locked.rule);
@@ -440,6 +457,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   } else if (locked.rule.oracle === "catalogue") {
     const feed = feedById(locked.rule.series!);
     if (!feed) return { error: fail(400, `unknown feed ${locked.rule.series}`) };
+    feedText = feed.unit ? { title: feed.title, sourceName: feed.sourceName, unitLabel: feed.unit.label } : null;
     const fp = feedRuleProblems(feed, locked.rule);
     if (fp.length) return { error: fail(400, fp.join("; "), { problems: fp }) };
     seriesTitle = feed.title;
@@ -484,23 +502,60 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     preflight = await preflightSelector(locked.rule, { polymarket: p.polymarket, derby: { pools: p.derbyPools ?? null, fetchImpl: p.derbyFetch, hermes: p.derbyHermes ?? null }, ...(o.preflight?.deps ?? {}) });
     if (preflight.refusal) return { error: fail(preflight.refusal.status, `preflight refused: ${preflight.refusal.reason}`, { code: "preflight", problems: [preflight.refusal.reason], preflight }) };
   }
-  const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: (m: string) => `/api/burnticker/metadata/${m}`, keeperPubkey: p.keeperPubkey };
-  const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[]): TokenRow => {
+  // THE DESCRIPTION IS GENERATED (coinText.ts): whatever `description` the request carried, the coin's is describe.ts's paragraph for
+  // the locked rule (+ the rule footer the bundle appends); the request's descCtx is checked word by word before it reaches a template.
+  const ctxA = serverDescribeCtx(locked.rule, (body as { descCtx?: unknown }).descCtx, { seriesTitle, feed: feedText });
+  input.description = generatedParagraph(locked.rule, input.ticker, ctxA);
+  // NOTHING ABOUT A COIN CAN CHANGE AFTER LAUNCH (pin.ts): the metadata JSON and the receipt art are pinned on Arweave before the
+  // bundle is built, and the token URI is the arweave URL. An upload failure refuses the launch; the hosted JSON only behind
+  // BURNTICKER_ALLOW_HOSTED_METADATA (devnet scripts). A preview bundle (register: false) pins nothing and says so.
+  const pins = new Map<string, PinnedCoin | null>();
+  const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
+    if (!o.register) return { pin: null };
+    const registered = registeredDescription(sideRule, description);
+    const uploader = p.uploader ?? null;
+    try {
+      if (!uploader) throw new Error("no Arweave uploader is configured on this host (BURNTICKER_UPLOAD_PAYER)");
+      const pin = await pinCoin(uploader, { ticker, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl });
+      pins.set(ticker, pin);
+      return { pin };
+    } catch (e) {
+      if (p.allowHostedMetadata) { pins.set(ticker, null); return { pin: null }; }
+      return { error: fail(502, `the coin's metadata could not be pinned on Arweave (${(e as Error).message.slice(0, 160)}): launch refused — a coin's metadata is never hosted on a server that could change it`, { code: "pin-failed" }) };
+    }
+  };
+  const uriFor = (ticker: string) => (m: string) => { const pin = pins.get(ticker); return pin ? pin.metadataUri : o.register ? `${publicOrigin()}/api/burnticker/metadata/${m}` : "ar://pending-upload-at-launch"; };
+  const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey };
+  const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[], creatorNote = ""): TokenRow => {
     const token = p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId: bundle.addresses.poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
     if (p.keeperPubkey) p.registry.addAttester({ mint: token.mint, pubkey: p.keeperPubkey, role: "data-key", addedAt: Date.now(), timelockUntil: null });
+    const pin = pins.get(ticker) ?? null;
+    p.registry.putTokenMeta({ mint: token.mint, creatorNote, metadataUri: pin?.metadataUri ?? null, metadataTx: pin?.metadataTx ?? null, metadataSha256: pin?.metadataSha256 ?? null, imageUri: pin?.imageUri ?? null, imageTx: pin?.imageTx || null, imageSha256: pin?.imageSha256 || null, hosted: !pin });
     return token;
   };
   if (b.pair) {
     if (o.mint) return { error: fail(400, "a rivalry pair is launched through the wizard's pair flow (two fresh mints); the public API takes single coins") };
     const side = { ticker: String(b.pair.ticker ?? "").toUpperCase(), name: String(b.pair.name ?? ""), description: String(b.pair.description ?? ""), imageUrl: b.pair.imageUrl ? String(b.pair.imageUrl) : null, links: Array.isArray(b.pair.links) ? b.pair.links as { label: string; url: string }[] : [] };
+    const sideText = creatorTextProblems({ name: side.name, ticker: side.ticker, note: "" });
+    if (sideText.length) return { error: fail(403, `side B refused: ${sideText.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(sideText.map((x) => x.category))], problems: sideText.map((x) => x.reason) }) };
+    if (side.imageUrl && !p.customImages) return { error: fail(400, "side B: a custom image is off on this host: every coin's image is its generated receipt art (BURNTICKER_CUSTOM_IMAGES_ENABLED)", { code: "custom-image-off" }) };
     const bProblems = launchProblems({ ...input, ...side });
     if (bProblems.length) return { error: fail(400, `side B: ${bProblems.join("; ")}`, { problems: bProblems }) };
     const bRefusals = nameRefusals(list, side.name, side.ticker);
     if (bRefusals.length) return { error: fail(403, `side B refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
     if (p.registry.tickerTaken(side.ticker)) return { error: fail(409, `ticker ${side.ticker} is taken`, { code: "ticker-taken" }) };
     try {
-      const pair = await buildPairBundles({ a: input, b: side, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, deps);
-      const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links) : null;
+      // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
+      const probe = await buildPairBundles({ a: input, b: { ...side, description: "" }, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });
+      const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
+      side.description = generatedParagraph(lockedB.rule, side.ticker, serverDescribeCtx(lockedB.rule, null, { seriesTitle, feed: feedText }));
+      input.description = generatedParagraph(lockedA.rule, input.ticker, ctxA);
+      for (const [lk, tk, nm, desc, links, img] of [[lockedA, input.ticker, input.name, input.description, input.links, input.imageUrl], [lockedB, side.ticker, side.name, side.description, side.links, side.imageUrl]] as const) {
+        const r = await pinFor(lk, tk, nm.trim(), desc, links, img);
+        if ("error" in r) return r;
+      }
+      const pair = await buildPairBundles({ a: input, b: side, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
+      const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links) : null;
       const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
@@ -512,8 +567,10 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   }
   if (locked.rule.pair) return { error: fail(400, "a rule with a pair field is launched through the pair flow (send `pair: { ticker, name, … }` for side B)") };
   try {
+    const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl);
+    if ("error" in pr) return pr;
     const bundle = await buildLaunchBundle(input, { ...deps, ...(o.mint ? { mint: o.mint } : {}) });
-    const token = o.register ? register(bundle, input.ticker, input.imageUrl, input.links) : null;
+    const token = o.register ? register(bundle, input.ticker, input.imageUrl, input.links, note) : null;
     return { ok: { bundle, token, seriesTitle, locked, preflight } };
   } catch (e) {
     return { error: fail(400, (e as Error).message) };

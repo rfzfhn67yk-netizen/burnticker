@@ -64,7 +64,7 @@ function kindRow(kind: SelectorKind, primaries: SourceDescriptor[], pairs: Cross
       if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two coins on one game, one per team (espn.game:…-loss), settled on the ESPN final score confirmed by the league's cross-read", true);
       return polyOk ? row("adjudicated-only", "one Polymarket game market (the moneyline), side B inverted: a partition, like a Kalshi one-shot") : row("uncovered", "no Polymarket game markets on this host");
     case "team-coin":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `ESPN scoreboard game results, each confirmed by the league's own feed (NHL, MLB) or TheSportsDB (NFL, NBA) before it counts (src/lib/burnticker/sources/espn.ts)`, true);
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `ESPN scoreboard game results in every team-sport league it serves (baseball, basketball, hockey, soccer, football, college), each confirmed by the league's own feed (MLB, NHL) or TheSportsDB (every other league) before it counts (src/lib/burnticker/sources/espn.ts; per league below)`, true);
       return row("uncovered", "the team's own leg of a Kalshi game series was the only route; Polymarket moneylines have no fixed per-team YES/NO (the team order changes per game); espn.nfl counts finals only and is not admitted");
     case "matchup-season":
       if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two team coins on the ESPN scoreboard, each game confirmed by its league's cross-read", true);

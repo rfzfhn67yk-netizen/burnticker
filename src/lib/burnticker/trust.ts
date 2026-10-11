@@ -228,12 +228,15 @@ export interface ProgramFacts { programId: string | null; deployed: boolean; bui
 export function programFacts(env: Readonly<Record<string, string | undefined>> = process.env): ProgramFacts {
   const id = (env.BURNTICKER_PROGRAM_ID ?? "").trim();
   const deployed = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id);
-  return {
+  const out: ProgramFacts = {
     programId: deployed ? id : null, deployed, buildHash: (env.BURNTICKER_PROGRAM_HASH ?? "").trim() || null,
     verify: deployed
       ? [`solana program dump ${id} program.so`, "sha256sum program.so   # compare with the build hash above", "anchor verify / solana-verify against the tagged source (repository link in the register when published)", `solana program show ${id}   # the upgrade authority must match the register`]
       : ["the burn_receipts program is not deployed yet; this section fills in when it is (program id, build hash, upgrade authority)"],
   };
+  // every coin's metadata, whatever the program's state (pin.ts; verify.ts verifyPinnedMetadata does the same three checks)
+  out.verify.push("metadata: curl -s <coin>/status.json | jq .pinned   # metadataUri (arweave), metadataSha256, expectedDescription", "curl -s <pinned.metadataUri> | sha256sum   # must equal pinned.metadataSha256", "curl -s <pinned.metadataUri> | jq -r .description   # must equal pinned.expectedDescription byte for byte (the generated text)");
+  return out;
 }
 
 // ---- the audit (scripts/burnticker-audit.mts writes it) ----

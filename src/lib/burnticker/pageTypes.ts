@@ -33,7 +33,8 @@ export interface MarketJson {
   trade: TradeLinks; chart: ChartJson; readAt: string | null; error: string | null;
 }
 /** The creator's card fields (from the launch request, in the registry) and the one-liner derived from the locked rule (coinCard.ts). */
-export interface TokenProfileJson { imageUrl: string | null; description: string; links: { label: string; url: string }[]; oneLiner: string }
+export interface TokenProfileJson { imageUrl: string | null; description: string; links: { label: string; url: string }[]; oneLiner: string; /** the window badge (describe.ts windowBadge): 2026 SEASON / PERPETUAL / ONE-SHOT · <date> … */ badge?: string; /** the creator's note (≤ 140, its own box: "creator's note — not part of the rule") */ note?: string; /** the standing line on every coin page and card */ affiliation?: string }
+export interface PinnedJson { metadataUri: string | null; metadataTx: string | null; metadataSha256: string | null; imageUri: string | null; imageTx: string | null; imageSha256: string | null; hosted: boolean; /** the token metadata description the pinned JSON must carry, byte for byte */ expectedDescription: string }
 
 export interface LifecycleJson {
   ended: { reason: string; at: string; mode: "drain" | "winddown" } | null;
@@ -88,6 +89,8 @@ export interface TokenStatusJson {
   program: TokenProgramJson | null;
   /** The coin card: image, description, socials, the rule's one-liner. */
   profile: TokenProfileJson;
+  /** What was pinned at launch (pin.ts): the Arweave metadata and image with their sha256, and the description they must carry. */
+  pinned?: PinnedJson | null;
   /** Bonding curve, graduation, top holders, chart embed and trade links (market.ts). */
   market: MarketJson;
   /** Rivalry pair: this side, the other side, and the running tally (burns / supply, both sides). */

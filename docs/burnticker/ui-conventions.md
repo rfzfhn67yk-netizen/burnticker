@@ -187,11 +187,79 @@ of the pool) and the name and ticker suggested.
 The same path, guided: Browse → Elections & Politics → US Senate → Michigan → the race's named outcomes. Unnamed placeholder markets
 ("Person A…J", `active: false`) are hidden, and the card says how many. Ticking two candidates opens the election-pair template.
 
-The other test cases:
-- "Eagles win" → an ESPN team card, plus the next game
-- "US debt rises $1B" → the Treasury feed
+The other test cases (they rotate across sports on purpose — no league comes first by habit):
+- "Rays win the World Series" → two cards: the one-shot on Polymarket's 2026 World Series market (the Rays outcome's condition id;
+  10 % once, ends Oct 31) and the recurring Rays coin for this season (2 % per win, ESPN + MLB StatsAPI). No matchup card yet: the
+  Rays' next opponent is still TBD on the frozen schedule.
+- "Lakers win tonight", "Oilers lose", "Arsenal win", "Inter Miami draw" → each league's team card (soccer offers win / loss / draw)
+- "US debt rises $1B" → the Treasury feed · "CPI above 3%" → the CPI feed
 - "Detroit high above 90" → `nws.high:DTW-90`
 - "WIF vs SHIB" → the Coin vs Coin tile (its page when present, else "not built yet" — the copy lint forbids "coming soon")
+
+## Intent cards, the rule dials, the window, the text and the image (10-10, third commit set)
+
+**Intent → rule cards.** The phrase box answers two or three cards. Each card shows the full rule sentence, the venue and its
+cross-read, the next possible burn, the end, a recurring / one-shot badge and the window badge. "Use this" opens the create screen
+pre-filled. A named team always gets both shapes:
+- the recurring coin, this season by default, with the other windows offered inline on the card;
+- the one-shot championship coin, or a card that says why not ("market lists no Rays outcome", "no championship market is mapped for
+  the Premier League yet");
+- the next game as a two-coin matchup, when both teams are known.
+
+No model runs at request time (`src/lib/burnticker/search.ts`).
+
+**The same create screen from every path.** Search card, Elections, Browse, Team coin, Matchup, Any market and Advanced all land on it.
+The rule's dials sit on top (`src/lib/burnticker/dials.ts`):
+- the share of the pool: 1–10 % for a recurring rule (default 2 %), 1–100 % for a one-shot (default 10 %);
+- the side: win / loss / draw, or YES / NO;
+- a team coin's window: this season, this postseason only, the next N games, or perpetual;
+- an NWS threshold;
+- league mode: off by default, for team seasons and outcome-list markets only.
+
+The rule sentence, the badge, the description and the image re-render as a dial moves. The review shows the final text and the rules
+sha256 before anything is signed. **Locked at launch — a different rule is a different coin.** The test that pins this:
+test/burntickerDescribe.test.ts, "the search-card path exposes the same dial set as the Team coin path".
+
+**The window is unmissable.** The window is part of the series, so it is part of the rules hash, and the team is pinned by its ESPN id
+(`espn.team:mlb-TB.30-win-s2026`). Every description carries exactly one window sentence:
+- a season coin: "This coin covers the 2026 Rays season only (regular season and playoffs). After the Rays' last game it burns down
+  whatever is left over four weeks and retires; it does not continue into 2027.";
+- a perpetual coin: "No end date — this coin does not retire.";
+- a one-shot: "Resolves once on Oct 31, 2026; then it burns down over four weeks and retires."
+
+The badge (2026 SEASON / POSTSEASON 2026 / NEXT 5 GAMES / PERPETUAL / ONE-SHOT · date) appears on the card, the coin page header, the
+pair page, the first line of the token metadata description and the footer of every post. Season tickers carry the year ($RAYS26).
+When a window ends (frozen-fixture tested), the keeper records the rule end and the wind-down starts the next day.
+
+**Every league.** The pickers and the search cover every team-sport league ESPN's scoreboard serves: baseball, basketball (NBA, WNBA,
+college), hockey, soccer (MLS, NWSL, the Premier League, La Liga, Serie A, the Bundesliga, Ligue 1, the UEFA cups, Liga MX and more),
+football (NFL, college). Each league has an independent cross-read: MLB StatsAPI, the NHL feed, or TheSportsDB. The league picker is a
+searchable list grouped by sport. The per-league verdicts are in SETTLEMENT-COVERAGE.md.
+
+**The description is generated and locked** (a deliberate choice: anti-misrepresentation). There is no free-text description.
+describe.ts writes it from the rule, and the launch route regenerates it on the server, so the request's text is never used. The same
+text goes into the token metadata, the coin page, the card and the first post. A creator may add a **note** of up to 140 characters,
+shown in its own box: "creator's note — not part of the rule". The note, the name and the ticker pass the copy lint with the creator
+scope, which adds no-affiliation (official, endorsed, partner…, links and handles). A hit refuses the draft and names the category.
+Every coin page and card carries "Not affiliated with any team, league, candidate, agency or market."
+
+**The image is generated receipt art only** (a deliberate choice). The art comes from the rule: ticker, one-liner, team colours and
+abbreviation (never a logo), and a scorch seeded from the rules hash. A creator's own image link exists only behind
+`BURNTICKER_CUSTOM_IMAGES_ENABLED`, which is off by default.
+
+**Nothing about a coin can change after launch.** LaunchLab writes the Metaplex metadata with `is_mutable = false`. A URI on our own
+server would still leave the description and image changeable, so at launch:
+- the metadata JSON (the generated description, byte for byte) and the receipt-art PNG are pinned on Arweave through Irys
+  (`src/lib/burnticker/pin.ts`; paid by `BURNTICKER_UPLOAD_PAYER`, never the keeper);
+- the token URI is the arweave URL;
+- the registry keeps both transaction ids and both sha256 values.
+
+The coin page re-fetches the pin, re-hashes it and shows "matches the locked description ✓"; the trust page's verifier lists the same
+three checks. A failed upload refuses the launch. A hosted URI is allowed only for devnet scripts, behind
+`BURNTICKER_ALLOW_HOSTED_METADATA`. After `--send`, the launch script's gate checks:
+- `is_mutable` is false;
+- the mint and freeze authorities are null;
+- the URI is on Arweave.
 
 ## What was built (this branch)
 

@@ -3,6 +3,7 @@
 // sends a URL to the v1 route modules (so the SDK's fetch exercises the real handlers); a fake Solana connection; and a small JSON
 // Schema validator for checking responses against the OpenAPI document. Not a test file itself.
 import os from "node:os";
+import { FakePinUploader } from "@/lib/burnticker/pin";
 import path from "node:path";
 import { PublicKey } from "@solana/web3.js";
 import { openRegistry, type Registry, type TokenRow } from "@/lib/burnticker/registry";
@@ -72,6 +73,7 @@ export async function makeWorld(): Promise<World> {
   const p: Platform = {
     registry, oracles: { kalshi, catalogue, polymarket }, kalshi, polymarket, program, launchLab: new FakeLaunchLab(), cluster: "devnet", publishDir: path.join(os.tmpdir(), `bt-api-${process.pid}`),
     devFeeWallet: null, keeperPubkey: ATTESTER, platformId: null, stubs: ["burn_receipts program: not deployed (FakeBurnProgram — test)"],
+    uploader: new FakePinUploader(),
   };
   setPlatformForTests(p);
   return { p, program, registry, bronco: registry.token(bronco.mint)!, deficit: registry.token(deficit.mint)! };

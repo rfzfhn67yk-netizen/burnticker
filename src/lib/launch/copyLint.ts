@@ -15,11 +15,11 @@ import path from "node:path";
 export const COPY_LINT_FILE = path.join("config", "launch", "copy-lint.json");
 export const COPY_LINT_SCHEMA = "burnticker.copy-lint/v1";
 
-export interface CopyLintRule { id: string; category: string; pattern: string; note?: string }
+export interface CopyLintRule { id: string; category: string; pattern: string; note?: string; /** "creator": applies only to creator-supplied text (lintCopy's scope option) */ scope?: "creator" }
 export interface CopyLintAllowed { id: string; pattern: string; note?: string }
 export interface CopyLintConfig {
   schema: typeof COPY_LINT_SCHEMA; note?: string; maxChars: number; linkCountsAs: number;
-  categories: Record<string, { ref: string; why: string }>;
+  categories: Record<string, { ref: string; why: string; scope?: "creator" }>;
   rules: CopyLintRule[]; allowed: CopyLintAllowed[];
 }
 export interface CopyLintHit { phrase: string; category: string; rule: string; ref: string; why: string; index: number; line: number }
@@ -52,18 +52,25 @@ export function xLength(text: string, linkCountsAs = 23): number {
 }
 
 /** Replaces every allowed span and every URL with spaces of the same length, so the forbidden patterns cannot see them. */
-export function maskAllowed(text: string, cfg: CopyLintConfig): string {
+export function maskAllowed(text: string, cfg: CopyLintConfig, keepUrls = false): string {
   let out = text;
   const blank = (s: string) => s.replace(/[^\n]/g, " ");
-  out = out.replace(URL_RE, (m) => blank(m));
+  if (!keepUrls) out = out.replace(URL_RE, (m) => blank(m));
   for (const a of cfg.allowed) out = out.replace(re(a.pattern), (m) => blank(m));
   return out;
 }
 
-export function lintCopy(text: string, cfg: CopyLintConfig = loadCopyLintConfig()): CopyLintResult {
-  const masked = maskAllowed(text, cfg);
+/**
+ * `opts.scope: "creator"` lints text a creator typed (a coin's name, ticker, creator's note): the creator-scoped rules (no-affiliation:
+ * official, endorsed, partner…, links and handles) apply on top of every platform rule, and nothing is masked as "allowed" except the
+ * disclaimer phrases. Platform copy (posts, pages, the generated description) skips the creator-scoped rules.
+ */
+export function lintCopy(text: string, cfg: CopyLintConfig = loadCopyLintConfig(), opts: { scope?: "creator" | "platform" } = {}): CopyLintResult {
+  const creator = opts.scope === "creator";
+  const masked = creator ? maskAllowed(text, { ...cfg, allowed: cfg.allowed.filter((a) => !["dollar-figures", "debt-to-the-penny", "treasury-posts", "buyback", "pump-fun"].includes(a.id)) }, true) : maskAllowed(text, cfg);
   const hits: CopyLintHit[] = [];
   for (const r of cfg.rules) {
+    if (r.scope === "creator" && !creator) continue;
     const cat = cfg.categories[r.category];
     for (const m of masked.matchAll(re(r.pattern))) {
       if (!m[0]) continue;

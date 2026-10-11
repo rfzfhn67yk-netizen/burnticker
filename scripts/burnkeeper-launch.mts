@@ -15,7 +15,10 @@
 //                                 else is warned loudly and refused for --send without --allow-foreign-creator.
 //   --payer <keypath>             the funded wallet that pays rent and the first buy (JSON array or .enc.json). Required to --send;
 //                                 a dry run may use --simulate-as <pubkey> instead (no key: the cluster simulates with that payer).
-//   --name --symbol --uri         metadata (symbol ≤ 10 chars; uri = the published metadata JSON)
+//   --name --symbol --uri         metadata (symbol ≤ 10 chars; uri = the metadata JSON PINNED ON ARWEAVE — https://arweave.net/<id>, or
+//                                 Irys devnet's gateway on devnet; a server-hosted URI only with BURNTICKER_ALLOW_HOSTED_METADATA=1)
+//   After --send the LAUNCH GATE reads the created accounts (src/lib/burnticker/launchGate.ts): is_mutable false, mint and freeze
+//   authority null, the URI on Arweave — recorded under "launchGate" in the output; a failed check exits 1.
 //   --raise-sol 85                the curve's raise target (LaunchLab's standard; devnet accepts 1)
 //   --first-buy-sol 0             the payer's buy in the same transaction (0 = none); --slippage-bps 300
 //   --vault-share 0               vault mode: percent of supply locked for the keeper (20–30 on mainnet lowers totalSellA to fit),
@@ -36,6 +39,7 @@
 // Progress lines go to stderr.
 
 import fs from "node:fs";
+import { PINNED_URI_RE, decodeMetadataAccount, launchGate } from "../src/lib/burnticker/launchGate.ts";
 import path from "node:path";
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, TransactionMessage, VersionedTransaction, type TransactionInstruction } from "@solana/web3.js";
 import { ComputeBudgetProgram } from "@solana/web3.js";
@@ -208,6 +212,8 @@ const input: LaunchInput = { cluster: flagCluster, programId, platformId, config
 const plan = planLaunch(input);
 problems.push(...plan.problems);
 if (mintAcc) problems.push(`the mint ${mintKp.publicKey.toBase58()} already exists on ${cluster} — a launch needs a fresh keypair`);
+const allowHosted = /^(1|true|on|yes)$/i.test((process.env.BURNTICKER_ALLOW_HOSTED_METADATA ?? "").trim());
+if (!PINNED_URI_RE.test(input.uri)) (allowHosted ? warnings : problems).push(`--uri ${input.uri || "(empty)"} is not an Arweave URL: pin the metadata JSON first (src/lib/burnticker/pin.ts)${allowHosted ? " — BURNTICKER_ALLOW_HOSTED_METADATA is on, so a hosted URI is allowed for this devnet script" : "; a hosted URI only with BURNTICKER_ALLOW_HOSTED_METADATA=1 (devnet scripts)"}`);
 if (rules.rules.mode === "vault" && plan.totalLockedRaw === BigInt(0)) problems.push("the rule file is vault mode but --vault-share is 0");
 if (rules.rules.mode === "buyback" && plan.totalLockedRaw > BigInt(0)) warnings.push("the rule file is buyback mode but a share is locked — the keeper will not claim vested tokens in buyback mode");
 if (plan.totalLockedRaw > BigInt(0) && creatorIsFeePda) problems.push("vault mode needs the CREATOR to sign create_vesting_account, and the creator is the burn program's fee PDA, which cannot sign — the burn program has no vesting CPI yet; vault mode is not launchable under the fee-PDA creator");
@@ -244,6 +250,15 @@ if (!problems.length) {
     const sent = await sendAndConfirm(vtx, [payerKey, mintKp]);
     out.sent = { create: { ...sent, explorer: explorerUrl(cluster, sent.signature) } };
     say(`create: ${sent.status} ${explorerUrl(cluster, sent.signature)}`);
+    if (sent.status === "confirmed") {
+      // THE LAUNCH GATE: what was created can never change (launchGate.ts).
+      const [mintInfo, metaAcc] = await Promise.all([connection.getParsedAccountInfo(mintKp.publicKey, "confirmed"), getAccount(plan.metadata)]);
+      const parsed = (mintInfo.value?.data as { parsed?: { info?: { mintAuthority?: string | null; freezeAuthority?: string | null } } } | undefined)?.parsed?.info;
+      const gate = metaAcc ? launchGate({ metadata: decodeMetadataAccount(metaAcc.data), mintAuthority: parsed?.mintAuthority ?? null, freezeAuthority: parsed?.freezeAuthority ?? null, allowHosted }) : { ok: false, checks: [{ id: "is_mutable", ok: false, detail: "the metadata account was not found" }] };
+      out.launchGate = gate;
+      if (!gate.ok) { problems.push(`LAUNCH GATE FAILED: ${gate.checks.filter((c) => !c.ok).map((c) => c.detail).join("; ")}`); say("LAUNCH GATE FAILED — see launchGate in the output"); }
+      else say("launch gate: is_mutable false · mint and freeze authority null · metadata on Arweave");
+    }
     if (vestingTx && vestingSigner && sent.status === "confirmed") {
       const v = await compile(vestingSigner.publicKey, vestingTx.instructions.map((d) => d.ix), 100_000);
       const vsim = await simulate(v);

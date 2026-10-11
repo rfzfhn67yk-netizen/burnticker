@@ -345,7 +345,10 @@ export function validateRule(raw: unknown): BurnRule {
     const l = set as { id?: unknown; outcome?: unknown; forwardBps?: unknown };
     if (typeof l !== "object" || typeof l.id !== "string" || !/^[a-z0-9][a-z0-9-]{2,47}$/.test(l.id) || typeof l.outcome !== "string" || !/^[A-Za-z0-9._:\/-]{1,64}$/.test(l.outcome) || !Number.isInteger(l.forwardBps) || (l.forwardBps as number) < 0 || (l.forwardBps as number) > 10_000 || Object.keys(l).some((k) => !["id", "outcome", "forwardBps"].includes(k))) p.push("set must be { id: 3–48 lowercase letters/digits/dashes, outcome: 1–64 id characters, forwardBps: 0–10,000 }");
     if ((r as { onEnd?: unknown }).onEnd === undefined || (r as { onEnd?: unknown }).onEnd === null) p.push("an outcome set needs the onEnd clause (the leftover that is not forwarded winds down on this coin)");
-    if (r.kind === "scalar" || r.oracle === "catalogue") p.push("an outcome set needs a selector with an outcome list (scalar feeds such as debt, CPI or weather have no winner)");
+    // A team coin of one league season (an ESPN team series with a season or postseason window) is a member of that league's set: the
+    // champion is the winner. Every other catalogue / scalar series has no winner (league mode on the create screen, 2026-10-10).
+    const leagueSeason = r.oracle === "catalogue" && /^espn\.team:[a-z0-9.]+-[A-Z]{2,5}\.\d{1,6}-(win|loss|draw)-[sp]\d{4}$/.test(r.series ?? "");
+    if ((r.kind === "scalar" || r.oracle === "catalogue") && !leagueSeason) p.push("an outcome set needs a selector with an outcome list (scalar feeds such as debt, CPI or weather have no winner)");
   }
   const onEnd = (r as { onEnd?: unknown }).onEnd;
   if (onEnd !== undefined && onEnd !== null) {

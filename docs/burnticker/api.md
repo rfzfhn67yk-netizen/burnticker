@@ -30,7 +30,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/sources/{id}/preview?fractionOfPool=&tokens=` | 300 s | read | what a catalogue rule would have burned over the source's frozen fixture |
 | GET | `/kalshi/search?q=&category=` · `?series=` | 60 s | heavy | live Kalshi series search with refuse-list verdicts, plus event-level hits (`events`, `ranking`: events first when the query names a team or a market); one series with its open markets (prices display only) |
 | GET | `/kalshi/events?q=&series=&status=` | 60 s | heavy | event-level search — games, contests, people: event title / ticker / market labels, with a team-alias table (eagles / philadelphia / PHI; jaguars / jacksonville / JAC / JAX); `?series=` alone lists its upcoming events; no parameters → the league chooser. Two-team games carry both sides and both selector modes (this game only = one market, side B inverted; every game = each side's own-leg filter). Events cached 10 min per series |
-| GET | `/search?q=` | 60 s | heavy | the universal search (API 1.4.0): describe the event → ready-made rules from every enabled source — ESPN teams and their next game, NWS stations ("Detroit high above 90"), first-party feeds, Polymarket election races and markets (named outcomes only), Kalshi only when enabled, the Coin vs Coin tile; each card carries the complete rule, the venue, who settles it, when, and how; no prices, odds, volume or liquidity |
+| GET | `/search?q=` | 60 s | heavy | the universal search (API 1.4.0): describe the event → ready-made rules from every enabled source — ESPN teams and their next game, NWS stations ("Detroit high above 90"), first-party feeds, Polymarket election races and markets (named outcomes only), Kalshi only when enabled, the Coin vs Coin tile; each card carries the complete rule, the venue, who settles it, when, and how; no prices, odds, volume or liquidity. Since 10-10 a card is a ready rule: `shape` (recurring / one-shot / pair), `crossRead`, `nextAt`, `endAt` / `endText`, `badge` (2026 SEASON / PERPETUAL / ONE-SHOT · date), `text` (the generated name, ticker, one-liner, window sentence and paragraph), `descCtx`, `windows` (a team card's four windows, this season first), `seasonYear`, `leagueSet`, `matchup` (both sides of the next game), `note` (why a card cannot offer its rule); suggested tickers are unique against the registry and the refuse list |
 | GET | `/elections?type=&state=` · `/elections/pair?slug=&a=&b=` | 300 s | heavy | Elections & Politics: race type → state → race → named outcomes (unnamed placeholders hidden), each with a ready one-shot rule settled on the on-chain payout and the state's certified-results publisher as the cross-read; the election-pair template (FEC beats + winner per side; pending gates listed). 503 with Polymarket discovery off |
 | GET | `/sports/teams?league=&q=` · `/sports/games?league=&q=` | 300 s | heavy | the ESPN scoreboard pickers: a league's teams with next game, record and `espn.team:` selectors; upcoming games with each side's one-game `espn.game:` loss selector (a matchup = two coins) |
 | GET | `/browse` · `?category=&q=` | 300 s | heavy | browse every source by Burnticker category (`config/burnticker/categories.json`: sports, politics, economics, financials, weather, science, culture, crypto, companies, health, world): one `SourceCard` per source — first-party feeds first, then the Polymarket tag's open events, then Kalshi series while `BURNTICKER_KALSHI_ENABLED` is on — with venue + tier, cadence, next event (or last reading), the "burns when …" `example`, launchability, refuse-list verdict and the `pick` (selector) to use; `venues` says what this host serves |
@@ -128,3 +128,28 @@ You should not have to trust this server. `rulesText` hashes to the `sha256` eve
 the SDK's `verifyReceipt` repeats all of them on your machine: Kalshi re-read from Kalshi, Polymarket re-read from the Conditional
 Tokens payout vector on Polygon (`eth_call` to `0x4D97DCd97eC945f40cF65F87097ACe5EA0476045`), feeds re-read through their published
 config, spend recomputed with the exact integer formula, and the memo read from the transaction itself. See [sdk.md](sdk.md) §5.
+
+
+## Launch: the generated description, the creator's note, the pin (2026-10-10)
+
+`POST /launch/bundle` (and the wizard's `/api/burnticker/launch`) never stores a free-text description. The coin's description is
+describe.ts's paragraph for the locked rule, generated on the server; the request's `descCtx` is checked word by word before it
+reaches a template. The other fields:
+
+- `note`: optional, ≤ 140 characters. It is stored apart and shown as "creator's note — not part of the rule".
+- `name`, `ticker` and `note` pass the copy lint with the creator scope. A hit returns 403 `code: "copy-lint"` with `categories`
+  (for example `no-affiliation`).
+- `imageUrl` is refused with 400 `custom-image-off` unless `BURNTICKER_CUSTOM_IMAGES_ENABLED`; the image is the generated receipt art.
+- At launch (`register: true`), the metadata JSON and the PNG are pinned on Arweave (Irys). The bundle's `metadataUri` is the arweave
+  URL. A failed upload returns 502 `pin-failed`.
+- A preview bundle carries `ar://pending-upload-at-launch`.
+- `status.json` gains `pinned` (`metadataUri`, `metadataSha256`, `imageUri`, `imageSha256`, `hosted`, `expectedDescription`). It also
+  gains `profile.badge`, `profile.note` and `profile.affiliation`.
+
+To verify a coin yourself:
+
+```sh
+curl -s "$SITE/t/RAYS26/status.json" | jq .pinned
+curl -s "<pinned.metadataUri>" | sha256sum                 # = pinned.metadataSha256
+curl -s "<pinned.metadataUri>" | jq -r .description        # = pinned.expectedDescription, byte for byte
+```

@@ -16,6 +16,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildCoverage, coverageExitCode, renderCoverageMarkdown } from "../src/lib/burnticker/coverage/index.ts";
+import { leagueCoverage } from "../src/lib/burnticker/coverage/leagues.ts";
+import { loadSourceEntries } from "../src/lib/burnticker/catalogue/index.ts";
 import { parseCategories } from "../src/lib/burnticker/browse.ts";
 import { openRegistry, REGISTRY_FILE } from "../src/lib/burnticker/registry.ts";
 import { polymarketClient } from "../src/lib/burnticker/server.ts";
@@ -53,5 +55,7 @@ else {
   }
   if (matrix.uncovered.length) { console.log("\nuncovered (category / kind):"); for (const u of matrix.uncovered) console.log(`  ${u.category} / ${u.kind}: ${u.why}`); }
 }
-if (args.includes("--write")) { fs.writeFileSync(DOC, renderCoverageMarkdown(matrix)); console.log(`\nwrote ${DOC}`); }
+const leagues = leagueCoverage(loadSourceEntries());
+if (!args.includes("--json")) { console.log("\nper league (team coins and matchups):"); for (const l of leagues) console.log(`  ${l.label.padEnd(26)} ${l.sport.padEnd(10)} ${String(l.teams).padStart(4)} teams · cross-read ${l.crossRead ? l.crossRead.id : "—"} · ${l.verdict}`); }
+if (args.includes("--write")) { fs.writeFileSync(DOC, renderCoverageMarkdown(matrix, leagues)); console.log(`\nwrote ${DOC}`); }
 process.exit(coverageExitCode(matrix, { requirePrimary: args.includes("--require-primary") }));

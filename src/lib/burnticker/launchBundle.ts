@@ -90,6 +90,8 @@ export interface LaunchInput {
 export interface LaunchBundle {
   version: "burnticker.launch/v1";
   cluster: string;
+  /** The token metadata URI the create instruction writes (immutable on chain): the Arweave pin at launch; "ar://pending-upload-at-launch" in a preview. */
+  metadataUri?: string;
   ready: boolean;
   pending: string[];
   creator: string;
@@ -121,7 +123,7 @@ export function launchProblems(i: LaunchInput): string[] {
   if (!PUBKEY_RE.test(i.creator)) p.push("creator must be a Solana public key");
   if (!TICKER_RE.test(i.ticker)) p.push("ticker must be 2–10 capitals/digits");
   if (typeof i.name !== "string" || i.name.trim().length < 2 || i.name.length > 32) p.push("name must be 2–32 characters");
-  if (typeof i.description !== "string" || i.description.length > 400) p.push("description must be ≤ 400 characters");
+  if (typeof i.description !== "string" || i.description.length > 800) p.push("description must be ≤ 800 characters");
   if (i.imageUrl !== null && !/^https:\/\/\S{1,200}$/.test(i.imageUrl)) p.push("imageUrl must be an https URL or null");
   if (!Array.isArray(i.links) || i.links.length > 4 || i.links.some((l) => !/^https:\/\/\S{1,200}$/.test(l.url) || typeof l.label !== "string" || l.label.length > 24)) p.push("links: up to 4 https URLs with short labels");
   if (!/^\d+(\.\d{1,9})?$/.test(i.firstBuySol) || Number(i.firstBuySol) > 50) p.push("firstBuySol must be a SOL amount ≤ 50");
@@ -147,6 +149,8 @@ export function allocationFor(locked: LockedRule): { supply: bigint; curve: bigi
 
 export interface LaunchDeps {
   program: BurnProgramClient; launchLab: LaunchLabClient; devFeeWallet: string | null; attesters: string[]; quorum: number; metadataUri: (mint: string) => string;
+  /** A pair's side B URI (each side's metadata is pinned on its own); defaults to metadataUri. */
+  metadataUriB?: (mint: string) => string;
   mintKeypair?: Keypair;
   /** The caller's own mint PUBLIC key (base58); the bundle then carries no secret (mintSecretKey: null). Exclusive with mintKeypair. */
   mint?: string;
@@ -193,7 +197,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   if (expressible) pending.push(`this rule cannot run on the current burn_receipts program: ${expressible}`);
   if (!deps.devFeeWallet) pending.push("BURNTICKER_FEE_WALLET (the developer fee wallet pubkey) is not set");
   return {
-    version: "burnticker.launch/v1", cluster: input.cluster, ready: false, pending,
+    version: "burnticker.launch/v1", cluster: input.cluster, metadataUri: deps.metadataUri(mint), ready: false, pending,
     creator: input.creator, mint, mintSecretKey: kp ? base58Encode(kp.secretKey) : null, ticker: input.ticker, name: input.name.trim(), description,
     rules: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule), mode: locked.mode },
     addresses: { tokenConfig: init.tokenConfig, feePda, feeWsol: pool.feeWsol, vault, poolId: create.poolId, platformId: deps.launchLab.platformId, configId: create.configId },
@@ -246,7 +250,7 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   const ruleA = validateRule({ ...probe, onEnd: probe.onEnd ?? { ...DEFAULT_ON_END }, pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now) } });
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, deps);
   const ruleB = invertMapping(ruleA, a.mint, pairId);
-  const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: undefined });
+  const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: undefined, metadataUri: deps.metadataUriB ?? deps.metadataUri });
   return { pairId, a, b, selector, notes: [
     `rivalry pair ${pairId}: ${input.a.ticker} (side A) and ${input.b.ticker} (side B) on selector ${selector}; each settlement burns exactly one side`,
     "sign A's bundle first, then B's: B's rule names A's mint as counterpart; A's counterpart is recorded in the registry (A is created before B's mint exists)",

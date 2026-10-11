@@ -68,7 +68,7 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
     const top = r.cards[0];
     assert.equal(top.venue, "polymarket");
     assert.equal(top.title, "Abdul El-Sayed (D) wins the Michigan Senate race · settles 2026-11-04 · Polymarket on-chain payout + Michigan SoS certified results");
-    assert.ok(top.rule?.market?.startsWith(DEM)); assert.equal(top.rule?.oracle, "polymarket"); assert.deepEqual(top.rule?.binary, { onYes: { fractionOfPool: 0.05 }, onNo: null });
+    assert.ok(top.rule?.market?.startsWith(DEM)); assert.equal(top.rule?.oracle, "polymarket"); assert.deepEqual(top.rule?.binary, { onYes: { fractionOfPool: 0.1 }, onNo: null }, "a one-shot defaults to 10 % of the pool");
     assert.match(top.howSettles ?? "", /Democratic nominee/); assert.match(top.howSettles ?? "", /Resolution rules \(Polymarket\)/);
     assert.equal(top.suggestedTicker, "ELSAYED");
     assertNoMarketData(r, "search payload");
@@ -76,11 +76,11 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
 
   test("'Eagles win' → an ESPN team card; 'US debt rises $1B' → Treasury; 'Detroit high above 90' → NWS; 'WIF vs SHIB' → the Coin vs Coin tile", async () => {
     const eagles = await universalSearch("Eagles win", deps());
-    assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI-win"); assert.equal(eagles.cards[0].venueLabel, "ESPN scoreboard · first-party");
-    assert.ok(eagles.cards.some((c) => c.rule?.series === "espn.game:nfl-401872981-PHI-win"), "the next game (at JAX) as a one-game card");
+    assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026", "this season by default, the team pinned by its ESPN id"); assert.equal(eagles.cards[0].venueLabel, "ESPN scoreboard · first-party");
+    assert.ok(eagles.cards.some((c) => c.matchup?.eventId === "401872981" && c.matchup.a.series === "espn.game:nfl-401872981-PHI-loss"), "the next game (at JAX) as a matchup card");
     assert.ok(!eagles.cards.some((c) => c.venue === "kalshi"));
     const debt = await universalSearch("US debt rises $1B", deps());
-    assert.equal(debt.cards[0].rule?.series, "treasury.debt"); assert.equal(debt.cards[0].title, "burns per $1B added");
+    assert.equal(debt.cards[0].rule?.series, "treasury.debt"); assert.match(debt.cards[0].title, /^Burns 2% per \$1B added — /);
     const wx = await universalSearch("Detroit high above 90", deps());
     assert.equal(wx.cards[0].venue, "nws"); assert.equal(wx.cards[0].rule?.series, "nws.high:DTW-90");
     const derby = await universalSearch("WIF vs SHIB", deps());
@@ -136,9 +136,9 @@ describe("the API: /search, /elections, /elections/pair, /sports — schemas, no
   test("sports pickers on the ESPN scoreboard: teams with next game and record; games with each side's one-game selector", async () => {
     await world();
     const lg = await get("/sports/teams", "listSportsTeams") as { leagues: { id: string }[] };
-    assert.deepEqual(lg.leagues.map((l) => l.id), ["nfl", "nba", "mlb", "nhl"]);
+    for (const id of ["mlb", "nba", "wnba", "nhl", "nfl", "cfb", "mcbb", "wcbb", "eng.1", "usa.1", "uefa.champions"]) assert.ok(lg.leagues.some((l) => l.id === id), id);
     const t = await get("/sports/teams?league=nfl&q=eagles", "listSportsTeams") as { teams: { abbr: string; series: { win: string }; next: { opponent: string } | null; record: string | null }[] };
-    assert.equal(t.teams[0].abbr, "PHI"); assert.equal(t.teams[0].series.win, "espn.team:nfl-PHI-win");
+    assert.equal(t.teams[0].abbr, "PHI"); assert.match(t.teams[0].series.win, /^espn\.team:nfl-PHI\.21-win-s\d{4}$/);
     const g = await get("/sports/games?league=nfl&q=eagles", "listSportsGames") as { games: { eventId: string; a: { abbr: string }; b: { abbr: string }; series: { aLoss: string; bLoss: string } }[] };
     assert.equal(g.games[0].eventId, "401872981"); assert.equal(g.games[0].series.aLoss, "espn.game:nfl-401872981-PHI-loss"); assert.equal(g.games[0].series.bLoss, "espn.game:nfl-401872981-JAX-loss");
     await get("/sports/games?league=xfl", "listSportsGames", 400);

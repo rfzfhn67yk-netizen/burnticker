@@ -43,6 +43,8 @@ export interface TokenRow {
   baselineAt: string; createdAt: number; status: TokenStatus;
 }
 
+export interface TokenMeta { mint: string; creatorNote: string; metadataUri: string | null; metadataTx: string | null; metadataSha256: string | null; imageUri: string | null; imageTx: string | null; imageSha256: string | null; /** true only for a devnet script coin under BURNTICKER_ALLOW_HOSTED_METADATA */ hosted: boolean; createdAt: number }
+
 export interface ReadingRow extends SettledEvent { oracle: string; selectorKey: string; settlementSourceUrl: string | null; method: string | null; proof: string | null; attestedBy: string[]; fetchedAt: number }
 
 /**
@@ -109,6 +111,9 @@ CREATE TABLE IF NOT EXISTS pair_outcomes (pair_id TEXT PRIMARY KEY, state TEXT N
 -- NO BURN POOL IS EVER LEFT BEHIND (2026-10-10): when and why a token's rule ENDED, and how its pool is spent from then on
 -- ('drain' after a one-shot YES at 100 %, else 'winddown'); written once by the keeper; append-only.
 CREATE TABLE IF NOT EXISTS rule_ends (mint TEXT PRIMARY KEY, mode TEXT NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL);
+-- What was pinned for a coin at launch (2026-10-10, "nothing about a coin can change after launch"): the creator's note (≤ 140, linted,
+-- never part of the description) and the Arweave copies of the metadata JSON and the receipt-art PNG with their sha256. Written once.
+CREATE TABLE IF NOT EXISTS token_meta (mint TEXT PRIMARY KEY, creator_note TEXT NOT NULL DEFAULT '', metadata_uri TEXT, metadata_tx TEXT, metadata_sha256 TEXT, image_uri TEXT, image_tx TEXT, image_sha256 TEXT, hosted INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
 `;
 
 /** Columns added to burns for program execution (2026-10-10), added in place to an older registry file. */
@@ -153,6 +158,10 @@ CREATE TRIGGER IF NOT EXISTS pairs_no_delete BEFORE DELETE ON pairs BEGIN SELECT
 CREATE TRIGGER IF NOT EXISTS pair_outcomes_no_update BEFORE UPDATE ON pair_outcomes BEGIN SELECT RAISE(ABORT, 'pair_outcomes: a pair goes live or voids once'); END;
 CREATE TRIGGER IF NOT EXISTS pair_outcomes_no_delete BEFORE DELETE ON pair_outcomes BEGIN SELECT RAISE(ABORT, 'pair_outcomes: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS rule_ends_no_update BEFORE UPDATE ON rule_ends BEGIN SELECT RAISE(ABORT, 'rule_ends: a rule ends once'); END;
+CREATE TRIGGER IF NOT EXISTS token_meta_no_update BEFORE UPDATE ON token_meta BEGIN SELECT RAISE(ABORT, 'token_meta: written once at launch'); END;
+CREATE TRIGGER IF NOT EXISTS token_meta_no_delete BEFORE DELETE ON token_meta BEGIN SELECT RAISE(ABORT, 'token_meta: append-only'); END;
+CREATE TRIGGER IF NOT EXISTS tokens_text_immutable BEFORE UPDATE OF name, description, image_url, links_json ON tokens
+  BEGIN SELECT RAISE(ABORT, 'tokens: the name, description, image and links are fixed at launch'); END;
 CREATE TRIGGER IF NOT EXISTS rule_ends_no_delete BEFORE DELETE ON rule_ends BEGIN SELECT RAISE(ABORT, 'rule_ends: append-only'); END;
 CREATE TRIGGER IF NOT EXISTS burns_voided_frozen BEFORE UPDATE ON burns WHEN OLD.status = 'voided'
   BEGIN SELECT RAISE(ABORT, 'burns: a voided receipt is final'); END;
@@ -350,6 +359,17 @@ export class Registry {
     this.db.prepare(`INSERT INTO burns (mint, event_id, settled_at, result, value, units, mapping_json, kind, note, prev_value, carry_in, carry_out, status, created_at, updated_at) VALUES (?,?,?,NULL,NULL,?,?,?,?,NULL,'0','0',?,?,?)`)
       .run(mint, e.id, e.at, step.units, step.mapping ? JSON.stringify(step.mapping) : null, kind, step.note, step.mapping && step.units > 0 ? "planned" : "nothing", now, now);
     return true;
+  }
+  /** The launch pins: the creator's note and the Arweave metadata / image (null for a coin made before them). */
+  tokenMeta(mint: string): TokenMeta | null {
+    const r = this.db.prepare("SELECT * FROM token_meta WHERE mint=?").get(mint) as Row | undefined;
+    return r ? { mint: String(r.mint), creatorNote: String(r.creator_note ?? ""), metadataUri: strOrNull(r.metadata_uri), metadataTx: strOrNull(r.metadata_tx), metadataSha256: strOrNull(r.metadata_sha256), imageUri: strOrNull(r.image_uri), imageTx: strOrNull(r.image_tx), imageSha256: strOrNull(r.image_sha256), hosted: Number(r.hosted) === 1, createdAt: Number(r.created_at) } : null;
+  }
+  /** Written once, with the draft (an earlier record wins; the table refuses updates). */
+  putTokenMeta(m: Omit<TokenMeta, "createdAt">, now = Date.now()): TokenMeta {
+    this.db.prepare("INSERT OR IGNORE INTO token_meta (mint, creator_note, metadata_uri, metadata_tx, metadata_sha256, image_uri, image_tx, image_sha256, hosted, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+      .run(m.mint, m.creatorNote.slice(0, 140), m.metadataUri, m.metadataTx, m.metadataSha256, m.imageUri, m.imageTx, m.imageSha256, m.hosted ? 1 : 0, now);
+    return this.tokenMeta(m.mint)!;
   }
   /** When and why a token's rule ended (null while it reads). */
   ruleEnd(mint: string): { mode: "drain" | "winddown"; reason: string; at: number } | null {

@@ -1,4 +1,5 @@
 import "server-only";
+import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
 import path from "node:path";
 import { openRegistry, readingMatches, REGISTRY_FILE, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { KalshiClient } from "@/lib/burnticker/oracle/kalshi";
@@ -45,6 +46,12 @@ export interface Platform {
   derbyHermes?: HermesClient | null;
   /** BURNTICKER_POLYMARKET_DISCOVERY_ENABLED (venues.ts): false withholds Polymarket discovery (search, Browse, elections); undefined = on. Settlement unaffected. */
   polymarketDiscovery?: boolean;
+  /** The Arweave uploader (pin.ts; Irys with BURNTICKER_UPLOAD_PAYER). Null/absent: every launch is refused unless hosted metadata is allowed. */
+  uploader?: PinUploader | null;
+  /** BURNTICKER_CUSTOM_IMAGES_ENABLED (default off): a creator's own image link instead of the generated receipt art. */
+  customImages?: boolean;
+  /** BURNTICKER_ALLOW_HOSTED_METADATA (default off; devnet scripts): a failed pin falls back to the hosted JSON, marked `hosted`. */
+  allowHostedMetadata?: boolean;
 }
 
 let cached: Platform | null = null;
@@ -97,6 +104,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
     devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
+    uploader: uploaderFromEnv(env, cluster), customImages: customImagesEnabled(env), allowHostedMetadata: allowHostedMetadata(env),
   };
   return cached;
 }
@@ -129,6 +137,7 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
     market,
     pair: await pairCounterpart(p, t),
     lifecycle: lifecycleFrom(p.registry, t, locked.rule, feePdaLamports),
+    meta: p.registry.tokenMeta(t.mint),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
     chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: await programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading")) },
     now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,

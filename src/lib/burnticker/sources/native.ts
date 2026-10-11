@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, espnSeriesTitle, espnSettled, outcomeOf, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
+import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, espnSeriesTitle, espnSettled, gamesFor, outcomeOf, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
 import { NwsClient, crossCheck, iemFor, nwsSeriesTitle, nwsSettled, parseNwsSeries, qualifies, stationByCode, type NwsSeries } from "@/lib/burnticker/sources/nws";
 
@@ -54,15 +54,16 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     preflight: async (nowMs) => {
       const c = espnClient();
       let games;
-      try { games = (await c.season(s.league, s.abbr)).filter((g) => s.kind === "team" || g.eventId === s.eventId); } catch (e) { return { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "", problem: { code: "primary-unreadable", reason: `ESPN could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
+      try { games = await gamesFor(c, s); } catch (e) { return { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "", problem: { code: "primary-unreadable", reason: `ESPN could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
       if (s.kind === "game" && !games.length) return { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "", problem: { code: "primary-unreadable", reason: `ESPN does not list game ${s.eventId} for ${t.name}` } };
       const next = games.find((g) => !g.completed && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS) ?? null;
       const nextAt = next?.startsAt ?? null, nextBasis = next ? `the next game's start (ESPN): ${next.name}` : "no scheduled game listed";
-      const done = games.filter((g) => outcomeOf(g, s.abbr) !== null && Date.parse(g.startsAt) + SETTLE_AFTER_START_MS <= nowMs);
+      const tid = s.kind === "team" ? s.teamId : null;
+      const done = games.filter((g) => outcomeOf(g, s.abbr, tid) !== null && Date.parse(g.startsAt) + SETTLE_AFTER_START_MS <= nowMs);
       const lastGame = done[done.length - 1] ?? null;
       if (!lastGame) return { last: null, crossLast: null, agreement: null, basis: "no completed game yet: the cross-read compares at the first one", nextAt, nextBasis, problem: null };
       const v = await c.crossRead(lastGame);
-      const out = outcomeOf(lastGame, s.abbr);
+      const out = outcomeOf(lastGame, s.abbr, tid);
       const last = { id: lastGame.date, value: `${lastGame.away.abbr} ${lastGame.away.score} @ ${lastGame.home.abbr} ${lastGame.home.score} (${out})`, at: lastGame.startsAt };
       if (v.verdict === "unavailable") return { last, crossLast: null, agreement: null, basis: v.detail, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: `${L.crossLabel} could not confirm ${t.name}'s latest final (${lastGame.name}): ${v.detail}` } };
       const crossLast = { id: lastGame.date, value: v.detail, at: lastGame.startsAt };

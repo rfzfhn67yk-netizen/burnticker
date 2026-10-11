@@ -175,3 +175,22 @@ export async function feedSourceReading(cfg: Pick<HttpSourceConfig, "request" | 
     return { events: parseBody(cfg as HttpSourceConfig, body, nowMs).readings, error: null, url };
   } catch (e) { return { events: null, error: (e as Error).message.slice(0, 160), url }; }
 }
+
+/**
+ * THE PINNED-METADATA CHECK (pin.ts; the coin page's "matches the locked description ✓" and the trust page's verifier): the bytes at
+ * the coin's arweave URI hash to the sha256 the registry recorded at launch, and their `description` equals the generated text byte for
+ * byte. ok: null when the coin has no pin (made before 2026-10-10, or a hosted devnet script coin).
+ */
+export async function verifyPinnedMetadata(pinned: { metadataUri: string | null; metadataSha256: string | null; hosted: boolean; expectedDescription: string } | null | undefined, fetchImpl: (url: string) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer> }>): Promise<{ ok: boolean | null; detail: string }> {
+  if (!pinned || pinned.hosted || !pinned.metadataUri || !pinned.metadataSha256) return { ok: null, detail: "no pinned metadata for this coin (made before pinning, or a hosted devnet script coin)" };
+  try {
+    const r = await fetchImpl(pinned.metadataUri);
+    if (!r.ok) return { ok: null, detail: `the gateway answered HTTP ${r.status}` };
+    const buf = new Uint8Array(await r.arrayBuffer());
+    const { createHash } = await import("node:crypto");
+    const sha = createHash("sha256").update(buf).digest("hex");
+    if (sha !== pinned.metadataSha256) return { ok: false, detail: `pinned bytes hash to ${sha}, not ${pinned.metadataSha256}` };
+    const j = JSON.parse(new TextDecoder().decode(buf)) as { description?: unknown };
+    return j.description === pinned.expectedDescription ? { ok: true, detail: `sha256 ${sha} · matches the locked description` } : { ok: false, detail: "the pinned description differs from the generated text" };
+  } catch (e) { return { ok: null, detail: `could not read the pin: ${(e as Error).message.slice(0, 120)}` }; }
+}

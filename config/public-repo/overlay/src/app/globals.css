@@ -143,6 +143,8 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-chip-catalogue, .bt-chip-feed { color: var(--bt-scorch); border-color: color-mix(in srgb, var(--bt-scorch) 50%, transparent); }
 .bt-chip-grad { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
 .bt-chip-draft { border-style: dashed; }
+/* the window badge (2026 SEASON / PERPETUAL / ONE-SHOT · date): a stamped box, unmissable on every card and header */
+.bt-chip-window { color: var(--bt-paper, #f2eee4); background: transparent; border: 1.5px solid var(--bt-scorch); color: var(--bt-scorch); }
 .bt-curve { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--bt-line) 80%, transparent); overflow: hidden; }
 .bt-curve-fill { height: 100%; border-radius: 99px; background: repeating-linear-gradient(90deg, var(--bt-scorch) 0 6px, color-mix(in srgb, var(--bt-scorch) 75%, transparent) 6px 8px); }
 .bt-curve-fill.is-done { background: var(--bt-stamp-solid); }

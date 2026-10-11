@@ -2,7 +2,11 @@ import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
 import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
-import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, oracleDisclosure, pairClause, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { badgeFromText } from "@/lib/burnticker/describe";
+import type { TokenMeta } from "@/lib/burnticker/registry";
+/** The standing line on every coin page and card (owner decision 2026-10-10, anti-misrepresentation). */
+export const AFFILIATION_LINE = "Not affiliated with any team, league, candidate, agency or market.";
 import { parseReceiptMemo } from "@/lib/burnticker/receipt";
 import { fullSpendUnits, unitStep, windDownUnits, type SettledEvent } from "@/lib/burnticker/units";
 import { feedById } from "@/lib/burnticker/catalogue";
@@ -39,6 +43,8 @@ export interface TokenPageInput {
   operator: { can: string[]; cannot: string[]; placeholder: boolean };
   /** Rivalry pair: the other side's summary, when this token is one half of a pair. */
   pair: PairCounterpart | null;
+  /** The launch pins (registry.token_meta): the creator's note and the Arweave copies. */
+  meta?: TokenMeta | null;
   /** No burn pool is ever left behind: the end of the rule and the sweep, from the registry (lifecycleFrom). */
   lifecycle?: LifecycleJson | null;
   /** The LaunchLab pool and top holders as read this cycle (market.ts readMarket); absent/null on a host without an RPC → the page shows "—". */
@@ -273,7 +279,8 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
     trust: { lpBurnedPct: LP_BURNED_PCT, creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
     program,
-    profile: { imageUrl: t.imageUrl, description: t.description, links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle) },
+    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
+    pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
     market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market }),
     lifecycle: i.lifecycle ?? null,
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
@@ -365,6 +372,9 @@ ${STATUS_CSS}
 <p><a href="../../">← Burnticker</a></p>
 ${s.pair ? `<div class="rule"><strong>$${t} <span class="muted">vs</span> <a href="../${esc(s.pair.counterpart.ticker)}/">$${esc(s.pair.counterpart.ticker)}</a></strong> — rivalry pair <code>${esc(s.pair.pairId)}</code> (this is side ${esc(s.pair.side)}; one selector, inverted mappings: each settlement burns exactly one side). Burns ${s.pair.tally.burnsThis} : ${s.pair.tally.burnsOther} · burned ${fmt(s.pair.tally.burnedThis)} : ${fmt(s.pair.tally.burnedOther)} · supply ${fmt(s.pair.tally.supplyThis)} : ${fmt(s.pair.tally.supplyOther)}${s.pair.counterpart.lastBurnAt ? ` · the other side last burned ${esc(s.pair.counterpart.lastBurnAt.slice(0, 10))}` : ""}. <a href="../../p/${esc(s.pair.pairId)}/">Pair page</a>.</div>` : ""}
 <h1>$${t} <span class="muted" style="font-weight:400">${esc(s.name)}</span></h1>
+${s.profile?.badge ? `<p><code>${esc(s.profile.badge)}</code></p>` : ""}${s.profile?.description ? `<p>${esc(s.profile.description)}</p>` : ""}${s.profile?.note ? `<p class="muted"><em>creator's note — not part of the rule:</em> ${esc(s.profile.note)}</p>` : ""}
+<p class="muted">${esc(AFFILIATION_LINE)}</p>
+${s.pinned?.metadataUri && !s.pinned.hosted ? `<p class="muted">Metadata pinned on Arweave · <a href="${esc(s.pinned.metadataUri)}">${esc(s.pinned.metadataUri)}</a> · sha256 <code>${esc(s.pinned.metadataSha256 ?? "")}</code></p>` : ""}
 <p class="muted">${esc(s.oracle === "kalshi" ? "Kalshi" : s.oracle === "polymarket" ? "Polymarket (result read on Polygon)" : "first-party feed")} · <code>${esc(s.selectorKey)}</code>${s.seriesTitle ? ` · ${esc(s.seriesTitle)}` : ""} · ${esc(s.cluster)} · ${esc(s.status)} · updated ${esc(s.generatedAt)}</p>
 <div class="rule"><strong>The rule.</strong> ${esc(s.rules.statement)}<br><span class="muted">Rule file: <a href="rules.json">rules.json</a> · sha256 <code>${esc(s.rules.sha256)}</code> · locked at launch; nobody can change it.</span>${s.rules.oneShot ? `<br><span class="muted">This rule resolves once${s.next.nextCloseTime ? `, on ${esc(s.next.nextCloseTime)}` : ""}; after that the supply is fixed.</span>` : ""}</div>
 <div class="tiles">
@@ -413,7 +423,7 @@ tick();setInterval(tick,1000);})();
 /** One coin on the platform index — the launchpad card's fields (2026-10-10: image, one-liner, curve progress, last burn, next result). */
 export interface PlatformIndexToken {
   ticker: string; name: string; mint: string; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; status: string; launchedAt: string | null; burned: string; burns: number; pctOfSupply: number; impliedChance: number | null; nextCheckAt: string | null; pairId: string | null;
-  imageUrl: string | null; oneLiner: string; lastBurnAt: string | null; nextMarket: string | null; nextCloseTime: string | null; oneShot: boolean;
+  imageUrl: string | null; oneLiner: string; lastBurnAt: string | null; nextMarket: string | null; nextCloseTime: string | null; oneShot: boolean; badge?: string | null;
   /** null = the curve was not read (no RPC on the host, or not launched): the card shows "—", never a guess. */
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null;
 }
@@ -432,7 +442,7 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
   const c = s.market?.curve ?? null;
   return {
     ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: s.next.impliedChance, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
-    imageUrl: s.profile?.imageUrl ?? null, oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot,
+    imageUrl: s.profile?.imageUrl ?? null, oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
     phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
   };
 }
@@ -513,7 +523,7 @@ ${STATUS_CSS}
 ${tiles}
 </div>
 <h2>Share line</h2>
-<pre class="today" id="share">${esc(pairDailyText(tally, site).replace(/\s*\{SITE_URL\}\/p\/[^/]+\/$/m, " this page"))}</pre>
+<pre class="today" id="share">${esc(pairDailyText(tally, site, a.profile?.badge ?? null).replace(/\s*\{SITE_URL\}\/p\/[^/]+\/$/m, " this page"))}</pre>
 <p class="muted">The same words as the pair post (src/lib/launch/dailyPost.ts pairDailyText): a report of the tally, filled from both sides' status.json and receipts.json, never retyped.</p>
 <h2>Receipts — $${A}</h2>
 ${table(a, receiptsA)}

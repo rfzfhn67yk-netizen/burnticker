@@ -12,6 +12,10 @@ import { plainSentence, ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { CoinCard } from "../_components/CoinCard";
 import { CoinVsCoinTile } from "./CoinVsCoinTile";
 import { STATIONS, nwsSeries } from "@/lib/burnticker/sources/nws";
+import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
+import { describeRule, DESCRIPTION_MAX, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 
 /**
  * THE CREATE WIZARD (LAUNCHPAD-PATH §1; the owner 10-09/10-10: "make it so its easier to navigate. I am still having a hard time
@@ -40,6 +44,13 @@ import { STATIONS, nwsSeries } from "@/lib/burnticker/sources/nws";
  * pump.fun's order — image → name → ticker → description → socials (website / X / Telegram) — with a live preview of the coin card on
  * the right (the same CoinCard the Coins page shows). Kalshi off (venues.ts): Team coin and Matchup show "venue unavailable".
  *
+ * THE RULE DIALS (10-10, the owner: "after we select a rule can we edit it? like the percentage burned?"): every path — a search card,
+ * Elections, Browse, Team coin, Matchup, Any market, Advanced — lands on this same create screen with the rule's dials on top
+ * (dials.ts: the share of the pool 1–10 %, the side, a team coin's window, an NWS threshold); the locked rule sentence, the window badge,
+ * the auto-generated description (describe.ts: the flavour line editable, the rule block locked and re-rendered) and the generated coin
+ * image (coinArt.ts, "use my own image link" overrides it) all follow the dials live. The review shows the final text and the rules
+ * sha256 before anything is signed. Locked at launch — a different rule is a different coin.
+ *
  * Progress ("Step 2 of 4"), back buttons, state kept across a refresh (sessionStorage), a Devnet badge from the server's cluster.
  * The request body and the launch route are unchanged: the API returns the unsigned bundle(s); nothing is sent from this page.
  * Every parameter is in rules.json, shown in full under "details".
@@ -56,8 +67,8 @@ const LABELS: Record<Flow, Partial<Record<Step, string>>> = {
   feed: { pick: "Source", rule: "The rule", name: "Name it", review: "Review", launch: "Launch" },
   browse: { pick: "Pick a source", rule: "The rule", name: "Name it", review: "Review", launch: "Launch" },
 };
-/** A ready-made rule from the universal search (GET /api/burnticker/v1/search). */
-interface Suggestion { id: string; venue: "feed" | "espn" | "nws" | "polymarket" | "kalshi" | "tile"; venueLabel: string; title: string; subtitle: string; settlement: string; settleAt: string | null; howSettles: string | null; rule: BurnRule | null; pick: { oracle: "catalogue" | "polymarket" | "kalshi"; series: string | null; market: string | null; title: string; yes?: string; no?: string } | null; source: { unit: { size: number; label: string; definition: string }; baseline: number; direction: "up" } | null; href: string | null; suggestedName: string | null; suggestedTicker: string | null; refused: string[] }
+/** A ready-made rule from the universal search (GET /api/burnticker/v1/search; the shape is search.ts Suggestion). */
+type Suggestion = SearchSuggestion;
 /** Browse (GET /api/burnticker/v1/browse): one source, any venue, in one shape. */
 interface BrowseCategory { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided?: string | null; adjudicatedOnly?: boolean }
 interface ElOutcome { conditionId: string; label: string; question: string; yes: string; no: string; title: string; settles: string; rule: BurnRule }
@@ -69,7 +80,7 @@ interface Series { ticker: string; title: string; category: string | null; frequ
 interface Source { id: string; kind: string; tier: number; tierLabel: string; title: string; sourceName: string; sourceUrl: string; cadence: string; unit: { size: number; label: string; definition: string } | null; direction: "up" | "down" | "abs" | null; baseline: "previousSettlement" | number | null; flags: string[]; launchable: { ok: boolean; why: string | null }; param: string | null; lastReading: { id: string; value: string | null; at: string } | null; readings: { id: string; value: string | null }[]; preview: { window: { from: string; to: string }; units: number; burnEvents: number; poolFractionSpent: number | null } | null }
 interface Backtest { sentence: string; text: string; sha256: string; sha12: string; mode: string; statement: string; seriesTitle: string | null; refusals: { reason: string }[]; matched: number; backtest: { rows: { id: string; at: string; title: string | null; result: string | null; value: string | null; units: number; kind: string }[]; totals: { events: number; burnEvents: number; voids: number; units: number; poolFractionSpent: number | null; tokens: number | null }; oneShot: { resolvesOn: string | null } | null } }
 interface Bundle { ready: boolean; pending: string[]; mint: string; ticker: string; rules: { text: string; sha256: string; statement: string; mode: string }; addresses: { feePda: string; feeWsol: string; vault: string | null; poolId: string; platformId: string }; allocation: { curve: string; locked: string; reserve: string; lpBurnedPct: number; teamAllocationPct: number }; fees: { sentence: string; curve: { legs: { label: string; bps: number }[]; totalBps: number }; postGraduation: { legs: { label: string; bps: number }[]; totalBps: number } }; burnPoolAuthority: string; transactions: { label: string; signers: string[]; instructions: { label: string }[] }[]; notes: string[] }
-interface League { id: string; label: string; series: { ticker: string; title: string }[] }
+interface League { id: string; label: string; series: { ticker: string; title: string }[]; sport?: string; crossRead?: string | null; draws?: boolean }
 interface Team { abbr: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null } | null; record: { w: number; l: number; d: number; since: string }; series?: { win: string; loss: string }; recordText?: string | null }
 /** The ESPN scoreboard pickers (GET /v1/sports/teams, /v1/sports/games). */
 interface SportsTeam { abbr: string; city: string; nickname: string; name: string; ticker: string; league: string; series: { win: string; loss: string }; record: string | null; next: { eventId: string; title: string; startsAt: string; detail: string; opponent: string; home: boolean } | null }
@@ -111,11 +122,11 @@ export default function LaunchWizard() {
   const creator = wallet.publicKey?.toBase58() ?? (PUB.test(pasted.trim()) ? pasted.trim() : "");
   // team / pair pickers
   const [leagues, setLeagues] = useState<League[]>([]), [leagueErr, setLeagueErr] = useState<string | null>(null);
-  const [leagueSeries, setLeagueSeries] = useState<string | null>(null);
+  const [leagueSeries, setLeagueSeries] = useState<string | null>(null), [leagueQ, setLeagueQ] = useState("");
   const [teams, setTeams] = useState<Team[]>([]), [teamsBusy, setTeamsBusy] = useState(false), [teamQ, setTeamQ] = useState("");
-  const [team, setTeam] = useState<Team | null>(null), [winLose, setWinLose] = useState<"win" | "lose">("lose");
+  const [team, setTeam] = useState<Team | null>(null), [winLose, setWinLose] = useState<"win" | "lose">("win");
   const [games, setGames] = useState<EventHit[]>([]), [gamesBusy, setGamesBusy] = useState(false), [gameQ, setGameQ] = useState("");
-  const [game, setGame] = useState<EventHit | null>(null), [swap, setSwap] = useState(false), [pairMode, setPairMode] = useState<"game" | "season">("game");
+  const [game, setGame] = useState<EventHit | null>(null), [swap, setSwap] = useState(false), [pairMode, setPairMode] = useState<"game" | "season" | "perpetual">("game");
   // any-market search (events + series)
   const [q2, setQ2] = useState(""), [found, setFound] = useState<{ results: Series[]; events: EventHit[]; ranking: "events" | "series" } | null>(null), [findBusy, setFindBusy] = useState(false);
   const [polyFound, setPolyFound] = useState<PolyFound | null>(null), [polyErr, setPolyErr] = useState<string | null>(null);
@@ -142,9 +153,19 @@ export default function LaunchWizard() {
   const [ackLocked, setAckLocked] = useState(false), [ackNoReturns, setAckNoReturns] = useState(false), [firstBuy, setFirstBuy] = useState("0");
   const [bundle, setBundle] = useState<Bundle | null>(null), [launchErr, setLaunchErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
   const [pairOut, setPairOut] = useState<{ pairId: string | null; a: Bundle; b: Bundle; notes: string[] } | null>(null);
+  // the dials (dials.ts): the rule as edited on the create screen, valid while the path's own rule is unchanged (key)
+  const [draft, setDraft] = useState<{ key: string; a: BurnRule; b: BurnRule | null } | null>(null);
+  // the auto-generated description (describe.ts): the flavour line is editable (null = the template's), the rule block never is
+  const [flavour, setFlavour] = useState<string | null>(null), [flavourB, setFlavourB] = useState<string | null>(null);
+  const [cardCtx, setCardCtx] = useState<{ key: string; ctx: Omit<DescribeCtx, "ticker"> } | null>(null), [cardYear, setCardYear] = useState<number | null>(null), [cardSet, setCardSet] = useState<{ id: string; outcome: string } | null>(null);
+  const [nameAuto, setNameAuto] = useState(true), [tickerAuto, setTickerAuto] = useState(true);
+  const [ownImage, setOwnImage] = useState(false), [customImages, setCustomImages] = useState(false);
+  // the creator's note (≤ 140 chars): its own box on the coin page, never part of the description; linted on the server at launch
+  const [note, setNote] = useState("");
+  const [cardWin, setCardWin] = useState<Record<string, number>>({});
 
   const pairOn = flow === "pair";
-  const season = pairOn && pairMode === "season";
+  const season = pairOn && pairMode !== "game";
   const sideA = game?.pair ? (swap ? game.pair.b : game.pair.a) : null, sideB = game?.pair ? (swap ? game.pair.a : game.pair.b) : null;
 
   // ---- state across a refresh (sessionStorage); `?pair=1` (the landing page's button) opens the pair flow --------------------------
@@ -163,15 +184,16 @@ export default function LaunchWizard() {
       set("tokensYes", setTokensYes); set("vaultShare", setVaultShare); set("burnOn", setBurnOn); set("fraction", setFraction);
       set("name", setName); set("ticker", setTicker); set("description", setDescription); set("imageUrl", setImageUrl); set("link", setLink); set("xUrl", setXUrl); set("tg", setTg); set("cat", setCat);
       set("nameB", setNameB); set("tickerB", setTickerB); set("descB", setDescB); set("imageB", setImageB); set("firstBuy", setFirstBuy); set("pasted", setPasted); set("q2", setQ2);
+      set("draft", setDraft); set("flavour", setFlavour); set("flavourB", setFlavourB); set("cardCtx", setCardCtx); set("cardYear", setCardYear); set("cardSet", setCardSet); set("nameAuto", setNameAuto); set("tickerAuto", setTickerAuto); set("ownImage", setOwnImage); set("note", setNote);
     } else if (wantPair) { setFlow("pair"); setStep("pick"); }
     setReady(true);
   }, []);
-  const snapshot = JSON.stringify({ flow, step, leagueSeries, team, winLose, game, swap, pairMode, pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn, fraction, name, ticker, description, imageUrl, link, xUrl, tg, cat, nameB, tickerB, descB, imageB, firstBuy, pasted, q2 });
+  const snapshot = JSON.stringify({ flow, step, leagueSeries, team, winLose, game, swap, pairMode, pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn, fraction, name, ticker, description, imageUrl, link, xUrl, tg, cat, nameB, tickerB, descB, imageB, firstBuy, pasted, q2, draft, flavour, flavourB, cardCtx, cardYear, cardSet, nameAuto, tickerAuto, ownImage, note });
   useEffect(() => { if (ready) { try { sessionStorage.setItem(STORE, snapshot); } catch { /* private mode: no memory, no harm */ } } }, [ready, snapshot]);
   useEffect(() => { window.scrollTo({ top: 0 }); }, [step]);
   const startOver = () => { try { sessionStorage.removeItem(STORE); } catch { /* ignore */ } window.location.href = window.location.pathname; };
 
-  useEffect(() => { fetch("/api/burnticker/catalogue").then((r) => r.json()).then((j) => { setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) setVenues(j.venues); }).catch(() => {}); }, []);
+  useEffect(() => { fetch("/api/burnticker/catalogue").then((r) => r.json()).then((j) => { setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) setVenues(j.venues); setCustomImages(j.customImages === true); }).catch(() => {}); }, []);
   const curCat = cats.find((c) => c.id === cat);
   useEffect(() => { if (flow === "browse" && curCat?.guided === "elections" && !etypes.length && venues.polymarket) getJson<{ types: { id: string; label: string; races: number }[] }>(`${V1}/elections`).then((j) => setEtypes(j.types)).catch(() => setEtypes([])); }, [flow, curCat?.guided, etypes.length, venues.polymarket]);
   useEffect(() => { if (!etype) return; setEbusy(true); setEraces(null); setEpair(null); setEsel([]); getJson<{ states: { abbr: string; name: string; races: number }[]; races: ElRace[] }>(`${V1}/elections?type=${etype}${estate ? `&state=${estate}` : ""}`).then((j) => { setEstates(j.states); setEraces(etype === "control" || estate ? j.races : null); }).catch(() => setEraces([])).finally(() => setEbusy(false)); }, [etype, estate]);
@@ -194,7 +216,7 @@ export default function LaunchWizard() {
   useEffect(() => { if (!q.trim()) { setHits([]); return; } const t = setTimeout(() => { fetch(`/api/burnticker/oracle/search?q=${encodeURIComponent(q.trim())}`).then((r) => r.json()).then((j) => setHits(j.results ?? [])).catch(() => setHits([])); }, 350); return () => clearTimeout(t); }, [q]);
   // leagues for the team / pair pickers
   // Team coins and matchups run on the ESPN scoreboard (sources/espn.ts; every result confirmed by a second, independent read).
-  useEffect(() => { if ((flow === "team" || flow === "pair") && !leagues.length) getJson<{ leagues: { id: string; label: string; crossRead: string }[] }>(`${V1}/sports/teams`).then((j) => setLeagues((j.leagues ?? []).map((l) => ({ id: l.id, label: l.label, series: [{ ticker: l.id, title: l.label }] })))).catch((e) => setLeagueErr(String(e.message))); }, [flow, leagues.length]);
+  useEffect(() => { if ((flow === "team" || flow === "pair") && !leagues.length) getJson<{ leagues: { id: string; label: string; sport: string; crossRead: string | null; draws: boolean }[] }>(`${V1}/sports/teams`).then((j) => setLeagues((j.leagues ?? []).map((l) => ({ id: l.id, label: l.label, sport: l.sport, crossRead: l.crossRead, draws: l.draws, series: [{ ticker: l.id, title: l.label }] })))).catch((e) => setLeagueErr(String(e.message))); }, [flow, leagues.length]);
   useEffect(() => {
     if (flow !== "team" || !leagueSeries) return; setTeamsBusy(true);
     getJson<{ teams: SportsTeam[] }>(`${V1}/sports/teams?league=${leagueSeries}`).then((j) => setTeams(j.teams.map((t) => ({ abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league: t.league, filter: t.series.win, collisions: [], series: t.series, recordText: t.record, record: recordOf(t.record),
@@ -241,18 +263,50 @@ export default function LaunchWizard() {
   /** Matchups (ESPN): two coins, one per team — "this game only" = each side burns if its team loses that game; "every game" = each side's team-loss coin. */
   const pairRules = useMemo(() => {
     if (!pairOn || !game || !sideA || !sideB || !leagueSeries) return null;
-    if (pairMode === "game") return { a: firstPartyRule(sideA.marketTicker, fraction), b: firstPartyRule(sideB.marketTicker, fraction) };
-    return { a: firstPartyRule(`espn.team:${leagueSeries}-${sideA.abbr}-loss`, fraction), b: firstPartyRule(`espn.team:${leagueSeries}-${sideB.abbr}-loss`, fraction) };
-  }, [pairOn, game, sideA, sideB, pairMode, fraction, leagueSeries]);
-  const rule: BurnRule | null = useMemo(() => {
-    if (flow === "team") return team?.series ? firstPartyRule(winLose === "win" ? team.series.win : team.series.loss, fraction) : null;
+    // a game pair is that game (one-shot: 10 % default); a season pair is this season or perpetual (recurring: 2 % default)
+    if (pairMode === "game") return { a: firstPartyRule(sideA.marketTicker, 0.1), b: firstPartyRule(sideB.marketTicker, 0.1) };
+    const lg = leagueSeries as LeagueId;
+    const w: TeamWindow = pairMode === "season" ? { kind: "season", year: cardYear ?? seasonYearAt(lg, Date.now()) } : { kind: "perpetual" };
+    try { return { a: firstPartyRule(teamSeries(lg, sideA.abbr, "loss", w), 0.02), b: firstPartyRule(teamSeries(lg, sideB.abbr, "loss", w), 0.02) }; } catch { return null; }
+  }, [pairOn, game, sideA, sideB, pairMode, leagueSeries, cardYear]);
+  const baseRule: BurnRule | null = useMemo(() => {
+    // a team coin: this season by default (the picker's selector), 2 % per game; the side, the window and the share are dials
+    if (flow === "team") return team?.series ? firstPartyRule(winLose === "win" ? team.series.win : team.series.loss, 0.02) : null;
     if (flow === "pair") return pairRules?.a ?? null;
     return genericRule;
-  }, [flow, team, winLose, fraction, pairRules, genericRule]);
-  const ruleB: BurnRule | null = useMemo(() => {
-    if (!pairRules) return null;
-    return pairRules.b;
-  }, [pairRules]);
+  }, [flow, team, winLose, pairRules, genericRule]);
+  const baseRuleB: BurnRule | null = useMemo(() => (pairRules ? pairRules.b : null), [pairRules]);
+  const baseKey = JSON.stringify([baseRule, baseRuleB]);
+  const rule: BurnRule | null = draft && draft.key === baseKey ? draft.a : baseRule;
+  const ruleB: BurnRule | null = draft && draft.key === baseKey ? draft.b : baseRuleB;
+  const dialCtx = { nowMs: Date.now(), seasonYear: cardYear ?? (leagueSeries ? seasonYearAt(leagueSeries as LeagueId, Date.now()) : null), set: cardSet };
+  /** One dial → the edited rule (both sides of a pair share the share and the window; the side stays each coin's own). */
+  const setDial = (id: DialId, v: string | number) => {
+    if (!rule) return;
+    setDraft({ key: baseKey, a: applyDial(rule, id, v, dialCtx), b: ruleB ? (id === "side" ? ruleB : applyDial(ruleB, id, v, dialCtx)) : null });
+  };
+  // the coin text (describe.ts), re-rendered from the rule as it is now
+  const aHome = !!swap;
+  const textCtx = useMemo((): Omit<DescribeCtx, "ticker"> => {
+    if (!rule) return {};
+    if (cardCtx && cardCtx.key === (rule.market ?? rule.series ?? "")) return cardCtx.ctx;
+    if (pairOn && pairMode === "game" && game && sideB) return { game: { opponent: sideB.nickname ?? sideB.name, home: aHome, startsAt: game.expectedAt ?? "" } };
+    if (pick?.oracle === "polymarket") return { eventPhrase: pick.title.replace(/\s*\(resolves once\)$/, "").replace(/\?$/, "").replace(/^will\s+/i, ""), endsAt: null };
+    if (pick?.oracle === "catalogue" && pick.source?.unit && !/^(espn|nws|fec)\./.test(pick.series ?? "")) return { feed: { title: pick.title, sourceName: pick.source.sourceName, unitLabel: pick.source.unit.label } };
+    return {};
+  }, [rule, cardCtx, pairOn, pairMode, game, sideB, aHome, pick]);
+  const text: CoinText | null = useMemo(() => { if (!rule) return null; try { return describeRule(rule, { ticker, ...textCtx }); } catch { return null; } }, [rule, ticker, textCtx]);
+  const textB: CoinText | null = useMemo(() => { if (!ruleB) return null; try { return describeRule(ruleB, { ticker: tickerB, ...(pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}) }); } catch { return null; } }, [ruleB, tickerB, pairMode, game, sideA, aHome]);
+  const compose = (t: CoinText | null, _fl: string | null, fallback: string) => (t ? t.paragraph.slice(0, DESCRIPTION_MAX) : fallback);
+  // a quick local read of the note (the server's lint is the one that counts: copy-lint.json, incl. no-affiliation)
+  const noteProblem = /https?:\/\/|www\.|\.(com|io|xyz|fun)\b/i.test(note) ? "no links in the note" : /\b(official|endorsed|partner(ed|ship)?|affiliated|backed|guaranteed|insured|audited|verified|licensed|sponsored)\b/i.test(note) ? "no claims of affiliation or endorsement" : null;
+  const finalDescription = compose(text, flavour, description), finalDescriptionB = compose(textB, flavourB, descB);
+  // the suggested name and ticker follow the rule (a window change re-suggests: $RAYS26 → $RAYS) until the creator types their own
+  useEffect(() => {
+    if (!text || step !== "name") return;
+    if (tickerAuto && text.ticker && text.ticker !== ticker) setTicker(text.ticker);
+    if (nameAuto && text.name && text.name !== name && flow !== "pair") setName(text.name);
+  }, [text, step, tickerAuto, nameAuto, ticker, name, flow]);
 
   const localPreview = useMemo(() => {
     if (!rule || !pick?.source?.readings?.length || flow !== "feed") return null;
@@ -290,16 +344,16 @@ export default function LaunchWizard() {
     try {
       if (pairOn && ruleB) {
         // A matchup on the ESPN scoreboard: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
-        const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description, imageUrl: imageUrl.trim() || null, links: linksOf(), rule });
-        const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: imageB.trim() || null, links: [], rule: ruleB });
+        const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: customImages && imageUrl.trim() ? imageUrl.trim() : null, links: linksOf(), rule });
+        const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}, note: "", imageUrl: customImages && imageB.trim() ? imageB.trim() : null, links: [], rule: ruleB });
         setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [season ? "Two coins, each burning on its own team's losses: two independent records. They meet only when the two teams play each other; on those games exactly one side burns." : `Two coins on ${game?.title ?? "one game"}: the loser's coin burns once the final score is confirmed; a tie burns neither.`] }); setBundle(a.bundle);
       } else {
-        const j = await post({ ...common, ticker: ticker.toUpperCase(), name, description, imageUrl: imageUrl.trim() || null, links: linksOf(), rule, pair: pairOn ? { ticker: tickerB.toUpperCase(), name: nameB, description: descB, imageUrl: imageB.trim() || null, links: [] } : undefined });
+        const j = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: customImages && ownImage && imageUrl.trim() ? imageUrl.trim() : null, links: linksOf(), rule, pair: pairOn ? { ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, imageUrl: null, links: [] } : undefined });
         if (j.bundles) { setPairOut({ pairId: j.pair.pairId, a: j.bundles.a, b: j.bundles.b, notes: j.pair.notes }); setBundle(j.bundles.a); } else setBundle(j.bundle);
       }
       setStep("launch");
     } catch (e) { setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
-  }, [rule, ruleB, season, pairOn, creator, ticker, name, description, imageUrl, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, descB, imageB]);
+  }, [rule, ruleB, season, pairOn, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title]);
 
   // ---- navigation -----------------------------------------------------------------------------------------------------------------
   const order = ORDER[flow];
@@ -309,6 +363,7 @@ export default function LaunchWizard() {
   const begin = (f: Flow) => {
     setFlow(f); setStep(ORDER[f][0]); setBt(null); setBtB(null); setBtFor(""); setPairOut(null); setBundle(null);
     if (f === "team" || f === "pair") { setFraction(DEFAULT_FRACTION); setLeagueSeries(null); }
+    setDraft(null); setFlavour(null); setFlavourB(null); setCardCtx(null); setCardYear(null); setNameAuto(true); setTickerAuto(true);
     if (f === "single" && pick?.oracle === "catalogue") setPick(null);
     if (f === "browse") { setPick(null); setDrill(null); }
   };
@@ -325,11 +380,26 @@ export default function LaunchWizard() {
     setHowSettles(o.how ?? null); setSettleNote(o.settlement ?? null);
     setStep("name");
   };
-  const applySuggestion = (c: Suggestion) => { if (c.rule && c.pick) applyRule(c.rule, c.pick, { name: c.suggestedName, ticker: c.suggestedTicker, how: c.howSettles, settlement: c.settlement, source: c.source }); };
-  const chooseTeam = (t: Team) => { setTeam(t); setName(t.name); setTicker(t.ticker); next(); };
+  /** A search card → the create screen: the window the card shows (team cards offer four), its text context, its suggested name. */
+  const applySuggestion = (c: Suggestion, wi = 0) => {
+    setDraft(null); setFlavour(null); setFlavourB(null); setCardYear(c.seasonYear ?? null); setCardSet(c.leagueSet ?? null);
+    if (c.matchup) {
+      const m = c.matchup, side = (x: typeof m.a): Side => ({ abbr: x.abbr, marketTicker: x.series, label: x.name, nickname: x.nickname, name: x.name, ticker: x.ticker });
+      setLeagueSeries(m.league); setCardCtx(null);
+      chooseGame({ eventTicker: m.eventId, seriesTicker: m.league, title: m.title, subTitle: null, category: "Sports", expectedAt: m.startsAt, closeTime: null, markets: [], matchedSides: [], pair: { a: side(m.a), b: side(m.b), tieMarket: null }, refused: [] });
+      return;
+    }
+    const w = c.windows?.[wi] ?? null, r = w?.rule ?? c.rule, tx = w?.text ?? c.text;
+    if (!r || !c.pick) return;
+    const tk = w && wi > 0 ? tx?.ticker ?? null : c.suggestedTicker, nm = w && wi > 0 ? tx?.name ?? null : c.suggestedName;
+    setCardCtx({ key: r.market ?? r.series ?? "", ctx: c.descCtx ?? {} });
+    const auto = !!tx && tk === tx.ticker; setTickerAuto(auto); setNameAuto(auto);
+    applyRule(r, { ...c.pick, series: r.series ?? c.pick.series, title: w ? w.title : c.pick.title }, { name: nm, ticker: tk, how: c.howSettles, settlement: c.settlement, source: c.source });
+  };
+  const chooseTeam = (t: Team) => { setTeam(t); setName(t.name); setTicker(t.ticker); setDraft(null); setFlavour(null); setNameAuto(true); setTickerAuto(true); next(); };
   const chooseGame = (g: EventHit) => {
     if (!g.pair) return;
-    setGame(g); setSwap(false); setPairMode("game");
+    setGame(g); setSwap(false); setPairMode("game"); setDraft(null); setFlavour(null); setFlavourB(null);
     setName(g.pair.a.name); setTicker(g.pair.a.ticker); setNameB(g.pair.b.name); setTickerB(g.pair.b.ticker);
     setFlow("pair"); setStep("name");
   };
@@ -344,14 +414,24 @@ export default function LaunchWizard() {
   const navRow = (nextLabel: string | null, disabled = false, onNext: () => void = next) => (
     <div className="flex items-center gap-3 pt-2"><button className="text-sm underline" onClick={back}>← Back</button>{nextLabel && <button className={primary} disabled={disabled} onClick={onNext}>{nextLabel}</button>}</div>
   );
+  /** Every league ESPN's scoreboard serves, grouped by sport and searchable (no league first by habit). */
   const leaguePicker = (
     <div className="space-y-2">
       {leagueErr && <p className="text-red-400 text-xs">The scoreboard is not answering right now ({leagueErr}).</p>}
-      <div className="flex flex-wrap gap-2">{leagues.map((l) => l.series.length === 1
-        ? <button key={l.id} onClick={() => { setLeagueSeries(l.series[0].ticker); setTeamQ(""); setGameQ(""); }} className={`rounded-full border px-4 py-2 text-sm ${leagueSeries === l.series[0].ticker ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{l.label}</button>
-        : <span key={l.id} className="inline-flex flex-wrap items-center gap-1 rounded-full border border-neutral-700 px-2 py-1 text-sm"><span className="px-2 text-neutral-400">{l.label}</span>{l.series.slice(0, 6).map((s) => <button key={s.ticker} onClick={() => { setLeagueSeries(s.ticker); setTeamQ(""); setGameQ(""); }} className={`rounded-full px-2 py-0.5 text-xs ${leagueSeries === s.ticker ? "bg-amber-400 text-neutral-950" : "bg-neutral-800 hover:bg-neutral-700"}`}>{s.title.replace(/ Game$/, "")}</button>)}</span>)}
-        {!leagues.length && !leagueErr && <span className="text-sm text-neutral-500">Loading leagues…</span>}
-      </div>
+      <input className={input + " w-72"} placeholder="Search leagues: MLB, Premier League, WNBA, MLS, college…" value={leagueQ} onChange={(e) => setLeagueQ(e.target.value)} aria-label="search leagues" />
+      {!leagues.length && !leagueErr && <span className="text-sm text-neutral-500">Loading leagues…</span>}
+      {(["baseball", "basketball", "football", "hockey", "soccer"] as const).map((sp) => {
+        const ls = leagues.filter((l) => l.sport === sp && (!leagueQ.trim() || `${l.label} ${l.id} ${sp}`.toLowerCase().includes(leagueQ.trim().toLowerCase())));
+        if (!ls.length) return null;
+        return (
+          <div key={sp} className="space-y-1">
+            <div className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{sp}</div>
+            <div className="flex flex-wrap gap-2">{ls.map((l) => (
+              <button key={l.id} onClick={() => { setLeagueSeries(l.id); setTeamQ(""); setGameQ(""); }} title={l.crossRead ? `cross-read: ${l.crossRead}` : "cross-read missing — refused at creation"} className={`rounded-full border px-3 py-1.5 text-sm ${leagueSeries === l.id ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{l.label}{!l.crossRead && <span className="ml-1 text-[10px] text-red-400">cross-read missing</span>}</button>
+            ))}</div>
+          </div>
+        );
+      })}
     </div>
   );
   const chip = (v: Venue) => <span className={`ml-2 inline-block rounded px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide ring-1 ${v === "kalshi" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40" : "bg-indigo-500/15 text-indigo-300 ring-indigo-500/40"}`}>{v === "kalshi" ? "Kalshi" : "Polymarket"}</span>;
@@ -360,22 +440,65 @@ export default function LaunchWizard() {
   const badge = (abbr: string) => <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 font-mono text-xs font-bold tracking-tight text-amber-300 ring-1 ring-neutral-700">{abbr}</span>;
   const kalshiOff = !venues.kalshi;
   const marketsOff = !venues.kalshi && !venues.polymarket;
-  const oneLiner = rule ? ruleOneLiner(rule, flow === "team" ? null : pick?.title ?? null) : "pick an event first";
-  const previewCard = (nm: string, tk: string, img: string, one: string, oracle: string) => <CoinCard href={null} c={{ ticker: tk, name: nm, imageUrl: img.trim() || null, oneLiner: one, oracle, status: "draft", phase: null, progressPct: 0, raised: null, threshold: null, quote: "SOL", burns: 0, lastBurnAt: null, nextAt: null, launchedAt: null, curveNote: "a new coin starts at 0% of its bonding curve" }} />;
+  const oneLiner = text?.oneLiner ?? (rule ? ruleOneLiner(rule, flow === "team" ? null : pick?.title ?? null) : "pick an event first");
+  const b64u = (x: string) => btoa(unescape(encodeURIComponent(x))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  /** The generated coin image for a rule still being edited (coinArt.ts via /burnticker/img/preview.svg): the default image. */
+  const genImg = (r: BurnRule | null, tk: string, one: string) => (r ? `/burnticker/img/preview.svg?r=${b64u(JSON.stringify(r))}&t=${encodeURIComponent(tk || "TICKER")}&l=${encodeURIComponent(one.slice(0, 120))}` : "");
+  const previewCard = (nm: string, tk: string, img: string, one: string, oracle: string, badgeText: string | null = null) => <CoinCard href={null} c={{ ticker: tk, name: nm, imageUrl: img.trim() || null, oneLiner: one, oracle, status: "draft", phase: null, progressPct: 0, raised: null, threshold: null, quote: "SOL", burns: 0, lastBurnAt: null, nextAt: null, launchedAt: null, badge: badgeText, curveNote: "a new coin starts at 0% of its bonding curve" }} />;
   const okUrl = (u: string) => !u.trim() || /^https:\/\/\S{1,200}$/.test(u.trim());
+  const shownImage = ownImage && imageUrl.trim() ? imageUrl : genImg(rule, ticker, oneLiner);
+  const sideLabel = (v: string) => { const e = rule && rule.oracle === "catalogue" && /^espn\./.test(rule.series ?? "") ? (text?.oneLiner.match(/^burns (?:when|if) (.+?) (?:win|lose|draw)\b/)?.[1] ?? "the team") : null; return e ? `When ${e} ${v === "win" ? "WIN" : v === "draw" ? "DRAW" : "LOSE"}` : `When it settles ${v.toUpperCase()}`; };
+  /**
+   * THE RULE DIALS on the create screen (dials.ts): the same set for a rule however it was reached. Each change rewrites the rule; the
+   * sentence, the badge, the description's rule block and the image follow.
+   */
+  const dialPanel = (r: BurnRule, t: CoinText | null, o: { sides?: boolean; windows?: boolean } = {}) => {
+    const d = dialsFor(r, dialCtx);
+    return (
+      <div className="rounded-lg border border-amber-400/50 bg-neutral-950 p-3 space-y-3" aria-label="Rule dials">
+        <div className="flex flex-wrap items-center gap-2"><h3 className="font-medium">The rule</h3>{t && <span className="bt-chip bt-chip-window">{t.badge}</span>}<span className="text-xs text-neutral-500">editable until launch</span></div>
+        {t && <p className="text-sm text-neutral-100">{t.ruleBlock.split(/(?<=\.)\s/)[0]}</p>}
+        {d.side && o.sides !== false && <div className={`grid gap-2 ${d.side.options.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>{d.side.options.map((x) => (
+          <button key={x.value} onClick={() => setDial("side", x.value)} className={`rounded-lg border p-2 text-center text-sm ${d.side!.value === x.value ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{sideLabel(x.value === "loss" ? "lose" : x.value)}</button>
+        ))}</div>}
+        <label className="block text-sm">Each burn spends <b>{pct(d.fraction)}</b> of the burn pool
+          <input type="range" min={d.bounds.min} max={d.bounds.max} step={d.bounds.step} value={d.fraction} onChange={(e) => setDial("fraction", Number(e.target.value))} className="w-full" aria-label="share of the burn pool per burn" />
+          <span className="text-xs text-neutral-500">{d.bounds.max >= 1 ? "a one-shot: 1–100 % (default 10 %)" : "recurring: 1–10 % per burn (default 2 %)"}</span></label>
+        {d.league && <div className="space-y-1 text-sm"><label><input type="checkbox" checked={d.league.on} onChange={(e) => setDial("league", e.target.checked ? "on" : "off")} /> League mode <span className="text-xs text-neutral-500">(off by default) — this coin joins set <code>{d.league.id}</code> as <code>{d.league.outcome}</code></span></label>
+          {d.league.on && <label className="block text-xs">Forward {Math.round(d.league.forwardBps) / 100}% of the leftover to the set&apos;s winning coin when the window ends <input type="range" min={0} max={10000} step={500} value={d.league.forwardBps} onChange={(e) => setDial("forward", Number(e.target.value))} className="w-full" /></label>}
+          {d.league.on && <p className="text-xs text-neutral-400">Only if the program&apos;s forwarding instruction is live by season end; otherwise the leftover burns down on this coin (the description says so).</p>}</div>}
+        {d.window && o.windows !== false && <div className="space-y-2"><div className="text-sm">Window</div><div className="grid gap-2 sm:grid-cols-2">{d.window.options.map((x) => (
+          <button key={x.value} onClick={() => setDial("window", x.value)} className={`rounded-lg border p-2 text-left text-xs ${d.window!.value === x.value ? "border-amber-400 ring-1 ring-amber-400" : "border-neutral-700 hover:border-neutral-500"}`}>{x.label}{x.value === "season" && <span className="ml-1 text-neutral-500">(default)</span>}</button>
+        ))}</div>
+          {d.window.value === "next" && <label className="block text-sm">Games <input type="number" min={1} max={20} className={input + " inline w-20 ml-1"} value={d.window.games ?? 5} onChange={(e) => setDial("games", Number(e.target.value))} /></label>}</div>}
+        {d.threshold && <label className="block text-sm">{d.threshold.label} <input type="number" step={d.threshold.step} min={d.threshold.min} max={d.threshold.max} className={input + " inline w-24 ml-1"} value={d.threshold.value} onChange={(e) => setDial("threshold", Number(e.target.value))} /></label>}
+        {d.fixedUnit && <p className="text-xs text-neutral-400">The unit is {d.fixedUnit}.</p>}
+        {t && <p className="text-xs text-neutral-300">{t.windowSentence}</p>}
+        <p className="text-xs font-medium text-amber-300">Locked at launch — a different rule is a different coin.</p>
+      </div>
+    );
+  };
   /** The create screen in pump.fun's field order (image → name → ticker → description → socials) with the live card preview on the right. */
   const createGrid = (oracle: string, extra: ReactNode = null) => (
     <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_320px]">
       <div className={card + " space-y-3 text-sm"}>
         <h2 className="font-medium">Create your coin</h2>
-        <label className="block">Image <span className="text-xs text-neutral-500">(optional · an https link to a square image, 512×512 works best)</span>
-          <input className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…/coin.png" />
-          {!okUrl(imageUrl) && <span className="text-xs text-red-400">must be an https link</span>}</label>
-        <label className="block">Name <span className="float-right text-xs text-neutral-500">{name.length}/32</span><input className={input} maxLength={32} value={name} onChange={(e) => setName(e.target.value)} placeholder="Coin name" /></label>
-        <label className="block">Ticker <span className="text-xs text-neutral-500">(2–10 letters or digits)</span>
-          <span className="flex items-center gap-1"><span className="font-mono text-neutral-400">$</span><input className={input + " font-mono uppercase"} maxLength={10} value={ticker} onChange={(e) => setTicker(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder="TICKER" /></span>
+        {rule && dialPanel(rule, text)}
+        <div className="block">Image <span className="text-xs text-neutral-500">{ownImage ? "(an https link to a square image, 512×512 works best)" : "(generated receipt art from the rule — see the preview; it can't be swapped for another picture)"}</span>
+          {customImages && <label className="ml-2 text-xs"><input type="checkbox" checked={ownImage} onChange={(e) => setOwnImage(e.target.checked)} /> use my own image link</label>}
+          {ownImage && <input className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…/coin.png" aria-label="image link" />}
+          {ownImage && !okUrl(imageUrl) && <span className="text-xs text-red-400">must be an https link</span>}</div>
+        <label className="block">Name <span className="float-right text-xs text-neutral-500">{name.length}/32</span><input className={input} maxLength={32} value={name} onChange={(e) => { setName(e.target.value); setNameAuto(false); }} placeholder="Coin name" /></label>
+        <label className="block">Ticker <span className="text-xs text-neutral-500">(2–10 letters or digits{tickerAuto && text ? "; suggested from the rule" : ""})</span>
+          <span className="flex items-center gap-1"><span className="font-mono text-neutral-400">$</span><input className={input + " font-mono uppercase"} maxLength={10} value={ticker} onChange={(e) => { setTicker(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")); setTickerAuto(false); }} placeholder="TICKER" /></span>
           {ticker && !okTicker(ticker) && <span className="text-xs text-red-400">2–10 letters or digits</span>}</label>
-        <label className="block">Description <span className="text-xs text-neutral-500">(optional)</span><span className="float-right text-xs text-neutral-500">{description.length}/400</span><textarea className={input} rows={3} maxLength={400} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+        {text && <div className="block space-y-1">
+          <div>Description <span className="text-xs text-neutral-500">(generated from the rule and locked — the same text goes into the token metadata, the coin page, the card and the first post)</span></div>
+          <p className="rounded border border-dashed border-neutral-700 bg-neutral-950 p-2 text-xs text-neutral-200" aria-label="description, generated"><span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-neutral-500">locked · from the rule</span>{text.paragraph}</p>
+        </div>}
+        <label className="block">Creator&apos;s note <span className="text-xs text-neutral-500">(optional · shown in its own box, labelled &quot;creator&apos;s note — not part of the rule&quot; · no links, no claims of affiliation · can&apos;t be edited after launch)</span><span className="float-right text-xs text-neutral-500">{note.length}/140</span>
+          <textarea className={input} rows={2} maxLength={140} value={note} onChange={(e) => setNote(e.target.value)} aria-label="creator's note" />
+          {noteProblem && <span className="text-xs text-red-400">{noteProblem}</span>}</label>
         <details open={!!(link || xUrl || tg)}><summary className="cursor-pointer text-neutral-300">Add social links (optional)</summary>
           <div className="mt-2 space-y-2">{([["Website", link, setLink, "https://…"], ["X", xUrl, setXUrl, "https://x.com/…"], ["Telegram", tg, setTg, "https://t.me/…"]] as const).map(([lb, v, set, ph]) => (
             <label key={lb} className="block">{lb}<input className={input} value={v} onChange={(e) => set(e.target.value)} placeholder={ph} />{!okUrl(v) && <span className="text-xs text-red-400">must be an https link</span>}</label>
@@ -385,12 +508,12 @@ export default function LaunchWizard() {
       </div>
       <div className="space-y-2">
         <div className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">Preview · how it shows on Coins</div>
-        <div className="bt-preview-frame">{previewCard(name, ticker, imageUrl, oneLiner, oracle)}</div>
-        <p className="text-xs text-neutral-500">The line under the name comes from the locked rule, not from the form: a card can&apos;t say more than the rule does. Image, name and ticker can&apos;t be changed after launch.</p>
+        <div className="bt-preview-frame">{previewCard(name, ticker, shownImage, oneLiner, oracle, text?.badge ?? null)}</div>
+        <p className="text-xs text-neutral-500">The line under the name, the badge and the image come from the locked rule, not from the form: a card can&apos;t say more than the rule does. Image, name and ticker can&apos;t be changed after launch.</p>
       </div>
     </div>
   );
-  const createOk = !!name.trim() && okTicker(ticker) && okUrl(imageUrl) && okUrl(link) && okUrl(xUrl) && okUrl(tg);
+  const createOk = !!name.trim() && okTicker(ticker) && (!ownImage || okUrl(imageUrl)) && okUrl(link) && okUrl(xUrl) && okUrl(tg);
   const teamFilter = (t: Team) => { const s = teamQ.trim().toLowerCase(); if (!s) return true; if (`${t.name} ${t.abbr} ${t.city} ${t.nickname ?? ""}`.toLowerCase().includes(s)) return true; return aliasLookup(teamQ).some((a) => a.abbr === t.abbr && a.series === leagueSeries); };
 
   return (
@@ -415,23 +538,39 @@ export default function LaunchWizard() {
         <section className="space-y-3" aria-label="Describe the event">
           <label className="block">
             <span className="text-lg font-medium">Describe the event</span>
-            <input autoFocus className={input + " mt-1 text-base py-3"} value={uq} onChange={(e) => setUq(e.target.value)} placeholder="e.g. 'El-Sayed wins Michigan Senate', 'Eagles win Sunday', 'Detroit high above 90', 'US debt rises $1B'" aria-label="Describe the event" />
+            <input autoFocus className={input + " mt-1 text-base py-3"} value={uq} onChange={(e) => setUq(e.target.value)} placeholder="e.g. 'Rays win the World Series', 'Lakers win tonight', 'Arsenal win', 'Oilers lose', 'El-Sayed wins Michigan Senate', 'Detroit high above 90'" aria-label="Describe the event" />
           </label>
           {ubusy && <p className="text-sm text-neutral-500">Searching every source…</p>}
           {ures && ures.cards.length > 0 && (
-            <ul className="grid gap-2 md:grid-cols-2" aria-label="Ready-made rules">
-              {ures.cards.map((c) => (
+            <ul className="grid gap-2 md:grid-cols-2 lg:grid-cols-3" aria-label="Ready-made rules">
+              {ures.cards.map((c) => {
+                const wi = cardWin[c.id] ?? 0, w = c.windows?.[wi] ?? null, title = w?.title ?? c.title, tx = w?.text ?? c.text, endText = w?.endText ?? c.endText, badgeText = w?.text.badge ?? c.badge;
+                return (
                 <li key={c.id} className={`rounded-lg border p-3 text-sm ${c.refused.length ? "border-neutral-900 opacity-60" : "border-neutral-800 bg-neutral-900"}`}>
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]"><span className={`bt-chip bt-chip-${c.venue === "espn" || c.venue === "nws" ? "feed" : c.venue}`}>{c.venueLabel}</span>{c.settleAt && <span className="text-neutral-500">settles {c.settleAt.slice(0, 10)}</span>}</div>
-                  <div className="mt-1 font-medium leading-snug">{c.title}</div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className={`bt-chip bt-chip-${c.venue === "espn" || c.venue === "nws" ? "feed" : c.venue}`}>{c.venueLabel}</span>
+                    {c.shape !== "tile" && <span className="bt-chip">{c.shape === "pair" ? "two coins" : c.shape}</span>}
+                    {badgeText && <span className="bt-chip bt-chip-window">{badgeText}</span>}
+                  </div>
+                  <div className="mt-1 font-medium leading-snug">{title}</div>
                   <div className="text-xs text-neutral-400">{c.subtitle}</div>
-                  <div className="mt-1 text-xs text-neutral-500">Settled by: {c.settlement}</div>
+                  <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-xs text-neutral-400">
+                    <dt className="text-neutral-500">settles on</dt><dd>{c.settlement}{c.crossRead ? <> · cross-read: {c.crossRead}</> : null}</dd>
+                    {c.nextAt && <><dt className="text-neutral-500">next burn</dt><dd>{denver(c.nextAt)} (Denver) at the earliest</dd></>}
+                    {(endText || c.endAt) && <><dt className="text-neutral-500">ends</dt><dd>{endText ?? ""}{c.endAt && (w?.kind ?? "season") !== "perpetual" ? ` · by ${c.endAt.slice(0, 10)}` : ""}</dd></>}
+                  </dl>
+                  {c.windows && c.windows.length > 1 && <div className="mt-2 flex flex-wrap gap-1" role="radiogroup" aria-label="window">{c.windows.map((x, k) => (
+                    <button key={x.kind} role="radio" aria-checked={k === wi} onClick={() => setCardWin({ ...cardWin, [c.id]: k })} className={`rounded-full border px-2 py-0.5 text-[11px] ${k === wi ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{x.label.replace(/ \(.*\)$/, "")}</button>
+                  ))}</div>}
+                  {tx && <p className="mt-2 text-xs text-neutral-300"><span className="font-mono">${tx.ticker}</span> — {tx.oneLiner}.</p>}
+                  {c.note && <p className="mt-2 text-xs text-amber-300">{c.note}</p>}
                   {c.howSettles && <details className="mt-1 text-xs text-neutral-400"><summary className="cursor-pointer">How this settles</summary><p className="mt-1 whitespace-pre-wrap">{c.howSettles}</p></details>}
                   {c.refused.length > 0 ? <p className="mt-2 text-xs text-red-400">REFUSED: {c.refused.join("; ")}</p>
                     : c.venue === "tile" ? (c.href ? <Link className="mt-2 inline-block underline text-amber-300 text-xs" href={c.href}>Open Coin vs Coin →</Link> : <p className="mt-2 text-xs text-neutral-500">Coin vs Coin — not built yet</p>)
-                    : <button className="mt-2 text-xs underline text-amber-300" onClick={() => applySuggestion(c)}>Use this rule →</button>}
+                    : (c.rule || c.matchup) ? <button className="mt-2 rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950" onClick={() => applySuggestion(c, wi)}>Use this →</button>
+                    : <button className="mt-2 rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-500" disabled>Use this</button>}
                 </li>
-              ))}
+              ); })}
             </ul>
           )}
           {ures && ures.cards.length === 0 && !ubusy && (
@@ -445,9 +584,9 @@ export default function LaunchWizard() {
           <h2 className="text-lg font-medium">…or pick a starting point</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {([
-              ["team", "Team coin", "One team. Burns on every win, or on every loss — you pick. Results from the ESPN scoreboard, each confirmed by a second read.", "e.g. $EAGLES burns every time the Eagles lose", false],
+              ["team", "Team coin", "One team in any league — baseball, basketball, hockey, soccer, football, college. Burns on every win, loss or draw — you pick. Results from the ESPN scoreboard, each confirmed by a second read.", "e.g. $RAYS26 burns every time the Rays win · $ARSENAL every Arsenal win", false],
               ["browse", "Browse everything", "Weather, elections, economics, space, culture… pick a category, then a source.", "e.g. the U.S. national debt, Denver's high, a launch count", false],
-              ["pair", "Matchup pair", "Two teams, two coins. This game only, or the whole season.", "e.g. $EAGLES vs $JAGUARS — the loser burns", false],
+              ["pair", "Matchup pair", "Two teams, two coins. This game only, this season, or perpetual.", "e.g. $LAKERS vs $CELTICS — the loser burns", false],
               ["single", "Any market", "Search adjudicated markets by name: an election, a show, an award.", "e.g. the Michigan Senate race, the Oscars", true],
             ] as const).map(([f, title, body, eg, needsMarkets]) => {
               const off = needsMarkets && marketsOff;
@@ -474,7 +613,7 @@ export default function LaunchWizard() {
           </div>
           {leagueSeries && (
             <div className={card + " space-y-3"}>
-              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick your team</h2><input className={input + " w-64"} placeholder="Eagles, Philly, PHI…" value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
+              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick your team</h2><input className={input + " w-64"} placeholder="Rays, Lakers, Oilers, Arsenal, Inter Miami…" value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
               {teamsBusy && <p className="text-sm text-neutral-500">Loading teams from the ESPN scoreboard…</p>}
               {!teamsBusy && !teams.length && <p className="text-sm text-neutral-500">No teams found for this league right now.</p>}
               <div className="grid gap-2 sm:grid-cols-2">{teams.filter(teamFilter).map((t) => (
@@ -483,7 +622,7 @@ export default function LaunchWizard() {
                   <div className="min-w-0"><div className="font-medium truncate">{t.name}</div><div className="text-xs text-neutral-400">{t.recordText === null ? "record —" : `${record(t)} this season`}{t.next ? ` · next: ${t.next.opponent ? `vs ${t.next.opponent}` : t.next.title}, result ~${denver(t.next.expectedAt)}` : ""}</div></div>
                 </button>
               ))}</div>
-              <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">ESPN scoreboard · first-party</span>Teams, records and next games come from ESPN&apos;s scoreboard; every result is confirmed by a second, independent read (the league&apos;s own feed for NHL and MLB, TheSportsDB for NFL and NBA) before it counts. Times are Denver time.</p>
+              <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">ESPN scoreboard · first-party</span>Teams, records and next games come from ESPN&apos;s scoreboard; every result is confirmed by a second, independent read (the league&apos;s own feed for MLB and the NHL, TheSportsDB for the other leagues) before it counts. Times are Denver time.</p>
             </div>
           )}
           {navRow(null)}
@@ -492,21 +631,8 @@ export default function LaunchWizard() {
 
       {flow === "team" && step === "name" && team && (
         <section className="space-y-4">
-          <div className={card + " space-y-3"}>
-            <h2 className="font-medium">When should ${ticker || team.ticker} burn?</h2>
-            <div className="grid grid-cols-2 gap-2">{(["lose", "win"] as const).map((w) => (
-              <button key={w} onClick={() => setWinLose(w)} className={`rounded-lg border p-4 text-center ${winLose === w ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}><div className="text-lg font-semibold">When the {team.nickname ?? team.name} {w === "win" ? "WIN" : "LOSE"}</div><div className="text-xs opacity-80">{w === "lose" ? "every loss burns" : "every win burns"}</div></button>
-            ))}</div>
-            {team.recordText !== null && <p className="text-sm text-neutral-300">This season so far: {record(team)} → {winLose === "win" ? team.record.w : team.record.l} burn{(winLose === "win" ? team.record.w : team.record.l) === 1 ? "" : "s"} would have happened.</p>}
-          </div>
-          {createGrid("kalshi")}
-          <details className={card + " text-sm"}>
-            <summary className="cursor-pointer text-neutral-300">Edit the rule</summary>
-            <div className="mt-2 space-y-2">
-              <label className="block">Each {winLose === "win" ? "win" : "loss"} spends {pct(fraction)} of the burn pool <input type="range" min={0.01} max={0.1} step={0.005} value={fraction} onChange={(e) => setFraction(Number(e.target.value))} className="w-full" /></label>
-              <p className="text-xs text-neutral-400">Generated selector: <code>{winLose === "win" ? team.series?.win : team.series?.loss}</code> — every {team.name} game this season on the ESPN scoreboard; each {winLose === "win" ? "win" : "loss"} counts once its final score is confirmed by the second read. Spend floor $1 (smaller spends wait), 0.02 SOL reserve; a tie counts as neither.</p>
-            </div>
-          </details>
+          {team.recordText !== null && (() => { const sideNow = rule ? dialsFor(rule, dialCtx).side?.value : "loss"; const n = sideNow === "win" ? team.record.w : team.record.l; return <p className="text-sm text-neutral-300">{team.name} this season so far: {record(team)} → {n} burn{n === 1 ? "" : "s"} would have happened.</p>; })()}
+          {createGrid("catalogue", <p className="text-xs text-neutral-400">Generated selector: <code>{rule?.series}</code> — the team pinned by its ESPN id; each result counts once its final score is confirmed by the second read. Spend floor $1 (smaller spends wait), 0.02 SOL reserve; a tie counts as neither.</p>)}
           {navRow("Next: review →", !createOk)}
         </section>
       )}
@@ -517,7 +643,7 @@ export default function LaunchWizard() {
           <div className={card + " space-y-3"}><h2 className="font-medium">1. Pick a league</h2>{leaguePicker}</div>
           {leagueSeries && (
             <div className={card + " space-y-3"}>
-              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick the game</h2><input className={input + " w-64"} placeholder="search a team: Eagles, JAX…" value={gameQ} onChange={(e) => setGameQ(e.target.value)} /></div>
+              <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">2. Pick the game</h2><input className={input + " w-64"} placeholder="search a team: Lakers, Oilers, Arsenal…" value={gameQ} onChange={(e) => setGameQ(e.target.value)} /></div>
               {gamesBusy && <p className="text-sm text-neutral-500">Loading games from the ESPN scoreboard…</p>}
               {!gamesBusy && !games.length && <p className="text-sm text-neutral-500">No upcoming games{gameQ ? ` matching “${gameQ}”` : ""}.</p>}
               <ul className="divide-y divide-neutral-800">{games.map((g) => (
@@ -536,10 +662,10 @@ export default function LaunchWizard() {
         <section className="space-y-4">
           <div className={card + " space-y-3"}>
             <h2 className="font-medium">{game.title}</h2>
-            <div className="grid gap-2 sm:grid-cols-2">{([["game", "This game only", `Settles once, ~${denver(game.expectedAt)}. Exactly one coin burns.`], ["season", "Every game this season", `${sideA.name}: every loss burns. ${sideB.name}: every loss burns. Two separate records.`]] as const).map(([m, title, body]) => (
+            <div className="grid gap-2 sm:grid-cols-3">{([["game", "This game only", `Settles once, ~${denver(game.expectedAt)}. Exactly one coin burns.`], ["season", "This season", `${sideA.name}: every loss this season burns. ${sideB.name}: the same. Two separate records; both retire after the season.`], ["perpetual", "Perpetual", "Every loss, every season, no end date — neither coin retires."]] as const).map(([m, title, body]) => (
               <button key={m} onClick={() => setPairMode(m)} className={`rounded-lg border p-3 text-left ${pairMode === m ? "border-amber-400 ring-1 ring-amber-400" : "border-neutral-700 hover:border-neutral-500"}`}><div className="font-medium">{title}{m === "game" && <span className="ml-2 text-xs text-neutral-400">(default)</span>}</div><div className="text-xs text-neutral-400 mt-1">{body}</div></button>
             ))}</div>
-            {pairMode === "season" && <p className="text-xs text-amber-300">Every game this season = two coins, each on its OWN team&apos;s games. They only meet when these two teams play each other (then exactly one burns); the rest of the season each coin keeps its own record, so they are launched as two coins, not as one registered pair.</p>}
+            {pairMode !== "game" && <p className="text-xs text-amber-300">A season pair = two coins, each on its OWN team&apos;s games. They only meet when these two teams play each other (then exactly one burns); the rest of the time each coin keeps its own record, so they are launched as two coins, not as one registered pair.</p>}
             {pairMode === "game" && <p className="text-xs text-neutral-400">Two coins on this game: each burns once if its team loses, read from the ESPN final score once the cross-read agrees. A tie burns neither.</p>}
           </div>
           <div className="grid gap-3 md:grid-cols-2">{([["A", sideA, name, setName, ticker, setTicker, imageUrl, setImageUrl], ["B", sideB, nameB, setNameB, tickerB, setTickerB, imageB, setImageB]] as const).map(([k, sd, nm, setNm, tk, setTk, img, setImg]) => (
@@ -547,10 +673,12 @@ export default function LaunchWizard() {
               <div className="flex items-center gap-2">{badge(sd.abbr)}<div className="text-xs text-neutral-400">burns when the {sd.nickname ?? sd.label} lose</div></div>
               <label className="block">Name <input className={input} maxLength={32} value={nm} onChange={(e) => setNm(e.target.value)} /></label>
               <label className="block">Ticker <input className={input} maxLength={10} value={tk} onChange={(e) => setTk(e.target.value.toUpperCase())} /></label>
-              <label className="block">Image link (optional) <input className={input} value={img} onChange={(e) => setImg(e.target.value)} placeholder="https://…" /></label>
+              {customImages && <label className="block">Image link (optional) <input className={input} value={img} onChange={(e) => setImg(e.target.value)} placeholder="https://…" /></label>}
+              {(k === "A" ? text : textB) && <p className="rounded border border-dashed border-neutral-700 bg-neutral-950 p-2 text-xs text-neutral-300"><span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-neutral-500">description · locked</span>{(k === "A" ? text : textB)!.paragraph}</p>}
             </div>
           ))}</div>
-          <div className="grid gap-3 md:grid-cols-2" aria-label="Preview">{([[name, ticker, imageUrl, rule], [nameB, tickerB, imageB, ruleB]] as const).map(([nm, tk, img, r], k) => <div key={k} className="bt-preview-frame">{previewCard(nm, tk, img, r ? ruleOneLiner(r) : "", "kalshi")}</div>)}</div>
+          {rule && dialPanel(rule, text, { sides: false, windows: false })}
+          <div className="grid gap-3 md:grid-cols-2" aria-label="Preview">{([[name, ticker, rule, text], [nameB, tickerB, ruleB, textB]] as const).map(([nm, tk, r, t], k) => <div key={k} className="bt-preview-frame">{previewCard(nm, tk, genImg(r, tk, t?.oneLiner ?? ""), t?.oneLiner ?? (r ? ruleOneLiner(r) : ""), "catalogue", t?.badge ?? null)}</div>)}</div>
           <p className="text-xs text-neutral-500"><button className="underline" onClick={doSwap}>Swap sides</button>{tickerB && tickerB === ticker ? <span className="text-red-400"> · the two coins need different tickers</span> : null}</p>
           {navRow("Next: back-test →", !name.trim() || !nameB.trim() || !okTicker(ticker) || !okTicker(tickerB) || ticker === tickerB, () => { setBt(null); setBtB(null); setBtFor(""); next(); })}
         </section>
@@ -568,10 +696,7 @@ export default function LaunchWizard() {
               {(bt.refusals.length > 0 || btB.refusals.length > 0) && <p className="md:col-span-2 text-red-400">REFUSED: {[...bt.refusals, ...btB.refusals].map((r) => r.reason).join("; ")}</p>}
             </div>
           )}
-          <details className={card + " text-sm"}><summary className="cursor-pointer text-neutral-300">Edit the rule</summary>
-            <label className="block mt-2">Each burn spends {pct(fraction)} of that coin&apos;s burn pool <input type="range" min={0.01} max={0.1} step={0.005} value={fraction} onChange={(e) => setFraction(Number(e.target.value))} className="w-full" /></label>
-            <p className="text-xs text-neutral-400">${ticker}: <code>{rule?.series}</code> · ${tickerB}: <code>{ruleB?.series}</code>. Final scores from the ESPN scoreboard, each confirmed by a second read before it counts. $1 spend floor, 0.02 SOL reserve.</p>
-          </details>
+          <p className={card + " text-xs text-neutral-400"}>${ticker}: <code>{rule?.series}</code> · ${tickerB}: <code>{ruleB?.series}</code> · each burn spends {rule ? pct(dialsFor(rule, dialCtx).fraction) : "—"} of that coin&apos;s burn pool (change it on the previous step). Final scores from the ESPN scoreboard, each confirmed by a second read before it counts. $1 spend floor, 0.02 SOL reserve.</p>
           {navRow("Next: review →", !btFresh || !bt || !btB || bt.refusals.length > 0 || btB.refusals.length > 0)}
         </section>
       )}
@@ -735,12 +860,12 @@ export default function LaunchWizard() {
         <section className="space-y-4">
           <div className={card}>
             <h2 className="font-medium">Custom Kalshi selector (tier 1, settled results only)</h2>
-            <input className={input + " mt-2"} placeholder="search Kalshi series: NFL, CPI, Denver temperature, S&P, election…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className={input + " mt-2"} placeholder="search Kalshi series: MLB, CPI, Denver temperature, S&P, election…" value={q} onChange={(e) => setQ(e.target.value)} />
             <ul className="mt-2 divide-y divide-neutral-800 max-h-72 overflow-y-auto">{hits.map((h) => (
               <li key={h.ticker} className="py-2 flex items-start justify-between gap-2"><div><div className="text-sm"><code>{h.ticker}</code> {h.title}</div><div className="text-xs text-neutral-500">{h.category} · {h.frequency ?? "—"} · settles by {h.settlementSource?.name ?? "Kalshi"}{h.refused.length ? ` · REFUSED: ${h.refused.join("; ")}` : ""}</div></div>
                 {h.refused.length === 0 && <button className="text-xs underline" onClick={() => { setPick({ oracle: "kalshi", series: h.ticker, market: null, title: h.title }); next(); }}>every market in this series →</button>}</li>
             ))}</ul>
-            <p className="text-xs text-neutral-500 mt-2">One specific market instead? Paste its ticker: <input className={input + " inline w-80 ml-1"} placeholder="KXNFLGAME-26OCT11PHIJAC-PHI" onKeyDown={(e) => { const v = (e.target as HTMLInputElement).value.trim().toUpperCase(); if (e.key === "Enter" && v) { setPick({ oracle: "kalshi", series: null, market: v, title: `market ${v} (resolves once)` }); next(); } }} /></p>
+            <p className="text-xs text-neutral-500 mt-2">One specific market instead? Paste its ticker: <input className={input + " inline w-80 ml-1"} placeholder="KXMLBGAME-26OCT13CLETB-TB" onKeyDown={(e) => { const v = (e.target as HTMLInputElement).value.trim().toUpperCase(); if (e.key === "Enter" && v) { setPick({ oracle: "kalshi", series: null, market: v, title: `market ${v} (resolves once)` }); next(); } }} /></p>
           </div>
           <div className={card}>
             <h2 className="font-medium">First-party feeds (tiers 3–5, for things no market covers)</h2>
@@ -824,14 +949,22 @@ export default function LaunchWizard() {
         <section className="space-y-3 text-sm">
           <div className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-2">
             <h2 className="text-lg font-semibold">In plain words</h2>
-            {flow === "team" && team ? <p className="text-base">{teamCoinSentence(team.nickname ?? team.name, ticker, winLose, fraction)}</p>
+            {text && <div className="space-y-1" aria-label="final text">
+              <div className="flex flex-wrap items-center gap-2"><span className="bt-chip bt-chip-window">{text.badge}</span><span className="text-xs text-neutral-400">the final description (token metadata, coin page, card, first post)</span></div>
+              <p className="text-base">{finalDescription}</p>
+              {pairOn && textB && <p className="text-base border-t border-neutral-800 pt-2">{finalDescriptionB}</p>}
+              <p className="font-mono text-xs text-neutral-300">rules sha256 {btFresh && bt ? bt.sha256 : "computing…"}{pairOn && ruleB ? ` · $${tickerB || "B"} ${btFresh && btB ? btB.sha256 : "computing…"}` : ""}</p>
+              {note.trim() && <div className="rounded border border-neutral-700 p-2 text-xs"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note — not part of the rule</div>{note.trim()}</div>}
+              <p className="text-xs font-medium text-amber-300">Locked at launch — a different rule is a different coin. Nothing above can be changed afterwards.</p>
+            </div>}
+            {text ? null : flow === "team" && team ? <p className="text-base">{teamCoinSentence(team.nickname ?? team.name, ticker, winLose, fraction)}</p>
               : pairOn && sideA && sideB ? <>
                 <p className="text-base">{season
                   ? `Every time the ${sideA.nickname ?? sideA.name} lose, $${ticker} buys itself back with its own fees and burns it. Every time the ${sideB.nickname ?? sideB.name} lose, $${tickerB} does the same. Two separate coins, two separate records.`
                   : `When ${game?.title} is final, the loser's coin burns: if the ${sideA.nickname ?? sideA.name} lose, $${ticker} buys itself back with its own fees and burns it; if the ${sideB.nickname ?? sideB.name} lose, $${tickerB} does. A tie burns neither.`}</p>
                 <p>Rules locked forever. You earn nothing from fees. All LP burned.</p>
               </> : <><p className="text-base">{plainSentence(rule, ticker, pick?.title ?? bt?.seriesTitle ?? null)}</p>{settleNote && <p className="text-sm text-neutral-400">Settled by: {settleNote}</p>}<p>Rule locked forever. You earn nothing from fees. All LP burned.</p></>}
-            {flow === "team" && team && team.recordText !== null && <p className="text-neutral-400">This season so far the {team.nickname ?? team.name} are {record(team)}: that would have been {winLose === "win" ? team.record.w : team.record.l} burn(s).{btFresh && bt ? ` This season on the ESPN scoreboard: ${bt.backtest.totals.burnEvents} burn(s) in ${bt.backtest.totals.events} game day(s).` : ""}</p>}
+            {flow === "team" && team && team.recordText !== null && <p className="text-neutral-400">This season so far the {team.nickname ?? team.name} are {record(team)}: that would have been {(rule ? dialsFor(rule, dialCtx).side?.value : "loss") === "win" ? team.record.w : team.record.l} burn(s).{btFresh && bt ? ` This season on the ESPN scoreboard: ${bt.backtest.totals.burnEvents} burn(s) in ${bt.backtest.totals.events} game day(s).` : ""}</p>}
             {btFresh && bt?.refusals.length ? <p className="text-red-400">REFUSED: {bt.refusals.map((r) => r.reason).join("; ")}</p> : null}
           </div>
           <details className={card}><summary className="cursor-pointer text-neutral-300">Details: the exact rule{pairOn ? "s" : ""}, the receipt format, fees</summary>
