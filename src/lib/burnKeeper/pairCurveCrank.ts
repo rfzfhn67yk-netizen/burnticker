@@ -44,6 +44,11 @@ export interface PairCurveCrankDeps {
   dryRun: boolean;
   log: (line: string) => void;
   now?: () => number;
+  /**
+   * Review RL-2: true when the registry records this pair as UNLINKED (unlink_pair ran) — such a pair is never re-linked by the keeper
+   * unless the program's rule explicitly allows a re-link. The keeper wires it to the registry; absent = nothing recorded.
+   */
+  isUnlinked?: (mintA: string, mintB: string) => boolean;
   /** Ops alert sink (the keeper: registry.recordAlert, deduped per Denver day). */
   alert?: (kind: string, key: string, text: string, meta: Record<string, unknown>) => void;
 }
@@ -66,8 +71,9 @@ export function unlockedSides(pairs: readonly { address: PublicKey; pair: Pick<P
  * Winner takes the burn: link_pair is due as soon as both mints have a TokenConfig (right after init_pair; round 2 refuses it once
  * either coin has a reading) and the two PairLinks do not already name each other as paired; never for a voided Pair. Pure.
  */
-export function linkPairDue(pair: Pick<PairAccount, "mints" | "status">, configs: [boolean, boolean], links: [PairLinkAccount | null, PairLinkAccount | null]): boolean {
-  if (pair.status === STATUS_VOIDED) return false;
+export function linkPairDue(pair: Pick<PairAccount, "mints" | "status" | "refunding">, configs: [boolean, boolean], links: [PairLinkAccount | null, PairLinkAccount | null], unlinked = false): boolean {
+  // review RL-2: never for a voided Pair, a side that is refunding (the unlink evidence), or a pair the registry records as unlinked
+  if (pair.status === STATUS_VOIDED || pair.refunding.some(Boolean) || unlinked) return false;
   if (!configs[0] || !configs[1]) return false;
   const ok = (l: PairLinkAccount | null, other: PublicKey) => !!l && l.paired && l.pair_mint.equals(other);
   return !(ok(links[0], pair.mints[1]) && ok(links[1], pair.mints[0]));
@@ -99,7 +105,7 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
       const B = d.ctx.burnReceiptsProgramId;
       const configs = await Promise.all(pair.mints.map(async (m) => !!(await d.ctx.connection.getAccountInfo(configPda(B, m), "confirmed")))) as [boolean, boolean];
       const links = await Promise.all(pair.mints.map((m) => fetchPairLink(d.ctx.connection, B, m))) as [PairLinkAccount | null, PairLinkAccount | null];
-      if (linkPairDue(pair, configs, links)) {
+      if (linkPairDue(pair, configs, links, d.isUnlinked?.(pair.mints[0].toBase58(), pair.mints[1].toBase58()) ?? false)) {
         const result = await simulateAndSend(d.ctx, [linkPairIx({ programId: B, payer: d.cranker.publicKey, pair: address, mintA: pair.mints[0], mintB: pair.mints[1] })], [d.cranker], { dryRun: d.dryRun });
         d.log(`  [pair-curve] ${address.toBase58().slice(0, 8)}… link_pair: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${pairErrorSentence(result.error)}`}`);
         if (!result.ok && result.error === "PairHasReadings") d.alert?.("pair-link-refused", `pair-link-refused:${address.toBase58()}`, `pair ${address.toBase58().slice(0, 8)}…: ${pairErrorSentence(result.error)}`, { pair: address.toBase58() });

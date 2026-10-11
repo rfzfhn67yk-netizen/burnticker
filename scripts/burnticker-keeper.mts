@@ -191,7 +191,7 @@ while (!stopping) {
   // mode only, behind BURNTICKER_PAIR_CURVE_ENABLED. Permissionless cranks; the keeper key pays transaction fees only.
   if (built.chain && pairCurveEnabled(process.env) && gate.sendsAllowed) {
     try {
-      const pc = await crankPairCurves({ ctx: { connection: built.chain.connection, cluster: built.chain.cluster, burnReceiptsProgramId: new PublicKey(PROGRAM_ID!), allowMainnet: process.env.BURNTICKER_MAINNET === "1" }, cranker: built.chain.payer, dryRun: deps.dryRun, log, alert: (kind, key, text, meta) => { registry.recordAlert({ kind, key, text, meta }); } });
+      const pc = await crankPairCurves({ ctx: { connection: built.chain.connection, cluster: built.chain.cluster, burnReceiptsProgramId: new PublicKey(PROGRAM_ID!), allowMainnet: process.env.BURNTICKER_MAINNET === "1" }, cranker: built.chain.payer, dryRun: deps.dryRun, log, isUnlinked: (ma, mb) => { const pr = registry.pairOf(ma); return !!pr && (pr.mintA === mb || pr.mintB === mb) && registry.getStatus(`pair.unlinked.${pr.pairId}`) !== null; }, alert: (kind, key, text, meta) => { registry.recordAlert({ kind, key, text, meta }); } });
       if (pc.acted.length || pc.errors.length) log(`pair curve: ${pc.scanned} pair(s) scanned, ${pc.acted.length} cranked${pc.errors.length ? ` · errors: ${pc.errors.slice(0, 3).join(" | ")}` : ""}`);
     } catch (e) { log(`pair curve crank failed: ${(e as Error).message.slice(0, 200)}`); }
   } else if (pairCurveEnabled(process.env) && !built.real) log(`  [pair-curve] ${PAIR_CURVE_FLAG} is set but the program client is the fake — nothing cranked`);

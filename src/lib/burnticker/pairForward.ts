@@ -285,7 +285,7 @@ export class FakePairForwardPort implements PairForwardPort {
     this.results.set(b.recordDate, { ...r, forwarded: true, forwardedLamports: a.lamports, forwardedAt: Math.floor(this.now() / 1000) });
     this.forwards++;
     const memo = formatForwardMemo(loser.cfg.memoPrefix, b.loser, winnerMint, b.recordDate, a.lamports);
-    loser.landed.set(sig, { slot: 900 + this.n, err: null, memo, payload: { kind: "other" } });
+    loser.landed.set(sig, { slot: 900 + this.n, err: null, memo, payload: { kind: "forward", recordDate: b.recordDate } });
     this.landed.set(sig, { facts: { loserMint: b.loser, winnerMint, recordDate: b.recordDate, units: rd.units, poolLamports: a.pool, lamports: a.lamports, solLamports: sol, wsolLamports: wsol, memo } });
   }
   async confirm(tx: Pick<SignedTx, "signature">): Promise<ConfirmOutcome> {

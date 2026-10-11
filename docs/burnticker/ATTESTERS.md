@@ -44,7 +44,8 @@ devnet the keeper key is both coins' attester). Two notes for anyone checking or
 - **What a win needs on chain.** The two coins paired to each other, a date on or after the pairing day (`PairDateBeforePairing`), both
   coins' readings for the date (the keeper attests a flat 0-unit winner reading first when needed) and the loser's still unprocessed —
   else `PairResultNotServable`. There is no pool condition: against a side without a verified pool the forward moves 0 lamports and the
-  loser keeps its fuel. A draw is signed only when the period truly was a draw; the keeper never substitutes one for a win.
+  fuel stays in the loser's pool (its own later burns spend it). A lost period never burns the losing coin unless no forward lands within
+  72 hours, in which case it burns as a plain period and a PairForwardMissing event is published. A draw is signed only when the period truly was a draw; the keeper never substitutes one for a win.
 
 ## 1. Run the reader on your own machine
 

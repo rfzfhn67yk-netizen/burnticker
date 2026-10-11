@@ -14,6 +14,7 @@ import { solToLamports } from "@/lib/burnKeeper/rules";
 import { derbyProofHash } from "@/lib/burnticker/derby/adapter";
 import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type BurnProgramClient } from "@/lib/burnticker/program";
 import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFeesKeeper";
+import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 
 /**
@@ -62,6 +63,12 @@ export interface KeeperDeps {
   readingGraceMs?: number;
   /** BURNTICKER_KALSHI_ENABLED (venues.ts). false: Kalshi is never read; coins with a Kalshi rule are held with a venue-disabled alert (C1, 2026-10-10). Undefined = on. */
   kalshiEnabled?: boolean;
+  /**
+   * Send unlink_pair when the program's evidence holds (pairForwardKeeper.pairUnlinkStep). OFF by default (pair-forward re-check RN-1/RN-2:
+   * the round-2 30-day not-live evidence would unlink healthy open pairs at day 30) until the round-3 evidence set is bound. Off, the step
+   * only observes: it records an unlink someone else made and alerts when the registry and the chain disagree.
+   */
+  pairUnlink?: boolean;
 }
 
 export interface FetchReport { key: string; written: number; refusals: string[]; awaitingFinal: number; error: string | null; skipped: boolean }
@@ -279,14 +286,18 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     }
   }
 
-  // 3. ADOPT readings already processed on chain (cranking is permissionless; a lost confirmation).
+  // 3. ADOPT readings already processed on chain (cranking is permissionless; a lost confirmation). Review RL-1: a reading processed by
+  // forward_to_winner (outcome "forwarded") — another cranker's forward, one that won the 72 h race, or the keeper's own whose confirmation
+  // was lost — is adopted from its write-ahead `forward:<date>` signature or the chain (findCrankTx matches ForwardToWinner too).
   for (const D of [...new Set(counted.map((b) => b.readingDate!))]) {
     const rd = await port.reading(D);
     if (!rd?.processed) continue;
-    const res = await resolveSent(d, port, mint, `crank:${formatDate(D)}`);
+    const fwd = rd.outcome === "forwarded";
+    const res = await resolveSent(d, port, mint, `${fwd ? "forward" : "crank"}:${formatDate(D)}`);
     const tx = "landed" in res ? { signature: res.landed.signature, slot: res.landed.slot, memo: await port.memoOf(res.landed.signature, D) } : await port.findCrankTx(D);
-    if (!tx) { hold("processed on chain; its crank transaction is not found yet", reg.receiptsForReading(mint, D)); continue; }
+    if (!tx) { hold(`processed on chain; its ${fwd ? "forward" : "crank"} transaction is not found yet`, reg.receiptsForReading(mint, D)); continue; }
     recordCrank(d, t, cfg, D, rd, tx, true, out);
+    if (fwd && pairCtx) await adoptForward(d, pairCtx, D, rd, tx);
   }
 
   // 4. CRANK in order.
@@ -366,6 +377,23 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     } catch (e) { fail(`RPC/program error: ${(e as Error).message.slice(0, 200)}`); break; }
   }
   return out;
+}
+
+/**
+ * Review RL-1: a forward the keeper did not itself just confirm, adopted from the chain — the append-only pair_forwards row (the program's
+ * facts from the transaction when readable, else the reading and the memo) and the receipt line. Idempotent (keyed by signature).
+ */
+async function adoptForward(d: KeeperDeps, ctx: PairCtx, D: number, rd: ProgramReadingView, tx: { signature: string; slot: number | null; memo: string | null }): Promise<void> {
+  if (d.registry.pairForwards(ctx.pair.pairId).some((f) => f.signature === tx.signature)) return;
+  let facts: ForwardFacts | null = null;
+  try { const f = await ctx.port.forwardFacts(tx.signature); facts = f && f !== "none" ? f : null; } catch { facts = null; }
+  if (!facts) {
+    const m = tx.memo ? parseForwardMemo(tx.memo) : null;
+    const lamports = m ? m.lamports : rd.spentLamports;
+    facts = { loserMint: ctx.me.mint, winnerMint: ctx.other.mint, recordDate: D, units: rd.units, poolLamports: rd.poolLamports, lamports, solLamports: lamports, wsolLamports: BigInt(0) };
+  }
+  d.log(`  [pair] $${ctx.me.ticker} ${formatDate(D)}: a forward already on chain (${tx.signature.slice(0, 12)}…) — adopted`);
+  recordForward(d.registry, ctx, D, facts, tx.signature, tx.slot, d.now(), d.log);
 }
 
 /** Attests every closed day's units (baseline first). Returns the refreshed config. */
@@ -709,8 +737,8 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
   }
   try { await pairUnmatchedAlerts(d.registry, d.program, d.now(), d.log); } catch (e) { errors.push(`pair links: ${(e as Error).message.slice(0, 160)}`); }
-  // r2 M-2: unlink_pair once the program's evidence holds (a voided pair curve, a refunding side, no verified pool 30 days after pairing).
-  try { await pairUnlinkStep(d.registry, d.program, d.now(), !!d.dryRun, d.log); } catch (e) { errors.push(`pair unlink: ${(e as Error).message.slice(0, 160)}`); }
+  // r2 M-2: unlink_pair on the program's evidence — sending is OFF unless d.pairUnlink (re-check RN-1/RN-2); observing always runs.
+  try { await pairUnlinkStep(d.registry, d.program, d.now(), !!d.dryRun, d.log, { send: d.pairUnlink === true }); } catch (e) { errors.push(`pair unlink: ${(e as Error).message.slice(0, 160)}`); }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
   for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }

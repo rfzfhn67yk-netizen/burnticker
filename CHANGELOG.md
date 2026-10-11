@@ -515,6 +515,18 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 997
 
+## 2026-10-11 — Pair-forward round-2 re-check, keeper items (RL-1, RL-2, RI-2); no publish, no deploy
+
+- RL-1: a `forward_to_winner` the keeper did not itself just confirm (another cranker's, one that won the 72 h race, or its own with a
+  lost confirmation) is adopted from the chain: the loser's FORWARDED reading, its `forward:<date>` write-ahead signature or the chain
+  (`findCrankTx` matches ForwardToWinner) — receipts recorded, the `pair_forwards` row written; nothing is held forever.
+- RL-2: the pair-curve crank never re-links a pair with a refunding side or one the registry records as unlinked; the unlink step re-reads
+  the chain every cycle and alerts `pair-unlink-drift` when the record and the chain disagree. Sending `unlink_pair` is OFF by default
+  (KeeperDeps.pairUnlink) until the round-3 evidence set is bound — the round-2 30-day not-live rule would unlink healthy open pairs (RN-1/RN-2).
+- RI-2: "a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a
+  PairForwardMissing event is published" — whitepaper §5.5, PAIR-CURVE.md, ATTESTERS.md and a dated checklist erratum.
+- Pair pages state the attester fact: "On this platform the operator's keeper is the sole attester (quorum 1) for both coins of a pair."
+
 ## 2026-10-11 — Pair-forward round 2 (the blind review's H-1 / M-1 / M-2 / L-1..L-4), client side; no publish, no mainnet deploy
 
 - burn_receipts gains `unlink_pair` (30 entrypoints, 34 event types with PairForwardMissing / PairUnlinked, 94 error codes).
@@ -613,6 +625,14 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 ## 2026-10-11 — publish from 354d363855fe
 
 - monorepo commit: `354d363855fec4732af8545c9472a94b7b3624ec` (the working tree had uncommitted changes when this tag was written)
+- program hash: `ac00ae8ef9c7791e73511413f3a53710d1275b242d25f4b91c2970d41562b316` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `8f0fed930369e67f3c0d172159dd86311836304f5da7cc87a160075b95863574`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1074
+
+## 2026-10-11 — publish from 9a337d448d68
+
+- monorepo commit: `9a337d448d688ba495076bd97f6855dca4488204` (the working tree had uncommitted changes when this tag was written)
 - program hash: `ac00ae8ef9c7791e73511413f3a53710d1275b242d25f4b91c2970d41562b316` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `8f0fed930369e67f3c0d172159dd86311836304f5da7cc87a160075b95863574`
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`

@@ -473,7 +473,8 @@ pair made since carries `pair.winnerTakesBurn: true` in both sides' canonical ru
   the loser's units and fraction (nothing below the rule's minimum spend; a one-shot pair maps 100 %, so all of it), from the loser's burn
   pool into the winner's, and writes the memo in every case `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. If either
   coin has no verified pool (or the pair has been unlinked) it moves 0 lamports and still processes the loser's reading, so a dead side can
-  never wedge the queue: a lost period never burns the losing coin; against a dead winner the fuel waits in the loser's pool. The loser's
+  never wedge the queue: a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published. Against a dead winner the fuel stays in the loser's pool, where the loser's own later
+  burns spend it. The loser's
   reading is processed with outcome 6 (forwarded). The winner's ordinary cranks then spend its pool on
   the winner's coin and burn what they get.
 - **What does not happen.** The loser's supply is untouched and nobody is paid: SOL moves between two program PDAs that have no withdraw
