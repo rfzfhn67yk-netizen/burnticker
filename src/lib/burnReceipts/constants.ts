@@ -152,7 +152,7 @@ export const LOCK_CPMM_PROGRAM_ID: Record<Cluster, PublicKey> = {
 export const LOCK_CP_AUTHORITY_SEED = Buffer.from("lock_cp_authority_seed", "utf8");
 /** The lock program's per-position state ["locked_liquidity", fee_nft_mint] (LockedCpLiquidityState, 256 B; offsets from devnet). */
 export const LOCKED_LIQUIDITY_SEED = Buffer.from("locked_liquidity", "utf8");
-export const LOCKED_LIQUIDITY_OFFSETS = { lockedLp: 8, claimedLp: 16, unclaimedLp: 24, lastLp: 32, lastK: 40, epoch: 56, pool: 64, feeNftMint: 96, owner: 128, lpMint: 160 } as const;
+export const LOCKED_LIQUIDITY_OFFSETS = { lockedLp: 8, claimedLp: 16, unclaimedLp: 24, lastLp: 32, lastK: 40, epoch: 56, pool: 64, feeNftMint: 96, owner: 128, locker: 128, lpMint: 160 } as const;
 export const SEED_FEE_KEYS = Buffer.from("fee_keys", "utf8");
 export const SEED_FEE_KEY = Buffer.from("fee_key", "utf8");
 /** The fixed split (program constants LOCK_FEE_BURN_BPS / LOCK_FEE_OPERATOR_BPS): operator = floor(x·2000/10000), burn pool = the rest. */
@@ -172,6 +172,26 @@ export const OPERATOR_TREASURY: Record<Cluster, PublicKey> = {
 export const LL_PLATFORM_LOCK_NFT_WALLET = 48;
 export const REQUIRED_LL_PLATFORM_SCALES_PPM: readonly [bigint, bigint, bigint] = [BigInt(1_000_000), BigInt(0), BigInt(0)];
 export const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+/**
+ * LP-lock round 2 (2026-10-11): the LOCKER (LockedCpLiquidityState @128) identifies a position. Policy 0 = LaunchLab's vault_auth PDA
+ * ["vault_auth_seed"] (the migration locks the LP under it); policy 2 = the pair's vault (pool.pool_creator).
+ */
+export const LAUNCHLAB_VAULT_AUTH_SEED = Buffer.from("vault_auth_seed", "utf8");
+export const LAUNCHLAB_VAULT_AUTH: Record<Cluster, PublicKey> = {
+  mainnet: new PublicKey("WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh"),
+  devnet: new PublicKey("5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq"),
+  localnet: new PublicKey("WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh"),
+};
+/**
+ * BURNTICKER_PLATFORM compiled into each build (round 2): initialize_token for policies 0 and 2 requires launchlab_platform == it
+ * (PlatformNotAllowed). Devnet = Burnticker's devnet LaunchLab platform; the default (mainnet) build carries all zeros and refuses
+ * (PlatformNotPinned) until the owner's mainnet platform is compiled in; localnet uses the `test-pins` cargo feature's value (not mirrored).
+ */
+export const BURNTICKER_PLATFORM: Record<Cluster, PublicKey> = {
+  mainnet: PublicKey.default,
+  devnet: new PublicKey("GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf"),
+  localnet: PublicKey.default,
+};
 
 /**
  * Genesis hashes, for the cluster-consistency check (review L-6) and the signed message's cluster binding (review-2 F12: the

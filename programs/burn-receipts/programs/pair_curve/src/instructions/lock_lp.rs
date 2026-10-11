@@ -9,7 +9,7 @@ use burn_receipts::cpmm::PoolView;
 
 use crate::constants::*;
 use crate::error::PairError;
-use crate::events::LpLocked;
+use crate::events::{LpBurnedFallback, LpLocked};
 use crate::guards::{mint_supply, require_token_account_intact, require_vault_intact, token_amount};
 use crate::state::Pair;
 
@@ -172,6 +172,8 @@ pub fn handle_lock_lp(ctx: Context<LockLp>, side: u8) -> Result<()> {
         let d = l.try_borrow_data()?;
         require!(d.len() >= 192 && d[..8] == LOCKED_LIQUIDITY_DISCRIMINATOR, PairError::LockMismatch);
         require!(d[64..96] == a.pool_state.key().to_bytes()[..] && d[96..128] == nft_mint.to_bytes()[..], PairError::LockMismatch);
+        // @128 = the liquidity owner (the locker): this pair's vault — what burn_receipts' register_fee_key identifies the position by.
+        require!(d[128..160] == vault.key().to_bytes()[..], PairError::LockMismatch);
     }
     // The emptied LP account's rent belongs to the side (CPMM charged it to the raise): to its burn pool.
     token::close_account(CpiContext::new_with_signer(
@@ -183,5 +185,68 @@ pub fn handle_lock_lp(ctx: Context<LockLp>, side: u8) -> Result<()> {
     let (pool_key, cranker, fee_nft_account, locked_liquidity) = (a.pool_state.key(), a.cranker.key(), a.fee_nft_account.key(), a.locked_liquidity.key());
     ctx.accounts.pair.lp_locked[s] = lp;
     emit_cpi!(LpLocked { pair: pair_key, side, cranker, pool: pool_key, lp_amount: lp, fee_nft_mint: nft_mint, fee_nft_account, locked_liquidity });
+    Ok(())
+}
+
+/// PERMISSIONLESS fallback (lp-lock blind review L-2), once per side: if `lock_lp` has not run LP_LOCK_FALLBACK_SECS (30 days) after the
+/// graduation decision — Raydium's upgradeable lock program refused, paused or changed `lock_cp_liquidity` — anyone burns ALL of the
+/// vault's LP for the side instead and records it in the same field (`lp_locked`; register_pair_pool counts burned + locked LP), so the
+/// side's pool can still be registered and its burn pool used. The LP fees of that side are then forgone (burned LP earns nothing for
+/// anyone). This is the ONLY instruction that destroys LP; lock_lp is the normal path and the keeper runs it at graduation.
+#[event_cpi]
+#[derive(Accounts)]
+#[instruction(side: u8)]
+pub struct BurnLp<'info> {
+    pub cranker: Signer<'info>,
+    #[account(mut, constraint = side < 2 @ PairError::InvalidSide, seeds = [PAIR_SEED, pair.mints[0].as_ref(), pair.mints[1].as_ref()], bump = pair.bump)]
+    pub pair: Box<Account<'info, Pair>>,
+    #[account(mut, address = pair.vault @ PairError::AccountMismatch)]
+    pub vault: SystemAccount<'info>,
+    /// CHECK: the side's pool (address = pair.pools[side]); parsed by PoolView.
+    #[account(address = pair.pools[side as usize] @ PairError::NothingToLock)]
+    pub pool_state: UncheckedAccount<'info>,
+    /// CHECK: the pool's LP mint (checked against the pool); its supply drops by the burn.
+    #[account(mut)]
+    pub lp_mint: UncheckedAccount<'info>,
+    /// CHECK: ATA(vault, lp_mint) — checked in the handler; emptied and closed here.
+    #[account(mut)]
+    pub vault_lp: UncheckedAccount<'info>,
+    /// CHECK: the side's burn pool (address recorded at init) — receives the emptied LP account's rent.
+    #[account(mut, address = pair.fee_vaults[side as usize] @ PairError::AccountMismatch)]
+    pub fee_vault: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+pub fn handle_burn_lp(ctx: Context<BurnLp>, side: u8) -> Result<()> {
+    let s = side as usize;
+    let a = &ctx.accounts;
+    let p = &a.pair;
+    require!(p.pools[s] != Pubkey::default() && p.lp_locked[s] == 0, PairError::NothingToLock);
+    let now = Clock::get()?.unix_timestamp;
+    require!(p.graduation_started_at > 0 && now >= p.graduation_started_at.saturating_add(LP_LOCK_FALLBACK_SECS), PairError::LpLockFallbackNotDue);
+    let pool = PoolView::load(&a.pool_state.to_account_info())?;
+    require_keys_eq!(a.lp_mint.key(), pool.lp_mint, PairError::PoolMismatch);
+    let vault = a.vault.to_account_info();
+    require_keys_eq!(a.vault_lp.key(), get_associated_token_address(&vault.key(), &pool.lp_mint), PairError::AccountMismatch);
+    let lp = require_token_account_intact(&a.vault_lp.to_account_info(), &vault.key(), &pool.lp_mint)?;
+    require!(lp > 0, PairError::NothingToLock);
+    let supply_before = mint_supply(&a.lp_mint.to_account_info())?;
+    let pair_key = p.key();
+    let vault_seeds: &[&[u8]] = &[VAULT_SEED, pair_key.as_ref(), &[p.vault_bump]];
+    let vault_lamports = vault.lamports();
+    token::burn(
+        CpiContext::new_with_signer(token::ID, token::Burn { mint: a.lp_mint.to_account_info(), from: a.vault_lp.to_account_info(), authority: vault.clone() }, &[vault_seeds]),
+        lp,
+    )?;
+    require!(mint_supply(&a.lp_mint.to_account_info())? == supply_before - lp, PairError::LockMismatch);
+    token::close_account(CpiContext::new_with_signer(
+        token::ID,
+        token::CloseAccount { account: a.vault_lp.to_account_info(), destination: a.fee_vault.to_account_info(), authority: vault.clone() },
+        &[vault_seeds],
+    ))?;
+    require_vault_intact(&vault, vault_lamports)?;
+    let (pool_key, cranker) = (a.pool_state.key(), a.cranker.key());
+    ctx.accounts.pair.lp_locked[s] = lp;
+    emit_cpi!(LpBurnedFallback { pair: pair_key, side, cranker, pool: pool_key, lp_amount: lp });
     Ok(())
 }

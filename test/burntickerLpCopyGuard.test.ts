@@ -75,7 +75,7 @@ describe("LP locked forever: no public surface still claims the LP is burned", (
   test("the guard catches the old claims and lets the program's technical phrasing through", () => {
     const claims = ["All LP burned", "all LP is burned at graduation", "LP burned at graduation: 100 %", "LP 100% burned", "100 % of graduation LP is burned", "our platform burns 100 % of graduation LP", "Creator earns nothing; all LP burned."];
     for (const c of claims) assert.ok(LP_BURNED_CLAIMS.some((re) => re.test(c)), c);
-    const fine = ["≥ 50 % of the LP burned or locked", "90 % of LP burned or locked", "LP burned/locked", "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)", "the burned LP's share"];
+    const fine = ["burn_lp: the only path that destroys LP; used only if Raydium's lock refuses for 30 days", "≥ 50 % of the LP burned or locked", "90 % of LP burned or locked", "LP burned/locked", "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)", "the burned LP's share"];
     for (const c of fine) assert.ok(!LP_BURNED_CLAIMS.some((re) => re.test(c)), c);
   });
 

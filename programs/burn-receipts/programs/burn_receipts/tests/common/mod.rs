@@ -61,7 +61,10 @@ fn read_fixture(rel: &str, hint: &str) -> Vec<u8> {
 impl Env {
     pub fn new() -> Self {
         let mut svm = LiteSVM::new().with_precompiles();
-        svm.add_program(burn_receipts::ID, &read_fixture("target/deploy/burn_receipts.so", "Run `anchor build` first.")).unwrap();
+        // The `test-pins` build (scripts/test.sh → target/deploy-test): mainnet genesis and Raydium ids, with the harness's
+        // TEST_LAUNCHLAB_PLATFORM compiled in as BURNTICKER_PLATFORM (lp-lock blind review RL-3) and the test treasury [0x7e; 32]. The
+        // default (mainnet) build pins no platform and refuses every policy-0/2 initialize_token (PlatformNotPinned).
+        svm.add_program(burn_receipts::ID, &read_fixture("target/deploy-test/burn_receipts.so", "Run scripts/test.sh first (builds --features test-pins).")).unwrap();
         svm.add_program(CPMM_PROGRAM_ID, &read_fixture("fixtures/raydium_cp_swap.so", "Run scripts/build-cpmm-fixture.sh first.")).unwrap();
         // The WSOL mint (SPL Token's native mint) — present on every real cluster, absent from a bare LiteSVM.
         let mut mint_data = vec![0u8; spl_token::state::Mint::LEN];
@@ -559,11 +562,18 @@ pub fn ix_register_pool_full(registrar: &Pubkey, mint: &Pubkey, pool: &Pubkey, l
             lp_mint,
             lp_lock_vault: get_associated_token_address(&LOCK_CPMM_AUTHORITY, &lp_mint),
             launchlab_pool: launchlab.map(|l| l.0),
+            // RL-3: policy 0 passes the mint's FeeKeyRecord (register_fee_key first; cpmm::launchlab_migrated writes a stand-in).
+            fee_key: launchlab.map(|_| fee_key_record_pda(mint)),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }
         .to_account_metas(None),
     )
+}
+
+/// burn_receipts' FeeKeyRecord ["fee_key", mint].
+pub fn fee_key_record_pda(mint: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[FEE_KEY_SEED, mint.as_ref()], &burn_receipts::ID).0
 }
 
 /// The test LaunchLab platform account (stand-in for the Receipts platform's PlatformConfig; LaunchLab owner, SDK layout).

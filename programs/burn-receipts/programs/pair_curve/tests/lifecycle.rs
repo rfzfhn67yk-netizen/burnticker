@@ -1196,7 +1196,7 @@ fn graduation_lp_is_locked_forever_and_its_fees_are_claimed_80_20_with_the_coin_
     }
     env.ok(&[ix_register_fee_key(&c.pubkey(), &p.mint(0), &pa.pool, &nft)], &[&c]);
     let (fee0, tre0, supply0) = (env.lamports(&fee_pda(&p.mint(0))), env.lamports(&treasury), env.mint_supply(&p.mint(0)));
-    let m = env.ok(&[ix_claim_lock_fees(&c.pubkey(), &p.mint(0), &pa, &nft, &treasury, u64::MAX)], &[&c]);
+    let m = env.ok(&[ix_claim_lock_fees(&c.pubkey(), &p.mint(0), &pa, &nft, &treasury)], &[&c]);
     let cl: burn_receipts::events::LockFeesClaimed = pc_event_br(&m);
     println!("claim_lock_fees on a pair pool: {} CU; wsol {} → {} / {}; burned {}", m.compute_units_consumed, cl.wsol_claimed, cl.to_burn_pool, cl.to_operator, cl.tokens_burned);
     assert!(cl.wsol_claimed > 0 && cl.tokens_burned > 0);

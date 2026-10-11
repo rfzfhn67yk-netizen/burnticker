@@ -66,8 +66,9 @@ pub mod burn_receipts {
     }
 
     /// LAUNCHPAD-PATH §35: collect the locked LP's fees; SOL 80 % burn pool / 20 % operator treasury (compiled), coin side burned.
-    pub fn claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -> Result<()> {
-        instructions::lock_fees::handle_claim_lock_fees(ctx, lp_fee_amount)
+    /// Always collects everything accrued (lp-lock blind review L-3: no caller-chosen amount).
+    pub fn claim_lock_fees(ctx: Context<ClaimLockFees>) -> Result<()> {
+        instructions::lock_fees::handle_claim_lock_fees(ctx)
     }
 
     /// Registration policy 2 (2026-10-10): the CPMM pool pair_curve's `graduate` created for this token (src/pair_curve.rs).

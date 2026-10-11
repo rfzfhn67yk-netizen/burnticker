@@ -12,6 +12,7 @@ data arrives as an attested reading, anyone can crank, and nobody custodies the 
 | `programs/burn-receipts/` | Anchor 1.2.1 workspace (program `burn_receipts`, LiteSVM tests, CPMM fixture script, IDL / powers-register generators) |
 | `src/lib/burnReceipts/` | TypeScript client: PDAs, IDL-driven instruction builders, attestation signing, memo, CPMM views, `crank.ts` for the keeper |
 | `test/burnReceipts*.test.ts` | TS unit tests (in `npm test`) + an opt-in end-to-end test on a local validator |
+| LiteSVM / localnet pins | LP-lock round 2 (2026-10-11): the `test-pins` cargo feature compiles test values for `OPERATOR_TREASURY` and `BURNTICKER_PLATFORM` into localnet builds, so the Rust suites can exercise claims and initialize_token; it is never part of a devnet or mainnet build |
 | `docs/burn-receipts/attestation.md` | Attestation: N-of-M ed25519 attesters (keeper, second operator, zkTLS relayer), the signed message, the zkTLS relayer path; why there is no Switchboard attester |
 | `docs/burn-receipts/powers-register.{json,md}` | Every power anyone holds — generated from the IDL |
 

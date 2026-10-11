@@ -36,6 +36,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | burn_receipts | `set_registration_policy` | config_authority | **none** | None. |
 | burn_receipts | `submit_reading` | anyone | **rent only (the caller pays it)** | Payer pays the reading account's rent (kept forever; readings are never closed). |
 | burn_receipts | `veto_registration_policy` | attester_key | **none** | None. |
+| pair_curve | `burn_lp` | anyone | **fallback only, if lock_lp cannot run for 30 days: burn_lp destroys the side's LP (no LP fees then)** | Vault LP → burned; emptied LP account's rent → the side's burn pool. |
 | pair_curve | `buy` | trader | **the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault** | Buyer → SOL vault (curve cost + fee); token vault → buyer (tokens). |
 | pair_curve | `claim_developer_fee` | anyone | **the accrued 25 bps → the developer wallet fixed at init** | SOL vault → developer wallet (the accrual only). |
 | pair_curve | `close_pair` | anyone | **voided pairs only: residue → burn pools; account rent → the creator who paid it** | Developer accrual → developer wallet (or the burn pools); SOL vault residue → burn pools; account rent → the creator. |
@@ -48,7 +49,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 What does not exist (the registers' own list):
 
 - (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned); tokens leave only by burn.
-- (burn_receipts) No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it.
+- (burn_receipts) No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).
 - (burn_receipts) No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.
 - (burn_receipts) No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.
 - (burn_receipts) No fee is charged by the program, so there is no fee to change. The LP-fee split of claim_lock_fees (80 % burn pool / 20 % operator) and the operator treasury are compiled constants: no instruction, config field or key changes them (LAUNCHPAD-PATH §35).
@@ -60,7 +61,7 @@ What does not exist (the registers' own list):
 - (burn_receipts) No PlatformConfig is required: without one, the hard-coded default cap (25 SOL until 2027-10-01) applies, so a lost or finalised upgrade authority cannot wedge buybacks.
 - (pair_curve) No admin, authority, owner or operator field exists in the program; no instruction takes a privileged signer after init_pair.
 - (pair_curve) No instruction updates a pair's parameters (virtual reserves, curve supply, target, minimum share, deadline, fee, fee recipients, AmmConfig) after init_pair.
-- (pair_curve) No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts; the LP is then locked forever by lock_lp, LAUNCHPAD-PATH §35) and residue to the burn pools.
+- (pair_curve) No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts; the LP is then locked forever by lock_lp, LAUNCHPAD-PATH §35 — or, only if lock_lp cannot run for 30 days, burned by burn_lp) and residue to the burn pools.
 - (pair_curve) No pause or freeze exists. Buys end at the deadline; nothing can stop sells on an open or voided pair.
 - (pair_curve) No mint authority survives init_pair and no freeze authority ever exists; the program never mints after init.
 - (pair_curve) The pair program holds the 75 bps burn share only in escrow: it reaches the side's burn_receipts fee PDA when the pool is created, or goes back to that side's holders on a void.
@@ -129,10 +130,10 @@ Kind: **interim-local**. INTERIM: built with cargo build-sbf on the operator's M
 
 | Program | Build | Features | Executable hash | Deployed (devnet) |
 |---|---|---|---|---|
-| burn_receipts | mainnet | default | `088c0b1d5967a0ede42945abb916532e41835a5ba725ecb6439f620f5347024f` | — |
-| burn_receipts | devnet | devnet | `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151` | `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151` = build |
-| pair_curve | mainnet | default | `8587c45adf033bfb0d45d7b7ab36ed224fe87a38a279af98316b440971ab3ff0` | — |
-| pair_curve | devnet | devnet | `e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` | `e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` = build |
+| burn_receipts | mainnet | default | `d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac` | — |
+| burn_receipts | devnet | devnet | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` = build |
+| pair_curve | mainnet | default | `a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d` | — |
+| pair_curve | devnet | devnet | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` = build |
 
 How to reproduce: docs/burnticker/VERIFIED-BUILD.md.
 

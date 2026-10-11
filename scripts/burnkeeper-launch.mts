@@ -212,7 +212,7 @@ const ammAcc = await getAccount(platform.cpConfigId);
 const amm = ammAcc ? decodeAmmConfig(ammAcc.data) : null;
 // LP LOCKED FOREVER (owner decision 2026-10-10) — the launch gate on the platform's LP pins: 100 % locked (1,000,000 / 0 / 0 ppm) and the
 // Fee Key to the burn program's fee-keys PDA; on mainnet also the operator treasury compiled into the program (TreasuryNotPinned otherwise).
-const lpPins = checkLpLockPins(platformAcc!.data, { programId: burnProgram, cluster: flagCluster, requireTreasury: flagCluster === "mainnet" });
+const lpPins = checkLpLockPins(platformAcc!.data, { programId: burnProgram, cluster: flagCluster, requireTreasury: flagCluster === "mainnet", platformId });
 for (const m of lpPins.problems) (SEND ? problems : warnings).push(`LP lock pin: ${m}`);
 const sol = (s: string | undefined, d: number) => BigInt(Math.round(Number(s ?? d) * LAMPORTS_PER_SOL));
 const input: LaunchInput = { cluster: flagCluster, programId, platformId, configId, global, platform, payer, creator, mint: mintKp.publicKey,

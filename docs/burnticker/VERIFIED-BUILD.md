@@ -25,25 +25,39 @@ replace this table (`kind: docker`). The OtterSec verified-builds registry entry
 
 The executable hash is solana-verify's definition: sha256 of the program bytes with trailing zero bytes removed — the number
 `solana-verify get-executable-hash <file.so>` prints for a build and `solana-verify get-program-hash <PROGRAM_ID>` prints for the
-deployed program. Source: monorepo commit `3d82b6b5d4beb771467462ac753673d9f0626f33`, the last commit that changed the compiled program sources — the LP-lock
-release (LAUNCHPAD-PATH §35: graduation LP locked forever in Raydium's CPMM lock, the Fee Key held by burn_receipts, claim_lock_fees
-80 % burn pool / 20 % operator). Both programs are built at opt-level "z" from this release on.
+deployed program. Source: monorepo commit `40e13bf5b0739e9f011c4bfa76d6683c973146a9`, the last commit that changed the compiled program sources — the LP-lock
+blind review r2 fixes (docs/burnticker/reviews/2026-10-11-lp-lock-blind.md: the Fee Key position identified by its locker, the
+operator's LaunchLab platform compiled into burn_receipts, register_pool requiring the recorded Fee Key for policy 0, claims against the
+recorded pool with no amount argument, pair_curve's 30-day burn_lp fallback) on top of the LP-lock release (LAUNCHPAD-PATH §35). Both
+programs are built at opt-level "z".
 
 | Program | Program id | Build | Features | Bytes | Executable hash | Deployed on devnet |
 |---|---|---|---|---|---|---|
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 635,968 | `088c0b1d5967a0ede42945abb916532e41835a5ba725ecb6439f620f5347024f` | — (not deployed on mainnet) |
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 636,056 | `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151` | `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151` = build (upgraded through the Squads vault 2026-10-10 21:56 Denver, vault transaction 8) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 393,488 | `8587c45adf033bfb0d45d7b7ab36ed224fe87a38a279af98316b440971ab3ff0` | — (not deployed on mainnet) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 393,544 | `e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` | `e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` = build (upgraded through the Squads vault 2026-10-10 21:56 Denver, vault transaction 7) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 643,144 | `d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac` | — (not deployed on mainnet) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 643,328 | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` = build (upgraded through the Squads vault 2026-10-10 23:41:33 Denver, vault transaction 9; docs/burnkeeper/devnet-lock-r2-run-log.md) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 406,624 | `a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d` | — (not deployed on mainnet) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 406,680 | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` = build (vault transaction 10, 23:42:06 Denver) |
 
-**Previous builds (history, no longer deployed):** burn_receipts mainnet `3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f` /
+**Feature sets (lp-lock blind review I-7).** Only the two builds above are deployable: `default` (mainnet) and `devnet`. They differ
+in the Raydium ids, the genesis tag, OPERATOR_TREASURY and BURNTICKER_PLATFORM compiled in. `localnet` and `test-pins` builds exist
+for the local validator and the LiteSVM suites only. They compile a test treasury (`[0x7e; 32]`, unspendable) and the harness's test
+platform, and must never be deployed anywhere: a `localnet` build on mainnet would route the 20 % to an unspendable address. A
+`devnet` build on mainnet would route it to the devnet vault's address and would not match mainnet's Raydium ids. The upgrade script
+refuses any buffer whose executable hash is not one of this table's rows.
+
+**Previous builds (history, no longer deployed):** the LP-lock release (source `3d82b6b5`): burn_receipts mainnet
+`088c0b1d5967a0ede42945abb916532e41835a5ba725ecb6439f620f5347024f` / devnet `f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151`
+(635,968 / 636,056 B; vault transaction 8), pair_curve mainnet `8587c45adf033bfb0d45d7b7ab36ed224fe87a38a279af98316b440971ab3ff0` / devnet
+`e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5` (393,488 / 393,544 B; vault transaction 7). Before that: burn_receipts mainnet `3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f` /
 devnet `5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d` (721,096 B, source `fcda14eb`, graduation LP destroyed under the pre-lock policy);
 pair_curve mainnet `9ef38e0d8954f6c8242d8157dccdc8a2b169dbd987b13f588c5096ee280ec006` / devnet
 `91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9` (365,824 / 365,880 B, source `fcda14eb`, re-check round 2). The
 devnet LP-lock release was first deployed at source `d54664ed` (burn_receipts devnet `755fb289…`, pair_curve devnet `affb2774…`,
 vault transactions 5 and 6, 21:42 Denver) and replaced 14 minutes later by the treasury-parking fix above.
 
-The burn_receipts **mainnet** row also carries no operator treasury yet (the all-zero placeholder): claim_lock_fees refuses every
+The burn_receipts **mainnet** row also pins no LaunchLab platform yet (BURNTICKER_PLATFORM = the all-zero placeholder, lp-lock blind
+review RL-3): every policy-0 and policy-2 initialize_token fails with `PlatformNotPinned` until the owner's mainnet platform is compiled
+in, which changes this hash. It also carries no operator treasury yet (the all-zero placeholder): claim_lock_fees refuses every
 claim (TreasuryNotPinned) until the owner's mainnet Squads vault is compiled in, and the fees wait in the lock meanwhile.
 
 The pair_curve **mainnet** row is a build that can never open a pair: its `BURNTICKER_PLATFORM` is still the all-zero placeholder, so

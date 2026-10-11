@@ -117,6 +117,15 @@ pub struct PairClosed {
 /// lock_lp: the side's LP moved into Raydium's CPMM lock forever; its Fee Key NFT is held by burn_receipts' FEE_KEYS PDA, whose
 /// claim_lock_fees splits the LP fees 80 % burn pool / 20 % operator (LAUNCHPAD-PATH §35).
 #[event]
+pub struct LpBurnedFallback {
+    pub pair: Pubkey,
+    pub side: u8,
+    pub cranker: Pubkey,
+    pub pool: Pubkey,
+    pub lp_amount: u64,
+}
+
+#[event]
 pub struct LpLocked {
     pub pair: Pubkey,
     pub side: u8,

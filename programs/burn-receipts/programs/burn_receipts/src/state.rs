@@ -168,7 +168,8 @@ pub struct FeeKeyRecord {
     pub version: u8,
     pub bump: u8,
     pub mint: Pubkey,
-    /// The registered CPMM pool (TokenConfig.cpmm_pool at registration).
+    /// The position's CPMM pool (policy 0: the token's LaunchLab migration pool, recorded before register_pool; policies 1/2: the
+    /// verified TokenConfig.cpmm_pool). Immutable — claim_lock_fees runs against it even after a pool replacement (L-1).
     pub pool: Pubkey,
     pub lp_mint: Pubkey,
     /// The Fee Key NFT mint and the FEE_KEYS PDA's account holding it.

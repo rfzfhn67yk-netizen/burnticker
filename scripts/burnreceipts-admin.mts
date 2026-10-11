@@ -13,9 +13,10 @@
 //   register-pool              --mint <pubkey> --pool <pubkey> [--fixed]       (policy 0 passes the token's LaunchLab pool automatically)
 //   claim-launchlab-creator-fee --mint <pubkey>
 //   register-fee-key           --mint <pubkey> [--nft <Fee Key mint>]   LAUNCHPAD-PATH §35: records the coin's permanent LP lock (Raydium's
-//                              CPMM lock position on the registered pool whose Fee Key the FEE_KEYS PDA holds). Without --nft it scans
-//                              the lock program for the pool's positions and takes the one FEE_KEYS holds with the most LP.
-//   claim-lock-fees            --mint <pubkey> [--lp-fee-amount <raw LP>]  collects the locked LP's fees: SOL 80 % to the fee PDA, 20 % to
+//                              CPMM lock position whose Fee Key the FEE_KEYS PDA holds). Policy 0: run it BEFORE register-pool, on the
+//                              migration pool (PDA of the pinned cpConfigId), position locked by LaunchLab's vault authority (r2 RL-2/RL-3).
+//                              Without --nft it scans the lock program for the pool's positions and takes the eligible one with the most LP.
+//   claim-lock-fees            --mint <pubkey>  collects the locked LP's fees: SOL 80 % to the fee PDA, 20 % to
 //                              the compiled operator treasury; the coin side burned (default: everything accrued)
 //   check-pool-health          --mint <pubkey>
 //   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
@@ -51,11 +52,11 @@ import { Connection, Keypair, PublicKey, TransactionMessage, VersionedTransactio
 import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { decodeType } from "../src/lib/burnReceipts/idlCoder.ts";
 import { decodeLockedLiquidity, decodePlatformConfig, decodeTokenConfig, fetchFeeKeyRecord, fetchTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
-import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURN_RECEIPTS_TEST_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LOCK_CPMM_PROGRAM_ID, MODE_BUYBACK, OPERATOR_TREASURY, POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_FIXED } from "../src/lib/burnReceipts/constants.ts";
+import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURN_RECEIPTS_TEST_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, MODE_BUYBACK, OPERATOR_TREASURY, POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_FIXED } from "../src/lib/burnReceipts/constants.ts";
 import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, createAtaIdempotentIx, initializePlatformIx, initializeTokenIx, operatorAttester, registerPoolIx, setRegistrationPolicyIx, vetoRegistrationPolicyIx } from "../src/lib/burnReceipts/instructions.ts";
 import { verifyPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
 import { checkLpLockPins } from "../src/lib/burnticker/lpLockPins.ts";
-import { associatedTokenAddress, configPda, feeKeyRecordPda, feeKeysPda, feePda, feeWsolAddress, platformPda } from "../src/lib/burnReceipts/pda.ts";
+import { associatedTokenAddress, configPda, cpmmPoolPda, feeKeyRecordPda, launchlabMigrationLocker, feeKeysPda, feePda, feeWsolAddress, platformPda } from "../src/lib/burnReceipts/pda.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import { fetchCpmmPool } from "../src/lib/burnReceipts/cpmm.ts";
 import { confirmByPolling, poolAccountsOrStandIns, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
@@ -174,7 +175,7 @@ if (CMD === "verify-platform-pins") {
   const r = await verifyPlatformPins(connection, programId, mint, cluster);
   // LP LOCKED FOREVER (2026-10-10): the platform must lock 100 % of the LP (1,000,000 / 0 / 0) to the burn program's fee-keys PDA.
   const platAcc = r.pinned.platform === PublicKey.default.toBase58() ? null : await connection.getAccountInfo(new PublicKey(r.pinned.platform), "confirmed");
-  const lp = checkLpLockPins(platAcc?.data ?? null, { programId, cluster, requireTreasury: cluster === "mainnet" });
+  const lp = checkLpLockPins(platAcc?.data ?? null, { programId, cluster, requireTreasury: cluster === "mainnet", platformId: r.pinned.platform === PublicKey.default.toBase58() ? null : r.pinned.platform });
   console.log(JSON.stringify({ command: CMD, cluster, rpc: rpcShown, programId: programId.toBase58(), mint: mint.toBase58(), ...r, lpLock: lp }, null, 2));
   if (!r.ok) die(`the LaunchLab platform no longer matches the pins — do NOT run LaunchLab's create: ${r.mismatches.join("; ")}`, 1);
   if (!lp.ok) die(`the LaunchLab platform does not lock the LP to the program — do NOT run LaunchLab's create: ${lp.problems.join("; ")}`, 1);
@@ -227,8 +228,12 @@ if (CMD === "claim-launchlab-creator-fee") {
 if (CMD === "register-fee-key") {
   const mint = mintArg();
   const cfg = (await fetchTokenConfig(connection, programId, mint)) ?? die(`no TokenConfig for ${mint.toBase58()}`);
-  if (!cfg.config.poolRegistered) die("no verified pool registered (register-pool / register_pair_pool first)");
-  const pool = cfg.config.cpmm_pool;
+  // lp-lock blind review r2: policy 0 registers the Fee Key BEFORE register_pool, on the token's migration pool (the PDA of the pinned
+  // cpConfigId), and the position must have been locked by LaunchLab's vault authority; pairs (policy 2) after register_pair_pool.
+  const policy0 = cfg.config.registration_policy === POOL_POLICY_CREATOR_IS_FEE_PDA;
+  if (!policy0 && !cfg.config.poolRegistered) die("no verified pool registered (register_pair_pool / register-pool first)");
+  const pool = policy0 ? cpmmPoolPda(CPMM_PROGRAM_ID[cluster], cfg.config.ll_cp_config, NATIVE_MINT, mint) : cfg.config.cpmm_pool;
+  const wantLocker = policy0 ? launchlabMigrationLocker(LAUNCHLAB_PROGRAM_ID[cluster]) : null;
   let nft = pubkeyOf(opt("nft"), "--nft");
   const positions: Record<string, unknown>[] = [];
   if (!nft) {
@@ -239,19 +244,20 @@ if (CMD === "register-fee-key") {
       const v = decodeLockedLiquidity(a.account.data);
       const held = await connection.getAccountInfo(associatedTokenAddress(feeKeysPda(programId), v.feeNftMint), "confirmed");
       const heldByFeeKeys = !!held && held.data.length >= 72 && held.data.readBigUInt64LE(64) === BigInt(1);
-      positions.push({ lockedLiquidity: a.pubkey.toBase58(), feeNftMint: v.feeNftMint.toBase58(), lockedLp: v.lockedLp, heldByFeeKeys });
-      if (heldByFeeKeys && (!best || v.lockedLp > best.lp)) best = { nft: v.feeNftMint, lp: v.lockedLp };
+      const lockerOk = !wantLocker || v.locker.equals(wantLocker);
+      positions.push({ lockedLiquidity: a.pubkey.toBase58(), feeNftMint: v.feeNftMint.toBase58(), lockedLp: v.lockedLp, locker: v.locker.toBase58(), heldByFeeKeys, lockerOk });
+      if (heldByFeeKeys && lockerOk && (!best || v.lockedLp > best.lp)) best = { nft: v.feeNftMint, lp: v.lockedLp };
     }
     nft = best?.nft ?? die(`no lock position on pool ${pool.toBase58()} whose Fee Key FEE_KEYS holds (${accs.length} positions found)`);
   }
-  await run([registerFeeKeyIx({ programId, payer: payer.publicKey, mint, pool, feeNftMint: nft, cluster })], payer, [], [{ address: feeKeyRecordPda(programId, mint), kind: "lamports" }], { pool: pool.toBase58(), feeNftMint: nft.toBase58(), feeKeys: feeKeysPda(programId).toBase58(), positions });
+  const lpMintFk = (await fetchCpmmPool(connection, pool, CPMM_PROGRAM_ID[cluster])).lpMint;
+  await run([registerFeeKeyIx({ programId, payer: payer.publicKey, mint, pool, feeNftMint: nft, cluster, lpMint: lpMintFk })], payer, [], [{ address: feeKeyRecordPda(programId, mint), kind: "lamports" }], { pool: pool.toBase58(), feeNftMint: nft.toBase58(), feeKeys: feeKeysPda(programId).toBase58(), positions });
 }
 if (CMD === "claim-lock-fees") {
   const mint = mintArg();
   const rec = (await fetchFeeKeyRecord(connection, programId, mint)) ?? die(`no FeeKeyRecord for ${mint.toBase58()} (register-fee-key first)`);
   const p = await fetchCpmmPool(connection, rec.record.pool, CPMM_PROGRAM_ID[cluster]);
-  const lpFeeAmount = opt("lp-fee-amount") ? BigInt(opt("lp-fee-amount")!) : undefined;
-  const ix = claimLockFeesIx({ programId, cranker: payer.publicKey, mint, feeNftMint: rec.record.fee_nft_mint, pool: { pool: p.address, lpMint: p.lpMint, token0Vault: p.token0Vault, token1Vault: p.token1Vault }, cluster, lpFeeAmount });
+  const ix = claimLockFeesIx({ programId, cranker: payer.publicKey, mint, feeNftMint: rec.record.fee_nft_mint, pool: { pool: p.address, lpMint: p.lpMint, token0Vault: p.token0Vault, token1Vault: p.token1Vault }, cluster });
   await run([ix], payer, [], [{ address: feePda(programId, mint), kind: "lamports" }, { address: OPERATOR_TREASURY[cluster], kind: "lamports" }, { address: feeKeyRecordPda(programId, mint), kind: "lamports" }], { feeNftMint: rec.record.fee_nft_mint.toBase58(), lockedLiquidity: rec.record.locked_liquidity.toBase58(), treasury: OPERATOR_TREASURY[cluster].toBase58() });
 }
 if (CMD === "check-pool-health") {

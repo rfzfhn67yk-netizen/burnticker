@@ -25,7 +25,8 @@ pub struct Pair {
     /// PoolState.lp_supply right after `initialize` (all LP that ever existed at creation, incl. CPMM's 100 unminted units).
     pub lp_supply_at_creation: [u64; 2],
     /// The LP lock_lp moved into Raydium's CPMM lock (0 until then). Pairs graduated before LAUNCHPAD-PATH §35 burned their LP and
-    /// this field (then `lp_burned`, same offset) recorded the burn.
+    /// this field (then `lp_burned`, same offset) recorded the burn; so does `burn_lp`, the 30-day fallback when lock_lp cannot run
+    /// (lp-lock blind review L-2). Either way register_pair_pool counts it as burned + locked LP.
     pub lp_locked: [u64; 2],
     /// The CPMM AmmConfig both pools use — the cpConfigId pinned in both mints' burn_receipts TokenConfigs.
     pub cp_config: Pubkey,

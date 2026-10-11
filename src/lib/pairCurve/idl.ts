@@ -12,6 +12,91 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
   },
   "instructions": [
     {
+      "name": "burn_lp",
+      "docs": [
+        "lp-lock blind review L-2: permissionless fallback — burn a graduated side's LP if lock_lp has not run 30 days after the",
+        "graduation decision. The only instruction that destroys LP."
+      ],
+      "discriminator": [
+        135,
+        136,
+        81,
+        255,
+        56,
+        231,
+        141,
+        85
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "pair",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pair.mints [0]",
+                "account": "Pair"
+              },
+              {
+                "kind": "account",
+                "path": "pair.mints [1]",
+                "account": "Pair"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "pool_state"
+        },
+        {
+          "name": "lp_mint",
+          "writable": true
+        },
+        {
+          "name": "vault_lp",
+          "writable": true
+        },
+        {
+          "name": "fee_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "side",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "buy",
       "discriminator": [
         102,
@@ -1121,6 +1206,19 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "LpBurnedFallback",
+      "discriminator": [
+        209,
+        162,
+        218,
+        224,
+        8,
+        3,
+        126,
+        173
+      ]
+    },
+    {
       "name": "LpLocked",
       "discriminator": [
         231,
@@ -1372,6 +1470,11 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
       "code": 6031,
       "name": "LockMismatch",
       "msg": "lock_lp: the lock program did not leave the expected lock (LP moved, Fee Key held by FEE_KEYS, state account)"
+    },
+    {
+      "code": 6032,
+      "name": "LpLockFallbackNotDue",
+      "msg": "burn_lp: only after LP_LOCK_FALLBACK_SECS (30 days) since the graduation decision with the side's LP still unlocked"
     }
   ],
   "types": [
@@ -1456,11 +1559,39 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
       }
     },
     {
-      "name": "LpLocked",
+      "name": "LpBurnedFallback",
       "docs": [
         "lock_lp: the side's LP moved into Raydium's CPMM lock forever; its Fee Key NFT is held by burn_receipts' FEE_KEYS PDA, whose",
         "claim_lock_fees splits the LP fees 80 % burn pool / 20 % operator (LAUNCHPAD-PATH §35)."
       ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pair",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": "u8"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LpLocked",
       "type": {
         "kind": "struct",
         "fields": [
@@ -1572,7 +1703,8 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
             "name": "lp_locked",
             "docs": [
               "The LP lock_lp moved into Raydium's CPMM lock (0 until then). Pairs graduated before LAUNCHPAD-PATH §35 burned their LP and",
-              "this field (then `lp_burned`, same offset) recorded the burn."
+              "this field (then `lp_burned`, same offset) recorded the burn; so does `burn_lp`, the 30-day fallback when lock_lp cannot run",
+              "(lp-lock blind review L-2). Either way register_pair_pool counts it as burned + locked LP."
             ],
             "type": {
               "array": [

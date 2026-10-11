@@ -35,6 +35,11 @@ pub const GRADUATION_STUCK_SECS: i64 = 3 * 24 * 60 * 60;
 /// fails) leaves no trace in the AmmConfig, and a failed `graduate` reverts, so it cannot leave evidence on chain either.
 pub const GRADUATION_FALLBACK_SECS: i64 = 30 * 24 * 60 * 60;
 
+/// lp-lock blind review L-2: if a graduated side's LP is still unlocked this long after the graduation decision (Raydium's
+/// upgradeable lock program refused or changed `lock_cp_liquidity`), anyone may BURN it instead (`burn_lp`) — the side's pool then
+/// registers on the burned LP (register_pair_pool counts burned + locked), at the cost of the LP fees. The keeper locks at once.
+pub const LP_LOCK_FALLBACK_SECS: i64 = 30 * 24 * 60 * 60;
+
 /// The LaunchLab PlatformConfig every pair must pin (blind review 1 M-1: the developer wallet is read from it, so it cannot be a
 /// creator's own platform). Per build: devnet = Burnticker's devnet platform (docs/burnkeeper/devnet-run-log-2026-10-10.md A10);
 /// `localnet` (LiteSVM suite) = the harness's test platform; the default (mainnet) build is UNSET (all zeros) until the owner creates

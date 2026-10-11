@@ -289,7 +289,8 @@ starting around 08:00 Denver. If the migration crank (K3) is prompt, the run tak
 | A17 | owner | Buy to graduate (≈1.2 SOL in 3 buys + 1 small sell) | browser | buys land; the fee vaults grow 0.5% / 0.25% of each buy | gate 3 rehearsal |
 | A18 | Claude | **K3** migration happens on devnet | block P with `AMM_CONFIG` | see K3 | — |
 | A19 | Claude | **K4** pool provenance | block P with `POOL` | see K4 | — |
-| A20 | either | `register_pool` | blocks A20a–A20b | simulation ok, then confirmed | §4 "register_pool" |
+| A20F | either | `register_fee_key` FIRST (LP-lock round 2: `register_pool` needs the FeeKeyRecord) | the keeper's next cycle, or `burnreceipts-admin.mts register-fee-key` | confirmed; the FeeKeyRecord names the migration pool | LP locked forever |
+| A20 | either | `register_pool` (passes the FeeKeyRecord; `FeeKeyNotRegistered` without it) | blocks A20a–A20b | simulation ok, then confirmed | §4 "register_pool" |
 | A21 | owner | Trade the CPMM pool for ≥ 25 min | browser | **K5** | — |
 | A22 | either | Keeper loop (program mode) | block A22 | `check_pool_health`, a `TwapUnavailable` wait, then `CRANKED · burned` | §4 "check_pool_health", "deferred", "crank_buyback" |
 | A23 | Claude | Receipt recomputes | blocks A23a–A23c | `verified: true`, `.health.unverified == 0`, memo on chain = the row's | gate 1 |
@@ -533,6 +534,10 @@ with the Fee Key NFT held at ATA(fee-keys PDA, Fee Key mint).
 
 ### A20. `register_pool` (anyone; here the keeper key)
 
+LP-lock round 2 (2026-10-11): run A20F first — `register_fee_key` on the migration pool (the keeper does it on its next cycle, or
+`scripts/burnreceipts-admin.mts register-fee-key --mint <mint>`). `register_pool` now takes the FeeKeyRecord as its last account and refuses
+`FeeKeyNotRegistered` (6076) without it, `FeeKeyMismatch` (6073) if the record names another pool.
+
 ```bash
 ACTION=register_pool CLUSTER=devnet RPC="$DEVNET_RPC" PROGRAM_ID=$BURNTICKER_PROGRAM_ID PAYER="$D/keeper.json" MINT=$(jq -r .mint "$D/launch.json") POOL=<CPMM_POOL> SEND=0 R --input-type=module -e "$(cat "$H/act.mjs")"
 ```
@@ -545,7 +550,7 @@ The keeper runs this itself ahead of the buyback crank (`src/lib/burnticker/lock
 `claim_lock_fees` whenever fees have accrued. *Pass:* (1) the Raydium `LockedCpLiquidityState` (`["locked_liquidity", <Fee Key mint>]` under
 the devnet lock program `DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX`) names the pool and holds ≈ 100 % of the LP; (2) the Fee Key NFT sits
 in ATA(fee-keys PDA, Fee Key mint); (3) `register_fee_key` confirms; (4) after A21's trades one `claim_lock_fees` confirms with the memo
-`<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|burned=…|nft=…|v1`, `operator` = floor(wsol × 2,000 / 10,000), the burn pool's WSOL grows by
+`<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|paid=…|pending=…|burned=…|nft=…|v2` (v1 without paid/pending before round 2), `operator` = floor(wsol × 2,000 / 10,000), the burn pool's WSOL grows by
 the rest, the devnet treasury `A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD` by the operator share; (5) the next `crank_buyback` burns.
 *Fail:* the Fee Key is anywhere else (`lock-fee-key-owner` alert), the split is not exactly 80/20 (`lock-fees-split`), or the claim refuses.
 
@@ -1056,7 +1061,10 @@ sh scripts/ops/deploy-sites.sh
 curl -s https://<DEFICIT_HOST>/status.json | jq '.execution, .rules.sha256, .addresses.mint, .buyback.funding, .program.attestation, .program.queue'
 ```
 
-### C14. After graduation: `register_pool`
+### C14. After graduation: `register_fee_key`, then `register_pool`
+
+LP-lock round 2: the Fee Key first (`burnreceipts-admin.mts register-fee-key --cluster mainnet --mint <DEFICIT_MINT>`, or the keeper's next
+cycle), then the pool below — `register_pool` refuses `FeeKeyNotRegistered` otherwise.
 
 Graduation could be days away, or never. Find the pool first (block P with `AMM_CONFIG=$(jq -r .cpmmAfterGraduation.ammConfig "$M/deficit.json")`
 and then `POOL=`). Run the K4 checks. Then:

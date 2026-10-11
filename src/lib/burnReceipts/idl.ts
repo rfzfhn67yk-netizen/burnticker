@@ -780,7 +780,8 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     {
       "name": "claim_lock_fees",
       "docs": [
-        "LAUNCHPAD-PATH §35: collect the locked LP's fees; SOL 80 % burn pool / 20 % operator treasury (compiled), coin side burned."
+        "LAUNCHPAD-PATH §35: collect the locked LP's fees; SOL 80 % burn pool / 20 % operator treasury (compiled), coin side burned.",
+        "Always collects everything accrued (lp-lock blind review L-3: no caller-chosen amount)."
       ],
       "discriminator": [
         124,
@@ -999,12 +1000,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "name": "program"
         }
       ],
-      "args": [
-        {
-          "name": "lp_fee_amount",
-          "type": "u64"
-        }
-      ]
+      "args": []
     },
     {
       "name": "clear_cranker_allowlist",
@@ -2070,6 +2066,9 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "name": "locked_liquidity"
         },
         {
+          "name": "lp_lock_vault"
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         },
@@ -2251,6 +2250,14 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "name": "launchlab_pool",
           "docs": [
             "pinned at initialize_token). Omitted under policy 1."
+          ],
+          "optional": true
+        },
+        {
+          "name": "fee_key",
+          "docs": [
+            "review RL-3: the migration's LP-lock Fee Key must already be recorded as held by FEE_KEYS for THIS pool, so a Fee Key the",
+            "platform admin redirected fails closed before the pool is verified. Omitted under policy 1."
           ],
           "optional": true
         },
@@ -3507,6 +3514,21 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6073,
       "name": "FeeKeyMismatch",
       "msg": "the Fee Key account, lock position or pool does not match this mint's registered record"
+    },
+    {
+      "code": 6074,
+      "name": "PlatformNotPinned",
+      "msg": "this build pins no Burnticker LaunchLab platform (mainnet placeholder): policy 0/2 tokens cannot be initialised until the owner's platform is compiled in"
+    },
+    {
+      "code": 6075,
+      "name": "LockerMismatch",
+      "msg": "the lock position was not made by the pool's own locker (LaunchLab's migration authority, or the pair's vault)"
+    },
+    {
+      "code": 6076,
+      "name": "FeeKeyNotRegistered",
+      "msg": "policy 0: register the coin's LP-lock Fee Key (register_fee_key) before register_pool — the pool is verified only when its LP fees reach the burn"
     }
   ],
   "types": [
@@ -3835,7 +3857,8 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "pool",
             "docs": [
-              "The registered CPMM pool (TokenConfig.cpmm_pool at registration)."
+              "The position's CPMM pool (policy 0: the token's LaunchLab migration pool, recorded before register_pool; policies 1/2: the",
+              "verified TokenConfig.cpmm_pool). Immutable — claim_lock_fees runs against it even after a pool replacement (L-1)."
             ],
             "type": "pubkey"
           },

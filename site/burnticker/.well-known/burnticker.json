@@ -28,15 +28,15 @@
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": true,
-          "executableHash": "f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151",
-          "buildHash": "f18ba9cce758fc3dbd69b7f632e26feedad0c90dfbf444f681e094eefe24d151",
+          "executableHash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3",
+          "buildHash": "b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": true,
-          "executableHash": "e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5",
-          "buildHash": "e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5",
+          "executableHash": "7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796",
+          "buildHash": "7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
         }
       },
@@ -66,6 +66,9 @@
         "feeKeysPda": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
         "operatorTreasury": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
         "treasuryPinned": true,
+        "platform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+        "platformPinned": true,
+        "launchLabLocker": "5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq",
         "split": {
           "burnBps": 8000,
           "operatorBps": 2000,
@@ -92,14 +95,14 @@
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "088c0b1d5967a0ede42945abb916532e41835a5ba725ecb6439f620f5347024f",
+          "buildHash": "d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac",
           "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
         },
         "pair_curve": {
           "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
           "deployed": false,
           "executableHash": null,
-          "buildHash": "8587c45adf033bfb0d45d7b7ab36ed224fe87a38a279af98316b440971ab3ff0",
+          "buildHash": "a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d",
           "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
         }
       },
@@ -129,6 +132,9 @@
         "feeKeysPda": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
         "operatorTreasury": null,
         "treasuryPinned": false,
+        "platform": null,
+        "platformPinned": false,
+        "launchLabLocker": "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh",
         "split": {
           "burnBps": 8000,
           "operatorBps": 2000,
@@ -162,7 +168,7 @@
     "operator": "https://burnticker.com/burnticker/operator",
     "verifiedBuild": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/VERIFIED-BUILD.md",
     "verifiedBuildKind": "interim-local",
-    "sourceCommit": "3d82b6b5d4beb771467462ac753673d9f0626f33",
+    "sourceCommit": "40e13bf5b0739e9f011c4bfa76d6683c973146a9",
     "powersRegisters": [
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/powers-register.md",
       "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/pair-curve-powers-register.md"

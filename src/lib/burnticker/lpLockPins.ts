@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { LP_SCALES_PPM, feeKeysPda, operatorTreasuryFor } from "@/lib/burnticker/lockFees";
+import { LP_SCALES_PPM, burntickerPlatformFor, feeKeysPda, lockFeeErrorSentence, operatorTreasuryFor } from "@/lib/burnticker/lockFees";
 
 /**
  * THE LP-LOCK LAUNCH GATE (owner decision 2026-10-10: LP locked forever, its fees fund the burn). Before LaunchLab's create, the
@@ -9,7 +9,9 @@ import { LP_SCALES_PPM, feeKeysPda, operatorTreasuryFor } from "@/lib/burnticker
  * (the program's initialize_token and buyback cranks assert the same two pins on chain; this is the client-side copy that names the
  * difference before anything is signed). The operator treasury compiled for the cluster is reported too: on mainnet it is not pinned
  * yet, so claim_lock_fees would refuse TreasuryNotPinned and the LP fees would stay in the lock — a launch-gate PROBLEM until the owner
- * compiles the Squads vault in (docs/burnticker/TODO-OWNER.md). Offsets: the SDK's PlatformConfig layout (8-byte discriminator, epoch,
+ * compiles the Squads vault in (docs/burnticker/TODO-OWNER.md). Round 2 (2026-10-11): the program also pins BURNTICKER_PLATFORM —
+ * initialize_token (policies 0 and 2) refuses any other LaunchLab platform (PlatformNotAllowed), and a build without it compiled in
+ * refuses everything (PlatformNotPinned, mainnet today). With `platformId` given, the gate checks it is the pinned one. Offsets: the SDK's PlatformConfig layout (8-byte discriminator, epoch,
  * platformClaimFeeWallet @16, platformLockNftWallet @48, platformScale/creatorScale/burnScale @80/88/96).
  */
 
@@ -20,14 +22,20 @@ export interface LpLockPinsResult {
   ok: boolean;
   problems: string[];
   current: { lockNftWallet: string | null; scalesPpm: [string, string, string] | null };
-  pinned: { lockNftWallet: string; scalesPpm: [string, string, string]; operatorTreasury: string | null };
+  pinned: { lockNftWallet: string; scalesPpm: [string, string, string]; operatorTreasury: string | null; platform: string | null };
 }
 
 /** Pure check of a LaunchLab PlatformConfig's data against the LP-lock pins. `requireTreasury` adds the TreasuryNotPinned problem. */
-export function checkLpLockPins(data: Uint8Array | null, o: { programId: string | PublicKey; cluster: string; requireTreasury?: boolean }): LpLockPinsResult {
+export function checkLpLockPins(data: Uint8Array | null, o: { programId: string | PublicKey; cluster: string; requireTreasury?: boolean; /** round 2: the LaunchLab platform the coin launches under, checked against BURNTICKER_PLATFORM. */ platformId?: string | PublicKey | null }): LpLockPinsResult {
   const want = feeKeysPda(o.programId).toBase58();
   const treasury = operatorTreasuryFor(o.cluster);
-  const out: LpLockPinsResult = { ok: false, problems: [], current: { lockNftWallet: null, scalesPpm: null }, pinned: { lockNftWallet: want, scalesPpm: [LP_SCALES_PPM.platform.toString(), LP_SCALES_PPM.creator.toString(), LP_SCALES_PPM.burn.toString()], operatorTreasury: treasury } };
+  const pinnedPlatform = burntickerPlatformFor(o.cluster);
+  const out: LpLockPinsResult = { ok: false, problems: [], current: { lockNftWallet: null, scalesPpm: null }, pinned: { lockNftWallet: want, scalesPpm: [LP_SCALES_PPM.platform.toString(), LP_SCALES_PPM.creator.toString(), LP_SCALES_PPM.burn.toString()], operatorTreasury: treasury, platform: pinnedPlatform } };
+  if (o.platformId !== undefined) {
+    const given = o.platformId === null ? null : typeof o.platformId === "string" ? o.platformId : o.platformId.toBase58();
+    if (!pinnedPlatform) out.problems.push(`${lockFeeErrorSentence("PlatformNotPinned")} (BURNTICKER_PLATFORM is all zeros in the ${o.cluster} build — the owner compiles it in first, TODO-OWNER)`);
+    else if (given !== pinnedPlatform) out.problems.push(`the LaunchLab platform ${given ?? "(none)"} is not the one compiled into burn_receipts (${pinnedPlatform}): initialize_token would refuse (PlatformNotAllowed)`);
+  }
   if (!data) { out.problems.push("the platform config does not exist"); return out; }
   if (data.length < LL_PLATFORM_SCALES_AT + 24) { out.problems.push(`the platform config is ${data.length} bytes (< ${LL_PLATFORM_SCALES_AT + 24})`); return out; }
   const d = Buffer.from(data.buffer, data.byteOffset, data.byteLength);

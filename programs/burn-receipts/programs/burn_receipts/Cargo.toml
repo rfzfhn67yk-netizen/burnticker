@@ -22,8 +22,12 @@ custom-heap = []
 custom-panic = []
 # Point the hard-coded Raydium CPMM program id at Raydium's devnet deployment (DRaycpLY…) instead of mainnet (CPMMoo8L…).
 devnet = []
-# Review-3 I-1: local-validator rehearsals bind their own genesis tag in the signed message (never mainnet's).
-localnet = []
+# Review-3 I-1: local-validator rehearsals bind their own genesis tag in the signed message (never mainnet's); they also use the
+# test pins below.
+localnet = ["test-pins"]
+# The LiteSVM suites' build (scripts/test.sh → target/deploy-test): the harness's test LaunchLab platform as BURNTICKER_PLATFORM and
+# the test operator treasury, with the mainnet genesis binding unchanged. Never deployed.
+test-pins = []
 
 [dependencies]
 anchor-lang = { version = "=1.2.1", features = ["init-if-needed", "event-cpi"] }

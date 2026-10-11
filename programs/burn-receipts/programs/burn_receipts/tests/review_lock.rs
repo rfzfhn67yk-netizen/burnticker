@@ -1,15 +1,15 @@
 //! Blind review 2026-10-11 of the LP-lock release (LAUNCHPAD-PATH §35) — exploit tests for burn_receipts `register_fee_key`,
 //! `claim_lock_fees` and the policy-0 platform pins (docs/burnticker/reviews/2026-10-11-lp-lock-blind.md).
 //!
-//! Every `rl*` test asserts the SAFE behaviour, so it FAILS against the reviewed code (07adf0fe; program sources = 3d82b6b5) and passes
-//! once the finding is fixed. They are `#[ignore]`d so scripts/test.sh stays green; run them with
-//!   cargo test -p burn_receipts --test review_lock -- --include-ignored --test-threads=1 --nocapture
-//! `mf*` tests are MOCK-FIDELITY checks (they fail against the stand-in and pass against the real program); `ctl_*` are controls.
+//! Every `rl*` test asserts the SAFE behaviour; it FAILED against the reviewed code (07adf0fe; program sources = 3d82b6b5) and passes
+//! since the r2 fixes (branch burnticker/lp-lock-r2) — kept as regressions, no longer ignored. `mf*` tests are MOCK-FIDELITY checks:
+//! they failed against the old stand-in and pass against both the fixed stand-in and the real program; `ctl_*` are controls.
+//! scripts/test.sh runs this suite with the stand-in, and again against the real binary when REVIEW_LOCK_SO is set.
 //!
 //! The lock program: by default the TEST-ONLY stand-in (fixtures/cpmm_lock_mock.so). Set REVIEW_LOCK_SO=<path> to load another
 //! binary at Raydium's lock program id instead — e.g. the REAL mainnet program dumped read-only with
 //!   solana program dump -u https://api.mainnet-beta.solana.com LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE lock_mainnet.so
-//! (its authority PDA and its compiled CPMM id are mainnet's — the ids this harness's localnet build uses).
+//! (its authority PDA and its compiled CPMM id are mainnet's — the ids this harness's test-pins build uses). Never commit the binary.
 
 #![allow(clippy::result_large_err, clippy::too_many_arguments)]
 mod common;
@@ -45,8 +45,7 @@ fn lock_program_so() -> Vec<u8> {
 }
 
 fn lock_env() -> Env {
-    let mut env = Env::new();
-    env.svm.add_program(burn_receipts::ID, &read("target/deploy-localnet/burn_receipts.so")).unwrap();
+    let mut env = Env::new(); // the test-pins build (test platform + test treasury)
     env.svm.add_program(LOCK_CPMM_PROGRAM_ID, &lock_program_so()).unwrap();
     // The real lock program's account list declares Metaplex's program (Program<'info, ...>): any executable stands in for it at its
     // id (with_metadata = false, so it is never invoked). The stand-in mock ignores the account.
@@ -110,6 +109,7 @@ fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft: &Pubke
             fee_nft_mint: *nft,
             fee_nft_account: get_associated_token_address(&fee_keys(), nft),
             locked_liquidity: locked_liquidity(nft),
+            lp_lock_vault: get_associated_token_address(&LOCK_CPMM_AUTHORITY, &cpmm::lp_mint_of(pool)),
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: event_authority(),
             program: burn_receipts::ID,
@@ -118,11 +118,11 @@ fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft: &Pubke
     )
 }
 
-fn ix_claim(cranker: &Pubkey, mint: &Pubkey, p: &Pool, nft: &Pubkey, lp_fee_amount: u64) -> Instruction {
+fn ix_claim(cranker: &Pubkey, mint: &Pubkey, p: &Pool, nft: &Pubkey) -> Instruction {
     let fk = fee_keys();
     Instruction::new_with_bytes(
         burn_receipts::ID,
-        &burn_receipts::instruction::ClaimLockFees { lp_fee_amount }.data(),
+        &burn_receipts::instruction::ClaimLockFees {}.data(),
         burn_receipts::accounts::ClaimLockFees {
             cranker: *cranker,
             platform: platform_pda(),
@@ -156,6 +156,38 @@ fn ix_claim(cranker: &Pubkey, mint: &Pubkey, p: &Pool, nft: &Pubkey, lp_fee_amou
         }
         .to_account_metas(None),
     )
+}
+
+/// The lock program's collect_cp_fees called DIRECTLY by a Fee Key holder wallet (`owner`), into its own token accounts — the lock
+/// binary alone, without burn_receipts (MF-1 checks the binary's partial-collect semantics this way, since claim_lock_fees no longer
+/// takes an amount: L-3).
+fn ix_collect(owner: &Pubkey, nft: &Pubkey, p: &Pool, amount: u64) -> Instruction {
+    let mut data = vec![8, 30, 51, 199, 209, 184, 247, 133];
+    data.extend_from_slice(&amount.to_le_bytes());
+    Instruction {
+        program_id: LOCK_CPMM_PROGRAM_ID,
+        accounts: vec![
+            AccountMeta::new_readonly(LOCK_CPMM_AUTHORITY, false),
+            AccountMeta::new_readonly(*owner, true),
+            AccountMeta::new(get_associated_token_address(owner, nft), false),
+            AccountMeta::new(locked_liquidity(nft), false),
+            AccountMeta::new_readonly(CPMM_PROGRAM_ID, false),
+            AccountMeta::new_readonly(p.authority, false),
+            AccountMeta::new(p.pool, false),
+            AccountMeta::new(p.lp_mint, false),
+            AccountMeta::new(get_associated_token_address(owner, &p.token_0_mint), false),
+            AccountMeta::new(get_associated_token_address(owner, &p.token_1_mint), false),
+            AccountMeta::new(p.token_0_vault, false),
+            AccountMeta::new(p.token_1_vault, false),
+            AccountMeta::new_readonly(p.token_0_mint, false),
+            AccountMeta::new_readonly(p.token_1_mint, false),
+            AccountMeta::new(get_associated_token_address(&LOCK_CPMM_AUTHORITY, &p.lp_mint), false),
+            AccountMeta::new_readonly(spl_token::ID, false),
+            AccountMeta::new_readonly(TOKEN_2022, false),
+            AccountMeta::new_readonly(MEMO_PROGRAM_ID, false),
+        ],
+        data,
+    }
 }
 
 /// CPMM `deposit` (SDK makeDepositCpmmInInstruction account order): `lp` LP for at most `max0` / `max1` of token 0 / token 1.
@@ -215,8 +247,9 @@ struct Coin {
 }
 
 /// A policy-0 LaunchLab coin: initialize_token (platform pins pass), migration into the CPMM pool (fee-PDA creator), LP locked in
-/// Raydium's lock in `shares` with each Fee Key to `owner` (default FEE_KEYS), then `before_register` runs and register_pool.
-fn coin_with(env: &mut Env, shares: &[u64], owner: Option<Pubkey>, before_register: impl FnOnce(&mut Env, &Pubkey, &Pool)) -> Coin {
+/// Raydium's lock in `shares` by LaunchLab's vault authority (locker @128, cpmm::set_locker) with each Fee Key to `owner` (default
+/// FEE_KEYS); not registered (r2 order: register_fee_key → register_pool, see `register`).
+fn coin_with(env: &mut Env, shares: &[u64], owner: Option<Pubkey>) -> Coin {
     let (mint_kp, creator, att) = (Keypair::new(), Keypair::new(), Keypair::new());
     let payer = env.payer.pubkey();
     env.ok(&[ix_initialize(&payer, &creator.pubkey(), &mint_kp.pubkey(), init_args(buyback_rule(), vec![att.pubkey()], 1))], &[&creator, &mint_kp]);
@@ -247,16 +280,26 @@ fn coin_with(env: &mut Env, shares: &[u64], owner: Option<Pubkey>, before_regist
         left -= lp;
         let nft = Keypair::new();
         env.ok(&[ix_lock(&launcher.pubkey(), &owner, &nft.pubkey(), &pool, lp)], &[&launcher, &nft]);
+        cpmm::set_locker(env, &locked_liquidity(&nft.pubkey()), &cpmm::launchlab_vault_auth());
         nfts.push(nft.pubkey());
     }
-    cpmm::launchlab_migrated(env, &mint, &pool);
-    before_register(env, &mint, &pool);
-    env.ok(&[ix_register_pool(&payer, &mint, &pool.pool)], &[]);
+    cpmm::launchlab_migrated_without_fee_key(env, &mint, &pool);
+    let _ = payer;
     Coin { mint, pool, nfts }
 }
 
+/// register_fee_key (first position) → register_pool.
+fn register(env: &mut Env, c: &Coin) {
+    let payer = env.payer.pubkey();
+    env.ok(&[ix_register_fee_key(&payer, &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
+    env.ok(&[ix_register_pool(&payer, &c.mint, &c.pool.pool)], &[]);
+}
+
+/// A registered coin (fee key + pool).
 fn coin(env: &mut Env) -> Coin {
-    coin_with(env, &[100], None, |_, _, _| {})
+    let c = coin_with(env, &[100], None);
+    register(env, &c);
+    c
 }
 
 fn trade(env: &mut Env, c: &Coin, rounds: u32, lamports: u64) {
@@ -277,13 +320,13 @@ fn event<T: AnchorDeserialize + Discriminator>(meta: &litesvm::types::Transactio
     events(meta).into_iter().find(|(d, _)| d[..] == T::DISCRIMINATOR[..]).map(|(_, p)| T::try_from_slice(&p).unwrap())
 }
 
-fn claim(env: &mut Env, c: &Coin, cranker: &Keypair, lp_fee_amount: u64) -> TxResult {
-    env.send(&[ix_claim(&cranker.pubkey(), &c.mint, &c.pool, &c.nfts[0], lp_fee_amount)], &[cranker])
+fn claim(env: &mut Env, c: &Coin, cranker: &Keypair) -> TxResult {
+    env.send(&[ix_claim(&cranker.pubkey(), &c.mint, &c.pool, &c.nfts[0])], &[cranker])
 }
 
-/// WSOL the coin's fee stream delivered in one honest (u64::MAX) claim.
+/// WSOL the coin's fee stream delivered in one claim (always everything accrued).
 fn claimed_wsol(env: &mut Env, c: &Coin, cranker: &Keypair) -> u64 {
-    match claim(env, c, cranker, u64::MAX) {
+    match claim(env, c, cranker) {
         Ok(m) => event::<LockFeesClaimed>(&m).map(|e| e.wsol_claimed).unwrap_or(0),
         Err(e) => panic!("honest claim failed: {:?}\n{}", e.err, e.meta.logs.join("\n")),
     }
@@ -298,60 +341,75 @@ fn claimed_wsol(env: &mut Env, c: &Coin, cranker: &Keypair) -> u64 {
 fn ctl_lock_register_trade_claim() {
     let mut env = lock_env();
     let c = coin(&mut env);
-    let payer = env.payer.insecure_clone();
-    env.ok(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
     trade(&mut env, &c, 6, 5 * SOL);
     let k = Keypair::new();
     env.fund(&k.pubkey(), SOL);
     let got = claimed_wsol(&mut env, &c, &k);
     println!("ctl: one honest claim after 6 round trips of 5 SOL delivered {got} lamports of WSOL");
     assert!(got > 0);
-    // LockedCpLiquidityState @128: the real program records the LIQUIDITY OWNER (who locked: LaunchLab's vault_auth_seed PDA on
-    // devnet, here the launcher); the stand-in records the Fee Key owner. Printed, not asserted (it differs by binary).
-    let d = env.svm.get_account(&locked_liquidity(&c.nfts[0])).unwrap().data;
-    let at128 = Pubkey::new_from_array(d[128..160].try_into().unwrap());
-    let launcher = LAUNCHER.with(|l| l.borrow().as_ref().unwrap().pubkey());
     {
         use anchor_lang::solana_program::program_pack::Pack;
         let m = spl_token::state::Mint::unpack(&env.svm.get_account(&c.nfts[0]).unwrap().data).unwrap();
         println!("ctl: Fee Key mint: supply {} decimals {} mint_authority {:?} freeze_authority {:?}", m.supply, m.decimals, m.mint_authority, m.freeze_authority);
+        assert!(m.mint_authority.is_none() && m.freeze_authority.is_none() && m.supply == 1 && m.decimals == 0);
     }
-    println!("ctl: state@128 = {} (liquidity owner/launcher: {}, Fee Key owner/FEE_KEYS: {})", if at128 == launcher { "LIQUIDITY OWNER" } else if at128 == fee_keys() { "FEE KEY OWNER" } else { "other" }, at128 == launcher, at128 == fee_keys());
+}
+
+/// I-3 (mock fidelity, now asserted for both binaries): LockedCpLiquidityState @128 is the LIQUIDITY OWNER (who locked) — the
+/// launcher here, LaunchLab's vault_auth_seed PDA on devnet ($LOCKT) — not the Fee Key owner (FEE_KEYS).
+#[test]
+fn mf3_state_at_128_is_the_liquidity_owner() {
+    let mut env = lock_env();
+    let launcher = Keypair::new();
+    env.fund(&launcher.pubkey(), 5_000 * SOL);
+    cpmm::setup_amm(&mut env, &launcher.pubkey());
+    let (mint_kp, payer) = (Keypair::new(), env.payer.pubkey());
+    env.create_mint(&mint_kp, &payer, DECIMALS);
+    let mint = mint_kp.pubkey();
+    let lt = env.create_ata(&launcher.pubkey(), &mint);
+    let me = env.payer.insecure_clone();
+    env.mint_to(&mint, &me, &lt, 800_000_000 * TOKEN);
+    let pool = cpmm::create_pool_unlocked(&mut env, &launcher, &cpmm::amm_config_0(), &mint, &fee_pda(&mint), 85 * SOL, 800_000_000 * TOKEN, &lt);
+    let all = env.token_amount(&get_associated_token_address(&launcher.pubkey(), &pool.lp_mint));
+    let nft = Keypair::new();
+    env.ok(&[ix_lock(&launcher.pubkey(), &fee_keys(), &nft.pubkey(), &pool, all)], &[&launcher, &nft]);
+    let d = env.svm.get_account(&locked_liquidity(&nft.pubkey())).unwrap().data;
+    let at128 = Pubkey::new_from_array(d[LL_LOCKED_LOCKER..LL_LOCKED_LOCKER + 32].try_into().unwrap());
+    assert_eq!(at128, launcher.pubkey(), "@128 = the liquidity owner (locker)");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // findings
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-/// MF-1 — MOCK FIDELITY (Info; fails against the stand-in, PASSES against the real mainnet lock program). claim_lock_fees takes a
-/// caller-chosen `lp_fee_amount`. A cranker claims a dust amount (DUST_LP = 10,000 LP units, ~0.0001 % of
-/// the position; 1 unit is refused by CPMM as a zero-token withdrawal). If the lock program
-/// re-bases the position's fee baseline on every collect (the stand-in does), everything accrued and not collected is folded into the
-/// locked principal for good — the burn pool never receives it. SAFE behaviour: after the dust claim, an honest claim still
-/// delivers (almost) what an honest claim delivers in a twin run without the dust claim.
+/// MF-1 — MOCK FIDELITY (Info): a PARTIAL collect_cp_fees keeps the uncollected remainder (the real program does; the old stand-in
+/// re-based and forfeited it). claim_lock_fees no longer takes an amount (L-3), so this drives the lock binary DIRECTLY from a Fee Key
+/// holder wallet: a dust collect (DUST_LP = 10,000 LP units, ~0.0001 % of the position) followed by a full collect must deliver
+/// (almost) what one full collect delivers in a twin run. Passes against the fixed stand-in and the real mainnet program.
 const DUST_LP: u64 = 10_000;
 
 #[test]
-#[ignore = "MF-1 (Info, mock fidelity): fails against fixtures/cpmm_lock_mock.so, passes with REVIEW_LOCK_SO=<real lock program>"]
-fn mf1_a_dust_lp_fee_amount_must_not_erase_accrued_fees() {
+fn mf1_a_dust_collect_must_not_erase_accrued_fees() {
     let run = |dust: bool| -> u64 {
         let mut env = lock_env();
-        let c = coin(&mut env);
-        let payer = env.payer.insecure_clone();
-        env.ok(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
+        let holder = Keypair::new();
+        env.fund(&holder.pubkey(), 10 * SOL);
+        let c = coin_with(&mut env, &[100], Some(holder.pubkey()));
         trade(&mut env, &c, 6, 5 * SOL);
-        let k = Keypair::new();
-        env.fund(&k.pubkey(), SOL);
+        let wsol = env.create_ata(&holder.pubkey(), &NATIVE_MINT);
+        env.create_ata(&holder.pubkey(), &c.mint);
         if dust {
-            let r = claim(&mut env, &c, &k, DUST_LP);
-            println!("MF-1 dust claim (lp_fee_amount = {DUST_LP}): {}", match &r { Ok(_) => "accepted".to_string(), Err(e) => format!("refused {:?}", e.err) });
+            env.ok(&[ix_collect(&holder.pubkey(), &c.nfts[0], &c.pool, DUST_LP)], &[&holder]);
         }
-        claimed_wsol(&mut env, &c, &k)
+        let before = env.token_amount(&wsol);
+        env.ok(&[ix_collect(&holder.pubkey(), &c.nfts[0], &c.pool, u64::MAX)], &[&holder]);
+        let full = env.token_amount(&wsol) - before;
+        if dust { full + before } else { full }
     };
     let (control, after_dust) = (run(false), run(true));
-    println!("MF-1: honest claim {control} lamports; honest claim after a dust claim {after_dust} lamports");
+    println!("MF-1: one full collect {control} lamports; dust + full collect {after_dust} lamports");
     assert!(control > 0);
-    assert!(after_dust as u128 * 100 >= control as u128 * 95, "a dust claim erased {} of {} lamports of accrued fees", control - after_dust.min(control), control);
+    assert!(after_dust as u128 * 100 >= control as u128 * 95, "a dust collect erased {} of {} lamports of accrued fees", control - after_dust.min(control), control);
 }
 
 /// RL-2 (register_fee_key majority is measured against the LIVE lp_supply). After migration (100 % locked, Fee Key at FEE_KEYS) and
@@ -359,11 +417,13 @@ fn mf1_a_dust_lp_fee_amount_must_not_erase_accrued_fees() {
 /// program exists to collect from — is now a minority and register_fee_key refuses it (LockNotMajority) for as long as the deposit
 /// stays (the depositor earns LP fees meanwhile). This is the dilution class blind review 3 M-2 closed for register_pair_pool by
 /// measuring against the creation supply. SAFE behaviour: the coin's migration position registers.
+/// FIXED (r2): register_fee_key identifies the position by its locker (LaunchLab's vault authority) and measures the majority against
+/// the LP in Raydium's lock account, which a deposit does not change. (r2 order: register_fee_key runs before register_pool; a
+/// deposit larger than the pool before register_pool still delays register_pool's own ≥ 50 % locked check — review-3 M-2, accepted.)
 #[test]
-#[ignore = "open finding RL-2 (Medium): fails until fixed — run with --ignored"]
 fn rl2_a_depositor_must_not_block_register_fee_key() {
     let mut env = lock_env();
-    let c = coin(&mut env);
+    let c = coin_with(&mut env, &[100], None);
     let supply = lp_supply(&env, &c.pool.pool);
     add_liquidity(&mut env, &c.mint, &c.pool, supply + supply / 20);
     println!("RL-2: lp_supply {} → {} after the deposit; the coin's locked position holds {}", supply, lp_supply(&env, &c.pool.pool), supply - 100);
@@ -373,6 +433,11 @@ fn rl2_a_depositor_must_not_block_register_fee_key() {
         println!("RL-2: register_fee_key refused: {:?}", e.err);
     }
     assert!(r.is_ok(), "the coin's own (migration) lock position must register despite a later deposit");
+    // the claim path works with the deposit in place
+    trade(&mut env, &c, 4, 5 * SOL);
+    let k = Keypair::new();
+    env.fund(&k.pubkey(), SOL);
+    assert!(claimed_wsol(&mut env, &c, &k) > 0);
 }
 
 /// RL-3 (the policy-0 platform pins are a point-in-time read). initialize_token checks platformLockNftWallet == FEE_KEYS and scales
@@ -381,26 +446,22 @@ fn rl2_a_depositor_must_not_block_register_fee_key() {
 /// migration then mints the Fee Key to the admin's wallet; register_pool still verifies the pool (100 % locked counts as locked) and
 /// buybacks run, but register_fee_key can never succeed — the LP fees "that fund the burn" go to the platform admin, silently.
 /// SAFE behaviour: a pool whose locked LP is not (majority) held under a Fee Key at FEE_KEYS is not verified for policy 0.
+/// FIXED (r2): register_pool for policy 0 requires the mint's FeeKeyRecord for this pool; a migration whose Fee Key went to the
+/// platform admin's wallet can never record one (FeeKeyNotHeld), so the pool is never verified (FeeKeyNotRegistered) and no buyback
+/// runs on it. (And only the compiled BURNTICKER_PLATFORM can be pinned at initialize_token — tests/lock_fees.rs.)
 #[test]
-#[ignore = "open finding RL-3 (Medium): fails until fixed — run with --ignored"]
 fn rl3_a_platform_nft_wallet_changed_after_init_must_not_verify_the_pool() {
     let mut env = lock_env();
     let admin_wallet = Pubkey::new_unique();
     // initialize_token passes the pins (FEE_KEYS, 100/0/0) inside coin_with; the migration below mints the Fee Key to `admin_wallet`
     // — what LaunchLab does after the platform admin's updateLockNftWallet.
-    let mut verified = false;
-    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let c = coin_with(&mut env, &[100], Some(admin_wallet), |_, _, _| {});
-        verified = env.config(&config_pda(&c.mint)).pool_verified;
-        let payer = env.payer.insecure_clone();
-        let fk = env.send(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
-        println!("RL-3: pool_verified = {verified}; register_fee_key: {}", if fk.is_ok() { "ok".into() } else { format!("{:?}", fk.unwrap_err().err) });
-    }));
-    // coin_with panics if register_pool refuses — that is the SAFE outcome
-    if r.is_err() {
-        return;
-    }
-    assert!(!verified, "the pool was verified although its LP-lock Fee Key went to the platform admin, not FEE_KEYS");
+    let c = coin_with(&mut env, &[100], Some(admin_wallet));
+    let payer = env.payer.insecure_clone();
+    let fk = env.send(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
+    expect_anchor_err(fk, "FeeKeyNotHeld");
+    let rp = env.send(&[ix_register_pool(&payer.pubkey(), &c.mint, &c.pool.pool)], &[]);
+    expect_anchor_err(rp, "FeeKeyNotRegistered");
+    assert!(!env.config(&config_pda(&c.mint)).pool_verified, "the pool was verified although its LP-lock Fee Key went to the platform admin");
 }
 
 /// Control (hypothesis refuted): an EXECUTABLE account at the treasury address (its key holder could deploy a program there) does not
@@ -411,8 +472,6 @@ fn rl3_a_platform_nft_wallet_changed_after_init_must_not_verify_the_pool() {
 fn ctl_an_executable_treasury_is_still_credited() {
     let mut env = lock_env();
     let c = coin(&mut env);
-    let payer = env.payer.insecure_clone();
-    env.ok(&[ix_register_fee_key(&payer.pubkey(), &c.mint, &c.pool.pool, &c.nfts[0])], &[]);
     trade(&mut env, &c, 6, 5 * SOL);
     // an executable account at the treasury address (any program image will do)
     env.svm.add_program(TREASURY, &read("fixtures/cpmm_lock_mock.so")).unwrap();
@@ -420,7 +479,7 @@ fn ctl_an_executable_treasury_is_still_credited() {
     let k = Keypair::new();
     env.fund(&k.pubkey(), SOL);
     let (fee0, t0) = (env.lamports(&fee_pda(&c.mint)), env.lamports(&TREASURY));
-    let r = claim(&mut env, &c, &k, u64::MAX);
+    let r = claim(&mut env, &c, &k);
     match &r {
         Ok(m) => println!("ctl: claim ok; burn pool +{}, executable treasury +{}, event {:?}", env.lamports(&fee_pda(&c.mint)) - fee0, env.lamports(&TREASURY) - t0, event::<LockFeesClaimed>(m).map(|e| (e.to_operator, e.operator_paid, e.operator_pending))),
         Err(e) => println!("ctl: claim reverted: {:?} — {}", e.err, e.meta.logs.iter().rev().find(|l| l.contains("failed")).cloned().unwrap_or_default()),

@@ -61,6 +61,12 @@ pub mod pair_curve {
         instructions::lock_lp::handle_lock_lp(ctx, side)
     }
 
+    /// lp-lock blind review L-2: permissionless fallback — burn a graduated side's LP if lock_lp has not run 30 days after the
+    /// graduation decision. The only instruction that destroys LP.
+    pub fn burn_lp(ctx: Context<BurnLp>, side: u8) -> Result<()> {
+        instructions::lock_lp::handle_burn_lp(ctx, side)
+    }
+
     pub fn void_pair(ctx: Context<VoidPair>) -> Result<()> {
         instructions::void_pair::handle_void(ctx)
     }

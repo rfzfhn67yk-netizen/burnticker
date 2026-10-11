@@ -20,9 +20,16 @@ fn read(rel: &str) -> Vec<u8> {
     std::fs::read(&p).unwrap_or_else(|e| panic!("cannot read {p}: {e} (run scripts/test.sh first)"))
 }
 
-/// Loads the TEST-ONLY lock-program stand-in at Raydium's lock program id (its authority PDA is then LOCK_CPMM_AUTHORITY).
+/// Loads the TEST-ONLY lock-program stand-in at Raydium's lock program id (its authority PDA is then LOCK_CPMM_AUTHORITY) — or, with
+/// REVIEW_LOCK_SO=<path> (scripts/test.sh lock-real mode), that binary: the real program dumped read-only, never committed. Metaplex's
+/// id gets an inert executable (the real program's account list declares it; with_metadata = false never invokes it).
 pub fn add_lock_program(env: &mut Env) {
-    env.svm.add_program(LOCK_CPMM_PROGRAM_ID, &read("fixtures/cpmm_lock_mock.so")).unwrap();
+    let so = match std::env::var("REVIEW_LOCK_SO") {
+        Ok(p) if !p.is_empty() => std::fs::read(&p).unwrap_or_else(|e| panic!("REVIEW_LOCK_SO={p}: {e}")),
+        _ => read("fixtures/cpmm_lock_mock.so"),
+    };
+    env.svm.add_program(LOCK_CPMM_PROGRAM_ID, &so).unwrap();
+    env.svm.add_program(METADATA_PROGRAM_ID, &read("fixtures/cpmm_lock_mock.so")).unwrap();
 }
 
 /// Loads the localnet build of burn_receipts (compiled-in test OPERATOR_TREASURY = [0x7e; 32]) over the default one.
@@ -122,6 +129,7 @@ pub fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft_min
             fee_nft_mint: *nft_mint,
             fee_nft_account: get_associated_token_address(&fee_keys(), nft_mint),
             locked_liquidity: locked_liquidity(nft_mint),
+            lp_lock_vault: lock_lp_vault(&crate::common::cpmm::lp_mint_of(pool)),
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: br_event_authority(),
             program: burn_receipts::ID,
@@ -130,11 +138,11 @@ pub fn ix_register_fee_key(payer: &Pubkey, mint: &Pubkey, pool: &Pubkey, nft_min
     )
 }
 
-pub fn ix_claim_lock_fees(cranker: &Pubkey, mint: &Pubkey, pool: &Pool, nft_mint: &Pubkey, treasury: &Pubkey, lp_fee_amount: u64) -> Instruction {
+pub fn ix_claim_lock_fees(cranker: &Pubkey, mint: &Pubkey, pool: &Pool, nft_mint: &Pubkey, treasury: &Pubkey) -> Instruction {
     let fk = fee_keys();
     Instruction::new_with_bytes(
         burn_receipts::ID,
-        &burn_receipts::instruction::ClaimLockFees { lp_fee_amount }.data(),
+        &burn_receipts::instruction::ClaimLockFees {}.data(),
         burn_receipts::accounts::ClaimLockFees {
             cranker: *cranker,
             platform: Pubkey::find_program_address(&[PLATFORM_SEED], &burn_receipts::ID).0,
@@ -165,6 +173,27 @@ pub fn ix_claim_lock_fees(cranker: &Pubkey, mint: &Pubkey, pool: &Pool, nft_mint
             system_program: anchor_lang::solana_program::system_program::ID,
             event_authority: br_event_authority(),
             program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// pair_curve burn_lp (lp-lock blind review L-2): the 30-day fallback that burns a graduated side's unlocked LP.
+pub fn ix_burn_lp(pair: &Pubkey, vault: &Pubkey, mint: &Pubkey, pool: &Pool, cranker: &Pubkey, side: u8) -> Instruction {
+    Instruction::new_with_bytes(
+        pair_curve::ID,
+        &pair_curve::instruction::BurnLp { side }.data(),
+        pair_curve::accounts::BurnLp {
+            cranker: *cranker,
+            pair: *pair,
+            vault: *vault,
+            pool_state: pool.pool,
+            lp_mint: pool.lp_mint,
+            vault_lp: get_associated_token_address(vault, &pool.lp_mint),
+            fee_vault: fee_pda(mint),
+            token_program: spl_token::ID,
+            event_authority: pc_event_authority(),
+            program: pair_curve::ID,
         }
         .to_account_metas(None),
     )

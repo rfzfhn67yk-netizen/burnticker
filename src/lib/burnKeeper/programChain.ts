@@ -51,7 +51,7 @@ export const WAIT_REASONS: Record<string, string> = {
   TwapDeviation: "waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts",
   PoolNotTradable: "waiting — the registered pool is not tradable right now",
   EmptyReserves: "waiting — the registered pool has no reserves",
-  "waiting-for-pool": "waiting for the CPMM pool — not graduated yet, or register_pool has not run",
+  "waiting-for-pool": "waiting for the CPMM pool — not graduated yet, or register_fee_key / register_pool has not run (the Fee Key is registered first since LP-lock round 2)",
 };
 export const WAIT_RETRY_MS = 10 * 60_000;
 

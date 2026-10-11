@@ -20,6 +20,9 @@ use crate::state::TokenConfig;
 ///     * its `pool_creator` is the fee PDA;
 ///     * ≥ 90 % of its LP is burned or held by Raydium's LP lock, as LaunchLab's migration leaves it (platform/creator lock NFTs +
 ///       burn: SDK instrument.ts createPlatformConfig `migrateCpLockNftScale {platformScale, creatorScale, burnScale}`).
+///     * lp-lock blind review RL-3: the mint's FeeKeyRecord exists for THIS pool — register_fee_key ran first and found the
+///       migration's lock position (locker = LaunchLab's vault authority) with its Fee Key held by FEE_KEYS. A Fee Key the platform
+///       admin redirected before migration therefore fails closed here: `pool_verified` implies the LP fees fund the burn.
 ///   POOL_POLICY_FIXED (1): the pool was fixed at init by the creator (creator trust); it must still have the fee PDA as
 ///     `pool_creator` and ≥ 90 % of its LP burned or locked. Sets `pool_verified`; crank_buyback refuses an unverified pool.
 ///
@@ -47,6 +50,10 @@ pub struct RegisterPool<'info> {
     /// CHECK: policy 0: the token's LaunchLab pool ["pool", mint, WSOL] (owner + address checked; its platformId must be the platform
     /// pinned at initialize_token). Omitted under policy 1.
     pub launchlab_pool: Option<UncheckedAccount<'info>>,
+    /// CHECK: policy 0: the mint's FeeKeyRecord ["fee_key", mint] (seeds, owner, discriminator checked in the handler) — lp-lock blind
+    /// review RL-3: the migration's LP-lock Fee Key must already be recorded as held by FEE_KEYS for THIS pool, so a Fee Key the
+    /// platform admin redirected fails closed before the pool is verified. Omitted under policy 1.
+    pub fee_key: Option<UncheckedAccount<'info>>,
 }
 
 /// The LaunchLab facts that prove the migration pool (policy 0): the token's LaunchLab pool account, the platform it must record
@@ -115,6 +122,17 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
                 &a.lp_lock_vault.to_account_info(),
                 Some(LaunchLabProof { pool: &llp, platform: c.ll_platform, cp_config: c.ll_cp_config }),
             )?;
+            // RL-3: the LP fees must reach the burn — the Fee Key of the migration's lock position is recorded (register_fee_key,
+            // which identifies the position by LaunchLab's locker and requires FEE_KEYS to hold its NFT) for this very pool.
+            let Some(fk) = a.fee_key.as_ref() else {
+                return err!(BurnError::FeeKeyNotRegistered);
+            };
+            let (fk_pda, _) = Pubkey::find_program_address(&[FEE_KEY_SEED, mint.as_ref()], &crate::ID);
+            require_keys_eq!(fk.key(), fk_pda, BurnError::FeeKeyNotRegistered);
+            let fki = fk.to_account_info();
+            require!(fki.owner == &crate::ID && !fki.data_is_empty(), BurnError::FeeKeyNotRegistered);
+            let rec = crate::state::FeeKeyRecord::try_deserialize(&mut &fki.try_borrow_data()?[..]).map_err(|_| BurnError::FeeKeyNotRegistered)?;
+            require_keys_eq!(rec.pool, a.pool_state.key(), BurnError::FeeKeyMismatch);
         }
         POOL_POLICY_FIXED => {
             require!(!c.pool_verified, BurnError::PoolAlreadyRegistered);

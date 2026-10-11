@@ -201,6 +201,8 @@ export class FakeBurnProgram implements BurnProgramClient {
           reserveLamports: c.rule.reserve_lamports, tokensPerUnit: c.rule.tokens_per_unit, vaultAllocation: c.rule.vault_allocation, attesters: i.attesters, quorum: i.quorum, heldKeys: this.heldKeys ?? i.attesters, decimals: DECIMALS, now: () => this.now() }));
         if (i.mode === "buyback" && this.autoRegisterPool) this.tokens.get(i.mint)!.registerPool();
         this.lockFees.port(i.mint).memoPrefix = c.memoPrefix;
+        // round 2: register_pool runs after register_fee_key through the lock path; it registers the pool on the coin's fake program too
+        this.lockFees.port(i.mint).onRegisterPool = () => { const f = this.tokens.get(i.mint); if (f && !f.cfg.poolRegistered) f.registerPool(); };
       } catch { /* not expressible: no on-chain config (the keeper reports why) */ }
     }
     return { tokenConfig, instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (placeholder program id — nothing is sent)", keys: [{ pubkey: i.creator, isSigner: true, isWritable: true }, { pubkey: i.mint, isSigner: true, isWritable: false }, { pubkey: tokenConfig, isSigner: false, isWritable: true }, { pubkey: this.feePdaFor(i.mint), isSigner: false, isWritable: true }], dataBase64: Buffer.from(JSON.stringify({ ix: "initialize_token", rulesSha256: i.rulesSha256, selectorKey: i.selectorKey, mode: i.mode, quorum: i.quorum, attesters: i.attesters }), "utf8").toString("base64") }] };

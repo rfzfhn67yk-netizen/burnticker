@@ -229,3 +229,12 @@ operator treasury (fixed in code; the coin side is burned). All additions, nothi
 - `GET /fees/ledger` → `lpFees`: the operator's LP-fee line (claims, SOL to the operator and to burn pools, the treasury).
 - A claim's receipt is its memo, `<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|burned=…|nft=<first 12 of the Fee Key>|v1`; the SDK's
   `parseLockFeesMemo` reads it and `fees.splitLockFees(lamports)` recomputes the split (operator = floor(20 %), the burn pool the rest).
+
+## LP lock round 2 (API 1.9.0)
+
+The blind review's fixes (2026-10-11), all additive: `status.lp.lastError` { at, error, sentence } — the keeper's last refusal for the coin's
+lock steps with the program error in plain words (`PlatformNotPinned`, `LockerMismatch`, `FeeKeyNotRegistered`, `FeeKeyMismatch`,
+`TreasuryNotPinned`…); `/trust` `lpLock` gains `platform` / `platformPinned` (the LaunchLab platform compiled into burn_receipts; null =
+not pinned, `initialize_token` refuses `PlatformNotPinned`) and `launchLabLocker`, and `lpLock.feeKeysPda` is never null (a fixed PDA of the
+program id). Claim memos are v2 — `<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|paid=…|pending=…|burned=…|nft=…|v2`; v1 memos (devnet
+history) still parse, and `lp.lastClaim.line` names any operator amount still owed. A claim that moves nothing writes no memo and no receipt.
