@@ -75,7 +75,8 @@ describe("check: where money can go, who can do what", () => {
   });
   test("what is not done names every gap the owner listed: one attester, upgrade authority, no firm review, third signer, bounty wallet, entity, interim build, the open pair_curve findings, the mainnet rehearsal", () => {
     const ids = c.notDone.map((n) => n.id);
-    for (const id of ["one-attester", "upgrade-authority", "no-firm-review", "third-signer", "bounty-wallet", "entity", "verified-build", "paircurve-findings-open", "rehearsal-rehearsal"]) assert.ok(ids.includes(id), id);
+    for (const id of ["one-attester", "upgrade-authority", "no-firm-review", "third-signer", "bounty-wallet", "entity", "verified-build", "paircurve-findings-open"]) assert.ok(ids.includes(id), id);
+    assert.ok(!ids.includes("rehearsal-rehearsal"), "the mainnet rehearsal (2026-10-11) is done, not open");
     assert.ok(!ids.includes("devnet-rehearsal") && !ids.includes("contact-todo") && !ids.includes("public-repo-not-created"), "done items are not listed as open (cold read T1–T3)");
     assert.equal(c.locked.find((l) => l.id === "metadata")?.status, loadTransparency(ROOT).trustPack?.metadataUri?.status);
   });

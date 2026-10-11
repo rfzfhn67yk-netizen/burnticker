@@ -35,7 +35,7 @@ describe("transparency.json", () => {
     assert.equal(cfg.policies.find((p) => p.id === "failure-definition")?.text, "Failure definition: if any coin on this platform trades at any price, nothing changes — no relaunch, no v2, no rebrand, no change to a rule. The rule runs and the receipts post.");
     // the rehearsal-coin slot: declared, not done, and on the bots' refuse list
     const reh = cfg.rehearsals.find((r) => r.symbol === "REHEARSAL")!;
-    assert.ok(reh && reh.mint === "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp" && reh.status === "not done" && /not for trading/.test(reh.text), "the rehearsal mint keypair exists (2026-10-11); the coin is not created yet");
+    assert.ok(reh && reh.mint === "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp" && /^done 2026-10-11/.test(reh.status) && /not for trading/.test(reh.text) && /does not prove a mainnet burn/.test(reh.text), "the mainnet rehearsal coin was created 2026-10-11; disclosed as not for trading and as not proving a burn");
     const own = JSON.parse(fs.readFileSync(path.join(ROOT, cfg.whoRunsThis.refuseListConfig), "utf8")) as { tokens: { symbol: string }[] };
     assert.ok(own.tokens.some((t) => t.symbol === "REHEARSAL") && own.tokens.some((t) => t.symbol === "DEFICIT"), "every platform coin, rehearsal included, is on the refuse list");
     assert.ok(fs.existsSync(path.join(ROOT, cfg.whoRunsThis.refuseListCode)) && fs.existsSync(path.join(ROOT, cfg.whoRunsThis.refuseListConfig)), "the refuse list it links to exists");

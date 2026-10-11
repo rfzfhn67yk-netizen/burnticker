@@ -9,3 +9,5 @@ The policy — what counts as an incident, the 48-hour public postmortem, where 
 its content unchanged (it held no entries).
 
 (No incidents recorded.)
+
+- 2026-10-11 ~17:00 Denver — $REHEARSAL created on mainnet (mint FwXiFscF…pzkp, pool AAT9VJAh…hRgG): a disclosed throwaway under the real platform config; the operator's one 0.1 SOL buy at creation; unrelated wallets bought within seconds; baseline Treasury reading attested by the host key. Proves deploy/config/create/fee routing/signed reading on mainnet; does not prove a burn. Evidence: docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json
