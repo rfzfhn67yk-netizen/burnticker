@@ -105,3 +105,4 @@ scripts/ops/verified-build.sh
 public/.well-known/burnticker.json
 test/fixtures/burnticker-trustpack/**
 test/fixtures/burnticker-season/**
+scripts/ops/codex-setup.sh
