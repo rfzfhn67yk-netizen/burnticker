@@ -4,6 +4,8 @@ import { platform } from "@/lib/burnticker/server";
 import { DECIMALS, TOTAL_SUPPLY } from "@/lib/burnticker/rules";
 import { coinsBurnedOn, dateRange, seasonBoards, type SeasonBoard, type SeasonCoinInput } from "@/lib/burnticker/seasons";
 import { derbyStore } from "@/lib/burnticker/derby/store";
+import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
+import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Seasons", description: "Burnticker seasons: one scoreboard per league and season, ranked by receipts; rivalry pairs and Burn Derby brackets below." };
@@ -16,6 +18,7 @@ export const metadata: Metadata = { title: "Seasons", description: "Burnticker s
 export default function SeasonsPage() {
   let boards: SeasonBoard[] = [], yesterday = 0, pairs: { pairId: string; a: string; b: string; selectorKey: string; createdAt: number }[] = [], brackets: { id: string; title: string; createdAt: number }[] = [];
   let err: string | null = null;
+  const launch = launchAvailability(process.env);
   const yday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   try {
     const p = platform();
@@ -40,7 +43,7 @@ export default function SeasonsPage() {
       {err && <p className="text-red-400 text-sm">Registry unavailable: {err}</p>}
 
       <section className="space-y-3" aria-label="season scoreboards">
-        {!err && boards.length === 0 && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-4">No team coins yet. A team coin is launched from the <Link className="underline" href="/burnticker/launch">wizard</Link> in any league: baseball, basketball, hockey, soccer, football, college.</p>}
+        {!err && boards.length === 0 && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-4">No team coins yet.{launch.open ? <> A team coin is launched from the <Link className="underline" href="/burnticker/launch">wizard</Link> in any league: baseball, basketball, hockey, soccer, football, college.</> : ` ${launch.closedLine}`} {NO_WALLET_LINE}</p>}
         <div className="grid gap-3 md:grid-cols-2">{boards.map((b) => (
           <article key={b.key} className={card} aria-label={b.label}>
             <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-medium">{b.label}</h2><span className="text-xs text-neutral-500">{dateRange(b.from, b.to)}{b.ended ? " · season over" : ""}</span></div>

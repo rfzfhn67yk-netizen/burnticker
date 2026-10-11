@@ -7,7 +7,7 @@ import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, operatorTreasuryFor, type Loc
  * THE FEE LEDGER (trust pack, 2026-10-10; /burnticker/fees/ledger, GET /api/burnticker/v1/fees/ledger). Every lamport the developer fee
  * wallet (pinned in config/burnticker/operator.json for the cluster the platform runs on) received or sent, READ FROM CHAIN — the
  * wallet's full signature history, each transaction's pre/post balance for the wallet — grouped by UTC month, next to the expenses the
- * fee pays (config/burnticker/expenses.json; null amounts are placeholders and say so). Nothing comes from our own records.
+ * fee pays (config/burnticker/expenses.json; null amounts are placeholders and say so). The wallet blocks are chain reads only; each block on the page names its source.
  *
  * `scripts/burnticker-trustpack.mts fees-ledger` writes the result to <publish dir>/fees-ledger.json (monthly on the keeper host is
  * enough); the API serves that copy while it is under an hour old and otherwise reads the chain itself (cached in memory).

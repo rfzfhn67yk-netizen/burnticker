@@ -9,7 +9,7 @@ delivered. The program runs behind a 25 SOL per-burn-pool cap (with a dated suns
 
 | | |
 |---|---|
-| Bounty wallet | `HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u` (mainnet, held by the operator; funding of 5–10 SOL pending); its balance is shown live on the trust page (`/burnticker/trust`) |
+| Bounty wallet | `HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u` (mainnet, held by the operator, not the Squads vault); funded 5 SOL on 2026-10-11; grows from the developer fee; balance shown live on the trust page (`/burnticker/trust`) |
 | Amount | **5–10 SOL**, set aside from the developer fee (25 bps of curve volume), per the owner's decision of 2026-10-09. Exact tiers: TODO. |
 | Status | **not published** — these terms are a draft until the owner removes this line |
 | Contact | security@burnticker.com (the operator contact on the trust page is contact@burnticker.com; both reach the operator directly) |

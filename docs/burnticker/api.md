@@ -57,7 +57,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/check/receipts/{signature}` | 300 s | heavy | the browser verifier's ten checks run on the server: transaction, program, memo, the program's Reading + TokenConfig accounts, rules hash, the Treasury source (URL hashed against `source_url_hash`), units, spend, burn — `ok` true / false / null with the reason |
 | GET | `/fees/ledger` | 600 s | read | the pinned developer fee wallet's ledger from chain, by UTC month, and the expenses the fee pays (`config/burnticker/expenses.json`, placeholders marked) |
 | GET | `/operator` | 60 s | read | who runs this, every operator wallet per cluster (TODO placeholders listed), the signed-statement check (ed25519), the never-buys monitor's last report |
-| GET | `/bounty` | 60 s | read | the bounty wallet (null until the mainnet Squads vault exists; `walletTodo` says so), its live balance once set, the decided reports |
+| GET | `/bounty` | 60 s | read | the bounty wallet (operator-held, funded 2026-10-11), its live balance read from chain, the decided reports |
 | GET | `/snapshots?limit=` | 60 s | read | (API 1.7.0, trust ops; `src/lib/burnticker/ops/snapshot.ts`) the daily registry snapshots pinned to Arweave, newest first: `{ date, sha256, arweaveTxId, url, rowCounts, bytes, capturedAt, verify }` — the append-only ledger (rules, readings, receipts, pairs, pair outcomes, rule ends, launch pins) as canonical JSONL; re-download and recompute with `scripts/burnticker-verify-snapshot.mts <txid>` |
 | GET | `/openapi.json` | 3600 s | read | the OpenAPI 3.1 document |
 

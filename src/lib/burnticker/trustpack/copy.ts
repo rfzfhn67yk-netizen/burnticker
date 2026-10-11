@@ -27,14 +27,17 @@ export const CHECK_COPY = {
 
 export const LEDGER_COPY = {
   title: "Fee ledger",
-  intro: "Every lamport the developer fee wallet received or sent, read from the chain and grouped by month, next to what the fee pays for. Nothing on this page comes from our own records.",
+  // review 2 §2 (2026-10-11): no universal provenance claim — the wallet blocks are chain reads, the LP-fee block is the keeper's records
+  // and the expenses are operator-entered; each block names its own source.
+  intro: "Every lamport the developer fee wallet received or sent, grouped by month, next to what the fee pays for. Each block names where its data comes from: chain reads, the keeper's records or operator-entered values.",
   walletLine: "Developer fee wallet, pinned in the platform config:",
   incomeTitle: "Received, by month (from chain)",
-  entriesTitle: "Every transaction",
+  entriesTitle: "Every transaction (from chain)",
   expensesTitle: "What the fee pays for",
+  expensesSource: "Source: operator-entered (config/burnticker/expenses.json); an amount not given yet says so.",
   placeholder: "amount not given yet",
   oneOff: "one-off",
-  unavailable: "The chain could not be read from this host just now; the ledger is never filled from our own records instead.",
+  unavailable: "The chain could not be read from this host just now; the wallet blocks are never filled from other records instead.",
   regenerated: "Regenerated from chain by scripts/burnticker-trustpack.mts fees-ledger (monthly by the keeper host, or on request); the API reads the chain directly when no published copy is newer than an hour.",
   devnetNote: "Devnet: the platform runs on devnet today, so this is the devnet wallet. Its income is rehearsal trading only.",
 } as const;
@@ -58,7 +61,7 @@ export const TRUSTPACK_SECTION_COPY = {
   title: "Check it yourself",
   intro: "Three pages that read only public files and the chain:",
   bountyTitle: "Bounty wallet",
-  bountyTodo: "set (held by the operator); funding of 5–10 SOL from the developer fee is pending. Terms: SECURITY.md.",
+  bountyTodo: "not configured on this host. Terms: SECURITY.md.",
   bountyReports: "Paid and rejected reports are listed in SECURITY.md and here once decided. None yet.",
 } as const;
 

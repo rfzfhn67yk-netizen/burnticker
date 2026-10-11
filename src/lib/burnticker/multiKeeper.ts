@@ -16,6 +16,7 @@ import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type B
 import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFeesKeeper";
 import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
+import { fenceToken, type FenceReport } from "@/lib/burnticker/ops/readingFence";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -69,13 +70,18 @@ export interface KeeperDeps {
    * someone else made, alerts when the registry and the chain disagree).
    */
   pairUnlink?: boolean;
+  /**
+   * THE FOREIGN-READING FENCE (ops/readingFence.ts) runs inside runCycle, after planning and before the first attestation (review 2 F1).
+   * On unless explicitly false — false exists only so a test can show the double count the fence prevents.
+   */
+  fence?: boolean;
 }
 
 export interface FetchReport { key: string; written: number; refusals: string[]; awaitingFinal: number; error: string | null; skipped: boolean }
 export type ExecOutcome =
   | { mint: string; eventId: string; outcome: "confirmed"; signature: string; burnRaw: bigint; adopted: boolean }
   | { mint: string; eventId: string; outcome: "skipped" | "exhausted" | "waiting" | "error" | "dry-run"; why: string };
-export interface CycleReport { fetched: FetchReport[]; planned: { mint: string; eventId: string; status: string }[]; executed: ExecOutcome[]; errors: string[]; /** claim_lock_fees per coin this cycle (LP locked forever, 2026-10-10); absent on a keeper without the client. */ lpFees?: LockFeesOutcome[] }
+export interface CycleReport { fetched: FetchReport[]; planned: { mint: string; eventId: string; status: string }[]; executed: ExecOutcome[]; errors: string[]; /** claim_lock_fees per coin this cycle (LP locked forever, 2026-10-10); absent on a keeper without the client. */ lpFees?: LockFeesOutcome[]; /** The foreign-reading fence this cycle (absent with `fence: false`); any hold ran the rest of the cycle as a dry run. */ fence?: FenceReport }
 
 const oracleFor = (d: KeeperDeps, key: string): OracleAdapter => {
   if (key.startsWith("catalogue:")) return d.oracles.catalogue;
@@ -692,7 +698,9 @@ export async function winnerFlatReading(d: KeeperDeps, ctx: PairCtx, D: number):
 }
 
 /** One full cycle over every live token (and, for the fallback clock, every retired coin of a voided pair). */
-export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): Promise<CycleReport> {
+export async function runCycle(d0: KeeperDeps, opts: { fetch?: boolean } = {}): Promise<CycleReport> {
+  // `d` is this cycle's copy: a fence hold turns it into a dry run for everything after it (the caller's deps are not changed).
+  const d: KeeperDeps = { ...d0 };
   const live = d.registry.tokens("live");
   const errors: string[] = [];
   if (d.derby) { try { await d.derby.sample(live); } catch (e) { errors.push(`derby sampler: ${(e as Error).message.slice(0, 160)}`); } }
@@ -720,6 +728,18 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     if (ctx?.active) { try { planned.push(...await planRuleEnd(d, t, locked, gate, ctx)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); } }
     ready.push({ t, locked, gate });
   }
+  // THE FENCE (review 2 F1): after planning, before the first attestation — every receipt this registry is about to count is checked
+  // against readings another keeper may already have landed (adopted when the units match; any doubt HOLDS every send this cycle).
+  const fenceOn = d.fence !== false;
+  const fence: FenceReport = { held: [], adopted: [], checked: 0 };
+  const fenceStep = async (t: TokenRow): Promise<void> => {
+    if (!fenceOn) return;
+    const before = fence.held.length;
+    try { await fenceToken(d, t, fence); }
+    catch (e) { fence.held.push({ mint: t.mint, ticker: t.ticker, why: `fence check failed: ${(e as Error).message.slice(0, 120)}` }); d.log(`  [fence] $${t.ticker}: check failed — sends held this cycle`); }
+    if (fence.held.length > before && !d.dryRun) { d.dryRun = true; d.log(`  [fence] sends HELD for the rest of this cycle (read, plan and publish go on)`); }
+  };
+  for (const { t } of ready) await fenceStep(t);
   // Pass 2 — EXECUTE, the coins with a lost period first: the forward lands before the winner's crank (the winner never waits for it).
   const losing = (m: string) => d.registry.pending(m).some((b) => b.pairRole === "lost");
   ready.sort((x, y) => Number(losing(y.t.mint)) - Number(losing(x.t.mint)));
@@ -734,8 +754,10 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     // LP LOCKED FOREVER (2026-10-10): claim the locked LP's fees AHEAD of the buyback cranks, so the 80 % share is in the pool they spend.
     if (d.program.lockFees) lpFees.push(await claimLockFeesFor({ registry: d.registry, lockFees: d.program.lockFees, log: d.log, now: d.now, dryRun: d.dryRun }, t));
     try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
-    // After the day's cranks: the end of the rule (drain / wind-down / retirement / sweep) is planned from what the program just did.
+    // After the day's cranks: the end of the rule (drain / wind-down / retirement / sweep) is planned from what the program just did —
+    // and fenced again before they are attested (a cold standby plans the same wind-down days the leader already counted).
     try { planned.push(...await planRuleEnd(d, t, locked, gate, ctx)); } catch (e) { errors.push(`$${t.ticker}: end of rule: ${(e as Error).message.slice(0, 160)}`); }
+    await fenceStep(t);
     try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
   }
   try { await pairUnmatchedAlerts(d.registry, d.program, d.now(), d.log); } catch (e) { errors.push(`pair links: ${(e as Error).message.slice(0, 160)}`); }
@@ -743,6 +765,7 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
   try { await pairUnlinkStep(d.registry, d.program, d.now(), !!d.dryRun, d.log, { send: d.pairUnlink !== false }); } catch (e) { errors.push(`pair unlink: ${(e as Error).message.slice(0, 160)}`); }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
   for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
+  if (fence.held.length) for (const h of fence.held) errors.push(`fence: $${h.ticker}: ${h.why}`);
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }
-  return { fetched, planned, executed, errors, ...(d.program.lockFees ? { lpFees } : {}) };
+  return { fetched, planned, executed, errors, ...(d.program.lockFees ? { lpFees } : {}), ...(fenceOn ? { fence } : {}) };
 }

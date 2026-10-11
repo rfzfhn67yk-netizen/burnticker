@@ -236,7 +236,7 @@ describe("transparency.json: the cold-read corrections and the trust-pack blocks
     assert.equal(lim["program-not-deployed"].status, "devnet only"); assert.match(lim["program-not-deployed"].text, /AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM/);
     assert.equal(lim["paircurve-findings-open"].status, "not done");
     for (const id of ["verified-build-interim", "bounty-wallet", "entity", "third-signer", "signed-operator-message"]) assert.ok(lim[id], id);
-    assert.equal(t.howBuilt.bounty.wallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u"); assert.match(t.howBuilt.bounty.walletTodo!, /funding/);
+    assert.equal(t.howBuilt.bounty.wallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u"); assert.match(t.howBuilt.bounty.walletTodo!, /developer fee/); assert.equal(t.howBuilt.bounty.status, "funded 2026-10-11");
     assert.deepEqual(t.trustPack?.pages.map((p) => p.path), ["/burnticker/check", "/burnticker/fees/ledger", "/burnticker/operator"]);
     assert.deepEqual(transparencyProblems({ ...t, howBuilt: { ...t.howBuilt, bounty: { ...t.howBuilt.bounty, wallet: "nope" } } }).length, 1);
   });

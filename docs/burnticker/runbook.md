@@ -352,8 +352,11 @@ public status.json>`. Tunables: `BURNTICKER_TAKEOVER_MISSED` (default 5), `BURNT
    once (`AlreadyProcessed`). They **can double-pay fees**: every duplicate or losing `submit_reading`, crank, creator-fee claim or
    health check that reaches the chain costs its base and priority fee (a few thousand lamports each).
 3. **Counting the same receipt into two readings** (a keeper whose registry missed the other's landed reading would add the same units
-   to the next day) is prevented by the fence, not by the program: before every cycle a keeper adopts any on-chain reading it did not
-   write whose units equal its own unassigned receipts through that day, and HOLDS all sends (`bt-foreign-reading`) when they differ.
+   to the next day) is prevented by the fence, not by the program: inside every cycle, after planning and before the first
+   attestation (and again before a coin's freshly planned end-of-rule receipts are attested), a keeper adopts any on-chain reading it
+   did not write whose units equal its own unassigned receipts through that day, and HOLDS all sends (`bt-foreign-reading`) when they
+   differ or when the coin's TokenConfig cannot be read. (Until review 2 F1, 2026-10-11, the fence ran before planning, so a standby
+   with an empty pending set checked nothing and counted the leader's receipts again.)
    The match is on unit totals per reading, not on event ids (the program stores only the hash of the source URL that names them); a
    coincidental equal total is adopted. A cycle that is already past its fence when the other keeper's reading lands loses its
    `submit_reading` in simulation (point 2) and is fenced next cycle.
@@ -374,3 +377,12 @@ public status.json>`. Tunables: `BURNTICKER_TAKEOVER_MISSED` (default 5), `BURNT
 - **Snapshot verify, same day:** `R scripts/burnticker-verify-snapshot.mts <latest txid> --cluster mainnet --db <latest .backup>` → `SNAPSHOT VERIFIED`.
 - **Standby check, same day:** the standby's status page says `standby · passive` with a heartbeat under 3 minutes, and the leader's
   status page shows the peer reachable.
+
+## Signing the operator statement
+
+(Moved here from the public operator page on 2026-10-11, review 2 §2: visitors see the "not signed yet" fact and the text; the steps are
+for the operator.) Sign the exact text in `config/burnticker/operator.json` → `signedMessage.message`, with `{PUBKEY}` and `{DATE}` filled
+in, as a raw message from the mainnet developer fee wallet: Phantom does not expose message signing in its settings, so use any dapp's
+`signMessage`, or `solana sign-offchain-message` with the CLI. Paste the base58 signature into `signedMessage.signature`, set
+`signedMessage.status` to the date, regenerate the well-known copies (`scripts/burnticker-trustpack.mts well-known --write`) and run the
+trust-pack tests. GET /api/burnticker/v1/operator then verifies it with ed25519 and the operator page shows ✓ (or ✗ with the reason).

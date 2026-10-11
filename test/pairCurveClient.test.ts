@@ -12,7 +12,12 @@ import { CPMM_PROGRAM_ID, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, PAIR_CURVE_PROGRAM_
 import { configPda, feeKeysPda, feePda, lockedLiquidityPda, lpLockVault } from "../src/lib/burnReceipts/pda.ts";
 import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, decodePair, feeNftMintPda, pairPda, poolPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda, type PairAccount } from "../src/lib/pairCurve/accounts.ts";
 import { burnLpIx, LP_LOCK_FALLBACK_SECS, buyIx, lockLpIx, CLAIM_THRESHOLD_LAMPORTS, claimDeveloperFeeIx, closePairIx, createPairMintIxs, graduateIx, initPairIx, pairCurveEventAuthority, planPairCrank, registerSideIx, seedObservationIxs, sellIx, syncNativeIx, voidPairIx } from "../src/lib/pairCurve/client.ts";
-import { unlockedSides } from "../src/lib/burnKeeper/pairCurveCrank.ts";
+import { crankPairCurves, unlockedSides } from "../src/lib/burnKeeper/pairCurveCrank.ts";
+import { feeKeyRecordPda } from "../src/lib/burnReceipts/pda.ts";
+import { bs58 } from "../src/lib/burnReceipts/accounts.ts";
+import { operatorAttester } from "../src/lib/burnReceipts/instructions.ts";
+import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
+import { GENESIS_HASH } from "../src/lib/burnReceipts/constants.ts";
 
 const anchorDisc = (kind: "global" | "account", name: string) => crypto.createHash("sha256").update(`${kind}:${name}`).digest().subarray(0, 8);
 const BR = new PublicKey("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
@@ -226,5 +231,101 @@ describe("pairCurve client — crank planner", () => {
     assert.equal(planPairCrank(v, 0, [false, false])[0].kind, "wait");
     const { pair: rich } = pairFixture({ status: STATUS_VOIDED, dev_accrued: CLAIM_THRESHOLD_LAMPORTS });
     assert.deepEqual(planPairCrank(rich, 0, [false, false]).map((a) => a.kind), ["claim"]);
+  });
+});
+
+// REVIEW 2 F2 (ChatGPT/Codex, 2026-10-11): the keeper's scan dropped every Graduated pair older than 7 days BEFORE unlockedSides and
+// crankPair, so a side whose lock_lp kept refusing vanished from retries and alerts at day 7 and the 30-day burn_lp fallback was never
+// reached. These drive the production wrapper (crankPairCurves) against a fake RPC, not only the pure planner.
+describe("review 2 F2 — the wrapper keeps an incomplete graduated pair in the scan regardless of age", () => {
+  const DAY = 86_400, NOW_S = 2_100_000_000;
+  const PC = PAIR_CURVE_PROGRAM_ID;
+  const disc = (name: string) => Buffer.from(PAIR_CURVE_IDL.instructions.find((i) => i.name === name)!.discriminator).toString("hex");
+  const encodePair = (p: PairAccount) => Buffer.concat([accountDiscriminator(PAIR_CURVE_IDL, "Pair"), encodeType(PAIR_CURVE_IDL, { defined: { name: "Pair" } }, { ...p, reserved: new Uint8Array(64) })]);
+  const pad = (s: string, n: number) => { const b = new Uint8Array(n); b.set(Buffer.from(s)); return b; };
+  /** A TokenConfig whose pool is verified (registered), for the "complete" pair. */
+  function registeredConfig(mint: PublicKey, pool: PublicKey): Buffer {
+    const a1 = Keypair.generate().publicKey;
+    const rule = ruleParamsFromKeeperRules(
+      { mode: "buyback", decimals: 6, vaultAllocation: "1", buyback: { fractionPerUnit: "0.05", reserveSol: "0.02", slippageBps: 300 }, rule: { unitUsd: "1000000000", burnPerUnitTokens: "100000", maxAbsDeltaUsd: "2000000000000", carry: "consecutive-increases", onNonIncrease: "burn-nothing-reset-carry" } },
+      { floorLamports: BigInt(1), maxTwapDeviationBps: 1500, twapWindowSecs: 600 },
+    );
+    const cfg = {
+      version: 1, bump: 255, fee_bump: 254, has_baseline: true, mint, creator: a1, admin: PublicKey.default, rule,
+      rules_sha256: new Uint8Array(32).fill(7), params_hash: new Uint8Array(32).fill(9),
+      feed_id: pad("pair", 32), feed_id_len: 4, memo_prefix: pad("P", 12), memo_prefix_len: 1, memo_source: pad("x", 64), memo_source_len: 1,
+      attesters: [operatorAttester(a1), ...Array.from({ length: 4 }, () => operatorAttester(PublicKey.default))], attester_count: 1, quorum: 1,
+      pending_attesters: Array.from({ length: 5 }, () => operatorAttester(PublicKey.default)), pending_count: 0, pending_quorum: 0, pending_eta: BigInt(0),
+      cpmm_pool: pool, last_record_date: 20261008, last_value: BigInt(1), carry: BigInt(0), crank_cursor: 20261007,
+      readings: 1, burns: 0, total_burned: BigInt(0), total_spent_lamports: BigInt(0), shortfall: BigInt(0), created_at: BigInt(1791547200), carried_spend_lamports: BigInt(0), pool_untradeable_since: BigInt(0), pool_untradeable_last_seen: BigInt(0), pool_verified: true, cluster_genesis: new PublicKey(GENESIS_HASH.devnet), registration_policy: 2, ll_platform: a1, ll_cp_config: PublicKey.default, ll_lock_scale_ppm: BigInt(1_000_000), pool_untradeable_candidate_at: BigInt(0), attester_added_at: [BigInt(1791547200), BigInt(0), BigInt(0), BigInt(0), BigInt(0)], pending_policy: 0, pending_policy_pool: PublicKey.default, pending_policy_eta: BigInt(0), pair_state: 2, pair_void_by: 0, pair_after_date: 0, pair_unlinked_at: BigInt(0), reserved: new Uint8Array(6),
+    };
+    return Buffer.concat([accountDiscriminator(BURN_RECEIPTS_IDL, "TokenConfig"), encodeType(BURN_RECEIPTS_IDL, { defined: { name: "TokenConfig" } }, cfg)]);
+  }
+  /** A fake RPC serving one Pair (and, when `complete`, both TokenConfigs registered + both Fee Key records). Dry run: simulate only. */
+  function world(pair: PairAccount, address: PublicKey, o: { complete?: boolean; lockRefuses?: boolean } = {}) {
+    const accounts = new Map<string, Buffer>([[address.toBase58(), encodePair(pair)]]);
+    if (o.complete) for (const s of [0, 1] as const) {
+      accounts.set(configPda(BR, pair.mints[s]).toBase58(), registeredConfig(pair.mints[s], pair.pools[s]));
+      accounts.set(feeKeyRecordPda(BR, pair.mints[s]).toBase58(), Buffer.alloc(64, 1));
+    }
+    const statusFilter = (filters: { memcmp: { offset: number; bytes: string } }[]) => filters.find((f) => f.memcmp.offset === 11)?.memcmp.bytes;
+    const simulated: string[] = [];
+    const connection = {
+      getGenesisHash: async () => GENESIS_HASH.devnet,
+      getProgramAccounts: async (_pid: PublicKey, cfg: { filters: { memcmp: { offset: number; bytes: string } }[] }) => (statusFilter(cfg.filters) === bs58(Uint8Array.from([pair.status])) ? [{ pubkey: address, account: { data: accounts.get(address.toBase58())! } }] : []),
+      getAccountInfo: async (k: PublicKey) => { const d = accounts.get(k.toBase58()); return d ? { data: d, owner: PC, lamports: 1, executable: false } : null; },
+      getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 100 }),
+      simulateTransaction: async (tx: { message: { compiledInstructions: { data: Uint8Array }[] } }) => {
+        const d8 = Buffer.from(tx.message.compiledInstructions.at(-1)!.data.subarray(0, 8)).toString("hex");
+        simulated.push(d8);
+        // Raydium's lock refusing (the report's scenario): lock_lp fails in simulation every cycle
+        if (o.lockRefuses && d8 === disc("lock_lp")) return { value: { err: { InstructionError: [1, { Custom: 1 }] }, logs: ["Program log: lock refused"], unitsConsumed: 1 } };
+        return { value: { err: null, logs: [], unitsConsumed: 1 } };
+      },
+    };
+    return { connection, simulated };
+  }
+  const graduated = (ageDays: number, over: Partial<PairAccount> = {}) => {
+    const pool0 = Keypair.generate().publicKey, pool1 = Keypair.generate().publicKey;
+    return pairFixture({ status: STATUS_GRADUATED, pools: [pool0, pool1], graduation_started_at: B(NOW_S - ageDays * DAY), graduated_at: B(NOW_S - ageDays * DAY), lp_locked: [B(0), B(0)], ...over });
+  };
+  async function crank(pair: PairAccount, address: PublicKey, o: { complete?: boolean; lockRefuses?: boolean } = {}) {
+    const w = world(pair, address, o);
+    const alerts: { kind: string; meta: Record<string, unknown> }[] = [];
+    const r = await crankPairCurves({ ctx: { connection: w.connection as never, cluster: "devnet", burnReceiptsProgramId: BR, programId: PC }, cranker: Keypair.generate(), dryRun: true, log: () => {}, now: () => NOW_S * 1000, alert: (kind, _k, _t, meta) => alerts.push({ kind, meta }) });
+    return { r, alerts, simulated: w.simulated };
+  }
+
+  test("day 8, both sides unlocked: still scanned, lock_lp retried, the unlocked-side alert raised (burn_lp not yet due)", async () => {
+    const { address, pair } = graduated(8);
+    const { r, alerts, simulated } = await crank(pair, address);
+    assert.equal(r.scanned, 1);
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual(alerts.filter((a) => a.kind === "pair-side-unlocked").map((a) => a.meta.fallbackDue), [false, false]);
+    assert.ok(simulated.includes(disc("lock_lp")), "lock_lp attempted");
+    assert.ok(!simulated.includes(disc("burn_lp")), "burn_lp waits for day 30");
+  });
+
+  test("day 31, both sides unlocked and Raydium's lock refusing: scanned, alerted as fallback-due, and burn_lp attempted (the planner's fallback reaches the chain)", async () => {
+    const { address, pair } = graduated(31);
+    const { r, alerts, simulated } = await crank(pair, address, { lockRefuses: true });
+    assert.equal(r.scanned, 1);
+    assert.deepEqual(alerts.filter((a) => a.kind === "pair-side-unlocked").map((a) => a.meta.fallbackDue), [true, true]);
+    assert.ok(simulated.includes(disc("burn_lp")), "burn_lp attempted");
+    assert.ok(r.acted.some((x) => x.steps.some((s) => s.action.kind === "burn_lp")));
+  });
+
+  test("day 40, LP locked but a side not registered / no Fee Key record: kept in the scan (registration work outstanding)", async () => {
+    const { address, pair } = graduated(40, { lp_locked: [B(1), B(1)] });
+    const { r } = await crank(pair, address);
+    assert.equal(r.scanned, 1);
+    assert.ok(r.acted.some((x) => x.steps.some((s) => s.action.kind === "register")), "register_pair_pool attempted");
+  });
+
+  test("a fully complete old pair (locked, registered, Fee Keys recorded, nothing to claim) may age out; a recent complete one is still scanned", async () => {
+    const { address, pair } = graduated(40, { lp_locked: [B(1), B(1)] });
+    assert.equal((await crank(pair, address, { complete: true })).r.scanned, 0);
+    const fresh = graduated(2, { lp_locked: [B(1), B(1)] });
+    assert.equal((await crank(fresh.pair, fresh.address, { complete: true })).r.scanned, 1);
   });
 });

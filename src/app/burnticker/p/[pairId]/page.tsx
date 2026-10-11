@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useLaunchAvailability } from "../../_components/useLaunchAvailability";
 import { useParams } from "next/navigation";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
+import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
+import { TermNote } from "../../_components/Term";
 
 /**
  * A rivalry pair's shared page. A scoreboard header (burns A : B, supply A : B, the last settlement with its market ticker and result,
@@ -35,6 +39,7 @@ const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?
 export default function PairPage() {
   const { pairId } = useParams<{ pairId: string }>();
   const [d, setD] = useState<Data | null>(null);
+  const launch = useLaunchAvailability();
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => { fetch(`/api/burnticker/pairs/${encodeURIComponent(pairId)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [pairId]);
@@ -54,13 +59,16 @@ export default function PairPage() {
   );
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
-      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={`/burnticker/t/${A}`}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={`/burnticker/t/${B}`}>${B}</Link></h1><p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this →</Link></p>{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}<p className="text-neutral-400 text-xs">Rivalry pair <code>{d.pair.pairId}</code> · one selector <code>{d.pair.selectorKey}</code> · inverted mappings: each settlement burns exactly one side (a voided market burns neither). The receipts are the scoreboard.</p></header>
+      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={`/burnticker/t/${A}`}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={`/burnticker/t/${B}`}>${B}</Link></h1>{launch.open && <p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this →</Link></p>}{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}<p className="text-neutral-400 text-xs">Rivalry pair <code>{d.pair.pairId}</code> · one selector <code>{d.pair.selectorKey}</code> · inverted mappings: each settlement burns exactly one side (a voided market burns neither). The receipts are the scoreboard.</p></header>
 
       <section className={card + " space-y-3"} aria-label="Scoreboard">
         <div className="text-center"><div className="text-xs text-neutral-400">burns</div><div className="text-4xl font-semibold tabular-nums">${A} {t.burnsA} <span className="text-neutral-500 text-2xl">:</span> {t.burnsB} ${B}</div><div className="text-xs text-neutral-500">{t.settlements} settlement(s){t.voids ? `, ${t.voids} void` : ""} · burned {fmt(t.burnedA)} : {fmt(t.burnedB)}</div></div>
         {t.attesterLine && <div className="text-center text-xs text-neutral-400" aria-label="Attesters">{t.attesterLine}</div>}
         {t.unpaired && <div className="text-center text-xs text-neutral-300" aria-label="Unpaired">unpaired ({t.unpaired.reason}) · {t.unpaired.at.slice(0, 10)} — two plain coins now; nothing forwards between them</div>}
-        {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="Burned and forwarded">burned on ${A} {fmt(t.burnedA)} / burned on ${B} {fmt(t.burnedB)} / forwarded ${A}→${B} {t.forwardedAtoB ?? "0"} SOL / ${B}→${A} {t.forwardedBtoA ?? "0"} SOL · winner takes the burn: fees from both coins burn the winner&apos;s supply</div>}
+        {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="Burned and forwarded">burned on ${A} {fmt(t.burnedA)} / burned on ${B} {fmt(t.burnedB)} / forwarded ${A}→${B} {t.forwardedAtoB ?? "0"} SOL / ${B}→${A} {t.forwardedBtoA ?? "0"} SOL</div>}
+        {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="pair rule">{PAIR_BURN_SENTENCE}</div>}
+        <div className="text-center text-xs text-neutral-500">{NO_WALLET_LINE}</div>
+        <TermNote ids={["receipt", "burnPool"]} />
         <div className="grid md:grid-cols-3 gap-2">
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">supply left</div><div className="text-lg tabular-nums">{t.supplyPctA.toFixed(2)}% <span className="text-neutral-500">:</span> {t.supplyPctB.toFixed(2)}%</div><div className="text-xs text-neutral-500 tabular-nums">{fmt(t.supplyA)} : {fmt(t.supplyB)} of {fmt(d.a.status.supply.initial)} each</div></div>
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">last settlement</div>{ls ? <><div><code>{ls.eventId}</code></div><div className="text-xs text-neutral-500">settled {(ls.result ?? ls.value ?? "—").toUpperCase()} · {ls.settledAt.slice(0, 16).replace("T", " ")}Z → {sideName(ls.burnedSide)} burned{ls.burned ? ` ${fmt(ls.burned)}` : ""}</div></> : <div className="text-xs text-neutral-500">none yet — the first settlement after launch burns one side</div>}</div>

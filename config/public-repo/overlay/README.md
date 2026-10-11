@@ -17,7 +17,7 @@ burns, one per league and season; when a season ends, the coin with the most rec
 recipient. The token page recomputes every receipt from the
 source. The audit script does it for every token and exits non-zero on a mismatch, and the trust page shows the result.
 
-**Guardrails.** Settled on primary sources · signed readings (one attester at launch; second attester scheduled, not live) · program-run burns · receipts anyone can recompute · open source ·
+**Guardrails.** Settled on primary sources · signed readings (one operator attester; no independent second attester is live) · program-run burns · receipts anyone can recompute · open source ·
 three blind AI reviews, not a firm audit · creators earn nothing · no team buy · the platform never buys any coin · LP locked forever, its fees fund the burn · rules locked at launch.
 
 **Operated by one independent operator (United States); contact@burnticker.com.** This repository is the public, buildable copy of everything the platform runs: the on-chain

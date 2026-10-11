@@ -3,6 +3,8 @@
  * One table, read by the header (desktop row + phone menu) and asserted by test/burntickerShell.test.ts: every entry is a Burnticker
  * page, the $DEFICIT site, or the public API — never another app's route.
  */
+import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
+
 export interface NavItem { label: string; href: string; external?: boolean; /** the header's active match: the href itself plus these prefixes */ match?: string[] }
 
 export const NAV: NavItem[] = [
@@ -12,7 +14,7 @@ export const NAV: NavItem[] = [
   // scoreboard (/burnticker/rivalries), league pages and pair pages belong to it
   { label: "Seasons", href: "/burnticker/leagues", match: ["/burnticker/rivalries", "/burnticker/p/"] },
   { label: "Trust", href: "/burnticker/trust" },
-  { label: "$DEFICIT", href: "https://deficit.burnticker.com", external: true },
+  { label: "$DEFICIT", href: DEFICIT_SITE, external: true },
   { label: "Docs/API", href: "/burnticker/docs" },
 ];
 

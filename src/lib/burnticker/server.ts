@@ -1,6 +1,7 @@
 import "server-only";
 import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
+import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { envGameDeps, polymarketGameReaders } from "@/lib/burnticker/sources/gameSettle";
 import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
 import path from "node:path";
@@ -86,7 +87,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   const rpc = (env.BURNTICKER_RPC_URL ?? "").trim();
   let program: BurnProgramClient;
   if (programId && rpc) {
-    program = new ProgramBurnClient({ connection: new Connection(rpc, "confirmed"), programId: new PublicKey(programId), cluster, payer: null, admin: (env.BURNTICKER_ADMIN ?? "").trim() ? new PublicKey((env.BURNTICKER_ADMIN ?? "").trim()) : null, solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable (Jupiter price API)"); return px; } });
+    program = new ProgramBurnClient({ connection: new Connection(rpc, "confirmed"), programId: new PublicKey(programId), cluster, payer: null, launchLabPlatform: (env.BURNTICKER_PLATFORM_ID ?? "").trim() ? new PublicKey((env.BURNTICKER_PLATFORM_ID ?? "").trim()) : null, admin: (env.BURNTICKER_ADMIN ?? "").trim() ? new PublicKey((env.BURNTICKER_ADMIN ?? "").trim()) : null, solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable (Jupiter price API)"); return px; } });
     stubs.push(`burn_receipts program ${programId}: read-only client (this host holds no key; the keeper signs readings and cranks)`);
   } else {
     program = new FakeBurnProgram(cluster);
@@ -116,9 +117,12 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
     uploader: uploaderFromEnv(env, cluster), customImages: customImagesEnabled(env), allowHostedMetadata: allowHostedMetadata(env),
     pinDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) : undefined,
-    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, "confirmed") as unknown as TxReader, { burnProgramId: programId || null }) : null,
+    // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks
+    // against; without BURNTICKER_PROGRAM_ID it refuses every confirmation (fail closed).
+    launchVerifier: rpc ? connectionLaunchVerifier(new Connection(rpc, "confirmed") as unknown as TxReader, { burnProgramId: programId || null, launchLabProgramId: LAUNCHLAB_PROGRAM_ID[cluster].toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() }) : null,
   };
   if (!rpc) stubs.push("launch confirmation: no BURNTICKER_RPC_URL on this host, so a launch transaction cannot be read and drafts are not taken live");
+  else if (!programId) stubs.push("launch confirmation: no BURNTICKER_PROGRAM_ID on this host, so initialize_token and the TokenConfig cannot be checked and drafts are not taken live");
   return cached;
 }
 

@@ -26,6 +26,7 @@ import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
 import { wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { buildLaunchBundle, buildPairBundles, launchProblems, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
+import { launchVenueOf } from "@/lib/burnticker/launchVerify";
 import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
@@ -599,7 +600,8 @@ export const DEFAULT_PIN_DAILY_CAP = 50;
 
 /**
  * `launched`: the landed launch transaction takes the draft live. ChatGPT/Codex review N1 (2026-10-10): the transaction is verified on
- * chain first (launchVerify.ts: successful, signed by the coin's mint and its creator, calls burn_receipts, landed after the draft) and
+ * chain first (launchVerify.ts: successful, signed by the coin's mint and its creator, landed after the draft, carrying burn_receipts
+ * initialize_token for this mint, the on-chain TokenConfig locking the draft's rules hash, and the venue completed — review-2 F3) and
  * the baseline is its BLOCK TIME; the same signature again is a no-op that leaves the baseline alone; a host without an RPC refuses.
  */
 export async function markLaunched(p: Platform, mint: string, launchTx: string): Promise<ApiResult> {
@@ -610,7 +612,9 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string):
   if (t.launchTx) return fail(409, `registry: ${mint} already launched in ${t.launchTx}`);
   if (t.status !== "draft") return fail(409, t.status === "expired" ? `registry: the draft ${mint} expired (not launched within 24 h); build a fresh bundle` : `registry: ${mint} is ${t.status}, not a draft`);
   if (!p.launchVerifier) return fail(503, "this host cannot verify a launch transaction (no BURNTICKER_RPC_URL): a draft goes live only after its launch is read from the chain", { code: "launch-unverifiable" });
-  const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt });
+  // Review-2 F3: the verifier checks the launch's CONTENT (initialize_token for this mint, the on-chain TokenConfig's rules hash, the
+  // venue) — and nothing is written to the registry unless it passes: a refused confirmation leaves status, baseline and launch_tx alone.
+  const v = await p.launchVerifier.verify(launchTx, { mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, p.registry.pairOf(mint)) });
   if (!v.ok) return fail(v.status, v.reason, { code: "launch-unverified" });
   const baselineAt = new Date(v.blockTimeMs).toISOString();
   try { p.registry.markLaunched(mint, launchTx, t.poolId, baselineAt); } catch (e) { return fail(409, (e as Error).message); }

@@ -86,7 +86,7 @@
     "cluster": "mainnet",
     "message": "Burnticker operator statement, signed by the developer fee wallet {PUBKEY}. I am the operator of burnticker.com and the burn_receipts and pair_curve programs. The wallets listed at https://burnticker.com/burnticker/operator are mine. The platform never buys any coin launched through it, and neither do I. Date: {DATE}.",
     "signature": null,
-    "how": "Sign the exact text (with {PUBKEY} and {DATE} filled in) as a raw message from the developer fee wallet in Phantom (Settings → sign message is not exposed; use any dapp's signMessage, or `solana sign-offchain-message` with the CLI), paste the base58 signature into `signature`, and set `status` to the date. GET /api/burnticker/v1/operator then verifies it with ed25519 and the page shows ✓."
+    "how": "The statement is signed by the operator; the steps are in docs/burnticker/runbook.md (Signing the operator statement). Once a signature is added, GET /api/burnticker/v1/operator verifies it with ed25519 and this page shows the result."
   },
   "neverBuys": {
     "rule": "None of the wallets above ever acquires a coin launched through the platform. The monitor lists every token account those wallets hold and every recent transaction in which one of them gained a platform coin.",

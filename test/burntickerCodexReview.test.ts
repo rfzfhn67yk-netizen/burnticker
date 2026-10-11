@@ -3,11 +3,19 @@
 // docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, TransactionMessage, VersionedMessage, VersionedTransaction } from "@solana/web3.js";
 import { openRegistry } from "@/lib/burnticker/registry";
-import { FakeBurnProgram } from "@/lib/burnticker/program";
-import { buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
-import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
+import { counterRule, FakeBurnProgram } from "@/lib/burnticker/program";
+import { buildLaunchBundle, buildPairBundles, FakeLaunchLab, SdkLaunchLab } from "@/lib/burnticker/launchBundle";
+import { buildPairCurveLaunch } from "@/lib/burnticker/pairCurveLaunch";
+import { initializeTokenIx, operatorAttester } from "@/lib/burnReceipts/instructions";
+import { configPda } from "@/lib/burnReceipts/pda";
+import { PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { PAIR_CURVE_IDL } from "@/lib/pairCurve/idl";
+import { pairPda } from "@/lib/pairCurve/accounts";
+import { LAUNCHLAB_PROGRAM } from "@/lib/burnKeeper/launchlab";
+import { connectionLaunchVerifier, launchVenueOf, type LaunchVerifier, type TxReader } from "@/lib/burnticker/launchVerify";
+import { transactionFrom } from "@/lib/burnticker/transactions";
 import { fetchDue, planToken, runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { CatalogueAdapter, feedById, loadFixture } from "@/lib/burnticker/catalogue";
@@ -24,7 +32,7 @@ import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { FakePinUploader } from "@/lib/burnticker/pin";
 import { eventsFromTransaction, EVENT_IX_TAG, base58Decode as base58DecodeSk } from "../packages/burnticker-sdk/src/events.ts";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
-import { encodeType } from "@/lib/burnReceipts/idlCoder";
+import { accountDiscriminator, decodeType, encodeType } from "@/lib/burnReceipts/idlCoder";
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { BRONCOS, DEBT_RULE, DENVER_HIGH, FRED_GFDEBTN_CSV, NOW } from "./burntickerHelpers.ts";
 
@@ -36,6 +44,44 @@ async function draftIn(reg: ReturnType<typeof openRegistry>, ticker: string, cre
   const b = await buildLaunchBundle({ creator: CREATOR, ticker, name: `${ticker} coin`, description: "a test", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
   return reg.register({ mint: b.mint, ticker, name: b.name, creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: b.addresses.vault, tokenConfig: b.addresses.tokenConfig, poolId: b.addresses.poolId, launchTx: null, cluster: "devnet", platformId: b.addresses.platformId, baselineAt: new Date(created).toISOString(), status: "draft" }, created);
 }
+
+const F3_ADMIN = Keypair.generate().publicKey;
+/** The tests' attester label is not a public key; the real encoding needs one (the verifier does not read the attester list). */
+const attesterKey = (a: string): PublicKey => { try { return new PublicKey(a); } catch { return F3_ADMIN; } };
+/** A FakeBurnProgram whose initialize_token is the REAL instruction encoding (the program's IDL), so a fixture is an honest launch. */
+class RealInitProgram extends FakeBurnProgram {
+  override async initializeToken(i: Parameters<FakeBurnProgram["initializeToken"]>[0]) {
+    const r = await super.initializeToken(i);
+    const c = counterRule(i.rule!, i.ticker, i.selectorKey, { floorLamports: this.floorLamports });
+    const programId = new PublicKey(this.programId), mint = new PublicKey(i.mint), creator = new PublicKey(i.creator);
+    const ix = initializeTokenIx({ programId, payer: creator, creator, mint, args: {
+      feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
+      attesters: i.attesters.map((a) => operatorAttester(attesterKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: F3_ADMIN,
+    }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst } : {}) });
+    return { tokenConfig: r.tokenConfig, instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (real encoding; test)", keys: ix.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(ix.data).toString("base64") }] };
+  }
+}
+
+/** A TokenConfig / Pair account as the chain holds it (Anchor discriminator + borsh, the program's own IDL). */
+const encodeAcc = (idl: typeof BURN_RECEIPTS_IDL | typeof PAIR_CURVE_IDL, name: string, set: (v: Record<string, unknown>) => void) => {
+  const t = { defined: { name } };
+  const v = decodeType(idl, t, Buffer.alloc(16_384)).value as Record<string, unknown>;
+  set(v);
+  return Buffer.concat([accountDiscriminator(idl, name), encodeType(idl, t, v)]);
+};
+type ChainAcc = [string, { owner: PublicKey; data: Buffer }];
+const tokenConfigAcc = (programId: string, mint: string, o: { creator: string; rulesSha: string; policy?: number }): ChainAcc => [configPda(new PublicKey(programId), new PublicKey(mint)).toBase58(), { owner: new PublicKey(programId), data: encodeAcc(BURN_RECEIPTS_IDL, "TokenConfig", (v) => {
+  v.mint = new PublicKey(mint); v.creator = new PublicKey(o.creator); v.rules_sha256 = Buffer.from(o.rulesSha, "hex"); v.registration_policy = o.policy ?? 0;
+  (v.rule as Record<string, unknown>).pool_policy = o.policy ?? 0; v.version = 1;
+}) }];
+const pairAcc = (mintA: string, mintB: string, creator: string, shaA: string, shaB: string): ChainAcc => [pairPda(new PublicKey(mintA), new PublicKey(mintB)).toBase58(), { owner: PAIR_CURVE_PROGRAM_ID, data: encodeAcc(PAIR_CURVE_IDL, "Pair", (v) => {
+  v.mints = [new PublicKey(mintA), new PublicKey(mintB)]; v.creator = new PublicKey(creator); v.rules_sha256_a = Buffer.from(shaA, "hex"); v.rules_sha256_b = Buffer.from(shaB, "hex"); v.version = 1;
+}) }];
+/** getTransaction + getAccountInfo over fixtures (nothing is read from a network). */
+const chainReader = (tx: unknown, accounts: ChainAcc[] = []): TxReader => {
+  const m = new Map(accounts);
+  return { getTransaction: async () => tx as never, getAccountInfo: async (k: PublicKey) => m.get(k.toBase58()) ?? null };
+};
 
 describe("N1 — a launch confirmation cannot move the baseline", () => {
   test("registry: replaying the accepted launch signature is a no-op — the baseline stays where the launch put it", async () => {
@@ -101,19 +147,21 @@ describe("N1 — a launch confirmation cannot move the baseline", () => {
     assert.equal(r.status, 503);
     assert.equal(w.registry.token(mint)!.status, "draft");
   });
-  test("connectionLaunchVerifier: success, mint + creator signatures, the burn program, landed after the draft", async () => {
+  test("connectionLaunchVerifier: refuses a missing or failed transaction, a missing mint or creator signature, no burn_receipts call, a pre-draft landing (the accepted launches are F3's honest fixtures below)", async () => {
     const mint = Keypair.generate().publicKey.toBase58(), creator = Keypair.generate().publicKey.toBase58(), program = Keypair.generate().publicKey.toBase58(), other = Keypair.generate().publicKey.toBase58();
     const k = (s: string) => ({ toBase58: () => s });
-    const tx = (o: { err?: unknown; keys?: string[]; signers?: number; blockTime?: number | null } = {}) => ({ blockTime: o.blockTime === undefined ? NOW / 1000 : o.blockTime, meta: { err: o.err ?? null }, transaction: { message: { header: { numRequiredSignatures: o.signers ?? 2 }, staticAccountKeys: (o.keys ?? [creator, mint, program]).map(k) } } });
-    const reader = (r: ReturnType<typeof tx> | null): TxReader => ({ getTransaction: async () => r });
-    const exp = { mint, creator, draftCreatedAtMs: NOW - 60_000 };
-    assert.deepEqual(await connectionLaunchVerifier(reader(tx()), { burnProgramId: program }).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    // review-2 F3: the program key merely PRESENT (no instruction of it) is no longer a launch — the default fixture is exactly that
+    const tx = (o: { err?: unknown; keys?: string[]; signers?: number; blockTime?: number | null } = {}) => ({ blockTime: o.blockTime === undefined ? NOW / 1000 : o.blockTime, meta: { err: o.err ?? null }, transaction: { message: { header: { numRequiredSignatures: o.signers ?? 2 }, staticAccountKeys: (o.keys ?? [creator, mint, program]).map(k), compiledInstructions: [] } } });
+    const reader = (r: ReturnType<typeof tx> | null): TxReader => chainReader(r);
+    const exp = { mint, creator, draftCreatedAtMs: NOW - 60_000, rulesSha: "00".repeat(32), venue: { kind: "launchlab" as const, platformId: other } };
+    assert.match(JSON.stringify(await connectionLaunchVerifier(reader(tx()), { burnProgramId: program }).verify("s", exp)), /does not call the burn_receipts program/, "a program key in the account list is not a call (review-2 F3)");
     assert.equal((await connectionLaunchVerifier(reader(null), { burnProgramId: program }).verify("s", exp)).ok, false);
     assert.match(JSON.stringify(await connectionLaunchVerifier(reader(tx({ err: { InstructionError: [0, "x"] } })), { burnProgramId: program }).verify("s", exp)), /failed on chain/);
     assert.match(JSON.stringify(await connectionLaunchVerifier(reader(tx({ keys: [creator, other, mint, program] })), { burnProgramId: program }).verify("s", exp)), /mint/, "the mint is present but not a signer");
     assert.match(JSON.stringify(await connectionLaunchVerifier(reader(tx({ keys: [other, mint, creator, program] })), { burnProgramId: program }).verify("s", exp)), /creator/);
     assert.match(JSON.stringify(await connectionLaunchVerifier(reader(tx({ keys: [creator, mint, other] })), { burnProgramId: program }).verify("s", exp)), /burn_receipts/);
     assert.match(JSON.stringify(await connectionLaunchVerifier(reader(tx({ blockTime: (NOW - 86_400_000) / 1000 })), { burnProgramId: program }).verify("s", exp)), /before this draft/);
+    assert.equal((await connectionLaunchVerifier(reader(tx()), { burnProgramId: null }).verify("s", exp)).ok, false, "no program id on the host: refused");
   });
 });
 
@@ -396,19 +444,24 @@ describe("N6 — with the pair curve enabled the wizard route never hands out tw
   });
   test("launch confirmation of a pair-curve coin: tx 1 confirms side A, tx 2 side B (mint creation + initialize_token, signed by creator + that mint); tx 3 (init_pair) confirms neither", async () => {
     const w = await makeWorld(); limiter.reset();
+    w.p.program = new RealInitProgram("devnet");   // review-2 F3: the verifier decodes initialize_token, so the set carries the real encoding
     const r = await withFlag(() => legacy(pairBody({ venue: "pair-curve" })));
     const j = await r.json() as { pairCurve: { mints: { a: string; b: string }; transactions: { signers: ("creator" | "mintA" | "mintB")[]; instructions: { programId: string; keys: { pubkey: string }[] }[] }[] } };
     const who = { creator: CREATOR, mintA: j.pairCurve.mints.a, mintB: j.pairCurve.mints.b };
     // the transaction as getTransaction would return it once landed: signers first, then every other account and program id
+    // the transaction as getTransaction would return it once landed: the compiled message (signers first, the instructions compiled)
     const landed = (t: (typeof j.pairCurve.transactions)[number]) => {
-      const signers = t.signers.map((x) => who[x]);
-      const rest = [...new Set(t.instructions.flatMap((ix) => [...ix.keys.map((k) => k.pubkey), ix.programId]))].filter((k) => !signers.includes(k));
-      return { blockTime: Math.floor(Date.now() / 1000), meta: { err: null }, transaction: { message: { header: { numRequiredSignatures: signers.length }, staticAccountKeys: [...signers, ...rest].map((k) => ({ toBase58: () => k })) } } };
+      const message = VersionedMessage.deserialize(transactionFrom(t.instructions as never, CREATOR, Keypair.generate().publicKey.toBase58()).serializeMessage());
+      assert.deepEqual(message.staticAccountKeys.slice(0, message.header.numRequiredSignatures).map((x) => x.toBase58()).sort(), t.signers.map((x) => who[x]).sort(), "the compiled signers are the set's");
+      return { blockTime: Math.floor(Date.now() / 1000), meta: { err: null }, transaction: { message } };
     };
-    const verifierFor = (t: (typeof j.pairCurve.transactions)[number]) => connectionLaunchVerifier({ getTransaction: async () => landed(t) } as never, { burnProgramId: w.p.program.programId });
-    const [tx1, tx2, tx3] = j.pairCurve.transactions;
     const a = w.registry.tokenByTicker("DENVER")!, b = w.registry.tokenByTicker("CHIEFS")!;
-    const exp = (t: typeof a) => ({ mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt });
+    // the chain after the whole set landed: both TokenConfigs (registration policy 2) and the Pair init_pair created
+    const accounts = [tokenConfigAcc(w.p.program.programId, a.mint, { creator: CREATOR, rulesSha: a.rulesSha, policy: 2 }), tokenConfigAcc(w.p.program.programId, b.mint, { creator: CREATOR, rulesSha: b.rulesSha, policy: 2 }), pairAcc(a.mint, b.mint, CREATOR, a.rulesSha, b.rulesSha)];
+    const verifierFor = (t: (typeof j.pairCurve.transactions)[number]) => connectionLaunchVerifier(chainReader(landed(t), accounts), { burnProgramId: w.p.program.programId, launchLabProgramId: null, pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() });
+    const [tx1, tx2, tx3] = j.pairCurve.transactions;
+    const exp = (t: typeof a) => ({ mint: t.mint, creator: t.creator, draftCreatedAtMs: t.createdAt, rulesSha: t.rulesSha, venue: launchVenueOf(t, w.registry.pairOf(t.mint)) });
+    assert.equal(exp(a).venue.kind, "pair-curve", "the registry row says pair curve: in a pair, no LaunchLab pool");
     assert.equal((await verifierFor(tx1).verify("s", exp(a))).ok, true, "tx 1 is side A's launch");
     assert.equal((await verifierFor(tx2).verify("s", exp(b))).ok, true, "tx 2 is side B's launch");
     assert.equal((await verifierFor(tx1).verify("s", exp(b))).ok, false, "tx 1 is not side B's launch");
@@ -492,5 +545,180 @@ describe("No odds for any coin (owner decision 2026-10-10): the market-implied c
       for (const re of [/impliedChance\s*\*\s*100/, /chance[AB]?\s*\*\s*100/, /Market-implied chance/i, /Kalshi-implied chance/i, /Next-burn chance/i, /\.impliedChance\s*!==\s*null\s*&&/]) if (re.test(src)) bad.push(`${path.relative(ROOT, f)}: ${re}`);
     }
     assert.deepEqual(bad, []);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// THE SECOND CHATGPT/CODEX REVIEW (2026-10-11; docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2.md), finding F3.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+describe("F3 (review 2) — a launch confirmation authenticates initialize_token, the on-chain TokenConfig and the venue, not account-key presence", () => {
+  const BLOCKHASH = Keypair.generate().publicKey.toBase58();
+  const creatorKp = Keypair.generate();
+  const CREATOR_F3 = creatorKp.publicKey.toBase58();
+  const DEVNET_GLOBAL = { curveType: 0, index: 0, migrateFee: BigInt(0), tradeFeeRate: BigInt(2500), maxShareFeeRate: BigInt(10000), minSupplyA: BigInt(10_000_000), maxLockRate: BigInt(999_999), minSellRateA: BigInt(1), minMigrateRateA: BigInt(1), minFundRaisingB: BigInt(1), mintB: new PublicKey("So11111111111111111111111111111111111111112") };
+  const PLATFORM_VIEW = { feeRate: BigInt(7500), creatorFeeRate: BigInt(500), platformScale: BigInt(0), creatorScale: BigInt(100_000), burnScale: BigInt(900_000), cpConfigId: new PublicKey("5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy"), platformCpCreator: PublicKey.default, platformClaimFeeWallet: Keypair.generate().publicKey, platformLockNftWallet: Keypair.generate().publicKey, platformVestingScale: BigInt(0), restrictCurveParam: 0, name: "Burnticker" };
+  const PLATFORM = Keypair.generate().publicKey, LL_CONFIG = Keypair.generate().publicKey;
+  const sdkLaunchLab = () => new SdkLaunchLab({ cluster: "devnet", programId: LAUNCHLAB_PROGRAM.devnet, platformId: PLATFORM, configId: LL_CONFIG, global: DEVNET_GLOBAL, platform: PLATFORM_VIEW });
+  const program = new RealInitProgram("devnet");
+  const PROGRAM = program.programId;
+  const opts = { burnProgramId: PROGRAM, launchLabProgramId: LAUNCHLAB_PROGRAM.devnet.toBase58(), pairCurveProgramId: PAIR_CURVE_PROGRAM_ID.toBase58() };
+  const toIx = (s: { programId: string; keys: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; dataBase64: string }) => new TransactionInstruction({ programId: new PublicKey(s.programId), keys: s.keys.map((k) => ({ pubkey: new PublicKey(k.pubkey), isSigner: k.isSigner, isWritable: k.isWritable })), data: Buffer.from(s.dataBase64, "base64") });
+  /** Signs locally (never sent) and returns the message exactly as getTransaction would: deserialized from the wire. */
+  const signed = (ixs: TransactionInstruction[], signers: Keypair[], v0 = false) => {
+    if (v0) {
+      const vt = new VersionedTransaction(new TransactionMessage({ payerKey: signers[0].publicKey, recentBlockhash: BLOCKHASH, instructions: ixs }).compileToV0Message());
+      vt.sign(signers);
+      return VersionedMessage.deserialize(vt.message.serialize());
+    }
+    // (the message bytes, not the wire transaction: a single coin's real launch is over the 1,232-byte packet limit as a legacy message)
+    const t = new Transaction({ feePayer: signers[0].publicKey, recentBlockhash: BLOCKHASH }).add(...ixs);
+    t.sign(...signers);
+    assert.ok(t.verifySignatures(), "the fixture is genuinely signed");
+    return VersionedMessage.deserialize(t.serializeMessage());
+  };
+  const landed = (message: unknown, blockTime = NOW / 1000) => ({ blockTime, meta: { err: null, loadedAddresses: { writable: [], readonly: [] } }, transaction: { message } });
+  const tokenConfig = (mint: string, o: { creator?: string; rulesSha: string; policy?: number }) => tokenConfigAcc(PROGRAM, mint, { creator: o.creator ?? CREATOR_F3, rulesSha: o.rulesSha, policy: o.policy })[1];
+  const pairAccount = (mintA: string, mintB: string, shaA: string, shaB: string) => pairAcc(mintA, mintB, CREATOR_F3, shaA, shaB)[1];
+  const chain = chainReader;
+  const cfgAt = (mint: string) => configPda(new PublicKey(PROGRAM), new PublicKey(mint)).toBase58();
+
+  /** A single coin: the real bundle (real initialize_token + the SDK's LaunchLab initialize_v2), its mint keypair, the draft's expectation. */
+  const singleCoin = async (rule: unknown = BRONCOS) => {
+    const mintKp = Keypair.generate();
+    const b = await buildLaunchBundle({ creator: CREATOR_F3, ticker: "REALL", name: "Real launch", description: "a test", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" },
+      { program, launchLab: sdkLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json`, mintKeypair: mintKp });
+    const exp = { mint: b.mint, creator: CREATOR_F3, draftCreatedAtMs: NOW - 60_000, rulesSha: b.rules.sha256, venue: { kind: "launchlab" as const, platformId: b.addresses.platformId } };
+    const ixs = b.transactions[0].instructions.map(toIx);
+    return { b, mintKp, exp, ixs, cfg: [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256 })] as [string, { owner: PublicKey; data: Buffer }] };
+  };
+
+  test("the report's fixture: a genuinely signed SystemProgram zero-lamport self-transfer, creator + draft mint signing, burn_receipts an unused key — refused", async () => {
+    const { mintKp, exp, cfg } = await singleCoin();
+    const ix = SystemProgram.transfer({ fromPubkey: creatorKp.publicKey, toPubkey: creatorKp.publicKey, lamports: 0 });
+    ix.keys.push({ pubkey: mintKp.publicKey, isSigner: true, isWritable: false }, { pubkey: new PublicKey(PROGRAM), isSigner: false, isWritable: false });
+    const msg = signed([ix], [creatorKp, mintKp]);
+    assert.ok(msg.staticAccountKeys.some((k) => k.toBase58() === PROGRAM), "burn_receipts IS among the account keys (the old check passed on this)");
+    const r = await connectionLaunchVerifier(chain(landed(msg), [cfg]), opts).verify("s", exp);
+    assert.equal(r.ok, false, `an unused program key is not a launch: ${JSON.stringify(r)}`);
+    assert.match(JSON.stringify(r), /burn_receipts/);
+  });
+  test("a burn_receipts instruction with another discriminator (not initialize_token) — refused", async () => {
+    const { mintKp, exp, ixs, cfg } = await singleCoin();
+    const init = ixs.find((i) => i.programId.toBase58() === PROGRAM)!;
+    const other = BURN_RECEIPTS_IDL.instructions.find((i) => i.name !== "initialize_token")!;
+    init.data = Buffer.concat([Buffer.from(other.discriminator), init.data.subarray(8)]);
+    const r = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), opts).verify("s", exp);
+    assert.equal(r.ok, false); assert.match(JSON.stringify(r), /initialize_token/);
+  });
+  test("initialize_token for ANOTHER mint (the draft's mint signs elsewhere in the transaction) — refused", async () => {
+    const draft = await singleCoin(), decoy = await singleCoin();
+    const decoyInit = decoy.ixs.find((i) => i.programId.toBase58() === PROGRAM)!;
+    const ixs = draft.ixs.map((i) => (i.programId.toBase58() === PROGRAM ? decoyInit : i));
+    const r = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, draft.mintKp, decoy.mintKp])), [draft.cfg, decoy.cfg]), opts).verify("s", draft.exp);
+    assert.equal(r.ok, false); assert.match(JSON.stringify(r), /another mint|mint/);
+  });
+  test("the on-chain TokenConfig locks another rule hash, is absent, or is not the program's — refused", async () => {
+    const { mintKp, exp, ixs, b } = await singleCoin();
+    const msg = signed(ixs, [creatorKp, mintKp]);
+    const otherSha = "ab".repeat(32);
+    const wrong = await connectionLaunchVerifier(chain(landed(msg), [[cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: otherSha })]]), opts).verify("s", exp);
+    assert.equal(wrong.ok, false); assert.match(JSON.stringify(wrong), /rule/);
+    const absent = await connectionLaunchVerifier(chain(landed(msg), []), opts).verify("s", exp);
+    assert.equal(absent.ok, false); assert.match(JSON.stringify(absent), /TokenConfig/);
+    const foreign = await connectionLaunchVerifier(chain(landed(msg), [[cfgAt(b.mint), { ...tokenConfig(b.mint, { rulesSha: b.rules.sha256 }), owner: Keypair.generate().publicKey }]]), opts).verify("s", exp);
+    assert.equal(foreign.ok, false); assert.match(JSON.stringify(foreign), /owned/);
+  });
+  test("a LaunchLab draft whose transaction lacks the LaunchLab create (initialize_token alone) — refused; a pair-curve TokenConfig on a LaunchLab draft — refused", async () => {
+    const { mintKp, exp, ixs, cfg, b } = await singleCoin();
+    const onlyInit = ixs.filter((i) => i.programId.toBase58() === PROGRAM);
+    const r = await connectionLaunchVerifier(chain(landed(signed(onlyInit, [creatorKp, mintKp])), [cfg]), opts).verify("s", exp);
+    assert.equal(r.ok, false); assert.match(JSON.stringify(r), /LaunchLab/);
+    const p2 = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [[cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256, policy: 2 })]]), opts).verify("s", exp);
+    assert.equal(p2.ok, false); assert.match(JSON.stringify(p2), /registration policy|pair curve/);
+    const noLl = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), { ...opts, launchLabProgramId: null }).verify("s", exp);
+    assert.equal(noLl.ok, false, "a host that does not know its LaunchLab program cannot check the venue: refused, never accepted");
+  });
+  test("a correct LaunchLab launch passes (legacy and v0 messages), with the block time as the baseline", async () => {
+    const { mintKp, exp, ixs, cfg } = await singleCoin();
+    assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp], true)), [cfg]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    const noProgram = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), { ...opts, burnProgramId: null }).verify("s", exp);
+    assert.equal(noProgram.ok, false, "no burn_receipts program id on the host: refused (fail closed)");
+  });
+
+  /** A pair-curve set built by the real builders (initialize_token re-encoded with policy 2; init_pair) and both mint keypairs. */
+  const pairCoins = async () => {
+    const LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } } };
+    const input = { creator: CREATOR_F3, ticker: "PAIRA", name: "Pair A", description: "", imageUrl: null, links: [], rule: LOSE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" as const };
+    const pair = await buildPairBundles({ a: input, b: { ticker: "PAIRB", name: "Pair B", description: "", imageUrl: null, links: [] } }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
+    const pc = await buildPairCurveLaunch(pair, CREATOR_F3, { cluster: "devnet", burnReceiptsProgramId: PROGRAM });
+    assert.deepEqual(pc.pending.filter((p) => /placeholder/.test(p)), [], "the initialize_token instructions are real");
+    const kp = (sk: string | null) => Keypair.fromSecretKey(Buffer.from(base58DecodeSk(sk!)));
+    const mintA = kp(pair.a.mintSecretKey), mintB = kp(pair.b.mintSecretKey);
+    const venue = { kind: "pair-curve" as const, mintA: pair.a.mint, mintB: pair.b.mint };
+    const expA = { mint: pair.a.mint, creator: CREATOR_F3, draftCreatedAtMs: NOW - 60_000, rulesSha: pair.a.rules.sha256, venue };
+    const accounts: [string, { owner: PublicKey; data: Buffer }][] = [
+      [cfgAt(pair.a.mint), tokenConfig(pair.a.mint, { rulesSha: pair.a.rules.sha256, policy: 2 })], [cfgAt(pair.b.mint), tokenConfig(pair.b.mint, { rulesSha: pair.b.rules.sha256, policy: 2 })],
+      [pairPda(mintA.publicKey, mintB.publicKey).toBase58(), pairAccount(pair.a.mint, pair.b.mint, pair.a.rules.sha256, pair.b.rules.sha256)],
+    ];
+    return { pair, pc, mintA, mintB, expA, accounts, txIxs: pc.transactions.map((t) => t.instructions.map(toIx)) };
+  };
+
+  test("a pair-curve draft: a correct side-A transaction (tx 1) passes once the pair is set up on chain", async () => {
+    const { mintA, expA, accounts, txIxs } = await pairCoins();
+    assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(txIxs[0], [creatorKp, mintA])), accounts), opts).verify("s", expA), { ok: true, blockTimeMs: NOW });
+  });
+  test("a pair-curve draft: init_pair alone (even co-signed by mint A), the other side's initialize_token, or an incomplete pair venue — refused", async () => {
+    const { mintA, mintB, expA, accounts, txIxs, pair } = await pairCoins();
+    const initPair = txIxs[2].map((ix) => new TransactionInstruction({ programId: ix.programId, data: ix.data, keys: ix.keys.map((k) => (k.pubkey.equals(mintA.publicKey) ? { ...k, isSigner: true } : k)) }));
+    const r1 = await connectionLaunchVerifier(chain(landed(signed(initPair, [creatorKp, mintA])), accounts), opts).verify("s", expA);
+    assert.equal(r1.ok, false, "init_pair is not side A's initialize_token"); assert.match(JSON.stringify(r1), /burn_receipts|initialize_token/);
+    // tx 2 (side B's mint + initialize_token), with mint A also signing: still not side A's launch
+    const tx2 = [...txIxs[1]];
+    tx2[0] = new TransactionInstruction({ programId: tx2[0].programId, data: tx2[0].data, keys: [...tx2[0].keys, { pubkey: mintA.publicKey, isSigner: true, isWritable: false }] });
+    const r2 = await connectionLaunchVerifier(chain(landed(signed(tx2, [creatorKp, mintB, mintA])), accounts), opts).verify("s", expA);
+    assert.equal(r2.ok, false, "side B's initialize_token is not side A's launch"); assert.match(JSON.stringify(r2), /mint/);
+    // init_pair has not landed: no Pair account → the venue is incomplete
+    const tx1 = signed(txIxs[0], [creatorKp, mintA]);
+    const r3 = await connectionLaunchVerifier(chain(landed(tx1), accounts.slice(0, 2)), opts).verify("s", expA);
+    assert.equal(r3.ok, false, "the pair is not set up on chain yet"); assert.match(JSON.stringify(r3), /init_pair/);
+    // a Pair that records another rule for side A, or another pair of mints
+    const badPair: [string, { owner: PublicKey; data: Buffer }] = [accounts[2][0], pairAccount(pair.a.mint, pair.b.mint, "cd".repeat(32), pair.b.rules.sha256)];
+    const r4 = await connectionLaunchVerifier(chain(landed(tx1), [...accounts.slice(0, 2), badPair]), opts).verify("s", expA);
+    assert.equal(r4.ok, false); assert.match(JSON.stringify(r4), /rule/);
+    // a pair-curve draft whose TokenConfig was registered for a LaunchLab pool (policy 0)
+    const r5 = await connectionLaunchVerifier(chain(landed(tx1), [[cfgAt(pair.a.mint), tokenConfig(pair.a.mint, { rulesSha: pair.a.rules.sha256, policy: 0 })], ...accounts.slice(1)]), opts).verify("s", expA);
+    assert.equal(r5.ok, false); assert.match(JSON.stringify(r5), /registration policy|pair curve/);
+  });
+
+  test("through the API: a refused confirmation leaves the draft a draft (status, baseline, launch tx unchanged); the genuine launch then goes live", async () => {
+    const w = await makeWorld();
+    w.p.program = program; w.p.launchLab = sdkLaunchLab();
+    const mintKp = Keypair.generate(), mint = mintKp.publicKey.toBase58();
+    const r = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST, body: JSON.stringify({ creator: CREATOR_F3, mint, ticker: "FTHREE", name: "F three", rule: DENVER_HIGH, acknowledgements: { ruleLocked: true, noReturns: true }, recentBlockhash: BLOCKHASH }) });
+    assert.equal(r.status, 200, JSON.stringify(await r.clone().json()).slice(0, 300));
+    const j = await r.json() as { transactions: { instructions: { programId: string; keys: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; dataBase64: string }[] }[] };
+    const before = w.registry.token(mint)!;
+    assert.equal(before.status, "draft");
+    const cfg: [string, { owner: PublicKey; data: Buffer }] = [cfgAt(mint), tokenConfig(mint, { rulesSha: before.rulesSha })];
+    const confirm = (sig: string) => callRoute(`${API}/launch/confirm`, { method: "POST", headers: POST, body: JSON.stringify({ mint, signature: sig }) });
+    // the report's forgery
+    const ix = SystemProgram.transfer({ fromPubkey: creatorKp.publicKey, toPubkey: creatorKp.publicKey, lamports: 0 });
+    ix.keys.push({ pubkey: mintKp.publicKey, isSigner: true, isWritable: false }, { pubkey: new PublicKey(PROGRAM), isSigner: false, isWritable: false });
+    w.p.launchVerifier = connectionLaunchVerifier(chain(landed(signed([ix], [creatorKp, mintKp]), Math.floor(Date.now() / 1000) + 60), [cfg]), opts);
+    const bad = await confirm("5".repeat(88));
+    assert.equal(bad.status, 422, JSON.stringify(await bad.clone().json()));
+    const after = w.registry.token(mint)!;
+    assert.equal(after.status, "draft", "a refused confirmation does not take the draft live");
+    assert.equal(after.baselineAt, before.baselineAt, "a refused confirmation does not move the baseline");
+    assert.equal(after.launchTx, null, "a refused confirmation records no launch transaction (a later genuine one is not blocked)");
+    // the genuine launch: the bundle's own transaction, signed by the creator and the mint
+    const blockTime = Math.floor(Date.now() / 1000) + 120;
+    w.p.launchVerifier = connectionLaunchVerifier(chain(landed(signed(j.transactions[0].instructions.map(toIx), [creatorKp, mintKp]), blockTime), [cfg]), opts);
+    const good = await confirm("4".repeat(88));
+    assert.equal(good.status, 200, JSON.stringify(await good.clone().json()));
+    assert.equal(w.registry.token(mint)!.status, "live");
+    assert.equal(w.registry.token(mint)!.baselineAt, new Date(blockTime * 1000).toISOString());
   });
 });

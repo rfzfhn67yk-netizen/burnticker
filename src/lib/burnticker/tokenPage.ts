@@ -2,8 +2,10 @@ import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
 import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
-import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, WINNER_TAKES_BURN_LINE, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
-import { badgeFromText } from "@/lib/burnticker/describe";
+import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { badgeFromText, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+import { auditBadgeView } from "@/lib/burnticker/auditBadge";
+import { NO_WALLET_LINE, termLine } from "@/lib/burnticker/glossary";
 import type { TokenMeta } from "@/lib/burnticker/registry";
 /** The standing line on every coin page and card (owner decision 2026-10-10, anti-misrepresentation). */
 export const AFFILIATION_LINE = "Not affiliated with any team, league, candidate, agency or market.";
@@ -494,7 +496,7 @@ ${programSection(s.program)}
 <p class="muted">Creator fee slice: ${s.fees.creatorSliceBps} bps (creators earn no cash from fees; the creator-fee slot pays the burn pool). LP locked forever at graduation (${s.trust.lpLockedPct ?? LP_LOCKED_PCT}%): its fees fund the burn — 16.8 bps of every swap to the burn pool and 4.2 bps to the operator (80/20, fixed in code) — plus Raydium's fixed 4.75 bps CPMM creator fee to the burn pool. Sources: docs/burnkeeper/fees.md.</p>
 ${lpLockHtml(s.lp)}
 <h2>What the operator can and cannot do</h2>
-<p class="muted">Derived from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>${s.trust.operator.placeholder ? " (placeholder until the program is deployed)" : ""}. LP locked forever (${s.trust.lpLockedPct ?? LP_LOCKED_PCT}%; fees 80% burn pool / 20% operator) · creator cash from fees ${s.trust.creatorCashBps} bps · team allocation ${s.trust.teamAllocationPct}%.</p>
+<p class="muted">Derived from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>${s.trust.operator.placeholder ? " (the register file is not on this host: rows from its environment)" : ""}. LP locked forever (${s.trust.lpLockedPct ?? LP_LOCKED_PCT}%; fees 80% burn pool / 20% operator) · creator cash from fees ${s.trust.creatorCashBps} bps · team allocation ${s.trust.teamAllocationPct}%.</p>
 <div class="rule"><strong>Can:</strong> ${s.trust.operator.can.map(esc).join("; ")}.<br><strong>Cannot:</strong> ${s.trust.operator.cannot.map(esc).join("; ")}.</div>
 <p class="muted">${esc(OPERATOR_LINE)} · ${esc(USE_OF_FEES)} · Creator wallet shown above (anonymous creators are allowed; the wallet is always displayed).${s.mode === "buyback" ? ` · ${esc(s.pool.queuedNote)}` : ""}</p>
 <h2>Attesters</h2>
@@ -567,7 +569,7 @@ ${STATUS_CSS}
 </style></head><body><main>
 <h1>Burnticker</h1>
 <p class="muted">Tokens whose supply burns when a settled, public event says so — settled results only, never prices. Every burn is a receipt: the source, the rule, the arithmetic, the transaction. Updated ${esc(ix.generatedAt)}.</p>
-<div class="tiles"><div class="tile"><div class="label">Live tokens</div><div class="value">${ix.totals.live}</div></div><div class="tile"><div class="label">Burns</div><div class="value">${ix.totals.burns}</div></div><div class="tile"><div class="label">Tokens burned</div><div class="value">${esc(fmt(ix.totals.burnedTokens))}</div></div><div class="tile"><div class="label">Public audit</div><div class="value">${ix.audit ? (ix.audit.ok ? '<span class="ok">all receipts recompute</span>' : `<span class="bad">${ix.audit.mismatches} mismatch(es)</span>`) : '<span class="muted">not run yet</span>'}</div><div class="sub">${ix.audit ? `${ix.audit.receipts} receipt(s) · ${ix.audit.chainChecked ? "source + chain" : "source only"} · ${esc(ix.audit.ranAt)}` : "scripts/burnticker-audit.mts"} · <a href="trust/">trust page</a></div></div></div>
+<div class="tiles"><div class="tile"><div class="label">Live tokens</div><div class="value">${ix.totals.live}</div></div><div class="tile"><div class="label">Burns</div><div class="value">${ix.totals.burns}</div></div><div class="tile"><div class="label">Tokens burned</div><div class="value">${esc(fmt(ix.totals.burnedTokens))}</div></div><div class="tile"><div class="label">Public audit</div><div class="value">${(() => { const v = auditBadgeView(ix.audit); return `<span class="${v.tone}">${esc(v.text)}</span>`; })()}</div><div class="sub">${ix.audit ? `${esc(auditBadgeView(ix.audit).sub)} · ${esc(ix.audit.ranAt)}` : "scripts/burnticker-audit.mts"} · <a href="trust/">trust page</a></div></div></div>
 <h2>Today</h2>
 <pre class="today" id="today">${esc(today)}</pre>
 ${ix.pairs.length ? `<h2>Rivalry pairs</h2>
@@ -604,7 +606,7 @@ ${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("
     tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "the next settlement after launch"}`),
     ...(tally.attesterLine ? [tile("Attesters", "1 key, quorum 1", esc(tally.attesterLine))] : []),
     ...(tally.unpaired ? [tile("Pair", "unpaired", `${esc(tally.unpaired.reason)} · ${esc(tally.unpaired.at.slice(0, 10))} — two plain coins now; nothing forwards between them`)] : []),
-    ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `burned on $${A} ${fmt(tally.burnedA)} <span class="muted">/</span> burned on $${B} ${fmt(tally.burnedB)}`, `forwarded $${A}→$${B} ${esc(tally.forwardedAtoB ?? "0")} SOL · $${B}→$${A} ${esc(tally.forwardedBtoA ?? "0")} SOL — ${esc(WINNER_TAKES_BURN_LINE)}`)] : []),
+    ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `burned on $${A} ${fmt(tally.burnedA)} <span class="muted">/</span> burned on $${B} ${fmt(tally.burnedB)}`, `forwarded $${A}→$${B} ${esc(tally.forwardedAtoB ?? "0")} SOL · $${B}→$${A} ${esc(tally.forwardedBtoA ?? "0")} SOL — ${esc(PAIR_BURN_SENTENCE)}`)] : []),
   ].join("\n");
   const rule = (s: TokenStatusJson, side: "A" | "B") => `<div class="rule"><strong>Side ${side} — <a href="../../t/${esc(s.ticker)}/">$${esc(s.ticker)}</a></strong> ${esc(s.name)}. ${esc(s.rules.statement)}<br><span class="muted">Rule file: <a href="../../t/${esc(s.ticker)}/rules.json">rules.json</a> · sha256 <code>${esc(s.rules.sha256)}</code></span></div>`;
   return `<!doctype html>
@@ -623,6 +625,7 @@ ${STATUS_CSS}
 <div class="tiles">
 ${tiles}
 </div>
+<p class="muted">${esc(NO_WALLET_LINE)} ${esc(termLine(["receipt", "burnPool"]))}</p>
 <h2>Share line</h2>
 <pre class="today" id="share">${esc(pairDailyText(tally, site, a.profile?.badge ?? null).replace(/\s*\{SITE_URL\}\/p\/[^/]+\/$/m, " this page"))}</pre>
 <p class="muted">The same words as the pair post (src/lib/launch/dailyPost.ts pairDailyText): a report of the tally, filled from both sides' status.json and receipts.json, never retyped.</p>

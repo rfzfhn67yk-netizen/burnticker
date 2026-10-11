@@ -20,7 +20,9 @@ import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPai
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { STATIONS, nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
 import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
-import { CREATOR_LAUNCHES_CLOSED } from "@/lib/burnticker/creatorLaunches";
+import { CREATOR_LAUNCHES_CLOSED, DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
+import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
+import { LaunchRecovery } from "./LaunchRecovery";
 import { describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATE_START, type TemplateId } from "@/lib/burnticker/templates";
@@ -454,7 +456,7 @@ export default function LaunchWizard() {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, links: [], rule });
         const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}, note: "", imageUrl: null, links: [], rule: ruleB });
-        setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [season ? "Two coins, each burning on its own team's losses: two independent records. They meet only when the two teams play each other; on those games exactly one side burns." : `Two coins on ${game?.title ?? "one game"}: the loser's coin burns once the final score is confirmed; a tie burns neither.`] }); setBundle(a.bundle);
+        setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [season ? "Two coins, each burning on its own team's losses: two independent records. They meet only when the two teams play each other; on those games exactly one side burns." : `Two coins on ${game?.title ?? "one game"}: the losing team's coin burns once the final score is confirmed; a tie burns neither.`] }); setBundle(a.bundle);
       } else {
         const body = { ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, links: [], rule };
         if (pairOn) {
@@ -575,7 +577,7 @@ export default function LaunchWizard() {
     <main className="mx-auto max-w-4xl px-4 py-6 space-y-3">
       <h1 className="text-2xl font-semibold">Launch a coin</h1>
       <p className="text-neutral-200" data-launches-closed>{CREATOR_LAUNCHES_CLOSED}</p>
-      <p className="text-sm"><Link className="underline" href="/burnticker/t/DEFICIT">$DEFICIT</Link> · <Link className="underline" href="/burnticker">Burnticker</Link></p>
+      <p className="text-sm"><a className="underline" href={DEFICIT_SITE}>$DEFICIT</a> · <Link className="underline" href="/burnticker">Burnticker</Link> · {NO_WALLET_LINE}</p>
     </main>
   );
 
@@ -588,6 +590,7 @@ export default function LaunchWizard() {
         </div>
         <span className="flex items-center gap-3 text-xs"><Link className="underline text-neutral-400" href="/burnticker/templates">Templates</Link><Link className="underline text-neutral-400" href="/burnticker/me">Your coins</Link>{step !== "choose" && <button data-nav className="text-neutral-500 underline" onClick={startOver}>start over</button>}</span>
       </header>
+      <LaunchRecovery />
 
       {step !== "choose" && (
         <div aria-label="Progress">
@@ -657,7 +660,7 @@ export default function LaunchWizard() {
           <div className="grid gap-3 sm:grid-cols-2">
             {([
               ["team", "Team coin", "Any team in any league — baseball, basketball, hockey, soccer, football. It burns on every win this season (type “… lose” in the box above for losses).", "e.g. $RAYS26 · $ARSENAL · $OILERS"],
-              ["pair", "Matchup", "Two teams, two coins: the loser's coin burns.", "e.g. $LAKERS vs $CELTICS"],
+              ["pair", "Matchup", "Two teams, two coins: the losing team's coin burns.", "e.g. $LAKERS vs $CELTICS"],
               ["browse", "Any result", "Weather, elections, the economy, space, culture: pick a category, then a source.", "e.g. the national debt, Denver's high, a Senate race"],
             ] as const).map(([f, title, body, eg]) => (
               <button key={f} data-decision="what" onClick={() => begin(f)} className="text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none">
@@ -866,7 +869,7 @@ export default function LaunchWizard() {
         const coinA = { key: "a", name, ticker, onName: (v: string) => { setName(v); setNameAuto(false); noteEdit(); }, onTicker: (v: string) => { setTicker(v); setTickerAuto(false); noteEdit(); }, image: genImg(rule, ticker, oneLiner), oneLiner, oracle: pairOn ? "catalogue" : pick?.oracle ?? "catalogue", badge: text?.badge ?? null };
         const coins = pairOn && ruleB ? [coinA, { key: "b", name: nameB, ticker: tickerB, onName: (v: string) => { setNameB(v); noteEdit(); }, onTicker: (v: string) => { setTickerB(v); noteEdit(); }, image: genImg(ruleB, tickerB, textB?.oneLiner ?? ""), oneLiner: textB?.oneLiner ?? ruleOneLiner(ruleB), oracle: "catalogue", badge: textB?.badge ?? null }] : [coinA];
         const sentence = pairOn && sideA && sideB
-          ? (season ? `$${ticker} burns ${shareText} of its pool every time the ${A} lose this season, and $${tickerB} does the same for the ${B}: two coins, two separate records.` : `When ${game?.title ?? "the game"} is final, the loser's coin burns ${shareText} of its pool — $${ticker} if the ${A} lose, $${tickerB} if the ${B} lose. A tie burns neither.`)
+          ? (season ? `$${ticker} burns ${shareText} of its pool every time the ${A} lose this season, and $${tickerB} does the same for the ${B}: two coins, two separate records.` : `When ${game?.title ?? "the game"} is final, the losing team's coin burns ${shareText} of its pool — $${ticker} if the ${A} lose, $${tickerB} if the ${B} lose. A tie burns neither.`)
           : text ? text.ruleBlock.split(/(?<=\.)\s/)[0] : plainSentence(rule, ticker, pick?.title ?? bt?.seriesTitle ?? null);
         const problems = btFresh ? [...(bt?.refusals ?? []), ...(pairOn ? btB?.refusals ?? [] : [])].map((r) => r.reason) : [];
         const ready = !!name.trim() && okTicker(ticker) && (!pairOn || (!!nameB.trim() && okTicker(tickerB) && ticker !== tickerB)) && !noteProblem;

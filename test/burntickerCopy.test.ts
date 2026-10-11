@@ -19,7 +19,7 @@ const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
 const SENTENCE = "Coins that burn on real-world results — with receipts.";
 const SUBLINE = "Launch one. Follow the season.";
-const GUARDRAILS = ["settled on primary sources", "signed readings (one attester at launch; second attester scheduled, not live)", "program-run burns", "receipts anyone can recompute", "open source", "three blind AI reviews, not a firm audit", "creators earn nothing", "no team buy", "the platform never buys any coin", "LP locked forever, its fees fund the burn", "rules locked at launch"];
+const GUARDRAILS = ["settled on primary sources", "signed readings (one operator attester; no independent second attester is live)", "program-run burns", "receipts anyone can recompute", "open source", "three blind AI reviews, not a firm audit", "creators earn nothing", "no team buy", "the platform never buys any coin", "LP locked forever, its fees fund the burn", "rules locked at launch"];
 const LEAGUE = "(?:NFL|MLB|NBA|NHL|WNBA|MLS)";
 
 /** The words a visitor reads: meta descriptions + the body without style, script and the inline SVG, tags stripped. */
@@ -42,7 +42,8 @@ describe("the landing page (site/burnticker/index.html)", () => {
   test("the hero is the one sentence and the sub-line; the title and descriptions carry it", () => {
     const h1 = /<h1>([\s\S]*?)<\/h1>/.exec(html)![1].replace(/<[^>]+>/g, "");
     assert.equal(h1, SENTENCE);
-    assert.match(html, /<p class="sub">Launch one\. Follow the season\.<\/p>/);
+    // review 2 §2: "Launch one." is a launch CTA — hidden until the catalogue says creator launches are open (data-launch-cta)
+    assert.match(html, /<p class="sub"><span data-launch-cta>Launch one\. <\/span>Follow the season\.<\/p>/);
     assert.match(html, /<meta name="description" content="Coins that burn on real-world results — with receipts\. Launch one\. Follow the season\./);
   });
   test("door 2 is generated from the leagues index: every league, never NFL-first, soccer included, no drift", () => {
@@ -55,11 +56,20 @@ describe("the landing page (site/burnticker/index.html)", () => {
 
   test("two doors above the fold — Launch and Seasons — before the tape, each a link to a page that exists", () => {
     const hero = html.slice(html.indexOf('<section class="hero'), html.indexOf('<div class="tape"'));
-    const doors = [...hero.matchAll(/<a class="door[^"]*" href="([^"]+)">[\s\S]*?<h3>([^<]+)<\/h3>/g)].map((m) => [m[2], m[1]]);
-    assert.deepEqual(doors, [["Launch", "/burnticker/launch"], ["Seasons", "/burnticker/leagues"]]);
+    const doors = [...hero.matchAll(/<a class="door[^"]*" href="([^"]+)"( data-launch-cta)?>[\s\S]*?<h3>([^<]+)<\/h3>/g)].map((m) => [m[3], m[1], !!m[2]]);
+    assert.deepEqual(doors, [["Launch", "/burnticker/launch", true], ["Seasons", "/burnticker/leagues", false]], "the Launch door is a gated CTA; Seasons is always there");
     assert.ok(fs.existsSync("src/app/burnticker/launch/page.tsx") && fs.existsSync("src/app/burnticker/leagues/page.tsx"));
     assert.equal(NAV.find((n) => n.label === "Seasons")?.href, "/burnticker/leagues", "the Seasons door and the nav land on the same page");
     assert.match(html, /\.doors\{display:grid;grid-template-columns:1fr;/, "one column on a phone");
+  });
+  test("review 2 §2: every launch CTA is hidden until the host's catalogue says creator launches are open; the closed line says so (fail closed)", () => {
+    const ctas = [...html.matchAll(/<a [^>]*href="\/burnticker\/launch"[^>]*>/g)].map((m) => m[0]);
+    assert.ok(ctas.length >= 3 && ctas.every((a) => a.includes("data-launch-cta")), ctas.join("\n"));
+    assert.match(html, /html:not\(\.launches-open\) \[data-launch-cta\]\{display:none!important\}/);
+    assert.match(html, /fetch\("\/api\/burnticker\/catalogue"\)[\s\S]*launches\.creators === true\) root\.classList\.add\("launches-open"\)/);
+    assert.match(html, /<p class="state" data-launches-closed>Creator launches are closed\.<span data-cluster-line><\/span><\/p>/);
+    // one served $DEFICIT destination
+    for (const m of html.matchAll(/<a [^>]*>\$DEFICIT<\/a>/g)) assert.match(m[0], /href="https:\/\/deficit\.burnticker\.com\/"/, m[0]);
   });
   test("the guardrail strip: the eleven guardrails, in order, inside the hero", () => {
     const strip = /<ul class="guard"[^>]*>([\s\S]*?)<\/ul>/.exec(html)![1];
