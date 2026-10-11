@@ -56,6 +56,12 @@
         "reportPath": "docs/burnticker/reviews/2026-10-11-lp-lock-blind.md"
       },
       {
+        "id": "pair-forward-blind",
+        "reviewer": "a fresh Claude agent reviewing the winner-takes-the-burn release blind (link_pair, submit_pair_result, forward_to_winner, the paired crank gate): 1 High (a loser's queue can wedge when the forward's preconditions can never hold), 2 Medium, 4 Low, 7 Info; exploit tests committed (#[ignore]d), fixes in progress",
+        "status": "completed 2026-10-11; findings open",
+        "reportPath": "docs/burnticker/reviews/2026-10-11-pair-forward-blind.md"
+      },
+      {
         "id": "chatgpt-adversarial",
         "reviewer": "ChatGPT/Codex, adversarial PR review against the same pre-registered checklist (reviewed public commit 58d43eae: 2 High, 5 Medium new findings plus checklist mismatches and pair_curve residuals; each answered in docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md)",
         "status": "completed 2026-10-10",
