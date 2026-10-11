@@ -24,7 +24,7 @@ const BR = "programs/burn-receipts/programs/burn_receipts/src";
 const CHECKLIST = "docs/burnticker/reviews/checklist.md";
 const ERRATUM = "## Erratum 2026-10-10 (after the ChatGPT/Codex review)";
 /** Every dated erratum, in the order they were appended (each one after the last; the pre-registered text before the first never changes). */
-const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)"];
+const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)"];
 /** sha256 of the pre-registered checklist exactly as reviewed (everything before the erratum). It must never change. */
 const CHECKLIST_PREREGISTERED_SHA256 = "7af9866eb64157d77205e63b34e4695aa9d1ecac6b12c4cbff58c5a068ff5f3b";
 const LP_SENTENCE = "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation";
@@ -60,6 +60,15 @@ describe("checklist: pre-registered text is immutable, corrections go in the err
     assert.ok(at.every((i) => i > 0), JSON.stringify(at));
     assert.deepEqual([...at].sort((a, b) => a - b), at);
     for (const h of ERRATA) assert.equal(text.split(h).length, 2, `${h} appears once`);
+  });
+  test("the round-2 erratum states both programs' entrypoint counts from lib.rs, the registration order, the platform pin and burn_lp", () => {
+    const e = erratumSection(ERRATA[2]);
+    const count = (lib: string) => { const src = read(lib); const start = src.indexOf("#[program]"); const open = src.indexOf("{", start); let depth = 0, end = open; for (let i = open; i < src.length; i++) { if (src[i] === "{") depth++; else if (src[i] === "}" && --depth === 0) { end = i; break; } } return [...src.slice(open, end).matchAll(/\bpub fn ([a-z_0-9]+)\s*[<(]/g)].length; };
+    const pc = count("programs/burn-receipts/programs/pair_curve/src/lib.rs");
+    assert.equal(pc, 9);
+    assert.match(e, new RegExp(`pair_curve has \\*\\*${pc} entrypoints\\*\\*`));
+    assert.match(e, new RegExp(`burn_receipts still has \\*\\*${count(`${BR}/lib.rs`)} entrypoints\\*\\*`));
+    for (const re of [/register_fee_key` runs BEFORE `register_pool`/, /BURNTICKER_PLATFORM/, /PlatformNotPinned/, /burn_lp/, /memo v2/]) assert.match(e, re);
   });
   test("the LP-lock erratum states the policy, the compiled split and the unchanged item-8 floor", () => {
     const e = erratumSection(ERRATA[1]);

@@ -22,7 +22,8 @@
 //   register    --pair <pubkey> --side A|B                                         (burn_receipts.register_pair_pool)
 //   lock        --pair <pubkey> --side A|B      (lock_lp: the side's LP into Raydium's CPMM lock forever, Fee Key → FEE_KEYS)
 //   fee-key     --pair <pubkey> --side A|B      (burn_receipts.register_fee_key for the side's lock position)
-//   claim-lock-fees --pair <pubkey> --side A|B [--lp-fee-amount <raw LP>]  (burn_receipts.claim_lock_fees: 80 % burn pool / 20 % treasury)
+//   burn-lp     --pair <pubkey> --side A|B      (burn_lp: 30-day fallback when lock_lp cannot run — burns the side's LP, no LP fees)
+//   claim-lock-fees --pair <pubkey> --side A|B  (burn_receipts.claim_lock_fees: 80 % burn pool / 20 % treasury)
 //   void        --pair <pubkey>
 //   close       --pair <pubkey>
 //   status      --pair <pubkey>        READ-ONLY: the Pair decoded, its phase, the vault and burn-pool balances, supplies, pools
@@ -48,11 +49,11 @@ import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import { redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 import { ata, curveOf, feeNftMintPda, fetchPair, pairPda, sidePoolAccounts, STATUS_NAMES, vaultPda } from "../src/lib/pairCurve/accounts.ts";
-import { buyIx, claimDeveloperFeeIx, lockLpIx, registerSideFeeKeyIx, syncVaultWsolIxs, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
+import { buyIx, claimDeveloperFeeIx, burnLpIx, lockLpIx, registerSideFeeKeyIx, syncVaultWsolIxs, closePairIx, crankPair, createPairMintIxs, graduateIx, initPairIx, registerSideIx, sellIx, simulateAndSend, voidPairIx, type PairCurveContext, type SendResult } from "../src/lib/pairCurve/client.ts";
 import { initParamProblems, pairPhase, quoteBuy, quoteRedeem, quoteSell, sideCosts, DEFAULT_CURVE_SUPPLY, DEFAULT_VIRTUAL_TOKEN_AMOUNT } from "../src/lib/pairCurve/pricing.ts";
 
 const args = process.argv.slice(2);
-const COMMANDS = ["init-pair", "buy", "sell", "crank", "graduate", "lock", "register", "fee-key", "claim-lock-fees", "void", "close", "claim", "status"] as const;
+const COMMANDS = ["init-pair", "buy", "sell", "crank", "graduate", "lock", "register", "fee-key", "burn-lp", "claim-lock-fees", "void", "close", "claim", "status"] as const;
 type Command = (typeof COMMANDS)[number];
 const CMD = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : null;
 const flag = (n: string) => args.includes(`--${n}`);
@@ -198,12 +199,12 @@ if (CMD === "graduate") {
 }
 if (CMD === "register") { const side = sideOf(); await send([registerSideIx({ registrar: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts })], { side: side === 0 ? "A" : "B" }); }
 if (CMD === "lock") { const side = sideOf(); await send([lockLpIx({ cranker: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts })], { side: side === 0 ? "A" : "B", feeNftMint: feeNftMintPda(pairKey, side).toBase58() }); }
+if (CMD === "burn-lp") { const side = sideOf(); await send([burnLpIx({ cranker: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster })], { side: side === 0 ? "A" : "B" }); }
 if (CMD === "fee-key") { const side = sideOf(); await send([registerSideFeeKeyIx({ payer: payer.publicKey, pairAddress: pairKey, pair: p, side, cluster, burnReceiptsProgramId: burnReceipts })], { side: side === 0 ? "A" : "B" }); }
 if (CMD === "claim-lock-fees") {
   const side = sideOf();
   const s = sidePoolAccounts(cluster, pairKey, side, p.mints[side]);
-  const lpFeeAmount = opt("lp-fee-amount") ? BigInt(opt("lp-fee-amount")!) : undefined;
-  await send([claimLockFeesIx({ programId: burnReceipts, cranker: payer.publicKey, mint: p.mints[side], feeNftMint: feeNftMintPda(pairKey, side), pool: { pool: s.pool, lpMint: s.lpMint, token0Vault: s.poolVault0, token1Vault: s.poolVault1 }, cluster, lpFeeAmount })], { side: side === 0 ? "A" : "B", treasury: OPERATOR_TREASURY[cluster].toBase58() });
+  await send([claimLockFeesIx({ programId: burnReceipts, cranker: payer.publicKey, mint: p.mints[side], feeNftMint: feeNftMintPda(pairKey, side), pool: { pool: s.pool, lpMint: s.lpMint, token0Vault: s.poolVault0, token1Vault: s.poolVault1 }, cluster })], { side: side === 0 ? "A" : "B", treasury: OPERATOR_TREASURY[cluster].toBase58() });
 }
 if (CMD === "void") await send([voidPairIx({ caller: payer.publicKey, pairAddress: pairKey, pair: p })]);
 if (CMD === "claim") await send([claimDeveloperFeeIx({ caller: payer.publicKey, pairAddress: pairKey, pair: p })]);

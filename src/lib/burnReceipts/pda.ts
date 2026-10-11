@@ -40,6 +40,13 @@ export const programDataAddress = (programId: PublicKey): PublicKey => PublicKey
 
 /** LaunchLab's creator-fee vault authority (SDK getPdaCreatorFeeVaultAuth) and the creator vault for (creator, WSOL) (getPdaCreatorVault). */
 export const launchlabVaultAuthority = (launchlabProgramId: PublicKey): PublicKey => PublicKey.findProgramAddressSync([LAUNCHLAB_CREATOR_FEE_VAULT_AUTH_SEED], launchlabProgramId)[0];
+/** LaunchLab's vault authority ["vault_auth_seed"] — the locker its CPMM migration records in LockedCpLiquidityState @128. */
+export const launchlabMigrationLocker = (launchlabProgramId: PublicKey): PublicKey => PublicKey.findProgramAddressSync([Buffer.from("vault_auth_seed", "utf8")], launchlabProgramId)[0];
+/** The CPMM pool PDA ["pool", amm_config, token_0, token_1] (token_0 < token_1) — LaunchLab's migration pool for (cpConfigId, WSOL, mint). */
+export const cpmmPoolPda = (cpmmProgramId: PublicKey, ammConfig: PublicKey, mintA: PublicKey, mintB: PublicKey): PublicKey => {
+  const [t0, t1] = Buffer.compare(mintA.toBuffer(), mintB.toBuffer()) < 0 ? [mintA, mintB] : [mintB, mintA];
+  return PublicKey.findProgramAddressSync([Buffer.from("pool", "utf8"), ammConfig.toBuffer(), t0.toBuffer(), t1.toBuffer()], cpmmProgramId)[0];
+};
 export const launchlabCreatorFeeVault = (launchlabProgramId: PublicKey, creator: PublicKey): PublicKey =>
   PublicKey.findProgramAddressSync([creator.toBuffer(), NATIVE_MINT.toBuffer()], launchlabProgramId)[0];
 

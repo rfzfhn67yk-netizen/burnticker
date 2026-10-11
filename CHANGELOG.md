@@ -515,6 +515,19 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 997
 
+## 2026-10-11 — LP lock round 2: the blind review's RL-2 / RL-3 / L-1..L-3 fixes (client side; no publish, no deploy)
+
+- `register_fee_key` gains `lp_lock_vault` and identifies the position by its LOCKER (LaunchLab's vault_auth for policy 0, the pair vault for
+  policy 2); for policy 0 it now runs BEFORE `register_pool`, which takes the FeeKeyRecord as its last account (`FeeKeyNotRegistered`,
+  `FeeKeyMismatch`). The keeper runs register_fee_key → register_pool → claims; the admin CLI's register-fee-key works on the migration pool.
+- `claim_lock_fees` takes no arguments; memo v2 adds `paid` / `pending` (the parsers read v1 and v2); a claim that moves nothing writes no
+  memo and records no receipt; a coin-token donation alone is still burned and counted.
+- New compiled pin `BURNTICKER_PLATFORM` (devnet `GvSKpe5p…xv3tf`, mainnet zeros → `PlatformNotPinned`): in the launch gate,
+  `verify-platform-pins`, `/trust` `lpLock.platformPinned` and TODO-OWNER row 27. `lpLock.feeKeysPda` is derived from the program id and is
+  never null.
+- pair_curve `burn_lp(side)`: the fallback after 30 days of a refusing lock — the only path that destroys LP; the keeper cranks it when due and
+  alerts `pair-side-unlocked` for every graduated side still unlocked. Program errors map to plain sentences in alerts and `lp.lastError`.
+
 ## 2026-10-10 — publish from 359a3490985a
 
 - monorepo commit: `359a3490985a46c27687d099dd878a8a6eebecf6` (the working tree had uncommitted changes when this tag was written)
@@ -522,3 +535,11 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `c60141372d28924c7f49c9436afccab883ee99093dbf2021e0331ea750d12501`
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 1000
+
+## 2026-10-11 — publish from 9fc0e7d32aff
+
+- monorepo commit: `9fc0e7d32affeae723652285f5346fcafb8634fa` (the working tree had uncommitted changes when this tag was written)
+- program hash: `d4f39b47f6135bebe316f0c6cf11f40eaebfa236832187798282b6ff3dce5bf2` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `5ef0c6a3e43df0c7ebd061bf577e82821a6a5a32bb1c3e1316e273d075c7741d`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1012

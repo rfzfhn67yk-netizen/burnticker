@@ -67,6 +67,12 @@ cargo-build-sbf --manifest-path "$here/programs/burn_receipts/Cargo.toml" --feat
 echo "target/deploy-localnet/burn_receipts.so built (--features localnet): used by the opt-in TS suite test/burnReceiptsLocalnet.test.ts"
 echo "  (run it from the repo root with BURN_RECEIPTS_LOCALNET=1; it starts solana-test-validator)"
 
+# lp-lock blind review RL-3 (2026-10-11): the LiteSVM harness (tests/common Env::new) loads the `test-pins` build — mainnet genesis
+# and Raydium ids, with the harness's test LaunchLab platform as BURNTICKER_PLATFORM and the test treasury [0x7e; 32]. The default
+# (mainnet) build pins no platform yet and refuses every policy-0/2 initialize_token (PlatformNotPinned); anchor build still makes it.
+cargo-build-sbf --manifest-path "$here/programs/burn_receipts/Cargo.toml" --features test-pins --sbf-out-dir "$here/target/deploy-test"
+echo "target/deploy-test/burn_receipts.so built (--features test-pins): loaded by the LiteSVM suites"
+
 cd "$here"
 cargo test -p burn_receipts -- --test-threads=1
 # pair_curve (2026-10-10): its LiteSVM suites load target/deploy-localnet/pair_curve.so (--features localnet: the harness's test
@@ -74,3 +80,14 @@ cargo test -p burn_receipts -- --test-threads=1
 # refuses init_pair) + target/deploy/burn_receipts.so + the CPMM fixture.
 cargo-build-sbf --manifest-path "$here/programs/pair_curve/Cargo.toml" --features localnet --sbf-out-dir "$here/target/deploy-localnet"
 cargo test -p pair_curve -- --test-threads=1
+
+# lp-lock blind review I-1..I-3: the lock suites again against the REAL Raydium lock program when REVIEW_LOCK_SO is set. Acquire it
+# read-only, outside the repo, and never commit it (Raydium's binary, not ours):
+#   solana program dump -u https://api.mainnet-beta.solana.com LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE /tmp/lock_mainnet.so
+#   REVIEW_LOCK_SO=/tmp/lock_mainnet.so bash scripts/test.sh
+# (The harness uses mainnet program ids, so the mainnet dump is the one that matches; the devnet program's compiled CPMM id differs.)
+if [ -n "${REVIEW_LOCK_SO:-}" ]; then
+  echo "== lock suites against REVIEW_LOCK_SO=$REVIEW_LOCK_SO (real lock program)"
+  cargo test -p burn_receipts --test lock_fees --test review_lock -- --test-threads=1
+  cargo test -p pair_curve -- --test-threads=1
+fi

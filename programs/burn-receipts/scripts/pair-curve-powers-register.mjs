@@ -61,6 +61,13 @@ const POWERS = {
     cannot: "Lock less than all of the LP, lock twice, lock before the pool exists; send the Fee Key anywhere but FEE_KEYS; let the lock program take lamports from the vault, re-assign it, or leave LP in the vault (all re-checked after the CPI, hard errors).",
     timelock: null, sunset: "Once per side.", funds: "Vault LP → Raydium's lock (forever); Fee Key → FEE_KEYS; emptied LP account's rent → the side's burn pool; cranker → the lock's rents.",
   },
+  burn_lp: {
+    class: "permissionless",
+    signers: { cranker: "anyone" },
+    can: "lp-lock blind review L-2 — the fallback if lock_lp cannot run (Raydium's upgradeable lock program refused or changed): once per side, only 30 days (LP_LOCK_FALLBACK_SECS) after the graduation decision and only while the side's LP is still unlocked, burn ALL of the vault's LP for that side, record it in lp_locked (register_pair_pool counts burned + locked LP) and close the emptied LP account (rent to the side's burn pool). The side's LP fees are forgone. The only instruction that destroys LP.",
+    cannot: "Run before the 30 days, after lock_lp, twice, or before the pool exists; burn less than all of the LP; move the LP or any SOL anywhere; take lamports from the vault (re-checked, hard error).",
+    timelock: "30 days after the graduation decision.", sunset: "Once per side (and never once lock_lp ran).", funds: "Vault LP → burned; emptied LP account's rent → the side's burn pool.",
+  },
   void_pair: {
     class: "permissionless",
     signers: { caller: "anyone" },
@@ -89,7 +96,7 @@ const POWERS = {
 const NON_POWERS = [
   "No admin, authority, owner or operator field exists in the program; no instruction takes a privileged signer after init_pair.",
   "No instruction updates a pair's parameters (virtual reserves, curve supply, target, minimum share, deadline, fee, fee recipients, AmmConfig) after init_pair.",
-  "No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts; the LP is then locked forever by lock_lp, LAUNCHPAD-PATH §35) and residue to the burn pools.",
+  "No withdraw, sweep or transfer-out instruction exists for the SOL vault or the token vaults. SOL leaves the vault only as a seller's formula proceeds, the fee legs (fixed recipients, formula amounts), the CPMM deposit at graduation (formula amounts; the LP is then locked forever by lock_lp, LAUNCHPAD-PATH §35 — or, only if lock_lp cannot run for 30 days, burned by burn_lp) and residue to the burn pools.",
   "No pause or freeze exists. Buys end at the deadline; nothing can stop sells on an open or voided pair.",
   "No mint authority survives init_pair and no freeze authority ever exists; the program never mints after init.",
   "The pair program holds the 75 bps burn share only in escrow: it reaches the side's burn_receipts fee PDA when the pool is created, or goes back to that side's holders on a void.",

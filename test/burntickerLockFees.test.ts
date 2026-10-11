@@ -12,16 +12,17 @@ import { buildLaunchBundle, FakeLaunchLab } from "@/lib/burnticker/launchBundle"
 import { runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { claimLockFeesFor, LOCK_FEES_EVENT, type LockFeesKeeperDeps } from "@/lib/burnticker/lockFeesKeeper";
 import {
-  CLAIM_ALL_LP_FEES, LOCK_FEES_INTERFACE, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCK_AUTHORITY, LP_LOCK_PROGRAM, LP_POLICY_LINE, OPERATOR_TREASURY, TREASURY_NOT_PINNED,
+  LOCK_FEES_INTERFACE, LOCK_FEE_ERRORS, BURNTICKER_PLATFORM, lockFeeErrorSentence, lpLockPolicyJson, launchLabLockerFor, LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCK_AUTHORITY, LP_LOCK_PROGRAM, LP_POLICY_LINE, OPERATOR_TREASURY, TREASURY_NOT_PINNED,
   buildLpLockJson, decodeLockedCpLiquidity, feeKeyRecordPda, feeKeysPda, formatLockFeesMemo, lockAuthorityPda, lockFeeClaimLine, lockedLiquidityPda, parseLockFeesMemo, splitLockFees, splitMatches,
 } from "@/lib/burnticker/lockFees";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { checkLpLockPins } from "@/lib/burnticker/lpLockPins";
 import { lpFeeLine } from "@/lib/burnticker/trustpack/ledger";
+import { lpLockBlock } from "@/lib/burnticker/lpLockPage";
 import * as PROGRAM from "@/lib/burnReceipts/constants";
 import * as PDA from "@/lib/burnReceipts/pda";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
-import { claimLockFeesIx } from "@/lib/burnReceipts/instructions";
+import { claimLockFeesIx, registerPoolIx } from "@/lib/burnReceipts/instructions";
 import { lockFeesMemoFromLogs } from "@/lib/burnticker/lockFeesChain";
 import { BRONCOS, NOW } from "./burntickerHelpers.ts";
 
@@ -61,10 +62,10 @@ describe("the split (compiled 80/20; the odd lamport goes to the burn pool)", ()
 
 describe("the program interface (final 2026-10-10)", () => {
   test("names, seeds, ids and treasuries are pinned", () => {
-    assert.deepEqual(LOCK_FEES_INTERFACE.instructions, { register: "register_fee_key", claim: "claim_lock_fees" });
+    assert.deepEqual(LOCK_FEES_INTERFACE.instructions, { register: "register_fee_key", claim: "claim_lock_fees", registerPool: "register_pool", pairBurnFallback: "burn_lp" });
     assert.deepEqual(LOCK_FEES_INTERFACE.seeds, { feeKeys: "fee_keys", feeKey: "fee_key", lockedLiquidity: "locked_liquidity", lockAuthority: "lock_cp_authority_seed", pairFeeNft: "fee_nft" });
     assert.equal(LOCK_FEES_INTERFACE.event, "LockFeesClaimed");
-    assert.equal(CLAIM_ALL_LP_FEES, BigInt(2) ** BigInt(64) - BigInt(1));
+    assert.equal(LOCK_FEES_INTERFACE.interface, "r2-2026-10-11");
     assert.deepEqual(LP_LOCK_PROGRAM, { mainnet: "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE", devnet: "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX", localnet: "LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE" });
     assert.equal(OPERATOR_TREASURY.devnet, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     assert.equal(OPERATOR_TREASURY.mainnet, null, "mainnet is not pinned until the owner compiles the vault in");
@@ -89,13 +90,18 @@ describe("the program interface (final 2026-10-10)", () => {
     assert.deepEqual([v.lockedLp, v.claimedLp, v.unclaimedLp, v.lastLp, v.lastK, v.epoch], [BigInt(1000), BigInt(5), BigInt(7), BigInt(990), BigInt(3) + (BigInt(1) << BigInt(64)), BigInt(42)]);
     assert.deepEqual([v.pool, v.feeNftMint, v.owner, v.lpMint], keys);
   });
-  test("the program's memo round-trips; anything else is refused", () => {
-    const f = { solLamports: BigInt(12345), toBurnPoolLamports: BigInt(9877), toOperatorLamports: BigInt(2468), tokenBurnedRaw: BigInt(55000000) };
-    const memo = formatLockFeesMemo("RAYS26", f, "Fee1KeyNftMint1111111111111111111111111111");
-    assert.equal(memo, "RAYS26|lockfees|wsol=12345|burnpool=9877|operator=2468|burned=55000000|nft=Fee1KeyNftMi|v1");
-    assert.deepEqual(parseLockFeesMemo(memo), { prefix: "RAYS26", nft: "Fee1KeyNftMi", ...f });
+  test("memo v1 (devnet history) and v2 (round 2: paid / pending) both parse; anything else is refused", () => {
+    const f = { solLamports: BigInt(12345), toBurnPoolLamports: BigInt(9876), toOperatorLamports: BigInt(2469), tokenBurnedRaw: BigInt(55000000) };
+    const v1 = formatLockFeesMemo("RAYS26", f, "Fee1KeyNftMint1111111111111111111111111111", "v1");
+    assert.equal(v1, "RAYS26|lockfees|wsol=12345|burnpool=9876|operator=2469|burned=55000000|nft=Fee1KeyNftMi|v1");
+    assert.deepEqual(parseLockFeesMemo(v1), { prefix: "RAYS26", nft: "Fee1KeyNftMi", version: "v1", ...f });
+    const v2 = formatLockFeesMemo("RAYS26", { ...f, paidLamports: BigInt(2000), pendingLamports: BigInt(469) }, "Fee1KeyNftMint1111111111111111111111111111");
+    assert.equal(v2, "RAYS26|lockfees|wsol=12345|burnpool=9876|operator=2469|paid=2000|pending=469|burned=55000000|nft=Fee1KeyNftMi|v2");
+    assert.deepEqual(parseLockFeesMemo(v2), { prefix: "RAYS26", nft: "Fee1KeyNftMi", version: "v2", ...f, paidLamports: BigInt(2000), pendingLamports: BigInt(469) });
     assert.equal(parseLockFeesMemo("RAYS26|buyback|wsol=1|v1"), null);
-    assert.equal(parseLockFeesMemo(memo.replace("|v1", "|v2")), null);
+    assert.equal(parseLockFeesMemo(v1.replace("|v1", "|v2")), null, "a v1 body with a v2 tag");
+    assert.equal(parseLockFeesMemo(v2.replace("|v2", "|v3")), null);
+    assert.match(lockFeeClaimLine({ ...f, paidLamports: BigInt(2000), pendingLamports: BigInt(469) }), /0\.000000469 still owed to the operator/);
   });
   test("the receipt line and the policy line are copy-lint clean", () => {
     const cfg = loadCopyLintConfig();
@@ -140,7 +146,7 @@ describe("the claim_lock_fees crank (keeper)", () => {
     assert.deepEqual([rows[0].solLamports, rows[0].toBurnPoolLamports, rows[0].toOperatorLamports, rows[0].tokenBurnedRaw], [BigInt(12345679), BigInt(9876544), BigInt(2469135), BigInt(2000000)]);
     assert.equal((await program.feePdaBalanceLamports(t.mint)) - pool0, BigInt(9876544), "the 80 % (with the odd lamport) landed in the coin's fee PDA");
     assert.equal(port.operatorLamports, BigInt(2469135));
-    assert.match(port.memoOf(rows[0].signature)!, /^RAYS\|lockfees\|wsol=12345679\|burnpool=9876544\|operator=2469135\|burned=2000000\|nft=/);
+    assert.match(port.memoOf(rows[0].signature)!, /^RAYS\|lockfees\|wsol=12345679\|burnpool=9876544\|operator=2469135\|paid=2469135\|pending=0\|burned=2000000\|nft=.*\|v2$/);
     assert.ok(lines.some((l) => l.includes("LP fees claimed: 0.012345679 SOL → 80% burn pool (0.009876544) / 20% operator (0.002469135); coin side burned (2 tokens)")));
     const sends = port.sends;
     const r2 = await claimLockFeesFor(deps(), t);
@@ -165,7 +171,7 @@ describe("the claim_lock_fees crank (keeper)", () => {
   test("a refusal alerts (lock-fees-failed) and backs off; the next call waits", async () => {
     const t = await launch("RAYS");
     const port = program.lockFees.port(t.mint).graduate().accrue(BigInt(5));
-    port.feeKeyRegistered = true;
+    port.feeKeyRegistered = true; port.poolRegistered = true;
     port.simErr = "TwapUnavailable";
     const r = await claimLockFeesFor(deps(), t);
     assert.equal(r.outcome, "error");
@@ -180,7 +186,7 @@ describe("the claim_lock_fees crank (keeper)", () => {
   test("an on-chain failure alerts too and leaves the signature marked failed", async () => {
     const t = await launch("RAYS");
     const port = program.lockFees.port(t.mint).graduate().accrue(BigInt(5));
-    port.feeKeyRegistered = true;
+    port.feeKeyRegistered = true; port.poolRegistered = true;
     port.failOnChain = "ConstraintSeeds";
     const r = await claimLockFeesFor(deps(), t);
     assert.equal(r.outcome, "error");
@@ -214,7 +220,7 @@ describe("the claim_lock_fees crank (keeper)", () => {
   test("a split that is not the compiled 80/20 is recorded as the program did it, and alarmed", async () => {
     const t = await launch("RAYS");
     const port = program.lockFees.port(t.mint).graduate().accrue(BigInt(1000));
-    port.feeKeyRegistered = true;
+    port.feeKeyRegistered = true; port.poolRegistered = true;
     port.skewSplit = true;
     assert.equal((await claimLockFeesFor(deps(), t)).outcome, "claimed");
     assert.equal(alerts("lock-fees-split").length, 1);
@@ -223,7 +229,7 @@ describe("the claim_lock_fees crank (keeper)", () => {
   test("a dropped send waits, then the write-ahead signature is resolved on the next cycle", async () => {
     const t = await launch("RAYS");
     const port = program.lockFees.port(t.mint).graduate().accrue(BigInt(9));
-    port.feeKeyRegistered = true;
+    port.feeKeyRegistered = true; port.poolRegistered = true;
     port.dropSends = true;
     const r = await claimLockFeesFor(deps(), t);
     assert.equal(r.outcome, "waiting");
@@ -239,7 +245,7 @@ describe("the claim_lock_fees crank (keeper)", () => {
     const t = await launch("RAYS");
     const port = program.lockFees.port(t.mint).graduate().accrue(BigInt(5));
     assert.equal((await claimLockFeesFor(deps({ dryRun: true }), t)).outcome, "dry-run");
-    port.feeKeyRegistered = true;
+    port.feeKeyRegistered = true; port.poolRegistered = true;
     assert.equal((await claimLockFeesFor(deps({ dryRun: true }), t)).outcome, "dry-run");
     assert.equal(port.sends, 0);
     assert.equal((await claimLockFeesFor(deps({ lockFees: undefined }), t)).outcome, "unbound");
@@ -348,5 +354,82 @@ describe("bound to the program builder's mirror (src/lib/burnReceipts)", () => {
     const memo = "RAYS|lockfees|wsol=59456045|burnpool=47564836|operator=11891209|burned=0|nft=Fee1KeyNftMi|v1";
     assert.equal(lockFeesMemoFromLogs(["Program log: Instruction: ClaimLockFees", `Program log: Memo (len ${memo.length}): "${memo}"`, "Program success"]), memo);
     assert.equal(lockFeesMemoFromLogs(['Program log: Memo (len 5): "hello"']), null);
+  });
+});
+
+describe("round 2 (2026-10-11): order, lockers, no-memo claims, donations, plain-word errors, pins", () => {
+  test("policy 0: register_fee_key runs BEFORE register_pool; register_pool without the FeeKeyRecord is refused (FeeKeyNotRegistered)", async () => {
+    const t = await launch("RAYS");
+    const port = program.lockFees.port(t.mint).graduate();
+    const early = await port.buildRegisterPool();
+    assert.equal((await port.simulate(early.raw)).err, "FeeKeyNotRegistered");
+    const r = await claimLockFeesFor(deps(), t);
+    assert.deepEqual([r.outcome, port.registers, port.poolRegisters], ["skipped", 1, 1]);
+    assert.ok(program.fake(t.mint).cfg.poolRegistered, "register_pool registered the pool on the coin's program");
+    const order = reg.db.prepare("SELECT event_id FROM signatures WHERE mint=? ORDER BY sent_at, rowid").all(t.mint).map((x) => (x as { event_id: string }).event_id);
+    assert.deepEqual(order, ["register-fee-key", "register-pool"]);
+  });
+  test("policy 2 (pair coins) registers the Fee Key but never register_pool; policy 1 (a fixed pool) is skipped", async () => {
+    const a = await launch("RAYS"), b = await launch("LAKERS");
+    const pa = program.lockFees.port(a.mint).graduate(); pa.policy = 2;
+    await claimLockFeesFor(deps(), a);
+    assert.deepEqual([pa.registers, pa.poolRegisters], [1, 0]);
+    const pb = program.lockFees.port(b.mint).graduate(); pb.policy = 1;
+    const r = await claimLockFeesFor(deps(), b);
+    assert.deepEqual([r.outcome, pb.sends], ["skipped", 0]);
+  });
+  test("a lock whose locker is not the policy's (LockerMismatch) is an alarm, never a registration", async () => {
+    const t = await launch("RAYS");
+    const port = program.lockFees.port(t.mint).graduate({ locker: "SomeoneE1se111111111111111111111111111111111" });
+    assert.equal(port.expectedLocker, launchLabLockerFor("devnet"));
+    const r = await claimLockFeesFor(deps(), t);
+    assert.equal(r.outcome, "error");
+    assert.equal(alerts("lock-fee-locker").length, 1);
+    assert.match(alerts("lock-fee-locker")[0].text, /not created by the expected locker/);
+    assert.equal(port.sends, 0);
+  });
+  test("a claim with nothing claimed and nothing paid writes no memo and counts no claim; a coin-token donation alone is burned and counted", async () => {
+    const t = await launch("RAYS");
+    const port = program.lockFees.port(t.mint).graduate(); port.feeKeyRegistered = true; port.poolRegistered = true;
+    const empty = await port.buildClaim();
+    await port.send(empty.raw);
+    assert.equal((await port.confirm(empty)).status, "confirmed");
+    assert.deepEqual([await port.claimFacts(empty.signature), port.claims], ["none", 0]);
+    port.accrue(BigInt(0), BigInt(7_000_000));
+    const r = await claimLockFeesFor(deps(), t);
+    assert.equal(r.outcome, "claimed");
+    assert.deepEqual(reg.lockFeeClaims(t.mint).map((c) => [c.solLamports, c.tokenBurnedRaw]), [[BigInt(0), BigInt(7_000_000)]]);
+    assert.equal(port.claims, 1);
+  });
+  test("a refusal is alerted in plain words and lands on the coin's lp.lastError", async () => {
+    const t = await launch("RAYS");
+    const port = program.lockFees.port(t.mint).graduate().accrue(BigInt(5)); port.feeKeyRegistered = true; port.poolRegistered = true;
+    port.simErr = "FeeKeyNotRegistered";
+    await claimLockFeesFor(deps(), t);
+    assert.match(alerts("lock-fees-failed")[0].text, /claim_lock_fees simulation refused: FeeKeyNotRegistered: the coin's Fee Key is not registered yet/);
+    const lp = await lpLockBlock(reg, program, "devnet", t.mint);
+    assert.equal(lp.lastError?.error, "claim_lock_fees: FeeKeyNotRegistered");
+    assert.match(lp.lastError!.sentence, /register_fee_key must run before register_pool/);
+    for (const [name, e] of Object.entries(LOCK_FEE_ERRORS)) { assert.ok(lockFeeErrorSentence(name).startsWith(`${name}: `)); assert.equal(lintCopy(e.sentence, loadCopyLintConfig()).ok, true, name); }
+    assert.match(lockFeeErrorSentence("custom program error: 0x17bb"), /^LockerMismatch/, "6075 in hex");
+  });
+  test("register_fee_key's policy-0 pool: the LaunchLab migration pool PDA (cpConfigId + mints in byte order); the builders carry the round-2 accounts", () => {
+    const cfg = PublicKey.unique(), mint = PublicKey.unique(), WSOL = new PublicKey("So11111111111111111111111111111111111111112");
+    const [t0, t1] = Buffer.compare(mint.toBuffer(), WSOL.toBuffer()) < 0 ? [mint, WSOL] : [WSOL, mint];
+    assert.equal(PDA.cpmmPoolPda(PROGRAM.CPMM_PROGRAM_ID.devnet, cfg, WSOL, mint).toBase58(), PublicKey.findProgramAddressSync([Buffer.from("pool"), cfg.toBuffer(), t0.toBuffer(), t1.toBuffer()], PROGRAM.CPMM_PROGRAM_ID.devnet)[0].toBase58());
+    const pid = new PublicKey(BURN_RECEIPTS_IDL.address);
+    const rp = registerPoolIx({ programId: pid, registrar: PublicKey.unique(), mint, pool: PublicKey.unique(), lpMint: PublicKey.unique(), cluster: "devnet" });
+    assert.ok(rp.keys.some((k) => k.pubkey.equals(PDA.feeKeyRecordPda(pid, mint))), "policy 0: register_pool passes the FeeKeyRecord");
+    const claim = claimLockFeesIx({ programId: pid, cranker: PublicKey.unique(), mint, feeNftMint: PublicKey.unique(), pool: { pool: PublicKey.unique(), lpMint: PublicKey.unique(), token0Vault: PublicKey.unique(), token1Vault: PublicKey.unique() }, cluster: "devnet" });
+    assert.equal(claim.data.length, 8, "claim_lock_fees has no arguments");
+    for (const c of ["mainnet", "devnet"] as const) assert.equal(PROGRAM.LAUNCHLAB_VAULT_AUTH[c].toBase58(), PDA.launchlabMigrationLocker(PROGRAM.LAUNCHLAB_PROGRAM_ID[c]).toBase58(), c);
+  });
+  test("pins: the platform compiled per cluster, the policy block never has a null fee-keys PDA", () => {
+    assert.equal(BURNTICKER_PLATFORM.devnet, "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf");
+    assert.equal(BURNTICKER_PLATFORM.mainnet, null);
+    const d = lpLockPolicyJson("devnet", null), m = lpLockPolicyJson("mainnet", null);
+    assert.equal(d.feeKeysPda, feeKeysPda(BURN_RECEIPTS_IDL.address).toBase58(), "derived from the IDL's program id when none is configured");
+    assert.deepEqual([d.platformPinned, d.platform, m.platformPinned, m.platform], [true, "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf", false, null]);
+    assert.deepEqual([d.launchLabLocker, m.launchLabLocker], ["5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq", "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh"]);
   });
 });

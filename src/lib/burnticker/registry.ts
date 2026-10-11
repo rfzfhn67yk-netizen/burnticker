@@ -241,6 +241,8 @@ export class Registry {
     for (const [name, type] of BURN_PROGRAM_COLUMNS) if (!have.has(name)) this.db.exec(`ALTER TABLE burns ADD COLUMN ${name} ${type}`);
     // 2026-10-10: a reading's on-chain proof locator (Polymarket: the CTF payout vector's condition id and block). Added, never changed.
     if (!(this.db.prepare("PRAGMA table_info(readings)").all() as { name: string }[]).some((c) => c.name === "proof")) this.db.exec("ALTER TABLE readings ADD COLUMN proof TEXT");
+    // LP-lock round 2 (memo v2): the operator leg's paid / pending lamports on a claim, added in place, never changed.
+    { const have = new Set((this.db.prepare("PRAGMA table_info(lock_fee_claims)").all() as { name: string }[]).map((c) => c.name)); for (const c of ["paid_lamports", "pending_lamports"]) if (!have.has(c)) this.db.exec(`ALTER TABLE lock_fee_claims ADD COLUMN ${c} TEXT`); }
     this.db.exec(IMMUTABILITY);
     // A program reading, once a receipt is counted into it, is part of the receipt's facts.
     this.db.exec(`CREATE TRIGGER IF NOT EXISTS burns_reading_once BEFORE UPDATE OF reading_date ON burns WHEN OLD.reading_date IS NOT NULL AND NEW.reading_date IS NOT OLD.reading_date
@@ -430,13 +432,13 @@ export class Registry {
   }
   /** A confirmed claim_lock_fees (lockFeesKeeper.ts), written once from the program's facts; false if already recorded. */
   recordLockFeeClaim(c: LockFeeClaimRow): boolean {
-    return Number(this.db.prepare("INSERT OR IGNORE INTO lock_fee_claims (signature, mint, at, slot, sol_lamports, burn_pool_lamports, operator_lamports, token_burned_raw) VALUES (?,?,?,?,?,?,?,?)")
-      .run(c.signature, c.mint, c.at, c.slot, c.solLamports.toString(), c.toBurnPoolLamports.toString(), c.toOperatorLamports.toString(), c.tokenBurnedRaw.toString()).changes) > 0;
+    return Number(this.db.prepare("INSERT OR IGNORE INTO lock_fee_claims (signature, mint, at, slot, sol_lamports, burn_pool_lamports, operator_lamports, token_burned_raw, paid_lamports, pending_lamports) VALUES (?,?,?,?,?,?,?,?,?,?)")
+      .run(c.signature, c.mint, c.at, c.slot, c.solLamports.toString(), c.toBurnPoolLamports.toString(), c.toOperatorLamports.toString(), c.tokenBurnedRaw.toString(), c.paidLamports?.toString() ?? null, c.pendingLamports?.toString() ?? null).changes) > 0;
   }
   /** Recorded claims, oldest first — one coin's, or every coin's. */
   lockFeeClaims(mint?: string): LockFeeClaimRow[] {
     const rows = (mint ? this.db.prepare("SELECT * FROM lock_fee_claims WHERE mint=? ORDER BY at, signature").all(mint) : this.db.prepare("SELECT * FROM lock_fee_claims ORDER BY at, signature").all()) as Row[];
-    return rows.map((r) => ({ signature: String(r.signature), mint: String(r.mint), at: Number(r.at), slot: numOrNull(r.slot), solLamports: BigInt(String(r.sol_lamports)), toBurnPoolLamports: BigInt(String(r.burn_pool_lamports)), toOperatorLamports: BigInt(String(r.operator_lamports)), tokenBurnedRaw: BigInt(String(r.token_burned_raw)) }));
+    return rows.map((r) => ({ signature: String(r.signature), mint: String(r.mint), at: Number(r.at), slot: numOrNull(r.slot), solLamports: BigInt(String(r.sol_lamports)), toBurnPoolLamports: BigInt(String(r.burn_pool_lamports)), toOperatorLamports: BigInt(String(r.operator_lamports)), tokenBurnedRaw: BigInt(String(r.token_burned_raw)), ...(r.paid_lamports != null ? { paidLamports: BigInt(String(r.paid_lamports)), pendingLamports: BigInt(String(r.pending_lamports ?? "0")) } : {}) }));
   }
   signatures(mint: string, eventId: string): SignatureRow[] { return (this.db.prepare("SELECT * FROM signatures WHERE mint=? AND event_id=? ORDER BY sent_at").all(mint, eventId) as Row[]).map(toSig); }
   setSignatureStatus(signature: string, status: SignatureRow["status"], err: string | null, slot: number | null): void { this.db.prepare("UPDATE signatures SET status=?, err=?, slot=COALESCE(?, slot) WHERE signature=?").run(status, err, slot, signature); }

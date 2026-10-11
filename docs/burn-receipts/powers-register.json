@@ -4,7 +4,7 @@
     "name": "burn_receipts",
     "version": "0.1.0",
     "address_in_idl": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
-    "idl_sha256": "f045576840ddf5fa034e48749dabd904fa52cfd90ed9ee8b7a2c364c2411881a"
+    "idl_sha256": "6426037e9e087b8a34465049f2d307027a4805da6134b856639b84b56a54c8f6"
   },
   "roles": {
     "anyone": "Anyone with a funded wallet. Pays only the transaction fee (and rent where noted); chooses no amounts.",
@@ -164,7 +164,7 @@
         }
       ],
       "gated_by": null,
-      "can": "LAUNCHPAD-PATH §35: collect the locked LP's accrued fees from Raydium's CPMM lock program (collect_cp_fees, signed by the FEE_KEYS PDA, into FEE_KEYS's own WSOL and token accounts) and split them by compiled constants: the SOL side 80 % (LOCK_FEE_BURN_BPS) to the coin's fee PDA (its burn pool) and 20 % (LOCK_FEE_OPERATOR_BPS) to the compiled OPERATOR_TREASURY; burn the coin side in the same instruction; write a receipt memo; FEE_KEYS's transient accounts are closed with their rent back to the cranker.",
+      "can": "LAUNCHPAD-PATH §35: collect ALL the recorded position's accrued fees (no caller-chosen amount: lp-lock blind review L-3; against the FeeKeyRecord's pool, so a pool replacement cannot strand them: L-1) from Raydium's CPMM lock program (collect_cp_fees, signed by the FEE_KEYS PDA, into FEE_KEYS's own WSOL and token accounts) and split them by compiled constants: the SOL side 80 % (LOCK_FEE_BURN_BPS) to the coin's fee PDA (its burn pool) and 20 % (LOCK_FEE_OPERATOR_BPS) to the compiled OPERATOR_TREASURY; burn the coin side in the same instruction; write a receipt memo (v2: with the operator share delivered and still pending) when SOL was claimed or delivered; FEE_KEYS's transient accounts are closed with their rent back to the cranker who created them (a pre-existing account's rent goes to the fee PDA).",
       "cannot": "Choose the split, the treasury or any recipient (the treasury is compiled per cluster; the mainnet placeholder refuses every claim); claim another coin's position or pool; touch the LP principal (the lock program pays only accrued fees) or the Fee Key (re-checked after the CPI, hard error); let the lock program change FEE_KEYS's owner, data or lamports or its accounts' owner, mint, delegate or close authority; claim while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
       "timelock": null,
       "sunset": "None.",
@@ -278,7 +278,7 @@
         }
       ],
       "gated_by": null,
-      "can": "Create the ONE TokenConfig of a mint: the burn rule (immutable thereafter), the feed id, the memo text, the rules-file hash, the attester set and quorum; fund the fee PDA with the rule's reserve; for buyback policy 0, read and PIN the LaunchLab platform (its cpConfigId; platformCpCreator must be unset or the fee PDA) and require it to lock 100 % of the migrated LP with the Fee Key to the program's FEE_KEYS PDA (platformLockNftWallet = FEE_KEYS, platformScale 1,000,000, creator and burn scale 0 — LAUNCHPAD-PATH §35).",
+      "can": "Create the ONE TokenConfig of a mint: the burn rule (immutable thereafter), the feed id, the memo text, the rules-file hash, the attester set and quorum; fund the fee PDA with the rule's reserve; for buyback policies 0 and 2, read and PIN the LaunchLab platform — only the operator's compiled BURNTICKER_PLATFORM (per cluster; the mainnet placeholder refuses: lp-lock blind review RL-3) — (its cpConfigId; platformCpCreator must be unset or the fee PDA) and, for policy 0, require it to lock 100 % of the migrated LP with the Fee Key to the program's FEE_KEYS PDA (platformLockNftWallet = FEE_KEYS, platformScale 1,000,000, creator and burn scale 0 — LAUNCHPAD-PATH §35).",
       "cannot": "Run twice for a mint; be run by anyone without the mint keypair; change anything afterwards.",
       "timelock": null,
       "sunset": "Single use per mint.",
@@ -329,8 +329,8 @@
         }
       ],
       "gated_by": null,
-      "can": "LAUNCHPAD-PATH §35: once per mint, record the coin's permanent LP lock — the Raydium CPMM lock program's LockedCpLiquidityState (owner, discriminator, PDA [\"locked_liquidity\", nft]) for the token's registered, verified pool, holding a strict majority of the pool's LP, whose Fee Key NFT the program's FEE_KEYS PDA holds — in a FeeKeyRecord [\"fee_key\", mint]; the payer pays its rent.",
-      "cannot": "Register a position of another pool, a minority position (so a griefer's dust lock cannot take the slot), a position whose Fee Key FEE_KEYS does not hold, or a second position; change the record; move any funds or the Fee Key.",
+      "can": "LAUNCHPAD-PATH §35: once per mint, record the coin's permanent LP lock — the Raydium CPMM lock program's LockedCpLiquidityState (owner, discriminator, PDA [\"locked_liquidity\", nft]) whose Fee Key NFT (supply 1, no mint or freeze authority) the program's FEE_KEYS PDA holds, identified by its LOCKER (state @128; lp-lock blind review RL-2): policy 0 — the token's LaunchLab migration pool (PDA of the pinned cpConfigId, fee-PDA creator) locked by LaunchLab's vault authority, BEFORE register_pool; policy 2 — the verified pair pool locked by the pair's vault; policy 1 — the verified pool. The position must hold a strict majority of the LP in Raydium's lock account for the LP mint. Recorded in a FeeKeyRecord [\"fee_key\", mint]; the payer pays its rent.",
+      "cannot": "Register a position of another pool, a position locked by anyone but the pool's own locker, a minority of the lock account (so a dust or squatter lock cannot take the slot — and a deposit cannot dilute the coin's own position), a position whose Fee Key FEE_KEYS does not hold, or a second position; change the record; move any funds or the Fee Key.",
       "timelock": null,
       "sunset": "Once per token (then frozen).",
       "funds": "Payer → the record's rent.",
@@ -363,8 +363,8 @@
         }
       ],
       "gated_by": null,
-      "can": "Record the Raydium CPMM pool the buyback trades on (pool policy 0) — only LaunchLab's migration pool: the token's LaunchLab pool records the fee PDA as creator, CPMM migration and the platform PINNED at init, the pool is the PDA of the PINNED cpConfigId and the two mints, its pool_creator is the fee PDA, and ≥ 50 % of its live LP is burned or held by Raydium's LP lock. Policy 1: verify the fixed pool (fee-PDA creator, ≥ 50 % LP burned/locked) before any buyback.",
-      "cannot": "Register any other pool (another AmmConfig, a random-keypair pool, a pool whose LP its creator can withdraw); register twice; change a registered pool.",
+      "can": "Record the Raydium CPMM pool the buyback trades on (pool policy 0) — only LaunchLab's migration pool: the token's LaunchLab pool records the fee PDA as creator, CPMM migration and the platform PINNED at init, the pool is the PDA of the PINNED cpConfigId and the two mints, its pool_creator is the fee PDA, ≥ 50 % of its live LP is burned or held by Raydium's LP lock, and (lp-lock blind review RL-3) the mint's FeeKeyRecord exists for this pool — so the pool is verified only when its LP fees reach the burn. Policy 1: verify the fixed pool (fee-PDA creator, ≥ 50 % LP burned/locked) before any buyback.",
+      "cannot": "Register any other pool (another AmmConfig, a random-keypair pool, a pool whose LP its creator can withdraw); register a policy-0 pool whose migration Fee Key FEE_KEYS does not hold (no FeeKeyRecord); register twice; change a registered pool.",
       "timelock": null,
       "sunset": "Once per token (then frozen).",
       "funds": "None.",
@@ -516,7 +516,7 @@
   ],
   "non_powers": [
     "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned); tokens leave only by burn.",
-    "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it.",
+    "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).",
     "No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.",
     "No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.",
     "No fee is charged by the program, so there is no fee to change. The LP-fee split of claim_lock_fees (80 % burn pool / 20 % operator) and the operator treasury are compiled constants: no instruction, config field or key changes them (LAUNCHPAD-PATH §35).",
@@ -539,7 +539,7 @@
       "holder": "the key that created the LaunchLab platform — not transferable (no admin-change instruction; the platform PDA is seeded by the admin key)",
       "timelock": "none (untimelocked key)",
       "can": "updatePlatformConfig: fee rate and wallets — including platformLockNftWallet, which receives every migration's Fee Key (LAUNCHPAD-PATH §35: burn_receipts' FEE_KEYS PDA) — cpConfigId, platformCpCreator, LP lock/burn scales (migrateCpLockNftScale; Burnticker: 1,000,000 / 0 / 0, all LP locked), vesting, curve rules — for launches that have not migrated yet.",
-      "effect_on_burn_receipts": "Pinned at initialize_token (review-3 M-3): a later cpConfigId change cannot redirect register_pool (only replace_pool uses the platform's current cpConfigId, after 7 continuous days of a dead pool); platformCpCreator / scales and (LAUNCHPAD-PATH §35) platformLockNftWallet = FEE_KEYS with scales 1,000,000/0/0 are checked at init. Changing them between a token's init and its migration can still strand the registration (recovered with set_registration_policy, 48 h, until the cap sunset) or send that migration's Fee Key — and so its LP fees — to another wallet (the LP itself stays locked; the fees then never reach the burn pool). LAUNCH GATE (re-check R3-3): immediately before LaunchLab's create the launcher re-reads platformCpCreator, the scales, platformLockNftWallet and cpConfigId and refuses on any difference (`burnreceipts-admin.mts verify-platform-pins --mint`)."
+      "effect_on_burn_receipts": "Pinned at initialize_token (review-3 M-3): a later cpConfigId change cannot redirect register_pool (only replace_pool uses the platform's current cpConfigId, after 7 continuous days of a dead pool); platformCpCreator / scales and (LAUNCHPAD-PATH §35) platformLockNftWallet = FEE_KEYS with scales 1,000,000/0/0 are checked at init. Changing them between a token's init and its migration can still strand the registration (recovered with set_registration_policy, 48 h, until the cap sunset) or send that migration's Fee Key — and so its LP fees — to another wallet (the LP itself stays locked; the fees then never reach the burn pool). Since lp-lock blind review r2 (RL-3) such a coin fails closed: register_pool requires the FEE_KEYS-held migration position to be recorded, so its pool is never verified and no buyback runs on it; and initialize_token pins only the operator's compiled BURNTICKER_PLATFORM, whose admin key is the operator's (to move under the Squads vault). LAUNCH GATE (re-check R3-3): immediately before LaunchLab's create the launcher re-reads platformCpCreator, the scales, platformLockNftWallet and cpConfigId and refuses on any difference (`burnreceipts-admin.mts verify-platform-pins --mint`)."
     }
   ]
 }

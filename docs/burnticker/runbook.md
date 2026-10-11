@@ -230,7 +230,10 @@ the keepers afterwards.
    `systemctl --user start mct-burnkeeper && tail -n 20 logs/burnkeeper.log` (banner: `execution program`, mainnet, the mint, the fee PDA, attesters/quorum, the rules sha; then `[attest] … attested and submitted` for the baseline, `[fees] curve: …`, and `waiting for the CPMM pool` until graduation) ·
    `systemctl --user start mct-burnticker-keeper && tail -n 20 logs/burnticker-keeper.log` (banner: `program … (REAL: …)`) ·
    `sh scripts/ops/deploy-sites.sh` · `curl -s https://<deficit host>/status.json | jq '.execution, .rules.sha256, .addresses.mint, .program.attestation, .program.queue'`.
-9. **After graduation:** anyone registers the migrated CPMM pool —
+9. **After graduation** (LP-lock round 2, 2026-10-11: the Fee Key FIRST, then the pool — `register_pool` takes the FeeKeyRecord and refuses
+   `FeeKeyNotRegistered` without it; the keeper does both steps itself on its next cycle, `src/lib/burnticker/lockFeesKeeper.ts`; by hand:)
+   `$R scripts/burnreceipts-admin.mts register-fee-key --cluster mainnet --program $BURNTICKER_PROGRAM_ID --payer <keeper key> --mint <mint>` (finds the
+   migration pool PDA and the lock position whose locker is LaunchLab's vault_auth and whose Fee Key the fee-keys PDA holds), then
    `$R scripts/burnreceipts-admin.mts register-pool --cluster mainnet --program $BURNTICKER_PROGRAM_ID --payer <keeper key> --mint <mint> --pool <cpmmAfterGraduation.expectedPoolId>`
    (dry run shows `lpSupply`, `poolCreator` and the simulation: it must be the PDA of the PINNED cpConfigId with the fee PDA as creator and
    ≥ 50 % of the LP burned/locked; then `--send --i-understand-this-spends-real-sol`). If LaunchLab migrated elsewhere (simulation:

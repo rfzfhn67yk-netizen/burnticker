@@ -19,7 +19,7 @@ use anchor_spl::associated_token::{self, get_associated_token_address, Associate
 use anchor_spl::token::{self, spl_token, Mint, Token};
 
 use crate::constants::*;
-use crate::cpmm::PoolView;
+use crate::cpmm::{self, PoolView};
 use crate::error::BurnError;
 use crate::events::{FeeKeyRegistered, LockFeesClaimed};
 use crate::guards::{require_fee_pda_intact, require_fee_token_account_intact};
@@ -34,6 +34,8 @@ pub struct LockedLiquidityView {
     pub locked_lp: u64,
     pub pool: Pubkey,
     pub fee_nft_mint: Pubkey,
+    /// The liquidity owner who locked (LaunchLab's vault authority for a migration, the pair's vault for lock_lp).
+    pub locker: Pubkey,
     pub lp_mint: Pubkey,
 }
 
@@ -50,6 +52,7 @@ impl LockedLiquidityView {
             locked_lp: u64::from_le_bytes(d[LL_LOCKED_LP_AMOUNT..LL_LOCKED_LP_AMOUNT + 8].try_into().expect("8 bytes")),
             pool: pk(LL_LOCKED_POOL),
             fee_nft_mint: pk(LL_LOCKED_FEE_NFT_MINT),
+            locker: pk(LL_LOCKED_LOCKER),
             lp_mint: pk(LL_LOCKED_LP_MINT),
         };
         require_keys_eq!(v.fee_nft_mint, *fee_nft_mint, BurnError::InvalidLockAccount);
@@ -71,9 +74,18 @@ fn token_amount(acc: &AccountInfo) -> Result<u64> {
     Ok(spl_token::state::Account::unpack(&acc.try_borrow_data()?).map_err(|_| BurnError::FeeAccountTampered)?.amount)
 }
 
-/// PERMISSIONLESS, ONCE per mint. Records the coin's lock position: the lock program's LockedCpLiquidityState for the registered
-/// (verified) pool whose Fee Key NFT FEE_KEYS holds. The position must hold a strict majority of the pool's LP, so only one position
-/// can ever qualify and a griefer's dust lock (Fee Key sent to FEE_KEYS) cannot take the slot.
+/// PERMISSIONLESS, ONCE per mint. Records the coin's lock position: the lock program's LockedCpLiquidityState for the coin's pool
+/// whose Fee Key NFT FEE_KEYS holds. lp-lock blind review RL-2: the position is identified by WHO LOCKED it (LockedCpLiquidityState
+/// @128, the liquidity owner), not by a majority of the pool's live LP supply (an unlocked deposit could dilute that and block the
+/// coin, the blind-3 M-2 class):
+///   * policy 0 (LaunchLab): the pool is the token's migration pool — the PDA of the pinned cpConfigId and the two mints, with the
+///     fee PDA as pool_creator — and the locker is LaunchLab's vault authority PDA ["vault_auth_seed"]. This runs BEFORE register_pool
+///     (which requires the record: RL-3), or on an already registered pool that is that same migration pool;
+///   * policy 2 (pair): the registered, verified pair pool, locker = its pool_creator (the pair's SOL vault, checked by
+///     register_pair_pool);
+///   * policy 1 (fixed pool): the registered, verified pool; no locker is known.
+/// Sanity floor for all: the position holds a strict majority of ALL LP in Raydium's lock account for the LP mint (deposits cannot
+/// move that), and the Fee Key NFT is a 0-decimal, supply-1 mint with no mint and no freeze authority (I-6).
 #[event_cpi]
 #[derive(Accounts)]
 pub struct RegisterFeeKey<'info> {
@@ -86,14 +98,15 @@ pub struct RegisterFeeKey<'info> {
     /// CHECK: the FEE_KEYS PDA (seeds-checked); data-less.
     #[account(seeds = [FEE_KEYS_SEED], bump)]
     pub fee_keys: UncheckedAccount<'info>,
-    /// CHECK: the registered pool (address = config.cpmm_pool); parsed by cpmm::PoolView.
-    #[account(address = config.cpmm_pool @ BurnError::PoolNotRegistered)]
+    /// CHECK: the coin's pool (policy 0: the migration pool PDA; policies 1/2: config.cpmm_pool) — checked in the handler.
     pub pool_state: UncheckedAccount<'info>,
     pub fee_nft_mint: Box<Account<'info, Mint>>,
     /// CHECK: FEE_KEYS's ATA for the NFT mint holding 1 (checked in the handler).
     pub fee_nft_account: UncheckedAccount<'info>,
-    /// CHECK: the lock program's LockedCpLiquidityState (owner, discriminator, PDA, pool, LP mint checked in the handler).
+    /// CHECK: the lock program's LockedCpLiquidityState (owner, discriminator, PDA, pool, LP mint, locker checked in the handler).
     pub locked_liquidity: UncheckedAccount<'info>,
+    /// CHECK: Raydium's lock account for the pool's LP mint, ATA(LOCK_CPMM_AUTHORITY, lp_mint) (address-checked in the handler).
+    pub lp_lock_vault: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -101,18 +114,47 @@ pub fn handle_register_fee_key(ctx: Context<RegisterFeeKey>) -> Result<()> {
     let a = &ctx.accounts;
     let c = &a.config;
     require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
-    require!(c.cpmm_pool != Pubkey::default(), BurnError::PoolNotRegistered);
-    require!(c.pool_verified, BurnError::PoolNotVerified);
+    let pool_key = a.pool_state.key();
     let pool = PoolView::load(&a.pool_state.to_account_info())?;
+    let mint = c.mint;
     let nft_mint = a.fee_nft_mint.key();
+    // I-6: a real Fee Key — one indivisible token whose mint can never mint again or freeze it.
     require!(a.fee_nft_mint.decimals == 0 && a.fee_nft_mint.supply == 1, BurnError::FeeKeyNotHeld);
+    require!(a.fee_nft_mint.mint_authority.is_none() && a.fee_nft_mint.freeze_authority.is_none(), BurnError::FeeKeyNotHeld);
     require_fee_key_held(&a.fee_nft_account.to_account_info(), &a.fee_keys.key(), &nft_mint)?;
     let lock = LockedLiquidityView::load(&a.locked_liquidity.to_account_info(), &nft_mint)?;
-    require_keys_eq!(lock.pool, a.pool_state.key(), BurnError::InvalidLockAccount);
+    require_keys_eq!(lock.pool, pool_key, BurnError::InvalidLockAccount);
     require_keys_eq!(lock.lp_mint, pool.lp_mint, BurnError::InvalidLockAccount);
-    require!((lock.locked_lp as u128) * BPS_DENOMINATOR > FEE_KEY_MIN_LOCKED_LP_BPS * pool.lp_supply as u128, BurnError::LockNotMajority);
+    match c.registration_policy {
+        POOL_POLICY_CREATOR_IS_FEE_PDA => {
+            // The migration pool: the pinned cpConfigId's pool PDA for WSOL / mint, created with the fee PDA as pool_creator.
+            require!(c.ll_cp_config != Pubkey::default(), BurnError::PoolNotRegistered);
+            require_keys_eq!(pool_key, cpmm::pool_pda(&c.ll_cp_config, &NATIVE_MINT, &mint), BurnError::NotMigrationPool);
+            require!(pool.wsol_is_token_0(&NATIVE_MINT, &mint).is_some(), BurnError::InvalidPoolMints);
+            let (fee_pda, _) = Pubkey::find_program_address(&[FEE_SEED, mint.as_ref()], &crate::ID);
+            require_keys_eq!(pool.pool_creator, fee_pda, BurnError::PoolCreatorMismatch);
+            if c.cpmm_pool != Pubkey::default() {
+                require_keys_eq!(c.cpmm_pool, pool_key, BurnError::FeeKeyMismatch);
+            }
+            let (vault_auth, _) = Pubkey::find_program_address(&[LAUNCHLAB_VAULT_AUTH_SEED], &LAUNCHLAB_PROGRAM_ID);
+            require_keys_eq!(lock.locker, vault_auth, BurnError::LockerMismatch);
+        }
+        POOL_POLICY_PAIR_CURVE => {
+            require!(c.pool_verified && c.cpmm_pool == pool_key, BurnError::PoolNotVerified);
+            require_keys_eq!(lock.locker, pool.pool_creator, BurnError::LockerMismatch);
+        }
+        POOL_POLICY_FIXED => {
+            require!(c.pool_verified && c.cpmm_pool == pool_key, BurnError::PoolNotVerified);
+        }
+        _ => return err!(BurnError::WrongPoolPolicy),
+    }
+    // Sanity floor (RL-2 b): a strict majority of all LP in Raydium's lock account — an unlocked deposit cannot dilute it.
+    let lock_vault = a.lp_lock_vault.to_account_info();
+    require_keys_eq!(*lock_vault.key, get_associated_token_address(&LOCK_CPMM_AUTHORITY, &pool.lp_mint), BurnError::InvalidCpmmAccount);
+    let in_lock = crate::instructions::register_pool::lock_vault_amount(&lock_vault, &pool.lp_mint)?;
+    require!((lock.locked_lp as u128) * BPS_DENOMINATOR > FEE_KEY_MIN_LOCKED_LP_BPS * in_lock as u128, BurnError::LockNotMajority);
 
-    let (mint, pool_key, registrar) = (c.mint, a.pool_state.key(), a.payer.key());
+    let registrar = a.payer.key();
     let (fee_nft_account, locked_liquidity) = (a.fee_nft_account.key(), a.locked_liquidity.key());
     let r = &mut ctx.accounts.fee_key;
     r.version = 1;
@@ -130,12 +172,18 @@ pub fn handle_register_fee_key(ctx: Context<RegisterFeeKey>) -> Result<()> {
 }
 
 /// PERMISSIONLESS (the cranker allowlist of crank_buyback applies while the pre-audit cap is in force). collect_cp_fees on the coin's
-/// lock position, signed by FEE_KEYS, into FEE_KEYS's own WSOL and token accounts; then, in this instruction:
+/// RECORDED lock position (lp-lock blind review L-1: against fee_key.pool, which the lock state pins forever — not config.cpmm_pool,
+/// which replace_pool / apply_registration_policy can move), always for everything accrued (L-3: lp_fee_amount = u64::MAX, no caller
+/// choice), signed by FEE_KEYS, into FEE_KEYS's own WSOL and token accounts; then, in this instruction:
 ///   * the coin side (the whole token account) is burned;
 ///   * the WSOL account is closed into FEE_KEYS and the claimed SOL is split: operator = floor(claimed · 2000 / 10000) to the compiled
-///     OPERATOR_TREASURY, the rest (≥ 80 %) to the coin's fee PDA; the account's rent goes back to the cranker (who paid it when the
-///     account was created in this instruction) and any lamports someone else had put there go to the fee PDA;
-///   * a memo (receipt line) and LockFeesClaimed.
+///     OPERATOR_TREASURY, the rest (≥ 80 %) to the coin's fee PDA; the account's rent goes back to the cranker only when this
+///     instruction created the account (I-5: a pre-existing account's rent, and any lamports someone else had put there, go to the
+///     fee PDA); the same for the coin account's rent;
+///   * a memo (receipt line, v2 with paid/pending) and LockFeesClaimed — only when SOL was claimed or operator_pending was delivered
+///     (I-5: a coin-token donation alone is burned and counted in total_tokens_burned, without a memo or a claim).
+/// No minimum-out on the LP withdrawal (I-4, accepted): a sandwich can shift a claim's WSOL/coin mix toward the burned coin side, at the
+/// sandwicher's cost; nothing is extracted.
 /// The operator share waits in the FeeKeyRecord account while the treasury cannot receive it (below its rent-exempt minimum) and is
 /// paid with the next claim that can deliver it. Only the claimed delta is split; nothing accrued (and nothing pending to pay) is a
 /// no-op (no transfer, no memo, counters unchanged). After the CPI the program
@@ -188,8 +236,8 @@ pub struct ClaimLockFees<'info> {
     pub cpmm_program: UncheckedAccount<'info>,
     /// CHECK: Raydium's vault-and-LP authority PDA; CPMM verifies its seeds.
     pub cpmm_authority: UncheckedAccount<'info>,
-    /// CHECK: the registered pool (address = config.cpmm_pool = fee_key.pool); parsed by cpmm::PoolView.
-    #[account(mut, address = config.cpmm_pool @ BurnError::PoolNotRegistered)]
+    /// CHECK: the recorded position's pool (address = fee_key.pool); parsed by cpmm::PoolView.
+    #[account(mut, address = fee_key.pool @ BurnError::FeeKeyMismatch)]
     pub pool_state: UncheckedAccount<'info>,
     /// CHECK: the pool's LP mint (key-checked against the pool).
     #[account(mut)]
@@ -214,7 +262,7 @@ pub struct ClaimLockFees<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -> Result<()> {
+pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>) -> Result<()> {
     require!(OPERATOR_TREASURY != Pubkey::default(), BurnError::TreasuryNotPinned);
     let now = Clock::get()?.unix_timestamp;
     let a = &ctx.accounts;
@@ -222,15 +270,16 @@ pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -
     require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
     let c = &a.config;
     require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
-    require!(c.pool_verified, BurnError::PoolNotVerified);
+    // L-1: no pool_verified / config.cpmm_pool check — the record was verified at register_fee_key and its pool is immutable in the
+    // lock state; a later pool replacement must not strand the position's fees (they still go 80 % burn pool / 20 % treasury).
     let r = &a.fee_key;
-    require_keys_eq!(r.pool, c.cpmm_pool, BurnError::FeeKeyMismatch);
     let mint_key = c.mint;
     let pool = PoolView::load(&a.pool_state.to_account_info())?;
     let wsol0 = pool.wsol_is_token_0(&NATIVE_MINT, &mint_key).ok_or(BurnError::InvalidPoolMints)?;
     require_keys_eq!(a.token_0_vault.key(), pool.token_0_vault, BurnError::InvalidCpmmAccount);
     require_keys_eq!(a.token_1_vault.key(), pool.token_1_vault, BurnError::InvalidCpmmAccount);
     require_keys_eq!(a.lp_mint.key(), pool.lp_mint, BurnError::InvalidCpmmAccount);
+    require_keys_eq!(pool.lp_mint, r.lp_mint, BurnError::FeeKeyMismatch);
     require_keys_eq!(a.lock_lp_vault.key(), get_associated_token_address(&LOCK_CPMM_AUTHORITY, &pool.lp_mint), BurnError::InvalidCpmmAccount);
     let fee_keys_key = a.fee_keys.key();
     require_fee_key_held(&a.fee_nft_account.to_account_info(), &fee_keys_key, &r.fee_nft_mint)?;
@@ -239,6 +288,8 @@ pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -
     let fee_keys_seeds: &[&[u8]] = &[FEE_KEYS_SEED, &[ctx.bumps.fee_keys]];
     let fee_keys = a.fee_keys.to_account_info();
     let (wsol_acc, tok_acc) = (a.fee_keys_wsol.to_account_info(), a.fee_keys_token.to_account_info());
+    // I-5: whose rent is it — the cranker's only if this instruction creates the account.
+    let (wsol_created, tok_created) = (wsol_acc.lamports() == 0, tok_acc.lamports() == 0);
     for (acc, m) in [(&wsol_acc, a.wsol_mint.to_account_info()), (&tok_acc, a.mint.to_account_info())] {
         associated_token::create_idempotent(CpiContext::new(
             associated_token::ID,
@@ -263,7 +314,7 @@ pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -
     let (r0, r1) = if wsol0 { (&wsol_acc, &tok_acc) } else { (&tok_acc, &wsol_acc) };
     let (m0, m1) = (pool.token_0_mint, pool.token_1_mint);
     let mut data = LOCK_COLLECT_CP_FEES_DISCRIMINATOR.to_vec();
-    data.extend_from_slice(&lp_fee_amount.to_le_bytes());
+    data.extend_from_slice(&u64::MAX.to_le_bytes()); // L-3: always everything accrued
     let metas = vec![
         AccountMeta::new_readonly(LOCK_CPMM_AUTHORITY, false),
         AccountMeta::new_readonly(fee_keys_key, true),
@@ -323,7 +374,11 @@ pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -
     }
     token::close_account(CpiContext::new_with_signer(
         token::ID,
-        token::CloseAccount { account: tok_acc.clone(), destination: a.cranker.to_account_info(), authority: fee_keys.clone() },
+        token::CloseAccount {
+            account: tok_acc.clone(),
+            destination: if tok_created { a.cranker.to_account_info() } else { a.fee_vault.to_account_info() },
+            authority: fee_keys.clone(),
+        },
         &[fee_keys_seeds],
     ))?;
     // The SOL side: close the WSOL account into FEE_KEYS, then pay out exactly what arrived.
@@ -336,7 +391,7 @@ pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -
     let released = fee_keys.lamports().checked_sub(before_close).ok_or(BurnError::MathOverflow)?;
     let (to_operator, to_burn_pool) = split_lock_fees(claimed);
     let extra = released.checked_sub(claimed).ok_or(BurnError::MathOverflow)?;
-    let rent_back = extra.min(Rent::get()?.minimum_balance(spl_token::state::Account::LEN));
+    let rent_back = if wsol_created { extra.min(Rent::get()?.minimum_balance(spl_token::state::Account::LEN)) } else { 0 };
     let to_fee_vault = to_burn_pool + (extra - rent_back);
     // The operator share is parked in the FeeKeyRecord account (program-owned) and paid to the treasury from there as soon as the
     // treasury can receive it: a treasury holding less than its rent-exempt minimum (an unfunded Squads vault) cannot be credited a
@@ -361,12 +416,17 @@ pub fn handle_claim_lock_fees(ctx: Context<ClaimLockFees>, lp_fee_amount: u64) -
     };
     let new_pending = pending - operator_paid;
 
-    if claimed == 0 && tokens == 0 && operator_paid == 0 {
+    if claimed == 0 && operator_paid == 0 {
+        // Nothing accrued and nothing delivered: no receipt, no claim. Donated coin tokens (if any) were burned above.
+        if tokens > 0 {
+            let r = &mut ctx.accounts.fee_key;
+            r.total_tokens_burned = r.total_tokens_burned.saturating_add(tokens);
+        }
         return Ok(());
     }
-    let memo_text = memo::format_lock_fees(c.memo_prefix_str(), claimed, to_burn_pool, to_operator, tokens, &r.fee_nft_mint);
+    let memo_text = memo::format_lock_fees(c.memo_prefix_str(), claimed, to_burn_pool, to_operator, operator_paid, new_pending, tokens, &r.fee_nft_mint);
     memo::emit_memo(&a.memo_program.to_account_info(), &memo_text)?;
-    let (pool_key, nft_mint, cranker) = (c.cpmm_pool, r.fee_nft_mint, a.cranker.key());
+    let (pool_key, nft_mint, cranker) = (r.pool, r.fee_nft_mint, a.cranker.key());
     let r = &mut ctx.accounts.fee_key;
     r.set_operator_pending(new_pending);
     r.claims = r.claims.saturating_add(1);

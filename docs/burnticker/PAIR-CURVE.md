@@ -211,10 +211,21 @@ pool (blind review 2 I-4: aggregators may route there; the site links only the r
    creation supply, not the live one, so a later depositor cannot dilute the ratio and block registration (the class of blind-review-3
    M-2). A pool whose LP is not locked yet is refused (`LpNotLocked`).
 5. **The Fee Key** (LAUNCHPAD-PATH §35): after registration, burn_receipts' permissionless `register_fee_key` records the side's lock
-   position (the lock program's LockedCpLiquidityState for the registered pool, holding a majority of its LP, whose NFT FEE_KEYS holds)
-   in a FeeKeyRecord; `claim_lock_fees` then collects the LP fees with the FEE_KEYS signature — SOL 80 % to the side's burn pool, 20 %
+   position in a FeeKeyRecord — the lock program's LockedCpLiquidityState for the registered pool whose NFT FEE_KEYS holds, identified
+   by its **locker** (state @128 = the pair's SOL vault, which `lock_lp` also re-checks after the CPI) and holding a strict majority of
+   the LP in Raydium's lock account ATA(LOCK_CPMM_AUTHORITY, lp_mint) — so a later deposit cannot dilute it (lp-lock blind review 2026-10-11
+   RL-2; before r2 the majority was measured against the live `lp_supply`); `claim_lock_fees` then collects the LP fees with the FEE_KEYS signature — SOL 80 % to the side's burn pool, 20 %
    to the compiled operator treasury (parked in the record while the treasury cannot receive it), the coin side burned, a receipt memo.
    The keeper's order per side: graduate → lock_lp → register_pair_pool → register_fee_key → seed swap → claim_lock_fees on its cadence.
+   `claim_lock_fees` always collects everything accrued (no amount argument, r2 L-3) against the FeeKeyRecord's pool (r2 L-1).
+6. **Fallback if the lock cannot be made** (r2 L-2): `lock_lp` depends on Raydium's upgradeable lock program. If a graduated side's LP
+   is still unlocked 30 days (`LP_LOCK_FALLBACK_SECS`) after the graduation decision, anyone may call pair_curve's `burn_lp(side)`: it
+   burns all of the vault's LP for that side, records it in `lp_locked` (so step 4 still passes on burned LP) and closes the LP account
+   into the side's burn pool. That side then earns no LP fees. `burn_lp` is the **only** instruction that destroys LP; it refuses before
+   the 30 days and once `lock_lp` ran. The keeper locks at graduation and alerts on any graduated side still unlocked.
+   **LP policy (round 2, 2026-10-11).** The LP is locked forever. `burn_lp` exists as a fallback — the only path that destroys LP; used only if Raydium's lock refuses for 30 days. The keeper sends it only when it is due
+   and raises `pair-side-unlocked` for every graduated side still unlocked, from the first cycle after graduation (before the fallback is
+   due as well), so a refusing lock is a visible alarm long before the fallback could run.
 
 Nothing else in `burn_receipts` changed: `register_pool` (LaunchLab, policy 0), `replace_pool`, the fixed-pool fallback and every
 post-CPI guard are untouched; `crank_buyback` only needs `pool_verified` and the registered address, which `register_pair_pool` sets.
@@ -289,7 +300,8 @@ on an undescribed instruction or signer):
 | `init_pair` | payer + the creator recorded in both TokenConfigs | create the pair once (Burnticker's compiled-in platform only); mint the supplies into the vaults; revoke mint authority |
 | `buy` / `sell` | anyone, for their own wallet | trade along the curve at the formula's price while Open (the trade that meets the condition commits the pair); after a void, redeem pro rata, no fee |
 | `graduate` | anyone | once per side on a committed pair; creates its side's pool, burns the leftover tokens, pays the side's escrowed burn share; the LP stays in the vault for lock_lp |
-| `lock_lp` | anyone | once per side after graduate: locks ALL of the pool's LP in Raydium's CPMM lock forever, Fee Key NFT to burn_receipts' FEE_KEYS PDA (LAUNCHPAD-PATH §35) |
+| `lock_lp` | anyone | once per side after graduate: locks ALL of the pool's LP in Raydium's CPMM lock forever, Fee Key NFT to burn_receipts' FEE_KEYS PDA (LAUNCHPAD-PATH §35); round 2: the lock state's locker (@128) must be the pair vault |
+| `burn_lp` | anyone | round 2 (2026-10-11) fallback, once pools[side] is set, lp_locked[side] is 0 and 30 days have passed since graduation started (`LP_LOCK_FALLBACK_SECS`; `LpLockFallbackNotDue` before): burns the vault's LP, records it in lp_locked, closes the LP account into the side's fee vault (event `LpBurnedFallback`) — the only path that destroys LP; used only if Raydium's lock refuses for 30 days |
 | `void_pair` | anyone | after the deadline if never committed; on a committed pair, each missing side ≥ 3 days after the commit while Raydium blocks it, or ≥ 30 days after it whatever the reason |
 | `claim_developer_fee` | anyone | pay the accrued 25 bps to the developer wallet recorded at init |
 | `close_pair` | anyone | Voided pairs with nothing circulating; burn the returned supplies; rent to the recorded creator; residue (and an accrual the developer wallet cannot receive) to the burn pools |

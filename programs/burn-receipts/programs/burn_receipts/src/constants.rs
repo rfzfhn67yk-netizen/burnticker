@@ -224,14 +224,33 @@ pub const LOCK_FEE_OPERATOR_BPS: u64 = 2_000;
 /// The operator treasury that receives the 20 % (the Squads vault), compiled per cluster like CLUSTER_GENESIS_HASH. The mainnet
 /// build carries the placeholder (all zeros) until the owner's mainnet Squads vault is compiled in: claim_lock_fees then refuses with
 /// TreasuryNotPinned and the fees stay in the lock (nothing is lost). Localnet = the test treasury of the LiteSVM suites.
-#[cfg(not(any(feature = "devnet", feature = "localnet")))]
+#[cfg(not(any(feature = "devnet", feature = "test-pins")))]
 pub const OPERATOR_TREASURY: Pubkey = Pubkey::new_from_array([0u8; 32]);
 #[cfg(feature = "devnet")]
 pub const OPERATOR_TREASURY: Pubkey = pubkey!("A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
-#[cfg(all(feature = "localnet", not(feature = "devnet")))]
+#[cfg(all(feature = "test-pins", not(feature = "devnet")))]
 pub const OPERATOR_TREASURY: Pubkey = Pubkey::new_from_array([0x7e; 32]);
-/// A position registered with register_fee_key must hold a strict majority of the pool's LP at registration: only one position can,
-/// so a griefer who locks dust with its Fee Key sent to FEE_KEYS cannot take the coin's slot (registration is once per mint).
+
+/// The ONE LaunchLab PlatformConfig a LaunchLab-path (policy 0) or pair (policy 2) token may pin (lp-lock blind review RL-3): the
+/// operator's own platform, whose admin is held under the Squads vault. Compiled per cluster like pair_curve's BURNTICKER_PLATFORM;
+/// the mainnet build carries the all-zero placeholder and refuses every such initialize_token (PlatformNotPinned) until the owner's
+/// mainnet platform is compiled in. test-pins / localnet = the LiteSVM harness's test platform.
+#[cfg(not(any(feature = "devnet", feature = "test-pins")))]
+pub const BURNTICKER_PLATFORM: Pubkey = Pubkey::new_from_array([0u8; 32]);
+#[cfg(feature = "devnet")]
+pub const BURNTICKER_PLATFORM: Pubkey = pubkey!("GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf");
+#[cfg(all(feature = "test-pins", not(feature = "devnet")))]
+pub const BURNTICKER_PLATFORM: Pubkey = Pubkey::new_from_array([0x5a; 32]);
+
+/// LaunchLab's vault authority PDA ["vault_auth_seed"] (SDK src/raydium/launchpad/pda.ts AUTH_SEED): the liquidity owner of the
+/// migration's LP lock — LockedCpLiquidityState @128 records it (lp-lock blind review I-3; devnet $LOCKT: 5xqNaZXX…).
+pub const LAUNCHLAB_VAULT_AUTH_SEED: &[u8] = b"vault_auth_seed";
+/// LockedCpLiquidityState @128: the LIQUIDITY OWNER who locked (the "locker"), not the Fee Key owner.
+pub const LL_LOCKED_LOCKER: usize = 128;
+
+/// register_fee_key identifies the coin's position by its locker (RL-2) and, as a sanity floor that deposits cannot move, requires
+/// it to hold a strict majority of ALL LP in Raydium's lock account for the LP mint (only a competing permanent lock — which pays the
+/// coin — could dilute that, never an unlocked deposit).
 pub const FEE_KEY_MIN_LOCKED_LP_BPS: u128 = 5_000;
 
 /// Review-3 M-2: at registration at least this share of the pool's CURRENT LP (pool.lp_supply) must be burned (lp_supply − LP mint

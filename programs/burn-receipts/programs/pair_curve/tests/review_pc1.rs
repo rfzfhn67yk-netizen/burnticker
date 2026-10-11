@@ -504,8 +504,9 @@ fn pc1_h2_executable_flag_is_the_cause() {
     env.ok(&[ix_sell(&p, &alice.pubkey(), 0, held / 2, 1)], &[&alice]);
 }
 
-/// M-1 REGRESSION: a creator pins its own LaunchLab platform (claim wallet = itself) in both TokenConfigs; init_pair refuses
-/// (PlatformMismatch) because only the platform compiled into the build (BURNTICKER_PLATFORM) is accepted.
+/// M-1 REGRESSION: a creator tries to pin its own LaunchLab platform (claim wallet = itself). Since lp-lock blind review r2 (RL-3)
+/// burn_receipts' initialize_token already refuses any platform but its compiled BURNTICKER_PLATFORM (PlatformNotAllowed); and
+/// init_pair independently refuses a rogue platform account (PlatformMismatch) for tokens that pinned the real one.
 #[test]
 fn pc1_m1_creator_routes_dev_fee_to_itself() {
     let mut env = new_env();
@@ -524,7 +525,9 @@ fn pc1_m1_creator_routes_dev_fee_to_itself() {
         let mut args = init_args(pair_rule(), vec![attester.pubkey()], 1);
         args.admin = creator.pubkey();
         let payer = env.payer.pubkey();
-        env.ok(&[ix_initialize_with_platform(&payer, &creator.pubkey(), &m.pubkey(), args, Some(rogue))], &[&creator, m]);
+        let rogue_init = ix_initialize_with_platform(&payer, &creator.pubkey(), &m.pubkey(), args.clone(), Some(rogue));
+        expect_anchor_err(env.send(&[rogue_init], &[&creator, m]), "PlatformNotAllowed");
+        env.ok(&[ix_initialize_with_platform(&payer, &creator.pubkey(), &m.pubkey(), args, Some(TEST_LAUNCHLAB_PLATFORM))], &[&creator, m]);
     }
     let p = P { ma, mb, creator, attester, pair, vault, dev: Pubkey::default(), amm };
     let mut ix = ix_init_pair(&env, &p, default_args(env.now()));

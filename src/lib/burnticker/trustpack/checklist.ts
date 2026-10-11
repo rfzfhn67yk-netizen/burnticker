@@ -39,6 +39,7 @@ export const OUTFLOW = {
   devClaim: "the accrued 25 bps → the developer wallet fixed at init",
   lockFees: "the locked LP's fees → 80 % to the burn pool, 20 % to the operator treasury (compiled); the coin side burned",
   lock: "the pool's LP → Raydium's lock, forever (the Fee Key held by burn_receipts)",
+  lpBurnFallback: "fallback only, if lock_lp cannot run for 30 days: burn_lp destroys the side's LP (no LP fees then)",
 } as const;
 export type OutflowClass = keyof typeof OUTFLOW;
 
@@ -51,7 +52,7 @@ export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowC
     propose_cap_raise: "none", register_fee_key: "rent", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
     set_registration_policy: "none", submit_reading: "rent", veto_registration_policy: "none",
   },
-  pair_curve: { buy: "trade", sell: "trade", graduate: "graduate", close_pair: "close", init_pair: "rent", void_pair: "none", claim_developer_fee: "devClaim", lock_lp: "lock" },
+  pair_curve: { buy: "trade", sell: "trade", graduate: "graduate", close_pair: "close", init_pair: "rent", void_pair: "none", claim_developer_fee: "devClaim", lock_lp: "lock", burn_lp: "lpBurnFallback" },
 };
 
 export interface MoneyRow { program: ProgramName; instruction: string; class: string; signers: string; outflow: string; outflowClass: OutflowClass; funds: string }

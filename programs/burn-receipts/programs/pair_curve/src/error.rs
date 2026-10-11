@@ -66,4 +66,6 @@ pub enum PairError {
     NothingToLock,
     #[msg("lock_lp: the lock program did not leave the expected lock (LP moved, Fee Key held by FEE_KEYS, state account)")]
     LockMismatch,
+    #[msg("burn_lp: only after LP_LOCK_FALLBACK_SECS (30 days) since the graduation decision with the side's LP still unlocked")]
+    LpLockFallbackNotDue,
 }

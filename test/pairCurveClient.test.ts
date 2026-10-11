@@ -11,7 +11,8 @@ import { accountDiscriminator, encodeType } from "../src/lib/burnReceipts/idlCod
 import { CPMM_PROGRAM_ID, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, PAIR_CURVE_PROGRAM_ID, POOL_POLICY_PAIR_CURVE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
 import { configPda, feeKeysPda, feePda, lockedLiquidityPda, lpLockVault } from "../src/lib/burnReceipts/pda.ts";
 import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, decodePair, feeNftMintPda, pairPda, poolPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda, type PairAccount } from "../src/lib/pairCurve/accounts.ts";
-import { buyIx, lockLpIx, CLAIM_THRESHOLD_LAMPORTS, claimDeveloperFeeIx, closePairIx, createPairMintIxs, graduateIx, initPairIx, pairCurveEventAuthority, planPairCrank, registerSideIx, seedObservationIxs, sellIx, syncNativeIx, voidPairIx } from "../src/lib/pairCurve/client.ts";
+import { burnLpIx, LP_LOCK_FALLBACK_SECS, buyIx, lockLpIx, CLAIM_THRESHOLD_LAMPORTS, claimDeveloperFeeIx, closePairIx, createPairMintIxs, graduateIx, initPairIx, pairCurveEventAuthority, planPairCrank, registerSideIx, seedObservationIxs, sellIx, syncNativeIx, voidPairIx } from "../src/lib/pairCurve/client.ts";
+import { unlockedSides } from "../src/lib/burnKeeper/pairCurveCrank.ts";
 
 const anchorDisc = (kind: "global" | "account", name: string) => crypto.createHash("sha256").update(`${kind}:${name}`).digest().subarray(0, 8);
 const BR = new PublicKey("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
@@ -30,8 +31,8 @@ describe("pairCurve client — IDL and registers", () => {
     assert.ok(BURN_RECEIPTS_IDL.instructions.some((i) => i.name === "register_pair_pool"));
     assert.equal(POOL_POLICY_PAIR_CURVE, 2);
   });
-  test("eight instructions, no admin, no withdraw; the generated Powers Register is current and lists no privileged power", () => {
-    assert.deepEqual(PAIR_CURVE_IDL.instructions.map((i) => i.name).sort(), ["buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "lock_lp", "sell", "void_pair"]);
+  test("nine instructions (burn_lp: the 30-day LP-lock fallback, lp-lock blind review L-2), no admin, no withdraw; the generated Powers Register is current and lists no privileged power", () => {
+    assert.deepEqual(PAIR_CURVE_IDL.instructions.map((i) => i.name).sort(), ["burn_lp", "buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "lock_lp", "sell", "void_pair"]);
     const r = spawnSync(process.execPath, [path.join(import.meta.dirname, "..", "programs", "burn-receipts", "scripts", "pair-curve-powers-register.mjs"), "--check"], { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     const reg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "..", "docs", "burn-receipts", "pair-curve-powers-register.json"), "utf8"));
@@ -201,6 +202,20 @@ describe("pairCurve client — crank planner", () => {
     assert.deepEqual(kinds(planPairCrank(pair, 2_000_000_000 + 3 * 86_400, [true, false])), [["graduate", 1], ["lock", 1], ["void", null]]);
     const { pair: refunding } = pairFixture({ status: STATUS_GRADUATING, pools: [pool, PublicKey.default], refunding: [false, true], lp_locked: [B(1), B(0)] });
     assert.deepEqual(kinds(planPairCrank(refunding, 2_100_000_000, [true, false])), [["wait", null]]);
+  });
+  test("LP-lock round 2: burn_lp is planned only from 30 days after the commit for a side still unlocked; the alert lists every unlocked graduated side", () => {
+    const pool = Keypair.generate().publicKey;
+    const { address, pair } = pairFixture({ status: STATUS_GRADUATED, pools: [pool, pool], graduation_started_at: B(2_000_000_000), lp_locked: [B(0), B(5)] });
+    const early = 2_000_000_000 + LP_LOCK_FALLBACK_SECS - 1, due = 2_000_000_000 + LP_LOCK_FALLBACK_SECS;
+    assert.deepEqual(kinds(planPairCrank(pair, early, [true, true])), [["lock", 0]], "not due: lock_lp only");
+    assert.deepEqual(kinds(planPairCrank(pair, due, [true, true])), [["lock", 0], ["burn_lp", 0]], "due: lock_lp first, burn_lp as the fallback");
+    assert.equal(LP_LOCK_FALLBACK_SECS, 30 * 86_400);
+    assert.deepEqual(unlockedSides([{ address, pair }], early).map((u) => [u.side, u.fallbackDue, u.days]), [["A", false, 29]]);
+    assert.deepEqual(unlockedSides([{ address, pair }], due).map((u) => [u.side, u.fallbackDue]), [["A", true]]);
+    const { pair: locked } = pairFixture({ status: STATUS_GRADUATED, pools: [pool, pool], lp_locked: [B(1), B(1)] });
+    assert.deepEqual(unlockedSides([{ address, pair: locked }], due), []);
+    const ix = burnLpIx({ cranker: Keypair.generate().publicKey, pairAddress: address, pair, side: 0, cluster: "devnet" });
+    assert.equal(ix.keys.filter((k) => k.isSigner).length, 1);
   });
   test("graduated → missing registrations / seeds; voided → wait; a developer accrual over the threshold → claim", () => {
     const pool = Keypair.generate().publicKey;

@@ -81,8 +81,10 @@ export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; c
 /**
  * register_pool (review-2 F5/F14, review-3 M-2/M-3). Policy 0 (default): the token's LaunchLab pool PDA is passed; the program checks
  * it records the fee PDA as creator, CPMM migration and the platform PINNED at init, that the CPMM pool is the PDA of the pinned
- * cpConfigId, that pool_creator is the fee PDA, and that ≥ 50 % of the live LP is burned or locked. `fixedPool: true` (policy 1, or
- * after a set_registration_policy switch): the LaunchLab pool is omitted. `lpMint` is the pool's LP mint (CpmmPool.lpMint).
+ * cpConfigId, that pool_creator is the fee PDA, and that ≥ 50 % of the live LP is burned or locked. lp-lock blind review r2 (RL-3):
+ * policy 0 also passes the mint's FeeKeyRecord ["fee_key", mint] — register_fee_key must have run first for this very pool, so the
+ * pool is verified only when its LP fees reach the burn. `fixedPool: true` (policy 1, or after a set_registration_policy switch): the
+ * LaunchLab pool and the FeeKeyRecord are omitted. `lpMint` is the pool's LP mint (CpmmPool.lpMint).
  */
 export function registerPoolIx(o: { programId: PublicKey; registrar: PublicKey; mint: PublicKey; pool: PublicKey; lpMint: PublicKey; cluster: Cluster; fixedPool?: boolean }): TransactionInstruction {
   const accounts: Record<string, PublicKey> = {
@@ -94,7 +96,10 @@ export function registerPoolIx(o: { programId: PublicKey; registrar: PublicKey; 
     lp_mint: o.lpMint,
     lp_lock_vault: lpLockVault(o.cluster, o.lpMint),
   };
-  if (!o.fixedPool) accounts.launchlab_pool = launchlabPoolPda(LAUNCHLAB_PROGRAM_ID[o.cluster], o.mint);
+  if (!o.fixedPool) {
+    accounts.launchlab_pool = launchlabPoolPda(LAUNCHLAB_PROGRAM_ID[o.cluster], o.mint);
+    accounts.fee_key = feeKeyRecordPda(o.programId, o.mint);
+  }
   return build(o.programId, "register_pool", accounts, {});
 }
 
@@ -107,10 +112,14 @@ export function registerPairPoolIx(o: { programId: PublicKey; registrar: PublicK
 }
 
 /**
- * register_fee_key (LAUNCHPAD-PATH §35) — permissionless, once per mint: records the coin's lock position (Raydium's CPMM lock
- * program state for the registered pool, majority of its LP) whose Fee Key NFT the FEE_KEYS PDA holds, in FeeKeyRecord ["fee_key", mint].
+ * register_fee_key (LAUNCHPAD-PATH §35) — permissionless, once per mint: records the coin's lock position whose Fee Key NFT the
+ * FEE_KEYS PDA holds, in FeeKeyRecord ["fee_key", mint]. lp-lock blind review r2: the position is identified by its LOCKER
+ * (LockedCpLiquidityState @128 — LaunchLab's vault authority for policy 0, the pair's vault for pairs) and must hold a majority of the
+ * LP in Raydium's lock account `lp_lock_vault`; for policy 0 it runs BEFORE register_pool, on the migration pool. `lpMint` defaults to
+ * the CPMM LP mint PDA ["pool_lp_mint", pool].
  */
-export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mint: PublicKey; pool: PublicKey; feeNftMint: PublicKey; cluster: Cluster }): TransactionInstruction {
+export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mint: PublicKey; pool: PublicKey; feeNftMint: PublicKey; cluster: Cluster; lpMint?: PublicKey }): TransactionInstruction {
+  const lpMint = o.lpMint ?? PublicKey.findProgramAddressSync([Buffer.from("pool_lp_mint"), o.pool.toBuffer()], CPMM_PROGRAM_ID[o.cluster])[0];
   return build(o.programId, "register_fee_key", {
     payer: o.payer,
     config: configPda(o.programId, o.mint),
@@ -120,6 +129,7 @@ export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mi
     fee_nft_mint: o.feeNftMint,
     fee_nft_account: feeNftAccount(o.programId, o.feeNftMint),
     locked_liquidity: lockedLiquidityPda(o.cluster, o.feeNftMint),
+    lp_lock_vault: lpLockVault(o.cluster, lpMint),
     system_program: SystemProgram.programId,
   }, {});
 }
@@ -128,12 +138,12 @@ export function registerFeeKeyIx(o: { programId: PublicKey; payer: PublicKey; mi
 export interface LockFeePoolAccounts { pool: PublicKey; lpMint: PublicKey; token0Vault: PublicKey; token1Vault: PublicKey }
 
 /**
- * claim_lock_fees(lp_fee_amount) (LAUNCHPAD-PATH §35) — permissionless (the cranker allowlist applies while the cap is in force).
- * Collects the locked LP's fees with the FEE_KEYS signature; the SOL side goes 80 % to the fee PDA and 20 % to the compiled
- * OPERATOR_TREASURY, the coin side is burned. `lpFeeAmount` defaults to u64::MAX ("everything accrued"). The cranker pays (and gets
- * back) two ATA rents.
+ * claim_lock_fees (LAUNCHPAD-PATH §35) — permissionless (the cranker allowlist applies while the cap is in force). Collects ALL the
+ * locked LP's accrued fees (lp-lock blind review L-3: no amount argument) with the FEE_KEYS signature; the SOL side goes 80 % to the fee
+ * PDA and 20 % to the compiled OPERATOR_TREASURY, the coin side is burned. `pool` must be the FeeKeyRecord's pool (L-1). The cranker
+ * pays (and gets back) the ATA rents it creates.
  */
-export function claimLockFeesIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; feeNftMint: PublicKey; pool: LockFeePoolAccounts; cluster: Cluster; lpFeeAmount?: bigint; treasury?: PublicKey }): TransactionInstruction {
+export function claimLockFeesIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey; feeNftMint: PublicKey; pool: LockFeePoolAccounts; cluster: Cluster; treasury?: PublicKey }): TransactionInstruction {
   const fk = feeKeysPda(o.programId);
   return build(o.programId, "claim_lock_fees", {
     cranker: o.cranker,
@@ -162,7 +172,7 @@ export function claimLockFeesIx(o: { programId: PublicKey; cranker: PublicKey; m
     memo_program: MEMO_PROGRAM_ID,
     associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
     system_program: SystemProgram.programId,
-  }, { lp_fee_amount: o.lpFeeAmount ?? BigInt("18446744073709551615") });
+  }, {});
 }
 
 /** SPL Token SyncNative (instruction 17) — the client prepends it for the fee PDA's WSOL account before every buyback (review-2 F3). */

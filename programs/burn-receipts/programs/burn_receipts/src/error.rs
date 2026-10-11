@@ -150,4 +150,10 @@ pub enum BurnError {
     LockNotMajority,
     #[msg("the Fee Key account, lock position or pool does not match this mint's registered record")]
     FeeKeyMismatch,
+    #[msg("this build pins no Burnticker LaunchLab platform (mainnet placeholder): policy 0/2 tokens cannot be initialised until the owner's platform is compiled in")]
+    PlatformNotPinned,
+    #[msg("the lock position was not made by the pool's own locker (LaunchLab's migration authority, or the pair's vault)")]
+    LockerMismatch,
+    #[msg("policy 0: register the coin's LP-lock Fee Key (register_fee_key) before register_pool — the pool is verified only when its LP fees reach the burn")]
+    FeeKeyNotRegistered,
 }

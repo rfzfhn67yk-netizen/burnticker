@@ -218,7 +218,7 @@ describe("/.well-known/burnticker.json", () => {
     assert.equal(w.links.github, loadTransparency(ROOT).publicRepo.url);
     assert.deepEqual(w.links.x, ["https://x.com/burnticker", "https://x.com/USA_DEFICIT"]);
     assert.equal(w.clusters.devnet.programs.burn_receipts.programId, "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
-    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "e406b969432d3dec0d1a90d15b5bd8132b7be64c24b9a98c55317e38c199adc5"); // the LP-lock release on devnet (vault transaction 7, 2026-10-10)
+    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796"); // the LP-lock r2 fixes on devnet (vault transaction 10, 2026-10-10)
     assert.equal(w.clusters.devnet.squads.vault, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     assert.equal(w.clusters.mainnet.squads.vault, "TODO_MAINNET_SQUADS_VAULT");
     assert.equal(w.security.bountyWallet, "TODO_BOUNTY_WALLET");

@@ -184,9 +184,48 @@ pub fn amm_config_0() -> Pubkey {
     pda(&[b"amm_config", &0u16.to_be_bytes()])
 }
 
-/// LaunchLab migrated `mint` into `p` with the fee PDA as creator.
+/// LaunchLab migrated `mint` into `p` with the fee PDA as creator — and (RL-3) the migration's Fee Key is recorded: suites without
+/// the lock program get a STAND-IN FeeKeyRecord for `p` written directly (what register_fee_key leaves; the real path — LaunchLab's
+/// vault authority as locker, FEE_KEYS holding the NFT — runs in tests/lock_fees.rs and tests/review_lock.rs).
 pub fn launchlab_migrated(env: &mut Env, mint: &Pubkey, p: &Pool) {
     launchlab_state(env, mint, &fee_pda(mint), &p.amm_config);
+    standin_fee_key_record(env, mint, &p.pool, &p.lp_mint);
+}
+
+/// LaunchLab migrated `mint` into `p`, without any FeeKeyRecord (the lock suites run register_fee_key themselves).
+pub fn launchlab_migrated_without_fee_key(env: &mut Env, mint: &Pubkey, p: &Pool) {
+    launchlab_state(env, mint, &fee_pda(mint), &p.amm_config);
+}
+
+/// A FeeKeyRecord for (mint, pool) written straight into the account (test stand-in for register_fee_key).
+pub fn standin_fee_key_record(env: &mut Env, mint: &Pubkey, pool: &Pubkey, lp_mint: &Pubkey) {
+    use anchor_lang::{AccountSerialize, Space};
+    let (key, bump) = Pubkey::find_program_address(&[FEE_KEY_SEED, mint.as_ref()], &burn_receipts::ID);
+    let nft = Pubkey::new_unique();
+    let rec = burn_receipts::state::FeeKeyRecord {
+        version: 1,
+        bump,
+        mint: *mint,
+        pool: *pool,
+        lp_mint: *lp_mint,
+        fee_nft_mint: nft,
+        fee_nft_account: get_associated_token_address(&fee_keys_pda(), &nft),
+        locked_liquidity: Pubkey::find_program_address(&[LOCKED_LIQUIDITY_SEED, nft.as_ref()], &LOCK_CPMM_PROGRAM_ID).0,
+        locked_lp_at_registration: 1,
+        registered_at: 0,
+        claims: 0,
+        total_wsol_claimed: 0,
+        total_to_burn_pool: 0,
+        total_to_operator: 0,
+        total_tokens_burned: 0,
+        last_claim_at: 0,
+        operator_pending: 0,
+        reserved: [0; 56],
+    };
+    let mut data = Vec::with_capacity(8 + burn_receipts::state::FeeKeyRecord::INIT_SPACE);
+    rec.try_serialize(&mut data).unwrap();
+    let lamports = env.svm.minimum_balance_for_rent_exemption(data.len());
+    env.svm.set_account(key, litesvm_account(lamports, data, burn_receipts::ID)).unwrap();
 }
 
 /// create_pool without the LP lock (the launcher keeps every LP token).
@@ -348,4 +387,19 @@ pub fn seed_history(env: &mut Env, p: &Pool, mint: &Pubkey) -> Keypair {
         swap(env, &trader, p, mint, i % 2 == 0, if i % 2 == 0 { SOL / 2 } else { 4_700_000 * TOKEN }).unwrap();
     }
     trader
+}
+
+/// LaunchLab's vault authority PDA ["vault_auth_seed"] — the liquidity owner LaunchLab's migration locks the LP as (devnet $LOCKT's
+/// LockedCpLiquidityState @128 = 5xqNaZXX…, the devnet program's PDA; the harness uses the mainnet LaunchLab id).
+pub fn launchlab_vault_auth() -> Pubkey {
+    Pubkey::find_program_address(&[LAUNCHLAB_VAULT_AUTH_SEED], &LAUNCHLAB_PROGRAM_ID).0
+}
+
+/// Rewrites LockedCpLiquidityState @128 (the locker / liquidity owner) of a lock position: a LiteSVM test cannot sign as LaunchLab's
+/// vault authority PDA, so a migration is simulated by locking from a test wallet and then recording LaunchLab's PDA as the locker —
+/// exactly the bytes the real migration leaves (lp-lock blind review I-3).
+pub fn set_locker(env: &mut Env, locked_liquidity: &Pubkey, locker: &Pubkey) {
+    let mut a = env.svm.get_account(locked_liquidity).expect("lock state");
+    a.data[LL_LOCKED_LOCKER..LL_LOCKED_LOCKER + 32].copy_from_slice(locker.as_ref());
+    env.svm.set_account(*locked_liquidity, a).unwrap();
 }

@@ -30,7 +30,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.8.0";
+export const API_VERSION = "1.9.0";
 export const API_PREFIX = "/api/burnticker/v1";
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
@@ -72,9 +72,11 @@ export const SCHEMAS: Record<string, Schema> = {
     lastClaim: nullable(obj({ at: str, signature: str, sol: str, toBurnPool: str, toOperator: str, tokenBurnedRaw: str, txUrl: nstr, line: str }, ["at", "signature", "sol", "toBurnPool", "toOperator", "line"])),
     totals: obj({ claims: int, sol: str, toBurnPool: str, toOperator: str, tokenBurnedRaw: str }, ["claims", "sol", "toBurnPool", "toOperator"]),
     urls: { type: "object" }, line: str, note: nstr,
+    lastError: { ...nullable(obj({ at: str, error: str, sentence: str }, ["error", "sentence"])), description: "since 1.9.0: the keeper's last refusal for this coin's lock steps, the program error in plain words" },
   }, ["policy", "lockProgram", "feeKey", "feeKeyOwner", "lockedPct", "lastClaim"], { description: "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code). Since 1.8.0." }),
   LpLockPolicy: obj({
-    policy: { const: "locked-forever" }, line: str, lockedPct: num, lockProgram: PUBKEY, lockAuthority: PUBKEY, feeKeysPda: nullable(PUBKEY), operatorTreasury: nullable(PUBKEY), treasuryPinned: bool,
+    policy: { const: "locked-forever" }, line: str, lockedPct: num, lockProgram: PUBKEY, lockAuthority: PUBKEY, feeKeysPda: { ...PUBKEY, description: "never null since 1.9.0: a fixed PDA of the program id" }, operatorTreasury: nullable(PUBKEY), treasuryPinned: bool,
+    platform: { ...nullable(PUBKEY), description: "since 1.9.0: BURNTICKER_PLATFORM compiled into burn_receipts (initialize_token refuses any other LaunchLab platform); null = not pinned (PlatformNotPinned)" }, platformPinned: bool, launchLabLocker: { ...PUBKEY, description: "since 1.9.0: the locker a policy-0 lock position must carry (LaunchLab's vault_auth PDA)" },
     split: { type: "object" }, perSwapAfterGraduationBps: obj({ lpFees: num, toBurnPool: num, toOperator: num, creatorFeeToBurnPool: num, burnedTotal: num }), instructions: obj({ register: str, claim: str }), urls: { type: "object" },
   }, ["policy", "lockProgram", "split"], { description: "The platform-wide LP policy (since 1.8.0)." }),
   BurnMapping: obj({ fractionOfPool: { type: "number", minimum: 0.01, maximum: 1, description: "buyback: fraction of the burn pool spent buying the token at market, all of it burned (≤ 0.10 for recurring rules; a one-shot may go to 1.00 since 1.4.0)" }, tokens: { type: "integer", minimum: 1, description: "vault: tokens burned from the vesting vault" } }, [], { description: "Exactly one key." }),

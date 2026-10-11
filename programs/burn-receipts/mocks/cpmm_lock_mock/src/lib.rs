@@ -48,6 +48,20 @@ fn create_ata<'a>(payer: &AccountInfo<'a>, ata: &AccountInfo<'a>, wallet: &Accou
     invoke(&ix, &[payer.clone(), ata.clone(), wallet.clone(), mint.clone(), system.clone(), token.clone(), ata_prog.clone()])
 }
 
+/// Anchor `init` semantics (lp-lock blind review I-2 / MF-2): an address someone pre-funded is adopted (top up to rent, allocate,
+/// assign) instead of failing the way a bare create_account does — the real program uses Anchor `init` and accepts it.
+fn create_or_adopt<'a>(payer: &AccountInfo<'a>, acc: &AccountInfo<'a>, system: &AccountInfo<'a>, space: usize, owner: &Pubkey, seeds: &[&[&[u8]]]) -> ProgramResult {
+    let need = Rent::get()?.minimum_balance(space);
+    if acc.lamports() == 0 {
+        return invoke_signed(&system_instruction::create_account(payer.key, acc.key, need, space as u64, owner), &[payer.clone(), acc.clone(), system.clone()], seeds);
+    }
+    if acc.lamports() < need {
+        invoke(&system_instruction::transfer(payer.key, acc.key, need - acc.lamports()), &[payer.clone(), acc.clone(), system.clone()])?;
+    }
+    invoke_signed(&system_instruction::allocate(acc.key, space as u64), &[acc.clone(), system.clone()], seeds)?;
+    invoke_signed(&system_instruction::assign(acc.key, owner), &[acc.clone(), system.clone()], seeds)
+}
+
 fn u64_at(d: &[u8], o: usize) -> u64 {
     u64::from_le_bytes(d[o..o + 8].try_into().unwrap())
 }
@@ -117,9 +131,8 @@ fn lock(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubkey, 
     if pk_at(&pool.try_borrow_data()?, P_LP_MINT) != *lp_mint.key {
         return Err(ProgramError::InvalidAccountData);
     }
-    let rent = Rent::get()?;
-    // the Fee Key NFT: a fresh 0-decimal mint, one token to fee_nft_owner's ATA, mint authority removed
-    invoke(&system_instruction::create_account(payer.key, nft_mint.key, rent.minimum_balance(82), 82, &spl_token::ID), &[payer.clone(), nft_mint.clone(), system.clone()])?;
+    // the Fee Key NFT: a fresh 0-decimal mint, one token to fee_nft_owner's ATA, mint authority removed, no freeze authority
+    create_or_adopt(payer, nft_mint, system, 82, &spl_token::ID, &[])?;
     invoke(&spl_token::instruction::initialize_mint2(&spl_token::ID, nft_mint.key, auth_key, None, 0)?, &[nft_mint.clone(), token.clone()])?;
     create_ata(payer, nft_acc, nft_owner, nft_mint, system, token, &a[17])?;
     invoke_signed(&spl_token::instruction::mint_to(&spl_token::ID, nft_mint.key, nft_acc.key, auth_key, &[], 1)?, &[nft_mint.clone(), nft_acc.clone(), auth.clone(), token.clone()], &[auth_seeds])?;
@@ -136,11 +149,7 @@ fn lock(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubkey, 
     if *locked.key != state_key {
         return Err(ProgramError::InvalidSeeds);
     }
-    invoke_signed(
-        &system_instruction::create_account(payer.key, locked.key, rent.minimum_balance(STATE_LEN), STATE_LEN as u64, program_id),
-        &[payer.clone(), locked.clone(), system.clone()],
-        &[&[LOCKED_SEED, nft_mint.key.as_ref(), &[state_bump]]],
-    )?;
+    create_or_adopt(payer, locked, system, STATE_LEN, program_id, &[&[LOCKED_SEED, nft_mint.key.as_ref(), &[state_bump]]])?;
     let (k, lp) = pool_k(pool, v0, v1)?;
     let mut d = locked.try_borrow_mut_data()?;
     d[..8].copy_from_slice(&STATE_DISCRIMINATOR);
@@ -149,7 +158,8 @@ fn lock(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubkey, 
     d[40..56].copy_from_slice(&k.to_le_bytes());
     d[64..96].copy_from_slice(pool.key.as_ref());
     d[96..128].copy_from_slice(nft_mint.key.as_ref());
-    d[128..160].copy_from_slice(nft_owner.key.as_ref());
+    // lp-lock blind review I-3: @128 is the LIQUIDITY OWNER (the locker), as the real program writes it — not the Fee Key owner.
+    d[128..160].copy_from_slice(owner.key.as_ref());
     d[160..192].copy_from_slice(lp_mint.key.as_ref());
     Ok(())
 }
@@ -159,7 +169,9 @@ fn lock(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubkey, 
 /// 9 recipient_token_1 (w), 10 token_0_vault (w), 11 token_1_vault (w), 12 vault_0_mint, 13 vault_1_mint, 14 locked_lp_vault (w),
 /// 15 token_program, 16 token_program_2022, 17 memo_program.
 /// Fee LP = the locked LP's share of k growth since the last collect: locked − locked·√k_last·lp_now / (√k_now·lp_last); withdraws
-/// min(requested, fee LP) through CPMM `withdraw` to the recipients. Nothing accrued → returns Ok without moving anything.
+/// min(requested, fee LP + unclaimed) through CPMM `withdraw` to the recipients and carries the rest as unclaimed @24 (I-1 / MF-1: the
+/// real program keeps the remainder of a partial collect; the fee LP leaves the principal @8 either way). Nothing accrued → returns
+/// Ok without moving anything.
 fn collect(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubkey, auth_seeds: &[&[u8]]) -> ProgramResult {
     if a.len() < 18 || data.len() < 16 {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -170,12 +182,12 @@ fn collect(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubke
     if auth.key != auth_key || !nft_owner.is_signer || locked.owner != program_id {
         return Err(ProgramError::MissingRequiredSignature);
     }
-    let (nft_mint, pool_key, locked_lp, last_lp, last_k) = {
+    let (nft_mint, pool_key, locked_lp, unclaimed, last_lp, last_k) = {
         let d = locked.try_borrow_data()?;
         if d.len() < STATE_LEN || d[..8] != STATE_DISCRIMINATOR {
             return Err(ProgramError::InvalidAccountData);
         }
-        (pk_at(&d, 96), pk_at(&d, 64), u64_at(&d, 8), u64_at(&d, 32), u128::from_le_bytes(d[40..56].try_into().unwrap()))
+        (pk_at(&d, 96), pk_at(&d, 64), u64_at(&d, 8), u64_at(&d, 24), u64_at(&d, 32), u128::from_le_bytes(d[40..56].try_into().unwrap()))
     };
     if pool_key != *pool.key {
         return Err(ProgramError::InvalidAccountData);
@@ -189,7 +201,8 @@ fn collect(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubke
     let per = isqrt(last_k).checked_mul(lp_now as u128).ok_or(ProgramError::ArithmeticOverflow)? / (last_lp as u128).max(1);
     let keep = (locked_lp as u128).checked_mul(per).ok_or(ProgramError::ArithmeticOverflow)? / isqrt(k_now).max(1);
     let fee_lp = (locked_lp as u128).saturating_sub(keep) as u64;
-    let amount = fee_lp.min(requested);
+    let accrued = fee_lp.checked_add(unclaimed).ok_or(ProgramError::ArithmeticOverflow)?;
+    let amount = accrued.min(requested);
     if amount > 0 {
         let mut w = CPMM_WITHDRAW.to_vec();
         w.extend_from_slice(&amount.to_le_bytes());
@@ -220,8 +233,9 @@ fn collect(program_id: &Pubkey, a: &[AccountInfo], data: &[u8], auth_key: &Pubke
     let (k_after, lp_after) = pool_k(pool, v0, v1)?;
     let mut d = locked.try_borrow_mut_data()?;
     let claimed = u64_at(&d, 16) + amount;
-    d[8..16].copy_from_slice(&(locked_lp - amount).to_le_bytes());
+    d[8..16].copy_from_slice(&(locked_lp - fee_lp).to_le_bytes());
     d[16..24].copy_from_slice(&claimed.to_le_bytes());
+    d[24..32].copy_from_slice(&(accrued - amount).to_le_bytes());
     d[32..40].copy_from_slice(&lp_after.to_le_bytes());
     d[40..56].copy_from_slice(&k_after.to_le_bytes());
     Ok(())

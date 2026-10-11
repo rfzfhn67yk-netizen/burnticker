@@ -674,7 +674,7 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 | `register_pool` | — | registrar | permissionless |
 | `register_pair_pool` | — | registrar | permissionless |
 | `register_fee_key` | — | payer | permissionless |
-| `claim_lock_fees` | lp_fee_amount | cranker (allowlist while the cap is in force) | permissionless |
+| `claim_lock_fees` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `check_pool_health` | — | caller | permissionless |
 | `replace_pool` | — | caller | permissionless |
 | `apply_attester_change` | — | caller | permissionless |
@@ -695,13 +695,14 @@ Events (28): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, Att
 BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered,
 LaunchLabCreatorFeeClaimed, LockFeesClaimed, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged,
 ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed,
-SpendCapBound, SpendCarried, TokenInitialized. Error codes: 74.
+SpendCapBound, SpendCarried, TokenInitialized. Error codes: 77.
 
 `pair_curve` (`src/lib/pairCurve/idl.ts`): `init_pair` (args; payer, creator — creation), the two curve-trade instructions (side, an
 amount, a slippage bound; the trader signs), `graduate` (side; cranker), `lock_lp` (side; cranker — locks the side's LP forever, Fee
-Key to burn_receipts' fee-keys PDA), `claim_developer_fee` (caller), `void_pair` (caller), `close_pair` (caller) — every one after
-`init_pair` permissionless. Events (8): PairInitialized, Trade, PairCommitted, SideGraduated, LpLocked, DeveloperFeeClaimed, PairVoided,
-PairClosed.
+Key to burn_receipts' fee-keys PDA), `burn_lp` (side; cranker — the 30-day fallback if the lock refuses, the only path that destroys
+LP), `claim_developer_fee` (caller), `void_pair` (caller), `close_pair` (caller) — every one after `init_pair` permissionless (9
+entrypoints). Events (9): PairInitialized, Trade, PairCommitted, SideGraduated, LpLocked, LpBurnedFallback, DeveloperFeeClaimed,
+PairVoided, PairClosed.
 
 ### 13.4 Memo grammars
 

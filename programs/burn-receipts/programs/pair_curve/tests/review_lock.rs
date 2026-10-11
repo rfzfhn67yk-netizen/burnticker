@@ -3,13 +3,14 @@
 //! new_env() able to load another lock-program binary (REVIEW_LOCK_SO=<path>, e.g. the real mainnet program dumped read-only with
 //! `solana program dump -u https://api.mainnet-beta.solana.com LockrWmn6K5twhz3y9w1dQERbmgSaRkfnTeTKbpofwE lock_mainnet.so`).
 //!
-//! Every `rl*` test asserts the SAFE behaviour (it fails while the finding is open) and is `#[ignore]`d so scripts/test.sh stays green;
-//! `mf*` tests are MOCK-FIDELITY checks (fail against the stand-in, pass against the real program); `ctl_*` tests are controls.
-//! Run all: cargo test -p pair_curve --test review_lock -- --include-ignored --test-threads=1 --nocapture
+//! Every `rl*` test asserts the SAFE behaviour; it failed against the reviewed code and passes since the r2 fixes (branch
+//! burnticker/lp-lock-r2) — kept as regressions, no longer ignored. `mf*` tests are MOCK-FIDELITY checks (they failed against the old
+//! stand-in and pass against the fixed stand-in and the real program); `ctl_*` tests are controls; `l2_*` covers the burn_lp fallback.
+//! scripts/test.sh runs it with the stand-in, and again against the real binary when REVIEW_LOCK_SO is set (never commit the binary).
 //!
 //! Run: scripts/test.sh builds the fixtures; then cargo test -p pair_curve --test review_lock -- --test-threads=1 --nocapture
 
-#![allow(clippy::result_large_err, clippy::too_many_arguments, dead_code, unused_imports)]
+#![allow(clippy::result_large_err, clippy::too_many_arguments, clippy::type_complexity, dead_code, unused_imports)]
 
 #[path = "../../burn_receipts/tests/common/mod.rs"]
 mod common;
@@ -49,11 +50,7 @@ fn new_env() -> Env {
     env.svm.add_program(pair_curve::ID, &read_so("target/deploy-localnet/pair_curve.so")).unwrap();
     // REVIEW_LOCK_SO=<path>: another lock-program binary at Raydium's id (e.g. the real mainnet program, dumped read-only); default the
     // stand-in. Metaplex's id gets an inert executable (the real program declares it; with_metadata = false never invokes it).
-    match std::env::var("REVIEW_LOCK_SO") {
-        Ok(p) if !p.is_empty() => env.svm.add_program(LOCK_CPMM_PROGRAM_ID, &std::fs::read(&p).unwrap()).unwrap(),
-        _ => add_lock_program(&mut env),
-    }
-    env.svm.add_program(METADATA_PROGRAM_ID, &read_so("fixtures/cpmm_lock_mock.so")).unwrap();
+    add_lock_program(&mut env); // honours REVIEW_LOCK_SO
     env
 }
 
@@ -509,7 +506,7 @@ fn ctl_graduate_lock_register_and_claim() {
     let nft = fee_nft_mint(&p.pair, 0);
     env.ok(&[ix_register_fee_key(&c.pubkey(), &mint, &pool.pool, &nft)], &[&c]);
     round_trips(&mut env, &p, 0, 4, SOL);
-    let m = env.ok(&[ix_claim_lock_fees(&c.pubkey(), &mint, &pool, &nft, &TREASURY, u64::MAX)], &[&c]);
+    let m = env.ok(&[ix_claim_lock_fees(&c.pubkey(), &mint, &pool, &nft, &TREASURY)], &[&c]);
     let ev: burn_receipts::events::LockFeesClaimed = pc_event(&m);
     println!("ctl: lock_lp + claim on a pair pool: wsol {} → burn pool {} / operator {}; tokens burned {}", ev.wsol_claimed, ev.to_burn_pool, ev.to_operator, ev.tokens_burned);
     assert!(ev.wsol_claimed > 0 && ev.tokens_burned > 0);
@@ -522,7 +519,6 @@ fn ctl_graduate_lock_register_and_claim() {
 /// bare System create_account, lock_lp fails for good — no other NFT mint can be used, register_pair_pool requires the lock, the LP
 /// stays in the vault and the side's burn pool is never registered. SAFE behaviour: lock_lp succeeds with each address pre-funded.
 #[test]
-#[ignore = "MF-2 (Info, mock fidelity): fails against fixtures/cpmm_lock_mock.so, passes with REVIEW_LOCK_SO=<real lock program>"]
 fn mf2_prefunded_lock_addresses_must_not_block_lock_lp() {
     let targets: [(&str, fn(&P) -> Pubkey); 3] = [
         ("fee_nft_mint (pair_curve PDA)", |p| fee_nft_mint(&p.pair, 0)),
@@ -550,8 +546,9 @@ fn mf2_prefunded_lock_addresses_must_not_block_lock_lp() {
 /// RL-2 on a pair pool: register_pair_pool measures against the CREATION supply (dilution-proof), register_fee_key against the LIVE
 /// supply. A depositor adding ~1.05× the pool's liquidity after lock_lp keeps the side's own lock position from ever registering
 /// while the deposit stays. SAFE behaviour: the side's lock position (its NFT mint is the pair_curve PDA, unforgeable) registers.
+/// FIXED (r2): register_fee_key identifies a pair position by its locker (@128 = the pair's vault = the pool's creator) and measures
+/// the majority against the LP in Raydium's lock account, which a deposit cannot change.
 #[test]
-#[ignore = "open finding RL-2 (Medium), pair pool: fails until fixed — run with --ignored"]
 fn rl2b_a_depositor_must_not_block_register_fee_key_on_a_pair_pool() {
     let mut env = lock_env();
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
@@ -575,4 +572,61 @@ fn rl2b_a_depositor_must_not_block_register_fee_key_on_a_pair_pool() {
     let r = env.send(&[ix_register_fee_key(&c.pubkey(), &mint, &pool.pool, &nft)], &[&c]);
     println!("RL-2b: register_fee_key → {}", describe(&r));
     assert!(r.is_ok(), "the side's own lock position must register despite a later deposit");
+}
+
+/// lp-lock blind review L-2: burn_lp — the permissionless fallback when lock_lp cannot run. Refused before 30 days after the
+/// graduation decision; afterwards it burns ALL of the vault's LP, records it in lp_locked (lock_lp then refuses), closes the LP account
+/// into the side's burn pool, and register_pair_pool accepts the burned LP. Refused once the LP is locked.
+#[test]
+fn l2_burn_lp_is_a_30_day_fallback_and_the_side_still_registers() {
+    let mut env = lock_env();
+    let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
+    let c = trader(&mut env, SOL);
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    graduate_only(&mut env, &p, &c, 0).unwrap();
+    let pool = pool_of(&p, 0);
+    let mint = p.mint(0);
+    let burn = |env: &mut Env| env.send(&[ix_burn_lp(&p.pair, &p.vault, &mint, &pool, &c.pubkey(), 0)], &[&c]);
+    expect_anchor_err(burn(&mut env), "LpLockFallbackNotDue");
+    let started = pair_state(&env, &p).graduation_started_at;
+    env.set_time(started + pair_curve::constants::LP_LOCK_FALLBACK_SECS - 1);
+    expect_anchor_err(burn(&mut env), "LpLockFallbackNotDue");
+    env.set_time(started + pair_curve::constants::LP_LOCK_FALLBACK_SECS);
+    let vault_lp = get_associated_token_address(&p.vault, &pool.lp_mint);
+    let lp = env.token_amount(&vault_lp);
+    let (supply0, fee0, vault0) = (env.mint_supply(&pool.lp_mint), env.lamports(&fee_pda(&mint)), env.lamports(&p.vault));
+    let rent = env.lamports(&vault_lp);
+    let m = burn(&mut env).unwrap();
+    let ev: pair_curve::events::LpBurnedFallback = pc_event(&m);
+    assert_eq!((ev.side, ev.lp_amount, ev.pool), (0, lp, pool.pool));
+    assert_eq!(supply0 - env.mint_supply(&pool.lp_mint), lp, "all of the vault's LP is burned");
+    assert_eq!(pair_state(&env, &p).lp_locked[0], lp, "recorded in lp_locked");
+    assert!(env.svm.get_account(&vault_lp).map(|a| a.lamports == 0).unwrap_or(true), "the LP account is closed");
+    assert_eq!(env.lamports(&fee_pda(&mint)) - fee0, rent, "its rent goes to the side's burn pool");
+    assert_eq!(env.lamports(&p.vault), vault0, "the vault keeps every lamport");
+    expect_anchor_err(lock_side(&mut env, &p, &c, 0), "NothingToLock");
+    expect_anchor_err(burn(&mut env), "NothingToLock");
+    env.ok(&[ix_register_pair(&c.pubkey(), &mint, &pool.pool, &pool.lp_mint, &p.pair)], &[&c]);
+    assert!(env.config(&config_pda(&mint)).pool_verified, "the side registers on its burned LP");
+    // side B: locked normally → burn_lp refuses even after 30 days
+    graduate_only(&mut env, &p, &c, 1).unwrap();
+    lock_side(&mut env, &p, &c, 1).unwrap();
+    let pool_b = pool_of(&p, 1);
+    let r = env.send(&[ix_burn_lp(&p.pair, &p.vault, &p.mint(1), &pool_b, &c.pubkey(), 1)], &[&c]);
+    expect_anchor_err(r, "NothingToLock");
+}
+
+/// The pair's lock position records the pair's vault as its locker (@128) — lock_lp checks it after the CPI, and register_fee_key
+/// identifies the position by it (RL-2 a).
+#[test]
+fn rl2c_the_pair_lock_records_the_vault_as_locker() {
+    let mut env = lock_env();
+    let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
+    let c = trader(&mut env, SOL);
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    graduate_only(&mut env, &p, &c, 0).unwrap();
+    lock_side(&mut env, &p, &c, 0).unwrap();
+    let nft = fee_nft_mint(&p.pair, 0);
+    let d = env.svm.get_account(&locked_liquidity(&nft)).unwrap().data;
+    assert_eq!(&d[LL_LOCKED_LOCKER..LL_LOCKED_LOCKER + 32], p.vault.as_ref());
 }

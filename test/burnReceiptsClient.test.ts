@@ -72,9 +72,10 @@ describe("burnReceipts client — LP lock and fee split (LAUNCHPAD-PATH §35)", 
     assert.ok(at("fee_nft_account").pubkey.equals(associatedTokenAddress(feeKeysPda(PID), nft)));
     assert.ok(at("locked_liquidity").pubkey.equals(lockedLiquidityPda("devnet", nft)));
     assert.ok(at("fee_vault").pubkey.equals(feePda(PID, MINT)) && at("cranker").isSigner);
-    assert.equal(ix.data.readBigUInt64LE(8), BigInt("18446744073709551615"), "lp_fee_amount defaults to everything accrued");
-    const r = registerFeeKeyIx({ programId: PID, payer: Keypair.generate().publicKey, mint: MINT, pool: pool.pool, feeNftMint: nft, cluster: "devnet" });
+    assert.equal(ix.data.length, 8, "lp-lock blind review L-3: no amount argument — the program always collects everything accrued");
+    const r = registerFeeKeyIx({ programId: PID, payer: Keypair.generate().publicKey, mint: MINT, pool: pool.pool, feeNftMint: nft, cluster: "devnet", lpMint: pool.lpMint });
     assert.ok(r.keys[order("register_fee_key").indexOf("fee_key")].pubkey.equals(feeKeyRecordPda(PID, MINT)));
+    assert.ok(r.keys[order("register_fee_key").indexOf("lp_lock_vault")].pubkey.equals(lpLockVault("devnet", pool.lpMint)), "r2 RL-2: majority of the lock account");
   });
 });
 
@@ -323,12 +324,12 @@ describe("burnReceipts client — review 2", () => {
     const lpMint = Keypair.generate().publicKey, pool = Keypair.generate().publicKey;
     const ix = registerPoolIx({ programId: PID, registrar: payer.publicKey, mint: MINT, pool, lpMint, cluster: "devnet" });
     const ll = LAUNCHLAB_PROGRAM_ID.devnet;
-    for (const k of [lpMint, lpLockVault("devnet", lpMint), launchlabPoolPda(ll, MINT)]) assert.ok(ix.keys.some((x) => x.pubkey.equals(k)), k.toBase58());
+    for (const k of [lpMint, lpLockVault("devnet", lpMint), launchlabPoolPda(ll, MINT), feeKeyRecordPda(PID, MINT)]) assert.ok(ix.keys.some((x) => x.pubkey.equals(k)), k.toBase58());
     assert.ok(lpLockVault("devnet", lpMint).equals(associatedTokenAddress(LOCK_CPMM_AUTHORITY.devnet, lpMint)));
-    // Fixed pool: the optional LaunchLab pool is omitted (Anchor: the program id in its slot).
+    // Fixed pool: the optional LaunchLab pool and FeeKeyRecord (r2 RL-3, policy 0 only) are omitted (Anchor: the program id in each slot).
     const fixed = registerPoolIx({ programId: PID, registrar: payer.publicKey, mint: MINT, pool, lpMint, cluster: "devnet", fixedPool: true });
     assert.equal(fixed.keys.length, ix.keys.length);
-    assert.equal(fixed.keys.filter((k) => k.pubkey.equals(PID)).length, 2, "the omitted optional + the program itself");
+    assert.equal(fixed.keys.filter((k) => k.pubkey.equals(PID)).length, 3, "the two omitted optionals + the program itself");
     // initialize_token takes the LaunchLab platform to pin (optional account; omitted → the program id).
     const rule = ruleParamsFromKeeperRules(
       { mode: "buyback", decimals: 6, vaultAllocation: "0", buyback: { fractionPerUnit: "0.05", reserveSol: "0.02", slippageBps: 300 }, rule: { unitUsd: "1000000000", burnPerUnitTokens: "100000", maxAbsDeltaUsd: "2000000000000", carry: "consecutive-increases", onNonIncrease: "burn-nothing-reset-carry" } },

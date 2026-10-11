@@ -108,3 +108,18 @@ the platform. The facts a reviewer checks instead:
 - **Economics a reviewer can recompute.** Per swap after graduation (CPMM tier 0, 25 bps): 21 bps LP fees → 16.8 bps burn pool + 4.2 bps
   operator; 3 bps RAY buyback + 1 bp Raydium treasury; plus the 4.75 bps creator fee to the burn pool. The operator earns 20 % of the
   post-graduation LP fees; this is new income for the operator and is stated on the trust page and in the fee tables.
+
+## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)
+
+The text above and the earlier errata stay as written. Round 2 (the review's RL-2 / RL-3 / L-1..L-3) changes what a reviewer checks:
+
+- **Instruction counts (item 1).** burn_receipts still has **26 entrypoints**; pair_curve has **9 entrypoints** with the new `burn_lp`.
+  The IDLs, the Powers Registers and the whitepaper's §13.3 agree.
+- **Registration order.** For policy 0, `register_fee_key` runs BEFORE `register_pool`, which takes the FeeKeyRecord
+  (`FeeKeyNotRegistered`, `FeeKeyMismatch`); a lock position is identified by its locker (LaunchLab's vault_auth, or the pair vault);
+  `claim_lock_fees` takes no arguments and claims against the FeeKeyRecord's pool; memo v2 adds `paid` / `pending`.
+- **New pin.** `BURNTICKER_PLATFORM` is compiled into burn_receipts (mainnet zeros → `PlatformNotPinned`); `initialize_token` for
+  policies 0 and 2 refuses any other LaunchLab platform.
+- **burn_lp.** pair_curve's fallback after 30 days of a refusing lock — the only path that destroys LP; it refuses before then and once
+  `lock_lp` ran.
+

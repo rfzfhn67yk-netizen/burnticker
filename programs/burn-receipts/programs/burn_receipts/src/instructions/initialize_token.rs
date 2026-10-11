@@ -185,6 +185,10 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
         let Some(p) = ctx.accounts.launchlab_platform.as_ref() else {
             return err!(BurnError::LaunchLabPlatformRequired);
         };
+        // lp-lock blind review RL-3: only the operator's own platform (compiled per cluster; its admin under the Squads vault) — a
+        // creator-controlled platform's admin could redirect the LP-lock Fee Key, and with it the LP fees, before migration.
+        require!(BURNTICKER_PLATFORM != Pubkey::default(), BurnError::PlatformNotPinned);
+        require_keys_eq!(p.key(), BURNTICKER_PLATFORM, BurnError::PlatformNotAllowed);
         let pins = pin_launchlab_platform(&p.to_account_info(), &ctx.accounts.fee_vault.key())?;
         if args.rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA {
             require_platform_locks_to_fee_keys(&p.to_account_info())?;

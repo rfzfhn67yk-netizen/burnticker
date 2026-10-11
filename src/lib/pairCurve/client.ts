@@ -147,7 +147,24 @@ export function lockLpIx(o: { cranker: PublicKey; pairAddress: PublicKey; pair: 
 export function registerSideFeeKeyIx(o: { payer: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; cluster: Cluster; burnReceiptsProgramId: PublicKey; programId?: PublicKey }): TransactionInstruction {
   const programId = o.programId ?? PAIR_CURVE_ID;
   const s = sidePoolAccounts(o.cluster, o.pairAddress, o.side, o.pair.mints[o.side], programId);
-  return registerFeeKeyIx({ programId: o.burnReceiptsProgramId, payer: o.payer, mint: o.pair.mints[o.side], pool: s.pool, feeNftMint: feeNftMintPda(o.pairAddress, o.side, programId), cluster: o.cluster });
+  return registerFeeKeyIx({ programId: o.burnReceiptsProgramId, payer: o.payer, mint: o.pair.mints[o.side], pool: s.pool, feeNftMint: feeNftMintPda(o.pairAddress, o.side, programId), cluster: o.cluster, lpMint: s.lpMint });
+}
+
+/** pair_curve's 30-day LP-lock fallback (lp-lock blind review L-2): LP_LOCK_FALLBACK_SECS after the graduation decision. */
+export const LP_LOCK_FALLBACK_SECS = 30 * 24 * 60 * 60;
+
+/**
+ * burn_lp(side) (lp-lock blind review L-2) — permissionless fallback, once per side, only if lock_lp has not run LP_LOCK_FALLBACK_SECS
+ * after the graduation decision (Raydium's lock program refused or changed): burns all of the vault's LP and records it in lp_locked,
+ * so register_pair_pool still accepts the side (burned + locked); the side's LP fees are forgone. The ONLY instruction that destroys LP.
+ */
+export function burnLpIx(o: { cranker: PublicKey; pairAddress: PublicKey; pair: PairAccount; side: 0 | 1; cluster: Cluster; programId?: PublicKey }): TransactionInstruction {
+  const programId = o.programId ?? PAIR_CURVE_ID;
+  const s = sidePoolAccounts(o.cluster, o.pairAddress, o.side, o.pair.mints[o.side], programId);
+  return build(programId, "burn_lp", {
+    cranker: o.cranker, pair: o.pairAddress, vault: o.pair.vault, pool_state: s.pool, lp_mint: s.lpMint, vault_lp: s.vaultLp,
+    fee_vault: o.pair.fee_vaults[o.side], token_program: TOKEN_PROGRAM_ID,
+  }, { side: o.side });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -157,6 +174,7 @@ export function registerSideFeeKeyIx(o: { payer: PublicKey; pairAddress: PublicK
 export type CrankAction =
   | { kind: "graduate"; side: 0 | 1; why: string }
   | { kind: "lock"; side: 0 | 1; why: string }
+  | { kind: "burn_lp"; side: 0 | 1; why: string }
   | { kind: "register"; side: 0 | 1; why: string }
   | { kind: "fee_key"; side: 0 | 1; why: string }
   | { kind: "void"; why: string }
@@ -186,7 +204,11 @@ export function planPairCrank(p: PairAccount, now: number, registered: [boolean,
   const tail = () => {
     for (const s of [0, 1] as const) {
       if (missingPool(s)) continue;
-      if (p.lp_locked[s] === BigInt(0)) out.push({ kind: "lock", side: s, why: "the pool's LP is still in the vault: lock_lp locks it forever (Fee Key to FEE_KEYS)" });
+      if (p.lp_locked[s] === BigInt(0)) {
+        out.push({ kind: "lock", side: s, why: "the pool's LP is still in the vault: lock_lp locks it forever (Fee Key to FEE_KEYS)" });
+        // the fallback (lp-lock blind review L-2), only once Raydium's lock has refused for LP_LOCK_FALLBACK_SECS since the commit
+        if (now >= Number(p.graduation_started_at) + LP_LOCK_FALLBACK_SECS) out.push({ kind: "burn_lp", side: s, why: "the LP is still unlocked 30 days after graduation started: burn_lp, the fallback that destroys it" });
+      }
       if (!registered[s]) out.push({ kind: "register", side: s, why: "the pool exists but is not registered in burn_receipts" });
       if (!feeKeys[s]) out.push({ kind: "fee_key", side: s, why: "the coin's lock position is not recorded yet (register_fee_key)" });
       if (!seeded[s]) out.push({ kind: "seed", side: s, why: "the pool has no oracle observation yet: a dust swap seeds the TWAP" });
@@ -322,6 +344,7 @@ export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAdd
   for (const s of [0, 1] as const) if (!p.pools[s].equals(PublicKey.default)) feeKeys[s] = !!(await ctx.connection.getAccountInfo(feeKeyRecordPda(ctx.burnReceiptsProgramId, p.mints[s]), "confirmed"));
   const actions = planPairCrank(p, now, await registeredSides(ctx, p), seeded, feeKeys);
   let graduateFailed = false;
+  const lockedNow: [boolean, boolean] = [false, false];
   for (const action of actions) {
     if (action.kind === "wait") { steps.push({ action, result: null }); continue; }
     if (action.kind === "graduate" && graduateFailed) continue;
@@ -333,6 +356,10 @@ export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAdd
       if (p.pools[action.side].equals(PublicKey.default) || p.lp_locked[action.side] !== BigInt(0)) continue;
       ixs = [lockLpIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
     }
+    if (action.kind === "burn_lp") {
+      if (p.pools[action.side].equals(PublicKey.default) || p.lp_locked[action.side] !== BigInt(0) || lockedNow[action.side]) continue;
+      ixs = [burnLpIx({ cranker: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, programId: ctx.programId })];
+    }
     if (action.kind === "fee_key") ixs = [registerSideFeeKeyIx({ payer: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
     if (action.kind === "register") ixs = [registerSideIx({ registrar: cranker.publicKey, pairAddress, pair: p, side: action.side, cluster: ctx.cluster, burnReceiptsProgramId: ctx.burnReceiptsProgramId, programId: ctx.programId })];
     if (action.kind === "claim") ixs = [claimDeveloperFeeIx({ caller: cranker.publicKey, pairAddress, pair: p, programId: ctx.programId })];
@@ -341,6 +368,7 @@ export async function crankPair(ctx: PairCurveContext, cranker: Keypair, pairAdd
     o.log?.(`  [pair-curve] ${pairAddress.toBase58().slice(0, 8)}… ${action.kind}${"side" in action ? `(${action.side === 0 ? "A" : "B"})` : ""}: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${result.error}`}${result.units ? ` · ${result.units} CU` : ""}`);
     steps.push({ action, result });
     if (action.kind === "graduate" && !result.ok) graduateFailed = true;
+    if (action.kind === "lock" && result.ok) lockedNow[action.side] = true;
     if (o.dryRun && action.kind === "graduate") break;
   }
   return steps;

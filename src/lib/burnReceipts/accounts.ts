@@ -74,12 +74,14 @@ export async function fetchFeeKeyRecord(connection: Connection, programId: Publi
 }
 
 /** Raydium's LockedCpLiquidityState (lock program; offsets read from live accounts). */
-export interface LockedLiquidityView { lockedLp: bigint; claimedLp: bigint; unclaimedLp: bigint; lastLp: bigint; pool: PublicKey; feeNftMint: PublicKey; owner: PublicKey; lpMint: PublicKey }
+/** LockedCpLiquidityState. @128 is the LOCKER (the liquidity owner who locked: LaunchLab's ["vault_auth_seed"] PDA for a migration,
+ *  the pair's vault for lock_lp) — lp-lock blind review I-3; `owner` is kept as an alias of `locker`. */
+export interface LockedLiquidityView { lockedLp: bigint; claimedLp: bigint; unclaimedLp: bigint; lastLp: bigint; pool: PublicKey; feeNftMint: PublicKey; owner: PublicKey; locker: PublicKey; lpMint: PublicKey }
 export function decodeLockedLiquidity(data: Buffer | Uint8Array): LockedLiquidityView {
   const d = Buffer.from(data);
   if (d.length < 192) throw new Error("burnReceipts: not a LockedCpLiquidityState (too short)");
   const pk = (o: number) => new PublicKey(d.subarray(o, o + 32));
-  return { lockedLp: d.readBigUInt64LE(8), claimedLp: d.readBigUInt64LE(16), unclaimedLp: d.readBigUInt64LE(24), lastLp: d.readBigUInt64LE(32), pool: pk(64), feeNftMint: pk(96), owner: pk(128), lpMint: pk(160) };
+  return { lockedLp: d.readBigUInt64LE(8), claimedLp: d.readBigUInt64LE(16), unclaimedLp: d.readBigUInt64LE(24), lastLp: d.readBigUInt64LE(32), pool: pk(64), feeNftMint: pk(96), owner: pk(128), locker: pk(128), lpMint: pk(160) };
 }
 
 export function decodePlatformConfig(data: Buffer | Uint8Array): PlatformConfigAccount {
