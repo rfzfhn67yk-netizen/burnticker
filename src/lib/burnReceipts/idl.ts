@@ -1757,36 +1757,6 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           "writable": true
         },
         {
-          "name": "winner_reading",
-          "docs": [
-            "The winner's reading for the same period (it exists: both coins read the period)."
-          ],
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  114,
-                  101,
-                  97,
-                  100,
-                  105,
-                  110,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "winner_config"
-              },
-              {
-                "kind": "arg",
-                "path": "record_date"
-              }
-            ]
-          }
-        },
-        {
           "name": "pair_result",
           "docs": [
             "The period's PairResult (address checked in the handler: [\"pair_result\", mint_lo, mint_hi, record_date])."
@@ -2083,6 +2053,9 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         },
         {
           "name": "partner_link",
+          "docs": [
+            "L-3): empty when this coin is first, the partner's link naming this mint when the partner was first."
+          ],
           "writable": true,
           "optional": true
         },
@@ -3098,6 +3071,14 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "reading_lo",
+          "optional": true
+        },
+        {
+          "name": "reading_hi",
+          "optional": true
         }
       ],
       "args": [
@@ -3242,6 +3223,183 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           }
         }
       ]
+    },
+    {
+      "name": "unlink_pair",
+      "docs": [
+        "pair-forward blind review M-2: undo a pairing on on-chain evidence that one coin can never be live. Permissionless."
+      ],
+      "discriminator": [
+        4,
+        22,
+        54,
+        247,
+        2,
+        91,
+        0,
+        0
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "config_a",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_a.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "config_b",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_b.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "link_a",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114,
+                  95,
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_a.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "link_b",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114,
+                  95,
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_b.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_a",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_a.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_b",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config_b.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pair",
+          "optional": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
     },
     {
       "name": "veto_registration_policy",
@@ -3561,6 +3719,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "PairForwardMissing",
+      "discriminator": [
+        1,
+        109,
+        198,
+        119,
+        84,
+        251,
+        244,
+        153
+      ]
+    },
+    {
       "name": "PairLinked",
       "discriminator": [
         19,
@@ -3597,6 +3768,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         33,
         246,
         81
+      ]
+    },
+    {
+      "name": "PairUnlinked",
+      "discriminator": [
+        117,
+        94,
+        166,
+        96,
+        127,
+        7,
+        231,
+        61
       ]
     },
     {
@@ -4245,6 +4429,26 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6089,
       "name": "PairSideNotLive",
       "msg": "forward_to_winner: both coins must be live (a verified pool) — a voided or unregistered side forwards nothing"
+    },
+    {
+      "code": 6090,
+      "name": "PairResultNotServable",
+      "msg": "pair result: a winner needs both coins' readings for the date and the loser's still unprocessed"
+    },
+    {
+      "code": 6091,
+      "name": "PairDateBeforePairing",
+      "msg": "pair result: the date is before the coins were paired"
+    },
+    {
+      "code": 6092,
+      "name": "PairHasReadings",
+      "msg": "link_pair: a coin already has readings under its unpaired rule; pairs are linked before their first reading"
+    },
+    {
+      "code": 6093,
+      "name": "PairStillLive",
+      "msg": "unlink_pair: no on-chain evidence that the partner can never be live (Pair voided / side refunding, or no verified pool 30 days after pairing)"
     }
   ],
   "types": [
@@ -4897,6 +5101,26 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "PairForwardMissing",
+      "docs": [
+        "pair-forward blind review H-1(c): a paired coin LOST the period, no forward landed within PAIR_RESULT_GRACE_SECS of its reading,",
+        "and its crank burned its own fuel as an unpaired coin would."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "PairLink",
       "docs": [
         "LAUNCHPAD-PATH §40 — the coin's partner in a winner-takes-the-burn pair. [\"pair_link\", mint]. Written by initialize_token (the",
@@ -4949,7 +5173,12 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
             "type": "i64"
           },
           {
-            "name": "reserved",
+            "name": "attester_set_hash",
+            "docs": [
+              "pair-forward blind review M-1: the coin's attester set when the link was written (pair::attester_set_hash). A result in which",
+              "this coin LOSES is valid with its own quorum alone only while its set still hashes to this; after a rotation the partner's quorum",
+              "must co-sign. Zero for links written before the r2 build (then the partner always co-signs)."
+            ],
             "type": {
               "array": [
                 "u8",
@@ -5156,6 +5385,33 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           },
           {
             "name": "submitter",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairUnlinked",
+      "docs": [
+        "pair-forward blind review M-2: the pairing was undone on on-chain evidence (UNLINK_* reason); both coins are plain coins again."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "reason",
+            "type": "u8"
+          },
+          {
+            "name": "cranker",
             "type": "pubkey"
           }
         ]
@@ -6584,6 +6840,14 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "1"
     },
     {
+      "name": "PAIR_UNLINK_NOT_LIVE_SECS",
+      "docs": [
+        "unlink_pair (pair-forward blind review M-2): a coin whose pool is still not verified this long after pairing can never take part."
+      ],
+      "type": "i64",
+      "value": "2592000"
+    },
+    {
       "name": "PAIR_WITNESS_INITIALIZE",
       "docs": [
         "PairLink.witness: how the pairing was proven — both initialize_token calls named each other, or a pair_curve Pair holds both mints."
@@ -6593,6 +6857,24 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     },
     {
       "name": "PAIR_WITNESS_PAIR_CURVE",
+      "type": "u8",
+      "value": "1"
+    },
+    {
+      "name": "UNLINK_NOT_LIVE",
+      "type": "u8",
+      "value": "2"
+    },
+    {
+      "name": "UNLINK_PAIR_VOIDED",
+      "docs": [
+        "PairUnlinked.reason: the pair_curve Pair is Voided / one of its sides is refunding / a coin has no verified pool 30 days after pairing."
+      ],
+      "type": "u8",
+      "value": "0"
+    },
+    {
+      "name": "UNLINK_SIDE_REFUNDING",
       "type": "u8",
       "value": "1"
     }

@@ -347,3 +347,20 @@ pub struct PairResultMissing {
     pub mint: Pubkey,
     pub record_date: u32,
 }
+
+/// pair-forward blind review H-1(c): a paired coin LOST the period, no forward landed within PAIR_RESULT_GRACE_SECS of its reading,
+/// and its crank burned its own fuel as an unpaired coin would.
+#[event]
+pub struct PairForwardMissing {
+    pub mint: Pubkey,
+    pub record_date: u32,
+}
+
+/// pair-forward blind review M-2: the pairing was undone on on-chain evidence (UNLINK_* reason); both coins are plain coins again.
+#[event]
+pub struct PairUnlinked {
+    pub mint_a: Pubkey,
+    pub mint_b: Pubkey,
+    pub reason: u8,
+    pub cranker: Pubkey,
+}

@@ -194,6 +194,18 @@ pub const PAIR_RESULT_LOST: u8 = 2;
 pub const PAIR_RESULT_DRAW: u8 = 3;
 /// pair_curve's Voided status (programs/pair_curve/src/constants.rs STATUS_VOIDED).
 pub const PAIR_CURVE_STATUS_VOIDED: u8 = 2;
+/// unlink_pair (pair-forward blind review M-2): a coin whose pool is still not verified this long after pairing can never take part.
+#[constant]
+pub const PAIR_UNLINK_NOT_LIVE_SECS: i64 = 30 * 24 * 60 * 60;
+/// PairUnlinked.reason: the pair_curve Pair is Voided / one of its sides is refunding / a coin has no verified pool 30 days after pairing.
+#[constant]
+pub const UNLINK_PAIR_VOIDED: u8 = 0;
+#[constant]
+pub const UNLINK_SIDE_REFUNDING: u8 = 1;
+#[constant]
+pub const UNLINK_NOT_LIVE: u8 = 2;
+/// The attester-set hash domain (pair::attester_set_hash).
+pub const PAIR_ATTESTERS_DOMAIN: &[u8] = b"BURNRECEIPTS-PAIR-ATTESTERS-v1";
 
 /// The pair_curve program (programs/pair_curve; one id for devnet and mainnet, like this program's). Its keypair is
 /// ~/.config/meme-coin-trader/mainnet-keys/pair_curve-program.json (never committed). register_pair_pool trusts an account only if

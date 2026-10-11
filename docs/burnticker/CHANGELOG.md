@@ -515,6 +515,18 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 997
 
+## 2026-10-11 — Pair-forward round 2 (the blind review's H-1 / M-1 / M-2 / L-1..L-4), client side; no publish, no mainnet deploy
+
+- burn_receipts gains `unlink_pair` (30 entrypoints, 34 event types with PairForwardMissing / PairUnlinked, 94 error codes).
+- Keeper: a win is posted only when it can be recorded (both readings, the loser's unprocessed; a flat winner reading first when needed),
+  never a substitute draw (`pair-result-unservable`); against a dead winner the forward moves 0 lamports and the loser keeps its fuel; no
+  result before the pairing day; past 72 h without a forward the planner's paired buyback cranks the period unpaired
+  (`pair-forward-missing`; `pair-forward-pending` fires at 1 h); `unlink_pair` on
+  evidence, recorded and shown as "unpaired (reason)"; `link_pair` right after `init_pair` (it refuses once a coin has a reading); a
+  forward against a dead side records 0 SOL.
+- Launch: `initialize_token` with `pair_mint` carries the partner's PairLink address every time (the builder's `initializeTokenIx`).
+- API 1.11.0 (additive): `status.pair.unpaired`, ops `pairs[].unpaired`; errors 6090–6093 in plain sentences.
+
 ## 2026-10-11 — Winner takes the burn (LAUNCHPAD-PATH §40), client side; no publish, no mainnet deploy
 
 - burn_receipts gains `link_pair`, `submit_pair_result` and `forward_to_winner` (29 entrypoints, 32 event types, 90 error codes); the
@@ -589,3 +601,11 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `f7a4eb92e5f00596226823f071a76c47f4fabfaa9cd95f2d7a230564f14ea12d`
 - allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
 - files published: 1069
+
+## 2026-10-11 — publish from 9d81ee5e1eff
+
+- monorepo commit: `9d81ee5e1eff7b5495ba0020717e152439051ba1` (the working tree had uncommitted changes when this tag was written)
+- program hash: `ac00ae8ef9c7791e73511413f3a53710d1275b242d25f4b91c2970d41562b316` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `8f0fed930369e67f3c0d172159dd86311836304f5da7cc87a160075b95863574`
+- allowlist sha256 (config/public-repo.allowlist): `7012a98e1aabc0504bbf3d8e828cd2a3cbb202d5005d4bc508d2aa0823eb27ef`
+- files published: 1071

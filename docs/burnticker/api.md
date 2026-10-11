@@ -255,3 +255,13 @@ additions, nothing removed:
 - A forward's receipt is its memo, `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<YYYY-MM-DD>|lamports=N|v1`. The program's pair
   refusals (6077–6089) appear as plain sentences in keeper alerts. The SDK reads `PairResultSubmitted` from "Program data:" logs.
 
+## Pair-forward round 2 (API 1.11.0)
+
+The pair-forward blind review's fixes (2026-10-11), all additive: `status.pair.unpaired` { reason, at, signature } once `unlink_pair` ran
+(a voided pair curve, a refunding side, or one coin without a verified pool 30 days after pairing) — two plain coins from then on, later
+receipts carry no `pairRole`; the pair page says "unpaired (reason)"; `status/status.json` `pairs[].unpaired`. A forward against a side
+without a verified pool is a `forwarded` receipt with `spent` 0 (the program always writes the memo, `lamports=0`). The keeper's new alerts:
+`pair-result-unservable` (a win could not be recorded yet; no draw is substituted), `pair-forward-missing` (a lost period cranked unpaired after 72 h),
+`pair-unlinked`, `pair-link-refused`. Errors 6090–6093 (`PairResultNotServable`, `PairDateBeforePairing`, `PairHasReadings`,
+`PairStillLive`) appear as plain sentences.
+

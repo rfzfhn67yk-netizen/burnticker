@@ -3,7 +3,7 @@ import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import type { BurnProgramClient } from "@/lib/burnticker/program";
 import type { PairRow, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
 import { pairWinnerTakesBurn } from "@/lib/burnticker/rules";
-import { PAIR_FORWARD_ALERT_SECS, PAIR_RESULT_ALERT_SECS, forwardLine, pairErrorSentence, type ForwardFacts, type PairForwardPort, type PairResultView } from "@/lib/burnticker/pairForward";
+import { PAIR_FORWARD_ALERT_SECS, PAIR_RESULT_ALERT_SECS, UNLINK_REASON_TEXT, forwardLine, pairErrorSentence, pairedOn, type ForwardFacts, type PairForwardPort, type PairResultView, type UnlinkReason } from "@/lib/burnticker/pairForward";
 
 /**
  * THE KEEPER'S WINNER-TAKES-THE-BURN STEPS (owner decision 2026-10-11, LAUNCHPAD-PATH §40). For a pair whose rules carry
@@ -29,7 +29,11 @@ import { PAIR_FORWARD_ALERT_SECS, PAIR_RESULT_ALERT_SECS, forwardLine, pairError
  * (the pair state is unreadable, or a LaunchLab pair is still inside its 7-day pairing window) — a receipt's pair role is written once
  * and never changes, so it is never guessed. A flagged pair the program never paired (window closed) is two plain coins: inactive.
  */
-export interface PairCtx { pair: PairRow; me: TokenRow; other: TokenRow; port: PairForwardPort; active: boolean; hold?: string }
+export interface PairCtx {
+  pair: PairRow; me: TokenRow; other: TokenRow; port: PairForwardPort; active: boolean; hold?: string;
+  /** The pairing day (YYYYMMDD, the later paired_at): periods before it have no PairResult (PairDateBeforePairing) and crank as plain. */
+  pairedOn?: number | null;
+}
 
 /** This coin's pair, its counterpart and the pair port — or null outside a pair / without a pair client. */
 export async function pairCtxFor(reg: Registry, program: Pick<BurnProgramClient, "pairForward">, t: TokenRow, now: number = Date.now()): Promise<PairCtx | null> {
@@ -44,7 +48,7 @@ export async function pairCtxFor(reg: Registry, program: Pick<BurnProgramClient,
   try { links = await port.links(); } catch (e) {
     return { pair, me: t, other, port, active: false, ...(ruleSays ? { hold: `pair state unreadable (${(e as Error).message.slice(0, 80)})` } : {}) };
   }
-  if (links.paired) return { pair, me: t, other, port, active: true };
+  if (links.paired) return { pair, me: t, other, port, active: true, pairedOn: pairedOn(links.a, links.b) };
   const deadline = Math.max(links.a?.pairingDeadline ?? 0, links.b?.pairingDeadline ?? 0);
   const provisional = links.stateA === 1 || links.stateB === 1;
   if (ruleSays && provisional && now < deadline * 1000) return { pair, me: t, other, port, active: false, hold: `pairing window open until ${new Date(deadline * 1000).toISOString()} (the second coin has not named the first back yet)` };
@@ -63,21 +67,23 @@ export function periodWinner(rows: readonly Pick<ReceiptRow, "pairRole" | "units
 }
 
 const alertKey = (kind: string, pair: string, D: number) => `${kind}:${pair}:${D}`;
+/** Registry status key: the pair was unlinked on chain (JSON { reason, reasonText, at, signature }). */
+export const unlinkedKey = (pairId: string) => `pair.unlinked.${pairId}`;
 function alert(reg: Registry, now: number, log: (s: string) => void, kind: string, key: string, text: string, meta: Record<string, unknown>): void {
   if (reg.recordAlert({ kind, key, text, meta }, now)) log(`  [alert] ${kind}: ${text}`);
 }
 
 /** When the keeper attested reading D for this coin (its confirmed submit_reading's send time), or null. */
-function attestedAt(reg: Registry, mint: string, D: number): number | null {
+export function attestedAt(reg: Registry, mint: string, D: number): number | null {
   const s = reg.signatures(mint, `reading:${formatDate(D)}`).find((x) => x.status === "confirmed");
   return s ? s.sentAt : null;
 }
 
 /** Ensures the PairResult for D exists (submits it when missing). Returns it, or the reason it is not there yet. */
-export async function ensurePairResult(ctx: PairCtx, reg: Registry, D: number, o: { now: number; dryRun: boolean; log: (s: string) => void; winnerReading?: () => Promise<"exists" | "submitted" | "cannot" | { waiting: string }> }): Promise<{ result: PairResultView } | { waiting: string }> {
+export async function ensurePairResult(ctx: PairCtx, reg: Registry, D: number, o: { now: number; dryRun: boolean; log: (s: string) => void; winnerReading?: () => Promise<"exists" | "submitted" | "cannot" | { waiting: string }> }): Promise<{ result: PairResultView; fresh?: true } | { waiting: string }> {
   const have = await ctx.port.result(D);
   const rows = reg.receiptsForReading(ctx.me.mint, D);
-  let winner = periodWinner(rows, ctx.me.mint, ctx.other.mint, reg.receiptsForReading(ctx.other.mint, D));
+  const winner = periodWinner(rows, ctx.me.mint, ctx.other.mint, reg.receiptsForReading(ctx.other.mint, D));
   const name = (m: string | null) => (m === null ? "draw" : m === ctx.me.mint ? `$${ctx.me.ticker}` : `$${ctx.other.ticker}`);
   if (have) {
     if (have.winner !== winner) alert(reg, o.now, o.log, "pair-result-conflict", alertKey("pair-result-conflict", ctx.pair.pairId, D), `pair ${ctx.pair.pairId} ${formatDate(D)}: the recorded result is ${name(have.winner)}, this coin's receipts say ${name(winner)} — a recorded result never changes`, { pairId: ctx.pair.pairId, recordDate: D });
@@ -85,19 +91,26 @@ export async function ensurePairResult(ctx: PairCtx, reg: Registry, D: number, o
   }
   const at = attestedAt(reg, ctx.me.mint, D);
   if (at !== null && o.now - at >= PAIR_RESULT_ALERT_SECS * 1000) alert(reg, o.now, o.log, "pair-result-missing", alertKey("pair-result-missing", ctx.pair.pairId, D), `pair ${ctx.pair.pairId} ${formatDate(D)}: reading attested ${Math.round((o.now - at) / 3_600_000)} h ago and no pair result is recorded — after 72 h the program burns the period unpaired and it can never forward`, { pairId: ctx.pair.pairId, recordDate: D });
-  // This coin lost D: forward_to_winner takes the WINNER's reading for D — make sure it exists (a flat one on a wind-down day). If the
-  // winner has already read past D, the period posts as a draw (the loser burns its own fuel) rather than a result nobody can forward.
+  // This coin lost D: a win needs BOTH coins' readings for D — make sure the winner's exists (a flat 0-unit one on a day the winner had
+  // nothing to read, as on a one-shot loser's end-of-rule days). The result is only ever the true one: a draw is posted only for a true
+  // draw. If the winner has already read past D the win is impossible — alert; the loser's reading then times out 72 h after it was
+  // submitted and burns unpaired (PairForwardMissing / PairResultMissing): never a substitute draw.
   if (winner === ctx.other.mint && o.winnerReading) {
     const wr = await o.winnerReading();
     if (typeof wr === "object") return { waiting: `pair result for ${formatDate(D)} waits for $${ctx.other.ticker}'s reading: ${wr.waiting}` };
     if (wr === "cannot") {
-      alert(reg, o.now, o.log, "pair-forward-impossible", alertKey("pair-forward-impossible", ctx.pair.pairId, D), `pair ${ctx.pair.pairId} ${formatDate(D)}: $${ctx.other.ticker} has no reading for the day and has read past it, so $${ctx.me.ticker}'s fuel cannot forward — the period posts as a draw and $${ctx.me.ticker} burns its own`, { pairId: ctx.pair.pairId, recordDate: D });
-      winner = null;
+      alert(reg, o.now, o.log, "pair-forward-impossible", alertKey("pair-forward-impossible", ctx.pair.pairId, D), `pair ${ctx.pair.pairId} ${formatDate(D)}: $${ctx.other.ticker} has no reading for the day and has read past it, so the win cannot be recorded — $${ctx.me.ticker}'s period times out 72 h after its reading and burns unpaired`, { pairId: ctx.pair.pairId, recordDate: D });
+      return { waiting: `$${ctx.other.ticker} read past ${formatDate(D)} without a reading for it: no win can be recorded (the period times out after 72 h)` };
     }
   }
   if (o.dryRun) { o.log(`  [dry-run] pair ${ctx.pair.pairId} ${formatDate(D)}: would submit_pair_result winner=${name(winner)}`); return { waiting: "dry run" }; }
   const tx = await ctx.port.buildSubmitResult({ recordDate: D, winner, sourceUrl: `burnticker://pair/${ctx.pair.pairId}/${formatDate(D)}?winner=${winner ?? "draw"}` });
   const sim = await ctx.port.simulate(tx.raw);
+  // PairResultNotServable (6090) now means only "a reading for D is missing, or the loser's reading for D is already processed": alert
+  // and wait (no pool condition; a dead side makes the forward 0 lamports). Never post a draw that was not the result.
+  if (sim.err === "PairResultNotServable" && winner !== null) {
+    alert(reg, o.now, o.log, "pair-result-unservable", alertKey("pair-result-unservable", ctx.pair.pairId, D), `pair ${ctx.pair.pairId} ${formatDate(D)}: ${name(winner)}'s win cannot be recorded yet (${pairErrorSentence(sim.err)}); no draw is posted — without a result the period times out 72 h after its reading and burns unpaired`, { pairId: ctx.pair.pairId, recordDate: D });
+  }
   if (sim.err) {
     if (sim.err === "ConflictingPairResult") alert(reg, o.now, o.log, "pair-result-conflict", alertKey("pair-result-conflict", ctx.pair.pairId, D), `pair ${ctx.pair.pairId} ${formatDate(D)}: ${pairErrorSentence(sim.err)}`, { pairId: ctx.pair.pairId, recordDate: D });
     return { waiting: `submit_pair_result refused: ${pairErrorSentence(sim.err)}` };
@@ -108,7 +121,7 @@ export async function ensurePairResult(ctx: PairCtx, reg: Registry, D: number, o
   const r = await ctx.port.result(D);
   if (!r) return { waiting: "submit_pair_result confirmed; the result is not readable yet" };
   o.log(`  [pair] ${ctx.pair.pairId} ${formatDate(D)}: result recorded — ${r.winner === null ? "draw (each coin burns its own fuel)" : `${name(r.winner)} takes the burn`} · ${tx.signature}`);
-  return { result: r };
+  return { result: r, fresh: true };
 }
 
 /** What a landed forward did, written down: the loser's receipts (via the caller's recordCrank), pair_forwards, the log line. */
@@ -168,3 +181,66 @@ export async function pairUnmatchedAlerts(reg: Registry, program: Pick<BurnProgr
   }
   return out;
 }
+
+/**
+ * Round 2 (r2 H-1(c)): a LOST period whose forward never landed within 72 h of the reading cranks UNPAIRED (the program emits
+ * PairForwardMissing) — its fuel burned this coin instead of moving to the winner. Called with what the crank recorded.
+ */
+export function forwardMissingAlert(reg: Registry, t: Pick<TokenRow, "mint" | "ticker">, D: number, outcome: string, now: number, log: (s: string) => void): void {
+  if (outcome === "forwarded") return;
+  const rows = reg.receiptsForReading(t.mint, D);
+  if (!rows.some((b) => b.pairRole === "lost")) return;
+  const pr = reg.pairOf(t.mint);
+  alert(reg, now, log, "pair-forward-missing", alertKey("pair-forward-missing", pr?.pairId ?? t.mint, D), `$${t.ticker} ${formatDate(D)}: lost the period but no forward landed within 72 hours of its reading, so the program cranked it unpaired (PairForwardMissing) — the fuel burned $${t.ticker}, not the winner`, { mint: t.mint, recordDate: D, outcome });
+}
+
+/**
+ * UNLINK (r2 M-2): for every pair still paired on chain, the keeper sends the permissionless unlink_pair once the program's evidence holds —
+ * a voided pair curve, a refunding side, or one coin still without a verified pool 30 days after the pairing. Both coins are plain
+ * afterwards (new receipts carry no pair role); the pages say "unpaired (reason)". A pair someone else unlinked is recorded too.
+ */
+export async function pairUnlinkStep(reg: Registry, program: Pick<BurnProgramClient, "pairForward">, now: number, dryRun: boolean, log: (s: string) => void): Promise<{ pairId: string; reason: UnlinkReason | null; signature: string | null }[]> {
+  const out: { pairId: string; reason: UnlinkReason | null; signature: string | null }[] = [];
+  if (!program.pairForward) return out;
+  for (const pr of reg.pairs()) {
+    if (reg.getStatus(unlinkedKey(pr.pairId)) !== null) continue;
+    const a = reg.token(pr.mintA), b = reg.token(pr.mintB);
+    if (!a || !b) continue;
+    const port = program.pairForward.port(pr.mintA, pr.mintB);
+    let l: Awaited<ReturnType<PairForwardPort["links"]>>;
+    try { l = await port.links(); } catch { continue; }
+    if (!l.paired) {
+      // unlinked by someone else: both links closed, both coins plain — recorded once the pair had acted as a pair here
+      const wasPaired = [...reg.receipts(pr.mintA), ...reg.receipts(pr.mintB)].some((r) => r.pairRole !== null);
+      if (wasPaired && !l.a && !l.b && l.stateA === 0 && l.stateB === 0) {
+        reg.setStatus(unlinkedKey(pr.pairId), JSON.stringify({ reason: null, reasonText: "unlinked on chain (the reason is in its PairUnlinked event)", at: now, signature: null }));
+        log(`  [pair] ${pr.pairId}: unlinked on chain — both coins are plain coins now`);
+        out.push({ pairId: pr.pairId, reason: null, signature: null });
+      }
+      continue;
+    }
+    let ev: Awaited<ReturnType<PairForwardPort["unlinkEvidence"]>>;
+    try { ev = await port.unlinkEvidence(now); } catch { continue; }
+    if (!ev) continue;
+    const text = UNLINK_REASON_TEXT[ev.reason];
+    if (dryRun) { log(`  [dry-run] pair ${pr.pairId}: would unlink_pair (${text})`); continue; }
+    const tx = await port.buildUnlink({ pair: ev.pair });
+    const sim = await port.simulate(tx.raw);
+    if (sim.err) { log(`  [pair] ${pr.pairId}: unlink_pair refused — ${pairErrorSentence(sim.err)}`); continue; }
+    try { await port.send(tx.raw); } catch (e) { log(`  [pair] ${pr.pairId}: unlink_pair send raised ${(e as Error).message.slice(0, 120)}`); }
+    const c = await port.confirm(tx);
+    if (c.status !== "confirmed") { log(`  [pair] ${pr.pairId}: unlink_pair ${c.status === "failed" ? `failed: ${pairErrorSentence(c.err)}` : "not confirmed yet"}`); continue; }
+    reg.setStatus(unlinkedKey(pr.pairId), JSON.stringify({ reason: ev.reason, reasonText: text, at: now, signature: tx.signature }));
+    alert(reg, now, log, "pair-unlinked", `pair-unlinked:${pr.pairId}`, `pair ${pr.pairId} ($${a.ticker} / $${b.ticker}) unlinked: ${text}; both are plain coins now and nothing forwards between them`, { pairId: pr.pairId, reason: ev.reason });
+    out.push({ pairId: pr.pairId, reason: ev.reason, signature: tx.signature });
+  }
+  return out;
+}
+
+/** The recorded unlink of a pair (for the pages and the API), or null. */
+export function pairUnlinked(reg: Pick<Registry, "getStatus">, pairId: string): { reason: string; at: string; signature: string | null } | null {
+  const raw = reg.getStatus(unlinkedKey(pairId));
+  if (!raw) return null;
+  try { const j = JSON.parse(raw) as { reasonText: string; at: number; signature: string | null }; return { reason: j.reasonText, at: new Date(j.at).toISOString(), signature: j.signature }; } catch { return null; }
+}
+

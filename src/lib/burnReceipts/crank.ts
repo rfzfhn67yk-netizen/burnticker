@@ -4,7 +4,7 @@ import { bs58, fetchNextReadingInLine, fetchReading, fetchTokenConfig, type Read
 import { assertSignableGenesis, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LL_POOL_PLATFORM_ID, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, OUTCOME_NAMES, PACKET_DATA_SIZE, POOL_POLICY_CREATOR_IS_FEE_PDA, SYSVAR_INSTRUCTIONS_ID } from "@/lib/burnReceipts/constants";
 import { type BuybackPoolAccounts, buybackPoolAccounts, decodeCpmmPool, fetchCpmmPool } from "@/lib/burnReceipts/cpmm";
 import { formatDate } from "@/lib/burnReceipts/math";
-import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
+import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
 import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
 import { configPda, cpmmAuthority, feePda, feeTokenAddress, feeWsolAddress, launchlabPoolPda, vaultAddress } from "@/lib/burnReceipts/pda";
 
@@ -296,8 +296,26 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
     if (!link) throw new Error(`paired config ${ctx.mint.toBase58()} has no PairLink`);
     partner = link.pair_mint;
     const result = await fetchPairResult(ctx.connection, ctx.programId, ctx.mint, partner, recordDate);
-    if (pairResultFor(result, ctx.mint) === PAIR_RESULT_LOST) {
-      return { kind: "forward", recordDate, config: c, instructions: [forwardToWinnerIx({ programId: ctx.programId, cranker, loserMint: ctx.mint, winnerMint: partner, recordDate })] };
+    // r2 H-1(c): a LOST period whose forward never landed opens the program's time-out PAIR_RESULT_GRACE_SECS after the reading — then
+    // the buyback (paired accounts; PairForwardMissing) is the instruction to send, not the forward.
+    let lostOpen = pairResultFor(result, ctx.mint) === PAIR_RESULT_LOST;
+    if (lostOpen) {
+      const slot = await ctx.connection.getSlot("confirmed");
+      const chainNow = (await ctx.connection.getBlockTime(slot)) ?? Math.floor(Date.now() / 1000);
+      if (chainNow >= Number(next.reading.submitted_at) + PAIR_RESULT_GRACE_SECS) lostOpen = false;
+    }
+    if (lostOpen) {
+      // review I-5: the winner fee PDA's WSOL account must exist for a WSOL leg — create it idempotently first.
+      const winnerFee = feePda(ctx.programId, partner);
+      return {
+        kind: "forward",
+        recordDate,
+        config: c,
+        instructions: [
+          createAtaIdempotentIx({ payer: cranker, owner: winnerFee, mint: NATIVE_MINT, ata: feeWsolAddress(ctx.programId, partner) }),
+          forwardToWinnerIx({ programId: ctx.programId, cranker, loserMint: ctx.mint, winnerMint: partner, recordDate }),
+        ],
+      };
     }
   }
   const pool = await poolAccountsOrStandIns(ctx, c.cpmm_pool);

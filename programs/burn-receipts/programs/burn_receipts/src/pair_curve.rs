@@ -24,6 +24,9 @@ mod off {
     pub const LP_LOCKED: usize = 156;
     pub const CP_CONFIG: usize = 172;
     pub const VAULT: usize = 204;
+    /// `refunding: [bool; 2]` (pair_curve state.rs; pinned by programs/pair_curve/tests/lifecycle.rs) — read only when the account is
+    /// long enough (unlink_pair's evidence).
+    pub const REFUNDING: usize = 880;
     pub const MIN_LEN: usize = 236;
 }
 
@@ -36,6 +39,8 @@ pub struct PairView {
     pub lp_locked: [u64; 2],
     pub cp_config: Pubkey,
     pub vault: Pubkey,
+    /// pair_curve's per-side refund flag (a side whose pool never came; its holders redeem pro rata).
+    pub refunding: [bool; 2],
 }
 
 fn pk(d: &[u8], at: usize) -> Pubkey {
@@ -58,6 +63,7 @@ impl PairView {
             lp_locked: [u64_at(&d, off::LP_LOCKED), u64_at(&d, off::LP_LOCKED + 8)],
             cp_config: pk(&d, off::CP_CONFIG),
             vault: pk(&d, off::VAULT),
+            refunding: if d.len() >= off::REFUNDING + 2 { [d[off::REFUNDING] != 0, d[off::REFUNDING + 1] != 0] } else { [false, false] },
         };
         let expected = Pubkey::find_program_address(&[PAIR_CURVE_PAIR_SEED, v.mints[0].as_ref(), v.mints[1].as_ref()], &PAIR_CURVE_PROGRAM_ID).0;
         require_keys_eq!(*acc.key, expected, BurnError::InvalidPairAccount);

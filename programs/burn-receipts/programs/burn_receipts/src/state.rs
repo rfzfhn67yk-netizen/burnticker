@@ -328,7 +328,10 @@ pub struct PairLink {
     /// Provisional links only: the partner must answer by this time (0 for links written already paired).
     pub pairing_deadline: i64,
     pub paired_at: i64,
-    pub reserved: [u8; 32],
+    /// pair-forward blind review M-1: the coin's attester set when the link was written (pair::attester_set_hash). A result in which
+    /// this coin LOSES is valid with its own quorum alone only while its set still hashes to this; after a rotation the partner's quorum
+    /// must co-sign. Zero for links written before the r2 build (then the partner always co-signs).
+    pub attester_set_hash: [u8; 32],
 }
 
 /// LAUNCHPAD-PATH §40 — one period's result of a pair, attested by a quorum of EACH coin's attesters over

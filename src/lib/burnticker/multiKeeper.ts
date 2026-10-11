@@ -14,7 +14,7 @@ import { solToLamports } from "@/lib/burnKeeper/rules";
 import { derbyProofHash } from "@/lib/burnticker/derby/adapter";
 import { COUNTER_BASE, counterRule, counterSourceUrl, programExpressible, type BurnProgramClient } from "@/lib/burnticker/program";
 import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFeesKeeper";
-import { ensurePairResult, forwardLoss, pairCtxFor, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
+import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -313,27 +313,34 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     if ("waiting" in res) { hold(res.waiting, rows); break; }
     const lead = rows[0];
     if (lead && !d.dryRun && lead.nextAttemptAt && now < lead.nextAttemptAt) { hold(lead.waitReason ? `${lead.waitReason} (next try ${new Date(lead.nextAttemptAt).toISOString()})` : `backing off until ${new Date(lead.nextAttemptAt).toISOString()}`, rows); break; }
-    // WINNER TAKES THE BURN: a pair period needs its PairResult before either crank; the LOSER's reading is forwarded, never cranked.
-    // Every buyback period of a paired coin needs a PairResult (a clock day or a period with no result is posted as a draw — each coin
-    // burns its own fuel); without one the program waits PairResultPending for up to 72 h.
-    // The chain planner (burnReceipts/crank.ts) already returns kind "forward" for a LOST period; both kinds go through here so the
-    // forward is recorded (pair_forwards, receipt line) the same way.
-    if (pairCtx?.active && (plan.kind === "buyback" || plan.kind === "forward")) {
+    // WINNER TAKES THE BURN: a pair period needs its PairResult before either crank; the LOSER's reading is forwarded, never burned on the
+    // losing coin. The chain planner (burnReceipts/crank.ts planCrank) plans the forward for a LOST period until PAIR_RESULT_GRACE_SECS
+    // after the reading (chain time), then the paired buyback (the program accepts it and emits PairForwardMissing) — the keeper follows
+    // the planner and does not repeat that time-out. A period dated before the pairing day has no PairResult (PairDateBeforePairing).
+    if (pairCtx?.active && (plan.kind === "buyback" || plan.kind === "forward") && (pairCtx.pairedOn == null || D >= pairCtx.pairedOn)) {
       const pr = await ensurePairResult(pairCtx, reg, D, { now, dryRun: d.dryRun, log: d.log, winnerReading: () => winnerFlatReading(d, pairCtx, D) });
-      if ("waiting" in pr) { hold(`pair result for ${Ds}: ${pr.waiting}`, rows); break; }
-      if (pr.result.winner === pairCtx.other.mint) {
-        const fr = await forwardLoss(pairCtx, reg, port, D, { now, dryRun: d.dryRun, log: d.log });
-        if ("waiting" in fr) {
-          if (fr.error) { reg.noteReadingError(mint, D, fr.waiting, now + backoffMs(lead?.attempts ?? 0), now); hold(fr.waiting, rows, "error"); }
-          else hold(fr.waiting, rows);
-          break;
+      if ("waiting" in pr) {
+        if (plan.kind === "forward") { hold(`pair result for ${Ds}: ${pr.waiting}`, rows); break; }
+        // no result: the paired buyback's simulation decides — PairResultPending (a wait) until 72 h after the reading, then unpaired
+        d.log(`  [pair] $${t.ticker} ${Ds}: no pair result — ${pr.waiting}`);
+      } else if (pr.result.winner === pairCtx.other.mint) {
+        // this coin LOST D. A result posted just now came after this plan: re-plan (the planner now plans the forward). An existing LOST
+        // result with a buyback plan means the planner opened the program's time-out: crank unpaired (recordCrank alerts pair-forward-missing).
+        if (plan.kind === "buyback" && pr.fresh) continue;
+        if (plan.kind === "forward") {
+          const fr = await forwardLoss(pairCtx, reg, port, D, { now, dryRun: d.dryRun, log: d.log });
+          if ("waiting" in fr) {
+            if (fr.error) { reg.noteReadingError(mint, D, fr.waiting, now + backoffMs(lead?.attempts ?? 0), now); hold(fr.waiting, rows, "error"); }
+            else hold(fr.waiting, rows);
+            break;
+          }
+          const rd0 = await port.reading(D);
+          if (!rd0?.processed) { hold(`forward ${fr.signature.slice(0, 12)}… confirmed; the reading is not processed yet`, rows); break; }
+          const rd = fr.facts ? { ...rd0, outcome: "forwarded", poolLamports: fr.facts.poolLamports, poolActualLamports: fr.facts.poolLamports, spentLamports: fr.facts.lamports, ruleSpendLamports: fr.facts.lamports, carriedInLamports: BigInt(0), carriedOutLamports: BigInt(0), got: BigInt(0), burned: BigInt(0) } : rd0;
+          recordCrank(d, t, cfg, D, rd, { signature: fr.signature, slot: fr.slot, memo: fr.memo }, false, out);
+          if (fr.facts) recordForward(reg, pairCtx, D, fr.facts, fr.signature, fr.slot, now, d.log);
+          continue;
         }
-        const rd0 = await port.reading(D);
-        if (!rd0?.processed) { hold(`forward ${fr.signature.slice(0, 12)}… confirmed; the reading is not processed yet`, rows); break; }
-        const rd = fr.facts ? { ...rd0, outcome: "forwarded", poolLamports: fr.facts.poolLamports, poolActualLamports: fr.facts.poolLamports, spentLamports: fr.facts.lamports, ruleSpendLamports: fr.facts.lamports, carriedInLamports: BigInt(0), carriedOutLamports: BigInt(0), got: BigInt(0), burned: BigInt(0) } : rd0;
-        recordCrank(d, t, cfg, D, rd, { signature: fr.signature, slot: fr.slot, memo: fr.memo }, false, out);
-        if (fr.facts) recordForward(reg, pairCtx, D, fr.facts, fr.signature, fr.slot, now, d.log);
-        continue;
       }
     }
     if (d.dryRun) { d.log(`  [dry-run] $${t.ticker} ${Ds}: would crank_${plan.kind} (the program computes the amounts)`); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "dry-run", why: `crank_${plan.kind} ${Ds}` }); break; }
@@ -441,6 +448,7 @@ function recordCrank(d: KeeperDeps, t: TokenRow, cfg: ProgramConfigView, D: numb
   const units = rows.reduce((a, b) => a + b.units, 0);
   if (rows.length && units !== rd.units) d.log(`  [program] $${t.ticker} ${formatDate(D)}: the program counted ${rd.units} unit(s), the receipts carry ${units} — the chain is the record`);
   const skippedReason = rd.outcome === "below-floor" ? `the program's spend was under its floor (${cfg.floorLamports} lamports) — nothing bought, the pool keeps the SOL` : rd.outcome === "no-units" ? "the program counted no units" : null;
+  forwardMissingAlert(reg, t, D, rd.outcome, d.now(), d.log);
   reg.markProgramOutcome(mint, D, { signature: tx.signature, slot: tx.slot, outcome: rd.outcome, memo: tx.memo, poolLamports: rd.poolLamports, poolActualLamports: rd.poolActualLamports, spentLamports: rd.spentLamports, ruleSpendLamports: rd.ruleSpendLamports, carriedInLamports: rd.carriedInLamports, carriedOutLamports: rd.carriedOutLamports, gotRaw: rd.got, burnRaw: rd.burned > BigInt(0) ? rd.burned : BigInt(0), shortfallRaw: rd.shortfall, skippedReason }, d.now());
   const partial = [rd.spentLamports > BigInt(0) && rd.carriedOutLamports > BigInt(0) ? `SpendCapBound: ${rd.carriedOutLamports} lamports carried into the next crank` : null, rd.poolActualLamports > rd.poolLamports ? `BurnPoolCapBound: the rule applied to ${rawToTokens(rd.poolLamports, 9)} of ${rawToTokens(rd.poolActualLamports, 9)} SOL` : null].filter(Boolean).join("; ");
   d.log(`  [crank] $${t.ticker} ${formatDate(D)}: ${adopted ? "already processed on chain — adopted" : "CRANKED"} · ${rd.outcome} · ${rd.units} unit(s) for ${rows.length} receipt(s) · spent ${rd.spentLamports} lamports, burned ${rawToTokens(rd.burned, DECIMALS)}${partial ? ` · PARTIAL — ${partial}` : ""} · ${tx.signature}`);
@@ -617,11 +625,11 @@ export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule
 }
 
 /**
- * WINNER TAKES THE BURN: the WINNER's reading for day D, which forward_to_winner takes. On an event day both coins read the period, so it
- * exists. On a one-shot loser's wind-down / drain / sweep day the winner may have nothing that day: the keeper attests a FLAT reading for
- * it (the unit counter unchanged — 0 units, processed at once; the clock proof for D). "exists" / "submitted"; "cannot" when the winner
- * has already read past D (the period then posts as a draw and the loser burns its own fuel); waiting while the winner still has
- * receipts up to D to attest, or the day is not over.
+ * WINNER TAKES THE BURN: the WINNER's reading for day D, which a win's submit_pair_result needs (both coins' readings). On an event day
+ * both coins read the period, so it exists. On a one-shot loser's wind-down / drain / sweep day the winner may have nothing that day: the
+ * keeper attests a FLAT reading for it (the unit counter unchanged — 0 units, processed at once; the clock proof for D). "exists" /
+ * "submitted"; "cannot" when the winner has already read past D (no win can be recorded: alert; the loser's period times out after 72 h —
+ * never a substitute draw); waiting while the winner still has receipts up to D to attest, or the day is not over.
  */
 export async function winnerFlatReading(d: KeeperDeps, ctx: PairCtx, D: number): Promise<"exists" | "submitted" | "cannot" | { waiting: string }> {
   const w = ctx.other, Ds = formatDate(D), now = d.now();
@@ -701,6 +709,8 @@ export async function runCycle(d: KeeperDeps, opts: { fetch?: boolean } = {}): P
     try { executed.push(...await executePending(d, t, locked, ctx)); } catch (e) { errors.push(`$${t.ticker}: execute: ${(e as Error).message.slice(0, 160)}`); }
   }
   try { await pairUnmatchedAlerts(d.registry, d.program, d.now(), d.log); } catch (e) { errors.push(`pair links: ${(e as Error).message.slice(0, 160)}`); }
+  // r2 M-2: unlink_pair once the program's evidence holds (a voided pair curve, a refunding side, no verified pool 30 days after pairing).
+  try { await pairUnlinkStep(d.registry, d.program, d.now(), !!d.dryRun, d.log); } catch (e) { errors.push(`pair unlink: ${(e as Error).message.slice(0, 160)}`); }
   for (const r of executed) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} ${r.eventId}: ${r.why}`);
   for (const r of lpFees) if (r.outcome === "error") errors.push(`${r.mint.slice(0, 8)} lock-fees: ${r.why}`);
   if (d.derby && !d.dryRun) { try { d.derby.plan(); } catch (e) { errors.push(`derby planning pass: ${(e as Error).message.slice(0, 160)}`); } }

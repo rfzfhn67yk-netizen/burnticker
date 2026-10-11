@@ -85,8 +85,9 @@ export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; c
     config: configPda(o.programId, o.mint),
     fee_vault: feePda(o.programId, o.mint),
     ...(o.launchlabPlatform ? { launchlab_platform: o.launchlabPlatform } : {}),
-    ...(o.pairMint ? { pair_mint: o.pairMint, pair_link: pairLinkPda(o.programId, o.mint) } : {}),
-    ...(o.pairMint && o.partnerFirst ? { partner_link: pairLinkPda(o.programId, o.pairMint), partner_config: configPda(o.programId, o.pairMint) } : {}),
+    // r2 L-3: the partner's PairLink address always rides with pairMint (empty when this coin is first).
+    ...(o.pairMint ? { pair_mint: o.pairMint, pair_link: pairLinkPda(o.programId, o.mint), partner_link: pairLinkPda(o.programId, o.pairMint) } : {}),
+    ...(o.pairMint && o.partnerFirst ? { partner_config: configPda(o.programId, o.pairMint) } : {}),
   }, { args: o.args });
 }
 

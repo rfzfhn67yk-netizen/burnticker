@@ -495,7 +495,8 @@ pub fn ix_initialize_full(
             launchlab_platform,
             pair_mint,
             pair_link: pair_mint.map(|_| pair_link_pda(mint)),
-            partner_link: pair_mint.filter(|_| partner_first).map(|m| pair_link_pda(&m)),
+            // pair-forward blind review L-3: the partner's PairLink address always rides with pair_mint.
+            partner_link: pair_mint.map(|m| pair_link_pda(&m)),
             partner_config: pair_mint.filter(|_| partner_first).map(|m| config_pda(&m)),
             event_authority: event_authority(),
             program: burn_receipts::ID,
@@ -870,6 +871,9 @@ pub fn ix_submit_pair_result(payer: &Pubkey, a: &Pubkey, b: &Pubkey, date: u32, 
             pair_result: pair_result_pda(&lo, &hi, date),
             instructions: solana_instructions_sysvar::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
+            // r2 H-1(a): a win carries both coins' readings for the date; a draw may omit them.
+            reading_lo: (winner != Pubkey::default()).then(|| reading_pda(&config_pda(&lo), date)),
+            reading_hi: (winner != Pubkey::default()).then(|| reading_pda(&config_pda(&hi), date)),
         }
         .to_account_metas(None),
     )
@@ -898,7 +902,6 @@ pub fn ix_forward_to_winner(cranker: &Pubkey, loser: &Pubkey, winner: &Pubkey, d
             winner_config: config_pda(winner),
             winner_fee_vault: wf,
             winner_fee_wsol: get_associated_token_address(&wf, &NATIVE_MINT),
-            winner_reading: reading_pda(&config_pda(winner), date),
             pair_result: pair_result_pda(loser, winner, date),
             token_program: anchor_spl::token::spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,
@@ -918,4 +921,37 @@ pub fn pair_link(env: &Env, mint: &Pubkey) -> Option<burn_receipts::state::PairL
 pub fn pair_result(env: &Env, a: &Pubkey, b: &Pubkey, date: u32) -> Option<burn_receipts::state::PairResult> {
     use anchor_lang::AccountDeserialize;
     env.svm.get_account(&pair_result_pda(a, b, date)).filter(|x| !x.data.is_empty()).map(|x| burn_receipts::state::PairResult::try_deserialize(&mut x.data.as_slice()).unwrap())
+}
+
+/// unlink_pair (pair-forward blind review M-2); `pair` = the pair_curve Pair as evidence (Voided / a side refunding), or None.
+pub fn ix_unlink_pair(cranker: &Pubkey, a: &Pubkey, b: &Pubkey, pair: Option<Pubkey>) -> Instruction {
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::UnlinkPair {}.data(),
+        burn_receipts::accounts::UnlinkPair {
+            cranker: *cranker,
+            config_a: config_pda(a),
+            config_b: config_pda(b),
+            link_a: pair_link_pda(a),
+            link_b: pair_link_pda(b),
+            fee_a: fee_pda(a),
+            fee_b: fee_pda(b),
+            pair,
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// submit_pair_result in a v0 transaction through a lookup table holding its accounts — what a result signed by two different keys
+/// needs once the readings ride along (a legacy transaction is ~1,274 bytes then).
+pub fn submit_pair_result_v0(env: &mut Env, a: &Pubkey, b: &Pubkey, date: u32, winner: Pubkey, signers: &[&Keypair]) -> TxResult {
+    let msg = pair_message(a, b, date, &winner, src_hash(), [0u8; 32]);
+    let entries: Vec<_> = signers.iter().map(|k| (k.pubkey(), sign(k, &msg))).collect();
+    let payer = env.payer.pubkey();
+    let ix = ix_submit_pair_result(&payer, a, b, date, winner, src_hash(), [0u8; 32]);
+    let addrs: Vec<Pubkey> = ix.accounts.iter().filter(|m| !m.is_signer && m.pubkey != burn_receipts::ID).map(|m| m.pubkey).collect();
+    let table = env.create_lookup_table(&addrs);
+    env.send_v0(&[ed25519_shared(&entries, &msg), ix], &[], &[table])
 }

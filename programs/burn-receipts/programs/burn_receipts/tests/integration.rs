@@ -740,6 +740,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "set_registration_policy",
             "submit_pair_result",
             "submit_reading",
+            "unlink_pair",
             "veto_registration_policy",
         ]
     );

@@ -13,6 +13,7 @@ import { KalshiClient, fixtureFetch, settledMarketsUrl, seriesApiUrl, openMarket
 import { CatalogueAdapter } from "@/lib/burnticker/catalogue";
 import { runCycle, type KeeperDeps } from "@/lib/burnticker/multiKeeper";
 import { buybackSpend } from "@/lib/burnReceipts/math";
+import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { PAIR_ERRORS, PAIR_RESULT_GRACE_SECS, forwardAmount, forwardLine, formatForwardMemo, pairErrorSentence, parseForwardMemo, sortPairMints } from "@/lib/burnticker/pairForward";
 import { pairCtxFor, periodWinner } from "@/lib/burnticker/pairForwardKeeper";
 import fs from "node:fs";
@@ -23,6 +24,9 @@ import { FIELD_HELP } from "@/lib/burnticker/fieldHelp";
 import { TEMPLATES } from "@/lib/burnticker/templates";
 import { pairCounterpartFrom, pairForwardsJson, forwardedSol } from "@/lib/burnticker/tokenPage";
 import { buildOpsStatus } from "@/lib/burnticker/ops/status";
+import { Keypair } from "@solana/web3.js";
+import { ProgramBurnClient } from "@/lib/burnticker/programClient";
+import { pairLinkPda, configPda } from "@/lib/burnReceipts/pda";
 import { winnerFlatReading } from "@/lib/burnticker/multiKeeper";
 import { linkPairDue } from "@/lib/burnKeeper/pairCurveCrank";
 import type { PairLinkAccount } from "@/lib/burnReceipts/pairs";
@@ -66,8 +70,11 @@ describe("the forward amount (the program's rule)", () => {
     assert.equal(forwardLine("CHIEFS", "BRONCOS", B(99_600_000)), "forwarded from $CHIEFS: 0.0996 SOL → $BRONCOS burn pool");
     const [lo, hi] = sortPairMints(winner, loser);
     assert.equal(Buffer.compare(new PublicKey(lo).toBuffer(), new PublicKey(hi).toBuffer()), -1);
-    assert.equal(Object.keys(PAIR_ERRORS).length, 13);
-    assert.deepEqual(Object.values(PAIR_ERRORS).map((e) => e.code), Array.from({ length: 13 }, (_, i) => 6077 + i));
+    assert.equal(Object.keys(PAIR_ERRORS).length, 17);
+    assert.deepEqual(Object.values(PAIR_ERRORS).map((e) => e.code), Array.from({ length: 17 }, (_, i) => 6077 + i));
+    // every pair error of the program's IDL has a plain sentence (6077–6093)
+    for (const e of BURN_RECEIPTS_IDL.errors.filter((x) => x.code >= 6077 && x.code <= 6093)) assert.equal(PAIR_ERRORS[e.name]?.code, e.code, e.name);
+    assert.match(pairErrorSentence("PairResultNotServable"), /no draw is substituted/);
     assert.match(pairErrorSentence("custom program error: 0x17c5"), /^ForwardRequired: /);
     const cfg = loadCopyLintConfig();
     for (const [k, e] of Object.entries(PAIR_ERRORS)) assert.equal(lintCopy(e.sentence, cfg).ok, true, k);
@@ -97,8 +104,10 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
   let reg: Registry, program: FakeBurnProgram, deps: KeeperDeps, clock: number, logs: string[];
   const table = { [settledMarketsUrl("KXNFLGAME")]: fx("kalshi/KXNFLGAME.settled.json"), [seriesApiUrl("KXNFLGAME")]: fx("kalshi/series.KXNFLGAME.json"), [openMarketsUrl("KXNFLGAME")]: { cursor: "", markets: [] } };
   beforeEach(() => { reg = openRegistry(":memory:"); program = new FakeBurnProgram("devnet"); clock = NOW; logs = []; deps = { registry: reg, program, oracles: { kalshi: new KalshiClient({ fetchImpl: fixtureFetch(table), now: () => clock, minIntervalMs: 0 }), catalogue: new CatalogueAdapter() }, attester: ATTESTER, log: (s) => logs.push(s), now: () => clock, dryRun: false }; });
-  async function launchPair(o: { legacy?: boolean } = {}) {
-    const inputA = { creator: CREATOR, ticker: "BRONCOS", name: "Broncos", description: "", imageUrl: null, links: [], rule: BRONCOS_LOSE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" as const };
+  async function launchPairNamed(ta: string, tb: string) { return launchPair({ tickers: [ta, tb] }); }
+  async function launchPair(o: { legacy?: boolean; tickers?: [string, string] } = {}) {
+    const [TA, TB] = o.tickers ?? ["BRONCOS", "CHIEFS"];
+    const inputA = { creator: CREATOR, ticker: TA, name: TA, description: "", imageUrl: null, links: [], rule: BRONCOS_LOSE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" as const };
     const deps0 = { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m: string) => `https://x/${m}.json` };
     let pr: { pairId: string; a: Awaited<ReturnType<typeof buildLaunchBundle>>; b: Awaited<ReturnType<typeof buildLaunchBundle>> };
     if (o.legacy) {
@@ -108,8 +117,8 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
       const a = await buildLaunchBundle({ ...inputA, rule: ruleA }, deps0);
       const b = await buildLaunchBundle({ ...inputA, ticker: "CHIEFS", name: "Chiefs", rule: invertMapping(ruleA, a.mint, pairId) }, deps0);
       pr = { pairId, a, b };
-    } else pr = await buildPairBundles({ a: inputA, b: { ticker: "CHIEFS", name: "Chiefs", description: "", imageUrl: null, links: [] }, voidBy: "2026-11-30" }, deps0);
-    for (const [b, ticker] of [[pr.a, "BRONCOS"], [pr.b, "CHIEFS"]] as const) {
+    } else pr = await buildPairBundles({ a: inputA, b: { ticker: TB, name: TB, description: "", imageUrl: null, links: [] }, voidBy: "2026-11-30" }, deps0);
+    for (const [b, ticker] of [[pr.a, TA], [pr.b, TB]] as const) {
       reg.register({ mint: b.mint, ticker, name: b.name, creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: null, tokenConfig: null, poolId: null, launchTx: null, cluster: "devnet", platformId: null, baselineAt: "2026-09-01T00:00:00Z", status: "draft" }, clock);
       reg.markLaunched(b.mint, `launch${ticker}`, null, "2026-09-01T00:00:00Z");
       program.deposit(b.mint, B(5_000_000_000)); program.supplies.set(b.mint, B("1000000000000000"));
@@ -152,13 +161,23 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     assert.throws(() => reg.db.exec("UPDATE burns SET status='planned' WHERE status='forwarded'"), /forwarded receipt is final/);
   });
 
-  test("the program's gate: a lost period refuses its crank (ForwardRequired); no result waits 72 h, then burns unpaired; a conflicting result is refused", async () => {
+  test("the program's gate: a lost period refuses its crank (ForwardRequired) for 72 h, then cranks unpaired; no result waits 72 h; a win needs both readings; a conflicting result is refused", async () => {
     const { a, b } = await launchPair();
     const fa = program.fake(a.mint), port = program.pairForward.port(a.mint, b.mint);
     assert.equal(port.gate(a.mint, 20260928, clock), "pending");
     assert.equal(port.gate(a.mint, 20260928, clock - PAIR_RESULT_GRACE_SECS * 1000), "missing");
-    const t1 = await port.buildSubmitResult({ recordDate: 20260928, winner: b.mint, sourceUrl: "x" }); await port.send(t1.raw);
+    // r2 H-1(a): no readings for the date yet → a win is not servable (the keeper posts a draw instead)
+    const t0 = await port.buildSubmitResult({ recordDate: 20260928, winner: b.mint, sourceUrl: "x" });
+    assert.equal((await port.simulate(t0.raw)).err, "PairResultNotServable");
+    port.results.set(20260928, { recordDate: 20260928, winner: b.mint, submittedAt: 0, forwarded: false, forwardedLamports: B(0), forwardedAt: null });
     assert.equal(port.gate(a.mint, 20260928, clock), "lost"); assert.equal(port.gate(b.mint, 20260928, clock), "won");
+    // r2 H-1(c): no forward within 72 h of the reading → the loser cranks unpaired (PairForwardMissing)
+    assert.equal(port.gate(a.mint, 20260928, clock - PAIR_RESULT_GRACE_SECS * 1000), "forward-missing");
+    // no result dated before the pairing day
+    port.pairedAtSec = Math.floor(Date.UTC(2026, 9, 1) / 1000);
+    const early = await port.buildSubmitResult({ recordDate: 20260930, winner: null, sourceUrl: "x" });
+    assert.equal((await port.simulate(early.raw)).err, "PairDateBeforePairing");
+    port.pairedAtSec = 0;
     const t2 = await port.buildSubmitResult({ recordDate: 20260928, winner: a.mint, sourceUrl: "x" });
     assert.equal((await port.simulate(t2.raw)).err, "ConflictingPairResult");
     const t3 = await port.buildSubmitResult({ recordDate: 20260928, winner: b.mint, sourceUrl: "x" });
@@ -197,6 +216,107 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     void b;
   });
 
+  // ---- round 2 (the pair-forward blind review: H-1, M-1, M-2, L-1..L-4) ----
+  test("r2: against a dead winner (no verified pool) the win is still recorded and the forward moves 0 lamports — the loser keeps its fuel and never burns a period it lost", async () => {
+    const { a, b, pairId } = await launchPair();
+    program.now = () => clock;
+    const port = program.pairForward.port(a.mint, b.mint);
+    port.winnerLive = false;
+    const fee0 = { [a.mint]: program.fake(a.mint).feeLamports, [b.mint]: program.fake(b.mint).feeLamports };
+    await runCycle(deps);
+    assert.ok(port.results.size >= 2 && [...port.results.values()].every((r) => r.winner !== null), "wins recorded, no substitute draw");
+    const fw = reg.pairForwards(pairId);
+    assert.ok(fw.length >= 2 && fw.every((f) => f.lamports === B(0)), "0-lamport forwards");
+    const lost = [...reg.receipts(a.mint), ...reg.receipts(b.mint)].filter((r) => r.pairRole === "lost");
+    assert.ok(lost.length >= 2 && lost.every((r) => r.status === "forwarded" && (r.burnRaw ?? B(0)) === B(0)), "a lost period never burns the losing coin");
+    for (const f of fw) assert.equal(program.fake(f.loserMint).feeLamports <= fee0[f.loserMint], true);
+    const kinds = reg.alertsSince(0).map((x) => x.kind);
+    assert.ok(!kinds.includes("pair-result-draw") && !kinds.includes("pair-forward-missing"));
+    assert.ok(logs.some((l) => /0 SOL → \$\w+ burn pool \(nothing to move/.test(l)));
+  });
+
+  test("r2: a win that cannot be recorded (PairResultNotServable) raises an alert and posts NO draw; without a result the period waits, then cranks unpaired after 72 h", async () => {
+    const { a, b } = await launchPair();
+    program.now = () => clock;
+    const port = program.pairForward.port(a.mint, b.mint);
+    port.simErr = "PairResultNotServable";
+    await runCycle(deps);
+    assert.equal(port.results.size, 0, "no result, no substitute draw");
+    assert.ok(reg.alertsSince(0).some((x) => x.kind === "pair-result-unservable" && /no draw is posted/.test(x.text)));
+    assert.ok([...reg.receipts(a.mint), ...reg.receipts(b.mint)].every((r) => r.status !== "confirmed" && r.status !== "forwarded"), "nothing burned while the program waits");
+    clock += 73 * 3600_000;
+    await runCycle(deps); await runCycle(deps);
+    const evs = [...program.fake(a.mint).pairEvents, ...program.fake(b.mint).pairEvents];
+    assert.ok(evs.some((e) => e.name === "PairResultMissing"), "the program's time-out: cranked unpaired");
+  });
+
+  test("r2: forward_to_winner against a dead winner moves 0 lamports, still processes the loser's reading, and writes the memo", async () => {
+    const { a, b } = await launchPair();
+    const port = program.pairForward.port(a.mint, b.mint), fa = program.fake(a.mint);
+    const D = 20261001, fee0 = fa.feeLamports;
+    fa.readings.set(D, { recordDate: D, prevDate: fa.cfg.crankCursor, kind: 1, processed: false, value: B(2), prevValue: B(1), delta: B(1), units: 1, signersMask: 1, pool: null, outcome: "pending", poolLamports: B(0), poolActualLamports: B(0), spentLamports: B(0), ruleSpendLamports: B(0), carriedInLamports: B(0), carriedOutLamports: B(0), got: B(0), burned: B(0), owed: B(0), shortfall: B(0) } as never);
+    port.results.set(D, { recordDate: D, winner: b.mint, submittedAt: 0, forwarded: false, forwardedLamports: B(0), forwardedAt: null });
+    port.winnerLive = false;
+    const tx = await port.buildForward({ loserMint: a.mint, recordDate: D });
+    assert.equal((await port.simulate(tx.raw)).err, null, "no PairSideNotLive any more");
+    await port.send(tx.raw);
+    const f = await port.forwardFacts(tx.signature);
+    assert.ok(f && f !== "none"); assert.equal(f.lamports, B(0)); assert.match(f.memo!, /\|lamports=0\|v1$/);
+    assert.deepEqual([fa.readings.get(D)!.processed, fa.readings.get(D)!.outcome], [true, "forwarded"]);
+    assert.equal(fa.feeLamports, fee0, "nothing left the loser's pool");
+    assert.match(forwardLine("BRONCOS", "CHIEFS", B(0)), /0 SOL → \$CHIEFS burn pool \(nothing to move/);
+  });
+
+  test("r2: a forward that cannot land alerts pair-forward-pending well inside 72 h; past 72 h the planner plans the paired buyback (PairForwardMissing) and pair-forward-missing fires", async () => {
+    const { a, b } = await launchPair();
+    program.now = () => clock;
+    const port = program.pairForward.port(a.mint, b.mint);
+    port.forwardErr = "OutOfOrder";
+    await runCycle(deps);
+    assert.ok(port.results.size >= 1 && port.forwards === 0, "results posted, no forward landed");
+    clock += 2 * 3600_000;
+    await runCycle(deps);
+    const pending = reg.alertsSince(0).filter((x) => x.kind === "pair-forward-pending");
+    assert.ok(pending.length >= 1, "pending alert at +2 h");
+    assert.ok(!reg.alertsSince(0).some((x) => x.kind === "pair-forward-missing"));
+    const loserMint = [a.mint, b.mint].find((m) => reg.pending(m).some((r) => r.pairRole === "lost"))!;
+    const kindOf = async () => { const p = await program.fake(loserMint).planCrank(); return "kind" in p ? p.kind : p.status; };
+    assert.equal(await kindOf(), "forward", "inside the grace the planner plans the forward");
+    clock += 72 * 3600_000;
+    assert.equal(await kindOf(), "buyback", "past the grace the planner plans the paired buyback — the keeper does not repeat the time-out");
+    await runCycle(deps); await runCycle(deps);
+    const missing = reg.alertsSince(0).filter((x) => x.kind === "pair-forward-missing");
+    assert.ok(missing.length >= 1, "forward-missing after the 72 h grace");
+    assert.match(missing[0].text, /cranked it unpaired \(PairForwardMissing\)/);
+    const evs = [...program.fake(a.mint).pairEvents, ...program.fake(b.mint).pairEvents];
+    assert.ok(evs.some((e) => e.name === "PairForwardMissing"));
+    const lost = [...reg.receipts(a.mint), ...reg.receipts(b.mint)].filter((r) => r.pairRole === "lost");
+    assert.ok(lost.length > 0 && lost.every((r) => r.status === "confirmed" || r.status === "skipped"), "the lost periods burned their own coin");
+  });
+
+  test("r2: unlink_pair runs only on evidence; afterwards the pair is 'unpaired (reason)', new receipts carry no role; an unlink by someone else is recorded too", async () => {
+    const { a, b, pairId } = await launchPair();
+    program.now = () => clock;
+    const port = program.pairForward.port(a.mint, b.mint);
+    await runCycle(deps);
+    assert.equal(reg.getStatus(`pair.unlinked.${pairId}`), null, "no evidence: PairStillLive, nothing sent");
+    port.unlinkReason = 2;
+    await runCycle(deps);
+    assert.ok(port.unlinked, "unlink_pair landed");
+    const cp = (await pairCounterpartFrom(reg, async () => null, a))!;
+    assert.equal(cp.unpaired!.reason, "one coin had no verified pool 30 days after the pairing");
+    assert.ok(reg.alertsSince(0).some((x) => x.kind === "pair-unlinked"));
+    const ctx = (await pairCtxFor(reg, program, a, clock))!;
+    assert.equal(ctx.active, false, "both are plain coins now");
+    // someone else unlinked another pair: recorded from the chain (both links closed)
+    const o = await launchPairNamed("BULLS", "BEARS");
+    await runCycle(deps);
+    const p2 = program.pairForward.port(o.a.mint, o.b.mint);
+    p2.unlinked = { reason: 0 }; p2.paired = false;
+    await runCycle(deps);
+    assert.match(reg.getStatus(`pair.unlinked.${o.pairId}`) ?? "", /unlinked on chain/);
+  });
+
   test("an unpaired LaunchLab pair raises pair-unmatched until its second coin names the first back", async () => {
     const { a, b, pairId } = await launchPair();
     program.pairForward.port(a.mint, b.mint).paired = false;
@@ -226,16 +346,15 @@ describe("pairing on chain: the pairing window, link_pair, the launch's pair_min
     assert.equal(w.registry.pairForwards(w.pairId).length, 0);
   });
 
-  test("link_pair is due once a side has a pool, both TokenConfigs exist and the PairLinks do not name each other yet", () => {
+  test("link_pair is due right after init_pair (both TokenConfigs, links not naming each other), never for a voided Pair", () => {
     const [m1, m2] = [new PublicKey(Buffer.alloc(32, 1)), new PublicKey(Buffer.alloc(32, 2))];
-    const pool = new PublicKey(Buffer.alloc(32, 9));
     const link = (mint: PublicKey, other: PublicKey, paired: boolean) => ({ mint, pair_mint: other, paired } as unknown as PairLinkAccount);
-    const pair = (pools: PublicKey[]) => ({ pools, mints: [m1, m2] });
-    assert.equal(linkPairDue(pair([PublicKey.default, PublicKey.default]), [true, true], [null, null]), false, "no pool yet");
-    assert.equal(linkPairDue(pair([pool, PublicKey.default]), [true, false], [null, null]), false, "side B has no TokenConfig yet");
-    assert.equal(linkPairDue(pair([pool, PublicKey.default]), [true, true], [null, null]), true);
-    assert.equal(linkPairDue(pair([pool, pool]), [true, true], [link(m1, m2, true), link(m2, m1, false)]), true, "half-linked");
-    assert.equal(linkPairDue(pair([pool, pool]), [true, true], [link(m1, m2, true), link(m2, m1, true)]), false, "already paired (idempotent)");
+    const pair = (status: number) => ({ status, mints: [m1, m2] });
+    assert.equal(linkPairDue(pair(0), [true, true], [null, null]), true, "open, no pool yet: link now (before any reading)");
+    assert.equal(linkPairDue(pair(0), [true, false], [null, null]), false, "side B has no TokenConfig yet");
+    assert.equal(linkPairDue(pair(1), [true, true], [link(m1, m2, true), link(m2, m1, false)]), true, "half-linked");
+    assert.equal(linkPairDue(pair(1), [true, true], [link(m1, m2, true), link(m2, m1, true)]), false, "already paired (a no-op)");
+    assert.equal(linkPairDue(pair(2), [true, true], [null, null]), false, "voided: never");
   });
 
   test("a launched pair names its partner in initialize_token: A provisional, B completes the pairing; a single coin's instruction is unchanged", async () => {
@@ -359,5 +478,23 @@ describe("pair copy: the locked description, the review line, help and templates
     for (const t of texts) { assert.doesNotMatch(t, PRIZE, t); assert.deepEqual(lintCopy(t, cfg).hits.map((h) => h.rule), [], t); }
     // the lint itself refuses "win fees" in any copy
     assert.equal(lintCopy("the winner wins the fees of both coins", cfg).hits.some((h) => h.rule === "win-fees"), true);
+  });
+});
+
+describe("r2: initialize_token at launch always carries the partner's PairLink (L-3)", () => {
+  test("side A (first): pair_mint, its own PairLink and the partner's (empty) PairLink; side B (second): plus the partner's TokenConfig; a single coin: none", async () => {
+    const programId = new PublicKey("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"), admin = Keypair.generate().publicKey;
+    const client = new ProgramBurnClient({ connection: {} as never, programId, cluster: "devnet", payer: null, admin, solUsd: async () => 150 });
+    const locked = lockRule(BRONCOS_LOSE);
+    const [mA, mB, creator] = [Keypair.generate().publicKey, Keypair.generate().publicKey, Keypair.generate().publicKey].map((k) => k.toBase58());
+    const base = { creator, ticker: "BRONCOS", rulesSha256: locked.sha256, selectorKey: "kalshi:KXNFLGAME:-DEN", mode: "buyback" as const, attesters: [creator], quorum: 1, vault: null, rule: locked.rule };
+    const def = BURN_RECEIPTS_IDL.instructions.find((i) => i.name === "initialize_token")!;
+    const slot = (keys: { pubkey: string }[], n: string) => keys[def.accounts.findIndex((a) => a.name === n)].pubkey;
+    const A = (await client.initializeToken({ ...base, mint: mA, pairMint: mB, partnerFirst: false })).instructions[0];
+    assert.deepEqual([slot(A.keys, "pair_mint"), slot(A.keys, "pair_link"), slot(A.keys, "partner_link"), slot(A.keys, "partner_config")], [mB, pairLinkPda(programId, new PublicKey(mA)).toBase58(), pairLinkPda(programId, new PublicKey(mB)).toBase58(), programId.toBase58()]);
+    const Bx = (await client.initializeToken({ ...base, ticker: "CHIEFS", mint: mB, pairMint: mA, partnerFirst: true })).instructions[0];
+    assert.deepEqual([slot(Bx.keys, "partner_link"), slot(Bx.keys, "partner_config")], [pairLinkPda(programId, new PublicKey(mA)).toBase58(), configPda(programId, new PublicKey(mA)).toBase58()]);
+    const single = (await client.initializeToken({ ...base, mint: mA })).instructions[0];
+    for (const n of ["pair_mint", "pair_link", "partner_link", "partner_config"]) assert.equal(slot(single.keys, n), programId.toBase58(), n);
   });
 });

@@ -4,7 +4,7 @@
   "note": "Written by `sh scripts/ops/verified-build.sh --local --write` (or --docker --write on a Linux host with Docker). The hash is solana-verify's executable hash: sha256 of the program bytes with trailing zero bytes removed \u2014 the same number `solana-verify get-program-hash` prints for the deployed program and `solana-verify get-executable-hash` prints for a .so. docs/burnticker/VERIFIED-BUILD.md renders this table; test/burntickerVerifiedBuild.test.ts holds the two together and compares any built .so on the host.",
   "kind": "interim-local",
   "kindNote": "INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check.",
-  "sourceCommit": "c183407458863d6592bd8aa7216b0bd6781fd43c",
+  "sourceCommit": "6fc15f00ff13c86c7efdc9e7a69573527d6bde9c",
   "sourceCommitNote": "the last monorepo commit that changed the compiled program sources under programs/burn-receipts (later commits there add exploit tests only, which are not compiled into the programs); the public repository carries the same files at the commit its next publish records in docs/burnticker/CHANGELOG.md",
   "toolchain": {
     "solanaCli": "4.3.0",
@@ -23,20 +23,20 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 729048,
-          "hash": "7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22"
+          "bytes": 749552,
+          "hash": "2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 729232,
-          "hash": "b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5"
+          "bytes": 749736,
+          "hash": "5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5",
+          "hash": "5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87",
           "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
           "readAt": "2026-10-11",
@@ -51,20 +51,20 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 409224,
-          "hash": "abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab"
+          "bytes": 410008,
+          "hash": "82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 409280,
-          "hash": "f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7"
+          "bytes": 410064,
+          "hash": "96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7",
+          "hash": "96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178",
           "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
           "readAt": "2026-10-11",

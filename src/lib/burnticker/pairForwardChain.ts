@@ -3,11 +3,12 @@ import { fetchReading, fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, NATIVE_MINT, type Cluster } from "@/lib/burnReceipts/constants";
 import { anchorErrorName, assertClusterAllowed, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
 import { createAtaIdempotentIx } from "@/lib/burnReceipts/instructions";
-import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_STATE_PAIRED, submitPairResultIx, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_STATE_PAIRED, PAIR_UNLINK_NOT_LIVE_SECS, submitPairResultIx, unlinkPairIx, UNLINK_NOT_LIVE, UNLINK_PAIR_VOIDED, UNLINK_SIDE_REFUNDING, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { fetchPair, pairPda, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
 import { sourceUrlHash } from "@/lib/burnReceipts/attestation";
 import { configPda, feePda, feeWsolAddress } from "@/lib/burnReceipts/pda";
 import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
-import { parseForwardMemo, type ForwardFacts, type PairForwardClient, type PairForwardPort, type PairLinkView, type PairResultView, type PairState } from "@/lib/burnticker/pairForward";
+import { parseForwardMemo, type ForwardFacts, type PairForwardClient, type PairForwardPort, type PairLinkView, type PairResultView, type PairState, type UnlinkReason } from "@/lib/burnticker/pairForward";
 
 /**
  * THE REAL PAIR-FORWARD CLIENT (winner takes the burn, LAUNCHPAD-PATH §40), bound to the program builder's src/lib/burnReceipts/pairs.ts:
@@ -16,12 +17,19 @@ import { parseForwardMemo, type ForwardFacts, type PairForwardClient, type PairF
  *
  *   links()             TokenConfig.pair_state for both coins + their PairLinks (["pair_link", mint]); paired = both PAIRED.
  *   result(D)           PairResult ["pair_result", lo, hi, D] (Pubkey.default winner = a draw).
- *   buildSubmitResult   ONE Ed25519SigVerify (shared message, attestPairResult) + submit_pair_result. Each attester key counts for
- *                       whichever coin's set holds it; two signatures fit a legacy transaction, larger quorums need a v0 transaction
- *                       with a lookup table (ATTESTERS.md). PairResultSubmitted is a plain `emit!` log event — the account is the record.
- *   buildForward        create the winner fee PDA's WSOL ATA (idempotent) + forward_to_winner(D).
- *   forwardFacts(sig)   the burn program's own Memo CPI (memoFromTransaction, never log text), the loser's processed Reading (units,
- *                       pool) and the loser fee PDA's lamport change (the SOL part; the rest came from its WSOL).
+ *   buildSubmitResult   ONE Ed25519SigVerify (shared message, attestPairResult) + submit_pair_result. Round 2: a WIN carries both
+ *                       coins' readings (the builder adds reading_lo / reading_hi) and needs the LOSER's quorum (the winner's too only
+ *                       when the loser rotated its attesters since pairing); a DRAW needs both quorums. A win missing a reading (or
+ *                       whose loser reading is processed) is refused PairResultNotServable — the keeper alerts, never substitutes a draw. 1 signature + both readings fits a legacy
+ *                       transaction; a 2-signature win needs a v0 transaction with a lookup table (ATTESTERS.md). PairResultSubmitted is
+ *                       a plain `emit!` log event — the account is the record.
+ *   buildForward        create the winner fee PDA's WSOL ATA (idempotent) + forward_to_winner(D). Round 2: no winner reading; a side
+ *                       without a verified pool (or an unlinked pair) forwards 0 lamports and the loser's reading is still processed.
+ *   forwardFacts(sig)   the burn program's own Memo CPI (memoFromTransaction, never log text) — the program ALWAYS writes the forward memo,
+ *                       lamports=0 included — the loser's processed Reading (units, pool) and the loser fee PDA's lamport change (the
+ *                       SOL part; the rest came from its WSOL).
+ *   unlinkEvidence      r2 M-2: a voided pair_curve Pair / a refunding side (the Pair is passed), or one coin without a verified pool
+ *                       PAIR_UNLINK_NOT_LIVE_SECS after the pairing; buildUnlink sends the permissionless unlink_pair.
  */
 
 export interface ChainPairForwardOpts {
@@ -41,7 +49,7 @@ const recordDateOf = (period: string): number => Number(period.replace(/-/g, "")
 
 function linkView(l: PairLinkAccount | null): PairLinkView | null {
   if (!l) return null;
-  return { mint: l.mint.toBase58(), pairMint: l.pair_mint.toBase58(), paired: l.paired, witness: (l.witness === 1 ? 1 : 0), createdAt: Number(l.created_at), pairingDeadline: Number(l.pairing_deadline), pairedAt: l.paired ? Number(l.paired_at) : null };
+  return { mint: l.mint.toBase58(), pairMint: l.pair_mint.toBase58(), paired: l.paired, witness: (l.witness === 1 ? 1 : 0), createdAt: Number(l.created_at), pairingDeadline: Number(l.pairing_deadline), pairedAt: l.paired ? Number(l.paired_at) : null, attesterSetHash: Buffer.from(l.attester_set_hash ?? new Uint8Array(32)).toString("hex") };
 }
 
 /** The loser fee PDA's lamport drop in a confirmed transaction (the SOL part of a forward). */
@@ -89,7 +97,29 @@ export class ChainPairForward implements PairForwardClient {
         const st = (x: typeof ca): PairState => { const v = x?.config.pair_state ?? 0; return (v === 1 || v === 2 ? v : 0) as PairState; };
         const stateA = st(ca), stateB = st(cb);
         const paired = stateA === PAIR_STATE_PAIRED && stateB === PAIR_STATE_PAIRED && !!la?.pair_mint.equals(B) && !!lb?.pair_mint.equals(A);
-        return { a: linkView(la), b: linkView(lb), stateA, stateB, paired };
+        return { a: linkView(la), b: linkView(lb), stateA, stateB, paired, poolsVerified: [!!ca?.config.pool_verified, !!cb?.config.pool_verified] as [boolean, boolean] };
+      },
+      async unlinkEvidence(nowMs: number): Promise<{ reason: UnlinkReason; pair: string | null } | null> {
+        const l = await port.links();
+        if (!l.paired || !l.a || !l.b) return null;
+        // a pair_curve pair: its Pair account is the evidence for a void or a refunding side
+        if (l.a.witness === 1 || l.b.witness === 1) {
+          for (const [x, y] of [[A, B], [B, A]] as const) {
+            const addr = pairPda(x, y);
+            const p = await fetchPair(c, addr).catch(() => null);
+            if (!p) continue;
+            if (p.status === STATUS_VOIDED) return { reason: UNLINK_PAIR_VOIDED as UnlinkReason, pair: addr.toBase58() };
+            if (p.refunding.some(Boolean)) return { reason: UNLINK_SIDE_REFUNDING as UnlinkReason, pair: addr.toBase58() };
+            break;
+          }
+        }
+        const since = Math.max(l.a.pairedAt ?? 0, l.b.pairedAt ?? 0, l.a.createdAt, l.b.createdAt);
+        const dead = !(l.poolsVerified?.[0] ?? false) || !(l.poolsVerified?.[1] ?? false);
+        return dead && nowMs / 1000 >= since + PAIR_UNLINK_NOT_LIVE_SECS ? { reason: UNLINK_NOT_LIVE as UnlinkReason, pair: null } : null;
+      },
+      async buildUnlink(i: { pair: string | null }) {
+        const payer = await need();
+        return sign([unlinkPairIx({ programId: o.programId, cranker: payer.publicKey, mintA: A, mintB: B, ...(i.pair ? { pair: new PublicKey(i.pair) } : {}) })]);
       },
       async result(D: number): Promise<PairResultView | null> {
         const r = await fetchPairResult(c, o.programId, A, B, D);
@@ -141,7 +171,7 @@ export class ChainPairForward implements PairForwardClient {
         if (!t?.meta || t.meta.err) return null;
         const memo = memoFromTransaction(t, o.programId);
         const f = memo ? parseForwardMemo(memo) : null;
-        // A forward under the loser's floor moves nothing; the program writes no forward memo then.
+        // The program always writes the forward memo (lamports=0 for a dead side or an amount under the floor); no memo = not a forward.
         if (!f) return "none";
         const loser = mintAS.startsWith(f.from) ? A : mintBS.startsWith(f.from) ? B : null;
         if (!loser) return null;

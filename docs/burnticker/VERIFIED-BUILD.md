@@ -25,17 +25,17 @@ replace this table (`kind: docker`). The OtterSec verified-builds registry entry
 
 The executable hash is solana-verify's definition: sha256 of the program bytes with trailing zero bytes removed — the number
 `solana-verify get-executable-hash <file.so>` prints for a build and `solana-verify get-program-hash <PROGRAM_ID>` prints for the
-deployed program. Source: monorepo commit `c183407458863d6592bd8aa7216b0bd6781fd43c`, the last commit that changed the compiled program sources — LAUNCHPAD-PATH §40,
-winner takes the burn (burn_receipts: PairLink / PairResult, link_pair, submit_pair_result, forward_to_winner, the paired crank gate;
-pair_curve is unchanged in source but links burn_receipts' crate, so its bytes change too), on top of the LP-lock r2 fixes. Both
-programs are built at opt-level "z".
+deployed program. Source: monorepo commit `6fc15f00ff13c86c7efdc9e7a69573527d6bde9c`, the last commit that changed the compiled program sources — the §40 blind
+review r2 fixes (docs/burnticker/reviews/2026-10-11-pair-forward-blind.md: no result can wedge a queue, the loser's quorum consents, a
+win servable without the pools, unlink_pair, link before readings) on top of LAUNCHPAD-PATH §40, winner takes the burn. pair_curve's
+source is unchanged; it links the burn_receipts crate, so its bytes change with it. Both programs are built at opt-level "z".
 
 | Program | Program id | Build | Features | Bytes | Executable hash | Deployed on devnet |
 |---|---|---|---|---|---|---|
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 729,048 | `7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22` | — (not deployed on mainnet) |
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 729,232 | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` = build (upgraded through the Squads vault 2026-10-11 10:04:56 Denver, vault transaction 11; docs/burnkeeper/devnet-pair-forward-run-log-2026-10-11.md) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 409,224 | `abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab` | — (not deployed on mainnet) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 409,280 | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` = build (vault transaction 12, 10:05:29 Denver) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 749,552 | `2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3` | — (not deployed on mainnet) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 749,736 | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` = build (upgraded through the Squads vault 2026-10-11, vault transaction 15; docs/burnkeeper/devnet-pair-forward-r2-run-log.md) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 410,008 | `82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4` | — (not deployed on mainnet) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 410,064 | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` = build (vault transaction 16, same run) |
 
 **Bytecode version: sBPFv3 (SIMD-0500 checked 2026-10-11).** cargo-build-sbf 4.4.0 (Solana CLI 4.3.0, platform-tools v1.57, Anchor
 1.2.1) builds `--arch v3` by default, and all four rows above are sBPFv3 — ELF header `e_flags = 0x3` (`readelf -h <file>.so | grep
@@ -54,7 +54,12 @@ platform, and must never be deployed anywhere: a `localnet` build on mainnet wou
 `devnet` build on mainnet would route it to the devnet vault's address and would not match mainnet's Raydium ids. The upgrade script
 refuses any buffer whose executable hash is not one of this table's rows.
 
-**Previous builds (history, no longer deployed):** the LP-lock r2 fixes (source `40e13bf5`): burn_receipts mainnet `d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac` / devnet
+**Previous builds (history, no longer deployed):** the r2 intermediate (source `bfe3bfd6`, superseded within the hour by the servability change): burn_receipts devnet
+`7a70b20841cd7e418111ef5d9833b4f43e1eadd75a90a9cf39581c5d8a7ef90e`, pair_curve devnet `bdb8ae753c5de001e33e5023d2ec6901f80d1c486ed2cd7874e7ee59c7d63dc6`
+(vault transactions 13 / 14). §40 winner takes the burn (source `c1834074`): burn_receipts mainnet
+`7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22` / devnet `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5`
+(729,048 / 729,232 B; vault transaction 11), pair_curve mainnet `abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab` / devnet
+`f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` (409,224 / 409,280 B; vault transaction 12). Before that, the LP-lock r2 fixes (source `40e13bf5`): burn_receipts mainnet `d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac` / devnet
 `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` (643,144 / 643,328 B; vault transaction 9), pair_curve mainnet
 `a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d` / devnet `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796`
 (406,624 / 406,680 B; vault transaction 10). Before that, the LP-lock release (source `3d82b6b5`): burn_receipts mainnet

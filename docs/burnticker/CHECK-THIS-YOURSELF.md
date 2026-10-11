@@ -38,6 +38,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | burn_receipts | `set_registration_policy` | config_authority | **none** | None. |
 | burn_receipts | `submit_pair_result` | anyone | **rent only (the caller pays it)** | Payer pays the PairResult account's rent (kept forever). |
 | burn_receipts | `submit_reading` | anyone | **rent only (the caller pays it)** | Payer pays the reading account's rent (kept forever; readings are never closed). |
+| burn_receipts | `unlink_pair` | anyone | **rent only (the caller pays it)** | PairLink rent → each coin's fee PDA. |
 | burn_receipts | `veto_registration_policy` | attester_key | **none** | None. |
 | pair_curve | `burn_lp` | anyone | **fallback only, if lock_lp cannot run for 30 days: burn_lp destroys the side's LP (no LP fees then)** | Vault LP → burned; emptied LP account's rent → the side's burn pool. |
 | pair_curve | `buy` | trader | **the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault** | Buyer → SOL vault (curve cost + fee); token vault → buyer (tokens). |
@@ -133,10 +134,10 @@ Kind: **interim-local**. INTERIM: built with cargo build-sbf on the operator's M
 
 | Program | Build | Features | Executable hash | Deployed (devnet) |
 |---|---|---|---|---|
-| burn_receipts | mainnet | default | `7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22` | — |
-| burn_receipts | devnet | devnet | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` = build |
-| pair_curve | mainnet | default | `abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab` | — |
-| pair_curve | devnet | devnet | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` = build |
+| burn_receipts | mainnet | default | `2eb83584ffd550dbac4f7fd9d6fa5ff0ad6625e7e68ce26e98d658f4b3fdabc3` | — |
+| burn_receipts | devnet | devnet | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` | `5a2d16004ec70c6cbcc1e3f9877b9784b141d8717f5b5e23bbba57fb4d62bf87` = build |
+| pair_curve | mainnet | default | `82310a2d990146007a2ba82e4c1a89aa3f811ce4a53443b666606816e3101bf4` | — |
+| pair_curve | devnet | devnet | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` | `96b8d79cd46bd6b0d8d6069656f1ab2fdddca47b82e6e2e1e6607dff6e4ef178` = build |
 
 How to reproduce: docs/burnticker/VERIFIED-BUILD.md.
 

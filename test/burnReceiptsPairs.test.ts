@@ -11,7 +11,7 @@ import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import {
   attestPairResult, decodePairLink, decodePairResult, forwardToWinnerIx, linkPairIx, OUTCOME_FORWARDED, PAIR_ATTESTATION_DOMAIN, PAIR_RESULT_DRAW, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST,
   PAIR_RESULT_NONE, PAIR_RESULT_WON, PAIR_STATE_NONE, PAIR_STATE_PAIRED, PAIR_STATE_PROVISIONAL, PAIR_WITNESS_INITIALIZE, PAIR_WITNESS_PAIR_CURVE, PAIRING_WINDOW_SECS, pairLinkPda, pairOrder,
-  pairResultFor, pairResultMessage, pairResultPda, parseForwardMemo, SEED_PAIR_LINK, SEED_PAIR_RESULT, submitPairResultIx,
+  pairResultFor, pairResultMessage, pairResultPda, parseForwardMemo, SEED_PAIR_LINK, SEED_PAIR_RESULT, submitPairResultIx, unlinkPairIx,
 } from "../src/lib/burnReceipts/pairs.ts";
 
 const PID = new PublicKey(BURN_RECEIPTS_IDL.address);
@@ -46,9 +46,9 @@ describe("burnReceipts pairs — accounts and the result view", () => {
   test("PairLink and PairResult round-trip through the IDL coder; the per-coin view", () => {
     const a = Keypair.generate().publicKey, b = Keypair.generate().publicKey;
     const [lo, hi] = pairOrder(a, b);
-    const link = { version: 1, bump: 250, mint: a, pair_mint: b, paired: true, witness: 1, created_at: BigInt(1), pairing_deadline: BigInt(0), paired_at: BigInt(2), reserved: new Uint8Array(32) };
+    const link = { version: 1, bump: 250, mint: a, pair_mint: b, paired: true, witness: 1, created_at: BigInt(1), pairing_deadline: BigInt(0), paired_at: BigInt(2), attester_set_hash: new Uint8Array(32).fill(9) };
     const l = decodePairLink(Buffer.concat([accountDiscriminator(BURN_RECEIPTS_IDL, "PairLink"), encodeType(BURN_RECEIPTS_IDL, { defined: { name: "PairLink" } }, link)]));
-    assert.ok(l.pair_mint.equals(b) && l.paired && l.witness === PAIR_WITNESS_PAIR_CURVE);
+    assert.ok(l.pair_mint.equals(b) && l.paired && l.witness === PAIR_WITNESS_PAIR_CURVE && l.attester_set_hash[0] === 9);
     const res = {
       version: 1, bump: 251, mint_lo: lo, mint_hi: hi, record_date: 20261006, winner: hi, signers_mask_lo: 1, signers_mask_hi: 1,
       source_url_hash: new Uint8Array(32).fill(3), proof_hash: new Uint8Array(32), submitted_at: BigInt(5), forwarded: true, forwarded_lamports: BigInt(146_536_720), forwarded_at: BigInt(6), reserved: new Uint8Array(32),
@@ -78,11 +78,17 @@ describe("burnReceipts pairs — the signed message and the instructions", () =>
       const sigOff = d.readUInt16LE(2 + i * 14), pkOff = d.readUInt16LE(2 + i * 14 + 4), msgOff = d.readUInt16LE(2 + i * 14 + 8), msgLen = d.readUInt16LE(2 + i * 14 + 10);
       assert.ok(verifyAttestation(new PublicKey(d.subarray(pkOff, pkOff + 32)), d.subarray(msgOff, msgOff + msgLen), d.subarray(sigOff, sigOff + 64)));
     }
-    // two attester signatures + submit_pair_result fit one legacy transaction (the program emits its event as a log for this reason)
+    // r2: a win needs only the loser's quorum — one signature + submit_pair_result (with both readings) fits a legacy transaction;
+    // a draw (no readings) with two signatures fits too
     const payer = Keypair.generate();
+    const one = attestPairResult({ genesisHash: GENESIS_HASH.devnet, programId: PID, mintA: a.publicKey, mintB: b.publicKey, recordDate: 20261006, winner: a.publicKey, sourceUrlHash: src, signers: [k1] });
     const ix = submitPairResultIx({ programId: PID, payer: payer.publicKey, mintA: a.publicKey, mintB: b.publicKey, recordDate: 20261006, winner: a.publicKey, sourceUrlHash: src });
-    const tx = new VersionedTransaction(new TransactionMessage({ payerKey: payer.publicKey, recentBlockhash: PublicKey.default.toBase58(), instructions: [att.instruction, ix] }).compileToLegacyMessage());
+    const tx = new VersionedTransaction(new TransactionMessage({ payerKey: payer.publicKey, recentBlockhash: PublicKey.default.toBase58(), instructions: [one.instruction, ix] }).compileToLegacyMessage());
     assert.ok(tx.serialize().length <= 1232, `${tx.serialize().length} bytes`);
+    const draw = attestPairResult({ genesisHash: GENESIS_HASH.devnet, programId: PID, mintA: a.publicKey, mintB: b.publicKey, recordDate: 20261006, winner: null, sourceUrlHash: src, signers: [k1, k2] });
+    const dix = submitPairResultIx({ programId: PID, payer: payer.publicKey, mintA: a.publicKey, mintB: b.publicKey, recordDate: 20261006, winner: null, sourceUrlHash: src });
+    const dtx = new VersionedTransaction(new TransactionMessage({ payerKey: payer.publicKey, recentBlockhash: PublicKey.default.toBase58(), instructions: [draw.instruction, dix] }).compileToLegacyMessage());
+    assert.ok(dtx.serialize().length <= 1232, `${dtx.serialize().length} bytes`);
   });
   test("submit_pair_result, link_pair and forward_to_winner follow the IDL account order", () => {
     const [lo, hi] = pairOrder(a.publicKey, b.publicKey);
@@ -94,6 +100,9 @@ describe("burnReceipts pairs — the signed message and the instructions", () =>
     assert.ok(at(s, "submit_pair_result", "pair_result").equals(pairResultPda(PID, lo, hi, 20261006)));
     assert.equal(s.data.length, 8 + 4 + 32 + 32 + 32);
     assert.ok(new PublicKey(s.data.subarray(12, 44)).equals(PublicKey.default), "a draw is the default pubkey");
+    assert.ok(at(s, "submit_pair_result", "reading_lo").equals(PID), "a draw omits the readings");
+    const w = submitPairResultIx({ programId: PID, payer, mintA: hi, mintB: lo, recordDate: 20261006, winner: lo, sourceUrlHash: src });
+    assert.ok(at(w, "submit_pair_result", "reading_lo").equals(readingPda(PID, configPda(PID, lo), 20261006)) && at(w, "submit_pair_result", "reading_hi").equals(readingPda(PID, configPda(PID, hi), 20261006)), "a win carries both readings");
     const pair = Keypair.generate().publicKey;
     const l = linkPairIx({ programId: PID, payer, pair, mintA: a.publicKey, mintB: b.publicKey });
     assert.ok(at(l, "link_pair", "link_b").equals(pairLinkPda(PID, b.publicKey)) && at(l, "link_pair", "pair").equals(pair));
@@ -101,7 +110,9 @@ describe("burnReceipts pairs — the signed message and the instructions", () =>
     assert.equal(f.keys.length, order("forward_to_winner").length);
     assert.ok(at(f, "forward_to_winner", "loser_fee_vault").equals(feePda(PID, b.publicKey)));
     assert.ok(at(f, "forward_to_winner", "winner_fee_wsol").equals(associatedTokenAddress(feePda(PID, a.publicKey), NATIVE_MINT)));
-    assert.ok(at(f, "forward_to_winner", "winner_reading").equals(readingPda(PID, configPda(PID, a.publicKey), 20261006)));
+    assert.ok(!order("forward_to_winner").includes("winner_reading"), "r2: forward_to_winner no longer reads the winner's reading");
+    const u = unlinkPairIx({ programId: PID, cranker: payer, mintA: a.publicKey, mintB: b.publicKey });
+    assert.ok(at(u, "unlink_pair", "link_a").equals(pairLinkPda(PID, a.publicKey)) && at(u, "unlink_pair", "fee_b").equals(feePda(PID, b.publicKey)) && at(u, "unlink_pair", "pair").equals(PID));
     assert.ok(at(f, "forward_to_winner", "pair_result").equals(pairResultPda(PID, a.publicKey, b.publicKey, 20261006)));
   });
   test("crank_buyback and initialize_token carry the pair accounts only when asked", () => {
@@ -123,7 +134,8 @@ describe("burnReceipts pairs — the signed message and the instructions", () =>
     assert.ok(second.keys[o.indexOf("partner_link")].pubkey.equals(pairLinkPda(PID, a.publicKey)));
     assert.ok(second.keys[o.indexOf("partner_config")].pubkey.equals(configPda(PID, a.publicKey)));
     const first = initializeTokenIx({ programId: PID, payer: a.publicKey, creator: a.publicKey, mint: a.publicKey, args, pairMint: b.publicKey });
-    assert.ok(first.keys[o.indexOf("partner_link")].pubkey.equals(PID), "the partner accounts are omitted when this coin is first");
+    assert.ok(first.keys[o.indexOf("partner_link")].pubkey.equals(pairLinkPda(PID, b.publicKey)), "r2 L-3: the partner's PairLink address always rides along");
+    assert.ok(first.keys[o.indexOf("partner_config")].pubkey.equals(PID), "the partner's config only when it was first");
   });
   test("the forward memo parses", () => {
     const m = `DEBT|forward|from=${a.publicKey.toBase58().slice(0, 12)}|to=${b.publicKey.toBase58().slice(0, 12)}|period=2026-10-06|lamports=146536720|v1`;

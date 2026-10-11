@@ -28,6 +28,8 @@
 //   submit-pair-result         --mint-a <pubkey> --mint-b <pubkey> --date YYYYMMDD --winner <mint|draw> --attester <keypath>...
 //                              [--source-url <url>]   (a quorum of EACH coin's attesters signs BURNRECEIPTS-PAIR-v1|…)
 //   forward-to-winner          --loser <mint> --winner <mint> --date YYYYMMDD   (the loser's fuel for the period → the winner's fee PDA)
+//   unlink-pair                --mint-a <pubkey> --mint-b <pubkey> [--pair <pair_curve Pair>]   (r2 M-2: on evidence only — the Pair
+//                              Voided / a side refunding, or a coin without a verified pool 30 days after the pairing)
 //   pair-status                --mint <pubkey> [--date YYYYMMDD]   READ-ONLY: pair_state, the PairLink, the period's PairResult
 //   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
 //                              (the cap is always the 25 SOL default at creation; ≤ 3 crankers, enforced only while the cap is in force)
@@ -68,14 +70,14 @@ import { verifyPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
 import { checkLpLockPins } from "../src/lib/burnticker/lpLockPins.ts";
 import { associatedTokenAddress, configPda, cpmmPoolPda, feeKeyRecordPda, launchlabMigrationLocker, feeKeysPda, feePda, feeWsolAddress, platformPda, readingPda } from "../src/lib/burnReceipts/pda.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
-import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, linkPairIx, PAIR_STATE_PAIRED, pairLinkPda, pairResultFor, pairResultPda, submitPairResultIx } from "../src/lib/burnReceipts/pairs.ts";
+import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, linkPairIx, PAIR_STATE_PAIRED, pairLinkPda, pairResultFor, pairResultPda, submitPairResultIx, unlinkPairIx } from "../src/lib/burnReceipts/pairs.ts";
 import { attestReading, sourceUrlHash } from "../src/lib/burnReceipts/attestation.ts";
 import { fetchCpmmPool } from "../src/lib/burnReceipts/cpmm.ts";
 import { confirmByPolling, planCrank, poolAccountsOrStandIns, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 
 const args = process.argv.slice(2);
-const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "pair-status"] as const;
+const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "unlink-pair", "pair-status"] as const;
 type Command = (typeof COMMANDS)[number];
 const CMD = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : null;
 const flag = (n: string) => args.includes(`--${n}`);
@@ -348,6 +350,12 @@ if (CMD === "submit-pair-result") {
   const att = attestPairResult({ genesisHash: genesis, programId, mintA, mintB, recordDate, winner, sourceUrlHash: src, signers: await attesterKeys() });
   const address = pairResultPda(programId, mintA, mintB, recordDate);
   await run([att.instruction, submitPairResultIx({ programId, payer: payer.publicKey, mintA, mintB, recordDate, winner, sourceUrlHash: src })], payer, [], [{ address, kind: "lamports" }], { pairResult: address.toBase58(), message: att.message.toString("utf8") });
+}
+if (CMD === "unlink-pair") {
+  const mintA = pubkeyOf(opt("mint-a"), "--mint-a") ?? die("--mint-a is required");
+  const mintB = pubkeyOf(opt("mint-b"), "--mint-b") ?? die("--mint-b is required");
+  const pair = pubkeyOf(opt("pair"), "--pair") ?? undefined;
+  await run([unlinkPairIx({ programId, cranker: payer.publicKey, mintA, mintB, pair })], payer, [], [...tokenWatch(mintA), ...tokenWatch(mintB), { address: pairLinkPda(programId, mintA), kind: "lamports" }, { address: pairLinkPda(programId, mintB), kind: "lamports" }]);
 }
 if (CMD === "forward-to-winner") {
   const loser = pubkeyOf(opt("loser"), "--loser") ?? die("--loser <mint> is required");

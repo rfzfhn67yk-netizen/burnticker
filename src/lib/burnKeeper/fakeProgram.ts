@@ -89,7 +89,9 @@ export class FakeProgram implements ProgramPort {
    * ForwardRequired, "pending" → PairResultPending (until 72 h after the reading was submitted), "won" / "draw" / "missing" / null →
    * the normal crank. `readingSubmittedAt` records when each reading landed (ms).
    */
-  pairGate: ((recordDate: number, readingSubmittedAtMs: number | null) => "won" | "lost" | "draw" | "pending" | "missing" | null) | null = null;
+  pairGate: ((recordDate: number, readingSubmittedAtMs: number | null) => "won" | "lost" | "draw" | "pending" | "missing" | "forward-missing" | null) | null = null;
+  /** Round 2: the PairForwardMissing / PairResultMissing events the crank gate emitted (a lost or result-less period cranked unpaired after 72 h). */
+  pairEvents: { name: "PairForwardMissing" | "PairResultMissing"; recordDate: number }[] = [];
   readingSubmittedAt = new Map<number, number>();
 
   constructor(i: FakeProgramInit) {
@@ -225,6 +227,7 @@ export class FakeProgram implements ProgramPort {
     const g = this.pairGate ? this.pairGate(D, this.readingSubmittedAt.get(D) ?? null) : null;
     if (g === "lost") return { err: "ForwardRequired" };
     if (g === "pending") return { err: "PairResultPending" };
+    if (commit && (g === "forward-missing" || g === "missing")) this.pairEvents.push({ name: g === "missing" ? "PairResultMissing" : "PairForwardMissing", recordDate: D });
     // Review-2 F3: the program measures the synced WSOL balance (stray lamports included) and syncs before the swap.
     if (commit && this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
     const poolActual = spendablePool(this.feeLamports, this.cfg.reserveLamports, this.wsol + this.strayWsolLamports);
