@@ -10,6 +10,10 @@ the rule is enforced by a program, not a promise) and the show (seasons and riva
 leads with the NFL. Copy rules: `config/launch/copy-lint.json`, including the `no-prizes` category (no prize, pot, payout, jackpot,
 reward, stake, bet, wager or odds; nobody wins money, gets paid or earns). Voice: `docs/launch/x-burnticker-profile.md`.
 
+**Go-to-market (10-10 night):** [`docs/launch/gtm/`](../launch/gtm/) — the plan of record (`PLAN.md`), pitches per audience,
+the outreach list, the T-14 → T+7 calendar and the cold-read edit list. Posts come from `scripts/burnticker-posts.mts` (six fixed
+formats, copy-lint refused) into `data/launch/post-queue.jsonl`, which the owner reads and posts by hand; nothing auto-posts.
+
 **Settlement (owner decision, 10-10): settled on primary sources; prediction markets are discovery and optional cross-checks where
 their terms permit.** Kalshi's Developer Agreement and Data Terms forbid using its API or data to settle products or to cache or
 redistribute it, so Kalshi is NOT a settlement input (the earlier customer line "burns on a Kalshi settlement" is withdrawn). A coin

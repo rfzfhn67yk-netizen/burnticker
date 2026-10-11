@@ -326,7 +326,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
             <pre id="curl">curl -s 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt&amp;filter=record_date:in:(PREV_DATE,RECORD_DATE)&amp;sort=record_date'</pre></li>
           <li><b>Apply the rule</b>:
             <pre>units = floor((now − prev + carry) / 1,000,000,000)
-spend = pool × (1 − 0.99^units)        # pool = the burn pool's SOL − 0.02 reserve
+spend = pool × (1 − 0.98^units)        # pool = the burn pool's SOL − 0.02 reserve
 burn  = every token the swap delivered</pre>
             <span class="muted">carry = the sub-$1B remainder from a run of consecutive increases; any down or flat day resets it to 0.</span></li>
           <li><b>Read the memo on the burn transaction</b> — it carries the same numbers, in this order:
@@ -342,7 +342,7 @@ burn  = every token the swap delivered</pre>
     <div class="flow">
       <div class="f"><div class="t">1 · trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. That fee is the only income the mechanism has.</p></div>
       <div class="f"><div class="t">2 · the fee pool</div><p>Fees are claimed into the burn pool, an account of the on-chain program that has no withdraw instruction. Any seed deposit is disclosed with its transaction. Nobody can withdraw it; the program never sells.</p><p class="addr" id="feeWallet"></p></div>
-      <div class="f"><div class="t">3 · the swap</div><p>On a day with units the program spends 1 − 0.99<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. Under the floor (about $1) it buys nothing and the pool keeps it.</p></div>
+      <div class="f"><div class="t">3 · the swap</div><p>On a day with units the program spends 1 − 0.98<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. Under the floor (about $1) it buys nothing and the pool keeps it.</p></div>
       <div class="f"><div class="t">4 · the burn</div><p>Every token received is burned in the same instruction, with the memo. Holders' balances are never touched: no delegate, no transfer hook, no mint authority.</p><p class="addr" id="mintAddr"></p></div>
     </div>
   </section>

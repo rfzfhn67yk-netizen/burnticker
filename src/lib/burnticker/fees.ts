@@ -78,7 +78,7 @@ export function capPool(spendableLamports: bigint, capLamports: bigint = PRE_AUD
 /** Operator identity and the use of the developer fee (the owner, 2026-10-09). The contact address is a TODO the owner fills in. */
 export const OPERATOR_LINE = "Operated by one independent operator (United States) — contact: contact@burnticker.com";
 export const OPERATOR_CONTACT_TODO = "TODO_CONTACT_ADDRESS";
-export const USE_OF_FEES = "Burnticker's 25 bps funds attesters, hosting, the audit, and the operator. The platform never buys back any coin, including its own.";
+export const USE_OF_FEES = "Burnticker's 25 bps funds attesters, hosting, the security reviews and bounty, and the operator. The platform never buys back any coin, including its own.";
 /** Attester #2 (Switchboard On-Demand) is scheduled within 14 days of the first launch. */
 export const ATTESTER2_DAYS_AFTER_FIRST_LAUNCH = 14;
 export function attesterStatusLine(firstLaunchAtMs: number | null): { line: string; dueBy: string | null } {

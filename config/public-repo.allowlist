@@ -45,6 +45,10 @@ packages/burnticker-sdk/public-closure.json
 #     the lint's word list. Named file by file: the rest of src/lib/launch (drafts, other launchpads' tooling) uses the private database. ---
 src/lib/launch/dailyPost.ts
 src/lib/launch/copyLint.ts
+# the GTM post generator (scripts/burnticker-posts.mts, matched by the glob above, imports it; 2026-10-10) and its fixtures/tests
+src/lib/launch/postQueue.ts
+test/postQueue*.ts
+test/gtmDocs.test.ts
 config/launch
 
 # --- the two shared modules the public code imports (split out of the private app so nothing else is dragged along) ---
@@ -64,7 +68,7 @@ site/brand-concepts
 docs/burnkeeper
 docs/burn-receipts
 docs/burnticker
-docs/launch
+docs/launch/*.md
 
 # --- deploy: the Burnticker host runs THIS tree (2026-10-10, docs/burnticker/deploy.md "The host runs the public tree") — so every
 #     unit, entrypoint and ops script the box uses is published, and nothing of the trading app is on it ---

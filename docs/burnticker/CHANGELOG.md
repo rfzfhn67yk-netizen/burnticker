@@ -198,3 +198,28 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
 - allowlist sha256 (config/public-repo.allowlist): `7add0488a2ba7070d08f39d8bd2409dc5b5a3a3027df97b0134fedf8e2d80276`
 - files published: 688
+
+## 2026-10-10 — go-to-market pack (no publish, no deploy)
+
+- `docs/launch/gtm/`: `PLAN.md` (the owner's plan of record, byte-identical, sha256 `2556dc5f…6c40`, pinned by `test/gtmDocs.test.ts`),
+  `PITCHES.md` (six audiences × one line, three lines, one paragraph, each with its proof link and the files it was checked against),
+  `OUTREACH.md` (14 targets ranked by fit and zero cost, verified or marked UNVERIFIED on 2026-10-10, a ≤ 600-character draft per
+  target, what is never offered; paid routes listed as skipped), `CALENDAR.md` (T-14 → T+7 with proposed dates — T = Mon 2026-10-26
+  08:00 MDT — the owner-side list and six stated conflicts with the plan and the run-sheet), `COLD-READ.md` (two cold reads of the live
+  site; an edit list by file and line).
+- Post generator: `scripts/burnticker-posts.mts` + `src/lib/launch/postQueue.ts`. Six fixed formats — `receipt` (the copy agent's
+  `receiptPostText`; `dailyText` for @USA_DEFICIT), `scoreboard` (`scoreboardText`; `pairDailyText` for a pair), `season-card`,
+  `explainer`, `launch-thread`, `teaser` — built from the keepers' published files or `--fixtures`. Every post runs through the copy
+  lint and is refused on a hit, an unfilled placeholder, > 280 X-characters or a thread over 8 posts. Clean posts append to
+  `data/launch/post-queue.jsonl` (append-only, content-addressed, never rewritten); the owner posts by hand. No network, no X API.
+  State-dependent claims (reviews, bounty, leagues read, coverage counts, the $DEFICIT fraction and hash) are read from
+  `transparency.json`, `sources/espn.ts`, `SETTLEMENT-COVERAGE.md` and the rule file. Tests: `test/postQueue.test.ts`,
+  `test/gtmDocs.test.ts`.
+
+## 2026-10-10 — publish from f045ff7445d6
+
+- monorepo commit: `f045ff7445d629eb318b4b0ea43237e574ca6af9` (the working tree had uncommitted changes when this tag was written)
+- program hash: `f3812ce47ff86e8c0bc8dcaae856e0e2c8523850afb19bda9de05ce559c775d0` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
+- allowlist sha256 (config/public-repo.allowlist): `4846d807d7f41728915e06d9dfb2d938c4df44f6d33d725cff0507506cc2b701`
+- files published: 698
