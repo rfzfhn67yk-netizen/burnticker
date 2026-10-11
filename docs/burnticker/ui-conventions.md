@@ -123,6 +123,7 @@ The trust rules decide every row. We never talk about price. Market data is show
 | 24 | Bottom tab bar on phones (Bags mobile web, pump.fun app) | **adopt** | **Coins · Launch · Rivalries · Trust** under 900 px, with Launch stamped violet. |
 | 25 | Category navigation (Kalshi, Polymarket) | **adapt** | The wizard's **Browse everything**: Burnticker's own taxonomy (`config/burnticker/categories.json`) on a left rail, or chips on a phone. Each category lists source cards from **every venue**: first-party feeds first, then Polymarket, then Kalshi when it is enabled. Each card shows venue, tier, cadence, next event and the "burns when …" example. |
 | 26 | Watchlist / favourites, quick-buy ⚡ (bonk.fun, Bags) | **reject** (for now) | Quick-buy is a call to buy. A watchlist needs accounts or local storage and is not a convention new users depend on. |
+| 27 | Hover help on every field (pump.fun's and bonk.fun's "?" tooltips on create) | **adopt** | Every input, toggle group and review row in the launch flow has a small **?** after its label (`_components/FieldHelp.tsx`). It opens on hover and on keyboard focus, toggles on tap on a phone, closes on Escape or a tap outside, and is announced through `aria-describedby`. It holds two lines from `src/lib/burnticker/fieldHelp.ts`: **what to enter** and **what it does** to the rule or the coin. Every string passes the copy lint. `test/burntickerFieldHelp.test.ts` fails when an input has no help. |
 
 ## Venues — what settles, what only helps you find (10-10)
 

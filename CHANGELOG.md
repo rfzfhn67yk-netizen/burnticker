@@ -329,3 +329,11 @@ publish script.
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
 - allowlist sha256 (config/public-repo.allowlist): `346810d696d2b14b4c7c3f69c89b86580d105a7ebbb8a700e99dfe564e2d6818`
 - files published: 824
+
+## 2026-10-10 — publish from 91148ab93f5b
+
+- monorepo commit: `91148ab93f5b504aaf5c238406605165f71d842d` (the working tree had uncommitted changes when this tag was written)
+- program hash: `f3812ce47ff86e8c0bc8dcaae856e0e2c8523850afb19bda9de05ce559c775d0` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `f4a0d6afa0f499c614145477ebd58642250da0503b6ee75f658141cc8a7e1112`
+- allowlist sha256 (config/public-repo.allowlist): `346810d696d2b14b4c7c3f69c89b86580d105a7ebbb8a700e99dfe564e2d6818`
+- files published: 827
