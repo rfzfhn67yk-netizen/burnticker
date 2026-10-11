@@ -121,7 +121,8 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
   });
   test("status and fallback pages: an unreadable status file stays unknown — no 'unaffected'", () => {
     const st = read("site/burnticker/status/index.html");
-    assert.match(st, /status\.json could not be read \(" \+ e\.message \+ "\)\. Current automation status is unavailable\."/);
+    // UX report 3 items 4/8 tightened it: every group the feed fills says unavailable (test/burntickerWebsite4.test.ts runs the script)
+    assert.match(st, /"Current automation data could not be read \(status\.json: " \+ why \+ "\)\. The current-status summary is separate and does not establish whether burns are being processed now\."/);
     assert.doesNotMatch(st, /unaffected/);
     assert.doesNotMatch(read("site/burnticker/fallback/index.html"), /unaffected/);
   });
@@ -159,14 +160,16 @@ describe("review 2 — the glossary at first use", () => {
   });
   test("placed where the terms first appear: the landing hero, the coins page, the trust page header, both pair pages; the no-wallet line beside every scoreboard", () => {
     const home = read("site/burnticker/index.html");
-    const dl = /<dl class="terms"[^>]*data-glossary>([\s\S]*?)<\/dl>/.exec(home)![1];
-    for (const id of ["burn", "receipt", "burnPool", "attester", "lockedLp", "keeper"] as TermId[]) assert.ok(dl.includes(`<dt>${GLOSSARY[id].term}</dt> <dd>— ${GLOSSARY[id].short}</dd>`), id);
-    assert.ok(dl.includes(NO_WALLET_LINE));
-    assert.ok(home.indexOf("data-glossary") < home.indexOf('<div class="tape"'), "in the hero, before the tape");
+    // UX report 3 item 10 replaced the hero's front-loaded six-term list with context help at each term's first use (<abbr title>)
+    assert.doesNotMatch(home, /data-glossary/, "no front-loaded glossary on the landing page");
+    const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
+    for (const id of ["burn", "receipt", "burnPool", "attester", "keeper"] as TermId[]) assert.ok(home.includes(`<abbr class="term" title="${esc(GLOSSARY[id].short)}">`), id);
+    assert.ok(home.indexOf('<abbr class="term" title="' + esc(GLOSSARY.burn.short)) < home.indexOf('<div class="tape"'), "burn is explained at its first use, in the hero");
+    assert.ok(home.includes(NO_WALLET_LINE));
     const coins = read("src/app/burnticker/page.tsx");
     assert.match(coins, /<Term id="burn">burns<\/Term>/); assert.match(coins, /<Term id="receipt" \/>/);
     assert.match(coins, /label: "Moved to trading pool", hint: GLOSSARY\.graduation\.short/);
-    assert.match(read("src/app/burnticker/trust/page.tsx"), /<TermNote ids=\{\["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"\]\} \/>/);
+    assert.match(read("src/app/burnticker/trust/page.tsx"), /data-trust-evidence[\s\S]*<TermNote ids=\{\["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"\]\} \/>/, "beside the evidence that uses the words");
     const pair = read("src/app/burnticker/p/[pairId]/page.tsx");
     assert.match(pair, /<TermNote ids=\{\["receipt", "burnPool"\]\} \/>/); assert.match(pair, /\{NO_WALLET_LINE\}/);
     assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{esc\(NO_WALLET_LINE\)\} \$\{esc\(termLine\(\["receipt", "burnPool"\]\)\)\}/);

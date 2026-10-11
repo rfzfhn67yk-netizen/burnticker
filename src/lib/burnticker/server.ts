@@ -91,7 +91,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     stubs.push(`burn_receipts program ${programId}: read-only client (this host holds no key; the keeper signs readings and cranks)`);
   } else {
     program = new FakeBurnProgram(cluster);
-    stubs.push(programId ? `burn_receipts program ${programId}: no BURNTICKER_RPC_URL on this host (FakeBurnProgram in use)` : "burn_receipts program: not deployed (FakeBurnProgram — PDAs are placeholders, nothing is sent)");
+    stubs.push(programId ? `burn_receipts program ${programId}: no BURNTICKER_RPC_URL on this host (FakeBurnProgram in use)` : "burn_receipts program: no program id wired on this host (FakeBurnProgram — PDAs are placeholders, nothing is sent); program deployment is on the trust page");
   }
   const platformId = (env.BURNTICKER_PLATFORM_ID ?? "").trim() || null;
   const launchLab = new FakeLaunchLab(platformId ?? undefined);

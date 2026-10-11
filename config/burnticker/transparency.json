@@ -84,6 +84,18 @@
         "reviewer": "ChatGPT/Codex, second adversarial code review + live-site UX audit against the same checklist (reviewed public commit 07b7b4f5): 3 P1 (F1 keeper fence order, F2 old unlocked pairs left the scan, F5 = pair-forward RN-1/RN-2), 3 P2 (F3 launch confirmation, F4 signing recovery, F6 reversed pair wording), UX cuts and ten explanation mismatches; each answered in docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2-response.md (F5 in pair round 3)",
         "status": "completed 2026-10-11",
         "reportPath": "docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2.md"
+      },
+      {
+        "id": "chatgpt-adversarial-3",
+        "reviewer": "ChatGPT/Codex, third code review, scoped 782e31ec..191d3b3b (public commit 191d3b3b): one P2, F1 — an unreadable ProgramData account rendered 'upgrade authority none (chain)' and a failed mainnet lookup 'not deployed'; answered in docs/burnticker/reviews/2026-10-11-chatgpt-review-3-response.md",
+        "status": "completed 2026-10-11; F1 fixed with regression tests",
+        "reportPath": "docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-3.md"
+      },
+      {
+        "id": "chatgpt-ux-3",
+        "reviewer": "ChatGPT, third live UX + feature review of the public site (inspected against public commit 191d3b3b): ten practical changes; nine done, the pre-wallet launch summary deferred while creator launches stay closed; answered in docs/burnticker/reviews/2026-10-11-chatgpt-review-3-response.md",
+        "status": "completed 2026-10-11",
+        "reportPath": "docs/burnticker/reviews/2026-10-11-chatgpt-ux-review-3.md"
       }
     ],
     "tooling": [
@@ -98,6 +110,7 @@
     "reviewsRule": "Every report is published in full in docs/burnticker/reviews/ as delivered, with every finding; fixes and their closing tests are in docs/burn-receipts/CHANGELOG.md; nothing is edited out.",
     "bounty": {
       "status": "funded 2026-10-11",
+      "recordedFunding": { "sol": 5, "date": "2026-10-11", "transaction": null, "source": "owner, 2026-10-11 (the funding transaction signature is not recorded in this repository)" },
       "rangeSol": [
         5,
         10

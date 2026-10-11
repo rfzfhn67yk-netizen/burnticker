@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { HostDiagnostics } from "../../_components/HostDiagnostics";
 import Link from "next/link";
 import { EmptyState } from "../../_components/EmptyState";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
@@ -103,7 +104,7 @@ export default function PairPage() {
           <div className="overflow-x-auto rounded border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Day</th><th className="p-2">Window</th><th className="p-2">{d.derby.pair.symbols.a}</th>{d.derby.pair.symbols.b && <th className="p-2">{d.derby.pair.symbols.b}</th>}<th className="p-2">Result</th><th className="p-2">Proof</th></tr></thead>
             <tbody>{[...d.derby.pair.days].reverse().map((x) => <tr key={x.windowId} className="border-t border-neutral-800 align-top"><td className="p-2">{x.day}</td><td className="p-2">{x.windowId}</td><td className="p-2 tabular-nums">{pctFmt(x.a.changePct)}</td>{x.b && <td className="p-2 tabular-nums">{pctFmt(x.b.changePct)}</td>}<td className="p-2">{x.status === "withheld" ? <span className="text-neutral-400" title={x.reason ?? ""}>withheld — no burn</span> : x.winner === "A" ? `$${A} burns` : x.winner === "B" ? `$${B} burns` : x.winner === "tie" ? "tie — no burn" : "read"}</td><td className="p-2 space-y-0.5">{x.proof.map((pl) => <div key={pl.label}>{pl.url ? <a className="underline" href={pl.url}>{pl.label}</a> : pl.label} <span className="text-neutral-500">{pl.detail}</span></div>)}</td></tr>)}</tbody></table></div>
           {d.derby.post && <pre className="whitespace-pre-wrap break-words text-xs bg-neutral-950 border border-neutral-800 rounded p-2">{d.derby.post}</pre>}
-          <p className="text-xs text-neutral-500">{d.derby.pair.note}. Readings: Pyth (its Solana account, or a Hermes update with a key) or a pool TWAP, cross-read by an independent operator.</p>
+          <p className="text-xs text-neutral-500">{d.derby.pair.note}. Readings: Pyth (its Solana account, or a Hermes update with a key) or a pool TWAP, cross-read against a second data publisher; one operator attester signs every reading.</p>
         </section>
       )}
 
@@ -120,7 +121,8 @@ export default function PairPage() {
       <section className="grid md:grid-cols-2 gap-3">{([[d.a, "A"], [d.b, "B"]] as const).map(([s, side]) => (
         <div className={card} key={side}><div className="text-xs text-neutral-400">side {side}</div><h2 className="font-medium"><Link className="underline" href={`/burnticker/t/${s.status.ticker}`}>${s.status.ticker}</Link> <span className="text-neutral-400 font-normal">{s.status.name}</span></h2><p className="text-xs text-neutral-400 mt-1">{s.status.rules.statement}</p><p className="text-xs text-neutral-500 mt-1 break-all">rules sha256 {s.status.rules.sha256}</p>{s.status.lp && <LpLine lp={s.status.lp} />}</div>
       ))}</section>
-      <footer className="text-xs text-neutral-500">A memecoin pair. Each rule says what its supply does, not what either price does. Nobody is promised anything.{d.stubs.length ? ` On this host: ${d.stubs.join(" · ")}` : ""}</footer>
+      <footer className="text-xs text-neutral-500">A memecoin pair. Each rule says what its supply does, not what either price does. Nobody is promised anything.</footer>
+      <HostDiagnostics stubs={d.stubs} />
     </main>
   );
 }

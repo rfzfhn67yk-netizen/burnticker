@@ -50,7 +50,7 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Burn Derby</h1>
-        <p className="text-neutral-400 text-sm max-w-3xl">Two coins people already hold, compared each UTC day (or week) on Pyth&apos;s feeds or a pool&apos;s time-weighted value, checked by an independent operator. A tie burns neither. The receipts are the scoreboard.</p>
+        <p className="text-neutral-400 text-sm max-w-3xl">Two coins people already hold, compared each UTC day (or week) on Pyth&apos;s feeds or a pool&apos;s time-weighted value, cross-read against a second data publisher (a source check; one operator attester signs every reading). A tie burns neither. The receipts are the scoreboard.</p>
         <p className="text-amber-200 text-sm max-w-3xl" aria-label="pair rule">{PAIR_BURN_SENTENCE}</p>
         <p className="text-neutral-500 text-xs">{NO_WALLET_LINE}</p>
         <Link className="inline-block rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={`/burnticker/launch?derby=1${want ? `&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}` : ""}`}>Coin vs Coin →</Link>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="prelaunch">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -207,6 +207,10 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
 .replay{margin-top:18px;font-size:.88rem;color:var(--muted)}
 .replay b{color:var(--dim)}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+/* UX report 3 item 8: before the first reading the empty Live / Today / Receipts / curve sections collapse into one summary */
+.prelaunch #live,.prelaunch #today,.prelaunch #receipts,.prelaunch #chart,.prelaunch .nav a[href="#today"],.prelaunch .nav a[href="#receipts"]{display:none}
+html:not(.prelaunch) #prelaunch{display:none}
+#prelaunch .pl{border:1px dashed var(--line);padding:14px 16px;max-width:72ch}#prelaunch .pl p{margin:0 0 8px}#prelaunch .pl p:last-child{margin:0}
 .ready{margin:14px 0 0;border:1px dashed var(--line);padding:12px 14px;max-width:72ch}.ready p{margin:0}.ready .rk{font:500 .72rem/1.3 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.ready .rl{margin:4px 0;font-weight:600}.ready .rd{color:var(--dim);font-size:.9rem}
 </style>
 </head>
@@ -252,6 +256,14 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
       <a class="btn ghost" href="rules.json">rules.json</a>
     </div>
     <p class="replay">Replayed over the real Treasury series, 2025-01 → 2026-10-08: <b>235 burn days</b>, <b>6,490 units</b>, biggest day <b>2025-07-07, +$366.44B → 366 units</b> (the day after the debt ceiling rose). A replay of what the rule would have counted, not a forecast.</p>
+  </section>
+
+  <section class="wrap" id="prelaunch" data-prelaunch>
+    <div class="pl">
+      <p><b>Not launched on this network.</b> There is no live reading, daily report or receipt for $DEFICIT yet, so those sections stay hidden until the first reading after launch. No launch date is announced.</p>
+      <p>The evidence that exists today is the devnet rehearsal: <a href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>. The rehearsal coin ran at 1% of the burn pool per $1B; the proposed mainnet rule above is 2% per $1B. Devnet is a rehearsal network: nothing there has money value.</p>
+      <p class="dim" id="prelaunchNote"></p>
+    </div>
   </section>
 
   <section class="wrap" id="live">
@@ -369,7 +381,7 @@ burn  = every token the swap delivered</pre>
 <footer class="wrap">
   <div class="links">
     <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">X · @USA_DEFICIT</a>
-    <a href="https://burnticker.com/" rel="noopener" target="_blank">Launched on Burnticker</a>
+    <a href="https://burnticker.com/" rel="noopener" target="_blank">Burnticker, the launchpad</a>
     <a id="tradeFoot" class="off" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
     <a href="status.json">status.json</a>
     <a href="burns.json">burns.json</a>
@@ -675,11 +687,11 @@ burn  = every token the swap delivered</pre>
   function offline(msg, detail) {
     var n = $("notice"); n.textContent = msg;
     if (detail) { var d = document.createElement("details"), sm = document.createElement("summary"), p = document.createElement("span"); sm.textContent = "Details"; p.textContent = " " + detail; d.appendChild(sm); d.appendChild(p); n.appendChild(d); }
-    n.classList.add("show"); draw();
+    n.classList.add("show"); var pn = $("prelaunchNote"); if (pn) pn.textContent = msg; draw();
   }
   if (!window.fetch) { offline("This browser cannot load the live figures; the receipts are in status.json and burns.json beside this page."); return; }
   getJson("status.json").then(function (s) {
-    status = s; renderStatus(s);
+    status = s; renderStatus(s); document.documentElement.classList.remove("prelaunch");
     return getJson("burns.json").catch(function () { return []; });
   }).then(function (b) {
     burns = Array.isArray(b) ? b : [];
@@ -691,6 +703,7 @@ burn  = every token the swap delivered</pre>
     var missing = /^404 /.test(String(e && e.message));
     offline(missing ? "Not launched: $DEFICIT is not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
       : "Data unavailable: the live figures could not be read just now. This says nothing about the coin or its receipts; try again later.", String(e && e.message || e));
+    if (missing && $("prelaunchNote")) $("prelaunchNote").textContent = ""; // the summary above already says not launched
   });
 })();
 </script>

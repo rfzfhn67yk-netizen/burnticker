@@ -59,7 +59,8 @@ export const PAIR_DESCRIPTION_SENTENCE = "Paired with a rival coin: fees from bo
  * forward_to_winner moves its share to the winner's fee PDA); `pairWinnerOf` computes the winner from the two rules and a result so a
  * named fixture can check the sentence against the engine.
  */
-export const PAIR_BURN_SENTENCE = "Winner takes the burn: fees from both coins burn the coin whose rule the result fires (the winner); the losing coin's share goes to the winner's burn pool, never to a holder.";
+// UX report 3 item 6: "winner" is the coin whose RULE fires, not the team that won (a team coin often burns when its team loses)
+export const PAIR_BURN_SENTENCE = "Winner takes the burn (the coin whose rule fires, not the team that won): when a result fires one coin's rule, eligible fees from both coins fund that coin's burn, and the other coin's share for that result moves to its burn pool. Nothing is paid to holders.";
 /** The review card's line for a registered rivalry pair (Coin vs Coin, a shared-selector matchup, an election pair). */
 export const PAIR_REVIEW_LINE = `${PAIR_BURN_SENTENCE} A draw or a void moves nothing.`;
 /** Does this binary rule map the result to a burn? (A scalar or a rule without a mapping for it: no.) */
@@ -77,7 +78,7 @@ export function pairWinnerOf<T extends { ticker: string; rule: Pick<BurnRule, "k
 export function pairResultSentence(a: { ticker: string; rule: Pick<BurnRule, "kind" | "binary"> }, b: { ticker: string; rule: Pick<BurnRule, "kind" | "binary"> }, result: "yes" | "no"): string {
   const w = pairWinnerOf(a, b, result);
   if (!w) return `A ${result.toUpperCase()} fires both rules or neither: a draw, and nothing moves between $${a.ticker} and $${b.ticker}.`;
-  return `Winner takes the burn: fees from both coins burn $${w.winner.ticker}, the coin whose rule the result fires (the winner); $${w.loser.ticker}'s share goes to $${w.winner.ticker}'s burn pool, never to a holder.`;
+  return `This result fires $${w.winner.ticker}'s rule: eligible fees from both coins fund $${w.winner.ticker}'s burn, and $${w.loser.ticker}'s share for it moves to $${w.winner.ticker}'s burn pool. Nothing is paid to holders.`;
 }
 const pairSentence = (r: BurnRule): string => (r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn ? ` ${PAIR_DESCRIPTION_SENTENCE}` : "");
 const BURN_DOWN = "it burns down whatever is left over four weeks and retires";

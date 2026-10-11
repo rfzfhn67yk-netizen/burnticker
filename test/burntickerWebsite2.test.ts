@@ -8,6 +8,8 @@ import { LAUNCH_GATE_LOADING, closedNetworkLine, launchGateFromCatalogue, wizard
 import { EMPTY_STATE_COPY, emptyHeading, emptyKindFor } from "@/lib/burnticker/emptyState";
 import { EXPLORE_VERIFIED_BURN, SEASONS_HREF } from "@/lib/burnticker/currentStatusLinks";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
+import { buildCurrentStatus, readChainFacts, UPGRADEABLE_LOADER, type ChainFacts } from "@/lib/burnticker/currentStatus";
+import { upgradeAuthorityText } from "@/lib/burnticker/currentStatusText";
 
 const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
@@ -37,7 +39,7 @@ describe("launch gate (website brief §1: no wizard flash before the gate resolv
     assert.match(gate, /EXPLORE_VERIFIED_BURN\.href/, "the closed page's primary action explores a verified burn");
   });
   test("the pre-launch action and the Seasons destination", () => {
-    assert.equal(EXPLORE_VERIFIED_BURN.label, "Explore a verified burn");
+    assert.equal(EXPLORE_VERIFIED_BURN.label, "Inspect the devnet receipt");
     assert.match(EXPLORE_VERIFIED_BURN.href, /^\/burnticker\/check\?demo=1#verify$/);
     assert.ok(fs.existsSync("src/app/burnticker/check/page.tsx"));
     assert.equal(SEASONS_HREF, "/burnticker/leagues");
@@ -131,7 +133,7 @@ describe("one current-status source (website brief §4)", () => {
     const { readChainFacts, SQUADS_PROGRAM } = await import("@/lib/burnticker/currentStatus");
     const rpc = { call: async <T,>(_m: string, p: unknown[]) => ({ value: (p[0] as string[]).map((k) => (k === "MS" ? { owner: SQUADS_PROGRAM, data: [b64(ms(2, 0, 3)), "base64"] } : null)) }) as unknown as T };
     const f = await readChainFacts("mainnet", rpc, "MS", ["PROG"], 0);
-    assert.deepEqual(f.squads, { threshold: 2, timeLockSecs: 0, members: 3 }); assert.deepEqual(f.programs.PROG, { deployed: false, upgradeAuthority: null }); assert.equal(f.error, null);
+    assert.deepEqual(f.squads, { threshold: 2, timeLockSecs: 0, members: 3 }); assert.deepEqual(f.programs.PROG, { deployed: false, upgradeAuthority: null, authorityRead: "unavailable" }); assert.equal(f.error, null);
     const bad = await readChainFacts("mainnet", { call: async () => { throw new Error("429"); } }, "MS", ["PROG"], 0);
     assert.equal(bad.squads, null); assert.match(bad.error!, /429/);
   });
@@ -214,7 +216,7 @@ describe("verification words and the featured receipt (website brief §3/§5)", 
     const block = html.slice(html.indexOf("data-demo-receipt"), html.indexOf('<div class="tape"'));
     assert.ok(html.indexOf("data-demo-receipt") < html.indexOf('<div class="tape"'), "inside the hero, before the tape");
     assert.ok(block.includes(demo.summary.replace(/&/g, "&amp;")), "the summary is current-status.json demo.summary verbatim");
-    assert.match(block, /devnet rehearsal · 2026-10-06/); assert.match(block, /href="\/burnticker\/check\?demo=1#verify">Explore a verified burn</);
+    assert.match(block, /devnet rehearsal · 2026-10-06/); assert.match(block, /href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</);
     clean(block.replace(/<[^>]+>/g, " "), "featured receipt");
   });
 });
@@ -291,7 +293,8 @@ describe("pair funds flow, by rule version (website brief §2)", () => {
     const f = pairFundsFlow("winner-takes-the-burn", { a: "ELSAYED", b: "ROGERS" });
     assert.equal(f.oneLiner, PAIR_BURN_SENTENCE);
     const all = JSON.stringify(f);
-    for (const re of [/draw/i, /72 hours after a reading/, /forward does not land within 72 hours/, /no live trading pool/, /80%/, /never touched/, /Nobody is paid/]) assert.match(all, re);
+    for (const re of [/draw/i, /72 hours after a reading/, /forward does not land within 72 hours/, /no live trading pool/, /80%/, /never touched/, /Nothing is paid to holders/]) assert.match(all, re);
+    assert.doesNotMatch(all, /Nobody is paid/, "the operator is paid fees; the sentence is about holders (UX report 3 item 6)");
     const old = pairFundsFlow("separate-pools");
     assert.match(old.versionLabel, /before 2026-10-11; none on mainnet/); assert.match(old.oneLiner, /neither pool pays the other/);
     for (const x of [f, old]) clean([x.versionLabel, x.oneLiner, ...x.steps.map((s) => `${s.title}. ${s.text}`), ...x.outcomes.map((o) => `${o.when}: ${o.then}`), x.never].join("\n"), x.version);
@@ -312,7 +315,7 @@ describe("the homepage around five questions, and an honest leagues directory (w
     for (const id of ["layers", "how", "feeds", "economics"]) assert.match(impl, new RegExp(`id="${id}"`), `${id} is inside the disclosure`);
     assert.match(home, /<h2>Safeguards and limitations<\/h2>/); assert.match(home, /data-current-limits/);
     const next = home.slice(at('id="next"'));
-    assert.match(next, /<a class="btn amber" href="\/burnticker\/check\?demo=1#verify">Explore a verified burn<\/a>/);
+    assert.match(next, /<a class="btn amber" href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt<\/a>/);
     assert.match(next, /href="\/burnticker\/launch" data-launch-cta>/, "the launch action is gated like every launch CTA");
     assert.match(home, /html:not\(\.launches-open\) \.doors\{grid-template-columns:1fr\}/, "one door fills the row while launches are closed");
   });
@@ -321,5 +324,85 @@ describe("the homepage around five questions, and an honest leagues directory (w
     assert.match(p, /<EmptyState kind="not-launched" body="No team coin is launched on this host yet/);
     assert.match(p, /Example data · illustrative coins and counts, not live/);
     assert.doesNotMatch(p, /launch one|Launch the first/i);
+  });
+});
+
+// F1 regression (code review 3; UX report 3 item 1): only a decoded None says no upgrade authority; a failed, partial or malformed read
+// says unavailable; a failed mainnet lookup leaves the deployment unknown.
+const b64f = (d: Uint8Array) => Buffer.from(d).toString("base64");
+const PROG = "PROG", PD = "PD";
+/** a Program account (type 2) pointing at a ProgramData address of 32 bytes of 7s (its base58 is what the second read asks for) */
+const programAcct = () => { const d = new Uint8Array(36); d[0] = 2; d.fill(7, 4); return { owner: UPGRADEABLE_LOADER, data: [b64f(d), "base64"] }; };
+const programData = (auth: "none" | "set") => { const d = new Uint8Array(45); d[0] = 3; d[12] = auth === "set" ? 1 : 0; if (auth === "set") d.fill(9, 13); return { owner: UPGRADEABLE_LOADER, data: [b64f(d), "base64"] }; };
+/** an RPC whose first getMultipleAccounts answers the Program account and whose second answers `second` (or throws) */
+const rpcWith = (second: unknown | Error) => {
+  let n = 0;
+  return { call: async <T,>(_m: string, p: unknown[]) => { n += 1; if (n === 1) return { value: (p[0] as string[]).map((k) => (k === PROG ? programAcct() : null)) } as unknown as T; if (second instanceof Error) throw second; return second as T; } };
+};
+
+describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'not deployed'", () => {
+  test("decoded None → no upgrade authority (chain); decoded Some → the key", async () => {
+    const none = await readChainFacts("devnet", rpcWith({ value: [programData("none")] }), null, [PROG], 0);
+    assert.deepEqual(none.programs[PROG], { deployed: true, upgradeAuthority: null, authorityRead: "decoded" });
+    const set = await readChainFacts("devnet", rpcWith({ value: [programData("set")] }), null, [PROG], 0);
+    assert.equal(set.programs[PROG].authorityRead, "decoded"); assert.ok(set.programs[PROG].upgradeAuthority);
+  });
+  const unavailable: [string, unknown | Error][] = [
+    ["the ProgramData read throws (partial: the Program account read succeeded)", new Error("HTTP 429")],
+    ["the ProgramData account is missing", { value: [null] }],
+    ["the response has no value array", {}],
+    ["the ProgramData account has a foreign owner", { value: [{ ...programData("none"), owner: "11111111111111111111111111111111" }] }],
+    ["the ProgramData bytes are the wrong account type", { value: [{ owner: UPGRADEABLE_LOADER, data: [b64f(new Uint8Array(45)), "base64"] }] }],
+    ["the ProgramData bytes are truncated", { value: [{ owner: UPGRADEABLE_LOADER, data: [b64f(Uint8Array.of(3, 0, 0)), "base64"] }] }],
+    ["the option tag is neither 0 nor 1", { value: [{ owner: UPGRADEABLE_LOADER, data: [b64f((() => { const d = new Uint8Array(45); d[0] = 3; d[12] = 2; return d; })()), "base64"] }] }],
+    ["the authority flag says Some but the key is cut off", { value: [{ owner: UPGRADEABLE_LOADER, data: [b64f((() => { const d = new Uint8Array(20); d[0] = 3; d[12] = 1; return d; })()), "base64"] }] }],
+  ];
+  for (const [what, second] of unavailable) {
+    test(`${what} → unavailable, never "no upgrade authority"`, async () => {
+      const f = await readChainFacts("devnet", rpcWith(second), null, [PROG], 0);
+      assert.equal(f.programs[PROG].deployed, true);
+      assert.equal(f.programs[PROG].authorityRead, "unavailable");
+      const s = buildCurrentStatus({ env: {}, chain: { devnet: f }, now: 0 });
+      // the real program ids are in verified-build.json; wire the fake read onto each so the joined object exercises the path
+      const facts: ChainFacts = { ...f, programs: Object.fromEntries(s.programs.map((p) => [p.programId, f.programs[PROG]])) };
+      for (const p of buildCurrentStatus({ env: {}, chain: { devnet: facts }, now: 0 }).programs) {
+        assert.equal(p.devnet.authoritySource, "unavailable"); assert.equal(p.devnet.upgradeAuthority, null);
+        const t = upgradeAuthorityText(p.devnet);
+        assert.match(t, /unavailable/); assert.doesNotMatch(t, /no upgrade authority|immutable|none/i);
+      }
+    });
+  }
+  test("the joined object: decoded None says immutable; no live read uses the verified-build record, labelled as a record", async () => {
+    const base = buildCurrentStatus({ env: {}, chain: {}, now: 0 });
+    for (const p of base.programs) { assert.equal(p.devnet.authoritySource, "verified-build"); assert.match(upgradeAuthorityText(p.devnet), /recorded in verified-build\.json/); }
+    const none = await readChainFacts("devnet", rpcWith({ value: [programData("none")] }), null, [PROG], 0);
+    const facts: ChainFacts = { ...none, programs: Object.fromEntries(base.programs.map((p) => [p.programId, none.programs[PROG]])) };
+    for (const p of buildCurrentStatus({ env: {}, chain: { devnet: facts }, now: 0 }).programs) { assert.equal(p.devnet.authoritySource, "chain"); assert.equal(upgradeAuthorityText(p.devnet), "no upgrade authority (immutable; read from chain)"); }
+    assert.equal(upgradeAuthorityText({ upgradeAuthority: null, authoritySource: "verified-build" }), "upgrade authority not recorded");
+  });
+  test("renderers use the one wording function, never a bare `?? \"none\"`", () => {
+    const r = fs.readFileSync("src/app/burnticker/_components/CurrentStatusSummary.tsx", "utf8");
+    assert.match(r, /upgradeAuthorityText\(p\.devnet\)/); assert.doesNotMatch(r, /upgradeAuthority \?\? "none"/);
+    const serverModule = ["@", "lib", "burnticker", "currentStatus"].join("/"); // spelled out so the publish import scan does not read a regex as an import
+    assert.ok(!r.split("\n").some((l) => l.startsWith("import {") && l.includes(`"${serverModule}"`)), "the client renderer imports only types from the server module (it reads files)");
+  });
+  test("a failed mainnet lookup is 'deployment unknown', never 'not deployed'; a successful empty read is 'not deployed'", async () => {
+    const base = buildCurrentStatus({ env: {}, chain: {}, now: 0 });
+    const failed = await readChainFacts("mainnet", { call: async () => { throw new Error("503"); } }, null, base.programs.map((p) => p.programId), 0);
+    const s = buildCurrentStatus({ env: {}, chain: { mainnet: failed }, now: 0 });
+    for (const p of s.programs) { assert.equal(p.mainnet.deployed, null); assert.equal(p.mainnet.source, "unavailable"); assert.match(p.mainnet.line, /unknown/); assert.doesNotMatch(p.mainnet.line, /not deployed/); }
+    assert.match(s.networks.find((n) => n.cluster === "mainnet")!.deployment, /unknown/);
+    assert.ok(s.lines.every((l) => !/not deployed on mainnet/.test(l)), "no summary line says not deployed");
+    const emptyRpc = { call: async <T,>(_m: string, p: unknown[]) => ({ value: (p[0] as string[]).map(() => null) }) as unknown as T };
+    const ok = await readChainFacts("mainnet", emptyRpc, null, base.programs.map((p) => p.programId), 0);
+    for (const p of buildCurrentStatus({ env: {}, chain: { mainnet: ok }, now: 0 }).programs) { assert.equal(p.mainnet.deployed, false); assert.equal(p.mainnet.source, "chain"); assert.equal(p.mainnet.line, "not deployed on mainnet yet"); }
+  });
+  test("a devnet read that failed before the Program accounts is unavailable too, with the dated verified-build record beside it", async () => {
+    const base = buildCurrentStatus({ env: {}, chain: {}, now: 0 });
+    const failed = await readChainFacts("devnet", { call: async () => { throw new Error("429"); } }, null, base.programs.map((p) => p.programId), 0);
+    for (const p of buildCurrentStatus({ env: {}, chain: { devnet: failed }, now: 0 }).programs) {
+      assert.equal(p.devnet.authoritySource, "unavailable");
+      assert.match(upgradeAuthorityText(p.devnet), /^upgrade authority unavailable — chain read failed; last recorded in verified-build\.json \(2026-10-11\): \w+/);
+    }
   });
 });

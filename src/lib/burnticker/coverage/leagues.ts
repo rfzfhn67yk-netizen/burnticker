@@ -7,7 +7,7 @@ import type { SourceEntry } from "@/lib/burnticker/catalogue";
  *   primary A  the game's on-chain payout (polymarket.gamepayout) where a moneyline market exists
  *   primary B  TheSportsDB v2 under its commercial licence (thesportsdb.v2; BURNTICKER_THESPORTSDB_KEY)
  *   reads      the on-chain payout and TheSportsDB confirm each other when both exist; the league's official feed is a further read
- *              where it is free; API-Sports (BURNTICKER_APISPORTS_KEY) is optional. A game needs TWO independent operators.
+ *              where it is free; API-Sports (BURNTICKER_APISPORTS_KEY) is optional. A game needs TWO independent sources (a source check, not a second signer).
  * The table states the requirement statically (no host's keys leak into the committed document).
  */
 export interface LeagueCoverage {
@@ -36,8 +36,8 @@ export function leagueCoverage(entries: readonly SourceEntry[]): LeagueCoverage[
     const off = officials.find((o) => o.readable && o.leagues?.includes(id)) ?? null;
     const opt = X && X.readable && X.leagues?.includes(id) ? { id: X.id, needsKey: X.needsKey ?? null } : null;
     const tsdbKey = b?.needsKey ? ` (needs \`${b.needsKey}\`)` : "";
-    const withMarket = !a ? "—" : off ? `on-chain payout + ${off.id} (no key)` : b ? `on-chain payout + TheSportsDB${tsdbKey}` : "one operator only";
-    const withoutMarket = !b ? "—" : off ? `TheSportsDB${tsdbKey} + ${off.id}` : opt ? `TheSportsDB${tsdbKey} + API-Sports (needs \`${opt.needsKey}\`)` : "one operator only";
+    const withMarket = !a ? "—" : off ? `on-chain payout + ${off.id} (no key)` : b ? `on-chain payout + TheSportsDB${tsdbKey}` : "one source only";
+    const withoutMarket = !b ? "—" : off ? `TheSportsDB${tsdbKey} + ${off.id}` : opt ? `TheSportsDB${tsdbKey} + API-Sports (needs \`${opt.needsKey}\`)` : "one source only";
     const verdict: LeagueCoverage["verdict"] = !a && !b ? "no primary" : off ? "settleable" : "settleable with the TheSportsDB key";
     return { id, label: L.label, sport: L.sport, teams: teamsOf(id).length, draws: L.draws, schedule: off ? { id: off.id, needsKey: null } : { id: "thesportsdb.v2", needsKey: B?.needsKey ?? null }, primaryA: a, primaryB: b, official: off ? { id: off.id, operator: off.operator } : null, optional: opt, withMarket, withoutMarket, verdict };
   });
@@ -46,7 +46,7 @@ export function leagueCoverage(entries: readonly SourceEntry[]): LeagueCoverage[
 export function renderLeagueCoverage(rows: readonly LeagueCoverage[]): string[] {
   const L = ["## Per league — team coins and matchups", "",
     "No ESPN reads. A league's games come from its free official schedule (MLB StatsAPI, NHL api-web, NBA cdn), else from TheSportsDB v2 under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`). Each game settles on **primary A**, its on-chain payout where a Polymarket moneyline market exists, else **primary B**, TheSportsDB's final.", "",
-    "The game needs two independent operators that agree. The on-chain payout and TheSportsDB confirm each other when both exist. The league's official feed is a further read where it is free. API-Sports (`BURNTICKER_APISPORTS_KEY`) is optional.", "",
+    "The game needs two independent sources (publishers) that agree; that is a source check, and one operator attester still signs the reading. The on-chain payout and TheSportsDB confirm each other when both exist. The league's official feed is a further read where it is free. API-Sports (`BURNTICKER_APISPORTS_KEY`) is optional.", "",
     "| League | Sport | Teams | Schedule | Game with a market | Game without a market | Verdict |", "| --- | --- | ---: | --- | --- | --- | --- |"];
   for (const r of [...rows].sort((a, b) => a.sport.localeCompare(b.sport) || a.label.localeCompare(b.label))) {
     L.push(`| ${r.label} (\`${r.id}\`)${r.draws ? " · draws" : ""} | ${r.sport} | ${r.teams} | ${r.schedule.id}${r.schedule.needsKey ? ` (needs \`${r.schedule.needsKey}\`)` : " (free)"} | ${r.withMarket} | ${r.withoutMarket} | ${r.verdict} |`);

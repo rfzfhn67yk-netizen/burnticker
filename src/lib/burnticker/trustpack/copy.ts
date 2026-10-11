@@ -8,7 +8,7 @@
 
 export const CHECK_COPY = {
   title: "Check this yourself",
-  intro: "A sceptic's checklist against ourselves. Every line names where to look; nothing here asks you to take our word. The receipt verifier at the bottom runs in your browser and asks the chain and the original data source directly.",
+  intro: "A sceptic's checklist against ourselves. Every line names where to look; nothing here asks you to take our word. The receipt verifier runs in your browser and asks the chain and the original data source directly.",
   moneyTitle: "Where money can go",
   moneyIntro: "Every instruction of both programs, with the only place it can move SOL or tokens. There is no withdraw, sweep or transfer-out instruction in either program.",
   powersTitle: "Who can do what",
@@ -20,6 +20,9 @@ export const CHECK_COPY = {
   buildIntro: "The executable hash of each program, built from this repository, next to the hash of the bytes deployed on chain.",
   verifierTitle: "Verify a receipt in your browser",
   verifierIntro: "Paste a receipt's transaction signature or pick a devnet receipt. Your browser fetches the transaction and the program's accounts from the public Solana RPC and the source values from the Treasury API, then recomputes the units and the spend. Our server is not asked for any of it except the sample list and the rules file, whose hash is checked against the chain.",
+  verifierDemoIntro: "The featured devnet receipt from the rehearsal, checked by your browser against the devnet chain and the Treasury API: the outcome first, then the three layers of evidence.",
+  verifierCaveat: "A signature establishes who signed a reading, not that the value is true; the source layer is the check of the value. A rejected check and an unavailable one are different results: unavailable means a dependency did not answer.",
+  checkAnotherTitle: "Check another receipt (pick one, paste a signature, choose your own RPC)",
   verifierPrivacy: "Requests go from your browser to the RPC endpoint shown and to api.fiscaldata.treasury.gov. Nothing is sent to Burnticker.",
   verifierScope: "Checks buyback receipts written by the burn program (memo v2). Receipts settled on other feeds show the source line as not checkable here; the API's verify route covers them.",
   legend: "✓ passed · ✗ failed (the receipt is wrong) · – not checkable here (with the reason)",
@@ -42,14 +45,17 @@ export const LEDGER_COPY = {
   devnetNote: "Devnet: the platform runs on devnet today, so this is the devnet wallet. Its income is rehearsal trading only.",
 } as const;
 
+/** The one operator line (the owner, 2026-10-09; re-exported by src/lib/burnticker/fees.ts). */
+export const OPERATOR_LINE = "Operated by one independent operator (United States) — contact: contact@burnticker.com";
+
 export const OPERATOR_COPY = {
   title: "Operator",
   intro: "Who runs this, every wallet the operator holds for the platform, and the checks that hold those wallets to the rules.",
   entityTitle: "Entity",
   walletsTitle: "Operator wallets",
-  walletsIntro: "Public keys only, copied from the rehearsal records named beside each one. Mainnet wallets are listed as TODO until they exist.",
+  walletsIntro: "Public keys only, each with its source. Devnet keys are copied from the rehearsal records; mainnet keys are the addresses the owner configured, and a key not configured yet is shown as TODO.",
   signedTitle: "Signed statement",
-  signedPending: "Not signed yet: the statement is signed by the mainnet developer fee wallet, which does not exist yet. The text to be signed is below, and the verification code is live: once a signature is added, this line shows ✓ or ✗.",
+  signedPending: "Address configured; statement not signed. The statement is to be signed by the mainnet developer fee wallet listed above. The text to be signed is below, and the verification code is live: once a signature is added, this line shows ✓ or ✗.",
   neverBuysTitle: "Never buys a platform coin",
   neverBuysIntro: "A monitor over the operator wallets: every token account they hold, and every recent transaction in which one of them received a platform coin.",
   neverBuysNotRun: "The monitor has not run on this host yet (scripts/burnticker-trustpack.mts never-buys).",

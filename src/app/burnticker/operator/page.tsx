@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
-import { OPERATOR_COPY } from "@/lib/burnticker/trustpack/copy";
+import { OPERATOR_COPY, OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
 
 /**
@@ -46,8 +46,8 @@ export default function OperatorPage() {
       {!v && !err && <EmptyState kind="loading" />}
       {v && <>
         <section className={card}>
-          <p className="text-base">{v.operator.name} · {v.operator.state ? `${v.operator.state}, ` : ""}{v.operator.country}</p>
-          <p className="text-xs">Contact <a className="underline" href={`mailto:${v.operator.contact}`}>{v.operator.contact}</a> · security reports <a className="underline" href={`mailto:${v.operator.security}`}>{v.operator.security}</a></p>
+          <p className="text-base" data-operator-line>{OPERATOR_LINE}</p>
+          <p className="text-xs">Security reports <a className="underline" href={`mailto:${v.operator.security}`}>{v.operator.security}</a> · {v.operator.name}</p>
           <p className="text-xs mt-1"><b>{OPERATOR_COPY.entityTitle}:</b> {isTodo(v.operator.entity) ? <span className="text-amber-400">{v.operator.entity}</span> : v.operator.entity} — {v.operator.entityPending}</p>
         </section>
 

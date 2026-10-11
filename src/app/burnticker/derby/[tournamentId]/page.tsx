@@ -57,7 +57,7 @@ export default async function BracketPage({ params }: { params: Promise<{ tourna
           <li key={c.slot} className="p-2 flex flex-wrap gap-x-3 text-xs"><span className="w-6 text-neutral-500">#{c.slot + 1}</span><span className="font-medium">{c.symbol}</span>{c.ticker ? <Link className="underline" href={`/burnticker/t/${c.ticker}`}>${c.ticker}</Link> : <span className="text-neutral-600">not launched</span>}<span className="text-neutral-500">{c.status === "retired" ? `retired — ${c.retiredReason ?? "knocked out"}; no further readings` : c.eliminatedInRound ? `knocked out in round ${c.eliminatedInRound}` : c.status ?? ""}</span></li>
         ))}</ul>
       </section>
-      <p className="text-xs text-neutral-500">Memecoins. Each fan coin&apos;s rule says what its supply does, not what any price does. Readings: Pyth (its Solana accounts, or a Hermes update with a key), cross-read by an independent operator; a disagreement withholds the day. Nobody is promised anything.</p>
+      <p className="text-xs text-neutral-500">Memecoins. Each fan coin&apos;s rule says what its supply does, not what any price does. Readings: Pyth (its Solana accounts, or a Hermes update with a key), cross-read against a second data publisher (one operator attester signs every reading); a disagreement withholds the day. Nobody is promised anything.</p>
     </main>
   );
 }

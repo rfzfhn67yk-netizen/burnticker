@@ -1,7 +1,7 @@
 {
   "schema": "burnticker.operator/v1",
-  "updatedAt": "2026-10-10",
-  "note": "Rendered on /burnticker/operator and served by GET /api/burnticker/v1/operator (src/lib/burnticker/trustpack/operator.ts). Every value that starts with TODO_ is a placeholder the owner fills in; docs/burnticker/TODO-OWNER.md lists each one with its file and line. Devnet public keys are copied from the rehearsal records named in each `source` (test/burntickerTrustPack.test.ts checks every one appears there). Mainnet wallets are TODO until the owner creates them; nothing here is a secret.",
+  "updatedAt": "2026-10-11",
+  "note": "Rendered on /burnticker/operator and served by GET /api/burnticker/v1/operator (src/lib/burnticker/trustpack/operator.ts). Every value that starts with TODO_ is a placeholder the owner fills in; docs/burnticker/TODO-OWNER.md lists each one with its file and line. Devnet public keys are copied from the rehearsal records named in each `source` (test/burntickerTrustPack.test.ts checks every one appears there). Mainnet rows carry the addresses the owner configured on 2026-10-11; a TODO_ value is a key not configured yet; nothing here is a secret.",
   "operator": {
     "name": "Burnticker operator (one independent individual; identity held privately until a legal entity is formed)",
     "state": null,
@@ -53,7 +53,7 @@
       ]
     },
     "mainnet": {
-      "status": "not deployed: the programs, the platform config, the Squads vault and every mainnet wallet are created by the owner on launch week",
+      "status": "programs not deployed on mainnet yet; the platform config, Squads vault and wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
       "programs": {
         "burn_receipts": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
         "pair_curve": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"

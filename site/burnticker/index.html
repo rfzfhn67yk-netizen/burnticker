@@ -60,7 +60,7 @@ section.lead{border-top:0}
 .nav .btn{padding:7px 12px;font-size:.84rem;border-radius:999px}
 @media (max-width:639px){.nav a.sec{display:none}}
 
-/* hero: one sentence, two doors, the guardrail strip */
+/* hero: one sentence, the pre-launch status, the real receipt, the guardrails behind a disclosure, then the doors */
 .hero{padding:26px 16px 8px}
 .hero h1{font:700 clamp(1.85rem,6vw,3.6rem)/1.04 var(--mono);letter-spacing:-.02em;margin:0 0 12px;text-transform:uppercase;max-width:20ch;overflow-wrap:anywhere}
 .hero h1 em{font-style:normal;color:var(--amber)}
@@ -79,12 +79,14 @@ html:not(.launches-open) [data-launch-cta]{display:none!important}
 html:not(.launches-open) .doors{grid-template-columns:1fr}
 .launches-open [data-launches-closed]{display:none}
 .state{color:var(--dim);font-size:.95rem;margin:.25rem 0 0}
-.terms{margin:.75rem 0 0;font-size:.8rem;color:var(--muted)}.terms div{margin:.1rem 0}.terms dt{display:inline;color:var(--dim);font-weight:600}.terms dd{display:inline;margin:0}
+abbr.term{text-decoration:underline dotted;text-underline-offset:3px;cursor:help}
 .door.launch .go{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
 .door.launch h3{color:var(--amber)}
 .guard{list-style:none;margin:0;padding:12px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font:600 .78rem/1.35 var(--mono);color:var(--dim)}
 .guard li{min-width:0;max-width:100%;overflow-wrap:anywhere}
 .guard li::before{content:"✓ ";color:var(--ok)}
+.guardsum{margin:14px 0 6px;color:var(--dim);font-size:.92rem;max-width:72ch}
+.guards{margin:0 0 18px}.guards>summary{cursor:pointer;font:700 .78rem/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);padding:6px 0}.guards .guard{margin-top:8px}
 @media (max-width:519px){.hero{padding-top:14px}.hero .sub{margin-bottom:8px}.hero .def{font-size:.9rem;margin-bottom:14px}.doors{gap:10px}.door{padding:14px 14px 12px;gap:6px}.door h3{font-size:1.4rem}.door .ex{display:none}}
 
 /* ticker tape */
@@ -239,7 +241,7 @@ footer{padding:28px 0 48px;color:var(--muted);font-size:.84rem}
 footer .links{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
 footer .links a{color:var(--dim)}
 .cs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:.92rem;color:var(--dim)}.cs ul{margin:0;padding-left:18px}.cs li{margin:0 0 4px}.cs .cs-head{font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}.cs .cs-meta{margin:8px 0 0;font:.74rem/1.4 var(--mono);color:var(--muted);overflow-wrap:anywhere}
-.verified{margin:16px 0 0;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 12px 12px 0;padding:14px 16px}.verified .vk{margin:0 0 6px;font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--violet)}.verified .vsum{margin:0 0 10px;color:var(--ink);font-size:.95rem;max-width:72ch}.verified .vg{margin:0;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.verified{margin:6px 0 0;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 12px 12px 0;padding:14px 16px}.verified .vk{margin:0 0 6px;font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--violet)}.verified .vsum{margin:0 0 10px;color:var(--ink);font-size:.95rem;max-width:72ch}.verified .vg{margin:0;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
 .impl{display:block;border-top:1px solid var(--line);padding:22px 16px}.impl>summary{cursor:pointer;font:700 .82rem/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}.impl>section{padding-left:0;padding-right:0}
 </style>
 </head>
@@ -267,10 +269,31 @@ footer .links a{color:var(--dim)}
     <h1>Coins that burn on real-world results — <em>with receipts.</em></h1>
     <p class="sub"><span data-launch-cta>Launch one. </span>Follow the season.</p>
     <p class="state" data-launches-closed>Creator launches are closed.<span data-cluster-line></span></p>
-    <p class="def">A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought. The transaction is the receipt.</p>
+    <p class="def">A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program <abbr class="term" title="A burn destroys tokens held by the program and lowers the coin&#x27;s total supply; it never touches the tokens in your wallet.">burns</abbr> what they bought. The transaction is the <abbr class="term" title="A receipt records the source result, the rule&#x27;s calculation and the transaction; checking one can be complete, partial or unavailable.">receipt</abbr>.</p>
+    <div class="verified" id="verified-burn" data-demo-receipt>
+      <p class="vk">a real verified burn · devnet rehearsal · 2026-10-06</p>
+      <p class="vsum" data-demo-summary>Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06: 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool; one crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT and every token bought was burned in the same transaction; the rest carried to the next crank.</p>
+      <p class="vg"><a class="btn amber" href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> <span class="muted small">This site currently shows devnet rehearsal evidence. The check runs in your browser against the devnet chain and Treasury's own data. No wallet is needed to read results or receipts. Devnet is a rehearsal network: nothing there has money value.</span></p>
+    </div>
+    <p class="guardsum">Each coin has one rule, locked at launch; a program spends the coin's own fee pool on the burn and nobody chooses the amount. One operator signs every reading today, and the program has had AI reviews, not a firm audit.</p>
+    <details class="guards"><summary>The eleven guardrails</summary>
+      <ul class="guard" aria-label="Guardrails on every coin">
+        <li>settled on primary sources</li>
+        <li>signed readings (one operator attester; no independent second attester is live)</li>
+        <li>program-run burns</li>
+        <li>receipts anyone can recompute</li>
+        <li>open source</li>
+        <li>three blind AI reviews, not a firm audit</li>
+        <li>creators earn nothing</li>
+        <li>no team buy</li>
+        <li>the platform never buys any coin</li>
+        <li>LP locked forever, its fees fund the burn</li>
+        <li>rules locked at launch</li>
+      </ul>
+    </details>
     <div class="doors">
       <a class="door launch" href="/burnticker/launch" data-launch-cta>
-        <span class="k">door 1 · the engine</span>
+        <span class="k">the engine</span>
         <h3>Launch</h3>
         <p>Write the result in one sentence, pick how much burns, launch. The rule locks; the coin's own trading fees pay for every burn.</p>
         <span class="ex">“Rays lose” · “Denver high above 90” · “US debt rises $1B”</span>
@@ -278,40 +301,13 @@ footer .links a{color:var(--dim)}
       </a>
       <!-- door2:begin -->
       <a class="door" href="/burnticker/leagues">
-        <span class="k">door 2 · the show</span>
+        <span class="k">the show</span>
         <h3>Seasons</h3>
         <p>One scoreboard per league and season — every league Burnticker covers, from the Argentine Primera to the WNBA — ranking that league's team coins by receipts. Rivalries and the Burn Derby keep a running tally of burns.</p>
         <span class="ex">Baseball (1) · Basketball (4) · Football (2) · Hockey (1) · Soccer (17) — 25 leagues, one scoreboard each</span>
         <span class="go">Follow the season</span>
       </a>
       <!-- door2:end -->
-    </div>
-    <ul class="guard" aria-label="Guardrails on every coin">
-      <li>settled on primary sources</li>
-      <li>signed readings (one operator attester; no independent second attester is live)</li>
-      <li>program-run burns</li>
-      <li>receipts anyone can recompute</li>
-      <li>open source</li>
-      <li>three blind AI reviews, not a firm audit</li>
-      <li>creators earn nothing</li>
-      <li>no team buy</li>
-      <li>the platform never buys any coin</li>
-      <li>LP locked forever, its fees fund the burn</li>
-      <li>rules locked at launch</li>
-    </ul>
-    <dl class="terms" aria-label="Words used here" data-glossary>
-      <div><dt>burn</dt> <dd>— A burn destroys tokens held by the program and lowers the coin's total supply; it never touches the tokens in your wallet.</dd></div>
-      <div><dt>receipt</dt> <dd>— A receipt records the source result, the rule's calculation and the transaction; checking one can be complete, partial or unavailable.</dd></div>
-      <div><dt>burn pool</dt> <dd>— The SOL set aside for one coin's programmed buybacks; nobody can withdraw it, and in a registered pair the losing coin's share moves to the winner's burn pool.</dd></div>
-      <div><dt>attester</dt> <dd>— A key that signs a reported source value; the signature proves who signed it, not that the value is true.</dd></div>
-      <div><dt>locked LP</dt> <dd>— The trading pool's liquidity position, locked with Raydium's permanent lock so its principal cannot be withdrawn.</dd></div>
-      <div><dt>automation</dt> <dd>— The keeper: software that submits the program instructions that are due; the program can still refuse or defer each one.</dd></div>
-      <div><dd>No wallet is needed to read results or receipts.</dd></div>
-    </dl>
-    <div class="verified" id="verified-burn" data-demo-receipt>
-      <p class="vk">a real verified burn · devnet rehearsal · 2026-10-06</p>
-      <p class="vsum" data-demo-summary>Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06: 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool; one crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT and every token bought was burned in the same transaction; the rest carried to the next crank.</p>
-      <p class="vg"><a class="btn amber" href="/burnticker/check?demo=1#verify">Explore a verified burn</a> <span class="muted small">The check runs in your browser against the devnet chain and Treasury's own data. Devnet is a rehearsal network: nothing there has money value.</span></p>
     </div>
   </section>
   <div class="tape" aria-label="A ticker of example burn receipts (pauses on hover or focus)" role="marquee" tabindex="0">
@@ -355,9 +351,9 @@ footer .links a{color:var(--dim)}
         <p class="lede">A Burnticker coin is a rule and its receipts. The rule says which settled result burns the coin and how much of its fee pool each burn spends. The receipt shows that it happened, in numbers anyone can check.</p>
         <ol>
           <li><b>The result settles</b> on a primary source, and a second publisher on another domain reports the same fact.</li>
-          <li><b>The reading is signed</b> on chain by the attester quorum before any burn uses it.</li>
-          <li><b>The program burns.</b> <code>burn_receipts</code> spends the share the rule names from the coin's own fee pool, buys the coin on its own pool and burns every token it receives, in one instruction.</li>
-          <li><b>The memo is the receipt:</b> source, reading, units, pool, spent, got, burned, the swap and the rule hash. Each coin's page recomputes it from the source and shows <span class="okmark">✓</span> only when chain and feed agree.</li>
+          <li><b>The reading is signed</b> on chain before any burn uses it, by its <abbr class="term" title="A key that signs a reported source value; the signature proves who signed it, not that the value is true.">reading signer</abbr> (one required today: the operator's key). A signature shows who signed, not that the value is true; step 1 is the check of the value.</li>
+          <li><b>The program burns.</b> <code>burn_receipts</code> spends the share the rule names from the coin's own <abbr class="term" title="One coin&#x27;s burn budget in SOL; nobody can withdraw it, and in a registered pair the other coin&#x27;s share joins it when this coin&#x27;s rule fires.">burn budget</abbr> (its fee pool), buys the coin on its own pool and burns every token it receives, in one instruction.</li>
+          <li><b>The memo is the receipt:</b> the transaction's execution record, submitted by <abbr class="term" title="The keeper: software that submits the program instructions that are due; the program can still refuse or defer each one.">automation</abbr> and checked by the program; source, reading, units, pool, spent, got, burned, the swap and the rule hash. Each coin's page recomputes it from the source and shows <span class="okmark">✓</span> only when chain and feed agree.</li>
         </ol>
         <p class="never"><b>Nothing is ever won here — things are only burned.</b> A coin pays nothing on any result. A season is a scoreboard of burns, one per league. Only when a league's season ends is the coin with the most receipts its champion: a stat on a scoreboard, never a recipient of anything.</p>
       </div>
@@ -404,7 +400,7 @@ footer .links a{color:var(--dim)}
 
   <section class="wrap" id="seasons">
     <h2>Seasons · a scoreboard of burns</h2>
-    <p class="lede">One scoreboard per league and season, each ranking only that league's team coins by receipts and share of supply burned. Each final counts once a second scoreboard agrees. There is no ranking across leagues, and a champion is named only when a league's season ends.</p>
+    <p class="lede">One scoreboard per league and season, each ranking only that league's team coins by receipts and share of supply burned. Each final counts once a second scoreboard agrees (a second source, not a second signer). There is no ranking across leagues, and a champion is named only when a league's season ends.</p>
     <div class="exhead"><span class="extag">example data</span><p>illustrative coins and counts, not live · receipts are season to date</p></div>
     <div class="boards">
       <div class="board">
@@ -478,7 +474,7 @@ footer .links a{color:var(--dim)}
       <div class="derby">
         <div>
           <h3>Burn Derby · coin vs coin, and brackets</h3>
-          <p>Two coins on one matchup between two other coins over a day or a week — "WIF out-gains SHIB" — read from Pyth with a cross-read; the pair follows the winner-takes-the-burn rule below, and a tie burns neither. Brackets of 8 or 16 run the same daily matchups round by round. The Derby page shows each pair's tally and its last days as a strip.</p>
+          <p>Two coins on one matchup between two other coins over a day or a week — "WIF out-gains SHIB" — read from Pyth with a cross-read against a second publisher; the pair follows the winner-takes-the-burn rule below, and a tie burns neither. Brackets of 8 or 16 run the same daily matchups round by round. The Derby page shows each pair's tally and its last days as a strip.</p>
         </div>
         <div class="strip" aria-label="Example day-by-day strip: which side burned each day">
           <span>last 7 days</span><b class="a">A</b><b class="b">B</b><b class="a">A</b><b>–</b><b class="a">A</b><b class="b">B</b><b class="a">A</b>
@@ -489,7 +485,7 @@ footer .links a{color:var(--dim)}
       <a class="btn amber" href="/burnticker/rivalries">Open the rivalries</a>
       <a class="btn" href="/burnticker/derby">Burn Derby</a>
       <a class="btn" href="/burnticker">All coins</a>
-      <p>A rivalry is two coins on one matchup, launched together from the wizard: one game, or every game of the season. Each side has its own locked rule and its own burn pool. Two coins on two separate results stay separate, each burning its own pool. Two coins on one shared settled result are a registered pair: <span data-pair-sentence>Winner takes the burn: fees from both coins burn the coin whose rule the result fires (the winner); the losing coin's share goes to the winner's burn pool, never to a holder.</span></p>
+      <p>A rivalry is two coins on one matchup, launched together from the wizard: one game, or every game of the season. Each side has its own locked rule and its own burn pool. Two coins on two separate results stay separate, each burning its own pool. Two coins on one shared settled result are a registered pair: <span data-pair-sentence>Winner takes the burn (the coin whose rule fires, not the team that won): when a result fires one coin's rule, eligible fees from both coins fund that coin's burn, and the other coin's share for that result moves to its burn pool. Nothing is paid to holders.</span></p>
     </div>
   </section>
 
@@ -547,7 +543,7 @@ footer .links a{color:var(--dim)}
   <section class="wrap" id="next">
     <h2>What you can do now</h2>
     <div class="paircta">
-      <a class="btn amber" href="/burnticker/check?demo=1#verify">Explore a verified burn</a>
+      <a class="btn amber" href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>
       <a class="btn" href="whitepaper.html">Read the whitepaper</a>
       <a class="btn" href="/burnticker/leagues">Follow the season</a>
       <a class="btn" href="/burnticker/trust">Current status and trust</a>

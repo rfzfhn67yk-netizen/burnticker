@@ -43,6 +43,7 @@
     "src/lib/burnticker/sources/attestedHttp.ts",
     "src/lib/burnticker/sources/types.ts",
     "src/lib/burnticker/transactions.ts",
+    "src/lib/burnticker/trustpack/copy.ts",
     "src/lib/burnticker/units.ts",
     "src/lib/burnticker/verify.ts"
   ],

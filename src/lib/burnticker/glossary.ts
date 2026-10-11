@@ -9,8 +9,8 @@ export type TermId = "burn" | "receipt" | "burnPool" | "attester" | "lockedLp" |
 export const GLOSSARY: Record<TermId, { term: string; short: string }> = {
   burn: { term: "burn", short: "A burn destroys tokens held by the program and lowers the coin's total supply; it never touches the tokens in your wallet." },
   receipt: { term: "receipt", short: "A receipt records the source result, the rule's calculation and the transaction; checking one can be complete, partial or unavailable." },
-  burnPool: { term: "burn pool", short: "The SOL set aside for one coin's programmed buybacks; nobody can withdraw it, and in a registered pair the losing coin's share moves to the winner's burn pool." },
-  attester: { term: "attester", short: "A key that signs a reported source value; the signature proves who signed it, not that the value is true." },
+  burnPool: { term: "burn pool", short: "One coin's burn budget in SOL; nobody can withdraw it, and in a registered pair the other coin's share joins it when this coin's rule fires." },
+  attester: { term: "reading signer (attester)", short: "A key that signs a reported source value; the signature proves who signed it, not that the value is true." },
   lockedLp: { term: "locked LP", short: "The trading pool's liquidity position, locked with Raydium's permanent lock so its principal cannot be withdrawn." },
   feeKey: { term: "Fee Key", short: "Raydium's record of the right to claim the locked position's trading fees, held by a program-controlled address." },
   graduation: { term: "moved to trading pool", short: "Graduation: the coin leaves its launch curve for an external trading pool; the lock and registration steps follow." },

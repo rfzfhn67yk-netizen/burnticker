@@ -227,6 +227,22 @@
         }
       ]
     }
+,
+    {
+      "id": "chatgpt-3",
+      "report": "docs/burnticker/reviews/2026-10-11-chatgpt-review-3-response.md",
+      "label": "third ChatGPT/Codex review (2026-10-11)",
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "P2",
+          "title": "an unreadable ProgramData account read as 'no upgrade authority'; a failed mainnet lookup as 'not deployed'",
+          "fix": "fixed in code (website-4)",
+          "recheck": "not re-checked",
+          "deployed": "web code; host deployment not verified here"
+        }
+      ]
+    }
   ],
   "releaseRequirements": [
     {

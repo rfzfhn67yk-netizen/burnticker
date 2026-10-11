@@ -115,7 +115,9 @@ describe("the landing page (site/burnticker/index.html)", () => {
     clean(sv, "seasons");
   });
   test("the cold read's edits (docs/launch/gtm/COLD-READ.md): the one-line definition, labelled examples, nothing the code does not do", () => {
-    assert.match(html, /<p class="def">A Solana memecoin launchpad\. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought\. The transaction is the receipt\.<\/p>/);
+    // UX report 3 item 10: the definition's words are unchanged; "burns" and "receipt" carry their glossary sentence as context help (<abbr>)
+    const def = /<p class="def">([\s\S]*?)<\/p>/.exec(html)![1];
+    assert.equal(def.replace(/<[^>]+>/g, ""), "A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought. The transaction is the receipt.");
     assert.match(text, /example receipt · illustrative numbers, not a live coin/);
     assert.match(text, /a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts/);
     assert.match(text, /if the operator stops, readings stop and burns stop\. Holders keep their coins/);

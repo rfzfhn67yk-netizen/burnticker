@@ -104,7 +104,7 @@ const utc = (iso: string) => `${iso.slice(11, 16)} UTC ${iso.slice(0, 10)}`;
 /** The plain evidence lines for one token (what the list prints). */
 export function evidenceLines(r: Omit<CloneRow, "evidence">): string[] {
   const out: string[] = [];
-  out.push(r.registered === false ? "not registered with the burn_receipts program" : r.registered === true ? "registered with the burn_receipts program, but not a Burnticker coin" : "not a Burnticker coin (the program is not read on this host)");
+  out.push(r.registered === false ? "not registered with the burn_receipts program" : r.registered === true ? "registered with the burn_receipts program, but not a Burnticker coin" : "not in this host's Burnticker coin list; the burn_receipts program check was unavailable here, so registration is unknown");
   out.push(`$${r.symbol || "?"}: ${r.matched.how} — ${r.matched.term === "BURNTICKER" ? "Burnticker" : `$${r.matched.term}`}`);
   if (r.bundle) out.push(`${r.bundle.wallets} wallets hold identical ${r.bundle.sharePct.toFixed(2)} %`);
   if (r.lp.state === "pulled" && r.lp.pulledAt) out.push(`LP pulled ${utc(r.lp.pulledAt)}`);

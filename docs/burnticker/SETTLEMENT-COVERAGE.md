@@ -263,7 +263,7 @@ No primary source maps to this category.
 
 No ESPN reads. A league's games come from its free official schedule (MLB StatsAPI, NHL api-web, NBA cdn), else from TheSportsDB v2 under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`). Each game settles on **primary A**, its on-chain payout where a Polymarket moneyline market exists, else **primary B**, TheSportsDB's final.
 
-The game needs two independent operators that agree. The on-chain payout and TheSportsDB confirm each other when both exist. The league's official feed is a further read where it is free. API-Sports (`BURNTICKER_APISPORTS_KEY`) is optional.
+The game needs two independent sources (publishers) that agree; that is a source check, and one operator attester still signs the reading. The on-chain payout and TheSportsDB confirm each other when both exist. The league's official feed is a further read where it is free. API-Sports (`BURNTICKER_APISPORTS_KEY`) is optional.
 
 | League | Sport | Teams | Schedule | Game with a market | Game without a market | Verdict |
 | --- | --- | ---: | --- | --- | --- | --- |

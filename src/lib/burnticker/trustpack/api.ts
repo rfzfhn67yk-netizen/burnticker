@@ -91,5 +91,5 @@ export async function v1Bounty(o: { rpc?: Rpc; root?: string; env?: Readonly<Rec
     try { balanceLamports = String((await (o.rpc ?? jsonRpc(serverRpcUrl("mainnet", o.env))).call<{ value: number }>("getBalance", [wallet, { commitment: "confirmed" }])).value); }
     catch (e) { error = (e as Error).message.slice(0, 160); }
   }
-  return ok({ wallet, walletTodo: wallet ? null : (b.walletTodo ?? "TODO_BOUNTY_WALLET"), balanceLamports, error, rangeSol: b.rangeSol, fundedFrom: b.fundedFrom, status: b.status, contact: b.contact, terms: b.termsPath, howReportsArePaid: b.howReportsArePaid ?? null, reports: b.reports ?? { paid: [], rejected: [], note: "none yet" } });
+  return ok({ wallet, walletTodo: wallet ? null : (b.walletTodo ?? "TODO_BOUNTY_WALLET"), balanceLamports, error, rangeSol: b.rangeSol, fundedFrom: b.fundedFrom, recordedFunding: b.recordedFunding ?? null, status: b.status, contact: b.contact, terms: b.termsPath, howReportsArePaid: b.howReportsArePaid ?? null, reports: b.reports ?? { paid: [], rejected: [], note: "none yet" } });
 }
