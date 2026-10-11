@@ -1,0 +1,118 @@
+{
+  "schema": "burnticker.well-known/v1",
+  "name": "Burnticker",
+  "updatedAt": "2026-10-10",
+  "operator": {
+    "name": "Burnticker operator (one independent individual; identity held privately until a legal entity is formed)",
+    "state": null,
+    "country": "United States",
+    "contact": "contact@burnticker.com",
+    "security": "security@burnticker.com",
+    "entity": "TODO_ENTITY"
+  },
+  "links": {
+    "site": "https://burnticker.com",
+    "app": "https://burnticker.com/burnticker",
+    "deficitSite": "https://deficit.burnticker.com",
+    "github": "https://github.com/rfzfhn67yk-netizen/burnticker",
+    "githubOrg": "TODO_GITHUB_ORG",
+    "x": [
+      "https://x.com/burnticker",
+      "https://x.com/USA_DEFICIT"
+    ]
+  },
+  "clusters": {
+    "devnet": {
+      "status": "rehearsal (2026-10-10): both programs deployed, upgrade authority held by a 2-of-3 Squads vault with a 60 s time lock",
+      "programs": {
+        "burn_receipts": {
+          "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "deployed": true,
+          "executableHash": "5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d",
+          "buildHash": "5ad3dd54287394b13e5e95ebca81b7aeebde6b58d941b27cbf13eaf3feea8f8d",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
+        },
+        "pair_curve": {
+          "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+          "deployed": true,
+          "executableHash": "2fa91c047dcefd459e7dc7e8b723d61f6308695a8ae6d94f09af840714ca2341",
+          "buildHash": "2fa91c047dcefd459e7dc7e8b723d61f6308695a8ae6d94f09af840714ca2341",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD"
+        }
+      },
+      "launchlabPlatform": "GvSKpe5pwLuRzCQ56EGAA1urjtcxx554NivsGHexv3tf",
+      "squads": {
+        "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
+        "threshold": "2 of 3",
+        "timeLock": "60 s on devnet (48 h on mainnet)"
+      },
+      "wallets": {
+        "dev-fee": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
+        "keeper": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+        "deployer": "ED2FxCzefc1pi2M2JxAAgYNAce2LcNVh1QPQ3aJzCBGR",
+        "platform-admin": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx",
+        "squads-vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+        "squads-member-1": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb",
+        "squads-member-2": "58w9pN56qGxuNcnhUrTXgte2mbRNNf4QSAun3ASaLwxd",
+        "squads-member-3": "Bymx5VmL5Fi1A1EBJWXrcoeNUKARUvYjxKkHAqJ3H4wQ"
+      }
+    },
+    "mainnet": {
+      "status": "not deployed: the programs, the platform config, the Squads vault and every mainnet wallet are created by the owner on launch week",
+      "programs": {
+        "burn_receipts": {
+          "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+          "deployed": false,
+          "executableHash": null,
+          "buildHash": "3ecae91b0cf52c271b38e2e48aa0a45154f1d84a61f331e01a7bc74f32d9074f",
+          "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
+        },
+        "pair_curve": {
+          "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+          "deployed": false,
+          "executableHash": null,
+          "buildHash": "9b20156f30b35eb7e31733fd32b40b40bbd38d1f2acca821f012f2dc59b31f34",
+          "upgradeAuthority": "TODO_MAINNET_SQUADS_VAULT"
+        }
+      },
+      "launchlabPlatform": "TODO_MAINNET_PLATFORM_ID",
+      "squads": {
+        "vault": "TODO_MAINNET_SQUADS_VAULT",
+        "multisig": "TODO_MAINNET_SQUADS_MULTISIG",
+        "threshold": "2 of 3",
+        "timeLock": "48 h"
+      },
+      "wallets": {
+        "dev-fee": "TODO_MAINNET_DEV_FEE_WALLET",
+        "keeper": "TODO_MAINNET_KEEPER",
+        "deployer": "TODO_MAINNET_DEPLOYER",
+        "platform-admin": "TODO_MAINNET_PLATFORM_ADMIN",
+        "squads-vault": "TODO_MAINNET_SQUADS_VAULT",
+        "squads-member-1": "TODO_SQUADS_MEMBER_1",
+        "squads-member-2": "TODO_SQUADS_MEMBER_2",
+        "squads-member-3": "TODO_THIRD_SIGNER_ADDRESS"
+      }
+    }
+  },
+  "security": {
+    "policy": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/SECURITY.md",
+    "contact": "security@burnticker.com",
+    "bountyWallet": "TODO_BOUNTY_WALLET",
+    "firmAudit": false
+  },
+  "trust": {
+    "trustPage": "https://burnticker.com/burnticker/trust",
+    "check": "https://burnticker.com/burnticker/check",
+    "feeLedger": "https://burnticker.com/burnticker/fees/ledger",
+    "operator": "https://burnticker.com/burnticker/operator",
+    "verifiedBuild": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/VERIFIED-BUILD.md",
+    "verifiedBuildKind": "interim-local",
+    "sourceCommit": "43dfcb7fe90b4f22b6d3cf1d9a73e012c3d6ef90",
+    "powersRegisters": [
+      "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/powers-register.md",
+      "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burn-receipts/pair-curve-powers-register.md"
+    ],
+    "api": "https://burnticker.com/api/burnticker/v1/openapi.json"
+  }
+}

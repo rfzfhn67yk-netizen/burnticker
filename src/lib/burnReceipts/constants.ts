@@ -1,0 +1,159 @@
+import { PublicKey } from "@solana/web3.js";
+import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
+
+/**
+ * burn_receipts — the Receipts launchpad's on-chain burn program (programs/burn-receipts). Constants mirror
+ * programs/burn-receipts/programs/burn_receipts/src/constants.rs.
+ *
+ * PROGRAM ID: the IDL's address is the id the committed build declares. Until 2026-10-10 that was the LOCALNET TEST key generated on
+ * the dev Mac (GV9CMj…SuF8); since the devnet rehearsal's `anchor keys sync` it is the REAL id (AuQjoSgq…zhMM, one id for devnet and
+ * mainnet, D-7). Every client entry point takes `programId` explicitly.
+ */
+export const BURN_RECEIPTS_LOCALNET_PROGRAM_ID = new PublicKey(BURN_RECEIPTS_IDL.address);
+/**
+ * The retired localnet test key. A fee PDA derived under it belongs to no deployed program, so the launch CLI refuses to --send with it.
+ * (The "placeholder" check used to compare against the IDL's address, which after `anchor keys sync` is the real id — so the real id
+ * was refused; fixed 2026-10-10 during the devnet rehearsal.)
+ */
+export const BURN_RECEIPTS_TEST_PROGRAM_ID = new PublicKey("GV9CMjXPGbmXnn3ci3RjvTBpfdgiZ4Ts7UWu1LCnSuF8");
+
+export type Cluster = "mainnet" | "devnet" | "localnet";
+
+export const SEED_CONFIG = Buffer.from("config", "utf8");
+export const SEED_FEE = Buffer.from("fee", "utf8");
+export const SEED_READING = Buffer.from("reading", "utf8");
+export const SEED_PLATFORM = Buffer.from("platform", "utf8");
+export const BPF_LOADER_UPGRADEABLE_ID = new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111");
+/** The owner's pre-audit burn-pool cap default (25 SOL); raised only through a 48 h timelock; sunsets at PlatformConfig.cap_sunset_ts. */
+export const DEFAULT_BURN_POOL_CAP_LAMPORTS = BigInt(25_000_000_000);
+export const CAP_TIMELOCK_SECS = 48 * 60 * 60;
+/** The default cap applies when no PlatformConfig exists, until this hard-coded sunset (2027-10-01T00:00:00Z) (review M-1). */
+export const DEFAULT_CAP_SUNSET_TS = 1_822_348_800;
+/** The initial PlatformConfig cap is at least 1 SOL and its sunset no later than DEFAULT_CAP_SUNSET_TS (review-2 F8). */
+export const MIN_BURN_POOL_CAP_LAMPORTS = BigInt(1_000_000_000);
+/**
+ * Buyback swap safety (review H-1/L-7, review-2 F1): mandatory TWAP guard ≤ 300 bps over 600–1,200 s; min-out = the larger of the
+ * spot and TWAP quotes less slippage (≤ 300 bps); deviation and slippage each ≥ 150,000 / window bps (the oracle's 15 s bucket
+ * margin); one crank ≤ 2 % of the WSOL reserve.
+ */
+export const MAX_TWAP_DEVIATION_BPS = 300;
+export const MAX_SLIPPAGE_BPS = 300;
+export const TWAP_BUCKET_TOLERANCE_BPS_SECS = 150_000;
+export const MIN_TWAP_WINDOW_SECS = 600;
+export const MAX_TWAP_WINDOW_SECS = 1_200;
+export const MAX_SPEND_RESERVE_BPS = 200;
+/** A dead pool can be replaced after 7 days of CONTINUOUS recorded untradeability (review M-4, review-2 F6: observations ≤ 24 h apart). */
+export const POOL_REPLACEMENT_DELAY_SECS = 7 * 24 * 60 * 60;
+export const UNTRADEABLE_MAX_GAP_SECS = 24 * 60 * 60;
+/** Review-3 L-3: a spell starts on the second of two untradeable observations ≥ 1 h apart (dated from the first). */
+export const UNTRADEABLE_CONFIRM_SECS = 60 * 60;
+/** Review-3 L-2: a kept key counts towards ADDING keys only after 7 days of membership. */
+export const ATTESTER_SENIORITY_SECS = 7 * 24 * 60 * 60;
+/** Review-3 L-4: at most 3 keys on the PlatformConfig's cranker allowlist (applies only while the cap is in force). */
+export const MAX_CRANKERS = 3;
+/** After 30 days of continuous untradeability a buyback reading is processed below-floor with its target carried (review-2 F7). */
+export const QUEUE_UNBLOCK_SECS = 30 * 24 * 60 * 60;
+/** register_pool: ≥ 50 % of the pool's LIVE LP burned or held by Raydium's LP lock — a floor under the provenance proof (review-3 M-2). */
+export const MIN_LOCKED_LP_BPS = 5_000;
+/** initialize_token (policy 0): the LaunchLab platform's LP lock + burn scales must cover ≥ 50 % (10⁻⁶ units; review-3 M-3). */
+export const MIN_LL_LOCK_SCALE_PPM = 500_000;
+/** Re-check R3-2: a set_registration_policy fallback pool needs ≥ 90 % of its live LP burned/locked unless it is a LaunchLab-known config's pool PDA. */
+export const FALLBACK_MIN_LOCKED_LP_BPS = 9_000;
+/** Re-check R3-2: a registration-policy proposal can be applied until 14 days after it was proposed. */
+export const POLICY_PROPOSAL_TTL_SECS = 14 * 24 * 60 * 60;
+/** Re-check R3-4: the cranker allowlist stops applying 90 days after initialize_platform (or at the cap sunset, if earlier). */
+export const CRANKER_ALLOWLIST_MAX_SECS = 90 * 24 * 60 * 60;
+
+/** v3 (review-2 F12): `BURNRECEIPTS-v3|<cluster genesis>|<program>|<mint>|<feed>|prev=…|<date>|<value>|src=…|proof=…`. */
+export const ATTESTATION_DOMAIN = "BURNRECEIPTS-v3";
+/** Largest quorum (review-2 F4): a quorum-3 shared-message reading fits a legacy transaction (≈ 1,190 of 1,232 bytes). */
+export const MAX_QUORUM = 3;
+/** The packet limit every transaction must fit (legacy or v0). */
+export const PACKET_DATA_SIZE = 1_232;
+export const PARAMS_HASH_DOMAIN = Buffer.from("BURNRECEIPTS-PARAMS-v1", "utf8");
+export const MAX_ATTESTERS = 5;
+export const ATTESTER_TIMELOCK_SECS = 48 * 60 * 60;
+export const MEMO_MAX_BYTES = 566;
+
+export const MODE_BUYBACK = 0;
+export const MODE_VAULT = 1;
+export const CARRY_CONSECUTIVE = 0;
+export const CARRY_NONE = 1;
+export const POOL_POLICY_CREATOR_IS_FEE_PDA = 0;
+export const POOL_POLICY_FIXED = 1;
+/** 2026-10-10: the token launched through pair_curve; its pool is registered by register_pair_pool (docs/burnticker/PAIR-CURVE.md §5.2). */
+export const POOL_POLICY_PAIR_CURVE = 2;
+/** The pair_curve program (one id for devnet and mainnet; burn_receipts hard-codes it as PAIR_CURVE_PROGRAM_ID). */
+export const PAIR_CURVE_PROGRAM_ID = new PublicKey("2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN");
+
+export const KIND_BASELINE = 0;
+export const KIND_INCREASE = 1;
+export const KIND_DOWN = 2;
+export const KIND_FLAT = 3;
+/** An out-of-bound reading accepted as a reset: 0 units, new baseline (review M-2). */
+export const KIND_RESET = 4;
+
+export const OUTCOME_PENDING = 0;
+export const OUTCOME_NO_UNITS = 1;
+export const OUTCOME_BURNED = 2;
+export const OUTCOME_BELOW_FLOOR = 3;
+export const OUTCOME_SHORT = 4;
+export const OUTCOME_EXHAUSTED = 5;
+export const OUTCOME_NAMES: Record<number, string> = { 0: "pending", 1: "no-units", 2: "burned", 3: "below-floor", 4: "short", 5: "exhausted" };
+
+export const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+export const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+export const ED25519_PROGRAM_ID = new PublicKey("Ed25519SigVerify111111111111111111111111111");
+export const SYSVAR_INSTRUCTIONS_ID = new PublicKey("Sysvar1nstructions1111111111111111111111111");
+export const NATIVE_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+
+/** Raydium CPMM (raydium-cp-swap). The program's `devnet` cargo feature switches its hard-coded id to Raydium's devnet deployment. */
+export const CPMM_PROGRAM_ID: Record<Cluster, PublicKey> = {
+  mainnet: new PublicKey("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"),
+  devnet: new PublicKey("DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb"),
+  // Localnet runs the mainnet build (the LiteSVM suite and the local validator load the fixture at the mainnet id).
+  localnet: new PublicKey("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"),
+};
+export const CPMM_AUTH_SEED = Buffer.from("vault_and_lp_mint_auth_seed", "utf8");
+
+/** Raydium LaunchLab (@raydium-io/raydium-sdk-v2 src/common/programId.ts). The program's `devnet` feature selects the devnet id. */
+export const LAUNCHLAB_PROGRAM_ID: Record<Cluster, PublicKey> = {
+  mainnet: new PublicKey("LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"),
+  devnet: new PublicKey("DRay6fNdQ5J82H7xV6uq2aV3mNrUZ1J4PgSKsWgptcm6"),
+  localnet: new PublicKey("LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"),
+};
+export const LAUNCHLAB_CREATOR_FEE_VAULT_AUTH_SEED = Buffer.from("creator_fee_vault_auth_seed", "utf8");
+/** LaunchLab pool PDA ["pool", mintA, mintB] (SDK pda.ts getPdaLaunchpadPoolId) and the layout offsets the program reads (layout.ts). */
+export const LAUNCHLAB_POOL_SEED = Buffer.from("pool", "utf8");
+export const LL_POOL_PLATFORM_ID = 173;
+export const LL_PLATFORM_CP_CONFIG_ID = 688;
+export const LL_PLATFORM_SCALES = 80;
+export const LL_PLATFORM_CP_CREATOR = 800;
+
+/** Raydium's CPMM LP lock authority (SDK programId.ts LOCK_CPMM_AUTH): locked LP sits in its ATA for the LP mint. */
+export const LOCK_CPMM_AUTHORITY: Record<Cluster, PublicKey> = {
+  mainnet: new PublicKey("3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH"),
+  devnet: new PublicKey("7qWVV8UY2bRJfDLP4s37YzBPKUkVB46DStYJBpYbQzu3"),
+  localnet: new PublicKey("3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH"),
+};
+
+/**
+ * Genesis hashes, for the cluster-consistency check (review L-6) and the signed message's cluster binding (review-2 F12: the
+ * program's default build binds mainnet's, its `devnet` build devnet's; each TokenConfig stores the one it enforces).
+ */
+export const GENESIS_HASH: Record<"mainnet" | "devnet", string> = {
+  mainnet: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+  devnet: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+};
+/** Review-3 I-1: the tag a `--features localnet` build binds instead of a genesis hash: sha256("BURNRECEIPTS-LOCALNET-GENESIS"). */
+export const LOCALNET_GENESIS_TAG = "38EeoTLdVHgiexj97JrnuEYvG7zV7nSFVdUeMJxUDdLt";
+
+/**
+ * Review-3 I-1: the client never signs a message bound to MAINNET's genesis unless the context is mainnet (a localnet rehearsal of the
+ * default build would otherwise produce mainnet-valid signatures); on devnet/mainnet the config's genesis must equal the RPC's.
+ */
+export function assertSignableGenesis(configGenesis: string, cluster: Cluster, rpcGenesis: string): void {
+  if (configGenesis === GENESIS_HASH.mainnet && cluster !== "mainnet") throw new Error(`burnReceipts: refusing to sign a mainnet-bound message on ${cluster} (use a --features ${cluster} build)`);
+  if (cluster !== "localnet" && configGenesis !== rpcGenesis) throw new Error(`burnReceipts: the program build binds genesis ${configGenesis} but the RPC's is ${rpcGenesis}; refusing to sign`);
+}

@@ -1,0 +1,61 @@
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+
+/**
+ * THE VERIFIED-BUILD TABLE (trust pack, 2026-10-10): config/burnticker/verified-build.json, written by scripts/ops/verified-build.sh.
+ * The executable hash is solana-verify's: sha256 over the program bytes with trailing zero bytes removed, so a .so built here, a
+ * `solana program dump` of the deployed program (padded to the ProgramData length) and `solana-verify get-program-hash` all compare.
+ */
+
+export const VERIFIED_BUILD_FILE = path.join("config", "burnticker", "verified-build.json");
+export type BuildVariant = "mainnet" | "devnet";
+export interface ProgramBuild { features: string[]; bytes: number; hash: string }
+export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean }
+export interface VerifiedBuild {
+  schema: "burnticker.verified-build/v1"; updatedAt: string; note: string;
+  kind: "interim-local" | "docker"; kindNote: string; sourceCommit: string; sourceCommitNote: string;
+  toolchain: Record<string, string>; workspace: string;
+  programs: { library: string; programId: string; builds: Record<BuildVariant, ProgramBuild>; deployed: { devnet: Deployed | null; mainnet: Deployed | null } }[];
+}
+
+export function executableHash(bytes: Uint8Array): string {
+  let n = bytes.length;
+  while (n > 0 && bytes[n - 1] === 0) n--;
+  return crypto.createHash("sha256").update(bytes.subarray(0, n)).digest("hex");
+}
+
+export function verifiedBuildProblems(t: Partial<VerifiedBuild> | null): string[] {
+  const out: string[] = [];
+  if (!t || t.schema !== "burnticker.verified-build/v1") return ["schema must be burnticker.verified-build/v1"];
+  if (t.kind !== "interim-local" && t.kind !== "docker") out.push("kind must be interim-local or docker");
+  if (!/^[0-9a-f]{40}$/.test(String(t.sourceCommit))) out.push("sourceCommit must be a 40-hex git commit");
+  const libs = (t.programs ?? []).map((p) => p.library).sort();
+  if (JSON.stringify(libs) !== JSON.stringify(["burn_receipts", "pair_curve"])) out.push("programs must be burn_receipts and pair_curve");
+  for (const p of t.programs ?? []) for (const v of ["mainnet", "devnet"] as BuildVariant[]) {
+    const b = p.builds?.[v];
+    if (!b || !/^[0-9a-f]{64}$/.test(b.hash)) out.push(`${p.library}.${v}: hash must be 64 hex`);
+    if (b && v === "devnet" && !b.features.includes("devnet")) out.push(`${p.library}.devnet must build with --features devnet`);
+    const d = p.deployed?.[v];
+    if (d && d.matchesBuild !== (d.hash === b?.hash)) out.push(`${p.library}.deployed.${v}.matchesBuild disagrees with the hashes`);
+  }
+  return out;
+}
+
+export function loadVerifiedBuild(root = process.cwd()): VerifiedBuild {
+  const t = JSON.parse(fs.readFileSync(path.join(root, VERIFIED_BUILD_FILE), "utf8")) as VerifiedBuild;
+  const bad = verifiedBuildProblems(t);
+  if (bad.length) throw new Error(`${VERIFIED_BUILD_FILE}: ${bad.join("; ")}`);
+  return t;
+}
+
+/** Built .so files on this host to compare: target/deploy (default build) and target/deploy-devnet (the devnet build), when present. */
+export function builtArtifacts(root = process.cwd()): { library: string; variant: BuildVariant; file: string }[] {
+  const ws = path.join(root, "programs", "burn-receipts", "target");
+  const out: { library: string; variant: BuildVariant; file: string }[] = [];
+  for (const [dir, variant] of [["deploy", "mainnet"], ["deploy-devnet", "devnet"]] as const) for (const library of ["burn_receipts", "pair_curve"]) {
+    const file = path.join(ws, dir, `${library}.so`);
+    if (fs.existsSync(file)) out.push({ library, variant, file });
+  }
+  return out;
+}

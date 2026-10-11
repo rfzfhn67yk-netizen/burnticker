@@ -1,0 +1,87 @@
+{
+  "schema": "burnkeeper.status/v1",
+  "generatedAt": "2026-10-09T22:30:00.000Z",
+  "ticker": "DEFICIT",
+  "ruleKey": "DEBT",
+  "cluster": "replay",
+  "sample": "Replay of the real Treasury series with an assumed $100/day fee inflow at a $0.001 token price. No transactions exist. Built by site/deficit/sample/make-sample.mjs.",
+  "addresses": {
+    "mint": null,
+    "vault": null,
+    "keeper": null,
+    "mintUrl": null,
+    "vaultUrl": null,
+    "keeperUrl": null
+  },
+  "rules": {
+    "sha256": "dae4d8042ac1753b6195aa91da1e699e534ef72cddc29bab7ae323bed6b81a15",
+    "statement": "Every full $1,000,000,000 added to the U.S. Total Public Debt Outstanding (Treasury's Debt to the Penny) since the previous business day's reading is one unit. Remainders under $1B carry forward only across consecutive increases; a day the debt falls or stays flat counts nothing and resets the remainder to zero. On each day with units, the keeper spends 1 - 0.95^units of its fee pool (the token's creator-fee SOL plus a disclosed seed, less a 0.02 SOL fee reserve) buying $DEFICIT at market on the public pool, and burns every token it receives in the next transaction. Days that would spend under $1 buy nothing. The keeper never sells and never sends tokens anywhere but the burn.",
+    "unitUsd": "1000000000",
+    "burnPerUnitTokens": "100000",
+    "file": "rules.json"
+  },
+  "supply": {
+    "initial": "1000000000",
+    "current": "935479891",
+    "source": "ledger"
+  },
+  "burned": {
+    "total": "64520109",
+    "pctOfSupply": 6.452,
+    "today": "146702",
+    "thisMonth": "736907",
+    "burnsToday": 1,
+    "burnsThisMonth": 5,
+    "count": 235
+  },
+  "shortfall": {
+    "outstanding": "0"
+  },
+  "vault": {
+    "allocation": "250000000",
+    "balance": null,
+    "allocationLeft": "250000000",
+    "trailing30d": "3694892",
+    "projectedLifeDays": null,
+    "vesting": {
+      "kind": "vesting",
+      "cliffDays": 0,
+      "vestDays": 365
+    }
+  },
+  "feed": {
+    "name": "U.S. Treasury, Debt to the Penny (Total Public Debt Outstanding)",
+    "lastRecordDate": "2026-10-08",
+    "lastAmount": "40305316210829.72",
+    "readings": 446,
+    "lastPollAt": "2026-10-09T20:30:04.000Z",
+    "lastPollOutcome": "burned 2026-10-08",
+    "nextPollAt": "2026-10-12T20:30:00.000Z"
+  },
+  "health": {
+    "pending": 0,
+    "lastError": null,
+    "unverified": 0
+  },
+  "mode": "buyback",
+  "buyback": {
+    "feePoolSol": "0.3788",
+    "reserveSol": "0.02",
+    "fractionPerUnit": "0.05",
+    "floorUsd": "1",
+    "spentSolToday": "0.733513584",
+    "spentSolMonth": "3.6846",
+    "spentSolTotal": "322.6012",
+    "boughtAndBurned": "64520109",
+    "skippedDays": 0,
+    "funding": {
+      "feeWallet": null,
+      "feeWalletUrl": null,
+      "creatorFeeSource": null,
+      "creatorFeeSourceUrl": null,
+      "seedTx": null,
+      "seedTxUrl": null,
+      "seedSol": null
+    }
+  }
+}

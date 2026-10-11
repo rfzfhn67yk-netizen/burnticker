@@ -1,0 +1,32 @@
+[Unit]
+Description=Burnticker web (the Next app on 127.0.0.1:3000 behind Caddy — wizard, in-app token pages, trust page, /api/burnticker/*)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/meme-coin-trader
+# The PUBLIC Burnticker tree (scripts/ops/publish-public-repo.sh; docs/burnticker/deploy.md "The host runs the public tree"), started by
+# its own run-burnticker-web.sh on loopback:3000 in production mode. Caddy proxies ONLY /burnticker, /burnticker/*, /api/burnticker/*
+# and /_next/* to it and passes the public Host header through; the tree carries no other app, so there is no other route to reach.
+ExecStart=/bin/sh %h/meme-coin-trader/scripts/service/run-burnticker-web.sh
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PORT=3000
+Environment=MCT_BIND_HOST=127.0.0.1
+Environment=APP_MODE=production
+Environment=NODE_ENV=production
+Environment=TZ=America/Denver
+Environment=BURNTICKER_DB=%h/meme-coin-trader/data/burnticker.db
+Environment=BURNTICKER_PUBLISH_DIR=%h/meme-coin-trader/data/burnticker-site
+# BURNTICKER_CLUSTER, BURNTICKER_FEE_WALLET, BURNTICKER_KEEPER_PUBKEY, BURNTICKER_PLATFORM_ID, BURNTICKER_RPC_URL,
+# NEXT_PUBLIC_BURNTICKER_RPC_URL live in .env.local on the host (read by run-burnticker-web.sh) — never in this file.
+# The production build (.next) is shipped prebuilt from the Mac by scripts/ops/deploy-burnticker-host.sh; a 4 GB box does not build Next.
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=90
+StandardOutput=append:%h/meme-coin-trader/logs/burnticker-web.log
+StandardError=append:%h/meme-coin-trader/logs/burnticker-web.log
+
+[Install]
+WantedBy=default.target

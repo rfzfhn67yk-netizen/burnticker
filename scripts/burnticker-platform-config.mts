@@ -1,0 +1,67 @@
+// BURNTICKER PLATFORM CONFIG — a DRY RUN that prints the LaunchLab create_platform_config transaction with the owner's dials
+// (2026-10-09): developer fee 25 bps (BURNTICKER_PLATFORM_FEE_BPS, env), creator-fee slot = the burn pool at the 50 bps cap, LP 100%
+// burned at graduation (--lp-platform-pct 0, the default; not creator-configurable), CPMM tier 0, platformCpCreator left default so the
+// launch creator (the burn-pool authority) is the CPMM creator-fee beneficiary. Built with the merged launch builder
+// (src/lib/burnKeeper/launch.ts → the Raydium SDK's own instruction). NEVER SENDS. No key is read. No environment file is printed.
+//
+//   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-platform-config.mts \
+//     --admin <pubkey> [--fee-wallet <pubkey> | BURNTICKER_FEE_WALLET] [--cluster devnet|mainnet] [--lp-platform-pct 0]
+//     [--web <https url> --img <https url>] [--json]
+// --web / --img are written ON CHAIN by create_platform_config; there is no default. Without them this dry run shows a placeholder and
+// says so, and burnkeeper-launch.mts platform --send refuses (platformSiteRefusal in src/lib/burnKeeper/launch.ts).
+import { PublicKey } from "@solana/web3.js";
+import { buildPlatformTx, platformProblems, platformViewOf, feeSplit, platformSiteRefusal, PLATFORM_SITE_UNSET, LAUNCHLAB_PROGRAM_SDK, PPM, type GlobalConfigView, type AmmConfigView } from "../src/lib/burnKeeper/launch.ts";
+import { WSOL_MINT } from "../src/lib/burnKeeper/launchlab.ts";
+import { BURNTICKER_DEV_FEE_BPS, BURN_POOL_CURVE_BPS, LP_BURNED_PCT, devFeeWallet } from "../src/lib/burnticker/fees.ts";
+
+const args = process.argv.slice(2);
+const opt = (n: string, d?: string) => { const i = args.indexOf(`--${n}`); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
+const cluster = opt("cluster", "devnet") === "mainnet" ? "mainnet" : "devnet";
+const adminS = opt("admin"), feeWalletS = opt("fee-wallet") ?? devFeeWallet() ?? null;
+const feeBps = Number(process.env.BURNTICKER_PLATFORM_FEE_BPS?.trim() || BURNTICKER_DEV_FEE_BPS);
+const lpPlatformPct = Number(opt("lp-platform-pct", "0"));
+if (!adminS) { console.error("usage: --admin <platform admin pubkey> [--fee-wallet <pubkey>] [--cluster devnet|mainnet] [--lp-platform-pct 0] [--web <https url> --img <https url>] [--json]"); process.exit(2); }
+if (lpPlatformPct !== 0) console.error(`WARNING: --lp-platform-pct ${lpPlatformPct} departs from the owner's decision (LP ${LP_BURNED_PCT}% burned). Printing anyway; this is a dry run.`);
+
+// CPMM AmmConfig index 0 (the 25 bps tier) per cluster — docs/burnkeeper/fees.md.
+const CP_CONFIG = { mainnet: new PublicKey("D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"), devnet: new PublicKey("5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy") }[cluster];
+const admin = new PublicKey(adminS);
+const claimFeeWallet = feeWalletS ? new PublicKey(feeWalletS) : PublicKey.default;
+const input = {
+  programId: LAUNCHLAB_PROGRAM_SDK[cluster], admin, claimFeeWallet, lockNftWallet: claimFeeWallet, vestingWallet: claimFeeWallet, cpConfigId: CP_CONFIG,
+  feeRatePpm: BigInt(Math.round(feeBps * 100)), creatorFeeRatePpm: BigInt(BURN_POOL_CURVE_BPS * 100), platformScalePpm: BigInt(Math.round(lpPlatformPct * 10_000)),
+  name: "Burnticker", web: opt("web") ?? PLATFORM_SITE_UNSET, img: opt("img") ?? PLATFORM_SITE_UNSET,
+};
+const problems = platformProblems(input);
+{ const r = platformSiteRefusal({ web: opt("web"), img: opt("img"), send: true }); if (r) problems.push(`${r.replace("--send needs", "a send would need")} — this dry run shows ${PLATFORM_SITE_UNSET}`); }
+const { platformId, tx } = buildPlatformTx(input);
+
+// The documented live values (fees.md §1), used here so the dry run prints the split without an RPC; the trust page reads the chain.
+const global: GlobalConfigView = { curveType: 0, index: 0, migrateFee: BigInt(0), tradeFeeRate: BigInt(2500), maxShareFeeRate: BigInt(10_000), minSupplyA: BigInt(0), maxLockRate: BigInt(cluster === "mainnet" ? 800_000 : 999_999), minSellRateA: BigInt(cluster === "mainnet" ? 200_000 : 1), minMigrateRateA: BigInt(cluster === "mainnet" ? 150_000 : 1), minFundRaisingB: BigInt(cluster === "mainnet" ? 24_000_000_000 : 1), mintB: WSOL_MINT };
+const amm: AmmConfigView = { index: 0, tradeFeeRate: BigInt(2500), protocolFeeRate: BigInt(120_000), fundFeeRate: BigInt(40_000), creatorFeeRate: BigInt(cluster === "mainnet" ? 500 : 2500), creatorFeeShareRate: BigInt(cluster === "mainnet" ? 50_000 : 0), createPoolFee: BigInt(0) };
+const split = feeSplit({ global, platform: platformViewOf(input), amm, creatorIsBurnPool: true });
+
+const out = {
+  dryRun: true, sent: false, cluster, platformId: platformId.toBase58(), admin: admin.toBase58(), claimFeeWallet: feeWalletS ?? "UNSET (BURNTICKER_FEE_WALLET)",
+  dials: { feeRatePpm: input.feeRatePpm.toString(), feeBps, creatorFeeRatePpm: input.creatorFeeRatePpm.toString(), creatorFeeBps: BURN_POOL_CURVE_BPS, platformScalePpm: input.platformScalePpm.toString(), creatorScalePpm: "0", burnScalePpm: (PPM - input.platformScalePpm).toString(), lpBurnedPct: 100 - lpPlatformPct, cpConfigId: CP_CONFIG.toBase58(), platformCpCreator: "default (launch creator = burn-pool authority)", platformVestingScale: "0" },
+  decisions: ["creators earn no cash from fees: the creator-fee slot pays the burn pool 100%", `developer slice ${feeBps} bps of curve volume → BURNTICKER_FEE_WALLET`, `LP burned at graduation ${100 - lpPlatformPct}%: developer post-graduation take ${lpPlatformPct === 0 ? "0" : "LP fee × share"}; burn pool 4.75 bps/SOL from Raydium's fixed CPMM creator fee`, "no referral share, no discounts, no vesting slice"],
+  problems, feeSplitPer1SolVolume: split,
+  transaction: { label: tx.label, signers: tx.signers, instructions: tx.instructions.map((d) => ({ name: d.name, program: d.program, args: d.args, accounts: d.accounts, dataHex: d.dataHex })) },
+  next: ["review the JSON above", "sign and send with the platform admin's wallet through scripts/burnkeeper-launch.mts --platform (the launch-flow CLI), never from here", "set BURNTICKER_PLATFORM_ID to the printed platformId; the trust page then reads the live config and compares it with these dials"],
+};
+if (args.includes("--json")) console.log(JSON.stringify(out, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2));
+else {
+  console.log(`Burnticker platform config — DRY RUN (${cluster}), nothing sent`);
+  console.log(`platform id      ${out.platformId}`);
+  console.log(`admin            ${out.admin}`);
+  console.log(`claim-fee wallet ${out.claimFeeWallet}`);
+  console.log(`dials            feeRate ${out.dials.feeRatePpm} ppm (${feeBps} bps) · creatorFeeRate ${out.dials.creatorFeeRatePpm} ppm (${BURN_POOL_CURVE_BPS} bps → burn pool) · LP platform ${out.dials.platformScalePpm} / creator 0 / burned ${out.dials.burnScalePpm} ppm (${out.dials.lpBurnedPct}% burned) · CPMM tier 0 ${out.dials.cpConfigId}`);
+  for (const d of out.decisions) console.log(`  · ${d}`);
+  if (problems.length) console.log(`PROBLEMS: ${problems.join("; ")}`);
+  console.log(`\nfee split per 1 SOL of volume`);
+  for (const l of split.preGraduation.legs) console.log(`  curve  ${String(l.bps).padStart(6)} bps  ${l.lamportsPer1Sol.padStart(9)} lamports → ${l.to}`);
+  for (const l of split.postGraduation.legs) console.log(`  cpmm   ${String(l.bps).padStart(6)} bps  ${l.lamportsPer1Sol.padStart(9)} lamports → ${l.to}`);
+  console.log(`\ninstruction: ${tx.instructions[0].name} (${tx.instructions[0].program}), ${tx.instructions[0].accounts.length} accounts, data ${tx.instructions[0].dataHex.length / 2} bytes`);
+  for (const a of tx.instructions[0].accounts) console.log(`  ${a.signer ? "S" : " "}${a.writable ? "W" : " "} ${a.pubkey}  ${a.role}`);
+  console.log(`\nnext: ${out.next.join(" → ")}`);
+}

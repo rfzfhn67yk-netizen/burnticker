@@ -1,0 +1,340 @@
+{
+  "schema": "burnticker.transparency/v1",
+  "updatedAt": "2026-10-10",
+  "note": "Rendered on /burnticker/trust by src/lib/burnticker/trust.ts (loadTransparency). Facts only. A null pubkey is a TODO the owner fills in before launch; the page shows it as TODO, never as blank. The operator's name comes from OPERATOR_LINE in src/lib/burnticker/fees.ts, not from this file. `rehearsals` lists every throwaway coin created under the real platform config to prove the machinery; each is also on config/own-tokens.json so the operator's bots refuse it.",
+  "publicRepo": {
+    "url": "https://github.com/rfzfhn67yk-netizen/burnticker",
+    "whatIsPublished": "the on-chain program, the keeper, the platform code, the sites, the docs, the deploy files, the tests and fixtures, and the refuse list the operator's trading bots read — carved out of a private monorepo by an explicit allowlist (config/public-repo.allowlist); the trading code never leaves"
+  },
+  "whoRunsThis": {
+    "alsoRuns": "The operator also runs automated trading systems (memecoin trading bots) on other hosts, with their own wallets. Those systems are not part of this platform and their code is private.",
+    "refusal": "Every one of those systems refuses to buy any coin launched through this platform, by mint address and by ticker, on every chain they trade. The refusal is code, not a promise: src/lib/ownTokens.ts reads config/own-tokens.json and every entry path asks it before a buy. A list that cannot be read refuses every entry (fail closed). Both files are in the public repository.",
+    "refuseListCode": "src/lib/ownTokens.ts",
+    "refuseListConfig": "config/own-tokens.json",
+    "holdingsRule": "Holdings of any platform coin by any wallet listed below are shown on this page when non-zero (read from chain once an RPC is configured)."
+  },
+  "howBuilt": {
+    "aiAssisted": true,
+    "statement": "The program, the keeper, the platform and this page were written with AI assistance (Claude Code) under the operator's direction and review. Three independent blind Claude reviews and one re-check of the burn_receipts program were completed on 2026-10-09/10 and are published in full; two blind Claude reviews of the pair_curve program were completed on 2026-10-10 and are published in full, their High findings not fixed yet; the ChatGPT review is pending. No security firm has audited any of it.",
+    "firmAudit": false,
+    "firmAuditStatement": "Not independently audited by a security firm. Reviewed by three independent blind AI reviews and one re-check of burn_receipts and two blind AI reviews of pair_curve (all published), an adversarial ChatGPT review (pending) and, once published, a public bounty.",
+    "reviews": [
+      {
+        "id": "claude-blind-1",
+        "reviewer": "a fresh Claude agent given the code only, not the builder's conclusions (blind review 1: 2 High, 4 Medium, 7 Low, 6 Info; all fixed or documented in docs/burn-receipts/CHANGELOG.md)",
+        "status": "completed 2026-10-09",
+        "reportPath": "docs/burnticker/reviews/2026-10-09-claude-blind-1.md"
+      },
+      {
+        "id": "claude-blind-2",
+        "reviewer": "a fresh Claude agent with no prior exposure, earlier reports read only after its findings were written (blind review 2: 5 Medium, 4 Low, 8 Info)",
+        "status": "completed 2026-10-10",
+        "reportPath": "docs/burnticker/reviews/2026-10-10-claude-blind-2.md"
+      },
+      {
+        "id": "claude-blind-3",
+        "reviewer": "a fresh Claude agent with no prior exposure (blind review 3: 3 Medium, 6 Low, 6 Info), plus its re-check of the round-3 fixes (4 Low, 2 Info) in the same report",
+        "status": "completed 2026-10-10 (review and re-check)",
+        "reportPath": "docs/burnticker/reviews/2026-10-10-claude-blind-3.md"
+      },
+      {
+        "id": "paircurve-blind-1",
+        "reviewer": "a fresh Claude agent reviewing the pair_curve program blind, the pre-registered checklist (pair_curve review 1: 2 High, 2 Medium, 3 Low, 3 Info; exploit tests committed, fixes not landed yet)",
+        "status": "completed 2026-10-10; findings open",
+        "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-blind-1.md"
+      },
+      {
+        "id": "paircurve-blind-2",
+        "reviewer": "a second fresh Claude agent reviewing pair_curve blind, emphasis on economics, griefing and liveness (pair_curve review 2: 3 High, 2 Medium, 4 Low, 5 Info; exploit tests committed, fixes not landed yet)",
+        "status": "completed 2026-10-10; findings open",
+        "reportPath": "docs/burnticker/reviews/2026-10-10-pair-curve-blind-2.md"
+      },
+      {
+        "id": "chatgpt-adversarial",
+        "reviewer": "ChatGPT, the same pre-registered checklist",
+        "status": "pending",
+        "reportPath": null
+      }
+    ],
+    "tooling": [
+      "cargo-audit",
+      "clippy pedantic",
+      "anchor verify / solana-verify",
+      "Trident fuzzing where feasible",
+      "Sec3 X-ray free tier"
+    ],
+    "toolingStatus": "partly run: clippy (--all-targets, -D warnings) clean in blind review 3's re-check; cargo-audit, anchor verify / solana-verify against a deployment, Trident and Sec3 X-ray not run yet",
+    "reviewsDir": "docs/burnticker/reviews",
+    "reviewsRule": "Every report is published in full in docs/burnticker/reviews/ as delivered, with every finding; fixes and their closing tests are in docs/burn-receipts/CHANGELOG.md; nothing is edited out.",
+    "bounty": {
+      "status": "not published",
+      "rangeSol": [
+        5,
+        10
+      ],
+      "fundedFrom": "the developer fee (25 bps of curve volume)",
+      "termsPath": "SECURITY.md in the public repository",
+      "contact": "security@burnticker.com",
+      "wallet": null,
+      "walletTodo": "TODO_BOUNTY_WALLET: the mainnet Squads vault once created (docs/burnticker/TODO-OWNER.md)",
+      "howReportsArePaid": "config/public-repo/overlay/SECURITY.md § Bounty wallet",
+      "reports": {
+        "paid": [],
+        "rejected": [],
+        "note": "Every report is listed here once decided: paid ones with the payment transaction, rejected ones with the reason. None yet."
+      }
+    }
+  },
+  "wallets": [
+    {
+      "role": "ops",
+      "label": "operations wallet",
+      "pubkey": null,
+      "envVar": null,
+      "description": "Pays the keeper's transaction fees and rent, and the hosting. Holds no platform coin. Funded by the operator and by the developer fee."
+    },
+    {
+      "role": "deployer",
+      "label": "program deployer",
+      "pubkey": null,
+      "envVar": null,
+      "description": "The key that deploys burn_receipts. Its upgrade authority is handed to the Squads vault at launch and set to none after the audit; the deployer key itself then holds nothing."
+    },
+    {
+      "role": "keeper",
+      "label": "keeper data key",
+      "pubkey": null,
+      "envVar": "BURNTICKER_KEEPER_PUBKEY",
+      "description": "The keeper signs readings and cranks; LaunchLab's recorded creator is the program's fee PDA. As an attester (quorum 1 at launch) it signs settled readings; as fee payer it sends cranks, claims and health checks. It cannot change a rule, burn more than the rule says, or withdraw from any fee PDA (see the Powers Register)."
+    },
+    {
+      "role": "dev-fee",
+      "label": "developer fee wallet",
+      "pubkey": null,
+      "envVar": "BURNTICKER_FEE_WALLET",
+      "description": "Receives the platform's 25 bps of curve volume (PlatformConfig.platformClaimFeeWallet). Its full ledger is read from chain on this page."
+    },
+    {
+      "role": "platform-admin",
+      "label": "LaunchLab platform admin",
+      "pubkey": null,
+      "envVar": "BURNTICKER_PLATFORM_ADMIN",
+      "description": "May change the platform fee bps, the claim wallet, cpConfigId, platformCpCreator and the LP split for launches not yet migrated. Holder: a dedicated encrypted key held by the operator; it cannot be transferred to the Squads vault (Raydium derives the platform id from the admin key) — disclosed as an untimelocked power (Powers Register, 'Powers outside the program'). Any change shows on this page within one cycle; initialize_token pins cpConfigId, platformCpCreator and the LP scales, and the launch gate re-reads them immediately before each create."
+    },
+    {
+      "role": "squads-vault",
+      "label": "Squads 2-of-3 vault",
+      "pubkey": null,
+      "envVar": "BURNTICKER_UPGRADE_AUTHORITY",
+      "description": "Holds the program upgrade authority (48 h time lock), the platform authority (may only RAISE the pre-audit burn-pool cap, 48 h timelock) and each token's config authority (attester set only, 48 h timelock)."
+    },
+    {
+      "role": "squads-member-1",
+      "label": "Squads member — owner, hardware key",
+      "pubkey": null,
+      "envVar": null,
+      "description": "One of the three signers of the vault."
+    },
+    {
+      "role": "squads-member-2",
+      "label": "Squads member — owner, second key",
+      "pubkey": null,
+      "envVar": null,
+      "description": "One of the three signers of the vault."
+    },
+    {
+      "role": "squads-member-3",
+      "label": "Squads member — trusted third party",
+      "pubkey": null,
+      "envVar": null,
+      "description": "One of the three signers of the vault; named here when the owner has their consent."
+    },
+    {
+      "role": "mint-deficit",
+      "label": "$DEFICIT mint keypair (public key)",
+      "pubkey": null,
+      "envVar": null,
+      "description": "The mint of the owner's first launch. The keypair signs once, inside initialize_token + the LaunchLab create; the program holds no mint authority afterwards."
+    },
+    {
+      "role": "trading-wallets",
+      "label": "the operator's trading-bot wallets (other hosts)",
+      "pubkey": null,
+      "envVar": null,
+      "description": "Not platform wallets. Listed so anyone can check that they never hold a platform coin; the bots refuse platform coins in code (src/lib/ownTokens.ts). The owner decides which addresses to list here before launch."
+    }
+  ],
+  "rehearsals": [
+    {
+      "symbol": "REHEARSAL",
+      "date": null,
+      "mint": null,
+      "status": "not done",
+      "text": "$REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP burned; not for trading. Its mint and the date go here when it happens; until then: not done."
+    }
+  ],
+  "limitations": [
+    {
+      "id": "quorum-1",
+      "status": "live design",
+      "text": "Quorum 1 at launch: the operator's keeper key is the only attester. The program verifies signatures and the quorum, not the reading itself. A second, independent attester is required before strangers launch."
+    },
+    {
+      "id": "switchboard-down",
+      "status": "not available",
+      "text": "Switchboard Technology Labs ended all oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. The planned replacements — a Reclaim zkTLS proof of the source response posted by a relayer key, and/or a second human operator running the reader on another machine — are not live. The 'attester #2 within 14 days' line on this page is the schedule, not a built thing."
+    },
+    {
+      "id": "kalshi-terms",
+      "status": "decided 2026-10-10",
+      "text": "Kalshi is not a settlement input. Its Developer Agreement v1.1 limits API use to a member's own trading and forbids caching or sharing API data with third parties without written authorization; its Data Terms of Use forbid using Kalshi Data to create, settle or support products without written consent. The Kalshi adapter remains in the code as discovery-only behind BURNTICKER_KALSHI_ENABLED (default off) and the launch preflight refuses any Kalshi rule regardless of the flag. Coins settle on first-party primaries with an independent cross-read, or on an on-chain Polymarket payout; Polymarket's Gamma API is used for discovery only and no prices, odds or volumes are displayed (its terms restrict market-data distribution)."
+    },
+    {
+      "id": "one-shot",
+      "status": "live design",
+      "text": "One-shot markets are allowed: a coin bound to a single market resolves once, on that market's close, and its supply is fixed after that. The token page says so."
+    },
+    {
+      "id": "cap-25",
+      "status": "live design",
+      "text": "Pre-audit cap: each burn pool spends from at most 25 SOL per burn day; SOL above the cap stays in the fee PDA until the next day. In the program it is PlatformConfig's cap with a sunset of at most 365 days, raisable only through a 48 h public timelock; the keeper models the same cap. Until the program is deployed only the keeper enforces it."
+    },
+    {
+      "id": "devnet-rehearsal",
+      "status": "done 2026-10-10",
+      "text": "The devnet rehearsal ran on 2026-10-10: $DEFICIT launched under a devnet platform config, readings attested, two buy-back burns cranked by the program; then the pair_curve rehearsal (two pairs: one graduated to two Raydium pools, one voided and sold back). Records: docs/burnkeeper/devnet-run.md, docs/burnkeeper/devnet-run-log-2026-10-10.md, docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md and docs/burnkeeper/evidence/ (every signature checked against devnet by scripts/ops/verify-evidence-signatures.mjs). The mainnet rehearsal coin is a separate step and is not done (see Rehearsal coins)."
+    },
+    {
+      "id": "program-not-deployed",
+      "status": "devnet only",
+      "text": "burn_receipts (AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM) and pair_curve (2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN) are deployed on devnet, upgrade authority held by a 2-of-3 Squads vault; their bytes match a build of this repository (docs/burnticker/VERIFIED-BUILD.md). Neither is deployed on mainnet. Pages read the devnet programs where an RPC is configured; the launch wizard refuses mainnet and answers ready: false."
+    },
+    {
+      "id": "launchlab-admin-timelock",
+      "status": "live design",
+      "text": "Raydium LaunchLab's PlatformConfig admin has no on-chain timelock (LaunchLab has none) and cannot be moved to the Squads vault after creation (the platform id is derived from the admin key). It is a dedicated encrypted key held by the operator, disclosed as an untimelocked power; the mitigations are the pins taken at initialize_token, the pre-create re-check and the live-vs-designed comparison on this page, not a lock."
+    },
+    {
+      "id": "contact-todo",
+      "status": "done",
+      "text": "The operator's contact address is contact@burnticker.com (security reports: security@burnticker.com)."
+    },
+    {
+      "id": "no-systemd-unit",
+      "status": "not built",
+      "text": "deploy/ has a unit for the $DEFICIT keeper only; the multi-token Burnticker keeper and the hourly audit timer have no systemd units yet."
+    },
+    {
+      "id": "rpc-dependent",
+      "status": "live design",
+      "text": "The live platform config, the fee ledger and wallet holdings on this page are read from an RPC. Without BURNTICKER_RPC_URL on the host the page says the live reads are unavailable instead of showing stale numbers."
+    },
+    {
+      "id": "public-repo-not-created",
+      "status": "done",
+      "text": "The public repository is live: https://github.com/rfzfhn67yk-netizen/burnticker, carved out of the private monorepo by scripts/ops/publish-public-repo.sh and config/public-repo.allowlist. A GitHub organisation for it is an owner step (docs/burnticker/TODO-OWNER.md)."
+    },
+    {
+      "id": "verified-build-interim",
+      "status": "interim",
+      "text": "The verified build is interim: the program hashes on docs/burnticker/VERIFIED-BUILD.md come from a local cargo build-sbf on the operator's Mac (they match the bytes deployed on devnet), not from solana-verify's Docker image, which needs a Linux host with Docker. scripts/ops/verified-build.sh runs the Docker build there; the OtterSec verified-builds registry entry is a mainnet-only step after deploy."
+    },
+    {
+      "id": "bounty-wallet",
+      "status": "not done",
+      "text": "The bounty wallet does not exist yet: it is the mainnet Squads vault, funded with 5–10 SOL from the developer fee once created. SECURITY.md and this page show TODO_BOUNTY_WALLET until then; the trust page shows its live balance once set."
+    },
+    {
+      "id": "entity",
+      "status": "not done",
+      "text": "No company stands behind the platform yet: it is operated by the individual named on /burnticker/operator. A LLC is an open owner decision (TODO_ENTITY)."
+    },
+    {
+      "id": "third-signer",
+      "status": "not done",
+      "text": "The third Squads signer (a trusted third party, named with consent) is not chosen yet; until then the mainnet vault cannot be created as designed."
+    },
+    {
+      "id": "signed-operator-message",
+      "status": "not done",
+      "text": "The operator's signed statement (a message signed by the developer fee wallet, verifiable on /burnticker/operator) is not signed yet: the mainnet wallet does not exist."
+    },
+    {
+      "id": "paircurve-findings-open",
+      "status": "not done",
+      "text": "The two pair_curve reviews (2026-10-10) found High-severity issues that are not fixed yet: close_pair can strand the burn-pool registration, a pre-funded pool vault or a pre-created token account can block graduation or init_pair, and an executable developer wallet can freeze trades. The exploit tests are committed; the fixes are not. The devnet pair_curve deployment carries these issues; pair launches stay off for mainnet (BURNTICKER_PAIR_CURVE_ENABLED) until they are fixed and re-reviewed."
+    }
+  ],
+  "policies": [
+    {
+      "id": "x-no-deletions",
+      "text": "On X: nothing is deleted. A mistake is corrected in-thread, with the receipt (the transaction and the recomputation) attached."
+    },
+    {
+      "id": "no-telegram-discord",
+      "text": "No Telegram or Discord: Burnticker and $DEFICIT communicate only through @burnticker / @USA_DEFICIT on X and the public repository. Any channel claiming otherwise is not ours."
+    },
+    {
+      "id": "failure-definition",
+      "text": "Failure definition: if any coin on this platform trades at any price, nothing changes — no relaunch, no v2, no rebrand, no change to a rule. The rule runs and the receipts post."
+    },
+    {
+      "id": "no-paid-promotion",
+      "text": "No paid promotion, no influencer payments, no referral kickbacks. No price talk and no countdowns."
+    },
+    {
+      "id": "platform-never-buys",
+      "text": "The platform never buys any coin, including its own. Burn pools buy only inside crank_buyback, by the rule, and burn what they receive. The operator's trading bots refuse platform coins."
+    },
+    {
+      "id": "nothing-coming-soon",
+      "text": "Nothing on any surface is described as coming later. If it is not built, this page lists it as not built, with its status."
+    },
+    {
+      "id": "no-creator-cash",
+      "text": "Creators receive no cash from fees; the creator-fee slot pays the burn pool, 100%. Zero team allocation on any coin. Seed deposits to a burn pool are gifts with no claim."
+    },
+    {
+      "id": "no-return-marketing",
+      "text": "The platform does not reply to or amplify return-marketing. A creator who markets returns using our pages loses the embed, not the rule."
+    },
+    {
+      "id": "append-only",
+      "text": "Rules, readings and receipts are append-only. Corrections are new entries that name what they correct; the incident log and this decision log are never edited after the fact."
+    },
+    {
+      "id": "disclaimer-everywhere",
+      "text": "The memecoin disclaimer and the event-contract disclosure sit on every surface that describes the mechanic."
+    }
+  ],
+  "trustPack": {
+    "note": "The sceptic's pages (2026-10-10): each reads only public files and the chain; placeholders stay visible and are listed in docs/burnticker/TODO-OWNER.md.",
+    "pages": [
+      {
+        "path": "/burnticker/check",
+        "title": "Check this yourself",
+        "what": "where money can go, who can do what, what is locked, what is not done, and a receipt verifier that runs in your browser",
+        "doc": "docs/burnticker/CHECK-THIS-YOURSELF.md"
+      },
+      {
+        "path": "/burnticker/fees/ledger",
+        "title": "Fee ledger",
+        "what": "every lamport the developer fee wallet received, from chain, by month, and the expenses it pays",
+        "doc": "config/burnticker/expenses.json"
+      },
+      {
+        "path": "/burnticker/operator",
+        "title": "Operator",
+        "what": "who runs this, every operator wallet, the signed statement slot and the never-buys monitor",
+        "doc": "config/burnticker/operator.json"
+      }
+    ],
+    "verifiedBuild": "docs/burnticker/VERIFIED-BUILD.md",
+    "wellKnown": "public/.well-known/burnticker.json",
+    "ownerTodo": "docs/burnticker/TODO-OWNER.md",
+    "metadataUri": {
+      "status": "arweave at launch (built; first upload pending)",
+      "text": "Each coin's metadata JSON (name, ticker, the generated description byte for byte, the image) and its art are uploaded to Arweave at launch and the token URI is the Arweave URL; LaunchLab creates the metadata with is_mutable = false, and a launch whose upload fails is refused (src/lib/burnticker/pin.ts). Not exercised yet: the Irys client packages and the upload payer are owner steps, and the devnet rehearsal coins predate it, so their metadata is server-hosted. The rule, the mint and the burns never depended on it."
+    }
+  }
+}

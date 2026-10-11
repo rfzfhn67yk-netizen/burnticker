@@ -1,0 +1,33 @@
+{
+  "name": "@burnticker/sdk",
+  "version": "0.1.0",
+  "description": "Build on Burnticker from a bot: rules, fee split, unsigned launch transactions, token reads, receipt verification from source and chain, the permissionless crank, program events.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "main": "./dist/sdk/index.js",
+  "types": "./dist/sdk/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "closure": "node scripts/closure.mjs --write",
+    "prepublishOnly": "node scripts/closure.mjs --check && node scripts/build.mjs"
+  },
+  "dependencies": {
+    "@raydium-io/raydium-sdk-v2": "0.2.74-alpha",
+    "@solana/web3.js": "^1.98.4",
+    "bn.js": "5.2.1"
+  }
+}

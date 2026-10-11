@@ -1,0 +1,162 @@
+{
+  "schema": "burnkeeper.status/v1",
+  "generatedAt": "2026-10-10T16:57:10.349Z",
+  "ticker": "DEFICIT",
+  "ruleKey": "DEBT",
+  "cluster": "devnet",
+  "addresses": {
+    "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+    "vault": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+    "keeper": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+    "mintUrl": "https://explorer.solana.com/address/4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F?cluster=devnet",
+    "vaultUrl": "https://explorer.solana.com/address/3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a?cluster=devnet",
+    "keeperUrl": "https://explorer.solana.com/address/D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn?cluster=devnet"
+  },
+  "rules": {
+    "sha256": "b9ad29b48ef13548e18674dca770a554b0f96e1924fcf70fdd378225689d8884",
+    "statement": "Every full $1,000,000,000 added to the U.S. Total Public Debt Outstanding (Treasury's Debt to the Penny) since the previous business day's reading is one unit. Remainders under $1B carry forward only across consecutive increases; a day the debt falls or stays flat counts nothing and resets the remainder to zero. On each day with units, the burn_receipts program spends 1 - 0.99^units of the token's burn pool (its fee account: the token's creator-fee SOL plus a disclosed seed, less a 0.02 SOL reserve; while the platform's pre-audit cap stands, of at most 25 SOL of it) buying $DEFICIT on the token's Raydium CPMM pool, and burns every token it receives in the same instruction. A day whose spend is under the floor fixed at launch (about $1 of SOL) buys nothing and the pool keeps the SOL; one crank spends at most 2% of the CPMM pool's SOL reserve and carries the rest to the next crank. The program never sells and has no instruction that moves the pool's SOL or tokens anywhere but that swap and burn.",
+    "unitUsd": "1000000000",
+    "burnPerUnitTokens": "100000",
+    "file": "rules.json"
+  },
+  "supply": {
+    "initial": "1000000000",
+    "current": "992032310.218969",
+    "source": "chain"
+  },
+  "burned": {
+    "total": "7967689.781031",
+    "pctOfSupply": 0.7967,
+    "today": "7967689.781031",
+    "thisMonth": "7967689.781031",
+    "burnsToday": 2,
+    "burnsThisMonth": 2,
+    "count": 2
+  },
+  "shortfall": {
+    "outstanding": "0"
+  },
+  "vault": {
+    "allocation": "250000000",
+    "balance": null,
+    "allocationLeft": "242032310.218969",
+    "trailing30d": "7967689.781031",
+    "projectedLifeDays": 911,
+    "vesting": {
+      "kind": "vesting",
+      "cliffDays": 0,
+      "vestDays": 365
+    }
+  },
+  "feed": {
+    "name": "U.S. Treasury, Debt to the Penny (Total Public Debt Outstanding)",
+    "lastRecordDate": "2026-10-08",
+    "lastAmount": "40305316210829.72",
+    "readings": 4,
+    "lastPollAt": "2026-10-10T16:17:06.021Z",
+    "lastPollOutcome": "0 new reading(s)",
+    "nextPollAt": "2026-10-10T20:30:00.000Z"
+  },
+  "health": {
+    "pending": 1,
+    "lastError": null,
+    "unverified": 0,
+    "waiting": 1
+  },
+  "mode": "buyback",
+  "execution": "program",
+  "program": {
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "config": "FqfwxFKaiLRaK1HAsBsRRkXAq3nzbEt92fX9qWQTZYPh",
+    "feePda": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+    "feePdaUrl": "https://explorer.solana.com/address/3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a?cluster=devnet",
+    "feePdaSol": "0.485167438",
+    "initialized": true,
+    "attestation": {
+      "attesters": [
+        {
+          "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+          "kind": "operator",
+          "url": "https://explorer.solana.com/address/D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn?cluster=devnet",
+          "heldByKeeper": true
+        }
+      ],
+      "quorum": 1,
+      "keeperHolds": 1,
+      "quorumMet": true,
+      "pendingChange": null,
+      "adminRenounced": false,
+      "lastReading": {
+        "recordDate": "2026-10-08",
+        "value": "40305316210829.72",
+        "status": "confirmed",
+        "units": 22,
+        "signature": "64SV55oiFpAyxhZsh3dqNniH3RxyBCBMhMBAjad3CzubJjEP9cVUEJtJwudJcbjEKr9gZUw3dcgZssjoKr1EECLW",
+        "txUrl": "https://explorer.solana.com/tx/64SV55oiFpAyxhZsh3dqNniH3RxyBCBMhMBAjad3CzubJjEP9cVUEJtJwudJcbjEKr9gZUw3dcgZssjoKr1EECLW?cluster=devnet"
+      },
+      "held": null
+    },
+    "queue": {
+      "lastOnChain": "2026-10-08",
+      "crankCursor": "2026-10-07",
+      "readingsNotOnChain": 0,
+      "awaitingCrank": 1,
+      "carriedSpendSol": "0.114624636",
+      "carriedRemainderUsd": "211779751.24",
+      "waits": [
+        {
+          "recordDate": "2026-10-08",
+          "reason": "TwapDeviation: waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts"
+        }
+      ],
+      "partials": [
+        {
+          "recordDate": "2026-10-06",
+          "note": "0.084212846 SOL carried (2% reserve cap)"
+        },
+        {
+          "recordDate": "2026-10-07",
+          "note": "0.114624636 SOL carried (2% reserve cap)"
+        }
+      ]
+    },
+    "pool": {
+      "registered": true,
+      "address": "5RoGVSCTBmcTSXdUgoktteBAi5sXTrax7QiJ6rh8hNyR",
+      "url": "https://explorer.solana.com/address/5RoGVSCTBmcTSXdUgoktteBAi5sXTrax7QiJ6rh8hNyR?cluster=devnet",
+      "untradeableSince": null,
+      "lastCheck": "check_pool_health: pool tradeable · 5Cpk36CYnJPycBrfqj4qznnwgS4Am5goxEFdmU4NnhvDS1VXgkL7E1jJxQZjgMHJqfqXhTaoD17KKnCswVfMqGsS"
+    },
+    "totals": {
+      "burned": "7967689.781031",
+      "spentSol": "0.040541929",
+      "shortfall": "0",
+      "readings": 4,
+      "burns": 2
+    },
+    "lastClaims": [
+      "sent 2XKo2h1HNARMRK2SygxoDqdEyQ8ciLGg5Js2BvXNkFYzHxaeqPR94Rjz1P4mnVo9HwNv1hBsMjFqW9VMUsJasaSz",
+      "curve: claim_launchlab_creator_fee not sent (RequireGtViolated)"
+    ]
+  },
+  "buyback": {
+    "feePoolSol": "0.465167438",
+    "reserveSol": "0.02",
+    "fractionPerUnit": "0.01",
+    "floorUsd": "1",
+    "spentSolToday": "0",
+    "spentSolMonth": "0",
+    "spentSolTotal": "0",
+    "boughtAndBurned": "7967689.781031",
+    "skippedDays": 0,
+    "funding": {
+      "feeWallet": "3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a",
+      "feeWalletUrl": "https://explorer.solana.com/address/3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a?cluster=devnet",
+      "creatorFeeSource": null,
+      "creatorFeeSourceUrl": null,
+      "seedTx": null,
+      "seedTxUrl": null,
+      "seedSol": null
+    }
+  }
+}

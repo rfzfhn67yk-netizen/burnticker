@@ -1,0 +1,35 @@
+[2026-10-10 16:17:03Z] burn keeper starting — $DEFICIT (rule DEBT, sha256:b9ad29b48ef1) · execution program · devnet · ledger data/burnkeeper-devnet.db · site data/burnkeeper-devnet-site
+[2026-10-10 16:17:06Z] cluster devnet · EXECUTION program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM · mode buyback · mint 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F · fee PDA 3J2B6wquyN35esxJuWyT6xMmxv52yMrmfBmBozqJTF9a · attesters 1 (quorum 1) · pool 5RoGVSCTBmcTSXdUgoktteBAi5sXTrax7QiJ6rh8hNyR · keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn (pays fees, signs readings) · rules sha256:b9ad29b48ef1
+[2026-10-10 16:17:07Z]   [fees] curve: claim_launchlab_creator_fee not sent (RequireGtViolated)
+[2026-10-10 16:17:07Z]   [fees] cpmm: nothing accrued (creator_fees_token_0/1 both 0)
+[2026-10-10 16:17:08Z]   [pool] check_pool_health: pool tradeable · 5hbP6Vk4nsQFWAQWQ3AtUPrW19pQcu5fseryzp17EaGKoZDY3jmGph7acHe3Yafa1vggpUdvDJgiTEgdNz3aCPhU
+[2026-10-10 16:26:37Z]   [fees] creator fees moved into the fee PDA: 2Tvrwo9oac3YrnKF3Fvg2HvDvTksX4QfN5BH1yc3nJzLFr7YSfQtvLZ9eGiGju8MGLLqywuBtD6ey2Km5EKt2Me2
+[2026-10-10 16:26:37Z]   [fees] curve: claim_launchlab_creator_fee not sent (RequireGtViolated)
+[2026-10-10 16:26:38Z]   [pool] check_pool_health: pool tradeable · VjFuFp9GLWvVKPy1VvpFKekkvaLJjHzgUYtuq2UgAAAZhUtvS1LZDrYwa8bEYMXvRqUfsQ2Ts3FiseVVSi4fV5n
+[2026-10-10 16:26:39Z]   [program] 2026-10-06: crank_buyback deferred by the program (TwapUnavailable) — waiting for TWAP history — the pool's oracle needs 600–1,200 s of observations before the program will buy (late, never lost)
+[2026-10-10 16:36:41Z]   [fees] creator fees moved into the fee PDA: 2rQtxBHsrapJ1fzMLsxkVydmBAF5xjj1KLPMrN7VDZu34t4ZSh9uF4Mso22MtQ1WZzRhHXwGtZdJsTqo1JeVma2j
+[2026-10-10 16:36:41Z]   [fees] curve: claim_launchlab_creator_fee not sent (RequireGtViolated)
+[2026-10-10 16:36:42Z]   [pool] check_pool_health: pool tradeable · 2j1Rh6mUjLb2c3asZ73ff8nvNssqK5LRLsrAgS3UaD1vayZHcFGujhhPRjr6JaAqbu7GkvaAho9V1wM9pJ7mRtDe
+[2026-10-10 16:36:44Z]   [program] 2026-10-06: CRANKED · burned · spent 20132384 lamports, got 4010874.872446, burned 4010874.872446 · PARTIAL — SpendCapBound: spent 20132384 of a 104345230 lamport target, 84212846 carried into the next crank · 3gBYyBbz5U1MA2Ut71vfzevMCWaBgAX4NjGymghbnhrnBxB94ADeenr3hvKVHrmfJmBy1JHxgY3k2SJNWiDkziVU · DEBT|2026-10-06|src=fiscaldata.treasury.gov debt_to_penny|prev=40249104431078.48|now=40273024579219.17|delta=23920148140.69|units=23|pool=505583582|spent=20132384|got=4010874.872446|burn=4010874.872446|swap=5RoGVSCTBmcT|rules=sha256:b9ad29b48ef1|v2
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 4000ms delay...
+[2026-10-10 16:36:52Z]   [program] 2026-10-07: crank_buyback deferred by the program (TwapDeviation) — waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts
+[2026-10-10 16:36:52Z]   [burn] 2026-10-06: 4010874.872446 burned by the program · https://explorer.solana.com/tx/3gBYyBbz5U1MA2Ut71vfzevMCWaBgAX4NjGymghbnhrnBxB94ADeenr3hvKVHrmfJmBy1JHxgY3k2SJNWiDkziVU?cluster=devnet
+[2026-10-10 16:46:54Z]   [fees] creator fees moved into the fee PDA: 33yDt4G3qRFtvU94o21thiFPiGSqgW5sii9Kzg17iAa8fRT3w8ZDfV4X62aiCSv2N868mGmVs8E1BbNHrq3jU1ws
+[2026-10-10 16:46:54Z]   [fees] curve: claim_launchlab_creator_fee not sent (RequireGtViolated)
+[2026-10-10 16:46:56Z]   [pool] check_pool_health: pool tradeable · joxSefuyB8bcdQ5tUzEM2Rvi7PCgr4D5H5ozyMpiKYEaEUJUKZ5yiDJMd3PCQnEZzzsLf2uiBpsBAUtLFpNduBY
+[2026-10-10 16:46:56Z]   [program] 2026-10-07: crank_buyback deferred by the program (TwapDeviation) — waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts
+[2026-10-10 16:56:58Z]   [fees] creator fees moved into the fee PDA: 2XKo2h1HNARMRK2SygxoDqdEyQ8ciLGg5Js2BvXNkFYzHxaeqPR94Rjz1P4mnVo9HwNv1hBsMjFqW9VMUsJasaSz
+[2026-10-10 16:56:58Z]   [fees] curve: claim_launchlab_creator_fee not sent (RequireGtViolated)
+[2026-10-10 16:57:00Z]   [pool] check_pool_health: pool tradeable · 5Cpk36CYnJPycBrfqj4qznnwgS4Am5goxEFdmU4NnhvDS1VXgkL7E1jJxQZjgMHJqfqXhTaoD17KKnCswVfMqGsS
+[2026-10-10 16:57:02Z]   [program] 2026-10-07: CRANKED · burned · spent 20409545 lamports, got 3956814.908585, burned 3956814.908585 · PARTIAL — SpendCapBound: spent 20409545 of a 135034181 lamport target, 114624636 carried into the next crank · WrU2qsjH2c6s2chHDXbip6ZXPCkw8Uka19rQPTJdmCAU33idaZF7UkcbYanhv2bhC58te8nzQW4pTqt1ZzcQbyj · DEBT|2026-10-07|src=fiscaldata.treasury.gov debt_to_penny|prev=40273024579219.17|now=40284036147367.19|delta=11011568148.02|units=11|pool=485576983|spent=20409545|got=3956814.908585|burn=3956814.908585|swap=5RoGVSCTBmcT|rules=sha256:b9ad29b48ef1|v2
+Server responded with 429 .  Retrying after 500ms delay...
+Server responded with 429 .  Retrying after 1000ms delay...
+Server responded with 429 .  Retrying after 2000ms delay...
+Server responded with 429 .  Retrying after 4000ms delay...
+[2026-10-10 16:57:10Z]   [program] 2026-10-08: crank_buyback deferred by the program (TwapDeviation) — waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts
+[2026-10-10 16:57:10Z]   [burn] 2026-10-07: 3956814.908585 burned by the program · https://explorer.solana.com/tx/WrU2qsjH2c6s2chHDXbip6ZXPCkw8Uka19rQPTJdmCAU33idaZF7UkcbYanhv2bhC58te8nzQW4pTqt1ZzcQbyj?cluster=devnet
+[2026-10-10 16:57:53Z] SIGINT: finishing the current cycle
+[2026-10-10 16:57:55Z] burn keeper stopped

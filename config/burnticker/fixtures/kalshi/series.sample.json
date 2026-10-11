@@ -1,0 +1,554 @@
+{
+ "fetchedAt": "2026-10-10T02:00:00Z",
+ "url": "https://api.elections.kalshi.com/trade-api/v2/series?category=…",
+ "series": [
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Financials"
+   ],
+   "category": "Financials",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/INX.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/INX.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "daily",
+   "last_updated_ts": "2026-09-16T17:54:36.932209Z",
+   "settlement_sources": [
+    {
+     "name": "For example, Google Finance",
+     "url": "https://www.google.com/finance/quote/.INX:INDEXSP?hl=en"
+    }
+   ],
+   "tags": [
+    "S&P"
+   ],
+   "ticker": "INXZ",
+   "title": "S&P 500 up"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Financials"
+   ],
+   "category": "Financials",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/RETURNCOMP.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/RETURNCOMP.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-10-07T06:30:21.386293Z",
+   "settlement_sources": [
+    {
+     "name": "For example, Google Finance",
+     "url": "https://www.google.com/finance/quote/NDX:INDEXNASDAQ?hl=en"
+    }
+   ],
+   "tags": [
+    "Gold",
+    "Indices",
+    "Markets",
+    "Match Ups",
+    "Metals",
+    "Precious Metals",
+    "S&P 500",
+    "Stock Market"
+   ],
+   "ticker": "KXINXVSGOLD",
+   "title": "Will the S&P 500 outperform gold this year?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Financials"
+   ],
+   "category": "Financials",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/NASDAQ100.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/NASDAQ100.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-09-16T19:07:47.269651Z",
+   "settlement_sources": [
+    {
+     "name": "For example, Google Finance",
+     "url": "https://www.google.com/finance/quote/NDX:INDEXNASDAQ?hl=en"
+    }
+   ],
+   "tags": [
+    "Markets",
+    "Indices"
+   ],
+   "ticker": "KXNASDAQ100W",
+   "title": "Nasdaq range"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Financials"
+   ],
+   "category": "Financials",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/INX.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/INX.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "daily",
+   "last_updated_ts": "2026-10-07T06:30:21.386293Z",
+   "settlement_sources": [
+    {
+     "name": "For example, Google Finance",
+     "url": "https://www.google.com/finance/quote/.INX:INDEXSP?hl=en"
+    }
+   ],
+   "tags": [
+    "Indices",
+    "Markets",
+    "S&P 500",
+    "Stock Market"
+   ],
+   "ticker": "KXINX",
+   "title": "S&P 500 range"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Politics"
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/POLLINGAPPROVALINPERIOD.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/POLLINGAPPROVALINPERIOD.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-10-08T20:16:11.048667Z",
+   "settlement_sources": [
+    {
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXTRUMPAPPROVALYEAR",
+   "title": "How high will Trump's approval get this year?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Politics"
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/REPORTTOPIC.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/REPORTTOPIC.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-10-09T06:00:44.326282Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "South China Morning Post",
+     "url": "https://www.scmp.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Verge",
+     "url": "https://www.theverge.com"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "ABC News Australia",
+     "url": "http://www.abc.net.au/news/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "CBC",
+     "url": "https://www.cbc.ca/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXSENATEADJOURN",
+   "title": "When will the Senate begin its August recess?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Politics"
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/JUDGEMENT.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/JUDGEMENT.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-10-09T05:57:58.776942Z",
+   "settlement_sources": [
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "PACER",
+     "url": "https://pacer.uscourts.gov/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXFRAUD2020",
+   "title": "Will any court rule that the 2020 election was fraudulent?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract.",
+    "Any candidate currently listed as a market within this event"
+   ],
+   "categories": [
+    "Elections"
+   ],
+   "category": "Elections",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/ELECTION.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/ELECTION.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-10-10T01:12:51.142251Z",
+   "settlement_sources": [
+    {
+     "name": "or equivalent electoral authority of the relevant jurisdiction; the formal proclamation by the head of state or government when constitutionally required; for religious elections",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "in hierarchical order: Primary Sources: the official electoral commission",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "constitutional court",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCOSTARICAPRES",
+   "title": "Costa Rica presidency"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract.",
+    "Any candidate currently listed as a market within this event"
+   ],
+   "categories": [
+    "Elections"
+   ],
+   "category": "Elections",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/ELECTION.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/ELECTION.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-10-10T01:12:51.973711Z",
+   "settlement_sources": [
+    {
+     "name": "or equivalent electoral authority of the relevant jurisdiction; the formal proclamation by the head of state or government when constitutionally required; for religious elections",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "in hierarchical order: Primary Sources: the official electoral commission",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "constitutional court",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": [
+    "International elections",
+    "Foreign Elections"
+   ],
+   "ticker": "KXSCOTPARLIAMENT",
+   "title": "Who will win the Scottish Parliament election?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract.",
+    "Any candidate currently listed as a market within this event"
+   ],
+   "categories": [
+    "Elections"
+   ],
+   "category": "Elections",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/ELECTION.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/ELECTION.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-10-10T01:12:51.684819Z",
+   "settlement_sources": [
+    {
+     "name": "or equivalent electoral authority of the relevant jurisdiction; the formal proclamation by the head of state or government when constitutionally required; for religious elections",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "in hierarchical order: Primary Sources: the official electoral commission",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "constitutional court",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXPORTUGALPRES",
+   "title": "Portugal Presidency"
+  },
+  {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/FOOTBALLGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/FOOTBALLGAMEWIN.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-06T14:58:29.805933Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "tags": [
+    "Football"
+   ],
+   "ticker": "KXNFLGAME",
+   "title": "NFL Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Climate and Weather"
+   ],
+   "category": "Climate and Weather",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/GLOBALTEMPERATURE.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/GLOBALTEMPERATURE.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "daily",
+   "last_updated_ts": "2026-10-01T20:50:16.803343Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "GLOBALTEMPERATURE-bulk-2026-09-02",
+     "markdown": "**Important information:** If it is determined in the sole discretion of the Exchange that there is a material error in the initial non-preliminary publication, Expiration may be held until the publication of a non-materially-erroneous data revision or until the Expiration Date, whichever comes first. If no data is available at the end of this period, all markets will resolve to the last fair price determined by Kalshi. Please note, a status of \"Final\" on weather.com/kalshi is provided for convenience only, and does not guarantee data to be error-free and thus exempt from the above.",
+     "message": "",
+     "title": ""
+    }
+   },
+   "settlement_sources": [
+    {
+     "name": "The Weather Company",
+     "url": "https://weather.com/kalshi"
+    }
+   ],
+   "tags": [
+    "Daily temperature"
+   ],
+   "ticker": "KXHIGHDEN",
+   "title": "Highest temperature in Denver"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Economics"
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/CPI.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/CPI.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-08-10T17:09:44.417619Z",
+   "product_metadata": {
+    "scope": "Calendar"
+   },
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/cpi/"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXCPI",
+   "title": "CPI"
+  }
+ ]
+}

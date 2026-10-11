@@ -1,0 +1,83 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>B1 avatar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root{ --surface:#1f1c19; --paper:#f2eee4; --ink:#1b1916; --stamp:#5b3fa3; }
+  html,body{margin:0;width:800px;height:800px;overflow:hidden;background:var(--surface);}
+  body{position:relative;font-family:'Courier Prime',monospace;color:var(--ink);}
+  /* counter surface: faint wood-grain-ish banding so it is not a flat fill */
+  .surface{position:absolute;inset:0;background:
+    repeating-linear-gradient(97deg, rgba(255,255,255,.018) 0 2px, transparent 2px 9px),
+    radial-gradient(120% 90% at 30% 20%, #262320 0%, #1a1816 70%);}
+  .receipt{position:absolute;left:142px;top:44px;width:560px;height:720px;background:var(--paper);
+    transform:rotate(-2.6deg);transform-origin:50% 50%;
+    box-shadow:0 18px 40px rgba(0,0,0,.55), 0 2px 0 rgba(0,0,0,.4);}
+  .receipt:before{content:"";position:absolute;inset:0;pointer-events:none;
+    /* thermal print-head banding + weak-dot stripe */
+    background:
+      linear-gradient(90deg, transparent 0 341px, rgba(255,255,255,.55) 341px 344px, transparent 344px),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.028) 0 1px, transparent 1px 3px);}
+  .grain{position:absolute;inset:0;opacity:.09;mix-blend-mode:multiply;pointer-events:none}
+  .body{position:absolute;left:38px;right:38px;top:64px;font-size:24px;line-height:34px;}
+  .wordmark{font-weight:700;font-size:64px;letter-spacing:4px;line-height:1;margin:0 0 6px -2px;
+    -webkit-mask-image:linear-gradient(90deg,#000 0 55%,rgba(0,0,0,.72) 66%,#000 80%);}
+  .sub{font-size:24px;letter-spacing:5px;margin-bottom:14px}
+  .rule{border-top:3px dashed #2a2622;height:0;margin:14px 0 12px}
+  .row{display:flex;justify-content:space-between}
+  .row b{font-weight:400}
+  .fade{opacity:.62}
+  .keep{margin-top:22px;font-size:19px;letter-spacing:5px;color:#4a443c;text-align:right}
+  .stamp{position:absolute;left:26px;top:538px;transform:rotate(-11deg);color:var(--stamp);
+    border:5px solid var(--stamp);border-radius:4px;padding:2px 14px 0;font-weight:700;font-size:54px;letter-spacing:6px;
+    line-height:1.05;mix-blend-mode:multiply;filter:url(#inkbleed);opacity:.88;}
+  .stamp small{display:block;font-size:17px;letter-spacing:4px;font-weight:400;margin-top:-2px}
+  .hole{position:absolute;left:286px;top:350px;width:260px;height:230px;}
+</style></head>
+<body>
+<div class="surface"></div>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="inkbleed" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="9" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.4 1.25" result="mask"/>
+    <feComposite in="d" in2="mask" operator="in"/>
+  </filter>
+</svg>
+<div class="receipt" id="r">
+  <svg class="grain" width="100%" height="100%"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <div class="body"><div class="wordmark">BURNTICKER</div><div class="sub">BURN RECEIPT</div><div class="rule"></div><div class="row"><span>FEED</span><b>TREASURY.DEBT</b></div>
+<div class="row"><span>DATE</span><b>2026-10-08</b></div>
+<div class="row fade"><span>READING</span><b>38,411,206,558,942</b></div>
+<div class="row"><span>DELTA</span><b>+21,284,113,007</b></div>
+<div class="row"><span>UNIT</span><b>$1,000,000,000</b></div>
+<div class="row"><span>UNITS</span><b>21</b></div><div class="rule"></div><div class="row"><span>BURNED</span><b>2,100,000 DEFICIT</b></div>
+<div class="row"><span>TX</span><b>5xQm7…kR7a</b></div>
+<div class="keep">KEEP THIS RECEIPT</div></div>
+  <!-- the scorch: the receipt itself has a burn hole where the burned amount sits -->
+  <svg class="hole" viewBox="0 0 260 230">
+    <defs>
+      <radialGradient id="sc" cx="48%" cy="50%" r="50%">
+        <stop offset="0" stop-color="#1f1c19"/><stop offset=".40" stop-color="#1f1c19"/>
+        <stop offset=".46" stop-color="#0e0b08"/><stop offset=".55" stop-color="#3a2411"/>
+        <stop offset=".66" stop-color="#8a5a24"/><stop offset=".78" stop-color="#cfa65c" stop-opacity=".85"/>
+        <stop offset=".9" stop-color="#e7d6a6" stop-opacity=".45"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="rough" x="-20%" y="-20%" width="140%" height="140%">
+        <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="4" seed="11" result="t"/>
+        <feDisplacementMap in="SourceGraphic" in2="t" scale="34" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+    <ellipse cx="128" cy="112" rx="118" ry="92" fill="url(#sc)" filter="url(#rough)"/>
+  </svg>
+  <div class="stamp">BURNED<small>ON-CHAIN · 2026-10-08</small></div>
+</div>
+<script>
+  // torn (serrated) ends: thermal receipts are torn against a toothed bar
+  const r=document.getElementById('r'),W=560,H=720,t=13,d=9;let p=[];
+  for(let x=0;x<=W;x+=t){p.push(`${x}px ${(x/t)%2?0:d}px`);}
+  for(let x=W;x>=0;x-=t){p.push(`${x}px ${H-((x/t)%2?0:d)}px`);}
+  r.style.clipPath=`polygon(${p.join(',')})`;
+</script>
+</body></html>

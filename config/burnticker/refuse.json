@@ -1,0 +1,16 @@
+{
+  "schema": "burnticker.refuse/v1",
+  "note": "Applied at create time to the selected series/market/event titles and categories, whatever the oracle (the owner, 2026-10-09; owner to confirm the list). Elections are ALLOWED by the owner's decision. Patterns are case-insensitive regular expressions over the title; categories match exactly.",
+  "categories": [],
+  "titlePatterns": [
+    { "id": "death", "pattern": "\\b(die|dies|died|death|deaths|dead|killed|kill|killing|fatal|fatalit(y|ies)|obituar|assassinat|suicide|execut(ed|ion)|lethal)\\b", "reason": "markets about deaths" },
+    { "id": "violence", "pattern": "\\b(shooting|shot|stabb|bomb|bombing|explosion|massacre|attack(s|ed)?|invasion|invade|airstrike|strike(s)? on|war crime|genocide|violen(t|ce)|riot)\\b", "reason": "markets about violence" },
+    { "id": "terror", "pattern": "\\b(terror|terrorist|terrorism|hostage|kidnap|hijack)\\b", "reason": "markets about terror" },
+    { "id": "casualties", "pattern": "\\b(casualt(y|ies)|death toll|body count|wounded|injur(ed|ies) count|how many (people )?(will )?(die|be killed))\\b", "reason": "casualty counts" },
+    { "id": "private-individual", "pattern": "\\b(private citizen|named individual|will .* be (arrested|indicted|charged|convicted|sentenced|divorced|pregnant|fired))\\b", "reason": "named private individuals' lives" },
+    { "id": "disaster", "pattern": "\\b(earthquake|tsunami|hurricane landfall|wildfire acres|flood deaths|pandemic deaths)\\b", "reason": "disasters (LAUNCHPAD-PATH §3: not a disaster)" }
+  ],
+  "namePatterns": [
+    { "id": "impersonation", "pattern": "^(official|real|the)\\s+", "reason": "names that claim to be official" }
+  ]
+}
