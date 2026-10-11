@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { platform } from "@/lib/burnticker/server";
 import { markLaunched, prepareLaunch } from "@/lib/burnticker/api/handlers";
+import { recordLaunchTimings } from "@/lib/burnticker/api/product";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
   if (body.action === "launched") { const r = markLaunched(p, String(body.mint ?? ""), String(body.launchTx ?? "")); return NextResponse.json(r.body, { status: r.status }); }
   const r = await prepareLaunch(p, body, { register: true });
   if ("error" in r) return NextResponse.json(r.error.body, { status: r.error.status });
+  recordLaunchTimings(p, body, "pair" in r ? [r.pair.tokens.a?.mint, r.pair.tokens.b?.mint] : [r.ok.token?.mint]);   // time-to-launch (productStore.ts)
   // RIVALRY PAIR (`pair: { ticker, name, … }` for side B): both bundles, both drafts and the pair row.
   if ("pair" in r) return NextResponse.json({ ok: true, pair: { pairId: r.pair.pairId, selector: r.pair.selector, notes: r.pair.notes, row: r.pair.row }, bundles: r.pair.bundles, tokens: r.pair.tokens, seriesTitle: r.pair.seriesTitle, stubs: p.stubs });
   return NextResponse.json({ ok: true, bundle: r.ok.bundle, token: r.ok.token, seriesTitle: r.ok.seriesTitle, stubs: p.stubs });

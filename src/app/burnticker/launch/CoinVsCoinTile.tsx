@@ -66,6 +66,9 @@ export function CoinVsCoinTile() {
   useEffect(() => {
     const u = new URLSearchParams(window.location.search);
     if (u.get("derby") === "1") { setOpen(true); setInitial({ a: (u.get("a") ?? "").slice(0, 12), b: (u.get("b") ?? "").slice(0, 12) }); }
+    // the templates gallery: coin-vs-coin, bracket (a Coin vs Coin season; the operator registers the bracket) and the flippening
+    const tpl = u.get("template");
+    if (tpl === "coin-vs-coin" || tpl === "bracket" || tpl === "flippening") { setOpen(true); if (tpl === "flippening") setFlip(true); }
   }, []);
   const [a, setA] = useState<Hit | null>(null), [b, setB] = useState<Hit | null>(null);
   const [window_, setWindow] = useState<"daily" | "weekly">("daily"), [seasonDays, setSeasonDays] = useState(30), [flip, setFlip] = useState(false), [fraction, setFraction] = useState(0.01);

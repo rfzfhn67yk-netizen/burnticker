@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { likeHref } from "@/lib/burnticker/templates";
 
 /**
  * A rivalry pair's shared page. A scoreboard header (burns A : B, supply A : B, the last settlement with its market ticker and result,
@@ -46,7 +47,7 @@ export default function PairPage() {
   );
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
-      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={`/burnticker/t/${A}`}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={`/burnticker/t/${B}`}>${B}</Link></h1>{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}<p className="text-neutral-400 text-xs">Rivalry pair <code>{d.pair.pairId}</code> · one selector <code>{d.pair.selectorKey}</code> · inverted mappings: each settlement burns exactly one side (a voided market burns neither). The receipts are the scoreboard.</p></header>
+      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={`/burnticker/t/${A}`}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={`/burnticker/t/${B}`}>${B}</Link></h1><p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this →</Link></p>{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}<p className="text-neutral-400 text-xs">Rivalry pair <code>{d.pair.pairId}</code> · one selector <code>{d.pair.selectorKey}</code> · inverted mappings: each settlement burns exactly one side (a voided market burns neither). The receipts are the scoreboard.</p></header>
 
       <section className={card + " space-y-3"} aria-label="Scoreboard">
         <div className="text-center"><div className="text-xs text-neutral-400">burns</div><div className="text-4xl font-semibold tabular-nums">${A} {t.burnsA} <span className="text-neutral-500 text-2xl">:</span> {t.burnsB} ${B}</div><div className="text-xs text-neutral-500">{t.settlements} settlement(s){t.voids ? `, ${t.voids} void` : ""} · burned {fmt(t.burnedA)} : {fmt(t.burnedB)}</div></div>

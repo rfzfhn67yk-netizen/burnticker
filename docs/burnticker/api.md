@@ -159,3 +159,15 @@ curl -s "$SITE/t/RAYS26/status.json" | jq .pinned
 curl -s "<pinned.metadataUri>" | sha256sum                 # = pinned.metadataSha256
 curl -s "<pinned.metadataUri>" | jq -r .description        # = pinned.expectedDescription, byte for byte
 ```
+
+
+## Product batch (API 1.6.0)
+
+| Method | Path | Cache | Bucket | What |
+|---|---|---|---|---|
+| POST | `/search/miss` | — | read | The launch page reports a search that showed cards but got no "Use this" click. Anonymous: the query folded to plain words, the UTC hour. No IP, no id. A search with no card is logged by `/search` itself. |
+| GET | `/ops/search-misses?days=` | — | read | Admin only (the operator's network + `x-action-pin`): missed searches by query, and time-to-launch p50 / p90 per wizard step. |
+| GET | `/creators/{wallet}` | 30 s | read | Read-only: every coin whose creator wallet matches. Each coin has its state (draft / curve / graduated / retired / voided), queued units, the next settlement, the last reading and how many independent reads confirmed it, receipts, the wind-down, and today's lint-checked post to copy. The `/burnticker/me` dashboard reads it. |
+
+`POST /launch/bundle` (and the wizard's launch route) accepts an optional `timings` object holding the page's step timestamps
+(`search`, `card`, `create`, `review`, `launch`). They are stored with the draft as durations.

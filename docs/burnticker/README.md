@@ -157,6 +157,18 @@ locked `derby` block (`src/lib/burnticker/derby/spec.ts`); design note: [DERBY.m
   starts before the next 00:00 UTC; Pyth's US index proxies stay behind `BURNTICKER_INDEX_PROXIES_ENABLED`. The coverage preflight runs
   each coin's primary and cross-read live. Not built: communities burning their own tokens into a score (attack surface; DERBY.md §9).
 
+## Templates, the creator dashboard, search misses and time-to-launch (10-10, the owner: "build them all")
+
+- **Templates.** `/burnticker/templates` lists the twelve canonical rule shapes (`src/lib/burnticker/templates.ts`), each with an
+  example sentence and "Start from this". Every coin and pair page has **Launch one like this**, which opens the create screen on the
+  same shape with the dials copied; the team, race or feed is picked again.
+- **Creator dashboard.** `/burnticker/me` is read-only (wallet connect or a pasted address; nothing is signed) and reads
+  `GET /api/burnticker/v1/creators/{wallet}`. It shows each coin's state, queued units, next settlement, last reading with how many
+  independent reads confirmed it, receipts and wind-down, and has a button to copy today's lint-checked post.
+- **Search misses and time-to-launch.** These are anonymous first-party records (`src/lib/burnticker/productStore.ts`;
+  transparency.md § 4). The admin summary is `GET /api/burnticker/v1/ops/search-misses`; the weekly markdown rollup is
+  `scripts/burnticker-search-misses.mts`.
+
 ## First-party settlement for team coins and weather; elections; the universal search (10-10, later the same day)
 
 - **Venues** (`src/lib/burnticker/venues.ts`): `BURNTICKER_KALSHI_ENABLED` defaults **off** — Kalshi routes, back-tests and launch bundles

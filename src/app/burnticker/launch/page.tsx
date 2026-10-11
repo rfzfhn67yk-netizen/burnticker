@@ -12,10 +12,11 @@ import { plainSentence, ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { CoinCard } from "../_components/CoinCard";
 import { FieldHelp } from "../_components/FieldHelp";
 import { CoinVsCoinTile } from "./CoinVsCoinTile";
-import { STATIONS, nwsSeries } from "@/lib/burnticker/sources/nws";
+import { STATIONS, nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
 import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
 import { describeRule, DESCRIPTION_MAX, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
-import { seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import { TEMPLATE_START, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { meaningful, queryTokens } from "@/lib/burnticker/textMatch";
 
@@ -157,6 +158,8 @@ export default function LaunchWizard() {
   const [pairOut, setPairOut] = useState<{ pairId: string | null; a: Bundle; b: Bundle; notes: string[] } | null>(null);
   // the dials (dials.ts): the rule as edited on the create screen, valid while the path's own rule is unchanged (key)
   const [draft, setDraft] = useState<{ key: string; a: BurnRule; b: BurnRule | null } | null>(null);
+  // "Launch one like this": the source coin's dials, applied once to the rule the new pick builds
+  const [pendingDials, setPendingDials] = useState<{ fraction: number; side: string | null; window: string | null; games: number | null; league: boolean; from: string } | null>(null);
   // the auto-generated description (describe.ts): the flavour line is editable (null = the template's), the rule block never is
   const [flavour, setFlavour] = useState<string | null>(null), [flavourB, setFlavourB] = useState<string | null>(null);
   const [cardCtx, setCardCtx] = useState<{ key: string; ctx: Omit<DescribeCtx, "ticker"> } | null>(null), [cardYear, setCardYear] = useState<number | null>(null), [cardSet, setCardSet] = useState<{ id: string; outcome: string } | null>(null);
@@ -188,6 +191,33 @@ export default function LaunchWizard() {
       set("nameB", setNameB); set("tickerB", setTickerB); set("descB", setDescB); set("imageB", setImageB); set("firstBuy", setFirstBuy); set("pasted", setPasted); set("q2", setQ2);
       set("draft", setDraft); set("flavour", setFlavour); set("flavourB", setFlavourB); set("cardCtx", setCardCtx); set("cardYear", setCardYear); set("cardSet", setCardSet); set("nameAuto", setNameAuto); set("tickerAuto", setTickerAuto); set("ownImage", setOwnImage); set("note", setNote);
     } else if (wantPair) { setFlow("pair"); setStep("pick"); }
+    const u = new URLSearchParams(window.location.search);
+    const tpl = u.get("template") as TemplateId | null, like = u.get("like");
+    if (tpl && TEMPLATE_START[tpl]) {
+      // "Start from this" (the templates gallery): the shape's own entry point; Coin vs Coin opens its tile (CoinVsCoinTile reads the same param)
+      try { sessionStorage.removeItem(STORE); } catch { /* ignore */ }
+      const st = TEMPLATE_START[tpl];
+      if (st.flow) { setFlow(st.flow); setStep(ORDER[st.flow][0]); }
+      else if (st.browse) { setFlow("browse"); setStep("pick"); setCat(st.browse); }
+      else { setFlow("team"); setStep("choose"); if (st.search) setUq(st.search); }
+    } else if (like) {
+      // "Launch one like this" (a coin or pair page): the same rule shape, the team / race / feed re-pickable, the dials copied
+      try { sessionStorage.removeItem(STORE); } catch { /* ignore */ }
+      fetch(`/api/burnticker/tokens/${encodeURIComponent(like)}`).then((r) => (r.ok ? r.json() : null)).then((j: { status?: { seriesTitle?: string | null; pair?: unknown }; rulesText?: string } | null) => {
+        if (!j?.rulesText) return;
+        let r: BurnRule; try { r = JSON.parse(j.rulesText) as BurnRule; } catch { return; }
+        const d = dialsFor(r, { nowMs: Date.now() });
+        const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
+        const n = r.oracle === "catalogue" && r.series ? parseNwsSeries(r.series) : null;
+        setPendingDials({ fraction: d.fraction, side: d.side?.value ?? null, window: d.window?.value ?? null, games: d.window?.games ?? null, league: !!d.league?.on, from: like.toUpperCase() });
+        if (e?.kind === "team") { setFlow("team"); setStep("team"); setLeagueSeries(e.league); }
+        else if (e?.kind === "game") { setFlow("pair"); setStep("pick"); setLeagueSeries(e.league); }
+        else if (n) { setFlow("browse"); setStep("pick"); setCat("weather"); setWx({ metric: n.metric, station: n.station, threshold: String(n.threshold ?? "") }); }
+        else if (r.oracle === "derby") { window.location.href = "/burnticker/launch?template=coin-vs-coin"; }
+        else if (r.oracle === "polymarket") { setFlow("single"); setStep("pick"); }
+        else { setFlow("team"); setStep("choose"); setUq(j.status?.seriesTitle ?? ""); }
+      }).catch(() => { /* the plain launch page */ });
+    }
     setReady(true);
   }, []);
   const snapshot = JSON.stringify({ flow, step, leagueSeries, team, winLose, game, swap, pairMode, pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn, fraction, name, ticker, description, imageUrl, link, xUrl, tg, cat, nameB, tickerB, descB, imageB, firstBuy, pasted, q2, draft, flavour, flavourB, cardCtx, cardYear, cardSet, nameAuto, tickerAuto, ownImage, note });
@@ -203,6 +233,20 @@ export default function LaunchWizard() {
   // the search box: 300 ms after the last keystroke, only for 3+ characters with at least one meaningful token, and only the response
   // to the LATEST query is shown (a sequence id discards a slow answer to an earlier keystroke); old results clear as soon as you type
   const useq = useRef(0);
+  // time-to-launch (productStore.ts): the page's own step timestamps, sent with the launch bundle request only
+  const stepTimes = useRef<Record<string, number>>({});
+  const mark = (k: "search" | "card" | "create" | "review" | "launch") => { if (!stepTimes.current[k] || k === "launch" || k === "review") stepTimes.current[k] = Date.now(); };
+  useEffect(() => { if (uq.trim()) mark("search"); }, [uq]);
+  useEffect(() => { if (step === "name") mark("create"); if (step === "review") mark("review"); }, [step]);
+  // search-miss telemetry: results with cards but no "Use this" before the next query or leaving the page (anonymous; productStore.ts)
+  const lastShown = useRef<{ q: string; cards: number; clicked: boolean; reported: boolean } | null>(null);
+  const reportNoClick = useCallback(() => {
+    const l = lastShown.current;
+    if (!l || l.clicked || l.reported || l.cards < 1) return;
+    l.reported = true;
+    try { void fetch(`${V1}/search/miss`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: l.q, cards: l.cards }), keepalive: true }); } catch { /* telemetry never breaks the page */ }
+  }, []);
+  useEffect(() => { const h = () => reportNoClick(); window.addEventListener("pagehide", h); return () => window.removeEventListener("pagehide", h); }, [reportNoClick]);
   const shortQuery = uq.trim().length > 0 && (uq.trim().length < 3 || !meaningful(queryTokens(uq)).length);
   useEffect(() => {
     const qv = uq.trim(), seq = ++useq.current;
@@ -211,7 +255,7 @@ export default function LaunchWizard() {
     setUbusy(true);
     const t = setTimeout(() => {
       getJson<{ cards: Suggestion[]; empty: boolean; categories: { id: string; label: string; blurb: string }[] }>(`${V1}/search?q=${encodeURIComponent(qv)}`)
-        .then((j) => { if (seq === useq.current) setUres(j); })
+        .then((j) => { if (seq === useq.current) { reportNoClick(); lastShown.current = { q: qv, cards: j.cards.filter((c) => c.rule || c.matchup).length, clicked: false, reported: false }; setUres(j); } })
         .catch(() => { if (seq === useq.current) setUres({ cards: [], empty: true, categories: [] }); })
         .finally(() => { if (seq === useq.current) setUbusy(false); });
     }, 300);
@@ -293,6 +337,20 @@ export default function LaunchWizard() {
   const rule: BurnRule | null = draft && draft.key === baseKey ? draft.a : baseRule;
   const ruleB: BurnRule | null = draft && draft.key === baseKey ? draft.b : baseRuleB;
   const dialCtx = { nowMs: Date.now(), seasonYear: cardYear ?? (leagueSeries ? seasonYearAt(leagueSeries as LeagueId, Date.now()) : null), set: cardSet };
+  useEffect(() => {
+    if (!pendingDials || step !== "name" || !baseRule) return;
+    const apply = (r0: BurnRule, withSide: boolean) => {
+      let r = r0;
+      const d0 = dialsFor(r, dialCtx);
+      if (withSide && pendingDials.side && d0.side?.options.some((o) => o.value === pendingDials.side)) r = applyDial(r, "side", pendingDials.side, dialCtx);
+      if (pendingDials.window && dialsFor(r, dialCtx).window) { r = applyDial(r, "window", pendingDials.window, dialCtx); if (pendingDials.games) r = applyDial(r, "games", pendingDials.games, dialCtx); }
+      r = applyDial(r, "fraction", pendingDials.fraction, dialCtx);
+      if (pendingDials.league && dialsFor(r, dialCtx).league) r = applyDial(r, "league", "on", dialCtx);
+      return r;
+    };
+    setDraft({ key: baseKey, a: apply(baseRule, true), b: baseRuleB ? apply(baseRuleB, false) : null });
+    setPendingDials(null);
+  }, [pendingDials, step, baseRule, baseRuleB, baseKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   /** One dial → the edited rule (both sides of a pair share the share and the window; the side stays each coin's own). */
   const setDial = (id: DialId, v: string | number) => {
     if (!rule) return;
@@ -353,7 +411,8 @@ export default function LaunchWizard() {
     if (!rule) return;
     setBusy(true); setLaunchErr(null);
     const post = async (body: Record<string, unknown>) => { const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); return j; };
-    const common = { creator, firstBuySol: firstBuy || "0", acknowledgements: { ruleLocked: ackLocked, noReturns: ackNoReturns } };
+    mark("launch");
+    const common = { creator, firstBuySol: firstBuy || "0", acknowledgements: { ruleLocked: ackLocked, noReturns: ackNoReturns }, timings: { ...stepTimes.current } };
     try {
       if (pairOn && ruleB) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
@@ -395,6 +454,8 @@ export default function LaunchWizard() {
   };
   /** A search card → the create screen: the window the card shows (team cards offer four), its text context, its suggested name. */
   const applySuggestion = (c: Suggestion, wi = 0) => {
+    if (lastShown.current) lastShown.current.clicked = true;
+    mark("card");
     setDraft(null); setFlavour(null); setFlavourB(null); setCardYear(c.seasonYear ?? null); setCardSet(c.leagueSet ?? null);
     if (c.matchup) {
       const m = c.matchup, side = (x: typeof m.a): Side => ({ abbr: x.abbr, marketTicker: x.series, label: x.name, nickname: x.nickname, name: x.name, ticker: x.ticker });
@@ -409,7 +470,7 @@ export default function LaunchWizard() {
     const auto = !!tx && tk === tx.ticker; setTickerAuto(auto); setNameAuto(auto);
     applyRule(r, { ...c.pick, series: r.series ?? c.pick.series, title: w ? w.title : c.pick.title }, { name: nm, ticker: tk, how: c.howSettles, settlement: c.settlement, source: c.source });
   };
-  const chooseTeam = (t: Team) => { setTeam(t); setName(t.name); setTicker(t.ticker); setDraft(null); setFlavour(null); setNameAuto(true); setTickerAuto(true); next(); };
+  const chooseTeam = (t: Team) => { mark("card"); setTeam(t); setName(t.name); setTicker(t.ticker); setDraft(null); setFlavour(null); setNameAuto(true); setTickerAuto(true); next(); };
   const chooseGame = (g: EventHit) => {
     if (!g.pair) return;
     setGame(g); setSwap(false); setPairMode("game"); setDraft(null); setFlavour(null); setFlavourB(null);
@@ -538,7 +599,7 @@ export default function LaunchWizard() {
           <h1 className="text-2xl font-semibold flex items-center gap-2">Launch a coin {cluster === "devnet" && <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-sky-500/40" title="BURNTICKER_CLUSTER=devnet: test network, no real money">Devnet</span>}</h1>
           <p className="text-neutral-400 text-sm"><Link className="underline" href="/burnticker">Burnticker</Link> · settles on primary sources (BLS, Treasury, NWS, league feeds…) or on an on-chain Polymarket payout; prediction markets are for discovery · the rule is locked at launch · <Link className="underline" href="/burnticker/trust">what the operator can and cannot do</Link></p>
         </div>
-        {step !== "choose" && <button className="text-xs text-neutral-500 underline" onClick={startOver}>start over</button>}
+        <span className="flex items-center gap-3 text-xs"><Link className="underline text-neutral-400" href="/burnticker/templates">Templates</Link><Link className="underline text-neutral-400" href="/burnticker/me">Your coins</Link>{step !== "choose" && <button className="text-neutral-500 underline" onClick={startOver}>start over</button>}</span>
       </header>
 
       {step !== "choose" && (
@@ -548,6 +609,8 @@ export default function LaunchWizard() {
         </div>
       )}
 
+
+      {pendingDials && <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status">Launching one like ${pendingDials.from}: pick the {flow === "team" ? "team" : flow === "pair" ? "game" : flow === "browse" ? "source" : "market"} — the dials ({Math.round(pendingDials.fraction * 1000) / 10}% per burn{pendingDials.window ? `, ${pendingDials.window}` : ""}{pendingDials.side ? `, on ${pendingDials.side}` : ""}) are copied onto the new rule, and you can change them before launch.</p>}
 
       {step === "choose" && (
         <section className="space-y-3" aria-label="Describe the event">

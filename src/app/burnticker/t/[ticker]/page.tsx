@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago, until } from "../../_components/CoinCard";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
+import { likeHref } from "@/lib/burnticker/templates";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; laid out like a launchpad coin page on 2026-10-10 — docs/burnticker/ui-conventions.md): the header
@@ -81,6 +82,7 @@ export default function TokenPage() {
           {prof?.description && <p className="text-sm text-neutral-200 max-w-2xl leading-relaxed">{prof.description}</p>}
           {prof?.note && <div className="max-w-2xl rounded border border-neutral-700 p-2 text-xs text-neutral-300"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note — not part of the rule</div>{prof.note}</div>}
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "Not affiliated with any team, league, candidate, agency or market."}</p>
+          <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>
           <PinnedCheck pinned={s.pinned} />
         </div>
       </header>

@@ -15,6 +15,7 @@ import type { FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polym
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import { API_PREFIX, buildOpenApi } from "@/lib/burnticker/api/spec";
 import { buildCoverage, type CoverageMatrix } from "@/lib/burnticker/coverage";
+import { logNoCardSearch, recordLaunchTimings } from "@/lib/burnticker/api/product";
 
 /**
  * THE PUBLIC API, v1 (2026-10-09). One function per operation in spec.ts; the route files under src/app/api/burnticker/v1/ call these
@@ -57,7 +58,12 @@ export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()
 export const v1KalshiSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiSearch(p, { q: q.get("q"), category: q.get("category"), series: q.get("series") });
 export const v1KalshiEvents = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiEvents(p, { q: q.get("q"), series: q.get("series"), status: q.get("status") });
 export const v1KalshiTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiTeams(p, { series: q.get("series") });
-export const v1Search = (p: Platform, q: URLSearchParams): Promise<ApiResult> => search(p, { q: q.get("q") });
+export const v1Search = async (p: Platform, q: URLSearchParams): Promise<ApiResult> => {
+  const r = await search(p, { q: q.get("q") });
+  // a search that found no card is logged, anonymously (productStore.ts; the page reports the no-click misses itself)
+  if (r.status === 200) logNoCardSearch(p, q.get("q") ?? "", ((r.body as { cards?: unknown[] }).cards ?? []).length);
+  return r;
+};
 export const v1Elections = (p: Platform, q: URLSearchParams): Promise<ApiResult> => elections(p, { type: q.get("type"), state: q.get("state") });
 export const v1ElectionPair = (p: Platform, q: URLSearchParams): Promise<ApiResult> => electionPair(p, { slug: q.get("slug"), a: q.get("a"), b: q.get("b") });
 export const v1SportsTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsTeams(p, { league: q.get("league"), q: q.get("q") });

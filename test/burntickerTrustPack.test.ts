@@ -255,8 +255,8 @@ describe("the six v1 routes (API 1.5.0)", () => {
   setPlatformForTests({ cluster: "devnet", publishDir: dir } as unknown as Platform);
   const doc = buildOpenApi() as Record<string, unknown> & { paths: Record<string, unknown>; components: { schemas: Record<string, Record<string, unknown>> } };
   const ok = (name: string, body: unknown) => assert.deepEqual(validateSchema(doc.components.schemas[name], body, doc), [], name);
-  test("API_VERSION is 1.5.0 and the six operations are in the document", () => {
-    assert.equal(API_VERSION, "1.5.0");
+  test("API_VERSION is 1.6.0 (the product batch after the trust pack) and the six trust-pack operations are in the document", () => {
+    assert.equal(API_VERSION, "1.6.0");
     const paths = Object.keys(doc.paths);
     for (const p of ["/check", "/check/receipts", "/check/receipts/{signature}", "/fees/ledger", "/operator", "/bounty"]) assert.ok(paths.includes(p), p);
   });
