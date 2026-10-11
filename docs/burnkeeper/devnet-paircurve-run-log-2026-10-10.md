@@ -1,6 +1,6 @@
 # Devnet rehearsal run log — pair_curve, 2026-10-10 (Saturday evening)
 
-Run by Claude (agent) on the Mac, worktree `mct-wt-PAIRCURVE`, branch `burnticker/pair-curve`. **The fixed program (after two blind reviews) was re-rehearsed at 18:32–19:22: §R2 at the end.** Devnet only: every command carried
+Run by Claude (agent) on the Mac, worktree `mct-wt-PAIRCURVE`, branch `burnticker/pair-curve`. **The fixed program (after two blind reviews) was re-rehearsed at 18:32–19:22 (§R2), and the round-2 fixes after the re-check were upgraded and spot-checked at 19:56–20:10 (§R3).** Devnet only: every command carried
 `-u devnet` / `--cluster devnet`, and every CLI checked the RPC's genesis hash (`EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG`). Keys:
 the throwaway devnet keys in `~/.config/meme-coin-trader/devnet/` (four new mint keys `pc{1,2}-mint-{a,b}.json`); the pair_curve
 program keypair in `~/.config/meme-coin-trader/mainnet-keys/pair_curve-program.json` (generated today, mode 600, one id for devnet and
@@ -307,3 +307,64 @@ program extension (20,600 B), ≈ 0.51 into pair 3's curves (0.142 now in the tw
 burn-pool fees and rents), ≈ 0.12 rents and burn-pool reserves (four mints, four TokenConfigs, fee-PDA reserves 4 × 0.02, Pair 3,
 reading accounts), the 0.0025 pre-fund, ≈ 0.02 transaction fees and TWAP trades. Pair 4's Pair and token-vault rents came back to the
 creator at close; the ≈ 1.857 SOL upgrade buffer came back to squads-a.
+
+
+---
+
+# §R3 — re-check round 2: upgrade and spot check (19:56–20:10)
+
+The independent re-check (`docs/burnticker/reviews/2026-10-10-pair-curve-recheck.md`, tests `review_pc3.rs`) confirmed every fix and
+found five residuals; a PR review added one Low. All fixed in **`fcda14eb`** (CHANGELOG "night" section). This run upgrades the devnet
+program again through the vault — with the upgrade script now checking the buffer's executable hash against
+`config/burnticker/verified-build.json` — and spot-checks the two behaviours the coordinator asked for on a fresh small pair. Evidence
+prefix `r3-`.
+
+## R3-U — upgrade (vault transaction 4)
+
+| step | signature / result |
+|---|---|
+| devnet SOL consolidated into the deployer (payer 0.95, keeper 0.70, squads-a 0.12, squads-b 0.06) | `4XG4opeL1BZF35cXdJF2d1ZPmabHoEQRHsyZPvGjgaiAbnP1ZtwKDd34UdSbZgbKiqFAE9PKLVETxU61HefeBj6T`, `26ZmftsKga12eoFzTRJtwn59tLWtcY84NzyycB8t3ssqdfffWycvU6kaW2TYXH3rgB4fUA3o64aUwxJwZDdX5dXs`, `3zepMTMecRhJbNy1NAhZ99SX56VdbhJX6s4FTuk3grpaAC4nztyovJyrE2coevUsB91aALH7ZJsYQqHiiQ7ndH6s`, `4Vs8rjSDpoZMd1VDARnht7EfumwdfVfAtVU9X3hiVrsrnDQHyijcJusHKHMidBzeELYGTrN81xSpNAxq28xEvyGF` |
+| `solana program extend … 10240` (the loader's minimum increment now; a 1,000-byte request was refused) | `31ehcNhwmprbDuroJWymeaKLoBzkH6UcEqP3UGcgPFbReRwiCs5xwsk3gR1dWm47JjnbnHJtCMLfTPpTrnUMxTXW` |
+| `write-buffer` → `FSf1X7cV5rZxqqDbfxQK5AqZ2HxnTAZae5o1VwNFCsSG` (the first attempt ran out of fee SOL after creating the buffer; resumed with `--buffer <address>`) | |
+| `set-buffer-authority` → the vault | `41AMWnywdQR9of2q51rD6oJYxj1TY8LiA6eiQTicM3VKVEt28cFJGv4MLunMgLc5T9CdJFNSRjqXcJSQx6pyZhpY` |
+| refusals (`r3-squads-refusals.log`): the previous release's table (`35b5b3e1…`) ≠ the buffer; `--expect-sha256` no longer accepted; `--expect-file` = the mainnet build (`9ef38e0d…`) ≠ the table's devnet hash | each `exit 2` |
+| **proposal** (index 4; `checks.bufferExecutableHash` = `tableHash` = `91d403e0…`, authorities = vault, spill a member) | **`3hmM1xQV5G8xhFX8bsGkh1D692LPjgoiw5Apounk3ixtXMuAhKFN6siChYozmrvrTRxRX9EPyKoqEGTvj6yrqy2T`** (`r3-squads-upgrade-propose.json`) |
+| approve squads-a / squads-b (19:59:46 / 20:00:14) | `3DnntHzDpyghGkyKozHZfa7hh5n2Cfhqbwung1X7JCBjpcexpABVnRNgstLU9WKyJHWpLw4ffdRZY58n54uL7A2r`, `318CgPvz6siQWkvVbyGJ8EipARfGJVVM7BTZBwgDcwmWFtxHEFMHaEfUepZDxHPJaAmjqcTUxpr5pgrMXGwpxzXo` |
+| **execute** (20:02) | **`3HzQXjgH3FHW6EpHmHuPeXc9buo2bqDEQa1MW6byyR6Rx2MgnoVCm5mHpLhKcD9zTzsXHgkk9XxBq9ZyWsvzwD3`** |
+| buffer refund (squads-a) back to payer 1.3 / keeper 0.4 | `5kKynfuufUbhh67k7tSBbFRULPa2JMvaEuj1ebFdqwmFkJLXqvRqTATSyEXYXhvHZQQBcfVAEkBS6M6iV6NQsZ53`, `22QmkRiw33vMJXi9BYoVcpTYfCnp5WRjKCxCEVhKLY8cinTe3kCrHPLvqAUmRwpjS7XAw6S7hWtAT2CknRAcf6EZ` |
+
+`solana program show`: authority the vault, data length 375,528, last deployed slot 509,744,638. `scripts/ops/verified-build.sh --onchain
+devnet` → **MATCH** pair_curve `91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9` (and burn_receipts unchanged).
+
+**Pair 1 retired.** Pair 1 (`5etkAGzWxEsyUcVwWNA8hVCfH4cKcsqCBo6FiW7RRfGh`, Graduated) was created by the first build with an 888-byte
+Pair; since the 946-byte layout of `fa8627a4` the program cannot load it — a simulated `claim_developer_fee` fails
+`AccountDidNotDeserialize` (`pair1-RETIRED.json`). Nothing was owed by it (vault at its rent minimum); its two pools stay registered in
+burn_receipts (which reads only the first 236 bytes) and keep trading. It is a record of the first rehearsal only. The rule this taught
+is in PAIR-CURVE.md §7 and runbook gate P3: no layout change while pairs are live.
+
+## R3-P5 — spot check (pair 5, $PCSA vs $PCSB, deadline 20:07:53)
+
+**Pair `BsoPFos6tdT6NdPUSNf4JAEbD8Wk6bYFxMtMhSzwB2EY`** (same parameters as pair 3, deadline +5 minutes; rules `config/burnkeeper/paircurve-devnet-5{a,b}.rules.json`).
+
+| step | signature | result |
+|---|---|---|
+| mint A + config / mint B + config / `init_pair` | `2AphiGFHPFkXPUG2sKx6tNNfMCsFzP8nejLBWxw2q2MFeCJWgAcJhm3mrQ33AVNhAHa7KuwSQ2uxjcYpxAxcg9a8`, `5Vbpap5uYD2cCzNMAuFFmM2S6dRrDXCvqRXvS4au9WfcVqeUX1Ao6GHSaF1c43jN781hnCKrqqYeS2pEaRKTzMXY`, `2ehS7DmjBVdPQUBVH576VYFSvPsjaq5BzDFoiQH5jZiDVVzC2AqT9fxEzUHUWV9BevwnRqwZWEJwHf5CzL11ew76` | 108,467 CU |
+| buy A 0.03 (payer) / buy B 0.02 (keeper) | `5eHvTLpBgz7nKZsUvMzybJ8kGV3pUVVHRfFYU6ghgLsanTtuHWy1Govhp4djhT2kdZnzZMDuLgqgdnvvURMZDJbH`, `52fpb4F2mrCyPpNRs1Wy46p8bfhjzhg8H8WT2zkRAuNi3etUNwF7Z1uyoLLjR2DMJGH2CCtM7vJnXnV93Rrhnq66` | |
+| sell 10 % of A before the deadline (a normal curve exit) | `5JfVGqjzNQJd63zfLfv4UrW77j6m3VR2PRURYQ1ZQjvW8HzyMLwqYG1Qrq56eL4oZcXdfSBkqpfdjpmkuyf3sYm3` | 30,006 CU |
+| **`claim_developer_fee`** (keeper) | **`4tRDkPGq2St61CVkKPRcSb6vfJA7VxDiAqy4L7j3DScFg47sMsFx6WVr2i7hJuLx2dzkyS3aFod6RUYNJdwv38Yn`** | developer wallet +131,841 (`r3-pair5-claim-developer-fee.json`) |
+| **curve sell of all A at 20:08:01, after the deadline, no void** (`--no-auto-void`) | — (simulation) | **refused `DeadlinePassed`** (`r3-pair5-curve-sell-at-deadline-refused.json`; the curve would have paid 26,205,884 after its fee) |
+| the same sell as the client sends it: `void_pair` + redemption in one transaction | `3t6FAiG2rRBvKW3jee9B2UAndgv8o3mydtTgL58pBADJRNDByDV3yFN81WXw2K6iRomCBXRYhM4CGMgLHgFCRH4o` | 48,830 CU; pair Voided; A's only holder redeemed 26,717,604 = curve SOL + A's escrowed burn share, no fee |
+| redeem all B (keeper) | `5FpMkU5wH3npxWsverivZJF84G3MWkiZ3V7QqyfGM9MAPGC7z63Fhhfa7Wv1aZJ3BMeopyK3feg3W7BWNxSopjJq` | 19,950,496; vault 650,240 = rent |
+| `close_pair` | `5qx6yvC5c3ad2kAYkj6cA3mrim9vRf46c27EhKPTeXaxSn5VEEMmhEeCj4vBsgq25zCrfApAbs5UUc1LxunpX6qr` | 30,157 CU; Pair closed |
+
+## R3 checkpoints
+
+| | checkpoint | verdict |
+|---|---|---|
+| R3-1 | upgrade through the vault with the executable-hash check against the committed table; three refusals; deployed = table | **PASS** |
+| R3-2 | a curve sell at/after the deadline is refused (RC-1) | **PASS** |
+| R3-3 | `claim_developer_fee` pays the accrual on the upgraded program | **PASS** |
+| R3-4 | void + redemption in one transaction, then close | **PASS** |
+
+SOL (devnet): ≈ 0.07 spent in §R3 (the 10,240-byte extension 0.052, pair 5's mint/config reserves and rents less the rent returned at
+close, fees); 2.27 SOL left across the devnet keys.

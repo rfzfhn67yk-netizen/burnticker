@@ -1119,3 +1119,27 @@ fn review_followups_commit_needs_both_sides_payable_tampered_vault_claim_and_exe
     assert_eq!(env.lamports(&p.creator.pubkey()), creator0);
     assert_eq!(env.lamports(&fee_pda(&p.mint(0))) - burn_a0, rent_back);
 }
+
+/// ChatGPT PR review (Low, retryable grief): somebody creates the pair vault's WSOL ATA and sends it plain lamports WITHOUT SyncNative.
+/// graduate syncs before it samples the account, so the donation is just residue (swept to the side's burn pool) and graduation
+/// succeeds on the first try, for both sides (the ATA is re-created and donated to again before side B).
+#[test]
+fn an_unsynced_lamport_donation_to_the_vault_wsol_account_does_not_block_graduation() {
+    let mut env = new_env();
+    let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
+    let c = trader(&mut env, SOL);
+    fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    let wsol = get_associated_token_address(&p.vault, &NATIVE_MINT);
+    for side in 0..2u8 {
+        if env.svm.get_account(&wsol).map(|a| a.lamports == 0).unwrap_or(true) {
+            env.create_ata(&p.vault, &NATIVE_MINT);
+        }
+        env.transfer_sol(&wsol, 1_000_000);
+        assert_eq!(env.token_amount(&wsol), 0, "the donation is not synced: the token amount still reads 0");
+        let m = graduate_side(&mut env, &p, &c, side, &[]).unwrap();
+        let ev: pair_curve::events::SideGraduated = pc_event(&m);
+        assert!(ev.residue_lamports >= 1_000_000, "the donation came back as residue to the burn pool");
+    }
+    assert_eq!(pair_state(&env, &p).status, pair_curve::STATUS_GRADUATED);
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env) + pair_state(&env, &p).dev_accrued);
+}

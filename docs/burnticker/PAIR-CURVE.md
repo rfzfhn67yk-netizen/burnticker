@@ -18,7 +18,8 @@ holder's tokens into a fixed pro-rata share of what their side raised.**
 **Revised after two blind reviews (2026-10-10).** `docs/burnticker/reviews/2026-10-10-pair-curve-blind-1.md` and `…-blind-2.md` found
 five Highs between them (pre-funded and pre-created accounts that blocked graduation or `init_pair` forever, a `close_pair` that could
 strand a graduated side's burn pool, and a developer wallet that could freeze every trade). §8 lists what was wrong and what replaced it;
-the finding → commit table is in `docs/burn-receipts/CHANGELOG.md`.
+the finding → commit table is in `docs/burn-receipts/CHANGELOG.md`. An independent re-check of the fixes
+(`docs/burnticker/reviews/2026-10-10-pair-curve-recheck.md`) and a PR review found five residuals, fixed in round 2 (§8, second table).
 
 ## 2. Accounts
 
@@ -103,15 +104,19 @@ keeps its protocol and fund shares. This is the main economic difference from a 
             buy/sell (both sides)    the trade that meets the condition commits the pair (or graduate(first side) does)
    Open ──────────────────────────────▶ Graduating ──graduate(A), graduate(B)──▶ Graduated  (two CPMM pools, 100 % of LP burned)
     │                                       │
-    │ void_pair — permissionless,           │ void_pair — ≥ 3 days after the commit AND Raydium blocks the missing side:
-    │ at/after the deadline, never committed│ that side alone goes into redemption (refunding[side])
+    │ void_pair — permissionless,           │ void_pair — a missing side goes into redemption (refunding[side]) ≥ 3 days
+    │ at/after the deadline, never committed│ after the commit if Raydium blocks it, ≥ 30 days after it whatever the reason
     ▼                                       ▼
   Voided   (buys closed; each holder redeems a fixed pro-rata share of their side, no fee — §5.3)
 ```
 
 - **Buys**: only while `Open` and `now < deadline`.
-- **Curve sells**: while `Open` (also after the deadline, before anyone voids). **Redemptions**: while `Voided`, or on a refunding side.
-  Never on a side whose pool exists or is committed to exist.
+- **Curve sells**: while `Open` and `now < deadline`. **Redemptions**: while `Voided`, or on a refunding side. Never on a side whose
+  pool exists or is committed to exist. At/after the deadline an Open pair can only void, so a curve sell there is refused
+  (`DeadlinePassed`): the first version of the fix still let a holder sell at the top of the curve between the deadline and the
+  `void_pair` call, ahead of everyone's pro-rata redemption (re-check RC-1). Clients send `void_pair` and the redemption in one
+  transaction. A sell before the deadline on a pair that is visibly going to fail is a normal curve exit (a bank run on a failing curve
+  is inherent; the UI says so).
 - **Graduation condition**: `sol_A + sol_B ≥ target_raise` **and** `sol_A · 10,000 ≥ min_side_share_bps · (sol_A + sol_B)` **and**
   the same for B (default 2,500 bps; at most 4,000 — §6) **and** both sides can pay for their pools at the pinned AmmConfig's current
   `create_pool_fee` with pool creation enabled (blind review 1 L-1).
@@ -137,12 +142,15 @@ then becomes transfer + allocate + assign). Both sides in one transaction measur
 ~0.01 SOL on pre-funding could push every pair's graduation over 64 and force it to void. One side per transaction measures 45–47
 entries with every address pre-funded (`tests/lifecycle.rs` `prefunded_addresses_do_not_block_graduation`).
 
-*If the second side cannot be created.* Only Raydium's admin can cause that after the commit (raising the pinned AmmConfig's
-`create_pool_fee` above the side's raise, or disabling pool creation). The side stays creatable whenever Raydium allows it. If it is
-still missing `GRADUATION_STUCK_SECS` (3 days) after the commit **and** Raydium is blocking it right now, anyone can call `void_pair`,
-which puts that side alone into redemption (`refunding[side]`, §5.3). Inactivity alone never refunds a side — a pair nobody cranked
-for 3 days is still graduated by the next crank (blind review 1 L-3). The other side keeps its pool and its registration; the Pair
-account is never closed, so the state is terminal and readable (blind review 1 L-2;
+*If a side cannot be created.* After the commit only Raydium can cause that: raising the pinned AmmConfig's `create_pool_fee` above the
+side's raise, disabling pool creation, or changing CPMM so that it refuses the pair's PDA-signed `initialize` (a refusal that leaves no
+trace in the AmmConfig — and a failed `graduate` reverts, so it leaves no evidence on chain either). `void_pair` examines **every**
+missing side and puts it alone into redemption (`refunding[side]`, §5.3) when either `GRADUATION_STUCK_SECS` (3 days) have passed
+since the commit and the AmmConfig shows the block, or `GRADUATION_FALLBACK_SECS` (30 days) have passed whatever the reason (re-check
+RC-2/RC-3). Inactivity alone never refunds a side within 30 days — a pair nobody cranked for 3 days is still graduated by the next
+crank (blind review 1 L-3). If neither pool exists and both sides end up refunding, the pair becomes Voided (nothing can be registered,
+so it is closable once everyone has redeemed). Otherwise the other side keeps its pool and its registration and the Pair account is
+never closed, so the state is terminal and readable (blind review 1 L-2;
 `graduating_commits_the_pair_and_only_a_real_raydium_block_refunds_the_second_side`).
 
 Each call, for its side:
@@ -165,7 +173,8 @@ Each call, for its side:
 6. **Burn 100 % of the LP** with SPL `burn` (the LP mint supply drops to 0; CPMM's `lp_supply` keeps counting it, which is how
    `burn_receipts` measures "burned"), close the LP account, record `lp_supply_at_creation[side]` and `lp_burned[side]`.
 7. Burn every token left in the side's token vault (unsold curve tokens and any reserve the price match did not need), close the WSOL
-   account, and send to this side's burn pool everything above what the vault must keep — its rent minimum, the developer accrual, and
+   account (the account is synced before it is first read, so lamports somebody sent to an existing vault WSOL account without
+`SyncNative` are just residue — PR review, Low), and send to this side's burn pool everything above what the vault must keep — its rent minimum, the developer accrual, and
    the other side's raise and escrow while that side's pool is still to come. That transfer includes this side's escrowed 75 bps
    (`burn_escrow_paid` in the event) and the rent refunds.
 
@@ -218,7 +227,9 @@ a whole every lamport the curve raised plus the escrowed burn share goes back to
 
 Permissionless, **only for a Voided pair**, and only once no token of either coin circulates outside the vault — measured as `mint
 supply = token-vault balance` per side, so tokens a holder burned count as gone and one burned raw unit cannot block the close
-forever (blind review 2 L-1). It burns the returned supplies, pays the developer accrual (and waits if the wallet cannot receive it),
+forever (blind review 2 L-1). It burns the returned supplies, pays the developer accrual — or, if the wallet cannot receive it (an
+executable account, or a payment that would leave it below rent), sends it to the burn pools with the residue
+(`PairClosed.dev_accrual_to_burn_pools`; re-check RC-5) —
 sends any lamports above the SOL vault's rent minimum (redemption dust, donations) to the two burn pools, and closes the token vaults
 and the Pair with their rent to the pair's recorded creator — or to burn pool A if that address is executable and cannot be credited
 (blind review 1 I-3). The SOL vault PDA stays as a system account with its rent minimum. A Pair can never be re-created for the same
@@ -261,9 +272,9 @@ on an undescribed instruction or signer):
 | `init_pair` | payer + the creator recorded in both TokenConfigs | create the pair once (Burnticker's compiled-in platform only); mint the supplies into the vaults; revoke mint authority |
 | `buy` / `sell` | anyone, for their own wallet | trade along the curve at the formula's price while Open (the trade that meets the condition commits the pair); after a void, redeem pro rata, no fee |
 | `graduate` | anyone | once per side on a committed pair; creates its side's pool, burns the LP and leftovers, pays the side's escrowed burn share |
-| `void_pair` | anyone | after the deadline if never committed; or one side, ≥ 3 days after the commit, while Raydium blocks it |
+| `void_pair` | anyone | after the deadline if never committed; on a committed pair, each missing side ≥ 3 days after the commit while Raydium blocks it, or ≥ 30 days after it whatever the reason |
 | `claim_developer_fee` | anyone | pay the accrued 25 bps to the developer wallet recorded at init |
-| `close_pair` | anyone | Voided pairs with nothing circulating; burn the returned supplies; rent to the recorded creator; residue to the burn pools |
+| `close_pair` | anyone | Voided pairs with nothing circulating; burn the returned supplies; rent to the recorded creator; residue (and an accrual the developer wallet cannot receive) to the burn pools |
 
 There is **no** admin, no authority field, no pause, no parameter update, no withdraw / sweep / transfer-out of the SOL vault or the
 token vaults except: a seller's own exit (formula price or pro-rata redemption), the developer claim (the accrual, fixed recipient),
@@ -273,7 +284,18 @@ the side's own burn pool. The **program upgrade authority** is the one power abo
 time lock. A time lock longer than the longest pair (up to 90 days, §6) is not practical, so the mainnet plan is to finalise the
 program (authority set to none) once the review period ends, before the first public pair; until then every upgrade proposal is made with `scripts/squads-program-upgrade.mts`, which refuses unless the buffer's
 code hashes to the local verifiable build, the buffer and the program are both under the vault, and the rent goes back to the vault
-or a member (blind review 2 M-2; `docs/burnticker/runbook.md` "Pair program gates").
+or a member (blind review 2 M-2; `docs/burnticker/runbook.md` "Pair program gates"). The code check compares the buffer's
+**executable hash** (solana-verify's definition) with `config/burnticker/verified-build.json` for that program and cluster — mandatory,
+never a hash the operator types (re-check, M-2 caveat).
+
+**Upgrades and the Pair layout.** An upgrade replaces the code for every pair at once, including pairs that are raising. Anchor
+deserialises `Pair` by its exact layout, so an upgrade that changes the layout makes every existing Pair unloadable — trades, exits,
+claims and closes would all fail with `AccountDidNotDeserialize`. This happened on devnet: pair 1 (`5etkAGzW…`, 888 B, Graduated
+before the 946 B layout of `fa8627a4`) is unloadable by the current program and is retired
+(`docs/burnkeeper/evidence/devnet-paircurve-2026-10-10/pair1-RETIRED.json`; nothing was owed by it, its pools stay registered). Rule:
+**while any pair is live, an upgrade must keep the `Pair` layout byte-for-byte (new fields only inside `reserved`, 64 bytes) or ship
+a migration instruction and run it before anything else**; burn_receipts reads only the first 236 bytes, which never change
+(runbook gate P3).
 
 ## 8. Threat model — what was wrong, and what reviewers should attack next
 
@@ -298,6 +320,18 @@ or a member (blind review 2 M-2; `docs/burnticker/runbook.md` "Pair program gate
 | R2 L-4 | A pool nobody had traded had no oracle observation, so `crank_buyback` deferred forever | the keeper seeds a dust swap (§5) |
 | R1 I-1 / I-2 | `net_budget` could overflow at `u64::MAX`; a 0-cost buy was possible at extreme parameters | u128 search; 0-cost buys refused (§3) |
 
+**Round 2 — what the re-check and the PR review found in the fixes** (`2026-10-10-pair-curve-recheck.md`, tests `tests/review_pc3.rs`):
+
+| Finding | What was still wrong | Now |
+|---|---|---|
+| RC-1 (R2 M-1 residual, Medium) | Between the deadline and the `void_pair` call an Open pair still sold along the curve: the early buyer of the reviewer's scenario took +7.12 SOL instead of its +2.46 SOL pro-rata share | curve sells at/after the deadline refused; void, then redeem (§5) |
+| RC-2 (Low) | The stuck-side refund only recognised a block visible in the AmmConfig; a CPMM-side refusal locked a side forever | 30-day unconditional fallback (§5.1) |
+| RC-3 (Info) | `void_pair` looked only at the first missing side | every missing side examined; both refunded without pools → Voided |
+| RC-5 (Info) | An executable developer wallet with an accrual outstanding blocked `close_pair` (rent stranded) | the accrual goes to the burn pools at close (§5.4) |
+| M-2 caveat (Low) | The upgrade script compared a local file and an optional plain sha256, not the published executable hash | mandatory check against `verified-build.json` (§7) |
+| PR review (Low) | An unsynced lamport donation to an existing vault WSOL account made `graduate` fail until somebody synced | `SyncNative` before the first read; the keeper prepends one too |
+| Layout (Info) | A layout-changing upgrade freezes live pairs (devnet pair 1) | documented rule + runbook gate (§7) |
+
 **What to attack next:**
 
 1. **The graduation CPI.** `graduate` lends the SOL vault's signature (signer + writable, holding the raise, the escrows and the
@@ -319,7 +353,7 @@ or a member (blind review 2 M-2; `docs/burnticker/runbook.md` "Pair program gate
 
 | | value | where measured |
 |---|---|---|
-| program size | 365,184 B mainnet build / 365,240 B devnet build (opt-level "z" for this package only) — devnet rent ≈ 1.857 SOL | `target/deploy/pair_curve.so`, devnet upgrade 2026-10-10 18:38 |
+| program size | 365,824 B mainnet build / 365,880 B devnet build (opt-level "z" for this package only) — devnet rent ≈ 1.86 SOL | `target/deploy/pair_curve.so`, devnet upgrade 2026-10-10 20:02 (round 2) |
 | `Pair` account | 946 B (8 + 938) | LiteSVM, devnet |
 | `init_pair` | 110–125 k CU (PDA bump searches vary) | devnet 121,967 / 112,479 |
 | `buy` | 34–55 k CU (the top end creates the buyer's token account) | devnet 33,977–55,130 |
@@ -333,7 +367,7 @@ or a member (blind review 2 M-2; `docs/burnticker/runbook.md` "Pair program gate
 | `crank_buyback` on a pair pool | 103–106 k CU in LiteSVM; 210–225 k on devnet (keeper's transaction incl. memo and ATA creation) | devnet run log |
 
 Tests: `programs/burn-receipts/programs/pair_curve/src/math.rs` (11 unit tests, reference values shared with the TS fixtures),
-`tests/lifecycle.rs` (15 LiteSVM tests against the real CPMM and burn_receipts, plus a hostile CPMM stand-in), `tests/review_pc1.rs` (10) and
-`tests/review_pc2.rs` (9) — the reviewers' exploits inverted into regressions —, `test/pairCurvePricing.test.ts`,
+`tests/lifecycle.rs` (16 LiteSVM tests against the real CPMM and burn_receipts, plus a hostile CPMM stand-in), `tests/review_pc1.rs` (10) and
+`tests/review_pc2.rs` (9), `tests/review_pc3.rs` (7) — the reviewers' exploits inverted into regressions —, `test/pairCurvePricing.test.ts`,
 `test/pairCurveClient.test.ts`, `test/pairCurveLaunch.test.ts`. Devnet: `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md`
-(first rehearsal at 17:00, re-rehearsal of the fixed program at 18:32).
+(first rehearsal at 17:00, re-rehearsal of the fixed program at 18:32, round-2 spot check at 19:58–20:10).

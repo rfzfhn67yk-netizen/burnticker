@@ -441,7 +441,8 @@ curves under the rules-level "both or neither" clause of §5.1.
   push them over it.
 - **Void**: at the deadline without graduation, buys close and each coin's holders share what that side raised (its curve SOL plus the
   75 bps held for its fee PDA) pro rata, with no fee and no advantage in leaving first. Once nothing circulates the pair's accounts
-  close. A side Raydium still blocks three days after the commit is put into the same pro-rata exit, alone.
+  close. A side Raydium still blocks three days after the commit, or any side still without its pool thirty days after it, is put
+  into the same pro-rata exit, alone. Once the deadline has passed nobody can leave along the curve ahead of the others.
 - **Registration**: `burn_receipts` gained registration policy 2 and `register_pair_pool`, which accepts only the pool `pair_curve`
   recorded for that mint, at its `pair_curve` address, created by the pair's vault on the pinned cpConfigId, with ≥ 90 % of the creation
   LP burned (§4.7).

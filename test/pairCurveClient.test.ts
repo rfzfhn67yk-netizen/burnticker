@@ -11,7 +11,7 @@ import { accountDiscriminator, encodeType } from "../src/lib/burnReceipts/idlCod
 import { CPMM_PROGRAM_ID, NATIVE_MINT, PAIR_CURVE_PROGRAM_ID, POOL_POLICY_PAIR_CURVE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
 import { configPda, feePda } from "../src/lib/burnReceipts/pda.ts";
 import { ata, CPMM_CREATE_POOL_FEE_RECEIVER, decodePair, pairPda, poolPda, sidePoolAccounts, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED, vaultPda, type PairAccount } from "../src/lib/pairCurve/accounts.ts";
-import { buyIx, CLAIM_THRESHOLD_LAMPORTS, claimDeveloperFeeIx, closePairIx, createPairMintIxs, graduateIx, initPairIx, pairCurveEventAuthority, planPairCrank, registerSideIx, seedObservationIxs, sellIx, voidPairIx } from "../src/lib/pairCurve/client.ts";
+import { buyIx, CLAIM_THRESHOLD_LAMPORTS, claimDeveloperFeeIx, closePairIx, createPairMintIxs, graduateIx, initPairIx, pairCurveEventAuthority, planPairCrank, registerSideIx, seedObservationIxs, sellIx, syncNativeIx, voidPairIx } from "../src/lib/pairCurve/client.ts";
 
 const anchorDisc = (kind: "global" | "account", name: string) => crypto.createHash("sha256").update(`${kind}:${name}`).digest().subarray(0, 8);
 const BR = new PublicKey("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
@@ -127,6 +127,11 @@ describe("pairCurve client — instruction builders follow the IDL", () => {
     const c = closePairIx({ caller: user, pairAddress: address, pair });
     assert.equal(c.keys.length, order("close_pair").length);
     assert.ok(at(c, "close_pair", "creator").pubkey.equals(pair.creator) && at(c, "close_pair", "dev_wallet").pubkey.equals(pair.dev_wallet));
+  });
+  test("graduate is preceded by an SPL SyncNative on the vault's WSOL account (no signer, writable)", () => {
+    const ix = syncNativeIx(pair.vault_wsol);
+    assert.ok(ix.programId.equals(TOKEN_PROGRAM_ID) && ix.keys[0].pubkey.equals(pair.vault_wsol) && ix.keys[0].isWritable && !ix.keys[0].isSigner);
+    assert.deepEqual([...ix.data], [17]);
   });
   test("seed: a dust CPMM swap_base_input into the side's pool that writes its observation", () => {
     const ixs = seedObservationIxs({ cluster: "devnet", payer: user, pairAddress: address, pair, side: 0 });

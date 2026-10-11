@@ -3,6 +3,8 @@
 //! copy of tests/review_pc2.rs's (itself lifecycle.rs's). Every test ASSERTS CURRENT BEHAVIOUR (they pass today); a test whose name
 //! says `still` documents a residual the fix did not close, so a future fix will make it fail and it must then be inverted.
 //!
+//!   ROUND 2 (2026-10-10 night): RC-1, RC-2, RC-3 and RC-5 are FIXED; their tests below keep their names and now assert the fix.
+//!
 //!   RC-1  (R2 M-1, partly fixed)  pc3_m1_still_a_race_curve_sell_after_deadline_front_runs_the_void
 //!         At/after the deadline the pair is certain to void, but until someone calls void_pair it is Open and curve sells pay the top
 //!         of the curve: the reviewer's early-vs-late scenario still nets the early buyer far more than its pro-rata share.
@@ -461,14 +463,13 @@ fn set_pool_fee(env: &mut Env, p: &P, fee: u64) {
     env.svm.set_account(p.amm, cfg).unwrap();
 }
 
-/// RC-1 (R2 M-1 partly fixed). The reviewer's scenario: early buyer 2 SOL on A, late buyer 40 SOL on A, B at 5 SOL (below its share),
-/// so the pair can only void. Run 1 (the fixed path): void first, both redeem pro rata. Run 2 (today, also allowed): at the deadline the
-/// early buyer SELLS ON THE CURVE (status still Open — trade.rs handle_sell accepts Open with no deadline check), taking the top of the
-/// curve; the late buyer then voids and redeems what is left. The race the fix meant to remove is still there; whoever does not call
-/// void_pair first wins it.
+/// RC-1 REGRESSION (R2 M-1 residual, fixed). The reviewer's scenario: early buyer 2 SOL on A, late buyer 40 SOL on A, B at 5 SOL, so
+/// the pair can only void. At/after the deadline a CURVE sell is now refused (DeadlinePassed): the early buyer cannot take the top of
+/// the curve ahead of the void. Whoever calls void_pair first, both holders then redeem pro rata, and the outcome is the same either
+/// way (the void-first numbers of the original run).
 #[test]
 fn pc3_m1_still_a_race_curve_sell_after_deadline_front_runs_the_void() {
-    fn run(sell_before_void: bool) -> (i128, i128) {
+    fn run(early_tries_curve_sell: bool) -> (i128, i128) {
         let mut env = new_env();
         let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
         let early = trader(&mut env, 10 * SOL);
@@ -480,14 +481,16 @@ fn pc3_m1_still_a_race_curve_sell_after_deadline_front_runs_the_void() {
         env.ok(&[ix_buy(&p, &b.pubkey(), 1, 5 * SOL, 1)], &[&b]);
         let s = pair_state(&env, &p);
         assert_eq!(s.status, pair_curve::STATUS_OPEN);
-        env.set_time(s.deadline); // buys are closed, a commit is impossible: the pair can only void
+        env.set_time(s.deadline);
         expect_anchor_err(env.send(&[ix_buy(&p, &late.pubkey(), 1, SOL, 1)], &[&late]), "DeadlinePassed");
         let he = held(&env, &early.pubkey(), &p.mint(0));
-        if sell_before_void {
+        if early_tries_curve_sell {
+            expect_anchor_err(env.send(&[ix_sell(&p, &early.pubkey(), 0, he, 0)], &[&early]), "DeadlinePassed");
+            // the late holder voids; the early holder can only redeem now
+            env.ok(&[ix_void(&p, &late.pubkey())], &[&late]);
             let m = env.ok(&[ix_sell(&p, &early.pubkey(), 0, he, 0)], &[&early]);
             let ev: pair_curve::events::Trade = pc_event(&m);
-            assert!(!ev.redemption && ev.fee > 0, "a curve sell with the 1 % fee, after the deadline");
-            env.ok(&[ix_void(&p, &late.pubkey())], &[&late]);
+            assert!(ev.redemption && ev.fee == 0);
         } else {
             env.ok(&[ix_void(&p, &early.pubkey())], &[&early]);
             env.ok(&[ix_sell(&p, &early.pubkey(), 0, he, 0)], &[&early]);
@@ -499,19 +502,16 @@ fn pc3_m1_still_a_race_curve_sell_after_deadline_front_runs_the_void() {
         (env.lamports(&early.pubkey()) as i128 - e0, env.lamports(&late.pubkey()) as i128 - l0)
     }
     let (e_fixed, l_fixed) = run(false);
-    let (e_race, l_race) = run(true);
-    println!("void first (pro rata): early {e_fixed:+} late {l_fixed:+} lamports");
-    println!("curve sell before void: early {e_race:+} late {l_race:+} lamports");
-    assert!(e_fixed > 0 && l_fixed < 0, "pro rata by tokens already favours the cheap early buyer (documented in §5.3)");
-    assert!(e_race > e_fixed + SOL as i128, "the curve sell after the deadline beats pro rata by more than 1 SOL");
-    assert!(l_race < l_fixed - SOL as i128, "and the late holder pays for it");
+    let (e_try, l_try) = run(true);
+    println!("void first: early {e_fixed:+} late {l_fixed:+}; curve sell attempted first: early {e_try:+} late {l_try:+} lamports");
+    // identical up to the transaction fee of the refused attempt (5,000 lamports) and who paid the void's fee
+    assert!((e_try - e_fixed).abs() <= 20_000 && (l_try - l_fixed).abs() <= 20_000, "no race left: the order of calls changes nothing");
 }
 
-/// RC-2 (R1 L-2/L-3 fix, liveness residual). After graduate(A), CPMM stops accepting pair_curve's `initialize` for B without any
-/// AmmConfig change (simulated by loading a different program at CPMM's id — mocks/evil_cpmm_init, which refuses with
-/// InvalidArgument when the AmmConfig carries no mode). 30 days later B's holders still cannot graduate, cannot be refunded
-/// (NotStuck: the AmmConfig shows creation enabled and an affordable fee) and cannot sell (SellsClosed). The first version reopened
-/// sells after 3 days whatever the reason.
+/// RC-2 REGRESSION (fixed). After graduate(A), CPMM stops accepting pair_curve's `initialize` for B without any AmmConfig change
+/// (mocks/evil_cpmm_init at CPMM's id). Before 30 days the refund still needs an AmmConfig signal (NotStuck); at 30 days after the
+/// commit the unconditional fallback refunds B, and B's holder redeems the whole side (curve SOL + escrow, no fee). A stays Graduating
+/// with its pool; the Pair is kept (never closable — A's registration reads it).
 #[test]
 fn pc3_l3_still_locked_when_cpmm_refuses_without_an_amm_config_signal() {
     let mut env = new_env();
@@ -522,18 +522,26 @@ fn pc3_l3_still_locked_when_cpmm_refuses_without_an_amm_config_signal() {
     env.svm.add_program(CPMM_PROGRAM_ID, &read_so("fixtures/evil_cpmm_init.so")).unwrap();
     assert!(graduate_side(&mut env, &p, &c, 1, &[]).is_err(), "CPMM refuses side B's pool");
     let s = pair_state(&env, &p);
-    env.set_time(s.graduation_started_at + 30 * DAY);
+    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_FALLBACK_SECS - 1);
     expect_anchor_err(env.send(&[ix_void(&p, &c.pubkey())], &[&c]), "NotStuck");
     let hb = held(&env, &bb.pubkey(), &p.mint(1));
     expect_anchor_err(env.send(&[ix_sell(&p, &bb.pubkey(), 1, hb, 0)], &[&bb]), "SellsClosed");
-    let e = pair_state(&env, &p);
-    assert!(e.sol[1] > 30 * SOL && !e.refunding[1] && e.status == pair_curve::STATUS_GRADUATING, "B's raise stays locked in the vault");
-    assert_identity(&env, &p, "locked");
+    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_FALLBACK_SECS);
+    let m = env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
+    let ev: pair_curve::events::PairVoided = pc_event(&m);
+    assert_eq!(ev.side, 1);
+    let r = pair_state(&env, &p);
+    assert!(r.refunding[1] && !r.refunding[0] && r.status == pair_curve::STATUS_GRADUATING);
+    let b0 = env.lamports(&bb.pubkey());
+    env.ok(&[ix_sell(&p, &bb.pubkey(), 1, hb, 0)], &[&bb]);
+    assert_eq!(env.lamports(&bb.pubkey()) - b0, r.redeem_pool[1]);
+    assert_identity(&env, &p, "after B's fallback refund");
+    expect_anchor_err(env.send(&[ix_close(&p, &c.pubkey())], &[&c]), "NotClosable");
 }
 
-/// RC-3 (Info). A trade commits the pair (both pools still missing). Raydium raises the create-pool fee to 45 SOL: side A (≈49.5 SOL)
-/// can still pay, side B (≈39.6 SOL) cannot. void_pair checks the FIRST missing side only (void_pair.rs:51 `find`), so it answers
-/// NotStuck until somebody graduates A — paying Raydium the 45 SOL fee out of A's raise — and only then refunds B.
+/// RC-3 REGRESSION (fixed). A trade commits the pair (both pools missing); Raydium raises the create-pool fee to 45 SOL so only side
+/// B (≈39.6 SOL) cannot pay. void_pair now examines both sides: after 3 days it refunds B directly — nobody has to graduate A first —
+/// and A can still graduate afterwards (its raise was never touched by B's refund).
 #[test]
 fn pc3_void_stuck_side_needs_the_payable_side_graduated_first() {
     let mut env = new_env();
@@ -544,16 +552,45 @@ fn pc3_void_stuck_side_needs_the_payable_side_graduated_first() {
     assert_eq!((s.status, s.pools), (pair_curve::STATUS_GRADUATING, [Pubkey::default(); 2]), "committed by the buy, no pool yet");
     set_pool_fee(&mut env, &p, 45 * SOL);
     env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS + 10);
-    expect_anchor_err(env.send(&[ix_void(&p, &c.pubkey())], &[&c]), "NotStuck");
-    graduate_side(&mut env, &p, &c, 0, &[]).unwrap();
-    let a = pair_state(&env, &p);
-    assert!(a.pool_sol[0] < 5 * SOL, "A's pool got what was left after the 45 SOL fee: {}", a.pool_sol[0]);
     let m = env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
     let ev: pair_curve::events::PairVoided = pc_event(&m);
-    assert_eq!(ev.side, 1);
+    assert_eq!(ev.side, 1, "B refunded while A is still ungraduated");
+    let r = pair_state(&env, &p);
+    assert_eq!((r.refunding, r.status), ([false, true], pair_curve::STATUS_GRADUATING));
     let hb = held(&env, &bb.pubkey(), &p.mint(1));
     env.ok(&[ix_sell(&p, &bb.pubkey(), 1, hb, 0)], &[&bb]);
     assert_identity(&env, &p, "after B's refund");
+    set_pool_fee(&mut env, &p, MAINNET_POOL_FEE);
+    graduate_side(&mut env, &p, &c, 0, &[]).unwrap();
+    assert_identity(&env, &p, "after A's graduation");
+    expect_anchor_err(graduate_side(&mut env, &p, &c, 1, &[]), "SideAlreadyGraduated");
+}
+
+/// RC-2/RC-3: both pools missing for 30 days (no Raydium signal at all): both sides are refunded in one call and, with no pool to
+/// register, the pair becomes Voided — closable once everyone has redeemed.
+#[test]
+fn pc3_fallback_with_both_pools_missing_voids_the_pair() {
+    let mut env = new_env();
+    let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
+    let c = trader(&mut env, SOL);
+    let (ba, bb) = fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    let s = pair_state(&env, &p);
+    assert_eq!(s.status, pair_curve::STATUS_GRADUATING);
+    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS + 10);
+    expect_anchor_err(env.send(&[ix_void(&p, &c.pubkey())], &[&c]), "NotStuck");
+    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_FALLBACK_SECS);
+    let m = env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
+    let ev: pair_curve::events::PairVoided = pc_event(&m);
+    assert_eq!(ev.side, 2);
+    let r = pair_state(&env, &p);
+    assert_eq!((r.status, r.refunding), (pair_curve::STATUS_VOIDED, [true, true]));
+    expect_anchor_err(graduate_side(&mut env, &p, &c, 0, &[]), "NotOpen");
+    for (h, side) in [(&ba, 0u8), (&bb, 1u8)] {
+        let amt = held(&env, &h.pubkey(), &p.mint(side));
+        env.ok(&[ix_sell(&p, &h.pubkey(), side, amt, 0)], &[h]);
+    }
+    assert_identity(&env, &p, "after both refunds");
+    env.ok(&[ix_close(&p, &c.pubkey())], &[&c]);
 }
 
 /// RC-4 (R2 H-1 fix). A side-A holder pre-funds A's WSOL pool vault with X = 2 SOL (above rent) so the pool opens above the curve
@@ -594,29 +631,34 @@ fn pc3_h1_prefunded_wsol_is_a_donation_the_donor_cannot_recover() {
     assert!(got_donated - got_plain < X, "but the donor recovers less than it gave: {} of {X}", got_donated - got_plain);
 }
 
-/// RC-5 (Info). After a void and full redemption the developer accrual is outstanding; the developer wallet address now holds an
-/// executable account (its key holder deployed a program there — the R1 H-2 mechanism). claim_developer_fee refuses (NothingToClaim)
-/// and close_pair refuses (NotClosable): the Pair and token-vault rent stay stranded until the wallet can receive. Trading and
-/// redemption were unaffected (the H-2 fix holds).
+/// RC-5 REGRESSION (fixed). After a void and full redemption the developer accrual is outstanding and the developer wallet address
+/// holds an executable account. claim_developer_fee still refuses (NothingToClaim) — but close_pair no longer waits: the accrual goes to
+/// the two burn pools with the residue (`PairClosed.dev_accrual_to_burn_pools`) and the rent goes back to the creator.
 #[test]
 fn pc3_executable_dev_wallet_still_blocks_close_pair() {
     let mut env = new_env();
     let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
     let t = trader(&mut env, 10 * SOL);
     env.ok(&[ix_buy(&p, &t.pubkey(), 0, SOL, 1)], &[&t]);
-    let normal = env.svm.get_account(&p.dev).unwrap();
     let exe = env.svm.get_account(&pair_curve::ID).unwrap();
-    env.svm.set_account(p.dev, exe).unwrap();
+    env.svm.set_account(p.dev, exe.clone()).unwrap();
     let s = pair_state(&env, &p);
     env.set_time(s.deadline);
     env.ok(&[ix_void(&p, &t.pubkey())], &[&t]);
     let h = held(&env, &t.pubkey(), &p.mint(0));
     env.ok(&[ix_sell(&p, &t.pubkey(), 0, h, 0)], &[&t]);
-    assert!(pair_state(&env, &p).dev_accrued > 0);
+    let accrued = pair_state(&env, &p).dev_accrued;
+    assert!(accrued > 0);
     expect_anchor_err(env.send(&[ix_claim(&p, &t.pubkey())], &[&t]), "NothingToClaim");
-    expect_anchor_err(env.send(&[ix_close(&p, &t.pubkey())], &[&t]), "NotClosable");
-    env.svm.set_account(p.dev, normal).unwrap();
-    env.ok(&[ix_close(&p, &t.pubkey())], &[&t]);
+    let burn0 = env.lamports(&fee_pda(&p.mint(0))) + env.lamports(&fee_pda(&p.mint(1)));
+    let m = env.ok(&[ix_close(&p, &t.pubkey())], &[&t]);
+    let ev: pair_curve::events::PairClosed = pc_event(&m);
+    assert_eq!(ev.dev_accrual_to_burn_pools, accrued);
+    let burn1 = env.lamports(&fee_pda(&p.mint(0))) + env.lamports(&fee_pda(&p.mint(1)));
+    assert_eq!(burn1 - burn0, ev.residue_lamports);
+    assert!(ev.residue_lamports >= accrued);
+    assert_eq!(env.lamports(&p.dev), exe.lamports, "nothing was sent to the executable account");
+    assert_eq!(env.lamports(&p.vault), vault_rent(&env));
 }
 
 /// RC-6 (R2 M-1 / L-1 rounding). Two side-A holders after a void. The smaller exits in 25 chunks (the last a single raw unit) and gets

@@ -41,7 +41,8 @@ pub struct Buy<'info> {
 }
 
 /// sell(side, amount, min_lamports_out) — PERMISSIONLESS, for the seller's own tokens.
-///   Open (also past the deadline, before anyone voids): along the curve, 100 bps fee (accounted like a buy's).
+///   Open and before the deadline: along the curve, 100 bps fee (accounted like a buy's). At/after the deadline curve sells are
+///   refused (DeadlinePassed): the pair can only void, and void_pair (permissionless) opens the pro-rata redemption.
 ///   Voided, or a refunding side: pro-rata redemption at the snapshot taken when redemption began — no fee, no race (the last holder
 ///   receives exactly what is left).
 ///   Never on a side whose pool exists or is committed to exist.
@@ -139,6 +140,9 @@ pub fn handle_sell(ctx: Context<Sell>, side: u8, amount: u64, min_lamports_out: 
     let p = &ctx.accounts.pair;
     let redemption = p.redeeming(s);
     require!(p.status == STATUS_OPEN || redemption, PairError::SellsClosed);
+    // Re-check RC-1 (the R2 M-1 residual): at/after the deadline an Open pair can only void, so a curve sell there would pay the top
+    // of the curve ahead of the pro-rata redemption. Refused; the holder (or the client, in the same transaction) calls void_pair first.
+    require!(redemption || now < p.deadline, PairError::DeadlinePassed);
     // (gross out of the side, fee legs, net to the seller, sold after, owed after)
     let (gross, fees, net, sold_after, sol_after) = if redemption {
         let payout = quote_redeem(p.redeem_pool[s], p.redeem_supply[s], p.sold[s], p.sol[s], amount)?;

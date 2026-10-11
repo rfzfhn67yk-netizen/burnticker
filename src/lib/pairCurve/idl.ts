@@ -1738,6 +1738,14 @@ export const PAIR_CURVE_IDL: AnchorIdl = {
           {
             "name": "residue_lamports",
             "type": "u64"
+          },
+          {
+            "name": "dev_accrual_to_burn_pools",
+            "docs": [
+              "Developer accrual the wallet could not receive (executable, or the payment would leave it below rent), sent to the burn pools",
+              "with the residue instead of blocking the close (re-check RC-5). Included in `residue_lamports`."
+            ],
+            "type": "u64"
           }
         ]
       }

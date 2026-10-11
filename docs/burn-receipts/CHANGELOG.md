@@ -1,5 +1,26 @@
 # burn_receipts — changelog
 
+## 2026-10-10 (night) — pair_curve round 2: the re-check's residuals and the PR review's Low
+
+Inputs: `docs/burnticker/reviews/2026-10-10-pair-curve-recheck.md` (re-check of `4eda2e3d`; tests `pair_curve/tests/review_pc3.rs`) and
+the ChatGPT PR review (vault WSOL sync). The re-check found every High fixed and nothing regressed. Code: **`fcda14eb`**. Devnet: upgrade
+through the vault (transaction 4) and spot check, run log §R3, commit **`f37f2d5b`**. burn_receipts unchanged.
+
+| Finding | Fix | Commit | Regression test |
+|---|---|---|---|
+| RC-1 (R2 M-1 residual, Medium) curve sells between the deadline and `void_pair` | `sell` refuses a curve sell at/after the deadline (`DeadlinePassed`); the pair can only be voided and redeemed pro rata. The admin CLI sends `void_pair` + the redemption in one transaction (`--no-auto-void` shows the refusal) | `fcda14eb` | `review_pc3::pc3_m1_still_a_race_curve_sell_after_deadline_front_runs_the_void` (inverted: the order of calls changes nothing); devnet `r3-pair5-curve-sell-at-deadline-refused.json` |
+| RC-2 (Low) stuck-side refund needs an AmmConfig signal | `GRADUATION_FALLBACK_SECS` = 30 days: any side still missing 30 days after the commit is refunded whatever the reason; the 3-day + AmmConfig path is kept | `fcda14eb` | `pc3_l3_still_locked_when_cpmm_refuses_without_an_amm_config_signal` (inverted: refused at 30 d − 1 s, refunded at 30 d), `pc3_fallback_with_both_pools_missing_voids_the_pair` (new) |
+| RC-3 (Info) only the first missing side examined | `void_pair` examines both sides; both refunded with no pool → status Voided (closable) | `fcda14eb` | `pc3_void_stuck_side_needs_the_payable_side_graduated_first` (inverted: B refunded directly, A graduates afterwards), `pc3_fallback_with_both_pools_missing_voids_the_pair` |
+| RC-5 (Info) executable developer wallet blocks `close_pair` | the accrual goes to the burn pools with the residue (`PairClosed.dev_accrual_to_burn_pools`); `claim_developer_fee` still refuses while the wallet cannot receive | `fcda14eb` | `pc3_executable_dev_wallet_still_blocks_close_pair` (inverted) |
+| M-2 caveat (Low) upgrade script trusts a local file / optional plain sha256 | the buffer's executable hash must equal `config/burnticker/verified-build.json` `builds.<cluster>.hash` for the program id (mandatory; `--expect-sha256` removed, `--expect-file` an extra check; localnet needs `--expect-file`) | `fcda14eb` | devnet `r3-squads-refusals.log` (3 refusals) and `r3-squads-upgrade-propose.json` |
+| PR review (Low) unsynced lamport donation to the vault's WSOL ATA blocks `graduate` until synced | `graduate` runs `SyncNative` before it first reads the account; the keeper and the admin CLI prepend a `SyncNative` when the account exists | `fcda14eb` | `lifecycle::an_unsynced_lamport_donation_to_the_vault_wsol_account_does_not_block_graduation` (fails with `VaultTampered` on `4eda2e3d`); TS `syncNativeIx` |
+| Layout (re-check, under R1 M-2) a layout-changing upgrade freezes live pairs | documented: no `Pair` layout change while pairs are live (new fields inside `reserved`, or a migration first) — PAIR-CURVE.md §7, runbook gate P3; devnet pair 1 (888 B) marked retired | — | `evidence/…/pair1-RETIRED.json` (simulated claim → `AccountDidNotDeserialize`) |
+
+Program hashes — executable hash (plain file sha256, size): mainnet `9ef38e0d8954f6c8242d8157dccdc8a2b169dbd987b13f588c5096ee280ec006`
+(`74fd0904…0313`, 365,824 B — still a build that cannot open a pair until `BURNTICKER_PLATFORM` is pinned, gate P0), devnet
+`91d403e061d37a999e418ca552545ff480bcf006b745be6c4d261dd0d05379d9` (`2e22b0cc…25ff`, 365,880 B) = the program deployed at `2jQotwSG…ELkN` on devnet
+(read back: MATCH). Powers Register, verified-build table, `.well-known` files and the trust-pack checklist regenerated.
+
 ## 2026-10-10 (late evening) — pair_curve: fixes for blind reviews PC-1 and PC-2
 
 Reviews: `docs/burnticker/reviews/2026-10-10-pair-curve-blind-1.md` (R1) and `…-blind-2.md` (R2), both of `547558fa`. Every exploit
