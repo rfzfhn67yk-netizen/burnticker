@@ -80,7 +80,9 @@ describe("the landing page (site/burnticker/index.html)", () => {
     const lists = leagueLists(text);
     assert.ok(lists.length >= 2, "the page names its leagues");
     for (const l of lists) assert.notEqual(l[0], "NFL", l.join(" "));
-    const espn = [...html.matchAll(/<i>ESPN\.([A-Z]+)<\/i>/g)].map((m) => m[1]);
+    // website brief §4: no ESPN reads — the tape tags sports lines SPORTS.<league>
+    assert.doesNotMatch(html.replace(/No ESPN reads\./g, ""), /ESPN/, "no ESPN source on the landing page");
+    const espn = [...html.matchAll(/<i>SPORTS\.([A-Z]+)<\/i>/g)].map((m) => m[1]);
     assert.notEqual(espn[0], "NFL"); assert.deepEqual([...new Set(espn)].sort(), ["MLB", "NBA", "NFL", "NHL"]);
     for (const team of ["$RAYS", "$LAKERS", "$OILERS", "$EAGLES"]) assert.ok(text.includes(team), team);
   });

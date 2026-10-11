@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { EmptyState } from "../_components/EmptyState";
 import { TermNote } from "../_components/Term";
 import CoverageSection from "./CoverageSection";
 import TrustPackSection from "./TrustPackSection";
 import OpsSection from "./OpsSection";
+import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
 
 /**
  * THE TRUST PAGE (the owner, 2026-10-09: no room for suspicion). Rendered from /api/burnticker/trust: the Powers Register, the LIVE
@@ -23,13 +25,14 @@ export default function TrustPage() {
   const [t, setT] = useState<Trust | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { fetch("/api/burnticker/trust").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setT(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
-  if (err) return <main className="p-6 text-red-400">{err}</main>;
-  if (!t) return <main className="p-6 text-neutral-400">Loading…</main>;
+  if (err) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="unavailable" body="The trust page data could not be read just now." details={err} /></main>;
+  if (!t) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const sol = (l: string) => (Number(l) / 1e9).toFixed(4);
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold">Trust</h1><p className="text-neutral-400 text-xs">What the operator can and cannot do, read from the chain and the config where it can be; placeholders say so. Generated {t.generatedAt} · {t.cluster} · RPC {t.rpcConfigured ? "configured" : "not configured on this host"}.</p><div className="mt-2"><TermNote ids={["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"]} /></div></header>
+      <CurrentStatusSummary card={card} />
       <section className={card}><p>{t.operatorLine}{t.contactIsTodo && <span className="text-amber-400 text-xs"> (contact address: TODO, owner to fill in)</span>}</p><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">Attesters: {t.attesterStatus.line}</p></section>
       <TrustPackSection card={card} />
       <section className={card}><h2 className="font-medium">Standing facts</h2><ul className="list-disc pl-5">{t.statements.map((s) => <li key={s}>{s}</li>)}</ul></section>

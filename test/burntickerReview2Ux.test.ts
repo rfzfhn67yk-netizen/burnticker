@@ -37,7 +37,7 @@ describe("review 2 — one launch-availability state", () => {
 
   test("every launch CTA on the app's pages renders only while launches are open", () => {
     const cases: [string, RegExp[]][] = [
-      ["src/app/burnticker/page.tsx", [/\{launch\.open && <Link href="\/burnticker\/launch" className="bt-launch-btn">Launch a coin<\/Link>\}/, /\{launch\.open && <div className="mt-3"><Link href="\/burnticker\/launch" className="underline">Launch the first one →<\/Link><\/div>\}/, /\{launch\.open && <> <Link className="underline" href="\/burnticker\/launch\?pair=1">/]],
+      ["src/app/burnticker/page.tsx", [/\{launch\.open && <Link href="\/burnticker\/launch" className="bt-launch-btn">Launch a coin<\/Link>\}/, /\{launch\.open && <div className="mt-3"><Link href="\/burnticker\/launch" className="underline">Launch the first one →<\/Link><\/div>\}/, /\{launch\.open && <p className="mt-2"><Link className="underline" href="\/burnticker\/launch\?pair=1">/]],
       ["src/app/burnticker/leagues/[league]/[season]/page.tsx", [/\{launch\.open && <Link className="text-xs underline" href=\{t\.launchHref\}>/, /\{launch\.open && <Link className="underline" href=\{t\.launchHref\}>/, /No team-coin receipts for this season yet\. This page tracks processed coin receipts, not every game\.\{launch\.open \? " Pick a team below to launch one\." : ""\}/]],
       ["src/app/burnticker/templates/page.tsx", [/\{launch\.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href=\{t\.href\}>Start from this →<\/Link>\}/]],
       ["src/app/burnticker/t/[ticker]/page.tsx", [/\{launch\.open && <p><Link [^>]*href=\{likeHref\(s\.ticker\)\}>Launch one like this →/]],
@@ -55,10 +55,13 @@ describe("review 2 — one served $DEFICIT destination", () => {
     assert.equal(DEFICIT_SITE, "https://deficit.burnticker.com/");
     assert.equal(deficitHref(false), DEFICIT_SITE); assert.equal(deficitHref(true), "/burnticker/t/DEFICIT");
     assert.equal(NAV.find((n) => n.label === "$DEFICIT")?.href, DEFICIT_SITE);
-    assert.match(read("src/app/burnticker/launch/page.tsx"), /<a className="underline" href=\{DEFICIT_SITE\}>\$DEFICIT<\/a>/);
+    // website brief §1: the closed state is LaunchGate.tsx, handed DEFICIT_SITE by the launch page
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /<LaunchGate .*deficitHref=\{DEFICIT_SITE\}/);
+    assert.match(read("src/app/burnticker/launch/LaunchGate.tsx"), /<a className="underline" href=\{deficitHref\}>\$DEFICIT<\/a>/);
     const coin = read("src/app/burnticker/t/[ticker]/page.tsx");
     assert.match(coin, /\/no token\/i\.test\(err\) \? <NotRegistered ticker=\{ticker\} \/>/);
-    assert.match(coin, /t === "DEFICIT" \? <p><a className="underline" href=\{DEFICIT_SITE\}>The \$DEFICIT page<\/a> is served on its own site until the coin is registered here/);
+    // website brief §1: $DEFICIT's not-registered state is the pre-launch page, canonical to DEFICIT_SITE
+    assert.match(coin, /if \(t === "DEFICIT"\) return <DeficitPrelaunch fallbackSite=\{DEFICIT_SITE\} \/>/);
     for (const f of ["src/app/burnticker/launch/page.tsx", "src/app/burnticker/page.tsx", "src/app/burnticker/_components/nav.ts"]) assert.doesNotMatch(read(f), /href="\/burnticker\/t\/DEFICIT"/, f);
   });
 });

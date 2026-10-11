@@ -1,22 +1,14 @@
-"use client";
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import { WalletProviders } from "./WalletProviders";
 
-import { useMemo, type ReactNode } from "react";
-import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import "@solana/wallet-adapter-react-ui/styles.css";
+// website brief §8: the launch page's title, description and canonical (a server layout); the wallet providers stay client-side.
+const DESCRIPTION = "Launch a Burnticker coin: one locked rule, burns paid by the coin's own trading fees, a receipt for every burn. Shows whether creator launches are open on this host before any control.";
+export const metadata: Metadata = {
+  title: "Launch", description: DESCRIPTION, alternates: { canonical: "/burnticker/launch" },
+  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker · Launch", description: DESCRIPTION, url: "/burnticker/launch", images: [{ url: "https://burnticker.com/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+};
 
-/**
- * Wallet providers for the launch wizard only (the rest of the app has none). @solana/wallet-adapter-react is already a dependency;
- * wallets are discovered through the Wallet Standard (no wallets package needed), so nothing heavy was added. The RPC here is only for
- * the adapter's connection object; the wizard never sends from it until a bundle says `ready: true`.
- */
 export default function LaunchLayout({ children }: { children: ReactNode }) {
-  const endpoint = useMemo(() => process.env.NEXT_PUBLIC_BURNTICKER_RPC_URL || "https://api.devnet.solana.com", []);
-  return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={[]} autoConnect={false}>
-        <WalletModalProvider>{children}</WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
-  );
+  return <WalletProviders>{children}</WalletProviders>;
 }

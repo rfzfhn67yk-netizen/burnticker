@@ -20,9 +20,12 @@ import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPai
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { STATIONS, nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
 import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
-import { CREATOR_LAUNCHES_CLOSED, DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
+import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { LaunchRecovery } from "./LaunchRecovery";
+import { LAUNCH_GATE_LOADING, launchGateFromCatalogue, wizardMayRender, type LaunchGateState } from "@/lib/burnticker/launchGateState";
+import { LaunchGate } from "./LaunchGate";
+import { PairFundsFlow } from "../_components/PairFundsFlow";
 import { describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATE_START, type TemplateId } from "@/lib/burnticker/templates";
@@ -112,8 +115,9 @@ export default function LaunchWizard() {
   const [flow, setFlow] = useState<Flow>("team");
   const [step, setStep] = useState<Step>("choose");
   const [cluster, setCluster] = useState<string | null>(null);
-  // BURNTICKER_CREATOR_LAUNCHES_ENABLED (default off): the catalogue's launches.creators; false → the sentence instead of the wizard.
-  const [launchesOpen, setLaunchesOpen] = useState<boolean | null>(null);
+  // BURNTICKER_CREATOR_LAUNCHES_ENABLED (default off): the catalogue's launches.creators decides; until it answers a neutral skeleton
+  // (launchGateState.ts — the wizard never flashes before the gate resolves; an unreadable catalogue keeps the controls hidden).
+  const [gate, setGate] = useState<LaunchGateState>(LAUNCH_GATE_LOADING);
   const [venues, setVenues] = useState<{ kalshi: boolean; polymarket: boolean; feeds: boolean; pairCurve?: boolean }>({ kalshi: true, polymarket: true, feeds: true });
   // review N6: a rivalry pair goes out with the venue this host uses (catalogue venues.pairCurve; a 409 corrects a stale read)
   const [pairVenue, setPairVenue] = useState<PairVenue>("launchlab");
@@ -237,7 +241,7 @@ export default function LaunchWizard() {
   useEffect(() => { window.scrollTo({ top: 0 }); }, [step]);
   const startOver = () => { try { sessionStorage.removeItem(STORE); } catch { /* ignore */ } window.location.href = window.location.pathname; };
 
-  useEffect(() => { fetch("/api/burnticker/catalogue").then((r) => r.json()).then((j) => { setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); setLaunchesOpen(j.launches?.creators === false ? false : true); }).catch(() => {}); }, []);
+  useEffect(() => { fetch("/api/burnticker/catalogue").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`catalogue HTTP ${r.status}`)))).then((j) => { setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); setGate(launchGateFromCatalogue(j)); }).catch((e) => setGate(launchGateFromCatalogue(null, String((e as Error).message ?? e)))); }, []);
   const curCat = cats.find((c) => c.id === cat);
   useEffect(() => { if (flow === "browse" && curCat?.guided === "elections" && !etypes.length && venues.polymarket) getJson<{ types: { id: string; label: string; races: number }[] }>(`${V1}/elections`).then((j) => setEtypes(j.types)).catch(() => setEtypes([])); }, [flow, curCat?.guided, etypes.length, venues.polymarket]);
   useEffect(() => { if (!etype) return; setEbusy(true); setEraces(null); setEpair(null); setEsel([]); getJson<{ states: { abbr: string; name: string; races: number }[]; races: ElRace[] }>(`${V1}/elections?type=${etype}${estate ? `&state=${estate}` : ""}`).then((j) => { setEstates(j.states); setEraces(etype === "control" || estate ? j.races : null); }).catch(() => setEraces([])).finally(() => setEbusy(false)); }, [etype, estate]);
@@ -573,13 +577,8 @@ export default function LaunchWizard() {
   const genImg = (r: BurnRule | null, tk: string, one: string) => (r ? `/burnticker/img/preview.svg?r=${b64u(JSON.stringify(r))}&t=${encodeURIComponent(tk || "TICKER")}&l=${encodeURIComponent(one.slice(0, 120))}` : "");
   const teamFilter = (t: Team) => { const s = teamQ.trim().toLowerCase(); if (!s) return true; if (`${t.name} ${t.abbr} ${t.city} ${t.nickname ?? ""}`.toLowerCase().includes(s)) return true; return aliasLookup(teamQ).some((a) => a.abbr === t.abbr && a.series === leagueSeries); };
 
-  if (launchesOpen === false) return (
-    <main className="mx-auto max-w-4xl px-4 py-6 space-y-3">
-      <h1 className="text-2xl font-semibold">Launch a coin</h1>
-      <p className="text-neutral-200" data-launches-closed>{CREATOR_LAUNCHES_CLOSED}</p>
-      <p className="text-sm"><a className="underline" href={DEFICIT_SITE}>$DEFICIT</a> · <Link className="underline" href="/burnticker">Burnticker</Link> · {NO_WALLET_LINE}</p>
-    </main>
-  );
+  // website brief §1: the gate resolves before any launch control renders (loading → skeleton; closed / unavailable → no controls)
+  if (!wizardMayRender(gate)) return <LaunchGate state={gate as Exclude<LaunchGateState, { kind: "open" }>} deficitHref={DEFICIT_SITE} noWalletLine={NO_WALLET_LINE} />;
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-6 space-y-5">
@@ -890,6 +889,8 @@ export default function LaunchWizard() {
               creator={creator || null}
               onLaunch={() => { void launch(); }}
             />
+            {/* website brief §2: the funds flow before a registered pair launches (pairs made now are winner-takes-the-burn) */}
+            {pairOn && !ruleB && <PairFundsFlow version="winner-takes-the-burn" tickers={{ a: ticker || "A", b: tickerB || "B" }} open />}
             {pairOn && ticker && ticker === tickerB && <p className="text-xs text-red-400">The two coins need different tickers.</p>}
             <p className="text-xs"><button className="underline" data-nav onClick={back}>← Back</button></p>
           </>

@@ -31,7 +31,7 @@
         "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
         "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
         "threshold": "2 of 3",
-        "timeLock": "60 s on devnet (48 h on mainnet)",
+        "timeLock": "60 s on devnet (mainnet: 0 now, 48 h planned)",
         "source": "docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md"
       },
       "wallets": [
@@ -63,7 +63,7 @@
         "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
-        "timeLock": "48 h",
+        "timeLock": "0 now (owner decision 2026-10-11, launch week); 48 h planned from around 2026-10-23 — the live value is read from chain",
         "source": "docs/burn-receipts/powers-register.md"
       },
       "wallets": [

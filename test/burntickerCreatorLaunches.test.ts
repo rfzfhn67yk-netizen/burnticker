@@ -52,7 +52,11 @@ describe("creator launches flag", () => {
 
   test("the launch page renders the sentence instead of the wizard when the catalogue says creators: false; the operator path is the CLI (runbook, deploy.md)", () => {
     const page = fs.readFileSync(path.join(ROOT, "src/app/burnticker/launch/page.tsx"), "utf8");
-    assert.match(page, /launches\?\.creators === false/); assert.match(page, /CREATOR_LAUNCHES_CLOSED/);
+    // website brief 2026-10-11 §1: the gate resolves before the wizard (launchGateState.ts; closed unless creators === true, a skeleton
+    // while loading) and the closed page is LaunchGate.tsx, which carries the sentence
+    assert.match(page, /launchGateFromCatalogue\(j\)/); assert.match(page, /if \(!wizardMayRender\(gate\)\) return <LaunchGate /);
+    assert.match(fs.readFileSync(path.join(ROOT, "src/lib/burnticker/launchGateState.ts"), "utf8"), /launches\?\.creators === true \? \{ kind: "open"/);
+    assert.match(fs.readFileSync(path.join(ROOT, "src/app/burnticker/launch/LaunchGate.tsx"), "utf8"), /\{CREATOR_LAUNCHES_CLOSED\}/);
     for (const f of ["docs/burnticker/deploy.md", "docs/burnticker/runbook.md"]) assert.match(fs.readFileSync(path.join(ROOT, f), "utf8"), /BURNTICKER_CREATOR_LAUNCHES_ENABLED/, f);
   });
 });

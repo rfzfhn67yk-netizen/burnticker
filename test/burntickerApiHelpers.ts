@@ -123,6 +123,7 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/fees\/ledger$/, "fees/ledger", []],
   [/^\/operator$/, "operator", []],
   [/^\/bounty$/, "bounty", []],
+  [/^\/current-status$/, "current-status", []],
   [/^\/snapshots$/, "snapshots", []],
   [/^\/openapi\.json$/, "openapi.json", []],
   [/^\/badge\/pairs\/([^/]+)$/, "badge/pairs/[file]", ["file"]],
