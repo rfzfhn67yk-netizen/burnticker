@@ -217,6 +217,17 @@ pool (blind review 2 I-4: aggregators may route there; the site links only the r
    RL-2; before r2 the majority was measured against the live `lp_supply`); `claim_lock_fees` then collects the LP fees with the FEE_KEYS signature — SOL 80 % to the side's burn pool, 20 %
    to the compiled operator treasury (parked in the record while the treasury cannot receive it), the coin side burned, a receipt memo.
    The keeper's order per side: graduate → lock_lp → register_pair_pool → register_fee_key → seed swap → claim_lock_fees on its cadence.
+   **LAUNCHPAD-PATH §40 — winner takes the burn (2026-10-11).** Before register_pair_pool (which now requires it), burn_receipts'
+   permissionless `link_pair` pairs the two coins with the Pair as the witness (PairLink ["pair_link", mint] per coin, any status but
+   Voided). Then at each result a quorum of each coin's attesters signs one PairResult ["pair_result", mint_lo, mint_hi, date] naming
+   the winner (or a draw); the loser's crank for that period refuses and `forward_to_winner` moves exactly what its rule would have
+   spent — buyback_spend(min(spendable, cap), units, f), nothing under its floor — from the loser's burn pool to the winner's; the
+   winner's ordinary cranks burn the winner's coin. The loser's supply is untouched; a draw forwards nothing; no result within 72 h of
+   the reading lets the coin crank as unpaired. Devnet: docs/burnkeeper/devnet-pair-forward-run-log-2026-10-11.md.
+   The keeper (src/lib/burnKeeper/pairCurveCrank.ts) sends `link_pair` as its own transaction once a side has a pool and both
+   TokenConfigs exist, before register_pair_pool; then per period (src/lib/burnticker/multiKeeper.ts): both coins attest, the PairResult
+   is posted, the loser's `forward_to_winner` lands, then the winner cranks — receipts `forwarded`, the append-only `pair_forwards`
+   table, the receipt line "forwarded from $LOSER: N SOL → $WINNER burn pool".
    `claim_lock_fees` always collects everything accrued (no amount argument, r2 L-3) against the FeeKeyRecord's pool (r2 L-1).
 6. **Fallback if the lock cannot be made** (r2 L-2): `lock_lp` depends on Raydium's upgradeable lock program. If a graduated side's LP
    is still unlocked 30 days (`LP_LOCK_FALLBACK_SECS`) after the graduation decision, anyone may call pair_curve's `burn_lp(side)`: it

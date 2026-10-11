@@ -45,6 +45,15 @@ export type WindowKind = "season" | "post" | "next" | "perpetual" | "one-shot";
 export interface CoinText { name: string; ticker: string; oneLiner: string; flavour: string; ruleBlock: string; windowSentence: string; windowKind: WindowKind; badge: string; paragraph: string; shape: "recurring" | "one-shot" }
 
 const CLOSER = "Creator earns nothing; LP locked forever, its fees fund the burn.";
+/**
+ * WINNER TAKES THE BURN (owner decision 2026-10-11, LAUNCHPAD-PATH §40): the locked description of a rivalry-pair coin carries this
+ * sentence (its rule's pair.winnerTakesBurn). The words match rules.ts WINNER_TAKES_BURN_LINE; the copy lint's no-prizes check keeps
+ * prize / reward / payout / "win fees" out of every pair sentence.
+ */
+export const PAIR_DESCRIPTION_SENTENCE = "Paired with a rival coin: fees from both coins burn the winner's supply (the coin whose rule a result fires).";
+/** The review card's line for a registered rivalry pair (Coin vs Coin, a shared-selector matchup, an election pair). */
+export const PAIR_REVIEW_LINE = "Winner takes the burn: fees from both coins burn the winner's supply — the winner is the coin whose rule a result fires. The other coin's fuel for that result moves to the winner's burn pool; nobody is paid, and a draw or a void moves nothing.";
+const pairSentence = (r: BurnRule): string => (r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn ? ` ${PAIR_DESCRIPTION_SENTENCE}` : "");
 const BURN_DOWN = "it burns down whatever is left over four weeks and retires";
 export const PERPETUAL_SENTENCE = "No end date — this coin does not retire.";
 /** One pattern per window kind; a description matches exactly one of them, exactly once (test/burntickerDescribe.test.ts). */
@@ -113,7 +122,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const cross = CROSS[s.league] ?? "a second independent source";
   const badge = windowBadge(r, c);
   const mk = (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]): CoinText => {
-    const ruleBlock = `${rules} ${windowSentence}${leagueSentence(r)} ${CLOSER}`;
+    const ruleBlock = `${rules} ${windowSentence}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
     return { name: name.slice(0, 32), ticker, oneLiner, flavour: `$${t} — ${oneLiner}.`, ruleBlock, windowSentence, windowKind, badge, paragraph: `$${t} — ${oneLiner}. ${ruleBlock}`, shape };
   };
   if (s.kind === "team") {
@@ -160,7 +169,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
   const badge = windowBadge(r, ctx);
   const build = (name0: string, tk0: string, oneLiner: string, block: (t: string) => string, windowSentence: string, shape: CoinText["shape"]): CoinText => {
     const name = ctx.suggest?.name ?? name0, tk = ctx.suggest?.ticker ?? tk0;
-    const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${leagueSentence(r)} ${CLOSER}`;
+    const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
     return { name: name.slice(0, 32), ticker: tk, oneLiner, flavour: `$${t} — ${oneLiner}.`, ruleBlock, windowSentence, windowKind: windowKindOf(r), badge, paragraph: `$${t} — ${oneLiner}. ${ruleBlock}`, shape };
   };
   if (n) {

@@ -4,7 +4,7 @@ import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
 import { CURVE_FEES, POST_GRADUATION_FEES, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, LP_LOCKED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
-import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
 
 /**
@@ -153,6 +153,13 @@ export interface LaunchDeps {
   /** A pair's side B URI (each side's metadata is pinned on its own); defaults to metadataUri. */
   metadataUriB?: (mint: string) => string;
   mintKeypair?: Keypair;
+  /**
+   * Winner takes the burn (LAUNCHPAD-PATH §40), set only by buildPairBundles: the partner's mint for initialize_token's pair_mint, and
+   * `partnerFirst` on the second coin (the partner's TokenConfig exists, so this coin's initialize_token completes the pairing). Absent
+   * for every single coin — its initialize_token is byte-identical to before.
+   */
+  pairMint?: string;
+  partnerFirst?: boolean;
   /** The caller's own mint PUBLIC key (base58); the bundle then carries no secret (mintSecretKey: null). Exclusive with mintKeypair. */
   mint?: string;
   /**
@@ -184,7 +191,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   const selectorKey = locked.rule.oracle === "derby" ? `derby:${locked.rule.series}` : locked.rule.oracle === "catalogue" ? `catalogue:${locked.rule.series}`
     : locked.rule.oracle === "polymarket" ? (locked.rule.market ? `polymarket:market:${locked.rule.market}` : `polymarket:${locked.rule.series}:${locked.rule.kind}`)
     : locked.rule.market ? `kalshi:market:${locked.rule.market}` : `kalshi:${locked.rule.series}`;
-  const init = await deps.program.initializeToken({ mint, creator: input.creator, ticker: input.ticker, rulesSha256: locked.sha256, selectorKey, mode: locked.mode, attesters: deps.attesters, quorum: deps.quorum, vault, rule: locked.rule });
+  const init = await deps.program.initializeToken({ mint, creator: input.creator, ticker: input.ticker, rulesSha256: locked.sha256, selectorKey, mode: locked.mode, attesters: deps.attesters, quorum: deps.quorum, vault, rule: locked.rule, ...(deps.pairMint ? { pairMint: deps.pairMint, partnerFirst: !!deps.partnerFirst } : {}) });
   const alloc = allocationFor(locked);
   const burnPoolAuthority = feePda;
   const create = await deps.launchLab.createLaunchIxs({
@@ -248,14 +255,21 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, selector);
   // Both or neither: the clause is part of BOTH sides' canonical rules (invertMapping carries it to side B), so each hash locks it.
   // …and the onEnd wind-down (no burn pool is ever left behind), unless the caller's rule already names its own.
-  const ruleA = validateRule({ ...probe, onEnd: probe.onEnd ?? { ...DEFAULT_ON_END }, pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now) } });
-  const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, deps);
+  // Winner takes the burn (2026-10-11): a one-shot pair moves the whole pool — both sides at 100 % (the loser forwards all of it).
+  const probeFull = isOneShot(probe) ? withFullFraction(probe) : probe;
+  const ruleA = validateRule({ ...probeFull, onEnd: probe.onEnd ?? { ...DEFAULT_ON_END }, pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now), winnerTakesBurn: true } });
+  // On chain the pair is linked through initialize_token (LaunchLab pairs): A names B's mint (A is PROVISIONAL), B names A back with
+  // partnerFirst inside the 7-day pairing window. So side A is never built alone: B's draft — its rule and its mint — exists before A's
+  // initialize_token is composed. A caller-supplied mint public key (deps.mint) cannot pre-name B: those bundles pair in the registry only.
+  const kpB = deps.mint === undefined ? Keypair.generate() : null;
+  const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...deps, ...(kpB ? { pairMint: kpB.publicKey.toBase58(), partnerFirst: false } : {}) });
   const ruleB = invertMapping(ruleA, a.mint, pairId);
-  const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: undefined, metadataUri: deps.metadataUriB ?? deps.metadataUri });
+  const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: kpB ?? undefined, ...(kpB ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });
   return { pairId, a, b, selector, notes: [
     `rivalry pair ${pairId}: ${input.a.ticker} (side A) and ${input.b.ticker} (side B) on selector ${selector}; each settlement burns exactly one side`,
     "sign A's bundle first, then B's: B's rule names A's mint as counterpart; A's counterpart is recorded in the registry (A is created before B's mint exists)",
     "program seam: burn_receipts TokenConfig may carry no counterpart field; the link is in both rules.json files (pairId) and the registry's pairs table",
+    "winner takes the burn (owner decision 2026-10-11): fees from both coins burn the winner's supply — at each result the other coin's fuel for that result moves to the winner's burn pool (forward_to_winner); nobody is paid, the other coin's supply is untouched, a draw or void moves nothing",
     `both or neither: event burns on either side apply only once both coins have a registered pool; if either has none when ${ruleA.pair!.voidBy} ends (UTC) the pair voids — no event burns ever, and each coin's pool winds down over ${ruleA.onEnd!.windDownDays} days`,
   ] };
 }

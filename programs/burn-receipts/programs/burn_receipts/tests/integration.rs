@@ -725,8 +725,10 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "crank_buyback",
             "crank_no_units",
             "crank_vault",
+            "forward_to_winner",
             "initialize_platform",
             "initialize_token",
+            "link_pair",
             "propose_attesters",
             "propose_cap_raise",
             "register_fee_key",
@@ -736,6 +738,7 @@ fn the_idl_has_no_withdraw_close_or_sweep_instruction() {
             "renounce_platform_authority",
             "replace_pool",
             "set_registration_policy",
+            "submit_pair_result",
             "submit_reading",
             "veto_registration_policy",
         ]

@@ -14,8 +14,8 @@ import { SOL_MINT, usdPrice } from "@/lib/burnKeeper/jupiterSwap";
 import { FakeBurnProgram, programPageBlock, type BurnProgramClient } from "@/lib/burnticker/program";
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
 import { FakeLaunchLab, type LaunchLabClient } from "@/lib/burnticker/launchBundle";
-import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairClauseState, type PairCounterpart, type TokenPageInput, type TokenStatusJson, type ReceiptJson } from "@/lib/burnticker/tokenPage";
-import { DECIMALS, TOTAL_SUPPLY } from "@/lib/burnticker/rules";
+import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairClauseState, pairForwardsJson, type PairCounterpart, type TokenPageInput, type TokenStatusJson, type ReceiptJson } from "@/lib/burnticker/tokenPage";
+import { DECIMALS, TOTAL_SUPPLY, pairWinnerTakesBurn } from "@/lib/burnticker/rules";
 import { rawToTokens, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { loadPowersRegister, operatorPowersSummary } from "@/lib/burnticker/trust";
 import { devFeeWallet } from "@/lib/burnticker/fees";
@@ -172,7 +172,10 @@ export async function pairCounterpart(p: Platform, t: TokenRow): Promise<PairCou
   const supplyRaw = (await p.program.supplyRaw(other.mint).catch(() => null)) ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS) - burnedRaw;
   const last = [...confirmed].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   const clause = await pairClauseState(p.registry, pair, async (mint) => { try { return (await p.program.port(mint).config())?.poolRegistered ?? null; } catch { return null; } });
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause };
+  // Winner takes the burn (API 1.10.0): the flag from this coin's locked rule, and every forward between the two coins.
+  let winnerTakesBurn = false;
+  try { winnerTakesBurn = pairWinnerTakesBurn(p.registry.lockedRule(t).rule); } catch { winnerTakesBurn = false; }
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supplyRaw, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards: pairForwardsJson(p.registry, pair.pairId, other.cluster) };
 }
 
 export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), opts: { live?: boolean } = {}): Promise<{ status: TokenStatusJson; receipts: ReceiptJson[]; readings: TokenPageInput["readings"]; rulesText: string; stubs: string[] }> {

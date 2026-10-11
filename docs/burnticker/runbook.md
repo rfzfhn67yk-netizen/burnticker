@@ -189,6 +189,21 @@ the proposal — `squads-multisig-cli` 0.1.7 cannot; the CLI votes and executes)
 
 Turning the flag on changes only how NEW pairs launch; existing LaunchLab pairs keep the rules-level void clause.
 
+## Winner takes the burn — before the first public pair (El-Sayed / Rogers; 2026-10-11)
+
+Pairs ship flag-off; a single coin's path does not change. Every pair made since 2026-10-11 runs winner takes the burn (decisions.md):
+at each result the losing coin's fuel forwards to the winning coin's burn pool. Before the El-Sayed / Rogers pair (or any first public
+pair) goes out, in order:
+
+| # | Step | Proof |
+|---|---|---|
+| W1 | burn_receipts on the cluster is the §40 build: 29 entrypoints (`link_pair`, `submit_pair_result`, `forward_to_winner`) | `solana program dump AuQj…zhMM` sha256 = `config/burnticker/verified-build.json`; the IDL lists the three |
+| W2 | both coins are built in ONE pair request (`buildPairBundles`): side B's draft and mint exist before side A's bundle, A's `initialize_token` names B (`pair_mint`), B's names A back (`partnerFirst`) — sign A, then B, the same session (the pairing window is 7 days; after it both are plain coins for good) | the bundles' review lines say "pair_mint … (provisional for 7 days)" / "(completes the pairing)"; after both land, `burnreceipts-admin pair-status` shows `paired` on both |
+| W3 | both rules carry `pair.winnerTakesBurn: true` and both locked descriptions the sentence "Paired with a rival coin: fees from both coins burn the winner's supply (the coin whose rule a result fires)." | the two `rules.json` files; the coin pages |
+| W4 | the keeper holds an attester key of BOTH coins (it signs one PairResult for both quorums); quorum ≤ 2 per coin, or a v0 transaction with a lookup table (ATTESTERS.md) | `status` on each coin: the keeper key in both attester sets |
+| W5 | on the race's settlement day: the keeper attests both coins, posts the PairResult naming the winner, the loser's forward lands, then the winner's crank burns | keeper log: "result recorded — $X takes the burn", "forwarded from $LOSER: N SOL → $WINNER burn pool", then "$WINNER … CRANKED"; the pair page tallies the forward |
+| W6 | alerts to act on: `pair-unmatched` (a coin has not named the other back), `pair-result-missing` (12 h after a reading; the program burns the period unpaired at 72 h), `pair-forward-pending` / `pair-forward-impossible` (the loser's fuel did not move; the plain sentence names the program refusal) | `status/status.json` `alerts.kinds`; `pairs[].lastForward` |
+
 ## Launch day — $DEFICIT, in order
 
 Preconditions: every gate above ticked; weekday morning 08–09 Denver (Treasury posts ~14:00 Denver); the Burnticker host fully provisioned

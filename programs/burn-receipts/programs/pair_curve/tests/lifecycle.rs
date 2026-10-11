@@ -196,6 +196,9 @@ fn setup(env: &mut Env, pool_fee: u64, f: impl FnOnce(&mut InitPairArgs)) -> P {
     f(&mut args);
     let ix = ix_init_pair(env, &p, args);
     let meta = env.ok(&[ix], &[&p.creator]);
+    // LAUNCHPAD-PATH §40: every pair is winner-takes-the-burn — link the two coins (the Pair is the witness).
+    let payer_pk = env.payer.pubkey();
+    env.ok(&[ix_link_pair(&payer_pk, &p.pair, &p.mint(0), &p.mint(1))], &[]);
     println!("init_pair CU: {}", meta.compute_units_consumed);
     p
 }
@@ -675,15 +678,56 @@ fn both_pools_register_in_burn_receipts_and_the_buyback_crank_runs_on_one() {
         r.unwrap();
     }
     let _ = bb;
+    let mint_b = p.mint(1);
+    let fee_b = fee_pda(&mint_b);
+    env.create_ata(&fee_b, &NATIVE_MINT);
+    env.create_ata(&fee_b, &mint_b);
     submit(&mut env, &mint, D1, V1, &[&p.attester]).unwrap();
     submit(&mut env, &mint, D2, V1 + 21 * UNIT, &[&p.attester]).unwrap();
+    submit(&mut env, &mint_b, D1, V1, &[&p.attester]).unwrap();
+    submit(&mut env, &mint_b, D2, V1 + 13 * UNIT, &[&p.attester]).unwrap();
+
+    // LAUNCHPAD-PATH §40: the coins are paired (link_pair at setup). A paired coin's crank needs the period's pair result.
+    let (la, lb) = (pair_link(&env, &mint).unwrap(), pair_link(&env, &mint_b).unwrap());
+    assert!(la.paired && lb.paired && la.pair_mint == mint_b && lb.pair_mint == mint && la.witness == PAIR_WITNESS_PAIR_CURVE);
+    expect_anchor_err(env.send(&[bcpmm::ix_crank_buyback(&cranker.pubkey(), &mint, &pa, D2)], &[&cranker]), "PairMismatch");
+    expect_anchor_err(env.send(&[bcpmm::ix_crank_buyback_paired(&cranker.pubkey(), &mint, &pa, D2, Some(mint_b))], &[&cranker]), "PairResultPending");
+    // The period's result: A wins (one attester signs for both coins' sets here).
+    submit_pair_result(&mut env, &mint, &mint_b, D2, mint, &[&p.attester]).unwrap();
+    let pr = pair_result(&env, &mint, &mint_b, D2).unwrap();
+    assert_eq!((pr.result_for(&mint), pr.result_for(&mint_b)), (PAIR_RESULT_WON, PAIR_RESULT_LOST));
+    // The loser's own crank refuses: its fuel goes to the winner.
+    expect_anchor_err(env.send(&[bcpmm::ix_crank_buyback_paired(&cranker.pubkey(), &mint_b, &pb, D2, Some(mint))], &[&cranker]), "ForwardRequired");
+    // forward B → A: exactly what B's rule would have spent on this period's units.
+    let rule_b = env.config(&config_pda(&mint_b)).rule;
+    let units_b = env.reading(&reading_pda(&config_pda(&mint_b), D2)).unwrap().units;
+    let (fa0, fb0) = (env.lamports(&fee), env.lamports(&fee_b));
+    let basis = (fb0 - rule_b.reserve_lamports).min(DEFAULT_BURN_POOL_CAP_LAMPORTS);
+    let expect = burn_receipts::math::buyback_spend(basis, units_b, rule_b.fraction_per_unit_bps).unwrap();
+    let meta = env.ok(&[ix_forward_to_winner(&cranker.pubkey(), &mint_b, &mint, D2)], &[&cranker]);
+    println!("forward_to_winner CU: {}; {} lamports for {} units", meta.compute_units_consumed, expect, units_b);
+    assert!(expect > 0);
+    assert_eq!((env.lamports(&fee) - fa0, fb0 - env.lamports(&fee_b)), (expect, expect));
+    let rb = env.reading(&reading_pda(&config_pda(&mint_b), D2)).unwrap();
+    assert_eq!((rb.processed, rb.outcome, rb.rule_spend_lamports, rb.burned), (true, OUTCOME_FORWARDED, expect, 0));
+    assert_eq!(env.config(&config_pda(&mint_b)).crank_cursor, D2);
+    let pr = pair_result(&env, &mint, &mint_b, D2).unwrap();
+    assert!(pr.forwarded && pr.forwarded_lamports == expect);
+    let memo = format!("|forward|from={}|to={}|period=", &mint_b.to_string()[..12], &mint.to_string()[..12]);
+    assert!(meta.logs.iter().any(|l| l.contains(&memo) && l.contains(&format!("|lamports={expect}|v1"))), "forward memo");
+    // idempotent
+    env.ok(&[ix_forward_to_winner(&cranker.pubkey(), &mint_b, &mint, D2)], &[&cranker]);
+    assert_eq!(env.lamports(&fee_b), fb0 - expect);
+
+    // The winner's ordinary crank burns (the forwarded lamports are part of its pool now).
     let supply = env.mint_supply(&mint);
-    let meta = env.ok(&[bcpmm::ix_crank_buyback(&cranker.pubkey(), &mint, &pa, D2)], &[&cranker]);
+    let meta = env.ok(&[bcpmm::ix_crank_buyback_paired(&cranker.pubkey(), &mint, &pa, D2, Some(mint_b))], &[&cranker]);
     println!("crank_buyback on a pair pool CU: {}", meta.compute_units_consumed);
     let r = env.reading(&reading_pda(&config_pda(&mint), D2)).unwrap();
     assert_eq!(r.outcome, OUTCOME_BURNED);
     assert!(r.burned > 0 && env.mint_supply(&mint) == supply - r.burned);
     assert_eq!(r.pool, pa.pool);
+    assert!(r.pool_actual_lamports >= expect, "the forward is in the winner's pool");
 }
 
 #[test]
@@ -963,14 +1007,14 @@ fn the_idl_has_no_admin_withdraw_or_parameter_update() {
     let names: Vec<String> = idl["instructions"].as_array().unwrap().iter().map(|i| i["name"].as_str().unwrap().to_string()).collect();
     let mut sorted = names.clone();
     sorted.sort();
-    assert_eq!(sorted, ["buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "lock_lp", "sell", "void_pair"]);
+    assert_eq!(sorted, ["burn_lp", "buy", "claim_developer_fee", "close_pair", "graduate", "init_pair", "lock_lp", "sell", "void_pair"]);
     for ix in idl["instructions"].as_array().unwrap() {
         let signers: Vec<&str> = ix["accounts"].as_array().unwrap().iter().filter(|a| a["signer"].as_bool().unwrap_or(false)).map(|a| a["name"].as_str().unwrap()).collect();
         let expected: &[&str] = match ix["name"].as_str().unwrap() {
             "init_pair" => &["payer", "creator"],
             "buy" => &["buyer"],
             "sell" => &["seller"],
-            "graduate" | "lock_lp" => &["cranker"],
+            "graduate" | "lock_lp" | "burn_lp" => &["cranker"],
             "void_pair" | "close_pair" | "claim_developer_fee" => &["caller"],
             n => panic!("undescribed instruction {n}"),
         };

@@ -27,6 +27,8 @@ export interface ReviewCardProps {
   coins: ReviewCoin[];
   /** The rule in one plain sentence. */
   sentence: string;
+  /** A registered rivalry pair: the winner-takes-the-burn line (describe.ts PAIR_REVIEW_LINE) under the sentence; null otherwise. */
+  pairLine?: string | null;
   /** "Ends Sep 30, 2027, then winds down" — null when the rule has no end. */
   ends: string | null;
   shares: { options: number[]; value: number; onChange: (v: number) => void };
@@ -76,6 +78,7 @@ export function ReviewCard(p: ReviewCardProps) {
         <button type="button" data-decision="name" className="underline" onClick={() => setEditing(!editing)}>{editing ? "done" : p.coins.length > 1 ? "edit the names and tickers" : "edit the name or ticker"}</button>
       </div>
       <p className="text-base text-neutral-100" data-summary>{p.sentence}</p>
+      {p.pairLine && <p className="text-sm text-amber-200" data-pair-line>{p.pairLine} <FieldHelp id="pair-burn" /></p>}
       {p.ends && <p className="text-xs text-neutral-300">Ends: {p.ends}</p>}
       <p className="text-xs text-neutral-400">{RECEIPTS_LINE} {LP_LINE}</p>
       <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="How much burns">

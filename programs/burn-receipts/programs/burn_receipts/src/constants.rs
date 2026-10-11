@@ -146,6 +146,54 @@ pub const OUTCOME_BELOW_FLOOR: u8 = 3;
 pub const OUTCOME_SHORT: u8 = 4;
 /// Vault: the allocation is used up; nothing is owed, ever again.
 pub const OUTCOME_EXHAUSTED: u8 = 5;
+/// LAUNCHPAD-PATH §40 (winner takes the burn): the coin LOST this period's pair result; forward_to_winner moved the fuel it would
+/// have spent (Reading.rule_spend_lamports) to the winner's fee PDA. Nothing was bought or burned on this coin.
+#[constant]
+pub const OUTCOME_FORWARDED: u8 = 6;
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// LAUNCHPAD-PATH §40 — pairs: winner takes the burn
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// PairLink ["pair_link", mint]: the coin's one partner (immutable once written).
+#[constant]
+pub const PAIR_LINK_SEED: &[u8] = b"pair_link";
+/// PairResult ["pair_result", mint_lo, mint_hi, record_date (u32 LE)] — mint_lo < mint_hi (byte order).
+#[constant]
+pub const PAIR_RESULT_SEED: &[u8] = b"pair_result";
+/// TokenConfig.pair_state: not paired / provisional (initialize_token named a partner that has not answered yet) / paired.
+#[constant]
+pub const PAIR_STATE_NONE: u8 = 0;
+#[constant]
+pub const PAIR_STATE_PROVISIONAL: u8 = 1;
+#[constant]
+pub const PAIR_STATE_PAIRED: u8 = 2;
+/// PairLink.witness: how the pairing was proven — both initialize_token calls named each other, or a pair_curve Pair holds both mints.
+#[constant]
+pub const PAIR_WITNESS_INITIALIZE: u8 = 0;
+#[constant]
+pub const PAIR_WITNESS_PAIR_CURVE: u8 = 1;
+/// The second coin must initialize (naming the first) within this long of the first, or the first stays a plain coin for good.
+#[constant]
+pub const PAIRING_WINDOW_SECS: i64 = 7 * 24 * 60 * 60;
+/// A paired coin's crank waits this long after a reading's submission for the period's pair result; afterwards it burns its own
+/// fuel as an unpaired coin would (a missing result never wedges the queue) and that period can no longer be forwarded.
+#[constant]
+pub const PAIR_RESULT_GRACE_SECS: i64 = 72 * 60 * 60;
+/// The pair-result attestation domain (the reading's is ATTESTATION_DOMAIN).
+#[constant]
+pub const PAIR_ATTESTATION_DOMAIN: &str = "BURNRECEIPTS-PAIR-v1";
+/// The per-coin view of a PairResult (pair_result_for): no result / this coin won / lost / draw (forwards nothing).
+#[constant]
+pub const PAIR_RESULT_NONE: u8 = 0;
+#[constant]
+pub const PAIR_RESULT_WON: u8 = 1;
+#[constant]
+pub const PAIR_RESULT_LOST: u8 = 2;
+#[constant]
+pub const PAIR_RESULT_DRAW: u8 = 3;
+/// pair_curve's Voided status (programs/pair_curve/src/constants.rs STATUS_VOIDED).
+pub const PAIR_CURVE_STATUS_VOIDED: u8 = 2;
 
 /// The pair_curve program (programs/pair_curve; one id for devnet and mainnet, like this program's). Its keypair is
 /// ~/.config/meme-coin-trader/mainnet-keys/pair_curve-program.json (never committed). register_pair_pool trusts an account only if

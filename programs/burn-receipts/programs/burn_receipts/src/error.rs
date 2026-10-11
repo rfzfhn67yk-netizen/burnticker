@@ -156,4 +156,30 @@ pub enum BurnError {
     LockerMismatch,
     #[msg("policy 0: register the coin's LP-lock Fee Key (register_fee_key) before register_pool — the pool is verified only when its LP fees reach the burn")]
     FeeKeyNotRegistered,
+    #[msg("pair: the partner mint is invalid (itself, empty, or a vault-mode token)")]
+    InvalidPairMint,
+    #[msg("pair: the accounts do not form a pair (PairLink / partner config / pair_curve Pair do not name each other)")]
+    PairMismatch,
+    #[msg("pair: the partner named this mint after its pairing window closed, or the coin is already linked to another partner")]
+    PairingClosed,
+    #[msg("pair: the two coins are not paired to each other")]
+    NotPaired,
+    #[msg("pair: policy 2 — run link_pair (the pair_curve Pair witnesses both mints) before register_pair_pool")]
+    PairNotLinked,
+    #[msg("pair result: pass the configs in byte order of their mints (mint_lo first)")]
+    PairOrder,
+    #[msg("pair result: the winner must be one of the two mints, or Pubkey::default() for a draw")]
+    InvalidWinner,
+    #[msg("pair result: a different result is already recorded for this period")]
+    ConflictingPairResult,
+    #[msg("this coin LOST the period's pair result: its fuel goes to the winner with forward_to_winner, not crank_buyback")]
+    ForwardRequired,
+    #[msg("a paired coin's crank waits for the period's pair result (or PAIR_RESULT_GRACE_SECS after the reading); retry later")]
+    PairResultPending,
+    #[msg("the account is not this period's PairResult for this pair")]
+    InvalidPairResult,
+    #[msg("forward_to_winner: the period's result is a draw (nothing is forwarded) or names the other coin")]
+    NotWinner,
+    #[msg("forward_to_winner: both coins must be live (a verified pool) — a voided or unregistered side forwards nothing")]
+    PairSideNotLive,
 }

@@ -1,8 +1,8 @@
 import { explorerUrl } from "@/lib/burnKeeper/solana";
-import { buybackSpend, rawToTokens, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
+import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
 import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
-import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, WINNER_TAKES_BURN_LINE, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { badgeFromText } from "@/lib/burnticker/describe";
 import type { TokenMeta } from "@/lib/burnticker/registry";
 /** The standing line on every coin page and card (owner decision 2026-10-10, anti-misrepresentation). */
@@ -12,13 +12,14 @@ import { fullSpendUnits, unitStep, windDownUnits, type SettledEvent } from "@/li
 import { feedById } from "@/lib/burnticker/catalogue";
 import type { ImpliedChance } from "@/lib/burnticker/oracle/types";
 import type { AttesterRow, FeedState, ReadingRow, ReceiptRow, Registry, TokenRow, TokenState } from "@/lib/burnticker/registry";
-import type { LifecycleJson, PairClauseJson, PairCounterpart, PairSideSummary, ReceiptJson, TokenProgramJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
+import type { LifecycleJson, PairClauseJson, PairCounterpart, PairForwardJson, PairSideSummary, ReceiptJson, TokenProgramJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
 import { pairDailyText, platformDailyText, tokenDayText } from "@/lib/launch/dailyPost";
 import { parseBuybackMemo as parseProgramBuybackMemo, parseDebtMemo as parseProgramVaultMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/lib/burnReceipts/math";
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type MarketInput } from "@/lib/burnticker/market";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
+import { parseForwardMemo } from "@/lib/burnticker/pairForward";
 import { LP_POLICY_BADGE, buildLpLockJson, feeKeysPda, operatorTreasuryFor, solscanUrl, type LpLockJson } from "@/lib/burnticker/lockFees";
 
 /**
@@ -69,6 +70,11 @@ export interface PairTally {
   clause: PairClauseJson | null;
   /** Each side's LaunchLab curve as status.json carries it (null without an RPC read) — the pair page draws them side by side. */
   curveA: TokenStatusJson["market"]["curve"]; curveB: TokenStatusJson["market"]["curve"];
+  /**
+   * WINNER TAKES THE BURN (since API 1.10.0): whether the pair runs it, the SOL each side's lost periods moved to the other's burn pool
+   * (from the forwarded receipts), and every forward (oldest first). "burned on A / burned on B / forwarded A→B / B→A" on the pair page.
+   */
+  winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string; forwards?: PairForwardJson[];
 }
 
 /** One side's summary from its status (and receipts, for the last burn time). */
@@ -116,7 +122,26 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
     next: { market: a.next.nextMarket ?? b.next.nextMarket, closeTime: a.next.nextCloseTime ?? b.next.nextCloseTime, chanceA: null, chanceB: b.next.impliedChance },
     clause: a.pair?.clause ?? b.pair?.clause ?? null,
     curveA: a.market?.curve ?? null, curveB: b.market?.curve ?? null,
+    winnerTakesBurn: !!(a.pair?.winnerTakesBurn || b.pair?.winnerTakesBurn), forwardedAtoB: forwardedSol(receiptsA), forwardedBtoA: forwardedSol(receiptsB),
+    forwards: a.pair?.forwards ?? b.pair?.forwards ?? forwardsFromReceipts(a, b, receiptsA, receiptsB),
   };
+}
+
+/** The SOL a side's forwarded receipts moved (the lead receipt of each reading carries the program's amount). */
+export function forwardedSol(receipts: readonly Pick<ReceiptJson, "status" | "spent">[]): string {
+  const l = receipts.filter((r) => r.status === "forwarded" && r.spent).reduce((acc, r) => acc + solToLamports(r.spent!), ZERO);
+  return rawToTokens(l, 9);
+}
+/** Forwards rebuilt from the two sides' forwarded receipts (a page without the registry's pair_forwards rows). */
+function forwardsFromReceipts(a: TokenStatusJson, b: TokenStatusJson, receiptsA: readonly ReceiptJson[], receiptsB: readonly ReceiptJson[]): PairForwardJson[] {
+  const one = (from: TokenStatusJson, to: TokenStatusJson, rs: readonly ReceiptJson[]) => rs.filter((r) => r.status === "forwarded" && r.spent && r.signature && r.lead !== false)
+    .map((r) => ({ recordDate: r.readingDate ?? r.settledAt.slice(0, 10), from: from.ticker, to: to.ticker, fromMint: from.mint, toMint: to.mint, sol: r.spent!, units: r.units, signature: r.signature!, txUrl: r.txUrl }));
+  return [...one(a, b, receiptsA), ...one(b, a, receiptsB)].sort((x, y) => (x.recordDate < y.recordDate ? -1 : x.recordDate > y.recordDate ? 1 : 0));
+}
+
+/** The registry's forwards for a pair as the public shape (tickers, SOL, explorer links). */
+export function pairForwardsJson(reg: Pick<Registry, "pairForwards" | "token">, pairId: string, cluster: string): PairForwardJson[] {
+  return reg.pairForwards(pairId).map((f) => ({ recordDate: formatU32(f.recordDate), from: reg.token(f.loserMint)?.ticker ?? f.loserMint.slice(0, 6), to: reg.token(f.winnerMint)?.ticker ?? f.winnerMint.slice(0, 6), fromMint: f.loserMint, toMint: f.winnerMint, sol: rawToTokens(f.lamports, 9), units: f.units, signature: f.signature, txUrl: explorerUrl(cluster as Parameters<typeof explorerUrl>[0], f.signature) }));
 }
 
 /**
@@ -140,7 +165,7 @@ export async function pairClauseState(reg: Pick<Registry, "token" | "lockedRule"
   return { voidBy: c.voidBy, state: "waiting", waitingOn, decidedAt: null, detail: now >= Date.parse(`${c.voidBy}T00:00:00Z`) + 86_400_000 ? "voidBy has passed: the keeper voids the pair on its next cycle" : null };
 }
 
-export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw"> & Partial<Pick<Registry, "lockedRule" | "pairOutcome">>, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">, poolRegistered?: (mint: string) => Promise<boolean | null>): Promise<PairCounterpart | null> {
+export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw"> & Partial<Pick<Registry, "lockedRule" | "pairOutcome" | "pairForwards">>, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">, poolRegistered?: (mint: string) => Promise<boolean | null>): Promise<PairCounterpart | null> {
   const pair = reg.pairOf(t.mint);
   if (!pair) return null;
   const side: "A" | "B" = pair.mintA === t.mint ? "A" : "B";
@@ -151,7 +176,11 @@ export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token"
   const supply = (await supplyRaw(other.mint).catch(() => null)) ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS) - burnedRaw;
   const last = [...confirmed].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   const clause = reg.lockedRule && reg.pairOutcome ? await pairClauseState({ token: reg.token.bind(reg), lockedRule: reg.lockedRule.bind(reg), pairOutcome: reg.pairOutcome.bind(reg) }, pair, poolRegistered) : null;
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause };
+  let winnerTakesBurn = false;
+  const me = reg.token(t.mint);
+  if (reg.lockedRule && me) { try { winnerTakesBurn = pairWinnerTakesBurn(reg.lockedRule(me).rule); } catch { winnerTakesBurn = false; } }
+  const forwards = reg.pairForwards ? pairForwardsJson({ pairForwards: reg.pairForwards.bind(reg), token: reg.token.bind(reg) }, pair.pairId, other.cluster) : [];
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards };
 }
 
 // ReceiptJson / TokenStatusJson live in pageTypes.ts (no runtime imports) so the public SDK can type the API without this module.
@@ -184,7 +213,8 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
     else if ((rd.result ?? null) !== (b.result ?? null) || (rd.value ?? null) !== (b.value ?? null)) checks.push("receipt result/value ≠ the recorded reading");
     let recomputedUnits = b.units;
     if (!clock) try {
-      const s = unitStep(rule, ev, { value: b.prevValue, carryOut: b.carryIn }, feed?.carry ?? "none");
+      // Winner takes the burn: a LOST receipt carries the units this coin would have had had it won — recomputed with the mirrored mapping.
+      const s = unitStep(b.pairRole === "lost" ? pairMirrorRule(rule) : rule, ev, { value: b.prevValue, carryOut: b.carryIn }, feed?.carry ?? "none");
       recomputedUnits = s.units;
       if (s.units !== b.units) checks.push(`units: recomputed ${s.units}, recorded ${b.units}`);
       if (JSON.stringify(s.mapping) !== JSON.stringify(b.mapping)) checks.push("mapping: recomputed differs from recorded");
@@ -194,13 +224,25 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
     const together = prog && b.readingDate !== null ? i.receipts.filter((x) => x.readingDate === b.readingDate) : [];
     const readingUnits = together.reduce((a, x) => a + x.units, 0);
     const bps = b.mapping?.fractionOfPool !== undefined ? Math.round(b.mapping.fractionOfPool * 10_000) : 0;
-    if (prog && b.lead && i.locked.mode === "buyback" && b.poolLamports !== null && b.ruleSpendLamports !== null) {
+    const fwd = b.status === "forwarded";
+    if (fwd && b.lead && b.poolLamports !== null) {
+      // forward_to_winner moves buyback_spend(pool, the reading's units, this coin's fraction) — 0 under the floor.
+      expectedSpend = programBuybackSpend(b.poolLamports, BigInt(readingUnits), bps);
+      if (b.spendLamports !== null && b.spendLamports !== expectedSpend && b.spendLamports !== ZERO) checks.push(`forwarded: recomputed ${expectedSpend} lamports, the program moved ${b.spendLamports}`);
+    } else if (prog && b.lead && i.locked.mode === "buyback" && b.poolLamports !== null && b.ruleSpendLamports !== null) {
       // The program's own fixed-point rule spend over the reading's units; the crank spends ≤ 2 % of the pool's reserve and carries the rest.
       expectedSpend = programBuybackSpend(b.poolLamports, BigInt(readingUnits), bps);
       if (expectedSpend !== b.ruleSpendLamports) checks.push(`rule spend: recomputed ${expectedSpend} lamports, the program recorded ${b.ruleSpendLamports}`);
       if (b.spendLamports !== null && b.carriedInLamports !== null && b.carriedOutLamports !== null && b.spendLamports + b.carriedOutLamports > b.ruleSpendLamports + b.carriedInLamports) checks.push("spent + carried out > rule spend + carried in");
     }
-    if (prog && b.memo) {
+    if (fwd && b.memo) {
+      const fm = parseForwardMemo(b.memo);
+      if (!fm) checks.push("forward memo does not parse (v1)");
+      else {
+        if (fm.prefix !== i.token.ticker || fm.from !== i.token.mint.slice(0, 12) || (b.readingDate !== null && fm.period !== formatU32(b.readingDate))) checks.push("forward memo fields ≠ this coin and period");
+        if (b.lead && b.spendLamports !== null && fm.lamports !== b.spendLamports) checks.push("forward memo lamports ≠ the recorded amount");
+      }
+    } else if (prog && b.memo) {
       const pm = i.locked.mode === "buyback" ? parseProgramBuybackMemo(b.memo) : parseProgramVaultMemo(b.memo);
       if (!pm) checks.push(`memo does not parse (program ${i.locked.mode === "buyback" ? "v2" : "v1"})`);
       else {
@@ -230,7 +272,7 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
         if (m.rulesSha12 !== sha12) checks.push(`memo rules hash ${m.rulesSha12} ≠ the published rule ${sha12}`);
       }
     }
-    const verified = (b.status === "confirmed" || b.status === "skipped" || b.status === "void" || b.status === "nothing" || b.status === "exhausted" || b.status === "voided") && checks.length === 0;
+    const verified = (b.status === "confirmed" || b.status === "forwarded" || b.status === "skipped" || b.status === "void" || b.status === "nothing" || b.status === "exhausted" || b.status === "voided") && checks.length === 0;
     const curl = feed
       ? `curl -s '${rd?.sourceUrl ?? feed.sourceUrl}'   # ${feed.sourceName}: the row for ${b.eventId}${b.prevValue !== null ? ` (previous reading ${b.prevValue})` : ""}; selection: ${JSON.stringify(feed.config.select)}`
       : `curl -s '${rd?.sourceUrl ?? `https://api.elections.kalshi.com/trade-api/v2/markets/${b.eventId}`}' | jq '.market // .markets | if type=="array" then map({ticker, result, expiration_value, settlement_ts}) else {ticker, result, expiration_value, settlement_ts} end'`;
@@ -238,7 +280,7 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
       ? `result = ${b.result ?? "?"} → ${b.mapping ? (b.mapping.fractionOfPool !== undefined ? `spend ${b.mapping.fractionOfPool * 100}% of the pool` : `burn ${b.mapping.tokens} tokens`) : "nothing"}${!prog && i.locked.mode === "buyback" && b.poolLamports !== null ? `; spend = ${b.poolLamports} × ${b.mapping?.fractionOfPool ?? 0} = ${expectedSpend} lamports` : ""}`
       : `units = floor((${b.value ?? "?"} − ${b.prevValue !== null && rule.scalar!.baseline === "previousSettlement" ? b.prevValue : rule.scalar!.baseline}${b.carryIn !== "0" ? ` + ${b.carryIn} carried` : ""}) / ${rule.scalar!.unit}) = ${recomputedUnits} (direction ${rule.scalar!.direction})${prog ? "" : i.locked.mode === "buyback" && b.poolLamports !== null ? `; spend = pool × (1 − (1 − ${b.mapping?.fractionOfPool ?? 0})^${b.units}) = ${b.poolLamports} × … = ${expectedSpend} lamports` : i.locked.mode === "vault" ? `; burn = ${b.units} × ${b.mapping?.tokens ?? 0} tokens` : ""}`;
     const programFormula = prog && b.readingDate ? `; counted into program reading ${formatU32(b.readingDate)} (${readingUnits} unit(s) from ${together.length} receipt(s)) — the program ${i.locked.mode === "buyback" ? `spends min(pool × (1 − (1 − ${bps}/10000)^${readingUnits}) + carried spend, 2% of the pool's SOL reserve)${b.lead && b.poolLamports !== null ? ` = rule spend ${expectedSpend} lamports from a ${b.poolLamports}-lamport pool` : ""} and burns everything the fee PDA holds` : `burns ${readingUnits} × ${b.mapping?.tokens ?? 0} tokens from its vault, shortfall carried`}` : "";
-    const expected = b.status === "pending-pair" ? "pending-pair — both or neither: this burn executes, in order, once both coins of the pair have a registered pool (or is voided if the pair voids)" : b.status === "voided" ? `voided — ${b.skippedReason ?? "the pair voided"}: no event burn, ever` : prog && b.waitReason && (b.status === "planned" || b.status === "sending") ? `pending — ${b.waitReason}` : prog && b.lead === false ? `burned together with this reading's first receipt (the same crank${b.signature ? `, ${b.signature.slice(0, 12)}…` : ""})` : b.status === "skipped" ? `nothing bought — ${b.skippedReason ?? "skipped"}` : b.status === "void" ? "void market: no burn (a receipt all the same)" : b.status === "nothing" ? `no burn: ${b.note}` : prog && b.lead ? (i.locked.mode === "buyback" ? `rule spend ${expectedSpend ?? "?"} lamports; spent ${b.spendLamports ?? "pending"} (${sol(b.spendLamports) ?? "?"} SOL) buying $${i.token.ticker}; burned every token the fee PDA held (${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the program's vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`) : i.locked.mode === "buyback" ? `spend ${expectedSpend ?? "?"} lamports (${sol(expectedSpend) ?? "?"} SOL) buying $${i.token.ticker} at market; burn every token received (${b.gotRaw === null ? "pending" : rawToTokens(b.gotRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`;
+    const expected = fwd ? `forwarded — this coin lost the period: ${sol(b.spendLamports) ?? "its"} SOL of its fuel moved to the winning coin's burn pool by forward_to_winner (winner takes the burn); nothing of $${i.token.ticker} was bought or burned` : b.status === "pending-pair" ? "pending-pair — both or neither: this burn executes, in order, once both coins of the pair have a registered pool (or is voided if the pair voids)" : b.status === "voided" ? `voided — ${b.skippedReason ?? "the pair voided"}: no event burn, ever` : prog && b.waitReason && (b.status === "planned" || b.status === "sending") ? `pending — ${b.waitReason}` : prog && b.lead === false ? `burned together with this reading's first receipt (the same crank${b.signature ? `, ${b.signature.slice(0, 12)}…` : ""})` : b.status === "skipped" ? `nothing bought — ${b.skippedReason ?? "skipped"}` : b.status === "void" ? "void market: no burn (a receipt all the same)" : b.status === "nothing" ? `no burn: ${b.note}` : prog && b.lead ? (i.locked.mode === "buyback" ? `rule spend ${expectedSpend ?? "?"} lamports; spent ${b.spendLamports ?? "pending"} (${sol(b.spendLamports) ?? "?"} SOL) buying $${i.token.ticker}; burned every token the fee PDA held (${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the program's vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`) : i.locked.mode === "buyback" ? `spend ${expectedSpend ?? "?"} lamports (${sol(expectedSpend) ?? "?"} SOL) buying $${i.token.ticker} at market; burn every token received (${b.gotRaw === null ? "pending" : rawToTokens(b.gotRaw, DECIMALS)})` : `burn ${b.burnRaw === null ? "pending" : rawToTokens(b.burnRaw, DECIMALS)} from the vault${b.shortOutRaw && b.shortOutRaw > ZERO ? ` (${rawToTokens(b.shortOutRaw, DECIMALS)} short, carried)` : ""}`;
     return {
       eventId: b.eventId, settledAt: b.settledAt, oracle: rule.oracle, market: b.eventId, result: b.result, value: b.value, title: rd?.title ?? null, method: rd?.method ?? null, sourceUrl: rd?.sourceUrl ?? null, settlementSourceUrl: rd?.settlementSourceUrl ?? null,
       units: b.units, kind: b.kind, note: b.note, prevValue: b.prevValue, carryIn: b.carryIn, mapping: b.mapping,
@@ -248,6 +290,7 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
       partial: [prog && b.lead && (b.spendLamports ?? ZERO) > ZERO && (b.carriedOutLamports ?? ZERO) > ZERO ? `spend cap bound (2% of the pool's reserve): ${sol(b.carriedOutLamports)} SOL carried into the next crank` : null,
         prog && b.lead && b.poolActualLamports !== null && b.poolLamports !== null && b.poolActualLamports > b.poolLamports ? `burn-pool cap bound: the rule applied to ${sol(b.poolLamports)} of ${sol(b.poolActualLamports)} SOL` : null].filter(Boolean).join("; ") || null,
       verify: { curl, formula: formula + programFormula, expected, checks, verified },
+      ...(b.pairRole ? { pairRole: b.pairRole } : {}),
     };
   });
 }
@@ -449,13 +492,17 @@ export interface PlatformIndexToken {
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null;
 }
 export interface AuditBadge { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean }
-export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null }
+export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary; winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null }
 
 /** Pairs listed once (both sides), from the statuses' pair fields. */
 export function groupPairs(statuses: readonly TokenStatusJson[]): PlatformIndexJson["pairs"] {
   const by = new Map<string, { a?: TokenStatusJson; b?: TokenStatusJson }>();
   for (const s of statuses) if (s.pair) by.set(s.pair.pairId, { ...(by.get(s.pair.pairId) ?? {}), [s.pair.side === "A" ? "a" : "b"]: s });
-  return [...by.entries()].filter(([, p]) => p.a && p.b).map(([pairId, p]) => ({ pairId, selectorKey: p.a!.selectorKey, seriesTitle: p.a!.seriesTitle, a: sideSummary(p.a!), b: sideSummary(p.b!) }));
+  const moved = (fw: readonly PairForwardJson[], from: string) => rawToTokens(fw.filter((f) => f.fromMint === from).reduce((acc, f) => acc + solToLamports(f.sol), ZERO), 9);
+  return [...by.entries()].filter(([, p]) => p.a && p.b).map(([pairId, p]) => {
+    const wtb = !!(p.a!.pair?.winnerTakesBurn || p.b!.pair?.winnerTakesBurn), fw = p.a!.pair?.forwards ?? p.b!.pair?.forwards ?? [];
+    return { pairId, selectorKey: p.a!.selectorKey, seriesTitle: p.a!.seriesTitle, a: sideSummary(p.a!), b: sideSummary(p.b!), ...(wtb ? { winnerTakesBurn: true, forwardedAtoB: moved(fw, p.a!.mint), forwardedBtoA: moved(fw, p.b!.mint) } : {}) };
+  });
 }
 
 /** A status.json → its index card. Tolerates a status published before the card fields existed (profile/market absent). */
@@ -518,13 +565,14 @@ export function renderPairHtml(tally: PairTally, a: TokenStatusJson, b: TokenSta
   const chance = (c: number | null) => (c === null ? "—" : `${(c * 100).toFixed(0)}%`);
   const sideTicker = (x: "A" | "B" | null) => (x === "A" ? `$${A}` : x === "B" ? `$${B}` : "neither side");
   const table = (s: TokenStatusJson, rs: readonly ReceiptJson[]) => rs.length === 0 ? `<p class="muted">No receipts yet for $${esc(s.ticker)}.</p>` : `<div class="scroll"><table><thead><tr><th>Settled</th><th>Market</th><th>Result</th><th>Units</th><th>Burned</th><th>Tx</th><th>Check</th></tr></thead><tbody>
-${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("T", " "))}</td><td><code>${esc(r.market)}</code></td><td>${esc(r.result ?? r.value ?? "—")}</td><td class="num">${r.units}</td><td class="num">${r.status === "confirmed" ? fmt(r.burned ?? "0") : `<span class="muted">${esc(r.status)}</span>`}</td><td>${r.txUrl && r.signature ? `<a href="${esc(r.txUrl)}">${esc(r.signature.slice(0, 10))}…</a>` : "—"}</td><td>${r.verify.verified ? '<span class="ok">✓</span>' : r.status === "confirmed" ? `<span class="bad" title="${esc(r.verify.checks.join("; "))}">!</span>` : "…"}</td></tr>`).join("\n")}
+${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("T", " "))}</td><td><code>${esc(r.market)}</code></td><td>${esc(r.result ?? r.value ?? "—")}</td><td class="num">${r.units}</td><td class="num">${r.status === "confirmed" ? fmt(r.burned ?? "0") : r.status === "forwarded" ? `<span class="muted">forwarded ${esc(r.spent ?? "")} SOL</span>` : `<span class="muted">${esc(r.status)}</span>`}</td><td>${r.txUrl && r.signature ? `<a href="${esc(r.txUrl)}">${esc(r.signature.slice(0, 10))}…</a>` : "—"}</td><td>${r.verify.verified ? '<span class="ok">✓</span>' : r.status === "confirmed" ? `<span class="bad" title="${esc(r.verify.checks.join("; "))}">!</span>` : "…"}</td></tr>`).join("\n")}
 </tbody></table></div>`;
   const tiles = [
     tile("Burns", `$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}`, `${tally.settlements} settlement(s)${tally.voids ? `, ${tally.voids} void` : ""} · burned ${fmt(tally.burnedA)} : ${fmt(tally.burnedB)}`),
     tile("Supply", `${tally.supplyPctA.toFixed(2)}% <span class="muted">:</span> ${tally.supplyPctB.toFixed(2)}%`, `${fmt(tally.supplyA)} : ${fmt(tally.supplyB)} of ${fmt(a.supply.initial)} each`),
     tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? `settled ${esc((ls.result ?? ls.value ?? "—").toUpperCase())} · ${esc(ls.settledAt.slice(0, 16).replace("T", " "))}Z → ${sideTicker(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)}` : ""}` : "the first settlement after launch burns one side"),
     tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "the next settlement after launch"}`),
+    ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `burned on $${A} ${fmt(tally.burnedA)} <span class="muted">/</span> burned on $${B} ${fmt(tally.burnedB)}`, `forwarded $${A}→$${B} ${esc(tally.forwardedAtoB ?? "0")} SOL · $${B}→$${A} ${esc(tally.forwardedBtoA ?? "0")} SOL — ${esc(WINNER_TAKES_BURN_LINE)}`)] : []),
   ].join("\n");
   const rule = (s: TokenStatusJson, side: "A" | "B") => `<div class="rule"><strong>Side ${side} — <a href="../../t/${esc(s.ticker)}/">$${esc(s.ticker)}</a></strong> ${esc(s.name)}. ${esc(s.rules.statement)}<br><span class="muted">Rule file: <a href="../../t/${esc(s.ticker)}/rules.json">rules.json</a> · sha256 <code>${esc(s.rules.sha256)}</code></span></div>`;
   return `<!doctype html>

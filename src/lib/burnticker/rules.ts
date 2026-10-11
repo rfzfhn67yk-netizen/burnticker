@@ -125,7 +125,20 @@ export interface PairField {
   clause?: typeof PAIR_CLAUSE;
   /** YYYY-MM-DD (UTC): the pair voids if either side has no registered pool when this date ends. */
   voidBy?: string;
+  /**
+   * WINNER TAKES THE BURN (owner decision 2026-10-11, LAUNCHPAD-PATH §40; the DEFAULT for every pair created from then on): at each
+   * result the loser's fuel for that result — its own fraction dial applied to its own pool, the same amount it would have burned had
+   * it won; a one-shot pair 100 % — moves to the winner's burn pool (burn_receipts forward_to_winner) and the winner's normal cranks
+   * buy and burn the winner's coin. The loser's supply is untouched; nobody is paid; a draw or a void forwards nothing. Derby: per
+   * window; a season matchup: per game; a one-shot: once — and when a one-shot loser's rule ends, its wind-down sweep goes to the
+   * winner's burn pool while the winner is live. Locked by both sides' hashes; absent on pairs created before the decision.
+   */
+  winnerTakesBurn?: true;
 }
+/** Does this pair forward the loser's fuel to the winner (winner takes the burn)? */
+export const pairWinnerTakesBurn = (r: Pick<BurnRule, "pair">): boolean => r.pair?.winnerTakesBurn === true;
+/** The locked description's sentence for every winner-takes-the-burn pair (lint-clean: nothing is won, nobody is paid). */
+export const WINNER_TAKES_BURN_LINE = "Fees from both coins burn the winner's supply.";
 /** The pair's clause, or null (a pair created before the clause, or a single coin). */
 export const pairClause = (r: Pick<BurnRule, "pair">): { voidBy: string } | null => (r.pair?.clause === PAIR_CLAUSE && r.pair.voidBy ? { voidBy: r.pair.voidBy } : null);
 
@@ -325,7 +338,8 @@ export function validateRule(raw: unknown): BurnRule {
         if (pair.clause !== PAIR_CLAUSE) p.push(`pair.clause must be "${PAIR_CLAUSE}"`);
         if (typeof pair.voidBy !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(pair.voidBy) || new Date(`${pair.voidBy}T00:00:00Z`).toISOString().slice(0, 10) !== pair.voidBy) p.push("pair.voidBy must be a YYYY-MM-DD date (UTC)");
       }
-      for (const k of Object.keys(pair)) if (!["pairId", "side", "counterpartMint", "clause", "voidBy"].includes(k)) p.push(`pair.${k} is not a known key`);
+      if (pair.winnerTakesBurn !== undefined && pair.winnerTakesBurn !== true) p.push("pair.winnerTakesBurn must be true or absent (pairs created before 2026-10-11 carry none)");
+      for (const k of Object.keys(pair)) if (!["pairId", "side", "counterpartMint", "clause", "voidBy", "winnerTakesBurn"].includes(k)) p.push(`pair.${k} is not a known key`);
     }
   }
   if (r.kind === "scalar") {
@@ -378,7 +392,7 @@ export function validateRule(raw: unknown): BurnRule {
     binary: r.kind === "binary" ? { onYes: r.binary!.onYes ?? null, onNo: r.binary!.onNo ?? null } : null,
     scalar: r.kind === "scalar" ? { unit: r.scalar!.unit, perUnit: r.scalar!.perUnit, baseline: r.scalar!.baseline, direction: r.scalar!.direction } : null,
     onVoid: "skip", floorUsd: r.floorUsd as string, reserveSol: r.reserveSol as string, vault: mode === "vault" ? vault : null,
-    pair: pair === null ? null : { pairId: pair.pairId, side: pair.side, counterpartMint: pair.counterpartMint ?? null, ...(pair.clause !== undefined ? { clause: pair.clause, voidBy: pair.voidBy } : {}) },
+    pair: pair === null ? null : { pairId: pair.pairId, side: pair.side, counterpartMint: pair.counterpartMint ?? null, ...(pair.clause !== undefined ? { clause: pair.clause, voidBy: pair.voidBy } : {}), ...(pair.winnerTakesBurn === true ? { winnerTakesBurn: true as const } : {}) },
     ...(set !== undefined && set !== null ? { set: { id: (set as { id: string }).id, outcome: (set as { outcome: string }).outcome, forwardBps: (set as { forwardBps: number }).forwardBps } } : {}),
     ...(onEnd !== undefined && onEnd !== null ? { onEnd: { windDownDays: (onEnd as { windDownDays: number }).windDownDays, sweepThresholdLamports: (onEnd as { sweepThresholdLamports: number }).sweepThresholdLamports } } : {}),
     ...(r.oracle === "derby" ? { derby: derby as DerbySpec } : {}),
@@ -395,6 +409,24 @@ export function invertMapping(a: BurnRule, counterpartMint: string | null, pairI
   if (a.kind === "binary" && a.binary) return validateRule({ ...base, binary: { onYes: a.binary.onNo, onNo: a.binary.onYes } });
   if (a.kind === "scalar" && a.scalar) return validateRule({ ...base, scalar: { ...a.scalar, direction: a.scalar.direction === "up" ? "down" : a.scalar.direction === "down" ? "up" : "abs" } });
   throw new Error("invertMapping: not a binary or scalar rule");
+}
+
+/**
+ * The other side's mapping applied to THIS coin (winner takes the burn): binary onYes/onNo swapped, scalar direction flipped. Used to
+ * compute the units a losing coin "would have had had it won" for a result (its fuel forwards with those units) — and by the receipt
+ * check to recompute a lost receipt. Not validated (a mirror is never a published rule).
+ */
+export function pairMirrorRule(r: BurnRule): BurnRule {
+  if (r.kind === "binary" && r.binary) return { ...r, binary: { onYes: r.binary.onNo, onNo: r.binary.onYes } };
+  if (r.kind === "scalar" && r.scalar) return { ...r, scalar: { ...r.scalar, direction: r.scalar.direction === "up" ? "down" : r.scalar.direction === "down" ? "up" : r.scalar.direction } };
+  return r;
+}
+/** One-shot winner-takes-the-burn pairs move the whole pool (owner decision 2026-10-11): every mapping of the rule at 100 %. */
+export function withFullFraction(r: BurnRule): BurnRule {
+  const full = (m: BurnMapping | null): BurnMapping | null => (m && m.fractionOfPool !== undefined ? { fractionOfPool: 1 } : m);
+  if (r.kind === "binary" && r.binary) return { ...r, binary: { onYes: full(r.binary.onYes), onNo: full(r.binary.onNo) } };
+  if (r.kind === "scalar" && r.scalar) return { ...r, scalar: { ...r.scalar, perUnit: full(r.scalar.perUnit)! } };
+  return r;
 }
 
 /** A pair id from the two tickers and the selector (lowercase, dashed; deterministic so a retry does not mint a second pair). */
@@ -452,6 +484,16 @@ export function pairClauseText(r: Pick<BurnRule, "pair">): string {
   return ` Both or neither: event burns on either side apply only once both coins have a registered pool; a settlement read before that waits as a pending-pair receipt and executes, in order, when the second pool registers. If either side has no registered pool when ${c.voidBy} ends (UTC), the pair voids: no event burn on either side, ever, and the rule has ended.`;
 }
 
+/**
+ * The winner-takes-the-burn clause in words ("" when the pair carries none). Lint-clean: nothing is won or paid; fuel moves between burn
+ * pools and burns the winner's coin.
+ */
+export function winnerTakesBurnText(r: Pick<BurnRule, "pair" | "market">): string {
+  if (!pairWinnerTakesBurn(r)) return "";
+  const oneShot = !!r.market;
+  return ` Winner takes the burn: ${WINNER_TAKES_BURN_LINE.toLowerCase()} At each result the other coin's fuel for that result (its own fraction of its own burn pool${oneShot ? ", all of it for this one-shot pair" : ""}) moves to the winning coin's burn pool, and the winning coin's next burn buys and burns the winning coin; the other coin's supply is untouched and nobody is paid. A draw or a void moves nothing.${oneShot ? " After the result, whatever the other coin's burn pool still spends (its end-of-rule burns and later sweeps) also goes to the winning coin's burn pool while that coin is live." : ""}`;
+}
+
 /** The onEnd clause in words ("" without one); `endDate` names the day the rule ends when it is known (a one-shot's settlement date). */
 export function onEndText(r: Pick<BurnRule, "onEnd" | "set">, endDate: string | null = null): string {
   if (!r.onEnd) return "";
@@ -464,7 +506,7 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
   if (r.oracle === "derby" && r.derby) {
     const m = ruleMappings(r)[0]?.mapping;
     const burn = m ? mapText(m, r.derby.selector === "coinvs" ? "for that window" : "per unit") : "burns nothing";
-    return `${derbyStatement(r.derby, r.pair?.side ?? null, r.pair?.pairId ?? null, r.scalar ? { unit: r.scalar.unit, direction: r.scalar.direction } : null)} On a window this coin wins, the keeper ${burn}. A voided (tied) window burns nothing.${pairClauseText(r)}${onEndText(r)}`;
+    return `${derbyStatement(r.derby, r.pair?.side ?? null, r.pair?.pairId ?? null, r.scalar ? { unit: r.scalar.unit, direction: r.scalar.direction } : null)} On a window this coin wins, the keeper ${burn}. A voided (tied) window burns nothing.${pairClauseText(r)}${winnerTakesBurnText(r)}${onEndText(r)}`;
   }
   const what = r.oracle === "catalogue" ? `the ${names.feedTitle ?? r.series} feed`
     : r.oracle === "polymarket" ? polySelectorText(r, names)
@@ -475,12 +517,12 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
     const no = r.binary.onNo ? ` When it settles NO, ${r.binary.onYes ? "it" : "the keeper"} ${mapText(r.binary.onNo, "for that market")}.` : " A NO settlement burns nothing.";
     const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side burns on the opposite outcome, so each settlement burns exactly one of the two.` : "";
     const poly = r.oracle === "polymarket" ? " YES is the market's first outcome and NO its second; the result is the payout the Conditional Tokens contract on Polygon records, and a 50-50 resolution is a void." : "";
-    return `${yes}${no}${pair}${pairClauseText(r)}${poly} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
+    return `${yes}${no}${pair}${pairClauseText(r)}${winnerTakesBurnText(r)}${poly} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
   }
   const s = r.scalar!;
   const base = s.baseline === "previousSettlement" ? "the previous settlement" : `a fixed baseline of ${s.baseline}`;
   const dir = s.direction === "up" ? "above" : s.direction === "down" ? "below" : "away from (either direction)";
-  const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}` : "";
+  const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}${winnerTakesBurnText(r)}` : "";
   return `Each time ${what} settles, every full ${s.unit} ${dir} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")} (buyback spend compounds: pool × (1 − (1 − f)^units)).${pair} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
 }
 

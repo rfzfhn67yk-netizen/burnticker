@@ -15,7 +15,7 @@ import type { Cluster } from "@/lib/burnReceipts/constants";
 export interface CrankContext { connection: Connection; programId: PublicKey | string; cluster: Cluster; allowMainnet?: boolean; computeUnits?: number }
 
 export type CrankPlan =
-  | { status: "ready"; kind: "no_units" | "vault" | "buyback"; recordDate: number; transaction: Transaction; feePayer: string; note: string }
+  | { status: "ready"; kind: "no_units" | "vault" | "buyback" | "forward"; recordDate: number; transaction: Transaction; feePayer: string; note: string }
   | { status: "idle"; cursor: number; note: string }
   | { status: "waiting-for-pool"; recordDate: number; note: string };
 

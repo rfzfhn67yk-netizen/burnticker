@@ -50,6 +50,10 @@ pub fn handle_register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
     require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
     require!(c.registration_policy == POOL_POLICY_PAIR_CURVE, BurnError::WrongPoolPolicy);
     require!(c.cpmm_pool == Pubkey::default() && !c.pool_verified, BurnError::PoolAlreadyRegistered);
+    // LAUNCHPAD-PATH §40: every pair is winner-takes-the-burn — the two coins must be paired (link_pair, the Pair as witness) first.
+    // Policy-2 coins can only be paired by link_pair (initialize_token refuses a partner for them), so PAIRED means "paired to the
+    // other mint of this Pair".
+    require!(c.pair_state == PAIR_STATE_PAIRED, BurnError::PairNotLinked);
     require_fixed_supply(&a.mint)?;
     let mint = c.mint;
 

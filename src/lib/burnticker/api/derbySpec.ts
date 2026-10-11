@@ -27,6 +27,7 @@ export const DERBY_SCHEMAS: Record<string, Schema> = {
     pairId: str, selector: { enum: ["coinvs", "price"] }, series: str, window: str, measure: str, flip: bool, symbols: obj({ a: str, b: nstr }, ["a"]),
     season: obj({ start: str, days: int, endsOn: str, over: bool, windows: int, windowsDone: int }, ["start", "days", "endsOn", "over"]),
     score: obj({ a: int, b: int, ties: int, withheld: int, dayNumber: int }, ["a", "b", "ties", "withheld", "dayNumber"]),
+    forwarded: { ...obj({ aToB: str, bToA: str, windows: int }, ["aToB", "bToA", "windows"]), description: "since 1.10.0 (winner takes the burn): the SOL each side's lost windows moved to the other side's burn pool, and how many windows forwarded" },
     days: arr(ref("DerbyDay")), retired: obj({ a: nstr, b: nstr }), note: str,
   }, ["pairId", "selector", "series", "season", "score", "days"], { description: "A Burn Derby pair: the running score (the receipts' tally), the day-by-day strip with both readings and proof links, the season end" }),
   DerbyTournament: obj({

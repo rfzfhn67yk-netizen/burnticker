@@ -30,6 +30,8 @@ export interface DerbyPairJson {
   symbols: { a: string; b: string | null };
   season: { start: string; days: number; endsOn: string; over: boolean; windows: number; windowsDone: number };
   score: { a: number; b: number; ties: number; withheld: number; dayNumber: number };
+  /** Winner takes the burn (2026-10-11): the fuel each side's lost windows moved to the other side's burn pool (SOL, from the forwarded receipts). */
+  forwarded: { aToB: string; bToA: string; windows: number };
   days: DerbyDayJson[];
   retired: { a: string | null; b: string | null };
   note: string;
@@ -64,7 +66,7 @@ export function proofLinks(row: WindowRow): ProofLink[] {
   return out;
 }
 
-type RJ = Pick<ReceiptJson, "eventId" | "status" | "burned" | "signature" | "txUrl" | "units">;
+type RJ = Pick<ReceiptJson, "eventId" | "status" | "burned" | "signature" | "txUrl" | "units"> & Partial<Pick<ReceiptJson, "spent">>;
 const rcpt = (r: RJ | undefined) => (r ? { status: r.status, burned: r.burned, signature: r.signature, txUrl: r.txUrl } : null);
 
 /** The derby block of a pair page; null when the pair is not a derby pair. */
@@ -90,14 +92,17 @@ export function derbyPairJson(reg: Pick<Registry, "token" | "lockedRule" | "getS
     };
   });
   // The running score is the receipts' tally: a burn day per side (a receipt with units), ties (void receipts), withheld windows.
-  const burnDay = (r: RJ | undefined) => !!r && r.units > 0 && r.status !== "voided" && r.status !== "pending-pair";
+  // a forwarded receipt is a LOST window (its fuel moved to the winner) — not a burn day for that side
+  const burnDay = (r: RJ | undefined) => !!r && r.units > 0 && r.status !== "voided" && r.status !== "pending-pair" && r.status !== "forwarded";
+  const fwdSum = (m: Map<string, RJ>) => { let l = 0, n = 0; for (const r of m.values()) if (r.status === "forwarded") { n++; l += Math.round(Number(r.spent ?? "0") * 1e9); } return { sol: (l / 1e9).toString(), n }; };
+  const fa = fwdSum(ra), fb = fwdSum(rb);
   const score = { a: days.filter((x) => x.eventId && burnDay(ra.get(x.eventId))).length, b: days.filter((x) => x.eventId && burnDay(rb.get(x.eventId))).length, ties: days.filter((x) => x.winner === "tie").length, withheld: days.filter((x) => x.status === "withheld").length, dayNumber: Math.max(0, ...days.map((x) => x.day)) };
   const endsOn = addDays(d.season.start, d.season.days);
   return {
     pairId: pair.pairId, selector: d.selector, series: pair.selectorKey.replace(/^derby:/, ""), window: d.window, measure: d.selector === "coinvs" ? d.measure : "pct", flip: d.selector === "coinvs" && d.flip,
     symbols: { a: d.selector === "coinvs" ? d.a.symbol : d.u.symbol, b: d.selector === "coinvs" ? d.b.symbol : null },
     season: { start: d.season.start, days: d.season.days, endsOn, over: now >= seasonEndMs(d), windows: windows.length, windowsDone: days.length },
-    score, days: days.sort((x, y) => (x.at < y.at ? -1 : 1)),
+    score, forwarded: { aToB: fa.sol, bToA: fb.sol, windows: fa.n + fb.n }, days: days.sort((x, y) => (x.at < y.at ? -1 : 1)),
     retired: { a: ta.status === "retired" ? retiredReasonOf(reg, ta.mint) ?? "retired" : null, b: tb.status === "retired" ? retiredReasonOf(reg, tb.mint) ?? "retired" : null },
     note: d.selector === "coinvs" ? "the winner's coin burns; a tie burns neither (a void receipt still posts); a withheld window (the cross-read disagreed or a value was missing) burns nothing" : "each side counts its own direction of the move; a withheld window burns nothing",
   };

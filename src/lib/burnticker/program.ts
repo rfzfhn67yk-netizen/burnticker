@@ -9,6 +9,7 @@ import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { solToLamports } from "@/lib/burnKeeper/rules";
 import { DECIMALS, TOTAL_SUPPLY, ruleMappings, type BurnRule, type RuleMode } from "@/lib/burnticker/rules";
 import { FakeLockFees, fakeLockAddress, operatorTreasuryFor, type LockFeesClient } from "@/lib/burnticker/lockFees";
+import { FakePairForward, type PairForwardClient } from "@/lib/burnticker/pairForward";
 
 /**
  * THE RECEIPTS PROGRAM, FROM THE BURNTICKER KEEPER'S SIDE (2026-10-10). Every registered token runs on the deployed burn_receipts
@@ -55,6 +56,10 @@ export interface InitializeTokenInput {
   vault: string | null;
   /** The locked rule (the counter mapping needs its fractions / token counts). */
   rule?: BurnRule;
+  /** Winner takes the burn: the partner coin's mint (initialize_token's pair_mint; the first coin is provisional for 7 days). */
+  pairMint?: string | null;
+  /** The second coin of a pair: the partner's TokenConfig exists, so this initialize_token completes the pairing. */
+  partnerFirst?: boolean;
 }
 
 export interface BurnProgramClient {
@@ -78,6 +83,11 @@ export interface BurnProgramClient {
    * the permissionless 80/20 claim. Optional: absent until the program change is bound, and the keeper then skips the claim crank.
    */
   readonly lockFees?: LockFeesClient;
+  /**
+   * WINNER TAKES THE BURN (2026-10-11, pairForward.ts): pair links, per-period PairResults (submit_pair_result) and forward_to_winner.
+   * Optional: absent until the program change is bound; the keeper then plans no forwards (each coin burns its own fuel).
+   */
+  readonly pairForward?: PairForwardClient;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -176,7 +186,9 @@ export class FakeBurnProgram implements BurnProgramClient {
   now: () => number = () => Date.now();
   /** The locked-LP fee claims in memory (lockFees.ts FakeLockFees): a claim's 80 % lands in the coin's fake fee PDA. */
   readonly lockFees: FakeLockFees;
-  constructor(cluster = "localnet") { this.cluster = cluster; this.lockFees = new FakeLockFees(this.programId, cluster, operatorTreasuryFor(cluster) ?? fakeLockAddress("fake operator treasury"), (mint, l) => { this.tokens.get(mint)?.deposit(l); }); }
+  /** The pair rules in memory (pairForward.ts FakePairForward): results, forwards and each paired coin's crank gate. */
+  readonly pairForward: FakePairForward;
+  constructor(cluster = "localnet") { this.cluster = cluster; this.pairForward = new FakePairForward((m) => this.fake(m), () => this.now()); this.lockFees = new FakeLockFees(this.programId, cluster, operatorTreasuryFor(cluster) ?? fakeLockAddress("fake operator treasury"), (mint, l) => { this.tokens.get(mint)?.deposit(l); }); }
 
   /** Creator fees / a seed arriving in the token's fee PDA. */
   deposit(mint: string, lamports: bigint): void { this.fake(mint).deposit(lamports); }

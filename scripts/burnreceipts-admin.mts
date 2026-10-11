@@ -19,6 +19,16 @@
 //   claim-lock-fees            --mint <pubkey>  collects the locked LP's fees: SOL 80 % to the fee PDA, 20 % to
 //                              the compiled operator treasury; the coin side burned (default: everything accrued)
 //   check-pool-health          --mint <pubkey>
+//   submit-reading             --mint <pubkey> --date YYYYMMDD --value <raw integer> --attester <keypath>... [--source-url <url>]
+//                              (what the keeper does: the quorum signs the canonical message; Ed25519SigVerify + submit_reading)
+//   crank                      --mint <pubkey>   the next reading in line (keeper plan: no-units / buyback / for a paired coin that
+//                              lost the period, forward_to_winner; a paired coin's buyback passes its PairLink + PairResult)
+//   LAUNCHPAD-PATH §40 — winner takes the burn:
+//   link-pair                  --pair <pair_curve Pair pubkey>   (link_pair: the Pair witnesses both mints; before register_pair_pool)
+//   submit-pair-result         --mint-a <pubkey> --mint-b <pubkey> --date YYYYMMDD --winner <mint|draw> --attester <keypath>...
+//                              [--source-url <url>]   (a quorum of EACH coin's attesters signs BURNRECEIPTS-PAIR-v1|…)
+//   forward-to-winner          --loser <mint> --winner <mint> --date YYYYMMDD   (the loser's fuel for the period → the winner's fee PDA)
+//   pair-status                --mint <pubkey> [--date YYYYMMDD]   READ-ONLY: pair_state, the PairLink, the period's PairResult
 //   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
 //                              (the cap is always the 25 SOL default at creation; ≤ 3 crankers, enforced only while the cap is in force)
 //   set-registration-policy    --mint <pubkey> --admin <keypath|pubkey> --policy 0|1 [--pool <pubkey>]   (48 h timelock; stranding recovery)
@@ -52,18 +62,20 @@ import { Connection, Keypair, PublicKey, TransactionMessage, VersionedTransactio
 import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { decodeType } from "../src/lib/burnReceipts/idlCoder.ts";
 import { decodeLockedLiquidity, decodePlatformConfig, decodeTokenConfig, fetchFeeKeyRecord, fetchTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
-import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURN_RECEIPTS_TEST_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, MODE_BUYBACK, OPERATOR_TREASURY, POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_FIXED } from "../src/lib/burnReceipts/constants.ts";
-import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, createAtaIdempotentIx, initializePlatformIx, initializeTokenIx, operatorAttester, registerPoolIx, setRegistrationPolicyIx, vetoRegistrationPolicyIx } from "../src/lib/burnReceipts/instructions.ts";
+import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURN_RECEIPTS_TEST_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, assertSignableGenesis, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, MODE_BUYBACK, OPERATOR_TREASURY, POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_FIXED } from "../src/lib/burnReceipts/constants.ts";
+import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, createAtaIdempotentIx, initializePlatformIx, initializeTokenIx, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx } from "../src/lib/burnReceipts/instructions.ts";
 import { verifyPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
 import { checkLpLockPins } from "../src/lib/burnticker/lpLockPins.ts";
-import { associatedTokenAddress, configPda, cpmmPoolPda, feeKeyRecordPda, launchlabMigrationLocker, feeKeysPda, feePda, feeWsolAddress, platformPda } from "../src/lib/burnReceipts/pda.ts";
+import { associatedTokenAddress, configPda, cpmmPoolPda, feeKeyRecordPda, launchlabMigrationLocker, feeKeysPda, feePda, feeWsolAddress, platformPda, readingPda } from "../src/lib/burnReceipts/pda.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
+import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, linkPairIx, PAIR_STATE_PAIRED, pairLinkPda, pairResultFor, pairResultPda, submitPairResultIx } from "../src/lib/burnReceipts/pairs.ts";
+import { attestReading, sourceUrlHash } from "../src/lib/burnReceipts/attestation.ts";
 import { fetchCpmmPool } from "../src/lib/burnReceipts/cpmm.ts";
-import { confirmByPolling, poolAccountsOrStandIns, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
+import { confirmByPolling, planCrank, poolAccountsOrStandIns, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 
 const args = process.argv.slice(2);
-const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees"] as const;
+const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "pair-status"] as const;
 type Command = (typeof COMMANDS)[number];
 const CMD = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : null;
 const flag = (n: string) => args.includes(`--${n}`);
@@ -182,6 +194,16 @@ if (CMD === "verify-platform-pins") {
   say("platform pins hold: platformCpCreator, LP lock/burn scales and cpConfigId are as pinned at initialize_token; 100 % of the LP is locked and the Fee Key goes to the fee-keys PDA");
   process.exit(0);
 }
+// READ-ONLY (no payer): LAUNCHPAD-PATH §40 pair state.
+if (CMD === "pair-status") {
+  const mint = pubkeyOf(opt("mint"), "--mint") ?? die("--mint <pubkey> is required");
+  const cfg = (await fetchTokenConfig(connection, programId, mint)) ?? die(`no TokenConfig for ${mint.toBase58()}`);
+  const link = await fetchPairLink(connection, programId, mint);
+  const d = opt("date") ? Number(opt("date")) : null;
+  const result = link && d ? await fetchPairResult(connection, programId, mint, link.pair_mint, d) : null;
+  console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), pair_state: cfg.config.pair_state, link, date: d, result, view: d ? pairResultFor(result, mint) : null }), null, 2));
+  process.exit(0);
+}
 const payer: Party = (await party("payer", false)) ?? (CMD === "initialize-platform" ? await party("upgrade-authority") : CMD === "set-registration-policy" || CMD === "cancel-registration-policy" ? await party("admin") : CMD === "veto-registration-policy" ? await party("attester") : null) ?? die("--payer <keypath|pubkey> is required");
 const mintArg = (): PublicKey => pubkeyOf(opt("mint"), "--mint") ?? die("--mint <pubkey> is required");
 const tokenWatch = (mint: PublicKey): Watch[] => [{ address: configPda(programId, mint), kind: "TokenConfig" }, { address: feePda(programId, mint), kind: "lamports" }];
@@ -259,6 +281,79 @@ if (CMD === "claim-lock-fees") {
   const p = await fetchCpmmPool(connection, rec.record.pool, CPMM_PROGRAM_ID[cluster]);
   const ix = claimLockFeesIx({ programId, cranker: payer.publicKey, mint, feeNftMint: rec.record.fee_nft_mint, pool: { pool: p.address, lpMint: p.lpMint, token0Vault: p.token0Vault, token1Vault: p.token1Vault }, cluster });
   await run([ix], payer, [], [{ address: feePda(programId, mint), kind: "lamports" }, { address: OPERATOR_TREASURY[cluster], kind: "lamports" }, { address: feeKeyRecordPda(programId, mint), kind: "lamports" }], { feeNftMint: rec.record.fee_nft_mint.toBase58(), lockedLiquidity: rec.record.locked_liquidity.toBase58(), treasury: OPERATOR_TREASURY[cluster].toBase58() });
+}
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Readings, cranks and LAUNCHPAD-PATH §40 pairs
+// ---------------------------------------------------------------------------------------------------------------------------------
+async function attesterKeys(): Promise<{ publicKey: PublicKey; secretKey: Uint8Array }[]> {
+  const files = opts("attester");
+  if (files.length === 0) die("--attester <keypath> is required (one per signing attester)");
+  const { loadKeypair } = await import("../src/lib/burnKeeper/keyfile.ts");
+  return files.map((f) => {
+    if (!fs.existsSync(f)) die(`--attester ${f}: not a key file`);
+    const k = loadKeypair({ keyPath: f });
+    return { publicKey: k.publicKey, secretKey: k.secretKey };
+  });
+}
+const dateArg = (): number => {
+  const d = Number(opt("date") ?? die("--date YYYYMMDD is required"));
+  if (!Number.isInteger(d) || d < 19700101 || d > 29991231) die("--date must be YYYYMMDD");
+  return d;
+};
+async function signableGenesis(mint: PublicKey): Promise<string> {
+  const cfg = (await fetchTokenConfig(connection, programId, mint)) ?? die(`no TokenConfig for ${mint.toBase58()}`);
+  const genesis = cfg.config.cluster_genesis.toBase58();
+  assertSignableGenesis(genesis, cluster, await connection.getGenesisHash());
+  return genesis;
+}
+if (CMD === "submit-reading") {
+  const mint = mintArg();
+  const recordDate = dateArg();
+  const value = BigInt(opt("value") ?? die("--value <raw integer> is required"));
+  const cfg = (await fetchTokenConfig(connection, programId, mint)) ?? die(`no TokenConfig for ${mint.toBase58()}`);
+  const genesis = await signableGenesis(mint);
+  const src = sourceUrlHash(opt("source-url") ?? `burnticker:${cfg.config.feedId}:${recordDate}`);
+  const att = attestReading({ genesisHash: genesis, programId, mint, feedId: cfg.config.feedId, prevDate: cfg.config.has_baseline ? cfg.config.last_record_date : 0, recordDate, value, valueDecimals: cfg.config.rule.value_decimals, sourceUrlHash: src, signers: await attesterKeys() });
+  await run([att.instruction, submitReadingIx({ programId, payer: payer.publicKey, mint, recordDate, value, sourceUrlHash: src })], payer, [], [...tokenWatch(mint), { address: readingPda(programId, configPda(programId, mint), recordDate), kind: "lamports" }], { message: att.message.toString("utf8") });
+}
+if (CMD === "crank") {
+  const mint = mintArg();
+  const plan = await planCrank({ connection, programId, mint, cluster }, payer.publicKey);
+  if ("status" in plan) { console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), plan }), null, 2)); process.exit(0); }
+  const cfg = (await fetchTokenConfig(connection, programId, mint))!;
+  const watch: Watch[] = [...tokenWatch(mint), { address: feePda(programId, mint), kind: "lamports" }];
+  if (cfg.config.pair_state === PAIR_STATE_PAIRED) {
+    const link = (await fetchPairLink(connection, programId, mint))!;
+    watch.push({ address: feePda(programId, link.pair_mint), kind: "lamports" });
+  }
+  await run(plan.instructions, payer, [], watch, { kind: plan.kind, recordDate: plan.recordDate });
+}
+if (CMD === "link-pair") {
+  const pair = pubkeyOf(opt("pair"), "--pair") ?? die("--pair <pubkey> is required");
+  const info = (await connection.getAccountInfo(pair, "confirmed")) ?? die(`no account at ${pair.toBase58()}`);
+  const d = Buffer.from(info.data);
+  if (d.length < 76) die("not a pair_curve Pair");
+  const [mintA, mintB] = [new PublicKey(d.subarray(12, 44)), new PublicKey(d.subarray(44, 76))];
+  await run([linkPairIx({ programId, payer: payer.publicKey, pair, mintA, mintB })], payer, [], [...tokenWatch(mintA), ...tokenWatch(mintB), { address: pairLinkPda(programId, mintA), kind: "lamports" }, { address: pairLinkPda(programId, mintB), kind: "lamports" }], { mintA: mintA.toBase58(), mintB: mintB.toBase58(), linkA: pairLinkPda(programId, mintA).toBase58(), linkB: pairLinkPda(programId, mintB).toBase58() });
+}
+if (CMD === "submit-pair-result") {
+  const mintA = pubkeyOf(opt("mint-a"), "--mint-a") ?? die("--mint-a is required");
+  const mintB = pubkeyOf(opt("mint-b"), "--mint-b") ?? die("--mint-b is required");
+  const recordDate = dateArg();
+  const w = opt("winner") ?? die("--winner <mint|draw> is required");
+  const winner = w === "draw" ? null : (pubkeyOf(w, "--winner") as PublicKey);
+  const genesis = await signableGenesis(mintA);
+  if ((await signableGenesis(mintB)) !== genesis) die("the two coins bind different genesis hashes");
+  const src = sourceUrlHash(opt("source-url") ?? `burnticker:pair:${mintA.toBase58()}:${mintB.toBase58()}:${recordDate}`);
+  const att = attestPairResult({ genesisHash: genesis, programId, mintA, mintB, recordDate, winner, sourceUrlHash: src, signers: await attesterKeys() });
+  const address = pairResultPda(programId, mintA, mintB, recordDate);
+  await run([att.instruction, submitPairResultIx({ programId, payer: payer.publicKey, mintA, mintB, recordDate, winner, sourceUrlHash: src })], payer, [], [{ address, kind: "lamports" }], { pairResult: address.toBase58(), message: att.message.toString("utf8") });
+}
+if (CMD === "forward-to-winner") {
+  const loser = pubkeyOf(opt("loser"), "--loser") ?? die("--loser <mint> is required");
+  const winner = pubkeyOf(opt("winner"), "--winner") ?? die("--winner <mint> is required");
+  const recordDate = dateArg();
+  await run([forwardToWinnerIx({ programId, cranker: payer.publicKey, loserMint: loser, winnerMint: winner, recordDate })], payer, [], [{ address: feePda(programId, loser), kind: "lamports" }, { address: feePda(programId, winner), kind: "lamports" }, { address: pairResultPda(programId, loser, winner, recordDate), kind: "lamports" }], { pairResult: pairResultPda(programId, loser, winner, recordDate).toBase58() });
 }
 if (CMD === "check-pool-health") {
   const mint = mintArg();

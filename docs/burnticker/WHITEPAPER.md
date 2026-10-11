@@ -340,7 +340,9 @@ disappears at its sunset. It protects against program bugs, not against the oper
 upgrade authority is finalised.
 
 Every state change emits an event through `emit_cpi!` (inner-instruction data, not truncatable logs), so an indexer can rebuild state
-(26 event types, §13.3).
+(32 event types, §13.3). The one exception is `PairResultSubmitted`, a plain `emit!` log event ("Program data:" in the transaction's
+logs): `submit_pair_result` carries both coins' attester signatures and has no room for the self-CPI accounts. The PairResult account it
+writes is the durable record.
 
 ## 5. Rivalry pairs
 
@@ -450,6 +452,33 @@ curves under the rules-level "both or neither" clause of §5.1.
 - **Powers**: none over funds. No admin, no parameter update, no withdraw; the upgrade authority is the same Squads vault as
   `burn_receipts`, to be finalised before the first public pair (`docs/burn-receipts/pair-curve-powers-register.md`). Two blind reviews
   (2026-10-10) found five High issues in the first version; all are fixed and re-run on devnet (`docs/burn-receipts/CHANGELOG.md`).
+### 5.5 Winner takes the burn
+
+The owner's decision of 2026-10-11 (LAUNCHPAD-PATH §40): "the fees for both the winner and loser should burn the winner's supply." Every
+pair made since carries `pair.winnerTakesBurn: true` in both sides' canonical rules (inside each hash; pairs made before keep their bytes).
+
+- **Pairing on chain.** A LaunchLab pair names each other in `initialize_token` (`pair_mint`): side A is provisional until side B names it
+  back within 7 days, else both are plain coins for good (the keeper alerts `pair-unmatched` daily meanwhile). A `pair_curve` pair is
+  linked by the permissionless `link_pair`, with the Pair account as the witness; `register_pair_pool` refuses until it has run.
+- **Each result.** A quorum of each coin's attesters signs one PairResult `["pair_result", mint_lo, mint_hi, date]` naming the winner — the
+  coin whose rule the result fires — or a draw. The loser's `crank_buyback` for that period refuses (`ForwardRequired`); the permissionless
+  `forward_to_winner` moves exactly what the loser's own rule would have spent, `buyback_spend(min(spendable pool, cap), units, f)` with
+  the loser's units and fraction (nothing below the rule's minimum spend; a one-shot pair maps 100 %, so all of it), from the loser's burn pool into the
+  winner's, and writes the memo `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. The loser's reading is processed
+  with outcome 6 (forwarded). The winner's ordinary cranks then spend its pool on the winner's coin and burn what they get.
+- **What does not happen.** The loser's supply is untouched and nobody is paid: SOL moves between two program PDAs that have no withdraw
+  path. A draw or a void forwards nothing; each coin burns its own fuel. With no result 72 h after the loser's reading, the coin cranks
+  as unpaired and that period can no longer forward (the keeper alerts `pair-result-missing` 12 h after the reading).
+- **Order.** The keeper attests both coins' readings, posts the PairResult, runs the loser's forward and only then the winner's crank, so
+  the forwarded fuel is in the pool that crank spends. After a one-shot pair's result, whatever reaches the loser's burn pool later (its
+  end-of-rule burns and sweeps) forwards to the winner while the winner is live; on such a day the keeper attests a flat reading (0 units)
+  for the winner, because `forward_to_winner` takes the winner's reading for the same date.
+- **Receipts.** The loser's receipt shows `forwarded` with the SOL moved; the receipt line reads "forwarded from $LOSER: N SOL → $WINNER
+  burn pool"; the registry keeps an append-only `pair_forwards` table; the pair page tallies "burned on A / burned on B / forwarded A→B /
+  B→A", and the Burn Derby scoreboard counts forwarded fuel. Devnet, 2026-10-11 (pair 6): one forward moved exactly 79,306,876 lamports
+  from side B to side A, and side A's paired cranks then burned its coin
+  (`docs/burnkeeper/evidence/devnet-pair-forward-2026-10-11/`).
+
 ## 6. Economics
 
 Fee dials were read from the pinned Raydium SDK, Raydium's documentation and the live config accounts (`docs/burnkeeper/fees.md`;
@@ -470,6 +499,10 @@ designed values in `src/lib/burnticker/fees.ts`).
   field can change the split. Per swap after graduation that is ≈ 21.55 bps toward the burn (16.8 + 4.75; it was 4.75 with the LP
   burned) and 4.2 bps to the operator: **the operator earns 20 % of post-graduation LP fees.** On mainnet the treasury is not compiled
   in yet; until it is, every claim refuses `TreasuryNotPinned` and the fees stay in the lock.
+- **Rivalry pairs: winner takes the burn** (owner decision 2026-10-11, §5.5). In a pair, fees from both coins burn the winner's supply: at
+  each result the loser's burn-pool spend for that result moves to the winner's burn pool (`forward_to_winner`) instead of buying the
+  loser's coin. It changes where a pair's burn-pool SOL is spent, not any fee rate above; no one is paid and the operator takes nothing
+  from a forward.
 - **Creators earn no cash from fees.** The creator-fee slot pays the burn pool, 100 %, by construction: the fee PDA is the creator.
 - **No team allocation** on any coin. The program has no mint path; supply is LaunchLab's fixed 1,000,000,000 at 6 decimals.
 - **Seed deposits are gifts.** $DEFICIT's planned 3 SOL seed to its burn pool is disclosed and carries no claim.
@@ -660,7 +693,7 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 - **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
   `crankers[3]`, `cranker_count`, reserved.
 
-### 13.3 Instructions (26, generated from `src/lib/burnReceipts/idl.ts`)
+### 13.3 Instructions (29, generated from `src/lib/burnReceipts/idl.ts`)
 
 | Instruction | Arguments | Signers | Class |
 |---|---|---|---|
@@ -673,6 +706,9 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 | `claim_launchlab_creator_fee` | — | payer | permissionless |
 | `register_pool` | — | registrar | permissionless |
 | `register_pair_pool` | — | registrar | permissionless |
+| `link_pair` | — | payer | permissionless |
+| `submit_pair_result` | record_date, winner, source_url_hash, proof_hash | payer (+ both coins' quorums via Ed25519) | permissionless |
+| `forward_to_winner` | record_date | cranker | permissionless |
 | `register_fee_key` | — | payer | permissionless |
 | `claim_lock_fees` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `check_pool_health` | — | caller | permissionless |
@@ -691,11 +727,11 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 | `renounce_platform_authority` | — | authority | privileged |
 | `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
 
-Events (28): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound,
-BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered,
-LaunchLabCreatorFeeClaimed, LockFeesClaimed, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged,
+Events (32): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound,
+BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered, ForwardedToWinner,
+LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairLinked, PairResultMissing, PairResultSubmitted (plain `emit!`), PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged,
 ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed,
-SpendCapBound, SpendCarried, TokenInitialized. Error codes: 77.
+SpendCapBound, SpendCarried, TokenInitialized. Error codes: 90.
 
 `pair_curve` (`src/lib/pairCurve/idl.ts`): `init_pair` (args; payer, creator — creation), the two curve-trade instructions (side, an
 amount, a slippage bound; the trader signs), `graduate` (side; cranker), `lock_lp` (side; cranker — locks the side's LP forever, Fee

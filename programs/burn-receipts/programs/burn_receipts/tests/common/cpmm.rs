@@ -327,6 +327,12 @@ fn ix_swap_raw(trader_key: &Pubkey, p: &Pool, mint: &Pubkey, buy: bool, amount_i
 }
 
 pub fn ix_crank_buyback(cranker: &Pubkey, mint: &Pubkey, p: &Pool, date: u32) -> Instruction {
+    ix_crank_buyback_paired(cranker, mint, p, date, None)
+}
+
+/// crank_buyback for a PAIRED coin (LAUNCHPAD-PATH §40): `partner` = the partner mint (the PairLink and the period's PairResult
+/// are passed).
+pub fn ix_crank_buyback_paired(cranker: &Pubkey, mint: &Pubkey, p: &Pool, date: u32, partner: Option<Pubkey>) -> Instruction {
     let config = config_pda(mint);
     let fee = fee_pda(mint);
     Instruction::new_with_bytes(
@@ -348,6 +354,8 @@ pub fn ix_crank_buyback(cranker: &Pubkey, mint: &Pubkey, p: &Pool, date: u32) ->
             wsol_vault: p.wsol_vault(),
             token_vault: p.token_vault(),
             observation_state: p.observation,
+            pair_link: partner.map(|_| pair_link_pda(mint)),
+            pair_result: partner.map(|q| pair_result_pda(mint, &q, date)),
             cpmm_program: CPMM_PROGRAM_ID,
             token_program: spl_token::ID,
             system_program: anchor_lang::solana_program::system_program::ID,

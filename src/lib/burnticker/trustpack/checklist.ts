@@ -39,6 +39,7 @@ export const OUTFLOW = {
   devClaim: "the accrued 25 bps → the developer wallet fixed at init",
   lockFees: "the locked LP's fees → 80 % to the burn pool, 20 % to the operator treasury (compiled); the coin side burned",
   lock: "the pool's LP → Raydium's lock, forever (the Fee Key held by burn_receipts)",
+  forwardWinner: "a paired coin's fuel for a period it lost → the winner's burn pool (formula amount, then burned by the winner's cranks)",
   lpBurnFallback: "fallback only, if lock_lp cannot run for 30 days: burn_lp destroys the side's LP (no LP fees then)",
 } as const;
 export type OutflowClass = keyof typeof OUTFLOW;
@@ -49,7 +50,7 @@ export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowC
     apply_attester_change: "none", apply_cap_raise: "none", apply_registration_policy: "none", cancel_attester_change: "none", cancel_cap_raise: "none",
     cancel_registration_policy: "none", check_pool_health: "none", claim_launchlab_creator_fee: "intoPool", claim_lock_fees: "lockFees", clear_cranker_allowlist: "none",
     crank_buyback: "swapBurn", crank_no_units: "none", crank_vault: "burn", initialize_platform: "rent", initialize_token: "rent", propose_attesters: "none",
-    propose_cap_raise: "none", register_fee_key: "rent", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
+    propose_cap_raise: "none", register_fee_key: "rent", link_pair: "rent", submit_pair_result: "rent", forward_to_winner: "forwardWinner", register_pair_pool: "none", register_pool: "none", renounce_admin: "none", renounce_platform_authority: "none", replace_pool: "none",
     set_registration_policy: "none", submit_reading: "rent", veto_registration_policy: "none",
   },
   pair_curve: { buy: "trade", sell: "trade", graduate: "graduate", close_pair: "close", init_pair: "rent", void_pair: "none", claim_developer_fee: "devClaim", lock_lp: "lock", burn_lp: "lpBurnFallback" },

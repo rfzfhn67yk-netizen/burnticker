@@ -214,6 +214,9 @@ fn setup(env: &mut Env, pool_fee: u64, f: impl FnOnce(&mut InitPairArgs)) -> P {
     f(&mut args);
     let ix = ix_init_pair(env, &p, args);
     let meta = env.ok(&[ix], &[&p.creator]);
+    // LAUNCHPAD-PATH §40: every pair is winner-takes-the-burn — link the two coins (the Pair is the witness).
+    let payer_pk = env.payer.pubkey();
+    env.ok(&[ix_link_pair(&payer_pk, &p.pair, &p.mint(0), &p.mint(1))], &[]);
     println!("init_pair CU: {}", meta.compute_units_consumed);
     p
 }

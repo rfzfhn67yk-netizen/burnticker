@@ -124,8 +124,9 @@ describe("both or neither", () => {
     seedAll(w);
     await runCycle(w.deps);
     const st = (m: string) => w.registry.receipts(m).filter((r) => r.kind !== "winddown").map((r) => `${r.eventId.slice(0, 10)}:${r.status}`);
-    assert.deepEqual(st(w.a.mint), ["2026-10-05:pending-pair", "2026-10-06:nothing", "2026-10-07:void", "2026-10-10:pending-pair", "2026-10-11:void"]);
-    assert.deepEqual(st(w.b.mint), ["2026-10-05:nothing", "2026-10-06:pending-pair", "2026-10-07:void", "2026-10-10:nothing", "2026-10-11:void"]);
+    // winner takes the burn: a lost window is a forward that waits for both pools too
+    assert.deepEqual(st(w.a.mint), ["2026-10-05:pending-pair", "2026-10-06:pending-pair", "2026-10-07:void", "2026-10-10:pending-pair", "2026-10-11:void"]);
+    assert.deepEqual(st(w.b.mint), ["2026-10-05:pending-pair", "2026-10-06:pending-pair", "2026-10-07:void", "2026-10-10:pending-pair", "2026-10-11:void"]);
     assert.equal(w.registry.pairOutcome(w.pairId), null);
     w.program.fake(w.a.mint).registerPool();
     await runCycle(w.deps);
@@ -133,11 +134,11 @@ describe("both or neither", () => {
     w.program.fake(w.b.mint).registerPool();
     await runCycle(w.deps); await runCycle(w.deps);
     assert.equal(w.registry.pairOutcome(w.pairId)!.state, "live");
-    assert.deepEqual(st(w.a.mint), ["2026-10-05:confirmed", "2026-10-06:nothing", "2026-10-07:void", "2026-10-10:confirmed", "2026-10-11:void"]);
-    assert.deepEqual(st(w.b.mint), ["2026-10-05:nothing", "2026-10-06:confirmed", "2026-10-07:void", "2026-10-10:nothing", "2026-10-11:void"]);
+    assert.deepEqual(st(w.a.mint), ["2026-10-05:confirmed", "2026-10-06:forwarded", "2026-10-07:void", "2026-10-10:confirmed", "2026-10-11:void"]);
+    assert.deepEqual(st(w.b.mint), ["2026-10-05:forwarded", "2026-10-06:confirmed", "2026-10-07:void", "2026-10-10:forwarded", "2026-10-11:void"]);
     const dates = w.registry.receipts(w.a.mint).filter((r) => r.status === "confirmed").map((r) => r.readingDate!);
     assert.deepEqual(dates, [...dates].sort((x, y) => x - y), "executed in settlement order");
-    assert.ok(w.logs.some((l) => /LIVE — both pools registered; 3 pending-pair receipt\(s\) now planned/.test(l)), w.logs.filter((l) => l.includes("[pair]")).join("\n"));
+    assert.ok(w.logs.some((l) => /LIVE — both pools registered; 6 pending-pair receipt\(s\) now planned/.test(l)), w.logs.filter((l) => l.includes("[pair]")).join("\n"));
   });
 
   test("one side still unregistered when voidBy ends: the pair voids — pending receipts voided, no event burn ever; the rule ends and both pools wind down (executed where a pool exists)", async () => {

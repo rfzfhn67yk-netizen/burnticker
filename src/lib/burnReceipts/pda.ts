@@ -64,3 +64,21 @@ export const feeKeyRecordPda = (programId: PublicKey, mint: PublicKey): PublicKe
 export const lockedLiquidityPda = (cluster: Cluster, feeNftMint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([LOCKED_LIQUIDITY_SEED, feeNftMint.toBuffer()], LOCK_CPMM_PROGRAM_ID[cluster])[0];
 /** FEE_KEYS's account holding a Fee Key NFT. */
 export const feeNftAccount = (programId: PublicKey, feeNftMint: PublicKey): PublicKey => associatedTokenAddress(feeKeysPda(programId), feeNftMint);
+
+// LAUNCHPAD-PATH §40 (winner takes the burn). Seeds = the program's PAIR_LINK_SEED / PAIR_RESULT_SEED (pairs.ts checks them against the IDL).
+
+/** (lo, hi) by raw 32-byte comparison — the order of the PairResult seeds and of submit_pair_result's config_lo / config_hi. */
+export function pairOrder(a: PublicKey, b: PublicKey): [PublicKey, PublicKey] {
+  return Buffer.compare(a.toBuffer(), b.toBuffer()) < 0 ? [a, b] : [b, a];
+}
+
+/** PairLink ["pair_link", mint]. */
+export const pairLinkPda = (programId: PublicKey, mint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([Buffer.from("pair_link", "utf8"), mint.toBuffer()], programId)[0];
+
+/** PairResult ["pair_result", mint_lo, mint_hi, record_date u32 LE] — the two mints in any order. */
+export function pairResultPda(programId: PublicKey, a: PublicKey, b: PublicKey, recordDate: number): PublicKey {
+  const [lo, hi] = pairOrder(a, b);
+  const d = Buffer.alloc(4);
+  d.writeUInt32LE(recordDate);
+  return PublicKey.findProgramAddressSync([Buffer.from("pair_result", "utf8"), lo.toBuffer(), hi.toBuffer(), d], programId)[0];
+}

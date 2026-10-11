@@ -20,6 +20,7 @@ export const FIELD_HELP = {
   "pair-window": { what: "This game only, this season, or perpetual.", does: "This game: each coin burns once if its team loses it. Season or perpetual: each coin follows its own team's games." },
   "pair-name": { what: "A name for this side's coin, up to 32 characters.", does: "Shown on the card and the coin page; it can't claim an affiliation and can't change after launch." },
   "pair-ticker": { what: "2 to 10 letters or digits for this side.", does: "The coin's symbol on chain; it must differ from the other side and from every coin already registered." },
+  "pair-burn": { what: "Nothing to set: every rivalry pair works this way (fixed in both rules).", does: "At each result the coin whose rule fires burns with fees from both coins: the other coin's fuel for that result moves to its burn pool. Nobody is paid; a draw or a void moves nothing." },
   "pair-image": { what: "Only on hosts that allow custom images: an https link to a square picture.", does: "Replaces the generated receipt art for this side; by default every coin uses the art made from its rule." },
   // ---- the rule
   side: { what: "Win, loss or draw for a team; YES or NO for a market.", does: "The outcome that burns. The other outcomes burn nothing." },

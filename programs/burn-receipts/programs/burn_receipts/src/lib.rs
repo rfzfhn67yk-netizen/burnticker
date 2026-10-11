@@ -12,7 +12,11 @@
 //!   claim_launchlab_creator_fee        permissionless: LaunchLab curve creator fee → the fee PDA's WSOL account (fee PDA signs)
 //!   submit_reading         permissionless; valid only with a quorum of attester ed25519 signatures over the canonical message
 //!                          (feed, period, value, source-URL hash, zkTLS proof locator)
-//!   crank_buyback          permissionless: spend → swap on CPMM → burn all received → memo v2
+//!   crank_buyback          permissionless: spend → swap on CPMM → burn all received → memo v2 (a paired coin that LOST the
+//!                          period's pair result refuses: its fuel is forwarded instead)
+//!   link_pair / submit_pair_result / forward_to_winner   LAUNCHPAD-PATH §40, winner takes the burn: pair two coins (pair_curve Pair
+//!                          witness; or both initialize_token calls name each other), attest a period's winner (quorum of each
+//!                          coin's attesters), move the loser's fuel for that period to the winner's fee PDA
 //!   crank_vault            permissionless: burn from the vault (shortfall carried) → memo v1
 //!   crank_no_units         permissionless: process a zero-unit reading that is next in line
 //!   propose_attesters / cancel_attester_change / renounce_admin    admin only (48 h timelock on proposals)
@@ -74,6 +78,21 @@ pub mod burn_receipts {
     /// Registration policy 2 (2026-10-10): the CPMM pool pair_curve's `graduate` created for this token (src/pair_curve.rs).
     pub fn register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
         instructions::register_pair_pool::handle_register_pair_pool(ctx)
+    }
+
+    /// LAUNCHPAD-PATH §40: pair the two coins of a pair_curve Pair (the Pair is the witness). Permissionless, idempotent.
+    pub fn link_pair(ctx: Context<LinkPair>) -> Result<()> {
+        instructions::pair::handle_link_pair(ctx)
+    }
+
+    /// LAUNCHPAD-PATH §40: one period's pair result (winner mint, or Pubkey::default() for a draw), a quorum of each coin's attesters.
+    pub fn submit_pair_result(ctx: Context<SubmitPairResult>, record_date: u32, winner: Pubkey, source_url_hash: [u8; 32], proof_hash: [u8; 32]) -> Result<()> {
+        instructions::pair::handle_submit_pair_result(ctx, record_date, winner, source_url_hash, proof_hash)
+    }
+
+    /// LAUNCHPAD-PATH §40: the loser's fuel for the period → the winner's fee PDA. Permissionless, idempotent.
+    pub fn forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32) -> Result<()> {
+        instructions::pair::handle_forward_to_winner(ctx, record_date)
     }
 
     pub fn check_pool_health(ctx: Context<CheckPoolHealth>) -> Result<()> {

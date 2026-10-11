@@ -67,4 +67,18 @@ describe("pair curve launch path", () => {
     assert.equal(out.keys[def.accounts.findIndex((a) => a.name === "launchlab_platform")].pubkey, platform.toBase58());
     assert.equal(toPairCurvePolicy({ ...ser, dataBase64: Buffer.from("{}").toString("base64") }, programId.toBase58(), platform.toBase58()), null);
   });
+
+  test("a LaunchLab pair bundle's pair_mint accounts are dropped for the pair curve (policy 2 pairs through link_pair; the program refuses InvalidPairMint)", () => {
+    const programId = new PublicKey("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
+    const mint = Keypair.generate().publicKey, partner = Keypair.generate().publicKey, creator = Keypair.generate().publicKey, platform = Keypair.generate().publicKey;
+    const rule = { mode: 0, carry_rule: 1, pool_policy: 0, value_decimals: 0, unit_value: BigInt(1), max_abs_delta: BigInt(1000), fraction_per_unit_bps: 200, slippage_bps: 300, max_twap_deviation_bps: 300, twap_window_secs: 600, floor_lamports: BigInt(1_000_000), reserve_lamports: BigInt(20_000_000), tokens_per_unit: BigInt(0), vault_allocation: BigInt(0) };
+    const args = { feed_id: "burnticker.counter", memo_prefix: "BT", memo_source: "burnticker counter", rules_sha256: new Uint8Array(32).fill(3), rule, attesters: [operatorAttester(creator)], quorum: 1, fixed_pool: PublicKey.default, admin: creator };
+    const ix = initializeTokenIx({ programId, payer: creator, creator, mint, args: args as never, pairMint: partner, partnerFirst: true });
+    const def = BURN_RECEIPTS_IDL.instructions.find((i) => i.name === "initialize_token")!;
+    const at = (name: string) => def.accounts.findIndex((a) => a.name === name);
+    assert.equal(ix.keys[at("pair_mint")].pubkey.toBase58(), partner.toBase58(), "the LaunchLab bundle names the partner");
+    const ser = { programId: programId.toBase58(), label: "burn_receipts.initialize_token", keys: ix.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(ix.data).toString("base64") };
+    const out = toPairCurvePolicy(ser, programId.toBase58(), platform.toBase58())!;
+    for (const n of ["pair_mint", "pair_link", "partner_link", "partner_config"]) assert.deepEqual(out.keys[at(n)], { pubkey: programId.toBase58(), isSigner: false, isWritable: false }, n);
+  });
 });

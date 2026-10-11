@@ -23,8 +23,10 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | burn_receipts | `crank_buyback` | anyone | **burn pool SOL → swap → every token received is burned** | Fee PDA SOL → its WSOL account → CPMM pool vault; tokens received → burned (supply reduced). |
 | burn_receipts | `crank_no_units` | anyone | **none** | None. |
 | burn_receipts | `crank_vault` | anyone | **vault tokens → burned** | Vault tokens → burned. |
+| burn_receipts | `forward_to_winner` | anyone | **a paired coin's fuel for a period it lost → the winner's burn pool (formula amount, then burned by the winner's cranks)** | Loser fee PDA SOL / WSOL → winner fee PDA SOL / WSOL account (then burned by the winner's cranks). |
 | burn_receipts | `initialize_platform` | anyone + upgrade_authority | **rent only (the caller pays it)** | Payer pays the PlatformConfig's rent. |
 | burn_receipts | `initialize_token` | anyone + creator + mint_keypair | **rent only (the caller pays it)** | Payer → fee PDA: the reserve only (rent for the PDA). |
+| burn_receipts | `link_pair` | anyone | **rent only (the caller pays it)** | Payer → the PairLinks' rent. |
 | burn_receipts | `propose_attesters` | config_authority | **none** | None. |
 | burn_receipts | `propose_cap_raise` | platform_authority | **none** | None. |
 | burn_receipts | `register_fee_key` | anyone | **rent only (the caller pays it)** | Payer → the record's rent. |
@@ -34,6 +36,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 | burn_receipts | `renounce_platform_authority` | platform_authority | **none** | None. |
 | burn_receipts | `replace_pool` | anyone | **none** | None. |
 | burn_receipts | `set_registration_policy` | config_authority | **none** | None. |
+| burn_receipts | `submit_pair_result` | anyone | **rent only (the caller pays it)** | Payer pays the PairResult account's rent (kept forever). |
 | burn_receipts | `submit_reading` | anyone | **rent only (the caller pays it)** | Payer pays the reading account's rent (kept forever; readings are never closed). |
 | burn_receipts | `veto_registration_policy` | attester_key | **none** | None. |
 | pair_curve | `burn_lp` | anyone | **fallback only, if lock_lp cannot run for 30 days: burn_lp destroys the side's LP (no LP fees then)** | Vault LP → burned; emptied LP account's rent → the side's burn pool. |
@@ -48,7 +51,7 @@ Every instruction of both programs and the only place it can move SOL or tokens.
 
 What does not exist (the registers' own list):
 
-- (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned); tokens leave only by burn.
+- (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) and inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period); tokens leave only by burn.
 - (burn_receipts) No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).
 - (burn_receipts) No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.
 - (burn_receipts) No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.
@@ -130,10 +133,10 @@ Kind: **interim-local**. INTERIM: built with cargo build-sbf on the operator's M
 
 | Program | Build | Features | Executable hash | Deployed (devnet) |
 |---|---|---|---|---|
-| burn_receipts | mainnet | default | `d7353e39858d5668fc97692841fca33f1824ba2f66c30c085baf47cc158478ac` | — |
-| burn_receipts | devnet | devnet | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` | `b5b7ea596e66b4dd890af6a3f67d526b3ca825979ebb8f88f497fe235e2a00a3` = build |
-| pair_curve | mainnet | default | `a67b48947fb031ea7e401d33bbaf23579b7feac6288536d60ae6b97b9575827d` | — |
-| pair_curve | devnet | devnet | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` | `7d1b06a568ac7ef70c89e6ba8b7e6f5fabf22793652aeceeb2b3c64b945c7796` = build |
+| burn_receipts | mainnet | default | `7d1949a20e0438ed418af1cd545f993bdebbbcceaf2c3e1603cc7e7f34ff7a22` | — |
+| burn_receipts | devnet | devnet | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` | `b23df8fa78c25c6f7375f9a5bb5cd7341f0bfe063e1b9b6af8ffebf0a54f97a5` = build |
+| pair_curve | mainnet | default | `abe0ce277ee7cb6d3d9e0663924fc3590c433e8d80e9fb3f60f68f7d5d2e73ab` | — |
+| pair_curve | devnet | devnet | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` | `f8c515cd1509260fd65fca6c261fbee4fa3847babd85f928e686c09268bc83c7` = build |
 
 How to reproduce: docs/burnticker/VERIFIED-BUILD.md.
 

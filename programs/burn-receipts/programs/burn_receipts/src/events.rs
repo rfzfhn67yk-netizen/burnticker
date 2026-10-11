@@ -301,3 +301,49 @@ pub struct LockFeesClaimed {
     pub operator_paid: u64,
     pub operator_pending: u64,
 }
+
+/// LAUNCHPAD-PATH §40: a coin's PairLink was written (provisional: waiting for the partner; paired: both name each other).
+#[event]
+pub struct PairLinked {
+    pub mint: Pubkey,
+    pub pair_mint: Pubkey,
+    pub paired: bool,
+    pub witness: u8,
+    pub pairing_deadline: i64,
+}
+
+/// LAUNCHPAD-PATH §40: one period's pair result (winner = Pubkey::default() for a draw).
+#[event]
+pub struct PairResultSubmitted {
+    pub mint_lo: Pubkey,
+    pub mint_hi: Pubkey,
+    pub record_date: u32,
+    pub winner: Pubkey,
+    pub signers_mask_lo: u8,
+    pub signers_mask_hi: u8,
+    pub source_url_hash: [u8; 32],
+    pub proof_hash: [u8; 32],
+    pub submitter: Pubkey,
+}
+
+/// LAUNCHPAD-PATH §40: the loser's fuel for a period moved to the winner's fee PDA (lamports = sol_lamports + wsol_lamports).
+#[event]
+pub struct ForwardedToWinner {
+    pub loser_mint: Pubkey,
+    pub winner_mint: Pubkey,
+    pub record_date: u32,
+    pub units: u64,
+    /// The loser's pool basis (min(spendable, cap)) the rule was applied to.
+    pub pool_lamports: u64,
+    pub lamports: u64,
+    pub sol_lamports: u64,
+    pub wsol_lamports: u64,
+    pub cranker: Pubkey,
+}
+
+/// LAUNCHPAD-PATH §40: a paired coin's crank ran without a pair result for the period, PAIR_RESULT_GRACE_SECS after the reading.
+#[event]
+pub struct PairResultMissing {
+    pub mint: Pubkey,
+    pub record_date: u32,
+}

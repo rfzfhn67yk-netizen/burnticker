@@ -20,6 +20,25 @@ The counter source URL (`burnticker://<TICKER>/units/<date>?events=<event ids>`)
 hash on chain (`Reading.source_url_hash`) commits to the events, not only to the number. A reading counts once **quorum** distinct
 attesters' signatures over that message are in the same transaction (an Ed25519SigVerify instruction before `submit_reading`).
 
+### Pair results (winner takes the burn, 2026-10-11)
+
+For a rivalry pair, each result period also gets one PairResult: the winner (the coin whose rule the result fires) or a draw, signed by
+a quorum of **each** coin's attesters over one shared message (`pairResultMessage`, `attestPairResult` in
+`src/lib/burnReceipts/pairs.ts`):
+
+```
+BURNRECEIPTS-PAIR-v1|<cluster genesis>|<program id>|<mint_lo>|<mint_hi>|<YYYY-MM-DD>|winner=<mint|draw>|src=<sha256 of the source URL>|proof=<hex>
+```
+
+One Ed25519SigVerify instruction carries every signature before `submit_pair_result`; a key counts for whichever coin's set holds it (on
+devnet the keeper key is both coins' attester). Two notes for anyone checking or running this:
+
+- **Its event is a plain log.** `PairResultSubmitted` is written with `emit!`, not `emit_cpi!`: read it from the transaction's
+  "Program data:" log lines written inside burn_receipts' own invocation (the SDK's `logEventsFrom` does), not from an inner
+  instruction. The PairResult account `["pair_result", mint_lo, mint_hi, date]` is the durable record.
+- **Transaction size.** Two attester signatures fit a legacy transaction. A pair whose quorums need more than two signatures needs a v0
+  transaction with an address lookup table.
+
 ## 1. Run the reader on your own machine
 
 ```sh

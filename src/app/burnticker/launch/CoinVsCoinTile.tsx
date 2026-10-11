@@ -13,6 +13,7 @@ import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { SignCard } from "./SignCard";
 import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
+import { PAIR_REVIEW_LINE } from "@/lib/burnticker/describe";
 
 /**
  * "COIN VS COIN" — the Burn Derby wizard tile (2026-10-10; cut to presets the same day, the owner: "the UI needs to be simpler, even if it
@@ -136,6 +137,7 @@ export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = 
             { key: "b", name: names.b, ticker: names.tb, onName: (v) => setNames((n) => ({ ...n, b: v })), onTicker: (v) => setNames((n) => ({ ...n, tb: v })), image: art(ruleB, names.tb), oneLiner: ruleB ? ruleOneLiner(ruleB) : "", oracle: "derby", badge: null },
           ]}
           sentence={model.sentence}
+          pairLine={PAIR_REVIEW_LINE}
           ends={ends}
           shares={{ options: [0.02, 0.05, 0.1], value: fraction, onChange: setFraction }}
           problems={model.problems}

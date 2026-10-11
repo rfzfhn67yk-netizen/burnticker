@@ -10,6 +10,7 @@ import { programClusterOf, solanaProgramPort } from "@/lib/burnKeeper/programAda
 import type { Cluster } from "@/lib/burnKeeper/solana";
 import { counterRule, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
 import { ChainLockFees } from "@/lib/burnticker/lockFeesChain";
+import { ChainPairForward } from "@/lib/burnticker/pairForwardChain";
 
 /**
  * THE REAL burn_receipts CLIENT FOR BURNTICKER (2026-10-10) — see program.ts for the interface and the unit counter. Per-token
@@ -46,12 +47,15 @@ export class ProgramBurnClient implements BurnProgramClient {
   private ports = new Map<string, ProgramPort>();
   /** LP locked forever (2026-10-10): register_fee_key / claim_lock_fees and the lock reads (lockFeesChain.ts); read-only without a payer. */
   readonly lockFees: ChainLockFees;
+  /** Winner takes the burn (LAUNCHPAD-PATH §40): pair links, submit_pair_result and forward_to_winner (pairForwardChain.ts). */
+  readonly pairForward: ChainPairForward;
   constructor(o: ProgramBurnClientOpts) {
     this.o = o;
     this.programId = o.programId.toBase58();
     this.cluster = o.cluster;
     this.canSign = !!o.payer;
     this.lockFees = new ChainLockFees({ connection: o.connection, programId: o.programId, cluster: programClusterOf(o.cluster), payer: o.payer, allowMainnet: o.allowMainnet });
+    this.pairForward = new ChainPairForward({ connection: o.connection, programId: o.programId, cluster: programClusterOf(o.cluster), payer: o.payer, attesters: o.attesters ?? (o.payer ? [o.payer] : undefined), allowMainnet: o.allowMainnet });
   }
   async initializeToken(i: InitializeTokenInput) {
     if (!i.rule) throw new Error("initialize_token: the locked rule is required (the counter mapping reads its fractions)");
@@ -65,8 +69,8 @@ export class ProgramBurnClient implements BurnProgramClient {
     const ix = initializeTokenIx({ programId: this.o.programId, payer: creator, creator, mint, args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: i.attesters.map((a) => operatorAttester(new PublicKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
-    } });
-    return { tokenConfig: configPda(this.o.programId, mint).toBase58(), instructions: [serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`})`)] };
+    }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst } : {}) });
+    return { tokenConfig: configPda(this.o.programId, mint).toBase58(), instructions: [serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)] };
   }
   feePdaFor(mint: string) { return burnPoolFor(this.o.programId, new PublicKey(mint)).feePda.toBase58(); }
   vaultFor(mint: string) { return vaultAddress(this.o.programId, new PublicKey(mint)).toBase58(); }

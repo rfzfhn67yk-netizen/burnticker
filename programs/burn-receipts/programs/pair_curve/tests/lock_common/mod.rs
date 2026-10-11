@@ -198,3 +198,23 @@ pub fn ix_burn_lp(pair: &Pubkey, vault: &Pubkey, mint: &Pubkey, pool: &Pool, cra
         .to_account_metas(None),
     )
 }
+
+/// burn_receipts link_pair (LAUNCHPAD-PATH §40): the Pair witnesses both mints; permissionless, idempotent.
+pub fn ix_link_pair(payer: &Pubkey, pair: &Pubkey, mint_a: &Pubkey, mint_b: &Pubkey) -> Instruction {
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::LinkPair {}.data(),
+        burn_receipts::accounts::LinkPair {
+            payer: *payer,
+            pair: *pair,
+            config_a: config_pda(mint_a),
+            config_b: config_pda(mint_b),
+            link_a: crate::common::pair_link_pda(mint_a),
+            link_b: crate::common::pair_link_pda(mint_b),
+            system_program: anchor_lang::solana_program::system_program::ID,
+            event_authority: br_event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}

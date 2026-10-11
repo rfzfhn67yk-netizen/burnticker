@@ -32,7 +32,7 @@ export interface ProgramReadingView {
   pool?: string | null;
 }
 
-export type CrankKind = "no_units" | "vault" | "buyback";
+export type CrankKind = "no_units" | "vault" | "buyback" | "forward"; // forward: LAUNCHPAD-PATH §40, a paired coin that lost the period
 /** The next reading in line and how to crank it. `build` signs the crank only when called — after earlier signatures are resolved. */
 export type CrankPlan = { kind: CrankKind; recordDate: number; build: () => Promise<SignedTx> } | { status: "idle" } | { status: "waiting-for-pool"; recordDate: number };
 

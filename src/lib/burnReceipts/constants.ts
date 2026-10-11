@@ -99,7 +99,7 @@ export const OUTCOME_BURNED = 2;
 export const OUTCOME_BELOW_FLOOR = 3;
 export const OUTCOME_SHORT = 4;
 export const OUTCOME_EXHAUSTED = 5;
-export const OUTCOME_NAMES: Record<number, string> = { 0: "pending", 1: "no-units", 2: "burned", 3: "below-floor", 4: "short", 5: "exhausted" };
+export const OUTCOME_NAMES: Record<number, string> = { 0: "pending", 1: "no-units", 2: "burned", 3: "below-floor", 4: "short", 5: "exhausted", 6: "forwarded" };
 
 export const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
