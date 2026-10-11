@@ -1,0 +1,35 @@
+{
+  "schema": "burnticker.mainnet-deploy-evidence/v1",
+  "date": "2026-10-11",
+  "cluster": "mainnet",
+  "note": "The mainnet deploy of both programs and the LaunchLab platform config, run by the owner from the Mac deployer key on 2026-10-11 (Denver afternoon). Signatures are mainnet transaction signatures; verify with any explorer. Bytes were dumped from chain and compared with the local build artefacts (sha256 of the padded program data equal; zero stray bytes).",
+  "programs": [
+    {
+      "name": "burn_receipts",
+      "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "date": "2026-10-11",
+      "slot": 455814493,
+      "signature": "3bu5JyUveEQw8dWTe6vaiuUWNxXhqBEeza1kYRfNGx1nsu2PqEp7wHFbjTqoWfGCCw5jVrtkHTgs1gyEF1k8RLKv",
+      "onChainSha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
+      "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
+    },
+    {
+      "name": "pair_curve",
+      "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+      "date": "2026-10-11",
+      "slot": 455815136,
+      "signature": "PWYvgnRmivfo9KHt1otPLiADaZE1JAKdvLXNMcfZ6vSzHCQrpuVZ7jB8hhXxZxAyXWcKEBkbjp8ngabY58np6nL",
+      "onChainSha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
+      "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV"
+    }
+  ],
+  "platformConfig": {
+    "platformId": "94x5qDDJP4UCkeMWppnmvqTmMgo971h3d6MDRnjEfYy9",
+    "admin": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23",
+    "feeWallet": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
+    "lpToFeeKeyPct": 100,
+    "platformFeeBps": 25,
+    "createdAt": "2026-10-11",
+    "signature": "5qhFPxSsf9SLouhyKApv8ENT4x2nv8PtmcPrvrxm1FysUZ7dRj7Z9ZbLLKJp3XJM11U5TxutBNrptrfTmq41syC1"
+  }
+}

@@ -93,7 +93,7 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
     const p = programFacts({}, ROOT);
     assert.match(p.hostWiring, /^this host is not wired to a burn_receipts program/);
     const br = p.chain.find((c) => c.library === "burn_receipts")!;
-    assert.match(br.devnet, /^deployed/); assert.equal(br.mainnet, "not deployed");
+    assert.match(br.devnet, /^deployed/); assert.match(br.mainnet, /^deployed \(read 2026-10-11\)/);
     assert.match(p.compiled, /^burn_receipts AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM/);
     assert.ok(!p.verify.some((v) => /not deployed yet/.test(v)), "no 'not deployed' line on a host that is merely not wired");
     const page = read("src/app/burnticker/trust/page.tsx");

@@ -211,9 +211,9 @@
     {
       "symbol": "REHEARSAL",
       "date": null,
-      "mint": null,
+      "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
       "status": "not done",
-      "text": "$REHEARSAL — a throwaway coin created under the real platform config on <date> to prove fee routing and burns on mainnet; LP locked forever; not for trading. Its mint and the date go here when it happens; until then: not done."
+      "text": "$REHEARSAL — a throwaway coin to be created under the real mainnet platform config (94x5qDDJ…EfYy9) to prove fee routing and the Fee Key claim on mainnet; LP locked forever; not for trading; rules sha256 2d109965…f99d (the $DEFICIT rule with the ticker changed); mint FwXiFscF…pzkp (keypair made 2026-10-11). The date and the create signature go here when it happens; nothing below 85 SOL raised graduates, so it does not prove a mainnet burn."
     }
   ],
   "limitations": [

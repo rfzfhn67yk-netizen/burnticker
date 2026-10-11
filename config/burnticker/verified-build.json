@@ -26,7 +26,7 @@
           "bytes": 763536,
           "hash": "e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19",
           "sha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
-          "status": "not deployed yet (mainnet pins compiled in 2026-10-11; deploy planned 2026-10-12)"
+          "status": "deployed 2026-10-11; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
         },
         "devnet": {
           "features": [
@@ -44,7 +44,14 @@
           "readAt": "2026-10-11",
           "matchesBuild": true
         },
-        "mainnet": null
+        "mainnet": {
+          "hash": "e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19",
+          "sha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+          "readAt": "2026-10-11",
+          "matchesBuild": true,
+          "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn"
+        }
       }
     },
     {
@@ -56,7 +63,7 @@
           "bytes": 411296,
           "hash": "50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef",
           "sha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
-          "status": "not deployed yet (mainnet pins compiled in 2026-10-11; deploy planned 2026-10-12)"
+          "status": "deployed 2026-10-11; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
         },
         "devnet": {
           "features": [
@@ -74,7 +81,14 @@
           "readAt": "2026-10-11",
           "matchesBuild": true
         },
-        "mainnet": null
+        "mainnet": {
+          "hash": "50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef",
+          "sha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+          "readAt": "2026-10-11",
+          "matchesBuild": true,
+          "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG"
+        }
       }
     }
   ]

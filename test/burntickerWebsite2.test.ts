@@ -8,7 +8,7 @@ import { LAUNCH_GATE_LOADING, closedNetworkLine, launchGateFromCatalogue, wizard
 import { EMPTY_STATE_COPY, emptyHeading, emptyKindFor } from "@/lib/burnticker/emptyState";
 import { EXPLORE_VERIFIED_BURN, SEASONS_HREF } from "@/lib/burnticker/currentStatusLinks";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
-import { buildCurrentStatus, readChainFacts, UPGRADEABLE_LOADER, type ChainFacts } from "@/lib/burnticker/currentStatus";
+import { buildCurrentStatus, readChainFacts, UPGRADEABLE_LOADER, type ChainFacts, mainnetDeployment } from "@/lib/burnticker/currentStatus";
 import { upgradeAuthorityText } from "@/lib/burnticker/currentStatusText";
 
 const cfg = loadCopyLintConfig();
@@ -150,11 +150,11 @@ describe("one current-status source (website brief §4)", () => {
     const down = buildCurrentStatus({ env: {}, chain: facts(null), now: 0 }).upgradeAuthority.find((u) => u.cluster === "mainnet")!;
     assert.equal(down.timeLockSecs, null); assert.equal(down.timeLockSource, "unavailable"); assert.match(down.line, /could not be read from chain/);
   });
-  test("design, deployed and historical are separate; mainnet programs read 'not deployed yet'; host wiring is its own line; every summary line is lint-clean", async () => {
+  test("design, deployed and historical are separate; mainnet programs read 'deployed on mainnet' (2026-10-11 record); host wiring is its own line; every summary line is lint-clean", async () => {
     const { buildCurrentStatus } = await import("@/lib/burnticker/currentStatus");
     const s = buildCurrentStatus({ env: { BURNTICKER_CLUSTER: "devnet" }, chain: {}, now: 0 });
-    for (const p of s.programs) { assert.equal(p.mainnet.deployed, false); assert.equal(p.mainnet.line, "not deployed on mainnet yet"); assert.equal(p.devnet.deployed, true); }
-    assert.equal(s.networks.find((n) => n.cluster === "mainnet")!.deployment, "not deployed yet");
+    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.equal(p.mainnet.line, "deployed on mainnet"); assert.equal(p.devnet.deployed, true); }
+    assert.equal(s.networks.find((n) => n.cluster === "mainnet")!.deployment, "deployed");
     assert.match(s.host.line, /no program id is wired on this host/);
     assert.ok(s.design.length && s.historical.length && s.historical.every((h) => fs.existsSync(h.path.replace(/\/$/, ""))), "history links point at files that exist");
     assert.ok(s.reviews.every((r) => r.findings.every((f) => f.fix && f.recheck && f.deployed)), "every finding has fix, re-check and deployed statuses");
@@ -386,16 +386,18 @@ describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'no
     const serverModule = ["@", "lib", "burnticker", "currentStatus"].join("/"); // spelled out so the publish import scan does not read a regex as an import
     assert.ok(!r.split("\n").some((l) => l.startsWith("import {") && l.includes(`"${serverModule}"`)), "the client renderer imports only types from the server module (it reads files)");
   });
-  test("a failed mainnet lookup is 'deployment unknown', never 'not deployed'; a successful empty read is 'not deployed'", async () => {
+  test("a failed mainnet lookup with a recorded deploy falls back to the dated verified-build record (never 'unknown' when recorded, never 'not deployed'); an unrecorded program reads 'unknown'", async () => {
     const base = buildCurrentStatus({ env: {}, chain: {}, now: 0 });
     const failed = await readChainFacts("mainnet", { call: async () => { throw new Error("503"); } }, null, base.programs.map((p) => p.programId), 0);
     const s = buildCurrentStatus({ env: {}, chain: { mainnet: failed }, now: 0 });
-    for (const p of s.programs) { assert.equal(p.mainnet.deployed, null); assert.equal(p.mainnet.source, "unavailable"); assert.match(p.mainnet.line, /unknown/); assert.doesNotMatch(p.mainnet.line, /not deployed/); }
-    assert.match(s.networks.find((n) => n.cluster === "mainnet")!.deployment, /unknown/);
+    // both programs were deployed on 2026-10-11 and verified-build.json records it: a failed read shows the record, attributed to it
+    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.equal(p.mainnet.source, "verified-build"); assert.doesNotMatch(p.mainnet.line, /not deployed|unknown/); }
     assert.ok(s.lines.every((l) => !/not deployed on mainnet/.test(l)), "no summary line says not deployed");
+    // the pure state function: no record + failed read = unknown; no record + empty read = not deployed; a live read wins over the record
+    assert.deepEqual(mainnetDeployment(false, failed, base.programs[0].programId), { deployed: null, source: "unavailable", line: "mainnet deployment unknown (the chain read failed)" });
     const emptyRpc = { call: async <T,>(_m: string, p: unknown[]) => ({ value: (p[0] as string[]).map(() => null) }) as unknown as T };
     const ok = await readChainFacts("mainnet", emptyRpc, null, base.programs.map((p) => p.programId), 0);
-    for (const p of buildCurrentStatus({ env: {}, chain: { mainnet: ok }, now: 0 }).programs) { assert.equal(p.mainnet.deployed, false); assert.equal(p.mainnet.source, "chain"); assert.equal(p.mainnet.line, "not deployed on mainnet yet"); }
+    assert.deepEqual(mainnetDeployment(false, ok, base.programs[0].programId), { deployed: false, source: "chain", line: "not deployed on mainnet yet" });
   });
   test("a devnet read that failed before the Program accounts is unavailable too, with the dated verified-build record beside it", async () => {
     const base = buildCurrentStatus({ env: {}, chain: {}, now: 0 });

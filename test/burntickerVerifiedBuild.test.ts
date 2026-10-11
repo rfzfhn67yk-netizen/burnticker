@@ -23,7 +23,8 @@ describe("verified-build.json", () => {
       assert.match(p.programId, /^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
       assert.equal(p.deployed.devnet?.matchesBuild, true, `${p.library}: the devnet deployment is this build`);
       assert.equal(p.deployed.devnet?.upgradeAuthority, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
-      assert.equal(p.deployed.mainnet, null, "nothing on mainnet yet");
+      assert.equal(p.deployed.mainnet?.matchesBuild, true, `${p.library}: the mainnet deployment (2026-10-11) is this build`);
+      assert.equal(p.deployed.mainnet?.upgradeAuthority, "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "mainnet upgrade authority is the Squads vault");
       assert.notEqual(p.builds.mainnet.hash, p.builds.devnet.hash, "the devnet build compiles Raydium's devnet ids in");
     }
     assert.deepEqual(verifiedBuildProblems({ ...table, programs: table.programs.map((p) => ({ ...p, deployed: { ...p.deployed, devnet: p.deployed.devnet ? { ...p.deployed.devnet, matchesBuild: false } : null } })) }).length, 2);
