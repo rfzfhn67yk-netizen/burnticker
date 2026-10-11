@@ -9,7 +9,7 @@ delivered. The program runs behind a 25 SOL per-burn-pool cap (with a dated suns
 
 | | |
 |---|---|
-| Bounty wallet | `TODO_BOUNTY_WALLET` — the mainnet Squads 2-of-3 vault once it is created; its balance is shown live on the trust page (`/burnticker/trust`) from then on |
+| Bounty wallet | `HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u` (mainnet, held by the operator; funding of 5–10 SOL pending); its balance is shown live on the trust page (`/burnticker/trust`) |
 | Amount | **5–10 SOL**, set aside from the developer fee (25 bps of curve volume), per the owner's decision of 2026-10-09. Exact tiers: TODO. |
 | Status | **not published** — these terms are a draft until the owner removes this line |
 | Contact | security@burnticker.com (the operator contact on the trust page is contact@burnticker.com; both reach the operator directly) |
@@ -19,8 +19,7 @@ delivered. The program runs behind a 25 SOL per-burn-pool cap (with a dated suns
 
 1. The report is acknowledged and reproduced; the reporter is told the severity we assign and why.
 2. The fix (or the decision not to fix, with the reason) is published, with the report, under `docs/burnticker/reviews/`.
-3. The amount for the severity is sent from the bounty wallet to the address the reporter names, through a Squads proposal (two of
-   three signers). The proposal and the transfer transaction are linked from the published list below.
+3. The amount for the severity is sent by the operator from the bounty wallet to the address the reporter names, with the transaction signature posted in the report thread.
 4. Duplicates: the first complete report is the one paid. A report about something the Powers Register or the known-limitations list
    already states as a power or a gap is acknowledged and not paid.
 

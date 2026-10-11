@@ -119,9 +119,10 @@
         "deployer": "TODO_MAINNET_DEPLOYER",
         "platform-admin": "TODO_MAINNET_PLATFORM_ADMIN",
         "squads-vault": "TODO_MAINNET_SQUADS_VAULT",
-        "squads-member-1": "TODO_SQUADS_MEMBER_1",
-        "squads-member-2": "TODO_SQUADS_MEMBER_2",
-        "squads-member-3": "TODO_THIRD_SIGNER_ADDRESS"
+        "squads-member-1": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ",
+        "squads-member-2": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt",
+        "squads-member-3": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG",
+        "bounty": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u"
       },
       "lpLock": {
         "policy": "locked-forever",
@@ -158,7 +159,7 @@
   "security": {
     "policy": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/SECURITY.md",
     "contact": "security@burnticker.com",
-    "bountyWallet": "TODO_BOUNTY_WALLET",
+    "bountyWallet": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u",
     "firmAudit": false
   },
   "trust": {
