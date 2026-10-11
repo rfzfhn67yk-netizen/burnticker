@@ -28,7 +28,7 @@ import type { VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
  *   programs[]                 { name, programId, cluster, deployedHash, buildHash, verified "matches"|"differs"|"not-deployed", buildKind, readAt }
  *   fence                      { held[] { ticker, why }, adopted (count this cycle) } — the foreign-reading fence (readingFence.ts)
  *   pairs[]                    (since 2026-10-11, winner takes the burn) { pairId, a, b (tickers), winnerTakesBurn, forwards (count),
- *                                lastForward { recordDate, from, to, lamports, signature, at } | null }
+ *                                lastForward { recordDate, from, to, lamports, signature, at } | null, unpaired (reason; after unlink_pair) }
  */
 
 export const OPS_STATUS_SCHEMA = "burnticker.ops-status/v1";
@@ -52,7 +52,7 @@ export interface OpsStatusJson {
   programs: ProgramStatus[];
   fence: { held: { ticker: string; why: string }[]; adopted: number };
   /** Rivalry pairs (winner takes the burn): the latest forward_to_winner per pair. Absent on documents written before 2026-10-11. */
-  pairs?: { pairId: string; a: string; b: string; winnerTakesBurn: boolean; forwards: number; lastForward: { recordDate: string; from: string; to: string; lamports: string; signature: string; at: string } | null }[];
+  pairs?: { pairId: string; a: string; b: string; winnerTakesBurn: boolean; forwards: number; lastForward: { recordDate: string; from: string; to: string; lamports: string; signature: string; at: string } | null; unpaired?: string | null }[];
 }
 
 /** The program rows from config/burnticker/verified-build.json for the keeper's cluster (localnet shows devnet's). */
@@ -108,7 +108,9 @@ export function buildOpsStatus(i: OpsStatusInput): OpsStatusJson {
     const fw = reg.pairForwards(pr.pairId), last = fw[fw.length - 1];
     const tick = (m: string) => (m === ta.mint ? ta.ticker : m === tb.mint ? tb.ticker : m.slice(0, 6));
     const ds = (d: number) => `${String(d).slice(0, 4)}-${String(d).slice(4, 6)}-${String(d).slice(6, 8)}`;
-    pairs.push({ pairId: pr.pairId, a: ta.ticker, b: tb.ticker, winnerTakesBurn: wtb, forwards: fw.length, lastForward: last ? { recordDate: ds(last.recordDate), from: tick(last.loserMint), to: tick(last.winnerMint), lamports: last.lamports.toString(), signature: last.signature, at: new Date(last.at).toISOString() } : null });
+    let unpaired: string | null = null;
+    try { const u = reg.getStatus(`pair.unlinked.${pr.pairId}`); unpaired = u ? String((JSON.parse(u) as { reasonText?: string }).reasonText ?? "unlinked") : null; } catch { unpaired = null; }
+    pairs.push({ pairId: pr.pairId, a: ta.ticker, b: tb.ticker, winnerTakesBurn: wtb, forwards: fw.length, lastForward: last ? { recordDate: ds(last.recordDate), from: tick(last.loserMint), to: tick(last.winnerMint), lamports: last.lamports.toString(), signature: last.signature, at: new Date(last.at).toISOString() } : null, ...(unpaired ? { unpaired } : {}) });
   }
   const r = i.role;
   return {

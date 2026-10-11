@@ -30,7 +30,7 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.10.0";
+export const API_VERSION = "1.11.0";
 export const API_PREFIX = "/api/burnticker/v1";
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
@@ -232,6 +232,7 @@ export const SCHEMAS: Record<string, Schema> = {
     pairId: str, side: { enum: ["A", "B"] }, counterpart: { type: "object" }, clause: { anyOf: [{ type: "object" }, { type: "null" }] },
     winnerTakesBurn: { ...bool, description: "since 1.10.0: fees from both coins burn the winner's supply (the coin whose rule a result fires); false for pairs made before 2026-10-11" },
     forwards: { ...arr(ref("PairForward")), description: "since 1.10.0: every forward between the two coins, oldest first" },
+    unpaired: { ...nullable(obj({ reason: str, at: str, signature: nstr }, ["reason", "at"])), description: "since 1.11.0: unlink_pair ran on chain (a voided pair curve, a refunding side, or one coin without a verified pool 30 days after pairing) — two plain coins now; later receipts carry no pairRole" },
     tally: { type: "object" }, pageUrl: str,
   }, ["pairId", "side", "counterpart"]),
   TokenStatus: obj({

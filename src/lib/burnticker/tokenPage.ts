@@ -20,6 +20,7 @@ import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
 import { buildMarketJson, type MarketInput } from "@/lib/burnticker/market";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { parseForwardMemo } from "@/lib/burnticker/pairForward";
+import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
 import { LP_POLICY_BADGE, buildLpLockJson, feeKeysPda, operatorTreasuryFor, solscanUrl, type LpLockJson } from "@/lib/burnticker/lockFees";
 
 /**
@@ -75,6 +76,8 @@ export interface PairTally {
    * (from the forwarded receipts), and every forward (oldest first). "burned on A / burned on B / forwarded A→B / B→A" on the pair page.
    */
   winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string; forwards?: PairForwardJson[];
+  /** Round 2: the pair was unlinked on chain (reason in words); "unpaired (reason)" on the page. */
+  unpaired?: { reason: string; at: string; signature: string | null } | null;
 }
 
 /** One side's summary from its status (and receipts, for the last burn time). */
@@ -124,6 +127,7 @@ export function pairTally(a: TokenStatusJson, b: TokenStatusJson, receiptsA: rea
     curveA: a.market?.curve ?? null, curveB: b.market?.curve ?? null,
     winnerTakesBurn: !!(a.pair?.winnerTakesBurn || b.pair?.winnerTakesBurn), forwardedAtoB: forwardedSol(receiptsA), forwardedBtoA: forwardedSol(receiptsB),
     forwards: a.pair?.forwards ?? b.pair?.forwards ?? forwardsFromReceipts(a, b, receiptsA, receiptsB),
+    unpaired: a.pair?.unpaired ?? b.pair?.unpaired ?? null,
   };
 }
 
@@ -165,7 +169,7 @@ export async function pairClauseState(reg: Pick<Registry, "token" | "lockedRule"
   return { voidBy: c.voidBy, state: "waiting", waitingOn, decidedAt: null, detail: now >= Date.parse(`${c.voidBy}T00:00:00Z`) + 86_400_000 ? "voidBy has passed: the keeper voids the pair on its next cycle" : null };
 }
 
-export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw"> & Partial<Pick<Registry, "lockedRule" | "pairOutcome" | "pairForwards">>, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">, poolRegistered?: (mint: string) => Promise<boolean | null>): Promise<PairCounterpart | null> {
+export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token" | "receipts" | "totalBurnedRaw"> & Partial<Pick<Registry, "lockedRule" | "pairOutcome" | "pairForwards" | "getStatus">>, supplyRaw: (mint: string) => Promise<bigint | null>, t: Pick<TokenRow, "mint">, poolRegistered?: (mint: string) => Promise<boolean | null>): Promise<PairCounterpart | null> {
   const pair = reg.pairOf(t.mint);
   if (!pair) return null;
   const side: "A" | "B" = pair.mintA === t.mint ? "A" : "B";
@@ -180,7 +184,7 @@ export async function pairCounterpartFrom(reg: Pick<Registry, "pairOf" | "token"
   const me = reg.token(t.mint);
   if (reg.lockedRule && me) { try { winnerTakesBurn = pairWinnerTakesBurn(reg.lockedRule(me).rule); } catch { winnerTakesBurn = false; } }
   const forwards = reg.pairForwards ? pairForwardsJson({ pairForwards: reg.pairForwards.bind(reg), token: reg.token.bind(reg) }, pair.pairId, other.cluster) : [];
-  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards };
+  return { pairId: pair.pairId, side, counterpart: { ticker: other.ticker, name: other.name, mint: other.mint, burns: confirmed.length, burned: rawToTokens(burnedRaw, DECIMALS), supply: rawToTokens(supply, DECIMALS), lastBurnAt: last?.settledAt ?? null }, clause, winnerTakesBurn, forwards, unpaired: reg.getStatus ? pairUnlinked({ getStatus: reg.getStatus.bind(reg) }, pair.pairId) : null };
 }
 
 // ReceiptJson / TokenStatusJson live in pageTypes.ts (no runtime imports) so the public SDK can type the API without this module.
@@ -572,6 +576,7 @@ ${[...rs].reverse().map((r) => `<tr><td>${esc(r.settledAt.slice(0, 19).replace("
     tile("Supply", `${tally.supplyPctA.toFixed(2)}% <span class="muted">:</span> ${tally.supplyPctB.toFixed(2)}%`, `${fmt(tally.supplyA)} : ${fmt(tally.supplyB)} of ${fmt(a.supply.initial)} each`),
     tile("Last settlement", ls ? `<code>${esc(ls.eventId)}</code>` : "none yet", ls ? `settled ${esc((ls.result ?? ls.value ?? "—").toUpperCase())} · ${esc(ls.settledAt.slice(0, 16).replace("T", " "))}Z → ${sideTicker(ls.burnedSide)} burned${ls.burned ? ` ${fmt(ls.burned)}` : ""}` : "the first settlement after launch burns one side"),
     tile("Next scheduled market", tally.next.market ? `<code>${esc(tally.next.market)}</code>` : "—", `${tally.next.closeTime ? `closes ${esc(tally.next.closeTime)}` : "the next settlement after launch"}`),
+    ...(tally.unpaired ? [tile("Pair", "unpaired", `${esc(tally.unpaired.reason)} · ${esc(tally.unpaired.at.slice(0, 10))} — two plain coins now; nothing forwards between them`)] : []),
     ...(tally.winnerTakesBurn ? [tile("Burned and forwarded", `burned on $${A} ${fmt(tally.burnedA)} <span class="muted">/</span> burned on $${B} ${fmt(tally.burnedB)}`, `forwarded $${A}→$${B} ${esc(tally.forwardedAtoB ?? "0")} SOL · $${B}→$${A} ${esc(tally.forwardedBtoA ?? "0")} SOL — ${esc(WINNER_TAKES_BURN_LINE)}`)] : []),
   ].join("\n");
   const rule = (s: TokenStatusJson, side: "A" | "B") => `<div class="rule"><strong>Side ${side} — <a href="../../t/${esc(s.ticker)}/">$${esc(s.ticker)}</a></strong> ${esc(s.name)}. ${esc(s.rules.statement)}<br><span class="muted">Rule file: <a href="../../t/${esc(s.ticker)}/rules.json">rules.json</a> · sha256 <code>${esc(s.rules.sha256)}</code></span></div>`;

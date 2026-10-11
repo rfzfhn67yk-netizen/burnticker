@@ -120,7 +120,7 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
     let units = ctx.accounts.reading.units;
     require_fixed_supply(&ctx.accounts.mint)?;
     // LAUNCHPAD-PATH §40: a paired coin that LOST this period's result does not burn — forward_to_winner moves its fuel.
-    let pair_result_missing = crate::instructions::pair::crank_pair_gate(
+    let pair_gate = crate::instructions::pair::crank_pair_gate(
         &ctx.accounts.config,
         &ctx.accounts.reading,
         ctx.accounts.pair_link.as_ref().map(|a| a.as_ref()),
@@ -389,8 +389,10 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
             spent_lamports: spent,
         });
     }
-    if pair_result_missing {
-        emit_cpi!(crate::events::PairResultMissing { mint: mint_key, record_date: r.record_date });
+    match pair_gate {
+        crate::instructions::pair::PairGate::ResultMissing => emit_cpi!(crate::events::PairResultMissing { mint: mint_key, record_date: r.record_date }),
+        crate::instructions::pair::PairGate::ForwardMissing => emit_cpi!(crate::events::PairForwardMissing { mint: mint_key, record_date: r.record_date }),
+        crate::instructions::pair::PairGate::Proceed => {}
     }
     emit_cpi!(ReadingProcessed {
         config: config_key,

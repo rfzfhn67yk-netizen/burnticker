@@ -1,10 +1,10 @@
 //! Blind review 2026-10-11 of the winner-takes-the-burn release (LAUNCHPAD-PATH §40) — exploit tests for burn_receipts
 //! `submit_pair_result`, the crank gate and `forward_to_winner` (docs/burnticker/reviews/2026-10-11-pair-forward-blind.md).
 //!
-//! Every `h*` test asserts the SAFE behaviour and FAILS against the reviewed code (ea65a7f0). They are `#[ignore]`d so
-//! scripts/test.sh stays green; run them with
-//!   cargo test -p burn_receipts --test review_pair -- --include-ignored --test-threads=1
-//! `ctl_*` tests are controls (they pass): they pin the behaviour the exploit tests build on.
+//! Every `h*` test asserts the SAFE behaviour; it FAILED against the reviewed code (ea65a7f0) and passes since the r2 fixes (branch
+//! burnticker/pair-forward-r2) — kept as regressions, no longer ignored. The reviewer's control is inverted: a win for a period the
+//! winner never read is now refused at submit_pair_result (H-1(a)). The other r2 paths (0-lamport forward for a dead side, the 72 h
+//! LOST time-out, unlink_pair) are in tests/pairs.rs.
 //!
 //! H-1: once a PairResult names a loser, the loser's reading for that period can be processed ONLY by forward_to_winner
 //! (crank_buyback refuses ForwardRequired, with no time-out). forward_to_winner needs the winner's reading for the same date AND both
@@ -22,9 +22,11 @@ use common::*;
 use solana_keypair::Keypair;
 use solana_signer::Signer;
 
-const D1: u32 = 20261005;
-const D2: u32 = 20261006;
-const D3: u32 = 20261007;
+// r2 (L-2): results are refused for dates before the pairing (the harness pairs on 2026-10-09): later periods, clock moved first.
+const D1: u32 = 20261010;
+const D2: u32 = 20261011;
+const D3: u32 = 20261012;
+const T0: i64 = NOW + 6 * DAY;
 const V1: u64 = 4_027_300_000_000_000;
 const DAY: i64 = 86_400;
 
@@ -56,6 +58,9 @@ fn init(env: &mut Env, mint: &Keypair, attester: &Pubkey, rule: RuleParams, pair
 
 /// The mint, its CPMM pool (fee-PDA creator, LP locked), register_pool, the fee PDA's ATAs and oracle history (as tests/pairs.rs).
 fn market(env: &mut Env, mint_kp: &Keypair) -> Pool {
+    if env.now() < T0 {
+        env.set_time(T0);
+    }
     platform(env);
     let payer = env.payer.pubkey();
     env.create_mint(mint_kp, &payer, DECIMALS);
@@ -93,6 +98,9 @@ fn paired(env: &mut Env, att: &Keypair, b_market: bool) -> (Coin, Coin) {
     assert_eq!(env.config(&config_pda(&ka.pubkey())).pair_state, PAIR_STATE_PAIRED);
     let pa = market(env, &ka);
     let pb = if b_market { Some(market(env, &kb)) } else { None };
+    if env.now() < T0 {
+        env.set_time(T0);
+    }
     submit(env, &ka.pubkey(), D1, V1, &[att]).unwrap();
     submit(env, &kb.pubkey(), D1, V1, &[att]).unwrap();
     (Coin { mint: ka.pubkey(), pool: Some(pa) }, Coin { mint: kb.pubkey(), pool: pb })
@@ -125,66 +133,48 @@ fn try_unwedge(env: &mut Env, k: &Keypair, loser: &Coin, winner: &Coin, date: u3
 // controls
 // =================================================================================================================================
 
-/// Control: the program accepts a PairResult for a period in which the WINNER has no reading, and the winner can then read past it.
+/// Inverted control (r2 H-1(a)): a WIN for a period in which the winner has no reading is refused — the keeper posts a draw instead.
 #[test]
-fn ctl_a_result_is_accepted_for_a_period_the_winner_never_read() {
+fn ctl_a_result_for_a_period_the_winner_never_read_is_refused() {
     let mut env = Env::new();
     let att = Keypair::new();
     let (a, b) = paired(&mut env, &att, true);
     submit(&mut env, &b.mint, D2, V1 + 5 * UNIT, &[&att]).unwrap();
-    // A has no reading for D2; the result naming A is accepted anyway (no reading is consulted).
-    submit_pair_result(&mut env, &a.mint, &b.mint, D2, a.mint, &[&att]).unwrap();
-    // A reads D3 next (its D2 never came); D2 can never be read for A again.
-    submit(&mut env, &a.mint, D3, V1 + UNIT, &[&att]).unwrap();
-    expect_anchor_err(submit(&mut env, &a.mint, D2, V1, &[&att]), "StaleReading");
+    expect_anchor_err(submit_pair_result(&mut env, &a.mint, &b.mint, D2, a.mint, &[&att]), "PairResultNotServable");
+    submit_pair_result(&mut env, &a.mint, &b.mint, D2, Pubkey::default(), &[&att]).unwrap();
 }
 
 // =================================================================================================================================
-// H-1 — a PairResult the winner cannot serve wedges the loser forever
+// H-1 — a PairResult the winner cannot serve must not wedge the loser (r2: refused at submit; 0-lamport forward; 72 h time-out)
 // =================================================================================================================================
 
-/// H-1(a): the result names a winner that has no reading for the period and has already read past it. The loser's D2 is
-/// ForwardRequired for crank_buyback and AccountNotInitialized (winner_reading) for forward_to_winner — forever, and every later
-/// reading of the loser is OutOfOrder behind it. SAFE: within 60 days the loser's queue advances one way or the other.
+/// H-1(a) regression: the would-be result (winner without a reading for the period, already read past it) is refused; the draw that
+/// replaces it lets the loser crank its own fuel, so its queue advances at once — and every later reading with it.
 #[test]
-#[ignore = "H-1 exploit: fails against ea65a7f0 (the loser's queue is wedged permanently)"]
 fn h1a_a_result_whose_winner_read_past_the_period_must_not_wedge_the_loser_forever() {
     let mut env = Env::new();
     let att = Keypair::new();
     let (a, b) = paired(&mut env, &att, true);
     env.transfer_sol(&fee_pda(&b.mint), 3 * SOL);
     submit(&mut env, &b.mint, D2, V1 + 5 * UNIT, &[&att]).unwrap();
-    submit_pair_result(&mut env, &a.mint, &b.mint, D2, a.mint, &[&att]).unwrap();
+    expect_anchor_err(submit_pair_result(&mut env, &a.mint, &b.mint, D2, a.mint, &[&att]), "PairResultNotServable");
     submit(&mut env, &a.mint, D3, V1 + UNIT, &[&att]).unwrap();
     submit(&mut env, &b.mint, D3, V1 + 9 * UNIT, &[&att]).unwrap();
+    submit_pair_result(&mut env, &a.mint, &b.mint, D2, Pubkey::default(), &[&att]).unwrap();
     let k = cranker(&mut env);
-
-    let (f0, c0) = try_unwedge(&mut env, &k, &b, &a, D2);
-    println!("H-1(a) right after the result: forward_to_winner = {f0}, crank_buyback = {c0}");
-    // B's next reading cannot be processed either: strict order.
+    let (f, c) = try_unwedge(&mut env, &k, &b, &a, D2);
+    println!("H-1(a) r2: forward_to_winner = {f} (a draw: NotWinner), crank_buyback = {c}");
+    assert_eq!(c, "ok", "the loser's reading {D2} is processed by its own crank");
+    // and B's next period is reachable (strict order is satisfied)
     let pool_b = b.pool.as_ref().unwrap();
     let later = env.send(&[cpmm::ix_crank_buyback_paired(&k.pubkey(), &b.mint, pool_b, D3, Some(a.mint))], &[&k]);
-    println!("H-1(a) B's D3 crank: {}", code(&later));
-
-    // Sixty days later, nothing has changed: no time-out exists on the LOST branch of the crank gate.
-    let now = env.now();
-    env.set_time(now + 60 * DAY);
-    let fee_b = env.lamports(&fee_pda(&b.mint));
-    let (f, c) = try_unwedge(&mut env, &k, &b, &a, D2);
-    println!("H-1(a) +60 days: forward_to_winner = {f}, crank_buyback = {c}; B's burn pool still holds {fee_b} lamports");
-    assert!(
-        f == "ok" || c == "ok",
-        "H-1(a): the loser's reading {D2} is wedged for good — forward_to_winner = {f}, crank_buyback = {c}; B's burn pool ({fee_b} lamports) can never be spent"
-    );
+    assert!(code(&later) == "PairResultPending", "D3 waits for its own result, not for D2: {}", code(&later));
 }
 
-/// H-1(b): the result names a winner whose pool is not verified (here: never registered — a LaunchLab partner still on its curve;
-/// equally a pair_curve side that is refunding, or a winner after apply_registration_policy). forward_to_winner refuses
-/// PairSideNotLive, crank_buyback refuses ForwardRequired. The program's own doc (pair.rs:351-352) and the whitepaper §5.5 say "a
-/// voided / unregistered side forwards nothing" / "a void forwards nothing". SAFE: the loser's reading is processed (forwarding nothing,
-/// or cranked as the loser's own) instead of blocking the queue.
+/// H-1(b) regression: a win naming a partner without a verified pool (a LaunchLab curve not migrated, a refunding pair_curve side, a
+/// pool switched away) is recorded, and forward_to_winner processes the live loser's reading as a 0-lamport FORWARDED: the loser keeps
+/// its fuel (it is not burned for a period it lost) and its queue moves on at once.
 #[test]
-#[ignore = "H-1 exploit: fails against ea65a7f0 (PairSideNotLive + ForwardRequired forever)"]
 fn h1b_a_result_naming_a_winner_without_a_verified_pool_must_not_wedge_the_loser() {
     let mut env = Env::new();
     let att = Keypair::new();
@@ -193,18 +183,17 @@ fn h1b_a_result_naming_a_winner_without_a_verified_pool_must_not_wedge_the_loser
     env.transfer_sol(&fee_pda(&a.mint), 3 * SOL);
     submit(&mut env, &a.mint, D2, V1 + 4 * UNIT, &[&att]).unwrap();
     submit(&mut env, &b.mint, D2, V1 + 7 * UNIT, &[&att]).unwrap();
-    // B (no pool) wins D2.
     submit_pair_result(&mut env, &a.mint, &b.mint, D2, b.mint, &[&att]).unwrap();
     let k = cranker(&mut env);
-    let (f0, c0) = try_unwedge(&mut env, &k, &a, &b, D2);
-    println!("H-1(b) right after the result: forward_to_winner = {f0}, crank_buyback = {c0}");
-    let now = env.now();
-    env.set_time(now + 60 * DAY);
     let fee_a = env.lamports(&fee_pda(&a.mint));
     let (f, c) = try_unwedge(&mut env, &k, &a, &b, D2);
-    println!("H-1(b) +60 days: forward_to_winner = {f}, crank_buyback = {c}; A's burn pool still holds {fee_a} lamports");
-    assert!(
-        f == "ok" || c == "ok",
-        "H-1(b): the live coin A is wedged behind a result naming its unregistered partner — forward_to_winner = {f}, crank_buyback = {c}"
-    );
+    println!("H-1(b) r2: forward_to_winner = {f}, then crank_buyback = {c} (AlreadyProcessed: the forward processed it)");
+    assert_eq!(f, "ok");
+    assert_eq!(env.lamports(&fee_pda(&a.mint)), fee_a, "nothing moved to the dead side");
+    assert_eq!(env.reading(&reading_pda(&config_pda(&a.mint), D2)).unwrap().outcome, OUTCOME_FORWARDED);
+    // 30 days after pairing, the dead partner can be unlinked on that evidence (M-2)
+    let paired_at = pair_link(&env, &a.mint).unwrap().paired_at;
+    env.set_time(paired_at.max(env.now()) + PAIR_UNLINK_NOT_LIVE_SECS);
+    env.ok(&[ix_unlink_pair(&k.pubkey(), &a.mint, &b.mint, None)], &[&k]);
+    assert_eq!(env.config(&config_pda(&a.mint)).pair_state, PAIR_STATE_NONE);
 }

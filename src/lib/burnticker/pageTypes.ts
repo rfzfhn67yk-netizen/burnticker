@@ -26,6 +26,8 @@ export interface PairCounterpart {
   winnerTakesBurn?: boolean;
   /** Since 1.10.0: every forward between the two coins, oldest first. */
   forwards?: PairForwardJson[];
+  /** Since 1.11.0: unlink_pair ran (a voided pair curve, a refunding side, or no verified pool 30 days after pairing) — two plain coins now. */
+  unpaired?: { reason: string; at: string; signature: string | null } | null;
 }
 
 /** Market data for the coin card and the coin page (market.ts builds it; 2026-10-10). Read from chain as data, never a price claim. */

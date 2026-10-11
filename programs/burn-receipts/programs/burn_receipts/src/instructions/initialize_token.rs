@@ -61,7 +61,8 @@ pub struct InitializeToken<'info> {
     /// CHECK: this coin's PairLink PDA ["pair_link", mint] (address-checked; created here). Required with pair_mint.
     #[account(mut)]
     pub pair_link: Option<UncheckedAccount<'info>>,
-    /// CHECK: the partner's PairLink ["pair_link", pair_mint] (address-checked) — when the partner initialized first.
+    /// CHECK: the partner's PairLink ["pair_link", pair_mint] (address-checked) — REQUIRED with pair_mint (pair-forward blind review
+    /// L-3): empty when this coin is first, the partner's link naming this mint when the partner was first.
     #[account(mut)]
     pub partner_link: Option<UncheckedAccount<'info>>,
     /// The partner's TokenConfig — when the partner initialized first (its pair_state becomes PAIRED).
@@ -315,6 +316,7 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
                 args.rule.mode,
                 args.rule.pool_policy,
                 now,
+                crate::instructions::pair::attester_set_hash(&ctx.accounts.config),
             )?;
             ctx.accounts.config.pair_state = state;
             Some(l)

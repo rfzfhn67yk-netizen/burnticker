@@ -1,10 +1,11 @@
 import { type Keypair, PublicKey } from "@solana/web3.js";
 import type { PairAccount } from "@/lib/pairCurve/accounts";
 import { LP_LOCK_FALLBACK_SECS } from "@/lib/pairCurve/client";
-import { fetchPairs, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN } from "@/lib/pairCurve/accounts";
+import { fetchPairs, STATUS_GRADUATED, STATUS_GRADUATING, STATUS_OPEN, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
 import { assertPairCurveCluster, crankPair, simulateAndSend, type CrankStep, type PairCurveContext, type SendResult } from "@/lib/pairCurve/client";
 import { configPda } from "@/lib/burnReceipts/pda";
 import { fetchPairLink, linkPairIx, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { pairErrorSentence } from "@/lib/burnticker/pairForward";
 
 /**
  * THE KEEPER'S PAIR-CURVE CRANK (2026-10-10; docs/burnticker/PAIR-CURVE.md §5). Program mode only, behind
@@ -18,9 +19,10 @@ import { fetchPairLink, linkPairIx, type PairLinkAccount } from "@/lib/burnRecei
  *                                       observation (blind review 2 L-4)
  *   Open at/after the deadline        → void_pair
  *   any                               → claim_developer_fee once the accrual reaches 0.01 SOL
- *   a side with a pool, before anything else → link_pair (LAUNCHPAD-PATH §40, winner takes the burn) when both TokenConfigs exist and the
- *                                       two PairLinks do not name each other yet — permissionless, idempotent; register_pair_pool refuses
- *                                       PairNotLinked without it. Its own transaction, before crankPair's register step.
+ *   right after init_pair, first     → link_pair (LAUNCHPAD-PATH §40, winner takes the burn) when both TokenConfigs exist and the two
+ *                                       PairLinks do not name each other yet — permissionless, a no-op once paired; register_pair_pool
+ *                                       refuses PairNotLinked without it, and since round 2 link_pair refuses once either coin has a reading
+ *                                       (PairHasReadings), so it runs before the first reading. Its own transaction, before crankPair's steps.
  *   a graduated side with lp_locked 0 → lock_lp; from 30 days after the commit also burn_lp (LP-lock round 2: the fallback, the only
  *                                       path that destroys LP) — and an alert `pair-side-unlocked` every cycle the side stays unlocked
  *
@@ -61,11 +63,11 @@ export function unlockedSides(pairs: readonly { address: PublicKey; pair: Pick<P
 }
 
 /**
- * Winner takes the burn: link_pair is due for a pair once a side has a pool (register_pair_pool comes next), both mints have a TokenConfig,
- * and the two PairLinks do not already name each other as paired. Pure.
+ * Winner takes the burn: link_pair is due as soon as both mints have a TokenConfig (right after init_pair; round 2 refuses it once
+ * either coin has a reading) and the two PairLinks do not already name each other as paired; never for a voided Pair. Pure.
  */
-export function linkPairDue(pair: Pick<PairAccount, "pools" | "mints">, configs: [boolean, boolean], links: [PairLinkAccount | null, PairLinkAccount | null]): boolean {
-  if (pair.pools.every((p) => p.equals(PublicKey.default))) return false;
+export function linkPairDue(pair: Pick<PairAccount, "mints" | "status">, configs: [boolean, boolean], links: [PairLinkAccount | null, PairLinkAccount | null]): boolean {
+  if (pair.status === STATUS_VOIDED) return false;
   if (!configs[0] || !configs[1]) return false;
   const ok = (l: PairLinkAccount | null, other: PublicKey) => !!l && l.paired && l.pair_mint.equals(other);
   return !(ok(links[0], pair.mints[1]) && ok(links[1], pair.mints[0]));
@@ -99,7 +101,8 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
       const links = await Promise.all(pair.mints.map((m) => fetchPairLink(d.ctx.connection, B, m))) as [PairLinkAccount | null, PairLinkAccount | null];
       if (linkPairDue(pair, configs, links)) {
         const result = await simulateAndSend(d.ctx, [linkPairIx({ programId: B, payer: d.cranker.publicKey, pair: address, mintA: pair.mints[0], mintB: pair.mints[1] })], [d.cranker], { dryRun: d.dryRun });
-        d.log(`  [pair-curve] ${address.toBase58().slice(0, 8)}… link_pair: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${result.error}`}`);
+        d.log(`  [pair-curve] ${address.toBase58().slice(0, 8)}… link_pair: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${pairErrorSentence(result.error)}`}`);
+        if (!result.ok && result.error === "PairHasReadings") d.alert?.("pair-link-refused", `pair-link-refused:${address.toBase58()}`, `pair ${address.toBase58().slice(0, 8)}…: ${pairErrorSentence(result.error)}`, { pair: address.toBase58() });
         (out.links ??= []).push({ pair: address.toBase58(), result });
       }
       const steps = await crankPair(d.ctx, d.cranker, address, { now, dryRun: d.dryRun, log: d.log, skipClusterCheck: true });

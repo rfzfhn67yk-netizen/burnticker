@@ -24,7 +24,7 @@ const BR = "programs/burn-receipts/programs/burn_receipts/src";
 const CHECKLIST = "docs/burnticker/reviews/checklist.md";
 const ERRATUM = "## Erratum 2026-10-10 (after the ChatGPT/Codex review)";
 /** Every dated erratum, in the order they were appended (each one after the last; the pre-registered text before the first never changes). */
-const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)"];
+const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)"];
 /** sha256 of the pre-registered checklist exactly as reviewed (everything before the erratum). It must never change. */
 const CHECKLIST_PREREGISTERED_SHA256 = "7af9866eb64157d77205e63b34e4695aa9d1ecac6b12c4cbff58c5a068ff5f3b";
 const LP_SENTENCE = "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation";
@@ -74,6 +74,10 @@ describe("checklist: pre-registered text is immutable, corrections go in the err
   test("the winner-takes-the-burn erratum states the pair entrypoints, the result message, the forward and the crank gate", () => {
     const e = erratumSection(ERRATA[3]);
     for (const re of [/\*\*29 entrypoints\*\*/, /link_pair/, /submit_pair_result/, /forward_to_winner/, /BURNRECEIPTS-PAIR-v1/, /ForwardRequired/, /PairResultPending/, /72 h/, /draw/, /emit!/, /lookup table/]) assert.match(e, re);
+  });
+  test("the round-2 pair erratum states 30 entrypoints, the no-wedge rules, the loser's consent, unlink and the ordering fixes", () => {
+    const e = erratumSection(ERRATA[4]);
+    for (const re of [/\*\*30 entrypoints\*\*/, /unlink_pair/, /PairResultNotServable/, /0 lamports/, /PairForwardMissing/, /loser's attester quorum/, /PairStillLive/, /PairHasReadings/, /PairDateBeforePairing/]) assert.match(e, re);
   });
   test("the LP-lock erratum states the policy, the compiled split and the unchanged item-8 floor", () => {
     const e = erratumSection(ERRATA[1]);
@@ -129,7 +133,7 @@ describe("burn_receipts entrypoint count matches the copy (review item 1)", () =
   }
   const n = programEntrypoints().length;
   test("lib.rs, the IDL and the Powers Register agree", () => {
-    assert.equal(n, 29, "29 entrypoints in the #[program] module today (24 + register_fee_key + claim_lock_fees + link_pair + submit_pair_result + forward_to_winner) — update the copy below if this changes");
+    assert.equal(n, 30, "30 entrypoints in the #[program] module today (24 + register_fee_key + claim_lock_fees + link_pair + submit_pair_result + forward_to_winner + unlink_pair) — update the copy below if this changes");
     assert.equal(BURN_RECEIPTS_IDL.instructions.length, n);
     assert.deepEqual([...BURN_RECEIPTS_IDL.instructions.map((x) => x.name)].sort(), [...programEntrypoints()].sort());
     assert.equal((JSON.parse(read("docs/burn-receipts/powers-register.json")) as { instructions: unknown[] }).instructions.length, n);

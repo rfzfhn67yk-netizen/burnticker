@@ -46,6 +46,11 @@ export const PAIR_RESULT_LOST = num("PAIR_RESULT_LOST");
 export const PAIR_RESULT_DRAW = num("PAIR_RESULT_DRAW");
 /** Reading.outcome after forward_to_winner. */
 export const OUTCOME_FORWARDED = num("OUTCOME_FORWARDED");
+/** unlink_pair (r2 M-2): a coin still without a verified pool this long after the pairing can be unlinked; PairUnlinked.reason values. */
+export const PAIR_UNLINK_NOT_LIVE_SECS = num("PAIR_UNLINK_NOT_LIVE_SECS");
+export const UNLINK_PAIR_VOIDED = num("UNLINK_PAIR_VOIDED");
+export const UNLINK_SIDE_REFUNDING = num("UNLINK_SIDE_REFUNDING");
+export const UNLINK_NOT_LIVE = num("UNLINK_NOT_LIVE");
 export const SEED_PAIR_LINK = seed("PAIR_LINK_SEED");
 export const SEED_PAIR_RESULT = seed("PAIR_RESULT_SEED");
 
@@ -62,6 +67,8 @@ export { pairLinkPda, pairOrder, pairResultPda } from "@/lib/burnReceipts/pda";
 export interface PairLinkAccount {
   version: number; bump: number; mint: PublicKey; pair_mint: PublicKey; paired: boolean; witness: number;
   created_at: bigint; pairing_deadline: bigint; paired_at: bigint;
+  /** r2 M-1: the coin's attester-set hash at pairing (zero for links written before r2); a rotation since then makes the partner co-sign. */
+  attester_set_hash: Uint8Array;
 }
 
 export interface PairResultAccount {
@@ -147,9 +154,19 @@ export function linkPairIx(o: { programId: PublicKey; payer: PublicKey; pair: Pu
   }, {});
 }
 
-/** submit_pair_result — mints in any order (sorted here). `winner` null = draw. */
+/**
+ * submit_pair_result — mints in any order (sorted here). `winner` null = draw.
+ * r2: a WIN carries both coins' readings for the date (reading_lo / reading_hi; the program requires both to exist and the loser's
+ * to be unprocessed — pools are NOT required: a side without a verified pool makes the forward a 0-lamport FORWARDED, so the loser
+ * keeps its fuel instead of burning a period it lost; never post a fallback draw for that) and needs the LOSER's quorum (+ the winner's only if the loser rotated its attesters since
+ * pairing — then the transaction needs a v0 + lookup table); a DRAW omits the readings and needs both quorums. Dates on or after the
+ * pairing day only.
+ */
 export function submitPairResultIx(o: { programId: PublicKey; payer: PublicKey; mintA: PublicKey; mintB: PublicKey; recordDate: number; winner: PublicKey | null; sourceUrlHash: Uint8Array; proofHash?: Uint8Array }): TransactionInstruction {
   const [lo, hi] = pairOrder(o.mintA, o.mintB);
+  const readings: Record<string, PublicKey> = o.winner && !o.winner.equals(PublicKey.default)
+    ? { reading_lo: readingPda(o.programId, configPda(o.programId, lo), o.recordDate), reading_hi: readingPda(o.programId, configPda(o.programId, hi), o.recordDate) }
+    : {};
   return buildIx(o.programId, "submit_pair_result", {
     payer: o.payer,
     config_lo: configPda(o.programId, lo),
@@ -158,6 +175,7 @@ export function submitPairResultIx(o: { programId: PublicKey; payer: PublicKey; 
     link_hi: pairLinkPda(o.programId, hi),
     pair_result: pairResultPda(o.programId, lo, hi, o.recordDate),
     system_program: SystemProgram.programId,
+    ...readings,
   }, {
     record_date: o.recordDate,
     winner: o.winner ?? PublicKey.default,
@@ -168,6 +186,7 @@ export function submitPairResultIx(o: { programId: PublicKey; payer: PublicKey; 
 
 /** forward_to_winner — the loser's fuel for `recordDate` → the winner's fee PDA. Permissionless (cranker allowlist during the cap). */
 export function forwardToWinnerIx(o: { programId: PublicKey; cranker: PublicKey; loserMint: PublicKey; winnerMint: PublicKey; recordDate: number }): TransactionInstruction {
+  // r2 H-1(b): no winner_reading account; a dead side (no verified pool) forwards 0 lamports but still processes the loser's reading.
   const [lc, wc] = [configPda(o.programId, o.loserMint), configPda(o.programId, o.winnerMint)];
   const [lf, wf] = [feePda(o.programId, o.loserMint), feePda(o.programId, o.winnerMint)];
   return buildIx(o.programId, "forward_to_winner", {
@@ -179,12 +198,29 @@ export function forwardToWinnerIx(o: { programId: PublicKey; cranker: PublicKey;
     winner_config: wc,
     winner_fee_vault: wf,
     winner_fee_wsol: associatedTokenAddress(wf, NATIVE_MINT),
-    winner_reading: readingPda(o.programId, wc, o.recordDate),
     pair_result: pairResultPda(o.programId, o.loserMint, o.winnerMint, o.recordDate),
     token_program: TOKEN_PROGRAM_ID,
     system_program: SystemProgram.programId,
     memo_program: MEMO_PROGRAM_ID,
   }, { record_date: o.recordDate });
+}
+
+/**
+ * unlink_pair (r2 M-2) — permissionless, on on-chain evidence only: `pair` = the pair_curve Pair when it is Voided or one side is
+ * refunding; without it, one coin must still lack a verified pool PAIR_UNLINK_NOT_LIVE_SECS after the pairing. Both coins become plain;
+ * both PairLinks close (rent to each coin's fee PDA).
+ */
+export function unlinkPairIx(o: { programId: PublicKey; cranker: PublicKey; mintA: PublicKey; mintB: PublicKey; pair?: PublicKey }): TransactionInstruction {
+  return buildIx(o.programId, "unlink_pair", {
+    cranker: o.cranker,
+    config_a: configPda(o.programId, o.mintA),
+    config_b: configPda(o.programId, o.mintB),
+    link_a: pairLinkPda(o.programId, o.mintA),
+    link_b: pairLinkPda(o.programId, o.mintB),
+    fee_a: feePda(o.programId, o.mintA),
+    fee_b: feePda(o.programId, o.mintB),
+    ...(o.pair ? { pair: o.pair } : {}),
+  }, {});
 }
 
 /** The forward receipt memo: `<PREFIX>|forward|from=<12>|to=<12>|period=<YYYY-MM-DD>|lamports=N|v1`. */

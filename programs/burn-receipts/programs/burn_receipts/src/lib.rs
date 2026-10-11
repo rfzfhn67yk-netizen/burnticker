@@ -95,6 +95,11 @@ pub mod burn_receipts {
         instructions::pair::handle_forward_to_winner(ctx, record_date)
     }
 
+    /// pair-forward blind review M-2: undo a pairing on on-chain evidence that one coin can never be live. Permissionless.
+    pub fn unlink_pair(ctx: Context<UnlinkPair>) -> Result<()> {
+        instructions::pair::handle_unlink_pair(ctx)
+    }
+
     pub fn check_pool_health(ctx: Context<CheckPoolHealth>) -> Result<()> {
         instructions::pool_health::handle_check_pool_health(ctx)
     }

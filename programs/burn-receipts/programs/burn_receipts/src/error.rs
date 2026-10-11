@@ -182,4 +182,12 @@ pub enum BurnError {
     NotWinner,
     #[msg("forward_to_winner: both coins must be live (a verified pool) — a voided or unregistered side forwards nothing")]
     PairSideNotLive,
+    #[msg("pair result: a winner needs both coins' readings for the date and the loser's still unprocessed")]
+    PairResultNotServable,
+    #[msg("pair result: the date is before the coins were paired")]
+    PairDateBeforePairing,
+    #[msg("link_pair: a coin already has readings under its unpaired rule; pairs are linked before their first reading")]
+    PairHasReadings,
+    #[msg("unlink_pair: no on-chain evidence that the partner can never be live (Pair voided / side refunding, or no verified pool 30 days after pairing)")]
+    PairStillLive,
 }

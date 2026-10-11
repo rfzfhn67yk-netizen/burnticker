@@ -569,6 +569,54 @@ fn pc1_l2_graduating_forever_after_stuck_side_sells_out() {
     expect_anchor_err(env.send(&[ix_close(&p, &c.pubkey())], &[&c]), "NotClosable");
 }
 
+/// pair-forward blind review H-1 (the pair_curve route) + M-2 REGRESSION: a half-graduated pair — side A graduated and registered, side
+/// B refunding after a real Raydium block (status stays Graduating). A WIN naming B is recorded but forwards nothing (B has no verified
+/// pool and never will): A keeps its fuel and its queue moves on; unlink_pair on the Pair's refunding evidence then returns both coins
+/// to plain coins. Also pins pair_curve's `refunding` offset (880)
+/// that burn_receipts' PairView reads.
+#[test]
+fn pf_r2_half_graduated_pair_refuses_a_win_for_the_dead_side_and_unlinks_on_the_refund() {
+    let mut env = new_env();
+    let p = setup(&mut env, MAINNET_POOL_FEE, |_| {});
+    let c = trader(&mut env, SOL);
+    let (_ba, bb) = fill(&mut env, &p, 50 * SOL, 40 * SOL);
+    let pa = pool_of(&p, 0);
+    graduate_side(&mut env, &p, &c, 0, &[ix_register_pair(&c.pubkey(), &p.mint(0), &pa.pool, &pa.lp_mint, &p.pair)]).unwrap();
+    assert!(env.config(&config_pda(&p.mint(0))).pool_verified);
+    let s = pair_state(&env, &p);
+    let mut cfg = env.svm.get_account(&p.amm).unwrap();
+    cfg.data[36..44].copy_from_slice(&(100 * SOL).to_le_bytes());
+    env.svm.set_account(p.amm, cfg).unwrap();
+    env.set_time(s.graduation_started_at + pair_curve::GRADUATION_STUCK_SECS);
+    env.ok(&[ix_void(&p, &c.pubkey())], &[&c]);
+    let _ = bb;
+    let raw = env.svm.get_account(&p.pair).unwrap().data;
+    assert!(pair_state(&env, &p).refunding[1] && raw[880] == 0 && raw[881] == 1, "pair_curve's refunding flags sit at offset 880");
+    // both coins read two periods after the pairing; the result naming the refunding side B is refused
+    const P1: u32 = 20261010;
+    const P2: u32 = 20261011;
+    for side in 0..2u8 {
+        submit(&mut env, &p.mint(side), P1, V1, &[&p.attester]).unwrap();
+        submit(&mut env, &p.mint(side), P2, V1 + 3 * UNIT, &[&p.attester]).unwrap();
+    }
+    submit_pair_result(&mut env, &p.mint(0), &p.mint(1), P2, p.mint(1), &[&p.attester]).unwrap();
+    let fee_a = env.lamports(&fee_pda(&p.mint(0)));
+    env.ok(&[ix_forward_to_winner(&c.pubkey(), &p.mint(0), &p.mint(1), P2)], &[&c]);
+    assert_eq!(env.lamports(&fee_pda(&p.mint(0))), fee_a, "the refunding side takes nothing");
+    expect_anchor_err(env.send(&[ix_unlink_pair(&c.pubkey(), &p.mint(0), &p.mint(1), None)], &[&c]), "PairStillLive");
+    let meta = env.ok(&[ix_unlink_pair(&c.pubkey(), &p.mint(0), &p.mint(1), Some(p.pair))], &[&c]);
+    let ev = events(&meta).into_iter().find(|(d, _)| d[..] == <burn_receipts::events::PairUnlinked as Discriminator>::DISCRIMINATOR[..]).expect("PairUnlinked");
+    let ev = <burn_receipts::events::PairUnlinked as AnchorDeserialize>::try_from_slice(&ev.1).unwrap();
+    assert_eq!(ev.reason, UNLINK_SIDE_REFUNDING);
+    for side in 0..2u8 {
+        assert_eq!(env.config(&config_pda(&p.mint(side))).pair_state, PAIR_STATE_NONE);
+    }
+    // no more results for the unlinked coins
+    expect_anchor_err(submit_pair_result(&mut env, &p.mint(0), &p.mint(1), P2, Pubkey::default(), &[&p.attester]), "AccountNotInitialized");    // L-1: the coins have readings now — link_pair refuses to re-pair them under a rule they did not read with
+    let payer = env.payer.pubkey();
+    expect_anchor_err(env.send(&[ix_link_pair(&payer, &p.pair, &p.mint(0), &p.mint(1))], &[]), "PairHasReadings");
+}
+
 /// L-3 REGRESSION: inactivity alone (no Raydium block) never refunds side B: void_pair = NotStuck, sells stay closed.
 #[test]
 fn pc1_l3_three_day_rule_fires_without_raydium() {

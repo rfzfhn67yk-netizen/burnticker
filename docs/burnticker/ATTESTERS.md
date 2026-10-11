@@ -22,8 +22,10 @@ attesters' signatures over that message are in the same transaction (an Ed25519S
 
 ### Pair results (winner takes the burn, 2026-10-11)
 
-For a rivalry pair, each result period also gets one PairResult: the winner (the coin whose rule the result fires) or a draw, signed by
-a quorum of **each** coin's attesters over one shared message (`pairResultMessage`, `attestPairResult` in
+For a rivalry pair, each result period also gets one PairResult: the winner (the coin whose rule the result fires) or a draw, signed
+over one shared message. Since round 2 (the pair-forward blind review): a **win** needs a quorum of the **losing** coin's attesters — the
+side giving up its fuel consents — plus the winner's quorum only if the loser's attester set changed since the pairing (the PairLink keeps
+the set's hash); a **draw** needs a quorum of **each** coin's attesters; repeated submissions are signature-checked too. The message (`pairResultMessage`, `attestPairResult` in
 `src/lib/burnReceipts/pairs.ts`):
 
 ```
@@ -36,8 +38,13 @@ devnet the keeper key is both coins' attester). Two notes for anyone checking or
 - **Its event is a plain log.** `PairResultSubmitted` is written with `emit!`, not `emit_cpi!`: read it from the transaction's
   "Program data:" log lines written inside burn_receipts' own invocation (the SDK's `logEventsFrom` does), not from an inner
   instruction. The PairResult account `["pair_result", mint_lo, mint_hi, date]` is the durable record.
-- **Transaction size.** Two attester signatures fit a legacy transaction. A pair whose quorums need more than two signatures needs a v0
-  transaction with an address lookup table.
+- **Transaction size.** A win carries both coins' readings for the date: one signature plus both readings fits a legacy transaction; a
+  two-signature draw fits too; a two-signature win (the winner co-signing after a loser rotation) needs a v0 transaction with an address
+  lookup table, as does any quorum above two.
+- **What a win needs on chain.** The two coins paired to each other, a date on or after the pairing day (`PairDateBeforePairing`), both
+  coins' readings for the date (the keeper attests a flat 0-unit winner reading first when needed) and the loser's still unprocessed —
+  else `PairResultNotServable`. There is no pool condition: against a side without a verified pool the forward moves 0 lamports and the
+  loser keeps its fuel. A draw is signed only when the period truly was a draw; the keeper never substitutes one for a win.
 
 ## 1. Run the reader on your own machine
 

@@ -224,10 +224,21 @@ pool (blind review 2 I-4: aggregators may route there; the site links only the r
    spent — buyback_spend(min(spendable, cap), units, f), nothing under its floor — from the loser's burn pool to the winner's; the
    winner's ordinary cranks burn the winner's coin. The loser's supply is untouched; a draw forwards nothing; no result within 72 h of
    the reading lets the coin crank as unpaired. Devnet: docs/burnkeeper/devnet-pair-forward-run-log-2026-10-11.md.
+   **Blind review r2 (2026-10-11, docs/burnticker/reviews/2026-10-11-pair-forward-blind.md):** `link_pair` runs before either coin's
+   first reading (L-1); a win is recorded only when the forward can serve it — both coins read the date and the loser's reading is still
+   unprocessed (no pool condition: a dead side makes the forward 0 lamports, the loser keeps its fuel) — and needs the LOSER's quorum (the winner's too only after a loser attester rotation; M-1); a
+   draw needs both quorums; a result never predates the pairing (L-2). A dead side forwards 0 lamports (the loser's reading is still
+   processed), and a LOST period whose forward never lands burns as unpaired 72 h after the reading (H-1). `unlink_pair` returns a
+   pair to two plain coins on on-chain evidence: the Pair Voided, a side refunding, or a coin without a verified pool 30 days after
+   pairing (M-2). Pairing is not in `params_hash` by design: params_hash is fixed at initialize_token over the rules file, while a
+   policy-2 pairing happens later (link_pair) and can be undone (unlink_pair); the chain's `pair_state` + PairLink is the record (I-6).
    The keeper (src/lib/burnKeeper/pairCurveCrank.ts) sends `link_pair` as its own transaction once a side has a pool and both
    TokenConfigs exist, before register_pair_pool; then per period (src/lib/burnticker/multiKeeper.ts): both coins attest, the PairResult
    is posted, the loser's `forward_to_winner` lands, then the winner cranks — receipts `forwarded`, the append-only `pair_forwards`
-   table, the receipt line "forwarded from $LOSER: N SOL → $WINNER burn pool".
+   table, the receipt line "forwarded from $LOSER: N SOL → $WINNER burn pool". The keeper posts only the true result (a draw only for a
+   true draw; a win it cannot record is an alert, never a substitute draw), attests a flat 0-unit winner reading when the winner had nothing
+   to read that day, and follows `planCrank` for the 72 h time-out (the forward until then, the paired buyback after) — a lost period never
+   burns the losing coin; against a dead winner the forward moves 0 lamports and the fuel waits in the loser's pool.
    `claim_lock_fees` always collects everything accrued (no amount argument, r2 L-3) against the FeeKeyRecord's pool (r2 L-1).
 6. **Fallback if the lock cannot be made** (r2 L-2): `lock_lp` depends on Raydium's upgradeable lock program. If a graduated side's LP
    is still unlocked 30 days (`LP_LOCK_FALLBACK_SECS`) after the graduation decision, anyone may call pair_curve's `burn_lp(side)`: it

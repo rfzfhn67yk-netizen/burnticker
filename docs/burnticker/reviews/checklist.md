@@ -143,3 +143,23 @@ burn_receipts entrypoints and changes what a reviewer checks for paired coins on
   nobody is paid. A draw or a void forwards nothing. With no result the crank waits (`PairResultPending`) for up to 72 h, then burns
   unpaired.
 
+## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)
+
+The text above and the earlier errata stay as written. The pair-forward blind review's fixes (H-1, M-1, M-2, L-1..L-4) change what a
+reviewer checks for paired coins only:
+
+- **Instruction count (item 1).** burn_receipts now has **30 entrypoints**: the 29 above plus `unlink_pair`. The IDL, the Powers Register
+  and the whitepaper's §13.3 list 30 (34 event types with `PairForwardMissing` and `PairUnlinked`, 94 error codes).
+- **No wedge (H-1).** A win is recorded only when both coins read the date and the loser's reading is unprocessed (`PairResultNotServable`
+  otherwise; no pool condition, and the keeper never substitutes a draw). `forward_to_winner` takes no winner reading; a side without a
+  verified pool forwards 0 lamports and still processes the loser's reading (the memo is always written), so a lost period never burns the
+  losing coin. A LOST period whose forward never lands cranks as unpaired 72 h after the reading (`PairForwardMissing`); `planCrank`
+  plans the paired buyback from that point.
+- **The loser consents (M-1).** A win needs the loser's attester quorum, the winner's too only after a loser attester rotation since pairing
+  (PairLink keeps the attester-set hash); a draw needs both quorums; repeated submissions are signature-checked.
+- **Unlink (M-2).** `unlink_pair`, permissionless, on evidence only: the pair_curve Pair Voided, a side refunding, or a coin without a
+  verified pool 30 days after pairing (`PairStillLive` otherwise; reasons 0 / 1 / 2 in `PairUnlinked`).
+- **Ordering (L-1..L-4).** `link_pair` refuses once either coin has a reading (`PairHasReadings`); no result predates the pairing day
+  (`PairDateBeforePairing`); `initialize_token` with `pair_mint` always takes the partner's PairLink address; WSOL is measured as lamports
+  minus rent after a sync.
+
