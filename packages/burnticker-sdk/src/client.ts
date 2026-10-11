@@ -26,11 +26,11 @@ export interface BurntickerOptions {
   userAgent?: string;
 }
 
-/** A token as a bot wants it: the page's status, its receipts, the next possible burn and the market-implied chance (display only). */
+/** A token as a bot wants it: the page's status, its receipts and the next possible burn. */
 export interface TokenView extends TokenDetail {
   ticker: string; mint: string;
   nextBurn: TokenStatusJson["next"];
-  /** The market-implied chance that the NEXT settlement burns — DISPLAY ONLY; the rule never reads a price. */
+  /** Always null: Burnticker shows no odds or prices for any coin (owner decision 2026-10-10). Kept for compatibility. */
   impliedChance: number | null;
 }
 
@@ -130,7 +130,7 @@ export class Burnticker {
     return buildLaunchBundle(this.api, { ...o, allowMainnet: o.allowMainnet ?? this.options.allowMainnet }, { connection: this.options.connection, programId: this.options.programId ? new PublicKey(this.options.programId) : null });
   }
 
-  /** Report the landed launch transaction: the draft goes live and its baseline is now. */
+  /** Report the landed launch transaction: the server reads it from the chain, then the draft goes live with its baseline at the block time (the same signature again is a no-op). */
   confirmLaunch(mint: PublicKey | string, signature: string): Promise<{ ok: boolean; ticker: string; mint: string; status: string; note: string }> {
     return this.api.post("/launch/confirm", { mint: new PublicKey(mint).toBase58(), signature });
   }
@@ -143,7 +143,7 @@ export class Burnticker {
 
   tokens(o: { status?: "draft" | "live" | "paused" | "retired" | "expired"; limit?: number; offset?: number } = {}): Promise<TokenList> { return this.api.get<TokenList>("/tokens", o); }
 
-  /** One token by ticker or mint: status, receipts, next possible burn, implied chance (display only), the exact rules.json text. */
+  /** One token by ticker or mint: status, receipts, next possible burn, the exact rules.json text. */
   async token(tickerOrMint: string): Promise<TokenView> {
     const d = await this.api.get<TokenDetail>(`/tokens/${encodeURIComponent(tickerOrMint)}`);
     return { ...d, ticker: d.status.ticker, mint: d.status.mint, nextBurn: d.status.next, impliedChance: d.status.next.impliedChance };
@@ -161,7 +161,7 @@ export class Burnticker {
   async verifyReceipt(receipt: ReceiptJson | string, o: Partial<VerifyOptions> & { eventId?: string } = {}): Promise<VerifyResult> {
     if (typeof receipt !== "string") {
       if (!o.ticker || !o.rulesText) throw new Error("burnticker.verifyReceipt: with a receipt object, pass { ticker, rulesText }");
-      return verifyReceipt(receipt, { connection: this.options.connection, fetch: this.options.fetch, ...o, ticker: o.ticker, rulesText: o.rulesText });
+      return verifyReceipt(receipt, { connection: this.options.connection, fetch: this.options.fetch, programId: this.options.programId, ...o, ticker: o.ticker, rulesText: o.rulesText });
     }
     if (!o.eventId) throw new Error("burnticker.verifyReceipt(ticker, { eventId })");
     const t = await this.token(receipt);
@@ -172,7 +172,7 @@ export class Burnticker {
       const series = lock(JSON.parse(t.rulesText)).rule.series;
       sourceConfig = (await this.catalogue()).sources.find((s) => s.id === series)?.config ?? null;
     }
-    return verifyReceipt(r, { connection: this.options.connection, fetch: this.options.fetch, ...o, ticker: t.ticker, rulesText: t.rulesText, sourceConfig });
+    return verifyReceipt(r, { connection: this.options.connection, fetch: this.options.fetch, programId: this.options.programId, mint: t.status.mint, ...o, ticker: t.ticker, rulesText: t.rulesText, sourceConfig });
   }
 
   /** The permissionless crank transaction for a mint's next attested reading (unsigned; your cranker key signs and pays the fee). */

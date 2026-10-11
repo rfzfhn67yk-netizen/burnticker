@@ -114,7 +114,7 @@ async function publishAll(now: number): Promise<void> {
       const oracle = locked.rule.oracle === "catalogue" ? deps.oracles.catalogue : locked.rule.oracle === "polymarket" ? polymarket : locked.rule.oracle === "derby" ? derby : kalshi;
       // Display reads on the published pages (venues.ts): Kalshi's only with BURNTICKER_KALSHI_ENABLED on; never a Polymarket odds read;
       // Polymarket titles only with discovery on. Settlement reads (fetchDue) are separate.
-      const implied = (locked.rule.oracle === "kalshi" && KALSHI_ON) || locked.rule.oracle === "derby" ? await oracle.impliedChance(locked.rule, state.lastValue).catch(() => null) : null;
+      const implied = locked.rule.oracle === "derby" ? await oracle.impliedChance(locked.rule, state.lastValue).catch(() => null) : null;   // derby: the next window's close time only; no odds for any coin (owner decision 2026-10-10)
       const info = locked.rule.oracle === "kalshi" ? (KALSHI_ON ? await kalshi.seriesInfo(locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null) : null)
         : locked.rule.oracle === "polymarket" ? (POLY_DISCOVERY ? await polymarket.seriesInfo(locked.rule.market ?? locked.rule.series!).catch(() => null) : null) : null;
       const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;

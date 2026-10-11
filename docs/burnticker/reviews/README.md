@@ -15,7 +15,7 @@ writing its own findings. Every fix and its closing test is in `docs/burn-receip
 | claude-blind-1 | a fresh Claude agent given the code only | completed 2026-10-09 (2 High, 4 Medium, 7 Low, 6 Info) | [2026-10-09-claude-blind-1.md](2026-10-09-claude-blind-1.md) |
 | claude-blind-2 | a fresh Claude agent, no prior exposure | completed 2026-10-10 (5 Medium, 4 Low, 8 Info) | [2026-10-10-claude-blind-2.md](2026-10-10-claude-blind-2.md) |
 | claude-blind-3 + re-check | a fresh Claude agent, no prior exposure; its re-check of the round-3 fixes is the last section of the same report | completed 2026-10-10 (3 Medium, 6 Low, 6 Info; re-check 4 Low, 2 Info) | [2026-10-10-claude-blind-3.md](2026-10-10-claude-blind-3.md) |
-| chatgpt-adversarial | ChatGPT, the same pre-registered checklist | pending | — |
+| chatgpt-adversarial | ChatGPT/Codex adversarial PR review, the same pre-registered checklist (reviewed public commit 58d43eae) | completed 2026-10-10 (2 High, 5 Medium; response with per-finding disposition in [2026-10-10-chatgpt-pr-review-response.md](2026-10-10-chatgpt-pr-review-response.md)) | [2026-10-10-chatgpt-pr-review.md](2026-10-10-chatgpt-pr-review.md) |
 | tooling | cargo-audit, clippy pedantic, anchor verify / solana-verify, Trident fuzzing where feasible, Sec3 X-ray free tier | partly run: clippy `--all-targets -D warnings` clean (review 3 re-check); the rest not run | — |
 | bounty | public, 5–10 SOL from the developer fee (SECURITY.md in the public repository) | not published | — |
 
@@ -25,7 +25,7 @@ writing its own findings. Every fix and its closing test is in `docs/burn-receip
 
 - `checklist.md` — the pre-registered checklist for the remaining reviews, committed BEFORE the review starts, so the questions
   cannot be tuned to the answers (committed 2026-10-10).
-- `YYYY-MM-DD-claude-blind-N.md` (three present) and `YYYY-MM-DD-chatgpt-adversarial.md` (pending) — each report **as delivered**, unedited. Every finding
+- `YYYY-MM-DD-claude-blind-N.md` (three present) and `2026-10-10-chatgpt-pr-review.md` (present, with its response file) — each report **as delivered**, unedited. Every finding
   keeps its original severity and wording. A finding that turns out to be wrong is answered under it, not removed.
 - `YYYY-MM-DD-tooling.md` — the raw output of the free tooling run against the tagged commit.
 - `findings.md` (not written yet; until then `docs/burn-receipts/CHANGELOG.md` is the per-finding record) — one table across all reviews: id, source, severity, status (open / fixed in `<commit>` / accepted with reason /

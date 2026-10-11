@@ -7,7 +7,7 @@ import { likeHref } from "@/lib/burnticker/templates";
 
 /**
  * A rivalry pair's shared page. A scoreboard header (burns A : B, supply A : B, the last settlement with its market ticker and result,
- * the next scheduled market with each side's Kalshi-implied chance — display only), the share line (dailyPost.ts pairDailyText, built
+ * the next scheduled market — ticker and close time, no odds), the share line (dailyPost.ts pairDailyText, built
  * by the API), both receipts tables stacked, both rules. The receipts are the scoreboard. The static twin is tokenPage.ts renderPairHtml.
  */
 interface Receipt { eventId: string; settledAt: string; result: string | null; value: string | null; units: number; status: string; burned: string | null; txUrl: string | null; signature: string | null; verify?: { verified: boolean; checks: string[] } }

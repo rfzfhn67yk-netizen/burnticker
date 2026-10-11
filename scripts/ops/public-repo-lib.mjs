@@ -12,6 +12,11 @@
 // declared in the monorepo's package.json (so the generated package.json is complete); and every text file is scanned against
 // config/public-repo.denypatterns. One failure of any kind and nothing is written.
 //
+// THE PROVENANCE GATE (N5, 2026-10-10). Before any of that, and before any file is read: every source must be a regular file reached
+// through real directories (no symlink at the path or above it) whose realpath stays inside its root (the repo for tracked files,
+// the overlay directory for overlay files). Re-proved at copy time (O_NOFOLLOW), and the staged output is rescanned afterwards (no
+// symlink, nothing outside the manifest, deny scan on the staged bytes). A refusal names the path and fails the run.
+//
 // THE OVERLAY. config/public-repo/overlay/** is copied on top at the same relative paths: the public README, LICENSE, SECURITY.md,
 // tsconfig, the test alias hook, the Next root layout — files that exist only for the public tree. They go through the same scan.
 //
@@ -24,11 +29,12 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
-const REPO = path.resolve(here, "..", "..");
 const args = process.argv.slice(2);
 const cmd = args[0];
 const opt = (name, dflt) => { const i = args.indexOf(`--${name}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : dflt; };
 const flag = (name) => args.includes(`--${name}`);
+// --root D: run against another checkout (the regression tests point it at a throwaway git repo). Default: this monorepo.
+const REPO = path.resolve(opt("root", path.resolve(here, "..", "..")));
 
 const ALLOWLIST = path.resolve(REPO, opt("allowlist", "config/public-repo.allowlist"));
 const DENYPATTERNS = path.resolve(REPO, opt("denypatterns", "config/public-repo.denypatterns"));
@@ -56,19 +62,78 @@ function readAllowlist() {
 function listTracked(specs) {
   return specs.map((spec) => {
     const out = execFileSync("git", ["ls-files", "-z", "--", spec], { cwd: REPO, encoding: "utf8" });
-    const files = out.split("\0").filter(Boolean).filter((f) => fs.existsSync(path.join(REPO, f)));   // deleted-but-staged files are not copied
+    // deleted-but-staged files are not copied; lstat (not existsSync) so a dangling symlink is still listed — and then refused
+    const files = out.split("\0").filter(Boolean).filter((f) => fs.existsSync(path.join(REPO, f)) || isLink(path.join(REPO, f)));
     return { spec, files };
   });
 }
 
-function walk(dir, base = dir, acc = []) {
+/**
+ * Every entry under `dir` (relative, "/"-separated). A symlink — to a file or a directory — is never followed: it is reported in
+ * `links` (relative path) so the caller can refuse it, and anything that is neither a regular file nor a directory lands in `odd`.
+ */
+function walk(dir, base = dir, acc = [], links = [], odd = []) {
   if (!fs.existsSync(dir)) return acc;
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) walk(p, base, acc); else acc.push(path.relative(base, p).split(path.sep).join("/"));
+    const r = path.relative(base, p).split(path.sep).join("/");
+    if (e.isSymbolicLink()) links.push(r);
+    else if (e.isDirectory()) walk(p, base, acc, links, odd);
+    else if (e.isFile()) acc.push(r);
+    else odd.push(r);
   }
   return acc;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// 1b. provenance (N5, the ChatGPT/Codex review 2026-10-10): an allowlisted PATHNAME proves nothing about the bytes behind it. A
+// symlink at an allowlisted path — or a symlinked directory above it — would publish its target (and a .png name skips the text
+// scan). So every source must be a regular file reached through real directories only, and its realpath must stay inside the
+// approved root: the repo root for tracked (and derived) files, the overlay directory for overlay files. Any failure REFUSES the run
+// with the path named; nothing is skipped silently.
+// ---------------------------------------------------------------------------------------------------------------------------------
+/** Problems with `relPath` under `root` (empty array = confined regular file). Never reads file contents. */
+function provenanceProblems(root, relPath, label) {
+  const problems = [];
+  const parts = relPath.split("/").filter(Boolean);
+  let cur = root;
+  for (let i = 0; i < parts.length; i++) {
+    cur = path.join(cur, parts[i]);
+    let st;
+    try { st = fs.lstatSync(cur); } catch (e) { problems.push(`${label}${relPath}: cannot lstat ${parts.slice(0, i + 1).join("/")} (${e.code ?? e.message})`); return problems; }
+    const sub = parts.slice(0, i + 1).join("/");
+    if (st.isSymbolicLink()) { problems.push(`${label}${relPath}: ${i === parts.length - 1 ? "is a symlink" : `has a symlink ancestor directory ${sub}`} — refused (symlinks are never published)`); return problems; }
+    if (i < parts.length - 1 && !st.isDirectory()) { problems.push(`${label}${relPath}: ancestor ${sub} is not a directory — refused`); return problems; }
+    if (i === parts.length - 1 && !st.isFile()) { problems.push(`${label}${relPath}: not a regular file — refused`); return problems; }
+  }
+  const realRoot = fs.realpathSync(root);
+  const real = fs.realpathSync(path.join(root, relPath));
+  if (real !== realRoot && !real.startsWith(realRoot + path.sep)) problems.push(`${label}${relPath}: resolves outside its source root (${rel(real)}) — refused`);
+  return problems;
+}
+
+/** The overlay root itself must be a real directory reached without symlinks (relative to the repo when it lives inside it). */
+function overlayRootProblems() {
+  if (!fs.existsSync(OVERLAY) && !isLink(OVERLAY)) return [];
+  const r = path.relative(REPO, OVERLAY);
+  const inside = r && !r.startsWith("..") && !path.isAbsolute(r);
+  const problems = [];
+  if (inside) {
+    const parts = r.split(path.sep);
+    let cur = REPO;
+    for (let i = 0; i < parts.length; i++) {
+      cur = path.join(cur, parts[i]);
+      if (isLink(cur)) { problems.push(`overlay root ${r.split(path.sep).join("/")}: ${i === parts.length - 1 ? "is a symlink" : `has a symlink ancestor directory ${parts.slice(0, i + 1).join("/")}`} — refused (symlinks are never published)`); return problems; }
+    }
+  } else if (isLink(OVERLAY)) problems.push(`overlay root ${OVERLAY}: is a symlink — refused`);
+  if (!fs.lstatSync(OVERLAY).isDirectory()) problems.push(`overlay root ${rel(OVERLAY)}: not a directory — refused`);
+  return problems;
+}
+
+function isLink(p) { try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; } }
+
+/** The source root a manifest entry must stay inside. */
+const rootOf = (entry) => (entry.origin === "overlay" ? OVERLAY : REPO);
 
 /** The whole published set: { published path → { from: absolute source, origin: "tracked" | "overlay" | "derived" } }. */
 function buildManifest() {
@@ -76,16 +141,26 @@ function buildManifest() {
   const listed = listTracked(specs);
   const warnings = listed.filter((l) => l.files.length === 0).map((l) => `allowlist line matches no tracked file: ${l.spec}`);
   const manifest = new Map();
-  for (const { files } of listed) for (const f of files) manifest.set(f, { from: path.join(REPO, f), origin: "tracked" });
+  const provenance = [];
+  for (const { files } of listed) for (const f of files) {
+    provenance.push(...provenanceProblems(REPO, f, ""));
+    manifest.set(f, { from: path.join(REPO, f), origin: "tracked", src: f });
+  }
   // the overlay wins over a tracked file at the same path (there should be none; say so if there is)
-  const overlayFiles = walk(OVERLAY).filter((f) => !f.endsWith(".DS_Store"));
+  const overlayProblems = overlayRootProblems();
+  provenance.push(...overlayProblems);
+  const links = [], odd = [];
+  const overlayFiles = overlayProblems.length ? [] : walk(OVERLAY, OVERLAY, [], links, odd).filter((f) => !f.endsWith(".DS_Store"));
+  for (const l of links) provenance.push(`overlay ${l}: is a symlink — refused (symlinks are never published)`);
+  for (const o of odd) provenance.push(`overlay ${o}: not a regular file — refused`);
   for (const f of overlayFiles) {
+    provenance.push(...provenanceProblems(OVERLAY, f, "overlay "));
     if (manifest.has(f) && manifest.get(f).origin === "tracked") warnings.push(`overlay replaces a tracked file: ${f}`);
     // the overlay directory itself is allowlisted (so the public can read it); its files are ALSO placed at the root
-    manifest.set(f, { from: path.join(OVERLAY, f), origin: "overlay" });
+    manifest.set(f, { from: path.join(OVERLAY, f), origin: "overlay", src: f });
   }
-  if (manifest.has(CHANGELOG_SRC)) manifest.set(CHANGELOG_PUBLIC_ROOT, { from: path.join(REPO, CHANGELOG_SRC), origin: "derived" });
-  return { manifest, warnings, specs };
+  if (manifest.has(CHANGELOG_SRC)) manifest.set(CHANGELOG_PUBLIC_ROOT, { from: path.join(REPO, CHANGELOG_SRC), origin: "derived", src: CHANGELOG_SRC });
+  return { manifest, warnings, specs, provenance: [...new Set(provenance)] };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -247,13 +322,54 @@ function cleanOut() {
   }
 }
 
+/**
+ * Copy time re-proves provenance (the tree may have changed since the check): lstat every component (no symlink, regular file),
+ * realpath inside the entry's source root, then open the source with O_NOFOLLOW and confirm the open descriptor is a regular file
+ * before reading. Throws on the first refusal — the caller empties the output.
+ */
 function copyAll(manifest) {
-  for (const [pub, { from }] of manifest) {
+  for (const [pub, entry] of manifest) {
+    const problems = provenanceProblems(rootOf(entry), entry.src, entry.origin === "overlay" ? "overlay " : "");
+    if (problems.length) throw new Error(`copy refused: ${problems.join("; ")}`);
+    const fd = fs.openSync(entry.from, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    let buf, mode;
+    try {
+      const st = fs.fstatSync(fd);
+      if (!st.isFile()) throw new Error(`copy refused: ${pub}: source is not a regular file`);
+      buf = fs.readFileSync(fd);
+      mode = st.mode;
+    } finally { fs.closeSync(fd); }
     const to = path.join(OUT, pub);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.copyFileSync(from, to);
-    if (pub.endsWith(".sh") || pub.endsWith(".mjs")) fs.chmodSync(to, fs.statSync(from).mode);
+    fs.writeFileSync(to, buf, { flag: "wx" });   // wx: never write through something already sitting at the destination
+    if (pub.endsWith(".sh") || pub.endsWith(".mjs")) fs.chmodSync(to, mode);
   }
+}
+
+/**
+ * Rescan what was actually staged (N5): walk the output (except .git and node_modules, which cleanOut keeps), refuse any symlink or
+ * non-regular file, refuse any file the manifest did not put there, and run the deny scan again over the staged bytes.
+ */
+function rescanStaged(manifest) {
+  const links = [], odd = [];
+  const files = [];
+  for (const e of fs.readdirSync(OUT, { withFileTypes: true })) {
+    if (e.name === ".git" || e.name === "node_modules") continue;
+    const p = path.join(OUT, e.name);
+    if (e.isSymbolicLink()) links.push(e.name);
+    else if (e.isDirectory()) walk(p, OUT, files, links, odd);
+    else if (e.isFile()) files.push(e.name);
+    else odd.push(e.name);
+  }
+  const expected = new Set([...manifest.keys(), "package.json", "package-lock.json"]);
+  const problems = [
+    ...links.map((l) => `staged ${l}: is a symlink`),
+    ...odd.map((o) => `staged ${o}: not a regular file`),
+    ...files.filter((f) => !expected.has(f)).map((f) => `staged ${f}: not in the manifest`),
+  ];
+  const staged = new Map(files.map((f) => [f, { from: path.join(OUT, f), origin: "staged" }]));
+  const hits = scanDeny(staged);
+  return { problems, hits, count: files.length };
 }
 
 /**
@@ -295,7 +411,14 @@ function verify() {
 // ---------------------------------------------------------------------------------------------------------------------------------
 function main() {
   if (cmd !== "check" && cmd !== "publish") { console.error("usage: public-repo-lib.mjs check|publish [--out D] [--tag] [--verify] [--link-node-modules]"); process.exit(2); }
-  const { manifest, warnings } = buildManifest();
+  const { manifest, warnings, provenance } = buildManifest();
+  // provenance first, and before any file is READ: a symlinked source is never opened, so its target cannot reach the report either
+  if (provenance.length) {
+    console.log(`PROVENANCE CHECK FAILED (${provenance.length}) — symlinks / non-regular / out-of-root sources are never published:`);
+    for (const p of provenance) console.log(`  ${p}`);
+    console.log(`\nnothing written.\nCHECK FAILED: ${provenance.length} provenance, 0 import, 0 leak findings`);
+    process.exit(1);
+  }
   const { violations, notes, external, declared } = scanImports(manifest);
   const hits = scanDeny(manifest);
 
@@ -313,7 +436,8 @@ function main() {
   if (hits.length) { console.log(`\nLEAK SCAN FAILED (${hits.length}):`); for (const h of hits) console.log(`  ${h}`); }
   else console.log("leak scan: no pattern matched");
   // The LAST line is the verdict, worded so it cannot be misread (the orchestrator greps it): exactly "CHECK PASSED" or
-  // "CHECK FAILED: N import, M leak findings". Exit status agrees (0 / 1). Nothing is written on a failure or in --check.
+  // "CHECK FAILED: N import, M leak findings" (a provenance refusal above prints "CHECK FAILED: K provenance, 0 import, 0 leak
+  // findings"). Exit status agrees (0 / 1). Nothing is written on a failure or in --check.
   if (violations.length || hits.length) { console.log(`\nnothing written.\nCHECK FAILED: ${violations.length} import, ${hits.length} leak findings`); process.exit(1); }
   if (cmd === "check") { console.log("nothing written (dry run).\nCHECK PASSED"); return; }
 
@@ -322,11 +446,21 @@ function main() {
   const oldLockPath = path.join(OUT, "package-lock.json");
   const oldLock = fs.existsSync(oldLockPath) ? { buf: fs.readFileSync(oldLockPath), mtime: fs.statSync(oldLockPath).mtime } : null;
   cleanOut();
-  copyAll(manifest);
+  try { copyAll(manifest); }
+  catch (e) { cleanOut(); console.log(`\n${e.message}\nthe output was emptied.\nCHECK FAILED: 1 provenance, 0 import, 0 leak findings`); process.exit(1); }
   const pkg = generatePackageJson(external, declared);
   fs.writeFileSync(path.join(OUT, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   console.log(`wrote ${OUT} (${manifest.size} files + package.json with ${Object.keys(pkg.dependencies).length} dependencies, ${Object.keys(pkg.devDependencies).length} devDependencies)`);
   if (!flag("no-lockfile") && !deriveLockfile()) process.exit(1);
+  const staged = rescanStaged(manifest);
+  if (staged.problems.length || staged.hits.length) {
+    cleanOut();
+    console.log(`\nSTAGED OUTPUT CHECK FAILED — the output was emptied:`);
+    for (const p of [...staged.problems, ...staged.hits]) console.log(`  ${p}`);
+    console.log(`CHECK FAILED: ${staged.problems.length} provenance, 0 import, ${staged.hits.length} leak findings`);
+    process.exit(1);
+  }
+  console.log(`staged output: ${staged.count} regular files, no symlink, nothing outside the manifest, leak scan clean`);
   if (oldLock && fs.existsSync(oldLockPath) && fs.readFileSync(oldLockPath).equals(oldLock.buf)) fs.utimesSync(oldLockPath, oldLock.mtime, oldLock.mtime);
   if (flag("verify")) { const ok = verify(); if (!ok) process.exit(1); }
 }

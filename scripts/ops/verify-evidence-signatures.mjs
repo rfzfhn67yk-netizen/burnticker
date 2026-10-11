@@ -117,4 +117,6 @@ console.log(`  64-byte decodes: ${candidates.length}/${all.length} · confirmed 
 console.log(`  evidence dir: ${evidence.length} files (${jsonFiles} JSON parsed) — 64-number arrays / secret|keypair fields / over-long *key* fields: ${problems.filter((p) => !p.startsWith("NOT a") && !p.startsWith("not a")).length}`);
 if (longerRuns) console.log(`  note: ${longerRuns} base58 run(s) longer than 88 chars (not the key shape; not checked)`);
 if (problems.length) { console.log(`FAILED (${problems.length}):`); for (const p of problems) console.log(`  ${p}`); process.exit(1); }
-console.log("PASSED: every token is a confirmed devnet transaction signature; no key material in the evidence directory");
+// Scope (review item 16): this proves each token is a confirmed devnet signature and that the key-shape heuristics above found nothing.
+// It does not authenticate burn programs, mints or amounts, recompute units, or prove the absence of every possible secret.
+console.log("PASSED: every token is a confirmed devnet transaction signature; no key-shaped material found in the evidence directory (64-byte arrays, secret/keypair fields, over-long *key* fields — heuristics, not a proof of no secrets)");

@@ -18,8 +18,11 @@ import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { encodeType } from "@/lib/burnReceipts/idlCoder";
 import type { IdlType } from "@/lib/burnReceipts/idlTypes";
 import { base58Decode } from "../packages/burnticker-sdk/src/events.ts";
+import { base58Encode as base58EncodeBytes } from "@/lib/burnKeeper/solana";
+import { configPda, readingPda } from "@/lib/burnReceipts/pda";
+const readingPdaFor = (programId: PublicKey, mint: PublicKey, date: number) => readingPda(programId, configPda(programId, mint), date);
 import type { Fetch } from "../packages/burnticker-sdk/src/http.ts";
-import { BRONCOS, DEBT_RULE, NOW, fx } from "./burntickerHelpers.ts";
+import { BRONCOS, DEBT_RULE, NOW, fx, treasuryAndCrossFetch } from "./burntickerHelpers.ts";
 import { polyClient } from "./burntickerPolyHelpers.ts";
 
 export const CREATOR = "CreatorWa11et111111111111111111111111111111";
@@ -55,7 +58,7 @@ export async function makeWorld(): Promise<World> {
   const registry = openRegistry(":memory:");
   const program = new FakeBurnProgram("devnet");
   const kalshi = new KalshiClient({ fetchImpl: kalshiFetch, now: () => NOW, minIntervalMs: 0 });
-  const catalogue = new CatalogueAdapter({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => TREASURY_BODY }), now: () => NOW });
+  const catalogue = new CatalogueAdapter({ fetchImpl: treasuryAndCrossFetch(TREASURY_BODY), now: () => NOW });
   const launch = async (rule: unknown, ticker: string, baselineAt: string) => {
     const b = await buildLaunchBundle({ creator: CREATOR, ticker, name: `${ticker} coin`, description: "a test", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://x/${m}.json` });
     const t = registry.register({ mint: b.mint, ticker, name: b.name, creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: b.addresses.vault, tokenConfig: b.addresses.tokenConfig, poolId: b.addresses.poolId, launchTx: null, cluster: "devnet", platformId: b.addresses.platformId, baselineAt, status: "draft" }, NOW);
@@ -74,6 +77,8 @@ export async function makeWorld(): Promise<World> {
     registry, oracles: { kalshi, catalogue, polymarket }, kalshi, polymarket, program, launchLab: new FakeLaunchLab(), cluster: "devnet", publishDir: path.join(os.tmpdir(), `bt-api-${process.pid}`),
     devFeeWallet: null, keeperPubkey: ATTESTER, platformId: null, stubs: ["burn_receipts program: not deployed (FakeBurnProgram — test)"],
     uploader: new FakePinUploader(),
+    // review N1: confirmations are read from the chain; on the fakes every signature is a landed launch at the call's clock
+    launchVerifier: { verify: async () => ({ ok: true as const, blockTimeMs: Date.now() }) },
   };
   setPlatformForTests(p);
   return { p, program, registry, bronco: registry.token(bronco.mint)!, deficit: registry.token(deficit.mint)! };
@@ -229,4 +234,29 @@ export function encodeAccount(name: string, overrides: (v: Record<string, unknow
   overrides(v);
   const disc = Buffer.from(BURN_RECEIPTS_IDL.accounts.find((a) => a.name === name)!.discriminator);
   return Buffer.concat([disc, encodeType(BURN_RECEIPTS_IDL, { defined: { name } }, v)]);
+}
+
+/**
+ * A crank transaction as getTransaction returns it (review N3): the burn program at top level on the mint, its Memo CPI and its SPL burn
+ * among that instruction's inner instructions; and the program-owned, processed Reading account for the memo's date on `conn`.
+ * `memoOnly: true` builds the attack: a lone Memo instruction carrying the same text, no program, no burn.
+ */
+export function programReceiptTx(conn: FakeConnection, o: { programId: PublicKey; mint: string; memo: string; burnedRaw: bigint; memoOnly?: boolean; strayMemo?: string; readingProcessed?: boolean; readingBurned?: bigint }): unknown {
+  const payer = new PublicKey("Payer11111111111111111111111111111111111111");
+  const MEMO = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"), TOKEN = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+  const feeToken = new PublicKey("FeeToken11111111111111111111111111111111111");
+  const keys = [payer, o.programId, new PublicKey(o.mint), MEMO, TOKEN, feeToken];
+  const memoData = base58EncodeBytes(Buffer.from(o.memo, "utf8"));
+  const burn = Buffer.alloc(9); burn[0] = 8; burn.writeBigUInt64LE(o.burnedRaw, 1);
+  const date = o.memo.split("|")[1];
+  if (!o.memoOnly && /^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
+    const addr = readingPdaFor(o.programId, new PublicKey(o.mint), Number(date.replace(/-/g, "")));
+    conn.accounts.set(addr.toBase58(), { owner: o.programId, lamports: 1, data: encodeAccount("Reading", (v) => { v.processed = o.readingProcessed ?? true; v.burned = o.readingBurned ?? o.burnedRaw; v.record_date = Number(date.replace(/-/g, "")); }) });
+  }
+  const message = o.memoOnly
+    ? { getAccountKeys: () => ({ get: (i: number) => keys[i] }), compiledInstructions: [{ programIdIndex: 3, accountKeyIndexes: [] }] }
+    : { getAccountKeys: () => ({ get: (i: number) => keys[i] }), compiledInstructions: [...(o.strayMemo ? [{ programIdIndex: 3, accountKeyIndexes: [] }] : []), { programIdIndex: 1, accountKeyIndexes: [0, 2, 5] }] };
+  const progIndex = o.strayMemo ? 1 : 0;
+  return { slot: 1, blockTime: 1, meta: { err: null, logMessages: [...(o.strayMemo ? [`Program log: Memo (len ${o.strayMemo.length}): "${o.strayMemo}"`] : []), `Program log: Memo (len ${o.memo.length}): "${o.memo}"`],
+    innerInstructions: o.memoOnly ? [] : [{ index: progIndex, instructions: [{ programIdIndex: 4, accounts: [5, 2, 0], data: base58EncodeBytes(burn) }, { programIdIndex: 3, accounts: [], data: memoData }] }] }, transaction: { message } };
 }

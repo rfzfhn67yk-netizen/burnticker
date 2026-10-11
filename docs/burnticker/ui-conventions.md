@@ -92,8 +92,11 @@ Sources: [docs: curve](https://docs.heaven.xyz/curve.md), [docs: fees](https://d
 
 ## Part 2 — the map to Burnticker
 
-The trust rules decide every row. We never talk about price. Market data is shown as data and never feeds a rule. The copy lint
-(`config/launch/copy-lint.json`) bans "market cap", "price", "moon", "target", urgency words and calls to buy.
+The trust rules decide every row. We never talk about price: no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence.
+(Burn Derby's one-shot flippening, "WIF's market cap passes SHIB's" — `coinCard.ts`, `launch/CoinVsCoinTile.tsx`; derby admission
+refuses any Burnticker platform coin as an input, `derby/admission.ts`; amended 2026-10-10 after the ChatGPT/Codex review.) The copy
+lint (`config/launch/copy-lint.json`) bans "market cap", "price", "moon", "target", urgency words and calls to buy; its only market-cap
+allowance is that rule sentence for two non-`$TICKER` symbols.
 
 | # | Pattern (who) | Verdict | Burnticker's version, and why |
 |---|---|---|---|
@@ -141,7 +144,8 @@ Off (the default):
 - The `/kalshi/*` routes answer 503.
 - Kalshi back-tests and launch bundles are refused.
 - The app and the keeper's page publish make no Kalshi display reads (series titles, implied chance).
-- The keeper reads Kalshi only for coins already registered with a Kalshi rule, logging a warning per read.
+- No market-implied chance (odds) is read or shown for ANY coin, whatever the venue and whether or not `BURNTICKER_KALSHI_ENABLED` is on (owner decision 2026-10-10). A coin page shows only the factual venue label: the next market's ticker and close time. `status.json` keeps `next.impliedChance`, always null, for schema compatibility.
+- The keeper does not read Kalshi at all while the switch is off, not even for coins already registered with a Kalshi rule: those coins are held (no readings, nothing planned or attested) with a "venue disabled" alert (owner decision 2026-10-10, after the ChatGPT/Codex review's C1; it replaces "reads Kalshi only for already-registered coins").
 - No default copy names Kalshi.
 
 **Polymarket discovery — `BURNTICKER_POLYMARKET_DISCOVERY_ENABLED`, default ON, NO MARKET DATA.** Polymarket's terms restrict "market

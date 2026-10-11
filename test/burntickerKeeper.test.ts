@@ -19,7 +19,7 @@ import { parseBuybackMemo as parseProgramMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend as programSpend } from "@/lib/burnReceipts/math";
 import { programExpressible, counterRule } from "@/lib/burnticker/program";
 import { MAX_SLIPPAGE_BPS, MAX_TWAP_DEVIATION_BPS, MAX_TWAP_WINDOW_SECS, MIN_TWAP_WINDOW_SECS, TWAP_BUCKET_TOLERANCE_BPS_SECS } from "@/lib/burnReceipts/constants";
-import { BRONCOS, DEBT_RULE, DENVER_HIGH, NOW, ONE_SHOT, SPX, VAULT_RULE, fx } from "./burntickerHelpers.ts";
+import { BRONCOS, DEBT_RULE, DENVER_HIGH, NOW, ONE_SHOT, SPX, VAULT_RULE, fx, treasuryAndCrossFetch } from "./burntickerHelpers.ts";
 
 const VAULT_EQUAL = { ...BRONCOS, binary: { onYes: { tokens: 1000000 }, onNo: { tokens: 1000000 } }, vault: { share: 0.25, vestDays: 365, cliffDays: 0 } };
 
@@ -44,7 +44,7 @@ async function launch(rule: unknown, ticker: string, baselineAt = "2026-09-01T00
 }
 beforeEach(() => {
   reg = openRegistry(":memory:"); program = new FakeBurnProgram("devnet"); program.now = () => clock; lines = []; clock = NOW;
-  deps = { registry: reg, program, oracles: { kalshi: new KalshiClient({ fetchImpl: fixtureFetch(table), now: () => clock, minIntervalMs: 0 }), catalogue: new CatalogueAdapter({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => treasuryBody }), now: () => clock }) }, attester: ATTESTER, log: (s) => lines.push(s), now: () => clock, dryRun: false };
+  deps = { registry: reg, program, oracles: { kalshi: new KalshiClient({ fetchImpl: fixtureFetch(table), now: () => clock, minIntervalMs: 0 }), catalogue: new CatalogueAdapter({ fetchImpl: treasuryAndCrossFetch(treasuryBody), now: () => clock }) }, attester: ATTESTER, log: (s) => lines.push(s), now: () => clock, dryRun: false };
 });
 
 describe("registry", () => {

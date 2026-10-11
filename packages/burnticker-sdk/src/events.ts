@@ -3,7 +3,6 @@ import { PublicKey, type Connection } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeType } from "@/lib/burnReceipts/idlCoder";
 import { configPda } from "@/lib/burnReceipts/pda";
-import { memoFromLogs } from "./verify.ts";
 import type { ApiTransport } from "./http.ts";
 import type { BurntickerEvent, ProgramEvent, ReceiptJson, Receipts } from "./types.ts";
 
@@ -26,6 +25,8 @@ import type { BurntickerEvent, ProgramEvent, ReceiptJson, Receipts } from "./typ
  * 9a 1d. Anchor reads sha256("anchor:event")[0..8] as a big-endian u64 and writes it little-endian, so the wire bytes are that hash
  * prefix REVERSED (the same prefix every Anchor program's CPI events carry, e.g. pump.fun's TradeEvent: e445a52e51cb9a1d bddb7fd3…).
  */
+const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+
 export const EVENT_IX_TAG = Buffer.from(crypto.createHash("sha256").update("anchor:event").digest().subarray(0, 8)).reverse();
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -59,13 +60,22 @@ interface TxLike {
 export function eventsFromTransaction(tx: TxLike, programId: PublicKey, signature: string): ProgramEvent[] {
   if (!tx.meta || tx.meta.err) return [];
   const keys = tx.transaction.message.getAccountKeys({ accountKeysFromLookups: tx.meta.loadedAddresses ?? undefined });
-  const memo = memoFromLogs(tx.meta.logMessages);
   const out: ProgramEvent[] = [];
-  for (const group of tx.meta.innerInstructions ?? []) for (const ix of group.instructions) {
-    if (!keys.get(ix.programIdIndex)?.equals(programId)) continue;
-    let bytes: Uint8Array; try { bytes = base58Decode(ix.data); } catch { continue; }
-    const ev = decodeEventData(bytes);
-    if (ev) out.push({ kind: "program", name: ev.name, data: ev.data, signature, slot: tx.slot, blockTime: tx.blockTime ?? null, memo });
+  for (const group of tx.meta.innerInstructions ?? []) {
+    // Review N3: the memo is the Memo CPI made inside the same instruction as the event (the program's own), never the first memo
+    // line in the logs — any Memo instruction elsewhere in the transaction logs the same line.
+    let memo: string | null = null;
+    for (const ix of group.instructions) {
+      if (keys.get(ix.programIdIndex)?.toBase58() !== MEMO_PROGRAM_ID) continue;
+      try { memo = Buffer.from(base58Decode(ix.data)).toString("utf8"); } catch { memo = null; }
+      break;
+    }
+    for (const ix of group.instructions) {
+      if (!keys.get(ix.programIdIndex)?.equals(programId)) continue;
+      let bytes: Uint8Array; try { bytes = base58Decode(ix.data); } catch { continue; }
+      const ev = decodeEventData(bytes);
+      if (ev) out.push({ kind: "program", name: ev.name, data: ev.data, signature, slot: tx.slot, blockTime: tx.blockTime ?? null, memo });
+    }
   }
   return out;
 }

@@ -165,7 +165,6 @@ export default function TokenPage() {
               <div><dt className="text-neutral-500">{s.mode === "buyback" ? "burn pool" : "vault"}</dt><dd className="font-mono">{s.mode === "buyback" ? (s.pool.feePdaSol === null ? "—" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance))}</dd></div>
               <div><dt className="text-neutral-500">burned</dt><dd className="font-mono tabular-nums">{s.burned.pctOfSupply.toFixed(2)}%</dd></div>
             </dl>
-            {s.next.impliedChance !== null && <p className="mt-2 text-[11px] text-neutral-500">Market-implied chance of the next burn {(s.next.impliedChance * 100).toFixed(0)}% ({s.next.nextMarket ?? ""}) — display only, never used by the rule.</p>}
             <p className="mt-2 text-[11px] text-neutral-500 break-all">sha256 {s.rules.sha256}</p>
             <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
               <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>

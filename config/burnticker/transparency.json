@@ -15,9 +15,9 @@
   },
   "howBuilt": {
     "aiAssisted": true,
-    "statement": "The program, the keeper, the platform and this page were written with AI assistance (Claude Code) under the operator's direction and review. Three independent blind Claude reviews and one re-check of the burn_receipts program were completed on 2026-10-09/10 and are published in full; two blind Claude reviews of the pair_curve program were completed on 2026-10-10 and are published in full, their High findings not fixed yet; the ChatGPT review is pending. No security firm has audited any of it.",
+    "statement": "The program, the keeper, the platform and this page were written with AI assistance (Claude Code) under the operator's direction and review. Three independent blind Claude reviews and one re-check of the burn_receipts program were completed on 2026-10-09/10 and are published in full; two blind Claude reviews of the pair_curve program were completed on 2026-10-10 and are published in full, their High findings not fixed yet; an adversarial ChatGPT/Codex PR review was completed on 2026-10-10 and is published in full with a per-finding response. No security firm has audited any of it.",
     "firmAudit": false,
-    "firmAuditStatement": "Not independently audited by a security firm. Reviewed by three independent blind AI reviews and one re-check of burn_receipts and two blind AI reviews of pair_curve (all published), an adversarial ChatGPT review (pending) and, once published, a public bounty.",
+    "firmAuditStatement": "Not independently audited by a security firm. Reviewed by three independent blind AI reviews and one re-check of burn_receipts and two blind AI reviews of pair_curve (all published), an adversarial ChatGPT/Codex PR review (published with its response) and, once published, a public bounty.",
     "reviews": [
       {
         "id": "claude-blind-1",
@@ -51,9 +51,9 @@
       },
       {
         "id": "chatgpt-adversarial",
-        "reviewer": "ChatGPT, the same pre-registered checklist",
-        "status": "pending",
-        "reportPath": null
+        "reviewer": "ChatGPT/Codex, adversarial PR review against the same pre-registered checklist (reviewed public commit 58d43eae: 2 High, 5 Medium new findings plus checklist mismatches and pair_curve residuals; each answered in docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md)",
+        "status": "completed 2026-10-10",
+        "reportPath": "docs/burnticker/reviews/2026-10-10-chatgpt-pr-review.md"
       }
     ],
     "tooling": [
@@ -187,7 +187,7 @@
     {
       "id": "kalshi-terms",
       "status": "decided 2026-10-10",
-      "text": "Kalshi is not a settlement input. Its Developer Agreement v1.1 limits API use to a member's own trading and forbids caching or sharing API data with third parties without written authorization; its Data Terms of Use forbid using Kalshi Data to create, settle or support products without written consent. The Kalshi adapter remains in the code as discovery-only behind BURNTICKER_KALSHI_ENABLED (default off) and the launch preflight refuses any Kalshi rule regardless of the flag. Coins settle on first-party primaries with an independent cross-read, or on an on-chain Polymarket payout; Polymarket's Gamma API is used for discovery only and no prices, odds or volumes are displayed (its terms restrict market-data distribution)."
+      "text": "Kalshi is not a settlement input. Its Developer Agreement v1.1 limits API use to a member's own trading and forbids caching or sharing API data with third parties without written authorization; its Data Terms of Use forbid using Kalshi Data to create, settle or support products without written consent. The Kalshi adapter remains in the code as discovery-only behind BURNTICKER_KALSHI_ENABLED (default off) and the launch preflight refuses any Kalshi rule regardless of the flag. With the flag off the keeper does not read Kalshi at all, not even for a coin already registered with a Kalshi rule: such a coin is held (no readings, nothing burned) with a venue-disabled alert (owner decision 2026-10-10, after the ChatGPT/Codex review's C1). No mainnet Kalshi coin exists; devnet rehearsal coins may stall. Coins settle on first-party primaries with an independent cross-read, or on an on-chain Polymarket payout; Polymarket's Gamma API is used for discovery only and no prices, odds or volumes are displayed (its terms restrict market-data distribution)."
     },
     {
       "id": "one-shot",
@@ -202,7 +202,7 @@
     {
       "id": "devnet-rehearsal",
       "status": "done 2026-10-10",
-      "text": "The devnet rehearsal ran on 2026-10-10: $DEFICIT launched under a devnet platform config, readings attested, two buy-back burns cranked by the program; then the pair_curve rehearsal (two pairs: one graduated to two Raydium pools, one voided and sold back). Records: docs/burnkeeper/devnet-run.md, docs/burnkeeper/devnet-run-log-2026-10-10.md, docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md and docs/burnkeeper/evidence/ (every signature checked against devnet by scripts/ops/verify-evidence-signatures.mjs). The mainnet rehearsal coin is a separate step and is not done (see Rehearsal coins)."
+      "text": "The devnet rehearsal ran on 2026-10-10: $DEFICIT launched under a devnet platform config, readings attested, two buy-back burns cranked by the program (2026-10-06 and 2026-10-07; the 2026-10-08 row in docs/burnkeeper/evidence/devnet-2026-10-10/burns.json is planned, not executed — deferred by TwapDeviation when the keeper was stopped, with no burn and no signature — and is not counted); then the pair_curve rehearsal (two pairs: one graduated to two Raydium pools, one voided and sold back). Records: docs/burnkeeper/devnet-run.md, docs/burnkeeper/devnet-run-log-2026-10-10.md, docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md and docs/burnkeeper/evidence/ (every signature checked against devnet by scripts/ops/verify-evidence-signatures.mjs). The mainnet rehearsal coin is a separate step and is not done (see Rehearsal coins)."
     },
     {
       "id": "program-not-deployed",
@@ -280,7 +280,7 @@
     },
     {
       "id": "no-paid-promotion",
-      "text": "No paid promotion, no influencer payments, no referral kickbacks. No price talk and no countdowns."
+      "text": "No paid promotion, no influencer payments, no referral kickbacks. No price talk and no countdowns: no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence (Burn Derby's flippening; derby admission refuses a Burnticker coin as an input)."
     },
     {
       "id": "platform-never-buys",

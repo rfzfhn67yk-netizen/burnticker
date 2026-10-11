@@ -4,7 +4,8 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { backtest, type Backtest } from "@/lib/burnticker/oracle/backtest";
-import { httpSource, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { fetchBody, httpSource, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { corroborate } from "@/lib/burnticker/catalogue/corroborate";
 import type { PriceFeedSourceConfig, ResolutionSource } from "@/lib/burnticker/sources/types";
 import { copycatSource, type CopycatSourceConfig, type CopycatSourceOptions } from "@/lib/burnticker/sources/copycats";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -154,7 +155,14 @@ export class CatalogueAdapter implements OracleAdapter {
     if (!feed) throw new Error(`catalogue: unknown source ${rule.series}`);
     const problems = feedRuleProblems(feed, rule);
     if (problems.length) throw new Error(`catalogue: ${problems.join("; ")}`);
-    return feed.settledSince(rule, sinceIso);
+    // Review N2 (2026-10-10): the primary's readings pass through the independent cross-read of the same fact, read in this cycle
+    // (corroborate.ts); a reading that is not confirmed is held, never written, never attested.
+    const now = this.o.now ?? (() => Date.now());
+    const fetchImpl = this.o.fetchImpl ?? (fetch as unknown as FetchLike);
+    const t0 = now();
+    const { readings, refusals } = feed.parse(await fetchBody(feed.config, t0, fetchImpl), t0);
+    const events = readings.filter((r) => sinceIso === null || r.at > sinceIso);
+    return corroborate(feed, readings, events, t0, { entries: loadSourceEntries(), crossFeed: (id) => feedById(id, this.o), fetchImpl, now }, { awaitingFinal: 0, refusals, settlementSourceUrl: feed.config.sourceUrl });
   }
   async impliedChance(): Promise<ImpliedChance> { return { chance: null, marketTicker: null, closeTime: null, basis: "primary source: there is no market to read" }; }
 }

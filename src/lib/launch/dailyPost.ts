@@ -277,8 +277,8 @@ export const pairShareLine = (t: Pick<PairTally, "a" | "b" | "burnsA" | "burnsB"
 
 /**
  * (f) RIVALRY PAIR — the scoreboard as a report: burns A : B, supply A : B (and % of the starting supply left), the last settlement
- * with its market ticker and result and the side it burned, the next scheduled market (no odds in the post; the page shows the
- * display-only implied chance), the pair page link. Filled from pairTally over both sides' status.json + receipts.json.
+ * with its market ticker and result and the side it burned, the next scheduled market (no odds, in the post or on the page), the
+ * pair page link. Filled from pairTally over both sides' status.json + receipts.json.
  */
 /**
  * Both or neither (2026-10-10): the pair's state line — "Pair live: both pools registered", "Pair voided — both sides on the weekly

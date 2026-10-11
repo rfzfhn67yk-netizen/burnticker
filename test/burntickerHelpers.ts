@@ -18,3 +18,14 @@ export const SPX = { schema: BURNTICKER_RULES_SCHEMA, oracle: "kalshi", series: 
 export const VAULT_RULE = { ...BRONCOS, binary: { onYes: { tokens: 1000000 }, onNo: { tokens: 250000 } }, vault: { share: 0.25, vestDays: 365, cliffDays: 0 } };
 /** Tier 2: the $DEFICIT rule as a Burnticker rule (every full $1B added, 5% of the pool per unit, carry fixed by the feed). */
 export const DEBT_RULE = { schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: "treasury.debt", market: null, filter: {}, kind: "scalar", scalar: { unit: 1e9, perUnit: { fractionOfPool: 0.05 }, baseline: "previousSettlement", direction: "up" }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null };
+
+/**
+ * A catalogue fetch for the Treasury feed AND its cross-read (review N2, 2026-10-10: a generic feed's readings pass the independent
+ * cross-read in the same cycle): fiscaldata URLs get the Treasury body, FRED URLs the frozen GFDEBTN CSV, anything else a 404.
+ */
+export const FRED_GFDEBTN_CSV = (fx("http/fred.GFDEBTN.json") as { body: string }).body;
+export function treasuryAndCrossFetch(treasuryBody: unknown) {
+  return async (url: string) => url.startsWith("https://fred.stlouisfed.org/") ? { ok: true, status: 200, json: async () => ({}), text: async () => FRED_GFDEBTN_CSV }
+    : url.startsWith("https://api.fiscaldata.treasury.gov/") ? { ok: true, status: 200, json: async () => treasuryBody, text: async () => JSON.stringify(treasuryBody) }
+    : { ok: false, status: 404, json: async () => ({}), text: async () => "" };
+}

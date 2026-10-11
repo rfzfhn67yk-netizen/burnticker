@@ -139,7 +139,7 @@ checked here, e.g. no RPC was given, or the source no longer serves that period)
    `spent`, and `burn` must equal `got`. Program receipts use the program's own fixed-point rule spend over the reading's units; a crank
    spends at most 2% of the pool's reserve and carries the rest, so a smaller `spent` is reported `null` (carried — see the Reading
    account), never a pass.
-6. **chain.** With a `connection`, the transaction at the receipt's signature exists, succeeded, and wrote exactly this memo.
+6. **chain.** With a `connection` AND the deployed `programId` and the coin's `mint` (the client passes both when it has them), the transaction at the receipt's signature exists, succeeded, and the burn program itself wrote exactly this memo (a Memo CPI inside a top-level burn_receipts instruction on the mint), burned the mint inside that instruction, and its Reading account for the receipt's reading is program-owned, processed and records the same burned amount. A memo on its own is never a burn: a Memo-only transaction fails, and without `programId` + `mint` the check is `null` (not checked), never a pass (ChatGPT/Codex review N3, 2026-10-10).
 
 `verified` is true when nothing failed and the rules and units checks passed. The receipt announcer example
 (`examples/receipt-announcer.ts`) prints this result for every new burn.

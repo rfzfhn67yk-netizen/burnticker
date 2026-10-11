@@ -22,7 +22,8 @@ import { readConditionResolution, type ConditionResolution, type FetchLike as Rp
  *            Polygon, or the feed's exact source URL) equals the receipt's — fetched by the verifier, never taken from us;
  *   units    the rule applied to that settled result (and the previous value / carried remainder the receipt states) gives the units;
  *   spend    buyback: spend = pool × (1 − (1 − f)^units), the keeper's exact integer formula, equals the memo's spent; burn ≥ got;
- *   chain    the transaction at the receipt's signature exists, succeeded, and wrote exactly this memo.
+ *   chain    the transaction at the receipt's signature exists, succeeded, and the BURN PROGRAM wrote exactly this memo inside its own
+ *            instruction, burned the mint there, and recorded the reading processed (review N3: a memo alone is never a burn).
  *
  * A check is ok: true (passed), false (failed — the receipt is wrong), or null (not checkable here: no RPC given, a void market with no
  * transaction, the source no longer serves that period). `verified` = nothing failed AND units/rules passed. Pure apart from the two
@@ -40,7 +41,12 @@ export interface VerifyCheck { id: "rules" | "memo" | "source" | "units" | "spen
 export interface VerifyResult { ticker: string; eventId: string; verified: boolean; checks: VerifyCheck[]; recomputed: { units: number | null; spentLamports: string | null } }
 
 export interface SourceReading { events: SettledEvent[] | null; error: string | null; url: string | null }
-export interface ChainReading { found: boolean; err: string | null; memo: string | null }
+/**
+ * What the chain says about a receipt's transaction. `provenance` (review N3): whether the burn program itself wrote the memo and burned
+ * (false = it did not: the check fails; null = not checkable here; absent = the reader already took the memo from the program's own
+ * Memo CPI, as the platform's findReceiptOnChain does).
+ */
+export interface ChainReading { found: boolean; err: string | null; memo: string | null; provenance?: { ok: boolean | null; detail: string } }
 
 const fracStr = (f: number) => f.toFixed(6).replace(/0+$/, "").replace(/\.$/, ".0");
 
@@ -120,6 +126,8 @@ export function verifyReceiptCore(i: { ticker: string; rulesText: string; receip
   else if (!i.chain) checks.push({ id: "chain", ok: null, detail: "chain not read (pass a Solana connection)" });
   else if (!i.chain.found) checks.push({ id: "chain", ok: false, detail: `no confirmed transaction ${r.signature}` });
   else if (i.chain.err) checks.push({ id: "chain", ok: false, detail: `transaction ${r.signature} failed: ${i.chain.err}` });
+  else if (i.chain.provenance?.ok === false) checks.push({ id: "chain", ok: false, detail: `not a burn by the program: ${i.chain.provenance.detail}` });
+  else if (i.chain.provenance && i.chain.provenance.ok === null) checks.push({ id: "chain", ok: null, detail: `provenance not checked: ${i.chain.provenance.detail}` });
   else if (i.chain.memo !== r.memo) checks.push({ id: "chain", ok: false, detail: `the memo on chain ≠ the receipt's memo (${(i.chain.memo ?? "none").slice(0, 60)}…)` });
   else checks.push({ id: "chain", ok: true, detail: `transaction ${r.signature.slice(0, 12)}… succeeded and wrote this exact memo` });
   const failed = checks.some((c) => c.ok === false);

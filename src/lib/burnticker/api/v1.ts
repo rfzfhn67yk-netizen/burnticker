@@ -123,9 +123,9 @@ export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>)
   });
 }
 
-export function v1Confirm(p: Platform, body: Record<string, unknown>): ApiResult {
+export async function v1Confirm(p: Platform, body: Record<string, unknown>): Promise<ApiResult> {
   const mint = String(body.mint ?? ""), sig = String(body.signature ?? "");
-  const r = markLaunched(p, mint, sig);
+  const r = await markLaunched(p, mint, sig);
   if (r.status !== 200) return r;
   const t = p.registry.token(mint)!;
   return ok({ ok: true, ticker: t.ticker, mint: t.mint, status: t.status, note: (r.body as { note: string }).note });
