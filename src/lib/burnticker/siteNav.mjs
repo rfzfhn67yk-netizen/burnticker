@@ -1,7 +1,7 @@
 /**
  * THE ONE BURNTICKER SHELL (website-10, 2026-10-12; the owner's review items 2, 3, 4, 11 and 16, building on site audit #6/#13 and
  * BT-22). burnticker.com and burnticker.com/burnticker printed two different sites. This file is the only source for what every page
- * shares: the link sets, the header's words (search, "Launch a coin", the disabled "Connect wallet", the closed-launches modal), the hero
+ * shares: the link sets, the header's words (search, "Launch a coin", "Connect wallet", the closed-launches modal), the hero
  * and "How it works" copy, the footer receipt's lines and the phone tab bar. The app reads it through src/app/burnticker/_components/
  * nav.ts; the static pages (home, status, fallback, $DEFICIT) get the same header, footer, tab bar, styles and script from the render
  * functions below, written into marked regions by scripts/burnticker-site-nav.mts; scripts/whitepaper-html.mjs renders them into the
@@ -35,16 +35,27 @@ export const LEARN_NAV = [
 /** The Launch entry's words. The nav says "Launch" in every state; the header's primary button says "Launch a coin". */
 export const LAUNCH_LABELS = { nav: "Launch", button: "Launch a coin" };
 
-/** What the "Launch a coin" button opens while creator launches are closed (brief rule 1: no date, no waitlist, no email). */
+/**
+ * What the "Launch a coin" button opens when this site's launch wizard is not available (brief rule 1: no date, no waitlist, no email).
+ * Its sentence is website-12's site launch record (launchAvailability.ts SiteLaunchState.sentence), never typed here: the app passes the
+ * record in, and a static page fills the sentence from GET /api/burnticker/home. `body` is the record's own loading sentence, shown until
+ * the read lands; `unread` is its own unavailable sentence (test/burntickerWebsite13.test.ts pins both to SITE_SENTENCE).
+ */
 export const LAUNCH_CLOSED = {
-  title: "Creator launches are closed",
-  body: "Creator launches are closed until the first coin has receipts. You can still look through the coins and check a real receipt.",
+  title: "Launching a coin",
+  body: "Checking whether creator launches are open on this site.",
+  unread: "Whether creator launches are open could not be read, so no launch controls are shown.",
+  more: "You can still look through the coins and check a real receipt.",
   coins: "See the coins",
   close: "Close",
 };
 
-/** The header's disabled wallet button (review item 3): it is there so the page reads like a launchpad, and it says why it does nothing. */
-export const WALLET = { label: "Connect wallet", note: "No page here needs a wallet while creator launches are closed." };
+/**
+ * The header's "Connect wallet" (website-13, 2026-10-12; owner decision on Claude site audit 2 item 6). In the app it is the real wallet
+ * adapter button (src/lib/burnticker/walletShell.ts). A static page cannot load the adapter, so its button opens "Your coins" with the
+ * wallet list already open. Connecting is independent of the launch state and signs nothing.
+ */
+export const WALLET = { label: "Connect wallet", note: "Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.", href: "/burnticker/me?connect=1", menuNote: "A wallet is only needed for Your coins." };
 
 /** The header search (review item 3): it searches the coin list. */
 export const SEARCH = { label: "Search coins", placeholder: "Search coins", href: "/burnticker" };
@@ -55,8 +66,26 @@ export const HERO = { title: "Memecoins that burn on real-world results.", sub: 
 /** The "How it works" strip under the hero (review item 8). Plain words; the precise terms live on the about page and the coin page. */
 export const HOW_IT_WORKS = [
   { title: "One locked rule", text: "Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches." },
-  { title: "The result settles", text: "When the result is published, the coin's own trading fees buy back some of the coin from its pool." },
+  { title: "The result settles", text: "When the result is published, fees from trading the coin buy back some of it from its pool." },
   { title: "Burned, with a receipt", text: "Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it." },
+];
+
+/**
+ * PLAIN MEANINGS AT FIRST USE (website-13, 2026-10-12; Codex review 5's glossary table): the words the home page's hero, its three steps
+ * and the cards use before they are explained anywhere else. Shown on demand ("What these words mean"), never as another mandatory
+ * introduction. The app's coin list and the static home print the same list. @type {{ term: string; meaning: string }[]}
+ */
+export const FIRST_USE = [
+  { term: "Memecoin", meaning: "A speculative crypto token built around a theme." },
+  { term: "Burn", meaning: "Tokens the program destroys for good. It never takes tokens from anyone's wallet." },
+  { term: "Receipt", meaning: "The burn's transaction and the source reading behind it, so anyone can check the burn." },
+  { term: "Settles", meaning: "The source has published its final result for that period." },
+  { term: "Trading fees", meaning: "A small amount collected each time someone trades the coin." },
+  { term: "Pool", meaning: "The coin and SOL held by a trading program so that trades can happen." },
+  { term: "Curve", meaning: "A new coin's first trading stage. When buyers have put in the full raise, the coin graduates to its own Raydium pool." },
+  { term: "Mint", meaning: "The coin's unique address. A reserved address does not mean the coin exists yet." },
+  { term: "Mainnet and devnet", meaning: "Mainnet is the real Solana network, where transactions use real SOL. Devnet is a practice network whose tokens have no money value." },
+  { term: "SOL and Raydium", meaning: "SOL is Solana's own coin, used for fees and deposits. Raydium is the outside Solana trading service these coins trade on." },
 ];
 
 /** The footer receipt: the one place the disclaimers are printed (review item 9, brief rule 5). */
@@ -111,7 +140,7 @@ export const ALL_LINKS = [...SITE_NAV, ...LEARN_NAV];
 const MARK = '<img src="ORIGIN/brand/favicon.png" width="34" height="34" alt="" class="sh-mark">';
 
 /**
- * The static header: brand, primary links with the Learn menu, search, "Launch a coin", the disabled wallet button, the theme switch and
+ * The static header: brand, primary links with the Learn menu, search, "Launch a coin", "Connect wallet" (a link to Your coins), the theme switch and
  * the phone menu; then the activity line and the closed-launches dialog. Same words and order as the app's SiteHeader.
  * @param {{ origin?: string; current?: string }} [o]
  */
@@ -133,11 +162,12 @@ export function shellHeaderHtml(o = {}) {
     `    <form class="sh-search" role="search" action="${origin}${SEARCH.href}" method="get"><label class="sh-sr" for="sh-q">${SEARCH.label}</label><input id="sh-q" name="q" type="search" placeholder="${SEARCH.placeholder}" autocomplete="off"></form>`,
     `    <div class="sh-actions">`,
     `      <a class="sh-launch" href="${origin}/burnticker/launch" data-launch-button>${LAUNCH_LABELS.button}</a>`,
-    `      <button type="button" class="sh-wallet" disabled title="${esc(WALLET.note)}">${WALLET.label}</button>`,
+    `      <a class="sh-wallet" href="${origin}${WALLET.href}" title="${esc(WALLET.note)}" data-wallet-button>${WALLET.label}<span class="sh-sr">. ${esc(WALLET.note)}</span></a>`,
     `      <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>`,
     `      <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>`,
     `        <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">`,
     linksHtml(ALL_LINKS, { origin, current: o.current, indent: "          " }),
+    `          <p class="sh-menu-wallet">${esc(WALLET.menuNote)} <a href="${origin}${WALLET.href}" data-wallet-button>${WALLET.label}</a></p>`,
     `        </nav>`,
     `      </details>`,
     `    </div>`,
@@ -146,7 +176,8 @@ export function shellHeaderHtml(o = {}) {
     `</header>`,
     `<dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">`,
     `  <h2 id="sh-launch-closed-h">${esc(LAUNCH_CLOSED.title)}</h2>`,
-    `  <p>${esc(LAUNCH_CLOSED.body)}</p>`,
+    `  <p data-launch-sentence>${esc(LAUNCH_CLOSED.body)}</p>`,
+    `  <p>${esc(LAUNCH_CLOSED.more)}</p>`,
     `  <p class="sh-modal-row"><a class="sh-launch" href="${origin}/burnticker">${esc(LAUNCH_CLOSED.coins)}</a> <button type="button" class="sh-ghost" data-modal-close>${esc(LAUNCH_CLOSED.close)}</button></p>`,
     `</dialog>`,
   ].join("\n");
@@ -211,7 +242,8 @@ export const SHELL_CSS = `
 .sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
 .sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
 .sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
-.sh-wallet{display:none;cursor:not-allowed;opacity:.6}.sh-ghost{cursor:pointer}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
 .sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
 .sh-menu>summary::-webkit-details-marker{display:none}
 .sh-menu{position:relative}
@@ -288,9 +320,12 @@ export function shellScript(o = {}) {
   });
 })();
 (function () {
-  // "Launch a coin": the closed-launches dialog unless the host's catalogue says creator launches are open (unreadable = closed)
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home \u2192 launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
   var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
-  fetch(${api} + "/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { open = !!(j && j.launches && j.launches.creators === true); }).catch(function () { open = false; });
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch(${api} + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : ${JSON.stringify(LAUNCH_CLOSED.unread)}; });
   if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
@@ -299,7 +334,7 @@ export function shellScript(o = {}) {
   // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  fetch(${api} + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+  window.btHome.then(function (j) {
     box.textContent = "";
     if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }

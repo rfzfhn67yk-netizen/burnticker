@@ -14,7 +14,9 @@ const base: ReadinessInput = { launched: true, phase: "curve", raisedSol: 12.345
 describe("readinessOf: one state per situation", () => {
   test("the facts it rests on: 85 SOL graduation in the launch bundle, pool_verified required by crank_buyback", () => {
     assert.equal(GRADUATION_SOL, 85);
-    assert.match(fs.readFileSync("src/lib/burnticker/launchBundle.ts", "utf8"), /totalFundRaisingB: BigInt\(85\) \* BigInt\(1_000_000_000\)/);
+    // website-12: the builder's raise is one named constant, which the launch review also reads
+    const lb = fs.readFileSync("src/lib/burnticker/launchBundle.ts", "utf8");
+    assert.match(lb, /export const LAUNCHLAB_RAISE_LAMPORTS: bigint = STANDARD_RAISE_LAMPORTS;/); assert.match(lb, /totalFundRaisingB: LAUNCHLAB_RAISE_LAMPORTS,/);
     assert.match(fs.readFileSync("programs/burn-receipts/programs/burn_receipts/src/instructions/crank_buyback.rs", "utf8"), /require!\(c\.pool_verified, BurnError::PoolNotVerified\)/);
   });
   test("each of the seven states, in order", () => {

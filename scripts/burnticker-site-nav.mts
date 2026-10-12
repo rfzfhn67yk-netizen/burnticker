@@ -10,24 +10,32 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS } from "../src/lib/burnticker/siteNav.mjs";
+import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS, FIRST_USE } from "../src/lib/burnticker/siteNav.mjs";
 import { OPERATOR_LINE } from "../src/lib/burnticker/trustpack/copy.ts";
+import { prerequisiteLineFor } from "../src/lib/burnticker/launchReview.ts";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** The home's hero and "How it works" strip, from the same words the app's home prints. */
+/**
+ * The home's hero and "How it works" strip, from the same words the app prints. On phones the strip collapses to its three step titles
+ * (the home page's CSS hides the sentences under 640 px) so the first card and the search sit in the first screen (Codex review 5
+ * trader-2); "What these words mean" opens the plain meanings on demand (FIRST_USE).
+ */
 export function heroHtml(): string {
   return [
     `<section class="hero wrap" aria-labelledby="hero-h">`,
     `  <h1 id="hero-h">${esc(HERO.title)}</h1>`,
     `  <p class="sub">${esc(HERO.sub)}</p>`,
     `</section>`,
-    `<section class="wrap" aria-label="How it works">`,
+    `<section class="wrap how-wrap" aria-label="How it works">`,
     `  <ol class="how">`,
-    ...HOW_IT_WORKS.map((h: { title: string; text: string }, i: number) => `    <li><span class="how-n" aria-hidden="true">${i + 1}</span><div><p class="how-t">${esc(h.title)}</p><p class="how-x">${esc(h.text)}</p></div></li>`),
+    // step 2 carries the first-burn prerequisite (website-12's launchReview.ts prerequisiteLineFor, from the configured raise)
+    ...HOW_IT_WORKS.map((h: { title: string; text: string }, i: number) => `    <li><span class="how-n" aria-hidden="true">${i + 1}</span><div><p class="how-t">${esc(h.title)}</p><p class="how-x">${esc(h.text)}</p>${i === 1 ? `<p class="how-x how-pre" data-prerequisite>${esc(prerequisiteLineFor("launchlab"))}</p>` : ""}</div></li>`),
     `  </ol>`,
-    `  <p class="small"><a href="/burnticker/about">Read how it works in full</a></p>`,
+    `  <div class="how-more"><a href="/burnticker/about">Read how it works in full</a><details class="terms"><summary>What these words mean</summary><dl>`,
+    ...FIRST_USE.map((t: { term: string; meaning: string }) => `    <div><dt>${esc(t.term)}</dt><dd>${esc(t.meaning)}</dd></div>`),
+    `  </dl></details></div>`,
     `</section>`,
   ].join("\n");
 }

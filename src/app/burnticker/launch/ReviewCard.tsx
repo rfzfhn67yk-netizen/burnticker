@@ -6,6 +6,7 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { CoinCard } from "../_components/CoinCard";
 import { FieldHelp } from "../_components/FieldHelp";
 import { pctLabel } from "@/lib/burnticker/launchPresets";
+import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 
 /**
@@ -31,6 +32,8 @@ export interface ReviewCardProps {
   sentence: string;
   /** A registered rivalry pair: the winner-takes-the-burn line (describe.ts PAIR_REVIEW_LINE) under the sentence; null otherwise. */
   pairLine?: string | null;
+  /** website-12 (A3): the two-coin economics in four facts and a worked example (describe.ts winnerTakesBurnFacts / independentPairFacts). */
+  pairFacts?: PairFacts | null;
   /** "Ends Sep 30, 2027, then winds down" — null when the rule has no end. */
   ends: string | null;
   shares: { options: number[]; value: number; onChange: (v: number) => void };
@@ -59,7 +62,14 @@ export interface ReviewCardProps {
 
 export const RECEIPTS_LINE = "Every burn posts a public receipt: the reading it settled on, the amount and the transaction, on the coin's page.";
 /** LP locked forever (owner decision 2026-10-10), on the receipts line. */
-export const LP_LINE = "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code).";
+/**
+ * The locked liquidity, said exactly (ChatGPT A4, 2026-10-12): the 80 / 20 split is of the SOL side of the locked liquidity's fees after
+ * graduation, not of every trading fee, and SOL sent to a burn pool is a budget, not something already burned. The full split per 1 SOL
+ * traded is in the summary below the card.
+ */
+export const LP_LINE = "The pool's liquidity is locked forever. After graduation, the SOL side of the fees it earns goes 80% to the coin's burn pool and 20% to the operator, a split fixed in code.";
+/** A4: the dial's name. The share is of the coin's burn budget, never of its supply. */
+export const BUDGET_LABEL = "Burn budget per result";
 export const ACK_LINE = "By launching, you confirm the rule as written. You also confirm that you make no promises to anyone about this coin. The rule is stored with the coin, and no instruction in the program can change it.";
 const okTicker = (t: string) => /^[A-Z0-9]{2,10}$/.test(t);
 export function ReviewCard(p: ReviewCardProps) {
@@ -67,9 +77,8 @@ export function ReviewCard(p: ReviewCardProps) {
   const [tickerNotes, setTickerNotes] = useState<Record<string, string | null>>({});
   const modal = useWalletModal();
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  // Launch without a wallet opens the chooser and launches once the wallet connects (one press, not two)
-  const pending = useRef(false);
-  useEffect(() => { if (pending.current && p.creator && !p.blocked) { pending.current = false; p.onLaunch(); } }, [p.creator]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ChatGPT A11: connecting and launching are two separate steps. Without a wallet the button is "Connect wallet" (it only opens the
+  // chooser); once connected it becomes "Launch", and pressing that is the signing step.
   // L07: every field problem, named per coin; the editor cannot be closed over a problem, and the list sits beside the button
   const many = p.coins.length > 1;
   const fieldProblems = p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; return [nameProblem(c.name), tickerProblem(c.ticker)].filter(Boolean).map((x) => ({ key: c.key, text: `${who}${x}` })); });
@@ -78,9 +87,9 @@ export function ReviewCard(p: ReviewCardProps) {
   // L08: when the wallet list closes without a wallet, focus returns to the button that opened it
   const launchBtn = useRef<HTMLButtonElement>(null), modalWasOpen = useRef(false);
   useEffect(() => { if (modal.visible) modalWasOpen.current = true; else if (modalWasOpen.current) { modalWasOpen.current = false; if (!p.creator) launchBtn.current?.focus(); } }, [modal.visible]); // eslint-disable-line react-hooks/exhaustive-deps
-  const launch = () => { if (!p.ready || p.busy || p.blocked) return; if (!p.creator) { pending.current = true; modal.setVisible(true); return; } p.onLaunch(); };
+  const launch = () => { if (!p.ready || p.busy || p.blocked) return; if (!p.creator) { modal.setVisible(true); return; } p.onLaunch(); };
   const chip = (on: boolean) => `rounded-full border px-3 py-1 text-sm ${on ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`;
-  const label = p.busy ? "Building…" : p.creator ? (many ? "Launch both" : "Launch") : "Open wallet and launch";
+  const label = p.busy ? "Building…" : p.creator || p.blocked ? (many ? "Launch both" : "Launch") : "Connect wallet";
   return (
     <section className="min-w-0 max-w-full overflow-hidden rounded-xl border border-amber-400/60 bg-neutral-900 p-3 sm:p-4 space-y-3 text-sm" aria-label="Review" data-review-card>
       <div className={`grid min-w-0 gap-3 ${many ? "md:grid-cols-2" : ""}`}>
@@ -112,13 +121,15 @@ export function ReviewCard(p: ReviewCardProps) {
           {p.event.criteria && <p className="mt-1 whitespace-pre-wrap text-neutral-400">{p.event.criteria.length > 600 ? `${p.event.criteria.slice(0, 600)}… The full rules are on the market page.` : p.event.criteria}</p>}
         </div>
       )}
-      {p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line>{p.pairLine} <FieldHelp id="pair-burn" /></p>}
+      {p.pairFacts ? <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-200" data-pair-facts={p.pairFacts.kind} aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul>
+        : p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line>{p.pairLine} <FieldHelp id="pair-burn" /></p>}
       {p.ends && <p className="min-w-0 break-words text-xs text-neutral-300" data-ends>{p.ends}</p>}
       <p className="min-w-0 break-words text-xs text-neutral-400">{RECEIPTS_LINE} {LP_LINE}</p>
-      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="How much burns each time">
-        <span className="text-xs text-neutral-500" aria-hidden="true">Burns</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={BUDGET_LABEL} aria-describedby={`${uid}-budget`}>
+        <span className="text-xs text-neutral-500" aria-hidden="true">{BUDGET_LABEL}</span>
         {p.shares.options.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
       </div>
+      <p id={`${uid}-budget`} className="min-w-0 break-words text-xs text-neutral-400" data-budget-line>Spend {pctLabel(p.shares.value)} of the available burn budget each time. The tokens bought are burned, and the token amount varies.</p>
       {p.durations && p.durations.options.length > 1 && (
         <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="How long the coins run">
           <span className="text-xs text-neutral-500" aria-hidden="true">Runs</span>
@@ -137,6 +148,7 @@ export function ReviewCard(p: ReviewCardProps) {
         {fieldProblems.length > 0 && <ul id={problemsId} className="list-disc pl-5 text-xs text-red-400" aria-label="Not ready to launch">{fieldProblems.map((x) => <li key={x.text}>{x.text}</li>)}</ul>}
         {p.blocked && <p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
         <button ref={launchBtn} type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-40" aria-describedby={[p.blocked ? blockedId : "", fieldProblems.length ? problemsId : ""].filter(Boolean).join(" ") || undefined} disabled={!p.ready || p.busy || p.problems.length > 0 || !!p.blocked || fieldProblems.length > 0} onClick={launch}>{label}</button>
+        {!p.creator && !p.blocked && <p className="min-w-0 break-words text-[11px] text-neutral-500" data-connect-note>Connecting shares only your wallet&apos;s public address. The button then becomes Launch, and launching is a separate step that your wallet asks you to sign.</p>}
         <p className="min-w-0 break-words text-[11px] text-neutral-500">{ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
       </div>
     </section>

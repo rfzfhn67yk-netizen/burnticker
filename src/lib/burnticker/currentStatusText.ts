@@ -30,3 +30,28 @@ export function upgradeDelaySummary(timeLockSecs: number | null, threshold = "2 
   if (timeLockSecs === 0) return `deploy new program code once ${threshold} approve a Squads proposal. The time lock is 0 today, so an approved upgrade can execute at once, with no notice period.`;
   return `deploy new program code once ${threshold} approve a Squads proposal. A ${fmtSecs(timeLockSecs)} time lock then runs before it can execute.`;
 }
+
+const WORD = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+const word = (n: number): string => WORD[n] ?? String(n);
+/**
+ * GOVERNANCE AT DECISION TIME (ChatGPT chat audit 6, A9, 2026-10-12): three sentences shown beside the launch review, from the same
+ * status record the Trust page reads (config/burnticker/current-status.json attesters and squads, operator.json's threshold, and the
+ * time lock last read from chain), so the words change when governance does. Whole sentences; lint-clean.
+ */
+export function governanceLines(g: { quorum: number; signers: { independent: boolean }[]; operatorKeys: number | null; threshold: string; timeLockSecs: number | null }): string[] {
+  const indep = g.signers.filter((x) => x.independent).length;
+  const signer = g.signers.length === 1 && indep === 0
+    ? "One signer, run by the operator, signs every reading."
+    : `${word(g.signers.length).replace(/^./, (c) => c.toUpperCase())} signers sign readings, and ${word(g.quorum)} must agree. ${indep === 0 ? "None of them is" : `${word(indep).replace(/^./, (c) => c.toUpperCase())} of them ${indep === 1 ? "is" : "are"}`} independent of the operator.`;
+  const t = /^(\d+) of (\d+)$/.exec(g.threshold.trim());
+  const need = t ? Number(t[1]) : null, total = t ? Number(t[2]) : null;
+  const keys = g.operatorKeys === null || need === null || total === null
+    ? `A program upgrade needs ${g.threshold} keys. Who controls them is on the Trust page.`
+    : g.operatorKeys >= need
+      ? `The operator controls ${word(g.operatorKeys)} of the ${word(total)} upgrade keys, so it can approve a program upgrade alone.`
+      : `The operator controls ${word(g.operatorKeys)} of the ${word(total)} upgrade keys, so an upgrade also needs another key holder.`;
+  const wait = g.timeLockSecs === null
+    ? "The waiting period for an approved upgrade could not be read just now. The Trust page reads it from the chain."
+    : g.timeLockSecs === 0 ? "An approved upgrade has no waiting period today, so it can run at once." : `An approved upgrade waits ${fmtSecs(g.timeLockSecs)} before it can run.`;
+  return [signer, keys, wait];
+}

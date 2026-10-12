@@ -24,11 +24,11 @@ test("BT-14: repository paths become links pinned to a 40-hex public commit (fol
   assert.doesNotMatch(read("src/app/burnticker/_components/CurrentStatusSummary.tsx"), /\(<code>\{h\.path\}<\/code>\)/, "history paths are links, not plain text");
 });
 
-test("BT-11: the whitepaper opens with a historical-version notice that links the live status", () => {
+test("BT-11 / A8: the whitepaper opens with its version notice (the dated current specification since 2026-10-12) that links the live status", () => {
   const html = read("site/burnticker/whitepaper.html");
   const notice = html.indexOf('<aside class="notice" role="note">'), firstSection = html.indexOf("<section");
   assert.ok(notice > 0 && (firstSection < 0 || notice < firstSection), "the notice comes before the first section");
-  assert.match(html, /Historical version — not the current status/); assert.match(html, /href="https:\/\/burnticker\.com\/burnticker\/trust"/);
+  assert.match(html, /Current specification, dated 2026-10-12\./); assert.match(html, /status is as of 2026-10-10 and is kept for the record/); assert.match(html, /href="https:\/\/burnticker\.com\/burnticker\/trust"/);
 });
 
 test("BT-12: the summary line names key control and notice (owner holds two of three keys; time lock 0 = no advance notice)", () => {

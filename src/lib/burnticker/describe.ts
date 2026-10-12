@@ -64,6 +64,38 @@ export const PAIR_DESCRIPTION_SENTENCE = "This coin is paired with a rival coin,
 export const PAIR_BURN_SENTENCE = "Winner takes the burn (the coin whose rule fires, not the team that won): when a result fires one coin's rule, eligible fees from both coins fund that coin's burn, and the other coin's share for that result moves to its burn pool. Nothing is paid to holders.";
 /** The review card's line for a registered rivalry pair (Coin vs Coin, a shared-selector matchup, an election pair). */
 export const PAIR_REVIEW_LINE = `${PAIR_BURN_SENTENCE} A draw or a void moves nothing.`;
+/**
+ * PAIR ECONOMICS IN ONE VOICE (ChatGPT chat audit 6, A3, 2026-10-12). Two kinds of two-coin launch, each explained by the same four facts,
+ * with the real tickers in a worked example: (a) which outcome fires, (b) which token is bought and burned, (c) whose pool pays, (d)
+ * whether SOL moves between the pools. A REGISTERED pair is winner-takes-the-burn (pairForward.ts header, LAUNCHPAD-PATH §40): the
+ * loser's fuel for that result moves to the winner's burn pool and burns the winner's coin; the loser's supply is untouched; a draw or a
+ * void moves nothing. A MATCHUP made of two separate launches is two independent coins: each burns itself from its own pool, and no SOL
+ * moves. The review card, the Coin vs Coin tile, the templates and About read these; nothing else describes pair money.
+ */
+export interface PairFacts { kind: "winner-takes-the-burn" | "independent"; trigger: string; burned: string; pays: string; moves: string; example: string }
+export function winnerTakesBurnFacts(a: string, b: string): PairFacts {
+  return {
+    kind: "winner-takes-the-burn",
+    trigger: `A result decides a winner by firing one coin's rule. The winner is the coin whose rule fires. That can be a coin whose team lost the game.`,
+    burned: "Only the winner's tokens are bought and burned. The loser's supply is untouched.",
+    pays: "The winner's burn pool pays its own share. The loser's burn pool pays the share it would have spent if it had won.",
+    moves: "SOL does move between the two pools. The loser's share for that result moves to the winner's burn pool. Nothing is paid to holders, and a draw or a void moves nothing.",
+    example: `For example, if a result fires $${a}'s rule, $${a} is bought and burned with its own share, and $${b}'s share for that result moves to $${a}'s burn pool and burns $${a} too. $${b}'s supply does not change.`,
+  };
+}
+export function independentPairFacts(a: string, b: string, teams: { a: string; b: string } | null = null): PairFacts {
+  const A = teams?.a ?? `$${a}'s side`, B = teams?.b ?? `$${b}'s side`;
+  return {
+    kind: "independent",
+    trigger: `These are two separate coins with their own rules. $${a}'s rule fires when ${A} lose, and $${b}'s rule fires when ${B} lose.`,
+    burned: "The coin whose rule fires is bought and burned. The other coin is not touched.",
+    pays: "Each coin pays from its own burn pool.",
+    moves: "No SOL moves between the two coins, because they are separate launches. A tie burns neither.",
+    example: `For example, if ${A} lose, $${a} spends its share of its own burn budget, the $${a} tokens bought are burned, and $${b} does nothing.`,
+  };
+}
+/** The four facts and the example as plain sentences, in order. */
+export const pairFactLines = (f: PairFacts): string[] => [f.trigger, f.burned, f.pays, f.moves, f.example];
 /** Does this binary rule map the result to a burn? (A scalar or a rule without a mapping for it: no.) */
 const firesOn = (r: Pick<BurnRule, "kind" | "binary">, result: "yes" | "no"): boolean => r.kind === "binary" && !!r.binary && ((result === "yes" ? r.binary.onYes : r.binary.onNo)?.fractionOfPool ?? 0) > 0;
 /**

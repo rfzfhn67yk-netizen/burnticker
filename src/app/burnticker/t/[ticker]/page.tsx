@@ -13,7 +13,8 @@ import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
-import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
+import { COIN_TAB_LABEL, burnsAfterGraduation, checkReceiptHref, coinTabs, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { useHome } from "../../_components/useHome";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
@@ -30,7 +31,7 @@ import { likeHref } from "@/lib/burnticker/templates";
  * holder data was read. There is no thread, and nothing counts down. The site's disclaimers live once, in the footer.
  */
 type Link_ = { label: string; url: string };
-interface Market { phase: "curve" | "migrating" | "graduated" | null; curve: { raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string } | null; curveNote: string; graduatedPool: string | null; holders: { count: number | null; countNote: string; top: { account: string; owner: string | null; amount: string; pct: number; label: string | null }[] | null; topNote: string }; trade: { links: { id: string; label: string; url: string }[]; note: string | null }; chart: { provider: string | null; embedUrl: string | null; pageUrl: string | null; note: string }; readAt: string | null; error: string | null }
+interface Market { phase: "curve" | "migrating" | "graduated" | null; curve: { raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string; marketCap?: string | null } | null; curveNote: string; graduatedPool: string | null; holders: { count: number | null; countNote: string; top: { account: string; owner: string | null; amount: string; pct: number; label: string | null }[] | null; topNote: string }; trade: { links: { id: string; label: string; url: string }[]; note: string | null }; chart: { provider: string | null; embedUrl: string | null; pageUrl: string | null; note: string }; readAt: string | null; error: string | null }
 interface Status { program?: { initialized: boolean } | null; ticker: string; name: string; mint: string; cluster: string; status: string; launchedAt: string | null; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; rules: { sha256: string; sha12: string; statement: string; oneShot: boolean }; addresses: { mint: string; mintUrl: string; feePda: string; feePdaUrl: string; feeWsol: string | null; feeWsolUrl: string | null; vault: string | null; vaultUrl: string | null; creator: string; creatorUrl: string; programId: string; poolId: string | null; launchTx: string | null; launchTxUrl: string | null }; supply: { initial: string; current: string; source: string }; burned: { total: string; pctOfSupply: number; count: number; last30d: string; lastAt?: string | null }; pool: { feePdaSol: string | null; spendableSol: string | null; reserveSol: string; vaultBalance: string | null; vaultAllocation: string | null; shortfallOutstanding: string }; next: { nextCheckAt: string | null; impliedChance: number | null; impliedBasis: string | null; nextMarket: string | null; nextCloseTime: string | null; awaitingFinal: number }; feed: { lastEventId: string | null; lastValue: string | null; lastSettledAt: string | null; readings: number; lastFetchAt: string | null; lastError: string | null }; attesters: { pubkey: string; role: string; active: boolean }[]; quorum: number; fees: { sentence: string; curve: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number }; postGraduation: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number } }; health: { pending: number; unverified: number; lastError: string | null }; disclosure: { disclaimer: string; eventContract: string | null }; trust: { lpBurnedPct: number; lpLockedPct?: number; creatorCashBps: number; teamAllocationPct: number; operator: { can: string[]; cannot: string[]; placeholder: boolean }; registerUrl: string }; lp?: LpBlock | null; profile?: { imageUrl: string | null; description: string; links: Link_[]; oneLiner: string; badge?: string; note?: string; affiliation?: string }; pinned?: PinnedView | null; market?: Market; pair: { pairId: string; side: "A" | "B"; counterpart: { ticker: string; name: string }; tally: { burnsThis: number; burnsOther: number }; pageUrl: string } | null }
 interface Receipt { eventId: string; settledAt: string; oracle: string; market: string; result: string | null; value: string | null; title: string | null; method: string | null; sourceUrl: string | null; settlementSourceUrl: string | null; units: number; status: string; skippedReason: string | null; spent: string | null; got: string | null; burned: string | null; memo: string | null; signature: string | null; txUrl: string | null; verify: { curl: string; formula: string; expected: string; checks: string[]; verified: boolean } }
 /** status.json `lp` (LP locked forever, 2026-10-10; src/lib/burnticker/lockFees.ts LpLockJson). */
@@ -61,6 +62,21 @@ function Chart({ readings, receipts }: { readings: Reading[]; receipts: Receipt[
   );
 }
 
+/** A fact list: label, value (a dash with the reason when this site did not read it), and the meaning or reason as small print. */
+function Facts({ rows, label }: { rows: FactRow[]; label: string }) {
+  return (
+    <dl className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2" aria-label={label}>
+      {rows.map((r) => (
+        <div key={r.key} data-fact={r.key} className="min-w-0">
+          <dt className="text-neutral-500">{r.label}</dt>
+          <dd className="break-all text-neutral-100">{r.href && r.value ? <a className="underline" href={r.href} rel="noopener" target="_blank">{r.value}</a> : r.value ?? "—"}</dd>
+          {r.note && <dd className="text-[11px] text-neutral-500">{r.note}</dd>}
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function CopyButton({ text, label = "copy" }: { text: string; label?: string }) {
   const [done, setDone] = useState(false);
   return <button type="button" className="bt-copy" onClick={() => { navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => setDone(false)); }} aria-label={`Copy ${label}`}>{done ? "copied" : label}</button>;
@@ -70,6 +86,8 @@ export default function TokenPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const [d, setD] = useState<Data | null>(null);
   const launch = useLaunchAvailability();
+  // the configured raise (GET /api/burnticker/home, the header's one read) for the "burns begin after graduation" line when the curve was not read
+  const raiseSol = useHome().data?.raiseSol ?? null;
   const [err, setErr] = useState<string | null>(null);
   // the time the page was read; "launched 3d ago" and "last burn 2h ago" are past records, and nothing on this page counts down
   const [now] = useState(() => Date.now());
@@ -90,6 +108,19 @@ export default function TokenPage() {
   const ready = readinessFromStatus(s as unknown as Parameters<typeof readinessFromStatus>[0], d.receipts as unknown as Parameters<typeof readinessFromStatus>[1]);
   // readiness.ts decides: a coin on its curve, or graduated with its pool not yet registered, cannot burn yet
   const preBurn = ready.state === "on-curve" || ready.state === "awaiting-registration";
+  const afterGraduation = burnsAfterGraduation(m?.curve?.threshold ?? raiseSol, m?.curve?.quote ?? "SOL");
+  // ChatGPT audit 6 A10: the market facts this site read, and Burnticker's own facts, equally legible; a dash with a reason for the rest
+  const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: m?.holders.count ?? null, holdersNote: m?.holders.countNote ?? "This site has not read the holders.", feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
+  const latest = [...d.receipts].filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
+  const nextAt = s.next.nextCloseTime ?? s.next.nextCheckAt;
+  const burnFacts: FactRow[] = [
+    { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : `Read from ${venue}.`, href: latest?.settlementSourceUrl ?? null },
+    { key: "next", label: "Next result", value: nextAt ? `${nextAt.slice(0, 16).replace("T", " ")} UTC` : "None scheduled", note: nextAt ? "Times are in UTC. The source publishes the result after this." : "This rule has no scheduled result this site knows of." },
+    { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
+    { key: "burned", label: "Burned so far", value: `${fmt(s.burned.total)} of ${fmt(s.supply.initial)} tokens`, note: `${s.burned.pctOfSupply.toFixed(2)}% of the supply, in ${count(s.burned.count, "burn")}.` },
+    { key: "last", label: "Last receipt", value: latest ? latest.settledAt.slice(0, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? afterGraduation : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
+    { key: "pending", label: "Waiting", value: s.health.pending === 0 ? "Nothing waiting" : count(s.health.pending, "receipt"), note: s.health.pending ? "A burn can wait for the pool's checks or a spend floor. The unspent funds stay in the burn pool." : null },
+  ];
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-5 space-y-5 text-sm">
@@ -137,6 +168,7 @@ export default function TokenPage() {
 
         <aside className="space-y-3 lg:self-start" aria-label="Trade and pool">
           <section className={card} aria-label="Trade">
+            <p className="mb-2 text-xs text-neutral-400" data-fees-before-trade>Each trade pays {s.fees.curve.totalBps / 100}% on the curve and {s.fees.postGraduation.totalBps / 100}% in the Raydium pool. Raydium shows how far your trade moves the pool, and your slippage setting, before you sign.</p>
             {trade ? <a href={trade.url} rel="noopener" target="_blank" className="bt-launch-btn block text-center" data-trade-link>{trade.label} ↗</a>
               : <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "The trade link appears once the coin is launched."}</p>}
             <p className="mt-2 text-xs text-neutral-500">Burnticker never takes an order and has no swap of its own. {trade ? `This link opens Raydium, set to $${s.ticker}.` : ""}</p>
@@ -146,12 +178,18 @@ export default function TokenPage() {
           <section className={card} aria-label="Pool">
             <CurveBar c={{ phase: m?.phase ?? null, progressPct: m?.curve?.progressPct ?? (m?.phase === "graduated" ? 100 : null), raised: m?.curve?.raised ?? null, threshold: m?.curve?.threshold ?? null, quote: m?.curve?.quote ?? null, curveNote: m?.curveNote }} />
             <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. $${s.ticker} now trades in a Raydium pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${Number(m.curve.remaining).toFixed(2)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
-            {preBurn && <p className="mt-2 text-xs text-neutral-300" data-burns-after-graduation>{BURNS_AFTER_GRADUATION}</p>}
+            {preBurn && <p className="mt-2 text-xs text-neutral-300" data-burns-after-graduation>{afterGraduation}</p>}
             <p className="mt-2 text-[11px] text-neutral-500">{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {(100 - s.burned.pctOfSupply).toFixed(2)}% of the supply is left.</p>
           </section>
 
           <ReadinessPanel r={ready} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
         </aside>
+      </div>
+
+      {/* ---- the market facts and the burn facts (ChatGPT audit 6 A10), side by side and equally legible ---- */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className={card} aria-labelledby="facts-market-h"><h2 id="facts-market-h" className="mb-2 font-medium">The coin</h2><Facts rows={market} label="Market facts" /></section>
+        <section className={card} aria-labelledby="facts-burn-h"><h2 id="facts-burn-h" className="mb-2 font-medium">Its burns</h2><Facts rows={burnFacts} label="Burn facts" /></section>
       </div>
 
       {/* ---- TABS: Burn log first, then Rule, then Holders when holder data was read. No thread. ---- */}
@@ -164,7 +202,7 @@ export default function TokenPage() {
       <div id="panel-burns" role="tabpanel" aria-labelledby="tab-burns" hidden={tab !== "burns"} className="space-y-5">
         <section aria-label="Burn log">
           <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {s.burned.pctOfSupply.toFixed(2)}% of the supply. Each receipt below can be checked in your browser.</p>
-          {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? BURNS_AFTER_GRADUATION : "The next result that counts prints the first one."}</p> : (
+          {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? afterGraduation : "The next result that counts prints the first one."}</p> : (
             <ol className="bt-tape">
               {rows.map((b) => (
                 <li key={b.eventId} className="bt-tape-row">
@@ -285,7 +323,7 @@ function NotRegisteredNotice({ t }: { t: string }) {
       {rehearsal ? (
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-2" data-rehearsal-coin>
           <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">Disclosed rehearsal coin</p>
-          <p>${t} is the operator&apos;s rehearsal coin on mainnet. It exists to test the burn machinery with real settings, and it is not for trading. That is why this site shows no chart and no trade link for it, and does not list it with the coins.</p>
+          <p>${t} is the operator&apos;s rehearsal coin on mainnet. It exists to test the burn machinery with real settings. The operator does not trade it and asks nobody to, so this site shows no chart and no trade link for it and does not list it with the coins. It can only burn if outside buyers fill its curve, and nobody is asked to do that.</p>
           {rehearsal.mint && <p className="text-xs text-neutral-400 break-all">Its mint address is <code>{rehearsal.mint}</code>. <Link className="underline" href={`/burnticker/verify?mint=${rehearsal.mint}`}>Check this coin with the burn program</Link>.</p>}
           <p className="text-xs text-neutral-400">The full record, including what it has and has not proved so far, is on the <Link className="underline" href="/burnticker/trust">Trust page</Link>.</p>
         </section>

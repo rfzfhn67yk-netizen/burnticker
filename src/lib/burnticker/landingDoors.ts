@@ -19,7 +19,7 @@ export function door2Html(ix: LeagueIndex = leagueIndex([], Date.UTC(2026, 9, 10
   return [
     `      <div class="head"><h2 id="seasons-h">Follow the season</h2></div>`,
     `      <p>Each league gets one scoreboard per season, from the ${esc(all[0])} to the ${esc(all[all.length - 1])}. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>`,
-    `      <p class="ex">The ${ix.totals.leagues} leagues cover ${esc(list)}. When a league's season ends, the coin with the most receipts is named its champion. That is a line on a scoreboard, and nobody receives anything for it.</p>`,
+    `      <p class="ex">The ${ix.totals.leagues} leagues cover ${esc(list)}. When a league's season ends, the coin with the most receipts is named its champion. Season titles are for the scoreboard only. There are no prizes.</p>`,
     `      <p class="links"><a class="go" href="${LEAGUES_PATH}">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>`,
 ].join("\n");
 }

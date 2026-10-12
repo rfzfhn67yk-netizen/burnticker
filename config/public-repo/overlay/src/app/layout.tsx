@@ -7,7 +7,9 @@ import { FooterSwitch } from "@/app/burnticker/_components/FooterSwitch";
 import { TabBar } from "@/app/burnticker/_components/TabBar";
 // Runs before paint: a theme the visitor picked (header switch, shared with the static pages) wins; otherwise the OS preference decides.
 import { THEME_BOOT } from "@/app/burnticker/_components/theme";
-import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
+import { hostCluster } from "@/lib/burnticker/launchAvailability";
+import { META_TITLE as TITLE, metaDescription } from "@/lib/burnticker/siteMeta";
+import { ShellWalletProviders } from "@/app/burnticker/_components/ShellWalletProviders";
 
 // site audit #19 (2026-10-11): the two families are self-hosted by next/font (one same-origin stylesheet, font-display swap, no request to
 // Google from a visitor's browser); globals.css reads them through these variables
@@ -15,15 +17,12 @@ const mono = Courier_Prime({ weight: ["400", "700"], subsets: ["latin"], display
 const sans = Space_Grotesk({ weight: ["400", "500", "600", "700"], subsets: ["latin"], display: "swap", variable: "--font-space-grotesk" });
 
 /**
- * BT-21 (2026-10-11): search and social previews follow the host's launch state at request time. While creator launches are closed they
- * say so and never invite launching; when the host opens them, the preview says launches are open. One flag: creatorLaunches.ts.
+ * BT-21 (2026-10-11), website-13 (2026-10-12, Claude site audit 2 item 1): search and social previews carry the current headline and
+ * the host's launch state at request time, read from launchAvailability.ts (catalogueLaunches: closed, preview or open, in its own
+ * words). Nothing here types "open" or "closed".
  */
-const TITLE = "Burnticker — coins that burn on real-world results, with receipts";
-const DESCRIPTION_CLOSED = "Coins that burn on real-world results, with receipts. Creator launches are closed for now. You can inspect a real devnet burn receipt. These are memecoins: the rule says what supply does, not what price does. Not advice.";
-const DESCRIPTION_OPEN = "Coins that burn on real-world results, with receipts. Creator launches are open on this host. You can inspect a real devnet burn receipt first. These are memecoins: the rule says what supply does, not what price does. Not advice.";
-
 export async function generateMetadata(): Promise<Metadata> {
-  const description = launchAvailability(process.env).open ? DESCRIPTION_OPEN : DESCRIPTION_CLOSED;
+  const description = metaDescription(process.env);
   return {
     metadataBase: new URL("https://burnticker.com"),
     title: { default: "Burnticker", template: "%s · Burnticker" },
@@ -48,7 +47,8 @@ export const viewport: Viewport = {
  * THE PUBLIC APP'S ROOT (2026-10-10, the owner: "keep it with the Burnticker branding … none of the meme coin trader stuff carries
  * over"). B1 "thermal receipt": Courier Prime for the receipt voice, Space Grotesk for reading text, the scorched-slip mark, a receipt
  * footer with the disclaimer and the operator line. This file exists only in the public tree (config/public-repo/overlay); it mounts the
- * Burnticker header and footer and nothing else — no providers, sync engines, tickers or another product's navigation.
+ * Burnticker header and footer, and since website-13 the one wallet provider (ShellWalletProviders) — no sync engines or another
+ * product's navigation.
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -58,10 +58,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bt-body">
         <a className="bt-skip" href="#bt-content">Skip to content</a>
-        <SiteHeader />
-        <div id="bt-content" className="bt-content">{children}</div>
-        <FooterSwitch full={<SiteFooter />} compact={<CompactFooter />} />
-        <TabBar />
+        {/* the one wallet provider for the whole app (website-13): the header's Connect wallet, Your coins and the launch wizard share it */}
+        <ShellWalletProviders cluster={hostCluster(process.env)}>
+          <SiteHeader />
+          <div id="bt-content" className="bt-content">{children}</div>
+          <FooterSwitch full={<SiteFooter />} compact={<CompactFooter />} />
+          <TabBar />
+        </ShellWalletProviders>
       </body>
     </html>
   );

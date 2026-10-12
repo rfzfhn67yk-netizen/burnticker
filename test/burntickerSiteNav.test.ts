@@ -18,7 +18,7 @@ const LEARN_LABELS = ["How it works", "Trust", "Operator", "Whitepaper", "Docs a
 function navLinks(html: string, name: string): [string, string][] {
   const m = new RegExp(`data-site-nav="${name}"[^>]*>([\\s\\S]*?)</${name === "learn" ? "div" : "nav"}>`).exec(html);
   assert.ok(m, `no data-site-nav="${name}"`);
-  return [...m[1].replace(/<details[\s\S]*?<\/details>/g, "").matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map((a) => [a[2].replace(/<span aria-hidden="true">[^<]*<\/span>/g, "").replace(/<[^>]+>/g, "").trim(), /href="([^"]+)"/.exec(a[1])![1]]);
+  return [...m[1].replace(/<details[\s\S]*?<\/details>/g, "").replace(/<p class="sh-menu-wallet">[\s\S]*?<\/p>/g, "").matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map((a) => [a[2].replace(/<span aria-hidden="true">[^<]*<\/span>/g, "").replace(/<[^>]+>/g, "").trim(), /href="([^"]+)"/.exec(a[1])![1]]);
 }
 
 describe("one shell, same links, same order, every surface (the owner's review items 2, 3, 11; website-10, 2026-10-12)", () => {
@@ -47,7 +47,13 @@ describe("one shell, same links, same order, every surface (the owner's review i
       assert.deepEqual(hrefs, ALL_LINKS.map((l) => l.href), `${f} footer hrefs`);
       // the footer receipt: the disclaimers once, and the operator line verbatim (brief rule 5)
       assert.ok(html.includes(FOOTER_COPY.never) && html.includes(FOOTER_COPY.notAdvice) && html.includes(OPERATOR_LINE.replace(/&/g, "&amp;")), `${f} footer receipt`);
-      assert.ok(html.includes(`>${WALLET.label}</button>`) && /class="sh-wallet" disabled/.test(html), `${f}: the disabled wallet button`);
+      // website-13 (owner decision on Claude site audit 2 item 6): a static page cannot load the wallet adapter, so "Connect wallet" opens
+      // Your coins with the wallet list open; never a disabled button, in the header and in the phone menu
+      const origin = /status|deficit/.test(f) ? "https://burnticker.com" : "";
+      assert.ok(html.includes(`<a class="sh-wallet" href="${origin}${WALLET.href}" title="${WALLET.note}" data-wallet-button>${WALLET.label}`), `${f}: the header's Connect wallet`);
+      assert.ok(html.includes(`<a href="${origin}${WALLET.href}" data-wallet-button>${WALLET.label}</a>`), `${f}: the phone menu's Connect wallet`);
+      assert.doesNotMatch(html, /class="sh-wallet" disabled|<button[^>]*sh-wallet/, `${f}: no disabled wallet button`);
+      assert.equal(WALLET.href, "/burnticker/me?connect=1");
       assert.ok(html.includes(`placeholder="${SEARCH.placeholder}"`), `${f}: the search box`);
     }
     // the whitepaper is generated with the same shell
@@ -65,13 +71,16 @@ describe("one shell, same links, same order, every surface (the owner's review i
   test("the app header: Launch a coin opens the closed-launches dialog while launches are closed; the phone menu traps focus and closes on Escape", () => {
     const h = read("src/app/burnticker/_components/SiteHeader.tsx");
     assert.match(h, /\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch" data-launch-button>\{LAUNCH_LABELS\.button\}<\/Link>\s*: <button type="button" className="bt-launch-btn bt-launch-head" onClick=\{\(\) => setModal\(true\)\}/);
-    assert.match(h, /<button type="button" className="bt-wallet" disabled title=\{WALLET\.note\}>\{WALLET\.label\}/);
+    // website-13: the real wallet adapter button, to the right of Launch a coin, and again in the phone menu; never disabled
+    assert.match(h, /data-launch-button>\}\s*<WalletButton \/>|data-launch-button>\{LAUNCH_LABELS\.button\}<\/button>\}\s*<WalletButton \/>/);
+    assert.match(h, /<WalletButton variant="menu" \/>/);
+    assert.doesNotMatch(h, /className="bt-wallet" disabled/);
     assert.match(h, /<form className="bt-search" role="search" action="\/burnticker"/);
     assert.match(h, /e\.key === "Escape"[\s\S]*menuBtn\.current\?\.focus\(\)/);
     assert.match(h, /e\.key !== "Tab"[\s\S]*const ring = \[menuBtn\.current, \.\.\.links\(\)\]/);
     assert.match(h, /links\(\)\[0\]\?\.focus\(\)/, "opening moves focus into the menu");
     const modal = read("src/app/burnticker/_components/LaunchClosedModal.tsx");
-    assert.match(modal, /<h2 id="bt-launch-closed-h">\{LAUNCH_CLOSED\.title\}<\/h2>/); assert.match(modal, /<p>\{LAUNCH_CLOSED\.body\}<\/p>/);
+    assert.match(modal, /<h2 id="bt-launch-closed-h">\{LAUNCH_CLOSED\.title\}<\/h2>/); assert.match(modal, /<p data-launch-sentence>\{state\.sentence\}<\/p>/, "website-13: the site launch record's own sentence");
     assert.match(modal, /href="\/burnticker" onClick=\{onClose\}>\{LAUNCH_CLOSED\.coins\}/, "a link to the Coins page");
     assert.doesNotMatch(LAUNCH_CLOSED.body, /\d{4}|soon|waitlist|email|notify/i, "brief rule 1: no date, no waitlist, no email capture");
     const home = read("site/burnticker/index.html");

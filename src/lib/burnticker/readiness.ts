@@ -72,3 +72,40 @@ export function readinessFromStatus(s: { status: string; market?: { phase: "curv
     latest: latest ? { status: latest.status, units: latest.units, skippedReason: latest.skippedReason, waitReason: latest.waitReason, checks: latest.verify?.checks, verified: latest.verify?.verified, burned: latest.burned ?? null, readingDate: latest.readingDate ?? null } : null,
   });
 }
+
+/**
+ * FIVE DISTINCT DATA STATES (ChatGPT chat audit 6, A5, 2026-10-12: "About to graduate" said "No coin is past half its bonding curve. This
+ * site does not read curve progress, so this list stays empty." The second sentence cannot establish the first). Every list or reading
+ * that can be missing says which of these it is, in its own sentence, and never shows "unavailable" as "none":
+ *
+ *   loading      the read has not answered yet
+ *   empty        the read answered, and nothing matches
+ *   unavailable  this site does not read it (not connected), so nothing can be said either way
+ *   stale        the last good read is older than its freshness window
+ *   error        the read was tried and failed
+ *
+ * Pure and client-safe; website-13's grid, tabs and cards use these words (curveProgressSentence for "About to graduate").
+ */
+export type DataState = "loading" | "empty" | "unavailable" | "stale" | "error";
+export const DATA_STATES: DataState[] = ["loading", "empty", "unavailable", "stale", "error"];
+const hhmm = (iso: string | null | undefined): string | null => {
+  if (!iso || Number.isNaN(Date.parse(iso))) return null;
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+};
+/** One sentence for a data state. `what` names the data in words ("curve progress", "the burn history"); `empty` says what none means. */
+export function dataStateSentence(state: DataState, what: string, o: { empty?: string; readAt?: string | null } = {}): string {
+  const What = what.charAt(0).toUpperCase() + what.slice(1);
+  const at = hhmm(o.readAt);
+  switch (state) {
+    case "loading": return `Reading ${what}.`;
+    case "empty": return o.empty ?? `${What} was read, and there is nothing to show.`;
+    case "unavailable": return `${What} is unavailable on this site, so this cannot say whether anything matches.`;
+    case "stale": return at ? `${What} was last read on ${at} Denver time and may be out of date.` : `${What} may be out of date.`;
+    case "error": return `${What} could not be read just now. Try again in a moment.`;
+  }
+}
+/** "About to graduate": what the tab says in each state (never "no coin" when progress is not read). */
+export function curveProgressSentence(state: DataState, o: { readAt?: string | null } = {}): string {
+  if (state === "unavailable") return "Curve progress is unavailable on this site, so this list cannot show which coins are close to graduating. Every coin and its receipts can still be viewed.";
+  return dataStateSentence(state, "curve progress", { empty: "No coin is past half its curve right now.", readAt: o.readAt });
+}

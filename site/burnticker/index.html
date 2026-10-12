@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Burnticker — memecoins that burn on real-world results, with receipts</title>
-<meta name="description" content="Memecoins that burn on real-world results. Every burn is a receipt. Burnticker is in pre-launch, and creator launches are closed. You can inspect a real devnet burn and check its receipt in your browser. A primary source settles the result, a program runs the burn, and anyone can recompute the receipt. Nothing is ever won. Things are only burned.">
+<title>Burnticker: memecoins that burn on real-world results</title>
+<meta name="description" content="Memecoins that burn on real-world results. Every burn is a receipt. Each coin locks one rule tied to a public result, and anyone can check each burn's receipt in the browser.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#12100e">
-<meta property="og:title" content="Burnticker — memecoins that burn on real-world results, with receipts">
-<meta property="og:description" content="Burnticker is in pre-launch, and creator launches are closed. You can inspect a real devnet burn. A primary source settled it, a program burned it, and anyone can recompute its receipt in the browser.">
+<meta property="og:title" content="Burnticker: memecoins that burn on real-world results">
+<meta property="og:description" content="Memecoins that burn on real-world results. Every burn is a receipt that anyone can check in the browser.">
 <meta property="og:image" content="https://burnticker.com/brand/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -95,6 +95,36 @@ a{color:var(--violet)}
 .seasons .links{display:flex;flex-wrap:wrap;gap:6px 14px}
 .cs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:.92rem;color:var(--dim)}.cs ul{margin:0;padding-left:18px}.cs li{margin:0 0 4px}.cs .cs-head{font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}.cs .cs-meta{margin:8px 0 0;font:.74rem/1.4 var(--mono);color:var(--muted);overflow-wrap:anywhere}.cs button{margin-top:8px;font:600 .85rem var(--sans);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
 .cs .bars span{display:block;height:10px;border-radius:4px;background:var(--line);margin:0 0 8px}
+/* website-13 (2026-10-12): the platform strip, the one-line status, the receipt-style identity, the full card rows, and the phone layout
+   that puts the first card in the first screen (the three steps collapse to their titles under 640 px) */
+.stats-wrap{padding:12px 16px 0}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
+.stats>div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.stats dt{font:700 .62rem/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.stats dd{margin:2px 0 0;font:700 1.05rem/1.2 var(--mono);color:var(--ink);overflow-wrap:anywhere}
+.stats-note{margin:6px 0 0;font-size:.74rem;color:var(--muted)}
+.stat-skel{display:inline-block;width:3.5em;height:.8em;border-radius:3px;background:var(--line)}.stat-skel.wide{width:min(32rem,80%)}
+.status-line{margin:0;font-size:.9rem;color:var(--dim)}
+.how-more{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin-top:10px;font-size:.86rem}
+.terms summary{cursor:pointer;color:var(--violet)}
+.terms dl{margin:8px 0 0;display:grid;gap:6px;max-width:62ch}
+.terms dl>div{display:grid;grid-template-columns:9rem 1fr;gap:8px}
+.terms dt{font-weight:600}.terms dd{margin:0;color:var(--dim)}
+.card .noimg{flex-direction:column;gap:2px}
+.card .noimg .ni-top{font-size:6px;letter-spacing:.14em;color:#5a5248}
+.card .noimg .ni-in{font:700 1.5rem/1 var(--mono)}
+.card .noimg .ni-tk{font-size:.55rem;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:639px){
+  .hero{padding-top:14px}
+  .how{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .how li{flex-direction:column;gap:4px;padding:8px}
+  .how-x{display:none}
+  .how-t{font-size:.7rem;margin:0}
+  .how-n{width:20px;height:20px;font-size:.72rem}
+  section{padding:14px 0}
+  .stats dd{font-size:.95rem}
+  .terms dl>div{grid-template-columns:1fr;gap:0}
+}
 </style>
 <!-- site-shell:css:begin -->
 <style>
@@ -121,7 +151,8 @@ a{color:var(--violet)}
 .sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
 .sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
 .sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
-.sh-wallet{display:none;cursor:not-allowed;opacity:.6}.sh-ghost{cursor:pointer}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
 .sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
 .sh-menu>summary::-webkit-details-marker{display:none}
 .sh-menu{position:relative}
@@ -186,7 +217,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     <form class="sh-search" role="search" action="/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
     <div class="sh-actions">
       <a class="sh-launch" href="/burnticker/launch" data-launch-button>Launch a coin</a>
-      <button type="button" class="sh-wallet" disabled title="No page here needs a wallet while creator launches are closed.">Connect wallet</button>
+      <a class="sh-wallet" href="/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet<span class="sh-sr">. Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.</span></a>
       <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
       <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
         <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
@@ -199,6 +230,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
           <a href="/whitepaper.html">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+          <p class="sh-menu-wallet">A wallet is only needed for Your coins. <a href="/burnticker/me?connect=1" data-wallet-button>Connect wallet</a></p>
         </nav>
       </details>
     </div>
@@ -206,49 +238,70 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
 </header>
 <dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
-  <h2 id="sh-launch-closed-h">Creator launches are closed</h2>
-  <p>Creator launches are closed until the first coin has receipts. You can still look through the coins and check a real receipt.</p>
+  <h2 id="sh-launch-closed-h">Launching a coin</h2>
+  <p data-launch-sentence>Checking whether creator launches are open on this site.</p>
+  <p>You can still look through the coins and check a real receipt.</p>
   <p class="sh-modal-row"><a class="sh-launch" href="/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
 </dialog>
 <!-- site-shell:header:end -->
 
 <main id="main" tabindex="-1">
+  <!-- the platform strip (Claude site audit 2 item 8): numbers from GET /api/burnticker/home, "0" when there are none -->
+  <section class="wrap stats-wrap" aria-label="Platform totals">
+    <dl class="stats" data-stats aria-live="polite">
+      <div><dt>Tokens burned, all coins</dt><dd data-stat="burned"><span class="stat-skel" aria-hidden="true"></span></dd></div>
+      <div><dt>Burns</dt><dd data-stat="burns"><span class="stat-skel" aria-hidden="true"></span></dd></div>
+      <div><dt>Receipts verified</dt><dd data-stat="verified"><span class="stat-skel" aria-hidden="true"></span></dd></div>
+    </dl>
+    <p class="stats-note" data-stats-note>These count the coins registered on this site. The devnet practice burns in the line above are not counted.</p>
+  </section>
 <!-- site-shell:hero:begin -->
 <section class="hero wrap" aria-labelledby="hero-h">
   <h1 id="hero-h">Memecoins that burn on real-world results.</h1>
   <p class="sub">Every burn is a receipt.</p>
 </section>
-<section class="wrap" aria-label="How it works">
+<section class="wrap how-wrap" aria-label="How it works">
   <ol class="how">
     <li><span class="how-n" aria-hidden="true">1</span><div><p class="how-t">One locked rule</p><p class="how-x">Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches.</p></div></li>
-    <li><span class="how-n" aria-hidden="true">2</span><div><p class="how-t">The result settles</p><p class="how-x">When the result is published, the coin's own trading fees buy back some of the coin from its pool.</p></div></li>
+    <li><span class="how-n" aria-hidden="true">2</span><div><p class="how-t">The result settles</p><p class="how-x">When the result is published, fees from trading the coin buy back some of it from its pool.</p><p class="how-x how-pre" data-prerequisite>Before the first burn, the curve must raise 85 SOL from buyers, the coin must move to its Raydium pool, and that pool must be registered and verified by the burn program.</p></div></li>
     <li><span class="how-n" aria-hidden="true">3</span><div><p class="how-t">Burned, with a receipt</p><p class="how-x">Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it.</p></div></li>
   </ol>
-  <p class="small"><a href="/burnticker/about">Read how it works in full</a></p>
+  <div class="how-more"><a href="/burnticker/about">Read how it works in full</a><details class="terms"><summary>What these words mean</summary><dl>
+    <div><dt>Memecoin</dt><dd>A speculative crypto token built around a theme.</dd></div>
+    <div><dt>Burn</dt><dd>Tokens the program destroys for good. It never takes tokens from anyone's wallet.</dd></div>
+    <div><dt>Receipt</dt><dd>The burn's transaction and the source reading behind it, so anyone can check the burn.</dd></div>
+    <div><dt>Settles</dt><dd>The source has published its final result for that period.</dd></div>
+    <div><dt>Trading fees</dt><dd>A small amount collected each time someone trades the coin.</dd></div>
+    <div><dt>Pool</dt><dd>The coin and SOL held by a trading program so that trades can happen.</dd></div>
+    <div><dt>Curve</dt><dd>A new coin's first trading stage. When buyers have put in the full raise, the coin graduates to its own Raydium pool.</dd></div>
+    <div><dt>Mint</dt><dd>The coin's unique address. A reserved address does not mean the coin exists yet.</dd></div>
+    <div><dt>Mainnet and devnet</dt><dd>Mainnet is the real Solana network, where transactions use real SOL. Devnet is a practice network whose tokens have no money value.</dd></div>
+    <div><dt>SOL and Raydium</dt><dd>SOL is Solana's own coin, used for fees and deposits. Raydium is the outside Solana trading service these coins trade on.</dd></div>
+  </dl></details></div>
 </section>
 <!-- site-shell:hero:end -->
 
   <section class="wrap" id="coins" aria-labelledby="coins-h">
-    <div class="head"><h2 id="coins-h">Coins</h2><a href="/burnticker">Open the full coin list, with filters and search</a></div>
+    <div class="head"><h2 id="coins-h">Featured coin and test receipts</h2><a href="/burnticker">Browse coins</a></div>
+    <p class="small muted">These are $DEFICIT, the operator's first coin, and two disclosed test coins. A row this site has not read shows a dash, and pointing at it shows why.</p>
     <div class="grid" data-featured aria-live="polite">
       <div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div>
     </div>
-    <p class="small muted">No wallet is needed to read results or receipts. <a href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> or read the <a href="whitepaper.html">whitepaper</a>.</p>
+    <p class="small"><a href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> or read the <a href="/whitepaper.html">whitepaper</a>.</p>
   </section>
 
   <section class="wrap seasons" id="seasons" aria-labelledby="seasons-h">
       <!-- door2:begin -->
       <div class="head"><h2 id="seasons-h">Follow the season</h2></div>
       <p>Each league gets one scoreboard per season, from the Argentine Primera to the WNBA. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>
-      <p class="ex">The 25 leagues cover baseball, basketball, football, hockey and soccer. When a league's season ends, the coin with the most receipts is named its champion. That is a line on a scoreboard, and nobody receives anything for it.</p>
+      <p class="ex">The 25 leagues cover baseball, basketball, football, hockey and soccer. When a league's season ends, the coin with the most receipts is named its champion. Season titles are for the scoreboard only. There are no prizes.</p>
       <p class="links"><a class="go" href="/burnticker/leagues">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>
       <!-- door2:end -->
   </section>
 
-  <section class="wrap" id="status" aria-labelledby="status-h">
-    <h2 id="status-h">Current status</h2>
-    <div class="cs" data-current-status aria-live="polite"><div class="bars" aria-hidden="true"><span style="width:40%"></span><span style="width:80%"></span><span style="width:65%"></span></div></div>
-    <p class="small muted">The <a href="/burnticker/trust">Trust page</a> has the full status, the safeguards and limits, the reviews and every wallet.</p>
+  <!-- the one-line status (Claude site audit 2 item 9), from current-status.json through GET /api/burnticker/home; the full record is on Trust -->
+  <section class="wrap" id="status" aria-label="Current status">
+    <p class="status-line" data-status-line aria-live="polite"><span class="stat-skel wide" aria-hidden="true"></span></p>
   </section>
 </main>
 
@@ -288,89 +341,103 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 <!-- site-shell:footer:end -->
 <script>
 (function () {
-  // THE COIN GRID (website-10, 2026-10-12): the featured cards from GET /api/burnticker/home, in the one card order the app prints
-  // (src/lib/burnticker/cardView.ts CARD_ROWS: image, name, ticker, rule, next result, burned, curve, receipt). Skeleton cards until the
-  // answer arrives; a failed read says so in plain words. Nothing is typed here.
+  // ONE READ OF GET /api/burnticker/home for this page: the coin grid, the platform strip and the status line here, and the activity
+  // line in the shell script below (it reuses window.btHome).
+  if (typeof document === "undefined" || typeof document.querySelector !== "function" || !window.fetch) return;
+  window.btHome = window.btHome || fetch("/api/burnticker/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+})();
+(function () {
+  // THE COIN GRID (website-10, 2026-10-12; the full field set since website-13): the featured cards from GET /api/burnticker/home, in
+  // the one card order the app prints (src/lib/burnticker/cardView.ts CARD_ROWS: image, name, ticker, badge, rule, next result, curve,
+  // market cap, holders, age, burned, receipt). A field not read prints a dash with its reason. Skeleton cards until the answer
+  // arrives; a failed read says so in plain words. Nothing is typed here.
   if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
   var grid = document.querySelector("[data-featured]");
-  if (!grid || !window.fetch) return;
+  if (!grid || !window.btHome) return;
+  var LABELS = { rule: "Rule", nextSettle: "Next result", curve: "Curve", mcap: "Market cap", holders: "Holders", age: "Age", burned: "Burned" };
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function cellNode(c) {
+    var s = el("span", "", c.text !== null ? c.text : "—");
+    if (c.why) s.title = c.why;
+    if (c.text === null && c.why) { var r = el("span", "sh-sr", ". " + c.why); var w = el("span"); w.appendChild(s); w.appendChild(r); return w; }
+    return s;
+  }
   function row(dl, key, label, value) { var d = el("div"); d.setAttribute("data-row", key); d.appendChild(el("dt", "", label)); var dd = el("dd"); if (typeof value === "string") dd.textContent = value; else dd.appendChild(value); d.appendChild(dd); dl.appendChild(d); }
+  function age(iso) {
+    if (!iso) return null;
+    var ms = Date.now() - Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T00:00:00Z" : iso);
+    if (!isFinite(ms)) return null;
+    if (ms < 3600000) return "under an hour";
+    var h = Math.floor(ms / 3600000), d = Math.floor(h / 24);
+    return d >= 1 ? d + " day" + (d === 1 ? "" : "s") : h + " hour" + (h === 1 ? "" : "s");
+  }
+  function initials(t) { return ((t || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 2) || "?").toUpperCase(); }
+  function thumb(v) {
+    // a coin without an image gets a receipt-style identity: the wordmark, its initials and its $TICKER (never "NO IMAGE")
+    var n = el("div", "noimg"); n.setAttribute("aria-hidden", "true");
+    n.appendChild(el("span", "ni-top", "BURNTICKER")); n.appendChild(el("span", "ni-in", initials(v.ticker))); n.appendChild(el("span", "ni-tk", "$" + v.ticker));
+    return n;
+  }
   function card(v) {
     var a = el("article", "card" + (v.tags.some(function (t) { return t.tone === "featured"; }) ? " featured" : ""));
+    a.setAttribute("data-group", v.group);
     var top = el("div", "top");
     var img;
-    if (v.imageUrl) { img = el("img", "img"); img.src = v.imageUrl; img.alt = ""; img.width = 64; img.height = 64; img.loading = "lazy"; img.onerror = function () { var n = el("div", "noimg", "$" + v.ticker); img.replaceWith(n); }; }
-    else img = el("div", "noimg", "$" + v.ticker);
+    if (v.imageUrl) { img = el("img", "img"); img.src = v.imageUrl; img.alt = ""; img.width = 64; img.height = 64; img.loading = "lazy"; img.onerror = function () { var n = thumb(v); n.setAttribute("data-row", "image"); img.replaceWith(n); }; }
+    else img = thumb(v);
     img.setAttribute("data-row", "image"); top.appendChild(img);
     var who = el("div");
-    if (v.tags.length) { var tg = el("div", "tags"); v.tags.forEach(function (t) { tg.appendChild(el("span", "tag " + t.tone, t.label)); }); who.appendChild(tg); }
     var h = el("h3"), name = el("span", "", v.name), tk = el("span", "tk", " $" + v.ticker);
     name.setAttribute("data-row", "name"); tk.setAttribute("data-row", "ticker");
     if (v.href) { var l = el("a"); l.href = v.href; l.appendChild(name); l.appendChild(tk); h.appendChild(l); } else { h.appendChild(name); h.appendChild(tk); }
     who.appendChild(h);
+    var tg = el("div", "tags"); tg.setAttribute("data-row", "badge"); v.tags.forEach(function (t) { tg.appendChild(el("span", "tag " + t.tone, t.label)); }); who.appendChild(tg);
     if (v.note) who.appendChild(el("p", "note", v.note));
     top.appendChild(who); a.appendChild(top);
     var dl = el("dl", "rows");
-    row(dl, "rule", "Rule", v.rule);
-    if (v.nextSettle) row(dl, "nextSettle", "Next result", v.nextSettle);
-    row(dl, "burned", "Burned", v.burned);
-    var c = el("span"); c.appendChild(document.createTextNode(v.curve.label)); var bar = el("span", "bar"), fill = el("span", v.curve.done ? "done" : ""); fill.style.width = (v.curve.pct === null ? 0 : Math.max(0, Math.min(100, v.curve.pct))) + "%"; bar.appendChild(fill); c.appendChild(bar);
-    row(dl, "curve", v.curve.done ? "Pool" : "Curve", c);
+    row(dl, "rule", LABELS.rule, v.rule);
+    row(dl, "nextSettle", LABELS.nextSettle, cellNode(v.nextSettle));
+    var c = el("span"); var ct = el("span", "", (v.curve.raised === null ? "—" : v.curve.raised) + " / " + v.curve.of + " raised"); if (v.curve.why) ct.title = v.curve.why; c.appendChild(ct);
+    var bar = el("span", "bar"), fill = el("span", v.curve.done ? "done" : ""); fill.style.width = (v.curve.pct === null ? 0 : Math.max(0, Math.min(100, v.curve.pct))) + "%"; bar.appendChild(fill); c.appendChild(bar);
+    row(dl, "curve", LABELS.curve, c);
+    row(dl, "mcap", LABELS.mcap, cellNode(v.mcap));
+    row(dl, "holders", LABELS.holders, cellNode(v.holders));
+    var ag = age(v.createdAt);
+    row(dl, "age", LABELS.age, cellNode({ text: ag, why: ag ? null : v.createdWhy }));
+    row(dl, "burned", LABELS.burned, cellNode(v.burned));
     a.appendChild(dl);
     var foot = el("div", "foot"); foot.setAttribute("data-row", "receipt");
     if (v.receipt) { var r = el("a", "btn", "Check receipt"); r.href = v.receipt.href; foot.appendChild(r); }
-    else { var off = el("span", "btn off", "Check receipt"); off.setAttribute("aria-disabled", "true"); foot.appendChild(off); foot.appendChild(el("span", "", "No receipt yet.")); }
+    else { var off = el("span", "btn off", "Check receipt"); off.setAttribute("aria-disabled", "true"); if (v.receiptWhy) off.title = v.receiptWhy; foot.appendChild(off); foot.appendChild(el("span", "", v.receiptWhy || "")); }
     a.appendChild(foot);
     if (v.mint) a.appendChild(el("p", "mint", v.mint.label + ": " + v.mint.address));
     return a;
   }
   function failed() { grid.textContent = ""; grid.appendChild(el("p", "dim", "The coins could not be read just now. The full list is on the coins page.")); }
-  fetch("/api/burnticker/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+  window.btHome.then(function (j) {
     if (!j || !Array.isArray(j.featured)) return failed();
     grid.textContent = "";
     j.featured.forEach(function (v) { grid.appendChild(card(v)); });
   }).catch(failed);
 })();
 (function () {
-  // THE ONE CURRENT-STATUS SOURCE (website brief §4): the summary lines come from GET /api/burnticker/v1/current-status
-  // (src/lib/burnticker/currentStatus.ts); this page only renders them. Site audit #7/#8: the homepage shows a SHORT status — the phase,
-  // signing, upgrades and what is open — once; the trust page has the rest. A failed read says so in plain words, with a Retry.
-  if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
-  var box = document.querySelector("[data-current-status]");
-  if (!box || !window.fetch) return;
-  var api = (/(^|\.)burnticker\.com$/.test(location.hostname) && location.hostname !== "burnticker.com" ? "https://burnticker.com" : "") + "/api/burnticker/v1/current-status";
-  var SHORT = /signs every reading|holds the upgrade authority|still open before release/;
-  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  function skeleton() { box.textContent = ""; var b = el("div", "bars"); b.setAttribute("aria-hidden", "true"); [40, 80, 65].forEach(function (w) { var s = el("span"); s.style.width = w + "%"; b.appendChild(s); }); box.appendChild(b); }
-  function failed(why) {
-    box.textContent = "";
-    box.appendChild(el("p", "cs-head", "Data unavailable"));
-    box.appendChild(el("p", "", "We could not read the current status just now. " + why + " This says nothing about the coins or their receipts."));
-    var b = el("button", "", "Retry"); b.type = "button"; b.addEventListener("click", load); box.appendChild(b);
-    box.appendChild(el("p", "cs-meta", "Last tried at " + new Date().toISOString().slice(11, 19) + " UTC."));
-  }
-  function load() {
-    skeleton();
-    var done = false, t = setTimeout(function () { if (!done) { done = true; failed("The server did not answer in time."); } }, 15000);
-    fetch(api, { cache: "no-store" }).then(function (r) { return r.text().then(function (x) { return { r: r, x: x }; }); }).then(function (o) {
-      if (done) return; done = true; clearTimeout(t);
-      if (!o.r.ok) return failed("The server answered with an error (HTTP " + o.r.status + ").");
-      var s; try { s = JSON.parse(o.x); } catch (e) { return failed("The server answered with something other than data."); }
-      if (!s || s.schema !== "burnticker.current-status/v1" || !s.lines) return failed("The answer was not a status summary.");
-      box.textContent = "";
-      var ul = document.createElement("ul");
-      s.lines.forEach(function (l, k) {
-        if (k !== 0 && !SHORT.test(l)) return;
-        // L02: the phase line is hand-written; the host's own flag decides whether launches are open
-        if (k === 0 && s.host && s.host.creatorLaunchesOpen === true) l = l.replace(/(c)reator launches are closed/i, function (m, c) { return c + "reator launches are open on this site"; });
-        ul.appendChild(el("li", "", l));
-      });
-      box.appendChild(ul);
-      box.appendChild(el("p", "cs-meta", "Checked on " + s.checkedAt + ". The chain was last read at " + String(s.readAt).slice(0, 16).replace("T", " ") + " UTC."));
-    }).catch(function () { if (done) return; done = true; clearTimeout(t); failed("The request did not reach the server."); });
-  }
-  load();
+  // THE PLATFORM STRIP and THE ONE-LINE STATUS (website-13): numbers and the status sentence from the same answer. "0" is a number; a
+  // failed read says so instead.
+  if (typeof document === "undefined" || typeof document.querySelector !== "function" || !window.btHome) return;
+  function group(s) { var n = Number(s); if (!isFinite(n)) return String(s); var p = (Math.round(n * 100) / 100).toFixed(2).split("."); var d = p[1].replace(/0+$/, ""); return p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (d ? "." + d : ""); }
+  function put(k, text, why) { var d = document.querySelector('[data-stat="' + k + '"]'); if (!d) return; d.textContent = text; if (why) { d.title = why; if (text === "\u2014") { var r = document.createElement("span"); r.className = "sh-sr"; r.textContent = ". " + why; d.appendChild(r); } } }
+  var line = document.querySelector("[data-status-line]");
+  window.btHome.then(function (j) {
+    var s = j && j.stats;
+    // a number this page could not read is a dash with the reason on hover and for screen readers, never a zero
+    if (!s) { ["burned", "burns", "verified"].forEach(function (k) { put(k, "\u2014", "The coin registry could not be read just now."); }); }
+    else { put("burned", group(s.burnedTokens)); put("burns", group(s.burns)); put("verified", s.receiptsVerified === null ? "\u2014" : group(s.receiptsVerified), s.receiptsWhy); }
+    if (line) {
+      line.textContent = "";
+      line.appendChild(document.createTextNode(j && j.statusLine ? j.statusLine + " " : "The current status could not be read just now. "));
+      var a = document.createElement("a"); a.href = "/burnticker/trust"; a.textContent = "The Trust page has the full record."; line.appendChild(a);
+    }
+  });
 })();
 </script>
 <!-- site-shell:script:begin -->
@@ -404,9 +471,12 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   });
 })();
 (function () {
-  // "Launch a coin": the closed-launches dialog unless the host's catalogue says creator launches are open (unreadable = closed)
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
   var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
-  fetch("/api/burnticker" + "/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { open = !!(j && j.launches && j.launches.creators === true); }).catch(function () { open = false; });
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
   if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
@@ -415,7 +485,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+  window.btHome.then(function (j) {
     box.textContent = "";
     if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }

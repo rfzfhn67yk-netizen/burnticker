@@ -74,7 +74,7 @@
         { "role": "squads-vault", "label": "Squads 2-of-3 vault (holds the upgrade and config authority; receives no fees)", "pubkey": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "source": "created by the owner 2026-10-11; vault PDA derived from the multisig and checked" },
         { "role": "squads-member-1", "label": "Squads member A, the operator's first key", "pubkey": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ", "source": "owner, 2026-10-11" },
         { "role": "squads-member-2", "label": "Squads member B, the operator's second key", "pubkey": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt", "source": "owner, 2026-10-11" },
-        { "role": "squads-member-3", "label": "Squads member C, a trusted third party named only with their consent", "pubkey": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG", "name": "TODO_THIRD_SIGNER_NAME", "source": "owner, 2026-10-11" },
+        { "role": "squads-member-3", "label": "Squads member C, a person outside the operator who holds the third key and is not named publicly", "pubkey": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG", "source": "owner, 2026-10-11; anonymity decided by the owner 2026-10-12" },
         { "role": "bounty", "label": "Bounty wallet, held by the operator to pay for security reports", "pubkey": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u", "source": "config/public-repo/overlay/SECURITY.md" }
       ],
       "platformMints": []

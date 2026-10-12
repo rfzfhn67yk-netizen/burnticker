@@ -1,3 +1,4 @@
+import { STANDARD_RAISE_LAMPORTS } from "@/lib/burnKeeper/launch";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { LAUNCHLAB_PROGRAM, launchLabPoolId, WSOL_MINT } from "@/lib/burnKeeper/launchlab";
 import { base58Encode } from "@/lib/burnKeeper/solana";
@@ -13,15 +14,18 @@ import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, typ
  * (100%: the owner's fee decision — creators earn no cash from fees), (c) optionally the creator's first buy. The creator pays
  * LaunchLab's creation cost and gas; nothing to us up front.
  *
- * STUBBED ON PURPOSE. The Receipts program is being built separately and the Raydium SDK + src/lib/burnKeeper/launch.ts are being
- * added by another agent, so this module codes against two small interfaces (BurnProgramClient, LaunchLabClient) with fakes, and the
- * bundle it returns says `ready: false` with the list of what is pending. The API route and the wizard run end to end on the fakes;
- * nothing is ever sent from here. Mainnet is refused outright until both pieces land.
+ * TWO SMALL INTERFACES (BurnProgramClient, LaunchLabClient). The fakes stay for tests and for hosts without an RPC; there the bundle
+ * says `ready: false` with the list of what is pending. Since launch-10 (2026-10-12) a host with an RPC, the program id and the platform
+ * id gets the real clients (server.ts: ProgramBurnClient, launchLabChain.ts ChainLaunchLab) and a ready bundle. Nothing is ever sent
+ * from here. Mainnet is refused unless the caller passes `allowMainnet` (the site: the host's BURNTICKER_ALLOW_MAINNET_LAUNCHES).
  *
  * ALLOCATION. Buyback mode: 100% on the curve (LaunchLab's default split: 793.1M sold, the rest the migration reserve). Vault mode:
  * `share` of supply locked as a LaunchLab vesting allocation to the program's vault PDA, 12-month linear; the curve share is reduced
  * so the migration reserve stays at LaunchLab's 15% minimum (docs/burnkeeper/launchlab-devnet.md).
  */
+
+/** The SOL a LaunchLab curve raises before it graduates (the bundle's totalFundRaisingB). The launch review reads this, never a typed 85. */
+export const LAUNCHLAB_RAISE_LAMPORTS: bigint = STANDARD_RAISE_LAMPORTS; // one source: src/lib/burnKeeper/launch.ts
 
 export interface LaunchLabCreateInput {
   cluster: "devnet" | "mainnet" | "localnet";
@@ -34,12 +38,18 @@ export interface LaunchLabCreateInput {
 
 export interface LaunchLabClient {
   platformId: string;
+  /**
+   * False only for a client whose instructions are the real LaunchLab ones (SdkLaunchLab, and ChainLaunchLab over it). Absent or true =
+   * placeholder instructions: the bundle then lists the adapter as pending and says `ready: false`, and the browser will not sign it.
+   */
+  readonly placeholder?: boolean;
   createLaunchIxs(i: LaunchLabCreateInput): Promise<{ instructions: SerializedIx[]; poolId: string; configId: string; notes: string[] }>;
 }
 
 /** Until src/lib/burnKeeper/launch.ts (Raydium SDK) lands: deterministic PDAs from the keeper's launchlab helpers, placeholder instruction bodies. */
 export class FakeLaunchLab implements LaunchLabClient {
   readonly platformId: string;
+  readonly placeholder = true;
   constructor(platformId = "P1atformConfig11111111111111111111111111111") { this.platformId = platformId; }
   async createLaunchIxs(i: LaunchLabCreateInput) {
     const program = i.cluster === "mainnet" ? LAUNCHLAB_PROGRAM.mainnet : LAUNCHLAB_PROGRAM.devnet;
@@ -62,6 +72,7 @@ export class FakeLaunchLab implements LaunchLabClient {
  */
 export class SdkLaunchLab implements LaunchLabClient {
   readonly platformId: string;
+  readonly placeholder = false;
   private readonly o: { cluster: "mainnet" | "devnet"; programId: PublicKey; platformId: PublicKey; configId: PublicKey; global: GlobalConfigView; platform: PlatformView; slippageBps?: number };
   constructor(o: { cluster: "mainnet" | "devnet"; programId: PublicKey; platformId: PublicKey; configId: PublicKey; global: GlobalConfigView; platform: PlatformView; slippageBps?: number }) { this.o = o; this.platformId = o.platformId.toBase58(); }
   async createLaunchIxs(i: LaunchLabCreateInput) {
@@ -167,7 +178,7 @@ export interface LaunchDeps {
    * program's fee PDA for the mint (src/lib/burnKeeper/burnPool.ts). Kept so older callers compile; the keeper is an attester only.
    */
   keeperPubkey?: string | null;
-  /** Mainnet is refused unless this is true (the SDK's explicit opt-in). The platform's own routes never set it. */
+  /** Mainnet is refused unless this is true: the SDK's explicit opt-in, or the site host's BURNTICKER_ALLOW_MAINNET_LAUNCHES (prepareLaunch). */
   allowMainnet?: boolean;
 }
 
@@ -182,7 +193,7 @@ function pairVoidByOf(rule: LockedRule["rule"]): number {
 export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): Promise<LaunchBundle> {
   const problems = launchProblems(input);
   if (problems.length) throw new Error(`launch: ${problems.join("; ")}`);
-  if (input.cluster === "mainnet" && !deps.allowMainnet) throw new Error("launch: mainnet is refused until the Receipts program and the LaunchLab adapter are live (and audited)");
+  if (input.cluster === "mainnet" && !deps.allowMainnet) throw new Error("launch: mainnet is refused unless the caller allows it explicitly (allowMainnet; on the site, the host's BURNTICKER_ALLOW_MAINNET_LAUNCHES)");
   if (deps.mint !== undefined && deps.mintKeypair) throw new Error("launch: pass a mint keypair or a mint public key, not both");
   if (deps.mint !== undefined && !PUBKEY_RE.test(deps.mint)) throw new Error("launch: mint must be a Solana public key");
   const locked = lockRule(input.rule);
@@ -203,16 +214,18 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   const burnPoolAuthority = feePda;
   const create = await deps.launchLab.createLaunchIxs({
     cluster: input.cluster, platformId: deps.launchLab.platformId, creator: input.creator, mint, name: input.name.trim(), symbol: input.ticker, uri: deps.metadataUri(mint), decimals: 6,
-    supply: toRaw(alloc.supply), totalSellA: toRaw(alloc.curve), totalFundRaisingB: BigInt(85) * BigInt(1_000_000_000), totalLockedAmount: toRaw(alloc.locked),
+    supply: toRaw(alloc.supply), totalSellA: toRaw(alloc.curve), totalFundRaisingB: LAUNCHLAB_RAISE_LAMPORTS, totalLockedAmount: toRaw(alloc.locked),
     cliffPeriod: (alloc.cliffDays ?? 0) * 86_400, unlockPeriod: (alloc.vestDays ?? 0) * 86_400, creatorFeeRecipient: burnPoolAuthority, firstBuyLamports: BigInt(Math.round(Number(input.firstBuySol) * 1e9)),
   });
   const description = `${input.description.trim()}${input.description.trim() ? " " : ""}${descriptionFooter(locked)}`;
-  const pending = [...(deps.program.programId === PLACEHOLDER_PROGRAM_ID.toBase58() ? ["burn_receipts program (initialize_token is a placeholder instruction)"] : []), "Raydium LaunchLab adapter src/lib/burnKeeper/launch.ts (initializeV2 is a placeholder instruction)"];
+  // launch-10 (2026-10-12): the LaunchLab leg is pending only when its client builds placeholder instructions (FakeLaunchLab); with the
+  // real client (ChainLaunchLab over SdkLaunchLab) and the real program client nothing is pending and the bundle is ready to sign.
+  const pending = [...(deps.program.programId === PLACEHOLDER_PROGRAM_ID.toBase58() ? ["burn_receipts program (initialize_token is a placeholder instruction)"] : []), ...(deps.launchLab.placeholder !== false ? ["Raydium LaunchLab adapter src/lib/burnKeeper/launch.ts (initializeV2 is a placeholder instruction)"] : [])];
   const expressible = programExpressible(locked.rule, input.ticker);
   if (expressible) pending.push(`this rule cannot run on the current burn_receipts program: ${expressible}`);
   if (!deps.devFeeWallet) pending.push("BURNTICKER_FEE_WALLET (the developer fee wallet pubkey) is not set");
   return {
-    version: "burnticker.launch/v1", cluster: input.cluster, metadataUri: deps.metadataUri(mint), ready: false, pending,
+    version: "burnticker.launch/v1", cluster: input.cluster, metadataUri: deps.metadataUri(mint), ready: pending.length === 0, pending,
     creator: input.creator, mint, mintSecretKey: kp ? base58Encode(kp.secretKey) : null, ticker: input.ticker, name: input.name.trim(), description,
     rules: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule), mode: locked.mode },
     addresses: { tokenConfig: init.tokenConfig, feePda, feeWsol: pool.feeWsol, vault, poolId: create.poolId, platformId: deps.launchLab.platformId, configId: create.configId },

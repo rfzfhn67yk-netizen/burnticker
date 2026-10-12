@@ -88,3 +88,47 @@ export function ruleFacts(rulesText: string, oneShot = false): RuleFacts {
 
 /** The plain line a coin on its bonding curve shows under the curve: burns wait for graduation and the pool's registration. */
 export const BURNS_AFTER_GRADUATION = "Burns begin only after the bonding curve fills, the coin moves to its Raydium pool, and that pool is registered with the burn program.";
+/** The same line with the raise that fills the curve, read from the curve or the configured threshold (website-13; never a typed 85). */
+export function burnsAfterGraduation(raise: string | null, quote = "SOL"): string {
+  return raise ? `Burns begin only after the bonding curve fills at ${raise} ${quote} raised, the coin moves to its Raydium pool, and that pool is registered with the burn program.` : BURNS_AFTER_GRADUATION;
+}
+
+/**
+ * THE COIN PAGE'S MARKET FACTS (website-13, 2026-10-12; ChatGPT audit 6 A10). What a trader expects to find, filled only from what this
+ * site read: the network, the mint with its explorer link, the quote asset, the market cap from the curve, the curve's raised and raise
+ * or the pool, holders, the creator and the launch date, and the fees. A field this site does not read says so ("Not read here" and the
+ * reason); a coin that is not launched says "Not applicable" and why. No price, no volume figure and no liquidity figure are invented:
+ * this site reads none of them, and the copy rules keep price talk off every page. Each row is label, value and the reason or meaning.
+ */
+export interface FactRow { key: string; label: string; value: string | null; note: string | null; href?: string | null }
+export interface FactInput {
+  cluster: string; status: string; mint: string; mintUrl: string; creator: string; creatorUrl: string; launchedAt: string | null;
+  phase: "curve" | "migrating" | "graduated" | null;
+  curve: { raised: string; threshold: string; quote: string; marketCap?: string | null } | null; curveNote: string | null;
+  graduatedPool: string | null; holdersCount: number | null; holdersNote: string;
+  feesCurveBps: number; feesPoolBps: number; readAt: string | null;
+}
+const NOT_LAUNCHED = "Not applicable";
+const NOT_READ_HERE = "Not read here";
+const dec2 = (s: string) => { const n = Number(s); return Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString("en-US") : s; };
+const pctOf = (bps: number) => `${Math.round(bps) / 100}%`;
+export function marketFacts(i: FactInput): FactRow[] {
+  const live = i.status !== "draft" && i.status !== "expired";
+  const na = (why: string) => ({ value: NOT_LAUNCHED, note: why });
+  const notLaunched = "The coin is not launched yet.";
+  const quote = i.curve?.quote ?? "SOL";
+  return [
+    { key: "network", label: "Network", value: `Solana ${i.cluster}`, note: i.cluster === "mainnet" ? "The real Solana network, where trades use real SOL." : "A practice network whose tokens have no money value." },
+    { key: "mint", label: "Mint address", value: i.mint, note: "The coin's unique address. Copy it to find the coin in a wallet.", href: i.mintUrl },
+    { key: "quote", label: "Traded against", value: quote, note: "The coin trades against SOL, Solana's own coin." },
+    { key: "mcap", label: "Market cap", ...(!live ? na(notLaunched) : i.curve?.marketCap && i.phase !== "graduated" ? { value: `${dec2(i.curve.marketCap)} ${quote}`, note: "The curve's current SOL per token times the total supply, read from the pool on chain." } : { value: NOT_READ_HERE, note: i.phase === "graduated" ? "After graduation this number comes from the Raydium pool, and this site does not read that pool's reserves yet." : i.curveNote || "This site has not read the coin's curve." }) },
+    { key: "curve", label: i.phase === "graduated" ? "Trading pool" : "Curve", ...(!live ? na(notLaunched) : i.phase === "graduated" ? { value: i.graduatedPool ?? "Graduated", note: "The curve is complete. The coin trades in its own Raydium pool, and that pool's liquidity is locked." } : i.curve ? { value: `${dec2(i.curve.raised)} / ${dec2(i.curve.threshold)} ${quote} raised`, note: i.phase === "migrating" ? "The curve is full, and the coin is moving to its Raydium pool." : "The coin graduates to its own Raydium pool when the curve has raised its full amount." } : { value: NOT_READ_HERE, note: i.curveNote || "This site has not read the coin's curve." }) },
+    { key: "volume", label: "Trading volume, 24 hours", value: NOT_READ_HERE, note: "This site does not read trading volume. The chart on this page, when there is one, comes from GeckoTerminal." },
+    { key: "liquidity", label: "Liquidity", value: !live ? NOT_LAUNCHED : NOT_READ_HERE, note: !live ? notLaunched : "This site does not read the pool's reserves yet." },
+    { key: "holders", label: "Holders", value: typeof i.holdersCount === "number" ? i.holdersCount.toLocaleString("en-US") : NOT_READ_HERE, note: typeof i.holdersCount === "number" ? null : i.holdersNote },
+    { key: "creator", label: "Creator", value: i.creator, note: "The wallet that launched the coin.", href: i.creatorUrl },
+    { key: "launched", label: "Launched", value: i.launchedAt ? `${i.launchedAt.slice(0, 10)}` : NOT_LAUNCHED, note: i.launchedAt ? null : notLaunched },
+    { key: "fees", label: "Fees per trade", value: `${pctOf(i.feesCurveBps)} on the curve, ${pctOf(i.feesPoolBps)} in the pool`, note: "Raydium shows how far your trade moves the pool, and your slippage setting, before you sign. Burnticker takes no order." },
+    { key: "freshness", label: "Read at", value: i.readAt ? `${i.readAt.slice(0, 16).replace("T", " ")} UTC` : NOT_READ_HERE, note: i.readAt ? null : "This site has not read the pool." },
+  ];
+}

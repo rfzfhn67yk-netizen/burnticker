@@ -21,12 +21,11 @@ test("site audit #7: at most 1,000 words before the status loads, leaving room f
 
 test("site audit #8: each fact once — the attester and time-lock lines are not printed by the page (they arrive once, from the status API)", () => {
   for (const dup of [/quorum 1/i, /time lock/i, /no independent second attester/i, /Squads/]) assert.doesNotMatch(visible, dup, String(dup));
-  // the status box shows only the phase, signing, upgrades and what is open
-  assert.match(home, /var SHORT = \/signs every reading\|holds the upgrade authority\|still open before release\/;/);
-  // the status box fails in plain words with a Retry, never a raw parser message
-  assert.match(home, /We could not read the current status just now\./); assert.match(home, /b\.addEventListener\("click", load\)/);
-  const statusScript = home.slice(home.indexOf("THE ONE CURRENT-STATUS SOURCE"), home.indexOf("<!-- site-shell:script:begin -->"));
-  assert.doesNotMatch(statusScript, /r\.json\(\)/);
+  // website-13 (Claude site audit 2 item 9): one status line, built from the one current-status source by the home API (home.ts
+  // homeStatusLine, fed by currentStatusLive), never retyped here; a failed read says so in plain words and still links the Trust page
+  assert.match(home, /line\.appendChild\(document\.createTextNode\(j && j\.statusLine \? j\.statusLine \+ " " : "The current status could not be read just now\. "\)\)/);
+  assert.match(home, /a\.href = "\/burnticker\/trust"; a\.textContent = "The Trust page has the full record\.";/);
+  assert.match(fs.readFileSync("src/app/api/burnticker/home/route.ts", "utf8"), /status = await currentStatusLive\(\)/);
 });
 
 test("site audit #15: headings in the page's main run H1 → H2 → H3 with no skipped level (the closed-launches dialog's H2 sits outside it)", () => {

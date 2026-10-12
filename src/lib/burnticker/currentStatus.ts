@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
 import { b58encode, base64ToBytes } from "@/lib/burnticker/trustpack/base58";
 import { jsonRpc, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
@@ -107,7 +108,7 @@ interface OperatorFile { clusters: Record<Cluster, { squads: { vault: string; mu
 export interface CurrentStatus {
   schema: "burnticker.current-status/v1"; checkedAt: string; readAt: string; source: string;
   phase: { label: string; line: string };
-  host: { cluster: string; programIdWired: boolean; creatorLaunchesOpen: boolean; line: string };
+  host: { cluster: string; programIdWired: boolean; creatorLaunchesOpen: boolean; /** website-12: a launch started on this site can be signed (siteLaunchState.canSign) */ canSign: boolean; line: string };
   networks: { cluster: Cluster; role: string; deployment: string; since: string | null }[];
   programs: { name: string; programId: string; version: string; note: string; verifiedBuild: string; devnet: { deployed: boolean; matchesBuild: boolean | null; upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt: string | null; recordedUpgradeAuthority: string | null }; mainnet: { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string } }[];
   upgradeAuthority: { cluster: Cluster; vault: string; multisig: string; threshold: string; members: number | null; timeLockSecs: number | null; timeLockSource: "chain" | "unavailable"; plannedTimeLockSecs: number; plannedFrom: string | null; why: string; line: string }[];
@@ -165,7 +166,9 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   const cluster = (env.BURNTICKER_CLUSTER ?? "").trim() === "mainnet" ? "mainnet" : "devnet";
   const wired = isKey((env.BURNTICKER_PROGRAM_ID ?? "").trim());
   const open = /^(1|true|yes|on)$/i.test((env.BURNTICKER_CREATOR_LAUNCHES_ENABLED ?? "").trim());
-  const host = { cluster, programIdWired: wired, creatorLaunchesOpen: open, line: `This site is showing ${cluster}.${wired ? "" : " No program is connected on this site."} Creator launches are ${open ? "open" : "closed"}.` };
+  // website-12: the launch sentence is the one typed record's (launchAvailability.ts siteLaunchState), never written here
+  const launch = siteLaunchState(env, now);
+  const host = { cluster, programIdWired: wired, creatorLaunchesOpen: open, canSign: launch.canSign, line: `This site is showing ${cluster}.${wired ? "" : " No program is connected on this site."} ${launch.sentence}` };
   const programs = vb.programs.map((p) => {
     const meta = st.programs.find((x) => x.name === p.library) ?? { version: "—", note: "" };
     const dev = p.deployed.devnet, liveDev = i.chain.devnet?.programs[p.programId];
@@ -194,7 +197,10 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   const lines = [
     st.phase.line,
     st.deficit.firstBurnPath.line,
-    ...programs.map((p) => `${cap(plainName(p.name))} (${p.name}) is ${p.devnet.deployed ? `deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match this repository's build" : ""}` : "not on devnet"}. ${p.mainnet.line}`),
+    // Claude audit 2 item 2c: one sentence per program when both networks agree it is deployed
+    ...programs.map((p) => (p.devnet.deployed && p.mainnet.deployed === true
+      ? `${cap(plainName(p.name))} (${p.name}) is deployed on devnet${p.devnet.matchesBuild ? ", where its bytes match this repository's build," : ""} and on mainnet.`
+      : `${cap(plainName(p.name))} (${p.name}) is ${p.devnet.deployed ? `deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match this repository's build" : ""}` : "not on devnet"}. ${p.mainnet.line}`)),
     st.attesters.line,
     // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
     `The 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock, an approved upgrade executes at once, with no advance notice." : ""}`,
@@ -223,4 +229,12 @@ export async function currentStatusLive(env: Readonly<Record<string, string | un
     cache = { at: now, facts: { devnet, mainnet } };
   }
   return buildCurrentStatus({ root, env, chain: cache.facts, now });
+}
+
+/**
+ * website-12 (A9): the time lock last read from chain for `cluster`, from the cache above, without a new read (null = not read yet). The
+ * launch review shows it beside the review; the review route refreshes the cache in the background on a production host.
+ */
+export function cachedTimeLockSecs(cluster: Cluster): number | null {
+  return cache?.facts[cluster]?.squads?.timeLockSecs ?? null;
 }

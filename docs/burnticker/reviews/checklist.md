@@ -188,3 +188,17 @@ paired coins only; a single coin's path is unchanged:
 - **Forward window and basis (RI-1, RI-4).** `forward_to_winner` is refused 72 h after the loser's reading (`ForwardWindowClosed`); its
   basis leaves the loser's carried spend.
 
+## Erratum 2026-10-12 (market cap on coin cards, owner decision)
+
+The text above and the earlier errata stay as written. On 2026-10-12 the owner decided, on Claude site audit 2 item 7, that coin cards show
+the market cap ("people like to see the market cap"). The UI rule is now: no price or odds for any Burnticker coin and no commentary on
+any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another
+coin's market cap may be a rule input, shown only as the rule sentence. What a reviewer checks:
+
+- **Instruction count (item 1).** Unchanged: burn_receipts has **31 entrypoints**. Nothing on chain changed; this is a display rule.
+- **Where it appears.** Only as the "Market cap" row of a coin card (`src/lib/burnticker/cardView.ts`) and of the coin page's facts
+  (`src/lib/burnticker/coinPage.ts` `marketFacts`), never in a sentence, a post or a headline. The copy lint is unchanged and still refuses "market cap" in prose.
+- **Where the number comes from.** Before graduation, the LaunchLab curve's own reserves: (virtualB + realB) / (virtualA − realA) times
+  the pool's total supply (`src/lib/burnticker/market.ts` `curveMarketCap`, pinned against the Raydium SDK on real mainnet pools). After
+  graduation the Raydium pool's reserves; until this site reads them the row shows a dash with that reason. Never an estimate.
+

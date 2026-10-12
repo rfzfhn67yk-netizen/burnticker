@@ -277,11 +277,24 @@ export function readWeatherThreshold(q: string, metric: NwsMetric): WeatherReadi
   const strict = !!n && /\b(above|over|more than|greater than|exceeds?|exceeding|higher than|hotter than|>)\s*-?\d/i.test(t) && !/\bor (more|above|higher)\b|\+/.test(t);
   const wrote = n ? (/\b(above|over|more than|greater than|exceeds?|exceeding|higher than|hotter than|at least|reaches|reach|hits?|>=?)\s*-?\d+(?:\.\d+)?/i.exec(t)?.[0] ?? n) : null;
   if (metric === "rain") {
-    const base = n && Number(n) < 10 ? Number(n) : 0.5;
-    return { metric, threshold: strict ? Math.round((base + 0.01) * 100) / 100 : base, strict, wrote };
+    const x = n && Number(n) > 0 && Number(n) < 10 ? Number(n) : 0.5;
+    return { metric, threshold: leastReportable(x, 100, strict), strict, wrote };
   }
-  const base = n && Number(n) >= 0 ? Math.round(Number(n)) : 90;
-  return { metric, threshold: strict ? base + 1 : base, strict, wrote };
+  const x = n && Number(n) >= 0 ? Number(n) : 90;
+  return { metric, threshold: leastReportable(x, 1, strict), strict, wrote };
+}
+
+/**
+ * THE THRESHOLD LATTICE (ChatGPT code review 5, F2, 2026-10-12: "Detroit high above 90.5" became 92, so a 91 °F day did not burn). The
+ * climate report gives whole °F and hundredths of an inch, and the rule counts a reading AT OR ABOVE its threshold. So the threshold is
+ * the least reportable reading that satisfies what was typed: strictly above x → the least step strictly greater than x (floor(x) + 1
+ * for whole degrees); at least x → the least step at or above x (ceil(x)). `per` is the steps per unit: 1 for °F, 100 for inches. Integer
+ * arithmetic on the scaled value, so 0.29 does not become 0.28999… and land a hundredth low.
+ */
+export function leastReportable(x: number, per: number, strict: boolean): number {
+  const scaled = Math.round(x * per * 1e6) / 1e6;   // 90.5 → 90.5, 0.29 × 100 → 29 (not 28.999…)
+  const step = strict ? Math.floor(scaled) + 1 : Math.ceil(scaled);
+  return step / per;
 }
 
 function weatherCards(q: string): Suggestion[] {

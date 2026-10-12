@@ -217,6 +217,7 @@ footer .links a{color:var(--dim);font:500 .84rem/1.4 var(--marquee);letter-spaci
 html:not(.prelaunch) #prelaunch{display:none}
 #prelaunch .pl{border:1px dashed var(--line);padding:14px 16px;max-width:72ch}#prelaunch .pl p{margin:0 0 8px}#prelaunch .pl p:last-child{margin:0}
 .ready{margin:14px 0 0;border:1px dashed var(--line);padding:12px 14px;max-width:72ch}.ready p{margin:0}.ready .rk{font:500 .72rem/1.3 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.ready .rl{margin:4px 0;font-weight:600}.ready .rd{color:var(--dim);font-size:.9rem}
+.ready.ready-top{margin:0 0 16px}
 </style>
 <!-- site-shell:css:begin -->
 <style>
@@ -243,7 +244,8 @@ html:not(.prelaunch) #prelaunch{display:none}
 .sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
 .sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
 .sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
-.sh-wallet{display:none;cursor:not-allowed;opacity:.6}.sh-ghost{cursor:pointer}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
 .sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
 .sh-menu>summary::-webkit-details-marker{display:none}
 .sh-menu{position:relative}
@@ -309,7 +311,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     <form class="sh-search" role="search" action="https://burnticker.com/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
     <div class="sh-actions">
       <a class="sh-launch" href="https://burnticker.com/burnticker/launch" data-launch-button>Launch a coin</a>
-      <button type="button" class="sh-wallet" disabled title="No page here needs a wallet while creator launches are closed.">Connect wallet</button>
+      <a class="sh-wallet" href="https://burnticker.com/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet<span class="sh-sr">. Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.</span></a>
       <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
       <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
         <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
@@ -322,6 +324,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
           <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
           <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+          <p class="sh-menu-wallet">A wallet is only needed for Your coins. <a href="https://burnticker.com/burnticker/me?connect=1" data-wallet-button>Connect wallet</a></p>
         </nav>
       </details>
     </div>
@@ -329,8 +332,9 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
 </header>
 <dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
-  <h2 id="sh-launch-closed-h">Creator launches are closed</h2>
-  <p>Creator launches are closed until the first coin has receipts. You can still look through the coins and check a real receipt.</p>
+  <h2 id="sh-launch-closed-h">Launching a coin</h2>
+  <p data-launch-sentence>Checking whether creator launches are open on this site.</p>
+  <p>You can still look through the coins and check a real receipt.</p>
   <p class="sh-modal-row"><a class="sh-launch" href="https://burnticker.com/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
 </dialog>
 <!-- site-shell:header:end -->
@@ -349,6 +353,12 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 
 <main id="main">
   <section class="hero wrap first">
+    <h1>Every <em>$1,000,000,000</em> the U.S. borrows burns $DEFICIT.</h1>
+    <div class="ready ready-top" id="readiness" data-readiness="not-launched" aria-live="polite">
+      <p class="rk" id="readyStep">Step 1 of 7 toward a first burn</p>
+      <p class="rl" id="readyLabel">Not launched</p>
+      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once 85 SOL has been raised, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
+    </div>
     <div class="board">
       <div class="face">
         <span class="bolt tl"></span><span class="bolt tr"></span><span class="bolt bl"></span><span class="bolt br"></span>
@@ -358,22 +368,17 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
         <p class="figcap" id="heroCap">of new U.S. debt on Treasury's Debt to the Penny, counted each business day.</p>
         <p class="label">$DEFICIT bought and burned to date</p>
         <div class="seg7 amber figamber" id="heroBurn" role="img" aria-label="not published yet"><span class="fb">—</span></div>
-        <h1>Every <em>$1,000,000,000</em> the U.S. borrows burns $DEFICIT.</h1>
-        <span class="stamp">A memecoin. The rule says what supply does, not what price does.</span>
+        <span class="stamp">A memecoin with a receipt for every burn.</span>
       </div>
     </div>
-    <p class="rule"><strong>The rule.</strong> Each business day, the Treasury publishes the national debt. Every full $1B it rose since the previous reading counts as one unit. Each unit spends 2% of the token's own burn pool, buying $DEFICIT on its Raydium pool. Over a day, the share spent is 1 − 0.98<sup>units</sup>. Think of it as the Fed's 2%, pointed the other way. The on-chain program burns everything bought in the same instruction, and the burn leaves a receipt on chain.</p>
-    <div class="ready" id="readiness" data-readiness="not-launched" aria-live="polite">
-      <p class="rk" id="readyStep">Step 1 of 7 toward a first burn</p>
-      <p class="rl" id="readyLabel">Not launched</p>
-      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once 85 SOL has been raised, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
-    </div>
+    <p class="rule"><strong>The rule.</strong> Each business day, the Treasury publishes the national debt. Every full $1B it rose since the previous reading counts as one unit. Each unit spends 2% of the token's own burn pool, buying $DEFICIT on its Raydium pool. Over a day, the share spent is 1 − 0.98<sup>units</sup>. The figure is total public debt outstanding, so a day's change is new borrowing minus debt repaid. The on-chain program burns everything bought in the same instruction, and the burn leaves a receipt on chain.</p>
+    <p class="replay">Why 2%: the number is a nod to the Federal Reserve's 2% inflation goal. That is only where the name came from. The rule reads nothing from the Fed.</p>
     <div class="cta">
       <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trading not available until launch</a>
       <a class="btn" id="receiptsCta" href="https://burnticker.com/burnticker/check?demo=1#verify" data-prelaunch-href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>
       <a class="btn ghost" href="rules.json">Read the rule file</a>
     </div>
-    <p class="replay">We replayed the rule over the real Treasury figures from January 2025 to October 8, 2026. It would have counted <b>235 burn days</b> and <b>6,490 units</b>. The biggest day was <b>2025-07-07</b>, when the debt rose <b>$366.44B</b>, which counts as <b>366 units</b>. That was the day after the debt ceiling was raised. This replay shows what the rule would have counted. It predicts nothing.</p>
+    <p class="replay">We replayed the rule over the Treasury's Debt to the Penny figures from January 2, 2025 to October 8, 2026, using a copy of the series fetched on 2026-10-09 (site/deficit/sample/treasury-fixture.json in the public repository) and the keeper's own unit, carry and reset logic. It would have counted <b>235 burn days</b> and <b>6,490 units</b>. The biggest day was <b>2025-07-07</b>, when the debt rose <b>$366.44B</b>, which counts as <b>366 units</b>. That was the next business day after the July 4, 2025 debt-limit increase. Units are what the rule counts. How much a burn would have bought depends on the burn pool, which this replay does not model, and it predicts nothing.</p>
   </section>
 
   <section class="wrap" id="prelaunch" data-prelaunch>
@@ -469,10 +474,10 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
             <pre>units = floor((now − prev + carry) / 1,000,000,000)
 spend = pool × (1 − 0.98^units)        # pool = the burn pool's SOL − 0.02 reserve
 burn  = every token the swap delivered</pre>
-            <span class="muted">Carry is the remainder under $1B from a run of rises in a row. Any flat or down day resets it to 0.</span></li>
+            <span class="muted">Carry is the remainder under $1B from a run of rises in a row. Any flat or down day resets it to 0. This short recipe gives the planned spend. The program also applies an execution cap, the 0.02 SOL reserve, carried spend, a spend floor and rounding, so a burn can spend less than this or wait. The <a href="https://burnticker.com/burnticker/check">receipt checker</a> runs every one of those checks.</span></li>
           <li><b>Read the memo on the burn transaction.</b> It carries the same numbers, in this order.
-            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;sig12&gt;|rules=sha256:8e3e8b66748a|v2</pre>
-            If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings. It marks a burn <span class="ok">✓</span> only when they match. Anything else shows <span class="bad">!</span> with the reason.</li>
+            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;pool12&gt;|rules=sha256:8e3e8b66748a|v2</pre>
+            In the memo, swap is the first 12 characters of the Raydium pool address the program bought on, or none when nothing was bought. The transaction that carries the memo is itself the swap and the burn. If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings. It marks a burn <span class="ok">✓</span> only when they match. Anything else shows <span class="bad">!</span> with the reason.</li>
         </ol>
       </div>
     </div>
@@ -490,9 +495,9 @@ burn  = every token the swap delivered</pre>
 
   <section class="wrap" id="disclaimer">
     <div class="disc">
-      <h3>A memecoin. The rule says what supply does, not what price does.</h3>
-      <p>$DEFICIT has no product, no revenue share and no team promise beyond running the published rule. Burning supply does not make a price go up, and nobody here claims it does. Trading fees fund the burns, so a day with no trading has small burns.</p>
-      <p>Everything on this page is recomputed from public data: the Treasury's API and the Solana chain. If a number here and a number on chain disagree, the chain is right and the page is wrong. This is not investment advice, and nothing here is an offer.</p>
+      <h3>What $DEFICIT is</h3>
+      <p>$DEFICIT has no product, no revenue share and no team promise beyond running the published rule. Burns draw on the accumulated budget. Trading adds funds; a burn can be delayed or skipped when the spendable amount is too small.</p>
+      <p>Everything on this page is recomputed from public data: the Treasury's API and the Solana chain. If a number here and a number on chain disagree, the chain is right and the page is wrong. The footer below carries the disclaimers.</p>
     </div>
   </section>
 </main>
@@ -657,7 +662,7 @@ burn  = every token the swap delivered</pre>
         "<td class=\"r num\">" + (skipped ? "—" : b.spent == null ? "pending" : esc(Number(b.spent).toFixed(4))) + "</td>" +
         "<td class=\"r num\">" + (b.got == null ? (skipped ? "—" : "pending") : fmtInt(b.got)) + "</td>" +
         "<td class=\"r num\">" + (skipped ? '<span class="muted" title="' + esc(b.skippedReason) + '">skipped</span>' : b.burned == null ? "pending" : "<b>" + fmtInt(b.burned) + "</b>") + "</td>" +
-        "<td>" + link(b.swapUrl, b.swapSig, skipped ? "—" : "—") + "</td>" +
+        "<td>" + (b.swapSig ? link(b.swapUrl, b.swapSig, "—") : esc(skipped ? "—" : b.execution === "program" && b.signature ? "same transaction" : "—")) + "</td>" +
         "<td>" + link(b.txUrl, b.signature, skipped ? "—" : b.signature ? "" : "—") + "</td>" +
         "<td>" + check + "</td>" +
         '<td><button type="button" class="vbtn" data-i="' + i + '" aria-expanded="false">verify</button></td>' +
@@ -912,9 +917,12 @@ burn  = every token the swap delivered</pre>
   });
 })();
 (function () {
-  // "Launch a coin": the closed-launches dialog unless the host's catalogue says creator launches are open (unreadable = closed)
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
   var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
-  fetch("https://burnticker.com/api/burnticker" + "/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { open = !!(j && j.launches && j.launches.creators === true); }).catch(function () { open = false; });
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
   if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
@@ -923,7 +931,7 @@ burn  = every token the swap delivered</pre>
   // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+  window.btHome.then(function (j) {
     box.textContent = "";
     if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }

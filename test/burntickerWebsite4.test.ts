@@ -18,7 +18,9 @@ describe("item 2: a short homepage — list first since 2026-10-12, the real rec
     assert.doesNotMatch(home, /Explore a verified burn/);
     assert.equal([...home.matchAll(/href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</g)].length, 1, "under the coin grid");
     const { featuredCoins } = await import("@/lib/burnticker/home");
-    assert.equal(featuredCoins().find((c) => c.id === "deficit-devnet")?.receipt?.href, EXPLORE_VERIFIED_BURN.href, "the devnet card's Check receipt");
+    // Codex review 5 F3/F4 (website-13): a card's Check receipt opens that coin's own newest receipt, never the shared demo link
+    const dv = featuredCoins().find((c) => c.id === "deficit-devnet")!;
+    assert.match(dv.receipt!.href, /^\/burnticker\/check\?sig=[1-9A-HJ-NP-Za-km-z]{60,90}&cluster=devnet#verify$/, "the devnet card's Check receipt");
   });
   test("R07 as rewritten by the owner's review item 7: one hero line, one subline, then three plain steps; the guardrails stay on Trust", () => {
     const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('id="coins"'));
@@ -26,7 +28,8 @@ describe("item 2: a short homepage — list first since 2026-10-12, the real rec
     const order = ['<h1 id="hero-h">', '<p class="sub">', '<ol class="how">', 'href="/burnticker/about">Read how it works in full'].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.doesNotMatch(hero, /guardsum|<details class="guards">|<ul class="guard"/);
-    assert.match(home, /No wallet is needed to read results or receipts/);
+    // website-13 (Claude site audit 2 item 3): the no-wallet line was a repeated disclaimer; the footer receipt carries the disclaimers
+    assert.doesNotMatch(home, /No wallet is needed to read results or receipts/);
     clean(hero.replace(/<[^>]+>/g, " "), "hero");
   });
 });
@@ -35,11 +38,15 @@ describe("item 3: zero data → one explanation and one evidence link; populated
   test("the coins page: the featured cards fill the grid before any coin is registered; the tabs and search stay above it; zero totals stay hidden", () => {
     // the owner's review item 5 (2026-10-12): the filter tabs sit above a grid, and pre-launch the grid is the featured cards
     const p = read("src/app/burnticker/CoinsIndex.tsx");
-    assert.match(p, /const cards: CardView\[\] = \[\.\.\.\(tab === "new" \? featured : \[\]\), \.\.\.coins\.map\(\(t\) => cardViewFromIndex\(t\)\)\];/);
+    // website-13 (ChatGPT audit 6 A5 and A10): the tabs filter the coins anyone can trade; the featured coin and the test receipts are a
+    // separate group below, never mixed into a tab's results
+    assert.match(p, /const cards: CardView\[\] = coins\.map\(\(t\) => cardViewFromIndex\(t, raise, ix\?\.cluster \?\? "mainnet"\)\);/);
     assert.ok(p.indexOf('className="bt-tabs" role="tablist"') < p.indexOf("cards.map((v) => <ViewCard"), "tabs above the grid");
+    assert.ok(p.indexOf("cards.map((v) => <ViewCard") < p.indexOf("featured.map((v) => <ViewCard"), "the test group after the tab's results");
+    assert.match(p, /<h2 id="bt-featured-h" className="text-lg font-semibold">Featured coin and test receipts<\/h2>/);
     assert.match(p, /\{ix && ix\.tokens\.length > 0 && \(\s*<section className="grid grid-cols-2/, "no zero totals before a coin is registered");
-    assert.match(p, /\{NO_WALLET_LINE\}/, "the no-wallet line stays");
-    assert.match(p, /loading \? <SkeletonGrid n=\{3\} \/>/, "skeleton cards while loading (review item 18)");
+    assert.doesNotMatch(p, /NO_WALLET_LINE/, "website-13: the repeated no-wallet line is gone");
+    assert.match(p, /\{state\.kind === "loading" && <SkeletonGrid n=\{3\}/, "skeleton cards while loading (review item 18)");
   });
   test("Seasons collapses three empty sections into one; the leagues directory keeps its labelled example before the league links", () => {
     const r = read("src/app/burnticker/rivalries/page.tsx");
@@ -154,7 +161,7 @@ describe("item 6: one signer vs two publishers; the rule's winner is not the tea
     const s = pairResultSentence({ ticker: "A", rule: rule(true) }, { ticker: "B", rule: rule(false) }, "yes");
     assert.match(s, /^This result fires \$A's rule/); assert.doesNotMatch(s, /\bwinner\b/i); clean(s, "named pair sentence");
     for (const f of ["src/lib/burnticker/pairFundsFlow.ts", "src/lib/burnticker/fieldHelp.ts", "src/lib/burnticker/api/spec.ts", "docs/burnticker/WHITEPAPER.md", "docs/burnticker/api.md", "site/burnticker/index.html", "site/burnticker/whitepaper.html"]) assert.doesNotMatch(read(f), /nobody is paid/i, f);
-    assert.match(read("site/burnticker/index.html"), /the coin with the most receipts is named its champion\. That is a line on a scoreboard, and nobody receives anything for it/, "a champion stays a statistic");
+    assert.match(read("site/burnticker/index.html"), /the coin with the most receipts is named its champion\. Season titles are for the scoreboard only\. There are no prizes\./, "a champion stays a statistic");
   });
 });
 

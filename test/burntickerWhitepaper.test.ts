@@ -21,5 +21,5 @@ test("the whitepaper passes the copy lint (no price talk, no promises)", () => {
 });
 
 test("the landing page links the whitepaper", () => {
-  assert.match(fs.readFileSync(path.join(ROOT, "site/burnticker/index.html"), "utf8"), /href="whitepaper\.html"/);
+  assert.match(fs.readFileSync(path.join(ROOT, "site/burnticker/index.html"), "utf8"), /href="\/whitepaper\.html"/);
 });

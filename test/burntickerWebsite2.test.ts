@@ -155,7 +155,7 @@ describe("one current-status source (website brief §4)", () => {
     const s = buildCurrentStatus({ env: { BURNTICKER_CLUSTER: "devnet" }, chain: {}, now: 0 });
     for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.equal(p.mainnet.line, "It is deployed on mainnet."); assert.equal(p.devnet.deployed, true); }
     assert.equal(s.networks.find((n) => n.cluster === "mainnet")!.deployment, "deployed");
-    assert.match(s.host.line, /^This site is showing devnet\. No program is connected on this site\. Creator launches are (open|closed)\.$/);
+    assert.equal(s.host.line, `This site is showing devnet. No program is connected on this site. ${(await import("@/lib/burnticker/launchAvailability")).siteLaunchState({ BURNTICKER_CLUSTER: "devnet" }).sentence}`);   // website-12: the one record's sentence
     assert.ok(s.design.length && s.historical.length && s.historical.every((h) => fs.existsSync(h.path.replace(/\/$/, ""))), "history links point at files that exist");
     assert.ok(s.reviews.every((r) => r.findings.every((f) => f.fix && f.recheck && f.deployed)), "every finding has fix, re-check and deployed statuses");
     assert.ok(s.settlement.some((x) => /GFDEBTN/.test(x.check) && /quarter/.test(x.check)), "the FRED comparison is stated as quarterly");
@@ -169,7 +169,9 @@ describe("one current-status source (website brief §4)", () => {
     for (const f of ["config/burnticker/transparency.json", "src/lib/burnticker/trustpack/checklist.ts", "docs/burn-receipts/powers-register.json", "docs/burnticker/CHECK-THIS-YOURSELF.md"]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /mainnet: 48 h\)|vault with a 48 h time lock|upgrade authority \(48 h time lock\)/, f);
     for (const f of ["src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx"]) assert.match(fs.readFileSync(f, "utf8"), /<CurrentStatusSummary card=\{card\} \/>/, f);
     assert.match(fs.readFileSync("src/app/burnticker/_components/CurrentStatusSummary.tsx", "utf8"), /useJsonRead<CurrentStatus>\("\/api\/burnticker\/v1\/current-status"\)/);
-    for (const f of ["site/burnticker/index.html", "site/burnticker/status/index.html"]) { const h = fs.readFileSync(f, "utf8"); assert.match(h, /data-current-status/, f); assert.match(h, /"\/api\/burnticker\/v1\/current-status"/, f); assert.match(h, /s\.lines\.forEach/, f); }
+    for (const f of ["site/burnticker/status/index.html"]) { const h = fs.readFileSync(f, "utf8"); assert.match(h, /data-current-status/, f); assert.match(h, /"\/api\/burnticker\/v1\/current-status"/, f); assert.match(h, /s\.lines\.forEach/, f); }
+    // website-13: the home prints one status line, which the home API builds from the same source (currentStatusLive)
+    assert.match(fs.readFileSync("site/burnticker/index.html", "utf8"), /data-status-line/); assert.match(fs.readFileSync("src/app/api/burnticker/home/route.ts", "utf8"), /currentStatusLive\(\)/);
     assert.ok(fs.existsSync("src/app/api/burnticker/v1/current-status/route.ts"));
   });
 });
@@ -220,7 +222,8 @@ describe("verification words and the featured receipt (website brief §3/§5)", 
     assert.match(about, /href=\{EXPLORE_VERIFIED_BURN\.href\}>\{EXPLORE_VERIFIED_BURN\.label\}/);
     assert.match(html, /href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</);
     const { featuredCoins } = await import("@/lib/burnticker/home");
-    assert.equal(featuredCoins().find((c) => c.id === "deficit-devnet")?.receipt?.href, "/burnticker/check?demo=1#verify");
+    // Codex review 5 F3/F4 (website-13): the devnet card's Check receipt opens its newest confirmed burn by signature, not the shared demo
+    assert.match(featuredCoins().find((c) => c.id === "deficit-devnet")!.receipt!.href, /^\/burnticker\/check\?sig=\w+&cluster=devnet#verify$/);
     const demo = (JSON.parse(fs.readFileSync("config/burnticker/current-status.json", "utf8")) as { demo: { summary: string } }).demo;
     clean(demo.summary, "featured receipt");
   });
@@ -254,7 +257,9 @@ describe("layout, navigation and sharing metadata (website brief §8)", () => {
   test("client app pages get a title, description and canonical from a server layout (check, trust, operator, launch)", () => {
     for (const d of ["check", "trust", "operator", "launch"]) {
       const l = fs.readFileSync(`src/app/burnticker/${d}/layout.tsx`, "utf8");
-      assert.doesNotMatch(l, /^"use client"/, d); assert.match(l, new RegExp(`canonical: "/burnticker/${d}"`)); assert.match(l, /export const metadata: Metadata/);
+      assert.doesNotMatch(l, /^"use client"/, d); assert.match(l, new RegExp(`canonical: "/burnticker/${d}"`));
+      // website-12: the launch page's description reads the one launch-state record at request time (generateMetadata), the others are static
+      assert.match(l, d === "launch" ? /export async function generateMetadata\(\): Promise<Metadata> \{\n  const description = `\$\{siteLaunchState\(process[.]env\)\.meta\.description\}/ : /export const metadata: Metadata/, d);
     }
     assert.match(fs.readFileSync("src/app/burnticker/launch/WalletProviders.tsx", "utf8"), /^"use client"/);
   });
@@ -319,11 +324,12 @@ describe("the homepage around five questions, and an honest leagues directory (w
     const order = ['<section class="hero', '<ol class="how">', 'id="coins"', "data-featured", 'id="seasons"', 'id="status"', '<footer class="sh-footer"'].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     for (const gone of ["Safeguards and limitations", "data-current-limits", 'class="wrap impl"', 'id="layers"', 'id="feeds"', 'id="economics"', 'id="products"']) assert.ok(!home.includes(gone), gone);
+    // website-13 (Claude site audit 2 item 9): the status is one line; its Trust link is added with it (the full record stays on Trust)
     const status = home.slice(at('id="status"'), at("</main>"));
-    assert.match(status, /data-current-status/); assert.match(status, /href="\/burnticker\/trust"/);
-    // review item 18: the status box shows grey bars while it loads, not "Loading" or "Reading the current status"
+    assert.match(status, /data-status-line/); assert.match(home, /a\.href = "\/burnticker\/trust"/);
+    // review item 18: the status line shows a grey bar while it loads, not "Loading" or "Reading the current status"
     assert.doesNotMatch(home, /Reading the current status/);
-    assert.match(home, /<div class="cs" data-current-status aria-live="polite"><div class="bars" aria-hidden="true">/);
+    assert.match(home, /<p class="status-line" data-status-line aria-live="polite"><span class="stat-skel wide" aria-hidden="true"><\/span><\/p>/);
   });
   test("the leagues directory: honest availability and a clearly labelled example, no launch invitation", () => {
     const p = fs.readFileSync("src/app/burnticker/leagues/page.tsx", "utf8");

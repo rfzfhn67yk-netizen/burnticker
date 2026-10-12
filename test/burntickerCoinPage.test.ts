@@ -6,7 +6,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { BURNS_AFTER_GRADUATION, RULES_SCHEMA, WIND_DOWN_DAYS, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts } from "@/lib/burnticker/coinPage";
+import { BURNS_AFTER_GRADUATION, burnsAfterGraduation, marketFacts, RULES_SCHEMA, WIND_DOWN_DAYS, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts } from "@/lib/burnticker/coinPage";
 import { tradeLinks } from "@/lib/burnticker/market";
 import { BURNTICKER_RULES_SCHEMA, DEFAULT_WIND_DOWN_DAYS, lockRule } from "@/lib/burnticker/rules";
 import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
@@ -96,13 +96,19 @@ describe("the coin page (t/[ticker])", () => {
     assert.equal((src.match(/s\.disclosure\.disclaimer/g) ?? []).length, 1, "the rule's footer line once, no page disclaimer of its own");
   });
   test("pre-graduation: the curve, and the plain line that burns wait for graduation and pool registration; nothing counts down", () => {
-    assert.match(src, /<CurveBar /); assert.match(src, /\{preBurn && <p [^>]*data-burns-after-graduation>\{BURNS_AFTER_GRADUATION\}<\/p>\}/);
+    assert.match(src, /<CurveBar /); assert.match(src, /\{preBurn && <p [^>]*data-burns-after-graduation>\{afterGraduation\}<\/p>\}/);
+    // website-13: the line names the raise read from the curve, else the configured one, never a typed 85
+    assert.match(src, /const afterGraduation = burnsAfterGraduation\(m\?\.curve\?\.threshold \?\? raiseSol, m\?\.curve\?\.quote \?\? "SOL"\);/);
+    assert.equal(burnsAfterGraduation("85"), "Burns begin only after the bonding curve fills at 85 SOL raised, the coin moves to its Raydium pool, and that pool is registered with the burn program.");
+    assert.equal(burnsAfterGraduation(null), BURNS_AFTER_GRADUATION);
     assert.match(src, /<ReadinessPanel r=\{ready\} /); assert.match(src, /const preBurn = ready\.state === "on-curve" \|\| ready\.state === "awaiting-registration"/);
     assert.doesNotMatch(src, /\buntil\(|setInterval|Kalshi/);
   });
   test("a disclosed rehearsal coin that is not registered here says what it is, from the trust API, with no trade link", () => {
     const nr = src.slice(src.indexOf("function NotRegisteredNotice"));
-    assert.match(nr, /fetch\("\/api\/burnticker\/trust"\)/); assert.match(nr, /transparency\?\.rehearsals\?\.find/); assert.match(nr, /not for trading/);
+    assert.match(nr, /fetch\("\/api\/burnticker\/trust"\)/); assert.match(nr, /transparency\?\.rehearsals\?\.find/);
+    // Claude site audit 2 item 2a: who would fill the curve, and that nobody is asked to (no "not for trading" beside "until its curve fills")
+    assert.match(nr, /The operator does not trade it and asks nobody to/); assert.match(nr, /It can only burn if outside buyers fill its curve, and nobody is asked to do that\./); assert.doesNotMatch(nr, /not for trading/);
     assert.doesNotMatch(nr, /raydium|data-trade-link/i);
   });
 });
@@ -125,5 +131,26 @@ describe("the pair page (p/[pairId]) follows the same order with both sides", ()
     const rule = src.slice(src.indexOf('id="panel-rule"'), src.indexOf("{hasHolders &&"));
     for (const s of ["ruleFacts(s.rulesText", "The dial", "The window", "The end", "{s.status.rules.sha256}", "<PairFundsFlow "]) assert.ok(rule.includes(s), s);
     assert.match(read("src/app/api/burnticker/pairs/[pairId]/route.ts"), /rulesText: da\.rulesText/);
+  });
+});
+
+describe("the coin page's market facts (website-13, ChatGPT audit 6 A10): read or said not read, never invented", () => {
+  const base = { cluster: "mainnet", status: "live", mint: "M1nt", mintUrl: "https://solscan.io/token/M1nt", creator: "Cr8", creatorUrl: "https://solscan.io/account/Cr8", launchedAt: "2026-10-14T23:00:00Z", phase: "curve" as const, curve: { raised: "12.5", threshold: "85", quote: "SOL", marketCap: "30.123" }, curveNote: null, graduatedPool: null, holdersCount: null, holdersNote: "Counting holders needs an indexer.", feesCurveBps: 125, feesPoolBps: 30, readAt: "2026-10-15T01:02:03Z" };
+  test("a coin on its curve: network, mint, quote, market cap and curve read; volume and liquidity said not read; fees before the trade link", () => {
+    const f = Object.fromEntries(marketFacts(base).map((r) => [r.key, r]));
+    assert.deepEqual(Object.keys(f), ["network", "mint", "quote", "mcap", "curve", "volume", "liquidity", "holders", "creator", "launched", "fees", "freshness"]);
+    assert.equal(f.mcap.value, "30.12 SOL"); assert.equal(f.curve.value, "12.5 / 85 SOL raised"); assert.equal(f.mint.href, base.mintUrl);
+    for (const k of ["volume", "liquidity", "holders"]) assert.equal(f[k].value, "Not read here", k);
+    assert.equal(f.fees.value, "1.25% on the curve, 0.3% in the pool");
+    for (const r of marketFacts(base)) for (const t of [r.label, r.value ?? "", r.note ?? ""]) if (r.key !== "mint" && r.key !== "creator") assert.ok(lintCopy(t, loadCopyLintConfig()).ok || r.key === "mcap" && t === "Market cap", `${r.key}: ${t}`);
+    const src = fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8");
+    assert.ok(src.indexOf("data-fees-before-trade") < src.indexOf("data-trade-link"), "the fees and the slippage note sit before the Raydium link");
+    assert.doesNotMatch(src.replace(/^\s*(\/\/|\*|\/\*).*$/gm, ""), /priceUsd|\bprice\b/i);
+  });
+  test("a draft says not applicable; a graduated coin says the pool is not read for its market cap", () => {
+    const d = Object.fromEntries(marketFacts({ ...base, status: "draft", launchedAt: null, curve: null }).map((r) => [r.key, r]));
+    assert.equal(d.mcap.value, "Not applicable"); assert.equal(d.curve.value, "Not applicable"); assert.equal(d.launched.value, "Not applicable");
+    const g = Object.fromEntries(marketFacts({ ...base, phase: "graduated", graduatedPool: "P00l" }).map((r) => [r.key, r]));
+    assert.equal(g.mcap.value, "Not read here"); assert.match(g.mcap.note!, /Raydium pool/); assert.equal(g.curve.label, "Trading pool"); assert.equal(g.curve.value, "P00l");
   });
 });

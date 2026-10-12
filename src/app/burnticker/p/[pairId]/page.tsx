@@ -12,7 +12,6 @@ import { useParams } from "next/navigation";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
 import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
-import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { TermNote } from "../../_components/Term";
 import { CurveBar } from "../../_components/CoinCard";
 import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
@@ -102,7 +101,6 @@ export default function PairPage() {
         {t.unpaired && <div className="text-center text-xs text-neutral-300" aria-label="Unpaired">This pair was unlinked on {t.unpaired.at.slice(0, 10)} ({t.unpaired.reason}). They are two separate coins now, and nothing moves between them.</div>}
         {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="Burned and forwarded">${A} has burned {fmt(t.burnedA)} and ${B} has burned {fmt(t.burnedB)}. ${A} has forwarded {t.forwardedAtoB ?? "0"} SOL to ${B}, and ${B} has forwarded {t.forwardedBtoA ?? "0"} SOL to ${A}.</div>}
         {t.winnerTakesBurn && <div className="text-center text-xs text-amber-200" aria-label="pair rule">{PAIR_BURN_SENTENCE}</div>}
-        <div className="text-center text-xs text-neutral-500">{NO_WALLET_LINE}</div>
         <TermNote ids={["receipt", "burnPool"]} />
         <div className="grid md:grid-cols-3 gap-2">
           <div className="rounded border border-neutral-800 p-2"><div className="text-xs text-neutral-400">supply left</div><div className="text-lg tabular-nums">{t.supplyPctA.toFixed(2)}% <span className="text-neutral-500">:</span> {t.supplyPctB.toFixed(2)}%</div><div className="text-xs text-neutral-500 tabular-nums">{fmt(t.supplyA)} : {fmt(t.supplyB)}, out of {fmt(d.a.status.supply.initial)} each</div></div>

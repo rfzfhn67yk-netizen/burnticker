@@ -95,10 +95,14 @@ describe("three decisions to a coin", () => {
 });
 
 describe("the API keeps every dial the web UI dropped", () => {
-  test("a share that is not a preset, socials, a first buy and a creator's note are still accepted by POST /v1/launch/bundle", async () => {
+  test("a share that is not a preset, socials and a creator's note are still accepted by POST /v1/launch/bundle; a first buy is not (launch-10)", async () => {
     await makeWorld();
     const rule = { ...DENVER_HIGH, scalar: { ...DENVER_HIGH.scalar, perUnit: { fractionOfPool: 0.07 } } };
-    const r = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: Keypair.generate().publicKey.toBase58(), ticker: "HEAT7", name: "Heat Seven", rule, note: "made for the Denver summer", links: [{ label: "website", url: "https://example.com" }], firstBuySol: "0.5", acknowledgements: { ruleLocked: true, noReturns: true } }) });
+    const req = (firstBuySol: string, ticker: string) => callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: JSON.stringify({ creator: CREATOR, mint: Keypair.generate().publicKey.toBase58(), ticker, name: "Heat Seven", rule, note: "made for the Denver summer", links: [{ label: "website", url: "https://example.com" }], firstBuySol, acknowledgements: { ruleLocked: true, noReturns: true } }) });
+    // launch-10 (2026-10-12): a create with an opening purchase does not fit one transaction, so hosted bundles carry none (hostedLaunch.ts)
+    const buy = await req("0.5", "HEAT8");
+    assert.equal(buy.status, 400); assert.equal((await buy.json() as { code: string }).code, "opening-purchase-off");
+    const r = await req("0", "HEAT7");
     assert.equal(r.status, 200, await r.clone().text());
     const j = await r.json() as { ok: boolean };
     assert.equal(j.ok, true);

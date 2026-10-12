@@ -283,7 +283,7 @@ describe("L08 — accessibility in the review card and the wallet dialog", () =>
   test("labels per control, Coin A / B, two radiogroups, the wallet close button named, focus returned", () => {
     const card = read("src/app/burnticker/launch/ReviewCard.tsx");
     assert.match(card, /<label htmlFor=\{nId\}>\{who\}Name<\/label>/); assert.match(card, /Coin \$\{i === 0 \? "A" : "B"\}/);
-    assert.match(card, /role="radiogroup" aria-label="How much burns each time"/); assert.match(card, /role="radiogroup" aria-label="How long the coins run"/);
+    assert.match(card, /role="radiogroup" aria-label=\{BUDGET_LABEL\}/); assert.match(card, /export const BUDGET_LABEL = "Burn budget per result";/);   // website-12 (A4): the dial is a share of the burn budget assert.match(card, /role="radiogroup" aria-label="How long the coins run"/);
     assert.match(read("src/app/burnticker/launch/WalletProviders.tsx"), /aria-label", "Close the wallet list"/);
     assert.match(card, /launchBtn\.current\?\.focus\(\)/);
   });

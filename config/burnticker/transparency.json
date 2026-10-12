@@ -187,10 +187,10 @@
     },
     {
       "role": "squads-member-3",
-      "label": "Squads member 3, a trusted third party",
+      "label": "Squads member 3, a person outside the operator",
       "pubkey": null,
       "envVar": null,
-      "description": "One of the three signers of the vault. They are named here only with their consent."
+      "description": "One of the three signers of the vault. Member C is a person outside the operator who holds the third key and is not named publicly."
     },
     {
       "role": "mint-deficit",
@@ -295,7 +295,7 @@
     {
       "id": "third-signer",
       "status": "not done",
-      "text": "The mainnet Squads vault exists (2-of-3). Member C's key is set, but the person who holds it is not named yet. They are named only with their consent. The owner holds members A and B, two of the three keys, so today the owner alone meets the threshold. With a time lock of 0, an upgrade can go through at once. The third key adds no independent approval until that changes."
+      "text": "The mainnet Squads vault exists (2-of-3). Member C is a person outside the operator who holds the third key and is not named publicly. The owner holds members A and B, two of the three keys, so today the owner alone meets the threshold. With a time lock of 0, an upgrade can go through at once. The third key adds no independent approval until that changes."
     },
     {
       "id": "signed-operator-message",
@@ -328,7 +328,7 @@
     },
     {
       "id": "no-paid-promotion",
-      "text": "There is no paid promotion, no payment to influencers and no referral kickback. There is no price talk and no countdown. The site shows no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence. Burn Derby's flippening is one such rule, and derby admission refuses a Burnticker coin as an input."
+      "text": "There is no paid promotion, no payment to influencers and no referral kickback. There is no price talk and no countdown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. Burn Derby's flippening is one such rule, and derby admission refuses a Burnticker coin as an input."
     },
     {
       "id": "platform-never-buys",
