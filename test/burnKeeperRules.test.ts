@@ -129,12 +129,12 @@ describe("vault-only settlement with a public shortfall (the vesting vault, 10-0
 });
 
 describe("BUYBACK mode (the primary mechanic since 10-09 evening)", () => {
-  test("the committed file: mode buyback, source fee-pool-buyback, memo v2, mint null until launch, 1% per unit (owner decision 2026-10-09, recorded in the file), $1 floor, 0.02 SOL reserve, no router (program execution)", () => {
+  test("the committed file: mode buyback, source fee-pool-buyback, memo v2, the mainnet mint pinned 2026-10-12 (AJJ4…4oqj), 2% per unit (owner decision 2026-10-10, recorded in the file), $1 floor, 0.02 SOL reserve, no router (program execution)", () => {
     const { rules } = loadRules(RULES);
     assert.equal(rules.mode, "buyback");
     assert.equal(rules.source, "fee-pool-buyback");
     assert.equal(rules.memo.version, "v2");
-    assert.equal(rules.mint, null);
+    assert.equal(rules.mint, "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj", "the $DEFICIT mainnet mint, written in before the create (REHEARSAL-RUNSHEET C2)");
     assert.deepEqual([rules.buyback.fractionPerUnit, rules.buyback.floorUsd, rules.buyback.reserveSol, rules.buyback.router, rules.buyback.burnShare], ["0.02", "1", "0.02", undefined, "all-received"]);
     assert.match((rules.buyback as unknown as { fractionPerUnitDecision: string }).fractionPerUnitDecision, /OWNER DECISION 2026-10-10 \(supersedes 2026-10-09's 0\.01\): 0\.02/);
     assert.doesNotMatch(JSON.stringify(rules), /PENDING|jupiter|next transaction/i, "no stale pre-program wording inside the hashed bytes");

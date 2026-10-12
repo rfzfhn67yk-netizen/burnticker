@@ -65,9 +65,9 @@ describe("every format from the fixtures", () => {
     assert.match(t, /Devnet rehearsal, 2026-10-06: [\s\S]* 23 units\. [\s\S]* spent 0\.0201 SOL [\s\S]* 4,010,874 test \$DEFICIT/);
     assert.match(t, /explorer\.solana\.com\/tx\/[1-9A-HJ-NP-Za-km-z]{86,88}\?cluster=devnet/);
   });
-  test("the $DEFICIT thread and teaser take the fraction and hash from the rule file (2% · 0.98 · 78f4c327552e)", () => {
+  test("the $DEFICIT thread and teaser take the fraction and hash from the rule file (2% · 0.98 · 8e3e8b66748a)", () => {
     const t = [...deficitLaunchThread(facts.deficit, F.FIXTURE_DEFICIT_SITE).posts, ...teaserDraft("the-rule", { site, deficit: facts.deficit }).posts].join("\n");
-    assert.match(t, /2% of its burn pool/); assert.match(t, /0\.98\^units/); assert.match(t, /sha256:78f4c327552e/);
+    assert.match(t, /2% of its burn pool/); assert.match(t, /0\.98\^units/); assert.match(t, /sha256:8e3e8b66748a/);
   });
   test("the scoreboard (the copy agent's scoreboardText): one post per league, live team coins only, then the cross-league count — never a ranking across leagues", () => {
     const d = scoreboardDrafts({ index: F.SEASON_INDEX, receiptsByTicker: F.SEASON_RECEIPTS, day: F.FIXTURE_DAY, site, top: 5 });

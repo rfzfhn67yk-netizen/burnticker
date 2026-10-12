@@ -62,7 +62,10 @@ describe("transparency.json", () => {
   test("wallets read TODO until a pubkey is set in the file or the named environment variable", () => {
     const cfg = loadTransparency(ROOT);
     const bare = resolveWallets(cfg, {});
-    assert.ok(bare.every((w) => w.source === "todo" && w.resolved === null), "nothing is set yet: every row is a TODO, none is blank");
+    // Since 2026-10-12 one row is set in the file: the $DEFICIT mint (a public key, pinned before the create). Every other row is a TODO.
+    const DEFICIT_MINT = "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj";
+    assert.deepEqual(bare.filter((w) => w.source !== "todo").map((w) => [w.role, w.source, w.resolved]), [["mint-deficit", "file", DEFICIT_MINT]], "only the $DEFICIT mint is set in the committed file");
+    assert.ok(bare.filter((w) => w.source === "todo").every((w) => w.resolved === null), "every TODO row is blank, not a half-set value");
     const withEnv = resolveWallets(cfg, { BURNTICKER_KEEPER_PUBKEY: KEEPER });
     const keeper = withEnv.find((w) => w.role === "keeper")!;
     assert.equal(keeper.resolved, KEEPER); assert.equal(keeper.source, "env");
@@ -94,7 +97,7 @@ describe("buildTransparency / buildTrustPage", () => {
     assert.equal(t.whoRunsThis.refuseListPresent, true);
     assert.equal(t.howBuilt.reviewsReadmePresent, true);
     assert.deepEqual(t.howBuilt.reportsPresent.map((r) => r.present), Array(13).fill(true), "the nine Claude reports and the four ChatGPT/Codex reports all exist");
-    assert.equal(t.walletsTodo, t.wallets.length);
+    assert.equal(t.walletsTodo, t.wallets.length - 1, "every wallet row but the $DEFICIT mint is still a TODO");
     assert.ok(t.decisions.entries >= 9 && t.changelog.entries >= 1);
   });
 

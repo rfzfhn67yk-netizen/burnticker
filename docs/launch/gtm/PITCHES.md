@@ -114,7 +114,7 @@ $DEFICIT is a memecoin whose supply follows one public number: Treasury's Debt t
 
 **Proof:** https://deficit.burnticker.com/ and the Treasury feed it reads
 (`https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny`). Rule file sha256
-`78f4c327552e…be58` (`config/burnkeeper/deficit.rules.json`, 2 %).
+`8e3e8b66748a…be58` (`config/burnkeeper/deficit.rules.json`, 2 %).
 **Do not send this pitch until** the $DEFICIT page stops saying 0.99 in two places (COLD-READ.md edit D-1, D-2): today the pitch
 says 2 % and the page's arithmetic block says 1 %.
 

@@ -355,7 +355,7 @@ html:not(.prelaunch) #prelaunch{display:none}
       <div class="card">
         <h3>The rule file and its hash</h3>
         <p>The rule is fixed at launch and published as <a href="rules.json">rules.json</a>. Its SHA-256 hash is written into every burn's memo. A receipt that cites a different hash is not using this rule.</p>
-        <div class="hash" id="sha">sha256: 78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58</div>
+        <div class="hash" id="sha">sha256: 8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9</div>
         <p class="muted" id="shaCheck">To check it yourself, run <code>curl -s https://deficit.burnticker.com/rules.json | shasum -a 256</code>. This browser also hashes the served file again when the page loads.</p>
         <p class="muted gap" id="statement"></p>
       </div>
@@ -370,7 +370,7 @@ spend = pool × (1 − 0.98^units)        # pool = the burn pool's SOL − 0.02 
 burn  = every token the swap delivered</pre>
             <span class="muted">Carry is the remainder under $1B from a run of rises in a row. Any flat or down day resets it to 0.</span></li>
           <li><b>Read the memo on the burn transaction.</b> It carries the same numbers, in this order.
-            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;sig12&gt;|rules=sha256:78f4c327552e|v2</pre>
+            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;sig12&gt;|rules=sha256:8e3e8b66748a|v2</pre>
             If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings. It marks a burn <span class="ok">✓</span> only when they match. Anything else shows <span class="bad">!</span> with the reason.</li>
         </ol>
       </div>
@@ -750,7 +750,7 @@ burn  = every token the swap delivered</pre>
     fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
   }).catch(function (e) {
     var missing = /^404 /.test(String(e && e.message));
-    checkRules("78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58");
+    checkRules("8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9");
     if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
     offline(missing ? "Not launched. $DEFICIT has not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
       : "Data unavailable. The live figures could not be read just now. This says nothing about the coin or its receipts. Try again later.", String(e && e.message || e));

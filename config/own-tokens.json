@@ -4,9 +4,9 @@
     {
       "symbol": "DEFICIT",
       "chain": "solana",
-      "address": null,
+      "address": "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj",
       "status": "planned",
-      "note": "The owner's first launch (Raydium LaunchLab), burns indexed to Treasury Debt to the Penny, rule key DEBT. Set address to the mint on launch day."
+      "note": "The owner's first launch (Raydium LaunchLab), burns indexed to Treasury Debt to the Penny, rule key DEBT. Mint keypair made 2026-10-11; the address is pinned before the create (status flips to launched on launch day)."
     },
     {
       "symbol": "REHEARSAL",
