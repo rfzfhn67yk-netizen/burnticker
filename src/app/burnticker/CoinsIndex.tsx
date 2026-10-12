@@ -86,7 +86,7 @@ export default function BurntickerIndex() {
       {!ix && !err && <EmptyState kind="loading" body="Reading the coin list." />}
 
       {empty && (
-        <EmptyState kind="not-launched" body={<>No coin is registered on this host yet. That is a fact about this host&apos;s coin list; whether the programs are deployed is separate, on the <Link className="underline" href="/burnticker/trust">Trust page</Link>.</>}>
+        <EmptyState kind="not-launched" body={<>No coin is registered on this site yet. That only describes this site&apos;s coin list. Whether the programs are deployed is a separate question, answered on the <Link className="underline" href="/burnticker/trust">Trust page</Link>.</>}>
           <p className="mt-3" data-empty-evidence><Link href={EXPLORE_VERIFIED_BURN.href} className="bt-launch-btn">{EXPLORE_VERIFIED_BURN.label}</Link></p>
           <p className="mt-2 text-xs text-neutral-500">{EXPLORE_VERIFIED_BURN.blurb}</p>
           {launch.open && <div className="mt-3"><Link href="/burnticker/launch" className="underline">Launch the first one →</Link></div>}
@@ -95,7 +95,7 @@ export default function BurntickerIndex() {
 
       {ix && !empty && tab !== "pairs" && (
         coins.length === 0 ? (
-          <EmptyState kind={!q && tab === "new" && ix.tokens.length === 0 ? "not-launched" : "no-activity"} body={q ? <>No coin matches “{q}”.</> : tab === "graduating" ? <>No coin is past half its bonding curve.{!curveRead && " Curve progress is not read on this host, so this list stays empty."}</> : tab === "graduated" ? <>No coin has moved to a trading pool yet.</> : tab === "next" ? <>No scheduled result is known for any coin.</> : <>No coin is launched on this host yet.</>}>
+          <EmptyState kind={!q && tab === "new" && ix.tokens.length === 0 ? "not-launched" : "no-activity"} body={q ? <>No coin matches “{q}”.</> : tab === "graduating" ? <>No coin is past half its bonding curve.{!curveRead && " This site does not read curve progress, so this list stays empty."}</> : tab === "graduated" ? <>No coin has moved to a trading pool yet.</> : tab === "next" ? <>No scheduled result is known for any coin.</> : <>No coin is launched on this site yet.</>}>
             {launch.open && <div className="mt-3"><Link href="/burnticker/launch" className="underline">Launch the first one →</Link></div>}
           </EmptyState>
         ) : (
@@ -106,7 +106,7 @@ export default function BurntickerIndex() {
       )}
 
       {ix && !empty && tab === "pairs" && (
-        pairs.length === 0 ? <EmptyState kind={ix.tokens.length === 0 ? "not-launched" : "no-activity"} body="No rivalry pair is launched on this host yet.">{launch.open && <p className="mt-2"><Link className="underline" href="/burnticker/launch?pair=1">Launch a pair →</Link></p>}</EmptyState> : (
+        pairs.length === 0 ? <EmptyState kind={ix.tokens.length === 0 ? "not-launched" : "no-activity"} body="No rivalry pair is launched on this site yet.">{launch.open && <p className="mt-2"><Link className="underline" href="/burnticker/launch?pair=1">Launch a pair →</Link></p>}</EmptyState> : (
           <div className="grid gap-3 md:grid-cols-2">
             {pairs.map((p) => (
               <Link key={p.pairId} href={`/burnticker/p/${encodeURIComponent(p.pairId)}`} className="bt-coin-card block">
@@ -130,9 +130,9 @@ export default function BurntickerIndex() {
           ))}
         </section>
       )}
-      {ix && <p className="text-xs text-neutral-500">This host reads {ix.cluster}. <Link className="underline" href="/burnticker/trust">What the operator can and cannot do</Link></p>}
+      {ix && <p className="text-xs text-neutral-500">This site is showing {ix.cluster}. <Link className="underline" href="/burnticker/trust">What the operator can and cannot do</Link></p>}
       {ix && <HostDiagnostics stubs={ix.stubs} />}
-      <p className="text-xs text-neutral-500">A memecoin. The rule says what the supply does, not what the price does. Nobody is promised anything.</p>
+      <p className="text-xs text-neutral-500">These are memecoins. Each rule says what the supply does, not what the price does. Nobody is promised anything.</p>
     </main>
   );
 }

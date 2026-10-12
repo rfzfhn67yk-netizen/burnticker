@@ -138,7 +138,7 @@ describe("both or neither", () => {
     assert.deepEqual(st(w.b.mint), ["2026-10-05:forwarded", "2026-10-06:confirmed", "2026-10-07:void", "2026-10-10:forwarded", "2026-10-11:void"]);
     const dates = w.registry.receipts(w.a.mint).filter((r) => r.status === "confirmed").map((r) => r.readingDate!);
     assert.deepEqual(dates, [...dates].sort((x, y) => x - y), "executed in settlement order");
-    assert.ok(w.logs.some((l) => /LIVE — both pools registered; 6 pending-pair receipt\(s\) now planned/.test(l)), w.logs.filter((l) => l.includes("[pair]")).join("\n"));
+    assert.ok(w.logs.some((l) => /LIVE — both pools registered; 6 pending-pair receipts now planned/.test(l)), w.logs.filter((l) => l.includes("[pair]")).join("\n"));
   });
 
   test("one side still unregistered when voidBy ends: the pair voids — pending receipts voided, no event burn ever; the rule ends and both pools wind down (executed where a pool exists)", async () => {
@@ -216,7 +216,7 @@ describe("the public API (OpenAPI 1.4.0) and the creation preflight", () => {
     const now = Date.UTC(2026, 9, 10, 22, 20);
     const r = await preflightSelector(coinvsRule(SEASON), { now, derby: { pools: fixturePort(), fetchImpl: fixtureFetch(), hermes: fixtureHermes } });
     assert.equal(r.ok, true, JSON.stringify(r.refusal)); assert.equal(r.agreement, true); assert.equal(r.primary.operator, "Pyth Data Association"); assert.equal(r.crossRead!.operator, "Jupiter");
-    assert.match(r.agreementBasis, /WIF: .* · SHIB: /);
+    assert.match(r.agreementBasis, /For WIF, .* For SHIB, /);
     // GIGA: spot 0.0002 SOL × Pyth SOL/USD from the real account; Jupiter quotes the same within 1%.
     const sol = fjson("derby/pyth.solana.accounts.json").accounts.SOL;
     const solUsd = Number(pythSnapshotFromAccount(sol.feed, { owner: sol.owner, data: Buffer.from(sol.dataBase64, "base64") }, null, pythFeedAccount(sol.feed)).value);
@@ -242,7 +242,7 @@ describe("the public API (OpenAPI 1.4.0) and the creation preflight", () => {
     const okR = await prepareLaunch(world.p, body, { register: false, preflight: { strict: true, deps: { now, derby: { pools: fixturePort(), fetchImpl: fixtureFetch(), hermes: fixtureHermes } } } });
     assert.ok("pair" in okR, JSON.stringify("error" in okR ? okR.error.body : okR).slice(0, 300));
     const badR = await prepareLaunch(world.p, body, { register: false, preflight: { strict: true, deps: { now, derby: { pools: null, fetchImpl: fixtureFetch(), hermes: null } } } });
-    assert.ok("error" in badR && badR.error.status === 502 && /preflight refused/.test(JSON.stringify(badR.error.body)));
+    assert.ok("error" in badR && badR.error.status === 502 && /The check run before launch refused this coin/.test(JSON.stringify(badR.error.body)));
   });
 });
 

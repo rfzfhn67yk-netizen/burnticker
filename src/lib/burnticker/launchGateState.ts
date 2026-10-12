@@ -37,5 +37,5 @@ export const wizardMaySign = (s: LaunchGateState): boolean => s.kind === "open";
 
 /** The closed page's network line: what this host shows while creator launches are closed. */
 export function closedNetworkLine(cluster: string | null): string {
-  return cluster ? `This host currently shows ${cluster} information.` : "";
+  return cluster ? `This site is showing ${cluster}.` : "";
 }

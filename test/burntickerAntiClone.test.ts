@@ -31,13 +31,13 @@ describe("verify a mint (pure)", () => {
   test("Burnticker coin: yes — the program's TokenConfig holds the registry's rules sha", () => {
     const v = verifyMint(facts({ program: { config: "Cfg111111111111111111111111111111111111111", rulesSha256: "a".repeat(64), readings: 3, burns: 2 }, coin: COIN }), NOW);
     assert.equal(v.verdict, "burnticker"); assert.equal(v.headline, "Burnticker coin: yes");
-    assert.match(v.summary, /\$DEFICIT \(Deficit\), launched 2026-10-12 by Cre…\w{4}|\$DEFICIT \(Deficit\), launched 2026-10-12 by \w{4}…\w{4} · 3 receipts · rules sha256 aaaaaaaaaaaa…/);
+    assert.match(v.summary, /\$DEFICIT \(Deficit\), launched 2026-10-12 by Cre…\w{4}|\$DEFICIT \(Deficit\), launched 2026-10-12 by \w{4}…\w{4}\. It has 3 receipts, and its rules sha256 starts aaaaaaaaaaaa…/);
     assert.equal(v.coin!.rulesMatch, true); assert.equal(v.links.page, "/burnticker/t/DEFICIT");
     assert.ok(v.checks.every((c) => c.ok === true));
   });
-  test("NOT registered with the burn_receipts program — plain, for an unknown mint", () => {
+  test("NOT registered with the burn program — plain, for an unknown mint", () => {
     const v = verifyMint(facts({}), NOW);
-    assert.equal(v.verdict, "not-registered"); assert.equal(v.headline, "NOT registered with the burn_receipts program");
+    assert.equal(v.verdict, "not-registered"); assert.equal(v.headline, "NOT registered with the burn program");
     assert.doesNotMatch(`${v.headline} ${v.summary}`, /scam|fake|fraud|rug|beware|warning|impostor/i, "no accusation");
   });
   test("program-only, rules mismatch, a draft, an unread program, an invalid address", () => {
@@ -110,11 +110,11 @@ describe("lookalike refusal", () => {
     assert.equal(editDistance("DEFICIT", "DEFICT"), 1); assert.equal(editDistance("DEFICIT", "DEFCIIT"), 1, "a swap is one edit"); assert.equal(editDistance("ABCDEF", "UVWXYZ", 1), 2);
   });
   test("refused: same letters, one edit, copycat suffix / prefix, the platform's name; each with a clear reason", () => {
-    const cases: [string, string, string][] = [["DEF1CIT", "Debt", "reads as the same letters as $DEFICIT"], ["DEFICT", "Debt", "one letter away from $DEFICIT"], ["DEFICIT2", "Debt Two", "reads as the same letters as $DEFICIT"], ["DEFICITINU", "x y", "copycat variant of $DEFICIT"], ["REALDEFICIT", "x y", "copycat variant of $DEFICIT"], ["BRONC0", "Horse", "same letters as $BRONCO"], ["ABC", "Burnticker Official", "platform's name"], ["XYZQ", "Deficit", 'reads as the same letters as "Deficit" ($DEFICIT)'], ["QQQQ", "Def1cit", "reads as"]];
+    const cases: [string, string, string][] = [["DEF1CIT", "Debt", "reads as the same letters as $DEFICIT"], ["DEFICT", "Debt", "one letter away from $DEFICIT"], ["DEFICIT2", "Debt Two", "reads as the same letters as $DEFICIT"], ["DEFICITINU", "x y", "copycat variant of $DEFICIT"], ["REALDEFICIT", "x y", "copycat variant of $DEFICIT"], ["BRONC0", "Horse", "same letters as $BRONCO"], ["ABC", "Burnticker Official", "platform's name"], ["XYZQ", "Deficit", 'reads as the same letters as "Deficit", the name of $DEFICIT'], ["QQQQ", "Def1cit", "reads as"]];
     for (const [ticker, name, why] of cases) {
       const r = lookalikeRefusal({ ticker, name }, EX);
       assert.ok(r, `${ticker} / ${name} must be refused`); assert.ok(r!.reason.includes(why), `${ticker}: ${r!.reason}`);
-      assert.match(r!.reason, /pick a ticker and name that cannot be mistaken for it$/);
+      assert.match(r!.reason, /Please pick a ticker and name that cannot be mistaken for it\.$/);
     }
   });
   test("allowed: different coins, short tickers that only differ by a letter, an expired draft's ticker, another window of the same team", () => {
@@ -207,7 +207,7 @@ describe("clone watch", () => {
     const rows = cloneRows(store.observations(), new Set(["OURMINT"]));
     const c1 = rows.find((r) => r.mint === "Clone1")!;
     assert.equal(c1.lp.state, "pulled"); assert.equal(c1.lp.pulledAt, "2026-10-10T11:02:00.000Z");
-    assert.deepEqual(c1.evidence.slice(0, 4), ["not registered with the burn_receipts program", "$DEFICIT: ticker reads as the same letters — $DEFICIT", "7 wallets hold identical 0.97 %", "LP pulled 11:02 UTC 2026-10-10"]);
+    assert.deepEqual(c1.evidence.slice(0, 4), ["It is not registered with the burn program (burn_receipts).", "The ticker $DEFICIT reads as the same letters as $DEFICIT.", "7 wallets each hold exactly 0.97 % of the supply.", "The liquidity was pulled at 11:02 UTC 2026-10-10."]);
     assert.equal(c1.firstSeenAt, "2026-10-10T10:00:00.000Z");
     assert.equal(store.lastScan()!.hits, 2);
     assert.throws(() => reg.db.exec("DELETE FROM clone_observations"), /append-only/);

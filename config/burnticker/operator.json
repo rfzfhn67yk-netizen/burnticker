@@ -1,15 +1,15 @@
 {
   "schema": "burnticker.operator/v1",
   "updatedAt": "2026-10-11",
-  "note": "Rendered on /burnticker/operator and served by GET /api/burnticker/v1/operator (src/lib/burnticker/trustpack/operator.ts). Every value that starts with TODO_ is a placeholder the owner fills in; docs/burnticker/TODO-OWNER.md lists each one with its file and line. Devnet public keys are copied from the rehearsal records named in each `source` (test/burntickerTrustPack.test.ts checks every one appears there). Mainnet rows carry the addresses the owner configured on 2026-10-11; a TODO_ value is a key not configured yet; nothing here is a secret.",
+  "note": "Rendered on /burnticker/operator and served by GET /api/burnticker/v1/operator (src/lib/burnticker/trustpack/operator.ts). Every value that starts with TODO_ is a placeholder the owner fills in; docs/burnticker/TODO-OWNER.md lists each one with its file and line, and the page says each one in words. Devnet public keys are copied from the rehearsal records named in each `source` (test/burntickerTrustPack.test.ts checks every one appears there). Mainnet rows carry the addresses the owner configured on 2026-10-11 (the keeper key is the attester in the mainnet rehearsal evidence; the deployer key ran the mainnet deploy); nothing here is a secret.",
   "operator": {
-    "name": "Burnticker operator (one independent individual; identity held privately until a legal entity is formed)",
+    "name": "Burnticker operator, one independent person whose identity is kept private until a legal entity is formed",
     "state": null,
     "country": "United States",
     "contact": "contact@burnticker.com",
     "security": "security@burnticker.com",
     "entity": "TODO_ENTITY",
-    "entityPending": "LLC: pending owner decision. Until an entity exists the platform is operated by one independent individual whose identity is held privately; contact@burnticker.com reaches the operator."
+    "entityPending": "Whether to form an LLC is not decided yet. Until an entity exists, one independent person runs the platform and keeps their identity private. contact@burnticker.com reaches the operator."
   },
   "links": {
     "site": "https://burnticker.com",
@@ -21,7 +21,7 @@
   },
   "clusters": {
     "devnet": {
-      "status": "rehearsal (2026-10-10): both programs deployed, upgrade authority held by a 2-of-3 Squads vault with a 60 s time lock",
+      "status": "This is the rehearsal network, used on 2026-10-10. Both programs are deployed, and a 2-of-3 Squads vault with a 60 s time lock holds their upgrade authority.",
       "programs": {
         "burn_receipts": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
         "pair_curve": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
@@ -31,18 +31,18 @@
         "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
         "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
         "threshold": "2 of 3",
-        "timeLock": "60 s on devnet (mainnet: 0 now, 48 h planned)",
+        "timeLock": "60 s on devnet; on mainnet it is 0 now, with 48 h planned",
         "source": "docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md"
       },
       "wallets": [
-        { "role": "dev-fee", "label": "developer fee wallet (PlatformConfig.platformClaimFeeWallet)", "pubkey": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp", "source": "docs/burnkeeper/evidence/devnet-2026-10-10/platform.json" },
-        { "role": "keeper", "label": "keeper data key (attester, quorum 1; pays crank fees)", "pubkey": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn", "source": "docs/burnkeeper/evidence/devnet-2026-10-10/status.json" },
-        { "role": "deployer", "label": "program deployer (upgrade authority handed to the Squads vault)", "pubkey": "ED2FxCzefc1pi2M2JxAAgYNAce2LcNVh1QPQ3aJzCBGR", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" },
-        { "role": "platform-admin", "label": "LaunchLab platform admin (also the rehearsal's fee payer)", "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx", "source": "docs/burnkeeper/evidence/devnet-2026-10-10/platform.json" },
-        { "role": "squads-vault", "label": "Squads 2-of-3 vault (upgrade authority of both programs)", "pubkey": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD", "source": "docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md" },
-        { "role": "squads-member-1", "label": "Squads member A (rehearsal key)", "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" },
-        { "role": "squads-member-2", "label": "Squads member B (rehearsal key)", "pubkey": "58w9pN56qGxuNcnhUrTXgte2mbRNNf4QSAun3ASaLwxd", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" },
-        { "role": "squads-member-3", "label": "Squads member C (rehearsal key)", "pubkey": "Bymx5VmL5Fi1A1EBJWXrcoeNUKARUvYjxKkHAqJ3H4wQ", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" }
+        { "role": "dev-fee", "label": "Developer fee wallet", "pubkey": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp", "source": "docs/burnkeeper/evidence/devnet-2026-10-10/platform.json" },
+        { "role": "keeper", "label": "Keeper key (signs every reading and pays the crank fees)", "pubkey": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn", "source": "docs/burnkeeper/evidence/devnet-2026-10-10/status.json" },
+        { "role": "deployer", "label": "Program deployer (handed the upgrade authority to the Squads vault)", "pubkey": "ED2FxCzefc1pi2M2JxAAgYNAce2LcNVh1QPQ3aJzCBGR", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" },
+        { "role": "platform-admin", "label": "LaunchLab platform admin (also paid the rehearsal's fees)", "pubkey": "Bfy67FZExj33ihNN9HDEH9KwLAPR6kW9tWAzvdXqssvx", "source": "docs/burnkeeper/evidence/devnet-2026-10-10/platform.json" },
+        { "role": "squads-vault", "label": "Squads 2-of-3 vault (holds the upgrade authority of both programs)", "pubkey": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD", "source": "docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md" },
+        { "role": "squads-member-1", "label": "Squads member A, a rehearsal key", "pubkey": "HUWbm4CnrTfe4MLwpFhstTJFVyrj4FNuTidMzEBoiHfb", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" },
+        { "role": "squads-member-2", "label": "Squads member B, a rehearsal key", "pubkey": "58w9pN56qGxuNcnhUrTXgte2mbRNNf4QSAun3ASaLwxd", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" },
+        { "role": "squads-member-3", "label": "Squads member C, a rehearsal key", "pubkey": "Bymx5VmL5Fi1A1EBJWXrcoeNUKARUvYjxKkHAqJ3H4wQ", "source": "docs/burnkeeper/devnet-run-log-2026-10-10.md" }
       ],
       "platformMints": [
         { "symbol": "DEFICIT", "mint": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F", "source": "docs/burnkeeper/evidence/devnet-2026-10-10/status.json" },
@@ -53,7 +53,7 @@
       ]
     },
     "mainnet": {
-      "status": "both programs deployed on mainnet 2026-10-11 (upgrade authority: the Squads vault below); LaunchLab platform config created 2026-10-11; no coin launched; the wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
+      "status": "Both programs were deployed on mainnet on 2026-10-11, and the Squads vault below holds their upgrade authority. The LaunchLab platform config was created the same day. No coin is launched yet. Every wallet address below is set.",
       "programs": {
         "burn_receipts": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
         "pair_curve": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
@@ -63,19 +63,19 @@
         "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
-        "timeLock": "0 now (owner decision 2026-10-11, launch week); 48 h planned from around 2026-10-23 — the live value is read from chain",
+        "timeLock": "0 now for launch week; 48 h planned from around 2026-10-23",
         "source": "docs/burn-receipts/powers-register.md"
       },
       "wallets": [
-        { "role": "dev-fee", "label": "developer fee wallet = operator treasury (PlatformConfig.platformClaimFeeWallet: the 25 bps curve fee, launch fees AND the 20 % post-graduation LP-fee share via OPERATOR_TREASURY; owner hardware wallet — owner decision 2026-10-11)", "pubkey": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", "source": "owner, 2026-10-11" },
-        { "role": "keeper", "label": "keeper data key (attester, quorum 1; pays crank fees)", "pubkey": "TODO_MAINNET_KEEPER", "source": null },
-        { "role": "deployer", "label": "program deployer (upgrade authority handed to the Squads vault)", "pubkey": "TODO_MAINNET_DEPLOYER", "source": null },
+        { "role": "dev-fee", "label": "Developer fee wallet (also the operator treasury)", "pubkey": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", "source": "owner, 2026-10-11" },
+        { "role": "keeper", "label": "Keeper key (signs every reading and pays the crank fees)", "pubkey": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6", "source": "docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json" },
+        { "role": "deployer", "label": "Program deployer (handed the upgrade authority to the Squads vault)", "pubkey": "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P", "source": "owner, 2026-10-11" },
         { "role": "platform-admin", "label": "LaunchLab platform admin", "pubkey": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23", "source": "owner, 2026-10-11" },
-        { "role": "squads-vault", "label": "Squads 2-of-3 vault (upgrade authority of both programs, config authority; holds no fee streams)", "pubkey": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "source": "created by the owner 2026-10-11; vault PDA derived from the multisig and checked" },
-        { "role": "squads-member-1", "label": "Squads member A: owner, hardware key", "pubkey": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ", "source": "owner, 2026-10-11" },
-        { "role": "squads-member-2", "label": "Squads member B: owner, second key", "pubkey": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt", "source": "owner, 2026-10-11" },
-        { "role": "squads-member-3", "label": "Squads member C: trusted third party (named only with consent)", "pubkey": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG", "name": "TODO_THIRD_SIGNER_NAME", "source": "owner, 2026-10-11" },
-        { "role": "bounty", "label": "bounty wallet (held by the operator; pays security reports)", "pubkey": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u", "source": "config/public-repo/overlay/SECURITY.md" }
+        { "role": "squads-vault", "label": "Squads 2-of-3 vault (holds the upgrade and config authority; receives no fees)", "pubkey": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV", "source": "created by the owner 2026-10-11; vault PDA derived from the multisig and checked" },
+        { "role": "squads-member-1", "label": "Squads member A, the operator's first key", "pubkey": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ", "source": "owner, 2026-10-11" },
+        { "role": "squads-member-2", "label": "Squads member B, the operator's second key", "pubkey": "57ugkFkTscnsFpLdSSNshZmCExMWXaXGrUEjeLuV4crt", "source": "owner, 2026-10-11" },
+        { "role": "squads-member-3", "label": "Squads member C, a trusted third party named only with their consent", "pubkey": "9usyTn3LbKoQgXUhTQ9Q1agj1JknHvnePTVvFLpXitCG", "name": "TODO_THIRD_SIGNER_NAME", "source": "owner, 2026-10-11" },
+        { "role": "bounty", "label": "Bounty wallet, held by the operator to pay for security reports", "pubkey": "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u", "source": "config/public-repo/overlay/SECURITY.md" }
       ],
       "platformMints": []
     }
@@ -86,10 +86,10 @@
     "cluster": "mainnet",
     "message": "Burnticker operator statement, signed by the developer fee wallet {PUBKEY}. I am the operator of burnticker.com and the burn_receipts and pair_curve programs. The wallets listed at https://burnticker.com/burnticker/operator are mine. The platform never buys any coin launched through it, and neither do I. Date: {DATE}.",
     "signature": null,
-    "how": "Not signed yet. When the operator signs it (steps: docs/burnticker/runbook.md, Signing the operator statement) and the signature is added here, GET /api/burnticker/v1/operator verifies it with ed25519 and this page shows the result and the time it was checked."
+    "how": "Once the operator signs the statement and the signature is added here, the site checks it with ed25519 and shows the result and the time of the check. The signing steps are in docs/burnticker/runbook.md, under Signing the operator statement."
   },
   "neverBuys": {
-    "rule": "None of the wallets above ever acquires a coin launched through the platform. The monitor lists every token account those wallets hold and every recent transaction in which one of them gained a platform coin.",
-    "rehearsalNote": "On devnet the rehearsal itself traded on the curves (the keeper and the payer bought and sold test coins to prove fee routing and sell-back). Those trades are listed as explained, each with the evidence file that records it; on mainnet any acquisition is a red status line."
+    "rule": "None of the wallets above ever acquires a coin launched through the platform. The monitor lists every token account those wallets hold, and every recent transaction that gave one of them a platform coin.",
+    "rehearsalNote": "On devnet, the rehearsal itself traded on the curves. The keeper and the payer bought and sold test coins to prove that fees go where they should and that selling back works. Those trades are listed as explained, each with the evidence file that records it. On mainnet, any acquisition turns the status line red."
   }
 }

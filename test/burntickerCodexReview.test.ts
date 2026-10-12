@@ -285,7 +285,7 @@ describe("N2 — a generic catalogue feed settles only on an agreeing independen
     const lagging = FRED.split("\n").filter((l) => !l.startsWith("2026-08-01")).join("\n");
     const r = await adapter({ bls: BLS, fred: lagging }).settledSince(EGGS, "2026-05");
     assert.deepEqual(r.events.map((e) => e.id), ["2026-06", "2026-07"]);
-    assert.ok(r.refusals.some((x) => /2026-08: the cross-read .* has no value for this period yet/.test(x)));
+    assert.ok(r.refusals.some((x) => /2026-08, the cross-read .* has no value for this period yet/.test(x)));
   });
   test("through the keeper: a disagreeing reading is not written to the registry", async () => {
     const reg = openRegistry(":memory:");

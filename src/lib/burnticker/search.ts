@@ -171,25 +171,25 @@ function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "lo
 
 async function championshipCard(t: EspnTeam, d: SearchDeps): Promise<Suggestion> {
   const c = CHAMPIONSHIP[t.league];
-  const card = (o: Partial<Suggestion>): Suggestion => ({ ...base, id: `champ:${t.league}:${t.abbr}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} win the championship`, subtitle: t.name, settlement: "Polymarket's on-chain payout", crossRead: OFFICIAL[t.league], score: 2.9, ...o });
-  if (!c) return card({ note: `no championship market is mapped for ${LEAGUES[t.league].label} yet` });
-  if (!d.venues.polymarket || !d.polyGet) return card({ note: "Polymarket discovery is off on this host: no championship market to bind to" });
+  const card = (o: Partial<Suggestion>): Suggestion => ({ ...base, id: `champ:${t.league}:${t.abbr}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} win the championship`, subtitle: t.name, settlement: "Polymarket's on-chain payout", crossRead: OFFICIAL[t.league], score: 2.9, ...o });
+  if (!c) return card({ note: `No championship market is set up for the ${LEAGUES[t.league].label} yet.` });
+  if (!d.venues.polymarket || !d.polyGet) return card({ note: "Polymarket search is turned off on this site, so there is no championship market to use." });
   let ev: GammaEvent | undefined;
   try { ev = parseEventsBody(await d.polyGet(searchUrl(c.query, "open", 8))).find((e) => c.title.test(e.title) && !e.closed); } catch { ev = undefined; }
-  if (!ev) return card({ note: `no open ${LEAGUES[t.league].label} championship market was found` });
+  if (!ev) return card({ note: `No open ${LEAGUES[t.league].label} championship market was found.` });
   const year = c.title.exec(ev.title)?.[1] ?? "";
   const champ = c.name(year);
   const title = `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} win ${champ}`;
   const m = ev.markets.find((x) => !x.inactive && (x.groupItemTitle?.toLowerCase() === t.name.toLowerCase() || x.groupItemTitle?.toLowerCase() === t.nickname.toLowerCase()));
-  if (!m) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `market lists no ${t.nickname} outcome` });
-  if (m.closed) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `the ${t.nickname} outcome is closed on Polymarket (eliminated or already resolved)` });
+  if (!m) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `The market has no outcome for the ${t.nickname}.` });
+  if (m.closed) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `The ${t.nickname} outcome is closed on Polymarket. The team is out, or the market has already settled.` });
   const rule = polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
   const phrase = `${teamRef(t)} win ${champ}`;
   const code = championshipCode(t.league);
   const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest: { name: `${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`.slice(0, 32), ticker: tickerFrom(t.nickname, code) } };
   const text = describeRule(rule, { ticker: "", ...descCtx });
   return card({
-    title, subtitle: `${t.name} · ${ev.title}`, nextAt: ev.endDate, settleAt: ev.endDate, endAt: ev.endDate, endText: "ends when the market resolves",
+    title, subtitle: `${t.name}, in ${ev.title}`, nextAt: ev.endDate, settleAt: ev.endDate, endAt: ev.endDate, endText: "ends when the market resolves",
     howSettles: `Settles on Polymarket's on-chain payout for "${m.groupItemTitle}" in ${ev.title}; ${OFFICIAL[t.league]} are the published cross-check.${ev.description ? `\n\nResolution rules (Polymarket): ${ev.description}` : ""}`,
     rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${teamRef(t)} win ${champ} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" },
     text, descCtx, leagueSet: { id: `champ-${t.league}-${year || "season"}`, outcome: t.abbr }, href: `https://polymarket.com/event/${ev.slug}`, suggestedName: text.name, suggestedTicker: text.ticker,
@@ -230,7 +230,7 @@ function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Su
   return {
     ...base, id: `game:${series}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "one-shot",
     title: `Burns ${pctLabel(share)} once if ${teamRef(t)} ${outcome === "win" ? "beat" : outcome === "draw" ? "draw with" : "lose to"} ${oppRef} on ${denverTime(g.startsAt)} Denver time`,
-    subtitle: `${g.name} · this game only`, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game",
+    subtitle: `${g.name}, this game only`, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game",
     howSettles: outcome === "draw" ? `This coin covers one game, ${g.name}. It burns only on a draw.` : `This coin covers one game, ${g.name}. A ${LEAGUES[t.league].draws ? "draw" : "tie"} burns nothing.`, rule, pick: { oracle: "catalogue", series, market: null, title: `${t.name} ${verb} — ${g.name} (resolves once)` },
     source: { unit: { size: 1, label: "the game", definition: "one burn if the result is the one the rule names" }, baseline: 0, direction: "up" },
     text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score: 3.2,
@@ -299,9 +299,9 @@ function weatherCards(q: string): Suggestion[] {
     const what = m === "high" ? `every day ${s.city}'s official high is ${thr} °F or hotter` : m === "rain" ? `every day ${s.city} gets ${Number(thr).toFixed(2)} in of rain or more` : `once, on ${s.city}'s first snow of the season`;
     const note = rd.strict && rd.wrote ? `You wrote “${rd.wrote}”. The climate report gives ${m === "high" ? `whole degrees, so strictly above that means ${thr} °F or hotter` : `hundredths of an inch, so strictly above that means ${Number(thr).toFixed(2)} in or more`}.` : null;
     out.push({
-      ...base, id: `nws:${series}`, venue: "nws", venueLabel: "NWS daily climate · first-party", shape: m === "snow" ? "one-shot" : "recurring",
+      ...base, id: `nws:${series}`, venue: "nws", venueLabel: "NWS daily climate report, a first-party source", shape: m === "snow" ? "one-shot" : "recurring",
       title: `Burns ${pctLabel(share)} ${what}`,
-      subtitle: `${nwsSeriesTitle(parseNwsSeries(series)!)} · station ${s.code}`, settlement: "the National Weather Service's daily climate report", crossRead: "the Iowa Environmental Mesonet",
+      subtitle: `${nwsSeriesTitle(parseNwsSeries(series)!)}, at station ${s.code}`, settlement: "the National Weather Service's daily climate report", crossRead: "the Iowa Environmental Mesonet",
       endText: m === "snow" ? "ends after the first snow" : "no end date", howSettles: src.unit.definition, rule, pick: { oracle: "catalogue", series, market: null, title: src.title }, source: { unit: src.unit, baseline: 0, direction: "up" },
       text, descCtx: {}, suggestedName: text.name, suggestedTicker: text.ticker, score: 1.5,
       interpreted: `This reads the ${s.label} weather station, code ${s.code}. ${m === "high" ? `The coin burns on each day the official high is ${thr} °F or hotter.` : m === "rain" ? `The coin burns on each day with ${Number(thr).toFixed(2)} in of rain or more.` : "The coin burns once a season, on the first measurable snow."} Each day follows the climate report's local standard time and is read the next morning.${m === "snow" ? "" : " There is no end date."}`,
@@ -323,7 +323,7 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
     const descCtx = { feed: { title: f.title, sourceName: f.sourceName, unitLabel: f.unit.label }, suggest: FEED_SUGGEST[f.id.split(":")[0]] ?? null };
     const text = describeRule(rule, { ticker: "", ...descCtx });
     out.push({
-      ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName} · first-party`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} per ${f.unit.label} — ${f.title}`, subtitle: f.cadence,
+      ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName}, a first-party source`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} per ${f.unit.label} — ${f.title}`, subtitle: f.cadence,
       settlement: f.sourceName, crossRead: "an independent publisher of the same figure", endText: "no end date", howSettles: f.unit.definition, rule,
       pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, source: { unit: f.unit, baseline: typeof f.baseline === "number" ? f.baseline : 0, direction: "up" }, text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score,
     });
@@ -341,8 +341,8 @@ export function raceCards(races: readonly Race[], q: string): Suggestion[] {
     const descCtx = { eventPhrase: `${o.label} wins the ${raceName} race`, crossRead: `the ${r.stateName ?? "state"} certified result`, endsAt: r.settlesOn };
     const text = describeRule(rule, { ticker: "", ...descCtx });
     return {
-      ...base, id: `polymarket:${o.conditionId}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot",
-      title: outcomeCardTitle(r, o), subtitle: `${r.title}${r.hiddenPlaceholders ? ` · ${r.hiddenPlaceholders} unnamed placeholder market(s) hidden` : ""}`,
+      ...base, id: `polymarket:${o.conditionId}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot",
+      title: outcomeCardTitle(r, o), subtitle: `${r.title}${r.hiddenPlaceholders ? `. ${r.hiddenPlaceholders === 1 ? "One placeholder market with no name is" : `${r.hiddenPlaceholders} placeholder markets with no name are`} hidden.` : ""}`,
       settlement: `${r.settlement} — ${r.sos.name}`, crossRead: `${r.sos.name}`, crossReadUrl: r.sos.url, nextAt: r.settlesOn, settleAt: r.settlesOn, endAt: r.settlesOn, endText: "ends when the race resolves",
       howSettles: `${outcomeSettlesNote(r, o)}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, rule,
       pick: { oracle: "polymarket", series: null, market: o.conditionId, title: `${o.label} wins the ${raceName} race (resolves once)`, yes: o.yes, no: o.no },
@@ -394,17 +394,17 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
           const label = outcomeLabel(m), sentence = plainQuestion(m.question), rule = polyRule(m.conditionId);
           const descCtx = { eventPhrase: sentence, endsAt: m.endDate };
           const text = describeRule(rule, { ticker: outcomeTicker(label), ...descCtx });
-          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.oneShot)} once, if ${sentence} resolves YES`, subtitle: `${e.title} · YES = ${m.outcomes[0] ?? "Yes"}, NO = ${m.outcomes[1] ?? "No"}`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.outcomes[0] ?? "Yes"}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" }, text, descCtx, suggestedTicker: outcomeTicker(label), suggestedName: label.slice(0, 32), href: eventPageUrl(e.slug), score: mm.score });
+          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.oneShot)} once, if ${sentence} resolves YES`, subtitle: `${e.title}. YES means ${m.outcomes[0] ?? "Yes"}, and NO means ${m.outcomes[1] ?? "No"}.`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.outcomes[0] ?? "Yes"}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" }, text, descCtx, suggestedTicker: outcomeTicker(label), suggestedName: label.slice(0, 32), href: eventPageUrl(e.slug), score: mm.score });
         }
         for (const em of found.events) {
           const e = em.event;
-          cards.push({ ...base, id: `polyevent:${e.slug}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: em.noun === "outcome" ? `Pick one: ${e.title.trim()} — your coin burns ${pctLabel(DEFAULT_SHARE.oneShot)} once if your pick wins` : `Pick a ${em.noun}: ${e.title.trim()} — your coin burns ${pctLabel(DEFAULT_SHARE.oneShot)} once if it wins`, subtitle: `${em.outcomes.length} named ${em.noun === "outcome" ? "outcomes" : `${em.noun}s`}; each is its own yes/no market`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: e.endDate, settleAt: e.endDate, endAt: e.endDate, endText: "ends when the market resolves", howSettles: "Settles on the market for the outcome you pick resolving YES; every other outcome is ignored.", note: em.note, href: eventPageUrl(e.slug), picker: { slug: e.slug, title: e.title.trim(), noun: em.noun, outcomes: em.outcomes }, score: em.score });
+          cards.push({ ...base, id: `polyevent:${e.slug}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot", title: em.noun === "outcome" ? `Pick one: ${e.title.trim()} — your coin burns ${pctLabel(DEFAULT_SHARE.oneShot)} once if your pick wins` : `Pick a ${em.noun}: ${e.title.trim()} — your coin burns ${pctLabel(DEFAULT_SHARE.oneShot)} once if it wins`, subtitle: `There are ${em.outcomes.length} named ${em.noun === "outcome" ? "outcomes" : `${em.noun}s`}. Each one is its own yes-or-no market.`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: e.endDate, settleAt: e.endDate, endAt: e.endDate, endText: "ends when the market resolves", howSettles: "It settles when the market for the outcome you pick resolves YES. Every other outcome is ignored.", note: em.note, href: eventPageUrl(e.slug), picker: { slug: e.slug, title: e.title.trim(), noun: em.noun, outcomes: em.outcomes }, score: em.score });
         }
       } catch (e) { errors.push(`polymarket: ${(e as Error).message.slice(0, 80)}`); }
     }
   }
   if (d.venues.kalshi && d.kalshiSearch) {
-    try { for (const s of (await d.kalshiSearch(query)).slice(0, 2)) cards.push({ ...base, id: `kalshi:${s.ticker}`, venue: "kalshi", venueLabel: "Kalshi", shape: "recurring", title: s.title, subtitle: `every market in series ${s.ticker}`, settlement: s.settlementSource?.name ?? "Kalshi", pick: { oracle: "kalshi", series: s.ticker, market: null, title: s.title }, score: 0.5 + overlap(query, s.title) }); } catch (e) { errors.push(`kalshi: ${(e as Error).message.slice(0, 80)}`); }
+    try { for (const s of (await d.kalshiSearch(query)).slice(0, 2)) cards.push({ ...base, id: `kalshi:${s.ticker}`, venue: "kalshi", venueLabel: "Kalshi", shape: "recurring", title: s.title, subtitle: `Every market in the ${s.ticker} series`, settlement: s.settlementSource?.name ?? "Kalshi", pick: { oracle: "kalshi", series: s.ticker, market: null, title: s.title }, score: 0.5 + overlap(query, s.title) }); } catch (e) { errors.push(`kalshi: ${(e as Error).message.slice(0, 80)}`); }
   }
   // a query that reads like a person's name ranks people (election outcomes) above everything else
   if (person) for (const c of cards) if (groupOf(c) === "elections") c.score += 1;

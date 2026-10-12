@@ -20,11 +20,11 @@ export default function NotBurntickerPage() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Not Burnticker</h1>
-        <p className="text-neutral-400 max-w-3xl">Tokens on Solana whose name or ticker resembles a Burnticker coin (or Burnticker itself) and that are <b>not</b> Burnticker coins. A Burnticker coin is registered with the burn_receipts program and listed on its coin page. Check any mint on <Link className="underline" href="/burnticker/verify">Verify a mint</Link>.</p>
-        <p className="text-xs text-neutral-500 max-w-3xl">{d?.note ?? "Evidence only."} Searched for: {d ? d.terms.map((t) => (t === "BURNTICKER" ? "Burnticker" : `$${t}`)).join(", ") : "—"}. {d?.lastScan ? `Last scan ${d.lastScan.at.slice(0, 16).replace("T", " ")} UTC · ${d.lastScan.hits} hit(s)${d.lastScan.errors.length ? ` · ${d.lastScan.errors.length} search error(s)` : ""}.` : "No scan has run on this host yet."}</p>
+        <p className="text-neutral-400 max-w-3xl">These are tokens on Solana whose name or ticker looks like a Burnticker coin, or like Burnticker itself, and that are <b>not</b> Burnticker coins. A real Burnticker coin is registered with the burn program and has its own coin page on this site. You can check any token on <Link className="underline" href="/burnticker/verify">Verify a mint</Link>.</p>
+        <p className="text-xs text-neutral-500 max-w-3xl">{d?.note ?? "This list shows evidence only."} {d ? `The scan searches for ${d.terms.map((t) => (t === "BURNTICKER" ? "Burnticker" : `$${t}`)).join(", ")}.` : ""} {d?.lastScan ? `The last scan ran at ${d.lastScan.at.slice(0, 16).replace("T", " ")} UTC and found ${d.lastScan.hits} ${d.lastScan.hits === 1 ? "match" : "matches"}${d.lastScan.errors.length ? `, with ${d.lastScan.errors.length} search ${d.lastScan.errors.length === 1 ? "error" : "errors"}` : ""}.` : "No scan has run on this site yet."}</p>
       </header>
-      {err && <p className="text-red-400 text-xs">Registry unavailable: {err}</p>}
-      {d && d.clones.length === 0 && <p className="text-neutral-400 border border-neutral-800 rounded p-4">Nothing recorded.</p>}
+      {err && <p className="text-red-400 text-xs">The coin registry could not be read just now. The error was: {err}</p>}
+      {d && d.clones.length === 0 && <p className="text-neutral-400 border border-neutral-800 rounded p-4">No lookalike tokens have been recorded.</p>}
       {d && d.clones.length > 0 && (
         <ul className="space-y-2">{d.clones.map((c) => (
           <li key={c.mint} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-1">
@@ -32,13 +32,13 @@ export default function NotBurntickerPage() {
               <span><span className="font-mono">${c.symbol || "?"}</span> <span className="text-neutral-400">{c.name}</span></span>
               <span className="text-xs text-neutral-500">first seen {c.firstSeenAt.slice(0, 16).replace("T", " ")} UTC</span>
             </div>
-            <div className="font-mono text-xs text-neutral-400 break-all">mint {c.mint}{c.pool ? ` · pool ${short(c.pool)}${c.dex ? ` (${c.dex})` : ""}` : ""}</div>
+            <div className="font-mono text-xs text-neutral-400 break-all">Mint {c.mint}{c.pool ? `, pool ${short(c.pool)}${c.dex ? ` (${c.dex})` : ""}` : ""}</div>
             <ul className="list-disc pl-5 text-xs text-neutral-300">{c.evidence.map((e) => <li key={e}>{e}</li>)}</ul>
             <div className="text-xs"><Link className="underline" href={`/burnticker/verify?mint=${encodeURIComponent(c.mint)}`}>verify this mint →</Link>{c.url && <> · <a className="underline" href={c.url} rel="noopener nofollow" target="_blank">pool on DexScreener</a></>}</div>
           </li>
         ))}</ul>
       )}
-      <p className="text-xs text-neutral-500">The same list as JSON: <a className="underline" href="/api/burnticker/v1/clones">/api/burnticker/v1/clones</a>. Memecoins: the rule says what supply does, not what price does.</p>
+      <p className="text-xs text-neutral-500">The same list is available as JSON at <a className="underline" href="/api/burnticker/v1/clones">/api/burnticker/v1/clones</a>. These are memecoins. A rule says what happens to a coin&apos;s supply, never its price.</p>
     </main>
   );
 }

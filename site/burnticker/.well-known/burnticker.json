@@ -3,7 +3,7 @@
   "name": "Burnticker",
   "updatedAt": "2026-10-11",
   "operator": {
-    "name": "Burnticker operator (one independent individual; identity held privately until a legal entity is formed)",
+    "name": "Burnticker operator, one independent person whose identity is kept private until a legal entity is formed",
     "state": null,
     "country": "United States",
     "contact": "contact@burnticker.com",
@@ -23,7 +23,7 @@
   },
   "clusters": {
     "devnet": {
-      "status": "rehearsal (2026-10-10): both programs deployed, upgrade authority held by a 2-of-3 Squads vault with a 60 s time lock",
+      "status": "This is the rehearsal network, used on 2026-10-10. Both programs are deployed, and a 2-of-3 Squads vault with a 60 s time lock holds their upgrade authority.",
       "programs": {
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
@@ -45,7 +45,7 @@
         "vault": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
         "multisig": "GfARhgcTZysagCH3CrC4mjXy3QkNnMuykW4aCzFx3K1w",
         "threshold": "2 of 3",
-        "timeLock": "60 s on devnet (mainnet: 0 now, 48 h planned)"
+        "timeLock": "60 s on devnet; on mainnet it is 0 now, with 48 h planned"
       },
       "wallets": {
         "dev-fee": "3s97xfWwH5qwPjqrmjHwPobZ3Z6oxWMQm2CDVQoA5pZp",
@@ -90,7 +90,7 @@
       }
     },
     "mainnet": {
-      "status": "both programs deployed on mainnet 2026-10-11 (upgrade authority: the Squads vault below); LaunchLab platform config created 2026-10-11; no coin launched; the wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
+      "status": "Both programs were deployed on mainnet on 2026-10-11, and the Squads vault below holds their upgrade authority. The LaunchLab platform config was created the same day. No coin is launched yet. Every wallet address below is set.",
       "programs": {
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
@@ -112,12 +112,12 @@
         "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
-        "timeLock": "0 now (owner decision 2026-10-11, launch week); 48 h planned from around 2026-10-23 — the live value is read from chain"
+        "timeLock": "0 now for launch week; 48 h planned from around 2026-10-23"
       },
       "wallets": {
         "dev-fee": "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5",
-        "keeper": "TODO_MAINNET_KEEPER",
-        "deployer": "TODO_MAINNET_DEPLOYER",
+        "keeper": "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6",
+        "deployer": "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P",
         "platform-admin": "EMht6aGcQWsBjKx4Ya41giF3G9MdZn1PVvctEjb6Tt23",
         "squads-vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "squads-member-1": "DLxTkuqMfp5D6b87SikjptfL1preaYH2WbMdMfxu6ZCJ",

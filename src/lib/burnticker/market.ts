@@ -85,13 +85,13 @@ export function rpcErrorText(e: unknown): string {
   return m.split("{")[0].replace(/[:\s]+$/, "").slice(0, 80) || "RPC error";
 }
 
-export const HOLDER_COUNT_NOTE = "a holder count needs an indexer (every token account of the mint); not read on this host";
+export const HOLDER_COUNT_NOTE = "Counting holders needs an indexer that lists every token account of the coin. This site does not run one.";
 const isMainnet = (c: string) => c === "mainnet";
 
 /** Deep links for a mint. Mainnet only: Raydium's and Jupiter's swap pages do not serve devnet. */
 export function tradeLinks(cluster: string, mint: string, phase: CurvePhase | null, status: string): TradeLinks {
-  if (status === "draft" || status === "expired") return { links: [], note: "not launched: there is nothing to trade until the launch transaction lands" };
-  if (!isMainnet(cluster)) return { links: [], note: `${cluster} coin: Raydium's and Jupiter's swap pages serve mainnet only` };
+  if (status === "draft" || status === "expired") return { links: [], note: "This coin is not launched. There is nothing to trade until the launch transaction lands." };
+  if (!isMainnet(cluster)) return { links: [], note: `This is a ${cluster} coin. Raydium's and Jupiter's swap pages only serve mainnet.` };
   const m = encodeURIComponent(mint);
   const jupiter = { id: "jupiter" as const, label: "Open in Jupiter", url: `https://jup.ag/swap/SOL-${m}` };
   if (phase === "graduated") return { links: [{ id: "raydium", label: "Trade on Raydium", url: `https://raydium.io/swap/?inputMint=sol&outputMint=${m}` }, jupiter], note: null };
@@ -101,10 +101,10 @@ export function tradeLinks(cluster: string, mint: string, phase: CurvePhase | nu
 /** GeckoTerminal's chart embed for the pool that trades now: the CPMM pool after graduation, the LaunchLab curve pool before (only a pool read on chain this cycle — never an unverified id). */
 export function chartFor(cluster: string, curvePool: string | null, graduatedPool: string | null, phase: CurvePhase | null): ChartJson {
   const pool = phase === "graduated" && graduatedPool ? graduatedPool : curvePool;
-  if (!isMainnet(cluster)) return { provider: null, embedUrl: null, pageUrl: null, note: `${cluster}: no public chart indexes this network — the burn chart below is drawn from the receipts` };
-  if (!pool) return { provider: null, embedUrl: null, pageUrl: null, note: "no pool read this cycle" };
+  if (!isMainnet(cluster)) return { provider: null, embedUrl: null, pageUrl: null, note: `No public chart covers ${cluster}, so the burn chart below is drawn from the receipts.` };
+  if (!pool) return { provider: null, embedUrl: null, pageUrl: null, note: "No pool was read this cycle." };
   const p = encodeURIComponent(pool);
-  return { provider: "geckoterminal", embedUrl: `https://www.geckoterminal.com/solana/pools/${p}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0`, pageUrl: `https://www.geckoterminal.com/solana/pools/${p}`, note: "market data from GeckoTerminal, shown as data; never read by any rule" };
+  return { provider: "geckoterminal", embedUrl: `https://www.geckoterminal.com/solana/pools/${p}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0`, pageUrl: `https://www.geckoterminal.com/solana/pools/${p}`, note: "This market data comes from GeckoTerminal. It is shown for information, and no rule ever reads it." };
 }
 
 /** The market block of status.json from what the reader brought back (or nothing). */
@@ -112,10 +112,10 @@ export function buildMarketJson(i: { cluster: string; mint: string; status: stri
   const pool = i.read?.pool ?? null;
   const curve = pool && i.poolId ? curveProgress(pool, i.poolId) : null;
   const phase: CurvePhase | null = curve?.phase ?? (i.graduatedPool ? "graduated" : null);
-  const curveNote = curve ? "" : i.status === "draft" || i.status === "expired" ? "not launched: no curve yet" : !i.read ? "the LaunchLab pool is not read on this host (no RPC configured)" : i.read.poolError ? `the LaunchLab pool could not be read: ${i.read.poolError}` : "the LaunchLab pool account was not found";
+  const curveNote = curve ? "" : i.status === "draft" || i.status === "expired" ? "This coin is not launched, so there is no curve yet." : !i.read ? "This site has not read the LaunchLab pool, because no RPC is set up." : i.read.poolError ? `The LaunchLab pool could not be read (${i.read.poolError}).` : "The LaunchLab pool account was not found.";
   return {
     phase, curve, curveNote, graduatedPool: i.graduatedPool,
-    holders: { count: null, countNote: HOLDER_COUNT_NOTE, top: i.read?.top ?? null, topNote: i.read?.top ? "the 20 largest token accounts (getTokenLargestAccounts), owners resolved on chain" : !i.read ? "not read on this host (no RPC configured)" : "not read" },
+    holders: { count: null, countNote: HOLDER_COUNT_NOTE, top: i.read?.top ?? null, topNote: i.read?.top ? "These are the 20 largest token accounts, with their owners looked up on chain." : !i.read ? "This site has not read the holders, because no RPC is set up." : "The holders were not read." },
     trade: tradeLinks(i.cluster, i.mint, phase, i.status), chart: chartFor(i.cluster, curve ? i.poolId : null, i.graduatedPool, phase),
     readAt: i.read?.readAt ? new Date(i.read.readAt).toISOString() : null, error: i.read?.error ?? null,
   };

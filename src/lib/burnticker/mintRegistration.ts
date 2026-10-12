@@ -34,29 +34,29 @@ type TokenConfigLite = { mint: string; rules_sha256: Uint8Array; readings: numbe
 export function decodeRegistration(network: Network, programId: string, config: string, acct: { owner: string; data: [string, string] } | null): NetworkRegistration {
   const base = { network, programId, config: null, rulesSha256: null, readings: null, burns: null, reason: null };
   if (acct === null) return { ...base, config, state: "not-registered" };   // config = the address that was read (no account there)
-  if (acct.owner !== programId) return { ...base, state: "unavailable", reason: `the account at the TokenConfig address is owned by ${acct.owner}, not the program` };
+  if (acct.owner !== programId) return { ...base, state: "unavailable", reason: `The account at the TokenConfig address belongs to ${acct.owner}, not to the program.` };
   const bytes = base64ToBytes(acct.data[0]);
-  if (!isAccount(BURN_RECEIPTS_IDL, "TokenConfig", bytes)) return { ...base, state: "unavailable", reason: "the account is not a TokenConfig (discriminator mismatch)" };
+  if (!isAccount(BURN_RECEIPTS_IDL, "TokenConfig", bytes)) return { ...base, state: "unavailable", reason: "The account is not a TokenConfig. Its type marker does not match." };
   try {
     const c = readAccount<TokenConfigLite>(BURN_RECEIPTS_IDL, "TokenConfig", bytes);
     return { ...base, state: "registered", config, rulesSha256: toHex(c.rules_sha256), readings: Number(c.readings), burns: Number(c.burns) };
   } catch (e) {
-    return { ...base, state: "unavailable", reason: `the TokenConfig did not decode (${(e as Error).message.slice(0, 80)})` };
+    return { ...base, state: "unavailable", reason: `The TokenConfig could not be decoded. The error was: ${(e as Error).message.slice(0, 80)}` };
   }
 }
 
 export async function readRegistration(rpc: Rpc, network: Network, programId: string, mint: string): Promise<NetworkRegistration> {
-  if (!isPubkey(mint) || !isPubkey(programId)) return { network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: "not a public key" };
+  if (!isPubkey(mint) || !isPubkey(programId)) return { network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: "This is not a public key." };
   const config = configPda(new PublicKey(programId), new PublicKey(mint)).toBase58();
   try {
     const r = await rpc.call<unknown>("getAccountInfo", [config, { encoding: "base64", commitment: "confirmed" }]);
     // Only an explicit `value: null` inside a getAccountInfo result means "no account". A missing result, a result without `value`,
     // or an account that is not {owner, data:[base64, "base64"]} is NOT an answer about the mint (ChatGPT re-check 2026-10-11 F1).
     const acct = accountInfoValue(r);
-    if (acct === undefined) return { ...unavailable(network, programId), config, reason: `the ${network} RPC answer was not a getAccountInfo result` };
+    if (acct === undefined) return { ...unavailable(network, programId), config, reason: `The ${network} RPC sent back an answer that was not account data.` };
     return decodeRegistration(network, programId, config, acct);
   } catch (e) {
-    return { ...unavailable(network, programId), reason: `the ${network} RPC could not be read just now (${(e as Error).message.slice(0, 100)})` };
+    return { ...unavailable(network, programId), reason: `The ${network} RPC could not be read just now. The error was: ${(e as Error).message.slice(0, 100)}` };
   }
 }
 

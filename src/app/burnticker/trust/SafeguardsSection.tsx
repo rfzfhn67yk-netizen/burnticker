@@ -11,7 +11,7 @@ export default function SafeguardsSection({ card }: { card: string }) {
       <h2 id="safeguards-h" className="font-medium">Guardrails and safeguards</h2>
       <p className="text-xs text-neutral-300">{GUARDRAIL_SUMMARY}</p>
       <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-mono text-neutral-300" aria-label="The eleven guardrails" data-guardrails>{GUARDRAILS.map((g) => <li key={g}>✓ {g}</li>)}</ul>
-      <details className="mt-3 text-xs"><summary className="cursor-pointer text-neutral-300">What protects a burn ({SAFEGUARDS.length})</summary>
+      <details className="mt-3 text-xs"><summary className="cursor-pointer text-neutral-300">What protects a burn</summary>
         <dl className="mt-2 grid gap-3 md:grid-cols-2">{SAFEGUARDS.map((s) => <div key={s.id}><dt className="font-medium text-neutral-100">{s.title}</dt><dd className="text-neutral-300">{s.text}</dd></div>)}</dl>
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">Who gets what</summary>

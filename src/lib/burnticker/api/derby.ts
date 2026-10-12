@@ -23,7 +23,7 @@ export function v1ListDerby(p: Platform, now = Date.now()): ApiResult {
     const j = derbyPairJson(p.registry, pr, p.registry.receipts(pr.mintA).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units })), p.registry.receipts(pr.mintB).map((r) => ({ eventId: r.eventId, status: r.status, burned: null, signature: r.signature, txUrl: null, units: r.units })), now);
     return { pairId: pr.pairId, a: a?.ticker ?? pr.mintA, b: b?.ticker ?? pr.mintB, series: pr.selectorKey.replace(/^derby:/, ""), selector: j?.selector ?? "coinvs", season: j ? { start: j.season.start, days: j.season.days, endsOn: j.season.endsOn } : { start: "", days: 0, endsOn: "" }, score: j ? { a: j.score.a, b: j.score.b, ties: j.score.ties } : { a: 0, b: 0, ties: 0 }, page: `/burnticker/p/${pr.pairId}` };
   });
-  return ok({ tournaments: tournamentSummaries(p.registry, now), pairs, note: "Burn Derby: the winner's coin burns each window; readings from Pyth (Solana accounts, or Hermes with a key) or a pool TWAP, cross-checked against a second data publisher (one operator attester signs every reading) — a disagreement withholds the window (no reading, no burn)" });
+  return ok({ tournaments: tournamentSummaries(p.registry, now), pairs, note: "In the Burn Derby, the winning coin burns in each window. Readings come from Pyth or from a pool's time-weighted average price, and a second data publisher checks each one. One signer, run by the operator, signs every reading. If the two sources disagree, that window is held back, so there is no reading and no burn." });
 }
 
 /** A derby pair's block + the latest decided day's post (the pair page and GET /derby/{id} share it). */
@@ -48,15 +48,15 @@ export async function v1Derby(p: Platform, id: string, now = Date.now()): Promis
   if (row) return ok({ kind: "tournament", tournament: derbyTournamentJson(p.registry, JSON.parse(row.json) as Tournament, row.sha256, now), pair: null, tickers: null, post: null });
   const blk = await derbyPairBlock(p, key, null, now);
   if (blk) return ok({ kind: "pair", tournament: null, pair: blk.pair, tickers: blk.tickers, post: blk.post });
-  return fail(404, `no Burn Derby bracket or pair ${key}`);
+  return fail(404, `There is no Burn Derby bracket or pair called ${key}.`);
 }
 
 export async function v1DerbySearch(p: Platform, q: URLSearchParams): Promise<ApiResult> {
   const query = (q.get("q") ?? "").trim();
-  if (query.length < 2) return fail(400, "q is required (2+ characters): a ticker, a name or a mint");
+  if (query.length < 2) return fail(400, "Type at least two characters. You can search for a ticker, a name or a mint.");
   const assets = q.get("assets") === "all" ? "all" : "crypto";
   try {
     const hits = await searchDerbyCoins(query, { fetchImpl: p.derbyFetch ?? (globalThis.fetch as unknown as FetchLike) }, { assets });
-    return ok({ query, assets, hits, note: `each hit's underlying is what a rule locks (Pyth feed, mint, cross-read); see ${API_PREFIX}/derby for the brackets and pairs` });
-  } catch (e) { return fail(502, `search unavailable: ${(e as Error).message.slice(0, 120)}`); }
+    return ok({ query, assets, hits, note: `Each result shows the asset a rule locks, with its Pyth feed, its mint and its second source. The brackets and pairs are at ${API_PREFIX}/derby.` });
+  } catch (e) { return fail(502, `Search is not working just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
 }

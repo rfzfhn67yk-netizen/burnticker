@@ -42,7 +42,7 @@ describe("the matrix: verdicts", () => {
     assert.equal(coverageMatrix([p], [cat("econ", ["a.primary"], ["economy"])]).categories[0].verdict, "adjudicated-only");
     const bare = coverageMatrix([p], [cat("econ", ["a.primary"])]);
     assert.equal(bare.categories[0].verdict, "uncovered");
-    assert.ok(bare.uncovered.some((u) => u.category === "econ" && u.kind === "scalar" && /without an independent cross-read/.test(u.why)));
+    assert.ok(bare.uncovered.some((u) => u.category === "econ" && u.kind === "scalar" && /no independent second source for the same fact/.test(u.why)));
   });
 
   test("the independent-operator rule: same operator or same domain is not a cross-read; another fact is not either", () => {
@@ -177,7 +177,7 @@ describe("the creation preflight", () => {
     const bls = JSON.parse(JSON.stringify(body("bls.LNS14000000"))) as { Results: { series: { data: { year: string; period: string; value: string }[] }[] } };
     bls.Results.series[0].data.find((x) => x.year === "2026" && x.period === "M09")!.value = "4.5";
     const dis = await preflightSelector(catalogueRule("fred.UNRATE"), { now: NOW, fetchImpl: fetchOf({ [UNRATE_URL]: body("fred.UNRATE"), [LNS_URL]: bls }) });
-    assert.equal(dis.refusal!.code, "disagreement"); assert.equal(dis.agreement, false); assert.match(dis.refusal!.reason, /2026-09: fred\.UNRATE 4\.2 vs bls\.LNS14000000 4\.5/);
+    assert.equal(dis.refusal!.code, "disagreement"); assert.equal(dis.agreement, false); assert.match(dis.refusal!.reason, /2026-09\. fred\.UNRATE says 4\.2, and bls\.LNS14000000 says 4\.5\./);
     const down = await preflightSelector(catalogueRule("fred.UNRATE"), { now: NOW, fetchImpl: fetchOf({}) });
     assert.equal(down.refusal!.code, "primary-unreadable"); assert.equal(down.refusal!.status, 502);
     const half = await preflightSelector(catalogueRule("fred.UNRATE"), { now: NOW, fetchImpl: fetchOf({ [UNRATE_URL]: body("fred.UNRATE") }) });
@@ -211,7 +211,7 @@ describe("the creation preflight", () => {
     const c = await prepareLaunch(w.p, { ...base, ticker: "COVU", rule: catalogueRule("fred.UNRATE") }, { register: false, preflight: { strict: true, deps: { now: NOW, fetchImpl: fetchOf({ [UNRATE_URL]: body("fred.UNRATE"), [LNS_URL]: body("bls.LNS14000000") }) } } });
     assert.ok("ok" in c, JSON.stringify((c as { error?: unknown }).error)); assert.equal(c.ok.preflight!.agreement, true);
     const lone = await prepareLaunch(w.p, { ...base, ticker: "COVL", rule: catalogueRule("ll2.launches") }, { register: false, preflight: { strict: true, deps: { now: NOW, fetchImpl: fetchOf({ "https://ll.thespacedevs.com/": body("ll2.launches") }) } } });
-    assert.ok("error" in lone); assert.match((lone.error.body as { error: string }).error, /^preflight refused: .*no independent cross-read/);
+    assert.ok("error" in lone); assert.match((lone.error.body as { error: string }).error, /^The check run before launch refused this coin: .*no independent second source/);
     // Off (the suite's default): the pipeline is unchanged and carries no preflight.
     const off = await prepareLaunch(w.p, { ...base, ticker: "COVO", rule: BRONCOS }, { register: false });
     assert.ok("ok" in off); assert.equal(off.ok.preflight, null);

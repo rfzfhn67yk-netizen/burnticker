@@ -24,7 +24,7 @@ export function onchainSource(id: OnchainFactId, rpc: SolanaRpcPort | null, o: {
   return {
     id, kind: "onchain", tier: 1, title: f.title, sourceName: "Solana RPC (consensus state)", sourceUrl: o.rpcUrl ?? "https://api.mainnet-beta.solana.com", cadence: "continuous; read once per UTC day",
     unit: f.unit, direction: "up", baseline: "previousSettlement", carry: "none", valueLabel: id.endsWith("slot") ? "slots" : "blocks", flags: ["onchain", "verifiable by any RPC and by the program"],
-    launchable: { ok: rpc !== null, why: rpc ? null : "no RPC configured on this host" },
+    launchable: { ok: rpc !== null, why: rpc ? null : "this site has no RPC set up" },
     async searchSeries() { return [summary]; },
     async seriesInfo() { return summary; },
     async settledSince(_rule: BurnRule, sinceIso: string | null): Promise<ResolvedSelector> {

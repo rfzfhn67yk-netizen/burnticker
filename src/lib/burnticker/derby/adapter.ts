@@ -89,7 +89,7 @@ export class DerbyAdapter implements OracleAdapter {
   async impliedChance(rule: BurnRule): Promise<ImpliedChance> {
     const now = this.d.now();
     const next = rule.derby && rule.derby.selector !== "bracket" && rule.derby.window === "weekly" ? (() => { let m = dayMs(isoDate(now)) + DAY_MS; while (new Date(m).getUTCDay() !== 1) m += DAY_MS; return m; })() : dayMs(isoDate(now)) + DAY_MS;
-    return { chance: null, marketTicker: null, closeTime: new Date(next).toISOString(), basis: "Burn Derby: no market and no odds — the next window closes at this time" };
+    return { chance: null, marketTicker: null, closeTime: new Date(next).toISOString(), basis: "A Burn Derby has no market and no odds. The next window closes at this time." };
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------------
@@ -106,7 +106,7 @@ export class DerbyAdapter implements OracleAdapter {
     const hours = marketHours(feed);
     const xs = this.store.samples(pythKey(feed), "pyth", boundaryMs, boundaryMs + (hours ? TOL_MS : PYTH_ONCHAIN_TOLERANCE_SEC * 1000));
     const pick = hours ? xs.find((x) => Number(x.detail.publishTime) <= b + 60 && Number(x.detail.publishTime) >= b - STALE_MARKET_SEC) : xs.find((x) => Number(x.detail.publishTime) >= b && Number(x.detail.publishTime) <= b + PYTH_ONCHAIN_TOLERANCE_SEC);
-    if (!pick) return { ok: false, reason: xs.length ? `no Pyth snapshot on Solana with a ${hours ? "last value published by" : "value published at or after"} the boundary (${xs.length} snapshot(s) checked)` : "no Pyth snapshot on Solana was taken at the boundary" };
+    if (!pick) return { ok: false, reason: xs.length ? `No Pyth snapshot on Solana has a ${hours ? "last value published by" : "value published at or after"} the boundary. ${xs.length} snapshot${xs.length === 1 ? " was" : "s were"} checked.` : "No Pyth snapshot on Solana was taken at the boundary." };
     return { ok: true, value: pick.value, proof: { ...pick.detail, boundary: b, sampledAt: pick.ts, feed, route: "pyth-solana" } };
   }
 
@@ -217,11 +217,11 @@ export class DerbyAdapter implements OracleAdapter {
     if (!a.ok) { const d: Decision = { status: "withheld", reason: a.reason, margin: null, crossMargin: null, disagreement: null }; return this.record(key, w, d, proofDocument(key, w, { a: null, b: null }, { a: null, b: null }, d)); }
     const cross = this.crossFor(spec.u, "pct", w, null, null);
     let d: Decision;
-    if (!cross) d = { status: "withheld", reason: `cross-read unavailable for ${spec.u.symbol} at a boundary (no reading, no burn)`, margin: a.side.changePct, crossMargin: null, disagreement: null };
+    if (!cross) d = { status: "withheld", reason: `The cross-read for ${spec.u.symbol} was not available at a boundary. There is no reading and no burn.`, margin: a.side.changePct, crossMargin: null, disagreement: null };
     else {
       const disagreement = absDec(subDec(a.side.changePct, cross.changePct));
       d = cmpDec(disagreement, String(DERBY_DISAGREEMENT_PP)) > 0
-        ? { status: "withheld", reason: `the cross-read disagrees by ${disagreement} points on the change (primary ${a.side.changePct}%, cross ${cross.changePct}%) — no reading, no burn`, margin: a.side.changePct, crossMargin: cross.changePct, disagreement }
+        ? { status: "withheld", reason: `The cross-read disagrees by ${disagreement} points on the change (primary ${a.side.changePct}%, cross ${cross.changePct}%). There is no reading and no burn.`, margin: a.side.changePct, crossMargin: cross.changePct, disagreement }
         : { status: "decided", result: null, value: canonicalDecimal(a.side.changePct), margin: a.side.changePct, crossMargin: cross.changePct, disagreement, note: `${spec.u.symbol} ${a.side.changePct}% (cross ${cross.changePct}%)` };
     }
     return this.record(key, w, d, proofDocument(key, w, { a: a.side, b: null }, { a: cross, b: null }, d));

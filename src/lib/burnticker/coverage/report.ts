@@ -135,7 +135,7 @@ export function renderCoverageMarkdown(m: CoverageMatrix, leagues: readonly Leag
   for (const c of m.categories) L.push(`| ${cell(c.label)} | ${VERDICT[c.verdict]} | ${c.primaries.map((p) => `\`${p.id}\``).join(", ") || "none"} | ${c.crossReads.map((x) => `\`${x.id}\` (of \`${x.of}\`)`).join(", ") || "none"} | ${c.polymarket.tags.join(", ") || "none"} |`);
   L.push("");
   for (const c of m.categories) {
-    L.push(`## ${c.label} — ${c.verdict}`, "", cell(c.why) + ".", "");
+    L.push(`## ${c.label} — ${c.verdict}`, "", /\.$/.test(c.why) ? cell(c.why) : cell(c.why) + ".", "");
     const byRow = new Map<string, SourceRefRow>();
     for (const p of c.primaries) byRow.set(p.id, { ...p, roles: ["primary"] });
     for (const x of c.crossReads) { const r = byRow.get(x.id); if (r) r.roles.push(`cross-read of \`${x.of}\``); else byRow.set(x.id, { ...x, roles: [`cross-read of \`${x.of}\``] }); }

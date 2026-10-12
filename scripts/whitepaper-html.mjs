@@ -129,7 +129,7 @@ const page = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Burnticker Whitepaper</title>
-<meta name="description" content="Burnticker technical paper: how a settled real-world event becomes a burn on Solana, how the burn_receipts program settles it on chain, what powers exist, and how anyone can recompute every receipt.">
+<meta name="description" content="Burnticker technical paper: how a settled real-world event becomes a burn on Solana, how a program on Solana settles it on chain, what powers exist, and how anyone can recompute every receipt.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#1f1c19">
 <link rel="canonical" href="https://burnticker.com/whitepaper.html">

@@ -76,10 +76,10 @@ export type Decision =
 /** A window of a coin-vs-coin derby (not a flippening): winner from the primary margin, withheld when the cross-read disagrees or is missing. */
 export function decideWindow(a: SideReading, b: SideReading, cross: { a: CrossSide | null; b: CrossSide | null }, bound = DERBY_DISAGREEMENT_PP): Decision {
   const margin = subDec(a.changePct, b.changePct);
-  if (!cross.a || !cross.b) return { status: "withheld", reason: `cross-read unavailable for ${!cross.a ? a.symbol : b.symbol} at a boundary (no reading, no burn)`, margin, crossMargin: null, disagreement: null };
+  if (!cross.a || !cross.b) return { status: "withheld", reason: `The cross-read for ${!cross.a ? a.symbol : b.symbol} was not available at a boundary. There is no reading and no burn.`, margin, crossMargin: null, disagreement: null };
   const crossMargin = subDec(cross.a.changePct, cross.b.changePct);
   const disagreement = absDec(subDec(margin, crossMargin));
-  if (cmpDec(disagreement, String(bound)) > 0) return { status: "withheld", reason: `the cross-read disagrees by ${disagreement} points on the margin (primary ${margin}, cross ${crossMargin}; bound ${bound}) — no reading, no burn`, margin, crossMargin, disagreement };
+  if (cmpDec(disagreement, String(bound)) > 0) return { status: "withheld", reason: `The cross-read disagrees by ${disagreement} points on the margin (primary ${margin}, cross ${crossMargin}, limit ${bound}). There is no reading and no burn.`, margin, crossMargin, disagreement };
   const c = cmpDec(margin, "0");
   return { status: "decided", result: c > 0 ? "yes" : c < 0 ? "no" : "void", value: canonicalDecimal(margin), margin, crossMargin, disagreement, note: c > 0 ? `${a.symbol} ${a.changePct}% vs ${b.symbol} ${b.changePct}%: ${a.symbol} wins` : c < 0 ? `${a.symbol} ${a.changePct}% vs ${b.symbol} ${b.changePct}%: ${b.symbol} wins` : `${a.symbol} and ${b.symbol} both ${a.changePct}%: a tie, no burn` };
 }
@@ -90,10 +90,10 @@ export function decideWindow(a: SideReading, b: SideReading, cross: { a: CrossSi
  */
 export function decideFlip(sizeA: string, sizeB: string, crossSizes: { a: string; b: string } | null, last: boolean, bound = DERBY_DISAGREEMENT_PP): Decision {
   const ratio = ratioPct(sizeA, sizeB);
-  if (!crossSizes) return { status: "withheld", reason: "cross-read unavailable at the boundary (no reading, no burn)", margin: ratio, crossMargin: null, disagreement: null };
+  if (!crossSizes) return { status: "withheld", reason: "The cross-read was not available at the boundary. There is no reading and no burn.", margin: ratio, crossMargin: null, disagreement: null };
   const crossRatio = ratioPct(crossSizes.a, crossSizes.b);
   const disagreement = absDec(subDec(ratio, crossRatio));
-  if (cmpDec(disagreement, String(bound)) > 0) return { status: "withheld", reason: `the cross-read disagrees by ${disagreement}% on the size comparison (primary ${ratio}%, cross ${crossRatio}%) — no reading, no burn`, margin: ratio, crossMargin: crossRatio, disagreement };
+  if (cmpDec(disagreement, String(bound)) > 0) return { status: "withheld", reason: `The cross-read disagrees by ${disagreement}% on the size comparison (primary ${ratio}%, cross ${crossRatio}%). There is no reading and no burn.`, margin: ratio, crossMargin: crossRatio, disagreement };
   if (cmpDec(ratio, "0") > 0) return { status: "decided", result: "yes", value: canonicalDecimal(ratio), margin: ratio, crossMargin: crossRatio, disagreement, note: `A's size is ${ratio}% above B's: the flippening` };
   if (last) return { status: "decided", result: "no", value: canonicalDecimal(ratio), margin: ratio, crossMargin: crossRatio, disagreement, note: "the season ended without a flippening" };
   return { status: "pending", reason: `no flippening yet (A's size ${ratio}% vs B's)` };

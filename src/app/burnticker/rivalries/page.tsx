@@ -11,7 +11,7 @@ import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 import { SeasonsTabs } from "../_components/SeasonsTabs";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Scoreboards", description: "Burnticker seasons: one scoreboard per league and season, ranked by receipts; rivalry pairs and Burn Derby brackets below." };
+export const metadata: Metadata = { title: "Scoreboards", description: "Burnticker keeps one scoreboard for each league and season, ranked by receipts. Rivalry pairs and Burn Derby brackets are listed below the scoreboards." };
 
 /**
  * SCOREBOARDS (route /burnticker/rivalries; under the nav's "Seasons"; audit 4 BT-22: the nav label names /burnticker/leagues, whose
@@ -44,12 +44,12 @@ export default function SeasonsPage() {
       <header className="space-y-1">
         <SeasonsTabs current="/burnticker/rivalries" />
         <h1 className="text-2xl font-semibold">Scoreboards</h1>
-        <p className="text-neutral-400 text-sm max-w-3xl">One scoreboard per league and season. Each card ranks only that league&apos;s team coins, by receipts, then by the share of supply burned. Leagues are never ranked against each other. One page per league and season: <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
-        {!err && !empty && <p className="text-sm text-neutral-300" aria-label="across all leagues">Yesterday ({yday}) across all leagues: {yesterday} coin{yesterday === 1 ? "" : "s"} burned.</p>}
+        <p className="text-neutral-400 text-sm max-w-3xl">One scoreboard per league and season. Each card ranks only that league&apos;s team coins, by receipts, then by the share of supply burned. Leagues are never ranked against each other. Each league and season also has its own page, listed under <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
+        {!err && !empty && <p className="text-sm text-neutral-300" aria-label="across all leagues">Yesterday ({yday}), {yesterday} coin{yesterday === 1 ? "" : "s"} burned across all leagues.</p>}
       </header>
       {err && <EmptyState kind="unavailable" body="The coin registry could not be read just now, so the scoreboards, rivalries and brackets are not shown." details={err} />}
       {empty && (
-        <EmptyState kind="not-launched" body={<>No team coin, rivalry pair or Burn Derby bracket is registered on this host yet, so there is no scoreboard to show. Each fills from the coins&apos; own receipts. {launch.open ? null : launch.closedLine} {NO_WALLET_LINE}</>}>
+        <EmptyState kind="not-launched" body={<>No team coin, rivalry pair or Burn Derby bracket is registered on this site yet, so there is no scoreboard to show. Each fills from the coins&apos; own receipts. {launch.open ? null : launch.closedLine} {NO_WALLET_LINE}</>}>
           <p className="mt-3" data-empty-evidence><Link className="underline" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link> <span className="text-xs text-neutral-500">— {EXPLORE_VERIFIED_BURN.blurb}</span></p>
           <p className="mt-1 text-xs text-neutral-500">An example scoreboard, clearly labelled, is on <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
         </EmptyState>
@@ -70,7 +70,7 @@ export default function SeasonsPage() {
 
       <section className="space-y-2" aria-label="rivalries">
         <h2 className="text-lg font-medium">Rivalries</h2>
-        <p className="text-neutral-400 text-sm max-w-3xl">Two coins on one settled event — each burns on its own side&apos;s result, under its own locked rule. The receipts are the scoreboard.</p>
+        <p className="text-neutral-400 text-sm max-w-3xl">A rivalry pairs two coins on one settled event. Each coin burns on its own side&apos;s result, under its own locked rule. The receipts are the scoreboard.</p>
         {!err && pairs.length === 0 && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-4">No rivalry pairs yet.</p>}
         {pairs.length > 0 && <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{pairs.map((r) => (
           <li key={r.pairId} className="p-3 flex flex-wrap items-baseline gap-x-4 gap-y-1"><Link className="font-mono underline" href={`/burnticker/p/${encodeURIComponent(r.pairId)}`}>${r.a} vs ${r.b}</Link><span className="font-mono text-xs text-neutral-500">{r.selectorKey}</span><span className="text-xs text-neutral-500">since {new Date(r.createdAt).toISOString().slice(0, 10)}</span></li>
@@ -85,7 +85,7 @@ export default function SeasonsPage() {
         ))}</ul>}
       </section>
       </>}
-      <p className="text-neutral-500 text-xs">Memecoins. Each rule says what its supply does, not what a price does. Not affiliated with any team, league, candidate, agency or market.</p>
+      <p className="text-neutral-500 text-xs">These are memecoins. Each rule says what happens to a coin&apos;s supply, never its price. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );
 }

@@ -98,6 +98,9 @@ export function jsonRpc(url: string, fetchImpl: typeof fetch = fetch, o: { attem
   };
 }
 
+/** "1 unit", "3 units": a count in words, never "unit(s)". */
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 export const PUBLIC_RPC: Record<"devnet" | "mainnet", string> = { devnet: "https://api.devnet.solana.com", mainnet: "https://api.mainnet-beta.solana.com" };
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 export const TREASURY_FEED_ID = "treasury.debt_to_penny";
@@ -224,7 +227,7 @@ export async function checkReceiptTx(o: CheckOptions): Promise<ReceiptCheckResul
   const m = memo ? parseProgramMemo(memo) : null;
   if (!m) { add("memo", false, memo ? "the memo does not parse as the program's v2 buyback memo" : "no memo in the transaction logs"); return done(); }
   facts.ticker = m.prefix; facts.recordDate = m.recordDate; facts.units = String(m.units);
-  add("memo", true, `${m.prefix} · reading ${m.recordDate} · ${m.units} unit(s) · pool ${m.pool} · spent ${m.spent} lamports · burn ${m.burn} · rules sha256:${m.rulesSha12}`);
+  add("memo", true, `${m.prefix} · reading ${m.recordDate} · ${plural(Number(m.units), "unit")} · pool ${m.pool} · spent ${m.spent} lamports · burn ${m.burn} · rules sha256:${m.rulesSha12}`);
 
   // accounts
   let accounts: (AccountJson | null)[];
@@ -253,7 +256,7 @@ export async function checkReceiptTx(o: CheckOptions): Promise<ReceiptCheckResul
   if (R.spent_lamports.toString() !== m.spent) rBad.push(`spent ${R.spent_lamports} ≠ memo ${m.spent}`);
   if (tokens(R.got, mintDecimals) !== m.got) rBad.push(`got ${tokens(R.got, mintDecimals)} ≠ memo ${m.got}`);
   if (tokens(R.burned, mintDecimals) !== m.burn) rBad.push(`burned ${tokens(R.burned, mintDecimals)} ≠ memo ${m.burn}`);
-  add("reading", rBad.length ? false : true, rBad.length ? rBad.join("; ") : `Reading ${keys[readingAt].slice(0, 8)}… (owned by the program): ${m.prev} → ${m.now}, ${R.units} unit(s), pool ${R.pool_lamports}, spent ${R.spent_lamports}, burned ${tokens(R.burned, mintDecimals)} — all as the memo says`);
+  add("reading", rBad.length ? false : true, rBad.length ? rBad.join("; ") : `Reading ${keys[readingAt].slice(0, 8)}… (owned by the program): ${m.prev} → ${m.now}, ${plural(Number(R.units), "unit")}, pool ${R.pool_lamports}, spent ${R.spent_lamports}, burned ${tokens(R.burned, mintDecimals)} — all as the memo says`);
 
   const prefix = txt(C.memo_prefix, C.memo_prefix_len);
   const cBad: string[] = [];
@@ -300,7 +303,7 @@ export async function checkReceiptTx(o: CheckOptions): Promise<ReceiptCheckResul
   // units
   const s = stepUnits(prevV, nowV, R.carry_in, C.rule.unit_value, C.rule.carry_rule);
   const uOk = s.units === R.units && s.carryOut === R.carry_out && s.units.toString() === String(m.units);
-  add("units", uOk, `${fromSource ? "from the source values" : "from the on-chain values (source not confirmed here)"}: (${fixed(nowV, dec)} − ${fixed(prevV, dec)}${C.rule.carry_rule === CARRY_CONSECUTIVE ? ` + carry ${fixed(R.carry_in, dec)}` : ""}) ÷ ${fixed(C.rule.unit_value, dec)} = ${s.units} unit(s), carry ${fixed(s.carryOut, dec)}${uOk ? "" : ` — the Reading says ${R.units} unit(s), carry ${fixed(R.carry_out, dec)}`}`);
+  add("units", uOk, `${fromSource ? "from the source values" : "from the on-chain values (source not confirmed here)"}: (${fixed(nowV, dec)} − ${fixed(prevV, dec)}${C.rule.carry_rule === CARRY_CONSECUTIVE ? ` + carry ${fixed(R.carry_in, dec)}` : ""}) ÷ ${fixed(C.rule.unit_value, dec)} = ${plural(Number(s.units), "unit")}, carry ${fixed(s.carryOut, dec)}${uOk ? "" : ` — the Reading says ${R.units} unit(s), carry ${fixed(R.carry_out, dec)}`}`);
 
   // spend
   const rs = ruleSpend(R.pool_lamports, R.units, C.rule.fraction_per_unit_bps);
@@ -327,6 +330,6 @@ export async function checkReceiptTx(o: CheckOptions): Promise<ReceiptCheckResul
   }
   if (belowFloor && burns === 0 && R.got === B(0)) { add("burn", true, "nothing was bought (under the spend floor), so there was nothing to burn; no Burn instruction, as expected"); return done(); }
   const bOk = burns > 0 && burned === R.burned && R.burned === R.got;
-  add("burn", bOk, burns === 0 ? "no token Burn instruction for this mint in the transaction" : `${burns} Burn instruction(s) for mint ${C.mint.slice(0, 8)}… burned ${tokens(burned, mintDecimals)}; the swap bought ${tokens(R.got, mintDecimals)}`);
+  add("burn", bOk, burns === 0 ? "no token Burn instruction for this mint in the transaction" : `${plural(burns, "Burn instruction")} for mint ${C.mint.slice(0, 8)}… burned ${tokens(burned, mintDecimals)}; the swap bought ${tokens(R.got, mintDecimals)}`);
   return done();
 }

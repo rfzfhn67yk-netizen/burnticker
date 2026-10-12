@@ -64,7 +64,7 @@ describe("trade links and the chart: deep links only, mainnet only", () => {
     assert.deepEqual(curve.links.map((l) => l.id), ["launchlab", "jupiter"]); assert.match(curve.links[0].url, /^https:\/\/raydium\.io\/launchpad\/token\/\?mint=CMHX/);
     const grad = tradeLinks("mainnet", MINT, "graduated", "live");
     assert.deepEqual(grad.links.map((l) => l.label), ["Trade on Raydium", "Open in Jupiter"]); assert.match(grad.links[0].url, /outputMint=CMHX/); assert.equal(grad.links[1].url, `https://jup.ag/swap/SOL-${MINT}`);
-    assert.deepEqual(tradeLinks("devnet", MINT, "curve", "live").links, []); assert.match(tradeLinks("devnet", MINT, "curve", "live").note!, /mainnet only/);
+    assert.deepEqual(tradeLinks("devnet", MINT, "curve", "live").links, []); assert.match(tradeLinks("devnet", MINT, "curve", "live").note!, /only serve mainnet/);
     assert.match(tradeLinks("mainnet", MINT, null, "draft").note!, /not launched/);
     const cfg = loadCopyLintConfig();
     for (const l of [...curve.links, ...grad.links]) assert.ok(lintCopy(l.label, cfg).ok, l.label);
@@ -76,7 +76,7 @@ describe("trade links and the chart: deep links only, mainnet only", () => {
   });
   test("buildMarketJson: nothing read → every number null with the reason; holder count always null with why", () => {
     const m = buildMarketJson({ cluster: "devnet", mint: MINT, status: "live", poolId: CURVE_62, graduatedPool: null, read: null });
-    assert.equal(m.curve, null); assert.match(m.curveNote, /not read on this host/); assert.equal(m.holders.count, null); assert.match(m.holders.countNote, /indexer/);
+    assert.equal(m.curve, null); assert.match(m.curveNote, /This site has not read the LaunchLab pool/); assert.equal(m.holders.count, null); assert.match(m.holders.countNote, /indexer/);
     const read = buildMarketJson({ cluster: "mainnet", mint: MINT, status: "live", poolId: GRADUATED, graduatedPool: null, read: { pool: decodeLaunchLabPool(bytes(GRADUATED)), top: null, readAt: NOW, error: null } });
     assert.equal(read.phase, "graduated"); assert.equal(read.curve?.progressPct, 100); assert.equal(read.readAt, new Date(NOW).toISOString());
   });
@@ -127,7 +127,7 @@ describe("the card's one-liner, from the locked rule", () => {
     assert.equal(ruleOneLiner(rule(BRONCOS)), "burns when the Broncos win");
     assert.equal(ruleOneLiner(rule(ONE_SHOT)), "burns if the Broncos win this game");
     assert.equal(ruleOneLiner(rule({ ...BRONCOS, filter: {}, series: "KXFEDDECISION" }), "Fed meeting"), "burns when Fed meeting settles YES");
-    assert.equal(ruleOneLiner(rule(DENVER_HIGH), "Highest temperature in Denver"), "burns per 1 above 80 · Highest temperature in Denver");
+    assert.equal(ruleOneLiner(rule(DENVER_HIGH), "Highest temperature in Denver"), "burns for every 1 above 80 (Highest temperature in Denver)");
     assert.equal(ruleOneLiner(rule(DEBT_RULE), "U.S. national debt"), "burns on the U.S. national debt feed");
     const cfg = loadCopyLintConfig();
     for (const r of [eaglesLose, BRONCOS, ONE_SHOT, DENVER_HIGH, DEBT_RULE]) { const t = ruleOneLiner(rule(r), null); assert.ok(lintCopy(t, cfg).ok, t); }
@@ -139,7 +139,7 @@ describe("status.json, the index and the API carry the card fields", () => {
     const w = await makeWorld();
     const d = await tokenPageData(w.p, w.bronco, NOW);
     assert.equal(d.status.profile.oneLiner, "burns when the Broncos win");
-    assert.equal(d.status.market.curve, null, "no RPC in the test world → not read"); assert.match(d.status.market.curveNote, /not read on this host/);
+    assert.equal(d.status.market.curve, null, "no RPC in the test world → not read"); assert.match(d.status.market.curveNote, /This site has not read the LaunchLab pool/);
     assert.deepEqual(d.status.market.trade.links, [], "devnet: no swap links"); assert.ok(d.status.burned.lastAt === null || /^\d{4}-/.test(d.status.burned.lastAt));
     const ix = buildPlatformIndex([d.status], NOW);
     const card = ix.tokens[0];

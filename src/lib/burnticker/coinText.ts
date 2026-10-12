@@ -23,7 +23,7 @@ export function creatorTextProblems(o: { name: string; ticker: string; note: str
   const out: CreatorTextProblem[] = [];
   for (const [field, text] of [["name", o.name], ["ticker", o.ticker], ["note", o.note]] as const) {
     if (!text.trim()) continue;
-    for (const h of lintCopy(text, cfg, { scope: "creator" }).hits) out.push({ field, category: h.category, rule: h.rule, phrase: h.phrase, reason: `${field} "${text.slice(0, 60)}": "${h.phrase}" — ${h.category} (${h.why})` });
+    for (const h of lintCopy(text, cfg, { scope: "creator" }).hits) out.push({ field, category: h.category, rule: h.rule, phrase: h.phrase, reason: `The ${field} "${text.slice(0, 60)}" contains "${h.phrase}", which is not allowed. Rule broken: ${h.category} (${h.why}).` });
   }
   return out;
 }

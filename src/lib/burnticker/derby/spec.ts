@@ -160,7 +160,7 @@ export function derbySpecProblems(raw: unknown): string[] {
       if (!validDate(s.start)) p.push("derby.season.start must be a YYYY-MM-DD date (00:00 UTC)");
       if (!Number.isInteger(s.days) || s.days < DERBY_SEASON_DAYS.min || s.days > DERBY_SEASON_DAYS.max) p.push(`derby.season.days must be a whole number ${DERBY_SEASON_DAYS.min}–${DERBY_SEASON_DAYS.max}`);
       if (d.window === "weekly" && Number.isInteger(s.days) && s.days % 7 !== 0) p.push("derby: a weekly season is a whole number of weeks (days a multiple of 7)");
-      if (d.window === "weekly" && validDate(s.start) && new Date(`${s.start}T00:00:00Z`).getUTCDay() !== 1) p.push("derby: a weekly season starts on a Monday (windows run Monday 00:00 → Monday 00:00 UTC)");
+      if (d.window === "weekly" && validDate(s.start) && new Date(`${s.start}T00:00:00Z`).getUTCDay() !== 1) p.push("derby: a weekly season starts on a Monday (windows run from Monday 00:00 to Monday 00:00 UTC)");
       for (const k of Object.keys(s)) if (k !== "start" && k !== "days") p.push(`derby.season.${k} is not a known key`);
     }
     if (typeof d.flip !== "boolean") p.push("derby.flip must be true or false");
@@ -188,7 +188,7 @@ function seasonProblems(s: { start?: unknown; days?: unknown } | undefined, wind
   if (!validDate(s.start)) p.push("derby.season.start must be a YYYY-MM-DD date (00:00 UTC)");
   if (!Number.isInteger(s.days) || (s.days as number) < DERBY_SEASON_DAYS.min || (s.days as number) > DERBY_SEASON_DAYS.max) p.push(`derby.season.days must be a whole number ${DERBY_SEASON_DAYS.min}–${DERBY_SEASON_DAYS.max}`);
   if (window === "weekly" && Number.isInteger(s.days) && (s.days as number) % 7 !== 0) p.push("derby: a weekly season is a whole number of weeks (days a multiple of 7)");
-  if (window === "weekly" && validDate(s.start) && new Date(`${s.start}T00:00:00Z`).getUTCDay() !== 1) p.push("derby: a weekly season starts on a Monday (windows run Monday 00:00 → Monday 00:00 UTC)");
+  if (window === "weekly" && validDate(s.start) && new Date(`${s.start}T00:00:00Z`).getUTCDay() !== 1) p.push("derby: a weekly season starts on a Monday (windows run from Monday 00:00 to Monday 00:00 UTC)");
   for (const k of Object.keys(s)) if (k !== "start" && k !== "days") p.push(`derby.season.${k} is not a known key`);
 }
 
@@ -252,7 +252,7 @@ const boundary = (w: DerbyWindow): string => (w === "daily" ? "00:00 UTC" : "Mon
  * `tickerB` null = a single coin (side A only).
  */
 export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | null, fraction: number): string {
-  const src = d.a.pyth && d.b.pyth ? "Pyth" : `${sourceText(d.a)} / ${sourceText(d.b)}`;
+  const src = d.a.pyth && d.b.pyth ? "Pyth" : `${sourceText(d.a)} and ${sourceText(d.b)}`;
   if (d.flip) {
     const a = `$${tickerA} burns ${pctText(fraction)} once, the first ${d.window === "daily" ? "day" : "week"} ${d.a.symbol}'s market cap passes ${d.b.symbol}'s (${src} × circulating supply, ${boundary(d.window)}).`;
     const b = tickerB ? ` $${tickerB} burns ${pctText(fraction)} once if the run ends without it.` : "";
@@ -267,20 +267,20 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
 
 /** The rule paragraph for the token page (rules.ts ruleStatement delegates here for oracle "derby"). */
 export function derbyStatement(d: DerbySpec, side: "A" | "B" | null, pairId: string | null, scalar: { unit: number; direction: string } | null = null): string {
-  const feed = (u: DerbyUnderlying) => (u.pyth ? `${u.symbol}/USD on Pyth (feed ${u.pyth.slice(0, 12)}…)` : `${u.symbol} from the time-weighted average of pool ${u.pool!.slice(0, 8)}… (vault balances, SOL→USD from Pyth)`);
+  const feed = (u: DerbyUnderlying) => (u.pyth ? `${u.symbol}/USD on Pyth (feed ${u.pyth.slice(0, 12)}…)` : `${u.symbol} from the time-weighted average of pool ${u.pool!.slice(0, 8)}… (its vault balances, turned from SOL into USD with Pyth)`);
   if (d.selector === "price") {
-    const wnd = d.window === "daily" ? "UTC day (00:00 → 00:00)" : "UTC week (Monday 00:00 → Monday 00:00)";
+    const wnd = d.window === "daily" ? "UTC day (00:00 to 00:00)" : "UTC week (Monday 00:00 to Monday 00:00)";
     const dir = scalar?.direction === "down" ? "fall" : "rise";
-    const pairText = pairId ? ` Burn Derby pair ${pairId}, side ${side}: the other side counts the opposite direction.` : "";
-    return `Every ${wnd}, the % change of ${feed(d.u)} is read; every full ${scalar?.unit ?? "?"} percentage points of ${dir} is one unit.${pairText} A market that is closed at a boundary reads its last published value (a closed day is a 0% window). Season: ${d.season.days} days from ${d.season.start}. A cross-read from an independent operator that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the change withholds the window: no reading, no burn.`;
+    const pairText = pairId ? ` This coin is side ${side} of Burn Derby pair ${pairId}, and the other side counts the opposite direction.` : "";
+    return `Every ${wnd}, the percentage change of ${feed(d.u)} is read. Every full ${scalar?.unit ?? "?"} percentage points of ${dir} is one unit.${pairText} A market that is closed at a boundary reads its last published value, so a closed day is a 0% window. The season runs ${d.season.days} days from ${d.season.start}. A cross-read from an independent operator that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the change withholds the window, so there is no reading and no burn.`;
   }
   if (d.selector === "bracket") {
-    return `Fan coin of slot ${d.slot} (${d.underlying.symbol}) in Burn Derby bracket ${d.tournamentId} (bracket sha256:${d.tournamentSha.slice(0, 12)}). Every UTC day ${d.underlying.symbol} plays its current match, the side with the larger 00:00 → 00:00 % change of ${feed(d.underlying)} versus its opponent's wins the day, and a win burns one unit (two in the final). A tie burns nothing. A round's winner has more winning days (tiebreak: the larger compounded % change over the round, then the lower slot) and advances; the loser's coin retires and reads nothing more. An independent cross-read that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the margin withholds the day: no reading, no burn.`;
+    return `This is the fan coin of slot ${d.slot} (${d.underlying.symbol}) in Burn Derby bracket ${d.tournamentId}, whose sha256 starts with ${d.tournamentSha.slice(0, 12)}. Every UTC day, ${d.underlying.symbol} plays its current match. The side whose ${feed(d.underlying)} has the larger percentage change from 00:00 to 00:00 wins the day, and a win burns one unit (two in the final). A tie burns nothing. The side with more winning days wins the round and advances. If winning days are level, the larger compounded percentage change over the round decides, and then the lower slot. The loser's coin retires and reads nothing more. An independent cross-read that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the margin withholds the day, so there is no reading and no burn.`;
   }
-  const measure = d.measure === "mcap" ? "% change of size (circulating supply read from the mint × the feed value)" : "% change";
-  const wnd = d.window === "daily" ? "UTC day (00:00 → 00:00)" : "UTC week (Monday 00:00 → Monday 00:00)";
-  const pairText = pairId ? ` Burn Derby pair ${pairId}, side ${side}: side A's coin burns on a window ${d.a.symbol} wins, side B's on a window ${d.b.symbol} wins — the winner's coin burns.` : "";
-  const season = `Season: ${d.season.days} days from ${d.season.start} (windows after that end read nothing).`;
-  if (d.flip) return `One-shot flippening: the first ${wnd} that ends with ${d.a.symbol}'s size (circulating supply × ${feed(d.a)}) above ${d.b.symbol}'s (× ${feed(d.b)}) settles YES; the season ending without one settles NO.${pairText} ${season} Then the selector is done. A cross-read that disagrees by more than ${DERBY_DISAGREEMENT_PP}% on the comparison withholds the reading: no reading, no burn.`;
-  return `Every ${wnd}, ${d.a.symbol}'s ${measure} (${feed(d.a)}) is compared with ${d.b.symbol}'s (${feed(d.b)}); the larger wins the window and settles YES for ${d.a.symbol}, NO for ${d.b.symbol}; an exact tie is a void and burns nothing.${pairText} ${season} A cross-read from an independent operator that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the margin withholds the window: no reading, no burn. Readings use each coin's feed at the boundaries; our own coins' trading is never read.`;
+  const measure = d.measure === "mcap" ? "percentage change in size (circulating supply read from the mint, times the feed value)" : "percentage change";
+  const wnd = d.window === "daily" ? "UTC day (00:00 to 00:00)" : "UTC week (Monday 00:00 to Monday 00:00)";
+  const pairText = pairId ? ` This coin is side ${side} of Burn Derby pair ${pairId}. Side A's coin burns on a window ${d.a.symbol} wins, and side B's coin burns on a window ${d.b.symbol} wins, so the winner's coin burns.` : "";
+  const season = `The season runs ${d.season.days} days from ${d.season.start}. Windows after that read nothing.`;
+  if (d.flip) return `This is a one-shot flippening. The first ${wnd} that ends with ${d.a.symbol}'s size above ${d.b.symbol}'s settles YES. Size is circulating supply times ${feed(d.a)} for ${d.a.symbol}, and times ${feed(d.b)} for ${d.b.symbol}. If the season ends without that, it settles NO.${pairText} ${season} After that, nothing more is read. A cross-read that disagrees by more than ${DERBY_DISAGREEMENT_PP}% on the comparison withholds the reading, so there is no reading and no burn.`;
+  return `Every ${wnd}, ${d.a.symbol}'s ${measure} (${feed(d.a)}) is compared with ${d.b.symbol}'s (${feed(d.b)}). The larger one wins the window. A window ${d.a.symbol} wins settles YES, and a window ${d.b.symbol} wins settles NO. An exact tie is a void and burns nothing.${pairText} ${season} A cross-read from an independent operator that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the margin withholds the window, so there is no reading and no burn. Readings use each coin's feed at the boundaries. Our own coins' trading is never read.`;
 }

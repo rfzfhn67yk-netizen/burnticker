@@ -131,7 +131,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
     let live = true; setReviewBusy(true); setReviewErr(null);
     const t = setTimeout(() => {
       fetch("/api/burnticker/v1/launch/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: model.rule, ticker: names.ta.toUpperCase(), name: names.a, pair: { ticker: names.tb.toUpperCase(), name: names.b } }) })
-        .then(async (r) => { const j = await r.json().catch(() => null); if (!r.ok) throw new Error(r.status === 403 ? "creator launches are closed on this host" : `the review could not be read (HTTP ${r.status})`); return j as LaunchReview; })
+        .then(async (r) => { const j = await r.json().catch(() => null); if (!r.ok) throw new Error(r.status === 403 ? "creator launches are closed on this site" : `the review could not be read (HTTP ${r.status})`); return j as LaunchReview; })
         .then((j) => { if (live) setReview(j); }).catch((e) => { if (live) { setReview(null); setReviewErr(String((e as Error).message)); } }).finally(() => { if (live) setReviewBusy(false); });
     }, 400);
     return () => { live = false; clearTimeout(t); };
@@ -141,7 +141,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
     <button onClick={() => setOpen(true)} data-decision="what" disabled={!!unavailable} aria-describedby={unavailable ? "cvc-why" : undefined} className="w-full text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none disabled:opacity-50" aria-label="Coin vs Coin">
       <div className="text-lg font-semibold">Coin vs Coin <span className="ml-1 rounded bg-amber-400/15 px-1.5 text-xs text-amber-300 align-middle">Burn Derby</span></div>
       <p className="mt-1 text-sm text-neutral-300">Pick two coins that people already hold. Burnticker only reads their published feeds. You launch two new coins that race on those feeds every day, and the new coin on the winning side burns.</p>
-      <p className="mt-3 text-xs text-neutral-500">e.g. $TEAMWIF burns on every UTC day WIF out-gains SHIB (Pyth, 00:00 UTC)</p>
+      <p className="mt-3 text-xs text-neutral-500">For example, $TEAMWIF burns on every UTC day that WIF gains more than SHIB, read from Pyth at 00:00 UTC.</p>
       {unavailable && <p id="cvc-why" className="mt-2 text-xs text-amber-300">{unavailable}</p>}
     </button>
   );

@@ -94,18 +94,18 @@ const HOW_TEXT: Record<LookalikeHit["how"], string> = { "same-letters": "reads a
 export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null }, existing: readonly LookalikeExisting[]): LookalikeHit[] {
   const hits: LookalikeHit[] = [];
   const ct = skeleton(cand.ticker), cn = skeleton(cand.name), team = teamOf(cand.rule);
-  for (const mark of PLATFORM_MARKS) for (const [field, v] of [["ticker", ct], ["name", cn]] as const) if (v.includes(mark)) hits.push({ field, existing: "Burnticker", how: "platform-name", reason: `the ${field} uses the platform's name (Burnticker)` });
+  for (const mark of PLATFORM_MARKS) for (const [field, v] of [["ticker", ct], ["name", cn]] as const) if (v.includes(mark)) hits.push({ field, existing: "Burnticker", how: "platform-name", reason: `The ${field} uses the platform's name, Burnticker.` });
   for (const e of existing) {
     if (e.status === "expired") continue;
     if (team && teamOf(e.rule) === team) continue;   // another window of the same team: RAYS26 / RAYS27
     const et = skeleton(e.ticker), en = skeleton(e.name);
     const t = compare(ct, et);
-    if (t && !(t === "same-letters" && cand.ticker.toUpperCase() === e.ticker.toUpperCase())) hits.push({ field: "ticker", existing: `$${e.ticker}`, how: t, reason: `$${cand.ticker.toUpperCase()} ${HOW_TEXT[t]} $${e.ticker}, an existing Burnticker coin` });
+    if (t && !(t === "same-letters" && cand.ticker.toUpperCase() === e.ticker.toUpperCase())) hits.push({ field: "ticker", existing: `$${e.ticker}`, how: t, reason: `$${cand.ticker.toUpperCase()} ${HOW_TEXT[t]} $${e.ticker}, which is an existing Burnticker coin.` });
     if (e.status === "draft") continue;   // a draft reserves its TICKER (checked above); names are compared with launched coins only
     const n = cn.length >= 5 ? compare(cn, en) : null;
     const nt = !n && cn.length >= 4 && et.length >= 4 && cn === et ? "same-letters" : null;   // a name that spells an existing ticker
-    if (n) hits.push({ field: "name", existing: e.name, how: n, reason: `the name "${cand.name}" ${HOW_TEXT[n]} "${e.name}" ($${e.ticker}), an existing Burnticker coin` });
-    else if (nt) hits.push({ field: "name", existing: `$${e.ticker}`, how: nt, reason: `the name "${cand.name}" reads as $${e.ticker}, an existing Burnticker coin` });
+    if (n) hits.push({ field: "name", existing: e.name, how: n, reason: `The name "${cand.name}" ${HOW_TEXT[n]} "${e.name}", the name of $${e.ticker}, which is an existing Burnticker coin.` });
+    else if (nt) hits.push({ field: "name", existing: `$${e.ticker}`, how: nt, reason: `The name "${cand.name}" reads as $${e.ticker}, which is an existing Burnticker coin.` });
   }
   return hits;
 }
@@ -114,7 +114,7 @@ export function lookalikeHits(cand: { ticker: string; name: string; rule?: Pick<
  *  registry's own "ticker taken" check and is not repeated here. */
 export function lookalikeRefusal(cand: { ticker: string; name: string; rule?: Pick<BurnRule, "oracle" | "series"> | null }, existing: readonly LookalikeExisting[]): { reason: string; hits: LookalikeHit[] } | null {
   const hits = lookalikeHits(cand, existing);
-  return hits.length ? { reason: `refused: ${[...new Set(hits.map((h) => h.reason))].join("; ")} — pick a ticker and name that cannot be mistaken for it`, hits } : null;
+  return hits.length ? { reason: `This launch is refused. ${[...new Set(hits.map((h) => h.reason))].join(" ")} Please pick a ticker and name that cannot be mistaken for it.`, hits } : null;
 }
 
 /**

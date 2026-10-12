@@ -209,7 +209,7 @@ describe("coin page snippet box", () => {
     assert.match(pair, /<EmbedSnippet kind="pair"/);
     const box = fs.readFileSync(new URL("../src/app/burnticker/_components/EmbedSnippet.tsx", import.meta.url), "utf8");
     const words = [...box.matchAll(/>([^<>{}]+)</g)].map((m) => m[1].trim()).filter(Boolean);
-    lintAll([...words, "the receipt card · no market data · refreshes every minute", "Embed this coin", "Embed this pair"], "snippet box");
+    lintAll([...words, "The receipt card shows no market data and refreshes every minute.", "Embed this coin", "Embed this pair"], "snippet box");
   });
   test("coinBadge builds snippets from the origin it is given", async () => {
     const d = await (await get("/badge/BRONCO.json")).json() as CoinBadgeJson;

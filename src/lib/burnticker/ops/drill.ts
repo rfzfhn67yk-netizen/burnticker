@@ -44,7 +44,7 @@ const ym = (ms: number) => new Date(ms).toISOString().slice(0, 7);
 function periods(kind: string, now: number): string[] {
   if (kind === "day") return [3, 2, 1].map((n) => ymd(now - n * DAY));
   if (kind === "month") { const d = new Date(now); return [3, 2, 1].map((n) => ym(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - n, 1))); }
-  throw new Error(`the drill runs on day and month feeds (this one is a ${kind} feed): pick e.g. treasury.debt or bls.eggs`);
+  throw new Error(`The drill runs only on daily and monthly feeds, and this one is a ${kind} feed. Pick one such as treasury.debt or bls.eggs.`);
 }
 
 /** A healthy synthetic source for the feed: three complete periods, the last one 2 units past the one before (direction-aware). */
@@ -80,7 +80,7 @@ export function faultyAdapter(feedId: string, mode: DrillMode, now: number): Ora
 async function scratchCoin(reg: Registry, program: FakeBurnProgram, feedId: string, ticker: string, baselineAt: string, now: number): Promise<TokenRow> {
   const feed = feedById(feedId);
   if (!feed) throw new Error(`no catalogue feed ${feedId}`);
-  if (!feed.unit || feed.baseline === undefined || feed.baseline === null || !feed.direction) throw new Error(`${feedId} is not a fixed-unit feed (no unit / baseline / direction)`);
+  if (!feed.unit || feed.baseline === undefined || feed.baseline === null || !feed.direction) throw new Error(`${feedId} is not a fixed-unit feed. It has no unit, baseline or direction.`);
   const rule = { schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: feed.id, market: null, filter: {}, kind: "scalar", scalar: { unit: feed.unit.size, perUnit: { fractionOfPool: 0.02 }, baseline: feed.baseline, direction: feed.direction }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null };
   lockRule(rule);
   const b = await buildLaunchBundle({ creator: CREATOR, ticker, name: `${ticker} drill`, description: "outage drill (scratch)", imageUrl: null, links: [], rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: "devnet" }, { program, launchLab: new FakeLaunchLab(), devFeeWallet: null, attesters: [ATTESTER], quorum: 1, metadataUri: (m) => `https://drill.invalid/${m}.json` });
@@ -118,7 +118,7 @@ export async function runDrill(o: { feed: string; mode: DrillMode; now?: number;
     const t = await scratchCoin(reg, program, o.feed, ticker, new Date(first - DAY).toISOString(), now);
     const r = await runCycle(depsFor(reg, program, healthyAdapter(o.feed, now), clock, log));
     const planned = reg.receipts(t.mint).filter((b) => b.units > 0);
-    checks.push({ id: "control", ok: planned.length > 0, detail: planned.length ? `a healthy source planned ${planned.length} receipt(s) (${planned.map((b) => `${b.eventId} ${b.units} unit(s)`).join(", ")}) and the cycle executed ${r.executed.filter((x) => x.outcome === "confirmed").length} — the setup cranks when the source is right` : "a healthy source planned nothing: the drill's setup is broken, the fault checks below prove nothing" });
+    checks.push({ id: "control", ok: planned.length > 0, detail: planned.length ? `a healthy source planned ${planned.length} ${planned.length === 1 ? "receipt" : "receipts"} (${planned.map((b) => `${b.eventId}, ${b.units} ${b.units === 1 ? "unit" : "units"}`).join("; ")}) and the cycle executed ${r.executed.filter((x) => x.outcome === "confirmed").length} — the setup cranks when the source is right` : "a healthy source planned nothing: the drill's setup is broken, the fault checks below prove nothing" });
     reg.close();
   }
 
@@ -144,14 +144,14 @@ export async function runDrill(o: { feed: string; mode: DrillMode; now?: number;
     const feedRow = published?.feeds.find((f) => f.selectorKey === t.selectorKey) ?? null;
 
     const readings = reg.readings(t.selectorKey, t.baselineAt);
-    checks.push({ id: "withheld", ok: readings.length === 0, detail: readings.length ? `${readings.length} reading(s) were written: ${readings.map((r) => `${r.id}=${r.value}`).join(", ")}` : `no reading written for ${t.selectorKey} after the baseline (${o.mode === "down" ? `${reg.feedState(t.selectorKey).failures} failed read(s), backing off` : o.mode === "disagree" ? `${reports.flatMap((r) => r.fetched.flatMap((f) => f.refusals)).length} refusal(s) from the cross-read` : "the source had nothing newer than its cadence allows"})` });
+    checks.push({ id: "withheld", ok: readings.length === 0, detail: readings.length ? `${readings.length} ${readings.length === 1 ? "reading was" : "readings were"} written: ${readings.map((r) => `${r.id}=${r.value}`).join(", ")}` : `no reading written for ${t.selectorKey} after the baseline (${o.mode === "down" ? `${reg.feedState(t.selectorKey).failures} failed ${reg.feedState(t.selectorKey).failures === 1 ? "read" : "reads"}, backing off` : o.mode === "disagree" ? `${reports.flatMap((r) => r.fetched.flatMap((f) => f.refusals)).length} refusal(s) from the cross-read` : "the source had nothing newer than its cadence allows"})` });
     const kind = `bt-feed-${o.mode}`;
     const alerts = reg.alertsSince(0).map((a) => `${a.kind}: ${a.text}`);
     checks.push({ id: "alert", ok: alerts.some((a) => a.startsWith(`${kind}:`)), detail: alerts.some((a) => a.startsWith(`${kind}:`)) ? `${kind} raised (${raised.length} new this check)` : `no ${kind} alert (raised: ${alerts.map((a) => a.split(":")[0]).join(", ") || "none"})` });
     checks.push({ id: "status", ok: feedRow?.state === o.mode, detail: feedRow ? `status/status.json shows ${t.selectorKey} as "${feedRow.state}" — ${feedRow.why}` : "status/status.json has no row for the selector" });
     const units = reg.receipts(t.mint).filter((b) => b.units > 0);
     const executed = reports.flatMap((r) => r.executed).filter((x) => x.outcome === "confirmed" || x.outcome === "dry-run");
-    checks.push({ id: "no-crank", ok: units.length === 0 && executed.length === 0 && reg.pending(t.mint).length === 0, detail: units.length || executed.length ? `${units.length} receipt(s) with units, ${executed.length} crank(s) executed` : "no receipt with units, nothing pending, nothing executed" });
+    checks.push({ id: "no-crank", ok: units.length === 0 && executed.length === 0 && reg.pending(t.mint).length === 0, detail: units.length || executed.length ? `${units.length} ${units.length === 1 ? "receipt" : "receipts"} with units, ${executed.length} ${executed.length === 1 ? "crank" : "cranks"} executed` : "no receipt with units, nothing pending, nothing executed" });
     return { ok: checks.every((c) => c.ok), feed: o.feed, mode: o.mode, selectorKey: t.selectorKey, ticker, ranAt: new Date(now).toISOString(), checks, status: feedRow, alerts, scratch: { db: dbFile, site } };
   } finally { reg.close(); }
 }

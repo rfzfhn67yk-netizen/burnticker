@@ -25,7 +25,7 @@ describe("launch gate (website brief §1: no wizard flash before the gate resolv
     assert.deepEqual(open, { kind: "open", cluster: "mainnet" }); assert.equal(wizardMayRender(open), true);
     for (const s of [launchGateFromCatalogue({ launches: { creators: false } }), launchGateFromCatalogue(null, "catalogue HTTP 502"), launchGateFromCatalogue("nope")]) assert.equal(wizardMayRender(s), false, JSON.stringify(s));
     assert.deepEqual(launchGateFromCatalogue(null, "catalogue HTTP 502"), { kind: "unavailable", detail: "catalogue HTTP 502" });
-    assert.equal(closedNetworkLine("devnet"), "This host currently shows devnet information."); assert.equal(closedNetworkLine(null), "");
+    assert.equal(closedNetworkLine("devnet"), "This site is showing devnet."); assert.equal(closedNetworkLine(null), "");
   });
   test("the launch page returns the gate component before the wizard, and starts in the loading state", () => {
     const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
@@ -104,8 +104,8 @@ describe("$DEFICIT before launch (website brief §1)", () => {
     for (const a of trade) { assert.doesNotMatch(a, /href=/, a); assert.match(a, /aria-disabled="true"/); assert.match(a, /not available/); }
     assert.match(html, /var LINKS = \{ trade: "" \}/);
     assert.doesNotMatch(html, /awaiting the keeper's status\.json|No receipts loaded/);
-    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY["not-launched"].heading}: \\$DEFICIT is not launched yet`));
-    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}: the live figures could not be read`));
+    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY["not-launched"].heading}\\. \\$DEFICIT has not launched yet`));
+    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}\\. The live figures could not be read`));
   });
   test("the shared EmptyState replaces the ad-hoc loading / error lines on the coins, pair, coin, trust, operator, check and leagues pages", () => {
     for (const f of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/check/page.tsx", "src/app/burnticker/leagues/page.tsx"]) {
@@ -143,8 +143,8 @@ describe("one current-status source (website brief §4)", () => {
     const now0 = buildCurrentStatus({ env: {}, chain: facts(0), now: 0 });
     const main = now0.upgradeAuthority.find((u) => u.cluster === "mainnet")!;
     assert.equal(main.timeLockSecs, 0); assert.equal(main.timeLockSource, "chain"); assert.equal(main.plannedTimeLockSecs, 172800);
-    assert.equal(main.line, "mainnet Squads time lock: 0 (none) now, read from chain; 48 h planned (around 2026-10-23).");
-    assert.match(main.why, /owner decision 2026-10-11/i);
+    assert.equal(main.line, "The mainnet Squads time lock is 0 (none) today, read from chain. The plan is 48 h from around 2026-10-23.");
+    assert.match(main.why, /owner decided on 2026-10-11/i);
     assert.equal(now0.releaseRequirements.find((r) => r.id === "time-lock")!.status, "open");
     assert.equal(buildCurrentStatus({ env: {}, chain: facts(172800), now: 0 }).releaseRequirements.find((r) => r.id === "time-lock")!.status, "done");
     const down = buildCurrentStatus({ env: {}, chain: facts(null), now: 0 }).upgradeAuthority.find((u) => u.cluster === "mainnet")!;
@@ -153,9 +153,9 @@ describe("one current-status source (website brief §4)", () => {
   test("design, deployed and historical are separate; mainnet programs read 'deployed on mainnet' (2026-10-11 record); host wiring is its own line; every summary line is lint-clean", async () => {
     const { buildCurrentStatus } = await import("@/lib/burnticker/currentStatus");
     const s = buildCurrentStatus({ env: { BURNTICKER_CLUSTER: "devnet" }, chain: {}, now: 0 });
-    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.equal(p.mainnet.line, "deployed on mainnet"); assert.equal(p.devnet.deployed, true); }
+    for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.equal(p.mainnet.line, "It is deployed on mainnet."); assert.equal(p.devnet.deployed, true); }
     assert.equal(s.networks.find((n) => n.cluster === "mainnet")!.deployment, "deployed");
-    assert.match(s.host.line, /no program id is wired on this host/);
+    assert.match(s.host.line, /^This site is showing devnet\. No program is connected on this site\. Creator launches are (open|closed)\.$/);
     assert.ok(s.design.length && s.historical.length && s.historical.every((h) => fs.existsSync(h.path.replace(/\/$/, ""))), "history links point at files that exist");
     assert.ok(s.reviews.every((r) => r.findings.every((f) => f.fix && f.recheck && f.deployed)), "every finding has fix, re-check and deployed statuses");
     assert.ok(s.settlement.some((x) => /GFDEBTN/.test(x.check) && /quarter/.test(x.check)), "the FRED comparison is stated as quarterly");
@@ -181,7 +181,7 @@ describe("verification words and the featured receipt (website brief §3/§5)", 
     const { verdictOf, checkStatus } = await import("@/lib/burnticker/verificationStatus");
     assert.equal(verdictOf(all()).verdict, "verified");
     const partly = verdictOf(all({ rules: { ok: null, detail: "no rules file given; the on-chain hash is …" }, source: { ok: null, detail: "feed x: this page re-fetches the Treasury feed only" } }));
-    assert.equal(partly.verdict, "partly verified"); assert.equal(partly.counts["not checked"], 2); assert.match(partly.line, /2 not checked/);
+    assert.equal(partly.verdict, "partly verified"); assert.equal(partly.counts["not checked"], 2); assert.match(partly.line, /2 were not checked/);
     const down = verdictOf([{ id: "tx", label: "tx", ok: null, detail: "the RPC did not answer: fetch failed" }]);
     assert.equal(down.verdict, "could not check"); assert.match(down.line, /not evidence that the receipt is invalid/); assert.equal(down.counts.unavailable, 1);
     const src = verdictOf(all({ source: { ok: null, detail: "the source could not be fetched from here: Treasury HTTP 503" } }));
@@ -323,7 +323,7 @@ describe("the homepage around five questions, and an honest leagues directory (w
     // site audit #9 (2026-10-11): one plain banner, then a compact sport → leagues list while no league has a coin
     assert.match(p, /data-prelaunch-banner>\s*<p className="font-medium text-neutral-100">No team coin has launched yet\.<\/p>/);
     assert.match(p, /\{empty \? \(\s*<dl className="space-y-3" data-leagues-compact>/);
-    assert.match(p, /Example data · illustrative coins and counts, not live/);
+    assert.match(p, /Example only\. These coins and counts are not live data\./);
     assert.doesNotMatch(p, /launch one|Launch the first/i);
   });
 });
@@ -375,11 +375,11 @@ describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'no
   }
   test("the joined object: decoded None says immutable; no live read uses the verified-build record, labelled as a record", async () => {
     const base = buildCurrentStatus({ env: {}, chain: {}, now: 0 });
-    for (const p of base.programs) { assert.equal(p.devnet.authoritySource, "verified-build"); assert.match(upgradeAuthorityText(p.devnet), /recorded in verified-build\.json/); }
+    for (const p of base.programs) { assert.equal(p.devnet.authoritySource, "verified-build"); assert.match(upgradeAuthorityText(p.devnet), /as recorded in verified-build\.json/); }
     const none = await readChainFacts("devnet", rpcWith({ value: [programData("none")] }), null, [PROG], 0);
     const facts: ChainFacts = { ...none, programs: Object.fromEntries(base.programs.map((p) => [p.programId, none.programs[PROG]])) };
-    for (const p of buildCurrentStatus({ env: {}, chain: { devnet: facts }, now: 0 }).programs) { assert.equal(p.devnet.authoritySource, "chain"); assert.equal(upgradeAuthorityText(p.devnet), "no upgrade authority (immutable; read from chain)"); }
-    assert.equal(upgradeAuthorityText({ upgradeAuthority: null, authoritySource: "verified-build" }), "upgrade authority not recorded");
+    for (const p of buildCurrentStatus({ env: {}, chain: { devnet: facts }, now: 0 }).programs) { assert.equal(p.devnet.authoritySource, "chain"); assert.equal(upgradeAuthorityText(p.devnet), "There is no upgrade authority, so the program is immutable. This was read from chain."); }
+    assert.equal(upgradeAuthorityText({ upgradeAuthority: null, authoritySource: "verified-build" }), "The upgrade authority is not recorded.");
   });
   test("renderers use the one wording function, never a bare `?? \"none\"`", () => {
     const r = fs.readFileSync("src/app/burnticker/_components/CurrentStatusSummary.tsx", "utf8");
@@ -395,17 +395,17 @@ describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'no
     for (const p of s.programs) { assert.equal(p.mainnet.deployed, true); assert.equal(p.mainnet.source, "verified-build"); assert.doesNotMatch(p.mainnet.line, /not deployed|unknown/); }
     assert.ok(s.lines.every((l) => !/not deployed on mainnet/.test(l)), "no summary line says not deployed");
     // the pure state function: no record + failed read = unknown; no record + empty read = not deployed; a live read wins over the record
-    assert.deepEqual(mainnetDeployment(false, failed, base.programs[0].programId), { deployed: null, source: "unavailable", line: "mainnet deployment unknown (the chain read failed)" });
+    assert.deepEqual(mainnetDeployment(false, failed, base.programs[0].programId), { deployed: null, source: "unavailable", line: "Its mainnet deployment is unknown because the chain read failed." });
     const emptyRpc = { call: async <T,>(_m: string, p: unknown[]) => ({ value: (p[0] as string[]).map(() => null) }) as unknown as T };
     const ok = await readChainFacts("mainnet", emptyRpc, null, base.programs.map((p) => p.programId), 0);
-    assert.deepEqual(mainnetDeployment(false, ok, base.programs[0].programId), { deployed: false, source: "chain", line: "not deployed on mainnet yet" });
+    assert.deepEqual(mainnetDeployment(false, ok, base.programs[0].programId), { deployed: false, source: "chain", line: "It is not deployed on mainnet yet." });
   });
   test("a devnet read that failed before the Program accounts is unavailable too, with the dated verified-build record beside it", async () => {
     const base = buildCurrentStatus({ env: {}, chain: {}, now: 0 });
     const failed = await readChainFacts("devnet", { call: async () => { throw new Error("429"); } }, null, base.programs.map((p) => p.programId), 0);
     for (const p of buildCurrentStatus({ env: {}, chain: { devnet: failed }, now: 0 }).programs) {
       assert.equal(p.devnet.authoritySource, "unavailable");
-      assert.match(upgradeAuthorityText(p.devnet), /^upgrade authority unavailable — chain read failed; last recorded in verified-build\.json \(2026-10-11\): \w+/);
+      assert.match(upgradeAuthorityText(p.devnet), /^The upgrade authority is unavailable because the chain read failed\. The last value recorded in verified-build\.json \(2026-10-11\) is \w+/);
     }
   });
 });

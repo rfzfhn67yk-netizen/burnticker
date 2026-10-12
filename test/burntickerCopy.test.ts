@@ -45,7 +45,7 @@ describe("the landing page (site/burnticker/index.html)", () => {
     // review 2 §2: "Launch one." is a launch CTA — hidden until the catalogue says creator launches are open (data-launch-cta)
     assert.match(html, /<p class="sub"><span data-launch-cta>Launch one\. <\/span>Follow the season\.<\/p>/);
     // audit 4 BT-21: search and social previews describe the pre-launch state; they never invite launching while launches are closed
-    assert.match(html, /<meta name="description" content="Coins that burn on real-world results — with receipts\. Pre-launch: creator launches are closed; inspect a real devnet burn/);
+    assert.match(html, /<meta name="description" content="Coins that burn on real-world results, with receipts\. Burnticker is in pre-launch, and creator launches are closed\. You can inspect a real devnet burn/);
     assert.doesNotMatch(/<meta (?:name|property)="(?:description|og:description|twitter:description)" content="([^"]*)"/g.exec(html)?.[0] ?? "", /Launch one/);
   });
   test("door 2 is generated from the leagues index: every league, never NFL-first, soccer included, no drift", () => {
@@ -113,12 +113,12 @@ describe("the landing page (site/burnticker/index.html)", () => {
   test("Seasons: no illustrative scoreboards on the homepage any more (site audit #7); the leagues page keeps its labelled example", () => {
     assert.doesNotMatch(html, /<div class="board">|class="tape"|Illustrative example/);
     const l = fs.readFileSync("src/app/burnticker/leagues/page.tsx", "utf8");
-    assert.match(l, /Example data · illustrative coins and counts, not live/);
+    assert.match(l, /Example only\. These coins and counts are not live data\./);
   });
   test("the cold read's edits (docs/launch/gtm/COLD-READ.md): the one-line definition stays; the safeguards it asked for moved to the trust page", async () => {
     // UX report 3 item 10: the definition's words are unchanged; "burns" and "receipt" carry their glossary sentence as context help (<abbr>)
     const def = /<p class="def">([\s\S]*?)<\/p>/.exec(html)![1];
-    assert.equal(def.replace(/<[^>]+>/g, ""), "A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought. The transaction is the receipt.");
+    assert.equal(def.replace(/<[^>]+>/g, ""), "Burnticker is a Solana memecoin launchpad. Each coin has one locked rule. When its result settles, the coin's own trading fees buy it back on its own pool, and a program burns what they bought. The transaction is the receipt.");
     const { SAFEGUARDS, WHO_GETS_WHAT } = await import("@/lib/burnticker/safeguards");
     const sg = SAFEGUARDS.map((x) => x.text).join(" "), wg = WHO_GETS_WHAT.map((x) => x.text).join(" ");
     assert.match(sg, /a short list of up to three approved accounts can be required instead, for at most 90 days/);

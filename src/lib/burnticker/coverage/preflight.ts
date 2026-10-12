@@ -76,35 +76,35 @@ async function readLive(feed: Feed, now: number, fetchImpl: FetchLike): Promise<
 export async function preflightSelector(rule: BurnRule, deps: PreflightDeps = {}): Promise<PreflightResult> {
   const now = deps.now ?? Date.now();
   const none = { id: selectorOf(rule), operator: null, lastReading: null, error: null };
-  if (rule.oracle === "kalshi") return result(rule, now, { primary: { ...none, operator: "Kalshi" } }, { code: "kalshi-not-settlement", reason: "Kalshi is not a settlement source: its Developer Agreement and Data Terms forbid using its API or data to settle products. Use a primary source with an independent cross-read, or a Polymarket market" });
+  if (rule.oracle === "kalshi") return result(rule, now, { primary: { ...none, operator: "Kalshi" } }, { code: "kalshi-not-settlement", reason: "Kalshi cannot settle a coin. Its Developer Agreement and Data Terms forbid using its API or data to settle products. Use a primary source with an independent second source, or a Polymarket market." });
   if (rule.oracle === "catalogue" && rule.series && nativeSourceById(rule.series)) return preflightNative(rule, deps, now);
   if (rule.oracle === "catalogue") return preflightCatalogue(rule, deps, now);
   if (rule.oracle === "polymarket") return preflightPolymarket(rule, deps, now);
   if (rule.oracle === "derby") return preflightDerby(rule, deps, now);
-  return result(rule, now, { primary: none }, { code: "stub-oracle", reason: `oracle ${rule.oracle} is a stub adapter: nothing can be read from it` });
+  return result(rule, now, { primary: none }, { code: "stub-oracle", reason: `The ${rule.oracle} source is only a placeholder, so nothing can be read from it.` });
 }
 
 async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: number): Promise<PreflightResult> {
   const feed = rule.series ? feedById(rule.series, {}, deps.root) : null;
-  if (!feed) return result(rule, now, { primary: { id: rule.series ?? "?", operator: null, lastReading: null, error: null } }, { code: "unknown-selector", reason: `no catalogue source ${rule.series}` });
+  if (!feed) return result(rule, now, { primary: { id: rule.series ?? "?", operator: null, lastReading: null, error: null } }, { code: "unknown-selector", reason: `There is no catalogue source called ${rule.series}.` });
   const all = deps.sources ?? loadSourceEntries(deps.root).map(describeEntry);
   const base = feed.config.id.split(":")[0];
   const desc = all.find((s) => s.id === base) ?? describeEntry({ ...feed.config, id: base });
   const primaryBase = { id: feed.id, operator: desc.operator, lastReading: null, error: null };
   const elig = primaryEligibility(desc);
-  if (!elig.ok) return result(rule, now, { primary: primaryBase }, { code: "not-primary", reason: `${feed.id} cannot settle a coin: ${elig.why}` });
+  if (!elig.ok) return result(rule, now, { primary: primaryBase }, { code: "not-primary", reason: `${feed.id} cannot settle a coin. The reason is: ${elig.why}.` });
   const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
   let pr: { readings: SettledEvent[]; refusals: string[] };
-  try { pr = await readLive(feed, now, fetchImpl); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now: ${(e as Error).message.slice(0, 160)}`, status: 502 }); }
+  try { pr = await readLive(feed, now, fetchImpl); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${(e as Error).message.slice(0, 160)}`, status: 502 }); }
   const last = pr.readings[pr.readings.length - 1] ?? null;
   const next = nextExpected(feed.config, last?.id ?? null, now);
   const primary = { ...primaryBase, lastReading: reading(last), error: pr.refusals.length ? pr.refusals.slice(0, 2).join("; ") : null };
-  if (!last) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-readings", reason: `${feed.id} returned no complete reading${pr.refusals.length ? ` (${pr.refusals[0]})` : ""}`, status: 502 });
+  if (!last) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-readings", reason: `${feed.id} returned no complete reading.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
   // A read that parses but stops short (a plausibility refusal, a frozen endpoint) leaves an old last reading: the schedule says a newer
   // one was due more than STALE_GRACE_MS ago → refused, with the parser's refusal as the reason (FRED's full-history CSV, 10-10).
-  if (next.at && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id} but the next was due ${next.at.slice(0, 10)}${pr.refusals.length ? ` (${pr.refusals[0]})` : ""}`, status: 502 });
+  if (next.at && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id}, but the next one was due on ${next.at.slice(0, 10)}.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
   const crosses = crossReadsOf(desc, all);
-  if (!crosses.length) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-cross-read", reason: `${feed.id} has no independent cross-read of the same fact (another operator on another domain), so it cannot settle a coin on its own reading` });
+  if (!crosses.length) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-cross-read", reason: `${feed.id} has no independent second source for the same fact, run by another operator on another domain. So it cannot settle a coin on its own reading.` });
   const feeds = catalogue(deps.root);
   let lastErr: string | null = null;
   for (const c of crosses) {
@@ -117,10 +117,10 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
     const latest = cmp.comparisons[cmp.comparisons.length - 1] ?? null;
     const crossRead = { id: c.id, operator: c.operator, lastReading: reading(cr.readings[cr.readings.length - 1]), error: null };
     const agreementBasis = latest ? `${latest.period}: ${feed.id} ${latest.primary} vs ${c.id} ${latest.crossRead} (${cmp.basis})` : `no period both reads cover yet (${cmp.basis}); compared at the next shared period`;
-    if (latest && !latest.agree) return result(rule, now, { primary, crossRead, nextExpectedAt: next.at, nextExpectedBasis: next.basis, agreement: false, agreementBasis }, { code: "disagreement", reason: `the primary and its cross-read disagree on ${latest.period}: ${feed.id} ${latest.primary} vs ${c.id} ${latest.crossRead}` });
+    if (latest && !latest.agree) return result(rule, now, { primary, crossRead, nextExpectedAt: next.at, nextExpectedBasis: next.basis, agreement: false, agreementBasis }, { code: "disagreement", reason: `The primary source and its second source disagree on ${latest.period}. ${feed.id} says ${latest.primary}, and ${c.id} says ${latest.crossRead}.` });
     return result(rule, now, { primary, crossRead, nextExpectedAt: next.at, nextExpectedBasis: next.basis, agreement: latest ? true : null, agreementBasis }, null);
   }
-  return result(rule, now, { primary, crossRead: { id: crosses[0].id, operator: crosses[0].operator, lastReading: null, error: lastErr }, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "cross-read-unreadable", reason: `no cross-read of ${feed.id} could be read just now (${lastErr ?? "no fixture or config"})`, status: 502 });
+  return result(rule, now, { primary, crossRead: { id: crosses[0].id, operator: crosses[0].operator, lastReading: null, error: lastErr }, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "cross-read-unreadable", reason: `No second source for ${feed.id} could be read just now. The error was: ${lastErr ?? "no saved sample or setup"}`, status: 502 });
 }
 
 /**
@@ -134,11 +134,11 @@ async function preflightNative(rule: BurnRule, deps: PreflightDeps, now: number)
   const all = deps.sources ?? loadSourceEntries(deps.root).map(describeEntry);
   const desc = all.find((s) => s.id === src.descriptorId);
   const primaryBase = { id: src.id, operator: desc?.operator ?? null, lastReading: null, error: null };
-  if (!desc) return result(rule, now, { primary: primaryBase }, { code: "unknown-selector", reason: `no descriptor ${src.descriptorId} in sources.json for ${src.id}` });
+  if (!desc) return result(rule, now, { primary: primaryBase }, { code: "unknown-selector", reason: `The source list has no entry ${src.descriptorId} for ${src.id}.` });
   const elig = primaryEligibility(desc);
-  if (!elig.ok) return result(rule, now, { primary: primaryBase }, { code: "not-primary", reason: `${src.id} cannot settle a coin: ${elig.why}` });
+  if (!elig.ok) return result(rule, now, { primary: primaryBase }, { code: "not-primary", reason: `${src.id} cannot settle a coin. The reason is: ${elig.why}.` });
   const cross = crossReadsOf(desc, all).find((c) => c.id === src.crossReadId) ?? null;
-  if (!cross) return result(rule, now, { primary: primaryBase }, { code: "no-cross-read", reason: `${src.id}'s cross-read ${src.crossReadId ?? "(none)"} is not an independent read of the same fact (another operator on another domain)` });
+  if (!cross) return result(rule, now, { primary: primaryBase }, { code: "no-cross-read", reason: `${src.crossReadId ? `${src.id}'s second source, ${src.crossReadId},` : `${src.id} has no second source, so it`} is not an independent read of the same fact by another operator on another domain.` });
   const p = await src.preflight(now);
   const primary = { ...primaryBase, lastReading: p.last ? { ...p.last, result: null } : null };
   const crossRead = { id: cross.id, operator: cross.operator, lastReading: p.crossLast ? { ...p.crossLast, result: null } : null, error: null };
@@ -152,26 +152,26 @@ async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: num
   const id = selectorOf(rule);
   const primaryBase = { id: `polymarket:${id}`, operator: "Polymarket (Conditional Tokens on Polygon)", lastReading: null, error: null };
   const gammaBase = { id: "polymarket.gamma", operator: "Polymarket (Gamma API)", lastReading: null, error: null };
-  if (!pm) return result(rule, now, { primary: primaryBase }, { code: "primary-unreadable", reason: "no Polymarket client on this host", status: 502 });
+  if (!pm) return result(rule, now, { primary: primaryBase }, { code: "primary-unreadable", reason: "This site has no connection to Polymarket.", status: 502 });
   if (rule.market) {
     let m: GammaMarket | null;
-    try { m = await pm.marketByCondition(rule.market); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${rule.market}: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
-    if (!m) return result(rule, now, { primary: primaryBase }, { code: "unknown-selector", reason: `Polymarket does not know the market ${rule.market}` });
+    try { m = await pm.marketByCondition(rule.market); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${rule.market}. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+    if (!m) return result(rule, now, { primary: primaryBase }, { code: "unknown-selector", reason: `Polymarket does not know the market ${rule.market}.` });
     let chain;
-    try { chain = await pm.readChain(rule.market); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 160) } }, { code: "primary-unreadable", reason: `the payout vector of ${rule.market} could not be read on Polygon: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+    try { chain = await pm.readChain(rule.market); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 160) } }, { code: "primary-unreadable", reason: `The on-chain payout for ${rule.market} could not be read on Polygon. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
     const cr = chainResult(chain), gr = gammaResult(m);
     const at = settledAtOf(m) ?? new Date(now).toISOString();
     const primary = { ...primaryBase, lastReading: cr ? { id: rule.market, value: null, result: cr, at } : null };
     const crossRead = { ...gammaBase, lastReading: gr ? { id: rule.market, value: null, result: gr, at } : null };
     if (!cr) return result(rule, now, { primary, crossRead, nextExpectedAt: m.endDate, nextExpectedBasis: "the market's end date (Gamma); the reading is the payout vector once it is on chain", agreementBasis: "not resolved on chain yet" }, null);
     const agree = gr ? gr === cr : null;
-    if (agree === false) return result(rule, now, { primary, crossRead, agreement: false, agreementBasis: `chain ${cr} vs Gamma ${gr}` }, { code: "disagreement", reason: `the payout vector (${cr}) and Gamma's report (${gr}) disagree on ${rule.market}` });
+    if (agree === false) return result(rule, now, { primary, crossRead, agreement: false, agreementBasis: `chain ${cr} vs Gamma ${gr}` }, { code: "disagreement", reason: `The on-chain payout and Gamma's report disagree on ${rule.market}. The chain says ${cr}, and Gamma says ${gr}.` });
     return result(rule, now, { primary, crossRead, nextExpectedAt: null, nextExpectedBasis: "a one-shot market: resolved, nothing further", agreement: agree, agreementBasis: gr ? `chain ${cr} = Gamma ${gr}` : "Gamma does not report it resolved yet" }, null);
   }
   const since = new Date((pm.clock?.() ?? now) - 30 * 86_400_000).toISOString();
   let chainRead, gammaRead;
-  try { chainRead = await pm.settledSince(rule, since, { limitPages: 2 }); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 160) } }, { code: "primary-unreadable", reason: `the selector's settled markets could not be read on Polygon: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
-  try { gammaRead = await pm.gammaSettled(rule, since, 2); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${id}: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+  try { chainRead = await pm.settledSince(rule, since, { limitPages: 2 }); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 160) } }, { code: "primary-unreadable", reason: `This rule's settled markets could not be read on Polygon. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+  try { gammaRead = await pm.gammaSettled(rule, since, 2); } catch (e) { return result(rule, now, { primary: primaryBase, crossRead: { ...gammaBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `Gamma did not answer for ${id}. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
   const last = chainRead.events[chainRead.events.length - 1] ?? null;
   const g = last ? gammaRead.events.find((e) => e.id === last.id) ?? null : null;
   let nextAt: string | null = null;
@@ -181,7 +181,7 @@ async function preflightPolymarket(rule: BurnRule, deps: PreflightDeps, now: num
   const nb = nextAt ? "the earliest end date among the selector's open markets (Gamma)" : "no open market found for this selector";
   if (!last) return result(rule, now, { primary, crossRead, nextExpectedAt: nextAt, nextExpectedBasis: nb, agreementBasis: "no market of this selector settled on chain in the last 30 days" }, null);
   const agree = g ? g.result === last.result : null;
-  if (agree === false) return result(rule, now, { primary, crossRead, nextExpectedAt: nextAt, nextExpectedBasis: nb, agreement: false, agreementBasis: `${last.id}: chain ${last.result} vs Gamma ${g!.result}` }, { code: "disagreement", reason: `the payout vector and Gamma's report disagree on ${last.id} (${last.result} vs ${g!.result})` });
+  if (agree === false) return result(rule, now, { primary, crossRead, nextExpectedAt: nextAt, nextExpectedBasis: nb, agreement: false, agreementBasis: `${last.id}: chain ${last.result} vs Gamma ${g!.result}` }, { code: "disagreement", reason: `The on-chain payout and Gamma's report disagree on ${last.id}. The chain says ${last.result}, and Gamma says ${g!.result}.` });
   return result(rule, now, { primary, crossRead, nextExpectedAt: nextAt, nextExpectedBasis: nb, agreement: agree, agreementBasis: g ? `${last.id}: chain ${last.result} = Gamma ${g.result}` : `${last.id}: Gamma does not report it resolved` }, null);
 }
 
@@ -219,7 +219,7 @@ async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: numb
     } else if (value === null) why.push("no Hermes key on this host (BURNTICKER_PYTH_API_KEY)");
     if (value !== null) {
       const age = now / 1000 - publish;
-      if (age > (hours ? 4 * 86_400 : 2 * 3600)) return { id, operator, refusal: { code: "stale-primary", reason: `${u.symbol}: Pyth's latest value was published ${Math.round(age / 3600)} h ago`, status: 502 } };
+      if (age > (hours ? 4 * 86_400 : 2 * 3600)) return { id, operator, refusal: { code: "stale-primary", reason: `Pyth's latest value for ${u.symbol} was published ${Math.round(age / 3600)} hours ago.`, status: 502 } };
       return { id, operator, value, at: new Date(publish * 1000).toISOString(), route };
     }
   }
@@ -240,7 +240,7 @@ async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: numb
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = await redstonePrimary(await res.json(), u.redstone, REDSTONE_LATEST_URL);
       if (r.ok) {
-        if (now - r.timestampMs > 2 * 3600_000) return { id: `redstone:${u.redstone}`, operator: "RedStone", refusal: { code: "stale-primary", reason: `${u.symbol}: RedStone's latest packages are ${Math.round((now - r.timestampMs) / 3600_000)} h old`, status: 502 } };
+        if (now - r.timestampMs > 2 * 3600_000) return { id: `redstone:${u.redstone}`, operator: "RedStone", refusal: { code: "stale-primary", reason: `RedStone's latest data for ${u.symbol} is ${Math.round((now - r.timestampMs) / 3600_000)} hours old.`, status: 502 } };
         return { id: `redstone:${u.redstone}`, operator: "RedStone", value: r.value, at: new Date(r.timestampMs).toISOString(), route: "redstone" };
       }
       why.push(r.reason);
@@ -248,14 +248,14 @@ async function derbyPrimary(u: DerbyUnderlying, d: DerbyPreflightDeps, now: numb
   }
   const id = u.pyth ? `pyth:${u.pyth.slice(0, 12)}` : u.pool ? `raydium.twap:${u.pool}` : `redstone:${u.redstone}`;
   const operator = u.pyth ? "Pyth Data Association" : u.pool ? "Raydium pool (on-chain)" : "RedStone";
-  return { id, operator, refusal: { code: "primary-unreadable", reason: `${u.symbol}: no primary could be read just now (${why.join("; ") || "no route"})`, status: 502 } };
+  return { id, operator, refusal: { code: "primary-unreadable", reason: `No primary source for ${u.symbol} could be read just now. ${why.length ? `The reasons were: ${why.join("; ")}.` : "There is no way to read it."}`, status: 502 } };
 }
 
 async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number): Promise<PreflightResult> {
   const spec = rule.derby;
   const sel = rule.series ?? "derby";
   const none = { id: sel, operator: null, lastReading: null, error: null };
-  if (!spec) return result(rule, now, { primary: none }, { code: "unknown-selector", reason: "a derby rule needs its derby block" });
+  if (!spec) return result(rule, now, { primary: none }, { code: "unknown-selector", reason: "A derby rule must include its derby settings." });
   const d = deps.derby ?? {};
   const fetchImpl = d.fetchImpl ?? deps.fetchImpl ?? (fetch as unknown as FetchLike);
   const us = spec.selector === "coinvs" ? [spec.a, spec.b] : spec.selector === "price" ? [spec.u] : [spec.underlying];
@@ -268,15 +268,15 @@ async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number):
     if ("refusal" in pr) return result(rule, now, { primary: { id: pr.id, operator: pr.operator, lastReading: null, error: pr.refusal.reason }, crossRead: crossBase }, pr.refusal);
     const primary = { id: pr.id, operator: pr.operator, lastReading: { id: u.symbol, value: pr.value, result: null, at: pr.at }, error: null };
     let q;
-    try { q = await crossQuote(fetchImpl, u.cross); } catch (e) { return result(rule, now, { primary, crossRead: { ...crossBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `${u.symbol}: the cross-read ${u.cross} could not be read just now: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
-    if (!q) return result(rule, now, { primary, crossRead: crossBase }, { code: "no-cross-read", reason: `${u.symbol}: the cross-read ${u.cross} does not carry this asset, so it cannot settle a coin on Pyth's reading alone` });
+    try { q = await crossQuote(fetchImpl, u.cross); } catch (e) { return result(rule, now, { primary, crossRead: { ...crossBase, error: (e as Error).message.slice(0, 160) } }, { code: "cross-read-unreadable", reason: `The second source for ${u.symbol}, ${u.cross}, could not be read just now. The error was: ${(e as Error).message.slice(0, 120)}`, status: 502 }); }
+    if (!q) return result(rule, now, { primary, crossRead: crossBase }, { code: "no-cross-read", reason: `The second source for ${u.symbol}, ${u.cross}, does not carry this asset. So a coin cannot settle on Pyth's reading alone.` });
     const crossRead = { ...crossBase, lastReading: { id: u.symbol, value: q.usd, result: null, at: new Date(now).toISOString() } };
     const diff = Math.abs(Number(pr.value) - Number(q.usd)) / Math.max(Number(pr.value), Number(q.usd));
-    const line = `${u.symbol}: ${pr.id} ${pr.value} vs ${crossBase.id} ${q.usd} (${(diff * 100).toFixed(2)}% apart; bound ${DERBY_DISAGREEMENT_PP}%)`;
+    const line = `For ${u.symbol}, ${pr.id} says ${pr.value} and ${crossBase.id} says ${q.usd}. They are ${(diff * 100).toFixed(2)}% apart, and the limit is ${DERBY_DISAGREEMENT_PP}%.`;
     basis.push(line);
-    if (diff * 100 > DERBY_DISAGREEMENT_PP) return result(rule, now, { primary, crossRead, agreement: false, agreementBasis: basis.join(" · ") }, { code: "disagreement", reason: `the primary and its cross-read disagree: ${line}` });
+    if (diff * 100 > DERBY_DISAGREEMENT_PP) return result(rule, now, { primary, crossRead, agreement: false, agreementBasis: basis.join(" ") }, { code: "disagreement", reason: `The primary source and its second source disagree. ${line}` });
     first ??= { primary, crossRead };
   }
   const next = new Date(Math.floor(now / 86_400_000) * 86_400_000 + 86_400_000).toISOString();
-  return result(rule, now, { primary: first!.primary, crossRead: first!.crossRead, nextExpectedAt: next, nextExpectedBasis: "the next 00:00 UTC window boundary", agreement: true, agreementBasis: basis.join(" · ") }, null);
+  return result(rule, now, { primary: first!.primary, crossRead: first!.crossRead, nextExpectedAt: next, nextExpectedBasis: "the next 00:00 UTC window boundary", agreement: true, agreementBasis: basis.join(" ") }, null);
 }

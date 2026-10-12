@@ -75,10 +75,10 @@ export function VenueChip({ oracle }: { oracle: string }) {
 /** The bonding-curve bar: SOL raised of the threshold; graduated → full with the badge; not read → an empty bar and "—". */
 export function CurveBar({ c, compact = false }: { c: Pick<CoinCardData, "phase" | "progressPct" | "raised" | "threshold" | "quote" | "curveNote">; compact?: boolean }) {
   const pct = c.progressPct === null ? null : Math.max(0, Math.min(100, c.progressPct));
-  const label = c.phase === "graduated" ? "graduated · trades on Raydium" : c.phase === "migrating" ? "curve complete · migrating" : pct === null ? "bonding curve —" : `bonding curve ${pct.toFixed(pct < 10 ? 1 : 0)}%`;
+  const label = c.phase === "graduated" ? "graduated, trades on Raydium" : c.phase === "migrating" ? "curve complete, moving to Raydium" : pct === null ? "bonding curve not read" : `bonding curve ${pct.toFixed(pct < 10 ? 1 : 0)}%`;
   const detail = c.phase === "graduated" ? null : c.raised !== null && c.threshold !== null ? `${roundStr(c.raised)} / ${roundStr(c.threshold)} ${c.quote ?? "SOL"}` : null;
   return (
-    <div title={pct === null && c.phase !== "graduated" ? (c.curveNote || "curve progress is not read on this host") : undefined}>
+    <div title={pct === null && c.phase !== "graduated" ? (c.curveNote || "This site has not read the curve's progress.") : undefined}>
       <div className={`flex items-baseline justify-between gap-2 ${compact ? "text-[11px]" : "text-xs"} text-neutral-400`}>
         <span className="font-mono uppercase tracking-wide">{label}</span>{detail && <span className="tabular-nums">{detail}</span>}
       </div>
@@ -104,21 +104,21 @@ export function CoinCard({ c, href, now, prelaunch = false }: { c: CoinCardData;
           <div className="flex items-center gap-1.5 flex-wrap">
             <VenueChip oracle={c.oracle} />
             {c.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}
-            {c.status === "draft" && !prelaunch && <span className="bt-chip bt-chip-draft" title="registered, not launched: nothing trades yet">draft</span>}
+            {c.status === "draft" && !prelaunch && <span className="bt-chip bt-chip-draft" title="Registered but not launched. Nothing trades yet.">draft</span>}
             {c.pairId && <span className="bt-chip">pair</span>}
-            {c.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{c.badge}</span>}
+            {c.badge && <span className="bt-chip bt-chip-window" title="The coin's window, fixed in its rule">{c.badge}</span>}
             {!prelaunch && <span className="ml-auto text-[11px] text-neutral-500" title={c.launchedAt ?? "not launched"}>{c.launchedAt ? ago(c.launchedAt, t) : "not launched"}</span>}
           </div>
           <h3 className="mt-1 truncate text-base font-semibold leading-tight">{c.name || "Coin name"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>
           <p className="mt-0.5 line-clamp-2 text-sm text-neutral-300">{c.oneLiner}</p>
-          <p className="mt-0.5 text-[10px] leading-tight text-neutral-500">Not affiliated with any team, league, candidate, agency or market.</p>
+          <p className="mt-0.5 text-[10px] leading-tight text-neutral-500">This coin is not affiliated with any team, league, candidate, agency or market.</p>
         </div>
       </div>
       {!prelaunch && <><div className="mt-3"><CurveBar c={c} compact /></div>
       <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
         <div><dt className="text-neutral-500">burns</dt><dd className="font-mono tabular-nums text-neutral-200">{c.burns}</dd></div>
         <div><dt className="text-neutral-500">last burn</dt><dd className="font-mono text-neutral-200">{ago(c.lastBurnAt, t)}</dd></div>
-        <div><dt className="text-neutral-500">next result</dt><dd className="font-mono text-neutral-200" title={c.nextAt ?? "no scheduled result known"}>{until(c.nextAt, t)}</dd></div>
+        <div><dt className="text-neutral-500">next result</dt><dd className="font-mono text-neutral-200" title={c.nextAt ?? "No result is scheduled yet."}>{until(c.nextAt, t)}</dd></div>
       </dl></>}
     </article>
   );

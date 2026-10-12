@@ -39,12 +39,12 @@ export function findToken(p: Platform, id: string): TokenRow | null {
 const links = (t: TokenRow) => ({ self: `${API_PREFIX}/tokens/${t.ticker}`, receipts: `${API_PREFIX}/tokens/${t.ticker}/receipts`, page: `/burnticker/t/${t.ticker}` });
 
 export function v1Catalogue(now = Date.now(), env: Record<string, string | undefined> = process.env): ApiResult {
-  return ok({ ...catalogueSources(now, { includeConfig: true }), launches: catalogueLaunches(env), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series (tier 1, adjudicated markets) are searched live; settled results only, prices display-only" }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket binary markets (tier 1, adjudicated markets) are searched live on Gamma; each result is read from the Conditional Tokens payout vector on Polygon; prices display-only" } });
+  return ok({ ...catalogueSources(now, { includeConfig: true }), launches: catalogueLaunches(env), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series are tier 1 adjudicated markets, searched live. Only settled results count, and prices are shown for display only." }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket yes-or-no markets are tier 1 adjudicated markets, searched live on Gamma. Each result is read from the on-chain payout on Polygon. Prices are shown for display only." } });
 }
 
 export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()): ApiResult {
   const feed = feedById(decode(id));
-  if (!feed) return fail(404, `no catalogue source ${id}`);
+  if (!feed) return fail(404, `There is no catalogue source called ${id}.`);
   const tokens = q.get("tokens"), frac = q.get("fractionOfPool");
   const perUnit = tokens !== null ? { tokens: Number(tokens) } : { fractionOfPool: frac !== null ? Number(frac) : 0.02 };
   let locked: LockedRule;
@@ -52,8 +52,8 @@ export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()
     locked = lockRule({ schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: feed.id, market: null, filter: {}, kind: "scalar", scalar: { unit: feed.unit!.size, perUnit, baseline: feed.baseline!, direction: feed.direction! }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: tokens !== null ? { share: 0.2, vestDays: 365, cliffDays: 0 } : null });
   } catch (e) { return fail(400, (e as Error).message); }
   let pv;
-  try { pv = previewFromFixture(feed, locked.rule, now); } catch (e) { return fail(404, `${feed.id} has no fixture to preview: ${(e as Error).message.slice(0, 120)}`); }
-  return ok({ id: feed.id, title: feed.title, tier: feed.tier, tierLabel: TIER_LABEL[feed.tier], launchable: feed.launchable, rule: locked.rule, sha256: locked.sha256, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), window: pv.window, totals: pv.totals, perMonth: pv.perMonth, rows: pv.rows, lastReading: pv.lastReading, fixtureFetchedAt: loadFixture(feed).fetchedAt, sentence: `${backtestSentence(pv)} (from the source's frozen fixture)`, note: "display-grade totals; receipts use the keeper's exact integer spend", config: publicConfig(feed.config) });
+  try { pv = previewFromFixture(feed, locked.rule, now); } catch (e) { return fail(404, `${feed.id} has no saved sample to preview. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
+  return ok({ id: feed.id, title: feed.title, tier: feed.tier, tierLabel: TIER_LABEL[feed.tier], launchable: feed.launchable, rule: locked.rule, sha256: locked.sha256, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), window: pv.window, totals: pv.totals, perMonth: pv.perMonth, rows: pv.rows, lastReading: pv.lastReading, fixtureFetchedAt: loadFixture(feed).fetchedAt, sentence: `${backtestSentence(pv)} This comes from the source's saved sample.`, note: "These totals are for display only. Receipts use the keeper's exact whole-number spend.", config: publicConfig(feed.config) });
 }
 
 export const v1KalshiSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiSearch(p, { q: q.get("q"), category: q.get("category"), series: q.get("series") });
@@ -76,7 +76,7 @@ export const v1PolymarketSearch = (p: Platform, q: URLSearchParams): Promise<Api
 /** POST /polymarket/backtest — a Polymarket rule's back-test from Gamma's closed markets (the same pipeline as /kalshi/backtest). */
 export async function v1PolymarketBacktest(p: Platform, body: Record<string, unknown>): Promise<ApiResult> {
   const oracle = (body.rule as { oracle?: unknown } | null | undefined)?.oracle;
-  if (oracle !== "polymarket") return fail(400, 'rule.oracle must be "polymarket" here (Kalshi and catalogue rules: POST /kalshi/backtest)');
+  if (oracle !== "polymarket") return fail(400, 'This back-test takes Polymarket rules only. Send Kalshi and catalogue rules to POST /kalshi/backtest.');
   return runBacktest(p, body);
 }
 
@@ -93,12 +93,12 @@ export function v1Validate(body: Record<string, unknown>): ApiResult {
 /** The unsigned launch transactions + the review payload the wizard shows. Requires the caller's own mint public key. */
 export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>): Promise<ApiResult> {
   const mint = typeof body.mint === "string" ? body.mint.trim() : "";
-  if (!mint) return fail(400, "mint is required: generate a fresh mint keypair yourself and send its PUBLIC key (the secret never leaves your machine)", { problems: ["mint is required"] });
+  if (!mint) return fail(400, "A mint is required. Make a new mint keypair yourself and send its public key. The secret key never leaves your machine.", { problems: ["A mint is required."] });
   const register = body.register !== false;
   const blockhash = typeof body.recentBlockhash === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.recentBlockhash) ? body.recentBlockhash : null;
   const r = await prepareLaunch(p, body, { register, mint });
   if ("error" in r) return r.error;
-  if (!("ok" in r)) return fail(400, "rivalry pairs launch through the wizard's pair flow");
+  if (!("ok" in r)) return fail(400, "Rivalry pairs launch through the pair steps on the launch page.");
   const { bundle, token, seriesTitle, locked, preflight } = r.ok;
   const transactions = compileUnsigned(bundle.transactions, bundle.creator, blockhash);
   return ok({
@@ -109,15 +109,15 @@ export async function v1LaunchBundle(p: Platform, body: Record<string, unknown>)
       addresses: bundle.addresses, allocation: bundle.allocation, fees: bundle.fees, burnPoolAuthority: bundle.burnPoolAuthority, notes: bundle.notes,
       disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(locked.rule.oracle) },
       operator: operatorPowersSummary(loadPowersRegister()),
-      acknowledgements: ["I understand the rule cannot be changed by anyone, including me", "I am not promising anyone anything (no returns, no price talk)"],
+      acknowledgements: ["I understand that nobody can change the rule, including me.", "I am not promising anyone anything. I make no claims about returns or price."],
     },
     transactions,
     registered: token ? { status: token.status, ticker: token.ticker, mint: token.mint } : null,
     next: [
-      ...(bundle.ready ? [] : ["NOT SIGNABLE YET: see `pending` — nothing should be sent until ready is true"]),
-      ...(transactions.some((t) => t.blockhashPlaceholder) ? ["replace the placeholder recentBlockhash with a fresh one from your RPC (or pass recentBlockhash), then sign"] : []),
-      "sign each transaction with the creator wallet AND your mint keypair (signers: creator + mint)",
-      "send it, then POST /launch/confirm { mint, signature } — settlements after that moment count",
+      ...(bundle.ready ? [] : ["This launch cannot be signed yet. The pending list says what is missing. Send nothing until ready is true."]),
+      ...(transactions.some((t) => t.blockhashPlaceholder) ? ["Replace the placeholder blockhash with a recent one from your RPC, or pass recentBlockhash in the request. Then sign."] : []),
+      "Sign each transaction with the creator wallet and with your mint keypair.",
+      "Send the signed transaction. Then post the mint and the signature to /launch/confirm. Results settled after that moment count.",
     ],
     stubs: p.stubs,
     preflight,
@@ -134,7 +134,7 @@ export async function v1Confirm(p: Platform, body: Record<string, unknown>): Pro
 
 export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
   const status = q.get("status");
-  if (status !== null && !["draft", "live", "paused", "retired", "expired"].includes(status)) return fail(400, "status must be draft, live, paused, retired or expired");
+  if (status !== null && !["draft", "live", "paused", "retired", "expired"].includes(status)) return fail(400, "The status must be draft, live, paused, retired or expired.");
   p.registry.expireDrafts();
   const limit = Math.min(200, Math.max(1, Number(q.get("limit") ?? 100) || 100)), offset = Math.max(0, Number(q.get("offset") ?? 0) || 0);
   const all = p.registry.tokens((status as TokenStatus | null) ?? undefined);
@@ -151,14 +151,14 @@ export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
 
 export async function v1Token(p: Platform, id: string): Promise<ApiResult> {
   const t = findToken(p, id);
-  if (!t) return fail(404, `no token ${decode(id)}`);
+  if (!t) return fail(404, `There is no token called ${decode(id)}.`);
   const d = await tokenPageData(p, t);
   return ok({ status: d.status, receipts: d.receipts, readings: d.readings.map((r) => ({ id: r.id, at: r.at, result: r.result, value: r.value, title: r.title, sourceUrl: r.sourceUrl, settlementSourceUrl: r.settlementSourceUrl, method: r.method, proof: r.proof ?? null, attestedBy: r.attestedBy })), rulesText: d.rulesText, stubs: d.stubs });
 }
 
 export async function v1Receipts(p: Platform, id: string): Promise<ApiResult> {
   const t = findToken(p, id);
-  if (!t) return fail(404, `no token ${decode(id)}`);
+  if (!t) return fail(404, `There is no token called ${decode(id)}.`);
   const d = await tokenPageData(p, t, Date.now(), { live: false });
   return ok({ ticker: t.ticker, mint: t.mint, rulesSha256: t.rulesSha, count: d.receipts.length, receipts: d.receipts });
 }
@@ -166,11 +166,11 @@ export async function v1Receipts(p: Platform, id: string): Promise<ApiResult> {
 /** Server-side verification: the same checks as the SDK's verifyReceipt, with the platform's Kalshi client and program client. */
 export async function v1Verify(p: Platform, id: string, eventId: string, o: { fetchImpl?: FetchLike; rpcFetch?: RpcFetchLike; now?: number } = {}): Promise<ApiResult> {
   const t = findToken(p, id);
-  if (!t) return fail(404, `no token ${decode(id)}`);
+  if (!t) return fail(404, `There is no token called ${decode(id)}.`);
   const ev = decode(eventId);
   const d = await tokenPageData(p, t, o.now ?? Date.now(), { live: false });
   const receipt = d.receipts.find((r) => r.eventId === ev);
-  if (!receipt) return fail(404, `no receipt ${ev} for $${t.ticker}`);
+  if (!receipt) return fail(404, `$${t.ticker} has no receipt for ${ev}.`);
   const locked = lockRule(JSON.parse(t.rulesJson));
   const now = o.now ?? Date.now();
   const feed = locked.rule.oracle === "catalogue" ? feedById(locked.rule.series!) : null;
@@ -181,7 +181,7 @@ export async function v1Verify(p: Platform, id: string, eventId: string, o: { fe
   else if (feed) source = o.fetchImpl ? await feedSourceReading(feed.config, o.fetchImpl, now)
     // the keeper's own reader (the catalogue adapter: same request, same parser, same politeness)
     : await p.oracles.catalogue.settledSince(locked.rule, null).then((r) => ({ events: r.events, error: null, url: feed.config.request.url }), (e: Error) => ({ events: null, error: e.message.slice(0, 160), url: feed.config.request.url }));
-  else source = { events: null, error: `no adapter for oracle ${locked.rule.oracle}`, url: null };
+  else source = { events: null, error: `There is no reader for the ${locked.rule.oracle} source.`, url: null };
   let chain: ChainReading | null = null;
   if (receipt.signature) {
     // Program receipts carry the program's memo ("<TICKER>|<reading date>|…"); the v3 receipt memo is keyed by the event.
@@ -190,7 +190,7 @@ export async function v1Verify(p: Platform, id: string, eventId: string, o: { fe
     chain = found ? { found: found.signature === receipt.signature, err: null, memo: found.memo } : { found: false, err: null, memo: null };
   }
   const v = verifyReceiptCore({ ticker: t.ticker, rulesText: t.rulesJson, receipt, carry: feed?.carry ?? "none", source, chain });
-  return ok({ ...v, receipt, how: ["rules: re-lock rules.json and hash it (shasum -a 256 rules.json)", "source: the settled result re-read from the original source just now (Polymarket: the CTF payout vector on Polygon)", "units/spend: the published rule applied with the keeper's exact integer formula", "chain: the memo of the receipt's transaction", "do it yourself without trusting this server: @burnticker/sdk verifyReceipt()"] });
+  return ok({ ...v, receipt, how: ["The rule was locked again from rules.json and hashed. You can do the same with shasum -a 256 rules.json.", "The settled result was read again from the original source just now. For Polymarket, that is the on-chain payout on Polygon.", "The units and the spend come from the published rule and the keeper's exact whole-number formula.", "The chain check reads the memo on the receipt's transaction.", "You can do all of this yourself without trusting this server. Use verifyReceipt() in @burnticker/sdk."] });
 }
 
 /** The platform's Kalshi client as a FetchLike (its cache, politeness and — in tests — its fixture table). */
@@ -219,7 +219,7 @@ export async function v1Trust(p: Platform): Promise<ApiResult> {
     fees: { designed: page.designedFees, live: { platformId: page.livePlatform.platformId, found: page.livePlatform.found, readAt: page.livePlatform.readAt, error: page.livePlatform.error, fields: liveBps } },
     lpLock: page.lpLock,
     program: page.program, attesters: page.attesters, audit: page.audit, statements: page.statements, operatorLine: page.operatorLine, useOfFees: page.useOfFees, preAuditCapSol: page.preAuditCapSol,
-    cannot: ["change any token's rule (a different rule is a different token)", "claim, redirect or discount any fee through this API", "adopt an existing token (the program needs the new mint's signature at init)", "sign, send or hold a key for you"],
+    cannot: ["Change any token's rule. A different rule makes a different token.", "Claim, redirect or discount any fee through this API.", "Adopt an existing token. The program needs the new mint's signature when the token is set up.", "Sign, send or hold a key for you."],
     rpcConfigured: !!rpc, stubs: p.stubs,
   });
 }

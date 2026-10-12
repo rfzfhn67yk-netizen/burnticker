@@ -18,18 +18,18 @@ import { crossReadsOf, isKalshi, pairOf, primaryEligibility } from "@/lib/burnti
  */
 
 export const SELECTOR_KINDS: SelectorKind[] = [
-  { id: "scalar", label: "a settled number each period (a primary feed's reading; was also Kalshi's strike ladders: index closes, daily highs)", wizard: "Advanced: first-party feed", appliesTo: "all" },
-  { id: "series-binary", label: "every market of a tag or an event, yes/no (recurring)", wizard: "Any market → a Polymarket tag or event", appliesTo: "all" },
-  { id: "one-shot", label: "one market that resolves once", wizard: "Any market → one market", appliesTo: "all" },
+  { id: "scalar", label: "a settled number each period, read from a primary feed. Kalshi's strike ladders, such as index closes and daily highs, used to count here too.", wizard: "Advanced, with our own feed", appliesTo: "all" },
+  { id: "series-binary", label: "every yes-or-no market under a tag or an event, again and again", wizard: "Any market, using a Polymarket tag or event", appliesTo: "all" },
+  { id: "one-shot", label: "one market that resolves once", wizard: "Any market, using one market", appliesTo: "all" },
   { id: "team-coin", label: "every game of one team", wizard: "Team coin", appliesTo: ["sports"] },
-  { id: "matchup-game", label: "two coins on one game (one market, inverted)", wizard: "Matchup pair → this game only", appliesTo: ["sports"] },
-  { id: "matchup-season", label: "two coins, each on its own team's games", wizard: "Matchup pair → every game this season", appliesTo: ["sports"] },
+  { id: "matchup-game", label: "two coins on one game, using one market with the opposite result for side B", wizard: "Matchup pair, for this game only", appliesTo: ["sports"] },
+  { id: "matchup-season", label: "two coins, each on its own team's games", wizard: "Matchup pair, for every game this season", appliesTo: ["sports"] },
 ];
 
 /** The per-game result fact the ESPN scoreboard and its league cross-reads share (config/burnticker/sources.json, kind native). */
 export const SPORTS_FACT = "sports.game.final-score";
 
-export const SETTLEMENT_RULE = "A coin settles on a primary source with an independent cross-read of the same fact (another operator on another domain), or on Polymarket's Conditional Tokens payout vector on Polygon for an adjudicated market. Prediction markets are discovery and optional cross-checks where their terms permit; Kalshi's terms do not permit either use, so Kalshi is never an input.";
+export const SETTLEMENT_RULE = "A coin settles on a primary source, checked by an independent second source for the same fact. The second source must be run by another operator on another domain. A coin can also settle on an adjudicated Polymarket market, read from its on-chain payout on Polygon. Prediction markets help people find events, and they can serve as an extra check where their terms allow it. Kalshi's terms allow neither use, so Kalshi is never an input.";
 
 export interface MatrixOptions {
   dryRuns?: Record<string, DryRunSummary>;
@@ -53,22 +53,22 @@ function kindRow(kind: SelectorKind, primaries: SourceDescriptor[], pairs: Cross
   const row = (verdict: Verdict, why: string, withPairs = false): KindCoverage => ({ kind: kind.id, verdict, why, primaries: withPairs ? prim : [], crossReads: withPairs ? pairs : [], polymarketTags: verdict === "adjudicated-only" ? tags : [] });
   switch (kind.id) {
     case "scalar": {
-      if (pairs.length) { const seen = new Set<string>(); const shown = pairs.filter((x) => { const k = [x.primary, x.crossRead].sort().join("|"); return seen.has(k) ? false : (seen.add(k), true); }); return row("settleable", `primary with an independent cross-read: ${shown.map((x) => `${x.primary} ↔ ${x.crossRead}`).join(", ")}`, true); }
-      if (primaries.length) return { ...row("uncovered", `primary source(s) without an independent cross-read of the same fact: ${prim.join(", ")}; Polymarket is binary-only, so no adjudicated scalar either`), primaries: prim };
-      return row("uncovered", "no primary source maps to this category, and Polymarket is binary-only (no adjudicated settled number)");
+      if (pairs.length) { const seen = new Set<string>(); const shown = pairs.filter((x) => { const k = [x.primary, x.crossRead].sort().join("|"); return seen.has(k) ? false : (seen.add(k), true); }); return row("settleable", `A primary source is checked by an independent second source. The pairs are ${shown.map((x) => `${x.primary} with ${x.crossRead}`).join(", ")}.`, true); }
+      if (primaries.length) return { ...row("uncovered", `${prim.length === 1 ? "This primary source has" : "These primary sources have"} no independent second source for the same fact: ${prim.join(", ")}. Polymarket has only yes-or-no markets, so it cannot settle a number either.`), primaries: prim };
+      return row("uncovered", "No primary source fits this category. Polymarket has only yes-or-no markets, so it cannot settle a number either.");
     }
     case "series-binary":
     case "one-shot":
-      return polyOk ? row("adjudicated-only", `Polymarket tag(s) ${tags.join(", ")}: the result is the CTF payout vector on Polygon; no primary source here is binary`) : row("uncovered", poly ? "no Polymarket tag maps to this category and no primary source is binary" : "Polymarket is not available on this host and no primary source is binary");
+      return polyOk ? row("adjudicated-only", `The result comes from the on-chain payout on Polygon for the Polymarket ${tags.length === 1 ? "tag" : "tags"} ${tags.join(", ")}. No primary source here gives a yes-or-no result.`) : row("uncovered", poly ? "No Polymarket tag fits this category, and no primary source here gives a yes-or-no result." : "Polymarket is not available on this site, and no primary source here gives a yes-or-no result.");
     case "matchup-game":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two coins on one game, one per team (espn.game:…-loss): the game settles on its on-chain payout where a moneyline market exists, else TheSportsDB's licensed final, once a second independent operator agrees", true);
-      return polyOk ? row("adjudicated-only", "one Polymarket game market (the moneyline), side B inverted: a partition, like a Kalshi one-shot") : row("uncovered", "no Polymarket game markets on this host");
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "Two coins follow one game, one for each team. The game settles on its on-chain payout where a moneyline market exists, and on TheSportsDB's licensed final score otherwise. It counts once a second, independent operator agrees.", true);
+      return polyOk ? row("adjudicated-only", "Both coins follow one Polymarket moneyline market, with side B taking the opposite result. Every result burns exactly one side.") : row("uncovered", "This site has no Polymarket game markets.");
     case "team-coin":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `no ESPN reads: the schedule from the league's own feed (MLB, NHL, NBA) or TheSportsDB (licensed); every game settles on its on-chain payout where a Polymarket moneyline market exists, else on TheSportsDB's final, and counts once a second independent operator agrees (the on-chain payout and TheSportsDB confirm each other; the league's official feed where free; API-Sports optional) (src/lib/burnticker/sources/gameSettle.ts; per league below)`, true);
-      return row("uncovered", "the team's own leg of a Kalshi game series was the only route; Polymarket moneylines have no fixed per-team YES/NO (the team order changes per game); espn.nfl counts finals only and is not admitted");
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `Nothing is read from ESPN. The schedule comes from the league's own feed for MLB, NHL and NBA, and from TheSportsDB with a licensed key for other leagues. Each game settles on its on-chain payout where a Polymarket moneyline market exists, and on TheSportsDB's final score otherwise. It counts once a second, independent operator agrees. The on-chain payout and TheSportsDB confirm each other, the league's official feed is read where it is free, and API-Sports is optional. Each league is listed below.`, true);
+      return row("uncovered", "The only way was the team's own market in a Kalshi game series. Polymarket moneylines have no fixed YES or NO for each team, because the team order changes from game to game. The ESPN NFL feed counts only final scores and is not allowed.");
     case "matchup-season":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "two team coins, each game settled on its on-chain payout or TheSportsDB's final once a second independent operator agrees", true);
-      return row("uncovered", "two team coins (one per team's games): uncovered for the same reason as team coins");
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "Two team coins follow their own teams. Each game settles on its on-chain payout or on TheSportsDB's final score, once a second, independent operator agrees.", true);
+      return row("uncovered", "Two team coins, each following its own team's games, cannot settle today for the same reason as team coins.");
   }
 }
 
@@ -92,13 +92,13 @@ export function coverageMatrix(sources: readonly SourceDescriptor[], categories:
     const scalar = kinds.find((k) => k.kind === "scalar")!;
     const verdict: Verdict = scalar.verdict === "settleable" ? "settleable" : kinds.some((k) => k.verdict === "adjudicated-only") ? "adjudicated-only" : "uncovered";
     const why = verdict === "settleable" ? scalar.why
-      : verdict === "adjudicated-only" ? `${primaries.length ? `primary source(s) ${primaries.map((p) => p.id).join(", ")} lack an independent cross-read` : "no primary source maps here"}; Polymarket covers yes/no markets (${tags.join(", ")})`
-      : `${primaries.length ? `primary source(s) ${primaries.map((p) => p.id).join(", ")} lack an independent cross-read` : "no primary source maps here"}, and no Polymarket tag does`;
+      : verdict === "adjudicated-only" ? `${primaries.length ? `${primaries.length === 1 ? "The primary source" : "The primary sources"} ${primaries.map((p) => p.id).join(", ")} ${primaries.length === 1 ? "has" : "have"} no independent second source.` : "No primary source fits here."} Polymarket covers yes-or-no markets under ${tags.join(", ")}.`
+      : `${primaries.length ? `${primaries.length === 1 ? "The primary source" : "The primary sources"} ${primaries.map((p) => p.id).join(", ")} ${primaries.length === 1 ? "has" : "have"} no independent second source.` : "No primary source fits here."} No Polymarket tag fits either.`;
     return { id: c.id, label: c.label, verdict, why, primaries: primaries.map((s) => ref(s, dryRuns)), crossReads, notPrimary, unknownFeeds, polymarket: { tags, available: poly }, kalshiDiscoveryOnly: [...c.kalshi], kinds };
   });
   const uncovered = cats.flatMap((c) => c.kinds.filter((k) => k.verdict === "uncovered").map((k) => ({ category: c.id, kind: k.kind, why: k.why })));
   const notes = [...(opts.notes ?? [])];
-  if (missingTags.size) notes.push(`Polymarket tags Gamma did not resolve (dropped): ${[...missingTags].join(", ")}`);
+  if (missingTags.size) notes.push(`Gamma did not recognise these Polymarket tags, so they were left out: ${[...missingTags].join(", ")}.`);
   return {
     schema: "burnticker.coverage/v1", generatedAt: opts.generatedAt ?? new Date().toISOString(), mode: opts.mode ?? "offline",
     taxonomy: { file: opts.taxonomyFile ?? "config/burnticker/categories.json", categories: categories.length }, rule: SETTLEMENT_RULE, kinds: SELECTOR_KINDS, categories: cats, uncovered, excluded,

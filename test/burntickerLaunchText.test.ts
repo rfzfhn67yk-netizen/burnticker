@@ -69,7 +69,7 @@ describe("generated, locked, pinned", () => {
     const pinned = JSON.parse(new TextDecoder().decode(pinnedBytes)) as { description: string; image: string; symbol: string };
     assert.equal(pinned.description, metadataDescription(locked, t.description), "byte for byte");
     assert.equal(pinned.description, `${badgeFromText(locked.rule, t.description)}\n${t.description}`);
-    assert.ok(pinned.description.startsWith("2026 SEASON\n$RAYS26 — burns when the Rays win."));
+    assert.ok(pinned.description.startsWith("2026 SEASON\n$RAYS26 burns when the Rays win."));
     assert.equal(pinned.image, meta.imageUri); assert.equal(pinned.symbol, "RAYS26");
     const png = up.get(meta.imageTx!)!; assert.deepEqual([...png.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]); assert.equal(sha256Hex(png), meta.imageSha256);
     // the bundle's token URI is the arweave URL
@@ -81,7 +81,7 @@ describe("generated, locked, pinned", () => {
     assert.equal(page.status.profile.description, paragraph, "the coin page header shows the generated paragraph");
     assert.equal(page.status.pinned!.expectedDescription, pinned.description);
     const html = renderTokenHtml(page.status, page.receipts, page.readings);
-    assert.ok(html.includes(AFFILIATION_LINE)); assert.ok(html.includes("creator's note — not part of the rule")); assert.ok(html.includes(meta.metadataUri!));
+    assert.ok(html.includes(AFFILIATION_LINE)); assert.ok(html.includes("Creator's note (not part of the rule):")); assert.ok(html.includes(meta.metadataUri!));
     // the verifier (coin page and trust page)
     const fetchPin = async (u: string) => ({ ok: true, status: 200, arrayBuffer: async () => { const b = up.get(u.split("/").pop()!)!; return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer; } });
     assert.equal((await verifyPinnedMetadata(page.status.pinned, fetchPin)).ok, true);

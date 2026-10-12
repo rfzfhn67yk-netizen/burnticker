@@ -32,8 +32,8 @@ export function kalshiEnabled(env: Env = process.env): boolean { return on(env[K
 /** Polymarket discovery (no market data): on unless explicitly disabled. */
 export function polymarketDiscoveryEnabled(env: Env = process.env): boolean { return !off(env[POLYMARKET_DISCOVERY_FLAG]); }
 
-export const KALSHI_UNAVAILABLE = `This venue is not enabled on this host (${KALSHI_FLAG} is off): venue unavailable. First-party feeds and the ESPN scoreboard still work.`;
-export const POLYMARKET_UNAVAILABLE = `Polymarket discovery is not enabled on this host (${POLYMARKET_DISCOVERY_FLAG}=0). Settlement of existing coins reads the on-chain payout regardless.`;
+export const KALSHI_UNAVAILABLE = "Kalshi is not turned on for this site (venue unavailable). Feeds read straight from their sources and the ESPN scoreboard still work.";
+export const POLYMARKET_UNAVAILABLE = "Searching Polymarket is not turned on for this site. Existing coins still settle on the on-chain payout.";
 
 export interface VenueFlags { kalshi: boolean; polymarket: boolean; feeds: boolean }
 export const venueFlagsFromEnv = (env: Env = process.env): VenueFlags => ({ kalshi: kalshiEnabled(env), polymarket: polymarketDiscoveryEnabled(env), feeds: true });

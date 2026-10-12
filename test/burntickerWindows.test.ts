@@ -71,7 +71,7 @@ describe("season boundaries from frozen ESPN schedules", () => {
     const st = windowStatus(p, await gamesFor(client(), p, "2026-09-01"), Date.parse("2027-02-01T00:00:00Z"));
     assert.deepEqual([st.perpetual, st.ended, st.endsAt], [true, false, null]);
     const t = describeRule(nativeRule(teamSeries("mlb", "TB", "win", { kind: "perpetual" })), { ticker: "" });
-    assert.match(t.paragraph, /No end date — this coin does not retire\./); assert.doesNotMatch(t.paragraph, /burns down whatever is left/);
+    assert.match(t.paragraph, /This coin has no end date and does not retire\./); assert.doesNotMatch(t.paragraph, /burns down whatever is left/);
   });
 
   test("next N: the first N games from the anchor day, ended when N are final", async () => {

@@ -118,7 +118,7 @@ describe("1 · the daily registry snapshot", () => {
     assert.match(verifySnapshotBytes(`${swapped.join("\n")}\n`).problems.join(" "), /not in key order/);
     const spaced = [...lines]; spaced[1] = JSON.stringify(JSON.parse(spaced[1]), null, 1).replace(/\n/g, "");
     assert.match(verifySnapshotBytes(`${spaced.join("\n")}\n`).problems.join(" "), /not canonical/);
-    assert.match(verifySnapshotBytes(ex.text, { rowCounts: { ...ex.rowCounts, readings: 1 } }).problems.join(" "), /readings: \d+ row\(s\) ≠ the recorded 1/);
+    assert.match(verifySnapshotBytes(ex.text, { rowCounts: { ...ex.rowCounts, readings: 1 } }).problems.join(" "), /The readings table has \d+ rows, but the record says 1\./);
   });
 
   test("append-only across time: a later registry holds every row of an earlier snapshot; a missing or changed row is named", async () => {
@@ -223,7 +223,7 @@ describe("2 · feed health, status.json and the status page", () => {
     assert.deepEqual(feedAlerts(h), [], "a hold is alerted by the refusal itself (bt-reading-implausible), not twice");
     observeCycle(reg, { fetched: [{ key, written: 0, refusals: [], awaitingFinal: 0, error: null, skipped: false }] }, NOW + 1000);
     h = computeFeedHealth(reg, NOW + 8 * DAY);
-    assert.equal(h[0].state, "stale"); assert.match(h[0].why, /2026-10-08 is \d+ day\(s\) old \(limit 5\)/);
+    assert.equal(h[0].state, "stale"); assert.match(h[0].why, /2026-10-08, is \d+ days? old\. The limit is 5 days\./);
     assert.deepEqual(feedAlerts(h).map((a) => a.kind), ["bt-feed-stale"]);
   });
 
@@ -259,7 +259,7 @@ describe("2 · feed health, status.json and the status page", () => {
     assert.ok(html.includes(".slip{") && html.includes("#f2eee4"), "the B1 receipt style");
     const fixture = JSON.parse(fs.readFileSync(path.join(ROOT, "test/fixtures/burnticker-ops/status.json"), "utf8")) as OpsStatusJson;
     const text = renderStatusPage(html, fixture, Date.parse("2026-10-12T15:00:00Z"));
-    for (const want of ["LEADER · ACTIVE · DEVNET", "heartbeat", "30 s ago", "4 · 3 not ok", "WITHHELD", "catalogue:nws.high:DEN-90", "DISAGREES", "disagree", "down", "stale", "$BRONCO · winddown since 2026-10-08 · 3 of 28 day(s) done", "$ONESHOT · retired 2026-10-05 · last sweep 2026-10-11", "sha256 4c1f0b4a", "rules 5 · readings 182", "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM", "deployed bytes = build (interim-local)", "bt-feed-down × 1", "Peer: standby, passive"]) assert.ok(text.includes(want), `rendered page shows: ${want}\n---\n${text.slice(0, 2000)}`);
+    for (const want of ["LEADER, ACTIVE, ON DEVNET", "heartbeat", "30 s ago", "3 of 4 not ok", "WITHHELD", "catalogue:nws.high:DEN-90", "DISAGREES", "disagree", "down", "stale", "$BRONCO has been winding down since 2026-10-08. 3 of 28 days are done.", "$ONESHOT was retired on 2026-10-05. Its last sweep was on 2026-10-11.", "sha256 4c1f0b4a", "rules 5, readings 182", "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM", "The deployed code matches the interim-local build.", "bt-feed-down × 1", "The other keeper is the standby and is passive."]) assert.ok(text.includes(want), `rendered page shows: ${want}\n---\n${text.slice(0, 2000)}`);
     const visible = staticText(html);
     const lint = lintCopy(`${visible}\n${text}`, loadCopyLintConfig(ROOT));
     assert.equal(lint.hits.length, 0, JSON.stringify(lint.hits));
@@ -411,7 +411,7 @@ describe("5b · the foreign-reading fence: two keepers on one chain never count 
     b.addEndReceipt(t.mint, "winddown", { id: "winddown-forged", at: first.settledAt }, { units: 2, mapping: { fractionOfPool: 0.05 }, note: "forged" });
     const fence = await readingFence(depsB);
     assert.equal(fence.held.length, 1);
-    assert.match(fence.held[0].why, /counted \d+ unit\(s\); this registry's unassigned receipts through that day carry \d+ — reconcile/);
+    assert.match(fence.held[0].why, /counted \d+ units?\. This registry's unassigned receipts through that day carry \d+\. Reconcile/);
     // the production cycle (KeeperOps.cycle → runCycle's fence) turns the hold into a dry-run cycle and an alert
     const ops = new KeeperOps({ registry: b, siteDir: tmp("bt-fence-"), cluster: "devnet", env: {}, log: () => {}, uploader: null, root: ROOT, hostId: "b" });
     const before = (await program.port(t.mint).config())!.lastValue;
@@ -539,7 +539,7 @@ describe("6 · the source-outage drill", () => {
   }
   test("a month feed runs too; a week feed is refused with a hint", async () => {
     assert.ok((await runDrill({ feed: "bls.eggs", mode: "down", now: Date.parse("2026-10-12T16:00:00Z"), dir: tmp("bt-drill-") })).ok);
-    await assert.rejects(runDrill({ feed: "eia.gasoline", mode: "down", now: NOW, dir: tmp("bt-drill-") }), /day and month feeds/);
+    await assert.rejects(runDrill({ feed: "eia.gasoline", mode: "down", now: NOW, dir: tmp("bt-drill-") }), /daily and monthly feeds/);
   });
 });
 
@@ -601,7 +601,7 @@ describe("3 · bring your own attester", () => {
     reg.addAttester({ mint: t.mint, pubkey: "Comm111111111111111111111111111111111111111", role: "independent", addedAt: NOW - 2 * DAY, timelockUntil: null });
     const [l] = attesterLines(reg, NOW);
     assert.equal(l.count, 2);
-    assert.match(l.line, /^2 attesters · Keeper… data-key since 2026-09-30 \(senior\) · Comm11… independent since 2026-10-08 \(senior from 2026-10-15\)$/);
+    assert.match(l.line, /^2 signers are active\. Keeper… is the data key\. It was added on 2026-09-30 and is senior\. Comm11… is an independent signer\. It was added on 2026-10-08 and becomes senior on 2026-10-15\.$/);
   });
 });
 
@@ -627,7 +627,7 @@ describe("4 · incident policy, the trust page section, the static fallback", ()
     const peerDoc = { ...fixture, keeper: { ...fixture.keeper, role: "standby", active: false, hostIdHash: "bbbb" } };
     const t = await buildTrustOps({ registry: reg, publishDir: site, env: { BURNTICKER_PEER_STATUS_URL: "https://status-b.example/status.json" }, now: NOW, fetchImpl: async () => ({ ok: true, status: 200, json: async () => peerDoc }) });
     assert.equal(t.keepers.length, 2);
-    assert.match(t.activeSummary, /^active: this host \(leader, host aaaa\)$/);
+    assert.match(t.activeSummary, /^The keeper on this host is active\. It is the leader, on host aaaa\.$/);
     assert.equal(t.keepers[1].role, "standby"); assert.equal(t.keepers[1].active, false);
     assert.equal(t.snapshot?.date, "2026-10-10");
     assert.deepEqual(t.incidents, { policy: "docs/burnticker/INCIDENTS.md", template: "docs/burnticker/incidents/TEMPLATE.md", log: "docs/burnticker/incidents/LOG.md" });

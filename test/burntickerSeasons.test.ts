@@ -25,7 +25,7 @@ const COINS: SeasonCoinInput[] = [
 describe("seasons", () => {
   const boards = seasonBoards(COINS);
   test("one card per league and window; no card holds two leagues; feeds are not team coins", () => {
-    assert.deepEqual(boards.map((b) => b.label), ["MLB 2026", "MLB 2026 postseason", "MLB · perpetual and next-N coins", "NHL 2026–27"]);
+    assert.deepEqual(boards.map((b) => b.label), ["MLB 2026", "MLB 2026 postseason", "MLB coins with no end date, or for a set number of games", "NHL 2026–27"]);
     for (const b of boards) {
       const leagues = new Set(b.rows.map((r) => COINS.find((c) => c.mint === r.mint)!.rule.series!.split(":")[1].split("-")[0]));
       assert.equal(leagues.size, 1, `${b.label} mixes leagues`); assert.ok(leagues.has(b.league));

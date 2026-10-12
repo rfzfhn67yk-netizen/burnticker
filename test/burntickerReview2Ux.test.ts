@@ -29,7 +29,7 @@ describe("review 2 — one launch-availability state", () => {
     assert.equal(launchAvailabilityFromCatalogue({ launches: { creators: true }, cluster: "devnet" }).open, true);
     for (const j of [null, {}, { launches: {} }, { launches: { creators: "true" } }, { launches: { creators: false } }]) assert.equal(launchAvailabilityFromCatalogue(j).open, false, JSON.stringify(j));
     assert.equal(LAUNCH_AVAILABILITY_UNKNOWN.open, false);
-    assert.equal(closedHostLine("devnet"), "Creator launches are closed. This host currently shows devnet information.");
+    assert.equal(closedHostLine("devnet"), "Creator launches are closed. This site is showing devnet.");
     assert.equal(launchAvailability({}).open, false, "default off");
     assert.equal(launchAvailability({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" }).open, true);
     assert.deepEqual(lint(closedHostLine("devnet")), []);
@@ -71,7 +71,7 @@ describe("review 2 — no trust badge over an empty audit", () => {
     const empty = auditBadgeView({ ok: true, receipts: 0, mismatches: 0, chainChecked: false });
     assert.deepEqual([empty.text, empty.tone], [NO_RECEIPTS_TO_CHECK, "muted"]);
     assert.equal(auditBadgeView({ ok: true, receipts: 4, mismatches: 0, chainChecked: true }).tone, "ok");
-    assert.equal(auditBadgeView({ ok: false, receipts: 4, mismatches: 1, chainChecked: true }).text, "1 mismatch(es)");
+    assert.equal(auditBadgeView({ ok: false, receipts: 4, mismatches: 1, chainChecked: true }).text, "1 mismatch");
     assert.equal(auditBadgeView(null).text, "not run yet");
     const html = renderPlatformIndexHtml(buildPlatformIndex([], Date.parse("2026-10-11T00:00:00Z"), { ok: true, ranAt: "2026-10-11T00:00:00Z", receipts: 0, mismatches: 0, chainChecked: false }));
     assert.match(html, /No receipts available to check on this host/);
@@ -91,14 +91,14 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
   });
   test("program: this host's wiring, the chain deployment and the compiled value are three separate labels", () => {
     const p = programFacts({}, ROOT);
-    assert.match(p.hostWiring, /^this host is not wired to a burn_receipts program/);
+    assert.match(p.hostWiring, /^This site is not connected to a burn program\./);
     const br = p.chain.find((c) => c.library === "burn_receipts")!;
     assert.match(br.devnet, /^deployed/); assert.match(br.mainnet, /^deployed \(read 2026-10-11\)/);
-    assert.match(p.compiled, /^burn_receipts AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM/);
+    assert.match(p.compiled, /^The burn program's address, compiled into the program and its interface file \(IDL\), is AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM\.$/);
     assert.ok(!p.verify.some((v) => /not deployed yet/.test(v)), "no 'not deployed' line on a host that is merely not wired");
     const page = read("src/app/burnticker/trust/page.tsx");
     assert.doesNotMatch(page, /"not deployed"\}/);
-    for (const s of ["This host:", "On chain —", "Compiled value:"]) assert.ok(page.includes(s), s);
+    for (const s of ["This site:", "On chain, {c.library}", "Compiled in:"]) assert.ok(page.includes(s), s);
   });
   test("attesters: the present fact, no scheduled second attester; systemd: supplied, installation not verified; one-shot: the onEnd schedule", () => {
     const a = attesterStatusLine(Date.parse("2026-10-07T00:00:00Z")).line;
@@ -122,7 +122,7 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
   test("status and fallback pages: an unreadable status file stays unknown — no 'unaffected'", () => {
     const st = read("site/burnticker/status/index.html");
     // UX report 3 items 4/8 tightened it: every group the feed fills says unavailable (test/burntickerWebsite4.test.ts runs the script)
-    assert.match(st, /"Current automation data could not be read \(status\.json: " \+ why \+ "\)\. The current-status summary is separate and does not establish whether burns are being processed now\."/);
+    assert.match(st, /"The automation data could not be read just now \(status\.json: " \+ why \+ "\)\. The current-status summary is separate\. It does not show whether burns are being processed now\."/);
     assert.doesNotMatch(st, /unaffected/);
     assert.doesNotMatch(read("site/burnticker/fallback/index.html"), /unaffected/);
   });

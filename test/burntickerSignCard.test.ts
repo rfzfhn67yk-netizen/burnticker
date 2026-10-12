@@ -109,11 +109,11 @@ describe("failures: never half-signed, resume at the failed step, plain sentence
     const plan = launchlabPlan([bundle()]);
     const log: string[] = [];
     const first = await signAndSendPlan(plan, CREATOR, fakeDeps(log, { refuseAt: 1 }));
-    assert.deepEqual([first.signatures, first.failedAt, first.error], [["sig1"], 1, "step 2 of 2 was not signed in the wallet"]);
+    assert.deepEqual([first.signatures, first.failedAt, first.error], [["sig1"], 1, "Step 2 of 2 was not signed in the wallet"]);
     const again = await signAndSendPlan(plan, CREATOR, fakeDeps(log), undefined, first.signatures);
     assert.equal(again.signatures.length, 2); assert.equal(log.filter((l) => l.startsWith("send")).length, 2, "step 1 sent once");
     const chain = await signAndSendPlan(plan, CREATOR, fakeDeps([], { chainErrAt: 1 }));
-    assert.match(chain.error!, /step 1 of 2 failed: the chain rejected it/);
+    assert.match(chain.error!, /Step 1 of 2 failed because the chain rejected it/);
   });
 
   test('"launched": 404 retried (~5 × 4 s), then 200; 409 / 422 / 429 / 503 stop with a plain sentence; a live coin is not re-sent', async () => {
@@ -184,7 +184,7 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     assert.equal(one.sent.length, 1);
     assert.deepEqual(one.pendingAtSend, [one.sent[0]], "the signed transaction's signature was in storage before sendRaw ran");
     assert.equal(first.failedAt, 0); assert.equal(first.state, "sent"); assert.equal(first.signature, one.sent[0]);
-    assert.match(first.error!, /Sent; confirmation unavailable — signature /);
+    assert.match(first.error!, /was sent, but the confirmation could not be read \(signature /);
     const rec = loadPlanRecord(store, plan)!;
     assert.equal(rec.pending!.signature, one.sent[0]); assert.equal(rec.pending!.step, 0);
     // the original transaction is now confirmed on chain: the resume adopts it and sends only step 2
@@ -218,7 +218,7 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     const again = await signAndSendPlan(plan, CREATOR, two.deps, undefined, first.signatures);
     assert.equal(two.sent.length, 0, "no new transaction while the first can still land");
     assert.deepEqual([again.failedAt, again.state, again.signature], [0, "sent", first.signature]);
-    assert.ok(again.error!.includes(`Sent; confirmation unavailable — signature ${first.signature}`));
+    assert.ok(again.error!.includes(`was sent, but the confirmation could not be read (signature ${first.signature})`));
     // a status the chain has seen but not yet confirmed ("processed") is unknown too
     const three = chain({ store, height: 101, status: () => ({ err: null, confirmationStatus: "processed" }) });
     assert.equal((await signAndSendPlan(plan, CREATOR, three.deps)).state, "sent"); assert.equal(three.sent.length, 0);
@@ -275,14 +275,14 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     const page = memoryPlanStorage(); page.set(key, before.get(key)!);
     const listed = listStoredLaunches(page);
     assert.equal(listed.length, 1);
-    assert.match(storedLaunchSentence(listed[0]), /step 1 of 2 — Sent; confirmation unavailable — signature /);
+    assert.match(storedLaunchSentence(listed[0]), /step 1 of 2 was sent, but the confirmation could not be read \(signature /);
     assert.doesNotMatch(storedLaunchSentence(listed[0]), /Nothing was sent/);
     // the chain says the create is confirmed: adopted; step 2 was never sent, so nothing is recorded yet and the sentence says how to finish
     const posts: string[] = [];
     const fetchFn = async (_u: string, init: { body: string }) => { posts.push(init.body); return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}) }; };
     const r = await recoverStoredLaunch(page, listed[0], { getSignatureStatus: async (sig) => (sig === one.sent[0] ? confirmedStatus() : null), getBlockHeight: async () => 50 }, fetchFn, () => "refused");
     assert.equal(r.done, false); assert.deepEqual(r.rec.confirmed, [one.sent[0]]); assert.equal(r.rec.pending, null);
-    assert.match(r.text, /1 of 2 step\(s\) confirmed on chain/);
+    assert.match(r.text, /1 of the 2 steps is confirmed on chain/);
     assert.equal(posts.length, 0, "not recorded while a step is missing");
     // a fully confirmed set (both steps landed before the reload): recorded with the transaction the mint signed, then the record is gone
     const done = memoryPlanStorage();
@@ -332,7 +332,7 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     assert.doesNotMatch(failed, /Nothing was sent/);
     assert.match(failureSentence({ signatures: [], failedAt: 0, error: "step 1 of 2 was not signed in the wallet", state: "not-sent" }, 2), /Nothing was sent\./);
     assert.match(failureSentence({ signatures: ["a"], failedAt: 1, error: "step 2 of 2 was not signed in the wallet", state: "not-sent" }, 2), /steps before it are confirmed/);
-    assert.equal(stepStatusText("sent", sig), `Sent; confirmation unavailable — signature ${sig}`);
+    assert.equal(stepStatusText("sent", sig), `sent, but the confirmation could not be read (signature ${sig})`);
     assert.match(stepStatusText("confirmed", sig), /^confirmed /);
     const states = planStepStates(3, ["a"], { failedAt: 1, state: "sent" });
     assert.deepEqual(states, ["confirmed", "sent", "not-sent"]);
@@ -362,19 +362,19 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
     const r = await signAndSendPlan(reloaded, CREATOR, { ...d, sendRaw: async () => { sends++; return "x"; }, storage: store });
     assert.deepEqual([log, sends], [[], 0], "no step built: the wallet saw nothing, nothing was sent — no duplicate create");
     assert.deepEqual([r.failedAt, r.state, r.signatures], [1, "abandoned", ["sig1"]]);
-    assert.match(r.error!, /1 of 4 step\(s\) confirmed on chain\. Steps 2–4 of 4 are abandoned: the mint key was lost on reload/);
-    assert.match(r.error!, /nothing from this plan is live until the create step confirms/);
-    assert.match(r.error!, /Fee already spent: 0\.00001 SOL/);
-    assert.match(r.error!, /The only safe action: start the launch again from the review, as a new plan\./);
+    assert.match(r.error!, /1 of the 4 steps is confirmed on chain\. Steps 2–4 of 4 are abandoned because the mint key was lost on reload/);
+    assert.match(r.error!, /Nothing from this plan is live until the create step confirms/);
+    assert.match(r.error!, /The fee already spent is 0\.00001 SOL/);
+    assert.match(r.error!, /The only safe thing to do is to start the launch again from the review, as a new plan\./);
     assert.equal(failureSentence(r, 4), r.error, "the card shows that sentence as is");
     assert.deepEqual(planStepStates(4, r.signatures, r), ["confirmed", "abandoned", "abandoned", "abandoned"]);
-    assert.equal(stepStatusText("abandoned"), "abandoned — the mint key was lost on reload");
+    assert.equal(stepStatusText("abandoned"), "abandoned because the mint key was lost on reload");
     for (const t of [r.error!, stepStatusText("abandoned")]) assert.ok(lintCopy(t, cfg).ok, t);
     // the launch page's recovery notice (no plan at all) says the same, per step
     const listed = listStoredLaunches(store);
     assert.equal(listed.length, 1);
     assert.deepEqual(storedStepStates(listed[0].rec), ["confirmed", "abandoned", "abandoned", "abandoned"]);
-    assert.match(storedLaunchSentence(listed[0]), /\$AYE and \$BEE: 1 of 4 step\(s\) confirmed on chain\. Steps 2–4 of 4 are abandoned.*Fee already spent: 0\.00001 SOL/);
+    assert.match(storedLaunchSentence(listed[0]), /For \$AYE and \$BEE, 1 of the 4 steps is confirmed on chain\. Steps 2–4 of 4 are abandoned.*The fee already spent is 0\.00001 SOL/);
   });
 
   test("a step sent with its outcome unknown is pending reconcile, not abandoned; a plan with nothing on chain is not abandoned (just not signable)", async () => {
@@ -395,8 +395,8 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
     const rec = loadPlanRecord(store, plan)!;
     assert.equal(feesPaidLamports(rec), 2 * LAMPORTS_PER_SIGNATURE + LAMPORTS_PER_SIGNATURE, "the confirmed create (2 signatures) and the rejected step (1)");
     const s = abandonedSentence({ ...rec, confirms: plan.confirms, steps: 2 });
-    assert.match(s, /its create steps are confirmed, but the launch is not recorded from this plan/);
-    assert.match(s, /Fee already spent: 0\.000015 SOL/);
+    assert.match(s, /Its create steps are confirmed, but the launch is not recorded from this plan/);
+    assert.match(s, /The fee already spent is 0\.000015 SOL/);
     assert.ok(lintCopy(s, cfg).ok, s);
   });
 

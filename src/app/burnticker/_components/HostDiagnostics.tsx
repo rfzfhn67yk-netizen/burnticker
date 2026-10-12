@@ -7,7 +7,7 @@ export function HostDiagnostics({ stubs, cluster }: { stubs: string[]; cluster?:
   if (!stubs.length) return null;
   return (
     <details className="text-xs text-neutral-500" data-host-diagnostics>
-      <summary className="cursor-pointer">{cluster ? `This host reads ${cluster}. ` : ""}Some live reads are not wired on this host ({stubs.length}) — operator details</summary>
+      <summary className="cursor-pointer">{cluster ? `This site is showing ${cluster}. ` : ""}Some live data is not connected on this site. Show the operator details</summary>
       <ul className="mt-1 list-disc pl-5 break-words font-mono">{stubs.map((s) => <li key={s}>{s}</li>)}</ul>
     </details>
   );

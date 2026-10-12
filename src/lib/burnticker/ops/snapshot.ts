@@ -213,7 +213,7 @@ export function verifySnapshotBytes(bytes: Uint8Array | string, expect: { sha256
     prevKey = key;
     rowCounts[spec.name]++;
   }
-  if (expect.rowCounts) for (const n of SNAPSHOT_TABLE_NAMES) if ((expect.rowCounts[n] ?? 0) !== rowCounts[n]) problems.push(`${n}: ${rowCounts[n]} row(s) ≠ the recorded ${expect.rowCounts[n] ?? 0}`);
+  if (expect.rowCounts) for (const n of SNAPSHOT_TABLE_NAMES) if ((expect.rowCounts[n] ?? 0) !== rowCounts[n]) problems.push(`The ${n} table has ${rowCounts[n]} ${rowCounts[n] === 1 ? "row" : "rows"}, but the record says ${expect.rowCounts[n] ?? 0}.`);
   if (problems.length > 50) problems.splice(50, problems.length - 50, `… and more`);
   return { ok: problems.length === 0, sha256: sha, date, rowCounts, bytes: Buffer.byteLength(text, "utf8"), problems };
 }

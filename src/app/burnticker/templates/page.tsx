@@ -16,7 +16,7 @@ export default function TemplatesPage() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-5">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Templates</h1>
-        <p className="max-w-3xl text-sm text-neutral-400">Twelve shapes a coin&apos;s rule can take.{launch.open ? <> Pick one to open the create screen ready for it; every dial stays editable until launch. On any coin or pair page, &ldquo;Launch one like this&rdquo; starts from that coin&apos;s own shape.</> : <> {launch.closedLine} The shapes are shown so you can read what each kind of rule does.</>}</p>
+        <p className="max-w-3xl text-sm text-neutral-400">A coin&apos;s rule can take one of twelve shapes.{launch.open ? <> Pick one to open the create screen with it filled in. Every dial stays editable until launch. On any coin or pair page, &ldquo;Launch one like this&rdquo; starts from that coin&apos;s own shape.</> : <> {launch.closedLine} The shapes are shown so you can read what each kind of rule does.</>}</p>
       </header>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="templates">
         {TEMPLATES.map((t) => (
@@ -31,7 +31,7 @@ export default function TemplatesPage() {
           </li>
         ))}
       </ul>
-      <p className="text-xs text-neutral-500">Memecoins: each rule says what its supply does, not what a price does. Not affiliated with any team, league, candidate, agency or market.</p>
+      <p className="text-xs text-neutral-500">These are memecoins. Each rule says what happens to a coin&apos;s supply, never its price. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );
 }

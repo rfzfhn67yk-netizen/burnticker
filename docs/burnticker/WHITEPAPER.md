@@ -1,18 +1,18 @@
 # Burnticker: coins that burn on real-world results, with receipts
 
-> **Historical version — not the current status.** This is draft 1 as written on 2026-10-10 and it is not edited as facts change, so
-> its status, governance (sections 9–11), review and bounty statements describe that day. Since then, among others: both programs are
-> deployed on mainnet (2026-10-11); the mainnet Squads vault exists with a time lock of 0 now (48 h planned around 2026-10-23), and the
-> owner holds two of its three keys, so the owner alone can approve an upgrade; the bounty wallet is funded. The live facts are on
-> [the trust page](https://burnticker.com/burnticker/trust) and in
-> [/api/burnticker/v1/current-status](https://burnticker.com/api/burnticker/v1/current-status). Revision log: draft 1, 2026-10-10;
-> this notice added 2026-10-11 (website audit 4); the text below is unchanged.
+> **Historical version — not the current status.** This is draft 1 of the paper, as written on 2026-10-10. Its facts are not updated
+> as things change, so what it says about status, governance (sections 9 to 11), reviews and the bounty describes that day. Several
+> things have changed since then. Both programs were deployed on mainnet on 2026-10-11. The mainnet Squads vault exists. Its time
+> lock is 0 for now, and a 48-hour lock is planned around 2026-10-23. The owner holds two of its three keys, so the owner alone can
+> approve an upgrade. The bounty wallet is funded. The live facts are on [the trust page](https://burnticker.com/burnticker/trust)
+> and at [/api/burnticker/v1/current-status](https://burnticker.com/api/burnticker/v1/current-status). Draft 1 is dated 2026-10-10.
+> This notice was added on 2026-10-11 during website audit 4. On the same day the wording was made plainer. The facts were not changed.
 
-Technical paper, draft 1, 2026-10-10. Written from the code and documents of the Burnticker repository at commit `76b9caa`. Every
-statement names its source file; where a component does not exist, this paper says "not built" or "not done".
+This is a technical paper, draft 1, dated 2026-10-10. It was written from the code and documents of the Burnticker repository at
+commit `76b9caa`. Every statement names its source file. Where a component does not exist, the paper says "not built" or "not done".
 
-**Status at the time of writing.** The program is deployed on devnet (the 2026-10-10 rehearsal, `docs/burnkeeper/devnet-run.md`);
-nothing is deployed on mainnet and no mainnet key exists.
+**Status at the time of writing.** The program is deployed on devnet for the rehearsal of 2026-10-10 (`docs/burnkeeper/devnet-run.md`).
+Nothing is deployed on mainnet, and no mainnet key exists.
 
 | Component | State | Source |
 |---|---|---|
@@ -22,7 +22,7 @@ nothing is deployed on mainnet and no mainnet key exists.
 | Mainnet rehearsal coin | not done | `docs/burnticker/REHEARSAL-RUNSHEET.md` |
 | `pair_curve` program (rivalry pairs: both coins graduate or neither; Anchor 1.2.1) | built 2026-10-10; LiteSVM suite and TS fixtures pass; devnet rehearsal run (one pair graduated to two CPMM pools and registered, one pair voided and sold back); not on mainnet; not reviewed | `docs/burnticker/PAIR-CURVE.md`, `docs/burnkeeper/devnet-paircurve-run-log-2026-10-10.md` |
 | Program deployment, program id, verifiable hash | devnet: deployed 2026-10-10 (`AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM`, upgrade authority a Squads 2-of-3 vault); mainnet: not done | `docs/burnkeeper/devnet-run.md` §4, `docs/burn-receipts/README.md` §5.4 |
-| Team-coin and matchup settlement (sports) | no ESPN reads: schedules from MLB StatsAPI, the NHL feed and the NBA feed (free), TheSportsDB v2 for every other league (`BURNTICKER_THESPORTSDB_KEY` not yet set); each game settles on its Polymarket on-chain payout where a moneyline market exists, else on TheSportsDB's final, and counts only when a second independent operator agrees (the on-chain payout and TheSportsDB confirm each other; the league's official feed where free; API-Sports optional) | `src/lib/burnticker/sources/gameSettle.ts`, `docs/burnticker/SETTLEMENT-COVERAGE.md` |
+| Team-coin and matchup settlement (sports) | Nothing is read from ESPN. Schedules come from MLB StatsAPI, the NHL feed and the NBA feed, which are free, and from TheSportsDB v2 for every other league (`BURNTICKER_THESPORTSDB_KEY` is not set yet). Each game settles on its Polymarket on-chain payout where a moneyline market exists, and otherwise on TheSportsDB's final. A game counts only when a second, independent operator agrees. The on-chain payout and TheSportsDB confirm each other, the league's official feed is used where it is free, and API-Sports is optional. | `src/lib/burnticker/sources/gameSettle.ts`, `docs/burnticker/SETTLEMENT-COVERAGE.md` |
 | Second, independent attester | not built | `config/burnticker/transparency.json` (`switchboard-down`, `quorum-1`) |
 | Public repository | public | https://github.com/rfzfhn67yk-netizen/burnticker |
 | Operator contact | set: contact@burnticker.com; security@burnticker.com for reports | `src/lib/burnticker/fees.ts` (`OPERATOR_LINE`), `config/public-repo/overlay/SECURITY.md` |
@@ -32,45 +32,47 @@ nothing is deployed on mainnet and no mainnet key exists.
 ## 1. Abstract
 
 **Coins that burn on real-world results — with receipts.** Burnticker is a launchpad for Solana memecoins whose supply burns when a
-settled real-world result says so. The receipt is the product: every burn leaves one that a stranger can recompute, and nothing is ever
+settled real-world result says so. The receipt is the product. Every burn leaves a receipt that a stranger can recompute. On Burnticker, nothing is ever
 won — things are only burned.
 
-A creator binds a coin to a selector over a resolution source and to a mapping from outcomes to burns. The source is a primary source
-with an independent cross-read, or the on-chain payout of an adjudicated Polymarket market. The rule is hashed and locked when the coin
-is created. When an event in the selector settles, attesters sign the settled reading. The `burn_receipts` program then spends a share
-of the coin's own creator-fee pool buying the coin on its Raydium CPMM pool and burns every token it receives, in one instruction that
-also writes a memo with the reading, the arithmetic and the rule hash. Anyone can recompute that memo from the public source and the
-published rule.
+A creator ties each coin to a rule. The rule picks events from a resolution source, which is called the selector, and says how much
+burns for each outcome, which is called the mapping. The source is either a primary source with an independent cross-read, or the
+on-chain payout of an adjudicated Polymarket market. The rule is hashed and locked when the coin is created. When an event that the
+selector picks settles, attesters sign the settled reading. The settlement program (`burn_receipts`) then spends a share of the coin's
+own creator-fee pool buying the coin on its Raydium CPMM pool. It burns every token it receives. The same instruction writes a memo with
+the reading, the arithmetic and the rule hash. Anyone can recompute that memo from the public source and the published rule.
 
-The platform has two layers. The engine is the launchpad and the program: rules locked at launch, readings signed before use, burns run
-by a program rather than promised by a person. The show is built from the same receipts: team coins scored by burns league by
-league, rivalry pairs (§5) whose pages keep the tally, and Burn Derby pairs and brackets (§5.2). A season is a scoreboard of burns.
-There is one per league and season, never a ranking across leagues; when a season ends, the coin with the most receipts is its
-league's champion — a stat, never a recipient: no coin pays anything on any outcome.
+The platform has two layers. The first is the engine, which is the launchpad and the program. Rules are locked at launch, readings are
+signed before use, and a program runs the burns instead of a person promising them. The second layer is the show, and it is built from
+the same receipts. It has team coins scored by burns, league by league. It has rivalry pairs (section 5), whose pages keep the tally. It
+has Burn Derby pairs and brackets (section 5.2). A season is a scoreboard of burns. There is one per league and season, and there is
+never a ranking across leagues. When a season ends, the coin with the most receipts is its league's champion. The champion is a stat,
+never a recipient. No coin pays anything on any outcome.
 
-Burnticker is run by one independent operator, reachable at contact@burnticker.com; the operator’s identity is held privately until a legal entity is formed. It is not an investment product: a coin holds no position in any
-market, and the rule says what the supply does, not what the price does. The program is not audited by a security firm.
+Burnticker is run by one independent operator, reachable at contact@burnticker.com. The operator’s identity is held privately until a
+legal entity is formed. Burnticker is not an investment product. A coin holds no position in any market, and the rule says what the
+supply does, not what the price does. The program is not audited by a security firm.
 
 ## 2. The problem with "burn" claims today
 
-Most token burns are statements by whoever controls the tokens. Three patterns recur:
+Most token burns are statements by whoever controls the tokens. Three patterns show up again and again.
 
-- **Operator-controlled burns.** A team wallet decides when and how much to burn, and the same wallet can also sell.
-- **Unverifiable triggers.** "We burn when X happens" names an event but not a source, a unit or a formula, so nobody can check that a
-  burn matches the event or that one was skipped.
-- **Team allocations.** Burning tokens a team was given for free removes supply the market never held, and the allocation gives
-  insiders a position the burn posts serve.
+- **Operator-controlled burns.** A team wallet decides when to burn and how much. The same wallet can also sell.
+- **Unverifiable triggers.** "We burn when X happens" names an event, but it names no source, unit or formula. Nobody can check that a
+  burn matches the event, or that a burn was skipped.
+- **Team allocations.** Burning tokens that a team got for free removes supply the market never held. The allocation also gives
+  insiders a position that the burn posts serve.
 
-Burnticker takes the trigger, the amount and the custody away from the operator and leaves a receipt a stranger can recompute: the rule
-is fixed before the first trade, the reading comes from an adjudicated source signed by named keys, the money sits in an account with no
-withdraw instruction, and the program computes the amount and writes the receipt in the same instruction as the burn.
+Burnticker takes the trigger, the amount and the custody away from the operator, and it leaves a receipt that a stranger can recompute.
+The rule is fixed before the first trade. The reading comes from an adjudicated source and is signed by named keys. The money sits in
+an account that has no withdraw instruction. The program computes the amount and writes the receipt in the same instruction as the burn.
 
 ## 3. Design
 
-### 3.1 The rule: a selector and an outcome→burn mapping
+### 3.1 The rule: a selector and an outcome–burn mapping
 
-A rule is a JSON document with schema `burnticker.rules/v1` (`src/lib/burnticker/rules.ts`). It names an oracle and a selector, maps
-outcomes to burns, and applies to markets that do not exist yet.
+A rule is a JSON document with the schema `burnticker.rules/v1` (`src/lib/burnticker/rules.ts`). It names an oracle and a selector, and
+it maps outcomes to burns. It can apply to markets that do not exist yet.
 
 ```json
 { "schema": "burnticker.rules/v1", "oracle": "kalshi", "series": "KXNFLGAME", "market": null,
@@ -82,50 +84,55 @@ outcomes to burns, and applies to markets that do not exist yet.
 | Field | Meaning |
 |---|---|
 | `oracle` | `kalshi`, `polymarket` (binary only) and `catalogue` are live; `uma`, `drift-bet`, `hedgehog` are parsers and stubs, not launchable |
-| `series` + `filter` | every present and future market of the series whose ticker contains the text and/or whose title matches a regex |
+| `series` + `filter` | every present and future market of the series whose ticker contains the text, whose title matches a regex, or both |
 | `market` | one market ticker: a one-shot rule that resolves once, after which the supply is fixed |
-| `kind: binary` | reads the settled yes/no result (Polymarket: the payout vector on Polygon; Kalshi's `result` only for coins launched on it before 2026-10-10); `onYes` / `onNo` give the burn for each outcome |
+| `kind: binary` | reads the settled yes-or-no result (Polymarket: the payout vector on Polygon; Kalshi's `result` only for coins launched on it before 2026-10-10); `onYes` and `onNo` give the burn for each outcome |
 | `kind: scalar` | reads the settled number and counts `unit`s from a baseline (`previousSettlement` or a number) in a direction (`up`, `down`, `abs`) |
 | `fractionOfPool` / `tokens` | buyback mode: fraction `f` of the burn pool per unit (1 % to 10 %); vault mode: tokens per unit |
 | `onVoid` | `skip`, the only policy |
 | `pair` | rivalry pairs (§5): `pairId`, `side`, `counterpartMint` |
 
-**Locking.** `lockRule` serialises the validated rule as canonical JSON (keys sorted, two-space indent, trailing newline) and hashes
-those bytes with sha256. The hash goes into `TokenConfig.rules_sha256` at `initialize_token`, into the token description's footer and
-into every on-chain memo as `rules=sha256:<first 12 hex>`. No instruction changes it. A different rule is a different coin.
+**Locking.** `lockRule` writes the validated rule as canonical JSON, with keys sorted, a two-space indent and a trailing newline. It
+hashes those bytes with sha256. The hash goes into three places: `TokenConfig.rules_sha256` at `initialize_token`, the footer of the
+token description, and every on-chain memo as `rules=sha256:<first 12 hex>`. No instruction changes it. A different rule makes a
+different coin.
 
-**Finality.** A Polymarket market counts once its payout vector is on chain; a primary source's period counts once it is complete
-(`src/lib/burnticker/sources/attestedHttp.ts`). For coins launched on a Kalshi rule before 2026-10-10, a Kalshi market counts when its
-status is `finalized`, or `settled` once `settlement_ts + settlement_timer_seconds` has passed (`src/lib/burnticker/oracle/kalshi.ts`). The rule reads settled results only, never prices; the token page's "market-implied chance of the next
-burn" is labelled display-only.
+**Finality.** A Polymarket market counts once its payout vector is on chain. A primary source's period counts once the period is
+complete (`src/lib/burnticker/sources/attestedHttp.ts`). Some coins were launched on a Kalshi rule before 2026-10-10. For those coins, a
+Kalshi market counts when its status is `finalized`, or when it is `settled` and `settlement_ts + settlement_timer_seconds` has passed
+(`src/lib/burnticker/oracle/kalshi.ts`). The rule reads only settled results, never prices. The token page shows a "market-implied chance
+of the next burn", and that figure is labelled display-only.
 
 ### 3.2 Sources
 
-**Settled on primary sources; prediction markets are discovery and optional cross-checks where their terms permit.** On 2026-10-10
-the owner decided that Kalshi is not a settlement input: Kalshi's Developer Agreement limits API use to a member's own trading, and its
-Data Terms forbid using Kalshi data to settle products or to cache or redistribute it. A coin settles on one of two things: a primary
-source read together with an independent cross-read of the same fact (another operator on another domain), or the payout vector of an
-adjudicated Polymarket market as Polygon's Conditional Tokens contract stores it (§3.4). The Kalshi adapter
-(`src/lib/burnticker/oracle/kalshi.ts`) remains for discovery behind `BURNTICKER_KALSHI_ENABLED`, and the creation preflight refuses
-every Kalshi rule.
+**Coins settle on primary sources.** Prediction markets serve for discovery, and as optional cross-checks where their terms permit. On
+2026-10-10 the owner decided that Kalshi is not a settlement input. Kalshi's Developer Agreement limits API use to a member's own
+trading. Its Data Terms forbid using Kalshi data to settle products, and they forbid caching or redistributing it. A coin settles on one
+of two things. The first is a primary source read together with an independent cross-read of the same fact, from another operator on
+another domain. The second is the payout vector of an adjudicated Polymarket market, as Polygon's Conditional Tokens contract stores it
+(section 3.4). The Kalshi adapter (`src/lib/burnticker/oracle/kalshi.ts`) remains for discovery behind `BURNTICKER_KALSHI_ENABLED`. The
+creation preflight refuses every Kalshi rule.
 
-**Polymarket binary markets are the adjudicated source** (since 2026-10-10): Gamma (`https://gamma-api.polymarket.com`) finds the
-markets, and the result is the payout vector the Conditional Tokens contract on Polygon stores for the market's condition id, read with
-`eth_call`; a reading counts only once that payout is on chain, a 50-50 payout is a void (`src/lib/burnticker/oracle/polymarket.ts`). A single game pairs on Polymarket's
-moneyline market; team coins have no settlement route (Polymarket lists the two teams in an order that changes from game to game).
+**Polymarket binary markets are the adjudicated source.** This has been the case since 2026-10-10. Gamma
+(`https://gamma-api.polymarket.com`) finds the markets. The result is the payout vector that the Conditional Tokens contract on Polygon
+stores for the market's condition id, read with `eth_call`. A reading counts only once that payout is on chain, and a 50-50 payout is a
+void (`src/lib/burnticker/oracle/polymarket.ts`). A single game pairs on Polymarket's moneyline market. Team coins have no settlement
+route on Polymarket, because it lists the two teams in an order that changes from game to game.
 
-**First-party feeds are the primary path.** `config/burnticker/sources.json` holds 34 sources (four of them cross-read-only) read through one generic adapter
-(`src/lib/burnticker/sources/attestedHttp.ts`): Treasury, BLS, NOAA, Launch Library 2, JPL, Wikimedia and others, each with a saved
-fixture, plausibility bounds, a fixed unit, direction, baseline and carry, the `operator` that runs the endpoint and, where another
-operator publishes the same number, a shared `fact`. Key-required sources are present but not launchable.
+**First-party feeds are the primary path.** The source list (`config/burnticker/sources.json`) holds 34 sources, four of them
+cross-read-only. One generic adapter reads them all (`src/lib/burnticker/sources/attestedHttp.ts`). They include Treasury, BLS, NOAA,
+Launch Library 2, JPL, Wikimedia and others. Each source has a saved fixture, plausibility bounds, a fixed unit, a direction, a baseline
+and a carry. Each one also names the `operator` that runs the endpoint. Where another operator publishes the same number, the two
+sources share a `fact`. Sources that need a key are present but not launchable.
 
-**$DEFICIT is the stated exception.** The operator's own first coin reads U.S. Treasury "Debt to the Penny"
-(`tot_pub_debt_out_amt`) directly: every full $1,000,000,000 added since the previous business day is one unit, remainders carry only
-across consecutive increases, and each unit spends 2 % of the burn pool — the Federal Reserve's 2 % inflation goal, pointed the other way
-(`config/burnkeeper/deficit.rules.json`; the devnet rehearsal coin used 1 %).
+**$DEFICIT is the stated exception.** The operator's own first coin reads U.S. Treasury "Debt to the Penny" (`tot_pub_debt_out_amt`)
+directly. Every full $1,000,000,000 added since the previous business day is one unit. Remainders carry only across consecutive
+increases. Each unit spends 2 % of the burn pool. That is the Federal Reserve's 2 % inflation goal, pointed the other way
+(`config/burnkeeper/deficit.rules.json`). The devnet rehearsal coin used 1 %.
 
-**Refused regardless of source** (`config/burnticker/refuse.json`, applied at create time): deaths, violence, terror, casualty counts,
-disasters and named private individuals; names that claim to be official; any selector on the coin's own trading (never the token's price). Elections are allowed.
+**Some topics are refused whatever the source** (`config/burnticker/refuse.json`, applied at create time). They are deaths, violence,
+terror, casualty counts, disasters and named private individuals. Names that claim to be official are refused. So is any selector on the
+coin's own trading, which means never the token's price. Elections are allowed.
 
 ### 3.3 Tiers: what a skeptic can verify at each
 
@@ -137,36 +144,41 @@ disasters and named private individuals; names that claim to be official; any se
 | 4 | primary API read by the keeper | no asset rates; one real fixture; plausibility bounds; complete periods only | the exact source row with the `curl` in every receipt | the attesters (quorum 1 at launch: the operator) |
 | 5 | page-scraped | owner's approval per source; regex pinned to the markup | the page and the regex | the page's editorial number and the attesters |
 
-Source: `docs/burnticker/README.md` §6 and `docs/burnkeeper/attestation.md` §1.
+The table comes from `docs/burnticker/README.md` section 6 and `docs/burnkeeper/attestation.md` section 1.
 
 ### 3.4 Settlement coverage
 
-`src/lib/burnticker/coverage/` audits, for every category of `config/burnticker/categories.json` and every selector kind the wizard
-can emit, whether a coin can be settled without Kalshi. A category is **settleable** only with at least one primary source (a
-first-party adapter: attested-http or on-chain, tier 4 or better, launchable, not an aggregator) AND an independent cross-read of the
-same fact; **adjudicated-only** when Polymarket's binary markets are the only route; **uncovered** otherwise. Each source also gets a
-90-day dry run: readings its schedule expected against readings produced, the median latency from the period's end to the keeper's
-first sighting, and the rate at which the primary and its cross-read disagree.
+The coverage audit (`src/lib/burnticker/coverage/`) checks every category in `config/burnticker/categories.json` and every selector kind
+the wizard can emit. For each one, it asks whether a coin can be settled without Kalshi. A category is **settleable** only when it has
+at least one primary source and an independent cross-read of the same fact. A primary source here means a first-party adapter that is
+attested-http or on-chain, tier 4 or better, launchable, and not an aggregator. A category is **adjudicated-only** when Polymarket's
+binary markets are its only route. Otherwise it is **uncovered**. Each source also gets a 90-day dry run. The dry run compares the
+readings its schedule expected with the readings it produced. It measures the median delay from the end of a period to the keeper's
+first sighting. It also measures how often the primary and its cross-read disagree.
 
-On the frozen fixtures of 2026-10-10 five of eleven categories are settleable (`docs/burnticker/SETTLEMENT-COVERAGE.md`): Sports (each game
-settles on its Polymarket on-chain payout where a moneyline market exists, else on TheSportsDB under its commercial licence,
-confirmed by the league's own feed — MLB, NHL, NBA — or API-Sports; no ESPN reads — schedules come from the leagues' own feeds or TheSportsDB), Economics (`fred.UNRATE` ↔ BLS `LNS14000000`, `fred.CPIAUCSL` ↔ BLS
-`CUSR0000SA0`, `bls.eggs` ↔ FRED `APU0000708111`, `treasury.debt` ↔ FRED `GFDEBTN` at quarter ends; 0 disagreements on every shared
-month), Financial markets (Pyth ↔ RedStone), Weather & Climate (the NWS climate report ↔ the Iowa Environmental Mesonet) and Crypto &
-On-chain (`bitcoin.blockHeight` ↔ blockstream.info; Pyth ↔ RedStone or the pool TWAP). The other six are adjudicated-only; none is
-uncovered. The pair catches a broken endpoint, a parser error or a
-tampered response; when the cross-read is a mirror (FRED republishes BLS), it does not catch an error in the original release.
+On the frozen fixtures of 2026-10-10, five of eleven categories are settleable (`docs/burnticker/SETTLEMENT-COVERAGE.md`). The first is
+Sports. Each game settles on its Polymarket on-chain payout where a moneyline market exists. Otherwise it settles on TheSportsDB under
+its commercial licence, confirmed by the league's own feed (MLB, NHL or NBA) or by API-Sports. Nothing is read from ESPN, and schedules
+come from the leagues' own feeds or from TheSportsDB. The second is Economics, where four series are each checked against a cross-read.
+They are `fred.UNRATE` against BLS `LNS14000000`, `fred.CPIAUCSL` against BLS `CUSR0000SA0`, `bls.eggs` against FRED `APU0000708111`,
+and `treasury.debt` against FRED `GFDEBTN` at quarter ends. There were 0 disagreements in every shared month. The third is Financial
+markets, where Pyth is checked against RedStone. The fourth is Weather & Climate, where the NWS climate report is checked against the
+Iowa Environmental Mesonet. The fifth is Crypto & On-chain, where `bitcoin.blockHeight` is checked against blockstream.info, and Pyth
+against RedStone or the pool TWAP. The other six categories are adjudicated-only, and none is uncovered. Reading a fact twice catches a
+broken endpoint, a parser error or a tampered response. When the cross-read is a mirror, as when FRED republishes BLS, it does not catch
+an error in the original release.
 
-Creation runs the selector live once first (`preflightSelector`, wired into the launch pipeline): the primary and its cross-read are
-read, and creation is refused on a Kalshi rule, a missing cross-read, a failed read or a disagreement on the latest shared period. The
-matrix is served at `GET /api/burnticker/v1/coverage`, drawn on the trust page and rendered to `docs/burnticker/SETTLEMENT-COVERAGE.md`;
-the test suite fails when any category is uncovered.
+Creation first runs the selector live once (`preflightSelector`, which is wired into the launch pipeline). The primary and its cross-read
+are both read. Creation is refused on a Kalshi rule, a missing cross-read, a failed read, or a disagreement on the latest shared period.
+The coverage matrix is served at `GET /api/burnticker/v1/coverage`, drawn on the trust page and rendered to
+`docs/burnticker/SETTLEMENT-COVERAGE.md`. The test suite fails when any category is uncovered.
 
-## 4. Settlement on chain: the `burn_receipts` program
+## 4. Settlement on chain: the burn receipts program
 
 ### 4.1 Accounts
 
-All accounts are PDAs of the program keyed by the mint (`programs/burn-receipts/programs/burn_receipts/src/constants.rs`, `state.rs`).
+All accounts are program-derived addresses (PDAs) of the program, keyed by the mint
+(`programs/burn-receipts/programs/burn_receipts/src/constants.rs`, `state.rs`).
 
 | Account | Seeds | Holds |
 |---|---|---|
@@ -195,136 +207,146 @@ crank_buyback (anyone; allowlist only while the cap stands)
         fee PDA SOL -> WSOL -> CPMM swap -> fee PDA token ATA -> BURN 100 % -> Memo CPI      one instruction
 ```
 
-Before graduation there is no CPMM pool, so buyback readings wait in order until `register_pool` succeeds; the 30-day dead-pool rule
-(§4.9) does not apply to an unregistered pool (`docs/burn-receipts/README.md` §3).
+Before graduation there is no CPMM pool. Buyback readings wait in order until `register_pool` succeeds. The 30-day dead-pool rule
+(section 4.9) does not apply to a pool that is not registered yet (`docs/burn-receipts/README.md` section 3).
 
 ### 4.3 `initialize_token`
 
-Signed by the payer, the creator and the new mint keypair (the mint need not exist yet), so only the launcher can create the config
-for a mint, and only once. It records the rule, feed id, memo text, rules hash, attester set and quorum; funds the fee PDA with the
-reserve; enforces the swap-safety bounds of §4.5; and, for buyback policy 0, pins the LaunchLab PlatformConfig's key, `cpConfigId` and LP
-lock and burn scales, refusing a platform whose `platformCpCreator` is not unset or the fee PDA, or whose scales cover under 50 %. It
-takes no token program or token account: the program has no mint path.
+Three keys sign it: the payer, the creator and the new mint keypair. The mint does not need to exist yet. So only the launcher can
+create the config for a mint, and only once. The instruction records the rule, the feed id, the memo text, the rules hash, the attester
+set and the quorum. It funds the fee PDA with the reserve. It enforces the swap-safety bounds of section 4.5. For buyback policy 0, it
+also pins the key of LaunchLab's `PlatformConfig` account, its `cpConfigId`, and its LP lock and burn scales. It refuses a platform whose
+`platformCpCreator` is set to anything other than the fee PDA, or whose scales cover less than 50 %. It takes no token program or token
+account, because the program has no mint path.
 
 ### 4.4 Readings
 
-`submit_reading(record_date, value, source_url_hash, proof_hash)` is permissionless but valid only with a quorum of attester
+Anyone can send `submit_reading(record_date, value, source_url_hash, proof_hash)`, but it is valid only with a quorum of attester
 signatures. Each attester signs exactly these bytes (`src/attest.rs`):
 
 ```
 BURNRECEIPTS-v3|<cluster genesis>|<program id>|<mint>|<feed_id>|prev=<previous date or none>|<YYYY-MM-DD>|<value>|src=<sha256(source URL), hex>|proof=<proof locator, hex>
 ```
 
-The signatures ride in an `Ed25519SigVerify` instruction of the same transaction (one shared message, one entry per key); the program
-reads them back through the instructions sysvar, requires every offset to point into that instruction, counts each key once, and
-matches the message byte for byte. Binding the genesis, program id and mint makes a signature useless on another cluster, token or
-deployment; binding the previous date fixes the order, so pre-signed readings cannot be reordered or skipped. Attester sets hold at
-most 5 keys and the quorum is at most 3, the largest that fits a legacy transaction (966 / 1,076 / 1,186 bytes for 1 / 2 / 3 keys).
+The signatures travel in an `Ed25519SigVerify` instruction in the same transaction, with one shared message and one entry per key. The
+program reads them back through the instructions sysvar. It requires every offset to point into that instruction, counts each key once,
+and matches the message byte for byte. The message binds the genesis, the program id and the mint, so a signature is useless on another
+cluster, token or deployment. It also binds the previous date, which fixes the order, so pre-signed readings cannot be reordered or
+skipped. An attester set holds at most 5 keys, and the quorum is at most 3. That is the largest quorum that fits a legacy transaction,
+which is 966 bytes for 1 key, 1,076 bytes for 2 keys and 1,186 bytes for 3 keys.
 
-Dates strictly increase and no future date is accepted. Readings are never edited, deleted or closed. Units follow the rule
+Dates strictly increase, and no future date is accepted. Readings are never edited, deleted or closed. Units follow the rule
 (`src/math.rs`, mirrored in `src/lib/burnReceipts/math.ts`):
 
-- on an increase, `units = floor((delta + carry_in) / unit_value)`; under carry rule 0 the remainder carries across consecutive
-  increases, under rule 1 it is dropped;
-- a down or flat reading earns nothing and resets the carry;
-- a quorum-signed reading whose change exceeds `max_abs_delta` is accepted as a RESET: 0 units, carry reset, new baseline,
-  `ReadingReset` emitted. It never wedges the feed (review 1, M-2).
+- On an increase, `units = floor((delta + carry_in) / unit_value)`. Under carry rule 0 the remainder carries across consecutive
+  increases. Under rule 1 it is dropped.
+- A reading that goes down or stays flat earns nothing and resets the carry.
+- A quorum-signed reading whose change exceeds `max_abs_delta` is accepted as a RESET. It gives 0 units, resets the carry, sets a new
+  baseline and emits `ReadingReset`. It never wedges the feed (review 1, M-2).
 
-**Event rules on the program: the unit counter.** The program's reading model is one value per UTC date. A Burnticker token is
-initialised with `value_decimals 0`, `unit_value 1`, carry none, feed id `bt.units:<TICKER>`, and the attested value is a counter:
+**How event rules use the unit counter.** The program's reading model is one value per UTC date. A Burnticker token is initialised with
+`value_decimals 0`, `unit_value 1`, no carry and the feed id `bt.units:<TICKER>`. The attested value is a counter, defined as
 `value(D) = 1 + every unit the token's settled receipts carried through date D`. The day's delta is the day's units, so one crank
-covers all of a day's settlements. The signed `src` hash commits to the exact events counted:
-`sha256("burnticker://<TICKER>/units/<YYYY-MM-DD>?events=<id,id,…>")` (`src/lib/burnticker/program.ts`). A rule that pays different
-fractions for different outcomes cannot be expressed on the current program; the launch bundle refuses it.
+covers all of a day's settlements. The signed `src` hash commits to the exact events counted, as
+`sha256("burnticker://<TICKER>/units/<YYYY-MM-DD>?events=<id,id,…>")` (`src/lib/burnticker/program.ts`). The current program cannot
+express a rule that pays different fractions for different outcomes, and the launch bundle refuses such a rule.
 
 ### 4.5 `crank_buyback`: swap, burn and memo in one instruction
 
-`crank_buyback(record_date)` processes the next reading in line (`prev_date == crank_cursor`). The cranker supplies no amount, pool,
-rate or recipient. In order (`src/instructions/crank_buyback.rs`):
+`crank_buyback(record_date)` processes the next reading in line, which is the one where `prev_date == crank_cursor`. The cranker
+supplies no amount, pool, rate or recipient. The steps run in this order (`src/instructions/crank_buyback.rs`):
 
-1. **Pool.** `pool = fee PDA lamports − reserve + WSOL already held` (`spendable_pool`). While the pre-audit cap is in force the rule is
-   applied to `min(pool, cap)`; `BurnPoolCapBound` is emitted when the cap binds and the Reading keeps both the basis and the actual pool.
-2. **Rule spend.** `spend = pool × (1 − (1 − f)^units)`, `f = fraction_per_unit_bps / 10,000`, computed as
-   `keep = floor(pool × pow_floor(1 − f, units) / 1e18)`, `spend = pool − keep` in u128 fixed point, so spend never exceeds the pool. It
-   agrees with the keeper's exact rational to within one lamport for pools under 10^15 lamports (pinned by test). The amount due is the
-   rule spend plus any spend carried from earlier cranks.
-3. **Spend floor.** Under `floor_lamports` nothing is bought; the reading is processed and memo'd `swap=none`, and the pool keeps the SOL.
-4. **Per-crank cap.** One crank spends at most 2 % of the pool's WSOL reserve; the rest is carried (`carried_spend_lamports`,
-   `SpendCapBound`). Small, frequent swaps limit trade impact and sandwich room.
-5. **TWAP guard.** `max_twap_deviation_bps` ≤ 300 and `twap_window_secs` 600 to 1,200 are enforced at init. The spot exchange rate
-   (tokens per SOL) may not sit more than the deviation below the CPMM oracle's time-weighted average. The oracle records the rate before
-   each swap and only across distinct seconds, so a same-block front-run cannot move it. A refused crank defers the burn day: late, not
-   lost.
-6. **Minimum output.** `min_out` is the larger of two quotes, each the constant-product output less the pool's whole fee and
-   `slippage_bps` (≤ 300): one on the live reserves, one on a pool of the same SOL depth at the TWAP rate. A same-transaction push lowers
-   the first quote, not the second, so a sandwich can take at most `slippage_bps` of a spend that is itself at most 2 % of the reserve.
-7. **Swap.** System transfer from the fee PDA to its WSOL account, then a CPI to Raydium CPMM `swap_base_input` on the registered,
-   verified pool. The CPMM program id is hard-coded; vaults, `amm_config` and the observation account are checked against the pool.
-8. **Burn.** Every token the fee PDA holds is burned: what the swap delivered plus any token-side creator fees or donations.
-9. **Memo.** The program CPIs the Memo program with the canonical v2 memo (§13.4), built from the accounts alone.
-10. **Events.** `ReadingProcessed`, plus `SpendCapBound`, `SpendCarried`, `BurnPoolCapBound` as they apply, via `emit_cpi!`.
+1. **Pool.** The pool is `pool = fee PDA lamports − reserve + WSOL already held` (`spendable_pool`). While the pre-audit cap is in
+   force, the rule is applied to `min(pool, cap)`. When the cap binds, `BurnPoolCapBound` is emitted, and the Reading keeps both the
+   basis and the actual pool.
+2. **Rule spend.** The spend is `spend = pool × (1 − (1 − f)^units)`, where `f = fraction_per_unit_bps / 10,000`. It is computed in u128
+   fixed point as `keep = floor(pool × pow_floor(1 − f, units) / 1e18)` and `spend = pool − keep`, so the spend never exceeds the pool.
+   It agrees with the keeper's exact rational result to within one lamport for pools under 10^15 lamports, and a test pins this. The
+   amount due is the rule spend plus any spend carried from earlier cranks.
+3. **Spend floor.** Under `floor_lamports`, nothing is bought. The reading is processed with the memo `swap=none`, and the pool keeps
+   the SOL.
+4. **Per-crank cap.** One crank spends at most 2 % of the pool's WSOL reserve. The rest is carried (`carried_spend_lamports`,
+   `SpendCapBound`). Small, frequent swaps limit trade impact and leave less room for a sandwich.
+5. **TWAP guard.** Initialisation enforces `max_twap_deviation_bps` ≤ 300 and a `twap_window_secs` of 600 to 1,200. The spot exchange
+   rate (tokens per SOL) may not sit more than the deviation below the CPMM oracle's time-weighted average. The oracle records the rate
+   before each swap, and only across distinct seconds, so a front-run in the same block cannot move it. A refused crank defers the burn
+   day. The burn is late, not lost.
+6. **Minimum output.** `min_out` is the larger of two quotes. Each quote is the constant-product output, less the pool's whole fee and
+   less `slippage_bps` (≤ 300). One quote uses the live reserves. The other uses a pool of the same SOL depth at the TWAP rate. A push
+   inside the same transaction lowers the first quote but not the second. So a sandwich can take at most `slippage_bps` of a spend, and
+   that spend is itself at most 2 % of the reserve.
+7. **Swap.** A system transfer moves SOL from the fee PDA to its WSOL account. Then a CPI calls Raydium CPMM `swap_base_input` on the
+   registered, verified pool. The CPMM program id is hard-coded. The vaults, `amm_config` and the observation account are checked
+   against the pool.
+8. **Burn.** Every token the fee PDA holds is burned. That is what the swap delivered, plus any token-side creator fees or donations.
+9. **Memo.** The program calls the Memo program through a CPI with the canonical v2 memo (section 13.4), built from the accounts alone.
+10. **Events.** The program emits `ReadingProcessed` through `emit_cpi!`, and also `SpendCapBound`, `SpendCarried` and
+    `BurnPoolCapBound` when they apply.
 
-`crank_vault` is the vault-mode twin: `owed = min(units × tokens_per_unit + shortfall_in, allocation_left)`,
-`burn = min(owed, vault)`, the rest a public shortfall carried forward, memo v1. `crank_no_units` marks a zero-unit reading processed.
+`crank_vault` is the vault-mode twin. It computes `owed = min(units × tokens_per_unit + shortfall_in, allocation_left)` and
+`burn = min(owed, vault)`. The rest becomes a public shortfall carried forward, and the memo is v1. `crank_no_units` marks a zero-unit
+reading as processed.
 
-Measured: about 110,000 compute units typical, 137,009 worst case; the crank transaction is 907 bytes.
+The measured cost is about 110,000 compute units in a typical case and 137,009 in the worst case. The crank transaction is 907 bytes.
 
 ### 4.6 How fees reach the burn pool
 
 The fee PDA is LaunchLab's recorded creator. LaunchLab's `initialize_v2` takes `creator` as a non-signer, so the launch passes
-`feePda(programId, mint)` there (`docs/burnkeeper/fees.md` §1; devnet simulation with a PDA creator succeeded, 188,143 CU).
+`feePda(programId, mint)` there (`docs/burnkeeper/fees.md` section 1). A devnet simulation with a PDA creator succeeded and used
+188,143 compute units.
 
-- **On the curve,** LaunchLab accrues the creator fee in its vault `[fee PDA, WSOL]`, claimable only with the creator's signature.
-  `claim_launchlab_creator_fee` (permissionless) CPIs LaunchLab's `claim_creator_fee` with the fee PDA signing by seeds and the
-  recipient pinned to the fee PDA's own WSOL account.
-- **After graduation,** the CPMM pool records `pool_creator` = the launch creator when the platform's `platformCpCreator` is unset, and
-  Raydium's `collect_creator_fee_permissionless` pays that creator's ATAs. Any payer may call it.
+- **On the curve.** LaunchLab accrues the creator fee in its vault `[fee PDA, WSOL]`, and only the creator's signature can claim it.
+  Anyone can call `claim_launchlab_creator_fee`. It calls LaunchLab's `claim_creator_fee` with the fee PDA signing by seeds, and the
+  recipient is pinned to the fee PDA's own WSOL account.
+- **After graduation.** When the platform's `platformCpCreator` is unset, the CPMM pool records the launch creator as `pool_creator`.
+  Raydium's `collect_creator_fee_permissionless` pays that creator's token accounts (ATAs). Any payer may call it.
 - **Seed deposits.** Anyone can send SOL to the fee PDA. Nobody can take it out.
 
 ### 4.7 Pool registration and provenance
 
-*Pair coins (registration policy 2, §5.4) register through `register_pair_pool` instead; everything below is the LaunchLab path,
-unchanged.*
+*Pair coins (registration policy 2, section 5.4) register through `register_pair_pool` instead. Everything below describes the
+LaunchLab path, which is unchanged.*
 
-`register_pool` (permissionless, once) accepts only LaunchLab's own migration pool:
+Anyone can call `register_pool`, once. It accepts only LaunchLab's own migration pool:
 
-1. the token's LaunchLab pool (`["pool", mint, WSOL]` under LaunchLab) records the fee PDA as creator, CPMM as its migration destination,
-   and the platform pinned at init;
-2. the CPMM pool is the deterministic PDA `["pool", cpConfigId, token0, token1]` of the `cpConfigId` pinned at init;
-3. its `pool_creator` is the fee PDA;
-4. at least 50 % of its live LP supply is burned or held by Raydium's LP lock (`ATA(LOCK_CPMM_AUTH, lp_mint)`). This is a minimum under
-   the provenance proof: to block registration a griefer must deposit more than the whole migrated liquidity and leave it there.
+1. The token's LaunchLab pool (`["pool", mint, WSOL]` under LaunchLab) records the fee PDA as creator, CPMM as its migration
+   destination, and the platform pinned at init.
+2. The CPMM pool is the deterministic PDA `["pool", cpConfigId, token0, token1]` of the `cpConfigId` pinned at init.
+3. Its `pool_creator` is the fee PDA.
+4. At least 50 % of its live LP supply is burned or held by Raydium's LP lock (`ATA(LOCK_CPMM_AUTH, lp_mint)`). This minimum sits on
+   top of the provenance proof. To block registration, a griefer has to deposit more than the whole migrated liquidity and leave it there.
 
-The mint must have no mint authority and no freeze authority. Burnticker's platform locks 100 % of graduation LP (§6), so a correct
-migration passes with margin. **Not yet confirmed:** that the real LaunchLab migration passes the creator through, creates the pool at
-the `cpConfigId` PDA and locks or burns LP as its SDK says. LaunchLab is closed source; this is a devnet-rehearsal gate.
+The mint must have no mint authority and no freeze authority. Burnticker's platform locks 100 % of graduation LP (section 6), so a
+correct migration passes with margin. **One point is not confirmed yet.** It is whether the real LaunchLab migration passes the creator
+through, creates the pool at the `cpConfigId` PDA, and locks or burns LP as its SDK says. LaunchLab is closed source, so this is a gate
+for the devnet rehearsal.
 
-**Stranding recovery.** If no pool can be registered, or the registered one is continuously untradeable for 7 days, the token's admin
-may propose `set_registration_policy` to a fixed pool passing the same creator and LP checks, plus either 90 % of LP burned or locked
-or the pool PDA of a LaunchLab-known AmmConfig. The proposal waits 48 hours, expires after 14 days, can be vetoed by any one current
-attester, and the power ends at the pre-audit cap's sunset or at `renounce_admin`.
+**Stranding recovery.** If no pool can be registered, or if the registered one stays untradeable for 7 days in a row, the token's admin
+may propose `set_registration_policy` to a fixed pool that passes the same creator and LP checks, plus either 90 % of LP burned or locked
+or the pool PDA of a LaunchLab-known `AmmConfig`. The proposal waits 48 hours and expires after 14 days. Any one current attester can
+veto it. The power ends at the pre-audit cap's sunset or at `renounce_admin`.
 
 ### 4.8 Post-CPI guards
 
-Two instructions lend the fee PDA's signature to external, upgradeable programs: the LaunchLab claim and the CPMM swap. After each, the
-program requires the fee PDA to still be System-owned with no data and the expected lamports, and each fee-PDA token account to keep
-owner, mint, no delegate and no close authority; the swap's output vault must have paid exactly what the fee PDA received. Any
-violation reverts (`FeeAccountTampered`, `SwapOutputMismatch`; `src/guards.rs`). This is tested against a hostile stand-in loaded at
-LaunchLab's and CPMM's program ids (`mocks/evil_callee`).
+Two instructions lend the fee PDA's signature to outside programs that can be upgraded: the LaunchLab claim and the CPMM swap. After
+each one, the program checks that the fee PDA is still System-owned, with no data and the expected lamports. It checks that each
+fee-PDA token account keeps its owner and mint, with no delegate and no close authority. It also checks that the swap's output vault
+paid exactly what the fee PDA received. Any violation reverts the transaction (`FeeAccountTampered`, `SwapOutputMismatch`;
+`src/guards.rs`). This is tested against a hostile stand-in loaded at LaunchLab's and CPMM's program ids (`mocks/evil_callee`).
 
 ### 4.9 Pool health and replacement
 
-`check_pool_health` (permissionless, top-level only, alone with the pool in its transaction) records observations of the registered pool
-being untradeable (swaps disabled, account gone, or under 0.01 SOL WSOL reserve). A spell starts on the second of two observations at
-least 1 hour apart and stays continuous while observations are at most 24 hours apart. After 7 continuous days, `replace_pool`
-(permissionless) moves to a different tradeable pool passing every `register_pool` check; after 30 days, cranks process readings below
-the spend floor with the amount carried, so the queue never wedges. A Jito bundle of separate transactions is invisible to these checks;
-that residual is accepted (`pool_health.rs`).
+Anyone can call `check_pool_health`. It must be a top-level instruction, alone in its transaction with the pool. It records
+observations of the registered pool being untradeable, which means swaps are disabled, the account is gone, or the WSOL reserve is under
+0.01 SOL. A spell starts on the second of two observations at least 1 hour apart. It stays continuous while observations are at most 24
+hours apart. After 7 continuous days, anyone can call `replace_pool` to move to a different tradeable pool that passes every
+`register_pool` check. After 30 days, cranks process readings below the spend floor with the amount carried, so the queue never wedges.
+A Jito bundle of separate transactions is invisible to these checks, and that gap is accepted (`pool_health.rs`).
 
 ### 4.10 Powers: what exists, with timelocks and sunsets
 
-From the Powers Register (`docs/burn-receipts/powers-register.md`, generated from the IDL; the generator fails on any undescribed
-instruction or signer):
+The Powers Register (`docs/burn-receipts/powers-register.md`) lists every power. It is generated from the IDL, and the generator fails
+on any instruction or signer that has no description.
 
 | Power | Holder | Limit | Timelock | Sunset |
 |---|---|---|---|---|
@@ -335,188 +357,210 @@ instruction or signer):
 | Program upgrade | upgrade authority (plan: Squads 2-of-3) | can replace all code | 48 h Squads time lock | set to none after review (§9) |
 | LaunchLab platform admin (outside the program) | the key that created the platform | fee rates, wallets, `cpConfigId`, `platformCpCreator`, LP scales for launches not yet migrated | **none** | none: the admin cannot be transferred |
 
-**What has no instruction:** withdraw, sweep, transfer, close or set-recipient for the fee PDA, its token accounts, the vault or any
-program account; mint; pause or freeze; rule update; feed, memo, rules-hash, mint, creator or registered-pool change; reading edit or
-delete; fee change (the program charges no fee). No account is ever closed, so no rent is refunded. Without a PlatformConfig the
-hard-coded default cap applies (25 SOL until 2027-10-01T00:00Z), so a lost or finalised upgrade authority cannot wedge buybacks.
+**What has no instruction.** There is no withdraw, sweep, transfer, close or set-recipient instruction for the fee PDA, its token
+accounts, the vault or any program account. There is no mint, no pause or freeze, and no rule update. Nothing changes the feed, the
+memo, the rules hash, the mint, the creator or the registered pool. Nothing edits or deletes a reading. There is no fee change, because
+the program charges no fee. No account is ever closed, so no rent is refunded. Without a `PlatformConfig`, the hard-coded default cap
+applies, which is 25 SOL until 2027-10-01T00:00Z. So a lost or finalised upgrade authority cannot wedge buybacks.
 
 ### 4.11 The pre-audit cap
 
-While in force, each crank's basis is `min(pool, 25 SOL)`; SOL above the cap stays in the fee PDA. `initialize_platform` (upgrade
-authority only, once) must set exactly the default, so the cap is never lowered; it can only be raised through the 48-hour timelock and
-disappears at its sunset. It protects against program bugs, not against the operator, whose multisig can replace the code until the
-upgrade authority is finalised.
+While the cap is in force, each crank's basis is `min(pool, 25 SOL)`. SOL above the cap stays in the fee PDA. Only the upgrade authority
+can call `initialize_platform`, and only once. It must set exactly the default, so the cap is never lowered. The cap can only be raised,
+through the 48-hour timelock, and it disappears at its sunset. It protects against program bugs. It does not protect against the
+operator, whose multisig can replace the code until the upgrade authority is finalised.
 
-Every state change emits an event through `emit_cpi!` (inner-instruction data, not truncatable logs), so an indexer can rebuild state
-(34 event types, §13.3). The one exception is `PairResultSubmitted`, a plain `emit!` log event ("Program data:" in the transaction's
-logs): `submit_pair_result` carries both coins' attester signatures and has no room for the self-CPI accounts. The PairResult account it
-writes is the durable record.
+Every state change emits an event through `emit_cpi!`. Those events are inner-instruction data, which cannot be truncated the way logs
+can, so an indexer can rebuild state. There are 34 event types, listed in section 13.3. The one exception is `PairResultSubmitted`. It
+is a plain `emit!` log event, which appears as "Program data:" in the transaction's logs. `submit_pair_result` carries both coins'
+attester signatures and has no room for the self-CPI accounts. The `PairResult` account it writes is the durable record.
 
 ## 5. Rivalry pairs
 
 Two coins launch together on the same tier-1 selector with inverted mappings (`src/lib/burnticker/rules.ts` `invertMapping`,
-`launchBundle.ts` `buildPairBundles`). Examples: $BRONCOS burns on the NO of each `-DEN` leg of `KXNFLGAME`, $CHIEFS on the YES; $BULLS
-and $BEARS on the S&P close direction (scalar `up` against `down`). A binary settlement burns exactly one side; a flat scalar settlement burns neither.
+`launchBundle.ts` `buildPairBundles`). For example, $BRONCOS burns on the NO of each `-DEN` leg of `KXNFLGAME`, and $CHIEFS burns on
+the YES. $BULLS and $BEARS burn on the direction of the S&P close (scalar `up` against `down`). A binary settlement burns exactly one
+side. A flat scalar settlement burns neither.
 
-- `pair: { pairId, side, counterpartMint }` is part of each side's canonical JSON, so the link is inside both locked rules; the two
-  rules are hashed independently. Side A is created first; side B's rule names A's mint as counterpart, and A's counterpart is held in
+- `pair: { pairId, side, counterpartMint }` is part of each side's canonical JSON, so the link is inside both locked rules. The two
+  rules are hashed separately. Side A is created first. Side B's rule names A's mint as its counterpart, and A's counterpart is held in
   the registry's append-only `pairs` table.
-- Binary sides swap `onYes` and `onNo`; scalar sides flip `up` and `down`; an `abs` rule cannot pair. Pairs must use a tier-1
+- Binary sides swap `onYes` and `onNo`. Scalar sides flip `up` and `down`. An `abs` rule cannot pair. Pairs must use a tier-1
   adjudicated market source.
-- **The scoreboard.** The pair page shows both sides, the burn tally, the supply burned per side and the interleaved receipts; for a binary
-  pair both back-tests' burn counts sum to the selector's non-void settlement count.
+- **The scoreboard.** The pair page shows both sides, the burn tally, the supply burned on each side, and the receipts of both coins in
+  time order. For a binary pair, the burn counts of the two back-tests add up to the number of the selector's settlements that were not
+  voids.
 
-A relative-value perpetual version was considered and rejected (pool-depth caps, oracle manipulation, no US-legal path;
-LAUNCHPAD-PATH §22).
+A relative-value perpetual version was considered and rejected. The reasons were pool-depth caps, oracle manipulation and the lack of a
+legal path in the US (LAUNCHPAD-PATH section 22).
 
 ### 5.1 Both or neither
 
-Every pair created since 2026-10-10 carries a clause in both sides' canonical rules: `pair.clause = "both-or-neither"`, a `voidBy` date
-(a one-shot's first settlement date, else 30 days after launch).
+Every pair created since 2026-10-10 carries a clause in both sides' canonical rules: `pair.clause = "both-or-neither"`, with a `voidBy`
+date. That date is a one-shot's first settlement date, or else 30 days after launch.
 
 - Event burns on either side apply only once BOTH coins have a registered pool. A settlement read before that is recorded as a
-  `pending-pair` receipt; the cycle the second pool registers, the pair goes live and the waiting receipts execute in settlement order.
-- If either side has no registered pool when the `voidBy` UTC date ends, the pair voids. Waiting receipts become `voided` (final), no
-  event burn happens on either side again, and the rule has ended: each coin's pool winds down (section 5.3), executed once that coin
-  has a pool, so no fee is stranded in a pool that can never burn.
-- The outcome (live or voided) is written once to the registry's append-only `pair_outcomes` table. The pair page shows the state, the
+  `pending-pair` receipt. In the cycle when the second pool registers, the pair goes live and the waiting receipts execute in
+  settlement order.
+- If either side has no registered pool when the `voidBy` UTC date ends, the pair voids. Waiting receipts become `voided`, which is
+  final. No event burn happens on either side again, and the rule has ended. Each coin's pool then winds down (section 5.3), once that
+  coin has a pool, so no fee is stranded in a pool that can never burn.
+- The outcome, live or voided, is written once to the registry's append-only `pair_outcomes` table. The pair page shows the state, the
   void date and both bonding curves side by side.
 
 ### 5.2 Burn Derby: coin against coin
 
-Burn Derby is a selector kind for pairs: the relative performance of two existing coins over a UTC day (00:00 to 00:00) or week. The
-rule's `derby` block names both coins (a Pyth feed id, a Solana mint, the deepest SOL pool, an independent cross-read), the window, the
-measure (% change, or the change of circulating supply times the feed value) and the season; the rule's `series` is derived from it and
-the whole block is inside the rule hash (`src/lib/burnticker/derby/spec.ts`).
+Burn Derby is a selector kind for pairs. It compares how two existing coins perform over a UTC day (00:00 to 00:00) or a week. The
+rule's `derby` block names both coins, the window, the measure and the season. For each coin it gives a Pyth feed id, a Solana mint, the
+deepest SOL pool and an independent cross-read. The measure is either the % change, or the change of circulating supply times the feed
+value. The rule's `series` is derived from the block, and the whole block is inside the rule hash
+(`src/lib/burnticker/derby/spec.ts`).
 
-- **Settlement.** A window's margin is coin A's % change minus coin B's, exact to six decimals. A positive margin settles YES and side A's
-  coin burns; a negative margin settles NO and side B's coin burns; an exact tie is a void on both sides. The coin on the winning side burns;
-  nothing is paid to anyone. A one-shot variant settles once, on the first window that ends with A's size above B's (YES), or at the end of the
-  season without it (NO).
-- **Values.** Pyth: the sponsored `PriceUpdateV2` accounts on Solana, which Pyth's receiver program writes after verifying the
-  Wormhole-signed update, read keylessly and snapshotted at each boundary; or the Hermes update published at the boundary (Pyth's
-  pull service, with an API key), whose bytes' sha256 becomes the proof. A coin without a Pyth feed is read from the time-weighted vault
-  balances of its deepest SOL pool, priced with Pyth's SOL/USD feed.
-- **Cross-read.** An independent operator (Jupiter, DexScreener or RedStone) is snapshotted at the same boundaries. When its margin
-  differs from the primary's by more than two percentage points, or a value is missing, the window is withheld: no reading, no burn, an
-  alert. Each window is decided once and stored append-only.
-- **Proof on chain.** The reading carries `derby:sha256:<hex>` of the window's proof document; the counter attestation's quorum-signed
-  message carries the same hash as `proof=` (section 4.4), and `src=` commits to the event ids, which carry its first 16 hex digits.
-- **Brackets.** Eight or sixteen coins, one derby per match per round (default seven days). More winning days advances; the tiebreak is
-  the compounded change over the round, then the lower seed. The losing fan coin retires and reads nothing more. A winning day in the
-  final counts two units, which the program compounds as pool × (1 − (1 − f)²), while two times f stays within the rules' 10% maximum.
-- **Refused.** A Burnticker coin as an input, the refuse list, the same coin twice, a coin with no Pyth feed and under $250,000 of
-  liquidity, and US index proxy feeds unless the host enables them. A coin's own trading is never an input.
+- **Settlement.** A window's margin is coin A's % change minus coin B's, exact to six decimals. A positive margin settles YES, and side
+  A's coin burns. A negative margin settles NO, and side B's coin burns. An exact tie is a void on both sides. The coin on the winning
+  side burns, and nothing is paid to anyone. A one-shot variant settles once. It settles YES on the first window that ends with A's size
+  above B's, or NO at the end of the season if that never happens.
+- **Values.** For Pyth, the values come from the sponsored `PriceUpdateV2` accounts on Solana. Pyth's receiver program writes them
+  after it verifies the Wormhole-signed update. They are read without a key and snapshotted at each boundary. The other option is the
+  Hermes update published at the boundary, which is Pyth's pull service and needs an API key. The sha256 of its bytes becomes the proof.
+  A coin without a Pyth feed is read from the time-weighted vault balances of its deepest SOL pool, priced with Pyth's SOL/USD feed.
+- **Cross-read.** An independent operator (Jupiter, DexScreener or RedStone) is snapshotted at the same boundaries. If its margin
+  differs from the primary's by more than two percentage points, or if a value is missing, the window is withheld. There is no reading
+  and no burn, and an alert goes out. Each window is decided once and stored append-only.
+- **Proof on chain.** The reading carries `derby:sha256:<hex>` of the window's proof document. The counter attestation's quorum-signed
+  message carries the same hash as `proof=` (section 4.4). Its `src=` commits to the event ids, and those ids carry the first 16 hex
+  digits of the hash.
+- **Brackets.** A bracket has eight or sixteen coins, with one derby per match per round. A round lasts seven days by default. The coin
+  with more winning days advances. The tiebreak is the compounded change over the round, then the lower seed. The losing fan coin
+  retires and reads nothing more. A winning day in the final counts as two units. The program compounds them as
+  pool × (1 − (1 − f)²), while two times f stays within the rules' 10% maximum.
+- **Refused.** A derby refuses a Burnticker coin as an input, anything on the refuse list, the same coin twice, and a coin with no Pyth
+  feed and under $250,000 of liquidity. It also refuses US index proxy feeds unless the host enables them. A coin's own trading is never
+  an input.
 
 ### 5.3 No pool is left behind
 
 Every rule created since 2026-10-10 carries `onEnd: { windDownDays: 28, sweepThresholdLamports }` inside its hash.
 
-- **The wind-down.** When a rule ends for any reason (a one-shot resolved NO or void, a pair voided, a derby season over, a bracket coin
-  knocked out, a team's season over), the keeper attests a daily reading from a date-based clock whose proof is
-  sha256("clock|<date>|<rules sha256>"). Each day counts the smallest number of units n of the rule's own fraction f with
-  (1 − f)^(28n) ≤ 1 % — 17 units a day at 1 % — so at least 99 % of the pool is spent within 28 days; the 2 % per-crank cap carries the
-  rest forward and the $1 floor ends the tail. Then the coin retires.
-- **A one-shot at 100 %.** A one-shot mapping may spend the whole pool (recurring rules stay at 10 % or less); the program already accepts
-  10,000 basis points. Because a crank spends at most 2 % of the pool's reserve and needs a reading with units, the keeper attests one
-  drain unit a day after the YES — each one's rule spend is the whole pool, exactly — until the program carries nothing more.
+- **The wind-down.** A rule can end for several reasons: a one-shot resolved NO or void, a pair voided, a derby season over, a bracket
+  coin knocked out, or a team's season over. When it ends, the keeper attests a daily reading from a date-based clock whose proof is
+  sha256("clock|<date>|<rules sha256>"). Each day counts the smallest number of units n of the rule's own fraction f for which
+  (1 − f)^(28n) ≤ 1 %. At 1 % that is 17 units a day. So at least 99 % of the pool is spent within 28 days. The 2 % per-crank cap
+  carries the rest forward, and the $1 floor ends the tail. Then the coin retires.
+- **A one-shot at 100 %.** A one-shot mapping may spend the whole pool. Recurring rules stay at 10 % or less. The program already
+  accepts 10,000 basis points. A crank spends at most 2 % of the pool's reserve and needs a reading with units. So after the YES, the
+  keeper attests one drain unit a day until the program carries nothing more. Each drain unit's rule spend is exactly the whole pool.
 - **The sweep.** A retired coin's burn pool keeps receiving the post-graduation creator fee. When its spendable balance passes the
-  threshold the keeper attests one full-spend reading (at most once a week). A permissionless instruction that lets anyone do this
-  without the keeper is queued for the next program review (`PROGRAM-UPGRADE-QUEUE.md`), as is forwarding a losing coin's leftover to
+  threshold, the keeper attests one full-spend reading, at most once a week. A permissionless instruction that lets anyone do this
+  without the keeper is queued for the next program review (`PROGRAM-UPGRADE-QUEUE.md`). So is forwarding a losing coin's leftover to
   the winning coin of an outcome set.
 
-Communities adding to a score by burning their own tokens into the program was considered and not built: it would turn the score into a
-function of spending and add a deposit path to a program designed without one.
+One idea was to let communities add to a score by burning their own tokens into the program. It was considered and not built. It would
+turn the score into a function of spending, and it would add a deposit path to a program designed without one.
 
 ### 5.4 The pair curve: both coins graduate, or neither does
 
-On LaunchLab each coin of a pair has its own curve, so one side can graduate while the other stalls. The owner's decision of
-2026-10-10 is a second program, `pair_curve` (`docs/burnticker/PAIR-CURVE.md`), through which a pair launches when
-`BURNTICKER_PAIR_CURVE_ENABLED` is set (default off; single coins stay on LaunchLab). Until it is on, pairs launch on two LaunchLab
-curves under the rules-level "both or neither" clause of §5.1.
+On LaunchLab each coin of a pair has its own curve, so one side can graduate while the other stalls. On 2026-10-10 the owner decided on
+a second program that runs both curves of a pair together (`pair_curve`, described in `docs/burnticker/PAIR-CURVE.md`). A pair launches
+through it when `BURNTICKER_PAIR_CURVE_ENABLED` is set. The setting is off by default, and single coins stay on LaunchLab. Until it is
+on, pairs launch on two LaunchLab curves under the rules-level "both or neither" clause of section 5.1.
 
-- **One account per pair**, two virtual-reserve bonding curves (pump.fun's constants by default: 30 SOL virtual, 1.073 B virtual
-  tokens, 793.1 M sellable, 206.9 M reserved for the pool), one System-owned SOL vault, 1,000,000,000 tokens per coin at 6 decimals,
-  mint authority revoked at creation and no freeze authority. The curve is path-independent — the vault holds exactly
-  `F(sold) = ceil(V_s · sold / (V_t − sold))` per side after any sequence of trades, so selling everything back drains it exactly.
-- **Fee: 100 bps of every curve trade**, 25 for the developer wallet (the claim wallet of Burnticker's own LaunchLab platform, compiled
-  into the program) and 75 for the traded coin's `burn_receipts` fee PDA. Both stay in the pair's vault until they are due: the 75 bps
-  reach the fee PDA when that coin's pool is created (or go back to its holders on a void), the 25 bps are paid by a permissionless
-  claim. No trade pays any other account, so no outside wallet can stop trading. No Raydium curve fee, no referral, no creator slice.
-- **Graduation** needs the combined raise to reach the pair's threshold with each side holding a minimum share of it (default 25 %, at
-  most 40 %), before the deadline, and both sides able to pay for their pools. The trade that meets this commits the pair on the spot
-  (both curves close; it can no longer void); each `graduate` call then creates its side's CPMM
-  pool at a `pair_curve` address nobody else can sign for, with SOL and tokens in the curve's closing ratio, and burns every token the pool
-  did not need; a permissionless `lock_lp` then locks 100 % of the LP with Raydium's LP lock, the Fee Key owned by `burn_receipts`' fee-keys
-  PDA (LP locked forever, §6). Two transactions, because both pools in one would sit at Solana's 64-entry instruction-trace cap and a griefer could
-  push them over it.
-- **Void**: at the deadline without graduation, buys close and each coin's holders share what that side raised (its curve SOL plus the
-  75 bps held for its fee PDA) pro rata, with no fee and no advantage in leaving first. Once nothing circulates the pair's accounts
-  close. A side Raydium still blocks three days after the commit, or any side still without its pool thirty days after it, is put
-  into the same pro-rata exit, alone. Once the deadline has passed nobody can leave along the curve ahead of the others.
-- **Registration**: `burn_receipts` gained registration policy 2 and `register_pair_pool`, which accepts only the pool `pair_curve`
-  recorded for that mint, at its `pair_curve` address, created by the pair's vault on the pinned cpConfigId, with ≥ 90 % of the creation
-  LP burned or locked (§4.7).
-- **Powers**: none over funds. No admin, no parameter update, no withdraw; the upgrade authority is the same Squads vault as
-  `burn_receipts`, to be finalised before the first public pair (`docs/burn-receipts/pair-curve-powers-register.md`). Two blind reviews
-  (2026-10-10) found five High issues in the first version; all are fixed and re-run on devnet (`docs/burn-receipts/CHANGELOG.md`).
+- **One account per pair.** Each pair has one account with two virtual-reserve bonding curves. By default they use pump.fun's
+  constants: 30 SOL virtual, 1.073 B virtual tokens, 793.1 M sellable and 206.9 M reserved for the pool. There is one System-owned SOL
+  vault. Each coin has 1,000,000,000 tokens at 6 decimals, with mint authority revoked at creation and no freeze authority. The curve is
+  path-independent. After any sequence of trades the vault holds exactly `F(sold) = ceil(V_s · sold / (V_t − sold))` per side, so
+  selling everything back drains it exactly.
+- **The fee is 1 % of every curve trade, which is 100 basis points.** Of that, 25 basis points go to the developer wallet, which is the
+  claim wallet of Burnticker's own LaunchLab platform, compiled into the program. The other 75 basis points go to the traded coin's fee
+  PDA in the settlement program (`burn_receipts`). Both shares stay in the pair's vault until they are due. The 75 basis points reach
+  the fee PDA when that coin's pool is created, or go back to its holders on a void. The 25 basis points are paid by a permissionless
+  claim. No trade pays any other account, so no outside wallet can stop trading. There is no Raydium curve fee, no referral and no
+  creator slice.
+- **Graduation.** Graduation needs the combined raise to reach the pair's threshold before the deadline. Each side must hold a minimum
+  share of it, which is 25 % by default and at most 40 %. Both sides must also be able to pay for their pools. The trade that meets this
+  commits the pair on the spot. Both curves close, and the pair can no longer void. Each `graduate` call then creates its side's CPMM
+  pool at a `pair_curve` address that nobody else can sign for. It puts in SOL and tokens in the curve's closing ratio, and it burns
+  every token the pool did not need. Then anyone can call `lock_lp`, which locks 100 % of the LP with Raydium's LP lock. The Fee Key is
+  owned by the fee-keys PDA of `burn_receipts`, and the LP is locked forever (section 6). Graduation takes two transactions, because
+  both pools in one transaction would sit at Solana's 64-entry instruction-trace cap, and a griefer could push them over it.
+- **Void.** If the deadline passes without graduation, buys close. Each coin's holders share what that side raised, pro rata. That is
+  its curve SOL plus the 75 basis points held for its fee PDA. There is no fee and no advantage in leaving first. Once nothing
+  circulates, the pair's accounts close. A side that Raydium still blocks three days after the commit is put into the same pro-rata
+  exit on its own. So is any side still without its pool thirty days after the commit. Once the deadline has passed, nobody can leave
+  along the curve ahead of the others.
+- **Registration.** The settlement program gained registration policy 2 and the instruction `register_pair_pool`. It accepts only the
+  pool that the pair program recorded for that mint, at its `pair_curve` address, created by the pair's vault on the pinned `cpConfigId`,
+  with ≥ 90 % of the creation LP burned or locked (section 4.7).
+- **Powers.** The pair program has no powers over funds. It has no admin, no parameter update and no withdraw. Its upgrade authority is
+  the same Squads vault as the settlement program's, and it is to be finalised before the first public pair
+  (`docs/burn-receipts/pair-curve-powers-register.md`). Two blind reviews on 2026-10-10 found five High issues in the first version. All
+  of them are fixed and were re-run on devnet (`docs/burn-receipts/CHANGELOG.md`).
+
 ### 5.5 Winner takes the burn
 
-The owner's decision of 2026-10-11 (LAUNCHPAD-PATH §40): "the fees for both the winner and loser should burn the winner's supply." Every
-pair made since carries `pair.winnerTakesBurn: true` in both sides' canonical rules (inside each hash; pairs made before keep their bytes).
+The owner decided this on 2026-10-11 (LAUNCHPAD-PATH section 40): "the fees for both the winner and loser should burn the winner's
+supply." Every pair made since then carries `pair.winnerTakesBurn: true` in both sides' canonical rules. The flag is inside each hash.
+Pairs made before then keep their bytes.
 
-- **Pairing on chain.** A LaunchLab pair names each other in `initialize_token` (`pair_mint`, with the partner's PairLink address passed
-  every time, and `pair_void_by` — the rules' locked voidBy, the same on both coins): side A is provisional until side B names it back
-  within 7 days, else both are plain coins for good (the keeper alerts `pair-unmatched` daily meanwhile). A `pair_curve` pair is linked by
-  the permissionless `link_pair` right after `init_pair`, with the Pair account as the witness; `register_pair_pool` refuses until it has
-  run (or after an unlink). `link_pair` is refused only for a voided Pair or a refunding side (`PairTerminal`). Both coins must have the
-  SAME attester set and quorum — same keys, same order — at the second `initialize_token` and at `link_pair` (`PairAttestersDiffer`).
-  Periods already read when the coins pair stay unpaired history (`pair_after_date` on both coins: no PairResult may name them and the
-  crank passes them as plain periods), so a coin that read first is never frozen. Pairing is deliberately not part of a coin's rules hash
-  or `params_hash`: those are fixed at `initialize_token`, while a pair_curve pairing happens later and can be undone; the chain's
-  `pair_state` (0 none, 1 provisional, 2 paired, 3 unlinked) and PairLink accounts are the record. A paired coin changes its attesters only
-  through `apply_paired_attester_change`, with the partner's quorum co-signing the pending set; `apply_attester_change` refuses it
-  (`PairedAttesterChange`). The residual, stated plainly: whoever holds the common attester quorum decides every result; on Burnticker that
-  is the operator's keeper alone at quorum 1.
-- **Each result.** One PairResult `["pair_result", mint_lo, mint_hi, date]` names the winner — the coin whose rule the result fires — or a
-  draw, never for a date before the pairing day or on/before `pair_after_date` (`PairPeriodUnpaired`). Every result needs both coins'
-  quorums — one common set, so one set of signatures. A win is recorded only when both coins have a reading for the date and the loser's is
-  still unprocessed (`PairResultNotServable` otherwise; there is no pool condition). The keeper attests a flat 0-unit
-  reading for the winner first when the winner had nothing to read that day. A draw is posted only for a true draw and needs both quorums. The loser's `crank_buyback` for that period refuses (`ForwardRequired`); the permissionless
-  `forward_to_winner` moves exactly what the loser's own rule would have spent, `buyback_spend(min(spendable pool − the loser's carried spend, cap), units, f)` with
-  the loser's units and fraction (nothing below the rule's minimum spend; a one-shot pair maps 100 %, so all of it), from the loser's burn
-  pool into the winner's, and writes the memo in every case `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. If either
-  coin has no verified pool (or the pair has been unlinked) it moves 0 lamports and still processes the loser's reading, so a dead side can
-  never wedge the queue: a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published. Against a dead winner the fuel stays in the loser's pool, where the loser's own later
-  burns spend it. The loser's
-  reading is processed with outcome 6 (forwarded). The winner's ordinary cranks then spend its pool on
-  the winner's coin and burn what they get.
-- **What does not happen.** The loser's supply is untouched and nothing is paid to holders: SOL moves between two program PDAs that have no withdraw
-  path. A draw or a void forwards nothing; each coin burns its own fuel. With no result 72 h after a reading, or a LOST period whose
-  forward never landed within 72 h, the coin cranks as unpaired (`PairResultMissing` / `PairForwardMissing`) and that period can no longer
-  forward — `forward_to_winner` is refused after the window (`ForwardWindowClosed`), so there is no race with the crank (the planner switches from the forward to the paired buyback at that point; the keeper does not repeat the time-out); the keeper
-  alerts `pair-result-missing` 12 h and `pair-forward-pending` 1 h after the reading, `pair-result-unservable` when a win cannot be
-  recorded, and `pair-forward-missing` if a time-out happens. No draw is ever substituted for a result.
-- **Unlinking.** The permissionless `unlink_pair` turns a pair back into two plain coins on TERMINAL on-chain evidence only: the pair_curve
-  Pair is Voided or one of its sides is refunding (the Pair is required evidence for a pair_curve coin; an Open pair is never unlinked,
-  however long its curve runs), or a LaunchLab pair's locked voidBy day has ended with a coin still without a verified pool (else
-  `PairStillLive`). Both coins become `unlinked` (pair_state 3; a pair_curve coin still registers its pool); both PairLinks close (their
-  rent goes to each coin's burn pool); recorded results stay as history. The keeper sends it when the evidence
-  holds; the pair page then says "unpaired (reason)" and later receipts carry no pair role.
-- **Order.** The keeper attests both coins' readings, posts the PairResult, runs the loser's forward and only then the winner's crank, so
-  the forwarded fuel is in the pool that crank spends. After a one-shot pair's result, whatever reaches the loser's burn pool later (its
-  end-of-rule burns and sweeps) forwards to the winner while the winner is live; on such a day the keeper attests a flat reading (0 units)
-  for the winner, because a win needs both coins' readings for the date.
-- **Receipts.** The loser's receipt shows `forwarded` with the SOL moved; the receipt line reads "forwarded from $LOSER: N SOL → $WINNER
-  burn pool"; the registry keeps an append-only `pair_forwards` table; the pair page tallies "burned on A / burned on B / forwarded A→B /
-  B→A", and the Burn Derby scoreboard counts forwarded fuel. Devnet, 2026-10-11 (pair 6): one forward moved exactly 79,306,876 lamports
-  from side B to side A, and side A's paired cranks then burned its coin
-  (`docs/burnkeeper/evidence/devnet-pair-forward-2026-10-11/`).
+- **Pairing on chain.** Two LaunchLab coins pair by naming each other in `initialize_token`. Each one passes `pair_mint`, the partner's
+  `PairLink` address, which is passed every time, and `pair_void_by`. That last value is the rules' locked voidBy, the same on both
+  coins. Side A is provisional until side B names it back. If that does not happen within 7 days, both stay plain coins for good, and
+  the keeper raises the `pair-unmatched` alert every day in the meantime. A `pair_curve` pair is linked by `link_pair`, which anyone can
+  call right after `init_pair`, with the `Pair` account as the witness. `register_pair_pool` refuses until `link_pair` has run, or after
+  an unlink. `link_pair` is refused only for a voided `Pair` or a refunding side (`PairTerminal`). Both coins must have the SAME attester
+  set and quorum, with the same keys in the same order. This is checked at the second `initialize_token` and at `link_pair`
+  (`PairAttestersDiffer`). Periods already read when the coins pair stay as unpaired history. Both coins record this in
+  `pair_after_date`. No `PairResult` may name those periods, and the crank passes them as plain periods. So a coin that read first is
+  never frozen. Pairing is deliberately left out of a coin's rules hash and `params_hash`. Those are fixed at `initialize_token`, while a
+  `pair_curve` pairing happens later and can be undone. The record is the chain's `pair_state` (0 none, 1 provisional, 2 paired,
+  3 unlinked) and the `PairLink` accounts. A paired coin changes its attesters only through `apply_paired_attester_change`, with the
+  partner's quorum co-signing the pending set. `apply_attester_change` refuses a paired coin (`PairedAttesterChange`). One risk remains,
+  and it is stated plainly here. Whoever holds the common attester quorum decides every result. On Burnticker that is the operator's
+  keeper alone, at quorum 1.
+- **Each result.** One `PairResult` account (`["pair_result", mint_lo, mint_hi, date]`) names the winner or a draw. The winner is the
+  coin whose rule the result fires. No result may name a date before the pairing day, or a date on or before `pair_after_date`
+  (`PairPeriodUnpaired`). Every result needs both coins' quorums. The two coins share one attester set, so one set of signatures covers
+  both. A win is recorded only when both coins have a reading for the date and the loser's reading is still unprocessed. Otherwise the
+  call fails with `PairResultNotServable`. There is no pool condition. When the winner had nothing to read that day, the keeper first
+  attests a flat 0-unit reading for it. A draw is posted only for a true draw and needs both quorums. The loser's `crank_buyback` for
+  that period refuses (`ForwardRequired`). Anyone can then call `forward_to_winner`. It moves exactly what the loser's own rule would
+  have spent, which is `buyback_spend(min(spendable pool − the loser's carried spend, cap), units, f)` with the loser's units and
+  fraction. The amount moves from the loser's burn pool into the winner's. Nothing below the rule's minimum spend moves. A one-shot pair
+  maps 100 %, so all of it moves. The instruction writes a memo in every case, in the form
+  `<LOSER PREFIX>|forward|from=<12>|to=<12>|period=<date>|lamports=N|v1`. If either coin has no verified pool, or if the pair has been
+  unlinked, it moves 0 lamports and still processes the loser's reading. So a dead side can never wedge the queue. Either way,
+  a lost period never burns the losing coin unless no forward lands within 72 hours, in which case it burns as a plain period and a PairForwardMissing event is published.
+  If the winner is dead, the fuel stays in the loser's pool, where the loser's own later burns spend it. The loser's reading is
+  processed with outcome 6 (forwarded). The winner's ordinary cranks then spend its pool on the winner's coin and burn what they get.
+- **What does not happen.** The loser's supply is untouched, and nothing is paid to holders. SOL moves between two program PDAs that
+  have no withdraw path. A draw or a void forwards nothing, and each coin burns its own fuel. If there is no result 72 hours after a
+  reading, or if a LOST period's forward never landed within 72 hours, the coin cranks as unpaired (`PairResultMissing` or
+  `PairForwardMissing`). That period can no longer forward. `forward_to_winner` is refused after the window (`ForwardWindowClosed`), so
+  there is no race with the crank. At that point the planner switches from the forward to the paired buyback, and the keeper does not
+  repeat the time-out. The keeper raises `pair-result-missing` 12 hours after the reading and `pair-forward-pending` 1 hour after it. It
+  raises `pair-result-unservable` when a win cannot be recorded, and `pair-forward-missing` if a time-out happens. No draw is ever
+  substituted for a result.
+- **Unlinking.** Anyone can call `unlink_pair` to turn a pair back into two plain coins, but only on TERMINAL on-chain evidence. For a
+  `pair_curve` coin, the evidence is that the `Pair` is Voided or one of its sides is refunding. The `Pair` is required evidence for such
+  a coin, and an Open pair is never unlinked, however long its curve runs. For a LaunchLab pair, the evidence is that the locked voidBy
+  day has ended with a coin still without a verified pool. Otherwise the call fails with `PairStillLive`. Both coins become `unlinked`
+  (`pair_state` 3), and a `pair_curve` coin still registers its pool. Both `PairLink` accounts close, and their rent goes to each coin's
+  burn pool. Recorded results stay as history. The keeper sends the instruction when the evidence holds. The pair page then says
+  "unpaired (reason)", and later receipts carry no pair role.
+- **Order.** The keeper attests both coins' readings, posts the `PairResult`, runs the loser's forward, and only then runs the winner's
+  crank. That way the forwarded fuel is in the pool that the crank spends. After a one-shot pair's result, anything that reaches the
+  loser's burn pool later, such as its end-of-rule burns and sweeps, forwards to the winner while the winner is live. On such a day the
+  keeper attests a flat reading (0 units) for the winner, because a win needs both coins' readings for the date.
+- **Receipts.** The loser's receipt shows `forwarded` with the SOL moved. The receipt line reads
+  `forwarded from $LOSER: N SOL → $WINNER burn pool`. The registry keeps an append-only `pair_forwards` table. The pair page tallies four
+  numbers: burned on A, burned on B, forwarded from A to B, and forwarded from B to A. The Burn Derby scoreboard counts forwarded fuel.
+  On devnet on 2026-10-11 (pair 6), one forward moved exactly 79,306,876 lamports from side B to side A, and side A's paired cranks then
+  burned its coin (`docs/burnkeeper/evidence/devnet-pair-forward-2026-10-11/`).
 
 ## 6. Economics
 
-Fee dials were read from the pinned Raydium SDK, Raydium's documentation and the live config accounts (`docs/burnkeeper/fees.md`;
-designed values in `src/lib/burnticker/fees.ts`).
+Fee dials were read from the pinned Raydium SDK, Raydium's documentation and the live config accounts (`docs/burnkeeper/fees.md`). The
+designed values are in `src/lib/burnticker/fees.ts`. The table gives fees in basis points (bps). One basis point is 0.01 % of volume.
 
 | Phase, per unit of volume | Raydium | Burnticker (developer / operator) | Burn pool (fee PDA) | Nobody |
 |---|---|---|---|---|
@@ -525,33 +569,35 @@ designed values in `src/lib/burnticker/fees.ts`).
 | Pair curve (`pair_curve`, §5.4) | 0 | 25 bps | 75 bps | none |
 | Pair coin after graduation (CPMM public `initialize`, creator fee off) | 4 bps of trade fee | 4.2 bps (20 % of the locked LP's fees) | 16.8 bps (80 % of the locked LP's fees; public pool creation cannot turn the creator fee on) | none |
 
-- **LP locked forever; its fees fund the burn** (owner decision 2026-10-10, replacing "all graduation LP is burned"). 100 % of every
-  coin's graduation LP is locked with Raydium's LP lock (LaunchLab `platformScale` 1,000,000, creator 0, burn 0; pair coins through
-  `lock_lp`), never withdrawable and not creator-configurable. The Fee Key NFT is owned by `burn_receipts`' `["fee_keys"]` PDA. The
-  permissionless `claim_lock_fees` splits the SOL side of the LP fees by compiled constants — `LOCK_FEE_BURN_BPS` 8,000 to the coin's
-  burn pool, `LOCK_FEE_OPERATOR_BPS` 2,000 to the operator treasury (the Squads vault) — and burns the coin side; no admin key or config
-  field can change the split. Per swap after graduation that is ≈ 21.55 bps toward the burn (16.8 + 4.75; it was 4.75 with the LP
-  burned) and 4.2 bps to the operator: **the operator earns 20 % of post-graduation LP fees.** On mainnet the treasury is not compiled
-  in yet; until it is, every claim refuses `TreasuryNotPinned` and the fees stay in the lock.
-- **Rivalry pairs: winner takes the burn** (owner decision 2026-10-11, §5.5). In a pair, fees from both coins burn the winner's supply: at
-  each result the loser's burn-pool spend for that result moves to the winner's burn pool (`forward_to_winner`) instead of buying the
-  loser's coin. It changes where a pair's burn-pool SOL is spent, not any fee rate above; no one is paid and the operator takes nothing
-  from a forward.
-- **Creators earn no cash from fees.** The creator-fee slot pays the burn pool, 100 %, by construction: the fee PDA is the creator.
-- **No team allocation** on any coin. The program has no mint path; supply is LaunchLab's fixed 1,000,000,000 at 6 decimals.
+- **The LP is locked forever, and its fees fund the burn.** The owner decided this on 2026-10-10, replacing "all graduation LP is burned".
+  100 % of every coin's graduation LP is locked with Raydium's LP lock (LaunchLab `platformScale` 1,000,000, creator 0, burn 0; pair
+  coins through `lock_lp`). It can never be withdrawn, and the creator cannot configure it. The Fee Key NFT is owned by the
+  `["fee_keys"]` PDA of `burn_receipts`. Anyone can call `claim_lock_fees`, which splits the SOL side of the LP fees by compiled
+  constants. `LOCK_FEE_BURN_BPS` sends 8,000 basis points of it to the coin's burn pool. `LOCK_FEE_OPERATOR_BPS` sends 2,000 basis points
+  to the operator treasury, which is the Squads vault. The coin side is burned. No admin key or config field can change the split.
+  Per swap after graduation, that is about 21.55 basis points toward the burn (16.8 + 4.75; it was 4.75 with the LP burned) and 4.2
+  basis points to the operator. **The operator earns 20 % of post-graduation LP fees.** On mainnet the treasury is not compiled in yet.
+  Until it is, every claim refuses with `TreasuryNotPinned`, and the fees stay in the lock.
+- **In rivalry pairs, the winner takes the burn.** The owner decided this on 2026-10-11 (section 5.5). In a pair, fees from both coins
+  burn the winner's supply. At each result, the loser's burn-pool spend for that result moves to the winner's burn pool
+  (`forward_to_winner`) instead of buying the loser's coin. This changes where a pair's burn-pool SOL is spent. It does not change any
+  fee rate above. No one is paid, and the operator takes nothing from a forward.
+- **Creators earn no cash from fees.** The creator-fee slot pays the burn pool, 100 %, by construction, because the fee PDA is the
+  creator.
+- **No coin has a team allocation.** The program has no mint path. Supply is LaunchLab's fixed 1,000,000,000 at 6 decimals.
 - **Seed deposits are gifts.** $DEFICIT's planned 3 SOL seed to its burn pool is disclosed and carries no claim.
-- **No referral share** (`shareFeeRate` 0), no hidden parameters, no creator fee slice (`CREATOR_FEE_SLICE_BPS = 0`).
-- **What the platform fee funds** (`USE_OF_FEES`): "attesters, hosting, the audit, and the operator. The platform never buys back any
-  coin, including its own." The bounty pool (5 to 10 SOL) is drawn from the same fee.
-- A creator pays LaunchLab's creation cost and gas; nothing to Burnticker up front.
+- **There is no referral share** (`shareFeeRate` 0), no hidden parameter and no creator fee slice (`CREATOR_FEE_SLICE_BPS = 0`).
+- **What the platform fee funds.** The fee list (`USE_OF_FEES`) says: "attesters, hosting, the audit, and the operator. The platform
+  never buys back any coin, including its own." The bounty pool (5 to 10 SOL) is drawn from the same fee.
+- A creator pays LaunchLab's creation cost and gas, and pays nothing to Burnticker up front.
 
-The platform admin key can change these dials for launches not yet migrated (§9); the trust page shows the live PlatformConfig beside
-the designed dials when the host has an RPC configured (`compareLivePlatform`).
+The platform admin key can change these dials for launches not yet migrated (section 9). When the host has an RPC configured, the trust
+page shows the live platform config beside the designed dials (`compareLivePlatform`).
 
 ## 7. Attestation and the trust ladder
 
-Every attester is an ed25519 key with an informational kind tag (operator, zkTLS relayer, oracle). The program verifies only signatures
-and the quorum; proof checking is off chain by design (`docs/burn-receipts/attestation.md`).
+Every attester is an ed25519 key with a kind tag (operator, zkTLS relayer or oracle), and the tag is for information only. The program
+checks only signatures and the quorum. Proof checking happens off chain by design (`docs/burn-receipts/attestation.md`).
 
 | Level | Configuration | Who could sign a false reading | Who holds the money | What remains trusted |
 |---|---|---|---|---|
@@ -559,16 +605,17 @@ and the quorum; proof checking is off chain by design (`docs/burn-receipts/attes
 | 2 | keeper plus an independent attester (second operator or zkTLS relayer), quorum 2 | two independent keys acting together | nobody | both attesters; with a relayer, the zkTLS provider |
 | 3 | a quorum of independent operators or relayers whose proofs are public | a colluding quorum, against public proofs | nobody | the proof system and the source |
 
-**Current status.** Level 1 is the launch design. Switchboard, the planned second signer, ended all oracle services on 2026-09-25; its
-attester was built and removed from the program the same day (commit `f94089c5`). The replacements, a Reclaim zkTLS proof of the source
-response posted by a relayer key and/or a second human operator, are not built; the decision log's "attester two within 14 days of the
-first launch" is a schedule. For Kalshi no independent on-chain attestation exists: settlement is published through Kalshi's own API,
-and reports of Kalshi markets tokenised on Solana through DFlow could not be confirmed from a primary source
-(`docs/burnticker/README.md` §8). At every level the upgrade authority remains until finalised.
+**Current status.** Level 1 is the launch design. Switchboard, the planned second signer, ended all oracle services on 2026-09-25. Its
+attester was built, then removed from the program the same day (commit `f94089c5`). The replacement is a Reclaim zkTLS proof of the
+source response posted by a relayer key, a second human operator, or both. None of these is built. The decision log names "attester two
+within 14 days of the first launch", and that line is a schedule. For Kalshi, no independent on-chain attestation exists. Kalshi
+publishes settlement through its own API. There were reports of Kalshi markets tokenised on Solana through DFlow, but they could not be
+confirmed from a primary source (`docs/burnticker/README.md` section 8). At every level, the upgrade authority remains until it is
+finalised.
 
 ## 8. Verification walk-through: recompute one receipt
 
-Take the $DEFICIT reading for 2026-10-08 used in the program's own memo tests (`src/memo.rs`).
+Take the $DEFICIT reading for 2026-10-08. The program's own memo tests use it (`src/memo.rs`).
 
 **Step 1, the source.**
 
@@ -576,23 +623,25 @@ Take the $DEFICIT reading for 2026-10-08 used in the program's own memo tests (`
 curl -s 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt&filter=record_date:eq:2026-10-08'
 ```
 
-The row gives `40305316210829.72`; the previous business day gave `40284036147367.19`. The attested `src` field is the sha256 of that
-exact URL; recompute it with `printf %s '<url>' | shasum -a 256` and compare with `Reading.source_url_hash`.
+The row gives `40305316210829.72`. The previous business day gave `40284036147367.19`. The attested `src` field is the sha256 of that
+exact URL. Recompute it with `printf %s '<url>' | shasum -a 256` and compare it with `Reading.source_url_hash`.
 
-**Step 2, the signature.** Rebuild the canonical message of §4.4 from the Reading and TokenConfig and check each signature in the
-`submit_reading` transaction's Ed25519 instruction against the attester keys listed in the TokenConfig.
+**Step 2, the signature.** Rebuild the canonical message of section 4.4 from the `Reading` and the `TokenConfig`. Then check each
+signature in the Ed25519 instruction of the `submit_reading` transaction against the attester keys listed in the `TokenConfig`.
 
-**Step 3, the units.** `delta = 21,280,063,462.53` dollars. With carry 0 and a $1B unit, `units = floor(21,280,063,462.53 / 1,000,000,000) = 21`;
-the remainder `280,063,462.53` carries into the next reading if that reading is also an increase.
+**Step 3, the units.** The change is `delta = 21,280,063,462.53` dollars. With carry 0 and a $1B unit,
+`units = floor(21,280,063,462.53 / 1,000,000,000) = 21`. The remainder `280,063,462.53` carries into the next reading if that reading
+is also an increase.
 
-**Step 4, the spend.** With `f = 1 %` and a pool basis of 1 SOL (1,000,000,000 lamports), `spend = 1,000,000,000 × (1 − 0.99^21) =
-190,272,132` lamports by the program's fixed-point arithmetic (`buybackSpend` in `src/lib/burnReceipts/math.ts` gives the same). Then
-apply the per-crank cap: if 2 % of the CPMM pool's WSOL reserve is smaller, the crank spends that and the Reading's
+**Step 4, the spend.** Take `f = 1 %` and a pool basis of 1 SOL (1,000,000,000 lamports). The program's fixed-point arithmetic gives
+`spend = 1,000,000,000 × (1 − 0.99^21) = 190,272,132` lamports, and `buybackSpend` in `src/lib/burnReceipts/math.ts` gives the same.
+Then apply the per-crank cap. If 2 % of the CPMM pool's WSOL reserve is smaller, the crank spends that, and the Reading's
 `carried_out_lamports` holds the rest. The memo's `pool=` is the basis actually used, so the arithmetic checks against the memo itself.
 
-**Step 5, the swap and the burn.** The crank transaction is itself the swap and the burn. In its inner instructions find the CPMM
-`swap_base_input` from the fee PDA's WSOL account, the SPL Token `Burn` from the fee PDA's token account (supply falls by `burn=`), and
-the Memo CPI. Check that the swap's minimum output is at least the larger of the spot and TWAP quotes less `slippage_bps`.
+**Step 5, the swap and the burn.** The crank transaction is itself the swap and the burn. Its inner instructions hold three steps. The
+first is the CPMM `swap_base_input` from the fee PDA's WSOL account. The second is the SPL Token `Burn` from the fee PDA's token account,
+and supply falls by `burn=`. The third is the Memo CPI. Check that the swap's minimum output is at least the larger of the spot and TWAP
+quotes, less `slippage_bps`.
 
 **Step 6, the memo.**
 
@@ -600,43 +649,44 @@ the Memo CPI. Check that the swap's minimum output is at least the larger of the
 DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=<lamports>|spent=<lamports>|got=<tokens>|burn=<tokens>|swap=<first 12 chars of the CPMM pool>|rules=sha256:<12>|v2
 ```
 
-`swap=` carries the first 12 base58 characters of the pool, because one instruction cannot know its own transaction signature.
-`burn` can exceed `got` when donated or fee tokens were also burned. `memoFromChain()` in `src/lib/burnReceipts/` rebuilds the memo
-from accounts alone.
+`swap=` carries the first 12 base58 characters of the pool, because one instruction cannot know its own transaction signature. `burn`
+can exceed `got` when donated or fee tokens were also burned. `memoFromChain()` in `src/lib/burnReceipts/` rebuilds the memo from the
+accounts alone.
 
-**For a Kalshi receipt**, step 1 is the settled market, for example
-`curl -s 'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXNFLGAME&status=settled'`: market
-`KXNFLGAME-26OCT04DENSF-DEN`, status `finalized`, `result` `no`, settled `2026-10-04T23:41:27Z` (saved fixture
-`config/burnticker/fixtures/kalshi/KXNFLGAME.settled.json`). Step 3 applies the locked rule to each settlement of the day; the counter's
-`src` hash commits to the event ids counted.
+**For a Kalshi receipt**, step 1 is the settled market. For example,
+`curl -s 'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXNFLGAME&status=settled'` gives the market
+`KXNFLGAME-26OCT04DENSF-DEN` with status `finalized` and `result` `no`, settled at `2026-10-04T23:41:27Z`. The saved fixture is
+`config/burnticker/fixtures/kalshi/KXNFLGAME.settled.json`. Step 3 applies the locked rule to each settlement of the day, and the
+counter's `src` hash commits to the event ids counted.
 
-**The public audit.** `scripts/burnticker-audit.mts` recomputes every receipt of every token from the recorded readings and the
-published rule, writes `audit.json` and exits non-zero on any mismatch; it reads no key and sends nothing. Its chain leg (comparing each
-memo on chain) is not wired: the script runs with no program client and reports "chain not checked".
+**The public audit.** The audit script (`scripts/burnticker-audit.mts`) recomputes every receipt of every token from the recorded
+readings and the published rule. It writes `audit.json` and exits non-zero on any mismatch. It reads no key and sends nothing. Its chain
+leg, which would compare each memo on chain, is not wired. The script runs with no program client and reports "chain not checked".
 
 ## 9. Governance and custody
 
-- **Squads 2-of-3 with a 48-hour time lock** (owner hardware key, owner second key, a trusted third party) is the planned holder of the
-  upgrade authority, the platform authority and each token's config authority; the program's own 48-hour timelocks come on top.
-  Commands: `docs/burn-receipts/README.md` §5.2. Not created yet.
-- **Upgrade authority plan.** Deploy the verifiable build, hand the authority to the Squads vault, and after review set it to none
-  (BPF Upgradeable Loader `SetAuthority` with no new authority, executed as a Squads vault transaction). The runbook's launch gate is
-  that the mainnet launch is published only after `solana program show` prints `Authority: none` and the deployed hash equals the
-  published verifiable hash (README §5.3). Until then, every "no extraction" property depends on the multisig not shipping a malicious
-  upgrade.
-- **LaunchLab platform admin, disclosed and untimelocked.** Raydium's `updatePlatformConfig` has no admin-change variant and the
-  PlatformConfig PDA is seeded by the admin key, so the admin cannot be moved under Squads after creation (D-3). It can change the
-  platform's fee rates, claim wallets, `cpConfigId`, `platformCpCreator` and LP scales for launches not yet migrated. Mitigations:
-  `initialize_token` pins what matters; `verify-platform-pins` re-reads the platform immediately before each create and refuses on any
-  difference; the stranding switch covers a change between init and migration; the trust page shows the live config.
-- **Cranker allowlist during the cap.** `initialize_platform` may name up to 3 keys allowed to call `crank_buyback` while the cap is in
-  force, against an outside cranker timing a multi-block TWAP hold. It can only be cleared, by the platform authority or any listed key,
-  and lapses 90 days after `initialize_platform` or at the cap sunset, whichever comes first. Readings, vault cranks, claims and health
-  checks stay permissionless.
+- **The plan is a Squads 2-of-3 vault with a 48-hour time lock.** The owner holds two of its keys, and a trusted third party holds the
+  third. The vault is the planned holder of the upgrade authority, the platform authority and each token's config authority. The
+  program's own 48-hour timelocks come on top. The commands are in `docs/burn-receipts/README.md` section 5.2. The vault is not created
+  yet.
+- **Upgrade authority plan.** Deploy the verifiable build, hand the authority to the Squads vault, and after review set it to none. That
+  last step is the BPF Upgradeable Loader's `SetAuthority` with no new authority, executed as a Squads vault transaction. The runbook's
+  launch gate says the mainnet launch is published only after `solana program show` prints `Authority: none` and the deployed hash
+  equals the published verifiable hash (README section 5.3). Until then, every "no extraction" property depends on the multisig not
+  shipping a malicious upgrade.
+- **The LaunchLab platform admin is disclosed and has no timelock.** Raydium's `updatePlatformConfig` has no way to change the admin,
+  and the platform config PDA is seeded by the admin key. So the admin cannot be moved under Squads after creation (D-3). It can change
+  the platform's fee rates, claim wallets, `cpConfigId`, `platformCpCreator` and LP scales for launches not yet migrated. Four things
+  limit this. `initialize_token` pins what matters. `verify-platform-pins` re-reads the platform just before each create and refuses on
+  any difference. The stranding switch covers a change between init and migration. The trust page shows the live config.
+- **Cranker allowlist during the cap.** `initialize_platform` may name up to 3 keys that are allowed to call `crank_buyback` while the
+  cap is in force. This guards against an outside cranker timing a multi-block TWAP hold. The list can only be cleared, by the platform
+  authority or any listed key. It lapses 90 days after `initialize_platform` or at the cap sunset, whichever comes first. Readings, vault
+  cranks, claims and health checks stay permissionless.
 
 ## 10. Security review history
 
-Burnticker is **not audited by a security firm**. The owner decided on 2026-10-09 against a paid audit, in favour of independent AI
+Burnticker is **not audited by a security firm**. On 2026-10-09 the owner decided against a paid audit, in favour of independent AI
 reviews, free tooling and a public bounty. Reports are published as delivered:
 
 | Round | Report | Findings | Outcome |
@@ -645,55 +695,62 @@ reviews, free tooling and a public bounty. Reports are published as delivered:
 | Blind review 2 (2026-10-10) | [2026-10-10-claude-blind-2.md](reviews/2026-10-10-claude-blind-2.md) | 5 Medium, 4 Low, 8 Info | sandwich bound via TWAP quote, attester takeover, stray-lamport wedge, quorum-2 transaction size, pool squatting fixed |
 | Blind review 3 and re-check (2026-10-10) | [2026-10-10-claude-blind-3.md](reviews/2026-10-10-claude-blind-3.md) | 3 Medium, 6 Low, 6 Info; re-check 4 Low, 2 Info | callee signer abuse (M-1) closed; LP griefing, LaunchLab pinning and iterated attester takeover partly closed by design |
 
-Each reviewer was a fresh Claude agent given the code, reading earlier reports only after writing its own findings. Every fix and its
-closing test is in `docs/burn-receipts/CHANGELOG.md`. Review 3: no path that moves funds was added and no Critical or High issue found.
+Each reviewer was a fresh Claude agent given the code. It read earlier reports only after writing its own findings. Every fix and its
+closing test is in `docs/burn-receipts/CHANGELOG.md`. Review 3 found that no path that moves funds was added, and it found no Critical
+or High issue.
 
-**Open or accepted after the re-check:** LP-ratio griefing by a deposit larger than the whole migrated liquidity; LaunchLab platform
-admin changes between init and migration (launch gate plus stranding switch); attester proposals still need no consent from current
-attesters (bounded by 48 h + 7 days + 48 h, all public); the Jito-bundle residual on pool-health observations; the multi-block TWAP
-hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-receipts/README.md` §8).
+**Open or accepted after the re-check.** LP-ratio griefing is still possible through a deposit larger than the whole migrated liquidity.
+The LaunchLab platform admin can still make changes between init and migration, which the launch gate and the stranding switch cover.
+Attester proposals still need no consent from current attesters. They are bounded by 48 hours, then 7 days, then 48 hours, all in
+public. The Jito-bundle gap in pool-health observations remains. So does the multi-block TWAP hold once the allowlist lapses.
+Informational items I-3 to I-6 are also open (`docs/burn-receipts/README.md` section 8).
 
-**Not done:** the ChatGPT review in the decision log; cargo-audit, Trident fuzzing and Sec3 X-ray (review 3 ran clippy with
-`-D warnings`: clean); the bounty (5 to 10 SOL from the developer fee, terms drafted in `SECURITY.md`, not published).
+**Not done.** The ChatGPT review named in the decision log is not done. Neither are cargo-audit, Trident fuzzing and Sec3 X-ray. Review 3
+ran clippy with `-D warnings`, and the result was clean. The bounty is not done either. It is 5 to 10 SOL from the developer fee, and its
+terms are drafted in `SECURITY.md` but not published.
 
 ## 11. Limitations and risks
 
-- **Settlement coverage.** Without Kalshi, settled numbers exist only where a primary source has an independent cross-read: two of
-  eleven categories today (§3.4). Everything else settles on Polymarket's payout vector or not at all, and Polymarket is binary-only.
-  Coins launched on a Kalshi rule before 2026-10-10 carry the event-contract disclosure on every page.
-- **LaunchLab is closed source.** The claim, the migration's pool address, `pool_creator` and LP handling rest on its SDK and docs, and
-  have run only against a stand-in. Confirmation is a devnet-rehearsal gate, not done.
-- **Sandwich bound.** A sandwich can take up to `slippage_bps` (≤ 3 %) of each crank's spend, itself at most 2 % of the reserve. A
-  manipulator who holds the rate up for a full TWAP window can still shift a crank once the allowlist lapses.
+- **Settlement coverage.** Without Kalshi, settled numbers exist only where a primary source has an independent cross-read. That is five
+  of eleven categories today (section 3.4). Everything else settles on Polymarket's payout vector or not at all, and Polymarket is
+  binary-only. Coins launched on a Kalshi rule before 2026-10-10 carry the event-contract disclosure on every page.
+- **LaunchLab is closed source.** The claim, the migration's pool address, `pool_creator` and LP handling rest on its SDK and docs. They
+  have run only against a stand-in. Confirming them is a devnet-rehearsal gate, and it is not done.
+- **Sandwich bound.** A sandwich can take up to `slippage_bps` (≤ 3 %) of each crank's spend, and that spend is at most 2 % of the
+  reserve. Once the allowlist lapses, a manipulator who holds the rate up for a full TWAP window can still shift a crank.
 - **Quorum 1 at launch.** The operator's key alone signs readings. A false reading is permanent and public, but it would size a burn.
-- **Pre-audit cap.** Each crank's basis is capped at 25 SOL until the sunset; larger pools burn more slowly.
+- **Pre-audit cap.** Each crank's basis is capped at 25 SOL until the sunset, so larger pools burn more slowly.
 - **Upgradeable until finalised.** The upgrade authority can replace every property in this paper until it is set to none.
-- **Oracle voids and late data.** A late source means no burn until it posts; a missed Treasury date cannot be inserted later (the
-  next delta absorbs it).
-- **No adoption of existing tokens.** `initialize_token` needs the new mint's signature and the fee PDA must be LaunchLab's creator
+- **Oracle voids and late data.** A late source means no burn until it posts. A missed Treasury date cannot be inserted later, and the
+  next delta absorbs it.
+- **No adoption of existing tokens.** `initialize_token` needs the new mint's signature, and the fee PDA must be LaunchLab's creator
   from the first trade.
-- **Per-outcome fractions unsupported.** A rule paying different fractions per outcome cannot be expressed on the current program.
+- **Per-outcome fractions are not supported.** The current program cannot express a rule that pays a different fraction for each
+  outcome.
 - **Burns wait on the curve.** No buyback runs before graduation and pool registration.
-- **Not built:** mainnet program deployment, second attester, the audit's chain leg, systemd units for the multi-token keeper and
-  audit timer.
+- **Not built.** Mainnet program deployment, the second attester, the audit's chain leg, and the systemd units for the multi-token
+  keeper and the audit timer are not built.
 
 ## 12. Open source and transparency
 
-- **Public repository:** `TODO_PUBLIC_REPO_URL`. The program, keeper, platform, sites, docs, deploy files, tests and fixtures are carved
-  out of a private monorepo by an explicit allowlist (`config/public-repo.allowlist`) and a leak scan
-  (`config/public-repo.denypatterns`); the operator's trading code never leaves. Licence: MIT, brand assets excluded. Every publish
-  appends the commit, program hash, IDL hash and allowlist hash to `docs/burnticker/CHANGELOG.md`.
-- **Powers Register:** `docs/burn-receipts/powers-register.{md,json}`, generated from the IDL.
-- **Decision log:** `docs/burnticker/decisions.md`, append-only. **Incident log:** `docs/burnticker/incidents/LOG.md` (no incidents
-  recorded). **Review reports:** `docs/burnticker/reviews/`.
-- **Wallet list:** `config/burnticker/transparency.json` names every role (operations, deployer, keeper, developer fee, LaunchLab
-  platform admin, Squads vault and three members, the $DEFICIT mint, the operator's trading wallets). Every public key is TODO until set.
-- **Policies:** no deletions on X, corrections in-thread with the receipt; no paid promotion; no talk of what any coin trades at; nothing
-  described as forthcoming; the platform never buys any coin.
-- **The operator also runs trading bots.** Every one refuses any platform coin by mint and ticker, fail-closed, in code
-  (`src/lib/ownTokens.ts` reading `config/own-tokens.json`, both published).
-- **The operator:** one independent operator (United States). Contact: contact@burnticker.com; security reports: security@burnticker.com.
-- **How it was built:** with AI assistance (Claude Code) under the operator's direction and review.
+- **Public repository.** This draft left the address as a placeholder. The repository is public at
+  https://github.com/rfzfhn67yk-netizen/burnticker, as the status table above says. The program, keeper, platform, sites, docs, deploy
+  files, tests and fixtures are carved out of a private monorepo. An explicit allowlist (`config/public-repo.allowlist`) and a leak
+  scan (`config/public-repo.denypatterns`) decide what leaves. The operator's trading code never leaves. The licence is MIT, with brand
+  assets excluded. Every publish adds the commit, program hash, IDL hash and allowlist hash to `docs/burnticker/CHANGELOG.md`.
+- **Powers Register.** It is generated from the IDL and published as `docs/burn-receipts/powers-register.{md,json}`.
+- **Logs.** The decision log (`docs/burnticker/decisions.md`) is append-only. The incident log (`docs/burnticker/incidents/LOG.md`) has
+  no incidents recorded. Review reports are in `docs/burnticker/reviews/`.
+- **Wallet list.** The transparency file (`config/burnticker/transparency.json`) names every role: operations, deployer, keeper,
+  developer fee, LaunchLab platform admin, the Squads vault and its three members, the $DEFICIT mint, and the operator's trading
+  wallets. In this draft every public key is a placeholder until it is set.
+- **Policies.** Posts on X are not deleted, and corrections go in the same thread with the receipt. There is no paid promotion and no
+  talk of what any coin trades at. Nothing is described as forthcoming. The platform never buys any coin.
+- **The operator also runs trading bots.** Each bot refuses any platform coin by mint and by ticker. The check is in code and fails
+  closed (`src/lib/ownTokens.ts`, which reads `config/own-tokens.json`). Both files are published.
+- **The operator.** Burnticker is run by one independent operator in the United States. The contact address is contact@burnticker.com,
+  and security reports go to security@burnticker.com.
+- **How it was built.** It was built with AI assistance (Claude Code), under the operator's direction and review.
 
 ## 13. Appendix
 
@@ -763,53 +820,55 @@ hold once the allowlist lapses; informational items I-3 to I-6 (`docs/burn-recei
 | `renounce_platform_authority` | — | authority | privileged |
 | `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
 
-Events (34): AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed, BurnPoolCapBound,
-BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered, ForwardedToWinner,
-LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked, PairResultMissing, PairResultSubmitted (plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged,
-ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed,
-SpendCapBound, SpendCarried, TokenInitialized. Error codes: 100.
+The program has 34 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
+BurnPoolCapBound, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered,
+ForwardedToWinner, LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked, PairResultMissing, PairResultSubmitted
+(plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared,
+PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled,
+RegistrationPolicyProposed, SpendCapBound, SpendCarried, TokenInitialized. Error codes: 100.
 
-`pair_curve` (`src/lib/pairCurve/idl.ts`): `init_pair` (args; payer, creator — creation), the two curve-trade instructions (side, an
-amount, a slippage bound; the trader signs), `graduate` (side; cranker), `lock_lp` (side; cranker — locks the side's LP forever, Fee
-Key to burn_receipts' fee-keys PDA), `burn_lp` (side; cranker — the 30-day fallback if the lock refuses, the only path that destroys
-LP), `claim_developer_fee` (caller), `void_pair` (caller), `close_pair` (caller) — every one after `init_pair` permissionless (9
-entrypoints). Events (9): PairInitialized, Trade, PairCommitted, SideGraduated, LpLocked, LpBurnedFallback, DeveloperFeeClaimed,
-PairVoided, PairClosed.
+The pair program (`pair_curve`, IDL in `src/lib/pairCurve/idl.ts`) has 9 entrypoints. `init_pair` takes args, is signed by the payer
+and the creator, and creates the pair. The two curve-trade instructions take a side, an amount and a slippage bound, and the trader
+signs. `graduate` takes a side and is sent by a cranker. `lock_lp` takes a side and is sent by a cranker. It locks the side's LP
+forever, with the Fee Key going to the fee-keys PDA of `burn_receipts`. `burn_lp` takes a side and is sent by a cranker. It is the
+30-day fallback if the lock refuses, and it is the only path that destroys LP. `claim_developer_fee`, `void_pair` and `close_pair` are
+sent by any caller. Every instruction after `init_pair` is permissionless. The pair program has 9 event types: PairInitialized, Trade,
+PairCommitted, SideGraduated, LpLocked, LpBurnedFallback, DeveloperFeeClaimed, PairVoided, PairClosed.
 
 ### 13.4 Memo grammars
 
-Written on chain by the program (`src/memo.rs`), at most 566 bytes:
+The program writes these memos on chain (`src/memo.rs`). A memo is at most 566 bytes.
 
 ```
 v1 (vault):   <PREFIX>|<YYYY-MM-DD>|src=<source>|prev=<v>|now=<v>|delta=<v>|units=<n>|burn=<tokens>[|short=<tokens>]|rules=sha256:<12>|v1
 v2 (buyback): <PREFIX>|<YYYY-MM-DD>|src=<source>|prev=<v>|now=<v>|delta=<v>|units=<n>|pool=<lamports>|spent=<lamports>|got=<tokens>|burn=<tokens>|swap=<pool12|none>|rules=sha256:<12>|v2
 ```
 
-For $DEFICIT the prefix is `DEBT` and the source `fiscaldata.treasury.gov debt_to_penny`. For a Burnticker counter token the prefix is
-the ticker, the source `burnticker <selector>`, and `prev`/`now` are counter values.
+For $DEFICIT the prefix is `DEBT` and the source is `fiscaldata.treasury.gov debt_to_penny`. For a Burnticker counter token the prefix
+is the ticker and the source is `burnticker <selector>`. In that case `prev` and `now` are counter values.
 
-The platform's per-event receipt line, v3 (`src/lib/burnticker/receipt.ts`), parsed and published by the platform; the current
-program does not write it on chain:
+The platform's per-event receipt line is v3 (`src/lib/burnticker/receipt.ts`). The platform parses and publishes it. The current
+program does not write it on chain.
 
 ```
 BT|<TICKER>|<id>|oracle=<oracle>|market=<ticker>|result=<yes|no|void|->|settled=<ISO second or period>|src=<host+path>|value=<decimal|->|units=<n>|pool=<lamports>|spent=<lamports>|got=<tokens>|burn=<tokens>|swap=<sig12|none>|rules=sha256:<12>|v3
 ```
 
-The signed attestation message (§4.4) is a separate grammar, `BURNRECEIPTS-v3`.
+The signed attestation message (section 4.4) is a separate grammar, `BURNRECEIPTS-v3`.
 
 ### 13.5 Addresses
 
 | What | Address |
 |---|---|
-| `burn_receipts` program id | `TODO_PROGRAM_ID` (localnet test key `GV9CMjXPGbmXnn3ci3RjvTBpfdgiZ4Ts7UWu1LCnSuF8` is not a deployment) |
-| Burnticker LaunchLab platform id | `TODO_PLATFORM_ID` |
-| $DEFICIT mint | `TODO_DEFICIT_MINT` |
-| Squads vault | `TODO_SQUADS_VAULT` |
-| Developer fee wallet | `TODO_DEV_FEE_WALLET` |
+| `burn_receipts` program id | not set in draft 1 (localnet test key `GV9CMjXPGbmXnn3ci3RjvTBpfdgiZ4Ts7UWu1LCnSuF8` is not a deployment) |
+| Burnticker LaunchLab platform id | not set in draft 1 |
+| $DEFICIT mint | not set in draft 1 |
+| Squads vault | not set in draft 1 |
+| Developer fee wallet | not set in draft 1 |
 | Raydium LaunchLab (mainnet) | `LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj` |
 | Raydium CPMM (mainnet) | `CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C` |
 | Raydium CPMM LP lock authority (mainnet) | `3f7GcQFG397GAaEnv51zR6tsTVihYRydnydDD1cXekxH` |
 | SPL Memo | `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` |
 | Mainnet genesis bound into signatures | `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d` |
 
-Source for the Raydium and system addresses: `programs/burn-receipts/programs/burn_receipts/src/constants.rs`.
+The Raydium and system addresses come from `programs/burn-receipts/programs/burn_receipts/src/constants.rs`.

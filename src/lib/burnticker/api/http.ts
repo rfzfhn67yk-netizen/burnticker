@@ -65,14 +65,14 @@ export async function runV1(operationId: string, req: Request, handler: () => Pr
   const cors: Record<string, string> = ep.method === "GET" ? { "access-control-allow-origin": "*" } : {};
   const rl = limiter.take(clientKey(req), ep.bucket, now);
   const rlHeaders = { "ratelimit-limit": String(rl.limit), "ratelimit-remaining": String(rl.remaining) };
-  if (!rl.ok) return json(fail(429, `rate limited: ${RATE_LIMITS[ep.bucket].human}; retry in ${rl.retryAfterSec}s`, { code: "rate-limited", retryAfterSec: rl.retryAfterSec }), { ...cors, ...rlHeaders, "retry-after": String(rl.retryAfterSec), "cache-control": "no-store" });
+  if (!rl.ok) return json(fail(429, `Too many requests. The limit here is ${RATE_LIMITS[ep.bucket].human}. Please try again in ${rl.retryAfterSec} seconds.`, { code: "rate-limited", retryAfterSec: rl.retryAfterSec }), { ...cors, ...rlHeaders, "retry-after": String(rl.retryAfterSec), "cache-control": "no-store" });
   if (ep.method === "POST") {
-    if (!isSameOrigin(req)) return json(fail(403, "cross-site request refused: from a bot, send an Origin header equal to this API's origin (browsers: use this site)", { code: "cross-origin" }), { ...rlHeaders, "cache-control": "no-store" });
+    if (!isSameOrigin(req)) return json(fail(403, "Requests from other sites are refused. A bot must send an Origin header that matches this API's address. In a browser, use this site.", { code: "cross-origin" }), { ...rlHeaders, "cache-control": "no-store" });
     const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    if (type !== "application/json") return json(fail(415, "POST bodies must be Content-Type: application/json", { code: "content-type" }), { ...rlHeaders, "cache-control": "no-store" });
+    if (type !== "application/json") return json(fail(415, "A POST body must be sent as JSON, with the content type application/json.", { code: "content-type" }), { ...rlHeaders, "cache-control": "no-store" });
   }
   let r: ApiResult;
-  try { r = await handler(); } catch (e) { r = fail(500, `internal error: ${(e as Error).message.slice(0, 200)}`, { code: "internal" }); }
+  try { r = await handler(); } catch (e) { r = fail(500, `Something went wrong on the server. The reason given was: ${(e as Error).message.slice(0, 200)}`, { code: "internal" }); }
   const cache = ep.method === "GET" && r.status === 200 && ep.cacheSec > 0 ? `public, max-age=${ep.cacheSec}, s-maxage=${ep.cacheSec}, stale-while-revalidate=${ep.cacheSec}` : "no-store";
   if (r.raw && r.status === 200) return new Response(r.raw.body as BodyInit, { status: 200, headers: { "content-type": r.raw.type, "x-burnticker-api": API_VERSION, "x-content-type-options": "nosniff", ...cors, ...rlHeaders, "cache-control": cache, ...(r.headers ?? {}) } });
   return json(r, { ...cors, ...rlHeaders, "cache-control": cache });

@@ -15,23 +15,23 @@ export default function OpsSection({ card, repo }: { card: string; repo?: string
   // audit 4 BT-14: repository paths open the public repository at the pinned commit, never a moving branch
   void repo;
   const link = (rel: string) => <RepoText text={rel} />;
-  if (failure) return <section className={card}><h2 className="font-medium">Keepers, attesters, snapshots</h2><ReadFailurePanel what="The operations summary" failure={failure} triedAt={triedAt} loading={loading} retry={retry} /></section>;
-  if (!t) return <section className={card}><h2 className="font-medium">Keepers, attesters, snapshots</h2><p className="text-xs text-neutral-500">Loading…</p></section>;
+  if (failure) return <section className={card}><h2 className="font-medium">Keepers, attesters and snapshots</h2><ReadFailurePanel what="The operations summary" failure={failure} triedAt={triedAt} loading={loading} retry={retry} /></section>;
+  if (!t) return <section className={card}><h2 className="font-medium">Keepers, attesters and snapshots</h2><p className="text-xs text-neutral-500">Loading…</p></section>;
   return (<>
-    <section className={card}><h2 className="font-medium">Keepers — which one is active</h2>
-      <p className="text-xs">{t.activeSummary} · <a className="underline" href={t.statusPage}>status page</a></p>
-      <ul className="text-xs mt-1">{t.keepers.map((k) => <li key={k.source}>{k.source}{k.url ? <> (<code>{k.url}</code>)</> : null}: {k.reachable ? <>{k.role ?? "?"} · <span className={k.active ? "text-emerald-400" : "text-neutral-400"}>{k.active ? "active" : "passive"}</span> · host <code>{k.hostIdHash ?? "?"}</code> · last cycle {k.lastCycleAt ?? "—"}{k.takeoverAt ? <> · took over {k.takeoverAt}{k.takeoverValid === false ? " (signature does NOT verify)" : " (signed note)"}</> : null}{k.reason ? <span className="text-neutral-500"> — {k.reason}</span> : null}</> : <span className="text-amber-400">{k.error ?? k.reason ?? "unreachable"}</span>}</li>)}</ul>
+    <section className={card}><h2 className="font-medium">Which keeper is active</h2>
+      <p className="text-xs">{t.activeSummary} The <a className="underline" href={t.statusPage}>status page</a> has more detail.</p>
+      <ul className="text-xs mt-1">{t.keepers.map((k) => <li key={k.source}>{k.source}{k.url ? <> (<code>{k.url}</code>)</> : null}: {k.reachable ? <>{k.role ?? "unknown role"}, <span className={k.active ? "text-emerald-400" : "text-neutral-400"}>{k.active ? "active" : "passive"}</span>. Host <code>{k.hostIdHash ?? "unknown"}</code>. Last cycle {k.lastCycleAt ?? "not recorded"}.{k.takeoverAt ? <> It took over at {k.takeoverAt}{k.takeoverValid === false ? ", and the signature does NOT verify." : ", with a signed note."}</> : null}{k.reason ? <span className="text-neutral-500"> {k.reason}</span> : null}</> : <span className="text-amber-400">{k.error ?? k.reason ?? "It cannot be reached."}</span>}</li>)}</ul>
     </section>
     <section className={card}><h2 className="font-medium">Attesters per coin</h2>
-      {t.attesters.length === 0 ? <p className="text-xs text-neutral-500">no coins yet</p> : <ul className="text-xs">{t.attesters.map((a) => <li key={a.ticker}>${a.ticker}: {a.line}</li>)}</ul>}
-      <p className="text-xs text-neutral-500 mt-1">From the registry; the authority is each coin&apos;s on-chain TokenConfig (<code>scripts/burnticker-attester.mts status &lt;mint&gt;</code>). A key can vouch for a new one only after 7 days in the set. Bring your own attester: {link("docs/burnticker/ATTESTERS.md")}.</p>
+      {t.attesters.length === 0 ? <p className="text-xs text-neutral-500">There are no coins yet.</p> : <ul className="text-xs">{t.attesters.map((a) => <li key={a.ticker}>${a.ticker}: {a.line}</li>)}</ul>}
+      <p className="text-xs text-neutral-500 mt-1">These lines come from the registry. The final word is each coin&apos;s settings on chain (TokenConfig), which you can check with <code>scripts/burnticker-attester.mts status &lt;mint&gt;</code>. A key can vouch for a new attester only after 7 days in the set. To run your own attester, see {link("docs/burnticker/ATTESTERS.md")}.</p>
     </section>
     <section className={card}><h2 className="font-medium">Registry snapshots on Arweave</h2>
-      {t.snapshot ? <p className="text-xs">Latest: {t.snapshot.date} · sha256 <code className="break-all">{t.snapshot.sha256}</code> · <a className="underline" href={t.snapshot.url}>{t.snapshot.arweaveTxId}</a> · {Object.entries(t.snapshot.rowCounts).map(([k, v]) => `${k} ${v}`).join(", ")}</p> : <p className="text-xs text-neutral-500">No snapshot recorded on this host yet (the keeper takes one per UTC day once the upload payer is set; nothing is hosted in place of the Arweave copy).</p>}
-      <p className="text-xs text-neutral-500 mt-1">Every snapshot: <a className="underline" href={t.snapshotsApi}>{t.snapshotsApi}</a> · recompute one: <code>scripts/burnticker-verify-snapshot.mts &lt;txid&gt;</code></p>
+      {t.snapshot ? <p className="text-xs">The latest snapshot is from {t.snapshot.date}. Its sha256 is <code className="break-all">{t.snapshot.sha256}</code>. The Arweave copy is <a className="underline" href={t.snapshot.url}>{t.snapshot.arweaveTxId}</a>. It holds these rows: {Object.entries(t.snapshot.rowCounts).map(([k, v]) => `${k} ${v}`).join(", ")}.</p> : <p className="text-xs text-neutral-500">No snapshot is recorded on this host yet. Once the upload payer is set, the keeper takes one each UTC day. Nothing else is hosted in place of the Arweave copy.</p>}
+      <p className="text-xs text-neutral-500 mt-1">Every snapshot is listed at <a className="underline" href={t.snapshotsApi}>{t.snapshotsApi}</a>. To recompute one, run <code>scripts/burnticker-verify-snapshot.mts &lt;txid&gt;</code>.</p>
     </section>
     <section className={card}><h2 className="font-medium">Incident policy</h2>
-      <p className="text-xs">What counts as an incident, the 48-hour public postmortem, where it is published and who signs it: {link(t.incidents.policy)} · template {link(t.incidents.template)} · the log {link(t.incidents.log)} (rendered below).</p>
+      <p className="text-xs">The incident policy says what counts as an incident, sets a public postmortem within 48 hours, and says where it is published and who signs it. The policy is in {link(t.incidents.policy)}. The template is {link(t.incidents.template)}, and the log is {link(t.incidents.log)}, shown below.</p>
     </section>
   </>);
 }

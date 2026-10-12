@@ -73,7 +73,7 @@ export const PAIR_ERRORS: Record<string, { code: number; sentence: string }> = {
   PairMismatch: { code: 6078, sentence: "the two coins do not name each other as pair partners" },
   PairingClosed: { code: 6079, sentence: "the 7-day pairing window closed before the partner named this coin back, so both are plain coins for good" },
   NotPaired: { code: 6080, sentence: "the two coins are not paired on chain, so nothing can be forwarded between them" },
-  PairNotLinked: { code: 6081, sentence: "the pair_curve pair is not linked yet: link_pair must run before register_pair_pool" },
+  PairNotLinked: { code: 6081, sentence: "the pair is not linked yet in the pair launch program (pair_curve), and link_pair must run before register_pair_pool" },
   PairOrder: { code: 6082, sentence: "the two mints were given in the wrong order (the lower mint by raw bytes comes first)" },
   InvalidWinner: { code: 6083, sentence: "the named winner is neither coin of the pair" },
   ConflictingPairResult: { code: 6084, sentence: "a different result for this period is already recorded; a recorded result never changes" },
@@ -124,8 +124,8 @@ export function parseForwardMemo(memo: string): { prefix: string; from: string; 
 }
 /** The receipt line for a landed forward. */
 export const forwardLine = (loserTicker: string, winnerTicker: string, lamports: bigint): string => lamports === BigInt(0)
-  ? `forwarded from $${loserTicker}: 0 SOL → $${winnerTicker} burn pool (nothing to move: under the floor, or a side has no verified pool)`
-  : `forwarded from $${loserTicker}: ${lamportsToSol(lamports)} SOL → $${winnerTicker} burn pool`;
+  ? `$${loserTicker} forwarded 0 SOL to the $${winnerTicker} burn pool. There was nothing to move, because the amount was under the floor or a side has no verified pool.`
+  : `$${loserTicker} forwarded ${lamportsToSol(lamports)} SOL to the $${winnerTicker} burn pool.`;
 function lamportsToSol(l: bigint): string {
   const SOL = BigInt(1_000_000_000), frac = (l % SOL).toString().padStart(9, "0").replace(/0+$/, "");
   return `${l / SOL}${frac ? `.${frac}` : ""}`;

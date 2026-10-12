@@ -8,7 +8,7 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 
 export const dynamic = "force-dynamic";
 
-const DESCRIPTION = "Every league Burnticker covers — baseball, basketball, football, hockey, soccer — with one page per season: the team coins, their receipts and the games they settled. Leagues are never ranked against each other.";
+const DESCRIPTION = "Burnticker covers leagues in baseball, basketball, football, hockey and soccer. Each league has one page per season, with its team coins, their receipts and the games they settled. Leagues are never ranked against each other.";
 export const metadata: Metadata = {
   title: "Leagues", description: DESCRIPTION, alternates: { canonical: "/burnticker/leagues" },
   openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker seasons by league", description: DESCRIPTION, url: "/burnticker/leagues", images: [{ url: "/burnticker/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
@@ -36,8 +36,8 @@ export default function LeaguesPage() {
           <p className="font-medium text-neutral-100">No team coin has launched yet.</p>
           <p className="mt-1 text-neutral-300">Every league page is empty for now. A page fills in from its coins&apos; own receipts, not from a list of games. You can still open any league to see its teams. No wallet is needed to read anything here.</p>
           <details className="mt-2 text-xs" data-demo-scoreboard>
-            <summary className="cursor-pointer text-neutral-300">See how a league page will look</summary>
-            <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-amber-300">Example data · illustrative coins and counts, not live</p>
+            <summary className="cursor-pointer text-neutral-300">See what a league page looks like</summary>
+            <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-amber-300">Example only. These coins and counts are not live data.</p>
             <table className="mt-1 w-full max-w-md text-xs"><thead className="text-left text-neutral-400"><tr><th className="p-1">#</th><th className="p-1">coin</th><th className="p-1 text-right">receipts</th><th className="p-1 text-right">supply burned</th></tr></thead>
               <tbody>{([["1", "$OILERS", "2", "0.98%"], ["2", "$BRUINS", "1", "0.51%"], ["3", "$FLAMES", "1", "0.49%"]] as const).map((r) => <tr key={r[1]} className="border-t border-neutral-800"><td className="p-1">{r[0]}</td><td className="p-1 font-mono">{r[1]}</td><td className="p-1 text-right">{r[2]}</td><td className="p-1 text-right">{r[3]}</td></tr>)}</tbody></table>
             <p className="mt-1 text-neutral-500">This is how an NHL page reads once three team coins have receipts. Coins are ranked by receipts, then by the share of supply burned. A champion is named only when the season ends.</p>

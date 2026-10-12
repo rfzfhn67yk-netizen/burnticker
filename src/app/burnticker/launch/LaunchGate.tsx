@@ -13,7 +13,7 @@ export function LaunchGate({ state, deficitHref, noWalletLine }: { state: Exclud
   if (state.kind === "loading") return (
     <main className="mx-auto max-w-4xl px-4 py-6 space-y-3" data-launch-gate="loading">
       <h1 className="text-2xl font-semibold">Launch a coin</h1>
-      <EmptyState kind="loading" body="Checking whether creator launches are open on this host." />
+      <EmptyState kind="loading" body="Checking whether creator launches are open on this site." />
     </main>
   );
   if (state.kind === "unavailable") return (

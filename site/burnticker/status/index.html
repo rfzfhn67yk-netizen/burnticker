@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Burnticker status</title>
-<meta name="description" content="Burnticker keeper status: heartbeat, sources, open alerts, wind-downs, the latest registry snapshot on Arweave, and the programs. Read from status.json, rewritten every minute.">
+<meta name="description" content="What the Burnticker keeper is doing right now. It shows whether the keeper is running, the sources it reads, open alerts, coins that are winding down, the latest registry snapshot on Arweave and the programs. The page reads status.json, which is rewritten every minute.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0a0c">
 <meta name="robots" content="noindex">
@@ -107,8 +107,8 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
 <main class="wrap">
   <section class="lead">
     <h1>Status</h1>
-    <p>What the keeper is doing right now, read from <a href="status.json">status.json</a> (rewritten about once a minute). When a source is down, disagrees with its cross-read or goes stale, its reading is withheld and nothing burns until it is right; this page says which.</p>
-    <p id="loadnote" class="small muted">Loading status.json…</p>
+    <p>This page shows what the keeper, our automation, is doing right now. It reads <a href="status.json">status.json</a>, a file that is rewritten about once a minute. A source can stop answering, disagree with a second source or go quiet for too long. When that happens, its reading is held back and nothing burns until it is right. This page says which source it is.</p>
+    <p id="loadnote" class="small muted">Reading the latest status.</p>
   </section>
   <div class="grid">
     <div>
@@ -122,11 +122,11 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
     </div>
     <div>
       <div class="panel"><h3>Current status</h3><div class="cs" data-current-status aria-live="polite"><p class="cs-head">Loading</p><p>Reading the current status.</p></div><p class="small muted" data-config-scope>This summary is the deployment and configuration record. It is separate from the automation data below and does not show whether burns are being processed now.</p></div>
-      <div class="panel"><h3>Sources</h3><div class="scroll"><table class="t" id="feeds"><thead><tr><th>Selector</th><th>Coins</th><th>State</th><th>Last good read</th><th>Cross-read</th><th>Newest reading</th></tr></thead><tbody></tbody></table></div><p class="small muted" id="feeds-note"></p></div>
-      <div class="panel"><h3>Open alerts (24 h)</h3><p id="alerts"></p></div>
-      <div class="panel"><h3>Wind-downs and retired coins</h3><div id="ends"></div></div>
+      <div class="panel"><h3>Sources</h3><div class="scroll"><table class="t" id="feeds"><thead><tr><th>Source</th><th>Coins</th><th>State</th><th>Last good read</th><th>Second source</th><th>Newest reading</th></tr></thead><tbody></tbody></table></div><p class="small muted" id="feeds-note"></p></div>
+      <div class="panel"><h3>Open alerts in the last 24 hours</h3><p id="alerts"></p></div>
+      <div class="panel"><h3>Coins winding down or retired</h3><div id="ends"></div></div>
       <div class="panel"><h3>Registry snapshot on Arweave</h3><div id="snapshot"></div></div>
-      <div class="panel"><h3>Programs</h3><div class="scroll"><table class="t" id="programs"><thead><tr><th>Program</th><th>Id</th><th>Cluster</th><th>Verified build</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="panel"><h3>Programs</h3><div class="scroll"><table class="t" id="programs"><thead><tr><th>Program</th><th>Address</th><th>Network</th><th>Verified build</th></tr></thead><tbody></tbody></table></div></div>
       <div class="panel"><h3>Keepers</h3><div id="keepers"></div></div>
     </div>
   </div>
@@ -148,7 +148,7 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
     <a href="https://burnticker.com/api/burnticker/v1/snapshots">Snapshots API</a>
     <a href="status.json">status.json</a>
   </div>
-  <div>This page shows the keeper and its sources, not any coin's market. Coins that burn on real-world results — with receipts.</div>
+  <div>This page shows the keeper and its sources. It does not show any coin's market. Burnticker coins burn on real-world results, and every burn has a receipt.</div>
 </footer>
 <script>
 (function () {
@@ -163,8 +163,8 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
     if (!s || s.schema !== "burnticker.current-status/v1" || !s.lines) throw new Error("not a current-status document");
     box.textContent = "";
     var ul = document.createElement("ul"); s.lines.forEach(function (l) { var li = document.createElement("li"); li.textContent = l; ul.appendChild(li); }); box.appendChild(ul);
-    var m = document.createElement("p"); m.className = "cs-meta"; m.textContent = "Checked " + s.checkedAt + " · chain read " + String(s.readAt).slice(0, 16).replace("T", " ") + " UTC · " + s.source; box.appendChild(m);
-  }).catch(function (e) { say("Data unavailable", "The current-status summary could not be read just now. This says nothing about the coins or their receipts.", String(e && e.message || e)); });
+    var m = document.createElement("p"); m.className = "cs-meta"; m.textContent = "Checked on " + s.checkedAt + ". The chain was last read at " + String(s.readAt).slice(0, 16).replace("T", " ") + " UTC."; box.appendChild(m);
+  }).catch(function (e) { say("Data unavailable", "We could not read the current status just now. This says nothing about the coins or their receipts.", String(e && e.message || e)); });
 })();
 (function () {
   "use strict";
@@ -176,69 +176,69 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
     return e;
   }
   function ago(ms, now) { if (ms === null || ms === undefined) return "never"; var s = Math.max(0, Math.round((now - ms) / 1000)); if (s < 90) return s + " s ago"; if (s < 5400) return Math.round(s / 60) + " min ago"; if (s < 172800) return Math.round(s / 3600) + " h ago"; return Math.round(s / 86400) + " days ago"; }
-  function badge(state) { var cls = state === "ok" ? "ok" : state === "never-read" ? "idle" : state === "stale" || state === "withheld" ? "warn" : "bad"; return el("span", { class: "st " + cls, text: state }); }
+  function badge(state) { var cls = state === "ok" ? "ok" : state === "never-read" ? "idle" : state === "stale" || state === "withheld" ? "warn" : "bad"; return el("span", { class: "st " + cls, text: state.replace(/-/g, " ") }); }
   function row(label, value) { return el("div", { class: "row" }, [el("span", { text: label }), el("b", { text: value })]); }
   function safeHref(u) { return /^https:\/\//.test(String(u || "")) ? u : null; }
   window.renderStatus = function (s, now) {
     now = now || Date.now();
     var k = s.keeper;
     var rows = $("slip-rows"); rows.textContent = "";
-    $("slip-sub").textContent = (k.role + " · " + (k.active ? "active" : "passive") + " · " + k.cluster).toUpperCase();
+    $("slip-sub").textContent = (k.role + ", " + (k.active ? "active" : "passive") + ", on " + k.cluster).toUpperCase();
     rows.appendChild(row("heartbeat", ago(k.lastCycleAt, now)));
     rows.appendChild(row("host", k.hostIdHash));
-    rows.appendChild(row("cranks", k.paused ? "held (paused)" : k.active ? "running" : "held (passive)"));
-    if (k.lastCycle) rows.appendChild(row("last cycle", k.lastCycle.fetched + " read · " + k.lastCycle.planned + " planned · " + k.lastCycle.executed + " executed" + (k.lastCycle.errors ? " · " + k.lastCycle.errors + " error(s)" : "")));
+    rows.appendChild(row("burn runs", k.paused ? "held while paused" : k.active ? "running" : "held on standby"));
+    if (k.lastCycle) rows.appendChild(row("last cycle", k.lastCycle.fetched + " read, " + k.lastCycle.planned + " planned, " + k.lastCycle.executed + " done" + (k.lastCycle.errors ? ", " + k.lastCycle.errors + (k.lastCycle.errors === 1 ? " error" : " errors") : "")));
     var bad = s.feeds.filter(function (f) { return f.state !== "ok"; }).length;
-    rows.appendChild(row("sources", s.feeds.length + " · " + (bad ? bad + " not ok" : "all ok")));
+    rows.appendChild(row("sources", bad ? bad + " of " + s.feeds.length + " not ok" : "all " + s.feeds.length + " ok"));
     rows.appendChild(row("open alerts", String(s.alerts.open)));
     rows.appendChild(row("wind-downs", String(s.windDowns.pending)));
     rows.appendChild(row("retired", String(s.retired.count)));
-    rows.appendChild(row("snapshot", s.snapshot ? s.snapshot.date + " · " + s.snapshot.sha256.slice(0, 12) + "…" : "none yet"));
-    if (s.fence && s.fence.held.length) rows.appendChild(row("fence", "HOLD: " + s.fence.held.map(function (h) { return "$" + h.ticker; }).join(", ")));
+    rows.appendChild(row("snapshot", s.snapshot ? s.snapshot.date + ", " + s.snapshot.sha256.slice(0, 12) + "…" : "none yet"));
+    if (s.fence && s.fence.held.length) rows.appendChild(row("on hold", s.fence.held.map(function (h) { return "$" + h.ticker; }).join(", ")));
     var slip = $("slip"); var old = slip.querySelector(".stamp"); if (old) old.remove();
     var stamp = !k.active ? "PASSIVE" : bad ? "WITHHELD" : "OK";
     slip.classList.add("hit"); slip.appendChild(el("div", { class: "stamp", text: stamp }));
     var tb = $("feeds").querySelector("tbody"); tb.textContent = "";
-    if (!s.feeds.length) tb.appendChild(el("tr", null, [el("td", { colspan: "6", text: "no live coins, so no sources to read" })]));
+    if (!s.feeds.length) tb.appendChild(el("tr", null, [el("td", { colspan: "6", text: "There are no live coins, so there are no sources to read." })]));
     s.feeds.forEach(function (f) {
       var cr = f.crossRead.agreement === true ? "agrees" : f.crossRead.agreement === false ? "DISAGREES" : "—";
       var newest = f.staleness.lastReadingId ? f.staleness.lastReadingId + (f.staleness.stale ? " (stale)" : "") : "none";
       tb.appendChild(el("tr", null, [el("td", { class: "mono", text: f.selectorKey }), el("td", { text: f.tickers.map(function (t) { return "$" + t; }).join(" ") }), el("td", null, [badge(f.state), el("div", { class: "small muted", text: f.why })]), el("td", { text: ago(f.lastOkAt, now) }), el("td", { text: cr }), el("td", { text: newest })]));
     });
-    $("feeds-note").textContent = "down = the source did not answer; disagree = its independent cross-read disagreed; withheld = held for another reason (the cross-read could not be read, a value is not final); stale = nothing new for longer than its cadence allows. Each one withholds the reading.";
+    $("feeds-note").textContent = "A source marked down did not answer. A source marked disagree gave a value that a second, independent source did not match. A source marked withheld is held back for another reason, for example because the second source could not be read or a value is not final yet. A source marked stale has had nothing new for longer than its schedule allows. In every one of these cases the reading is held back.";
     var kinds = Object.keys(s.alerts.kinds);
-    $("alerts").textContent = s.alerts.open ? s.alerts.open + " alert(s): " + kinds.map(function (x) { return x + " × " + s.alerts.kinds[x]; }).join(", ") + " (kinds only; the operator reads the text)" : "none";
+    $("alerts").textContent = s.alerts.open ? (s.alerts.open === 1 ? "There is 1 open alert. " : "There are " + s.alerts.open + " open alerts. ") + "By kind, they are " + kinds.map(function (x) { return x + " × " + s.alerts.kinds[x]; }).join(", ") + ". This page shows only the kind of each alert. The operator reads the full text." : "There are no open alerts.";
     var ends = $("ends"); ends.textContent = "";
-    s.windDowns.coins.forEach(function (w) { ends.appendChild(el("p", { text: "$" + w.ticker + " · " + w.mode + " since " + w.endedAt.slice(0, 10) + " · " + w.daysDone + (w.windDownDays ? " of " + w.windDownDays : "") + " day(s) done · " + w.reason })); });
-    s.retired.coins.forEach(function (r) { ends.appendChild(el("p", { text: "$" + r.ticker + " · retired" + (r.retiredAt ? " " + r.retiredAt.slice(0, 10) : "") + " · last sweep " + (r.lastSweepDate || "none") })); });
-    if (!ends.childNodes.length) ends.appendChild(el("p", { text: "none" }));
+    s.windDowns.coins.forEach(function (w) { ends.appendChild(el("p", { text: "$" + w.ticker + " has been " + (w.mode === "winddown" ? "winding down" : "in " + w.mode) + " since " + w.endedAt.slice(0, 10) + ". " + w.daysDone + (w.windDownDays ? " of " + w.windDownDays : "") + ((w.windDownDays || w.daysDone) === 1 ? " day is" : " days are") + " done. The reason given is that " + w.reason + "." })); });
+    s.retired.coins.forEach(function (r) { ends.appendChild(el("p", { text: "$" + r.ticker + " was retired" + (r.retiredAt ? " on " + r.retiredAt.slice(0, 10) : "") + ". " + (r.lastSweepDate ? "Its last sweep was on " + r.lastSweepDate + "." : "It has had no sweep.") })); });
+    if (!ends.childNodes.length) ends.appendChild(el("p", { text: "No coins are winding down or retired." }));
     var sn = $("snapshot"); sn.textContent = "";
     if (s.snapshot) {
       var href = safeHref(s.snapshot.url);
-      sn.appendChild(el("p", null, ["Latest: " + s.snapshot.date + " · ", href ? el("a", { href: href, text: s.snapshot.arweaveTxId }) : el("span", { text: s.snapshot.arweaveTxId })]));
+      sn.appendChild(el("p", null, ["The latest snapshot is from " + s.snapshot.date + ". Its Arweave transaction is ", href ? el("a", { href: href, text: s.snapshot.arweaveTxId }) : el("span", { text: s.snapshot.arweaveTxId })]));
       sn.appendChild(el("p", { class: "mono small", text: "sha256 " + s.snapshot.sha256 }));
-      sn.appendChild(el("p", { class: "small muted", text: Object.keys(s.snapshot.rowCounts).map(function (t) { return t + " " + s.snapshot.rowCounts[t]; }).join(" · ") }));
-    } else sn.appendChild(el("p", { text: "No snapshot pinned yet." }));
+      sn.appendChild(el("p", { class: "small muted", text: "Rows saved: " + Object.keys(s.snapshot.rowCounts).map(function (t) { return t + " " + s.snapshot.rowCounts[t]; }).join(", ") + "." }));
+    } else sn.appendChild(el("p", { text: "No snapshot has been saved yet." }));
     var pt = $("programs").querySelector("tbody"); pt.textContent = "";
-    s.programs.forEach(function (p) { pt.appendChild(el("tr", null, [el("td", { text: p.name }), el("td", { class: "mono", text: p.programId }), el("td", { text: p.cluster }), el("td", null, [badge(p.verified === "matches" ? "ok" : p.verified === "not-deployed" ? "never-read" : "down"), el("span", { class: "small muted", text: " " + (p.verified === "matches" ? "deployed bytes = build (" + p.buildKind + ")" : p.verified === "not-deployed" ? "not deployed on this cluster" : "deployed bytes differ from the build") })])])); });
+    s.programs.forEach(function (p) { pt.appendChild(el("tr", null, [el("td", { text: p.name }), el("td", { class: "mono", text: p.programId }), el("td", { text: p.cluster }), el("td", null, [badge(p.verified === "matches" ? "ok" : p.verified === "not-deployed" ? "never-read" : "down"), el("span", { class: "small muted", text: " " + (p.verified === "matches" ? "The deployed code matches the " + p.buildKind + " build." : p.verified === "not-deployed" ? "Not deployed on this network." : "The deployed code does not match the build.") })])])); });
     var kp = $("keepers"); kp.textContent = "";
-    kp.appendChild(el("p", { text: "This keeper: " + k.role + ", " + (k.active ? "active" : "passive") + " — " + k.reason }));
-    if (k.peer && k.peer.url) kp.appendChild(el("p", { text: "Peer: " + (k.peer.reachable ? (k.peer.role || "?") + ", " + (k.peer.active ? "active" : "passive") + ", last cycle " + ago(k.peer.lastCycleAt, now) : "unreachable (" + (k.peer.error || "no answer") + ")") }));
-    if (k.takeover) kp.appendChild(el("p", { class: "mono small", text: "Takeover note: " + k.takeover.at + " by host " + k.takeover.by + ", signed by " + k.takeover.signer.slice(0, 8) + "… — " + k.takeover.reason }));
-    $("loadnote").textContent = "status.json written " + ago(Date.parse(s.generatedAt), now) + " (" + s.generatedAt + ")";
+    kp.appendChild(el("p", { text: "This keeper is the " + k.role + " and is " + (k.active ? "active" : "passive") + ". Its own note says: " + k.reason + "." }));
+    if (k.peer && k.peer.url) kp.appendChild(el("p", { text: k.peer.reachable ? "The other keeper is the " + (k.peer.role || "unknown role") + " and is " + (k.peer.active ? "active" : "passive") + ". Its last cycle was " + ago(k.peer.lastCycleAt, now) + "." : "The other keeper could not be reached. The error was: " + (k.peer.error || "no answer") + "." }));
+    if (k.takeover) kp.appendChild(el("p", { class: "mono small", text: "Host " + k.takeover.by + " took over at " + k.takeover.at + ". The takeover note is signed by " + k.takeover.signer.slice(0, 8) + "…. The reason given: " + k.takeover.reason }));
+    $("loadnote").textContent = "status.json was written " + ago(Date.parse(s.generatedAt), now) + ", at " + s.generatedAt + ".";
   };
   // UX report 3 items 4/8: a missing status.json is MISSING evidence — every group it feeds says "unavailable", never an empty table
   // or "none" that could read as zero problems. The current-status summary is separate and does not show whether burns are processed.
   window.renderUnavailable = function (why) {
     var n = $("loadnote"); n.className = "small err";
-    n.textContent = "Current automation data could not be read (status.json: " + why + "). The current-status summary is separate and does not establish whether burns are being processed now.";
-    $("slip-sub").textContent = "STATUS RECEIPT · UNAVAILABLE";
-    var rows = $("slip-rows"); rows.textContent = ""; ["heartbeat", "cranks", "sources", "open alerts"].forEach(function (l) { rows.appendChild(row(l, "unavailable")); });
-    var say = "unavailable: status.json could not be read";
+    n.textContent = "The automation data could not be read just now (status.json: " + why + "). The current-status summary is separate. It does not show whether burns are being processed now.";
+    $("slip-sub").textContent = "STATUS UNAVAILABLE";
+    var rows = $("slip-rows"); rows.textContent = ""; ["heartbeat", "burn runs", "sources", "open alerts"].forEach(function (l) { rows.appendChild(row(l, "unavailable")); });
+    var say = "Unavailable. The status file could not be read.";
     var tb = $("feeds").querySelector("tbody"); tb.textContent = ""; tb.appendChild(el("tr", null, [el("td", { colspan: "6", text: say })]));
     $("feeds-note").textContent = "";
     $("alerts").textContent = say; $("ends").textContent = say; $("snapshot").textContent = say; $("keepers").textContent = say;
-    var pt = $("programs").querySelector("tbody"); pt.textContent = ""; pt.appendChild(el("tr", null, [el("td", { colspan: "4", text: say + " (the current-status summary lists the programs)" })]));
+    var pt = $("programs").querySelector("tbody"); pt.textContent = ""; pt.appendChild(el("tr", null, [el("td", { colspan: "4", text: say + " The current-status summary lists the programs." })]));
     document.documentElement.setAttribute("data-status-feed", "unavailable");
   };
   if (document.currentScript && document.currentScript.dataset.noFetch === "1") return;

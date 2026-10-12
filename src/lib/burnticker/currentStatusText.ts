@@ -10,12 +10,12 @@
  * and failed, came back partial or did not decode).
  */
 export type AuthoritySource = "chain" | "verified-build" | "unavailable";
-/** The one sentence every renderer uses for a program's upgrade authority (F1). */
+/** The one sentence every renderer uses for a program's upgrade authority (F1). Whole sentences, so a renderer never splices it. */
 export function upgradeAuthorityText(d: { upgradeAuthority: string | null; authoritySource: AuthoritySource; recordedAt?: string | null; recordedUpgradeAuthority?: string | null }): string {
-  const rec = d.recordedUpgradeAuthority ? `; last recorded in verified-build.json${d.recordedAt ? ` (${d.recordedAt})` : ""}: ${d.recordedUpgradeAuthority}` : "";
-  if (d.authoritySource === "unavailable") return `upgrade authority unavailable — chain read failed${rec}`;
-  if (d.authoritySource === "chain") return d.upgradeAuthority ? `upgrade authority ${d.upgradeAuthority} (read from chain)` : "no upgrade authority (immutable; read from chain)";
-  return d.upgradeAuthority ? `upgrade authority ${d.upgradeAuthority} (recorded in verified-build.json${d.recordedAt ? `, ${d.recordedAt}` : ""})` : "upgrade authority not recorded";
+  const rec = d.recordedUpgradeAuthority ? ` The last value recorded in verified-build.json${d.recordedAt ? ` (${d.recordedAt})` : ""} is ${d.recordedUpgradeAuthority}.` : "";
+  if (d.authoritySource === "unavailable") return `The upgrade authority is unavailable because the chain read failed.${rec}`;
+  if (d.authoritySource === "chain") return d.upgradeAuthority ? `The upgrade authority is ${d.upgradeAuthority}, read from chain.` : "There is no upgrade authority, so the program is immutable. This was read from chain.";
+  return d.upgradeAuthority ? `The upgrade authority is ${d.upgradeAuthority}, as recorded in verified-build.json${d.recordedAt ? ` on ${d.recordedAt}` : ""}.` : "The upgrade authority is not recorded.";
 }
 
 /** A time lock in words: "0 (none)", "48 h", "60 s". */
@@ -26,7 +26,7 @@ export const fmtSecs = (s: number): string => (s === 0 ? "0 (none)" : s % 3600 =
  * said "a public, time-locked proposal" while the mainnet lock was 0. `timeLockSecs` is the value read from chain (null = not read).
  */
 export function upgradeDelaySummary(timeLockSecs: number | null, threshold = "2 of 3"): string {
-  if (timeLockSecs === null) return `deploy new program code (a Squads proposal approved by ${threshold}; the current time lock could not be read from chain just now — see the current status)`;
-  if (timeLockSecs === 0) return `deploy new program code (a Squads proposal approved by ${threshold}; the time lock is 0 today, so an approved upgrade can execute at once, with no notice period)`;
-  return `deploy new program code (a Squads proposal approved by ${threshold}, then a ${fmtSecs(timeLockSecs)} time lock before it can execute)`;
+  if (timeLockSecs === null) return `deploy new program code once ${threshold} approve a Squads proposal. The current time lock could not be read from chain just now; the current status above says more.`;
+  if (timeLockSecs === 0) return `deploy new program code once ${threshold} approve a Squads proposal. The time lock is 0 today, so an approved upgrade can execute at once, with no notice period.`;
+  return `deploy new program code once ${threshold} approve a Squads proposal. A ${fmtSecs(timeLockSecs)} time lock then runs before it can execute.`;
 }

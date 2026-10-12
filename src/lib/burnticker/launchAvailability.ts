@@ -59,9 +59,9 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
   const polymarket = !/^(0|false|no|off)$/i.test((env.BURNTICKER_POLYMARKET_DISCOVERY_ENABLED ?? "").trim());
   const sportsOk = tsdb || !mainnet;
   const pairsOk = pairCurve || !mainnet;
-  const sportsWhy = sportsOk ? null : "Games without an on-chain market settle on TheSportsDB's scores, and that licence is not linked on this host yet.";
-  const pairsWhy = pairsOk ? null : "Paired coins stay off on mainnet until this host turns on the pair curve.";
-  const polyWhy = polymarket ? null : "Polymarket search is turned off on this host.";
+  const sportsWhy = sportsOk ? null : "Games without an on-chain market settle on TheSportsDB's scores, and that licence is not linked on this site yet.";
+  const pairsWhy = pairsOk ? null : "Paired coins are off on mainnet because this site has not turned on the pair curve.";
+  const polyWhy = polymarket ? null : "Polymarket search is turned off on this site.";
   const t = (type: LaunchType, ok: boolean, why: string | null): TypeAvailability => ({ type, label: LABEL[type], available: ok, reason: ok ? null : why });
   const types: Record<LaunchType, TypeAvailability> = {
     team: t("team", sportsOk, sportsWhy), matchup: t("matchup", sportsOk, sportsWhy),
@@ -70,12 +70,12 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
     derby: t("derby", pairsOk, pairsWhy), pairs: t("pairs", pairsOk, pairsWhy),
   };
   const sources: SourceAvailability[] = [
-    { id: "sports-settlement", label: "Sports settlement (on-chain payout, else TheSportsDB's licensed final)", available: sportsOk, reason: sportsWhy },
-    { id: "sports-schedule", label: "Sports schedules (league feeds; TheSportsDB for the rest)", available: true, reason: tsdb ? null : "leagues without a free official schedule list their teams without next games" },
+    { id: "sports-settlement", label: "Sports settlement, from the on-chain payout or else TheSportsDB's licensed final score", available: sportsOk, reason: sportsWhy },
+    { id: "sports-schedule", label: "Sports schedules, from the league feeds and TheSportsDB for the rest", available: true, reason: tsdb ? null : "leagues without a free official schedule list their teams without next games" },
     { id: "polymarket", label: "Polymarket discovery", available: polymarket, reason: polyWhy },
     { id: "nws", label: "National Weather Service daily climate reports", available: true, reason: null },
     { id: "feeds", label: "Public data publishers (Treasury, BLS, FRED, …)", available: true, reason: null },
-    { id: "pair-curve", label: "Pair curve (registered pairs on mainnet)", available: pairCurve, reason: pairCurve ? null : "BURNTICKER_PAIR_CURVE_ENABLED is off" },
+    { id: "pair-curve", label: "Pair curve (registered pairs on mainnet)", available: pairCurve, reason: pairCurve ? null : "the pair curve is turned off on this site" },
   ];
   return { mode, transactions: mode === "open", cluster, banner: mode === "preview" ? PREVIEW_BANNER : mode === "closed" ? CREATOR_LAUNCHES_CLOSED : null, types, sources };
 }
@@ -124,7 +124,7 @@ export function typeRefusal(body: unknown, env: Env = process.env, cluster: stri
   const type = launchTypeOf(rule, { pair: !!b.pair });
   if (!type) return null;
   const a = availabilityFromEnv(env, cluster).types[type];
-  return a.available ? null : { status: 403, body: { error: `${a.label} launches are not available on this host. ${a.reason}`, code: TYPE_UNAVAILABLE_CODE, type } };
+  return a.available ? null : { status: 403, body: { error: `${a.label} launches are not available on this site. ${a.reason}`, code: TYPE_UNAVAILABLE_CODE, type } };
 }
 
 /** The host's cluster as the catalogue names it (the same reading of BURNTICKER_CLUSTER as the catalogue route). */
@@ -136,5 +136,5 @@ export const hostCluster = (env: Env = process.env): "mainnet" | "devnet" | "loc
  */
 export function catalogueLaunches(env: Env = process.env): { creators: boolean; note: string; mode: LaunchMode; banner: string | null; types: Record<LaunchType, TypeAvailability>; sources: SourceAvailability[] } {
   const m = availabilityFromEnv(env, hostCluster(env));
-  return { creators: m.mode === "open", note: m.mode === "open" ? "creator launches are open on this host" : m.mode === "preview" ? PREVIEW_BANNER : CREATOR_LAUNCHES_CLOSED, mode: m.mode, banner: m.banner, types: m.types, sources: m.sources };
+  return { creators: m.mode === "open", note: m.mode === "open" ? "creator launches are open on this site" : m.mode === "preview" ? PREVIEW_BANNER : CREATOR_LAUNCHES_CLOSED, mode: m.mode, banner: m.banner, types: m.types, sources: m.sources };
 }

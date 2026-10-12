@@ -103,9 +103,10 @@ export interface BountyReconciliation { fundedLamports: string; paidLamports: st
 export function bountyReconciliation(funded: bigint, paid: bigint, live: bigint | null): BountyReconciliation {
   const expected = funded - paid, sol = (l: bigint) => (Number(l) / 1e9).toFixed(4);
   const diff = live === null ? null : live - expected;
-  const line = live === null ? `Recorded: ${sol(funded)} SOL funded − ${sol(paid)} SOL paid = ${sol(expected)} SOL expected; the live balance could not be read just now, so what is available now is unknown.`
-    : diff === BigInt(0) ? `Recorded: ${sol(funded)} SOL funded − ${sol(paid)} SOL paid = ${sol(expected)} SOL; live balance ${sol(live)} SOL — they agree.`
-    : `Recorded: ${sol(funded)} SOL funded − ${sol(paid)} SOL paid = ${sol(expected)} SOL; live balance ${sol(live)} SOL — an unexplained difference of ${diff! > BigInt(0) ? "+" : "−"}${sol(diff! < BigInt(0) ? -diff! : diff!)} SOL.`;
+  const rec = `The records show ${sol(funded)} SOL funded and ${sol(paid)} SOL paid out, so ${sol(expected)} SOL should remain.`;
+  const line = live === null ? `${rec} The live balance could not be read just now, so the amount available now is unknown.`
+    : diff === BigInt(0) ? `${rec} The live balance is ${sol(live)} SOL, which agrees.`
+    : `${rec} The live balance is ${sol(live)} SOL, an unexplained difference of ${diff! > BigInt(0) ? "+" : "−"}${sol(diff! < BigInt(0) ? -diff! : diff!)} SOL.`;
   return { fundedLamports: String(funded), paidLamports: String(paid), expectedLamports: String(expected), liveLamports: live === null ? null : String(live), differenceLamports: diff === null ? null : String(diff), line };
 }
 

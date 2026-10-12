@@ -23,19 +23,19 @@ export function PinnedCheck({ pinned }: { pinned: PinnedView | null | undefined 
       const r = await fetch(pinned.metadataUri, { cache: "no-store" });
       const buf = await r.arrayBuffer();
       const sha = await sha256Hex(buf);
-      if (sha !== pinned.metadataSha256) { setState({ ok: false, detail: `the pinned bytes hash to ${sha.slice(0, 16)}…, not the recorded ${pinned.metadataSha256.slice(0, 16)}…` }); return; }
+      if (sha !== pinned.metadataSha256) { setState({ ok: false, detail: `The pinned file hashes to ${sha.slice(0, 16)}…, but the recorded hash is ${pinned.metadataSha256.slice(0, 16)}…` }); return; }
       const j = JSON.parse(new TextDecoder().decode(buf)) as { description?: string };
-      setState(j.description === pinned.expectedDescription ? { ok: true, detail: "matches the locked description" } : { ok: false, detail: "the pinned description differs from the locked text" });
-    } catch (e) { setState({ ok: false, detail: `could not re-fetch it here (${String((e as Error).message).slice(0, 80)}) — check it with the trust page's verifier` }); }
+      setState(j.description === pinned.expectedDescription ? { ok: true, detail: "It matches the locked description." } : { ok: false, detail: "The pinned description differs from the locked text." });
+    } catch (e) { setState({ ok: false, detail: `This page could not fetch it again (${String((e as Error).message).slice(0, 80)}). You can check it with the trust page's verifier.` }); }
   }, [pinned]);
   useEffect(() => { void run(); }, [run]);
   if (!pinned) return null;
-  if (pinned.hosted || !pinned.metadataUri) return <p className="text-xs text-amber-300">Metadata hosted on this server (a devnet script coin made with BURNTICKER_ALLOW_HOSTED_METADATA) — not pinned on Arweave.</p>;
+  if (pinned.hosted || !pinned.metadataUri) return <p className="text-xs text-amber-300">This coin&apos;s metadata is hosted on this server and is not pinned on Arweave. It is a devnet test coin made by a script.</p>;
   return (
     <p className="text-xs text-neutral-400" aria-label="pinned metadata">
-      Metadata pinned on Arweave · <a className="underline" href={pinned.metadataUri} rel="noopener" target="_blank">{pinned.metadataUri.replace(/^https:\/\//, "")}</a> · sha256 <span className="font-mono">{pinned.metadataSha256?.slice(0, 16)}…</span>
-      {" · "}{state === null ? "checking…" : state.ok ? <span className="text-emerald-300">{state.detail} ✓</span> : <span className="text-red-400">{state.detail} ✗</span>}
-      {pinned.imageUri && <> · image <a className="underline" href={pinned.imageUri} rel="noopener" target="_blank">pinned</a>{pinned.imageSha256 ? <> (sha256 <span className="font-mono">{pinned.imageSha256.slice(0, 12)}…</span>)</> : null}</>}
+      The metadata is pinned on Arweave at <a className="underline" href={pinned.metadataUri} rel="noopener" target="_blank">{pinned.metadataUri.replace(/^https:\/\//, "")}</a> (sha256 <span className="font-mono">{pinned.metadataSha256?.slice(0, 16)}…</span>).
+      {" "}{state === null ? "Checking it now…" : state.ok ? <span className="text-emerald-300">{state.detail} ✓</span> : <span className="text-red-400">{state.detail} ✗</span>}
+      {pinned.imageUri && <> The image is <a className="underline" href={pinned.imageUri} rel="noopener" target="_blank">pinned too</a>{pinned.imageSha256 ? <> (sha256 <span className="font-mono">{pinned.imageSha256.slice(0, 12)}…</span>)</> : null}.</>}
     </p>
   );
 }

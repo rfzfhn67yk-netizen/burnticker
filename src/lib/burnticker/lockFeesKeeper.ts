@@ -89,7 +89,7 @@ export async function claimLockFeesFor(d: LockFeesKeeperDeps, t: TokenRow): Prom
     }
     const bo = reg.getStatus(backoffKey(mint));
     const back = bo ? (JSON.parse(bo) as { failures: number; nextAt: number }) : null;
-    if (back && now < back.nextAt) return { mint, outcome: "waiting", why: `backing off after ${back.failures} failure(s)` };
+    if (back && now < back.nextAt) return { mint, outcome: "waiting", why: `waiting after ${back.failures} ${back.failures === 1 ? "failure" : "failures"} before trying again` };
     // 2. Read the lock.
     const st = await port.state();
     if (st.policy === 1) return { mint, outcome: "skipped", why: "fixed-pool policy: no LaunchLab lock to claim from" };

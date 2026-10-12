@@ -56,13 +56,13 @@ export default async function LeagueSeasonRoute({ params }: Params) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8 text-sm">
       {p.jsonLd.map((j, k) => <script key={k} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(j).replace(/</g, "\\u003c") }} />)}
-      <nav className="text-xs text-neutral-400" aria-label="breadcrumb"><Link className="underline" href="/burnticker">Burnticker</Link> / <Link className="underline" href={LEAGUES_PATH}>Leagues</Link> / {p.leagueLabel} {p.seasonLabel}</nav>
+      <nav className="text-xs text-neutral-400" aria-label="breadcrumb"><Link className="underline" href="/burnticker">Burnticker</Link> › <Link className="underline" href={LEAGUES_PATH}>Leagues</Link> › {p.leagueLabel} {p.seasonLabel}</nav>
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">{p.leagueLabel} {p.seasonLabel}</h1>
         <p className="text-neutral-400 max-w-3xl">Team coins for the {p.leagueLabel} {p.seasonLabel} season. Each coin burns supply on its own team&apos;s results under a locked rule, with a receipt per game. The scoreboard ranks coins inside this league only.</p>
         {p.otherSeasons.length > 0 && <p className="text-xs text-neutral-500">Other seasons: {p.otherSeasons.map((s, k) => <span key={s.slug}>{k ? " · " : ""}<Link className="underline" href={s.href}>{s.label}</Link></span>)}</p>}
       </header>
-      {err && <p className="text-red-400 text-xs">Registry unavailable: {err}</p>}
+      {err && <p className="text-red-400 text-xs">The coin registry could not be read just now. The error was: {err}</p>}
 
       {/* site audit #9: league pages lead with the Teams list */}
       <section className="space-y-2" aria-label="teams">
@@ -70,7 +70,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
         {withCoins.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{withCoins.map((t) => (
           <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{launch.open && <Link className="text-xs underline" href={t.launchHref}>launch a coin for this team</Link>}</li>
         ))}</ul>}
-        <details open={withCoins.length === 0 && rest.length <= 40} className="text-xs" data-teams><summary className="cursor-pointer text-neutral-400">{withCoins.length ? "Teams with no coin this season" : "Every team"} ({rest.length})</summary>
+        <details open={withCoins.length === 0 && rest.length <= 40} className="text-xs" data-teams><summary className="cursor-pointer text-neutral-400">{withCoins.length ? `${rest.length} ${rest.length === 1 ? "team has" : "teams have"} no coin this season` : `All ${rest.length} teams`}</summary>
           <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span>{launch.open && <Link className="underline" href={t.launchHref}>launch a coin for this team</Link>}</li>)}</ul>
         </details>
       </section>
@@ -82,7 +82,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       <section className="space-y-3" aria-label="scoreboard">
         <h2 className="text-lg font-medium">Scoreboard</h2>
         <p className="text-xs text-neutral-500">{NO_WALLET_LINE}{launch.open ? "" : ` ${launch.closedLine}`}</p>
-        {p.champions.map((c) => <p key={c.board} className="text-xs"><span className="bt-chip bt-chip-window">champion</span> <span className="font-mono">${c.ticker}</span> — {c.board}: the most receipts once the season ended. A stat, not a prize.</p>)}
+        {p.champions.map((c) => <p key={c.board} className="text-xs"><span className="bt-chip bt-chip-window">champion</span> <span className="font-mono">${c.ticker}</span> had the most receipts on the {c.board} board when the season ended. This is a stat, and nobody receives anything for it.</p>)}
         {p.boards.length === 0 ? <p className="text-neutral-400 border border-neutral-800 rounded p-4">No team-coin receipts for this season yet. This page tracks processed coin receipts, not every game.{launch.open ? " Pick a team below to launch one." : ""}</p> : (
           <div className="grid gap-3 md:grid-cols-2">{p.boards.map((b) => (
             <article key={b.key} className={card} aria-label={b.label}>
@@ -96,8 +96,8 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       </section>
 
       <section className="space-y-2" aria-label="settled games">
-        <h2 className="text-lg font-medium">Settled games · {p.games.range}</h2>
-        <p className="text-xs text-neutral-500">Games this league&apos;s coins settled, as each reading recorded them. A game counts once a second publisher reports the same final. That is a second-source check, not a second signer: one operator attester signs every reading (quorum 1).</p>
+        <h2 className="text-lg font-medium">Games settled in the last seven days <span className="text-neutral-500 text-sm font-normal">({p.games.range})</span></h2>
+        <p className="text-xs text-neutral-500">These are the games this league&apos;s coins settled, as each reading recorded them. A game counts once a second publisher reports the same final score. That second source is a check on the data. It is not a second signer: one signer, run by the operator, signs every reading.</p>
         {p.games.rows.length === 0 ? <p className="text-neutral-400 border border-neutral-800 rounded p-4">No games settled for {p.leagueLabel} coins in these dates.</p> : (
           <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{p.games.rows.map((g) => (
             <li key={`${g.date}-${g.away.abbr}-${g.home.abbr}`} className="p-3 space-y-1">
@@ -109,7 +109,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       </section>
 
       </>}
-      <p className="text-neutral-500 text-xs">Memecoins. Each rule says what its supply does, not what price does. Team names are used to describe the result a rule reads. Not affiliated with any team, league, candidate, agency or market.</p>
+      <p className="text-neutral-500 text-xs">These are memecoins. Each rule says what happens to a coin&apos;s supply, never its price. Team names are used only to describe the result a rule reads. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );
 }

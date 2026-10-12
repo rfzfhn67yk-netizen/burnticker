@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Burnticker — coins that burn on real-world results, with receipts</title>
-<meta name="description" content="Coins that burn on real-world results — with receipts. Pre-launch: creator launches are closed; inspect a real devnet burn and check its receipt in your browser. Burnticker is a memecoin launchpad with locked rules: a settled result from a primary source, a burn run by a program, and a receipt anyone can recompute. Nothing is ever won; things are only burned.">
+<meta name="description" content="Coins that burn on real-world results, with receipts. Burnticker is in pre-launch, and creator launches are closed. You can inspect a real devnet burn and check its receipt in your browser. Burnticker is a memecoin launchpad with locked rules. A primary source settles the result, a program runs the burn, and anyone can recompute the receipt. Nothing is ever won. Things are only burned.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0a0c">
 <meta property="og:title" content="Burnticker — coins that burn on real-world results, with receipts">
-<meta property="og:description" content="Pre-launch: creator launches are closed. Inspect a real devnet burn: settled on a primary source, burned by a program, and a receipt anyone can recompute in the browser.">
+<meta property="og:description" content="Burnticker is in pre-launch, and creator launches are closed. You can inspect a real devnet burn. A primary source settled it, a program burned it, and anyone can recompute its receipt in the browser.">
 <meta property="og:image" content="https://burnticker.com/brand/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -175,7 +175,7 @@ footer .links a{color:var(--dim)}
       <li>The coin's own trading fees make up its <abbr class="term" title="One coin&#x27;s burn budget in SOL; nobody can withdraw it, and in a registered pair the other coin&#x27;s share joins it when this coin&#x27;s rule fires.">burn budget</abbr>. That money buys the coin back on its own pool.</li>
       <li>A program burns everything it bought. Our <abbr class="term" title="The keeper: software that submits the program instructions that are due; the program can still refuse or defer each one.">automation</abbr> submits the transaction, and that transaction is the receipt you can check.</li>
     </ol>
-    <p class="def">A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program <abbr class="term" title="A burn destroys tokens held by the program and lowers the coin&#x27;s total supply; it never touches the tokens in your wallet.">burns</abbr> what they bought. The transaction is the <abbr class="term" title="A receipt records the source result, the rule&#x27;s calculation and the transaction; checking one can be complete, partial or unavailable.">receipt</abbr>.</p>
+    <p class="def">Burnticker is a Solana memecoin launchpad. Each coin has one locked rule. When its result settles, the coin's own trading fees buy it back on its own pool, and a program <abbr class="term" title="A burn destroys tokens held by the program and lowers the coin&#x27;s total supply; it never touches the tokens in your wallet.">burns</abbr> what they bought. The transaction is the <abbr class="term" title="A receipt records the source result, the rule&#x27;s calculation and the transaction; checking one can be complete, partial or unavailable.">receipt</abbr>.</p>
     <p class="row"><a class="btn amber" href="#verified-burn">See a verified example</a> <a class="btn" href="#how" data-open-how>How launching works</a></p>
   </section>
 
@@ -185,7 +185,7 @@ footer .links a{color:var(--dim)}
       <span class="st ver">Verified devnet</span>
       <p class="vk">A real burn from the devnet rehearsal on October 6, 2026.</p>
       <p class="vrate">This rehearsal coin spent 1% of its burn pool for each $1 billion unit. The rule proposed for mainnet spends 2%.</p>
-      <p class="vsum" data-demo-summary>Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06: 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool; one crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT and every token bought was burned in the same transaction; the rest carried to the next crank.</p>
+      <p class="vsum" data-demo-summary>Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06, which is 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool. One crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT. Every token bought was burned in the same transaction, and the rest carried over to the next crank.</p>
       <p class="row"><a class="btn amber" href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> <span class="muted small">The check runs in your browser. It reads the devnet chain and the Treasury's own data. This site currently shows devnet rehearsal evidence. Devnet is a practice network, and nothing on it has money value.</span></p>
     </div>
   </section>
@@ -196,7 +196,7 @@ footer .links a{color:var(--dim)}
       <article class="card launch" id="how">
         <h3>Launch</h3>
         <p>You describe a result in one sentence. Then you choose how much of the coin's fee pool each burn spends, between 1% and 10%. The rule is locked at launch. A different rule means a different coin.</p>
-        <p class="state" data-launches-closed>Creator launches are closed on this host.</p>
+        <p class="state" data-launches-closed>Creator launches are closed on this site.</p>
         <details><summary>How launching works</summary>
           <ol>
             <li>Describe the result, or browse by category. Each suggestion says where the result comes from, who checks it and when it settles.</li>
@@ -216,7 +216,7 @@ footer .links a{color:var(--dim)}
       <!-- door2:end -->
       <article class="card" id="deficit">
         <h3>$DEFICIT</h3>
-        <span class="st pro">Proposed mainnet rule · not launched</span>
+        <span class="st pro">Proposed mainnet rule, not launched</span>
         <p>This coin burns when the U.S. national debt rises. Each full $1 billion added to the Treasury's Debt to the Penny counts as one unit. Each unit spends 2% of the burn pool to buy $DEFICIT at market, and everything bought is burned. The devnet rehearsal coin ran the same rule text at 1% per unit.</p>
         <p class="small"><span class="st rep">Historical replay</span><br>We replayed the rule over the real Treasury figures from January 2025 to October 8, 2026. It would have counted 235 burn days and 6,490 units. This is a look back, and it predicts nothing. The second publisher, FRED, reports this debt only once a quarter. It can confirm the quarter ends but not each daily reading.</p>
         <p class="links"><a class="go" href="https://deficit.burnticker.com/" target="_blank" rel="noopener">Open the $DEFICIT page<span aria-hidden="true"> ↗</span></a></p>
@@ -234,13 +234,13 @@ footer .links a{color:var(--dim)}
   <section class="wrap" id="next" aria-labelledby="next-h">
     <h2 id="next-h">What you can do now</h2>
     <p class="row"><a class="btn amber" href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> <a class="btn" href="/burnticker/leagues">Follow the season</a> <a class="btn" href="whitepaper.html">Read the whitepaper</a> <a class="btn" href="/burnticker/launch" data-launch-cta>Launch a coin</a></p>
-    <p class="small muted">No wallet is needed to read results or receipts. Creator launches open only when this host says so.</p>
+    <p class="small muted">No wallet is needed to read results or receipts. Creator launches open only when this site says they are open.</p>
   </section>
 
   <section class="wrap" aria-labelledby="disc-h">
     <div class="disc">
       <h2 id="disc-h">Memecoins. The rule says what supply does, not what price does.</h2>
-      <p>Coins launched on Burnticker have no product, no revenue share and no promise beyond the published rule. Nothing is won on any result. Burning supply does not make a price go up; nobody here says it will. We refuse markets about deaths, violence, terror, casualty counts, disasters or named private individuals, and a source is never the token's price. We also refuse names that impersonate people or institutions.</p>
+      <p>Coins launched on Burnticker have no product, no revenue share and no promise beyond the published rule. Nothing is won on any result. Burning supply does not make a price go up, and nobody here claims it does. We refuse markets about deaths, violence, terror, casualty counts, disasters or named private individuals. A source is never the token's price. We also refuse names that impersonate people or institutions.</p>
       <p>If a page and the chain disagree, the chain is right. The program is open source. No security firm has audited it. This is not investment advice, and nothing here is an offer.</p>
     </div>
   </section>
@@ -270,7 +270,7 @@ footer .links a{color:var(--dim)}
   var box = document.querySelector("[data-current-status]");
   if (!box || !window.fetch) return;
   var api = (/(^|\.)burnticker\.com$/.test(location.hostname) && location.hostname !== "burnticker.com" ? "https://burnticker.com" : "") + "/api/burnticker/v1/current-status";
-  var SHORT = /^(Signing|Upgrades|Open before release):/;
+  var SHORT = /signs every reading|holds the upgrade authority|still open before release/;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
   function failed(why) {
     box.textContent = "";
@@ -292,7 +292,7 @@ footer .links a{color:var(--dim)}
       s.lines.forEach(function (l, k) {
         if (k !== 0 && !SHORT.test(l)) return;
         // L02: the phase line is hand-written; the host's own flag decides whether launches are open
-        if (k === 0 && s.host && s.host.creatorLaunchesOpen === true) l = l.replace(/creator launches are closed/i, "creator launches are open on this host");
+        if (k === 0 && s.host && s.host.creatorLaunchesOpen === true) l = l.replace(/(c)reator launches are closed/i, function (m, c) { return c + "reator launches are open on this site"; });
         ul.appendChild(el("li", "", l));
       });
       box.appendChild(ul);
@@ -316,7 +316,7 @@ footer .links a{color:var(--dim)}
       Array.prototype.forEach.call(document.querySelectorAll("[data-launch-link]"), function (a) { a.textContent = a.closest("#menu") ? "Launch a token" : "Launch"; });
     }
     var line = document.querySelector("[data-cluster-line]");
-    if (line && j && typeof j.cluster === "string") line.textContent = " This host currently shows " + j.cluster + " information.";
+    if (line && j && typeof j.cluster === "string") line.textContent = " This site is showing " + j.cluster + ".";
   }).catch(function () { /* closed */ });
 })();
 (function () {

@@ -113,7 +113,7 @@ export const TWAP_WINDOW_MS = 60 * 60_000;
  */
 export function twap(samples: readonly { ts: number; priceSol: string }[], boundaryMs: number, windowMs = TWAP_WINDOW_MS): { value: string; used: number } | { value: null; reason: string } {
   const xs = samples.filter((x) => x.ts >= boundaryMs - windowMs && x.ts <= boundaryMs).sort((a, b) => a.ts - b.ts);
-  if (xs.length < TWAP_MIN_SAMPLES) return { value: null, reason: `TWAP: ${xs.length} pool sample(s) in the hour before the boundary (needs ${TWAP_MIN_SAMPLES})` };
+  if (xs.length < TWAP_MIN_SAMPLES) return { value: null, reason: `The pool average needs ${TWAP_MIN_SAMPLES} pool samples in the hour before the boundary, and there ${xs.length === 1 ? "was 1" : `were ${xs.length}`}.` };
   const toS = (v: string) => { const [w, f = ""] = v.split("."); return BigInt(w) * BigInt(10) ** BigInt(SCALE) + BigInt((f + "0".repeat(SCALE)).slice(0, SCALE) || "0"); };
   let acc = BigInt(0), span = BigInt(0);
   for (let i = 0; i < xs.length; i++) {

@@ -26,7 +26,7 @@ import type { SerializedIx } from "@/lib/burnticker/program";
 
 export { pairCurveEnabled, PAIR_CURVE_FLAG };
 
-export const PAIR_CURVE_BADGE = { id: "pair-curve", label: "Pair curve", text: "Both coins graduate together, or neither does — one launch program for the pair (docs/burnticker/PAIR-CURVE.md)." } as const;
+export const PAIR_CURVE_BADGE = { id: "pair-curve", label: "Pair curve", text: "Both coins graduate together, or neither does. One launch program runs the pair." } as const;
 
 /** Raydium CPMM AmmConfig index 0 per cluster (devnet: read 2026-10-10, docs/burnkeeper/devnet-run-log-2026-10-10.md). init_pair re-checks it against the TokenConfigs' pin. */
 export const DEFAULT_CP_CONFIG: Record<"mainnet" | "devnet" | "localnet", string> = {
@@ -116,7 +116,7 @@ export async function buildPairCurveLaunch(pair: PairBundles, creator: string, d
   for (const [side, b, m] of [["A", pair.a, mintA], ["B", pair.b, mintB]] as const) {
     const init = b.transactions.flatMap((t) => t.instructions).find((ix) => ix.label.startsWith("burn_receipts.initialize_token"));
     const re = init ? toPairCurvePolicy(init, deps.burnReceiptsProgramId, platform) : null;
-    if (!re) pending.push(`side ${side}: the initialize_token instruction is a placeholder (no real burn_receipts client on this host)`);
+    if (!re) pending.push(`Side ${side} has only a placeholder for the initialize_token step, because this site has no real client for the burn program (burn_receipts).`);
     txs.push({
       label: `create mint ${side} (authority: the pair's SOL vault, no freeze authority) + burn_receipts.initialize_token (policy 2)`,
       signers: ["creator", side === "A" ? "mintA" : "mintB"],

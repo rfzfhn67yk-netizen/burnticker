@@ -29,18 +29,18 @@ interface Register { schema: string; program: { name: string; address_in_idl: st
 /** The outflow classes, in the words the page prints. */
 export const OUTFLOW = {
   none: "none",
-  rent: "rent only (the caller pays it)",
-  intoPool: "fees into the burn pool",
-  swapBurn: "burn pool SOL → swap → every token received is burned",
-  burn: "vault tokens → burned",
-  trade: "the trader's own funds, at the formula (pro rata after a void); fees stay in the pair's vault",
-  graduate: "curve SOL → the Raydium pool (its LP then locked forever by lock_lp); leftover tokens burned; the side's escrowed fees and residue → its burn pool",
-  close: "voided pairs only: residue → burn pools; account rent → the creator who paid it",
-  devClaim: "the accrued 25 bps → the developer wallet fixed at init",
-  lockFees: "the locked LP's fees → 80 % to the burn pool, 20 % to the operator treasury (compiled); the coin side burned",
-  lock: "the pool's LP → Raydium's lock, forever (the Fee Key held by burn_receipts)",
-  forwardWinner: "a paired coin's fuel for a period it lost → the winner's burn pool (formula amount, then burned by the winner's cranks)",
-  lpBurnFallback: "fallback only, if lock_lp cannot run for 30 days: burn_lp destroys the side's LP (no LP fees then)",
+  rent: "rent only, paid by the caller",
+  intoPool: "fees go into the burn pool",
+  swapBurn: "SOL from the burn pool is swapped for the coin, and every token received is burned",
+  burn: "tokens from the vault are burned",
+  trade: "the trader's own funds, priced by the formula, or pro rata after a void; the fees stay in the pair's vault",
+  graduate: "the curve's SOL goes into the Raydium pool, and lock_lp then locks that pool's LP tokens forever; leftover tokens are burned; the side's held fees and leftovers go to its burn pool",
+  close: "voided pairs only; leftovers go to the burn pools, and the account rent goes back to the creator who paid it",
+  devClaim: "the 0.25% fee collected so far goes to the developer wallet set at setup",
+  lockFees: "the locked LP's fees: 80% go to the burn pool and 20% to the operator treasury, both fixed in the code; the coin side is burned",
+  lock: "the pool's LP tokens go into Raydium's lock forever; the burn program holds the Fee Key",
+  forwardWinner: "a paired coin's fuel for a period it lost goes to the winner's burn pool, in the formula's amount, and the winner's own burns spend it",
+  lpBurnFallback: "fallback only: if lock_lp cannot run for 30 days, burn_lp destroys the side's LP tokens, and there are no LP fees after that",
 } as const;
 export type OutflowClass = keyof typeof OUTFLOW;
 
@@ -68,6 +68,9 @@ export interface Checklist {
   build: VerifiedBuild;
 }
 
+/** A pointer into a file, in words: "<file>, under <key>". */
+const at = (file: string, key: string) => `${file}, under ${key}`;
+
 export function loadRegister(root: string, p: ProgramName): Register {
   return JSON.parse(fs.readFileSync(path.join(root, REGISTER_FILES[p]), "utf8")) as Register;
 }
@@ -94,30 +97,30 @@ export function buildChecklist(root = process.cwd()): Checklist {
 
   const dev = op.clusters.devnet;
   const locked: CheckItem[] = [
-    { id: "rule", title: "Each coin's rule", text: "The burn rule, the feed, the memo text and the rules-file hash are written once at initialize_token; no instruction updates them. A different rule is a different coin. The rules file's sha256 is on chain (TokenConfig.rules_sha256) and in every memo.", where: `${REGISTER_FILES.burn_receipts} → non_powers` },
-    { id: "readings", title: "Readings and receipts", text: "Readings are append-only and quorum-checked on chain; no instruction edits or deletes one. Off chain, the registry refuses updates and deletes with SQL triggers.", where: `${REGISTER_FILES.burn_receipts} → submit_reading` },
-    { id: "pools", title: "Where a burn pool can trade", text: "The pool is registered once (provenance-checked) and frozen; replacing a dead pool needs 7 days of continuous recorded untradeability and the same checks.", where: `${REGISTER_FILES.burn_receipts} → register_pool, replace_pool` },
-    { id: "mint", title: "Supply", text: "Neither program holds a mint authority after creation; pair coins have their mint authority revoked inside init_pair and no freeze authority ever. The only token instruction either program runs on a coin is Burn.", where: `${REGISTER_FILES.burn_receipts}, ${REGISTER_FILES.pair_curve} → non_powers` },
-    { id: "lp", title: "Liquidity", text: "LP is locked forever at graduation: 100% on LaunchLab migrations under the platform config and 100% through pair_curve's lock_lp, with Raydium's LP lock (never withdrawable). The Fee Key is owned by the burn_receipts fee-keys PDA; the permissionless claim_lock_fees pays 80% of the SOL-side fees to the coin's burn pool and 20% to the operator treasury, compiled constants; the coin side is burned.", where: `${REGISTER_FILES.burn_receipts} → claim_lock_fees; ${REGISTER_FILES.pair_curve} → lock_lp; src/lib/burnticker/lockFees.ts` },
-    { id: "pair-params", title: "A pair's terms", text: "Curve parameters, the combined raise that graduates the pair, the minimum share, the deadline, the fee and the fee recipients are fixed at init_pair; pair_curve has no admin field at all.", where: `${REGISTER_FILES.pair_curve} → non_powers` },
-    { id: "metadata", title: "Coin metadata", text: t.trustPack?.metadataUri?.text ?? "Server-hosted until then.", where: `${TRANSPARENCY_FILE} → trustPack.metadataUri`, status: t.trustPack?.metadataUri?.status ?? "server-hosted" },
+    { id: "rule", title: "Each coin's rule", text: "The burn rule, the data feed, the memo text and the hash of the rules file are written once, when the coin is set up (initialize_token). No instruction can change them. A different rule means a different coin. The rules file's sha256 hash is stored on chain (TokenConfig.rules_sha256) and appears in every memo.", where: at(REGISTER_FILES.burn_receipts, "non_powers") },
+    { id: "readings", title: "Readings and receipts", text: "Readings can only be added. The program checks the signers on chain before it stores one, and no instruction edits or deletes a reading. Off chain, the registry database uses SQL triggers to refuse edits and deletes.", where: at(REGISTER_FILES.burn_receipts, "submit_reading") },
+    { id: "pools", title: "Where a burn pool can trade", text: "Each coin's pool is registered once, after its origin is checked, and then it is frozen. A dead pool can be replaced only after 7 days in a row on record in which it could not trade, and the new pool must pass the same checks.", where: at(REGISTER_FILES.burn_receipts, "register_pool and replace_pool") },
+    { id: "mint", title: "Supply", text: "Neither program keeps the power to mint after a coin is created. Pair coins lose their mint authority inside init_pair, and they never have a freeze authority. The only token instruction either program runs on a coin is Burn.", where: `${REGISTER_FILES.burn_receipts} and ${REGISTER_FILES.pair_curve}, under non_powers` },
+    { id: "lp", title: "Liquidity", text: "The liquidity pool tokens (LP) are locked forever at graduation. LaunchLab coins lock 100% when they move to their pool, under the platform config. Pair coins lock 100% through the pair program's lock_lp. Both use Raydium's LP lock, which can never be withdrawn. The Fee Key is held by an account that the burn program controls. Anyone can call claim_lock_fees. It pays 80% of the SOL-side fees to the coin's burn pool and 20% to the operator treasury, and those shares are fixed in the code. The coin side of the fees is burned.", where: `${at(REGISTER_FILES.burn_receipts, "claim_lock_fees")}; ${at(REGISTER_FILES.pair_curve, "lock_lp")}; src/lib/burnticker/lockFees.ts` },
+    { id: "pair-params", title: "A pair's terms", text: "The curve settings, the combined raise that graduates the pair, the minimum share, the deadline, the fee and who receives the fee are all fixed when the pair is created (init_pair). The pair program has no admin at all.", where: at(REGISTER_FILES.pair_curve, "non_powers") },
+    { id: "metadata", title: "Coin metadata", text: t.trustPack?.metadataUri?.text ?? "The metadata is hosted on our server for now.", where: at(TRANSPARENCY_FILE, "trustPack.metadataUri"), status: t.trustPack?.metadataUri?.status ?? "server-hosted" },
   ];
 
   const notDone: CheckItem[] = [
-    { id: "one-attester", title: "One attester at launch", text: "Quorum 1: the operator's keeper key is the only attester. The program checks signatures and the quorum, not the reading; a second, independent attester is an open owner decision (who and when).", where: `${TRANSPARENCY_FILE} → limitations.quorum-1`, status: "not done" },
-    { id: "upgrade-authority", title: "Upgrade authority held by Squads until finalisation", text: `Both programs can still be upgraded by the 2-of-3 Squads vault (devnet: ${dev.squads.vault}, 60 s time lock; mainnet: 0 during launch week, 48 h planned from around 2026-10-23 — the live value is on /burnticker/trust). Finalising (setting it to none) is the planned last step, not done.`, where: `${REGISTER_FILES.burn_receipts} → upgrade_authority`, status: "not done" },
-    { id: "no-firm-review", title: "No professional security firm has reviewed the code", text: t.howBuilt.firmAuditStatement, where: `${TRANSPARENCY_FILE} → howBuilt`, status: "not done" },
-    { id: "third-signer", title: "Third Squads signer", text: "Member C's key is configured; the trusted third party who holds it is not named yet (named only with consent). The owner holds members A and B, two of the three keys, so the owner alone meets the 2-of-3 threshold today.", where: `${OPERATOR_FILE} → clusters.mainnet.wallets[squads-member-3]`, status: "not done" },
-    { id: "bounty-wallet", title: "Bounty wallet", text: "Funded 5 SOL on 2026-10-11: HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator (not the Squads vault). The owner's statement matches the chain (funding transaction in docs/burnkeeper/evidence/bounty-2026-10-11/funding.json); top-ups come from the developer fee and the trust page reads the live balance from a mainnet RPC. The exact severity tiers in SECURITY.md are still open.", where: "config/public-repo/overlay/SECURITY.md", status: "funded 2026-10-11; tiers open" },
-    { id: "entity", title: "Legal entity", text: op.operator.entityPending, where: `${OPERATOR_FILE} → operator.entity`, status: "not done" },
+    { id: "one-attester", title: "One signer for readings at launch", text: "The operator's keeper key is the only signer, so one signature is enough. The program checks the signatures and the quorum. It does not check whether the reading is true. Adding a second, independent signer is still an open decision for the owner, both who and when.", where: at(TRANSPARENCY_FILE, "limitations.quorum-1"), status: "not done" },
+    { id: "upgrade-authority", title: "The programs can still be upgraded", text: `A Squads vault that needs 2 of 3 signers can still upgrade both programs. On devnet the vault is ${dev.squads.vault}, with a 60-second time lock. On mainnet the time lock is 0 during launch week, and 48 hours is planned from around 2026-10-23. The trust page (/burnticker/trust) shows the live value. Removing the upgrade authority for good is the planned last step, and it is not done.`, where: at(REGISTER_FILES.burn_receipts, "upgrade_authority"), status: "not done" },
+    { id: "no-firm-review", title: "No professional security firm has reviewed the code", text: t.howBuilt.firmAuditStatement, where: at(TRANSPARENCY_FILE, "howBuilt"), status: "not done" },
+    { id: "third-signer", title: "The third Squads signer is not named", text: "Member C's key is set up. The trusted third party who holds it is not named yet. They are named only with their consent. The owner holds members A and B, two of the three keys. So today the owner alone meets the 2-of-3 threshold.", where: at(OPERATOR_FILE, "clusters.mainnet.wallets[squads-member-3]"), status: "not done" },
+    { id: "bounty-wallet", title: "Bounty wallet", text: "The bounty wallet was funded with 5 SOL on 2026-10-11. It is HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator, separate from the Squads vault. The owner's statement matches the chain, and the funding transaction is recorded in docs/burnkeeper/evidence/bounty-2026-10-11/funding.json. Top-ups come from the developer fee. The trust page reads the live balance from a mainnet RPC. The exact severity tiers in SECURITY.md are still open.", where: "config/public-repo/overlay/SECURITY.md", status: "funded 2026-10-11, tiers open" },
+    { id: "entity", title: "Legal entity", text: op.operator.entityPending, where: at(OPERATOR_FILE, "operator.entity"), status: "not done" },
     { id: "verified-build", title: "Docker verified build", text: build.kindNote, where: VERIFIED_BUILD_FILE, status: build.kind === "docker" ? "done" : "interim" },
   ];
   const seen = new Set(notDone.map((n) => n.id));
   for (const l of t.limitations) {
     if (!/^(not|interim|devnet only)/i.test(l.status) || ["third-signer", "bounty-wallet", "entity", "verified-build-interim", "quorum-1"].includes(l.id) || seen.has(l.id)) continue;
-    notDone.push({ id: l.id, title: l.id.replace(/-/g, " "), text: l.text, where: `${TRANSPARENCY_FILE} → limitations.${l.id}`, status: l.status });
+    notDone.push({ id: l.id, title: l.id.replace(/-/g, " ").replace(/^./, (x) => x.toUpperCase()), text: l.text, where: at(TRANSPARENCY_FILE, `limitations.${l.id}`), status: l.status });
   }
-  for (const r of t.rehearsals) if (/^not/i.test(r.status)) notDone.push({ id: `rehearsal-${r.symbol.toLowerCase()}`, title: `Mainnet rehearsal coin $${r.symbol}`, text: r.text, where: `${TRANSPARENCY_FILE} → rehearsals`, status: r.status });
+  for (const r of t.rehearsals) if (/^not/i.test(r.status)) notDone.push({ id: `rehearsal-${r.symbol.toLowerCase()}`, title: `Mainnet rehearsal coin $${r.symbol}`, text: r.text, where: at(TRANSPARENCY_FILE, "rehearsals"), status: r.status });
 
   return {
     schema: "burnticker.check/v1",
@@ -134,31 +137,35 @@ export function buildChecklist(root = process.cwd()): Checklist {
 export function checklistMarkdown(c: Checklist): string {
   const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
   const L: string[] = [];
-  L.push("# Check this yourself — the sceptic's checklist against ourselves", "");
-  L.push(`GENERATED by \`node --import ./test/alias-hook.mjs scripts/burnticker-trustpack.mts check-doc --write\` from ${c.generatedFrom.map((f) => `\`${f}\``).join(", ")} — do not edit by hand. The same object is the page \`/burnticker/check\` and \`GET /api/burnticker/v1/check\`.`, "");
-  L.push("Nothing here asks you to take our word: every line names the file or the account that says it. The page adds a receipt verifier that runs in your browser (it fetches the transaction and the program's accounts from the public Solana RPC and the source values from the Treasury API, then recomputes units and spend).", "");
-  L.push("## 1. Where money can go", "", "Every instruction of both programs and the only place it can move SOL or tokens. There is no withdraw, sweep or transfer-out instruction in either program.", "");
-  L.push("| Program | Instruction | Who signs | Outflow | The register's words |", "|---|---|---|---|---|");
+  L.push("# Check this yourself", "", "This is a sceptic's checklist, written against ourselves.", "");
+  L.push(`This file is GENERATED by \`node --import ./test/alias-hook.mjs scripts/burnticker-trustpack.mts check-doc --write\` from ${c.generatedFrom.map((f) => `\`${f}\``).join(", ")}. Do not edit it by hand. The page \`/burnticker/check\` and \`GET /api/burnticker/v1/check\` show the same data.`, "");
+  L.push("Nothing here asks you to take our word. Every line names the file or the account that says it. The page also has a receipt verifier that runs in your browser. It fetches the transaction and the program's accounts from the public Solana RPC, and the source values from the Treasury API. Then it works out the units and the spend again.", "");
+  L.push("## 1. Where money can go", "", "This table lists every instruction of both programs and the only place each one can move SOL or tokens. Neither program has an instruction to withdraw, sweep or send funds out.", "");
+  L.push("| Program | Instruction | Who signs | Where money can go | The register's words |", "|---|---|---|---|---|");
   for (const m of c.money) L.push(`| ${m.program} | \`${m.instruction}\` | ${esc(m.signers)} | **${esc(m.outflow)}** | ${esc(m.funds)} |`);
-  L.push("", "What does not exist (the registers' own list):", "");
+  L.push("", "What does not exist, in the registers' own words:", "");
   for (const n of c.nonPowers) L.push(`- (${n.program}) ${n.text}`);
-  L.push("", "## 2. Who can do what", "", `Powers over funds: **none** in either program (${c.programs.map((p) => `${p.name}: ${p.privileged} privileged instruction(s), every one with Funds "None."`).join("; ")}).`, "");
-  L.push("| Program | Instruction | Holder | Can | Timelock |", "|---|---|---|---|---|");
+  const progName: Record<ProgramName, string> = { burn_receipts: "The burn program (`burn_receipts`)", pair_curve: "The pair program (`pair_curve`)" };
+  L.push("", "## 2. Who can do what", "", `Neither program has **any** power over funds. ${c.programs.map((p) => p.privileged === 0 ? `${progName[p.name]} has no privileged instructions.` : `${progName[p.name]} has ${p.privileged} privileged instruction${p.privileged === 1 ? "" : "s"}, and its register says "None." for the funds of every one.`).join(" ")}`, "");
+  L.push("| Program | Instruction | Holder | What it can do | Time lock |", "|---|---|---|---|---|");
   for (const p of c.powers) L.push(`| ${p.program} | \`${p.instruction}\` | ${esc(p.holder)} | ${esc(p.can)} | ${esc(p.timelock ?? "—")} |`);
-  L.push("", "Upgrade authority (outside the programs' interfaces — the one power above everything else):", "");
+  L.push("", "The upgrade authority sits outside the programs' instructions. It is the one power above everything else.", "");
   for (const u of c.upgradeAuthority) L.push(`- ${u.program}: ${u.holder} Sunset: ${u.sunset}`);
   L.push("", "Powers outside the programs that they depend on:", "");
-  for (const e of c.external) L.push(`- (${e.program}) **${e.power}** — holder: ${e.holder}. ${e.effect}`);
+  for (const e of c.external) L.push(`- (${e.program}) **${e.power}**. Holder: ${e.holder}. ${e.effect}`);
   L.push("", "## 3. What is locked", "");
-  for (const l of c.locked) L.push(`- **${l.title}**${l.status ? ` (${l.status})` : ""} — ${l.text} *Where:* ${l.where}`);
+  for (const l of c.locked) L.push(`- **${l.title}**${l.status ? ` (${l.status})` : ""}. ${l.text} *Where:* ${l.where}`);
   L.push("", "## 4. What is not done yet", "");
-  for (const n of c.notDone) L.push(`- **${n.title}** (${n.status ?? "not done"}) — ${n.text} *Where:* ${n.where}`);
-  L.push("", "## 5. Is the deployed code this code?", "", `Kind: **${c.build.kind}**. ${c.build.kindNote}`, "");
+  for (const n of c.notDone) L.push(`- **${n.title}** (${n.status ?? "not done"}). ${n.text} *Where:* ${n.where}`);
+  L.push("", "## 5. Is the deployed code this code?", "", `The build kind is **${c.build.kind}**. ${c.build.kindNote}`, "");
   // audit R05: one row per program and network; the deployed bytes, their read date and evidence are that network's own
   L.push("| Program | Network | Features | Executable hash (this repository) | Deployed bytes on that network | Read | Evidence |", "|---|---|---|---|---|---|---|");
-  for (const p of c.build.programs) for (const v of ["mainnet", "devnet"] as const) { const d = p.deployed[v]; L.push(`| ${p.library} | ${v} | ${p.builds[v].features.join(", ") || "default"} | \`${p.builds[v].hash}\` | ${d ? `\`${d.hash}\` ${d.matchesBuild ? "= build" : "≠ build"}` : "none recorded"} | ${d?.readAt ?? "—"} | ${d?.evidence ?? "—"} |`); }
-  L.push("", "How to reproduce: docs/burnticker/VERIFIED-BUILD.md.", "");
-  L.push("## 6. Verify a receipt", "", "On the page: paste a receipt's transaction signature (or pick a devnet receipt). The checks, each ✓ / ✗ / – (not checkable here, with the reason): the transaction exists and succeeded; it ran the pinned program's `crank_buyback`; the memo parses; the program-owned Reading account agrees with the memo; the TokenConfig is the Reading's own; the published rules file hashes to the on-chain rules hash; the Reading's `source_url_hash` is sha256 of the Treasury URL for that date and the Treasury API gives the same two values; the units recompute; the spend recomputes in the program's fixed point; the transaction's Burn instructions burned exactly what the swap bought.", "");
-  L.push("Without the page: `curl -s https://burnticker.com/api/burnticker/v1/check/receipts` lists the devnet receipts; `curl -s https://burnticker.com/api/burnticker/v1/check/receipts/<signature>` runs the same checks on our server (the same code, src/lib/burnticker/trustpack/receiptCheck.ts).", "");
+  for (const p of c.build.programs) for (const v of ["mainnet", "devnet"] as const) { const d = p.deployed[v]; L.push(`| ${p.library} | ${v} | ${p.builds[v].features.join(", ") || "default"} | \`${p.builds[v].hash}\` | ${d ? `\`${d.hash}\` ${d.matchesBuild ? "same as the build" : "differs from the build"}` : "none recorded"} | ${d?.readAt ?? "—"} | ${d?.evidence ?? "—"} |`); }
+  L.push("", "The steps to reproduce the build are in docs/burnticker/VERIFIED-BUILD.md.", "");
+  L.push("## 6. Verify a receipt", "", "On the page, paste a receipt's transaction signature, or pick a devnet receipt. Each check shows ✓ when it passed, ✗ when it failed, or – when the page cannot run it, with the reason. These are the checks:", "",
+    "- The transaction exists and succeeded.", "- It ran the pinned program's `crank_buyback`.", "- The memo can be read.", "- The Reading account, which the program owns, agrees with the memo.", "- The TokenConfig belongs to that Reading.",
+    "- The published rules file hashes to the rules hash on chain.", "- The Reading's `source_url_hash` is the sha256 of the Treasury URL for that date, and the Treasury API gives the same two values.", "- The units come out the same when worked out again.",
+    "- The spend comes out the same in the program's fixed-point arithmetic.", "- The transaction's Burn instructions burned exactly what the swap bought.", "");
+  L.push("You can also check without the page. `curl -s https://burnticker.com/api/burnticker/v1/check/receipts` lists the devnet receipts. `curl -s https://burnticker.com/api/burnticker/v1/check/receipts/<signature>` runs the same checks on our server, with the same code (src/lib/burnticker/trustpack/receiptCheck.ts).", "");
   return L.join("\n");
 }

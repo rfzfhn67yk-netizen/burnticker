@@ -178,7 +178,7 @@ describe("the multi-token keeper, on the burn_receipts program (the unit counter
     reg.register({ mint: b.mint, ticker: "QUORUM", name: "q", creator: CREATOR, description: b.description, imageUrl: null, links: [], rulesText: b.rules.text, feePda: b.addresses.feePda, vault: null, tokenConfig: b.addresses.tokenConfig, poolId: null, launchTx: null, cluster: "devnet", platformId: null, baselineAt: "2026-09-01T00:00:00Z", status: "draft" }, clock);
     reg.markLaunched(b.mint, "launchQ", null, "2026-09-01T00:00:00Z");
     const r = await runCycle(deps);
-    assert.equal(r.executed[0].outcome, "waiting"); if (r.executed[0].outcome === "waiting") assert.match(r.executed[0].why, /quorum short: the program needs 2/);
+    assert.equal(r.executed[0].outcome, "waiting"); if (r.executed[0].outcome === "waiting") assert.match(r.executed[0].why, /Waiting for signatures\. The program needs 2 signer signatures/);
     assert.equal(program.fake(b.mint).signed.length, 0);
   });
   test("CRASH AFTER SEND: the crank's signature was written first; the next cycle waits while it may land, adopts it when it does — one crank", async () => {
@@ -325,7 +325,7 @@ describe("the token page", () => {
     assert.equal(receipts.length, 2);
     for (const r of receipts) assert.equal(r.verify.verified, true, `${r.eventId}: ${r.verify.checks.join("; ")}`);
     assert.match(receipts[0].verify.curl, /^curl -s 'https:\/\/api\.elections\.kalshi\.com\/trade-api\/v2\/markets\/KXNFLGAME-26SEP27LARDEN-DEN'/);
-    assert.match(receipts[0].verify.formula, /result = yes → spend 2% of the pool; counted into program reading 2026-09-28 \(1 unit\(s\) from 1 receipt\(s\)\) — the program spends min\(pool × \(1 − \(1 − 200\/10000\)\^1\) \+ carried spend, 2% of the pool's SOL reserve\) = rule spend \d+ lamports/);
+    assert.match(receipts[0].verify.formula, /result = yes, so spend 2% of the pool; counted into program reading 2026-09-28 \(1 unit from 1 receipt\)\. The program spends min\(pool × \(1 − \(1 − 200\/10000\)\^1\) \+ carried spend, 2% of the pool's SOL reserve\) = rule spend \d+ lamports/);
     assert.equal(s.health.unverified, 0);
     const tampered = buildReceiptsJson({ ...input, receipts: input.receipts.map((x, k) => (k === 0 ? { ...x, ruleSpendLamports: x.ruleSpendLamports! + BigInt(1) } : x)) });
     assert.equal(tampered[0].verify.verified, false); assert.ok(tampered[0].verify.checks.some((c) => /^rule spend: recomputed/.test(c)));
@@ -348,7 +348,7 @@ describe("the token page", () => {
     assert.match(html, /KXNFLGAME-26SEP27LARDEN-DEN/);
     assert.match(html, /0\.0025 SOL to Burnticker \(developer\)/);
     assert.match(html, /regulated event contract/);
-    assert.match(html, /Binary selector: 2 settled market\(s\) read — 1 YES, 1 NO/);
+    assert.match(html, /This coin reads yes-or-no results\. 2 settled markets have been read: 1 YES, 1 NO and 0 void\./);
     assert.match(html, /prefers-color-scheme: dark/);
     const copy = html.replace(/<script>[\s\S]*?<\/script>/g, "");
     for (const bad of [/to the moon/i, /\bguarantee/i, /\breturns?\b/i, /price will (rise|go up|increase)/i, /\bprofit/i, /\binvest/i]) assert.doesNotMatch(copy, bad);

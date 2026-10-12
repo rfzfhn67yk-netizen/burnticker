@@ -60,17 +60,17 @@ export default function ReceiptVerifier({ card }: { card: string }) {
       <h2 className="font-medium">{CHECK_COPY.verifierTitle}</h2>
       <p className="text-xs text-neutral-300">{wantDemo ? CHECK_COPY.verifierDemoIntro : CHECK_COPY.verifierIntro}</p>
       {wantDemo && !res && !err && !sigError && (busy || !samples) && <div className="mt-3" data-verdict="checking"><EmptyState compact kind="loading" body="Checking the featured devnet receipt in this browser." /></div>}
-      {err && <p className="mt-2 text-xs text-amber-300">Could not check: {err}. This is not evidence that the receipt is invalid; try again or use another RPC.</p>}
+      {err && <p className="mt-2 text-xs text-amber-300">The check could not run: {err}. This is not evidence that the receipt is invalid. Try again, or use another RPC.</p>}
       {res && (() => { const v = verdictOf(res.checks); return (
         <div className="mt-3 text-xs" data-verdict={v.verdict}>
           <p className={`text-sm ${VERDICT_TONE[v.verdict]}`}>{v.line} {res.facts.explorerUrl && <a className="text-xs underline" href={res.facts.explorerUrl} target="_blank" rel="noreferrer">transaction</a>}</p>
           <ul className="mt-2 grid gap-2 sm:grid-cols-3">{v.layers.map((l) => { const st = l.checks.map((c) => c.status); const sum: CheckStatus = st.includes("failed") ? "failed" : st.length && st.every((x) => x === "passed") ? "passed" : st.includes("unavailable") ? "unavailable" : "not checked"; const partly = sum === "not checked" && st.includes("passed"); return (
-            <li key={l.layer} className="rounded border border-neutral-800 p-2" data-layer={l.layer}><div className={`font-medium ${TONE[sum]}`}>{MARK[sum]} {l.title} <span className="font-normal text-neutral-500">{partly ? "partly checked" : sum}</span></div><p className="mt-1 text-neutral-400">{l.what}</p><p className="mt-1 text-neutral-500">{l.checks.map((c) => `${c.label}: ${c.status}`).join(" · ") || "no check"}</p></li>); })}</ul>
+            <li key={l.layer} className="rounded border border-neutral-800 p-2" data-layer={l.layer}><div className={`font-medium ${TONE[sum]}`}>{MARK[sum]} {l.title} <span className="font-normal text-neutral-500">{partly ? "partly checked" : sum}</span></div><p className="mt-1 text-neutral-400">{l.what}</p><p className="mt-1 text-neutral-500">{l.checks.map((c) => `${c.label}: ${c.status}`).join(", ") || "No check runs in this layer."}</p></li>); })}</ul>
           <details className="mt-2"><summary className="cursor-pointer text-neutral-300">Every check, the memo and the accounts</summary>
             <ul className="mt-2 space-y-1">{v.layers.flatMap((l) => l.checks).map((c) => <li key={c.id} className="grid grid-cols-[1.5rem_1fr] gap-1"><span className={`${TONE[c.status]} font-mono`} title={c.status}>{MARK[c.status]}</span><span><span className="text-neutral-200">{c.label}</span> <span className="text-neutral-500">({c.status})</span> — <span className="text-neutral-400 break-words">{c.detail}</span></span></li>)}</ul>
-            <p className="mt-2 text-neutral-500">{CHECK_COPY.legend} ✓ passed · ✗ failed · ? unavailable (a dependency did not answer) · – not checked on this page.</p>
+            <p className="mt-2 text-neutral-500">{CHECK_COPY.legend} A ? means the check is unavailable because something it needs did not answer.</p>
             {res.facts.memo && <pre className="mt-2 whitespace-pre-wrap break-all rounded bg-neutral-950 p-2">{res.facts.memo}</pre>}
-            <p className="mt-1 text-neutral-500 break-all">Reading <code>{res.facts.readingAddress ?? "—"}</code> · TokenConfig <code>{res.facts.configAddress ?? "—"}</code> · mint <code>{res.facts.mint ?? "—"}</code>{res.facts.sourceUrl && <> · source <a className="underline break-all" href={res.facts.sourceUrl} target="_blank" rel="noreferrer">{res.facts.recordDate}</a> / <a className="underline" href={res.facts.prevSourceUrl ?? "#"} target="_blank" rel="noreferrer">{res.facts.prevDate}</a></>}</p>
+            <p className="mt-1 text-neutral-500 break-all">Reading account <code>{res.facts.readingAddress ?? "—"}</code>, token config <code>{res.facts.configAddress ?? "—"}</code>, mint <code>{res.facts.mint ?? "—"}</code>.{res.facts.sourceUrl && <> Open the source data for <a className="underline break-all" href={res.facts.sourceUrl} target="_blank" rel="noreferrer">{res.facts.recordDate}</a> and <a className="underline" href={res.facts.prevSourceUrl ?? "#"} target="_blank" rel="noreferrer">{res.facts.prevDate}</a>.</>}</p>
           </details>
         </div>); })()}
       <p className="mt-2 text-xs text-neutral-500" data-signer-caveat>{CHECK_COPY.verifierCaveat}</p>
@@ -79,15 +79,15 @@ export default function ReceiptVerifier({ card }: { card: string }) {
         <div className="mt-2 grid gap-2 text-xs">
           <label className="grid min-w-0 gap-1"><span className="text-neutral-400">Devnet receipt</span>
             <select className="w-full min-w-0 max-w-full truncate rounded border border-neutral-700 bg-neutral-950 p-2" value={samples?.receipts.some((r) => r.signature === sig) ? sig : ""} onChange={(e) => setSig(e.target.value)}>
-              <option value="">— paste a signature below —</option>
-              {samples?.receipts.map((r) => <option key={r.signature} value={r.signature}>${r.ticker} · reading {r.recordDate} · {r.units} unit(s) · {r.status}</option>)}
+              <option value="">Or paste a signature below</option>
+              {samples?.receipts.map((r) => <option key={r.signature} value={r.signature}>${r.ticker}, reading of {r.recordDate}, {r.units} unit{r.units === 1 ? "" : "s"}, {r.status}</option>)}
             </select>
           </label>
           <label className="grid min-w-0 gap-1"><span className="text-neutral-400">Transaction signature</span>
             <input className={`w-full min-w-0 rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby={sigError ? "sig-error" : undefined} />
-            {sigError && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">Not checked: {sigError}. This is a typing problem, not evidence about any receipt.</span>}
+            {sigError && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">Not checked: {sigError}. This is a typing problem. It says nothing about any receipt.</span>}
           </label>
-          <label className="grid min-w-0 gap-1"><span className="text-neutral-400">RPC endpoint (any devnet RPC you trust)</span>
+          <label className="grid min-w-0 gap-1"><span className="text-neutral-400">RPC endpoint (use any devnet RPC you trust)</span>
             <input className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
           </label>
           <div><button type="button" disabled={busy} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>

@@ -105,11 +105,11 @@ export function eventValue(markets: readonly KalshiMarket[]): EventValue {
   if (ev) return { value: canonicalDecimal(ev), method: "expiration_value", note: `Kalshi's expiration_value ${ev}` };
   const yes = markets.filter((m) => m.result === "yes");
   const between = yes.filter((m) => m.strikeType === "between" && m.floorStrike !== null);
-  if (between.length) return { value: numToDec(between[0].floorStrike!), method: "ladder-between", note: `the between band ${between[0].ticker} settled YES → its floor ${between[0].floorStrike}` };
+  if (between.length) return { value: numToDec(between[0].floorStrike!), method: "ladder-between", note: `The between band ${between[0].ticker} settled YES, so the value is its floor, ${between[0].floorStrike}.` };
   const greater = yes.filter((m) => m.strikeType === "greater" && m.floorStrike !== null).sort((a, b) => b.floorStrike! - a.floorStrike!);
-  if (greater.length) return { value: numToDec(greater[0].floorStrike!), method: "ladder-greater", note: `highest 'greater' strike that settled YES: ${greater[0].ticker} → ${greater[0].floorStrike}` };
+  if (greater.length) return { value: numToDec(greater[0].floorStrike!), method: "ladder-greater", note: `The highest "greater" strike that settled YES is ${greater[0].ticker}, so the value is ${greater[0].floorStrike}.` };
   const less = yes.filter((m) => m.strikeType === "less" && m.capStrike !== null).sort((a, b) => a.capStrike! - b.capStrike!);
-  if (less.length) return { value: numToDec(less[0].capStrike!), method: "ladder-less", note: `lowest 'less' strike that settled YES: ${less[0].ticker} → ${less[0].capStrike}` };
+  if (less.length) return { value: numToDec(less[0].capStrike!), method: "ladder-less", note: `The lowest "less" strike that settled YES is ${less[0].ticker}, so the value is ${less[0].capStrike}.` };
   return { value: null, method: "none", note: "no numeric expiration_value and no YES on the ladder" };
 }
 
@@ -173,7 +173,7 @@ const mid = (m: KalshiMarket): number | null => (m.yesBid !== null && m.yesAsk !
 /** Pure: the market-implied chance that the NEXT settlement burns. DISPLAY ONLY; approximate for ladders (sums the bands beyond the threshold). */
 export function impliedChanceFrom(rule: BurnRule, open: readonly KalshiMarket[], prevValue: string | null): ImpliedChance {
   const matching = open.filter((m) => selectorMatches(rule, m) && m.closeTime).sort((a, b) => (a.closeTime! < b.closeTime! ? -1 : 1));
-  if (!matching.length) return { chance: null, marketTicker: null, closeTime: null, basis: "no open market under this selector" };
+  if (!matching.length) return { chance: null, marketTicker: null, closeTime: null, basis: "There is no open market for this rule." };
   if (rule.kind === "binary") {
     const m = matching[0];
     const p = mid(m);
@@ -184,7 +184,7 @@ export function impliedChanceFrom(rule: BurnRule, open: readonly KalshiMarket[],
   const s = rule.scalar!;
   const next = matching.filter((m) => m.eventTicker === matching[0].eventTicker);
   const base = s.baseline === "previousSettlement" ? (prevValue === null ? null : Number(prevValue)) : s.baseline;
-  if (base === null) return { chance: null, marketTicker: next[0].eventTicker, closeTime: next[0].closeTime, basis: "no previous settlement yet to measure against" };
+  if (base === null) return { chance: null, marketTicker: next[0].eventTicker, closeTime: next[0].closeTime, basis: "There is no earlier result yet to measure against." };
   const upT = base + s.unit, downT = base - s.unit;
   let p = 0, any = false;
   for (const m of next) {
@@ -193,7 +193,7 @@ export function impliedChanceFrom(rule: BurnRule, open: readonly KalshiMarket[],
     const down = s.direction !== "up" && ((m.strikeType === "between" && m.capStrike !== null && m.capStrike <= downT) || (m.strikeType === "less" && m.capStrike !== null && m.capStrike <= downT + 1e-9));
     if (up || down) { p += q; any = true; }
   }
-  return { chance: any ? Math.min(1, p) : 0, marketTicker: next[0].eventTicker, closeTime: next[0].closeTime, basis: `sum of YES mid-prices over the ${next[0].eventTicker} ladder bands at least one unit (${s.unit}) ${s.direction === "abs" ? "away from" : s.direction} ${base}` };
+  return { chance: any ? Math.min(1, p) : 0, marketTicker: next[0].eventTicker, closeTime: next[0].closeTime, basis: `This is the sum of the YES mid-prices for the ${next[0].eventTicker} bands that sit at least one unit of ${s.unit} ${s.direction === "abs" ? "away from" : s.direction === "up" ? "above" : "below"} ${base}.` };
 }
 
 export function summariseOpen(open: readonly KalshiMarket[], rule: BurnRule, limit = 12): OpenMarketSummary[] {
@@ -406,7 +406,7 @@ export class KalshiClient implements OracleAdapter {
 
   async impliedChance(rule: BurnRule, prevValue: string | null): Promise<ImpliedChance> {
     const series = rule.series ?? (rule.market ? seriesTickerOf(rule.market) : null);
-    if (!series) return { chance: null, marketTicker: null, closeTime: null, basis: "no series" };
+    if (!series) return { chance: null, marketTicker: null, closeTime: null, basis: "The rule names no series." };
     return impliedChanceFrom(rule, await this.openMarkets(series), prevValue);
   }
 }

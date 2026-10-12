@@ -17,7 +17,7 @@ import { parseEspnSeries, seasonLabel } from "@/lib/burnticker/sources/espn";
 
 export const BADGE_SCHEMA = "burnticker.badge/v1";
 export const BADGE_CACHE_SEC = 60;
-export const BADGE_DISCLAIMER = "Memecoins: the rule says what supply does, not what price does.";
+export const BADGE_DISCLAIMER = "This is a memecoin. Its rule says what happens to its supply, never its price.";
 
 /** One coin as the badge shows it. */
 export interface BadgeSide {
@@ -102,7 +102,7 @@ export function coinBadge(i: SideInput): CoinBadgeJson {
     nextSettlementAt: nextOf(i.status), nextSettlementNote: nextNote(i.status),
     badgeUrl: { svg: `${o}${badgePath}.svg`, png: `${o}${badgePath}.png`, json: `${o}${badgePath}.json` }, embedUrl: `${o}/burnticker/embed/${t}`,
     embed: snippets({ origin: o, embedPath: `/burnticker/embed/${t}`, badgePath: `${badgePath}.svg`, pagePath: `/burnticker/t/${t}`, alt: `$${i.status.ticker} receipts on Burnticker` }),
-    disclaimer: BADGE_DISCLAIMER, affiliation: i.status.profile?.affiliation ?? "Not affiliated with any team, league, candidate, agency or market.",
+    disclaimer: BADGE_DISCLAIMER, affiliation: i.status.profile?.affiliation ?? "This coin is not affiliated with any team, league, candidate, agency or market.",
   };
 }
 
@@ -116,7 +116,7 @@ export function pairBadge(pairId: string, a: SideInput, b: SideInput): PairBadge
     nextSettlementAt: next, nextSettlementNote: next ? (next === nextOf(a.status) ? nextNote(a.status) : nextNote(b.status)) : "no result scheduled",
     pageUrl: page, verifyUrl: page, badgeUrl: { svg: `${o}${badgePath}.svg`, png: `${o}${badgePath}.png`, json: `${o}${badgePath}.json` }, embedUrl: `${o}/burnticker/embed/pairs/${id}`,
     embed: snippets({ origin: o, embedPath: `/burnticker/embed/pairs/${id}`, badgePath: `${badgePath}.svg`, pagePath: `/burnticker/p/${id}`, alt: `$${a.status.ticker} vs $${b.status.ticker} receipts on Burnticker`, height: 254 }),
-    disclaimer: "Two memecoins: each rule says what its supply does, not what price does.", affiliation: a.status.profile?.affiliation ?? "Not affiliated with any team, league, candidate, agency or market.",
+    disclaimer: "These are two memecoins. Each rule says what happens to its coin's supply, never its price.", affiliation: a.status.profile?.affiliation ?? "These coins are not affiliated with any team, league, candidate, agency or market.",
   };
 }
 

@@ -101,7 +101,7 @@ export function unitStep(rule: BurnRule, ev: SettledEvent, prev: { value: string
   const s = rule.scalar!;
   if (ev.result === "void" || ev.value === null) return { units: 0, mapping: null, kind: "void", carryOut: "0", baseline: null, note: "voided market or no settled value: no burn" };
   const baselineStr: string | null = s.baseline === "previousSettlement" ? (prev?.value ?? null) : numToDec(s.baseline);
-  if (baselineStr === null) return { units: 0, mapping: null, kind: "flat", carryOut: "0", baseline: null, note: "baseline: the first settlement is recorded; nothing is burned for it" };
+  if (baselineStr === null) return { units: 0, mapping: null, kind: "flat", carryOut: "0", baseline: null, note: "This first settlement is recorded as the starting point, so nothing is burned for it." };
   const unitStr = numToDec(s.unit);
   const carryIn = prev?.carryOut ?? "0";
   const scale = Math.max(decimalsOf(ev.value), decimalsOf(baselineStr), decimalsOf(unitStr), decimalsOf(carryIn));
@@ -120,7 +120,8 @@ export function unitStep(rule: BurnRule, ev: SettledEvent, prev: { value: string
   const rem = carry === "consecutive-increases" ? total % unit : BigInt(0);
   if (units === BigInt(0)) return { units: 0, mapping: null, kind: "under-unit", carryOut: fromScaled(rem, scale), baseline: baselineStr, note: `moved ${fromScaled(moved, scale)}${carry === "consecutive-increases" && cin > BigInt(0) ? ` (+ ${carryIn} carried)` : ""}: under one unit of ${unitStr}${carry === "consecutive-increases" ? `; ${fromScaled(rem, scale)} carried` : ""}` };
   if (units > BigInt(1_000_000)) throw new Error(`units ${units} exceed the 1,000,000 sanity cap — refused`);
-  return { units: Number(units), mapping: s.perUnit, kind: dir === "down" ? "down" : "up", carryOut: fromScaled(rem, scale), baseline: baselineStr, note: `moved ${fromScaled(moved, scale)}${carry === "consecutive-increases" && cin > BigInt(0) ? ` (+ ${carryIn} carried)` : ""} = ${units} unit(s) of ${unitStr}${rem > BigInt(0) ? `; ${fromScaled(rem, scale)} carried` : ""}` };
+  const unitWord = units === BigInt(1) ? "unit" : "units";
+  return { units: Number(units), mapping: s.perUnit, kind: dir === "down" ? "down" : "up", carryOut: fromScaled(rem, scale), baseline: baselineStr, note: `moved ${fromScaled(moved, scale)}${carry === "consecutive-increases" && cin > BigInt(0) ? ` (+ ${carryIn} carried)` : ""} = ${units} ${unitWord} of ${unitStr}${rem > BigInt(0) ? `; ${fromScaled(rem, scale)} carried` : ""}` };
 }
 
 /** Many events in `at` order, threading the previous value and carry. */

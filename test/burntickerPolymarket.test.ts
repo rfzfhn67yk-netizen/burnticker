@@ -171,9 +171,9 @@ describe("the client on the fixtures", () => {
     await assert.rejects(polyClient({ chain: { ...CHAIN, calls: {} } }).settledSince(validateRule(PM_BUCS), null), /every on-chain read failed/);
     const capped = await polyClient({ chainCap: 2 }).settledSince(validateRule(PM_NFL_MONEYLINE), "2026-09-30T00:00:00Z");
     assert.equal(capped.events.length, 2);
-    assert.ok(capped.refusals.some((x) => /more closed market\(s\) wait for the next cycle/.test(x)));
+    assert.ok(capped.refusals.some((x) => /more closed markets? waits? for the next cycle/.test(x)));
     const dense = await polyClient({ pageCap: 1 }).settledSince(validateRule(PM_NFL_MONEYLINE), "2026-01-01T00:00:00Z");
-    assert.ok(dense.refusals.some((x) => /denser than one cycle reads/.test(x)));
+    assert.ok(dense.refusals.some((x) => /settles more markets than one cycle reads/.test(x)));
   });
   test("the back-test reads Gamma's closed markets (display-grade) through the same unit engine", async () => {
     const c = polyClient();
@@ -273,7 +273,7 @@ describe("the keeper, the API and the SDK (on the fakes)", () => {
     const bt = await call("backtestPolymarket", { body: { rule: PM_NFL_MONEYLINE, months: 1 } });
     assert.ok((bt.matched as number) >= 15);
     assert.equal(bt.scanComplete, true, "one month of end-date windows, every one in the fixture");
-    assert.match(bt.sentence as string, /from Gamma's closed markets; the keeper reads each result from the Polygon payout vector/);
+    assert.match(bt.sentence as string, /comes from Gamma's closed markets\. The keeper reads each result from the Polygon payout vector\./);
     await call("backtestPolymarket", { body: { rule: { ...PM_BUCS, oracle: "kalshi" } }, expect: 400 });
     const one = await call("backtestKalshi", { body: { rule: PM_BUCS } });
     assert.equal(one.seriesTitle, "Buccaneers vs. Cowboys", "the shared back-test pipeline dispatches on the oracle");

@@ -13,6 +13,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ ticker: 
   const id = decodeURIComponent(ticker);
   const now = Date.now();
   const b = /^[A-Za-z0-9]{2,44}$/.test(id) ? await coinBadgeData(platform(), id, badgeOrigin(req), now).catch(() => null) : null;
-  if (!b) return new Response(renderEmbedMissing(`No launched coin ${id.toUpperCase().slice(0, 44)} on Burnticker.`), { status: 404, headers: { ...EMBED_HEADERS, "cache-control": "no-store" } });
+  if (!b) return new Response(renderEmbedMissing(`There is no launched coin called ${id.toUpperCase().slice(0, 44)} on Burnticker.`), { status: 404, headers: { ...EMBED_HEADERS, "cache-control": "no-store" } });
   return new Response(renderEmbedHtml(b, now), { status: 200, headers: EMBED_HEADERS });
 }

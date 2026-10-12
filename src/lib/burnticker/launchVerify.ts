@@ -81,7 +81,7 @@ const NOT_THIS = "it is not this coin's launch";
 export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: string | null; launchLabProgramId?: string | null; pairCurveProgramId?: string | null }): LaunchVerifier {
   return {
     async verify(signature, expect) {
-      if (!o.burnProgramId) return { ok: false, status: 503, reason: "this host has no burn_receipts program id (BURNTICKER_PROGRAM_ID), so a launch cannot be checked: drafts are not taken live" };
+      if (!o.burnProgramId) return { ok: false, status: 503, reason: "this site has no address set for the burn program, so a launch cannot be checked. Drafts are not taken live." };
       const program = o.burnProgramId;
       let tx: Awaited<ReturnType<TxReader["getTransaction"]>>;
       try { tx = await reader.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }); }
@@ -127,7 +127,7 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       const v = expect.venue;
       if (v.kind === "launchlab") {
         if (cfg.registration_policy !== POOL_POLICY_CREATOR_IS_FEE_PDA) return { ok: false, status: 422, reason: `the TokenConfig's registration policy is ${cfg.registration_policy}, not a LaunchLab coin's (the burn pool is LaunchLab's creator): ${NOT_THIS}` };
-        if (!o.launchLabProgramId) return { ok: false, status: 503, reason: "this host does not know the LaunchLab program for its cluster, so the LaunchLab create cannot be checked: drafts are not taken live" };
+        if (!o.launchLabProgramId) return { ok: false, status: 503, reason: "this site does not know the LaunchLab program for its network, so the LaunchLab create step cannot be checked. Drafts are not taken live." };
         if (!v.platformId) return { ok: false, status: 422, reason: "the draft records no LaunchLab platform, so its LaunchLab create cannot be checked: it is not taken live" };
         const burnPool = feePda(programKey, mintKey).toBase58();
         const creates = ixs.filter((ix) => ix.program === o.launchLabProgramId && ix.data.length >= 8 && ix.data.subarray(0, 8).equals(LAUNCHLAB_INITIALIZE_V2) && ix.accounts[LL_MINT] === expect.mint);
@@ -137,7 +137,7 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       }
       if (v.kind === "pair-curve") {
         if (cfg.registration_policy !== POOL_POLICY_PAIR_CURVE) return { ok: false, status: 422, reason: `the TokenConfig's registration policy is ${cfg.registration_policy}, not the pair curve's (${POOL_POLICY_PAIR_CURVE}): ${NOT_THIS}` };
-        if (!o.pairCurveProgramId) return { ok: false, status: 503, reason: "this host does not know the pair_curve program, so the pair cannot be checked: drafts are not taken live" };
+        if (!o.pairCurveProgramId) return { ok: false, status: 503, reason: "this site does not know the pair program, so the pair cannot be checked. Drafts are not taken live." };
         const side = v.mintA === expect.mint ? "a" : v.mintB === expect.mint ? "b" : null;
         if (!side) return { ok: false, status: 422, reason: `this coin's mint is neither side of the draft's pair: ${NOT_THIS}` };
         const pairAddress = pairPda(new PublicKey(v.mintA), new PublicKey(v.mintB), new PublicKey(o.pairCurveProgramId));

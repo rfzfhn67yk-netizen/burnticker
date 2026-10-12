@@ -32,12 +32,12 @@ export async function corroborate(feed: Feed, all: readonly SettledEvent[], even
   const sorted = [...events].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : 1));
   const hold = (why: string, kept: SettledEvent[] = []): ResolvedSelector => ({ ...base, events: kept, awaitingFinal: base.awaitingFinal + (sorted.length - kept.length), refusals: [...base.refusals, why] });
   const pf = feed.config.fact;
-  if (!pf) return hold(`${feed.id}: no fact is declared, so no cross-read can confirm it — ${sorted.length} reading(s) held`);
+  if (!pf) return hold(`${feed.id} declares no fact, so no second source can confirm it. ${sorted.length} ${sorted.length === 1 ? "reading is" : "readings are"} held.`);
   const descs = deps.entries.map(describeEntry);
   const baseId = feed.config.id.split(":")[0];
   const desc = descs.find((s) => s.id === baseId) ?? describeEntry({ ...feed.config, id: baseId });
   const crosses = crossReadsOf(desc, descs);
-  if (!crosses.length) return hold(`${feed.id}: no independent cross-read of the same fact is configured — ${sorted.length} reading(s) held (a primary alone never settles)`);
+  if (!crosses.length) return hold(`${feed.id} has no independent second source set up for the same fact. ${sorted.length} ${sorted.length === 1 ? "reading is" : "readings are"} held, because a primary source alone never settles a coin.`);
   let lastErr: string | null = null;
   for (const c of crosses) {
     const cf = deps.crossFeed(c.id);
@@ -57,7 +57,7 @@ export async function corroborate(feed: Feed, all: readonly SettledEvent[], even
       const kept: SettledEvent[] = [];
       for (const e of sorted) {
         const x = byPeriod.get(e.id);
-        if (!x) return hold(`${feed.id} ${e.id}: the cross-read ${who} has no value for this period yet — held with ${sorted.length - kept.length - 1} later reading(s)`, kept);
+        if (!x) return hold(`For ${feed.id} ${e.id}, the cross-read ${who} has no value for this period yet. It is held along with ${sorted.length - kept.length - 1} later ${sorted.length - kept.length - 1 === 1 ? "reading" : "readings"}.`, kept);
         if (!x.agree) return hold(`${feed.id} ${e.id}: the primary (${x.primary}) and the cross-read ${who} (${x.crossRead}) disagree — held with every later reading`, kept);
         kept.push({ ...e, method: `${e.method ? `${e.method} · ` : ""}cross-read ${who}: ${x.crossRead} for ${e.id} agrees with ${x.primary} (tolerance ${tol})` });
       }
@@ -69,7 +69,7 @@ export async function corroborate(feed: Feed, all: readonly SettledEvent[], even
       if (!x) return hold(`${feed.id} ${latest.id}: the cross-read ${who} could not be paired with the latest value (${cmp.basis}) — held`);
       if (!x.agree) return hold(`${feed.id} ${latest.id}: the primary (${x.primary}) and the cross-read ${who} (${x.crossRead}) disagree — held`);
       const dropped = sorted.length - 1;
-      return { ...base, events: [{ ...latest, method: `${latest.method ? `${latest.method} · ` : ""}cross-read ${who}: ${x.crossRead} agrees with ${x.primary} (${cmp.basis})` }], refusals: dropped ? [...base.refusals, `${feed.id}: ${dropped} earlier snapshot value(s) in this read could not be paired with a cross-read and are not applied (the latest value's change includes them)`] : base.refusals };
+      return { ...base, events: [{ ...latest, method: `${latest.method ? `${latest.method} · ` : ""}cross-read ${who}: ${x.crossRead} agrees with ${x.primary} (${cmp.basis})` }], refusals: dropped ? [...base.refusals, `${feed.id} has ${dropped} earlier snapshot ${dropped === 1 ? "value" : "values"} in this read that could not be paired with a cross-read and are not applied (the latest value's change includes them)`] : base.refusals };
     }
     // quarter-end: series-level
     const bad = cmp.comparisons.find((y) => !y.agree);
@@ -78,5 +78,5 @@ export async function corroborate(feed: Feed, all: readonly SettledEvent[], even
     const note = last ? `series check: cross-read ${who} agrees on ${last.period} (${last.primary} vs ${last.crossRead}, tolerance ${tol}); a daily value between quarter ends is not individually corroborated` : `series check: cross-read ${who} read this cycle (latest ${cr[cr.length - 1].id}); no quarter both reads cover yet; a daily value between quarter ends is not individually corroborated`;
     return { ...base, events: sorted.map((e) => ({ ...e, method: `${e.method ? `${e.method} · ` : ""}${note}` })) };
   }
-  return hold(`${feed.id}: no cross-read could be read this cycle (${lastErr ?? "none configured on this host"}) — ${sorted.length} reading(s) held`);
+  return hold(`For ${feed.id}, no cross-read could be read this cycle (${lastErr ?? "none is set up on this host"}). ${sorted.length} ${sorted.length === 1 ? "reading is" : "readings are"} held.`);
 }

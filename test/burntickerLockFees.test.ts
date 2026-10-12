@@ -52,7 +52,7 @@ describe("the split (compiled 80/20; the odd lamport goes to the burn pool)", ()
   test("the program builder's local mock claim (LaunchLab path): 59,456,045 lamports → 47,564,836 burn pool + 11,891,209 treasury", () => {
     assert.deepEqual(splitLockFees(BigInt(59456045)), { burnPool: BigInt(47564836), operator: BigInt(11891209) });
     const line = lockFeeClaimLine({ solLamports: BigInt(59456045), toBurnPoolLamports: BigInt(47564836), toOperatorLamports: BigInt(11891209), tokenBurnedRaw: BigInt(0) });
-    assert.equal(line, "LP fees claimed: 0.059456045 SOL → 80% burn pool (0.047564836) / 20% operator (0.011891209); coin side burned");
+    assert.equal(line, "0.059456045 SOL of pool fees was claimed. 0.047564836 SOL (80%) went to the burn pool and 0.011891209 SOL (20%) went to the operator. The coin side was burned.");
   });
   test("splitMatches flags anything but the compiled split", () => {
     assert.equal(splitMatches({ solLamports: BigInt(7), toBurnPoolLamports: BigInt(6), toOperatorLamports: BigInt(1) }), true);
@@ -102,12 +102,12 @@ describe("the program interface (final 2026-10-10)", () => {
     assert.equal(parseLockFeesMemo("RAYS26|buyback|wsol=1|v1"), null);
     assert.equal(parseLockFeesMemo(v1.replace("|v1", "|v2")), null, "a v1 body with a v2 tag");
     assert.equal(parseLockFeesMemo(v2.replace("|v2", "|v3")), null);
-    assert.match(lockFeeClaimLine({ ...f, paidLamports: BigInt(2000), pendingLamports: BigInt(469) }), /0\.000000469 still owed to the operator/);
+    assert.match(lockFeeClaimLine({ ...f, paidLamports: BigInt(2000), pendingLamports: BigInt(469) }), /0\.000000469 SOL still owed to the operator/);
   });
   test("the receipt line and the policy line are copy-lint clean", () => {
     const cfg = loadCopyLintConfig();
     const line = lockFeeClaimLine({ solLamports: BigInt(12345678), toBurnPoolLamports: BigInt(9876543), toOperatorLamports: BigInt(2469135), tokenBurnedRaw: BigInt(1500000) });
-    assert.equal(line, "LP fees claimed: 0.012345678 SOL → 80% burn pool (0.009876543) / 20% operator (0.002469135); coin side burned (1.5 tokens)");
+    assert.equal(line, "0.012345678 SOL of pool fees was claimed. 0.009876543 SOL (80%) went to the burn pool and 0.002469135 SOL (20%) went to the operator. The coin side was burned (1.5 tokens).");
     for (const t of [line, LP_POLICY_LINE]) assert.equal(lintCopy(t, cfg).ok, true, t);
   });
 });
@@ -148,7 +148,7 @@ describe("the claim_lock_fees crank (keeper)", () => {
     assert.equal((await program.feePdaBalanceLamports(t.mint)) - pool0, BigInt(9876544), "the 80 % (with the odd lamport) landed in the coin's fee PDA");
     assert.equal(port.operatorLamports, BigInt(2469135));
     assert.match(port.memoOf(rows[0].signature)!, /^RAYS\|lockfees\|wsol=12345679\|burnpool=9876544\|operator=2469135\|paid=2469135\|pending=0\|burned=2000000\|nft=.*\|v2$/);
-    assert.ok(lines.some((l) => l.includes("LP fees claimed: 0.012345679 SOL → 80% burn pool (0.009876544) / 20% operator (0.002469135); coin side burned (2 tokens)")));
+    assert.ok(lines.some((l) => l.includes("0.012345679 SOL of pool fees was claimed. 0.009876544 SOL (80%) went to the burn pool and 0.002469135 SOL (20%) went to the operator. The coin side was burned (2 tokens).")));
     const sends = port.sends;
     const r2 = await claimLockFeesFor(deps(), t);
     assert.equal(r2.outcome, "skipped");
