@@ -91,6 +91,19 @@ export interface ChainReader { accountData(pubkey: string): Promise<Uint8Array |
 
 export interface LivePlatform { platformId: string; found: boolean; view: PlatformView | null; comparison: LiveVsDesigned[]; readAt: string; error: string | null }
 
+/** Deep-converts a value for JSON: bigint → decimal string, PublicKey (anything with toBase58) → base58, Uint8Array → hex. */
+export function jsonSafe<T>(v: T): unknown {
+  if (typeof v === "bigint") return v.toString();
+  if (v instanceof Uint8Array) return Buffer.from(v).toString("hex");
+  if (v && typeof v === "object") {
+    const b58 = (v as unknown as { toBase58?: () => string }).toBase58;
+    if (typeof b58 === "function") return b58.call(v);
+    if (Array.isArray(v)) return v.map(jsonSafe);
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, jsonSafe(x)]));
+  }
+  return v;
+}
+
 export async function readLivePlatform(reader: ChainReader | null, platformId: string | null, env: Readonly<Record<string, string | undefined>> = process.env, now = Date.now()): Promise<LivePlatform> {
   const readAt = new Date(now).toISOString();
   if (!platformId) return { platformId: "", found: false, view: null, comparison: [], readAt, error: "BURNTICKER_PLATFORM_ID is not set: the platform config has not been created yet" };
@@ -99,7 +112,10 @@ export async function readLivePlatform(reader: ChainReader | null, platformId: s
     const data = await reader.accountData(platformId);
     if (!data) return { platformId, found: false, view: null, comparison: [], readAt, error: "the platform config account does not exist on this cluster" };
     const view = decodePlatform(data);
-    return { platformId, found: true, view, comparison: compareLivePlatform(view, devFeeWallet(env), (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null), readAt, error: null };
+    // The decoded view carries bigint fee rates / scales and PublicKeys; the page is served as JSON (NextResponse.json has no
+    // replacer), so it is made JSON-safe here. First seen 2026-10-11 on the mainnet host: the route threw "Do not know how to
+    // serialize a BigInt" and the Trust page read "data unavailable" (site audit R01).
+    return { platformId, found: true, view: jsonSafe(view) as unknown as PlatformView, comparison: compareLivePlatform(view, devFeeWallet(env), (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null), readAt, error: null };
   } catch (e) { return { platformId, found: false, view: null, comparison: [], readAt, error: (e as Error).message.slice(0, 200) }; }
 }
 
