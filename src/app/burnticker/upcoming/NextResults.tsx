@@ -6,7 +6,7 @@ import { useHome } from "../_components/useHome";
 import { useWatchlist } from "../_components/useWatchlist";
 import { FollowButton } from "../_components/FollowButton";
 import { EmptyState } from "../_components/EmptyState";
-import { SETTLEMENT_LABEL, UPCOMING_EMPTY, type UpcomingRow } from "@/lib/burnticker/upcoming";
+import { SETTLEMENT_LABEL, upcomingNotice, type UpcomingRow } from "@/lib/burnticker/upcoming";
 import { WATCH_NOTE } from "@/lib/burnticker/watchlist";
 
 /**
@@ -20,12 +20,17 @@ export default function NextResults() {
   const { data, error } = useHome();
   const watch = useWatchlist();
   const [only, setOnly] = useState(false);
-  const rows: UpcomingRow[] = (data?.upcoming ?? []).filter((r) => !only || watch.list.results.includes(r.ticker));
+  // website-15 (code review 6 P2 2): ready, partial or unavailable; a failure is never an empty list
+  const set = data?.upcoming ?? null;
+  const all: UpcomingRow[] = Array.isArray(set?.rows) ? set!.rows : [];
+  const rows = all.filter((r) => !only || watch.list.results.includes(r.ticker));
+  const notice = data ? upcomingNotice(set) : null;
+  const failed = !!data && (!set || set.state === "unavailable");
   return (
     <main className="mx-auto max-w-4xl px-4 py-6 space-y-4 text-sm">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Next results</h1>
-        <p className="text-neutral-300">Each coin burns only when its own result is published. This page lists the result each coin waits for, who publishes it, and the publisher&apos;s own schedule. The times are the source&apos;s, and this site does not promise them.</p>
+        <p className="text-neutral-300">Each coin burns only when its own result is published. This page lists the result each coin waits for, who publishes it, and the publisher&apos;s own schedule. Publication times come from the source and may change.</p>
         <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
           <button type="button" className="bt-watch" aria-pressed={only} onClick={() => setOnly(!only)}>{only ? "Showing the results you follow" : "Show only the results you follow"}</button>
           <span>{WATCH_NOTE}</span>
@@ -33,7 +38,9 @@ export default function NextResults() {
       </header>
       {!data && !error && <EmptyState kind="loading" body="Reading the next results." />}
       {error && <EmptyState kind="unavailable" body="The next results could not be read just now. Try again in a moment." details={error} />}
-      {data && rows.length === 0 && <EmptyState compact kind="no-activity" body={only ? "You do not follow any result yet. Turn this filter off and press Follow on a row. Your list stays in this browser." : UPCOMING_EMPTY} />}
+      {failed && <EmptyState kind="unavailable" body={notice!} details={set?.omitted.map((o) => `$${o.ticker}: ${o.reason}`).join(" ") || undefined} />}
+      {data && !failed && set?.state === "partial" && <p className="text-xs text-amber-300" role="status" data-upcoming-partial>{notice}</p>}
+      {data && !failed && rows.length === 0 && <EmptyState compact kind="no-activity" body={only && all.length ? "You do not follow any result yet. Turn this filter off and press Follow on a row. Your list stays in this browser." : notice ?? "No pending results."} />}
       {data && rows.length > 0 && (
         <ol className="space-y-3" aria-label="Next results">
           {rows.map((r) => (

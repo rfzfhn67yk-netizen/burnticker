@@ -1,5 +1,6 @@
 "use client";
 
+import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 import { useEffect, useState } from "react";
 import { HostDiagnostics } from "../../_components/HostDiagnostics";
 import Link from "next/link";
@@ -144,7 +145,7 @@ export default function TokenPage() {
             {s.program?.initialized ? <Link className="bt-chip bt-chip-grad" href={`/burnticker/verify?mint=${s.mint}`} title="The burn program has a record for this coin.">verified by program · mint {short(s.mint)}</Link> : <Link className="underline" href={`/burnticker/verify?mint=${s.mint}`} title="This site has not read the burn program's record for this coin.">check this coin</Link>}
             {(prof?.links ?? []).map((l) => <a key={l.url} href={l.url} rel="nofollow noopener ugc" target="_blank" className="underline">{l.label}</a>)}
           </div>
-          {prof?.description && <p className="text-sm text-neutral-200 max-w-2xl leading-relaxed">{prof.description}</p>}
+          {prof?.description && <p className="text-sm text-neutral-200 max-w-2xl leading-relaxed whitespace-pre-line" data-coin-description>{prof.description}</p>}
           {prof?.note && <div className="max-w-2xl rounded border border-neutral-700 p-2 text-xs text-neutral-300"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note (not part of the rule)</div>{prof.note}</div>}
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "This coin is not affiliated with any team, league, candidate, agency or market."}</p>
           {launch.open && <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>}
@@ -335,7 +336,7 @@ function NotRegisteredNotice({ t }: { t: string }) {
       {rehearsal ? (
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-2" data-rehearsal-coin>
           <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">Disclosed rehearsal coin</p>
-          <p>${t} is the operator&apos;s rehearsal coin on mainnet. It exists to test the burn machinery with real settings. The operator does not trade it and asks nobody to, so this site shows no chart and no trade link for it and does not list it with the coins. It can only burn if outside buyers fill its curve, and nobody is asked to do that.</p>
+          <p data-rehearsal-sentence>{REHEARSAL_SENTENCE}</p>
           {rehearsal.mint && <p className="text-xs text-neutral-400 break-all">Its mint address is <code>{rehearsal.mint}</code>. <Link className="underline" href={`/burnticker/verify?mint=${rehearsal.mint}`}>Check this coin with the burn program</Link>.</p>}
           <p className="text-xs text-neutral-400">The full record, including what it has and has not proved so far, is on the <Link className="underline" href="/burnticker/trust">Trust page</Link>.</p>
         </section>

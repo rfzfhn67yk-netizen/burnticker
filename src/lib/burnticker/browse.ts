@@ -52,6 +52,8 @@ export interface SourceCard {
   /** The next thing that settles (Kalshi: the next event's close; Polymarket: the event's end), or the last reading for a feed. */
   next: { label: string; at: string | null } | null;
   example: string; launchable: { ok: boolean; why: string | null }; refused: string[]; flags: string[];
+  /** website-15 item 8: a feed's own parse refusals ("schema: no rows at …"), shown only behind Details; never the refuse list */
+  diagnostics?: string[];
   sourceName: string | null; sourceUrl: string | null; pick: SourcePick;
   /** A native family card that needs one more choice before it is a rule: a team (the Team coin picker) or a station + threshold. */
   configure: { kind: "team"; league: string } | { kind: "weather"; metric: "high" | "rain" | "snow" } | null;
@@ -77,7 +79,7 @@ export function feedCard(f: FeedCardInput): SourceCard {
   return {
     id: `feed:${f.id}`, venue: "feed", venueLabel: f.sourceName, tier: f.tier, tierLabel: f.tierLabel, title: f.title, cadence: f.cadence, kind: "scalar",
     next: f.lastReading ? { label: `last reading ${f.lastReading.id}${f.lastReading.value !== null ? `: ${f.lastReading.value}` : ""}`, at: null } : null,
-    example: f.unit ? `burns for every ${f.unit.label}` : "burns on each settled reading", launchable: f.launchable, refused: f.refusals ?? [], flags: f.flags,
+    example: f.unit ? `burns for every ${f.unit.label}` : "burns on each settled reading", launchable: f.launchable, refused: [], diagnostics: f.refusals ?? [], flags: f.flags,
     sourceName: f.sourceName, sourceUrl: f.sourceUrl, pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, configure: null,
   };
 }

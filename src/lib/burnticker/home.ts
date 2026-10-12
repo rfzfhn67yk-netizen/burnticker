@@ -12,7 +12,9 @@ import { deficitQueue, type DeficitQueue, type KeeperFiles } from "@/lib/burntic
 import { readinessOf, type Readiness } from "@/lib/burnticker/readiness";
 import { progressOf } from "@/lib/burnticker/progress";
 import { RAISE_PRESETS_SOL } from "@/lib/burnticker/launchPresets";
-import type { UpcomingRow } from "@/lib/burnticker/upcoming";
+import { upcomingSet, type UpcomingSet } from "@/lib/burnticker/upcoming";
+import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
+export { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 
 /**
  * THE HOME PAGE'S DATA (website-10, 2026-10-12; evidence defects fixed by website-13 the same day, Codex review 5 F3 and F4). Read from
@@ -30,15 +32,22 @@ import type { UpcomingRow } from "@/lib/burnticker/upcoming";
  */
 
 export type { ActivityEvent } from "@/lib/burnticker/activity";
-export interface HomeStats { burnedTokens: string; burns: number; receiptsVerified: number | null; receiptsWhy: string | null }
+export interface HomeStats {
+  burnedTokens: string; burns: number; receiptsVerified: number | null; receiptsWhy: string | null;
+  /** website-15 item 15: the devnet practice burns, shown with a "(devnet)" mark while mainnet has no burn; null when none were read */
+  devnet?: { burns: number; burnedTokens: string } | null;
+}
 export interface HomeData {
   schema: "burnticker.home/v1"; generatedAt: string; featured: CardView[]; events: ActivityEvent[]; noEvents: string;
   /** The raises a creator may choose (40, 60 or 85 SOL; LAUNCHPAD-PATH §75). A coin's own raise is read from its pool, never from here. */
   raisePresetsSol: readonly string[];
   /** The $DEFICIT queued-units counter (deficitQueue.ts), from the keeper's published files; state "unavailable" when they were not read. */
   deficitQueue: DeficitQueue;
-  /** The next result each coin waits for (upcoming.ts); an empty list when no coin is registered or the registry was not read. */
-  upcoming: UpcomingRow[];
+  /**
+   * The next result each coin waits for (upcoming.ts upcomingSet): the rows read, the coins that could not be read, and ready, partial or
+   * unavailable. An unread registry is "unavailable", never an empty list (website-15, code review 6 P2 2).
+   */
+  upcoming: UpcomingSet;
   stats: HomeStats | null;
   /** The one-line status: the phase and governance facts, then the site launch record's one sentence. */
   statusLine: string | null;
@@ -58,7 +67,24 @@ export interface HomeCoin extends Pick<IndexCoin, "ticker" | "burns" | "lastBurn
 export const NO_EVENTS_LINE = "Nothing has happened on chain yet. Burns, signed readings, graduations and pool registrations appear here once they are recorded.";
 export const UNAVAILABLE = "Unavailable";
 const OWN_TOKENS = path.join("config", "own-tokens.json");
+/** Whether config/own-tokens.json marks $DEFICIT launched (the owner flips it on launch day). False when the file cannot be read. */
+export function deficitCreated(root = process.cwd()): boolean {
+  try { return (JSON.parse(fs.readFileSync(path.join(root, OWN_TOKENS), "utf8")) as { tokens: { symbol: string; status: string }[] }).tokens.some((t) => t.symbol === "DEFICIT" && t.status === "launched"); }
+  catch { return false; }
+}
 const REHEARSAL_RULES = path.join("config", "burnkeeper", "rehearsal.rules.json");
+/** The mainnet rehearsal's evidence file (its LaunchLab create: pool id and signature). */
+export const REHEARSAL_EVIDENCE = path.join("docs", "burnkeeper", "evidence", "mainnet-rehearsal-2026-10-11", "rehearsal.json");
+/** The rehearsal's LaunchLab create from its evidence file: the pool, the create signature and the day. Null when the file is unreadable. */
+export function rehearsalCreate(root = process.cwd()): { mint: string; poolId: string; signature: string; date: string } | null {
+  try {
+    const e = JSON.parse(fs.readFileSync(path.join(root, REHEARSAL_EVIDENCE), "utf8")) as { date: string; mint: string; steps: { step: string; poolId?: string; signature?: string }[] };
+    const c = e.steps.find((x) => x.step === "launchlab create");
+    return c?.poolId && c.signature ? { mint: e.mint, poolId: c.poolId, signature: c.signature, date: e.date } : null;
+  } catch { return null; }
+}
+/** The rehearsal's curve as the home route read it from its LaunchLab pool (market.ts readKeeperCurve); null when not read. */
+export type RehearsalCurve = { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string; quote: string; progressPct: number; marketCap?: string | null } | null;
 const DEVNET_RULES = path.join("config", "burnkeeper", "deficit.devnet.rules.json");
 const STATUS_FILE = path.join("config", "burnticker", "current-status.json");
 
@@ -76,13 +102,14 @@ const debtRule = (percent: string, unitLabel: string) => `Spends ${percent} of i
 const DEBT_NEXT: CardCell = { text: "Each business day", why: "The rule reads the Treasury's debt figure after it is posted each business day, in New York time." };
 const cell = (text: string | null, why: string | null): CardCell => ({ text, why });
 
+const REHEARSAL_UNREAD = "This site could not read $REHEARSAL's pool just now.";
 /** A curve with no raise read: "— raised", and the reason. Never a typed 85 (LAUNCHPAD-PATH §75). */
 const noCurve = (why: string): CardView["curve"] => ({ raised: null, of: null, pct: null, done: false, why });
 /** The keeper's status.json, when it is the live schema. */
 type KeeperStatus = { schema?: string; burned?: { total: string; pctOfSupply: number; count: number }; curve?: { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string; quote: string; progressPct: number } | null; readiness?: Readiness; addresses?: { mint: string | null } };
 const keeperLive = (k: KeeperFiles | null): KeeperStatus | null => { const s = k?.status as KeeperStatus | null | undefined; return s && s.schema === "burnkeeper.status/v1" ? s : null; };
 
-export function featuredCoins(root = process.cwd(), samples: SampleList | null = null, coins: readonly HomeCoin[] | null = [], keeper: KeeperFiles | null = null, now = Date.now()): CardView[] {
+export function featuredCoins(root = process.cwd(), samples: SampleList | null = null, coins: readonly HomeCoin[] | null = [], keeper: KeeperFiles | null = null, now = Date.now(), rehearsalCurve: RehearsalCurve = null): CardView[] {
   const out: CardView[] = [];
   const own = JSON.parse(fs.readFileSync(path.join(root, OWN_TOKENS), "utf8")) as { tokens: { symbol: string; address: string | null; status: string }[] };
   const d = deficitPrelaunch(root);
@@ -98,6 +125,8 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
   const queuedCell = (): CardCell | null => (queue.card ? cell(queue.card, queue.headline) : null);
   const burned: CardCell = !created ? cell(null, "The coin is not created yet, so nothing can have burned.")
     : readable ? (live!.burns === 0 && queuedCell()) || cell(`${groupDigits(live!.burned ?? "0")} $DEFICIT${typeof live!.pctOfSupply === "number" ? `, ${pctOfSupply(live!.pctOfSupply)}` : ""}`, live!.burns > 0 ? `${live!.burns} burn${live!.burns === 1 ? "" : "s"} so far.` : "No burn has confirmed yet.")
+    // website-15 (code review 6, P2 1): the keeper's burn list unread or the wrong shape is unavailable, never "0 burned"
+    : ks && queue.state === "unavailable" ? cell(UNAVAILABLE, queue.headline)
     : ks?.burned ? (ks.burned.count === 0 && queuedCell()) || cell(`${groupDigits(ks.burned.total)} $DEFICIT, ${pctOfSupply(ks.burned.pctOfSupply)}`, ks.burned.count > 0 ? `${ks.burned.count} burn${ks.burned.count === 1 ? "" : "s"} so far, from the keeper's published files.` : "No burn has confirmed yet.")
     : cell(UNAVAILABLE, unreadWhy);
   const keeperBurns = ks ? ((Array.isArray(keeper?.burns) ? keeper!.burns : (keeper?.burns as { burns?: unknown[] } | null)?.burns ?? []) as { status?: string; signature?: string | null; recordDate?: string }[]) : [];
@@ -110,7 +139,7 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
   out.push({
     id: "deficit", ticker: "DEFICIT", name: "Deficit", imageUrl: "/burnticker/brand/deficit.png", group: "test",
     tags: [{ label: "Featured", tone: "featured" }, ...(created ? [] : [{ label: "Not created yet", tone: "neutral" as const }])],
-    note: created ? "The operator's first coin, said like DeFi-cit: decentralized finance pointed at the national deficit. Its rules were locked before it was created." : "The operator's first coin, said like DeFi-cit: decentralized finance pointed at the national deficit. Its rules are locked, and the coin is not created yet.",
+    note: created ? "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules were locked before it was created." : "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules are locked, and the coin is not created yet.",
     rule: debtRule(d.dial.percent, d.dial.unitLabel), nextSettle: DEBT_NEXT,
     progress: readiness ? progressOf(readiness, { raiseSol: Number.isFinite(raiseNum) && raiseNum > 0 ? raiseNum : null, raisedSol: Number.isFinite(raisedNum) ? raisedNum : null, queuedUnits: queue.state === "queued" ? queue.units : null }) : null,
     progressWhy: readiness ? null : unreadWhy,
@@ -130,16 +159,19 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
   });
 
   const rehearsal = loadTransparency(root).rehearsals.find((r) => r.symbol === "REHEARSAL");
+  const rc = rehearsalCurve;
   if (rehearsal) {
     const rr = dialOf(rulesOf(root, REHEARSAL_RULES));
     out.push({
       id: "rehearsal", ticker: "REHEARSAL", name: "Rehearsal", imageUrl: null, group: "test",
       tags: [{ label: "Mainnet rehearsal", tone: "rehearsal" }],
-      note: "A disclosed test coin on mainnet that checks fees and signed readings. The operator does not trade it and asks nobody to. It can only burn if outside buyers fill its curve.",
+      note: REHEARSAL_SENTENCE,
       rule: debtRule(rr.percent, rr.unitLabel), nextSettle: DEBT_NEXT,
-      progress: null, progressWhy: "This site does not read $REHEARSAL's curve or pool, because it is not listed with the coins.",
-      curve: noCurve("This site does not read $REHEARSAL's curve, because it is not listed with the coins."),
-      mcap: cell(null, "This site does not read $REHEARSAL's curve."), holders: cell(null, NOT_READ.holders),
+      // website-15 item 9: its LaunchLab pool is read like any coin's (home route); unread is a plain dash with a plain reason
+      progress: rc ? progressOf(readinessOf({ launched: true, phase: rc.phase, raisedSol: Number(rc.raised), graduationSol: Number(rc.threshold), poolVerified: null, latest: null }), { raiseSol: Number(rc.threshold), raisedSol: Number(rc.raised) }) : null,
+      progressWhy: rc ? null : REHEARSAL_UNREAD,
+      curve: rc ? curveCell(rc, null) : noCurve(REHEARSAL_UNREAD),
+      mcap: rc?.marketCap ? cell(`${groupDigits(rc.marketCap)} ${rc.quote}`, CARD_MEANINGS.mcap) : cell(null, rc ? (rc.phase === "graduated" ? NOT_READ.mcapPool : REHEARSAL_UNREAD) : REHEARSAL_UNREAD), holders: cell(null, NOT_READ.holders),
       createdAt: rehearsal.date ?? null, createdWhy: rehearsal.date ? null : "The record does not give a creation date.",
       burned: cell(null, `This site does not read $REHEARSAL's burns. The operator's record says: ${rehearsal.status}.`),
       mint: rehearsal.mint ? { address: rehearsal.mint, label: "Mint address" } : null,
@@ -160,9 +192,11 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       tags: [{ label: "Devnet", tone: "devnet" }],
       note: "The practice run on devnet, a test network where tokens have no money value.",
       rule: debtRule(dv.percent, dv.unitLabel), nextSettle: cell(null, "The devnet rehearsal is over, so no result is scheduled."),
-      progress: progressOf(readinessOf({ launched: true, phase: "graduated", raisedSol: null, poolVerified: true, latest: { status: "confirmed", units: 1, skippedReason: null, waitReason: null } })),
+      // website-15 item 6 (ChatGPT repair 2): the devnet coin never had a curve, so curve and graduation are "not applicable", not done;
+      // its real devnet burn stays
+      progress: progressOf(readinessOf({ launched: true, phase: null, raisedSol: null, poolVerified: true, latest: { status: "confirmed", units: 1, skippedReason: null, waitReason: null } }), { notApplicable: ["Trading on curve", "Graduated"] }),
       progressWhy: null,
-      curve: { raised: null, of: null, pct: 100, done: true, why: "The rehearsal coin trades in its own devnet pool. Its curve was not used." },
+      curve: { raised: null, of: null, pct: null, done: false, na: true, why: "Not applicable. The devnet rehearsal coin traded in its own devnet pool and never had a curve." },
       mcap: cell(null, "Devnet tokens have no money value, so this number does not apply."), holders: cell(null, NOT_READ.holders),
       createdAt: st.deficit?.rehearsal?.date ?? null, createdWhy: st.deficit?.rehearsal?.date ? null : "The record does not give a creation date.",
       burned: cell(`${groupDigits(total)} $DEFICIT${supply > 0 ? `, ${pctOfSupply((total / supply) * 100)}` : ""}`, `${burns.length} confirmed burns on devnet.`),
@@ -195,6 +229,15 @@ export function activityEvents(tokens: readonly HomeCoin[], samples: SampleList 
     ev.push({ kind: "burn", at: r.recordDate, network: "devnet", ticker: r.ticker, signature: r.signature, href: checkReceiptHref(r.signature, samples!.cluster)!, text: `On ${shortDay(r.recordDate)}, the devnet rehearsal coin $${r.ticker} burned ${amt === null ? "its purchase" : `${groupDigits(amt)} tokens`}.` });
   }
   return sortEvents(ev, limit);
+}
+
+/** The devnet practice burns from the sample receipts (confirmed only, the amount from each memo), for the stat strip's "(devnet)" figures. */
+export function withDevnet(s: HomeStats | null, samples: SampleList | null): HomeStats | null {
+  if (!s) return s;
+  const conf = (samples?.receipts ?? []).filter((r) => r.status === "confirmed");
+  if (!conf.length) return { ...s, devnet: null };
+  const total = conf.reduce((a, r) => a + (memoBurn(r.memo) ?? 0), 0);
+  return { ...s, devnet: { burns: conf.length, burnedTokens: String(Math.round(total * 1e6) / 1e6) } };
 }
 
 /** The platform strip from the index totals and the public audit; null when the index could not be read. */
@@ -235,17 +278,34 @@ export function homeStatusLine(rec: StatusRecord | null): string | null {
   return parts.length ? parts.join(" ") : null;
 }
 
-export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingRow[] = []): HomeData {
+/**
+ * THE MAINNET RECORDS IN THE ACTIVITY LINE (website-15 item 15, Claude site audit 3 item 12): until mainnet has burns, the line is not
+ * all devnet. From real records only: $REHEARSAL's LaunchLab create (its evidence file: the day and the signature) and, while $DEFICIT
+ * is not created, its reserved mint address (config/own-tokens.json; no date is claimed). Nothing when the files cannot be read.
+ */
+export function mainnetRecordEvents(root = process.cwd()): ActivityEvent[] {
+  const out: ActivityEvent[] = [];
+  const rh = rehearsalCreate(root);
+  if (rh) out.push({ kind: "created", at: rh.date, network: "mainnet", ticker: "REHEARSAL", signature: rh.signature, href: `https://explorer.solana.com/tx/${rh.signature}`, text: `$REHEARSAL created on mainnet, ${shortDay(rh.date) ?? rh.date}` });
+  try {
+    const own = JSON.parse(fs.readFileSync(path.join(root, OWN_TOKENS), "utf8")) as { tokens: { symbol: string; address: string | null; status: string }[] };
+    const d = own.tokens.find((t) => t.symbol === "DEFICIT");
+    if (d?.address && d.status !== "launched") out.push({ kind: "reserved", at: null, network: "mainnet", ticker: "DEFICIT", signature: null, href: deficitHref(false), text: "$DEFICIT mint address reserved" });
+  } catch { /* no row */ }
+  return out;
+}
+
+export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingSet | null = null, rehearsalCurve: RehearsalCurve = null): HomeData {
   let samples: SampleList | null = null;
   try { samples = sampleReceipts(root); } catch { samples = null; }
   let featured: CardView[] = [];
-  try { featured = featuredCoins(root, samples, tokens, keeper, now); } catch { featured = []; }
+  try { featured = featuredCoins(root, samples, tokens, keeper, now, rehearsalCurve); } catch { featured = []; }
   let rec: StatusRecord | null = null;
   if (statusRecord !== undefined) rec = statusRecord as StatusRecord | null;
   else { try { rec = JSON.parse(fs.readFileSync(path.join(root, STATUS_FILE), "utf8")) as StatusRecord; } catch { rec = null; } }
   return {
-    schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: activityEvents(tokens ?? [], samples, 12, keeper), noEvents: NO_EVENTS_LINE,
-    raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming, stats: homeStats(index?.totals ?? null, index?.audit ?? null),
+    schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...mainnetRecordEvents(root)], 12), noEvents: NO_EVENTS_LINE,
+    raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null), samples),
     statusLine: [homeStatusLine(rec), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
   };
 }

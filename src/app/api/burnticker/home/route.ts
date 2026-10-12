@@ -8,7 +8,9 @@ import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
 import { eventsFromStatus } from "@/lib/burnticker/activity";
 import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { deficitRuleSchedule, readKeeperFiles } from "@/lib/burnticker/deficitQueue";
-import { upcomingFromKeeper, upcomingFromStatus, type UpcomingRow } from "@/lib/burnticker/upcoming";
+import { upcomingFromKeeper, upcomingFromStatus, upcomingSet, type UpcomingOmitted, type UpcomingRow } from "@/lib/burnticker/upcoming";
+import { deficitCreated, rehearsalCreate, type RehearsalCurve } from "@/lib/burnticker/home";
+import { readKeeperCurve } from "@/lib/burnticker/market";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +26,14 @@ export async function GET() {
   const now = Date.now();
   const statuses = [];
   const upcoming: UpcomingRow[] = [];
+  // website-15 (code review 6, P2 2): a coin whose page fails is named in `omitted`, and an unread registry is `registered: null`
+  const omitted: UpcomingOmitted[] = [];
+  let registered: number | null = null;
   let coins: HomeCoin[] | null = [];
   try {
-    for (const t of p.registry.tokens()) {
+    const tokens = p.registry.tokens();
+    registered = tokens.length;
+    for (const t of tokens) {
       try {
         const d = await tokenPageData(p, t, now);
         statuses.push(d.status);
@@ -35,9 +42,13 @@ export async function GET() {
         coins.push({ ...homeCoinOf(d.status), cluster: d.status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(d.status, d.receipts) });
         const row = upcomingFromStatus(d.status, d.receipts);
         if (row) upcoming.push(row);
-      } catch { coins.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false }); }
+      } catch (e) {
+        console.error(`[burnticker/home] ${t.ticker}: the coin's page could not be read:`, e);
+        coins.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false });
+        omitted.push({ ticker: t.ticker, reason: "This site could not read the coin's page." });
+      }
     }
-  } catch { coins = null; }
+  } catch (e) { console.error("[burnticker/home] the coin registry could not be read:", e); coins = null; registered = null; }
   let audit = null;
   try { const a = readAudit(p.publishDir); audit = a ? { ok: a.ok, ranAt: a.ranAt, receipts: a.receipts, mismatches: a.mismatches.length, chainChecked: a.chainChecked } : null; } catch { audit = null; }
   const index = coins === null ? null : buildPlatformIndex(statuses, now, audit);
@@ -46,8 +57,18 @@ export async function GET() {
   const keeper = readKeeperFiles();
   // $DEFICIT's own row comes from its keeper until the coin is registered here (then its registry row above is the one)
   const sched = deficitRuleSchedule();
-  if (sched && !upcoming.some((u) => u.ticker === "DEFICIT")) { const k = upcomingFromKeeper(keeper.status, keeper.burns, sched); if (k) upcoming.unshift(k); }
-  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, upcoming), cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
+  if (sched && !upcoming.some((u) => u.ticker === "DEFICIT") && !omitted.some((o) => o.ticker === "DEFICIT")) {
+    const k = upcomingFromKeeper(keeper.status, keeper.burns, sched);
+    if (k) upcoming.unshift(k);
+    // after the create, an unread keeper status is a missing row, not an absent coin
+    else if (keeper.error && deficitCreated()) omitted.unshift({ ticker: "DEFICIT", reason: keeper.error });
+  }
+  const next = upcomingSet(upcoming, omitted, registered);
+  // website-15 item 9: $REHEARSAL's LaunchLab pool, read like any coin's curve (one account read on a mainnet host with an RPC)
+  let rehearsalCurve: RehearsalCurve = null;
+  const rh = rehearsalCreate();
+  if (rh && p.market && p.cluster === "mainnet") rehearsalCurve = await readKeeperCurve(p.market, { cluster: "mainnet", mint: rh.mint, poolId: rh.poolId }, now);
+  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve), cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
 }
 
 function homeCoinOf(s: Parameters<typeof buildPlatformIndex>[0][number]): HomeCoin {

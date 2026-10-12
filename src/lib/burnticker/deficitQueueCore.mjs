@@ -3,7 +3,8 @@
  * the keeper attests records its units on chain, and they wait for the pool. This turns the keeper's own published files (status.json and
  * burns.json, written by src/lib/burnKeeper/statusPage.ts) into one honest state and its sentences:
  *
- *   unavailable   the files could not be read (or are not the keeper's schema): say so, never a placeholder number
+ *   unavailable   the files could not be read (or are not the keeper's schema), including a missing, unparsable or wrong-shape
+ *                 burns.json once the coin is launched: say so, never a placeholder number. Only a valid empty list means zero.
  *   not-launched  the pre-launch file: no mint, no reading, nothing queued
  *   no-reading    launched, but the keeper has not published a reading yet (the first one is the baseline)
  *   queued        launched, the trading pool is not registered: N units wait; the debt's rise since launch; 1 − 0.98^N of the burn pool
@@ -33,12 +34,15 @@ export function deficitQueueCore(status, burnsFile, now) {
       formula: o.formula || null, readingDate: o.readingDate || null, generatedAt: o.generatedAt || null, stale: !!o.stale, raiseSol: o.raiseSol || null,
       headline: o.headline, lines: o.lines || [], card: o.card || null };
   }
-  if (!status || typeof status !== "object") return out("unavailable", { headline: "The queue is unavailable, because the keeper's published status could not be read.", card: null });
+  if (!status || typeof status !== "object") return out("unavailable", { headline: "The queue is unavailable, because the keeper's published status did not load.", card: null });
   if (status.state === "not-launched" || /prelaunch/.test(String(status.schema || ""))) {
     return out("not-launched", { headline: "$" + ticker + " is not created yet, so no reading has been recorded and nothing is queued.", generatedAt: status.generatedAt || null });
   }
   if (status.schema !== "burnkeeper.status/v1") return out("unavailable", { headline: "The queue is unavailable, because the keeper's status file is in a format this page does not read." });
-  var rows = Array.isArray(burnsFile) ? burnsFile : burnsFile && Array.isArray(burnsFile.burns) ? burnsFile.burns : [];
+  // website-15 (code review 6, P2 1): a missing, unparsable or wrong-shape burns.json is unavailable, never an empty history
+  var rows = Array.isArray(burnsFile) ? burnsFile : burnsFile && typeof burnsFile === "object" && Array.isArray(burnsFile.burns) ? burnsFile.burns : null;
+  if (rows) for (var j = 0; j < rows.length; j++) if (!rows[j] || typeof rows[j] !== "object" || typeof rows[j].status !== "string") { rows = null; break; }
+  if (!rows) return out("unavailable", { headline: "The queue is unavailable, because the keeper's list of readings and burns did not load.", generatedAt: status.generatedAt || null });
   var gen = Date.parse(status.generatedAt);
   var stale = isFinite(gen) && now - gen > STALE;
   var feed = status.feed || {};

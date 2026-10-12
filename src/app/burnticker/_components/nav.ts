@@ -73,7 +73,10 @@ export const inLearn = (pathname: string | null): boolean => { const a = activeN
  * footer; Coins, Launch, coin and pair pages and every other page keep the full disclosure slip.
  */
 const COMPACT_FOOTER = ["/burnticker/leagues", "/burnticker/rivalries", "/burnticker/derby"];
-export function footerVariant(pathname: string | null): "full" | "compact" {
+/** website-15 item 18 (ChatGPT repair 6): short pages, where the receipt would outweigh the page, show its first block and "Show the full receipt". */
+const SHORT_FOOTER = ["/burnticker/me"];
+export function footerVariant(pathname: string | null): "full" | "compact" | "short" {
   const p = (pathname ?? "").replace(/\/+$/, "");
+  if (SHORT_FOOTER.includes(p)) return "short";
   return COMPACT_FOOTER.some((c) => p === c || p.startsWith(`${c}/`)) ? "compact" : "full";
 }

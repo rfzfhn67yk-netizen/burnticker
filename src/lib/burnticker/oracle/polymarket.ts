@@ -1,6 +1,7 @@
 import { POLY_EVENT_SERIES_RE, POLY_MARKET_RE, POLY_TAG_SERIES_RE, type BurnRule } from "@/lib/burnticker/rules";
 import type { EventResult, SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
+import { finalAfter, statedSource, type FinalAfter, type StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { DEFAULT_POLYGON_RPCS, POLYGON_CHAIN_ID, POLYMARKET_CTF, readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 
 /**
@@ -71,10 +72,16 @@ export interface GammaMarket {
   outcomeFigures: string[];
   /** DISPLAY ONLY: the YES side's mid (bestBid/bestAsk), else last trade, else the first outcome figure, on an open market. */
   yesPrice: number | null;
+  /** The market's resolution rules (Gamma "description"; the event's when the market has none): sources/polyStated.ts reads its source sentence. */
+  description?: string | null;
+  /** The UMA liveness, in seconds, the adapter set for this question (Gamma "customLiveness"; 0 or absent = the 2-hour default). */
+  customLiveness?: number | null;
+  /** Gamma's history of UMA states for this market ("proposed", "disputed", "resolved"), oldest first. */
+  umaStatuses?: string[];
 }
 
 /** A Gamma market row (from /markets, /public-search or nested in /events) → the fields the adapter reads; null when not a market. */
-export function parseGammaMarket(raw: unknown, ctx: { eventSlug?: string | null; eventTitle?: string | null; tags?: string[] } = {}): GammaMarket | null {
+export function parseGammaMarket(raw: unknown, ctx: { eventSlug?: string | null; eventTitle?: string | null; tags?: string[]; eventDescription?: string | null } = {}): GammaMarket | null {
   const m = raw as Record<string, unknown> | null;
   if (!m || typeof m.conditionId !== "string" || typeof m.question !== "string") return null;
   const ev = Array.isArray(m.events) ? (m.events[0] as Record<string, unknown> | undefined) : undefined;
@@ -88,6 +95,7 @@ export function parseGammaMarket(raw: unknown, ctx: { eventSlug?: string | null;
     endDate: normaliseTime(m.endDate), closedTime: normaliseTime(m.closedTime), umaEndDate: normaliseTime(m.umaEndDate),
     negRisk: m.negRisk === true, sportsMarketType: str(m.sportsMarketType), groupItemTitle: str(m.groupItemTitle), inactive: m.active === false, outcomeFigures: figures,
     yesPrice: closed ? null : bid !== null && ask !== null ? (bid + ask) / 2 : last ?? num(figures[0]),
+    description: str(m.description) ?? ctx.eventDescription ?? null, customLiveness: num(m.customLiveness), umaStatuses: list(m.umaResolutionStatuses),
   };
 }
 
@@ -98,7 +106,7 @@ export function parseGammaEvent(raw: unknown): GammaEvent | null {
   if (!e || typeof e.slug !== "string") return null;
   const tags = (Array.isArray(e.tags) ? e.tags : []).map((t: Record<string, unknown>) => ({ slug: String(t?.slug ?? ""), label: String(t?.label ?? t?.slug ?? "") })).filter((t) => t.slug);
   const title = String(e.title ?? e.slug);
-  const markets = (Array.isArray(e.markets) ? e.markets : []).map((m) => parseGammaMarket(m, { eventSlug: e.slug as string, eventTitle: title, tags: tags.map((t) => t.slug) })).filter((m): m is GammaMarket => m !== null);
+  const markets = (Array.isArray(e.markets) ? e.markets : []).map((m) => parseGammaMarket(m, { eventSlug: e.slug as string, eventTitle: title, tags: tags.map((t) => t.slug), eventDescription: str(e.description) })).filter((m): m is GammaMarket => m !== null);
   return { id: String(e.id ?? ""), slug: e.slug, title, closed: e.closed === true, endDate: normaliseTime(e.endDate), closedTime: normaliseTime(e.closedTime), tags, markets, description: str(e.description) };
 }
 
@@ -253,15 +261,31 @@ export function impliedChanceFromMarkets(rule: BurnRule, open: readonly GammaMar
 
 // ---- search shapes ------------------------------------------------------------------------------------------------------------
 
-export interface PolyMarketHit { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; selector: { oracle: "polymarket"; series: null; market: string }; /** the outcome name inside its event (Gamma groupItemTitle), when Gamma names one */ outcome: string | null }
+export interface PolyMarketHit {
+  conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; selector: { oracle: "polymarket"; series: null; market: string }; /** the outcome name inside its event (Gamma groupItemTitle), when Gamma names one */ outcome: string | null;
+  /** What Polymarket says it resolves the market from, and the catalogue's cross-read of it (sources/polyStated.ts). Display; never a settlement input. */
+  resolutionSource?: StatedSource;
+  /** The dispute window before the payout can be final (sources/polyStated.ts). */
+  finalAfter?: FinalAfter;
+}
 export interface PolyEventHit { slug: string; title: string; url: string; endDate: string | null; closed: boolean; tags: { slug: string; label: string }[]; markets: PolyMarketHit[]; marketCount: number; selector: { oracle: "polymarket"; series: string; market: null }; refused: string[] }
 export interface PolyTagHit { slug: string; label: string; events: number; series: string[] }
 
 const HEAD_TO_HEAD = /^[^:]+ vs\.? [^:]+$/;
 export function marketHit(m: GammaMarket): PolyMarketHit {
   const { yes, no } = sideLabels(m);
-  return { conditionId: m.conditionId, question: m.question, yes, no, endDate: m.endDate, closed: m.closed, sportsMarketType: m.sportsMarketType, selector: { oracle: "polymarket", series: null, market: m.conditionId }, outcome: m.groupItemTitle };
+  return { conditionId: m.conditionId, question: m.question, yes, no, endDate: m.endDate, closed: m.closed, sportsMarketType: m.sportsMarketType, selector: { oracle: "polymarket", series: null, market: m.conditionId }, outcome: m.groupItemTitle, ...polyStated(m) };
 }
+
+/** A market's stated source and dispute window (sources-2): what the review card and the coin page show beside the on-chain payout. */
+export function polyStated(m: GammaMarket): { resolutionSource: StatedSource; finalAfter: FinalAfter } {
+  return { resolutionSource: statedSource(m), finalAfter: finalAfter(m) };
+}
+/**
+ * Is the payout final? Only when the Conditional Tokens contract has reported it (payoutDenominator > 0). A UMA proposal inside its
+ * dispute window, whatever Gamma's figures say, is not: resolvePolymarket counts it as awaiting and writes nothing.
+ */
+export const payoutIsFinal = (chain: Pick<ConditionResolution, "resolved"> | null): boolean => !!chain && chain.resolved === true;
 
 /** Events → search hits (binary markets only, head-to-head and moneyline first, at most `perEvent`), tags aggregated into recurring selectors. */
 export function searchHits(events: readonly GammaEvent[], o: { refuse?: TitleRefuser | null; perEvent?: number; status?: "open" | "closed" | "all" } = {}): { events: PolyEventHit[]; tags: PolyTagHit[] } {

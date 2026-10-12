@@ -54,7 +54,7 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     sourceUrl: `https://www.thesportsdb.com/`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
     unit: { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
-    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial licence) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent sources must read every game and agree (a source check; one operator attester signs the reading)"],
+    flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent sources must read every game and agree (a source check; one operator attester signs the reading)"],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",
     settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps()),
     preflight: async (nowMs) => {
@@ -70,7 +70,7 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
       if (!lastGame) {
         // no game played yet: a primary must exist for the next one (its market, or the licensed final)
         const m = next && d.market ? await d.market(next).catch(() => null) : null;
-        if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: "no primary: no moneyline market for the next game and BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial licence) is not set" } };
+        if (!m && !d.tsdbKey) return { ...none, nextAt, nextBasis, problem: { code: "primary-unreadable", reason: "no primary: no moneyline market for the next game and BURNTICKER_THESPORTSDB_KEY (TheSportsDB commercial license) is not set" } };
         const ops = operatorsFor(s.league, d, !!m);
         if (ops.length < 2) return { ...none, nextAt, nextBasis, problem: { code: "cross-read-unreadable", reason: `only one operator can read these games (${ops.join(", ")}): a second independent read is needed` } };
         return { ...none, basis: "no completed game yet: both reads are compared at the first one", nextAt, nextBasis, problem: null };

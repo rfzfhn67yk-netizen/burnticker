@@ -23,7 +23,7 @@ test("site audit #8: each fact once — the attester and time-lock lines are not
   for (const dup of [/quorum 1/i, /time lock/i, /no independent second attester/i, /Squads/]) assert.doesNotMatch(visible, dup, String(dup));
   // website-13 (Claude site audit 2 item 9): one status line, built from the one current-status source by the home API (home.ts
   // homeStatusLine, fed by currentStatusLive), never retyped here; a failed read says so in plain words and still links the Trust page
-  assert.match(home, /line\.appendChild\(document\.createTextNode\(j && j\.statusLine \? j\.statusLine \+ " " : "The current status could not be read just now\. "\)\)/);
+  assert.match(home, /line\.appendChild\(document\.createTextNode\(j && j\.statusLine \? j\.statusLine \+ " " : "The current status did not load just now\. "\)\)/);
   assert.match(home, /a\.href = "\/burnticker\/trust"; a\.textContent = "The Trust page has the full record\.";/);
   assert.match(fs.readFileSync("src/app/api/burnticker/home/route.ts", "utf8"), /status = await currentStatusLive\(\)/);
 });

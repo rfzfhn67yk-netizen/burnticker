@@ -149,7 +149,14 @@ function describe(ix: TransactionInstruction): Record<string, unknown> {
   if (!def) return { program: programId.toBase58(), dataHex: Buffer.from(ix.data).toString("hex") };
   let off = 8;
   const decoded: Record<string, unknown> = {};
-  for (const a of def.args) { const r = decodeType(BURN_RECEIPTS_IDL, a.type, Buffer.from(ix.data), off); decoded[a.name] = r.value; off = r.end; }
+  // The IDL is the current (round-4) one; a round-3 instruction (INITIALIZE_TOKEN layout "r3", the default until the mainnet upgrade)
+  // carries fewer bytes than the IDL's arg list. Decode as far as the bytes go and say so, instead of failing the whole dry run.
+  let note: string | null = null;
+  for (const a of def.args) {
+    try { const r = decodeType(BURN_RECEIPTS_IDL, a.type, Buffer.from(ix.data), off); decoded[a.name] = r.value; off = r.end; }
+    catch (e) { note = `the remaining args (${a.name} onward) are not in these bytes: this is an older (round-3) layout of ${def.name}, decoded with the current IDL — ${(e as Error).message}`; break; }
+  }
+  if (note) decoded.__note = note;
   return { program: programId.toBase58(), instruction: def.name, accounts: ix.keys.map((k, i) => ({ name: def.accounts[i]?.name ?? `remaining_${i}`, pubkey: k.pubkey.toBase58(), signer: k.isSigner, writable: k.isWritable })), args: decoded };
 }
 const jsonSafe = (v: unknown): unknown => JSON.parse(JSON.stringify(v, (_, x) => (typeof x === "bigint" ? x.toString() : x instanceof PublicKey ? x.toBase58() : x instanceof Uint8Array ? Buffer.from(x).toString("hex") : x?.type === "Buffer" && Array.isArray(x.data) ? Buffer.from(x.data).toString("hex") : x)));

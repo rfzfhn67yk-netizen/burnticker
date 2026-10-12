@@ -24,7 +24,7 @@ describe("sources.json: every configured source", () => {
       assert.ok([3, 4, 5].includes(c.tier), `${c.id} tier`);
       assert.ok(TIER_LABEL[c.tier]);
       assert.ok(c.unit.size > 0 && c.unit.label && c.unit.definition, `${c.id} unit`);
-      const f = feedById(c.id) ?? feedById(`${c.id}:${{ "wiki.views": "Bitcoin", "github.stars": "anza-xyz/agave", "steam.players": "730", "defillama.tvl": "raydium", "edgar.8k": "0000320193" }[c.id] ?? ""}`);
+      const f = feedById(c.id) ?? feedById(`${c.id}:${{ "wiki.views": "Bitcoin", "github.stars": "anza-xyz/agave", "steam.players": "730", "defillama.tvl": "raydium", "edgar.8k": "0000320193", "ll2.provider": "121", "ll2.launch": "7d1afb26-6f9c-429b-9ccf-29012fd1e519", "usgs.quakes": "5.5", "github.releases": "anza-xyz/agave", "github.milestone": "anza-xyz/agave.1900", "youtube.milestone": "UCLA_DiR1FfKNvjuUpBHmylQ/subscribers.15000000" }[c.id] ?? ""}`);
       assert.ok(f, `${c.id} resolves`);
       if (!c.fixture) { assert.ok(c.needsKey || c.note, `${c.id}: no fixture needs a reason`); assert.equal(f!.launchable.ok, false); continue; }
       const { readings, refusals } = fixtureReadings(f!, NOW);

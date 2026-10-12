@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Burnticker: memecoins that burn on real-world results</title>
-<meta name="description" content="Memecoins that burn on real-world results. Every burn is a receipt. Each coin locks one rule tied to a public result, and anyone can check each burn's receipt in the browser.">
+<meta name="description" content="Memecoins that burn on real-world results. Every burn leaves a receipt. Each coin locks one rule tied to a public result, and anyone can check each burn's receipt in the browser.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#12100e">
 <meta property="og:title" content="Burnticker: memecoins that burn on real-world results">
-<meta property="og:description" content="Memecoins that burn on real-world results. Every burn is a receipt that anyone can check in the browser.">
+<meta property="og:description" content="Memecoins that burn on real-world results. Every burn leaves a receipt that anyone can check in the browser.">
 <meta property="og:image" content="https://burnticker.com/brand/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -56,7 +56,11 @@ a{color:var(--violet)}
 .hero .sub{font:700 clamp(1rem,2.6vw,1.25rem)/1.3 var(--mono);color:var(--violet);margin:8px 0 0}
 .how{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 @media (min-width:760px){.how{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.how li{display:flex;gap:10px;border:1px dashed var(--line);border-radius:10px;padding:12px}
+.how li{border:1px dashed var(--line);border-radius:10px;padding:12px}
+/* website-15 item 14: each step is a disclosure. Wide screens keep all three open and show no chevron; at 768 px and under they start
+   closed with a visible chevron, the title plus one line of the body shows, and a tap opens the whole step across the row */
+.how-d summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:default}.how-d summary::-webkit-details-marker{display:none}
+.how-chev,.how-line{display:none}.how-b{margin-top:4px}
 .how-n{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#f2eee4;color:#1b1916;font:700 .85rem/1 var(--mono)}
 .how-t{font:700 .82rem/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px}
 .how-x{margin:0;font-size:.88rem;color:var(--dim)}
@@ -81,6 +85,12 @@ a{color:var(--violet)}
 .rows>div{display:grid;grid-template-columns:6.2rem 1fr;gap:8px}
 .rows dt{font:700 .68rem/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .rows dd{margin:0;min-width:0}
+/* website-15 item 7: the reason behind a dash, on tap, click or keyboard focus */
+.why{position:relative;display:inline-block}.why-btn{font:inherit;color:inherit;background:none;border:0;padding:0 2px;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.why-mark{display:inline-block;margin-left:3px;min-width:1.1em;height:1.1em;line-height:1.05em;border-radius:99px;border:1px solid var(--line);font:700 .62rem/1.05em var(--mono,monospace);text-align:center;color:var(--dim);vertical-align:1px}
+.why-tip{display:none;position:absolute;z-index:20;left:0;top:calc(100% + 4px);width:max-content;max-width:min(18rem,80vw);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg,#12100e);color:inherit;font-size:.75rem;line-height:1.35;white-space:normal}
+.why-tip.open,.why-btn:focus-visible+.why-tip{display:block}@media (hover:hover){.why:hover .why-tip{display:block}}
+@media (max-width:640px){.why{display:inline}.why-tip{position:static;width:auto;max-width:none;margin-top:4px}}
 .bar{display:block;height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:4px}
 .bar span{display:block;height:100%;background:#c8873a}.bar span.done{background:#5b3fa3}
 .foot{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
@@ -124,7 +134,7 @@ a{color:var(--violet)}
 .walk{margin:8px 0 0;font-size:.84rem;color:var(--dim)}
 .prog{list-style:none;margin:0;padding:0;display:flex;gap:3px;max-width:9rem}
 .prog li{flex:1 1 0;height:6px;border-radius:99px;background:var(--line)}
-.prog li.done{background:#5b3fa3}.prog li.current{background:#c8873a}
+.prog li.done{background:#5b3fa3}.prog li.current{background:#c8873a}.prog li.na{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
 .prog-now{display:block;margin-top:4px;font-size:.78rem}
 .prog-next{display:block;margin-top:2px;font-size:.74rem;color:var(--dim)}
 .follow{margin-left:auto;font:700 .7rem/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:4px;padding:6px 8px;cursor:pointer}
@@ -134,16 +144,25 @@ a{color:var(--violet)}
 .strip li{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);font-size:.86rem;min-width:0}
 .strip .st-h{font-weight:600}.strip .st-x{display:block;margin-top:3px;color:var(--dim);font-size:.8rem}
 .st-tag{display:inline-block;margin-right:6px;font:700 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 6px;border-radius:3px;border:1px solid var(--line);color:var(--dim)}
+@media (max-width:768px){
+  .how-d summary{flex-wrap:wrap;gap:4px 6px;cursor:pointer}
+  .how-chev{display:inline-block;margin-left:auto;width:8px;height:8px;border-right:2px solid var(--dim);border-bottom:2px solid var(--dim);transform:rotate(45deg);transition:transform .15s}
+  .how-d[open] .how-chev{transform:rotate(-135deg)}
+  .how-line{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;flex:1 0 100%;font-size:.74rem;color:var(--dim);text-transform:none;letter-spacing:0}
+  .how-d[open] .how-line{display:none}
+  .how li:has(.how-d[open]){grid-column:1/-1}
+  .how-b .how-x{font-size:.82rem}
+}
 @media (max-width:639px){
   .paths{gap:6px;margin-top:10px}.path{padding:8px 10px}.path-t{font-size:.74rem}.path-x{font-size:.72rem;line-height:1.35}.walk{font-size:.78rem;margin-top:6px}
   .hero{padding-top:14px}
   .how{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-  .how li{flex-direction:column;gap:4px;padding:8px}
-  .how-x{display:none}
+  .how li{padding:8px}
   .how-t{font-size:.7rem;margin:0}
   .how-n{width:20px;height:20px;font-size:.72rem}
   section{padding:14px 0}
   .stats dd{font-size:.95rem}
+  .stats-note{display:none} /* website-15 item 15: the figures say "(devnet)" themselves; the first card stays in the first screen */
   .terms dl>div{grid-template-columns:1fr;gap:0}
 }
 </style>
@@ -230,7 +249,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
         <div class="sh-learn-menu" data-site-nav="learn">
           <a href="/burnticker/about">How it works</a>
           <a href="/burnticker/trust">Trust</a>
-          <a href="/burnticker/operator">Operator</a>
+          <a href="/burnticker/operator">Who runs this</a>
           <a href="/whitepaper.html">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -249,7 +268,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
           <a href="/burnticker/launch" data-launch-link>Launch</a>
           <a href="/burnticker/about">How it works</a>
           <a href="/burnticker/trust">Trust</a>
-          <a href="/burnticker/operator">Operator</a>
+          <a href="/burnticker/operator">Who runs this</a>
           <a href="/whitepaper.html">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -276,12 +295,12 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <div><dt>Burns</dt><dd data-stat="burns"><span class="stat-skel" aria-hidden="true"></span></dd></div>
       <div><dt>Receipts verified</dt><dd data-stat="verified"><span class="stat-skel" aria-hidden="true"></span></dd></div>
     </dl>
-    <p class="stats-note" data-stats-note>These count the coins registered on this site. The devnet practice burns in the line above are not counted.</p>
+    <p class="stats-note" data-stats-note>Until a coin burns on mainnet, the first two figures count the devnet practice burns and say so.</p>
   </section>
 <!-- site-shell:hero:begin -->
 <section class="hero wrap" aria-labelledby="hero-h">
   <h1 id="hero-h">Memecoins that burn on real-world results.</h1>
-  <p class="sub">Every burn is a receipt.</p>
+  <p class="sub">Every burn leaves a receipt.</p>
   <div class="paths" data-two-paths>
     <a class="path path-explore" href="/burnticker"><span class="path-t">Explore coins</span><span class="path-x">See every coin, its rule and its receipts, and follow coins in this browser without a wallet.</span></a>
     <a class="path path-create" href="/burnticker/launch" data-launch-button><span class="path-t">Create a coin</span><span class="path-x">Pick a public result and lock one rule, and the launch page shows every detail before your wallet signs anything.</span></a>
@@ -290,9 +309,9 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 </section>
 <section class="wrap how-wrap" aria-label="How it works">
   <ol class="how">
-    <li><span class="how-n" aria-hidden="true">1</span><div><p class="how-t">One locked rule</p><p class="how-x">Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches.</p></div></li>
-    <li><span class="how-n" aria-hidden="true">2</span><div><p class="how-t">The result settles</p><p class="how-x">When the result is published, fees from trading the coin buy back some of it from its pool.</p><p class="how-x how-pre" data-prerequisite>Before the first burn, the curve must raise the amount its creator chose (40, 60 or 85 SOL) from buyers, the coin must move to its Raydium pool, and that pool must be registered and verified by the burn program.</p></div></li>
-    <li><span class="how-n" aria-hidden="true">3</span><div><p class="how-t">Burned, with a receipt</p><p class="how-x">Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it.</p></div></li>
+    <li><details class="how-d" open><summary><span class="how-n" aria-hidden="true">1</span><span class="how-t">One locked rule</span><span class="how-chev" aria-hidden="true"></span><span class="how-line" aria-hidden="true">Each coin names one public result.</span></summary><div class="how-b"><p class="how-x">Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches.</p></div></details></li>
+    <li><details class="how-d" open><summary><span class="how-n" aria-hidden="true">2</span><span class="how-t">The result settles</span><span class="how-chev" aria-hidden="true"></span><span class="how-line" aria-hidden="true">When the result is published, the coin's own fees pay for its burn.</span></summary><div class="how-b"><p class="how-x">When the result is published, fees from trading the coin buy back some of it from its pool.</p><p class="how-x how-pre" data-prerequisite>Before the first burn, the curve must raise the amount its creator chose (40, 60 or 85 SOL) from buyers, the coin must move to its Raydium pool, and that pool must be registered and verified by the burn program.</p></div></details></li>
+    <li><details class="how-d" open><summary><span class="how-n" aria-hidden="true">3</span><span class="how-t">Burned, with a receipt</span><span class="how-chev" aria-hidden="true"></span><span class="how-line" aria-hidden="true">Everything bought is burned, and the transaction is the receipt.</span></summary><div class="how-b"><p class="how-x">Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it.</p></div></details></li>
   </ol>
   <div class="how-more"><a href="/burnticker/about">Read how it works in full</a><details class="terms"><summary>What these words mean</summary><dl>
     <div><dt>Memecoin</dt><dd>A speculative crypto token built around a theme.</dd></div>
@@ -311,7 +330,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 
   <section class="wrap" id="coins" aria-labelledby="coins-h">
     <div class="head"><h2 id="coins-h">Featured coin and test receipts</h2><a href="/burnticker">Browse coins</a></div>
-    <p class="small muted">These are $DEFICIT, the operator's first coin, and two disclosed test coins. A row this site has not read shows a dash, and pointing at it shows why.</p>
+    <p class="small muted">These are $DEFICIT, the operator's first coin, and two disclosed test coins.</p>
     <div class="grid" data-featured aria-live="polite">
       <div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div>
     </div>
@@ -364,7 +383,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <a href="/burnticker/launch" data-launch-link>Launch</a>
       <a href="/burnticker/about">How it works</a>
       <a href="/burnticker/trust">Trust</a>
-      <a href="/burnticker/operator">Operator</a>
+      <a href="/burnticker/operator">Who runs this</a>
       <a href="/whitepaper.html">Whitepaper</a>
       <a href="/burnticker/docs">Docs and API</a>
       <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -381,6 +400,34 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 </nav>
 <!-- site-shell:footer:end -->
 <script>
+// website-15 item 14: the three steps start closed at 768 px and under (title, one line and a chevron; a tap opens one), open on wider
+// screens, where the summary does not toggle
+(function () {
+  if (typeof document === "undefined" || !window.matchMedia) return;
+  var narrow = window.matchMedia("(max-width: 768px)");
+  var ds = document.querySelectorAll(".how-d");
+  function apply() { for (var i = 0; i < ds.length; i++) { if (narrow.matches) ds[i].removeAttribute("open"); else ds[i].setAttribute("open", ""); } }
+  apply();
+  for (var i = 0; i < ds.length; i++) ds[i].querySelector("summary").addEventListener("click", function (e) { if (!narrow.matches) e.preventDefault(); });
+  if (narrow.addEventListener) narrow.addEventListener("change", apply);
+})();
+// website-15 item 7: a value not read is a dash button; its reason opens under it on tap, click or keyboard focus and is the button's
+// description for screen readers (the app's Why.tsx does the same). Never printed inline after the value.
+window.btWhy = function (label, why, name) {
+  window.btWhyN = (window.btWhyN || 0) + 1;
+  var w = document.createElement("span"); w.className = "why";
+  var b = document.createElement("button"); b.type = "button"; b.className = "why-btn"; var id = "why-" + window.btWhyN;
+  b.setAttribute("aria-describedby", id); b.setAttribute("aria-expanded", "false");
+  if (!label || label === "\u2014") b.setAttribute("aria-label", name || "Not available");
+  if (label) { var l = document.createElement("span"); l.textContent = label; if (label === "\u2014") l.setAttribute("aria-hidden", "true"); b.appendChild(l); }
+  var m = document.createElement("span"); m.className = "why-mark"; m.setAttribute("aria-hidden", "true"); m.textContent = "?"; b.appendChild(m);
+  var t = document.createElement("span"); t.className = "why-tip"; t.id = id; t.setAttribute("role", "tooltip"); t.textContent = why;
+  function set(o) { t.classList.toggle("open", o); b.setAttribute("aria-expanded", o ? "true" : "false"); }
+  b.addEventListener("click", function () { set(!t.classList.contains("open")); });
+  b.addEventListener("blur", function () { set(false); });
+  b.addEventListener("keydown", function (e) { if (e.key === "Escape") set(false); });
+  w.appendChild(b); w.appendChild(t); return w;
+};
 (function () {
   // ONE READ OF GET /api/burnticker/home for this page: the coin grid, the platform strip and the status line here, and the activity
   // line in the shell script below (it reuses window.btHome).
@@ -410,9 +457,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   var LABELS = { progress: "Progress", rule: "Rule", nextSettle: "Next result", curve: "Curve", mcap: "Market cap", holders: "Holders", age: "Age", burned: "Burned" };
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
   function cellNode(c) {
-    var s = el("span", "", c.text !== null ? c.text : "—");
-    if (c.why) s.title = c.why;
-    if (c.text === null && c.why) { var r = el("span", "sh-sr", ". " + c.why); var w = el("span"); w.appendChild(s); w.appendChild(r); return w; }
+    if (c.text === null) return window.btWhy("\u2014", c.why || "This site has no reading for this field.");
+    var s = el("span", "", c.text); if (c.why) s.title = c.why;
     return s;
   }
   function row(dl, key, label, value) { var d = el("div"); d.setAttribute("data-row", key); d.appendChild(el("dt", "", label)); var dd = el("dd"); if (typeof value === "string") dd.textContent = value; else dd.appendChild(value); d.appendChild(dd); dl.appendChild(d); }
@@ -452,16 +498,20 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     var pg;
     if (v.progress) {
       pg = el("span"); var ol = el("ol", "prog"); ol.setAttribute("aria-label", v.progress.done + " of " + v.progress.steps.length + " steps are done");
-      v.progress.steps.forEach(function (s) { var li = el("li", s.state); li.title = s.label; ol.appendChild(li); }); pg.appendChild(ol);
-      var cur = v.progress.steps[v.progress.done];
-      pg.appendChild(el("span", "prog-now", cur ? "Now: " + cur.label.toLowerCase() : "Burned"));
+      v.progress.steps.forEach(function (s) { var li = el("li", s.state); li.title = s.label + (s.state === "na" ? ", not applicable" : ""); ol.appendChild(li); }); pg.appendChild(ol);
+      // website-15 item 6: the API's own heading ("Not created", "Next: graduated", "Burned"), never "Now:" on a step not reached
+      pg.appendChild(el("span", "prog-now", v.progress.now || ""));
       pg.appendChild(el("span", "prog-next", v.progress.next));
     } else pg = cellNode({ text: null, why: v.progressWhy });
     row(dl, "progress", LABELS.progress, pg);
     row(dl, "rule", LABELS.rule, v.rule);
     row(dl, "nextSettle", LABELS.nextSettle, cellNode(v.nextSettle));
     // the raise is the coin's own, read from its pool; when it was not read the row says "— raised" and never prints a typed raise
-    var c = el("span"); var ct = el("span", "", (v.curve.raised === null ? "—" : v.curve.raised) + (v.curve.of === null ? " raised" : " / " + v.curve.of + " raised")); if (v.curve.why) ct.title = v.curve.why; c.appendChild(ct);
+    var c = el("span"), ct = el("span"), tail = v.curve.of === null ? " raised" : " / " + v.curve.of + " raised";
+    if (v.curve.na) ct.appendChild(window.btWhy("Not applicable", v.curve.why || "This coin never had a curve."));
+    else if (v.curve.raised === null && v.curve.why) { ct.appendChild(window.btWhy("\u2014", v.curve.why, "Not read")); ct.appendChild(document.createTextNode(tail)); }
+    else { ct.appendChild(document.createTextNode((v.curve.raised === null ? "\u2014" : v.curve.raised) + tail)); if (v.curve.of === null && v.curve.why) { ct.appendChild(document.createTextNode(" ")); ct.appendChild(window.btWhy("", v.curve.why, "Why the raise is not shown")); } }
+    c.appendChild(ct);
     var bar = el("span", "bar"), fill = el("span", v.curve.done ? "done" : ""); fill.style.width = (v.curve.pct === null ? 0 : Math.max(0, Math.min(100, v.curve.pct))) + "%"; bar.appendChild(fill); c.appendChild(bar);
     row(dl, "curve", LABELS.curve, c);
     row(dl, "mcap", LABELS.mcap, cellNode(v.mcap));
@@ -484,7 +534,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     b.title = "Kept in this browser only"; b.addEventListener("click", function () { window.btWatch.toggle("coins", t); paint(); }); paint();
     return b;
   }
-  function failed() { grid.textContent = ""; grid.appendChild(el("p", "dim", "The coins could not be read just now. The full list is on the coins page.")); }
+  function failed() { grid.textContent = ""; grid.appendChild(el("p", "dim", "The coins did not load just now. The full list is on the coins page.")); }
   window.btHome.then(function (j) {
     if (!j || !Array.isArray(j.featured)) return failed();
     grid.textContent = "";
@@ -495,7 +545,17 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   // NEXT RESULTS and FOLLOWING (website-14): the next result each coin waits for (GET /api/burnticker/home → upcoming, the source's own
   // schedule, never a promise) and the coins this browser follows. An empty list says so in one sentence; a failed read says so too.
   if (typeof document === "undefined" || typeof document.querySelector !== "function" || !window.btHome) return;
-  var LABEL = { waiting: "Waiting for the source", published: "Published, not signed yet", attested: "Signed, waiting for its burn run", burned: "Burned", deferred: "On hold" };
+  var LABEL = { waiting: "Waiting for the source", published: "Published, not signed yet", attested: "Signed, waiting for its burn run", burned: "Burned", deferred: "On hold", unavailable: "Unavailable" };
+  // website-15 (code review 6 P2 2): the same sentences as upcoming.ts upcomingNotice; a failure is never "no coin is registered"
+  function tickers(o) { var t = o.map(function (x) { return "$" + x.ticker; }); return t.length <= 1 ? (t[0] || "a coin") : t.slice(0, -1).join(", ") + " and " + t[t.length - 1]; }
+  function notice(u) {
+    if (!u || !Array.isArray(u.rows)) return "The next results are unavailable, because this site could not read its list of coins just now.";
+    if (u.state === "unavailable") return u.registered === null ? "The next results are unavailable, because this site could not read its list of coins just now." : "The next results are unavailable, because this site could not read " + tickers(u.omitted || []) + " just now.";
+    if (u.state === "partial") return "Some next results are missing, because this site could not read " + tickers(u.omitted || []) + " just now.";
+    if (u.rows.length) return null;
+    return u.registered === 0 ? "No coin is registered on this site yet, so no result is being waited for. Each coin appears here once it is created and registered." : "No pending results. No coin registered on this site is active right now.";
+  }
+  function rowsOf(j) { return j && j.upcoming && Array.isArray(j.upcoming.rows) ? j.upcoming.rows : []; }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
   function item(r) {
     var li = el("li"); var a = el("a", "st-h", r.name + " $" + r.ticker); a.href = r.href; li.appendChild(el("span", "st-tag", LABEL[r.status] || r.status)); li.appendChild(a);
@@ -505,16 +565,16 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   window.btHome.then(function (j) {
     if (box) {
       box.textContent = "";
-      if (!j || !Array.isArray(j.upcoming)) box.appendChild(el("li", "", "The next results could not be read just now."));
-      else if (!j.upcoming.length) box.appendChild(el("li", "", "No coin is registered on this site yet, so no result is being waited for. Each coin appears here once it is created and registered."));
-      else j.upcoming.slice(0, 4).forEach(function (r) { box.appendChild(item(r)); });
+      var u = j ? j.upcoming : null, say = notice(u);
+      if (say) box.appendChild(el("li", "", say));
+      if (u && u.state !== "unavailable") rowsOf(j).slice(0, 4).forEach(function (r) { box.appendChild(item(r)); });
     }
     function paintFollowing() {
       if (!fol || !folList || !window.btWatch) return;
       var w = window.btWatch.read(); var tickers = w.coins.concat(w.results.filter(function (t) { return w.coins.indexOf(t) < 0; }));
       fol.hidden = tickers.length === 0; folList.textContent = "";
       tickers.forEach(function (t) {
-        var r = j && Array.isArray(j.upcoming) ? j.upcoming.filter(function (u) { return u.ticker === t; })[0] : null;
+        var r = rowsOf(j).filter(function (u) { return u.ticker === t; })[0] || null;
         if (r) folList.appendChild(item(r));
         else { var li = el("li"); var a = el("a", "st-h", "$" + t); a.href = "/burnticker/t/" + encodeURIComponent(t); li.appendChild(a); li.appendChild(el("span", "st-x", "This site has no next result listed for this coin.")); folList.appendChild(li); }
       });
@@ -527,16 +587,18 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   // failed read says so instead.
   if (typeof document === "undefined" || typeof document.querySelector !== "function" || !window.btHome) return;
   function group(s) { var n = Number(s); if (!isFinite(n)) return String(s); var p = (Math.round(n * 100) / 100).toFixed(2).split("."); var d = p[1].replace(/0+$/, ""); return p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (d ? "." + d : ""); }
-  function put(k, text, why) { var d = document.querySelector('[data-stat="' + k + '"]'); if (!d) return; d.textContent = text; if (why) { d.title = why; if (text === "\u2014") { var r = document.createElement("span"); r.className = "sh-sr"; r.textContent = ". " + why; d.appendChild(r); } } }
+  function put(k, text, why) { var d = document.querySelector('[data-stat="' + k + '"]'); if (!d) return; d.textContent = ""; if (text === "\u2014" && why) { d.appendChild(window.btWhy("\u2014", why)); return; } d.textContent = text; if (why) d.title = why; }
   var line = document.querySelector("[data-status-line]");
   window.btHome.then(function (j) {
     var s = j && j.stats;
     // a number this page could not read is a dash with the reason on hover and for screen readers, never a zero
-    if (!s) { ["burned", "burns", "verified"].forEach(function (k) { put(k, "\u2014", "The coin registry could not be read just now."); }); }
+    if (!s) { ["burned", "burns", "verified"].forEach(function (k) { put(k, "\u2014", "The coin registry did not load just now."); }); }
+    // website-15 item 15: until a mainnet coin burns, the first two figures are the devnet practice burns, marked "(devnet)"
+    else if (s.burns === 0 && s.devnet && s.devnet.burns > 0) { put("burned", group(s.devnet.burnedTokens) + " (devnet)"); put("burns", group(s.devnet.burns) + " (devnet)"); put("verified", s.receiptsVerified === null ? "\u2014" : group(s.receiptsVerified), s.receiptsWhy); }
     else { put("burned", group(s.burnedTokens)); put("burns", group(s.burns)); put("verified", s.receiptsVerified === null ? "\u2014" : group(s.receiptsVerified), s.receiptsWhy); }
     if (line) {
       line.textContent = "";
-      line.appendChild(document.createTextNode(j && j.statusLine ? j.statusLine + " " : "The current status could not be read just now. "));
+      line.appendChild(document.createTextNode(j && j.statusLine ? j.statusLine + " " : "The current status did not load just now. "));
       var a = document.createElement("a"); a.href = "/burnticker/trust"; a.textContent = "The Trust page has the full record."; line.appendChild(a);
     }
   });
@@ -578,7 +640,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
   var said = dlg && dlg.querySelector("[data-launch-sentence]");
   window.btHome = window.btHome || fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
-  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown."; });
   if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
@@ -588,17 +650,17 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. On phones the strip
   // scrolls sideways, so its right edge fades until the end is reached.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
-  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered"};
+  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered","created":"Created","reserved":"Mint reserved"};
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
   function edge() { box.classList.toggle("is-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 4); }
   box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
   window.btHome.then(function (j) {
     box.textContent = "";
-    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); return; }
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
     j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : "") + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
     edge();
-  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); });
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); });
 })();
 </script>
 <!-- site-shell:script:end -->

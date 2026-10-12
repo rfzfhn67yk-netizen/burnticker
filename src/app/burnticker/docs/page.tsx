@@ -17,7 +17,7 @@ export default function DocsPage() {
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-400">Base</h2>
-        <pre className="font-mono text-sm border border-neutral-800 bg-neutral-900 rounded p-3 overflow-x-auto">{`API=https://burnticker.com${API_PREFIX}
+        <pre className="bt-hscroll font-mono text-sm border border-neutral-800 rounded p-3 overflow-x-auto" tabIndex={0}>{`API=https://burnticker.com${API_PREFIX}
 curl -s "$API/catalogue"            # every source and its tier
 curl -s "$API/tokens"               # every coin on the platform
 curl -s "$API/tokens/<TICKER>/receipts"`}</pre>
@@ -26,9 +26,10 @@ curl -s "$API/tokens/<TICKER>/receipts"`}</pre>
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-400">Endpoints</h2>
-        <div className="overflow-x-auto border border-neutral-800 rounded">
-          <table className="w-full text-sm">
-            <thead className="text-left text-neutral-500"><tr><th className="p-2">Method</th><th className="p-2">Path</th><th className="p-2">What it does</th><th className="p-2">Cache</th><th className="p-2">Limit group</th></tr></thead>
+        {/* website-15 item 19 (ChatGPT repair 5): a readable minimum width per column, and a shadow on the edge that still has more */}
+        <div className="bt-hscroll overflow-x-auto border border-neutral-800 rounded" tabIndex={0} role="region" aria-label="API endpoints">
+          <table className="w-full min-w-[46rem] text-sm">
+            <thead className="text-left text-neutral-500"><tr><th className="p-2">Method</th><th className="p-2">Path</th><th className="p-2 min-w-[16rem]">What it does</th><th className="p-2">Cache</th><th className="p-2">Limit group</th></tr></thead>
             <tbody className="divide-y divide-neutral-800">
               {ENDPOINTS.map((e) => (
                 <tr key={e.operationId} className="align-top">

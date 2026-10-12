@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CARD_LABELS, CARD_MEANINGS, ageText, cardViewFromIndex, curveLine, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
 import { ProgressStrip } from "./ProgressStrip";
 import { FollowButton } from "./FollowButton";
+import { Why } from "./Why";
 
 /**
  * THE COIN CARD (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md; the full field set since website-13, 2026-10-12,
@@ -99,10 +100,10 @@ export function CurveBar({ c, compact = false }: { c: Pick<CoinCardData, "phase"
 /** The rule's one-liner as a sentence ("burns when the Eagles lose" → "Burns when the Eagles lose."). */
 const asSentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };
 
-/** One field: its text, or "—" with the reason on hover and for screen readers. */
+/** One field: its text, or "—" with its reason behind a tap or focus (website-15 item 7: Why.tsx; never inline, never on hover only). */
 function Cell({ c }: { c: CardCell }) {
   if (c.text !== null) return <span title={c.why ?? undefined}>{c.text}</span>;
-  return <span title={c.why ?? undefined}><span aria-hidden="true">—</span><span className="sr-only">{c.why ?? "Not available."}</span></span>;
+  return <Why why={c.why ?? "This site has no reading for this field."} />;
 }
 
 /**
@@ -133,10 +134,11 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
       </div>
       <dl className="bt-card-rows">
         <div data-row="progress"><dt title={CARD_MEANINGS.progress}>{CARD_LABELS.progress}</dt><dd>{v.progress ? <ProgressStrip p={v.progress} compact /> : <Cell c={{ text: null, why: v.progressWhy }} />}</dd></div>
-        <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}</dd></div>
+        <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}{v.creatorText && <span className="mt-1 block text-xs text-neutral-300" data-creator-text>{v.creatorText}</span>}{v.links && v.links.length > 0 && <span className="mt-1 flex flex-wrap gap-2 text-xs" data-creator-links>{v.links.map((l) => <a key={l.url} className="underline" href={l.url} rel="nofollow noopener ugc" target="_blank">{l.label}</a>)}</span>}</dd></div>
         <div data-row="nextSettle"><dt>{CARD_LABELS.nextSettle}</dt><dd><Cell c={v.nextSettle} /></dd></div>
         <div data-row="curve"><dt title={CARD_MEANINGS.curve}>{CARD_LABELS.curve}</dt><dd>
-          <span title={v.curve.why ?? undefined}>{curveLine(v.curve)}{(v.curve.raised === null || v.curve.of === null) && v.curve.why && <span className="sr-only">. {v.curve.why}</span>}</span>
+          {/* website-15 item 7: a curve not read is "— raised" with the dash as the reason's button; "not applicable" carries its reason the same way */}
+          <span>{v.curve.na ? <Why label="Not applicable" why={v.curve.why} /> : v.curve.raised === null && v.curve.why ? <><Why why={v.curve.why} name="Not read" />{curveLine(v.curve).replace(/^—/, "")}</> : v.curve.of === null && v.curve.why ? <>{curveLine(v.curve)} <Why why={v.curve.why} label="" name="Why the raise is not shown" /></> : curveLine(v.curve)}</span>
           <span className="bt-curve mt-1 block" role="progressbar" aria-label="Curve progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined} aria-valuetext={pct === null ? "Not read" : `${pct.toFixed(0)}%`}><span className={`bt-curve-fill block${v.curve.done ? " is-done" : ""}`} style={{ width: `${pct ?? 0}%` }} /></span>
         </dd></div>
         <div data-row="mcap"><dt title={CARD_MEANINGS.mcap}>{CARD_LABELS.mcap}</dt><dd><Cell c={v.mcap} /></dd></div>

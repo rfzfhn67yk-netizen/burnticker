@@ -64,7 +64,7 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
   const polymarket = !/^(0|false|no|off)$/i.test((env.BURNTICKER_POLYMARKET_DISCOVERY_ENABLED ?? "").trim());
   const sportsOk = tsdb || !mainnet;
   const pairsOk = pairCurve || !mainnet;
-  const sportsWhy = sportsOk ? null : "Games without an on-chain market settle on TheSportsDB's scores, and that licence is not linked on this site yet.";
+  const sportsWhy = sportsOk ? null : "Games without an on-chain market settle on TheSportsDB's scores, and that license is not linked on this site yet.";
   const pairsWhy = pairsOk ? null : PAIRS_BLOCKER;
   const polyWhy = polymarket ? null : "Polymarket search is turned off on this site.";
   const t = (type: LaunchType, ok: boolean, why: string | null): TypeAvailability => ({ type, label: LABEL[type], available: ok, reason: ok ? null : why });
@@ -194,7 +194,7 @@ export interface SiteLaunchState {
 }
 
 /** The headline every description starts with (Claude site audit 2 item 1: "the current headline"). */
-export const SITE_HEADLINE = "Memecoins that burn on real-world results. Every burn is a receipt.";
+export const SITE_HEADLINE = "Memecoins that burn on real-world results. Every burn leaves a receipt.";
 /** A catalogue reading older than this is stale: launch controls stay off until the page reads it again. */
 export const STALE_AFTER_MS = 15 * 60_000;
 /**
@@ -207,7 +207,7 @@ export const HOSTED_BUILDER_ALLOWS_MAINNET = true;
 
 export const SITE_SENTENCE = {
   loading: "Checking whether creator launches are open on this site.",
-  unavailable: "Whether creator launches are open could not be read, so no launch controls are shown.",
+  unavailable: "Whether creator launches are open is unknown right now, so no launch controls are shown.",
   stale: "The launch status on this page is out of date, so launch controls stay off. Reload the page to read it again.",
   closed: CREATOR_LAUNCHES_CLOSED,
   preview: PREVIEW_BANNER,

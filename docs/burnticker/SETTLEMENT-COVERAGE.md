@@ -4,7 +4,7 @@
 
 **The rule.** A coin settles on a primary source, checked by an independent second source for the same fact. The second source must be run by another operator on another domain. A coin can also settle on an adjudicated Polymarket market, read from its on-chain payout on Polygon. Prediction markets help people find events, and they can serve as an extra check where their terms allow it. Kalshi's terms allow neither use, so Kalshi is never an input.
 
-Mode: offline (frozen fixtures, data as of 2026-10-10). Taxonomy: `config/burnticker/categories.json` (11 categories). The same matrix is served as JSON at `GET /api/burnticker/v1/coverage` and drawn on the trust page.
+Mode: offline (frozen fixtures, data as of 2026-10-12). Taxonomy: `config/burnticker/categories.json` (11 categories). The same matrix is served as JSON at `GET /api/burnticker/v1/coverage` and drawn on the trust page.
 
 A **primary** is a first-party source adapter: kind attested-http or on-chain, tier 4 or better, launchable, not an aggregator, not declared cross-read-only, never Kalshi. An **independent cross-read** reads the same fact (`fact` in `config/burnticker/sources.json`) from another operator on another registrable domain. **Hit rate** = readings the source's schedule expected in the 90-day window that one read produced; **latency** = first sighting by the keeper minus the end of the period; **disagreement** = shared periods where the primary and its cross-read differ beyond the fact's tolerance.
 
@@ -15,14 +15,14 @@ A **primary** is a first-party source adapter: kind attested-http or on-chain, t
 | Category | Verdict | Primaries | Independent cross-reads | Polymarket tags |
 |---|---|---|---|---|
 | Sports | **settleable** | `polymarket.gamepayout`, `thesportsdb.v2` | `thesportsdb.v2` (of `polymarket.gamepayout`), `nhl.score` (of `polymarket.gamepayout`), `mlb.statsapi` (of `polymarket.gamepayout`), `nba.cdn` (of `polymarket.gamepayout`), `apisports.games` (of `polymarket.gamepayout`), `polymarket.gamepayout` (of `thesportsdb.v2`), `nhl.score` (of `thesportsdb.v2`), `mlb.statsapi` (of `thesportsdb.v2`), `nba.cdn` (of `thesportsdb.v2`), `apisports.games` (of `thesportsdb.v2`) | sports |
-| Elections & Politics | adjudicated-only (Polymarket) | `fedreg.finalRules`, `fec.reports` | none | elections, politics |
+| Elections & Politics | adjudicated-only (Polymarket) | `fedreg.finalRules`, `fedreg.eo`, `fec.reports` | none | elections, politics |
 | Economics | **settleable** | `treasury.debt`, `fred.UNRATE`, `fred.CPIAUCSL`, `fred.GFDEBTN`, `bls.eggs` | `fred.GFDEBTN` (of `treasury.debt`), `bls.LNS14000000` (of `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `treasury.debt` (of `fred.GFDEBTN`), `fred.APU0000708111` (of `bls.eggs`) | economy |
 | Financial markets | **settleable** | `pyth.equity`, `pyth.fx`, `pyth.metal`, `pyth.commodity`, `pyth.rates` | `redstone.equity` (of `pyth.equity`), `redstone.fx` (of `pyth.fx`), `redstone.metal` (of `pyth.metal`), `redstone.commodity` (of `pyth.commodity`) | finance |
 | Weather & Climate | **settleable** | `nws.cli` | `iem.asos` (of `nws.cli`) | weather, climate-science |
-| Science & Space | adjudicated-only (Polymarket) | `ll2.launches`, `noaa.flares`, `jpl.neo` | none | space, tech |
+| Science & Space | adjudicated-only (Polymarket) | `ll2.launches`, `ll2.provider`, `ll2.launch`, `noaa.flares`, `jpl.neo` | none | space, tech |
 | Entertainment & Culture | adjudicated-only (Polymarket) | `wiki.views`, `steam.players` | none | pop-culture |
 | Crypto & On-chain | **settleable** | `bitcoin.blockHeight`, `solana.blockHeight.rpc`, `pyth.crypto`, `raydium.twap`, `redstone.crypto` | `bitcoin.blockHeight.blockstream` (of `bitcoin.blockHeight`), `raydium.twap` (of `pyth.crypto`), `jupiter.quote` (of `pyth.crypto`), `dexscreener.pairs` (of `pyth.crypto`), `redstone.crypto` (of `pyth.crypto`), `pyth.crypto` (of `raydium.twap`), `jupiter.quote` (of `raydium.twap`), `dexscreener.pairs` (of `raydium.twap`), `redstone.crypto` (of `raydium.twap`), `pyth.crypto` (of `redstone.crypto`), `raydium.twap` (of `redstone.crypto`), `jupiter.quote` (of `redstone.crypto`), `dexscreener.pairs` (of `redstone.crypto`) | crypto |
-| Companies | adjudicated-only (Polymarket) | `edgar.8k`, `github.stars` | none | business |
+| Companies | adjudicated-only (Polymarket) | `edgar.8k`, `github.stars`, `github.releases`, `github.milestone` | none | business |
 | Health | adjudicated-only (Polymarket) | `openfda.approvals` | none | health |
 | World | adjudicated-only (Polymarket) | none | none | world, geopolitics |
 
@@ -33,7 +33,7 @@ A primary source is checked by an independent second source. The pairs are polym
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
 | `polymarket.gamepayout` | primary; cross-read of `thesportsdb.v2` | Polymarket / UMA (Conditional Tokens on Polygon) | polygonscan.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
-| `thesportsdb.v2` | primary; cross-read of `polymarket.gamepayout` | TheSportsDB (commercial licence) | thesportsdb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
+| `thesportsdb.v2` | primary; cross-read of `polymarket.gamepayout` | TheSportsDB (commercial license) | thesportsdb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 | `nhl.score` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | National Hockey League | nhle.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 | `mlb.statsapi` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | MLB Advanced Media | mlb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 | `nba.cdn` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | National Basketball Association | nba.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
@@ -52,18 +52,19 @@ Kalshi categories mapped here (Sports) are discovery only: never a settlement in
 
 ## Elections & Politics — adjudicated-only
 
-The primary sources fedreg.finalRules, fec.reports have no independent second source. Polymarket covers yes-or-no markets under elections, politics.
+The primary sources fedreg.finalRules, fedreg.eo, fec.reports have no independent second source. Polymarket covers yes-or-no markets under elections, politics.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
 | `fedreg.finalRules` | primary | Office of the Federal Register | federalregister.gov | 4 | — | n/a (no schedule) | n/a | n/a |
+| `fedreg.eo` | primary | Office of the Federal Register | federalregister.gov | 4 | — | 100% (57/57) | n/a | n/a |
 | `fec.reports` | primary | Federal Election Commission | fec.gov | 4 | `fec.candidate.receipts-per-report` | n/a | n/a | n/a |
 
-Mapped here but not a primary: `congress.lawsSigned` (not launchable: needs a key: CONGRESS_API_KEY (free, api.data.gov)).
+Mapped here but not a primary: `congress.lawsSigned` (not launchable: needs a key: BURNTICKER_CONGRESS_API_KEY (free, api.data.gov)).
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced, with our own feed (`scalar`) | **uncovered** | These primary sources have no independent second source for the same fact: fedreg.finalRules, fec.reports. Polymarket has only yes-or-no markets, so it cannot settle a number either. |
+| Advanced, with our own feed (`scalar`) | **uncovered** | These primary sources have no independent second source for the same fact: fedreg.finalRules, fedreg.eo, fec.reports. Polymarket has only yes-or-no markets, so it cannot settle a number either. |
 | Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags elections, politics. No primary source here gives a yes-or-no result. |
 | Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags elections, politics. No primary source here gives a yes-or-no result. |
 
@@ -139,17 +140,19 @@ Kalshi categories mapped here (Climate and Weather) are discovery only: never a 
 
 ## Science & Space — adjudicated-only
 
-The primary sources ll2.launches, noaa.flares, jpl.neo have no independent second source. Polymarket covers yes-or-no markets under space, tech.
+The primary sources ll2.launches, ll2.provider, ll2.launch, noaa.flares, jpl.neo have no independent second source. Polymarket covers yes-or-no markets under space, tech.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
 | `ll2.launches` | primary | The Space Devs | thespacedevs.com | 4 | — | 100% (29/29) | n/a | n/a |
+| `ll2.provider` | primary | The Space Devs | thespacedevs.com | 4 | — | 100% (90/90) | n/a | n/a |
+| `ll2.launch` | primary | The Space Devs | thespacedevs.com | 4 | — | n/a (no schedule) | n/a | n/a |
 | `noaa.flares` | primary | NOAA Space Weather Prediction Center | noaa.gov | 4 | — | 100% (6/6) | n/a | n/a |
 | `jpl.neo` | primary | NASA Jet Propulsion Laboratory | nasa.gov | 4 | — | 100% (60/60) | n/a | n/a |
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced, with our own feed (`scalar`) | **uncovered** | These primary sources have no independent second source for the same fact: ll2.launches, noaa.flares, jpl.neo. Polymarket has only yes-or-no markets, so it cannot settle a number either. |
+| Advanced, with our own feed (`scalar`) | **uncovered** | These primary sources have no independent second source for the same fact: ll2.launches, ll2.provider, ll2.launch, noaa.flares, jpl.neo. Polymarket has only yes-or-no markets, so it cannot settle a number either. |
 | Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags space, tech. No primary source here gives a yes-or-no result. |
 | Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags space, tech. No primary source here gives a yes-or-no result. |
 
@@ -164,7 +167,7 @@ The primary sources wiki.views, steam.players have no independent second source.
 | `wiki.views` | primary | Wikimedia Foundation | wikimedia.org | 4 | — | 97.4% (38/39) | n/a | n/a |
 | `steam.players` | primary | Valve (Steam) | steampowered.com | 4 | — | n/a (no schedule) | n/a | n/a |
 
-Mapped here but not a primary: `youtube.views` (not launchable: needs a key: YOUTUBE_API_KEY (Google Cloud)); `billboard.hot100` (page-scraped (tier 5): never a primary); `spotify.charts` (page-scraped (tier 5): never a primary); `bom.weekendGross` (page-scraped (tier 5): never a primary).
+Mapped here but not a primary: `youtube.views` (not launchable: needs a key: YOUTUBE_API_KEY (Google Cloud)); `youtube.milestone` (not launchable: needs a key: BURNTICKER_YOUTUBE_API_KEY (Google Cloud, free)); `billboard.hot100` (page-scraped (tier 5): never a primary); `spotify.charts` (page-scraped (tier 5): never a primary); `bom.weekendGross` (page-scraped (tier 5): never a primary).
 
 | Selector kind | Verdict | Why |
 |---|---|---|
@@ -201,16 +204,18 @@ Kalshi categories mapped here (Crypto) are discovery only: never a settlement in
 
 ## Companies — adjudicated-only
 
-The primary sources edgar.8k, github.stars have no independent second source. Polymarket covers yes-or-no markets under business.
+The primary sources edgar.8k, github.stars, github.releases, github.milestone have no independent second source. Polymarket covers yes-or-no markets under business.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
 | `edgar.8k` | primary | U.S. Securities and Exchange Commission | sec.gov | 4 | — | n/a (no schedule) | n/a | n/a |
 | `github.stars` | primary | GitHub | github.com | 4 | — | n/a (no schedule) | n/a | n/a |
+| `github.releases` | primary | GitHub | github.com | 4 | — | 100% (90/90) | n/a | n/a |
+| `github.milestone` | primary | GitHub | github.com | 4 | — | n/a (no schedule) | n/a | n/a |
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced, with our own feed (`scalar`) | **uncovered** | These primary sources have no independent second source for the same fact: edgar.8k, github.stars. Polymarket has only yes-or-no markets, so it cannot settle a number either. |
+| Advanced, with our own feed (`scalar`) | **uncovered** | These primary sources have no independent second source for the same fact: edgar.8k, github.stars, github.releases, github.milestone. Polymarket has only yes-or-no markets, so it cannot settle a number either. |
 | Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tag business. No primary source here gives a yes-or-no result. |
 | Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tag business. No primary source here gives a yes-or-no result. |
 
@@ -245,7 +250,7 @@ No primary source maps to this category.
 ## What we cannot settle today
 
 - **No first-party source at all:** World. Nothing in these categories settles on a primary reading; only Polymarket's yes/no markets can, where a tag maps.
-- **Primary source without an independent cross-read:** Elections & Politics (`fedreg.finalRules`, `fec.reports`); Science & Space (`ll2.launches`, `noaa.flares`, `jpl.neo`); Entertainment & Culture (`wiki.views`, `steam.players`); Companies (`edgar.8k`, `github.stars`); Health (`openfda.approvals`). One operator's number cannot settle a coin on its own, so these feeds are refused at creation until a second operator's read of the same fact is configured.
+- **Primary source without an independent cross-read:** Elections & Politics (`fedreg.finalRules`, `fedreg.eo`, `fec.reports`); Science & Space (`ll2.launches`, `ll2.provider`, `ll2.launch`, `noaa.flares`, `jpl.neo`); Entertainment & Culture (`wiki.views`, `steam.players`); Companies (`edgar.8k`, `github.stars`, `github.releases`, `github.milestone`); Health (`openfda.approvals`). One operator's number cannot settle a coin on its own, so these feeds are refused at creation until a second operator's read of the same fact is configured.
 - **Settled numbers (scalar rules) in:** Elections & Politics, Science & Space, Entertainment & Culture, Companies, Health, World. Polymarket is binary-only, so where no primary pair exists there is no settled number at all: index closes, rates and commodity settlements (Financial markets), daily temperatures and rainfall (Weather & Climate) and every other Kalshi strike ladder have no replacement today.
 - **Elections and votes:** adjudicated-only. They settle on Polymarket's payout vector or not at all; no official results feed is configured.
 - **One-shot markets** (one question that resolves once): Polymarket only. No primary source answers an arbitrary question.
@@ -261,7 +266,7 @@ No primary source maps to this category.
 
 ## Per league — team coins and matchups
 
-No ESPN reads. A league's games come from its free official schedule (MLB StatsAPI, NHL api-web, NBA cdn), else from TheSportsDB v2 under its commercial licence (`BURNTICKER_THESPORTSDB_KEY`). Each game settles on **primary A**, its on-chain payout where a Polymarket moneyline market exists, else **primary B**, TheSportsDB's final.
+No ESPN reads. A league's games come from its free official schedule (MLB StatsAPI, NHL api-web, NBA cdn), else from TheSportsDB v2 under its commercial license (`BURNTICKER_THESPORTSDB_KEY`). Each game settles on **primary A**, its on-chain payout where a Polymarket moneyline market exists, else **primary B**, TheSportsDB's final.
 
 The game needs two independent sources (publishers) that agree; that is a source check, and one operator attester still signs the reading. The on-chain payout and TheSportsDB confirm each other when both exist. The league's official feed is a further read where it is free. API-Sports (`BURNTICKER_APISPORTS_KEY`) is optional.
 

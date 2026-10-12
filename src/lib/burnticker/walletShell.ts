@@ -23,7 +23,7 @@ export const WALLET_COPY = {
   /** The phone menu's line above the button. */
   menuNote: WALLET.menuNote,
   /** "Your coins" while no wallet is connected. */
-  prompt: "Connect a wallet to see the coins and pairs it created. This page only reads. It never asks you to sign anything, and it never posts for you.",
+  prompt: "View a wallet's created coins without signing a transaction.",
   lookup: "You can also look up any creator address without connecting.",
 } as const;
 

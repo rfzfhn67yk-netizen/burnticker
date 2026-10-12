@@ -186,7 +186,7 @@ describe("website-12's site launch record, consumed (coordinator, 2026-10-12)", 
     const h = read("src/app/burnticker/_components/SiteHeader.tsx"), m = read("src/app/burnticker/_components/LaunchClosedModal.tsx");
     assert.match(h, /const launch = useSiteLaunchState\(\);\s*const launchOpen = launch\.wizard;/); assert.match(h, /<LaunchClosedModal state=\{launch\}/);
     assert.match(m, /<p data-launch-sentence>\{state\.sentence\}<\/p>/);
-    for (const f of ["src/app/burnticker/_components/SiteHeader.tsx", "src/app/burnticker/_components/LaunchClosedModal.tsx", "src/lib/burnticker/siteNav.mjs", "config/public-repo/overlay/src/app/layout.tsx", "src/lib/burnticker/siteMeta.ts", "src/lib/burnticker/home.ts"]) assert.doesNotMatch(code(read(f)).replace(/Whether creator launches are open could not be read|Checking whether creator launches are open/g, ""), /launches are (open|closed)/i, f);
+    for (const f of ["src/app/burnticker/_components/SiteHeader.tsx", "src/app/burnticker/_components/LaunchClosedModal.tsx", "src/lib/burnticker/siteNav.mjs", "config/public-repo/overlay/src/app/layout.tsx", "src/lib/burnticker/siteMeta.ts", "src/lib/burnticker/home.ts"]) assert.doesNotMatch(code(read(f)).replace(/Whether creator launches are open is unknown right now|Checking whether creator launches are open/g, ""), /launches are (open|closed)/i, f);
     assert.equal(LAUNCH_CLOSED.body, SITE_SENTENCE.loading); assert.equal(LAUNCH_CLOSED.unread, SITE_SENTENCE.unavailable); assert.equal(WALLET.note, WALLET_NOTE);
     for (const env of [{}, { BURNTICKER_CREATOR_LAUNCHES_PREVIEW: "1" }, { BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1", BURNTICKER_CLUSTER: "mainnet" }]) {
       const st = siteLaunchState(env);
@@ -196,7 +196,7 @@ describe("website-12's site launch record, consumed (coordinator, 2026-10-12)", 
     }
     // the static dialog: the record's sentence from the home API, the unavailable sentence when it cannot be read
     const home = read("site/burnticker/index.html");
-    assert.match(home, /open = !!\(l && l\.wizard === true\); if \(said\) said\.textContent = l && l\.sentence \? l\.sentence : "Whether creator launches are open could not be read, so no launch controls are shown\.";/);
+    assert.match(home, /open = !!\(l && l\.wizard === true\); if \(said\) said\.textContent = l && l\.sentence \? l\.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown\.";/);
     assert.equal(siteLaunchStateFromCatalogue(null, { failure: "x" }).sentence, SITE_SENTENCE.unavailable);
   });
   test("the home strip's step 2 carries the first-burn prerequisite with the creator's raise choices (website-14, §75: no typed 85)", () => {

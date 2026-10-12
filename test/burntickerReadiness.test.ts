@@ -1,6 +1,7 @@
 // READINESS (website follow-up 2026-10-11): one derivation of where a coin stands on the way to its burns — $DEFICIT cannot burn before
 // graduation (crank_buyback requires TokenConfig.pool_verified; the LaunchLab curve graduates at 85 SOL raised; a seed gift does not
 // count). Every state, the adapters, and the pages that show it.
+import { PROGRESS_STEPS } from "@/lib/burnticker/progress";
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -67,7 +68,8 @@ describe("where the state is shown", () => {
     assert.match(fs.readFileSync("src/lib/burnKeeper/statusPage.ts", "utf8"), /readiness: \(\(\) => \{[\s\S]*readinessOf\(/);
     const site = fs.readFileSync("site/deficit/index.html", "utf8");
     assert.match(site, /id="readiness" data-readiness="not-launched"/); assert.match(site, /s\.readiness && s\.readiness\.label/);
-    assert.match(site, new RegExp(`" of ${READINESS_ORDER.length} toward a first burn`), "the static step count equals the state list");
+    // website-15 item 6: the static count is the progress strip's six steps (progress.ts), the same numbering as the app
+    assert.match(site, new RegExp(`" of ${PROGRESS_STEPS.length} toward a first burn`), "the static step count equals the progress strip's steps");
     assert.match(site, /Nothing burns until the curve fills and the debt rises/);
   });
 });

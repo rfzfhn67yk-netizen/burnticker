@@ -1,0 +1,452 @@
+{
+ "fetchedAt": "2026-10-12T19:26:00Z",
+ "note": "Real response, captured read-only; each launch trimmed to the fields the adapter reads (id, name, net, status).",
+ "url": "https://ll.thespacedevs.com/2.3.0/launches/previous/?limit=40&mode=list&lsp__id=121&include_suborbital=false",
+ "body": {
+  "count": 713,
+  "next": "https://ll.thespacedevs.com/2.3.0/launches/previous/?include_suborbital=false&limit=40&lsp__id=121&mode=list&offset=40",
+  "previous": null,
+  "results": [
+   {
+    "id": "da43dc2c-00af-4cc1-8ef1-90a60b2eb9e5",
+    "name": "Falcon 9 Block 5 | SDA Tranche 1 Transport Layer A",
+    "net": "2026-10-10T07:39:44Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "4651fd8a-43de-4166-bf8f-c168b3bd1d2c",
+    "name": "Falcon Heavy | NROL-97",
+    "net": "2026-10-02T03:54:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "67213393-7983-4c06-8b44-b8c785a5ed79",
+    "name": "Falcon 9 Block 5 | Transporter 18 (Dedicated SSO Rideshare)",
+    "net": "2026-10-01T18:32:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "18441371-8b2e-457c-afb5-1ec1b11ab630",
+    "name": "Falcon 9 Block 5 | Crew-13",
+    "net": "2026-10-01T15:10:06Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "7d1afb26-6f9c-429b-9ccf-29012fd1e519",
+    "name": "Starship | Starlink Group 31-1 (Starship Flight 14)",
+    "net": "2026-09-28T12:48:59Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "7330d83b-c478-426c-8859-f9e3a335876d",
+    "name": "Falcon 9 Block 5 | USSF-385",
+    "net": "2026-09-26T14:00:54Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "d1471f9d-e9d0-4146-8e97-90863e48bfc8",
+    "name": "Falcon 9 Block 5 | Starlink Group 15-27",
+    "net": "2026-09-20T01:47:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "17c71937-dd80-406f-bb47-0c9ee9a24276",
+    "name": "Falcon 9 Block 5 | USSF-259",
+    "net": "2026-09-17T01:07:56Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "ad358a4d-c541-409b-9366-9c2f2da4aeb9",
+    "name": "Falcon 9 Block 5 | O3b mPower 11-13",
+    "net": "2026-09-13T18:49:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "3e0456da-14b1-4ac3-b59e-35fefb1d1530",
+    "name": "Falcon 9 Block 5 | USSF-153",
+    "net": "2026-09-10T15:42:30Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "153ef8ef-b12b-43f4-a4bf-05b225c0cd37",
+    "name": "Falcon 9 Block 5 | Starlink Group 15-24",
+    "net": "2026-09-06T14:26:54Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "63181269-b125-4c36-951c-c9bd9bbc4b55",
+    "name": "Falcon 9 Block 5 | Starlink Group 15-23",
+    "net": "2026-09-02T08:42:12Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "521f3a1c-f977-4306-9b7f-495858719adf",
+    "name": "Falcon Heavy | Nancy Grace Roman Space Telescope",
+    "net": "2026-08-30T11:26:04Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "95653d52-bb77-4860-a815-dd7141778d17",
+    "name": "Falcon 9 Block 5 | Starlink Group 15-22",
+    "net": "2026-08-26T09:35:11Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "ad501ebd-a357-4305-90c1-c46c6feb2ecf",
+    "name": "Falcon 9 Block 5 | Starlink Group 10-49",
+    "net": "2026-08-25T09:33:38Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "6208f972-18ec-490f-bbe5-6f5c6cfcd48c",
+    "name": "Falcon 9 Block 5 | Starlink Group 15-20",
+    "net": "2026-08-22T07:25:16Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "bbdc4d47-1de3-428e-9fe1-bbf45d9b1e04",
+    "name": "Falcon 9 Block 5 | Starlink Group 10-39",
+    "net": "2026-08-21T15:14:22Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "f6958a77-37bb-4559-a108-40ba0ff9e34a",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-50",
+    "net": "2026-08-19T04:01:07Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "55b79515-ddbf-4198-8a59-29a12ed21330",
+    "name": "Falcon 9 Block 5 | USSF-366",
+    "net": "2026-08-16T01:50:45Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "be8b4b0d-1989-48a5-a96d-e8e4d59ed8b3",
+    "name": "Falcon 9 Block 5 | Globalstar 2-R Mission 1 (x 8)",
+    "net": "2026-08-16T01:12:14Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "6f94dbe4-1318-4ffb-a53d-351bbdcba733",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-49",
+    "net": "2026-08-12T04:46:47Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "36ab6924-bb36-416a-b71d-cda9e88004be",
+    "name": "Falcon 9 Block 5 | Starlink Group 10-19",
+    "net": "2026-08-11T15:58:26Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "e4316d4c-9eb8-4a18-9b0d-4307c3970ef6",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-38",
+    "net": "2026-08-08T16:35:02Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "56a85c82-ea71-449b-828c-b583f6f4a18b",
+    "name": "Falcon 9 Block 5 | BlueBird 11-13 (Block 2 #6-8)",
+    "net": "2026-08-05T07:49:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "0448d030-5175-4c1f-bd0b-4f3f87072921",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-53",
+    "net": "2026-08-04T17:05:03Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "e7e55b53-6f69-4c22-9fc5-df00df653a3f",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-52",
+    "net": "2026-08-01T03:08:43Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "24675e3d-2458-48a3-8c70-5196e44d4dc3",
+    "name": "Falcon 9 Block 5 | NROL-95",
+    "net": "2026-07-30T07:10:19Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "5b2f05d7-9052-49fb-9bd7-2a05d4910576",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-51",
+    "net": "2026-07-25T15:51:55Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "0f6780cf-edae-4d7c-99d6-ce7de784d140",
+    "name": "Falcon 9 Block 5 | MRV-1",
+    "net": "2026-07-21T21:15:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "e1079d3a-c0a6-4b42-bc1d-92e48a5a78fc",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-39",
+    "net": "2026-07-21T14:49:34Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "d9adedc4-8fa1-4a36-84f9-43b8893a6865",
+    "name": "Falcon 9 Block 5 | SDA Tranche 1 Transport Layer E",
+    "net": "2026-07-16T20:32:36Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "9999a3a3-b15d-4ee3-b70f-acf00d10d912",
+    "name": "Falcon 9 Block 5 | Starlink Group 10-45",
+    "net": "2026-07-14T09:10:12Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "e09f254f-18bc-4985-963e-6075fa3d7a1c",
+    "name": "Falcon 9 Block 5 | Starlink Group 15-14",
+    "net": "2026-07-14T01:28:17Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "135fb199-a39e-48cc-ba27-0aecd96ba9f8",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-48",
+    "net": "2026-07-11T03:01:57Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "62d4cd48-ed28-418b-b58c-526781a50a39",
+    "name": "Falcon 9 Block 5 | Starlink Group 10-42",
+    "net": "2026-07-09T09:25:43Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "a6db1e67-5860-47c9-a674-adc0f35b62e0",
+    "name": "Falcon 9 Block 5 | Transporter 17 (Dedicated SSO Rideshare)",
+    "net": "2026-07-07T07:12:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "1ef27ca1-af91-48bb-b934-3da5abd9f711",
+    "name": "Falcon 9 Block 5 | Starlink Group 10-50",
+    "net": "2026-07-05T10:50:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "491122a3-3eff-42db-aff3-424b3431fc0b",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-46",
+    "net": "2026-07-02T02:58:19Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "ce3db8f7-ba9b-4a2a-953c-c6c6ee926541",
+    "name": "Falcon 9 Block 5 | Sirius SXM-11",
+    "net": "2026-06-29T02:25:00Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   },
+   {
+    "id": "0740c699-9877-4331-8aef-4e29ea6281c0",
+    "name": "Falcon 9 Block 5 | Starlink Group 17-40",
+    "net": "2026-06-28T16:09:18Z",
+    "status": {
+     "id": 3,
+     "name": "Launch Successful",
+     "abbrev": "Success",
+     "description": "The launch vehicle successfully inserted its payload(s) into the target orbit(s)."
+    }
+   }
+  ]
+ }
+}

@@ -15,7 +15,7 @@ interface Op { cluster: string; neverBuys: { line: string; status: string } }
 const PAGES = [
   { href: "/burnticker/check", title: "Check this yourself", what: "It shows where money can go, who can do what, what is locked and what is not done. It also lists the build hashes and has a receipt checker that runs in your browser." },
   { href: "/burnticker/fees/ledger", title: "Fee ledger", what: "It lists every lamport the developer fee wallet received, read from the chain and grouped by month. It also shows what the fee pays for." },
-  { href: "/burnticker/operator", title: "Operator", what: "It says who runs this. It lists every operator wallet, the signed statement and the monitor that watches the operator's wallets for platform coins." },
+  { href: "/burnticker/operator", title: "Who runs this", what: "It says who runs this. It lists every operator wallet, the signed statement and the monitor that watches the operator's wallets for platform coins." },
 ];
 
 export default function TrustPackSection({ card }: { card: string }) {

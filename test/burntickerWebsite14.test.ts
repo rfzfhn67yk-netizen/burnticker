@@ -196,7 +196,8 @@ describe("item 3: next results (/burnticker/upcoming and the home strip)", () =>
     assert.match(pg, /<h1 className="text-2xl font-semibold">Next results<\/h1>/); assert.match(pg, /data\?\.upcoming/);
     assert.match(home, /<h2 id="next-h">Next results<\/h2>/); assert.match(home, /j\.upcoming/);
     assert.equal(lintCopy("Upcoming results", cfg).ok, false, "why the visible words avoid it");
-    assert.deepEqual(homeData([], "/nonexistent-root").upcoming, []);
+    // website-15 (code review 6 P2 2): the answer is a set with its own state; an empty readable registry is ready and empty
+    assert.deepEqual(homeData([], "/nonexistent-root").upcoming, { state: "ready", rows: [], omitted: [], registered: 0 });
   });
 });
 
@@ -205,7 +206,8 @@ describe("item 4: six steps, a view of readiness.ts (no second model)", () => {
     const base: ReadinessInput = { launched: true, phase: "curve", raisedSol: 40, graduationSol: 60, poolVerified: false, latest: null };
     const cases: [ReadinessInput, number, RegExp][] = [
       [{ ...base, launched: false }, 0, /^Next, the coin has to be created\.$/],
-      [base, 1, /^Next, the curve has to raise 20 more SOL to reach its 60 SOL raise and graduate\.$/],
+      // website-15 item 6: a coin on its curve has done "Created" and "Trading on curve"; graduation is the next unmet milestone
+      [base, 2, /^Next, the curve has to raise 20 more SOL to reach its 60 SOL raise and graduate\.$/],
       [{ ...base, phase: "graduated" }, 3, /registered with the burn program and verified/],
       [{ ...base, poolVerified: true }, 4, /at least one unit/],
       [{ ...base, poolVerified: true, latest: { status: "skipped", units: 1, skippedReason: "under the floor", waitReason: null } }, 4, /spend floor/],
@@ -217,7 +219,7 @@ describe("item 4: six steps, a view of readiness.ts (no second model)", () => {
       const r = readinessOf(i), p = progressOf(r, { raiseSol: i.graduationSol, raisedSol: i.raisedSol });
       seen.add(r.state); assert.equal(p.done, done, r.state); assert.match(p.next, re, r.state); clean(p.next, r.state);
       assert.equal(p.steps.length, 6); assert.deepEqual(p.steps.map((s) => s.label), [...PROGRESS_STEPS]);
-      p.steps.forEach((s, k) => assert.equal(s.state, k < done ? "done" : k === done ? "current" : "todo"));
+      p.steps.forEach((s, k) => assert.equal(s.state, k < done ? "done" : k === done && done > 0 ? "current" : "todo"));
     }
     assert.deepEqual([...seen].sort(), [...READINESS_ORDER].sort(), "every readiness state is covered");
     assert.equal(progressOf(readinessOf({ ...base, graduationSol: undefined }), {}).next, "Next, the curve has to reach its raise and graduate.", "no raise read, no number");
@@ -310,7 +312,7 @@ describe("item 9: retirement in practical terms (the shipped 28-day wind-down; o
     assert.match(mod, /END-SINK SWITCH/); assert.doesNotMatch(RETIREMENT_FACTS.map((f) => f.a).join(" "), /sink|another coin's|flagship/i);
     for (const f of RETIREMENT_FACTS) { clean(f.q, f.q); clean(f.a, f.q); }
     clean(RETIREMENT_HEADING, "heading"); clean(NO_END_LINE, "no end");
-    assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /<RetirementFacts className="mt-1" \/>/); assert.match(read("src/app/burnticker/launch/ReviewCard.tsx"), /<RetirementFacts className="mt-1" \/>/);
+    assert.match(read("src/app/burnticker/t/[ticker]/page.tsx"), /<RetirementFacts className="mt-1" \/>/); assert.match(read("src/app/burnticker/launch/ReviewCard.tsx"), /<RetirementFacts className="mt-1" open \/>/, "website-15 item 12: inside the one collapsed end-of-rule block");
   });
 });
 

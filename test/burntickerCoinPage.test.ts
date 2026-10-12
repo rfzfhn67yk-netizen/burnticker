@@ -108,8 +108,8 @@ describe("the coin page (t/[ticker])", () => {
   test("a disclosed rehearsal coin that is not registered here says what it is, from the trust API, with no trade link", () => {
     const nr = src.slice(src.indexOf("function NotRegisteredNotice"));
     assert.match(nr, /fetch\("\/api\/burnticker\/trust"\)/); assert.match(nr, /transparency\?\.rehearsals\?\.find/);
-    // Claude site audit 2 item 2a: who would fill the curve, and that nobody is asked to (no "not for trading" beside "until its curve fills")
-    assert.match(nr, /The operator does not trade it and asks nobody to/); assert.match(nr, /It can only burn if outside buyers fill its curve, and nobody is asked to do that\./); assert.doesNotMatch(nr, /not for trading/);
+    // website-15 item 9 (Claude site audit 3): the one rehearsal sentence, nothing else about why it exists; no "outside buyers" line
+    assert.match(nr, /\{REHEARSAL_SENTENCE\}/); assert.doesNotMatch(nr, /outside buyers|not for trading|does not list it with the coins/);
     assert.doesNotMatch(nr, /raydium|data-trade-link/i);
   });
 });

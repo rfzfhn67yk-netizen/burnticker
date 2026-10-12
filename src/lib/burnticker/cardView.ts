@@ -43,7 +43,11 @@ export interface CardView {
   progress: ProgressView | null;
   progressWhy: string | null;
   /** the bonding curve: raised of the coin's own raise ("85 SOL"); `of` is null when the raise was not read, `raised` null when not read */
-  curve: { raised: string | null; of: string | null; pct: number | null; done: boolean; why: string | null };
+  /** `na`: the coin never had a curve (the devnet rehearsal coin; website-15 item 6), so the row says "Not applicable" */
+  curve: { raised: string | null; of: string | null; pct: number | null; done: boolean; why: string | null; na?: boolean };
+  /** website-15 item 13: the creator's own text and links, under the rule (registered coins only) */
+  creatorText?: string | null;
+  links?: { label: string; url: string }[];
   /** market cap in SOL (a bare number), read from the curve before graduation */
   mcap: CardCell;
   holders: CardCell;
@@ -87,7 +91,7 @@ export const NOT_READ = {
 } as const;
 
 /** The curve row's words: "35.7 / 85 SOL raised"; "— raised" when the raise was not read (never a typed 85). */
-export const curveLine = (c: CardView["curve"]): string => (c.of === null ? `${c.raised ?? "—"} raised` : `${c.raised ?? "—"} / ${c.of} raised`);
+export const curveLine = (c: CardView["curve"]): string => (c.na ? "Not applicable" : c.of === null ? `${c.raised ?? "—"} raised` : `${c.raised ?? "—"} / ${c.of} raised`);
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "Oct 6" from an ISO date or time (UTC calendar day). */
@@ -133,6 +137,7 @@ export function ageText(iso: string | null, now: number): string | null {
 /** What the coins index (GET /api/burnticker/tokens) says about one registered coin. */
 export interface IndexCoin {
   ticker: string; name: string; mint: string; oneLiner: string; status: string; imageUrl: string | null; burned: string; burns: number;
+  /** website-15 item 13 */ creatorText?: string | null; links?: { label: string; url: string }[];
   nextCheckAt: string | null; nextCloseTime: string | null; lastBurnAt: string | null; launchedAt: string | null; pairId: string | null; badge?: string | null;
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null;
   /** website-14: where the coin stands (readiness.ts), computed by the API from its status and receipts; absent when not read */
@@ -169,7 +174,7 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
   const pct = typeof t.pctOfSupply === "number" ? t.pctOfSupply : null;
   return {
     id: t.mint, ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
-    rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()),
+    rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()), creatorText: t.creatorText ?? null, links: t.links ?? [],
     progress: t.readiness ? progressOf(t.readiness, { raiseSol: t.threshold ? Number(t.threshold) : null, raisedSol: t.raised ? Number(t.raised) : null }) : null,
     progressWhy: t.readiness ? null : "This site did not read where this coin stands.",
     nextSettle: next ? { text: `${shortDay(next)}`, why: null } : { text: null, why: NOT_READ.nextNone },

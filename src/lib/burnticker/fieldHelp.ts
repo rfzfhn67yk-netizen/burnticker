@@ -56,7 +56,7 @@ export const FIELD_HELP = {
   ticker: { what: "2 to 10 letters or digits. Season coins carry the year, as in RAYS26.", does: "This is the symbol on chain, and it must be free. If a ticker is taken, a number is added, as in RAYS262." },
   note: { what: "Up to 140 characters, and optional. No links and no claims of affiliation.", does: "It is shown in its own box, marked as not part of the rule. It can't be edited after launch." },
   socials: { what: "Links (https) to your website, X or Telegram. This is optional.", does: "They are written into the coin's metadata and shown on the coin page." },
-  image: { what: "There is nothing to enter. The image is made from the rule.", does: "It is receipt art with the ticker, the one-line rule and the team colours. It is pinned at launch and can't be swapped." },
+  image: { what: "You can upload your own image, or keep the art made from the rule.", does: "Without an upload, it is receipt art with the ticker, the one-line rule and the team colors. Either one is pinned at launch and can't be swapped." },
   "own-image-toggle": { what: "Tick this only if this site allows custom images.", does: "It uses your picture instead of the generated receipt art." },
   "own-image-link": { what: "An https link to a square picture.", does: "It is pinned with the metadata at launch, in place of the receipt art." },
   // ---- review and launch

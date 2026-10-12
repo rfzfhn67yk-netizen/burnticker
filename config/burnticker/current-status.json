@@ -29,7 +29,7 @@
   },
   "phase": {
     "label": "pre-launch (mainnet programs deployed)",
-    "line": "Burnticker is in pre-launch. Both programs were deployed on mainnet on 2026-10-11, with the Squads vault as upgrade authority, and the LaunchLab platform is set up. The only coin created on mainnet so far is $REHEARSAL, the operator's disclosed test coin, made on 2026-10-11 and not for trading. No public coin has launched on mainnet yet."
+    "line": "Burnticker is in pre-launch. Both programs were deployed on mainnet on 2026-10-11, with the Squads vault as upgrade authority, and the LaunchLab platform is set up. The only coin created on mainnet so far is $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. No public coin has launched on mainnet yet."
   },
   "networks": {
     "devnet": {
@@ -118,7 +118,7 @@
       "category": "Sports (team coins, matchups)",
       "primary": "the game's Polymarket on-chain payout where a moneyline market exists, or else TheSportsDB's licensed final score",
       "check": "the league's own free feed (MLB, NHL, NBA), or whichever of the two was not the main source. ESPN is never read",
-      "status": "available, since the TheSportsDB licence key was set up on the host on 2026-10-11"
+      "status": "available, since the TheSportsDB license key was set up on the host on 2026-10-11"
     },
     {
       "category": "Elections, one-shot results",
@@ -294,7 +294,7 @@
     },
     {
       "id": "sports-licence",
-      "text": "Set up the TheSportsDB licence key for sports settlement. This was done on 2026-10-11, and the key is set on the mainnet host.",
+      "text": "Set up the TheSportsDB license key for sports settlement. This was done on 2026-10-11, and the key is set on the mainnet host.",
       "status": "done"
     },
     {

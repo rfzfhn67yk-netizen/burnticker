@@ -23,8 +23,11 @@ export function PreWalletSummary({ review, loading, error, updating = false }: {
   // older servers (before website-12) send no venue fields: fall back to the lists they do send
   const prereqLine = review.prerequisiteLine ?? review.prerequisites[0];
   return (
-    <section className="min-w-0 space-y-2 rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300" aria-label="Before you connect a wallet" data-prewallet>
-      <h3 className="text-sm font-medium text-neutral-100">Before you connect a wallet</h3>
+    <>
+    {/* website-15 item 12: collapsed below the launch button; "Who controls what today" is its own block, and the end of the rule is said once, above */}
+    <details className="min-w-0 rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300" aria-label="Before you connect a wallet" data-prewallet>
+      <summary className="cursor-pointer text-sm font-medium text-neutral-100">Before you connect a wallet</summary>
+      <div className="mt-2 space-y-2">
       <p className="break-words" data-network>{net}</p>
       {review.budget && <p className="break-words" data-budget>{review.budget}</p>}
       <p className="break-words text-amber-200" data-prerequisite>{prereqLine}</p>
@@ -37,16 +40,10 @@ export function PreWalletSummary({ review, loading, error, updating = false }: {
         <ul className="mt-0.5 list-disc space-y-0.5 pl-5">{review.costs.lines.map((l) => <li key={l.label} className="break-words">{l.sol} SOL. {l.label}</li>)}</ul>
         <p className="mt-0.5 break-words text-neutral-400">{review.costs.note}</p>
       </div>
-      {review.governance && review.governance.length > 0 && (
-        <div data-governance>
-          <p className="break-words font-medium text-neutral-200">Who controls what today</p>
-          <ul className="mt-0.5 list-disc space-y-0.5 pl-5">{review.governance.map((g) => <li key={g} className="break-words">{g}</li>)}</ul>
-        </div>
-      )}
       <p className="break-words">Connecting a wallet only shares its public address with this page. Nothing is signed or sent when you connect.</p>
       <p className="break-words">{review.transactions.note}</p>
       <ul className="list-disc space-y-0.5 pl-5" data-recovery>{(review.recovery ?? ["If you reject the request in your wallet, nothing is sent and nothing is charged. The draft is kept for 24 hours, so you can press the button again."]).map((x) => <li key={x} className="break-words">{x}</li>)}</ul>
-      <p className="break-words">{review.rule.presets} {review.rule.endsLine}</p>
+      <p className="break-words">{review.rule.presets}</p>
       <p className="break-words" data-authority>{review.authority}</p>
       <p className="break-words text-neutral-400">{review.operator}</p>
       <details className="min-w-0">
@@ -61,6 +58,14 @@ export function PreWalletSummary({ review, loading, error, updating = false }: {
         <p className="mt-1 break-all font-mono text-[11px]" data-sha256>sha256 {review.rule.sha256}</p>
         <pre className="mt-1 max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-900 p-2 font-mono text-[11px]">{review.rule.text}</pre>
       </details>
-    </section>
+      </div>
+    </details>
+    {review.governance && review.governance.length > 0 && (
+      <details className="min-w-0 text-xs text-neutral-300" data-governance>
+        <summary className="cursor-pointer text-neutral-300">Who controls what today</summary>
+        <ul className="mt-1 list-disc space-y-0.5 pl-5">{review.governance.map((g) => <li key={g} className="break-words">{g}</li>)}</ul>
+      </details>
+    )}
+    </>
   );
 }

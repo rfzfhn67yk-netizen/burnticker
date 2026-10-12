@@ -120,7 +120,7 @@ describe("the rule dials", () => {
     assert.equal(card.rule!.series, viaTeamCoin.series);
     const a = dialsFor(card.rule!, ctx), b = dialsFor(viaTeamCoin, ctx);
     assert.deepEqual(a, b);
-    assert.deepEqual(a.ids, ["fraction", "league", "side", "window"]);
+    assert.deepEqual(a.ids, ["fraction", "league", "inverse", "side", "window"]);
     assert.deepEqual(a.window!.options.map((o) => o.value), ["season", "post", "next", "perpetual"]);
     assert.equal(a.fraction, 0.02); assert.deepEqual(a.bounds, { min: 0.01, max: 0.1, step: 0.005 });
   });

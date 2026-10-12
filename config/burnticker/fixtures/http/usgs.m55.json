@@ -1,0 +1,457 @@
+{
+ "fetchedAt": "2026-10-12T19:26:30Z",
+ "note": "Real response, captured read-only; each event trimmed to magnitude, time, review status and type. Place names, felt reports and alert levels are dropped: the adapter never reads them.",
+ "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=5.5&starttime=2026-08-28&endtime=2026-10-12&orderby=time-asc",
+ "body": {
+  "type": "FeatureCollection",
+  "metadata": {
+   "generated": 1791833252000,
+   "url": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&minmagnitude=5.5&starttime=2026-08-28&endtime=2026-10-12&orderby=time-asc",
+   "count": 40,
+   "status": 200,
+   "api": "2.8.1"
+  },
+  "features": [
+   {
+    "type": "Feature",
+    "id": "us7000tcxn",
+    "properties": {
+     "mag": 5.5,
+     "time": 1788080528070,
+     "updated": 1790103699032,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tdhl",
+    "properties": {
+     "mag": 5.7,
+     "time": 1788307494803,
+     "updated": 1790705697040,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tdmp",
+    "properties": {
+     "mag": 5.6,
+     "time": 1788352110120,
+     "updated": 1791819277141,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tdms",
+    "properties": {
+     "mag": 5.9,
+     "time": 1788352556633,
+     "updated": 1790265883223,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tdrv",
+    "properties": {
+     "mag": 6.2,
+     "time": 1788392816213,
+     "updated": 1789706040228,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tdvt",
+    "properties": {
+     "mag": 6.3,
+     "time": 1788434241717,
+     "updated": 1791458853584,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tdw6",
+    "properties": {
+     "mag": 5.5,
+     "time": 1788435582108,
+     "updated": 1790590925434,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tefx",
+    "properties": {
+     "mag": 5.5,
+     "time": 1788565950709,
+     "updated": 1790459903474,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000teji",
+    "properties": {
+     "mag": 5.5,
+     "time": 1788617526916,
+     "updated": 1791648060101,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tek0",
+    "properties": {
+     "mag": 5.6,
+     "time": 1788627731369,
+     "updated": 1789313627236,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000temi",
+    "properties": {
+     "mag": 5.6,
+     "time": 1788667527288,
+     "updated": 1791324887833,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tep6",
+    "properties": {
+     "mag": 5.5,
+     "time": 1788690747690,
+     "updated": 1791632449754,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000teu1",
+    "properties": {
+     "mag": 5.5,
+     "time": 1788760244117,
+     "updated": 1790871021138,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tgl2",
+    "properties": {
+     "mag": 5.9,
+     "time": 1789127783356,
+     "updated": 1791309571666,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tgrk",
+    "properties": {
+     "mag": 6.5,
+     "time": 1789161835815,
+     "updated": 1791149850912,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000thcs",
+    "properties": {
+     "mag": 5.6,
+     "time": 1789383483188,
+     "updated": 1791377664765,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000ti1p",
+    "properties": {
+     "mag": 6.5,
+     "time": 1789654792472,
+     "updated": 1791815397672,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tiqc",
+    "properties": {
+     "mag": 6.4,
+     "time": 1789895856531,
+     "updated": 1791823777977,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us7000tit5",
+    "properties": {
+     "mag": 5.5,
+     "time": 1789937677205,
+     "updated": 1790612013234,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000tx3m",
+    "properties": {
+     "mag": 5.7,
+     "time": 1790174462688,
+     "updated": 1791214575187,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000txpi",
+    "properties": {
+     "mag": 6.6,
+     "time": 1790371383309,
+     "updated": 1790458207826,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000txqi",
+    "properties": {
+     "mag": 5.5,
+     "time": 1790379581392,
+     "updated": 1790466290671,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000txtc",
+    "properties": {
+     "mag": 5.6,
+     "time": 1790431698875,
+     "updated": 1790693136205,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000tyc3",
+    "properties": {
+     "mag": 5.5,
+     "time": 1790687169941,
+     "updated": 1790789044040,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000tyhk",
+    "properties": {
+     "mag": 5.6,
+     "time": 1790744424971,
+     "updated": 1790831202559,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000tymj",
+    "properties": {
+     "mag": 5.6,
+     "time": 1790805326296,
+     "updated": 1791430735230,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000tz62",
+    "properties": {
+     "mag": 5.8,
+     "time": 1790958881010,
+     "updated": 1791045609993,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000tzer",
+    "properties": {
+     "mag": 5.9,
+     "time": 1791068155358,
+     "updated": 1791224735012,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u0hy",
+    "properties": {
+     "mag": 5.8,
+     "time": 1791305302347,
+     "updated": 1791392087721,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "aka2026tuxgky",
+    "properties": {
+     "mag": 5.5,
+     "time": 1791311671760,
+     "updated": 1791830679813,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u0ws",
+    "properties": {
+     "mag": 5.5,
+     "time": 1791442007971,
+     "updated": 1791528687136,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u0x4",
+    "properties": {
+     "mag": 5.5,
+     "time": 1791446879114,
+     "updated": 1791565395040,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u0xi",
+    "properties": {
+     "mag": 6.3,
+     "time": 1791450007768,
+     "updated": 1791536906084,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u164",
+    "properties": {
+     "mag": 5.9,
+     "time": 1791557381714,
+     "updated": 1791644069678,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u18k",
+    "properties": {
+     "mag": 7.7,
+     "time": 1791568566036,
+     "updated": 1791832433258,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u18t",
+    "properties": {
+     "mag": 5.5,
+     "time": 1791570135709,
+     "updated": 1791656912360,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u18x",
+    "properties": {
+     "mag": 5.8,
+     "time": 1791571066146,
+     "updated": 1791657781947,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u19w",
+    "properties": {
+     "mag": 6.6,
+     "time": 1791577539080,
+     "updated": 1791666545458,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u1cf",
+    "properties": {
+     "mag": 6,
+     "time": 1791605641786,
+     "updated": 1791760360409,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   },
+   {
+    "type": "Feature",
+    "id": "us6000u1kv",
+    "properties": {
+     "mag": 6.2,
+     "time": 1791727643188,
+     "updated": 1791814488549,
+     "status": "reviewed",
+     "type": "earthquake"
+    }
+   }
+  ]
+ }
+}

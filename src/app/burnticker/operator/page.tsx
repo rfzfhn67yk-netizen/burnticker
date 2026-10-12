@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
 import { OPERATOR_COPY, OPERATOR_LINE, placeholderSentence } from "@/lib/burnticker/trustpack/copy";
+import { MailSafe } from "../_components/MailSafe";
+import { TAKEDOWN_LINE } from "@/lib/burnticker/creatorProfile";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
 import { RepoText } from "../_components/RepoText";
 
@@ -45,13 +47,15 @@ export default function OperatorPage() {
         <h1 className="text-2xl font-semibold">{OPERATOR_COPY.title}</h1>
         <p className="text-neutral-300">{OPERATOR_COPY.intro}</p>
       </header>
-      <CurrentStatusSummary card={card} />
+      <CurrentStatusSummary card={card} compact />
       {err && <EmptyState kind="unavailable" body="The operator data could not be read just now." details={err} />}
       {!v && !err && <EmptyState kind="loading" />}
       {v && <>
         <section className={card}>
-          <p className="text-base" data-operator-line>{OPERATOR_LINE}</p>
+          <p className="text-base" data-operator-line><MailSafe text={OPERATOR_LINE} /></p>
           <p className="text-xs">Send security reports to <a className="underline" href={`mailto:${v.operator.security}`}>{v.operator.security}</a>.</p>
+          {/* website-15 item 13: the takedown route for a creator's image (config/burnticker/image-takedowns.json is what the site honors) */}
+          <p className="text-xs" data-takedown><MailSafe text={TAKEDOWN_LINE} /></p>
           <p className="text-xs mt-1"><b>{OPERATOR_COPY.entityTitle}.</b> {isTodo(v.operator.entity) ? v.operator.entityPending : `${v.operator.entity}.`}</p>
         </section>
 

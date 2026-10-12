@@ -159,7 +159,7 @@ first sighting. It also measures how often the primary and its cross-read disagr
 
 On the frozen fixtures of 2026-10-10, five of eleven categories are settleable (`docs/burnticker/SETTLEMENT-COVERAGE.md`). The first is
 Sports. Each game settles on its Polymarket on-chain payout where a moneyline market exists. Otherwise it settles on TheSportsDB under
-its commercial licence, confirmed by the league's own feed (MLB, NHL or NBA) or by API-Sports. Nothing is read from ESPN, and schedules
+its commercial license, confirmed by the league's own feed (MLB, NHL or NBA) or by API-Sports. Nothing is read from ESPN, and schedules
 come from the leagues' own feeds or from TheSportsDB. The second is Economics, where four series are each checked against a cross-read.
 They are `fred.UNRATE` against BLS `LNS14000000`, `fred.CPIAUCSL` against BLS `CUSR0000SA0`, `bls.eggs` against FRED `APU0000708111`,
 and `treasury.debt` against FRED `GFDEBTN` at quarter ends. There were 0 disagreements in every shared month. The third is Financial
@@ -688,7 +688,7 @@ leg, which would compare each memo on chain, is not wired. The script runs with 
 
 ## 10. Security review history
 
-Burnticker is **not audited by a security firm**. On 2026-10-09 the owner decided against a paid audit, in favour of independent AI
+Burnticker is **not audited by a security firm**. On 2026-10-09 the owner decided against a paid audit, in favor of independent AI
 reviews, free tooling and a public bounty. Reports are published as delivered:
 
 | Round | Report | Findings | Outcome |
@@ -738,7 +738,7 @@ terms are drafted in `SECURITY.md` but not published.
 - **Public repository.** This draft left the address as a placeholder. The repository is public at
   https://github.com/rfzfhn67yk-netizen/burnticker, as the status table above says. The program, keeper, platform, sites, docs, deploy
   files, tests and fixtures are carved out of a private monorepo. An explicit allowlist (`config/public-repo.allowlist`) and a leak
-  scan (`config/public-repo.denypatterns`) decide what leaves. The operator's trading code never leaves. The licence is MIT, with brand
+  scan (`config/public-repo.denypatterns`) decide what leaves. The operator's trading code never leaves. The license is MIT, with brand
   assets excluded. Every publish adds the commit, program hash, IDL hash and allowlist hash to `docs/burnticker/CHANGELOG.md`.
 - **Powers Register.** It is generated from the IDL and published as `docs/burn-receipts/powers-register.{md,json}`.
 - **Logs.** The decision log (`docs/burnticker/decisions.md`) is append-only. The incident log (`docs/burnticker/incidents/LOG.md`) has

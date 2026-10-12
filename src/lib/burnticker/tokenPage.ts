@@ -4,6 +4,7 @@ import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeepe
 import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { badgeFromText, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+import { creatorTextOf } from "@/lib/burnticker/creatorProfile";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { NO_WALLET_LINE, termLine } from "@/lib/burnticker/glossary";
 import type { TokenMeta } from "@/lib/burnticker/registry";
@@ -362,7 +363,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
     lp: i.lp ?? defaultLp(i),
     program,
-    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
+    profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
     pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
     market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market }),
     lifecycle: i.lifecycle ?? null,
@@ -523,6 +524,8 @@ tick();setInterval(tick,1000);})();
 export interface PlatformIndexToken {
   ticker: string; name: string; mint: string; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; status: string; launchedAt: string | null; burned: string; burns: number; pctOfSupply: number; impliedChance: number | null; nextCheckAt: string | null; pairId: string | null;
   imageUrl: string | null; oneLiner: string; lastBurnAt: string | null; nextMarket: string | null; nextCloseTime: string | null; oneShot: boolean; badge?: string | null;
+  /** website-15 item 13: the creator's own text and links, shown on the card under the rule */
+  creatorText?: string | null; links?: { label: string; url: string }[];
   /** null = the curve was not read (no RPC on the host, or not launched): the card shows "—", never a guess. */
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null;
   /** website-13: the curve's market cap in the quote, read from the pool (market.ts curveMarketCap); null when not read or after graduation. */
@@ -549,7 +552,7 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
   const c = s.market?.curve ?? null;
   return {
     ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: null, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
-    imageUrl: s.profile?.imageUrl ?? null, oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
+    imageUrl: s.profile?.imageUrl ?? null, creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [], oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
     phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
     marketCap: c?.marketCap ?? null, holders: s.market?.holders.count ?? null,
   };

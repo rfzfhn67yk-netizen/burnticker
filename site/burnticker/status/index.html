@@ -170,7 +170,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
         <div class="sh-learn-menu" data-site-nav="learn">
           <a href="https://burnticker.com/burnticker/about">How it works</a>
           <a href="https://burnticker.com/burnticker/trust">Trust</a>
-          <a href="https://burnticker.com/burnticker/operator">Operator</a>
+          <a href="https://burnticker.com/burnticker/operator">Who runs this</a>
           <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
           <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -189,7 +189,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
           <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
           <a href="https://burnticker.com/burnticker/about">How it works</a>
           <a href="https://burnticker.com/burnticker/trust">Trust</a>
-          <a href="https://burnticker.com/burnticker/operator">Operator</a>
+          <a href="https://burnticker.com/burnticker/operator">Who runs this</a>
           <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
           <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -259,7 +259,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
       <a href="https://burnticker.com/burnticker/about">How it works</a>
       <a href="https://burnticker.com/burnticker/trust">Trust</a>
-      <a href="https://burnticker.com/burnticker/operator">Operator</a>
+      <a href="https://burnticker.com/burnticker/operator">Who runs this</a>
       <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
       <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
       <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -311,7 +311,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
   var said = dlg && dlg.querySelector("[data-launch-sentence]");
   window.btHome = window.btHome || fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
-  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open is unknown right now, so no launch controls are shown."; });
   if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
@@ -321,17 +321,17 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. On phones the strip
   // scrolls sideways, so its right edge fades until the end is reached.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
-  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered"};
+  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered","created":"Created","reserved":"Mint reserved"};
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
   function edge() { box.classList.toggle("is-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 4); }
   box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
   window.btHome.then(function (j) {
     box.textContent = "";
-    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); return; }
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
     j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : "https://burnticker.com") + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
     edge();
-  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); });
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); });
 })();
 </script>
 <!-- site-shell:script:end -->
@@ -390,7 +390,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       var newest = f.staleness.lastReadingId ? f.staleness.lastReadingId + (f.staleness.stale ? " (stale)" : "") : "none";
       tb.appendChild(el("tr", null, [el("td", { class: "mono", text: f.selectorKey }), el("td", { text: f.tickers.map(function (t) { return "$" + t; }).join(" ") }), el("td", null, [badge(f.state), el("div", { class: "small muted", text: f.why })]), el("td", { text: ago(f.lastOkAt, now) }), el("td", { text: cr }), el("td", { text: newest })]));
     });
-    $("feeds-note").textContent = "A source marked down did not answer. A source marked disagree gave a value that a second, independent source did not match. A source marked withheld is held back for another reason, for example because the second source could not be read or a value is not final yet. A source marked stale has had nothing new for longer than its schedule allows. In every one of these cases the reading is held back.";
+    $("feeds-note").textContent = "A source marked down did not answer. A source marked disagree gave a value that a second, independent source did not match. A source marked withheld is held back for another reason, for example because the second source did not load or a value is not final yet. A source marked stale has had nothing new for longer than its schedule allows. In every one of these cases the reading is held back.";
     var kinds = Object.keys(s.alerts.kinds);
     $("alerts").textContent = s.alerts.open ? (s.alerts.open === 1 ? "There is 1 open alert. " : "There are " + s.alerts.open + " open alerts. ") + "By kind, they are " + kinds.map(function (x) { return x + " × " + s.alerts.kinds[x]; }).join(", ") + ". This page shows only the kind of each alert. The operator reads the full text." : "There are no open alerts.";
     var ends = $("ends"); ends.textContent = "";
@@ -416,10 +416,10 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   // or "none" that could read as zero problems. The current-status summary is separate and does not show whether burns are processed.
   window.renderUnavailable = function (why) {
     var n = $("loadnote"); n.className = "small err";
-    n.textContent = "The automation data could not be read just now (status.json: " + why + "). The current-status summary is separate. It does not show whether burns are being processed now.";
+    n.textContent = "The automation data did not load just now (status.json: " + why + "). The current-status summary is separate. It does not show whether burns are being processed now.";
     $("slip-sub").textContent = "STATUS UNAVAILABLE";
     var rows = $("slip-rows"); rows.textContent = ""; ["heartbeat", "burn runs", "sources", "open alerts"].forEach(function (l) { rows.appendChild(row(l, "unavailable")); });
-    var say = "Unavailable. The status file could not be read.";
+    var say = "Unavailable. The status file did not load.";
     var tb = $("feeds").querySelector("tbody"); tb.textContent = ""; tb.appendChild(el("tr", null, [el("td", { colspan: "6", text: say })]));
     $("feeds-note").textContent = "";
     $("alerts").textContent = say; $("ends").textContent = say; $("snapshot").textContent = say; $("keepers").textContent = say;

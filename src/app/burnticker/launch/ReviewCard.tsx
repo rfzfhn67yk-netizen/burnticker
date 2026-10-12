@@ -51,8 +51,14 @@ export interface ReviewCardProps {
   onLaunch: () => void;
   /** website-14 (product idea 6): the coins already registered with this rule (DuplicateNotice.tsx), under the sentence. */
   duplicate?: ReactNode;
-  /** Launch audit 5 L06: the pre-wallet summary (PreWalletSummary.tsx), shown above the button. */
+  /** Launch audit 5 L06: the pre-wallet summary (PreWalletSummary.tsx); since website-15 item 12 it is collapsed BELOW the button. */
   summary?: ReactNode;
+  /** website-15 item 12: the one cost line above the button ("The estimated cost is about 0.03 SOL."), from the review; null while unread. */
+  cost?: string | null;
+  /** website-15 item 13: the creator's image, description and links (ProfileFields.tsx), above the rule choices; null for pairs. */
+  profile?: ReactNode;
+  /** website-15 item 13: what still blocks the launch in those fields (listed beside the button). */
+  profileProblems?: string[];
   /** L02 / site audit #4: why the wallet cannot open (preview mode, a closed host, a type this host cannot take); null = it can. */
   blocked?: string | null;
   /** L05: availability warnings carried from the source screen (a schedule that could not be read, …). */
@@ -88,7 +94,7 @@ export function ReviewCard(p: ReviewCardProps) {
   // chooser); once connected it becomes "Launch", and pressing that is the signing step.
   // L07: every field problem, named per coin; the editor cannot be closed over a problem, and the list sits beside the button
   const many = p.coins.length > 1;
-  const fieldProblems = p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; return [nameProblem(c.name), tickerProblem(c.ticker)].filter(Boolean).map((x) => ({ key: c.key, text: `${who}${x}` })); });
+  const fieldProblems = [...p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; return [nameProblem(c.name), tickerProblem(c.ticker)].filter(Boolean).map((x) => ({ key: c.key, text: `${who}${x}` })); }), ...(p.profileProblems ?? []).map((x) => ({ key: "profile", text: x }))];
   const editing = editState || fieldProblems.length > 0 || (!!p.namePrompt && !editState && !p.coins.some((c) => c.name.trim() && c.name !== "Event Coin"));
   const blockedId = `${uid}-blocked`, problemsId = `${uid}-problems`;
   // L08: when the wallet list closes without a wallet, focus returns to the button that opened it
@@ -131,8 +137,7 @@ export function ReviewCard(p: ReviewCardProps) {
       )}
       {p.pairFacts ? <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-200" data-pair-facts={p.pairFacts.kind} aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul>
         : p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line>{p.pairLine} <FieldHelp id="pair-burn" /></p>}
-      {p.ends && <div className="min-w-0 break-words text-xs text-neutral-300" data-ends><p>{p.ends}</p>{!/no end date/.test(p.ends) && <RetirementFacts className="mt-1" />}</div>}
-      <p className="min-w-0 break-words text-xs text-neutral-400">{RECEIPTS_LINE} {LP_LINE}</p>
+      {p.profile}
       <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={BUDGET_LABEL} aria-describedby={`${uid}-budget`}>
         <span className="text-xs text-neutral-500" aria-hidden="true">{BUDGET_LABEL}</span>
         {p.shares.options.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
@@ -161,13 +166,28 @@ export function ReviewCard(p: ReviewCardProps) {
       ) : <button type="button" data-optional="note" className="text-xs underline text-neutral-400" onClick={() => setNoteOpen(true)}>add a note</button>)}
       {p.problems.length > 0 && <p className="min-w-0 break-words text-red-400">Can&apos;t launch this rule: {p.problems.join("; ")}</p>}
       {p.error && <p className="min-w-0 break-words text-red-400" role="alert">{p.error}</p>}
-      {p.summary}
+      {p.cost && <p className="min-w-0 break-words text-sm text-neutral-200" data-cost-line>{p.cost}</p>}
       <div className="space-y-1 pt-1">
         {fieldProblems.length > 0 && <ul id={problemsId} className="list-disc pl-5 text-xs text-red-400" aria-label="Not ready to launch">{fieldProblems.map((x) => <li key={x.text}>{x.text}</li>)}</ul>}
         {p.blocked && <p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
         <button ref={launchBtn} type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-40" aria-describedby={[p.blocked ? blockedId : "", fieldProblems.length ? problemsId : ""].filter(Boolean).join(" ") || undefined} disabled={!p.ready || p.busy || p.problems.length > 0 || !!p.blocked || fieldProblems.length > 0} onClick={launch}>{label}</button>
         {!p.creator && !p.blocked && <p className="min-w-0 break-words text-[11px] text-neutral-500" data-connect-note>Connecting shares only your wallet&apos;s public address. The button then becomes Launch, and launching is a separate step that your wallet asks you to sign.</p>}
-        <p className="min-w-0 break-words text-[11px] text-neutral-500">{ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
+      </div>
+      {/* website-15 item 12 (Claude site audit 3 item 9; ChatGPT repairs 1 and 6): every word is kept, collapsed below the button */}
+      <div className="min-w-0 space-y-2 border-t border-neutral-800 pt-2 text-xs" data-review-more>
+        {p.ends && (
+          <details className="min-w-0" data-ends>
+            <summary className="cursor-pointer text-neutral-300">What the end of the rule means</summary>
+            <p className="mt-1 break-words text-neutral-300">{p.ends}</p>
+            {!/no end date/.test(p.ends) && <RetirementFacts className="mt-1" open />}
+          </details>
+        )}
+        {p.summary}
+        <details className="min-w-0" data-terms>
+          <summary className="cursor-pointer text-neutral-300">What you confirm by launching</summary>
+          <p className="mt-1 break-words text-neutral-400">{RECEIPTS_LINE} {LP_LINE}</p>
+          <p className="mt-1 break-words text-neutral-400">{ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
+        </details>
       </div>
     </section>
   );
