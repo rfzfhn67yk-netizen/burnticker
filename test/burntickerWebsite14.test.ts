@@ -157,6 +157,11 @@ describe("item 2: readings, graduations and pool registrations as their own labe
     const home = activityEvents([{ ticker: "RAYS", burns: 1, lastBurnAt: null, events: ev }], null, 20, { status: keeperStatus(), burns: keeperBurns, error: null });
     assert.ok(home.some((e) => e.ticker === "DEFICIT" && e.kind === "reading")); assert.ok(home.some((e) => e.ticker === "RAYS" && e.kind === "pool"));
     clean(NO_EVENTS_LINE, "no events");
+    // indexer-1 wiring: once the chain dates are read, the graduation and pool rows are dated and carry their signatures
+    const read = (at: string, signature: string) => ({ state: "read" as const, at, blockTime: 0, slot: 1, signature });
+    const dated = eventsFromStatus({ ticker: "RAYS", cluster: "mainnet", market: { phase: "graduated", graduatedPool: "Cpmm", dates: { created: read("2026-10-10T00:00:00Z", "SigC"), graduated: read("2026-10-12T00:00:00Z", "SigG"), registered: read("2026-10-13T00:00:00Z", "SigP"), readAt: "x" } }, program: { lastReading: null, pool: { registered: true, address: "PoolAddr" } } });
+    assert.deepEqual(dated.map((e) => [e.kind, e.at, e.signature]), [["graduation", "2026-10-12T00:00:00Z", "SigG"], ["pool", "2026-10-13T00:00:00Z", "SigP"]]);
+    for (const e of dated) { assert.doesNotMatch(e.text, /does not read the date/); clean(e.text, e.kind); }
   });
   test("the activity line labels each kind and fades its right edge on phones until the end is reached (app and static shell)", () => {
     const t = read("src/app/burnticker/_components/ActivityTicker.tsx"), nav = read("src/lib/burnticker/siteNav.mjs"), css = read("config/public-repo/overlay/src/app/globals.css");

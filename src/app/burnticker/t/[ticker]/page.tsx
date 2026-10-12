@@ -14,7 +14,7 @@ import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
-import { COIN_TAB_LABEL, burnsAfterGraduation, checkReceiptHref, coinTabs, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
+import { COIN_TAB_LABEL, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
@@ -25,6 +25,9 @@ import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
 import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
+import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
+import type { LifecycleDatesJson, PoolMarketJson, StatedJson } from "@/lib/burnticker/pageTypes";
+import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; re-ordered by website-11 on 2026-10-12 for the owner's review items 6 and 8, as the website brief
@@ -38,13 +41,13 @@ import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
  * holder data was read. There is no thread, and nothing counts down. The site's disclaimers live once, in the footer.
  */
 type Link_ = { label: string; url: string };
-interface Market { phase: "curve" | "migrating" | "graduated" | null; curve: { raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string; marketCap?: string | null } | null; curveNote: string; graduatedPool: string | null; holders: { count: number | null; countNote: string; top: { account: string; owner: string | null; amount: string; pct: number; label: string | null }[] | null; topNote: string }; trade: { links: { id: string; label: string; url: string }[]; note: string | null }; chart: { provider: string | null; embedUrl: string | null; pageUrl: string | null; note: string }; readAt: string | null; error: string | null }
+interface Market { phase: "curve" | "migrating" | "graduated" | null; curve: { raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string; marketCap?: string | null } | null; curveNote: string; graduatedPool: string | null; holders: { count: number | null; countNote: string; top: { account: string; owner: string | null; amount: string; pct: number; label: string | null }[] | null; topNote: string; top10?: { owner: string; amount: string; pct: number | null; label: string | null }[] | null; top10Pct?: number | null; top10PctUnlabelled?: number | null }; pool?: PoolMarketJson | null; poolNote?: string; dates?: LifecycleDatesJson | null; trade: { links: { id: string; label: string; url: string }[]; note: string | null }; chart: { provider: string | null; embedUrl: string | null; pageUrl: string | null; note: string }; readAt: string | null; error: string | null }
 interface Status { program?: { initialized: boolean } | null; ticker: string; name: string; mint: string; cluster: string; status: string; launchedAt: string | null; oracle: string; selectorKey: string; seriesTitle: string | null; mode: string; rules: { sha256: string; sha12: string; statement: string; oneShot: boolean }; addresses: { mint: string; mintUrl: string; feePda: string; feePdaUrl: string; feeWsol: string | null; feeWsolUrl: string | null; vault: string | null; vaultUrl: string | null; creator: string; creatorUrl: string; programId: string; poolId: string | null; launchTx: string | null; launchTxUrl: string | null }; supply: { initial: string; current: string; source: string }; burned: { total: string; pctOfSupply: number; count: number; last30d: string; lastAt?: string | null }; pool: { feePdaSol: string | null; spendableSol: string | null; reserveSol: string; vaultBalance: string | null; vaultAllocation: string | null; shortfallOutstanding: string }; next: { nextCheckAt: string | null; impliedChance: number | null; impliedBasis: string | null; nextMarket: string | null; nextCloseTime: string | null; awaitingFinal: number }; feed: { lastEventId: string | null; lastValue: string | null; lastSettledAt: string | null; readings: number; lastFetchAt: string | null; lastError: string | null }; attesters: { pubkey: string; role: string; active: boolean }[]; quorum: number; fees: { sentence: string; curve: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number }; postGraduation: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number } }; health: { pending: number; unverified: number; lastError: string | null }; disclosure: { disclaimer: string; eventContract: string | null }; trust: { lpBurnedPct: number; lpLockedPct?: number; creatorCashBps: number; teamAllocationPct: number; operator: { can: string[]; cannot: string[]; placeholder: boolean }; registerUrl: string }; lp?: LpBlock | null; profile?: { imageUrl: string | null; description: string; links: Link_[]; oneLiner: string; badge?: string; note?: string; affiliation?: string }; pinned?: PinnedView | null; market?: Market; pair: { pairId: string; side: "A" | "B"; counterpart: { ticker: string; name: string }; tally: { burnsThis: number; burnsOther: number }; pageUrl: string } | null }
 interface Receipt { eventId: string; settledAt: string; oracle: string; market: string; result: string | null; value: string | null; title: string | null; method: string | null; sourceUrl: string | null; settlementSourceUrl: string | null; units: number; status: string; skippedReason: string | null; spent: string | null; got: string | null; burned: string | null; memo: string | null; signature: string | null; txUrl: string | null; verify: { curl: string; formula: string; expected: string; checks: string[]; verified: boolean } }
 /** status.json `lp` (LP locked forever, 2026-10-10; src/lib/burnticker/lockFees.ts LpLockJson). */
 interface LpBlock { policy: string; lockProgram: string; feeKey: string | null; feeKeyOwner: string | null; lockedLiquidity: string | null; lockedPct: number; split: { burnBps: number; operatorBps: number }; operatorTreasury: string | null; lastClaim: { at: string; line: string; txUrl: string | null } | null; totals: { claims: number; sol: string; toBurnPool: string; toOperator: string }; urls: { lockProgram: string | null; feeKey: string | null; feeKeyOwner: string | null; lockedLiquidity: string | null; operatorTreasury: string | null }; line: string; note: string | null }
 interface Reading { id: string; at: string; result: string | null; value: string | null; title: string | null }
-interface Data { status: Status & { lifecycle?: { line: string } | null }; receipts: Receipt[]; readings: Reading[]; rulesText: string; stubs: string[] }
+interface Data { status: Status & { lifecycle?: { line: string } | null; stated?: StatedJson | null }; receipts: Receipt[]; readings: Reading[]; rulesText: string; stubs: string[] }
 
 const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? `.${f}` : ""); };
 const short = (a: string) => (a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
@@ -99,7 +102,7 @@ export default function TokenPage() {
   const [now] = useState(() => Date.now());
   const [tab, setTab] = useState<CoinTab>("burns");
   useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
-  const hasHolders = !!d?.status.market?.holders.top?.length;
+  const hasHolders = !!d?.status.market?.holders.top10?.length;
   useEffect(() => { if (d) setTab(initialTab(window.location.hash, coinTabs(hasHolders))); }, [d, hasHolders]);
   // review 2 §2: a ticker this host has no record of explains itself (and $DEFICIT links its served page) instead of a bare error line
   if (err) return /no token/i.test(err) ? <NotRegistered ticker={ticker} /> : <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="unavailable" body={`The page for $${ticker.toUpperCase()} could not be read just now.`} details={err} /></main>;
@@ -116,7 +119,7 @@ export default function TokenPage() {
   const preBurn = ready.state === "on-curve" || ready.state === "awaiting-registration";
   const afterGraduation = burnsAfterGraduation(m?.curve?.threshold ?? null, m?.curve?.quote ?? "SOL");
   // ChatGPT audit 6 A10: the market facts this site read, and Burnticker's own facts, equally legible; a dash with a reason for the rest
-  const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: m?.holders.count ?? null, holdersNote: m?.holders.countNote ?? "This site has not read the holders.", feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
+  const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: m?.holders.count ?? null, holdersNote: m?.holders.countNote ?? "This site has not read the holders.", pool: m?.pool ?? null, poolNote: m?.poolNote ?? null, dates: m?.dates ?? null, feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
   const latest = [...d.receipts].filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
   const nextAt = s.next.nextCloseTime ?? s.next.nextCheckAt;
   const burnFacts: FactRow[] = [
@@ -139,6 +142,7 @@ export default function TokenPage() {
           <div className="flex flex-wrap items-center gap-1.5"><VenueChip oracle={s.oracle} />{m?.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}{s.status !== "live" && <span className="bt-chip bt-chip-draft">{s.status}</span>}{prof?.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{prof.badge}</span>}<span className="text-xs text-neutral-500">{s.cluster}, {s.launchedAt ? `launched ${ago(s.launchedAt, now)}` : "not launched"}</span></div>
           <h1 className="text-2xl font-semibold leading-tight">{s.name} <span className="font-mono text-lg text-neutral-400">${s.ticker}</span></h1>
           <p className="text-neutral-300">{prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey}</p>
+          {s.stated && <p className="text-xs text-neutral-400" data-stated>{statedSentences(s.stated, s.stated.finalAfter)}</p>}
           <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
             <span className="font-mono" title={s.mint}>CA {short(s.mint)}</span><CopyButton text={s.mint} label="copy address" />
             {/* growth batch: the program's own word on this mint (verifyMint.ts) — the verifier page answers for any mint */}
@@ -215,6 +219,7 @@ export default function TokenPage() {
         })()}
         <section aria-label="Burn log">
           <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {s.burned.pctOfSupply.toFixed(2)}% of the supply. Each receipt below can be checked in your browser.</p>
+          <p className="mb-2 flex flex-wrap gap-x-4 text-xs"><a className="underline" href={csvHref(s.ticker, "burns")} download>{CSV_LINK_COPY.burnsLink}</a><a className="underline" href={csvHref(s.ticker, "readings")} download>{CSV_LINK_COPY.readingsLink}</a><a className="underline" href={feedHref({ coin: s.ticker }, "rss")}>{COIN_FEED_LINK}</a></p>
           {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? afterGraduation : "The next result that counts prints the first one."}</p> : (
             <ol className="bt-tape">
               {rows.map((b) => (
@@ -283,12 +288,12 @@ export default function TokenPage() {
         <p className="text-xs text-neutral-500" data-rule-footer>{s.disclosure.disclaimer}</p>
       </div>
 
-      {hasHolders && m?.holders.top && (
+      {hasHolders && m?.holders.top10 && (
         <div id="panel-holders" role="tabpanel" aria-labelledby="tab-holders" hidden={tab !== "holders"}>
           <section className={card} aria-label="Holders">
             <h2 className="font-medium">The largest holders</h2>
-            <ol className="mt-2 space-y-0.5 text-xs">{m.holders.top.slice(0, 20).map((h, i) => <li key={h.account} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {short(h.owner ?? h.account)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct.toFixed(2)}%</span></li>)}</ol>
-            <p className="mt-2 text-xs text-neutral-500">{m.holders.topNote} {m.holders.count === null ? m.holders.countNote : `There are ${m.holders.count} holders.`}</p>
+            <ol className="mt-2 space-y-0.5 text-xs">{m.holders.top10.map((h, i) => <li key={h.owner} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {short(h.owner)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct === null ? h.amount : `${h.pct.toFixed(2)}%`}</span></li>)}</ol>
+            <p className="mt-2 text-xs text-neutral-500">{holdersShareLine(m.holders.top10Pct, m.holders.top10PctUnlabelled)} {m.holders.count === null ? m.holders.countNote : `There are ${m.holders.count} holders.`}</p>
           </section>
         </div>
       )}

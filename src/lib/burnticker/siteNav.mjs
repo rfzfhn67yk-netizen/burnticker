@@ -29,6 +29,8 @@ export const LEARN_NAV = [
   { label: "Who runs this", href: "/burnticker/operator", kind: "app" },   // website-15 item 16: the address stays /operator
   { label: "Whitepaper", href: "/whitepaper.html", kind: "static" },
   { label: "Docs and API", href: "/burnticker/docs", kind: "app" },
+  { label: "Terms", href: "/burnticker/terms", kind: "app" },
+  { label: "Privacy", href: "/burnticker/privacy", kind: "app" },
   { label: "X", href: "https://x.com/BurnTicker", kind: "external" },
 ];
 
@@ -109,8 +111,15 @@ export const FOOTER_COPY = {
   notAdvice: "Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing. A coin's rule says what its supply does when a public result settles, never what its price does. Nothing on this site is investment advice.",
   affiliation: "Burnticker and its coins are not affiliated with any team, league, candidate, agency or market.",
   chain: "If a page and the chain disagree, the chain is right.",
+  legal: "Read the terms of use and the privacy page.",
   sources: "The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia and Polymarket. None of them is affiliated with any coin or endorses one.",
 };
+
+/** The words of FOOTER_COPY.legal that link to the terms and privacy pages (polish-1 wiring). */
+export const FOOTER_LEGAL_LINKS = [
+  { words: "terms of use", href: "/burnticker/terms" },
+  { words: "privacy page", href: "/burnticker/privacy" },
+];
 
 /** The phone tab bar, on every page under 900 px (review item 16). @type {{ label: string; href: string; glyph: string }[]} */
 export const SITE_TABS = [
@@ -214,6 +223,7 @@ export function shellFooterHtml(o) {
     `    <p><b>NOT ADVICE.</b> ${esc(FOOTER_COPY.notAdvice)}</p>`,
     `    <p>${esc(FOOTER_COPY.affiliation)} ${esc(FOOTER_COPY.chain)}</p>`,
     `    <p class="sh-slip-dim">${esc(FOOTER_COPY.sources)}</p>`,
+    `    <p data-legal-line>${FOOTER_LEGAL_LINKS.reduce((h, l) => h.replace(esc(l.words), `<a href="${esc(origin + l.href)}">${esc(l.words)}</a>`), esc(FOOTER_COPY.legal))}</p>`,
     `    <div class="sh-rule"></div>`,
     `    <p data-operator-line>${esc(o.operatorLine)}</p>`,
     `    <div class="sh-rule"></div>`,

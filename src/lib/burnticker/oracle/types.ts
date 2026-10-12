@@ -1,3 +1,4 @@
+import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStated";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
 
@@ -19,6 +20,8 @@ export interface SeriesSummary {
   /** The venue's named settlement source (name + URL), when it publishes one. */
   settlementSource: { name: string; url: string } | null;
   tags: string[];
+  /** sources-2: a one-market Polymarket selector's stated source and dispute window (oracle/polymarket.ts polyStated). Display only. */
+  stated?: { resolutionSource: StatedSource; finalAfter: FinalAfter };
 }
 
 export interface OpenMarketSummary { ticker: string; title: string; closeTime: string | null; yesPrice: number | null; strikeType: string | null; floorStrike: number | null; capStrike: number | null }

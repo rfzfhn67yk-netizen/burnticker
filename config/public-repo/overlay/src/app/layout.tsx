@@ -9,6 +9,7 @@ import { TabBar } from "@/app/burnticker/_components/TabBar";
 import { THEME_BOOT } from "@/app/burnticker/_components/theme";
 import { hostCluster } from "@/lib/burnticker/launchAvailability";
 import { META_TITLE as TITLE, metaDescription } from "@/lib/burnticker/siteMeta";
+import { FEED_COPY, feedHref } from "@/lib/burnticker/feeds";
 import { ShellWalletProviders } from "@/app/burnticker/_components/ShellWalletProviders";
 
 // site audit #19 (2026-10-11): the two families are self-hosted by next/font (one same-origin stylesheet, font-display swap, no request to
@@ -31,6 +32,10 @@ export async function generateMetadata(): Promise<Metadata> {
     icons: { icon: [{ url: "/burnticker/brand/favicon.png", type: "image/png", sizes: "32x32" }], apple: "/burnticker/brand/apple-touch-icon.png" },
     openGraph: { type: "website", siteName: "Burnticker", title: TITLE, description, url: "/burnticker", images: [{ url: "/burnticker/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
     twitter: { card: "summary_large_image", site: "@BurnTicker", title: TITLE, description, images: ["/burnticker/brand/og.png"] },
+    alternates: { types: {
+      "application/rss+xml": [{ url: feedHref("receipts", "rss"), title: FEED_COPY.receiptsTitle }, { url: feedHref("next-results", "rss"), title: FEED_COPY.nextTitle }],
+      "application/feed+json": [{ url: feedHref("receipts", "json"), title: FEED_COPY.receiptsTitle }, { url: feedHref("next-results", "json"), title: FEED_COPY.nextTitle }],
+    } },
   };
 }
 

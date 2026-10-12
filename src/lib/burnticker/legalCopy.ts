@@ -16,7 +16,7 @@ import { FOOTER_COPY } from "@/lib/burnticker/siteNav.mjs";
  *   a coin's details and image pinned on Arweave      api/handlers.ts (launches are refused when the pin fails)
  *   the chart on a graduated coin's page              t/[ticker]/page.tsx (GeckoTerminal's embed, loaded from its own site)
  *
- * The takedown route (contact@burnticker.com, the image off the site within one day, the Arweave copy permanent), the creator's
+ * The takedown route (contact@burnticker.com, the Arweave copy permanent), the creator's
  * responsibilities and "governing law not decided yet" are the owner's words from the brief. The operator line and the not-advice
  * sentence are imported, never retyped, so the tests that pin them keep holding.
  */
@@ -25,7 +25,7 @@ export interface LegalSection { id: string; heading: string; paragraphs: string[
 
 export const CONTACT_EMAIL = "contact@burnticker.com";
 export const GOVERNING_LAW_SENTENCE = "The law that governs these terms has not been decided yet. This page says so plainly instead of guessing.";
-export const TAKEDOWN_SENTENCE = `To ask for an image to be taken down, email ${CONTACT_EMAIL}. The site stops showing the image within one day of the request. The copy stored on Arweave when the coin was created is permanent, and nobody can delete it.`;
+export const TAKEDOWN_SENTENCE = `To ask for an image to be taken down, email ${CONTACT_EMAIL}. The copy stored on Arweave when the coin was created is permanent, and nobody can delete it.`;
 
 export const TERMS_TITLE = "Terms of use";
 export const TERMS_INTRO = "These terms cover burnticker.com, its pages and its public API. They are short on purpose. By using the site, you agree to them.";
@@ -129,7 +129,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
 
 /** For the merge reviewer (WIRING.md): the launch form's line beside the image option, and the footer receipt's one line. */
 export const IMAGE_RIGHTS_LINE = "By adding an image, you confirm that you have the right to use it. The terms of use say how an image is taken down.";
-export const FOOTER_LEGAL_LINE = "Read the terms of use and the privacy page.";
+export const FOOTER_LEGAL_LINE = FOOTER_COPY.legal;   // the footer receipt prints it from siteNav.mjs (static pages and app alike)
 
 /** Every sentence the two pages print, for the copy lint and the plain-English test. */
 export const ALL_LEGAL_COPY: string[] = [IMAGE_RIGHTS_LINE, FOOTER_LEGAL_LINE, TERMS_TITLE, TERMS_INTRO, PRIVACY_TITLE, PRIVACY_INTRO, ...[...TERMS_SECTIONS, ...PRIVACY_SECTIONS].flatMap((s) => [s.heading, ...s.paragraphs])];

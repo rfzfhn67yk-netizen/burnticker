@@ -131,7 +131,7 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   "deficitQueueCore.mjs", "activity.ts", "upcoming.ts", "progress.ts", "burnWalkthrough.ts", "watchlist.ts", "retirementCopy.ts", "creatorCopy.ts",
   "sharePreview.ts", "duplicateRule.ts", "raisePresets.ts",
   // polish-1 (2026-10-12): the terms and privacy pages, the feeds' fixed sentences, the CSV routes' refusals
-  "legalCopy.ts", "feeds.ts", "csvServe.ts",
+  "legalCopy.ts", "feeds.ts", "csvServe.ts", "exportLinks.ts",
   // sources-2 (2026-10-12): the new publishers' coin text, the fade side's choice and Polymarket's stated-source sentences
   "sources/fedreg.ts", "sources/launchLibrary.ts", "sources/usgs.ts", "sources/github.ts", "sources/youtube.ts", "sources/polyStated.ts", "inverse.ts"]
   .map((f) => `src/lib/burnticker/${f}`);

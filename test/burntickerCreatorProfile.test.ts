@@ -91,7 +91,7 @@ describe("the rights line and the takedown route", () => {
   test("both pass the copy lint; the review card shows the rights line; the operator page gives the route; the site honors the list", () => {
     clean(RIGHTS_LINE); clean(TAKEDOWN_LINE);
     assert.equal(RIGHTS_LINE, "I have the right to use this image. A team, league or company mark is used at my own risk.");
-    assert.equal(TAKEDOWN_LINE, "To ask for an image to be removed from this site, email contact@burnticker.com; the site stops showing it within one day. The copy on Arweave is permanent and cannot be removed.");
+    assert.equal(TAKEDOWN_LINE, "To ask for an image to be removed from this site, email contact@burnticker.com. The copy on Arweave is permanent and cannot be removed.");
     assert.match(fs.readFileSync("src/app/burnticker/launch/ProfileFields.tsx", "utf8"), /<span data-rights-line>\{RIGHTS_LINE\}<\/span>/);
     assert.match(fs.readFileSync("src/app/burnticker/operator/page.tsx", "utf8"), /<p className="text-xs" data-takedown><MailSafe text=\{TAKEDOWN_LINE\} \/><\/p>/);
     const list = JSON.parse(fs.readFileSync("config/burnticker/image-takedowns.json", "utf8")) as { mints: string[] };

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { EVENT_LABEL, type ActivityEvent } from "@/lib/burnticker/activity";
 import { SETTLEMENT_LABEL, UPCOMING_EMPTY, type UpcomingRow } from "@/lib/burnticker/upcoming";
+import { FEEDS_PATH, type FeedFormat } from "@/lib/burnticker/exportLinks";
+export { FEEDS_PATH, feedHref, COIN_FEED_LINK, type FeedFormat } from "@/lib/burnticker/exportLinks";
 
 /**
  * THE FEEDS (polish-1, 2026-10-12; PLATFORM-NEXT-2-BRIEF.md item 5). Three feeds, each as RSS 2.0 and as JSON Feed 1.1, built from the
@@ -16,7 +18,6 @@ import { SETTLEMENT_LABEL, UPCOMING_EMPTY, type UpcomingRow } from "@/lib/burnti
  */
 
 export type FeedId = "receipts" | "next-results" | `coin:${string}`;
-export type FeedFormat = "rss" | "json";
 export interface FeedItem { id: string; title: string; text: string; url: string; /** ISO; null when the row's time is not read */ date: string | null }
 export interface FeedDoc { id: FeedId; title: string; description: string; homeUrl: string; rssUrl: string; jsonUrl: string; items: FeedItem[]; /** set when items is empty: the honest reason */ emptyText: string | null; updated: string }
 
@@ -24,7 +25,6 @@ export const FEED_CACHE_SEC = 300;
 export const FEED_ITEM_LIMIT = 50;
 export const RSS_TYPE = "application/rss+xml; charset=utf-8";
 export const JSON_FEED_TYPE = "application/feed+json; charset=utf-8";
-export const FEEDS_PATH = "/api/burnticker/feeds";
 
 export const FEED_COPY = {
   receiptsTitle: "Burnticker burn receipts",
@@ -42,9 +42,6 @@ export const FEED_COPY = {
   badPath: "Feed addresses end in .rss or .json, for example receipts.rss or coin/DEFICIT.json.",
 };
 
-/** The feed addresses the layout and the coin page advertise with <link rel="alternate"> (WIRING.md). */
-export const feedHref = (feed: "receipts" | "next-results" | { coin: string }, fmt: FeedFormat) => `${FEEDS_PATH}/${typeof feed === "string" ? feed : `coin/${encodeURIComponent(feed.coin.toUpperCase())}`}.${fmt}`;
-export const COIN_FEED_LINK = "Follow this coin's feed";
 
 /** "receipts.rss" → { name: "receipts", fmt: "rss" }; null for anything else. */
 export function parseFeedFile(file: string, namePattern = /^[A-Za-z0-9-]{2,44}$/): { name: string; fmt: FeedFormat } | null {

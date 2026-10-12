@@ -1,5 +1,7 @@
 import { windowKindOf, PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
 import type { BurnRule } from "@/lib/burnticker/rules";
+import type { DateReadJson, LifecycleDatesJson } from "@/lib/burnticker/pageTypes";
+import { MCAP_POOL_MEANING, NOT_READ } from "@/lib/burnticker/cardView";
 
 // rules.ts reads files (node:fs) and cannot ship to the browser; these two values mirror it and test/burntickerCoinPage.test.ts pins them.
 export const RULES_SCHEMA = "burnticker.rules/v1";
@@ -19,6 +21,16 @@ export const COIN_TAB_LABEL: Record<CoinTab, string> = { burns: "Burn log", rule
 /** The tabs a coin page shows, in order. Holders is left out, not shown empty, when no holder data was read. */
 export function coinTabs(hasHolders: boolean): CoinTab[] {
   return hasHolders ? ["burns", "rule", "holders"] : ["burns", "rule"];
+}
+
+/** The Holders tab's share line (indexer-1): the ten largest wallets' share of the supply, then the same without the labelled wallets (the
+ * bonding curve, the trading pool, the burn pool and the creator). A share that was not read is left out, never shown as zero. */
+export function holdersShareLine(top10Pct: number | null | undefined, top10PctUnlabelled: number | null | undefined): string {
+  const pct = (n: number) => `${n.toFixed(2)}%`;
+  return [
+    typeof top10Pct === "number" ? `The ten largest wallets hold ${pct(top10Pct)} of the supply.` : null,
+    typeof top10PctUnlabelled === "number" ? `Leaving out the labelled wallets, the ten largest hold ${pct(top10PctUnlabelled)}.` : null,
+  ].filter(Boolean).join(" ");
 }
 
 /** The tab a page opens on: the one its address names (#rule, #holders) when that tab exists, else the burn log. */
@@ -107,11 +119,18 @@ export interface FactInput {
   curve: { raised: string; threshold: string; quote: string; marketCap?: string | null } | null; curveNote: string | null;
   graduatedPool: string | null; holdersCount: number | null; holdersNote: string;
   feesCurveBps: number; feesPoolBps: number; readAt: string | null;
+  /** indexer-1: the graduated coin's Raydium pool as read, why it was not, and the lifecycle dates read on chain */
+  pool?: { marketCap: string } | null; poolNote?: string | null; dates?: LifecycleDatesJson | null;
 }
 const NOT_LAUNCHED = "Not applicable";
 const NOT_READ_HERE = "Not read here";
 const dec2 = (s: string) => { const n = Number(s); return Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString("en-US") : s; };
 const pctOf = (bps: number) => `${Math.round(bps) / 100}%`;
+/** A lifecycle date row: the day with a link to its transaction when read, else the read's own reason. */
+function dateRow(key: string, label: string, d: DateReadJson, cluster: string): FactRow {
+  if (d.state === "read") return { key, label, value: d.at.slice(0, 10), note: null, href: `https://explorer.solana.com/tx/${d.signature}${cluster === "mainnet" ? "" : `?cluster=${cluster}`}` };
+  return { key, label, value: d.state === "none" ? NOT_LAUNCHED : NOT_READ_HERE, note: d.reason };
+}
 export function marketFacts(i: FactInput): FactRow[] {
   const live = i.status !== "draft" && i.status !== "expired";
   const na = (why: string) => ({ value: NOT_LAUNCHED, note: why });
@@ -121,13 +140,14 @@ export function marketFacts(i: FactInput): FactRow[] {
     { key: "network", label: "Network", value: `Solana ${i.cluster}`, note: i.cluster === "mainnet" ? "The real Solana network, where trades use real SOL." : "A practice network whose tokens have no money value." },
     { key: "mint", label: "Mint address", value: i.mint, note: "The coin's unique address. Copy it to find the coin in a wallet.", href: i.mintUrl },
     { key: "quote", label: "Traded against", value: quote, note: "The coin trades against SOL, Solana's own coin." },
-    { key: "mcap", label: "Market cap", ...(!live ? na(notLaunched) : i.curve?.marketCap && i.phase !== "graduated" ? { value: `${dec2(i.curve.marketCap)} ${quote}`, note: "The curve's current SOL per token times the total supply, read from the pool on chain." } : { value: NOT_READ_HERE, note: i.phase === "graduated" ? "After graduation this number comes from the Raydium pool, and this site does not read that pool's reserves yet." : i.curveNote || "This site has not read the coin's curve." }) },
+    { key: "mcap", label: "Market cap", ...(!live ? na(notLaunched) : i.curve?.marketCap && i.phase !== "graduated" ? { value: `${dec2(i.curve.marketCap)} ${quote}`, note: "The curve's current SOL per token times the total supply, read from the pool on chain." } : i.phase === "graduated" && i.pool?.marketCap ? { value: `${dec2(i.pool.marketCap)} ${quote}`, note: MCAP_POOL_MEANING } : { value: NOT_READ_HERE, note: i.phase === "graduated" ? i.poolNote || NOT_READ.mcapPool : i.curveNote || "This site has not read the coin's curve." }) },
     { key: "curve", label: i.phase === "graduated" ? "Trading pool" : "Curve", ...(!live ? na(notLaunched) : i.phase === "graduated" ? { value: i.graduatedPool ?? "Graduated", note: "The curve is complete. The coin trades in its own Raydium pool, and that pool's liquidity is locked." } : i.curve ? { value: `${dec2(i.curve.raised)} / ${dec2(i.curve.threshold)} ${quote} raised`, note: i.phase === "migrating" ? "The curve is full, and the coin is moving to its Raydium pool." : "The coin graduates to its own Raydium pool when the curve has raised its full amount." } : { value: NOT_READ_HERE, note: i.curveNote || "This site has not read the coin's curve." }) },
     { key: "volume", label: "Trading volume, 24 hours", value: NOT_READ_HERE, note: "This site does not read trading volume. The chart on this page, when there is one, comes from GeckoTerminal." },
     { key: "liquidity", label: "Liquidity", value: !live ? NOT_LAUNCHED : NOT_READ_HERE, note: !live ? notLaunched : "This site does not read the pool's reserves yet." },
     { key: "holders", label: "Holders", value: typeof i.holdersCount === "number" ? i.holdersCount.toLocaleString("en-US") : NOT_READ_HERE, note: typeof i.holdersCount === "number" ? null : i.holdersNote },
     { key: "creator", label: "Creator", value: i.creator, note: "The wallet that launched the coin.", href: i.creatorUrl },
     { key: "launched", label: "Launched", value: i.launchedAt ? `${i.launchedAt.slice(0, 10)}` : NOT_LAUNCHED, note: i.launchedAt ? null : notLaunched },
+    ...(i.dates ? [dateRow("graduated", "Graduated", i.dates.graduated, i.cluster), dateRow("registered", "Pool registered", i.dates.registered, i.cluster)] : []),
     { key: "fees", label: "Fees per trade", value: `${pctOf(i.feesCurveBps)} on the curve, ${pctOf(i.feesPoolBps)} in the pool`, note: "Raydium shows how far your trade moves the pool, and your slippage setting, before you sign. Burnticker takes no order." },
     { key: "freshness", label: "Read at", value: i.readAt ? `${i.readAt.slice(0, 16).replace("T", " ")} UTC` : NOT_READ_HERE, note: i.readAt ? null : "This site has not read the pool." },
   ];

@@ -13,6 +13,7 @@ import { progressOf } from "@/lib/burnticker/progress";
 import { QueuePanel } from "../../_components/QueuePanel";
 import { ProgressStrip } from "../../_components/ProgressStrip";
 import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
+import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
 
 /**
  * /burnticker/t/DEFICIT BEFORE THE COIN IS REGISTERED ON THIS HOST (website brief 2026-10-11 §1). A useful page instead of "no token":
@@ -46,7 +47,7 @@ export function DeficitPrelaunch({ fallbackSite }: { fallbackSite: string }) {
             <ReadinessPanel r={r} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
             {d.queue && <QueuePanel q={d.queue} />}
             <section className={card} aria-label="What launch day looks like"><h2 className="font-medium">What happens after launch</h2><p className="mt-1 text-xs text-neutral-300">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once {c ? `${Number(c.threshold)} SOL` : "its raise"} has been raised, and a seed gift to the burn pool does not count toward that. {c ? "This site read that raise from the coin's own pool." : "The raise is read from the coin's own pool once it exists."} Then its Raydium pool is registered and verified. Only after that can a Treasury reading with at least one full $1B unit start a burn.</p></section>
-            {d.keeper && <section className={card} aria-label="Burn log"><h2 className="font-medium">On chain so far</h2>{d.keeper.events.length === 0 ? <p className="mt-1 text-xs text-neutral-400">The keeper has not recorded anything on chain yet. Signed readings, burns, the graduation and the pool registration appear here as they happen.</p> : <ol className="bt-tape mt-2">{d.keeper.events.map((e) => <li key={`${e.kind}-${e.at}-${e.text}`} className="bt-tape-row text-xs" data-kind={e.kind}><span className="bt-ticker-kind">{EVENT_LABEL[e.kind]}</span><a className="underline" href={e.href}>{e.text}</a></li>)}</ol>}</section>}
+            {d.keeper && <section className={card} aria-label="Burn log"><h2 className="font-medium">On chain so far</h2>{d.keeper.events.length === 0 ? <p className="mt-1 text-xs text-neutral-400">The keeper has not recorded anything on chain yet. Signed readings, burns, the graduation and the pool registration appear here as they happen.</p> : <ol className="bt-tape mt-2">{d.keeper.events.map((e) => <li key={`${e.kind}-${e.at}-${e.text}`} className="bt-tape-row text-xs" data-kind={e.kind}><span className="bt-ticker-kind">{EVENT_LABEL[e.kind]}</span><a className="underline" href={e.href}>{e.text}</a></li>)}</ol>}<p className="mt-2 flex flex-wrap gap-x-4 text-xs"><a className="underline" href={csvHref(d.ticker, "burns")} download>{CSV_LINK_COPY.burnsLink}</a><a className="underline" href={csvHref(d.ticker, "readings")} download>{CSV_LINK_COPY.readingsLink}</a><a className="underline" href={feedHref({ coin: d.ticker }, "rss")}>{COIN_FEED_LINK}</a></p></section>}
           </>;
         })()}
         <section className={card} aria-label="The rule">

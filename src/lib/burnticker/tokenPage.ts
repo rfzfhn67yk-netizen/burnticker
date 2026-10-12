@@ -15,12 +15,15 @@ import { fullSpendUnits, unitStep, windDownUnits, type SettledEvent } from "@/li
 import { feedById } from "@/lib/burnticker/catalogue";
 import type { ImpliedChance } from "@/lib/burnticker/oracle/types";
 import type { AttesterRow, FeedState, ReadingRow, ReceiptRow, Registry, TokenRow, TokenState } from "@/lib/burnticker/registry";
-import type { LifecycleJson, PairClauseJson, PairCounterpart, PairForwardJson, PairSideSummary, ReceiptJson, TokenProgramJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
+import type { LifecycleJson, PairClauseJson, PairCounterpart, PairForwardJson, PairSideSummary, ReceiptJson, StatedJson, TokenProgramJson, TokenStatusJson } from "@/lib/burnticker/pageTypes";
 import { pairDailyText, platformDailyText, tokenDayText } from "@/lib/launch/dailyPost";
 import { parseBuybackMemo as parseProgramBuybackMemo, parseDebtMemo as parseProgramVaultMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend as programBuybackSpend, formatDate as formatU32 } from "@/lib/burnReceipts/math";
 import type { ProgramConfigView } from "@/lib/burnKeeper/programPort";
-import { buildMarketJson, type MarketInput } from "@/lib/burnticker/market";
+import { buildMarketJson, type CpmmMarket, type MarketInput } from "@/lib/burnticker/market";
+import type { HoldersRead } from "@/lib/burnticker/holders";
+import type { LifecycleDates } from "@/lib/burnticker/lifecycleDates";
+import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { PAIR_STATE_NAMES, parseForwardMemo, type PairLinks } from "@/lib/burnticker/pairForward";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
@@ -55,6 +58,12 @@ export interface TokenPageInput {
   lifecycle?: LifecycleJson | null;
   /** The LaunchLab pool and top holders as read this cycle (market.ts readMarket); absent/null on a host without an RPC → the page shows "—". */
   market?: MarketInput | null;
+  /** indexer-1 (WIRING.md step 1): the graduated pool's read, the holder count and the lifecycle dates; absent when not read */
+  cpmm?: { market: CpmmMarket | null; error: string | null } | null;
+  holders?: HoldersRead | null;
+  dates?: LifecycleDates | null;
+  /** sources-2: a one-market Polymarket coin's stated source and dispute window (oracle/polymarket.ts polyStated); absent when not read */
+  stated?: { resolutionSource: StatedSource; finalAfter: FinalAfter } | null;
   /** LP locked forever (2026-10-10): the lock as read + recorded claims (lpLockPage.ts lpLockBlock); absent → the policy alone. */
   lp?: LpLockJson | null;
 }
@@ -346,7 +355,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
   const program = buildTokenProgram(i);
   const lastBurn = [...confirmed].filter((b) => (b.burnRaw ?? ZERO) > ZERO).sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   return {
-    schema: TOKEN_STATUS_SCHEMA, generatedAt: new Date(i.now).toISOString(), ticker: t.ticker, name: t.name, mint: t.mint, cluster: i.chain.cluster, status: t.status, launchedAt: t.launchTx ? t.baselineAt : null,
+    schema: TOKEN_STATUS_SCHEMA, generatedAt: new Date(i.now).toISOString(), ticker: t.ticker, name: t.name, mint: t.mint, cluster: i.chain.cluster, status: t.status, launchedAt: i.dates?.created.state === "read" ? i.dates.created.at : t.launchTx ? t.baselineAt : null,
     oracle: rule.oracle, selectorKey: t.selectorKey, seriesTitle: i.seriesTitle, mode: i.locked.mode,
     rules: { sha256: i.locked.sha256, sha12: i.locked.sha12, statement: ruleStatement(rule, { seriesTitle: i.seriesTitle }), file: "rules.json", oneShot: !!rule.market },
     addresses: (() => { let feeWsol: string | null = null; try { feeWsol = i.chain.programId ? burnPoolAddresses(i.chain.programId, t.mint).feeWsol : null; } catch { feeWsol = null; } return { mint: t.mint, mintUrl: addr(t.mint)!, feePda: t.feePda, feePdaUrl: addr(t.feePda)!, feeWsol, feeWsolUrl: addr(feeWsol), vault: t.vault, vaultUrl: addr(t.vault), creator: t.creator, creatorUrl: addr(t.creator)!, programId: i.chain.programId, poolId: t.poolId, launchTx: t.launchTx, launchTxUrl: t.launchTx ? explorerUrl(i.chain.cluster, t.launchTx) : null }; })(),
@@ -365,8 +374,9 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     program,
     profile: { imageUrl: t.imageUrl, description: t.description.replace(descriptionFooter(i.locked), "").trim(), creatorText: creatorTextOf(t.description.replace(descriptionFooter(i.locked), "").trim()), links: t.links, oneLiner: ruleOneLiner(rule, i.seriesTitle), badge: badgeFromText(rule, t.description, t.status === "retired"), note: i.meta?.creatorNote ?? "", affiliation: AFFILIATION_LINE },
     pinned: i.meta ? { metadataUri: i.meta.metadataUri, metadataTx: i.meta.metadataTx, metadataSha256: i.meta.metadataSha256, imageUri: i.meta.imageUri, imageTx: i.meta.imageTx, imageSha256: i.meta.imageSha256, hosted: i.meta.hosted, expectedDescription: `${badgeFromText(rule, t.description)}\n${t.description}` } : null,
-    market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market }),
+    market: buildMarketJson({ cluster: i.chain.cluster, mint: t.mint, status: t.status, poolId: t.poolId, graduatedPool: program?.pool.registered && t.status !== "draft" && t.status !== "expired" ? program.pool.address : null, read: i.market, cpmm: i.cpmm, holders: i.holders, dates: i.dates }),
     lifecycle: i.lifecycle ?? null,
+    stated: i.stated && rule.oracle === "polymarket" && rule.market ? { phrase: i.stated.resolutionSource.phrase, text: i.stated.resolutionSource.text, crossRead: i.stated.resolutionSource.crossRead ? { text: i.stated.resolutionSource.crossRead.text } : null, finalAfter: { text: i.stated.finalAfter.text, ifDisputed: i.stated.finalAfter.ifDisputed } } : null,
     pair: i.pair ? { ...i.pair, tally: { burnsThis: confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO).length, burnsOther: i.pair.counterpart.burns, burnedThis: rawToTokens(totalRaw, DECIMALS), burnedOther: i.pair.counterpart.burned, supplyThis: rawToTokens(current, DECIMALS), supplyOther: i.pair.counterpart.supply }, pageUrl: `/burnticker/p/${i.pair.pairId}` } : null,
   };
 }
@@ -530,8 +540,12 @@ export interface PlatformIndexToken {
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null;
   /** website-13: the curve's market cap in the quote, read from the pool (market.ts curveMarketCap); null when not read or after graduation. */
   marketCap?: string | null;
-  /** website-13: the holder count when one was read (it needs an indexer this site does not run, so it is null today). */
+  /** the holder count when one was read (indexer-1: holders.ts readHolders); null when not read, with holdersNote saying why */
   holders?: number | null;
+  /** indexer-1: why the holder count or the graduated pool was not read */
+  holdersNote?: string | null; poolNote?: string | null;
+  /** sources-2: a one-market Polymarket coin's stated source and dispute window */
+  stated?: StatedJson | null;
 }
 export interface AuditBadge { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean }
 export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary; winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null }
@@ -554,7 +568,9 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
     ticker: s.ticker, name: s.name, mint: s.mint, oracle: s.oracle, selectorKey: s.selectorKey, seriesTitle: s.seriesTitle, mode: s.mode, status: s.status, launchedAt: s.launchedAt ?? null, burned: s.burned.total, burns: s.burned.count, pctOfSupply: s.burned.pctOfSupply, impliedChance: null, nextCheckAt: s.next.nextCheckAt, pairId: s.pair?.pairId ?? null,
     imageUrl: s.profile?.imageUrl ?? null, creatorText: s.profile?.creatorText ?? null, links: s.profile?.links ?? [], oneLiner: s.profile?.oneLiner ?? (s.seriesTitle ?? s.selectorKey), lastBurnAt: s.burned.lastAt ?? null, nextMarket: s.next.nextMarket, nextCloseTime: s.next.nextCloseTime, oneShot: s.rules.oneShot, badge: s.profile?.badge ?? null,
     phase: s.market?.phase ?? null, progressPct: c ? c.progressPct : s.market?.phase === "graduated" ? 100 : null, raised: c?.raised ?? null, threshold: c?.threshold ?? null, quote: c?.quote ?? null,
-    marketCap: c?.marketCap ?? null, holders: s.market?.holders.count ?? null,
+    marketCap: c?.marketCap ?? s.market?.pool?.marketCap ?? null, holders: s.market?.holders.count ?? null,
+    holdersNote: s.market && s.market.holders.count === null ? s.market.holders.countNote || null : null, poolNote: s.market?.poolNote ?? null,
+    stated: s.stated ?? null,
   };
 }
 

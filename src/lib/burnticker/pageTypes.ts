@@ -53,9 +53,27 @@ export interface MarketJson {
   phase: CurvePhase | null; curve: CurveJson | null; curveNote: string;
   /** The CPMM pool the curve migrated to, as registered in the burn program (null before graduation or with no program read). */
   graduatedPool: string | null;
-  holders: { count: number | null; countNote: string; top: HolderRow[] | null; topNote: string };
+  holders: { count: number | null; countNote: string; top: HolderRow[] | null; topNote: string;
+    /** indexer-1 (holders.ts readHolders): the ten largest wallets, labelled, and their share of supply with and without the labelled ones */
+    top10?: HolderTopJson[] | null; top10Pct?: number | null; top10PctUnlabelled?: number | null };
   trade: TradeLinks; chart: ChartJson; readAt: string | null; error: string | null;
+  /** indexer-1: the graduated coin's Raydium pool as read (market.ts readCpmmMarket); null before graduation or when not read */
+  pool?: PoolMarketJson | null;
+  /** what the pool figure means, or why it was not read */
+  poolNote?: string;
+  /** indexer-1: when the coin was created, graduated and its pool registered, read on chain (lifecycleDates.ts) */
+  dates?: LifecycleDatesJson | null;
 }
+/** market.ts CpmmMarket, as status.json carries it. */
+export interface PoolMarketJson { poolId: string; mint: string; quote: "SOL"; tokenReserve: string; solReserve: string; supply: string; marketCap: string; status: number; readAt: string }
+/** holders.ts HolderTopRow. */
+export interface HolderTopJson { owner: string; amount: string; pct: number | null; label: string | null }
+/** lifecycleDates.ts DateRead and LifecycleDates. */
+export type DateReadJson =
+  | { state: "read"; at: string; blockTime: number; slot: number; signature: string }
+  | { state: "none"; reason: string }
+  | { state: "unavailable"; reason: string };
+export interface LifecycleDatesJson { created: DateReadJson; graduated: DateReadJson; registered: DateReadJson; readAt: string }
 /** The creator's card fields (from the launch request, in the registry) and the one-liner derived from the locked rule (coinCard.ts). */
 export interface TokenProfileJson { imageUrl: string | null; description: string; /** website-15 item 13: the creator's own text, after the generated paragraph; null when none */ creatorText?: string | null; links: { label: string; url: string }[]; oneLiner: string; /** the window badge (describe.ts windowBadge): 2026 SEASON / PERPETUAL / ONE-SHOT · <date> … */ badge?: string; /** the creator's note (≤ 140, its own box: "creator's note — not part of the rule") */ note?: string; /** the standing line on every coin page and card */ affiliation?: string }
 export interface PinnedJson { metadataUri: string | null; metadataTx: string | null; metadataSha256: string | null; imageUri: string | null; imageTx: string | null; imageSha256: string | null; hosted: boolean; /** the token metadata description the pinned JSON must carry, byte for byte */ expectedDescription: string }
@@ -134,4 +152,8 @@ export interface TokenStatusJson {
    * retired-coin sweep, and the one line the coin page shows ("retired · swept <date> · pool ≈ 0"). Absent on older status files.
    */
   lifecycle?: LifecycleJson | null;
+  /** sources-2: a one-market Polymarket coin's stated source and dispute window (sources/polyStated.ts). Absent on older files; null when not read. */
+  stated?: StatedJson | null;
 }
+/** Polymarket's stated source (`text` verbatim, `phrase` for coin text), the cross-read, and the dispute window. Display only. */
+export interface StatedJson { phrase: string | null; text: string | null; crossRead: { text: string } | null; finalAfter: { text: string; ifDisputed: string } }

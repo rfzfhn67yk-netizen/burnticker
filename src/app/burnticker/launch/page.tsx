@@ -2,6 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import type { StatedJson } from "@/lib/burnticker/pageTypes";
+import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStated";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { previewTotals, unitStep, type SettledEvent } from "@/lib/burnticker/units";
@@ -97,7 +99,7 @@ interface SportsSide { abbr: string; name: string; nickname: string; ticker: str
 interface SportsGame { eventId: string; league: string; title: string; startsAt: string; detail: string; a: SportsSide; b: SportsSide; series: { aLoss: string; bLoss: string } }
 const recordOf = (r: string | null): { w: number; l: number; d: number; since: string } => { const m = /^(\d+)-(\d+)(?:-(\d+))?$/.exec(r ?? ""); return { w: m ? Number(m[1]) : 0, l: m ? Number(m[2]) : 0, d: m && m[3] ? Number(m[3]) : 0, since: "" }; };
 interface Side { abbr: string; marketTicker: string; label: string; nickname: string | null; name: string; ticker: string }
-interface PolyMarket { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; /** the outcome's name inside its event (Gamma groupItemTitle), when named */ outcome?: string | null }
+interface PolyMarket { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; /** the outcome's name inside its event (Gamma groupItemTitle), when named */ outcome?: string | null; /** sources-2 (oracle/polymarket.ts polyStated) */ resolutionSource?: StatedSource; finalAfter?: FinalAfter }
 interface PolyEvent { slug: string; title: string; url: string; endDate: string | null; closed: boolean; markets: PolyMarket[]; marketCount: number; refused: string[] }
 interface PolyTag { slug: string; label: string; events: number; series: string[] }
 interface PolyFound { events: PolyEvent[]; tags: PolyTag[]; markets: PolyMarket[] }
@@ -234,7 +236,7 @@ export default function LaunchWizard() {
   // A6: the summary is keyed by the draft's revision (launchReviewSync.ts) — never shown beside another draft's card
   const [reviewSlot, setReviewSlot] = useState<ReviewSlot<LaunchReview>>(EMPTY_REVIEW_SLOT);
   // L06 / L12: the event as the source states it (the full question, its link, the outcome, when it resolves, the resolution rules)
-  const [eventInfo, setEventInfo] = useState<{ question: string; url: string | null; outcome: string | null; resolves: string | null; criteria: string | null } | null>(null);
+  const [eventInfo, setEventInfo] = useState<{ question: string; url: string | null; outcome: string | null; resolves: string | null; criteria: string | null; stated?: StatedJson | null } | null>(null);
   const [scheduleDetail, setScheduleDetail] = useState<string | null>(null), [leagueDetail, setLeagueDetail] = useState<string | null>(null), [drillErr, setDrillErr] = useState<string | null>(null);
 
   const pairOn = flow === "pair";
@@ -461,10 +463,10 @@ export default function LaunchWizard() {
     if (!rule) return {};
     if (cardCtx && cardCtx.key === (rule.market ?? rule.series ?? "")) return cardCtx.ctx;
     if (pairOn && pairMode === "game" && game && sideB) return { game: { opponent: sideB.nickname ?? sideB.name, home: aHome, startsAt: game.expectedAt ?? "" } };
-    if (pick?.oracle === "polymarket") return { eventPhrase: pick.title.replace(/\s*\(resolves once\)$/, "").replace(/\?$/, "").replace(/^will\s+/i, ""), endsAt: null };
+    if (pick?.oracle === "polymarket") return { eventPhrase: pick.title.replace(/\s*\(resolves once\)$/, "").replace(/\?$/, "").replace(/^will\s+/i, ""), endsAt: null, ...(pick.market && eventInfo?.stated ? { stated: eventInfo.stated } : {}) };
     if (pick?.oracle === "catalogue" && pick.source?.unit && !/^(espn|nws|fec)\./.test(pick.series ?? "")) return { feed: { title: pick.title, sourceName: pick.source.sourceName, unitLabel: pick.source.unit.label } };
     return {};
-  }, [rule, cardCtx, pairOn, pairMode, game, sideB, aHome, pick]);
+  }, [rule, cardCtx, pairOn, pairMode, game, sideB, aHome, pick, eventInfo]);
   const text: CoinText | null = useMemo(() => { if (!rule) return null; try { return describeRule(rule, { ticker, ...textCtx }); } catch { return null; } }, [rule, ticker, textCtx]);
   const textB: CoinText | null = useMemo(() => { if (!ruleB) return null; try { return describeRule(ruleB, { ticker: tickerB, ...(pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}) }); } catch { return null; } }, [ruleB, tickerB, pairMode, game, sideA, aHome]);
   const compose = (t: CoinText | null, _fl: string | null, fallback: string) => (t ? t.paragraph.slice(0, DESCRIPTION_MAX) : fallback);
@@ -666,7 +668,7 @@ export default function LaunchWizard() {
     </div>
   );
   const chip = (v: Venue) => <span className={`ml-2 inline-block rounded px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide ring-1 ${v === "kalshi" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40" : "bg-indigo-500/15 text-indigo-300 ring-indigo-500/40"}`}>{v === "kalshi" ? "Kalshi" : "Polymarket"}</span>;
-  const pickPoly = (m: PolyMarket) => { markOrigin("exact"); setSrcWarnings([]); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, criteria: null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setFilter(""); setPolyPreset(null); next(); };
+  const pickPoly = (m: PolyMarket) => { markOrigin("exact"); setSrcWarnings([]); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, criteria: null, stated: m.resolutionSource && m.finalAfter ? { phrase: m.resolutionSource.phrase, text: m.resolutionSource.text, crossRead: m.resolutionSource.crossRead ? { text: m.resolutionSource.crossRead.text } : null, finalAfter: { text: m.finalAfter.text, ifDisputed: m.finalAfter.ifDisputed } } : null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setFilter(""); setPolyPreset(null); next(); };
   const pickPolySeries = (series: string, title: string) => { markOrigin("exact"); setSrcWarnings([]); setPick({ oracle: "polymarket", series, market: null, title }); setKind("binary"); setFilter(""); setPolyPreset(series.includes("/moneyline") ? "^[^:]+ vs\\. [^:]+$" : null); next(); };
   const badge = (abbr: string) => <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 font-mono text-xs font-bold tracking-tight text-amber-300 ring-1 ring-neutral-700">{abbr}</span>;
   const kalshiOff = !venues.kalshi;
@@ -1010,6 +1012,7 @@ export default function LaunchWizard() {
               pairFacts={pairOn && sideA && sideB ? (ruleB ? independentPairFacts(ticker || "A", tickerB || "B", { a: `the ${A}`, b: `the ${B}` }) : winnerTakesBurnFacts(ticker || "A", tickerB || "B")) : null}
               ends={endsLine(text)}
               shares={{ options: [...shareOptions], value: shareValue, onChange: (v) => { flowStats.current.decisions++; setDial("fraction", v); } }}
+              inverse={curDials?.inverse ? { options: curDials.inverse.options, value: curDials.inverse.on ? "on" : "off", onChange: (v) => { flowStats.current.decisions++; setDial("inverse", v); } } : null}
               raise={pairOn ? null : { options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: (v) => { flowStats.current.decisions++; setRaiseSol(v); }, line: shownReview.review?.raise?.line ?? null }}
               durations={pairOn ? { options: [{ value: "game", label: "until the result" }, { value: "season", label: "this season" }], value: pairMode === "game" ? "game" : "season", onChange: (v) => { flowStats.current.decisions++; setPairMode(v === "game" ? "game" : "season"); } } : null}
               note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}

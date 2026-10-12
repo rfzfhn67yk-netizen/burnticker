@@ -134,7 +134,7 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
       </div>
       <dl className="bt-card-rows">
         <div data-row="progress"><dt title={CARD_MEANINGS.progress}>{CARD_LABELS.progress}</dt><dd>{v.progress ? <ProgressStrip p={v.progress} compact /> : <Cell c={{ text: null, why: v.progressWhy }} />}</dd></div>
-        <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}{v.creatorText && <span className="mt-1 block text-xs text-neutral-300" data-creator-text>{v.creatorText}</span>}{v.links && v.links.length > 0 && <span className="mt-1 flex flex-wrap gap-2 text-xs" data-creator-links>{v.links.map((l) => <a key={l.url} className="underline" href={l.url} rel="nofollow noopener ugc" target="_blank">{l.label}</a>)}</span>}</dd></div>
+        <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}{v.stated && <span className="mt-1 block text-xs text-neutral-400" data-stated>{v.stated}</span>}{v.creatorText && <span className="mt-1 block text-xs text-neutral-300" data-creator-text>{v.creatorText}</span>}{v.links && v.links.length > 0 && <span className="mt-1 flex flex-wrap gap-2 text-xs" data-creator-links>{v.links.map((l) => <a key={l.url} className="underline" href={l.url} rel="nofollow noopener ugc" target="_blank">{l.label}</a>)}</span>}</dd></div>
         <div data-row="nextSettle"><dt>{CARD_LABELS.nextSettle}</dt><dd><Cell c={v.nextSettle} /></dd></div>
         <div data-row="curve"><dt title={CARD_MEANINGS.curve}>{CARD_LABELS.curve}</dt><dd>
           {/* website-15 item 7: a curve not read is "— raised" with the dash as the reason's button; "not applicable" carries its reason the same way */}

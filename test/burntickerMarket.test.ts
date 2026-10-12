@@ -98,6 +98,12 @@ describe("trade links and the chart: deep links only, mainnet only", () => {
     assert.equal(m.curve, null); assert.match(m.curveNote, /This site has not read the LaunchLab pool/); assert.equal(m.holders.count, null); assert.match(m.holders.countNote, /indexer/);
     const read = buildMarketJson({ cluster: "mainnet", mint: MINT, status: "live", poolId: GRADUATED, graduatedPool: null, read: { pool: decodeLaunchLabPool(bytes(GRADUATED)), top: null, readAt: NOW, error: null } });
     assert.equal(read.phase, "graduated"); assert.equal(read.curve?.progressPct, 100); assert.equal(read.readAt, new Date(NOW).toISOString());
+    // indexer-1 wiring: a holder count read replaces the indexer note; an unavailable read gives its own reason; a failed pool read says why
+    const counted = buildMarketJson({ cluster: "mainnet", mint: MINT, status: "live", poolId: null, graduatedPool: "Pool", read: null, holders: { state: "read", source: "das", holders: 42, tokenAccounts: 45, top10: [{ owner: "W", amount: "10", pct: 1, label: null }], top10Pct: 1, top10PctUnlabelled: 1, supply: "1000", readAt: "x" }, cpmm: { market: null, error: "the pool account was not found" } });
+    assert.equal(counted.holders.count, 42); assert.equal(counted.holders.countNote, ""); assert.equal(counted.holders.top10?.length, 1);
+    assert.equal(counted.pool, null); assert.match(counted.poolNote ?? "", /could not read that pool\. The pool account was not found\.$/);
+    const refused = buildMarketJson({ cluster: "mainnet", mint: MINT, status: "live", poolId: null, graduatedPool: null, read: null, holders: { state: "unavailable", reason: "This RPC cannot count holders.", readAt: "x" } });
+    assert.equal(refused.holders.count, null); assert.equal(refused.holders.countNote, "This RPC cannot count holders.");
   });
 });
 

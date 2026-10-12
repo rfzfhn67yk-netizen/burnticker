@@ -1,5 +1,6 @@
 import { checkReceiptHref } from "@/lib/burnticker/coinPage";
 import { groupDigits, shortDay } from "@/lib/burnticker/cardView";
+import type { LifecycleDatesJson } from "@/lib/burnticker/pageTypes";
 
 /**
  * THE ACTIVITY ROWS (website-14, platform item 6; WEBSITE-10-11 brief rule 3: "attested readings, confirmed burns, graduations, pool
@@ -8,8 +9,8 @@ import { groupDigits, shortDay } from "@/lib/burnticker/cardView";
  *
  *   burn          a confirmed burn             its own receipt check (signature and network)
  *   reading       a reading signed on chain    its submit_reading transaction on the explorer (date, value, units, signature)
- *   graduation    the curve completed          the coin's page (the date is not read on chain here, so the row says so)
- *   pool          the pool was registered      the pool's address on the explorer (same: no date is read)
+ *   graduation    the curve completed          the coin's page (dated when lifecycleDates.ts read its transaction; else the row says so)
+ *   pool          the pool was registered      the pool's address on the explorer (dated the same way)
  *
  * Sources: a registered coin's status and receipts (the platform keeper, via the API), the $DEFICIT keeper's status.json and burns.json,
  * and the devnet rehearsal's evidence file. Pure and client-safe: the home API, the activity line and the coin pages' Burn log share it.
@@ -39,7 +40,7 @@ const day = (iso: string | null) => shortDay(iso) ?? iso ?? "";
 /** The slice of a registered coin's status.json (pageTypes.ts TokenStatusJson) the rows need. */
 export interface StatusForEvents {
   ticker: string; cluster: string;
-  market?: { phase: "curve" | "migrating" | "graduated" | null; graduatedPool: string | null } | null;
+  market?: { phase: "curve" | "migrating" | "graduated" | null; graduatedPool: string | null; dates?: LifecycleDatesJson | null } | null;
   program?: { lastReading: { date: string; signature: string; txUrl?: string } | null; pool: { registered: boolean; address: string | null } } | null;
 }
 export interface ReceiptForEvents { status: string; settledAt: string; units: number; value: string | null; signature: string | null; readingDate?: string | null; burned?: string | null }
@@ -59,8 +60,13 @@ export function eventsFromStatus(s: StatusForEvents, receipts: readonly ReceiptF
     out.push({ kind: "reading", at: lr.date, network: net, ticker: t, signature: lr.signature, href: lr.txUrl ?? explorer(net, lr.signature),
       text: `$${t}'s reading for ${day(lr.date)}${value ? `, value ${value},` : ""} was signed on chain${same.length ? `. It counted ${unitsText(units)}` : ""}.` });
   }
-  if (s.market?.phase === "graduated") out.push({ kind: "graduation", at: null, network: net, ticker: t, href: `/burnticker/t/${encodeURIComponent(t)}`, text: `$${t} graduated from its curve to its Raydium pool. This site does not read the date.` });
-  if (s.program?.pool.registered && s.program.pool.address) out.push({ kind: "pool", at: null, network: net, ticker: t, href: explorer(net, s.program.pool.address, "address"), text: `$${t}'s Raydium pool is registered with the burn program. This site does not read the date.` });
+  // indexer-1: the graduation and the pool registration are dated when their transactions were read on chain (lifecycleDates.ts)
+  const gd = s.market?.dates?.graduated, rd = s.market?.dates?.registered;
+  if (gd?.state === "read") out.push({ kind: "graduation", at: gd.at, network: net, ticker: t, signature: gd.signature, href: `/burnticker/t/${encodeURIComponent(t)}`, text: `$${t} graduated from its curve to its Raydium pool on ${day(gd.at)}.` });
+  else if (s.market?.phase === "graduated") out.push({ kind: "graduation", at: null, network: net, ticker: t, href: `/burnticker/t/${encodeURIComponent(t)}`, text: `$${t} graduated from its curve to its Raydium pool. This site does not read the date.` });
+  if (s.program?.pool.registered && s.program.pool.address) out.push(rd?.state === "read"
+    ? { kind: "pool", at: rd.at, network: net, ticker: t, signature: rd.signature, href: explorer(net, s.program.pool.address, "address"), text: `$${t}'s Raydium pool was registered with the burn program on ${day(rd.at)}.` }
+    : { kind: "pool", at: null, network: net, ticker: t, href: explorer(net, s.program.pool.address, "address"), text: `$${t}'s Raydium pool is registered with the burn program. This site does not read the date.` });
   return out;
 }
 

@@ -1,3 +1,4 @@
+import { feedHref } from "@/lib/burnticker/feeds";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { coinSharePreview, previewMetadata } from "@/lib/burnticker/sharePreviewServe";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ ticker: string }> }): Promise<Metadata> {
   const { ticker } = await params;
   const p = await coinSharePreview(ticker.toUpperCase());
-  return p ? { ...previewMetadata(p, `/burnticker/t/${encodeURIComponent(ticker.toUpperCase())}`), alternates: { canonical: `/burnticker/t/${encodeURIComponent(ticker.toUpperCase())}` } } : {};
+  return p ? { ...previewMetadata(p, `/burnticker/t/${encodeURIComponent(ticker.toUpperCase())}`), alternates: { canonical: `/burnticker/t/${encodeURIComponent(ticker.toUpperCase())}`, types: { "application/rss+xml": feedHref({ coin: ticker }, "rss"), "application/feed+json": feedHref({ coin: ticker }, "json") } } } : {};
 }
 
 export default function Layout({ children }: { children: ReactNode }) { return children; }

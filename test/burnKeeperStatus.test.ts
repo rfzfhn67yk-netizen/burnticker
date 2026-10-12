@@ -43,7 +43,7 @@ describe("status.json", () => {
     assert.equal(s.ticker, "DEFICIT");
     assert.equal(s.ruleKey, "DEBT");
     assert.equal(s.rules.sha256, loaded.sha256);
-    assert.deepEqual(Object.keys(s).sort(), ["addresses", "burned", "buyback", "cluster", "curve", "execution", "feed", "generatedAt", "health", "mode", "program", "readiness", "rules", "ruleKey", "schema", "shortfall", "supply", "ticker", "vault"].sort());
+    assert.deepEqual(Object.keys(s).sort(), ["addresses", "burned", "buyback", "cluster", "curve", "execution", "feed", "generatedAt", "health", "mode", "poolMarket", "program", "readiness", "rules", "ruleKey", "schema", "shortfall", "supply", "ticker", "vault"].sort());
     assert.equal(s.execution, "legacy"); assert.equal(s.program, null, "no program block in legacy execution");
     // 10-05 +$6.66B → 6; 10-06 +$23.92B (+0.66 carried) → 24; 10-07 +$11.01B (+0.58) → 11; 10-08 +$21.28B (+0.59) → 21. 62 units.
     assert.equal(s.burned.count, 4);
