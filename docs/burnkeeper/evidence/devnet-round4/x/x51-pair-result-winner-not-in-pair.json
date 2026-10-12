@@ -1,0 +1,21 @@
+{
+  "case": "x51-pair-result-winner-not-in-pair",
+  "expected": "InvalidWinner",
+  "observed": "client refusal in src/lib/burnReceipts/pairs.ts:169 \"the winner must be one of the two mints\" \u2014 the program check (InvalidWinner) was not reached by this CLI",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-pair-result --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint-a 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz --mint-b iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg --date 20261012 --winner 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": null,
+  "errorLogLines": [],
+  "stderr": [
+    "    at pairResultMessage (file://<repo>/src/lib/burnReceipts/pairs.ts:169:65)",
+    "    at attestPairResult (file://<repo>/src/lib/burnReceipts/pairs.ts:183:19)",
+    "    at file://<repo>/scripts/burnreceipts-admin.mts:388:15",
+    "    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+    "",
+    "Node.js v26.8.2"
+  ],
+  "output": {
+    "raw": ""
+  }
+}

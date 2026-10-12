@@ -6,7 +6,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { BURNS_AFTER_GRADUATION, burnsAfterGraduation, marketFacts, RULES_SCHEMA, WIND_DOWN_DAYS, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts } from "@/lib/burnticker/coinPage";
+import { BURNS_AFTER_GRADUATION, burnsAfterGraduation, marketFacts, LIQUIDITY_NOT_READ, RULES_SCHEMA, WIND_DOWN_DAYS, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts } from "@/lib/burnticker/coinPage";
 import { tradeLinks } from "@/lib/burnticker/market";
 import { BURNTICKER_RULES_SCHEMA, DEFAULT_WIND_DOWN_DAYS, lockRule } from "@/lib/burnticker/rules";
 import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
@@ -153,5 +153,18 @@ describe("the coin page's market facts (website-13, ChatGPT audit 6 A10): read o
     assert.equal(d.mcap.value, "Not applicable"); assert.equal(d.curve.value, "Not applicable"); assert.equal(d.launched.value, "Not applicable");
     const g = Object.fromEntries(marketFacts({ ...base, phase: "graduated", graduatedPool: "P00l" }).map((r) => [r.key, r]));
     assert.equal(g.mcap.value, "Not read here"); assert.match(g.mcap.note!, /Raydium pool/); assert.equal(g.curve.label, "Trading pool"); assert.equal(g.curve.value, "P00l");
+  });
+  test("legitimacy pass fix a: a graduated coin shows the pool's reserves when read; the old sentence only when they are not", () => {
+    const pool = { marketCap: "412.5", tokenReserve: "206250000.123456", solReserve: "95.123456789", readAt: "2026-10-15T01:02:03.000Z" };
+    const g = Object.fromEntries(marketFacts({ ...base, phase: "graduated", graduatedPool: "P00l", pool }).map((r) => [r.key, r]));
+    assert.equal(g.liquidity.value, "95.12 SOL and 206,250,000.12 tokens");
+    assert.equal(g.liquidity.note, "The two reserves of the coin's Raydium pool, read on chain at 2026-10-15 01:02 UTC.");
+    assert.ok(lintCopy(`${g.liquidity.value} ${g.liquidity.note}`, loadCopyLintConfig()).ok);
+    const unread = Object.fromEntries(marketFacts({ ...base, phase: "graduated", graduatedPool: "P00l", pool: null, poolNote: "The pool could not be read just now." }).map((r) => [r.key, r]));
+    assert.equal(unread.liquidity.value, "Not read here"); assert.equal(unread.liquidity.note, "The pool could not be read just now.");
+    const bare = Object.fromEntries(marketFacts({ ...base, phase: "graduated", graduatedPool: "P00l" }).map((r) => [r.key, r]));
+    assert.equal(bare.liquidity.note, LIQUIDITY_NOT_READ);
+    const curve = Object.fromEntries(marketFacts({ ...base, pool }).map((r) => [r.key, r]));
+    assert.equal(curve.liquidity.note, LIQUIDITY_NOT_READ, "a coin on its curve never shows a pool's reserves");
   });
 });

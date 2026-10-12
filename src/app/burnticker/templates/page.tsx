@@ -3,6 +3,8 @@ import Link from "next/link";
 import { TEMPLATES } from "@/lib/burnticker/templates";
 import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
 import { CreatorOnboarding } from "../_components/CreatorOnboarding";
+import { CreatorBenefitsList } from "./CreatorBenefitsList";
+import { ExampleTickets } from "./ExampleTickets";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,8 @@ export default function TemplatesPage() {
         <p className="max-w-3xl text-sm text-neutral-300" data-launch-state>{site.sentence}</p>
       </header>
       <CreatorOnboarding />
+      {/* website-17 item 6: the benefits list right after the no-fee-revenue line */}
+      <CreatorBenefitsList />
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="templates">
         {TEMPLATES.map((t) => { const launch = { open: site.wizard && !unavailable(t) }; return (
           <li key={t.id} className={`flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 p-4${unavailable(t) ? " border-dashed" : ""}`} data-unavailable={unavailable(t) ? "" : undefined}>
@@ -40,6 +44,8 @@ export default function TemplatesPage() {
           </li>
         ); })}
       </ul>
+      {/* website-17 item 7: the example tickets, after the real templates */}
+      <ExampleTickets site={site} />
     </main>
   );
 }

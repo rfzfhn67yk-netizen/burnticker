@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { platform } from "@/lib/burnticker/server";
 import { buildTrustPage, jsonSafe, web3ChainReader } from "@/lib/burnticker/trust";
 import { currentStatusLive } from "@/lib/burnticker/currentStatus";
+import { readReleases } from "@/lib/burnticker/history";
 
 export const dynamic = "force-dynamic";
 
@@ -16,5 +17,7 @@ export async function GET() {
   const upgradeTimeLockSecs = await currentStatusLive().then((s) => s.upgradeAuthority.find((u) => u.cluster === "mainnet")?.timeLockSecs ?? null).catch(() => null);
   const page = await buildTrustPage({ reader, siteDir: p.publishDir, attesters, firstLaunchAt: live.length ? Math.min(...live.map((t) => Date.parse(t.baselineAt))) : null, cluster: p.cluster, upgradeTimeLockSecs });
   // jsonSafe: the live platform view and any chain-read value may hold bigints (R01, 2026-10-11)
-  return NextResponse.json(jsonSafe({ ...page, cluster: p.cluster, rpcConfigured: !!rpc, stubs: p.stubs }));
+  // legitimacy pass item 1: the latest three releases for "How this was built" (docs/burnticker/CHANGELOG.md, read as it is now)
+  const latestReleases = readReleases()?.slice(-3).reverse() ?? null;
+  return NextResponse.json(jsonSafe({ ...page, cluster: p.cluster, rpcConfigured: !!rpc, stubs: p.stubs, latestReleases }));
 }

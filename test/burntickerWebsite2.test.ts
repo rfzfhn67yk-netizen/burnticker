@@ -420,7 +420,7 @@ describe("F1 (ChatGPT code review 3, 2026-10-11): unknown is never 'none' or 'no
     const failed = await readChainFacts("devnet", { call: async () => { throw new Error("429"); } }, null, base.programs.map((p) => p.programId), 0);
     for (const p of buildCurrentStatus({ env: {}, chain: { devnet: failed }, now: 0 }).programs) {
       assert.equal(p.devnet.authoritySource, "unavailable");
-      assert.match(upgradeAuthorityText(p.devnet), /^The upgrade authority is unavailable because the chain read failed\. The last value recorded in verified-build\.json \(2026-10-11\) is \w+/);
+      assert.match(upgradeAuthorityText(p.devnet), /^The upgrade authority is unavailable because the chain read failed\. The last value recorded in verified-build\.json \(2026-10-12\) is \w+/);
     }
   });
 });

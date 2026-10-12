@@ -3,6 +3,8 @@ import { platform, tokenPageData } from "@/lib/burnticker/server";
 import { buildPlatformIndex } from "@/lib/burnticker/tokenPage";
 import { readAudit } from "@/lib/burnticker/trust";
 import { readinessFromStatus, type Readiness } from "@/lib/burnticker/readiness";
+import { rankLines } from "@/lib/burnticker/coinRank";
+import { leagueData } from "@/lib/burnticker/leaguesServe";
 
 export const dynamic = "force-dynamic";
 
@@ -18,5 +20,7 @@ export async function GET() {
   for (const t of p.registry.tokens()) { try { const d = await tokenPageData(p, t, now); statuses.push(d.status); ready.set(d.status.ticker, readinessFromStatus(d.status, d.receipts)); } catch { /* a token whose page fails is left out, not invented */ } }
   const audit = readAudit(p.publishDir);
   const index = buildPlatformIndex(statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null);
-  return NextResponse.json({ ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.ticker) ?? null })), cluster: p.cluster, stubs: p.stubs });
+  // website-17 wiring item 2: each coin's rank line (coinRank.ts), null when the registry could not be ranked (never a guessed rank)
+  const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
+  return NextResponse.json({ ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.ticker) ?? null, rank: ranks?.get(t.ticker)?.line ?? null })), cluster: p.cluster, stubs: p.stubs });
 }

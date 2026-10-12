@@ -1,0 +1,321 @@
+{
+  "schema": "burnticker.status/v1",
+  "generatedAt": "2026-10-12T21:30:56.849Z",
+  "ticker": "R4KVV",
+  "name": "R4KVV devnet r4 keeper test",
+  "mint": "GxvzJcM8ojXhhHuJfCtxiGC2XJ9KQSy9FYL8UsGrJgzC",
+  "cluster": "devnet",
+  "status": "live",
+  "launchedAt": "2026-10-09T21:19:39.358Z",
+  "oracle": "catalogue",
+  "selectorKey": "catalogue:treasury.debt",
+  "seriesTitle": "U.S. national debt (Debt to the Penny)",
+  "mode": "buyback",
+  "rules": {
+    "sha256": "8f82aa6a97477aabf6693c4ebc40865a6e360b5989f09331448cda37704302ab",
+    "sha12": "8f82aa6a9747",
+    "statement": "Each time the treasury.debt feed settles, every full 1000000000 above the previous settlement is one unit, and the keeper spends 1% of the fee pool buying the token at market and burns everything received per unit (buyback spend compounds: pool × (1 − (1 − f)^units)). A voided market burns nothing. Settled results only; prices are never read. When the rule ends with a result, whatever is left in the burn pool moves to $DEFICIT's burn pool (the platform's flagship coin) and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (a voided market, a voided pair or a cancelled season), whatever is left burns down on this coin on a daily clock over four weeks (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes 0.05 SOL (at most once a week).",
+    "file": "rules.json",
+    "oneShot": false
+  },
+  "addresses": {
+    "mint": "GxvzJcM8ojXhhHuJfCtxiGC2XJ9KQSy9FYL8UsGrJgzC",
+    "mintUrl": "https://explorer.solana.com/address/GxvzJcM8ojXhhHuJfCtxiGC2XJ9KQSy9FYL8UsGrJgzC?cluster=devnet",
+    "feePda": "B274hyPkomQhkrKoo7wCrngP3rNSoTLamLdzj1Z2daan",
+    "feePdaUrl": "https://explorer.solana.com/address/B274hyPkomQhkrKoo7wCrngP3rNSoTLamLdzj1Z2daan?cluster=devnet",
+    "feeWsol": "7n58qoL2LV9Gx65v22AuhpHWANVL4FtYigvHTgpFRf2K",
+    "feeWsolUrl": "https://explorer.solana.com/address/7n58qoL2LV9Gx65v22AuhpHWANVL4FtYigvHTgpFRf2K?cluster=devnet",
+    "vault": null,
+    "vaultUrl": null,
+    "creator": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+    "creatorUrl": "https://explorer.solana.com/address/2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk?cluster=devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "poolId": null,
+    "launchTx": "4kH4L63LD4TV…",
+    "launchTxUrl": "https://explorer.solana.com/tx/4kH4L63LD4TV…?cluster=devnet"
+  },
+  "supply": {
+    "initial": "1000000000",
+    "current": "1000000000",
+    "source": "registry"
+  },
+  "burned": {
+    "total": "0",
+    "pctOfSupply": 0,
+    "count": 0,
+    "last30d": "0",
+    "lastAt": null
+  },
+  "pool": {
+    "feePdaSol": "0.02",
+    "spendableSol": "0",
+    "reserveSol": "0.02",
+    "vaultBalance": null,
+    "vaultAllocation": null,
+    "shortfallOutstanding": "0",
+    "capSol": 25,
+    "queuedSol": "0",
+    "queuedNote": "Before the audit, burns spend from at most 25 SOL. Fee income above that is held and released after the audit. The keeper enforces this cap today, and the program enforces it once it is deployed."
+  },
+  "next": {
+    "nextCheckAt": "2026-10-12T22:20:01.308Z",
+    "impliedChance": null,
+    "impliedBasis": null,
+    "nextMarket": null,
+    "nextCloseTime": null,
+    "awaitingFinal": 0
+  },
+  "feed": {
+    "lastEventId": null,
+    "lastValue": null,
+    "lastSettledAt": null,
+    "readings": 0,
+    "lastFetchAt": "2026-10-12T21:20:01.308Z",
+    "lastError": null,
+    "failures": 0
+  },
+  "attesters": [],
+  "quorum": 1,
+  "fees": {
+    "curve": {
+      "phase": "curve",
+      "legs": [
+        {
+          "label": "Raydium protocol",
+          "bps": 25,
+          "recipient": "Raydium (GlobalConfig.protocolFeeOwner)",
+          "dial": "Fixed by Raydium at 2,500 ppm (GlobalConfig.tradeFeeRate)",
+          "note": ""
+        },
+        {
+          "label": "Burnticker (developer)",
+          "bps": 25,
+          "recipient": "Burnticker's developer fee wallet (PlatformConfig.platformClaimFeeWallet)",
+          "dial": "Set to 2,500 ppm in the platform config (PlatformConfig.feeRate). Anything from 0 to 50,000 is allowed.",
+          "note": "owner's decision 2026-10-09"
+        },
+        {
+          "label": "burn pool",
+          "bps": 50,
+          "recipient": "This coin's burn pool gets all of it. The burn pool is the burn program's fee account, which is also the coin's creator on LaunchLab. Anyone can run the claim (claim_launchlab_creator_fee) that moves these fees into it.",
+          "dial": "Set to 5,000 ppm in the platform config (PlatformConfig.creatorFeeRate), the program's cap",
+          "note": "Creators receive none of it. The keeper only pays network fees."
+        }
+      ],
+      "totalBps": 100
+    },
+    "postGraduation": {
+      "phase": "post-graduation",
+      "legs": [
+        {
+          "label": "Raydium protocol",
+          "bps": 4,
+          "recipient": "Raydium. It takes 0.03% and 0.01% of each trade.",
+          "dial": "AmmConfig.protocolFeeRate 12% + fundFeeRate 4% of the 25 bps trade fee; creatorFeeShareRate 0% of the 25 bps creator fee",
+          "note": "fixed per tier"
+        },
+        {
+          "label": "Burnticker (operator, LP fees)",
+          "bps": 4.2,
+          "recipient": "the operator treasury A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD on devnet — the devnet Squads vault (rehearsal network): 20% of the locked LP's SOL-side fees, paid by the permissionless claim_lock_fees",
+          "dial": "84% of the 25 bps trade fee × LOCK_FEE_OPERATOR_BPS 2,000 — compiled into the program; no admin key, no config field",
+          "note": "owner decision 2026-10-10: the operator earns 20% of the post-graduation LP fees"
+        },
+        {
+          "label": "burn pool",
+          "bps": 25,
+          "recipient": "This coin's burn pool. The pool lists the burn pool as its creator, copied from LaunchLab at graduation, so anyone can collect this fee into it (collect_creator_fee_permissionless).",
+          "dial": "AmmConfig.creatorFeeRate = 2,500 ppm (25 bps) × (1 − 0%) — fixed per tier (AmmConfig index 0); no platform dial changes it",
+          "note": ""
+        },
+        {
+          "label": "burn pool (LP fees)",
+          "bps": 16.8,
+          "recipient": "This coin's burn pool gets 80% of the SOL fees from the locked liquidity, through the open claim step (claim_lock_fees). The burn program owns the Fee Key. The coin side of those fees is burned outright.",
+          "dial": "84% of the 25 bps trade fee × LOCK_FEE_BURN_BPS 8,000 — compiled into the program",
+          "note": "LP locked forever (owner decision 2026-10-10)"
+        }
+      ],
+      "totalBps": 50
+    },
+    "sentence": "On every 1 SOL traded on the curve, 0.0025 SOL to Raydium, 0.0025 SOL to Burnticker (developer) and 0.005 SOL to the burn pool (1% in all). After graduation, each trade in the Raydium pool pays 0.5% in fees. 100% of the liquidity is locked forever, and its fees fund the burn. Of the 0.0021 SOL per 1 SOL that the liquidity earns, 0.00168 SOL goes to the burn pool and 0.00042 SOL goes to the operator. That 80/20 split is fixed in code, and the coin side of those fees is burned. The burn pool also gets Raydium's fixed CPMM creator fee of 0.0025 SOL per 1 SOL. The coin's creator on LaunchLab is the burn program's fee account, so the creator-fee slot can only pay the burn pool. The human creator receives no cash from fees, and the keeper only pays network fees.",
+    "creatorSliceBps": 0
+  },
+  "health": {
+    "pending": 0,
+    "unverified": 0,
+    "lastError": null
+  },
+  "disclosure": {
+    "disclaimer": "A memecoin. The rule says what the supply does, not what the price does. The rule is locked at launch and cannot be changed by anyone, including the creator. Burns are funded by the token's own trading fees (or a disclosed vault), recomputable by anyone from the public source and the published rule. Nobody is promised anything.",
+    "eventContract": null
+  },
+  "trust": {
+    "lpBurnedPct": 0,
+    "lpLockedPct": 100,
+    "lpPolicy": "locked-forever",
+    "creatorCashBps": 0,
+    "teamAllocationPct": 0,
+    "operator": {
+      "can": [
+        "submit a settled reading it read from the public source",
+        "crank a burn the rule computes from that reading",
+        "raise or lower the developer fee within 0..500 bps for new trades",
+        "change the developer wallet",
+        "change the LP split for future graduations",
+        "claim the platform fee vault",
+        "deploy new program code once 2 of 3 approve a Squads proposal. The current time lock could not be read from chain just now; the current status above says more."
+      ],
+      "cannot": [
+        "change a rule",
+        "burn more than the rule says",
+        "withdraw from any fee PDA or vault",
+        "touch a holder's balance",
+        "change any token's rule or burn",
+        "take from a burn pool",
+        "change the creator fee above 50 bps (program cap)",
+        "redirect a coin's Fee Key or LP fees (initialize_token and every buyback crank refuse a platform whose lock-NFT wallet is not the burn program's fee-keys PDA or whose LP is not 100 % locked; the 80/20 claim split is compiled)",
+        "anything to a token",
+        "anything without a new deployment, which is public",
+        "change a token's rule, readings or receipts after the fact, because the registry is append-only and database triggers enforce that",
+        "earn from a burn pool, because nothing is ever taken from one"
+      ],
+      "placeholder": true
+    },
+    "registerUrl": "/burnticker/trust"
+  },
+  "lp": {
+    "policy": "locked-forever",
+    "lockProgram": "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX",
+    "feeKey": null,
+    "feeKeyOwner": "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3",
+    "lockedLiquidity": null,
+    "feeKeyRecord": "5dHyr9bL6tCBCFFCDWUhY8eoWkQyWevtF8PF4Z34YdA4",
+    "feeKeyRegistered": false,
+    "lockedPct": 100,
+    "split": {
+      "burnBps": 8000,
+      "operatorBps": 2000,
+      "coinSide": "burned",
+      "fixedInCode": true
+    },
+    "operatorTreasury": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+    "lastClaim": null,
+    "totals": {
+      "claims": 0,
+      "sol": "0",
+      "toBurnPool": "0",
+      "toOperator": "0",
+      "tokenBurnedRaw": "0"
+    },
+    "urls": {
+      "lockProgram": "https://solscan.io/account/DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX?cluster=devnet",
+      "feeKey": null,
+      "feeKeyOwner": "https://solscan.io/account/Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3?cluster=devnet",
+      "lockedLiquidity": null,
+      "operatorTreasury": "https://solscan.io/account/A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD?cluster=devnet"
+    },
+    "line": "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)",
+    "note": "This coin has not graduated yet. Its liquidity is locked at graduation, and the Fee Key address shows up then.",
+    "lastError": null
+  },
+  "program": {
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "config": "GKHig9F6yYErGqnCRHmQ35r1rnVnu4ociEoRpqir8nWZ",
+    "initialized": true,
+    "attesters": [
+      {
+        "key": "D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn",
+        "kind": "operator",
+        "heldByKeeper": true
+      }
+    ],
+    "quorum": 1,
+    "keeperHolds": 1,
+    "quorumMet": true,
+    "adminRenounced": false,
+    "lastReading": {
+      "date": "2026-10-12",
+      "signature": "rzqQL6vJBzME…",
+      "txUrl": "https://explorer.solana.com/tx/rzqQL6vJBzME…?cluster=devnet"
+    },
+    "queue": {
+      "lastOnChain": "2026-10-12",
+      "crankCursor": "2026-10-12",
+      "notAttested": 0,
+      "awaitingCrank": 0,
+      "carriedSpendSol": "0",
+      "waits": [],
+      "partials": []
+    },
+    "pool": {
+      "registered": false,
+      "address": null,
+      "untradeableSince": null
+    },
+    "totals": {
+      "readings": 1,
+      "burns": 0,
+      "burned": "0",
+      "spentSol": "0"
+    }
+  },
+  "profile": {
+    "imageUrl": null,
+    "description": "devnet-r4 keeper cycle coin (throwaway)",
+    "creatorText": null,
+    "links": [],
+    "oneLiner": "burns on the U.S. national debt (Debt to the Penny) feed",
+    "badge": "PERPETUAL",
+    "note": "",
+    "affiliation": "This coin is not affiliated with any team, league, candidate, agency or market."
+  },
+  "pinned": null,
+  "market": {
+    "phase": null,
+    "curve": null,
+    "curveNote": "The LaunchLab pool account was not found.",
+    "graduatedPool": null,
+    "holders": {
+      "count": null,
+      "countNote": "Counting holders needs an indexer that lists every token account of the coin. This site does not run one.",
+      "top": null,
+      "topNote": "The holders were not read.",
+      "top10": null,
+      "top10Pct": null,
+      "top10PctUnlabelled": null
+    },
+    "trade": {
+      "links": [],
+      "note": "This is a devnet coin. Raydium's and Jupiter's swap pages only serve mainnet."
+    },
+    "chart": {
+      "provider": null,
+      "embedUrl": null,
+      "pageUrl": null,
+      "note": "No public chart covers devnet, so the burn chart below is drawn from the receipts."
+    },
+    "readAt": "2026-10-12T21:30:56.849Z",
+    "error": "holders: rate-limited by the RPC",
+    "pool": null,
+    "poolNote": "After graduation this number comes from the Raydium pool, and this site could not read that pool.",
+    "dates": null
+  },
+  "lifecycle": {
+    "ended": {
+      "reason": "the market was voided (devnet-r4 keeper test)",
+      "at": "2026-10-12T20:19:39.358Z",
+      "mode": "winddown"
+    },
+    "windDown": {
+      "days": 28,
+      "done": 0,
+      "unitsPerDay": 17
+    },
+    "lastSweep": null,
+    "line": "This coin is winding down. It is on day 1 of 28.",
+    "fees": "Creator fees go to the burn pool and are burned. The liquidity is locked forever, and its fees go 80% to the burn pool and 20% to the operator, fixed in code."
+  },
+  "stated": null,
+  "pair": null
+}

@@ -1,0 +1,23 @@
+Cap raise on localnet, 2026-10-12 (afternoon, America/Denver). Nothing was sent to devnet or mainnet.
+Runner: test/burnReceiptsCap.test.ts with BURN_RECEIPTS_LOCALNET=1, solana-test-validator (Agave 4.3.0).
+burn_receipts: cargo-build-sbf --features localnet of source 48a9ead7 (program code unchanged by this work),
+  sha256 8b661ad7bb180083dfc0bd0f15bc7ae4774b90dc2cd9f9b04df28a9d7cdcefc6; its upgrade authority on the validator = the vault.
+Squads v4: the mainnet program's bytes (solana program dump SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf, read-only),
+  sha256 dec8d3e0fae58c7c8f2416e5f67c25e673f047afd6dd2bba4a47e0b29a01d34c.
+Multisig: 1 of 1, time lock 0, preloaded in the Squads v4 Multisig layout; vault index 0. Keys were throwaway test keys.
+Signatures below (shortened) exist only on that local validator.
+
+1. show: none (default 25 SOL cap until 2027-10-01T00:00:00Z)
+2. propose-vault dry run, vault unfunded: exit 1; rent 2582160 lamports payable by the vault; inner simulation {"InstructionError":[0,{"Custom":1}]} (insufficient lamports)
+3. vault funded 0.01 SOL; dry run exit 0; decoded PlatformConfig the program would write: authority = vault, cap 25 SOL, pending 1000 SOL, sunset 2027-10-01
+4. propose-vault --send (vault_transaction_create + proposal_create, vault transaction 1): rgTwhwBQ…Noi4fXvG; inner message 325 bytes (one cranker)
+5. proposal_approve: 5cHhoTeU…3fYX1mPa
+6. vault_transaction_execute: 45bnWsU9…azvm1YPQ
+   PlatformConfig written: authority = vault, cap 25 SOL, pending 1000 SOL, eta 1792011776 (= execution + 48 h), 1 cranker;
+   the vault's balance fell by exactly the rent, 2582160 lamports
+7. apply before the eta: refusing: the 48 h timelock has not elapsed: 2d 0h 0m 0s left (eta 10/14/2026, 15:02:56 MDT (America/Denver) = 2026-10-14T21:02:56Z)
+   the program itself, simulated directly: {"InstructionError":[0,{"Custom":6034}]} (TimelockNotElapsed)
+8. propose-vault again on the existing config: refused while a raise is pending; with --replace-pending --new-cap-sol 2000 the dry run builds propose_cap_raise only
+9. SECOND validator, preloaded with step 6's PlatformConfig and pending_cap_eta moved 48 h back (a test validator's clock cannot be moved 48 h):
+   apply --send without --i-understand-this-raises-the-cap: refused
+   apply --send --i-understand-this-raises-the-cap: 4NSYYrHm…DrqndGn9; cap now 1000 SOL, nothing pending

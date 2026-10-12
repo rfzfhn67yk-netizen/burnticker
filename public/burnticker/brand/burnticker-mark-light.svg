@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64">
+  <title>Burnticker mark (light version, for light backgrounds)</title>
+  <path d="M14 6h36v46l-4.5 5-4.5-5-4.5 5-4.5-5-4.5 5-4.5-5-4.5 5-4.5-5z" fill="#1b1916"/>
+  <path d="M21 16h22M21 26h14M21 33h22" stroke="#f2eee4" stroke-width="3" stroke-linecap="round"/>
+  <path d="M21 42h22" stroke="#f2eee4" stroke-width="3" stroke-linecap="round" stroke-dasharray="3 4"/>
+</svg>

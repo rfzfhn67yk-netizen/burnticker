@@ -37,6 +37,13 @@
   --bt-stamp-solid: #5b3fa3;
   --bt-stamp-ink: #ffffff;
   --bt-scorch: #c8873a;
+  /* BURNTICKER'S OWN SYSTEM (legitimacy pass, website-16; docs/burnticker/ui-conventions.md): one type scale (the same steps as the
+     Tailwind text-xs … text-2xl classes the pages use), one spacing scale, one radius, one transition duration, one focus ring */
+  --bt-fs-xs: .75rem; --bt-fs-sm: .875rem; --bt-fs-base: 1rem; --bt-fs-lg: 1.125rem; --bt-fs-xl: 1.25rem; --bt-fs-2xl: 1.5rem;
+  --bt-sp-1: 4px; --bt-sp-2: 8px; --bt-sp-3: 12px; --bt-sp-4: 16px; --bt-sp-5: 24px; --bt-sp-6: 32px;
+  --bt-radius: 8px;
+  --bt-dur: 150ms;
+  --bt-focus: var(--bt-stamp);
   color-scheme: dark;
 }
 
@@ -178,7 +185,7 @@ body.bt-body {
 .wallet-adapter-button-trigger { background-color: var(--bt-stamp-solid) !important; font-family: var(--font-mono) !important; white-space: nowrap; }
 
 /* ---- launchpad conventions (2026-10-10, docs/burnticker/ui-conventions.md): coin cards, tabs, the curve bar, chips, tape, tab bar ---- */
-.bt-coin-card { height: 100%; border: 1px solid var(--bt-line); background: var(--bt-counter); border-radius: 10px; padding: 12px; transition: border-color .15s, transform .15s; }
+.bt-coin-card { height: 100%; border: 1px solid var(--bt-line); background: var(--bt-counter); border-radius: 10px; padding: 12px; transition: border-color var(--bt-dur), transform var(--bt-dur); }
 a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-thumb-receipt { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: var(--bt-paper); color: var(--bt-paper-ink); border-radius: 4px; font-family: var(--font-mono); overflow: hidden;
   background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.03) 0 1px, transparent 1px 3px); clip-path: polygon(0 0, 100% 0, 100% 92%, 92% 100%, 84% 92%, 76% 100%, 68% 92%, 60% 100%, 52% 92%, 44% 100%, 36% 92%, 28% 100%, 20% 92%, 12% 100%, 4% 92%, 0 100%); }
@@ -305,3 +312,51 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 }
 /* website-15 item 7: on phones the reason opens in the flow under the dash, so it never runs off the card's edge */
 @media (max-width: 640px) { .bt-why { display: inline; } .bt-why-tip { position: static; width: auto; max-width: none; margin-top: 4px; } .bt-why-tip.is-open, .bt-why-btn:focus-visible + .bt-why-tip { display: block; } }
+
+/* ---- Burnticker's own system (legitimacy pass, website-16, 2026-10-12; docs/burnticker/ui-conventions.md) ----
+   One focus ring on every control, one motion rule (one duration; none at all when the visitor asks for reduced motion), and the page
+   parts the newer pages share (_components/Panel.tsx): page, header, panel, sub-panel, table, list, eyebrow, meta, code block. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--bt-focus); outline-offset: 2px; border-radius: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+.bt-page { max-width: 48rem; margin: 0 auto; padding: var(--bt-sp-5) var(--bt-sp-4); display: grid; gap: var(--bt-sp-5); font-size: var(--bt-fs-sm); line-height: 1.55; }
+.bt-page.is-wide { max-width: 64rem; }
+.bt-page-head { display: grid; gap: var(--bt-sp-2); }
+.bt-h1 { margin: 0; font: 600 var(--bt-fs-2xl)/1.2 var(--font-sans); }
+.bt-h2 { margin: 0 0 var(--bt-sp-2); font: 600 var(--bt-fs-base)/1.3 var(--font-sans); }
+.bt-h3 { margin: var(--bt-sp-3) 0 var(--bt-sp-1); font: 600 var(--bt-fs-sm)/1.3 var(--font-sans); }
+.bt-lede { margin: 0; font-size: var(--bt-fs-base); color: var(--color-neutral-300); }
+.bt-body-text { margin: 0 0 var(--bt-sp-2); color: var(--color-neutral-200); }
+.bt-meta { margin: 0; font-size: var(--bt-fs-xs); color: var(--color-neutral-400); }
+.bt-meta-sep { display: inline-block; width: var(--bt-sp-3); }
+.bt-eyebrow { margin: 0 0 var(--bt-sp-1); font: 700 .6875rem/1.4 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--color-neutral-400); }
+.bt-panel { border: 1px solid var(--color-neutral-800); background: var(--color-neutral-900); border-radius: var(--bt-radius); padding: var(--bt-sp-4); min-width: 0; }
+.bt-subpanel { border: 1px dashed var(--color-neutral-700); border-radius: var(--bt-radius); padding: var(--bt-sp-3); min-width: 0; }
+.bt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--bt-sp-3); }
+.bt-bullets { margin: 0 0 var(--bt-sp-2); padding-left: 1.25rem; list-style: disc; display: grid; gap: var(--bt-sp-1); color: var(--color-neutral-200); }
+.bt-dl { margin: 0 0 var(--bt-sp-2); display: grid; gap: var(--bt-sp-2); }
+.bt-dl > div { display: grid; gap: 2px; }
+.bt-dl dt { font: 700 .6875rem/1.4 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--color-neutral-400); }
+.bt-dl dd { margin: 0; min-width: 0; color: var(--color-neutral-200); }
+@media (min-width: 640px) { .bt-dl > div { grid-template-columns: 11rem 1fr; gap: var(--bt-sp-3); } }
+.bt-table-wrap { overflow-x: auto; }
+.bt-table { width: 100%; border-collapse: collapse; font-size: var(--bt-fs-xs); }
+.bt-table th { text-align: left; font-weight: 600; color: var(--color-neutral-400); padding: var(--bt-sp-2); }
+.bt-table td { border-top: 1px solid var(--color-neutral-800); padding: var(--bt-sp-2); vertical-align: top; }
+.bt-pre { margin: 0 0 var(--bt-sp-2); padding: var(--bt-sp-2) var(--bt-sp-3); background: var(--color-neutral-950); border: 1px solid var(--color-neutral-800); border-radius: 6px; font: var(--bt-fs-xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-neutral-100); }
+.bt-pre.is-output { border-style: dashed; color: var(--color-neutral-300); }
+.bt-cmd { display: flex; gap: var(--bt-sp-2); align-items: flex-start; }
+.bt-cmd .bt-pre { flex: 1 1 auto; min-width: 0; }
+.bt-cmd .bt-copy { flex: 0 0 auto; min-height: 32px; }
+.bt-note { margin: 0; padding: var(--bt-sp-2); border: 1px dashed var(--color-neutral-700); border-radius: 6px; font-size: var(--bt-fs-xs); color: var(--color-neutral-300); }
+.bt-note.is-devnet { border-color: color-mix(in srgb, var(--color-amber-400) 55%, transparent); color: var(--color-amber-200); }
+.bt-press-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--bt-sp-3); }
+@media (min-width: 640px) { .bt-press-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bt-press-preview { display: block; width: 160px; max-width: 100%; height: auto; margin: var(--bt-sp-2) 0; border-radius: 6px; border: 1px solid var(--color-neutral-800); }
+/* the empty state's receipt mark (EmptyState.tsx): a small slip beside the one sentence */
+.bt-receipt-mark { flex: 0 0 auto; color: var(--color-neutral-500); }
+.bt-empty-row { display: flex; gap: var(--bt-sp-3); align-items: flex-start; }
+.bt-empty-row > div { min-width: 0; }
+/* the phone tab bar's icons (siteNav.mjs SITE_ICONS): one inline SVG set, no icon font */
+.bt-icon { width: 20px; height: 20px; display: block; }

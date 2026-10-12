@@ -1,0 +1,42 @@
+{
+  "case": "x65-paired-apply-after-unlink",
+  "expected": "AccountNotInitialized|NotPaired",
+  "observed": "AccountNotInitialized",
+  "match": true,
+  "exitCode": 0,
+  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts apply-paired --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L --partner ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi --attester-key ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":3012}]}",
+  "errorLogLines": [
+    "Program log: AnchorError caused by account: link. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+  ],
+  "stderr": [
+    "Server responded with 429 .  Retrying after 500ms delay...",
+    "Server responded with 429 .  Retrying after 1000ms delay...",
+    "Server responded with 429 .  Retrying after 2000ms delay...",
+    "Server responded with 429 .  Retrying after 4000ms delay..."
+  ],
+  "output": {
+    "command": "h.mts apply-paired",
+    "cluster": "devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "mint": "AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L",
+    "partner": "ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi",
+    "pendingEta": "1792012491",
+    "message": "BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|AB67fCm5PUKqiLr2zF6Dp8ZYcTUgSAMW7rUV9v5VXt9L|ExNU8xg4vVNEr9G9aX7VDpFoHUQjQyjRibvohyRtBHqi|set=338db32c9e66205e58eb7e30f82ac19832e279e59c11a30c49b9308ada5c246f|eta=1792012491",
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":3012}]}",
+      "unitsConsumed": 14031,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: ApplyPairedAttesterChange",
+        "Program log: AnchorError caused by account: link. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 13881 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0xbc4"
+      ]
+    }
+  }
+}

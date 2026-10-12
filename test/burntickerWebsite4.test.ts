@@ -40,7 +40,8 @@ describe("item 3: zero data → one explanation and one evidence link; populated
     const p = read("src/app/burnticker/CoinsIndex.tsx");
     // website-13 (ChatGPT audit 6 A5 and A10): the tabs filter the coins anyone can trade; the featured coin and the test receipts are a
     // separate group below, never mixed into a tab's results
-    assert.match(p, /const cards: CardView\[\] = coins\.map\(\(t\) => cardViewFromIndex\(t, null, ix\?\.cluster \?\? "mainnet"\)\);/);
+    // website-17 wiring item 3 (applied by website-16): the registered cards, then the earned slots moved to the front with their labels
+    assert.match(p, /const cards: CardView\[\] = coins\.map\(\(t\) => cardViewFromIndex\(t, null, ix\?\.cluster \?\? "mainnet"\)\)\.map\(/);
     assert.ok(p.indexOf('className="bt-tabs" role="tablist"') < p.indexOf("cards.map((v) => <ViewCard"), "tabs above the grid");
     assert.ok(p.indexOf("cards.map((v) => <ViewCard") < p.indexOf("featured.map((v) => <ViewCard"), "the test group after the tab's results");
     assert.match(p, /<h2 id="bt-featured-h" className="text-lg font-semibold">Featured coin and test receipts<\/h2>/);

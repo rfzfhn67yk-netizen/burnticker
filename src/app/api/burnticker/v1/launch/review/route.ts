@@ -1,6 +1,7 @@
 // Public API v1 (1.14.0): the read-only pre-wallet review (src/lib/burnticker/launchReview.ts; launch audit 5 L02 / L06).
 import { fail, ok, readJson, runV1 } from "@/lib/burnticker/api/http";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
+import { statedCtx } from "@/lib/burnticker/coinText";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { platform } from "@/lib/burnticker/server";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
@@ -8,7 +9,7 @@ import { cachedTimeLockSecs, currentStatusLive } from "@/lib/burnticker/currentS
 
 export const dynamic = "force-dynamic";
 
-/** Builds nothing, pins nothing, registers nothing, reads no chain: works in preview and open modes; a closed host refuses. */
+/** Builds nothing, pins nothing, registers nothing, reads no chain (one Gamma read for a one-market Polymarket rule): works in preview and open modes; a closed host refuses. */
 export async function POST(req: Request) {
   return runV1("reviewLaunch", req, async () => {
     if (launchModeFromEnv(process.env) === "closed") { const r = globalRefusal(process.env)!; return fail(r.status, r.body.error, { code: r.body.code, preview: false }); }
@@ -18,7 +19,17 @@ export async function POST(req: Request) {
     // the background so the next review has it. Never awaited here: the review reads no chain.
     const cluster = hostCluster(process.env) === "mainnet" ? "mainnet" : "devnet";
     if (process.env.NODE_ENV === "production" && cachedTimeLockSecs(cluster) === null) void currentStatusLive().catch(() => null);
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster) });
+    // legitimacy pass fix b: a one-market Polymarket rule's stated source and dispute window come from this server's own read of the
+    // market (the same read the launch route makes), never from the request; no read within 4 seconds leaves the older wording
+    const rule = (body as { rule?: { oracle?: unknown; market?: unknown } }).rule;
+    let stated: ReturnType<typeof statedCtx> = null;
+    if (rule && rule.oracle === "polymarket" && typeof rule.market === "string" && rule.market) {
+      const read = platform().polymarket.seriesInfo(rule.market).catch(() => null);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      stated = statedCtx(await Promise.race([read, new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })]));
+      clearTimeout(timer);
+    }
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

@@ -1,0 +1,46 @@
+{
+  "case": "x38-kind1-never-launched-sink-H1-dry",
+  "expected": "none",
+  "observed": "none",
+  "match": true,
+  "exitCode": 0,
+  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint 7dEkizegBmb9e9QL5j3FB4XtFetTFLkGpp3byukuy1o9 --target 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F --sink-mint 6qdoD6hcnETb7kZH4BLYP2HKZydJ8V96WQUFquPtA3D8",
+  "simulationErr": null,
+  "errorLogLines": [],
+  "stderr": [],
+  "output": {
+    "command": "h.mts fwd",
+    "cluster": "devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "mint": "7dEkizegBmb9e9QL5j3FB4XtFetTFLkGpp3byukuy1o9",
+    "target": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+    "sinkMint": "6qdoD6hcnETb7kZH4BLYP2HKZydJ8V96WQUFquPtA3D8",
+    "pair": null,
+    "simulation": {
+      "err": null,
+      "unitsConsumed": 99191,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+        "Program log: CreateIdempotent",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 7437 of 399850 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: ForwardOnEnd",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [2]",
+        "Program log: Memo (len 48): \"R4XN|endfwd|to=4QnwyiBMm2Ca|lamports=12000000|v1\"",
+        "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 18594 of 330789 compute units",
+        "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [2]",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 1853 of 308796 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 91604 of 392413 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM success"
+      ]
+    }
+  }
+}

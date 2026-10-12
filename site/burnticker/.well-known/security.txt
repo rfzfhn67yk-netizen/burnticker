@@ -1,0 +1,5 @@
+Contact: mailto:security@burnticker.com
+Expires: 2027-10-12T00:00:00.000Z
+Policy: https://burnticker.com/burnticker/bounty
+Canonical: https://burnticker.com/.well-known/security.txt
+Preferred-Languages: en

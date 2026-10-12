@@ -4,7 +4,7 @@
  * templates page and the launch page's first screen. No income is implied anywhere: a creator gets a coin with a rule, its receipts and
  * a scoreboard line, and the coin's fees go to its own burn pool. Lint-clean, plain sentences (test/burntickerWebsite14.test.ts).
  */
-export const NO_FEE_REVENUE_LINE = "Creators receive no trading-fee revenue. The creator's share of the fees goes to the coin's own burn pool.";
+export const NO_FEE_REVENUE_LINE = "Creators receive no fee revenue of any kind. Every fee set aside for the creator, on the curve and in the Raydium pool, goes to the coin's own burn pool.";
 
 export const WHY_CREATE = "People create a coin to give a community something to follow together: a team's season, a rivalry, or a public event such as an election or a weather record. The rule is public and locked, so everyone can read what the coin does when the result comes in, and anyone can check every burn.";
 

@@ -22,7 +22,11 @@ import { RetirementFacts } from "../../_components/RetirementFacts";
 import { progressOf } from "@/lib/burnticker/progress";
 import { EVENT_LABEL, eventsFromStatus } from "@/lib/burnticker/activity";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
-import { EmbedSnippet } from "../../_components/EmbedSnippet";
+import { createdBy, creatorHref, SHARE_COPY } from "@/lib/burnticker/creatorBenefits";
+import { shortAddress } from "@/lib/burnticker/walletShell";
+import { RANK_MEANING } from "@/lib/burnticker/cardView";
+import { ShareBlock } from "../../creator/ShareBlock";
+import { SETTLEMENT_LINK } from "@/lib/burnticker/settlementCopy";
 import { likeHref } from "@/lib/burnticker/templates";
 import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
 import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
@@ -81,6 +85,7 @@ function Facts({ rows, label }: { rows: FactRow[]; label: string }) {
           <dt className="text-neutral-500">{r.label}</dt>
           <dd className="break-all text-neutral-100">{r.href && r.value ? <a className="underline" href={r.href} rel="noopener" target="_blank">{r.value}</a> : r.value ?? "—"}</dd>
           {r.note && <dd className="text-[11px] text-neutral-500">{r.note}</dd>}
+          {r.more && <dd className="text-[11px]"><Link className="underline" href={r.more.href}>{r.more.label}</Link></dd>}
         </div>
       ))}
     </dl>
@@ -102,6 +107,9 @@ export default function TokenPage() {
   const [now] = useState(() => Date.now());
   const [tab, setTab] = useState<CoinTab>("burns");
   useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
+  // website-17 wiring item 1: the rank line from the creator summary; nothing when the read fails (never a guessed rank)
+  const [rank, setRank] = useState<string | null>(null);
+  useEffect(() => { const c = d?.status.addresses.creator, t = d?.status.ticker; if (!c || !t) return; fetch(`/burnticker/creator/${encodeURIComponent(c)}/summary`).then((r) => (r.ok ? r.json() : null)).then((j: { coins?: { ticker: string; rank: string | null }[] } | null) => setRank(j?.coins?.find((x) => x.ticker === t)?.rank ?? null)).catch(() => setRank(null)); }, [d]);
   const hasHolders = !!d?.status.market?.holders.top10?.length;
   useEffect(() => { if (d) setTab(initialTab(window.location.hash, coinTabs(hasHolders))); }, [d, hasHolders]);
   // review 2 §2: a ticker this host has no record of explains itself (and $DEFICIT links its served page) instead of a bare error line
@@ -124,7 +132,7 @@ export default function TokenPage() {
   const nextAt = s.next.nextCloseTime ?? s.next.nextCheckAt;
   const burnFacts: FactRow[] = [
     { key: "trigger", label: "What fires the rule", value: prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey, note: latest?.settlementSourceUrl ? "The source of the latest result is linked." : `Read from ${venue}.`, href: latest?.settlementSourceUrl ?? null },
-    { key: "next", label: "Next result", value: nextAt ? `${nextAt.slice(0, 16).replace("T", " ")} UTC` : "None scheduled", note: nextAt ? "Times are in UTC. The source publishes the result after this." : "This rule has no scheduled result this site knows of." },
+    { key: "next", label: "Next result", value: nextAt ? `${nextAt.slice(0, 16).replace("T", " ")} UTC` : "None scheduled", note: nextAt ? "Times are in UTC. The source publishes the result after this." : "This rule has no scheduled result this site knows of.", more: SETTLEMENT_LINK },
     { key: "budget", label: "Burn pool", value: s.mode === "buyback" ? (s.pool.feePdaSol === null ? "Not read here" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "Not read here" : fmt(s.pool.vaultBalance)), note: s.mode === "buyback" ? `SOL set aside for this coin's burns. ${s.pool.reserveSol} SOL of it is kept back for fees.` : "Tokens set aside for this coin's burns." },
     { key: "burned", label: "Burned so far", value: `${fmt(s.burned.total)} of ${fmt(s.supply.initial)} tokens`, note: `${s.burned.pctOfSupply.toFixed(2)}% of the supply, in ${count(s.burned.count, "burn")}.` },
     { key: "last", label: "Last receipt", value: latest ? latest.settledAt.slice(0, 10) : "None yet", note: latest ? "Check it in your browser." : preBurn ? afterGraduation : "The next result that counts prints the first one.", href: latest ? checkReceiptHref(latest.signature, s.cluster) : null },
@@ -142,6 +150,7 @@ export default function TokenPage() {
           <div className="flex flex-wrap items-center gap-1.5"><VenueChip oracle={s.oracle} />{m?.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}{s.status !== "live" && <span className="bt-chip bt-chip-draft">{s.status}</span>}{prof?.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{prof.badge}</span>}<span className="text-xs text-neutral-500">{s.cluster}, {s.launchedAt ? `launched ${ago(s.launchedAt, now)}` : "not launched"}</span></div>
           <h1 className="text-2xl font-semibold leading-tight">{s.name} <span className="font-mono text-lg text-neutral-400">${s.ticker}</span></h1>
           <p className="text-neutral-300">{prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey}</p>
+          <p className="text-xs"><Link className="underline" href={creatorHref(s.addresses.creator)} data-created-by>{createdBy(shortAddress(s.addresses.creator))}</Link></p>
           {s.stated && <p className="text-xs text-neutral-400" data-stated>{statedSentences(s.stated, s.stated.finalAfter)}</p>}
           <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
             <span className="font-mono" title={s.mint}>CA {short(s.mint)}</span><CopyButton text={s.mint} label="copy address" />
@@ -219,6 +228,7 @@ export default function TokenPage() {
         })()}
         <section aria-label="Burn log">
           <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {s.burned.pctOfSupply.toFixed(2)}% of the supply. Each receipt below can be checked in your browser.</p>
+          {rank && <p className="mb-2 text-xs text-neutral-400" data-rank title={RANK_MEANING}>{rank}</p>}
           <p className="mb-2 flex flex-wrap gap-x-4 text-xs"><a className="underline" href={csvHref(s.ticker, "burns")} download>{CSV_LINK_COPY.burnsLink}</a><a className="underline" href={csvHref(s.ticker, "readings")} download>{CSV_LINK_COPY.readingsLink}</a><a className="underline" href={feedHref({ coin: s.ticker }, "rss")}>{COIN_FEED_LINK}</a></p>
           {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? afterGraduation : "The next result that counts prints the first one."}</p> : (
             <ol className="bt-tape">
@@ -298,7 +308,7 @@ export default function TokenPage() {
         </div>
       )}
 
-      {s.status !== "draft" && s.status !== "expired" && <EmbedSnippet kind="coin" id={s.ticker} label={`$${s.ticker}`} />}
+      {s.status !== "draft" && s.status !== "expired" && <section className={card + " text-xs"} aria-label={SHARE_COPY.heading}><h2 className="font-medium text-sm">{SHARE_COPY.heading}</h2><div className="mt-2"><ShareBlock ticker={s.ticker} /></div></section>}
       <HostDiagnostics stubs={d.stubs} />
     </main>
   );

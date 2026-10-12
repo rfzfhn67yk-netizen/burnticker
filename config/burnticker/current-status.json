@@ -1,6 +1,6 @@
 {
   "schema": "burnticker.current-status/v1",
-  "checkedAt": "2026-10-11",
+  "checkedAt": "2026-10-12",
   "note": "THE ONE HUMAN-MAINTAINED CURRENT-STATUS FILE (website brief 2026-10-11 §4). src/lib/burnticker/currentStatus.ts joins it with config/burnticker/verified-build.json, config/burnticker/operator.json, the host's environment and live chain reads (Squads time lock, program upgrade authority), and GET /api/burnticker/v1/current-status serves the result; the homepage, the trust, operator and status pages and the $DEFICIT pre-launch page render that one object. Facts only: no 'coming soon', no promised dates. History stays in the append-only logs listed under `historical`.",
   "deficit": {
     "servedAt": "https://deficit.burnticker.com/",
@@ -29,7 +29,7 @@
   },
   "phase": {
     "label": "pre-launch (mainnet programs deployed)",
-    "line": "Burnticker is in pre-launch. Both programs were deployed on mainnet on 2026-10-11, with the Squads vault as upgrade authority, and the LaunchLab platform is set up. The only coin created on mainnet so far is $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. No public coin has launched on mainnet yet."
+    "line": "Burnticker is in pre-launch. Both programs were deployed on mainnet on 2026-10-11 and upgraded to round 4 (end sinks and pairs) on 2026-10-12 through the Squads vault, which holds the upgrade authority, and the LaunchLab platform is set up. The only coin created on mainnet so far is $REHEARSAL, a test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. No public coin has launched on mainnet yet."
   },
   "networks": {
     "devnet": {
@@ -53,9 +53,9 @@
       "mainnetDeploy": {
         "date": "2026-10-11",
         "slot": 455814493,
-        "onChainSha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
+        "onChainSha256": "b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7",
         "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
-        "evidence": "docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json"
+        "evidence": "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log"
       }
     },
     {
@@ -65,9 +65,9 @@
       "mainnetDeploy": {
         "date": "2026-10-11",
         "slot": 455815136,
-        "onChainSha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
+        "onChainSha256": "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2",
         "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
-        "evidence": "docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json"
+        "evidence": "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log"
       }
     }
   ],
@@ -349,7 +349,7 @@
       "lpToFeeKeyPct": 100,
       "platformFeeBps": 25,
       "createdAt": "2026-10-11",
-      "evidence": "docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json"
+      "evidence": "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log"
     }
   }
 }

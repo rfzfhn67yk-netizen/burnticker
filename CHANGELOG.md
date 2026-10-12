@@ -924,3 +924,49 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `decc3a1e20d516b664feb5929f69c4995225f3d01c5caaadffb9c43bdcfc0322`
 - allowlist sha256 (config/public-repo.allowlist): `f2b9bec2accd99971553d6804d08c38e6ee256dfa7fb2a1d3704cc2366625214`
 - files published: 1404
+
+## 2026-10-12 — public commits recorded after the fact (no publish, no deploy)
+
+The publish entries above name the monorepo commit each public tree was cut from. The public repository's own commit for each one was
+named only in the monorepo commit that wrote the tag. These lines record it here so /burnticker/changelog can link each release to the
+public repository at that commit. A release whose tag commit did not name exactly one public commit stays unlinked. When two tags were
+written before one public commit, the commit is recorded against the later tag. From now on a publish entry may carry its own
+`- public commit:` line.
+
+- publish from 24169e899c75: public commit `af233100bfa1c0493800eb942aa8fcd9936cb0fe`
+- publish from 359a3490985a: public commit `15c5c131c7002fa862ba05aef508ebfb270668b3`
+- publish from 9fc0e7d32aff: public commit `ac1759131966f9e6adc2986bfe737a55b6cf35a1`
+- publish from 46501d7e5d82: public commit `203f5bd07765b4e1708332f69b3f4b899f6bc6e7`
+- publish from c9e812da196e: public commit `e7992c9fd8734bd2ed6585113f9c9111a486d420`
+- publish from a348eef0c02d: public commit `d9f60f67737a6d0b6aa1031d609304272d03333c`
+- publish from 354d363855fe: public commit `9634d473d5e312fb86505913b75917fc0c963ead`
+- publish from 9a337d448d68: public commit `b728aa1ce00c27cd6f9b52695118e476f7376205`
+- publish from 73a657ae0baa: public commit `4bf8e0dfc5e7f8c6c46f7c35ffb7e1eb6c91b189`
+- publish from ab0a5a1c4d27: public commit `f5d179fa8cbca599fd040c5bd2dedde457d9fd1d`
+- publish from c9baa75b9c11: public commit `f7c2ada2803aed2695b57293d0c8a494323efa21`
+- publish from 44a23725ad75: public commit `d9e5a151692f04dca5e3613beed318e9c3aa1514`
+- publish from 1c942b12087b: public commit `af52b4a4ea0b80168a4c2e0f47a32045d1035c91`
+- publish from 79ba47fdb5b8: public commit `0304267b345ce56110ee3503904097687a011837`
+- publish from a69fc30307b9: public commit `c2bbcd9c1167510ef2a148e09e611ea4b14b91be`
+- publish from e9e8d0e772cf: public commit `8a519590a0d34940936e8fe64ab1989d073e4457`
+- publish from 37cabb9c48f8: public commit `4f01c4687ae91a72027b5dd4362e3998dbf747e9`
+- publish from 15d6baf7e9bf: public commit `7e7bab5804f9e3dee070ebbc2bd3ba1de1c6b999`
+- publish from 92c0ffba20af: public commit `b139dbf64e066bb3b6ac32c28c234e7ec9855e69`
+- publish from 716ffd3be061: public commit `4a0b7203dfe0e6a973472e1c06de87b659237ef6`
+- publish from 7f8064b0a49a: public commit `1f22d4ac38a218bc9afcf31e0c52628fda8fac9f`
+
+## 2026-10-12 — publish from 86e4bfa95667
+
+- monorepo commit: `86e4bfa9566718eb8025d887ca11d7abdffc54a3` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `decc3a1e20d516b664feb5929f69c4995225f3d01c5caaadffb9c43bdcfc0322`
+- allowlist sha256 (config/public-repo.allowlist): `f2b9bec2accd99971553d6804d08c38e6ee256dfa7fb2a1d3704cc2366625214`
+- files published: 1699
+
+## 2026-10-12 — publish from 86e4bfa95667
+
+- monorepo commit: `86e4bfa9566718eb8025d887ca11d7abdffc54a3` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `decc3a1e20d516b664feb5929f69c4995225f3d01c5caaadffb9c43bdcfc0322`
+- allowlist sha256 (config/public-repo.allowlist): `f2b9bec2accd99971553d6804d08c38e6ee256dfa7fb2a1d3704cc2366625214`
+- files published: 1699

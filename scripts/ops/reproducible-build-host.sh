@@ -15,7 +15,7 @@
 # Exit 0 = every built program's executable hash equals the deployed program's hash on mainnet. Exit 1 = a difference (the table says
 # which). Exit 2 = it could not run (wrong architecture, a failed install, a failed build).
 set -euo pipefail
-COMMIT="4a0b7203dfe0e6a973472e1c06de87b659237ef6"
+COMMIT="1f22d4ac38a218bc9afcf31e0c52628fda8fac9f"
 REPO="https://github.com/rfzfhn67yk-netizen/burnticker"
 RPC="https://api.mainnet-beta.solana.com"
 INSTALL=1
@@ -29,16 +29,16 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# What the table in config/burnticker/verified-build.json says for the mainnet builds (2026-10-11 deploy). sha256 is the plain hash of
+# What the table in config/burnticker/verified-build.json says for the mainnet builds (2026-10-12 round-4 upgrade). sha256 is the plain hash of
 # the .so file; the executable hash is solana-verify's (trailing zero bytes removed), the number get-program-hash prints for the chain.
 # test/burntickerVerifiedBuild.test.ts keeps these lines equal to the table.
 declare -A ID SHA EXE
 ID[burn_receipts]="AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"
-SHA[burn_receipts]="7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a"
-EXE[burn_receipts]="e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19"
+SHA[burn_receipts]="b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7"
+EXE[burn_receipts]="d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae"
 ID[pair_curve]="2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
-SHA[pair_curve]="f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767"
-EXE[pair_curve]="50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef"
+SHA[pair_curve]="8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2"
+EXE[pair_curve]="567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895"
 LIBS=(burn_receipts pair_curve)
 WS="programs/burn-receipts"
 say() { printf '[%s] %s\n' "$(date -u '+%H:%M:%S')" "$*"; }

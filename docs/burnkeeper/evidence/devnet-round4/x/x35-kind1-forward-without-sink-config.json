@@ -1,0 +1,41 @@
+{
+  "case": "x35-kind1-forward-without-sink-config",
+  "expected": "EndSinkMismatch",
+  "observed": "EndSinkMismatch",
+  "match": true,
+  "exitCode": 0,
+  "command": "R /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/h.mts fwd --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx --target 4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6107}]}",
+  "errorLogLines": [
+    "Program log: AnchorError occurred. Error Code: EndSinkMismatch. Error Number: 6107. Error Message: forward_on_end: the target is not the coin's end sink (or the flagship when the sink is not live).",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17db"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "h.mts fwd",
+    "cluster": "devnet",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "mint": "HUAZdGq5t54uuqDnEXJTaw3nLZCvqCUy95fimdJvxVQx",
+    "target": "4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F",
+    "sinkMint": null,
+    "pair": null,
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":6107}]}",
+      "unitsConsumed": 57972,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+        "Program log: CreateIdempotent",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 7437 of 399850 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: ForwardOnEnd",
+        "Program log: AnchorError occurred. Error Code: EndSinkMismatch. Error Number: 6107. Error Message: forward_on_end: the target is not the coin's end sink (or the flagship when the sink is not live).",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 50385 of 392413 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17db"
+      ]
+    }
+  }
+}

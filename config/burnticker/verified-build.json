@@ -1,11 +1,11 @@
 {
   "schema": "burnticker.verified-build/v1",
-  "updatedAt": "2026-10-11",
-  "note": "Written by `sh scripts/ops/verified-build.sh --local --write` (or --docker --write on a Linux host with Docker). The hash is solana-verify's executable hash: sha256 of the program bytes with trailing zero bytes removed — the same number `solana-verify get-program-hash` prints for the deployed program and `solana-verify get-executable-hash` prints for a .so. docs/burnticker/VERIFIED-BUILD.md renders this table; test/burntickerVerifiedBuild.test.ts holds the two together and compares any built .so on the host.",
+  "updatedAt": "2026-10-12",
+  "note": "Written by `sh scripts/ops/verified-build.sh --local --write` (or --docker --write on a Linux host with Docker). The hash is solana-verify's executable hash: sha256 of the program bytes with trailing zero bytes removed \u2014 the same number `solana-verify get-program-hash` prints for the deployed program and `solana-verify get-executable-hash` prints for a .so. docs/burnticker/VERIFIED-BUILD.md renders this table; test/burntickerVerifiedBuild.test.ts holds the two together and compares any built .so on the host.",
   "kind": "interim-local",
   "kindNote": "INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check.",
-  "sourceCommit": "bc0565589ad99c774786adc21bc1e505c6e5f733",
-  "sourceCommitNote": "the last monorepo commit that changed the compiled program sources under programs/burn-receipts (later commits there add exploit tests only, which are not compiled into the programs); the public repository carries the same files at the commit its next publish records in docs/burnticker/CHANGELOG.md",
+  "sourceCommit": "29f6f5de19f1916945992fae711cefc36927d856",
+  "sourceCommitNote": "The last monorepo commit that changed the compiled program sources: end-sink round 4 with the pair-forward round-3 re-check fixes (2026-10-12). Both programs were upgraded to these bytes on devnet and mainnet through the Squads vaults on 2026-10-12 (docs/burnkeeper/evidence/devnet-round4, docs/burnkeeper/evidence/mainnet-round4).",
   "toolchain": {
     "solanaCli": "4.3.0",
     "cargoBuildSbf": "4.4.0",
@@ -23,34 +23,38 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 763536,
-          "hash": "e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19",
-          "sha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
-          "status": "deployed 2026-10-11; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
+          "bytes": 826384,
+          "hash": "d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae",
+          "sha256": "b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7",
+          "status": "deployed 2026-10-12 (round 4), slot 456198354; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 763536,
-          "hash": "90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35"
+          "bytes": 826392,
+          "hash": "87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a",
+          "sha256": "0bf463b373c6d5eda2673572a37108c0b0bc8555af533de447437911d39c3b0c",
+          "status": "deployed 2026-10-12 (round 4), slot 510391591; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35",
+          "hash": "87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a",
           "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
-          "readAt": "2026-10-11",
-          "matchesBuild": true
+          "readAt": "2026-10-12",
+          "matchesBuild": true,
+          "slot": 510391591
         },
         "mainnet": {
-          "hash": "e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19",
-          "sha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
+          "hash": "d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae",
+          "sha256": "b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7",
           "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
-          "readAt": "2026-10-11",
+          "readAt": "2026-10-12",
           "matchesBuild": true,
-          "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn"
+          "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+          "slot": 456198354
         }
       }
     },
@@ -60,34 +64,38 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 411296,
-          "hash": "50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef",
-          "sha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
-          "status": "deployed 2026-10-11; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
+          "bytes": 413224,
+          "hash": "567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895",
+          "sha256": "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2",
+          "status": "deployed 2026-10-12 (round 4), slot 456201604; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 411296,
-          "hash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42"
+          "bytes": 413224,
+          "hash": "364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf",
+          "sha256": "11c96bce4e56c6faa240e69c9d2f6547f3c3abefad6e51b8cf0ce449d8b00898",
+          "status": "deployed 2026-10-12 (round 4), slot 510391786; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
         }
       },
       "deployed": {
         "devnet": {
-          "hash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42",
+          "hash": "364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf",
           "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG",
           "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
-          "readAt": "2026-10-11",
-          "matchesBuild": true
+          "readAt": "2026-10-12",
+          "matchesBuild": true,
+          "slot": 510391786
         },
         "mainnet": {
-          "hash": "50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef",
-          "sha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
+          "hash": "567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895",
+          "sha256": "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2",
           "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
-          "readAt": "2026-10-11",
+          "readAt": "2026-10-12",
           "matchesBuild": true,
-          "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG"
+          "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG",
+          "slot": 456201604
         }
       }
     }

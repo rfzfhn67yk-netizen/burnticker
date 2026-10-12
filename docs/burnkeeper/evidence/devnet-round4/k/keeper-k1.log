@@ -1,0 +1,16 @@
+[2026-10-12 21:20:01Z] claim_lock_fees crank: on (fee-keys PDA Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3, operator treasury A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD)
+[2026-10-12 21:20:01Z] burnticker keeper starting — 2 live token(s) · ledger /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/k/data2/burnticker.db · site /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/k/site · devnet · program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM (REAL: program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM on devnet, keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn) · role leader · host bcc00ad890cfa434 · snapshots REFUSED (no BURNTICKER_UPLOAD_PAYER) · alerts off (--once)
+[2026-10-12 21:20:01Z]   [role] leader ACTIVE — leader (no peer configured)
+[2026-10-12 21:20:02Z]   [feed] catalogue:treasury.debt: 30 new readings
+[2026-10-12 21:20:03Z]   [end] $R4KRR: flat reading for 2026-10-12 before the end: confirmed
+[2026-10-12 21:20:10Z]   [end] $R4KVV: flat reading for 2026-10-12 before the end: confirmed
+[2026-10-12 21:20:10Z] cycle: 1 fetch(es), 0 planned, 0 executed
+[2026-10-12 21:20:10Z]   [r4x-filter] pair scan limited to 2 pair(s): 792sAKMe,7Ebs5oCp
+[2026-10-12 21:20:15Z]   [pair-curve] 7Ebs5oCp… graduate(A): 2fuBNXAxf4tq… · 152220 CU
+[2026-10-12 21:20:18Z]   [pair-curve] 7Ebs5oCp… lock(A): 24mEhtQYe5ZS… · 191323 CU
+[2026-10-12 21:20:20Z]   [pair-curve] 7Ebs5oCp… graduate(B): 6gBAzXtbnw2c… · 150714 CU
+[2026-10-12 21:20:24Z]   [pair-curve] 7Ebs5oCp… lock(B): 2XbEAiSWWs1e… · 152323 CU
+[2026-10-12 21:20:24Z] pair curve: 2 pair(s) scanned, 1 cranked
+[2026-10-12 21:20:31Z]   [snapshot] 2026-10-12 not pinned: BURNTICKER_UPLOAD_PAYER is not set: a snapshot is recorded only once its bytes are on Arweave, and nothing is hosted in its place — refused
+[2026-10-12 21:20:31Z]   [refuse-list] /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/k/data2/own-tokens.generated.json rewritten: 2 platform token(s) — the arms re-read it on their next candidate
+[2026-10-12 21:20:31Z] burnticker keeper stopped

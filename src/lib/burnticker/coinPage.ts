@@ -109,10 +109,11 @@ export function burnsAfterGraduation(raise: string | null, quote = "SOL"): strin
  * THE COIN PAGE'S MARKET FACTS (website-13, 2026-10-12; ChatGPT audit 6 A10). What a trader expects to find, filled only from what this
  * site read: the network, the mint with its explorer link, the quote asset, the market cap from the curve, the curve's raised and raise
  * or the pool, holders, the creator and the launch date, and the fees. A field this site does not read says so ("Not read here" and the
- * reason); a coin that is not launched says "Not applicable" and why. No price, no volume figure and no liquidity figure are invented:
- * this site reads none of them, and the copy rules keep price talk off every page. Each row is label, value and the reason or meaning.
+ * reason); a coin that is not launched says "Not applicable" and why. No price and no volume figure are invented: this
+ * site reads neither, and the copy rules keep price talk off every page. Liquidity is the graduated pool's two reserves when the server
+ * read them (market.pool), else said not read. Each row is label, value and the reason or meaning.
  */
-export interface FactRow { key: string; label: string; value: string | null; note: string | null; href?: string | null }
+export interface FactRow { key: string; label: string; value: string | null; note: string | null; href?: string | null; /** one same-site link under the row (the "Next result" row's How burns are settled) */ more?: { href: string; label: string } | null }
 export interface FactInput {
   cluster: string; status: string; mint: string; mintUrl: string; creator: string; creatorUrl: string; launchedAt: string | null;
   phase: "curve" | "migrating" | "graduated" | null;
@@ -120,11 +121,22 @@ export interface FactInput {
   graduatedPool: string | null; holdersCount: number | null; holdersNote: string;
   feesCurveBps: number; feesPoolBps: number; readAt: string | null;
   /** indexer-1: the graduated coin's Raydium pool as read, why it was not, and the lifecycle dates read on chain */
-  pool?: { marketCap: string } | null; poolNote?: string | null; dates?: LifecycleDatesJson | null;
+  pool?: { marketCap: string; tokenReserve?: string; solReserve?: string; readAt?: string } | null; poolNote?: string | null; dates?: LifecycleDatesJson | null;
 }
 const NOT_LAUNCHED = "Not applicable";
 const NOT_READ_HERE = "Not read here";
 const dec2 = (s: string) => { const n = Number(s); return Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString("en-US") : s; };
+/** The liquidity row's sentence when the pool's reserves were not read (a coin on its curve, or a pool this site could not read). */
+export const LIQUIDITY_NOT_READ = "This site does not read the pool's reserves yet.";
+/** The liquidity row (legitimacy pass, fix a): a graduated coin's two Raydium pool reserves when the server read them, else why not. */
+function liquidityRow(i: FactInput, live: boolean): { value: string; note: string } {
+  if (!live) return { value: NOT_LAUNCHED, note: "The coin is not launched yet." };
+  const p = i.phase === "graduated" ? i.pool : null;
+  if (p?.solReserve && p.tokenReserve) {
+    return { value: `${dec2(p.solReserve)} SOL and ${dec2(p.tokenReserve)} tokens`, note: `The two reserves of the coin's Raydium pool, read on chain${p.readAt ? ` at ${p.readAt.slice(0, 16).replace("T", " ")} UTC` : ""}.` };
+  }
+  return { value: NOT_READ_HERE, note: i.phase === "graduated" && i.poolNote ? i.poolNote : LIQUIDITY_NOT_READ };
+}
 const pctOf = (bps: number) => `${Math.round(bps) / 100}%`;
 /** A lifecycle date row: the day with a link to its transaction when read, else the read's own reason. */
 function dateRow(key: string, label: string, d: DateReadJson, cluster: string): FactRow {
@@ -143,7 +155,7 @@ export function marketFacts(i: FactInput): FactRow[] {
     { key: "mcap", label: "Market cap", ...(!live ? na(notLaunched) : i.curve?.marketCap && i.phase !== "graduated" ? { value: `${dec2(i.curve.marketCap)} ${quote}`, note: "The curve's current SOL per token times the total supply, read from the pool on chain." } : i.phase === "graduated" && i.pool?.marketCap ? { value: `${dec2(i.pool.marketCap)} ${quote}`, note: MCAP_POOL_MEANING } : { value: NOT_READ_HERE, note: i.phase === "graduated" ? i.poolNote || NOT_READ.mcapPool : i.curveNote || "This site has not read the coin's curve." }) },
     { key: "curve", label: i.phase === "graduated" ? "Trading pool" : "Curve", ...(!live ? na(notLaunched) : i.phase === "graduated" ? { value: i.graduatedPool ?? "Graduated", note: "The curve is complete. The coin trades in its own Raydium pool, and that pool's liquidity is locked." } : i.curve ? { value: `${dec2(i.curve.raised)} / ${dec2(i.curve.threshold)} ${quote} raised`, note: i.phase === "migrating" ? "The curve is full, and the coin is moving to its Raydium pool." : "The coin graduates to its own Raydium pool when the curve has raised its full amount." } : { value: NOT_READ_HERE, note: i.curveNote || "This site has not read the coin's curve." }) },
     { key: "volume", label: "Trading volume, 24 hours", value: NOT_READ_HERE, note: "This site does not read trading volume. The chart on this page, when there is one, comes from GeckoTerminal." },
-    { key: "liquidity", label: "Liquidity", value: !live ? NOT_LAUNCHED : NOT_READ_HERE, note: !live ? notLaunched : "This site does not read the pool's reserves yet." },
+    { key: "liquidity", label: "Liquidity", ...liquidityRow(i, live) },
     { key: "holders", label: "Holders", value: typeof i.holdersCount === "number" ? i.holdersCount.toLocaleString("en-US") : NOT_READ_HERE, note: typeof i.holdersCount === "number" ? null : i.holdersNote },
     { key: "creator", label: "Creator", value: i.creator, note: "The wallet that launched the coin.", href: i.creatorUrl },
     { key: "launched", label: "Launched", value: i.launchedAt ? `${i.launchedAt.slice(0, 10)}` : NOT_LAUNCHED, note: i.launchedAt ? null : notLaunched },

@@ -135,10 +135,10 @@ The build kind is **interim-local**. INTERIM: built with cargo build-sbf on the 
 
 | Program | Network | Features | Executable hash (this repository) | Deployed bytes on that network | Read | Evidence |
 |---|---|---|---|---|---|---|
-| burn_receipts | mainnet | default | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` same as the build | 2026-10-11 | docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json |
-| burn_receipts | devnet | devnet | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` same as the build | 2026-10-11 | docs/burnticker/VERIFIED-BUILD.md |
-| pair_curve | mainnet | default | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` same as the build | 2026-10-11 | docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json |
-| pair_curve | devnet | devnet | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` same as the build | 2026-10-11 | docs/burnticker/VERIFIED-BUILD.md |
+| burn_receipts | mainnet | default | `d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae` | `d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae` same as the build | 2026-10-12 | docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log |
+| burn_receipts | devnet | devnet | `87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a` | `87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a` same as the build | 2026-10-12 | docs/burnticker/VERIFIED-BUILD.md |
+| pair_curve | mainnet | default | `567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895` | `567f37001f4ecc9966ddce3ca3ac2da8262a1138d21c90825591c08d0bc8a895` same as the build | 2026-10-12 | docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log |
+| pair_curve | devnet | devnet | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` same as the build | 2026-10-12 | docs/burnticker/VERIFIED-BUILD.md |
 
 The steps to reproduce the build are in docs/burnticker/VERIFIED-BUILD.md.
 

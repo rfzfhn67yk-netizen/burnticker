@@ -23,7 +23,7 @@ export default async function BracketPage({ params }: { params: Promise<{ tourna
   } catch (e) { err = e instanceof Error ? e.message : String(e); }
   if (err) return <main className="p-6 text-red-400 text-sm">The coin registry could not be read just now. The error was: {err}</main>;
   if (!t) return <main className="p-6 text-neutral-400 text-sm">There is no Burn Derby bracket called {tournamentId}. <Link className="underline" href="/burnticker/rivalries">See the scoreboards</Link>.</main>;
-  const cell = (r: string) => (r === "A" ? "bg-amber-500 text-neutral-950" : r === "B" ? "bg-sky-500 text-neutral-950" : r === "tie" ? "bg-neutral-700" : r === "withheld" ? "bg-neutral-800 text-neutral-400" : "border border-dashed border-neutral-700 text-neutral-600");
+  const cell = (r: string) => (r === "A" ? "bg-amber-500 text-neutral-950" : r === "B" ? "bg-sky-500 text-neutral-950" : r === "tie" ? "bg-neutral-700" : r === "withheld" ? "bg-neutral-800 text-neutral-400" : "border border-dashed border-neutral-700 text-neutral-500");
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 space-y-6 text-sm">
       <header className="space-y-1">
@@ -35,12 +35,12 @@ export default async function BracketPage({ params }: { params: Promise<{ tourna
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${t.rounds.length}, minmax(0, 1fr))` }}>
         {t.rounds.map((r) => (
           <section key={r.index} className="space-y-3" aria-label={`Round ${r.index + 1}`}>
-            <h2 className="text-xs uppercase tracking-wide text-neutral-400">{r.final ? "Final" : `Round ${r.index + 1}`} <span className="normal-case text-neutral-600">{r.start} to {r.end}</span></h2>
+            <h2 className="text-xs uppercase tracking-wide text-neutral-400">{r.final ? "Final" : `Round ${r.index + 1}`} <span className="normal-case text-neutral-500">{r.start} to {r.end}</span></h2>
             {r.matches.map((m) => (
               <div key={m.index} className="rounded-lg border border-neutral-800 bg-neutral-900 p-2 space-y-1">
                 {([[m.a, m.winsA, "A"], [m.b, m.winsB, "B"]] as const).map(([s, w, k]) => (
                   <div key={k} className={`flex items-center justify-between ${s && m.winner !== null && m.winner !== s.slot ? "text-neutral-500 line-through" : ""}`}>
-                    <span>{s ? <>{s.symbol} {s.ticker ? <Link className="underline text-xs" href={`/burnticker/t/${s.ticker}`}>${s.ticker}</Link> : <span className="text-xs text-neutral-600">no fan coin</span>}</> : <span className="text-neutral-600">—</span>}</span>
+                    <span>{s ? <>{s.symbol} {s.ticker ? <Link className="underline text-xs" href={`/burnticker/t/${s.ticker}`}>${s.ticker}</Link> : <span className="text-xs text-neutral-500">no fan coin</span>}</> : <span className="text-neutral-500">—</span>}</span>
                     <span className="tabular-nums">{s ? w : ""}</span>
                   </div>
                 ))}
@@ -54,7 +54,7 @@ export default async function BracketPage({ params }: { params: Promise<{ tourna
       <section className="space-y-1">
         <h2 className="font-medium">Fan coins</h2>
         <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{t.coins.map((c) => (
-          <li key={c.slot} className="p-2 flex flex-wrap gap-x-3 text-xs"><span className="w-6 text-neutral-500">#{c.slot + 1}</span><span className="font-medium">{c.symbol}</span>{c.ticker ? <Link className="underline" href={`/burnticker/t/${c.ticker}`}>${c.ticker}</Link> : <span className="text-neutral-600">not launched</span>}<span className="text-neutral-500">{c.status === "retired" ? `retired (${c.retiredReason ?? "knocked out"}), with no further readings` : c.eliminatedInRound ? `knocked out in round ${c.eliminatedInRound}` : c.status ?? ""}</span></li>
+          <li key={c.slot} className="p-2 flex flex-wrap gap-x-3 text-xs"><span className="w-6 text-neutral-500">#{c.slot + 1}</span><span className="font-medium">{c.symbol}</span>{c.ticker ? <Link className="underline" href={`/burnticker/t/${c.ticker}`}>${c.ticker}</Link> : <span className="text-neutral-500">not launched</span>}<span className="text-neutral-500">{c.status === "retired" ? `retired (${c.retiredReason ?? "knocked out"}), with no further readings` : c.eliminatedInRound ? `knocked out in round ${c.eliminatedInRound}` : c.status ?? ""}</span></li>
         ))}</ul>
       </section>
       <p className="text-xs text-neutral-500">Readings come from Pyth, either from its Solana accounts or from a Hermes update with a key. A second data publisher checks each reading, and one signer, run by the operator, signs every reading. If the two sources disagree, that day is withheld.</p>

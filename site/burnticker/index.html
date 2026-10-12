@@ -227,7 +227,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
   .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:color-mix(in srgb,var(--sh-bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
   .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;font:700 10px/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
-  .sh-tabbar a span:first-child{font-size:18px;line-height:1}
+  .sh-tabbar a span:first-child{display:block;line-height:0}
+  .sh-icon{width:20px;height:20px;display:block}
   .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
 }
 @media (max-width:899px){.sh-ticker{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}.sh-ticker.is-end{-webkit-mask-image:none;mask-image:none}}
@@ -250,9 +251,15 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
         <div class="sh-learn-menu" data-site-nav="learn">
           <a href="/burnticker/about">How it works</a>
           <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
           <a href="/burnticker/operator">Who runs this</a>
           <a href="/whitepaper.html">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/press">Press</a>
           <a href="/burnticker/terms">Terms</a>
           <a href="/burnticker/privacy">Privacy</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -271,9 +278,15 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
           <a href="/burnticker/launch" data-launch-link>Launch</a>
           <a href="/burnticker/about">How it works</a>
           <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
           <a href="/burnticker/operator">Who runs this</a>
           <a href="/whitepaper.html">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/press">Press</a>
           <a href="/burnticker/terms">Terms</a>
           <a href="/burnticker/privacy">Privacy</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -389,9 +402,15 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       <a href="/burnticker/launch" data-launch-link>Launch</a>
       <a href="/burnticker/about">How it works</a>
       <a href="/burnticker/trust">Trust</a>
+      <a href="/burnticker/verify-yourself">Verify it yourself</a>
       <a href="/burnticker/operator">Who runs this</a>
       <a href="/whitepaper.html">Whitepaper</a>
       <a href="/burnticker/docs">Docs and API</a>
+      <a href="/burnticker/how-burns-settle">How burns are settled</a>
+      <a href="/burnticker/changelog">Changelog</a>
+      <a href="/burnticker/incidents">Incidents</a>
+      <a href="/burnticker/bounty">Bounty</a>
+      <a href="/burnticker/press">Press</a>
       <a href="/burnticker/terms">Terms</a>
       <a href="/burnticker/privacy">Privacy</a>
       <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -400,11 +419,11 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   </div>
 </footer>
 <nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">
-  <a href="/burnticker"><span aria-hidden="true">▦</span><span>Coins</span></a>
-  <a href="/burnticker#search"><span aria-hidden="true">⌕</span><span>Search</span></a>
-  <a href="/burnticker/launch"><span aria-hidden="true">+</span><span>Launch</span></a>
-  <a href="/burnticker/leagues"><span aria-hidden="true">⇄</span><span>Seasons</span></a>
-  <a href="/burnticker/about"><span aria-hidden="true">?</span><span>Learn</span></a>
+  <a href="/burnticker"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h7v7H4z"/><path d="M13 4h7v7h-7z"/><path d="M4 13h7v7H4z"/><path d="M13 13h7v7h-7z"/></svg></span><span>Coins</span></a>
+  <a href="/burnticker#search"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"/><path d="M15.5 15.5 20 20"/></svg></span><span>Search</span></a>
+  <a href="/burnticker/launch"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span><span>Launch</span></a>
+  <a href="/burnticker/leagues"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 7h14"/><path d="M15 3l4 4-4 4"/><path d="M19 17H5"/><path d="M9 13l-4 4 4 4"/></svg></span><span>Seasons</span></a>
+  <a href="/burnticker/about"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span><span>Learn</span></a>
 </nav>
 <!-- site-shell:footer:end -->
 <script>

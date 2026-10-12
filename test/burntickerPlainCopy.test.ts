@@ -133,7 +133,11 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   // polish-1 (2026-10-12): the terms and privacy pages, the feeds' fixed sentences, the CSV routes' refusals
   "legalCopy.ts", "feeds.ts", "csvServe.ts", "exportLinks.ts",
   // sources-2 (2026-10-12): the new publishers' coin text, the fade side's choice and Polymarket's stated-source sentences
-  "sources/fedreg.ts", "sources/launchLibrary.ts", "sources/usgs.ts", "sources/github.ts", "sources/youtube.ts", "sources/polyStated.ts", "inverse.ts"]
+  "sources/fedreg.ts", "sources/launchLibrary.ts", "sources/usgs.ts", "sources/github.ts", "sources/youtube.ts", "sources/polyStated.ts", "inverse.ts",
+  // website-16 (2026-10-12): the legitimacy pass, the changelog, incidents, bounty, press kit, walk-through and history pages
+  "historyCopy.ts", "settlementCopy.ts",
+  // website-17 (2026-10-12): the creator benefits, the rank line, the featured-placement rules and the example tickets
+  "creatorBenefits.ts", "coinRank.ts", "featuredSlots.ts", "exampleTickets.ts"]
   .map((f) => `src/lib/burnticker/${f}`);
 
 describe("plain-English copy: no shorthand on any page (website-9)", () => {

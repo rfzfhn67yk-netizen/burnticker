@@ -77,7 +77,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
   .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:color-mix(in srgb,var(--sh-bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
   .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;font:700 10px/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
-  .sh-tabbar a span:first-child{font-size:18px;line-height:1}
+  .sh-tabbar a span:first-child{display:block;line-height:0}
+  .sh-icon{width:20px;height:20px;display:block}
   .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
 }
 @media (max-width:899px){.sh-ticker{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}.sh-ticker.is-end{-webkit-mask-image:none;mask-image:none}}
@@ -154,9 +155,15 @@ footer p{margin:0 0 6px;max-width:none}
         <div class="sh-learn-menu" data-site-nav="learn">
           <a href="/burnticker/about">How it works</a>
           <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
           <a href="/burnticker/operator">Who runs this</a>
           <a href="/whitepaper.html" aria-current="page">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/press">Press</a>
           <a href="/burnticker/terms">Terms</a>
           <a href="/burnticker/privacy">Privacy</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -175,9 +182,15 @@ footer p{margin:0 0 6px;max-width:none}
           <a href="/burnticker/launch" data-launch-link>Launch</a>
           <a href="/burnticker/about">How it works</a>
           <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/verify-yourself">Verify it yourself</a>
           <a href="/burnticker/operator">Who runs this</a>
           <a href="/whitepaper.html" aria-current="page">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
+          <a href="/burnticker/how-burns-settle">How burns are settled</a>
+          <a href="/burnticker/changelog">Changelog</a>
+          <a href="/burnticker/incidents">Incidents</a>
+          <a href="/burnticker/bounty">Bounty</a>
+          <a href="/burnticker/press">Press</a>
           <a href="/burnticker/terms">Terms</a>
           <a href="/burnticker/privacy">Privacy</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -299,6 +312,8 @@ footer p{margin:0 0 6px;max-width:none}
 <p>The coverage audit (<code>src/lib/burnticker/coverage/</code>) checks every category in <code>config/burnticker/categories.json</code> and every selector kind the wizard can emit. For each one, it asks whether a coin can be settled without Kalshi. A category is <strong>settleable</strong> only when it has at least one primary source and an independent cross-read of the same fact. A primary source here means a first-party adapter that is attested-http or on-chain, tier 4 or better, launchable, and not an aggregator. A category is <strong>adjudicated-only</strong> when Polymarket's binary markets are its only route. Otherwise it is <strong>uncovered</strong>. Each source also gets a 90-day dry run. The dry run compares the readings its schedule expected with the readings it produced. It measures the median delay from the end of a period to the keeper's first sighting. It also measures how often the primary and its cross-read disagree.</p>
 <p>On the frozen fixtures of 2026-10-10, five of eleven categories are settleable (<code>docs/burnticker/SETTLEMENT-COVERAGE.md</code>). The first is Sports. Each game settles on its Polymarket on-chain payout where a moneyline market exists. Otherwise it settles on TheSportsDB under its commercial license, confirmed by the league's own feed (MLB, NHL or NBA) or by API-Sports. Nothing is read from ESPN, and schedules come from the leagues' own feeds or from TheSportsDB. The second is Economics, where four series are each checked against a cross-read. They are <code>fred.UNRATE</code> against BLS <code>LNS14000000</code>, <code>fred.CPIAUCSL</code> against BLS <code>CUSR0000SA0</code>, <code>bls.eggs</code> against FRED <code>APU0000708111</code>, and <code>treasury.debt</code> against FRED <code>GFDEBTN</code> at quarter ends. There were 0 disagreements in every shared month. The third is Financial markets, where Pyth is checked against RedStone. The fourth is Weather &amp; Climate, where the NWS climate report is checked against the Iowa Environmental Mesonet. The fifth is Crypto &amp; On-chain, where <code>bitcoin.blockHeight</code> is checked against blockstream.info, and Pyth against RedStone or the pool TWAP. The other six categories are adjudicated-only, and none is uncovered. Reading a fact twice catches a broken endpoint, a parser error or a tampered response. When the cross-read is a mirror, as when FRED republishes BLS, it does not catch an error in the original release.</p>
 <p>Creation first runs the selector live once (<code>preflightSelector</code>, which is wired into the launch pipeline). The primary and its cross-read are both read. Creation is refused on a Kalshi rule, a missing cross-read, a failed read, or a disagreement on the latest shared period. The coverage matrix is served at <code>GET /api/burnticker/v1/coverage</code>, drawn on the trust page and rendered to <code>docs/burnticker/SETTLEMENT-COVERAGE.md</code>. The test suite fails when any category is uncovered.</p>
+<h3 id="s-3-5-how-burns-are-settled">3.5 How burns are settled</h3>
+<p>A coin settled by a market is read every 5 minutes. A coin settled by a published data feed is read on that feed's own schedule, and a feed with no schedule of its own is read every 60 minutes. $DEFICIT reads the Treasury's debt figure at 4:30 p.m. and 8:00 p.m. New York time on business days. A result counts only when it is final: a game when its feed marks it final, a Polymarket market only after its on-chain payout is recorded, which follows UMA's dispute window of about 2 hours (longer if a proposal is disputed), and a scheduled publisher's number when it is posted. The cycle that sees a final result submits the reading and runs the burn in the same pass. Before it swaps, the program checks the pool's current rate against its average over the last 10 to 20 minutes, which a trading pool already has. One burn spends at most 2% of the pool's SOL reserve, and the rest carries to the next burn, so a large burn arrives in slices. Typical times after the event are about 5 to 25 minutes for sports results and scheduled data, and about 2 hours plus a few minutes for Polymarket markets. When the transaction confirms, the receipt appears on the coin's page. The page <a href="https://burnticker.com/burnticker/how-burns-settle">How burns are settled</a> states the same facts, each number read from the code.</p>
 </section>
 <section aria-labelledby="s-4-settlement-on-chain-the-burn-receipts-program">
 <h2 id="s-4-settlement-on-chain-the-burn-receipts-program">4. Settlement on chain: the burn receipts program</h2>
@@ -675,9 +690,15 @@ v2 (buyback): &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt
       <a href="/burnticker/launch" data-launch-link>Launch</a>
       <a href="/burnticker/about">How it works</a>
       <a href="/burnticker/trust">Trust</a>
+      <a href="/burnticker/verify-yourself">Verify it yourself</a>
       <a href="/burnticker/operator">Who runs this</a>
       <a href="/whitepaper.html" aria-current="page">Whitepaper</a>
       <a href="/burnticker/docs">Docs and API</a>
+      <a href="/burnticker/how-burns-settle">How burns are settled</a>
+      <a href="/burnticker/changelog">Changelog</a>
+      <a href="/burnticker/incidents">Incidents</a>
+      <a href="/burnticker/bounty">Bounty</a>
+      <a href="/burnticker/press">Press</a>
       <a href="/burnticker/terms">Terms</a>
       <a href="/burnticker/privacy">Privacy</a>
       <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
@@ -686,11 +707,11 @@ v2 (buyback): &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt
   </div>
 </footer>
 <nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">
-  <a href="/burnticker"><span aria-hidden="true">▦</span><span>Coins</span></a>
-  <a href="/burnticker#search"><span aria-hidden="true">⌕</span><span>Search</span></a>
-  <a href="/burnticker/launch"><span aria-hidden="true">+</span><span>Launch</span></a>
-  <a href="/burnticker/leagues"><span aria-hidden="true">⇄</span><span>Seasons</span></a>
-  <a href="/burnticker/about"><span aria-hidden="true">?</span><span>Learn</span></a>
+  <a href="/burnticker"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4h7v7H4z"/><path d="M13 4h7v7h-7z"/><path d="M4 13h7v7H4z"/><path d="M13 13h7v7h-7z"/></svg></span><span>Coins</span></a>
+  <a href="/burnticker#search"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"/><path d="M15.5 15.5 20 20"/></svg></span><span>Search</span></a>
+  <a href="/burnticker/launch"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span><span>Launch</span></a>
+  <a href="/burnticker/leagues"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 7h14"/><path d="M15 3l4 4-4 4"/><path d="M19 17H5"/><path d="M9 13l-4 4 4 4"/></svg></span><span>Seasons</span></a>
+  <a href="/burnticker/about"><span aria-hidden="true"><svg class="sh-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg></span><span>Learn</span></a>
 </nav>
 <script>
 (function () {

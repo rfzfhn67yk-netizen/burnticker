@@ -32,6 +32,14 @@ export const STATIC_PAGES: { path: string; changefreq: SitemapEntry["changefreq"
   // polish-1: the terms and privacy pages
   { path: "/burnticker/terms", changefreq: "monthly", priority: 0.3 },
   { path: "/burnticker/privacy", changefreq: "monthly", priority: 0.3 },
+  // the legitimacy pass (website-16): the walk-through, the history pages, the bounty and the press kit
+  { path: "/burnticker/verify-yourself", changefreq: "weekly", priority: 0.5 },
+  { path: "/burnticker/how-burns-settle", changefreq: "monthly", priority: 0.5 },
+  { path: "/burnticker/history", changefreq: "weekly", priority: 0.4 },
+  { path: "/burnticker/changelog", changefreq: "daily", priority: 0.4 },
+  { path: "/burnticker/incidents", changefreq: "weekly", priority: 0.4 },
+  { path: "/burnticker/bounty", changefreq: "weekly", priority: 0.4 },
+  { path: "/burnticker/press", changefreq: "monthly", priority: 0.3 },
 ];
 export const DOC_PAGES: string[] = ["/burnticker/docs", "/whitepaper.html", "/api/burnticker/v1/openapi.json"];
 

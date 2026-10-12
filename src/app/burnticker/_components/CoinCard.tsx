@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CARD_LABELS, CARD_MEANINGS, ageText, cardViewFromIndex, curveLine, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
+import { CARD_LABELS, CARD_MEANINGS, RANK_MEANING, ageText, cardViewFromIndex, curveLine, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
 import { ProgressStrip } from "./ProgressStrip";
 import { FollowButton } from "./FollowButton";
 import { Why } from "./Why";
@@ -144,7 +144,7 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
         <div data-row="mcap"><dt title={CARD_MEANINGS.mcap}>{CARD_LABELS.mcap}</dt><dd><Cell c={v.mcap} /></dd></div>
         <div data-row="holders"><dt title={CARD_MEANINGS.holders}>{CARD_LABELS.holders}</dt><dd><Cell c={v.holders} /></dd></div>
         <div data-row="age"><dt>{CARD_LABELS.age}</dt><dd><Cell c={{ text: age, why: age ? null : v.createdWhy }} /></dd></div>
-        <div data-row="burned"><dt title={CARD_MEANINGS.burned}>{CARD_LABELS.burned}</dt><dd><Cell c={v.burned} /></dd></div>
+        <div data-row="burned"><dt title={CARD_MEANINGS.burned}>{CARD_LABELS.burned}</dt><dd><Cell c={v.burned} />{v.rank && <span className="mt-0.5 block text-xs text-neutral-400" data-rank title={RANK_MEANING}>{v.rank}</span>}</dd></div>
       </dl>
       <div className="bt-card-foot" data-row="receipt">
         {v.receipt ? <a className="bt-ghost-btn" href={v.receipt.href} title={CARD_MEANINGS.receipt}>Check receipt</a> : <><span className="bt-ghost-btn is-disabled" aria-disabled="true" title={v.receiptWhy ?? undefined}>Check receipt</span><span className="text-xs text-neutral-500">{v.receiptWhy}</span></>}
