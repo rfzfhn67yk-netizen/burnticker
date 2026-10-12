@@ -92,7 +92,7 @@ Sources: [docs: curve](https://docs.heaven.xyz/curve.md), [docs: fees](https://d
 
 ## Part 2 — the map to Burnticker
 
-The trust rules decide every row. We never talk about price: no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence.
+The trust rules decide every row. We never talk about price: no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence.
 (Burn Derby's one-shot flippening, "WIF's market cap passes SHIB's" — `coinCard.ts`, `launch/CoinVsCoinTile.tsx`; derby admission
 refuses any Burnticker platform coin as an input, `derby/admission.ts`; amended 2026-10-10 after the ChatGPT/Codex review.) The copy
 lint (`config/launch/copy-lint.json`) bans "market cap", "price", "moon", "target", urgency words and calls to buy; its only market-cap

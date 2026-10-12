@@ -1,5 +1,7 @@
+import { hostedSigning as hostedSigningLive } from "@/lib/burnticker/hostedLaunch";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { CREATOR_LAUNCHES_CLOSED, CREATOR_LAUNCHES_CODE, CREATOR_LAUNCHES_FLAG } from "@/lib/burnticker/creatorLaunches";
+import { LOOKUP_TABLES } from "@/lib/burnticker/networks";
 
 /**
  * WHAT A CREATOR CAN LAUNCH ON THIS HOST, DERIVED, NOT WRITTEN (ChatGPT launch audit 5, L02 / audit #4, 2026-10-11: the status said
@@ -42,6 +44,9 @@ const on = (v: string | undefined) => /^(1|true|yes|on)$/i.test((v ?? "").trim()
 export const PREVIEW_BANNER = "This is a preview. Creator launches are closed, so nothing here builds or sends a transaction.";
 export const LAUNCHES_CLOSED_CODE = "launches-closed";
 export const TYPE_UNAVAILABLE_CODE = "launch-type-unavailable";
+/** website-12 (2026-10-12, ChatGPT audit 6 A2): the ONE line beside every pair option, and the blocker behind its details. */
+export const PAIRS_UNAVAILABLE_LINE = "Paired launches are not available yet.";
+export const PAIRS_BLOCKER = "On mainnet this site has not turned on the program that runs pair launches, so a launch with two coins cannot be reviewed for signing or built here.";
 
 export function launchModeFromEnv(env: Env = process.env): LaunchMode {
   if (on(env[CREATOR_LAUNCHES_FLAG])) return "open";
@@ -60,7 +65,7 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
   const sportsOk = tsdb || !mainnet;
   const pairsOk = pairCurve || !mainnet;
   const sportsWhy = sportsOk ? null : "Games without an on-chain market settle on TheSportsDB's scores, and that licence is not linked on this site yet.";
-  const pairsWhy = pairsOk ? null : "Paired coins are off on mainnet because this site has not turned on the pair curve.";
+  const pairsWhy = pairsOk ? null : PAIRS_BLOCKER;
   const polyWhy = polymarket ? null : "Polymarket search is turned off on this site.";
   const t = (type: LaunchType, ok: boolean, why: string | null): TypeAvailability => ({ type, label: LABEL[type], available: ok, reason: ok ? null : why });
   const types: Record<LaunchType, TypeAvailability> = {
@@ -134,7 +139,138 @@ export const hostCluster = (env: Env = process.env): "mainnet" | "devnet" | "loc
  * The catalogue's `launches` block (the app's /api/burnticker/catalogue and /v1/catalogue): `creators` (true only when open — older
  * readers keep working), `note`, and since API 1.14.0 `mode`, `banner`, `types` and `sources`.
  */
-export function catalogueLaunches(env: Env = process.env): { creators: boolean; note: string; mode: LaunchMode; banner: string | null; types: Record<LaunchType, TypeAvailability>; sources: SourceAvailability[] } {
+export function catalogueLaunches(env: Env = process.env, now: number = Date.now()): { creators: boolean; note: string; mode: LaunchMode; banner: string | null; types: Record<LaunchType, TypeAvailability>; sources: SourceAvailability[]; hostedSigning: HostedSigning; readAt: string } {
   const m = availabilityFromEnv(env, hostCluster(env));
-  return { creators: m.mode === "open", note: m.mode === "open" ? "creator launches are open on this site" : m.mode === "preview" ? PREVIEW_BANNER : CREATOR_LAUNCHES_CLOSED, mode: m.mode, banner: m.banner, types: m.types, sources: m.sources };
+  return { creators: m.mode === "open", note: m.mode === "open" ? "creator launches are open on this site" : m.mode === "preview" ? PREVIEW_BANNER : CREATOR_LAUNCHES_CLOSED, mode: m.mode, banner: m.banner, types: m.types, sources: m.sources, ...catalogueLaunchState(env, now) };
+}
+
+
+// ---- THE SITE'S ONE LAUNCH-STATE RECORD (website-12, 2026-10-12) ------------------------------------------------------------------
+/**
+ * ONE TYPED RECORD FOR EVERY OPEN / CLOSED SENTENCE (Claude site audit 2 item 1, ChatGPT chat audit 6 A1 and A11, code review 5 item 2).
+ * Trust and Operator said "Creator launches are closed" in the dated summary and "open" in the host line; About said closed; the header's
+ * disabled wallet said closed; the meta tags said closed; and the launcher offered an enabled "Open wallet and launch" although no launch
+ * can be signed on this site. Every such sentence now reads `siteLaunchState` (server pages, from the env) or
+ * `siteLaunchStateFromCatalogue` (client pages, from GET /api/burnticker/catalogue). Nothing else may write "open" or "closed".
+ *
+ *   read           loading | ready | unavailable (the catalogue could not be read) | stale (the reading is older than STALE_AFTER_MS)
+ *   mode           closed | preview | open (the host flags, launchModeFromEnv)
+ *   types / pairs  which launch types this host takes and why not; `pairs` is the one pair line (Coin vs Coin, registered pairs and the
+ *                  two-coin Matchup) with its blocker
+ *   hostedSigning  whether a launch started on this site can be signed and sent at all. False today, from three source facts: the server
+ *                  wires a stand-in LaunchLab adapter (server.ts), the server's launch route does not pass allowMainnet to the builder
+ *                  (handlers.ts prepareLaunch, so launchBundle.ts refuses mainnet), and no address lookup table is pinned for the network
+ *                  (networks.ts LOOKUP_TABLES, which the browser needs to sign). test/burntickerWebsite12.test.ts reads those sources so
+ *                  the constants below cannot drift from them.
+ *   canSign        mode open, read ready, hosted signing complete. The launch button is enabled only when this is true.
+ *   sentence       THE one sentence about launching on this site; `walletNote` the header's wallet line (connection only; it gates
+ *                  "Your coins"); `meta.description` the pages' description and social previews.
+ *
+ * Pure and client-safe. A missing or malformed catalogue field is read as the safe value (closed, cannot sign).
+ */
+export type SiteLaunchRead = "loading" | "ready" | "unavailable" | "stale";
+export interface HostedSigning { complete: boolean; blockers: string[] }
+export interface SiteLaunchState {
+  read: SiteLaunchRead;
+  mode: LaunchMode;
+  cluster: string | null;
+  types: Record<LaunchType, TypeAvailability>;
+  /** Coin vs Coin, registered pairs and the two-coin Matchup: one line and its blocker (null when available). */
+  pairs: { available: boolean; line: string | null; detail: string | null };
+  hostedSigning: HostedSigning;
+  /** The launch button may sign and send: open, freshly read, hosted signing complete. */
+  canSign: boolean;
+  /** The wizard (search, tiles, review card) may render: open or preview, freshly read. */
+  wizard: boolean;
+  /** THE one open / closed sentence for this site. */
+  sentence: string;
+  /** Why the launch button cannot sign, in one sentence (null when it can). */
+  signingSentence: string | null;
+  /** The header's wallet explanation: what connecting does, and that it is only for "Your coins". */
+  walletNote: string;
+  meta: { description: string };
+  /** When the host answered (ISO), null when unknown. */
+  readAt: string | null;
+}
+
+/** The headline every description starts with (Claude site audit 2 item 1: "the current headline"). */
+export const SITE_HEADLINE = "Memecoins that burn on real-world results. Every burn is a receipt.";
+/** A catalogue reading older than this is stale: launch controls stay off until the page reads it again. */
+export const STALE_AFTER_MS = 15 * 60_000;
+/**
+ * The server's launch wiring. Since launch-10 (2026-10-12) the real LaunchLab client and the mainnet allowance exist in code, so
+ * whether a launch started on this site can be signed is a HOST question (env), read live from hostedLaunch.ts's `hostedSigning`, not a
+ * source fact. These two constants record that the code paths exist; test/burntickerWebsite12.test.ts pins them to the source.
+ */
+export const HOSTED_LAUNCHLAB_ADAPTER: "stand-in" | "real" = "real";
+export const HOSTED_BUILDER_ALLOWS_MAINNET = true;
+
+export const SITE_SENTENCE = {
+  loading: "Checking whether creator launches are open on this site.",
+  unavailable: "Whether creator launches are open could not be read, so no launch controls are shown.",
+  stale: "The launch status on this page is out of date, so launch controls stay off. Reload the page to read it again.",
+  closed: CREATOR_LAUNCHES_CLOSED,
+  preview: PREVIEW_BANNER,
+  reviewOnly: "You can set up and review a coin on this site, but a launch cannot be signed here yet.",
+  open: "Creator launches are open on this site.",
+} as const;
+export const SIGNING_UNAVAILABLE = "A launch cannot be signed on this site yet, so the launch button stays off.";
+export const WALLET_NOTE = "Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.";
+
+/**
+ * Why a launch started on this site cannot be signed and sent (empty = it can): the host's live wiring from hostedLaunch.ts
+ * (allowance, RPC, program, platform, admin, fee wallet, the browser RPC on mainnet, the client setting, the lookup-table pin).
+ * `cluster` only overrides the network the host would otherwise read from env.
+ */
+export function hostedSigningFor(cluster: string | null, env: Env = process.env): HostedSigning {
+  const e = cluster === "mainnet" || cluster === "devnet" ? { ...env, BURNTICKER_CLUSTER: cluster } : env;
+  const h = hostedSigningLive(e as Readonly<Record<string, string | undefined>>);
+  return { complete: h.canComplete, blockers: h.blockers };
+}
+
+function stateFrom(read: SiteLaunchRead, m: LaunchAvailabilityModel, hostedSigning: HostedSigning, readAt: string | null): SiteLaunchState {
+  const fresh = read === "ready";
+  const mode: LaunchMode = fresh ? m.mode : "closed";
+  const pairsA = m.types.pairs;
+  const canSign = fresh && mode === "open" && hostedSigning.complete;
+  const sentence = read === "loading" ? SITE_SENTENCE.loading : read === "unavailable" ? SITE_SENTENCE.unavailable : read === "stale" ? SITE_SENTENCE.stale
+    : mode === "closed" ? SITE_SENTENCE.closed : mode === "preview" ? SITE_SENTENCE.preview : hostedSigning.complete ? SITE_SENTENCE.open : SITE_SENTENCE.reviewOnly;
+  const signingSentence = canSign ? null : !fresh || mode !== "open" ? sentence : SIGNING_UNAVAILABLE;
+  return {
+    read, mode, cluster: m.cluster, types: m.types,
+    pairs: { available: pairsA.available, line: pairsA.available ? null : PAIRS_UNAVAILABLE_LINE, detail: pairsA.available ? null : pairsA.reason },
+    hostedSigning, canSign, wizard: fresh && (mode === "open" || mode === "preview"), sentence, signingSentence, walletNote: WALLET_NOTE,
+    meta: { description: `${SITE_HEADLINE} ${read === "ready" ? sentence : SITE_SENTENCE.closed}` },
+    readAt,
+  };
+}
+
+/** Server pages and routes: the record from the host's environment. */
+export function siteLaunchState(env: Env = process.env, now: number = Date.now()): SiteLaunchState {
+  const cluster = hostCluster(env);
+  return stateFrom("ready", availabilityFromEnv(env, cluster), hostedSigningFor(cluster, env), new Date(now).toISOString());
+}
+
+/** Before the catalogue answers. */
+export const SITE_LAUNCH_STATE_LOADING: SiteLaunchState = stateFrom("loading", availabilityFromCatalogue(null), { complete: false, blockers: [] }, null);
+
+/**
+ * Client pages: the record from the catalogue body. `failure` (the request failed or was not JSON) → unavailable; a `launches.readAt`
+ * older than STALE_AFTER_MS → stale; a missing `hostedSigning` → cannot sign. All three keep every launch control off.
+ */
+export function siteLaunchStateFromCatalogue(body: unknown, o: { failure?: string | null; now?: number } = {}): SiteLaunchState {
+  if (o.failure != null || !body || typeof body !== "object") return stateFrom("unavailable", availabilityFromCatalogue(null), { complete: false, blockers: [] }, null);
+  const l = ((body as { launches?: { hostedSigning?: unknown; readAt?: unknown } }).launches ?? {});
+  const hs = l.hostedSigning as Partial<HostedSigning> | undefined;
+  const hostedSigning: HostedSigning = hs && typeof hs.complete === "boolean" && Array.isArray(hs.blockers)
+    ? { complete: hs.complete, blockers: hs.blockers.filter((b): b is string => typeof b === "string") }
+    : { complete: false, blockers: ["This site did not say whether a launch can be signed here."] };
+  const readAt = typeof l.readAt === "string" && !Number.isNaN(Date.parse(l.readAt)) ? l.readAt : null;
+  const stale = readAt !== null && (o.now ?? Date.now()) - Date.parse(readAt) > STALE_AFTER_MS;
+  return stateFrom(stale ? "stale" : "ready", availabilityFromCatalogue(body), hostedSigning, readAt);
+}
+
+/** The catalogue's additive fields for the record: `hostedSigning` and `readAt`. */
+export function catalogueLaunchState(env: Env = process.env, now: number = Date.now()): { hostedSigning: HostedSigning; readAt: string } {
+  return { hostedSigning: hostedSigningFor(hostCluster(env), env), readAt: new Date(now).toISOString() };
 }

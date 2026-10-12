@@ -57,6 +57,25 @@ describe("the LaunchLab PoolState decoder", () => {
   });
 });
 
+describe("the curve's market cap (website-13, owner decision 2026-10-12): a number read from the pool, pinned to the SDK", () => {
+  test("virtual reserves decode at the SDK's offsets; the market cap is the SDK's constant-product price times the total supply", async () => {
+    const { Curve } = await import("@raydium-io/raydium-sdk-v2");
+    const { curveMarketCap } = await import("@/lib/burnticker/market");
+    for (const id of [CURVE_62, CURVE_1]) {
+      const raw = bytes(id);
+      const sdk = LaunchpadPool.decode(Buffer.from(raw)) as unknown as Record<string, BN>;
+      const v = decodeLaunchLabPool(raw)!;
+      assert.equal(v.virtualARaw.toString(), sdk.virtualA.toString()); assert.equal(v.virtualBRaw.toString(), sdk.virtualB.toString());
+      const price = Curve.getPrice({ poolInfo: LaunchpadPool.decode(Buffer.from(raw)), decimalA: v.decimalsA, decimalB: v.decimalsB, curveType: 0 } as never) as unknown as { mul: (x: string) => { toNumber: () => number } };
+      const want = price.mul((Number(v.supplyRaw) / 10 ** v.decimalsA).toString()).toNumber();
+      const got = Number(curveMarketCap(v));
+      assert.ok(Math.abs(got - want) / want < 1e-9, `${id}: ${got} vs the SDK's ${want}`);
+      assert.equal(curveProgress(v, id).marketCap, curveMarketCap(v));
+    }
+    assert.equal(curveMarketCap(decodeLaunchLabPool(bytes(GRADUATED))!), null, "after graduation the curve says nothing; the pool is read separately");
+  });
+});
+
 describe("trade links and the chart: deep links only, mainnet only", () => {
   const MINT = "CMHXT3ZhRQFRnZ2KbEYmGuknR9dgpBPYnJ4ikJXwgray";
   test("curve → Raydium LaunchLab + Jupiter; graduated → Raydium swap + Jupiter; devnet and drafts get no links and say why", () => {

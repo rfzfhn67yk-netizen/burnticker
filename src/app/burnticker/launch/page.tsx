@@ -24,19 +24,21 @@ import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { LaunchRecovery } from "./LaunchRecovery";
 import { LAUNCH_GATE_LOADING, launchGateFromCatalogue, wizardMayRender, type LaunchGateState } from "@/lib/burnticker/launchGateState";
-import { availabilityFromCatalogue, launchTypeOf, PREVIEW_BANNER, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
+import { availabilityFromCatalogue, launchTypeOf, PREVIEW_BANNER, siteLaunchStateFromCatalogue, SITE_LAUNCH_STATE_LOADING, type LaunchAvailabilityModel, type LaunchType, type SiteLaunchState } from "@/lib/burnticker/launchAvailability";
+import { draftRevision, EMPTY_REVIEW_SLOT, reviewAnswered, reviewFor, reviewMatchesDraft, reviewRequested, REVIEW_UPDATING, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
 import { DEFAULT_SHARE, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset } from "@/lib/burnticker/launchPresets";
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
+import { VAULT_HIDDEN_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { wxThresholdProblem } from "@/lib/burnticker/launchFields";
 import { composeRule, fieldsFromRule, launchBody } from "@/lib/burnticker/launchDraft";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { LaunchGate } from "./LaunchGate";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
-import { describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
-import { TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
+import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { fold, meaningful, queryTokens } from "@/lib/burnticker/textMatch";
 
@@ -210,13 +212,18 @@ export default function LaunchWizard() {
   const [outPick, setOutPick] = useState<{ id: string; q: string } | null>(null);
   // launch audit 5 L02: per-type availability from the catalogue (launchAvailability.ts), explained before any form
   const [avail, setAvail] = useState<LaunchAvailabilityModel | null>(null);
+  // website-12: the one launch-state record (launchAvailability.ts siteLaunchState): every open / closed / signing sentence on this page
+  const [site, setSite] = useState<SiteLaunchState>(SITE_LAUNCH_STATE_LOADING);
+  // A2: a pair path restored from storage or opened by a link while pairs are unavailable lands back on the first screen, said once
+  const [pairNotice, setPairNotice] = useState<string | null>(null);
   // L03: the screen the review was entered from (Back returns there, with its query, category and scroll position)
   const [origin, setOrigin] = useState<Origin | null>(null);
   const restoreScroll = useRef<number | null>(null);
   // L01: a share moved onto the preset row, said out loud; L05: warnings carried from the source screen into the review
   const [shareNotice, setShareNotice] = useState<string | null>(null), [srcWarnings, setSrcWarnings] = useState<string[]>([]);
   // L06: the read-only review payload (POST /v1/launch/review) behind the pre-wallet summary
-  const [review, setReview] = useState<LaunchReview | null>(null), [reviewBusy, setReviewBusy] = useState(false), [reviewErr, setReviewErr] = useState<string | null>(null);
+  // A6: the summary is keyed by the draft's revision (launchReviewSync.ts) — never shown beside another draft's card
+  const [reviewSlot, setReviewSlot] = useState<ReviewSlot<LaunchReview>>(EMPTY_REVIEW_SLOT);
   // L06 / L12: the event as the source states it (the full question, its link, the outcome, when it resolves, the resolution rules)
   const [eventInfo, setEventInfo] = useState<{ question: string; url: string | null; outcome: string | null; resolves: string | null; criteria: string | null } | null>(null);
   const [scheduleDetail, setScheduleDetail] = useState<string | null>(null), [leagueDetail, setLeagueDetail] = useState<string | null>(null), [drillErr, setDrillErr] = useState<string | null>(null);
@@ -236,7 +243,7 @@ export default function LaunchWizard() {
     if (s && (!wantPair || s.flow === "pair")) {
       const set = <T,>(k: string, f: (v: T) => void) => { if (s![k] !== undefined) f(s![k] as T); };
       set("flow", setFlow); set("step", (v: Step) => setStep(v === "launch" ? "review" : v)); set("leagueSeries", setLeagueSeries); set("team", setTeam); set("winLose", setWinLose);
-      set("game", setGame); set("swap", setSwap); set("pairMode", setPairMode); set("pick", setPick); set("filter", setFilter); set("kind", setKind); set("mode", setMode);
+      set("game", setGame); set("swap", setSwap); set("pairMode", setPairMode); set("pick", setPick); set("filter", setFilter); set("kind", setKind); /* launch-10: a stored "vault" mode is never restored (vault mode is hidden; hostedLaunch.ts) */
       set("onYes", setOnYes); set("onNoEnabled", setOnNoEnabled); set("onNo", setOnNo); set("unit", setUnit); set("perUnit", setPerUnit); set("baseline", setBaseline); set("direction", setDirection);
       set("tokensYes", setTokensYes); set("vaultShare", setVaultShare); set("burnOn", setBurnOn); set("fraction", setFraction);
       set("name", setName); set("ticker", setTicker); set("description", setDescription); set("imageUrl", setImageUrl); set("link", setLink); set("xUrl", setXUrl); set("tg", setTg); set("cat", setCat);
@@ -284,7 +291,9 @@ export default function LaunchWizard() {
   const startOver = () => { try { sessionStorage.removeItem(STORE); } catch { /* ignore */ } window.location.href = window.location.pathname; };
 
   // site audit #18: the one shared catalogue read (catalogueClient.ts) — the header's availability uses the same promise
-  useEffect(() => { loadCatalogue().then((raw) => { const j = raw as { sources?: Source[]; cluster?: string; venues?: typeof venues; customImages?: boolean }; setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); setAvail(availabilityFromCatalogue(j)); setGate(launchGateFromCatalogue(j)); }).catch((e) => setGate(launchGateFromCatalogue(null, String((e as Error).message ?? e)))); }, []);
+  useEffect(() => { loadCatalogue().then((raw) => { const j = raw as { sources?: Source[]; cluster?: string; venues?: typeof venues; customImages?: boolean }; setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); setAvail(availabilityFromCatalogue(j)); const st = siteLaunchStateFromCatalogue(j); setSite(st); setGate(st.read === "stale" ? { kind: "unavailable", detail: st.sentence } : launchGateFromCatalogue(j)); }).catch((e) => { const why = String((e as Error).message ?? e); setSite(siteLaunchStateFromCatalogue(null, { failure: why })); setGate(launchGateFromCatalogue(null, why)); }); }, []);
+  // A2: no pair path while pairs are unavailable — a restored session, ?pair=1, the matchup template or "launch one like this" on a game
+  useEffect(() => { if (site.read === "ready" && !site.pairs.available && flow === "pair" && step !== "choose") { setFlow("team"); setStep("choose"); setGame(null); setPairNotice(site.pairs.line); } }, [site, flow, step]);
   const curCat = cats.find((c) => c.id === cat);
   useEffect(() => { if (flow === "browse" && curCat?.guided === "elections" && !etypes.length && venues.polymarket) getJson<{ types: { id: string; label: string; races: number }[] }>(`${V1}/elections`).then((j) => setEtypes(j.types)).catch((e) => { setEtypes([]); setEtypesErr(`The races could not be read just now (${detailOf(e)}).`); }); }, [flow, curCat?.guided, etypes.length, venues.polymarket]);
   useEffect(() => { if (!etype) return; setEbusy(true); setEraces(null); setEpair(null); setEsel([]); getJson<{ states: { abbr: string; name: string; races: number }[]; races: ElRace[] }>(`${V1}/elections?type=${etype}${estate ? `&state=${estate}` : ""}`).then((j) => { setEstates(j.states); setEraces(etype === "control" || estate ? j.races : null); }).catch(() => setEraces([])).finally(() => setEbusy(false)); }, [etype, estate]);
@@ -484,32 +493,34 @@ export default function LaunchWizard() {
     return () => clearTimeout(t);
   }, [rule, btKey, btFor, btBusy, step, flow, runBacktest]);
   const btFresh = btFor === btKey && !!bt;
-  // L06: the read-only review payload (POST /v1/launch/review) for the pre-wallet summary — the server's numbers, debounced; a stale
-  // answer (the rule or names changed meanwhile) is dropped by the sequence id
+  // L06: the read-only review payload (POST /v1/launch/review) for the pre-wallet summary — the server's numbers, debounced. A6: every
+  // request carries the draft's revision; an answer for an older revision or an older request is dropped (launchReviewSync.ts)
   const reviewSeq = useRef(0);
-  const reviewKey = JSON.stringify([rule, ticker, name, note, pairOn ? [tickerB, nameB] : null, srcWarnings, textCtx]);
+  const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB] : null, srcWarnings, textCtx]);
+  const curRev = useRef(reviewKey); curRev.current = reviewKey;
   useEffect(() => {
     if (step !== "review" || !rule || gate.kind === "loading") return;
-    const seq = ++reviewSeq.current;
-    setReviewBusy(true); setReviewErr(null);
+    const seq = ++reviewSeq.current, rev = reviewKey;
+    setReviewSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
       getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: srcWarnings, ...(pairOn && ruleB ? { companion: { ticker: tickerB.toUpperCase(), name: nameB } } : {}) }) })
-        .then((j) => { if (seq === reviewSeq.current) setReview(j); })
-        .catch((e) => { if (seq === reviewSeq.current) { setReview(null); setReviewErr(`${(e as Error).message} (${detailOf(e)})`); } })
-        .finally(() => { if (seq === reviewSeq.current) setReviewBusy(false); });
+        .then((j) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
+        .catch((e) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: `${(e as Error).message} (${detailOf(e)})` })));
     }, 400);
     return () => clearTimeout(t);
   }, [step, reviewKey, gate.kind]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const shownReview = reviewFor(reviewSlot, reviewKey);
+  const reviewCurrent = reviewMatchesDraft(reviewSlot, reviewKey);
 
   const linksOf = useCallback(() => ([["website", link], ["X", xUrl], ["Telegram", tg]] as const).filter(([, u]) => /^https:\/\/\S+$/.test(u.trim())).map(([label, u]) => ({ label, url: u.trim() })), [link, xUrl, tg]);
   const launch = useCallback(async () => {
-    if (!rule) return;
+    if (!rule || !reviewMatchesDraft(reviewSlot, curRev.current)) return;   // A6: transactions are prepared only for the reviewed draft
     setBusy(true); setLaunchErr(null);
     // 409 / 429 / 503 → a plain sentence (pairLaunchClient.launchErrorMessage)
     const post = async (body: Record<string, unknown>) => { const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => null); if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after"))); return j; };
     setPcOut(null);
     mark("launch");
-    // pressing Launch is the acknowledgement (the line under the button states both); socials, a first buy and a custom image are API-only
+    // pressing Launch is the acknowledgement (the line under the button states both); socials and a custom image are API-only; no launch built here carries an opening purchase (hostedLaunch.ts)
     flowStats.current.decisions++;
     const common = { creator, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, timings: { ...stepTimes.current, screens: flowStats.current.screens, decisions: flowStats.current.decisions } };
     try {
@@ -517,7 +528,7 @@ export default function LaunchWizard() {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
         const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, links: [], rule });
         const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}, note: "", imageUrl: null, links: [], rule: ruleB });
-        setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [season ? "Two coins, each burning on its own team's losses: two independent records. They meet only when the two teams play each other; on those games exactly one side burns." : `Two coins on ${game?.title ?? "one game"}: the losing team's coin burns once the final score is confirmed; a tie burns neither.`] }); setBundle(a.bundle);
+        setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [independentPairFacts(ticker.toUpperCase(), tickerB.toUpperCase()).moves] }); setBundle(a.bundle);
       } else {
         const body = { ...common, ...launchBody({ creator, ticker, name, description: finalDescription, descCtx: textCtx, note, rule }) };
         if (pairOn) {
@@ -530,7 +541,7 @@ export default function LaunchWizard() {
       }
       setStep("launch");
     } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
-  }, [rule, ruleB, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title]);
+  }, [reviewSlot, rule, ruleB, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title]);
 
   // ---- navigation -----------------------------------------------------------------------------------------------------------------
   const order = ORDER[flow];
@@ -631,7 +642,7 @@ export default function LaunchWizard() {
           <div key={sp} className="space-y-1">
             <div className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{sp}{sp === "baseball" && <FieldHelp id="league-pick" />}</div>
             <div className="flex flex-wrap gap-2">{ls.map((l) => (
-              <button data-decision="what" key={l.id} onClick={() => { setLeagueSeries(l.id); setTeamQ(""); setGameQ(""); }} title={l.crossRead ? `confirmed by: ${l.crossRead}` : "no confirmation source — refused at creation"} className={`rounded-full border px-3 py-1.5 text-sm ${leagueSeries === l.id ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{l.label}{!l.crossRead && <span className="ml-1 text-[10px] text-red-400">cross-read missing</span>}</button>
+              <button data-decision="what" key={l.id} onClick={() => { setLeagueSeries(l.id); setTeamQ(""); setGameQ(""); }} title={l.crossRead ? `Checked against ${l.crossRead}.` : "This league has no second source to check results, so a coin on it is refused."} className={`rounded-full border px-3 py-1.5 text-sm ${leagueSeries === l.id ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700 hover:border-neutral-500"}`}>{l.label}{!l.crossRead && <span className="ml-1 text-[10px] text-red-400">no second check</span>}</button>
             ))}</div>
           </div>
         );
@@ -652,11 +663,15 @@ export default function LaunchWizard() {
 
   // launch audit 5 L02: per-type availability (the catalogue's model), shown before any form and on every card that leads to a type
   const typeBlocked = (t: LaunchType | null): string | null => { if (!t || !avail) return null; const a = avail.types[t]; return a.available ? null : `${a.label} launches are not available on this site. ${a.reason ?? ""}`.trim(); };
-  const cardBlocked = (c: Suggestion): string | null => typeBlocked(c.matchup ? "matchup" : c.picker ? "markets" : launchTypeOf(c.rule));
+  /** A2: the one line beside every pair option (Coin vs Coin, the two-coin Matchup, registered pairs) while pairs are unavailable. */
+  const pairsBlocked: string | null = site.read === "ready" && !site.pairs.available ? site.pairs.line : null;
+  const pairsWhy = (id: string) => pairsBlocked ? <details id={id} className="mt-2 text-xs text-amber-300" data-pairs-blocked><summary className="cursor-pointer">{pairsBlocked}</summary><p className="mt-1 text-neutral-400">{site.pairs.detail}</p></details> : null;
+  const cardBlocked = (c: Suggestion): string | null => (c.matchup || c.venue === "tile" ? pairsBlocked : null) ?? typeBlocked(c.matchup ? "matchup" : c.picker ? "markets" : launchTypeOf(c.rule));
   const firstActionable = ures ? ures.cards.findIndex((c) => !c.refused.length && (!!c.picker || !!c.rule || !!c.matchup) && !cardBlocked(c)) : -1;
   const preview = gate.kind === "preview";
   /** Why the wallet cannot open for the rule on the review card (preview / closed host, an unavailable type), or null. */
-  const walletBlocked = (t: LaunchType | null): string | null => (preview ? "This is a preview, so the wallet stays closed. Creator launches are closed on this site." : gate.kind !== "open" ? "Creator launches are closed on this host, so the wallet stays closed." : typeBlocked(t));
+  // website-12: one record decides; the review's own reason (a type or a pair this host cannot take) comes first, then the site's
+  const walletBlocked = (t: LaunchType | null, two = false): string | null => (two ? pairsBlocked : null) ?? typeBlocked(t) ?? site.signingSentence ?? (step === "review" && !reviewCurrent ? REVIEW_UPDATING : null);
   // website brief §1: the gate resolves before any launch control renders (loading → skeleton; closed / unavailable → no controls)
   if (!wizardMayRender(gate)) return <LaunchGate state={gate as Exclude<LaunchGateState, { kind: "open" | "preview" }>} deficitHref={DEFICIT_SITE} noWalletLine={NO_WALLET_LINE} />;
 
@@ -715,7 +730,7 @@ export default function LaunchWizard() {
                   {c.note && <p className="mt-2 text-xs text-amber-300">{c.note}</p>}
                   {cardBlocked(c) && <p className="mt-2 text-xs text-amber-300" data-type-blocked>{cardBlocked(c)}</p>}
                   {c.refused.length > 0 ? <p className="mt-2 text-xs text-red-400">{refusedLine(c.refused)}</p>
-                    : c.venue === "tile" ? (c.href ? <Link className="mt-2 inline-block underline text-amber-300 text-xs" href={c.href}>Open Coin vs Coin →</Link> : <p className="mt-2 text-xs text-neutral-500">Coin vs Coin — not built yet</p>)
+                    : c.venue === "tile" ? (pairsBlocked ? null : c.href ? <Link className="mt-2 inline-block underline text-amber-300 text-xs" href={c.href}>Open Coin vs Coin →</Link> : <p className="mt-2 text-xs text-neutral-500">Coin vs Coin — not built yet</p>)
                     : c.picker ? <div className="mt-2 space-y-1">
                       <button data-decision="what" data-first-result={ci === firstActionable ? "" : undefined} className="rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950" aria-expanded={outPick?.id === c.id} onClick={() => setOutPick(outPick?.id === c.id ? null : { id: c.id, q: "" })}>{outPick?.id === c.id ? "Close the list" : `Pick a ${c.picker.noun === "outcome" ? "name" : c.picker.noun} →`}</button>
                       {outPick?.id === c.id && <div className="rounded border border-neutral-700 p-2" aria-label="outcome picker">
@@ -741,28 +756,25 @@ export default function LaunchWizard() {
       {step === "choose" && (
         <section className="space-y-3" aria-label="What do you want to launch?">
           <h2 className="text-lg font-medium">…or start from one of these</h2>
-          {avail && Object.values(avail.types).some((t) => !t.available) && (
-            <div className="rounded border border-neutral-800 p-2 text-xs text-neutral-400" data-availability>
-              <p className="text-neutral-300">Some kinds of coin cannot be launched on this site right now.</p>
-              <ul className="mt-1 list-disc space-y-0.5 pl-5">{Object.values(avail.types).filter((t) => !t.available).map((t) => <li key={t.type}>{t.label} launches are not available. {t.reason}</li>)}</ul>
-            </div>
-          )}
+          {pairNotice && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-300" role="status" data-pair-notice>{pairNotice} {site.pairs.detail}</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             {([
               ["team", "Team coin", "Any team in any league — baseball, basketball, hockey, soccer, football. It burns on every win this season. For losses, type “… lose” in the box above.", "For example, $RAYS26, $ARSENAL or $OILERS"],
-              ["pair", "Matchup", "Two teams, two coins: the losing team's coin burns.", "For example, $LAKERS vs $CELTICS"],
+              ["pair", "Matchup", "Two teams, two separate coins. Each coin burns itself when its own team loses, and no SOL moves between them.", "For example, $LAKERS vs $CELTICS"],
               ["browse", "Any result", "Weather, elections, the economy, space or culture. Pick a category, then a source.", "For example, the national debt, Denver's high or a Senate race"],
-            ] as const).map(([f, title, body, eg]) => { const why = f === "team" ? typeBlocked("team") : f === "pair" ? typeBlocked("matchup") : null; return (
-              <button key={f} data-decision="what" disabled={!!why} aria-describedby={why ? `tile-${f}-why` : undefined} onClick={() => begin(f)} className="text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none disabled:opacity-50 disabled:hover:border-neutral-800">
-                <div className="text-lg font-semibold">{title}</div>
-                <p className="mt-1 text-sm text-neutral-300">{body}</p>
-                <p className="mt-3 text-xs text-neutral-500">{eg}</p>
-                {why && <p id={`tile-${f}-why`} className="mt-2 text-xs text-amber-300">{why}</p>}
-              </button>
+            ] as const).map(([f, title, body, eg]) => { const pairTile = f === "pair" && !!pairsBlocked; const why = f === "team" ? typeBlocked("team") : f === "pair" ? pairsBlocked ?? typeBlocked("matchup") : null; return (
+              <div key={f} className={`rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-tile={f} data-unavailable={why ? "" : undefined}>
+                <button data-decision="what" disabled={!!why} aria-describedby={why ? `tile-${f}-why` : undefined} onClick={() => begin(f)} className="w-full text-left rounded-xl p-5 hover:border-amber-400 focus:outline focus:outline-amber-400 disabled:cursor-not-allowed">
+                  <div className="text-lg font-semibold">{title}</div>
+                  <p className="mt-1 text-sm text-neutral-300">{body}</p>
+                  <p className="mt-3 text-xs text-neutral-500">{eg}</p>
+                </button>
+                {pairTile ? <div className="px-5 pb-4">{pairsWhy(`tile-${f}-why`)}</div> : why && <p id={`tile-${f}-why`} className="px-5 pb-4 text-xs text-amber-300">{why}</p>}
+              </div>
             ); })}
-            <CoinVsCoinTile pairCurve={venues.pairCurve === true} blocked={walletBlocked("derby")} unavailable={typeBlocked("derby")} />
+            <CoinVsCoinTile pairCurve={venues.pairCurve === true} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
           </div>
-          <p className="text-xs text-neutral-500"><Link className="underline" href="/burnticker/templates">Templates</Link> has twelve ready shapes. The weather template opens the review card ready to launch. The others open the screen where you make the last choice.</p>
+          <p className="text-xs text-neutral-500"><Link className="underline" href="/burnticker/templates">Start with one of {TEMPLATES.length} templates.</Link></p>
         </section>
       )}
 
@@ -827,7 +839,7 @@ export default function LaunchWizard() {
                   <div key={e.eventTicker} className="rounded border border-neutral-800 p-2">
                     <div className="text-sm font-medium">{e.title} <span className="text-xs text-neutral-500">{e.subTitle ?? ""} · result ~{denver(e.expectedAt)}</span></div>
                     {e.refused.length > 0 ? <p className="text-xs text-red-400">{refusedLine(e.refused)}</p> : <>
-                      {e.pair && <button data-decision="what" className="mt-1 text-xs underline text-amber-300" onClick={() => { markOrigin("exact"); chooseGame(e); }}>Make a matchup pair from this game →</button>}
+                      {e.pair && (pairsBlocked ? <p className="mt-1 text-xs text-amber-300" data-pairs-blocked>{pairsBlocked}</p> : <button data-decision="what" className="mt-1 text-xs underline text-amber-300" onClick={() => { markOrigin("exact"); chooseGame(e); }}>Make a matchup pair from this game →</button>)}
                       <ul className="mt-1 text-xs text-neutral-400 space-y-0.5">{e.markets.slice(0, 12).map((m) => <li key={m.ticker} className="flex items-center justify-between gap-2"><span><code>{m.suffix}</code> {m.label}</span><button data-decision="what" className="underline" onClick={() => { markOrigin("exact"); setPick({ oracle: "kalshi", series: null, market: m.ticker, title: `${e.title} — ${m.label} (resolves once)` }); setKind("binary"); next(); }}>burn on this market →</button></li>)}</ul>
                     </>}
                   </div>
@@ -907,7 +919,7 @@ export default function LaunchWizard() {
                 <div key={c.id} className={`rounded-lg border p-3 text-sm ${c.launchable.ok ? "border-neutral-800 bg-neutral-900" : "border-neutral-900 opacity-70"}`}>
                   <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
                     <span className={`bt-chip bt-chip-${c.venue}`}>{c.venue === "feed" ? "Feed" : c.venueLabel}</span>
-                    <span className="text-neutral-500">tier {c.tier} · {c.tierLabel}</span>
+                    <span className="text-neutral-500">{c.tierLabel.replace(/^keeper-read /, "read by the operator's automation from a ")}</span>
                     <span className="ml-auto text-neutral-500">{c.kind === "scalar" ? "a number" : "yes / no"}</span>
                   </div>
                   <div className="mt-1 font-medium leading-snug">{c.title}</div>
@@ -968,7 +980,7 @@ export default function LaunchWizard() {
         const coinA = { key: "a", name, ticker, onName: (v: string) => { setName(v); setNameAuto(false); noteEdit(); }, onTicker: (v: string) => { setTicker(v); setTickerAuto(false); noteEdit(); }, image: genImg(rule, ticker, oneLiner), oneLiner, oracle: pairOn ? "catalogue" : pick?.oracle ?? "catalogue", badge: text?.badge ?? null };
         const coins = pairOn && ruleB ? [coinA, { key: "b", name: nameB, ticker: tickerB, onName: (v: string) => { setNameB(v); noteEdit(); }, onTicker: (v: string) => { setTickerB(v); noteEdit(); }, image: genImg(ruleB, tickerB, textB?.oneLiner ?? ""), oneLiner: textB?.oneLiner ?? ruleOneLiner(ruleB), oracle: "catalogue", badge: textB?.badge ?? null }] : [coinA];
         const sentence = pairOn && sideA && sideB
-          ? (season ? `$${ticker} burns ${shareText} of its pool every time the ${A} lose this season, and $${tickerB} does the same for the ${B}: two coins, two separate records.` : `When ${game?.title ?? "the game"} is final, the losing team's coin burns ${shareText} of its pool — $${ticker} if the ${A} lose, $${tickerB} if the ${B} lose. A tie burns neither.`)
+          ? (season ? `$${ticker} spends ${shareText} of its burn budget every time the ${A} lose this season, and $${tickerB} does the same for the ${B}. They are two separate coins with two separate records.` : `When ${game?.title ?? "the game"} is final, the coin of the team that lost spends ${shareText} of its own burn budget: $${ticker} if the ${A} lose, $${tickerB} if the ${B} lose.`)
           : text ? text.ruleBlock.split(/(?<=\.)\s/)[0] : plainSentence(rule, ticker, pick?.title ?? bt?.seriesTitle ?? null);
         const problems = btFresh ? [...(bt?.refusals ?? []), ...(pairOn ? btB?.refusals ?? [] : [])].map((r) => r.reason) : [];
         const ready = !!name.trim() && okTicker(ticker) && (!pairOn || (!!nameB.trim() && okTicker(tickerB) && ticker !== tickerB)) && !noteProblem;
@@ -978,6 +990,7 @@ export default function LaunchWizard() {
               coins={coins}
               sentence={sentence}
               pairLine={pairOn && !ruleB ? PAIR_REVIEW_LINE : null}
+              pairFacts={pairOn && sideA && sideB ? (ruleB ? independentPairFacts(ticker || "A", tickerB || "B", { a: `the ${A}`, b: `the ${B}` }) : winnerTakesBurnFacts(ticker || "A", tickerB || "B")) : null}
               ends={endsLine(text)}
               shares={{ options: [...shareOptions], value: shareValue, onChange: (v) => { flowStats.current.decisions++; setDial("fraction", v); } }}
               durations={pairOn ? { options: [{ value: "game", label: "until the result" }, { value: "season", label: "this season" }], value: pairMode === "game" ? "game" : "season", onChange: (v) => { flowStats.current.decisions++; setPairMode(v === "game" ? "game" : "season"); } } : null}
@@ -988,14 +1001,15 @@ export default function LaunchWizard() {
               ready={ready}
               creator={creator || null}
               onLaunch={() => { void launch(); }}
-              summary={<PreWalletSummary review={review} loading={reviewBusy} error={reviewErr} />}
-              blocked={walletBlocked(pairOn ? "matchup" : launchTypeOf(rule))}
+              summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
+              blocked={walletBlocked(pairOn ? "matchup" : launchTypeOf(rule), pairOn)}
               warnings={srcWarnings}
               shareNotice={shareNotice}
               event={flow === "single" && pick?.oracle === "polymarket" && !pairOn ? eventInfo : null}
               namePrompt={!pairOn && text?.name === "Event Coin" ? "This question does not give a clear coin name: please name the coin (and check the ticker) before you launch." : null}
             />
             {/* website brief §2: the funds flow before a registered pair launches (pairs made now are winner-takes-the-burn) */}
+            <p className="text-xs text-neutral-500" data-vault-hidden>{VAULT_HIDDEN_SENTENCE}</p>
             {pairOn && !ruleB && <PairFundsFlow version="winner-takes-the-burn" tickers={{ a: ticker || "A", b: tickerB || "B" }} open />}
             {pairOn && ticker && ticker === tickerB && <p className="text-xs text-red-400">The two coins need different tickers.</p>}
             <p className="text-xs"><button className="underline" data-nav onClick={back}>← Back</button></p>

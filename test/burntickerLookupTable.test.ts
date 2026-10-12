@@ -138,7 +138,7 @@ describe("the measured wire size: every real step fits 1,232 bytes as v0 + the t
       console.log(`${network} ${o.vault ? "vault + first buy" : "single + first buy"}: v0+table ${size} B (over ${PACKET_LIMIT})`);
       assert.ok(size > PACKET_LIMIT, "if this now fits, move the case into the list above");
       const problems = planSizeProblems(plan.steps, creator, network);
-      assert.equal(problems.length, 1); assert.match(problems[0], /over the 1,232-byte limit.*launch without the opening purchase/);
+      assert.equal(problems.length, 1); assert.match(problems[0], /over the 1,232-byte limit, so it cannot be sent as one transaction$/);   // launch-10: the site never builds this shape (hostedLaunch.ts)
       assert.ok(lintCopy(problems[0], loadCopyLintConfig()).ok, problems[0]);
       let walletCalls = 0;
       const r = await signAndSendPlan(plan, creator, { latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 100 }), lookupTable: async () => expectedLookupTable(network), signTransaction: async (tx) => { walletCalls++; return tx; }, sendRaw: async () => "x", confirm: async () => ({ err: null }) });
@@ -201,7 +201,8 @@ describe("the browser verifies the table before signing (lookup table mismatch â
     for (const x of NETWORKS) assert.ok(x in LOOKUP_TABLES && "address" in LOOKUP_TABLES[x] && "authority" in LOOKUP_TABLES[x]);
     for (const x of NETWORKS) assert.equal(LOOKUP_TABLE_ENTRIES[x].length, 21);
     const card = fs.readFileSync(path.join(ROOT, "src/app/burnticker/launch/SignCard.tsx"), "utf8");
-    assert.match(card, /lookupTable: \(\) => verifiedLookupTable\(connection, network\)/);
-    assert.match(card, /lookupTablePinProblems\(network\)/);
+    // launch-10 (2026-10-12): the pin comes from the host at runtime (GET /api/burnticker/launch); test/burntickerHostedLaunch.test.ts
+    assert.match(card, /lookupTable: \(\) => verifiedLookupTable\(connection, network, pin\)/);
+    assert.match(card, /lookupTablePinProblems\(network, pin\)/);
   });
 });

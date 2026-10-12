@@ -20,6 +20,31 @@ export const GUARDRAILS = [
   "rules locked at launch",
 ] as const;
 
+/**
+ * WHAT KIND OF PROMISE EACH GUARDRAIL IS (ChatGPT chat audit 6, A9, 2026-10-12): the trust page showed one check mark for policy, current
+ * program behaviour and review history alike. Each guardrail now names its kind and says its scope in a full sentence. GUARDRAILS stays
+ * the short list the README and the announcement thread quote; this is how the trust page shows it.
+ *
+ *   enforced  the current program or platform settings make it so (an upgrade could change it; the scope says so)
+ *   policy    the operator's own rule, which no code enforces
+ *   observed  evidence anyone can look at now
+ *   planned   not in place yet
+ */
+export type GuardrailKind = "enforced" | "policy" | "observed" | "planned";
+export const GUARDRAIL_KIND_LABEL: Record<GuardrailKind, string> = { enforced: "Enforced by the current program or settings", policy: "Operator policy, not enforced by code", observed: "Evidence you can check now", planned: "Planned, not in place yet" };
+export const GUARDRAIL_DETAIL: Record<(typeof GUARDRAILS)[number], { kind: GuardrailKind; text: string }> = {
+  "settled on primary sources": { kind: "policy", text: "A rule may settle only on a primary source, or on an adjudicated market's on-chain payout." },
+  "signed readings (one operator attester; no independent second attester is live)": { kind: "enforced", text: "The program accepts a reading only with the required signature. Today one signer, run by the operator, signs every reading, and no independent second signer is live." },
+  "program-run burns": { kind: "enforced", text: "In the current program, a burn is one program step that buys and burns in the same transaction. Nobody picks the amount." },
+  "receipts anyone can recompute": { kind: "observed", text: "Every burn's memo, transaction and source reading are public, and the check page recomputes them in your browser." },
+  "open source": { kind: "observed", text: "The code is in a public repository at a pinned commit." },
+  "three blind AI reviews, not a firm audit": { kind: "observed", text: "The program had three blind AI reviews and later AI code reviews. These are AI reviews. They are not a professional security audit, and no security firm has audited the code." },
+  "creators earn nothing": { kind: "enforced", text: "Creators receive no trading-fee revenue. The platform settings send the creator's share of the curve fees to the coin's burn pool. A creator can still hold or trade the coin like anyone else." },
+  "no team buy": { kind: "policy", text: "There is no team allocation, and the operator makes no opening purchase." },
+  "the platform never buys any coin": { kind: "policy", text: "The operator and its wallets never trade a coin launched here. This is a policy, checked by the monitor on the operator page. It is separate from each coin's program-run buyback, which buys only to burn." },
+  "LP locked forever, its fees fund the burn": { kind: "enforced", text: "At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. After graduation the program sends 80% of the SOL side of its fees to the coin's burn pool and 20% to the operator." },
+  "rules locked at launch": { kind: "enforced", text: "No instruction in the current program can change a coin's rule. The program itself can still be upgraded, and the current status says who can approve an upgrade." },
+};
 export const GUARDRAIL_SUMMARY = "Each coin has one rule, and the rule is locked at launch. A program spends the coin's own fee pool on each burn, and nobody chooses the amount. Today one operator signs every reading. The program has had AI reviews, and no security firm has audited it.";
 
 /** What protects a burn. The current values (signers, upgrade authority, time lock) are in the current-status summary, so they are not repeated here. */
@@ -29,7 +54,7 @@ export const SAFEGUARDS: { id: string; title: string; text: string }[] = [
   { id: "crank", title: "Nobody picks the amount", text: "The program that records burns works out each amount from the rule and the pool. It buys the coin on the coin's own pool and burns it in the same step. Anyone may start that step. Before the audit, a short list of up to three approved accounts can be required instead, for at most 90 days. Readings need the operator's signature today. If the operator stops, readings stop and burns stop. Holders keep their coins, nothing can be withdrawn, and every past receipt can still be checked. A way to close out retired coins is planned for the next program upgrade." },
   { id: "no-withdraw", title: "There is no withdraw", text: "The fee pool belongs to the program. Trading fees flow in, and anyone may add more. The only way out is a burn. The program itself can still be upgraded. The current-status summary above says who can approve an upgrade and how long it must wait." },
   { id: "receipts", title: "Anyone can recompute a receipt", text: "Each burn writes one memo in a fixed order. It holds the date, the source, the previous and current readings, the change, the units, the pool, the amount spent, the amount bought, the amount burned, the swap and the rule's fingerprint. Each coin's page recomputes it from the source and shows a tick only when the chain and the source agree." },
-  { id: "holders", title: "Holders are never touched", text: "No one can move or burn tokens in your wallet, and no one can mint more. Burns use only what the pool bought. A coin that stops trading simply stops burning." },
+  { id: "holders", title: "Holders are never touched", text: "No instruction in the current program can move or burn tokens in your wallet, and no one can mint more. Burns use only what the pool bought. A coin that stops trading simply stops burning." },
 ];
 
 /** The admission rules for a source (the old homepage "sources" box). */
@@ -37,7 +62,7 @@ export const ADMISSION_RULES = "A rule settles on a public result. Its input is 
 
 /** Who gets what (the old homepage "economics" cards). */
 export const WHO_GETS_WHAT: { who: string; text: string }[] = [
-  { who: "The coin", text: "Its share of the trading fees goes to its burn pool, which is its burn budget. A day with little trading means a small burn. There is no team allocation, and the team buys nothing at launch." },
+  { who: "The coin", text: "Its share of the trading fees goes to its burn pool, which is its burn budget. Burns draw on the accumulated budget. Trading adds funds, and a burn can be delayed or skipped when the spendable amount is too small. There is no team allocation, and the team buys nothing at launch." },
   { who: "The creator", text: "The creator pays the venue's creation cost and the network fee. The creator earns no cash from fees, because the creator's share is fixed at zero. What the creator gets is a coin whose burns are paid for by its own trading." },
   { who: "Burnticker", text: "Burnticker takes 25 basis points of trading volume on the launch curve. That rate is set in the LaunchLab platform settings, and this page reads it live below. After a coin moves to its trading pool, the liquidity is locked forever. The program splits the fees from that liquidity: 80% goes to the coin's burn pool and 20% goes to the operator. Nothing is ever taken from a burn pool. The operator never trades a coin launched here. The only purchases are the program's own buybacks, and everything bought is burned." },
 ];

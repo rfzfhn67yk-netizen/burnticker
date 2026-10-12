@@ -24,6 +24,19 @@ const THEME_BOOT_JS = "(function(){try{var t=localStorage.getItem('bt-theme');if
 
 export const WHITEPAPER_MD = "docs/burnticker/WHITEPAPER.md";
 export const WHITEPAPER_HTML = "site/burnticker/whitepaper.html";
+/**
+ * WHITEPAPER VERSIONS (ChatGPT chat audit 6, A8, 2026-10-12): whitepaper.html is the CURRENT specification, dated and tied to the public
+ * commit it describes (the version notice at the top of WHITEPAPER.md). The first draft, exactly as it stood at the end of 2026-10-10, is
+ * a frozen archive: docs/burnticker/WHITEPAPER-2026-10-10.md is that file byte for byte (test/burntickerWebsite12.test.ts pins its
+ * SHA-256), rendered at whitepaper-2026-10-10.html under an archive banner the renderer adds. The archive's text is never edited.
+ */
+export const CURRENT_SPEC = { date: "2026-10-12", publicCommit: "af52b4a4ea0b80168a4c2e0f47a32045d1035c91" };
+export const ARCHIVE_MD = "docs/burnticker/WHITEPAPER-2026-10-10.md";
+export const ARCHIVE_HTML = "site/burnticker/whitepaper-2026-10-10.html";
+export const ARCHIVE_SHA256 = "3c0f0d9aa915fe19a3b2e8ebe8cd8bd11ba36e0f6c454dafd44283e476a7a78b";
+/** @type {{ title: string; kicker: string; path: string; source: string; banner: string | null }} */
+const CURRENT_OPTS = { title: "Burnticker Whitepaper", kicker: `Technical paper, current specification, ${CURRENT_SPEC.date}`, path: "/whitepaper.html", source: WHITEPAPER_MD, banner: null };
+export const ARCHIVE_OPTS = { title: "Burnticker Whitepaper, draft 1 of 2026-10-10 (archive)", kicker: "Technical paper, draft 1, 2026-10-10, archived", path: "/whitepaper-2026-10-10.html", source: ARCHIVE_MD, banner: '<strong>Archived copy.</strong> This is draft 1 of the paper, kept exactly as it stood at the end of 2026-10-10, and it is not updated. Its statements about status, governance, reviews and fees describe that day. The current specification is at <a href="/whitepaper.html">whitepaper.html</a>.' };
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = "docs/burnticker/";
 
@@ -36,7 +49,8 @@ export function publicRepoBase(root = ROOT) {
   return "TODO_PUBLIC_REPO_URL/blob/main/";
 }
 
-export function renderWhitepaper(mdText, repoBase = publicRepoBase()) {
+/** @param {string} mdText @param {string} [repoBase] @param {{ title: string; kicker: string; path: string; source: string; banner: string | null }} [opts] */
+export function renderWhitepaper(mdText, repoBase = publicRepoBase(), opts = CURRENT_OPTS) {
 const md = mdText.replace(/\r/g, "");
 const REPO = repoBase;
 
@@ -60,6 +74,8 @@ function inline(text) {
 const lines = md.split("\n");
 const body = [];
 const toc = [];
+// A8: the notices before the first section sit above the contents, so a phone reader sees the version before the long list
+const lead = [];
 let title = "";
 let i = 0;
 let sectionOpen = false;
@@ -118,7 +134,7 @@ while (i < lines.length) {
   if (/^> /.test(line)) {
     const q = [];
     while (i < lines.length && /^>( |$)/.test(lines[i])) q.push(lines[i++].replace(/^> ?/, "").trim());
-    body.push(`<aside class="notice" role="note"><p>${inline(q.join(" "))}</p></aside>`);
+    (toc.length ? body : lead).push(`<aside class="notice" role="note"><p>${inline(q.join(" "))}</p></aside>`);
     continue;
   }
   const buf = [];
@@ -132,15 +148,15 @@ const page = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Burnticker Whitepaper</title>
+<title>${esc(opts.title)}</title>
 <meta name="description" content="Burnticker technical paper: how a settled real-world event becomes a burn on Solana, how a program on Solana settles it on chain, what powers exist, and how anyone can recompute every receipt.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#1f1c19">
-<link rel="canonical" href="https://burnticker.com/whitepaper.html">
-<meta property="og:title" content="Burnticker Whitepaper">
+<link rel="canonical" href="https://burnticker.com${opts.path}">
+<meta property="og:title" content="${esc(opts.title)}">
 <meta property="og:description" content="How a settled real-world result becomes a burn on Solana, what powers exist, and how anyone can recompute every receipt.">
 <meta property="og:image" content="https://burnticker.com/brand/og.png">
-<meta property="og:url" content="https://burnticker.com/whitepaper.html">
+<meta property="og:url" content="https://burnticker.com${opts.path}">
 <meta property="og:type" content="article">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@BurnTicker">
@@ -209,9 +225,10 @@ footer p{margin:0 0 6px;max-width:none}
 ${shellHeaderHtml({ current: "/whitepaper.html" })}
 <main class="wrap" id="main">
 <article class="slip">
-<p class="kicker">Technical paper · draft 1 · 2026-10-10</p>
+${opts.banner ? `<aside class="notice" role="note" data-archive><p>${opts.banner}</p></aside>\n` : ""}<p class="kicker">${esc(opts.kicker)}</p>
 <h1>${inline(title)}</h1>
 <p class="stamp">Not audited by a security firm</p>
+${lead.join("\n")}
 <nav class="toc" aria-label="Contents">
 <p>Contents</p>
 <ul>
@@ -222,7 +239,7 @@ ${body.join("\n")}
 </article>
 </main>
 <footer class="wrap">
-  <p>Source of this page: <code>docs/burnticker/WHITEPAPER.md</code>.</p>
+  <p>Source of this page: <code>${opts.source}</code>.</p>
 </footer>
 ${shellFooterHtml({ current: "/whitepaper.html", operatorLine: operatorLine() })}
 <script>
@@ -235,14 +252,17 @@ return page;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const page = renderWhitepaper(fs.readFileSync(path.join(ROOT, WHITEPAPER_MD), "utf8"));
-  const out = path.join(ROOT, WHITEPAPER_HTML);
-  if (process.argv.includes("--check")) {
-    const current = fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "";
-    if (current !== page) { console.error(`${WHITEPAPER_HTML} is out of date: run node scripts/whitepaper-html.mjs`); process.exit(1); }
-    console.log(`${WHITEPAPER_HTML} matches ${WHITEPAPER_MD}`);
-  } else {
-    fs.writeFileSync(out, page);
-    console.log(`wrote ${WHITEPAPER_HTML} (${page.length} bytes) from ${WHITEPAPER_MD}`);
+  let stale = false;
+  for (const [src, dst, opts] of [[WHITEPAPER_MD, WHITEPAPER_HTML, CURRENT_OPTS], [ARCHIVE_MD, ARCHIVE_HTML, ARCHIVE_OPTS]]) {
+    const page = renderWhitepaper(fs.readFileSync(path.join(ROOT, src), "utf8"), publicRepoBase(), opts);
+    const out = path.join(ROOT, dst);
+    if (process.argv.includes("--check")) {
+      const current = fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "";
+      if (current !== page) { console.error(`${dst} is out of date: run node scripts/whitepaper-html.mjs`); stale = true; } else console.log(`${dst} matches ${src}`);
+    } else {
+      fs.writeFileSync(out, page);
+      console.log(`wrote ${dst} (${page.length} bytes) from ${src}`);
+    }
   }
+  if (stale) process.exit(1);
 }

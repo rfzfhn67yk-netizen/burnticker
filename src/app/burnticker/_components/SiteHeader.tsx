@@ -4,17 +4,21 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { NAV, LEARN, HOME_HREF, LAUNCH_LABELS, activeNav, inLearn, type NavItem } from "./nav";
-import { useLaunchAvailability } from "./useLaunchAvailability";
+import { useSiteLaunchState } from "./useSiteLaunchState";
 import { THEME_KEY, currentTheme, type Theme } from "./theme";
 import { ActivityTicker } from "./ActivityTicker";
 import { LaunchClosedModal } from "./LaunchClosedModal";
-import { SEARCH, WALLET } from "@/lib/burnticker/siteNav.mjs";
+import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
+import { WalletButton } from "./WalletButton";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { WALLET_COPY } from "@/lib/burnticker/walletShell";
 
 /**
  * THE BURNTICKER HEADER (B1 "thermal receipt", 2026-10-10; the launchpad skeleton since 2026-10-12, the owner's review items 3, 4 and
  * 11): the mark and wordmark, the primary links Coins · Seasons · Launch with a Learn menu, a search box for the coin list, "Launch a
- * coin" as the one primary button, a disabled "Connect wallet", the light/dark switch, a MENU toggle under 900 px, and the activity
- * line under the row. Every word comes from src/lib/burnticker/siteNav.mjs, which the static pages render too.
+ * coin" as the one primary button, the real "Connect wallet" to its right (WalletButton, website-13: the one shell-wide wallet provider;
+ * it opens "Your coins" and never depends on the launch state), the light/dark switch, a MENU toggle under 900 px (it also carries the
+ * wallet button on phones), and the activity line under the row. Every word comes from src/lib/burnticker/siteNav.mjs, which the static pages render too.
  *
  * "Launch a coin" goes to the launch page while creator launches are open. While they are closed (or the state cannot be read) it opens
  * the closed-launches dialog instead: no date, no waitlist, a link to the coins (brief rule 1).
@@ -56,19 +60,24 @@ export function SiteHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const active = activeNav(pathname);
-  const launchOpen = useLaunchAvailability().open;
+  // website-12's site launch record: the wizard link when the wizard may render, else the dialog with the record's sentence
+  const launch = useSiteLaunchState();
+  const launchOpen = launch.wizard;
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState(false);
   const [theme, setTheme] = useState<Theme>("dark");
   useEffect(() => { setTheme(currentTheme()); }, []);
   useEffect(() => { setOpen(false); }, [pathname]);
+  // the wallet list opened from the phone menu: close the menu so its focus trap does not hold the list's keyboard focus
+  const walletList = useWalletModal().visible;
+  useEffect(() => { if (walletList) setOpen(false); }, [walletList]);
   // a link to "#launch-closed" opens the dialog (the static pages use the same hash)
   useEffect(() => { if (window.location.hash === "#launch-closed") setModal(true); }, []);
   const menuBtn = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!open) return;
-    const links = () => Array.from(menu.current?.querySelectorAll<HTMLElement>("a[href]") ?? []);
+    const links = () => Array.from(menu.current?.querySelectorAll<HTMLElement>("a[href],button") ?? []);
     links()[0]?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); setOpen(false); menuBtn.current?.focus(); return; }
@@ -122,7 +131,7 @@ export function SiteHeader() {
           {launchOpen
             ? <Link className="bt-launch-btn bt-launch-head" href="/burnticker/launch" data-launch-button>{LAUNCH_LABELS.button}</Link>
             : <button type="button" className="bt-launch-btn bt-launch-head" onClick={() => setModal(true)} aria-haspopup="dialog" data-launch-button>{LAUNCH_LABELS.button}</button>}
-          <button type="button" className="bt-wallet" disabled title={WALLET.note}>{WALLET.label}<span className="sr-only">. {WALLET.note}</span></button>
+          <WalletButton />
           <button type="button" className="bt-icon-btn" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={theme === "dark" ? "Light theme" : "Dark theme"}>
             {theme === "dark" ? "☀" : "☾"}
           </button>
@@ -133,9 +142,10 @@ export function SiteHeader() {
       </div>
       <nav id="bt-mobile-nav" ref={menu} className={`bt-nav-mobile${open ? " is-open" : ""}`} aria-label="Burnticker (menu)" hidden={!open}>
         {[...NAV, ...LEARN].map((n) => <NavLink key={n.href} item={n} active={active === n.href} onNavigate={() => setOpen(false)} />)}
+        <div className="bt-nav-wallet"><p>{WALLET_COPY.menuNote}</p><WalletButton variant="menu" /></div>
       </nav>
       <ActivityTicker />
-      {modal && <LaunchClosedModal onClose={() => { setModal(false); if (window.location.hash === "#launch-closed") window.history.replaceState(null, "", window.location.pathname + window.location.search); }} />}
+      {modal && <LaunchClosedModal state={launch} onClose={() => { setModal(false); if (window.location.hash === "#launch-closed") window.history.replaceState(null, "", window.location.pathname + window.location.search); }} />}
     </header>
   );
 }

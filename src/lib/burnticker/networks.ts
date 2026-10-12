@@ -29,6 +29,27 @@ export const LOOKUP_TABLES: Record<Network, { address: string | null; authority:
   mainnet: { address: null, authority: null },
 };
 
+export type LookupTablePin = { address: string | null; authority: string | null };
+const PUBKEY_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/**
+ * THE PIN THE BROWSER CHECKS, READ AT RUNTIME (launch-10, 2026-10-12): pinning a table must not need a code release. On the host's own
+ * network BURNTICKER_LOOKUP_TABLE (the table address) and BURNTICKER_LOOKUP_TABLE_AUTHORITY (the operations key still allowed to hold
+ * it; unset = the table must be frozen) override LOOKUP_TABLES above; the other network keeps the compiled value. The signing card
+ * fetches this from GET /api/burnticker/launch. A malformed address is ignored (the compiled value stays), so a typo cannot unpin a
+ * table silently. The address only says WHERE to look: the browser still checks every entry against lookupTable.ts before it signs.
+ */
+export function lookupTablePin(network: Network, env: Readonly<Record<string, string | undefined>> = process.env): LookupTablePin {
+  if (network !== hostNetwork(env)) return LOOKUP_TABLES[network];
+  const address = (env.BURNTICKER_LOOKUP_TABLE ?? "").trim(), authority = (env.BURNTICKER_LOOKUP_TABLE_AUTHORITY ?? "").trim();
+  if (!PUBKEY_RE.test(address)) return LOOKUP_TABLES[network];
+  return { address, authority: PUBKEY_RE.test(authority) ? authority : null };
+}
+
+/** Both networks' pins as the host serves them (GET /api/burnticker/launch). */
+export const lookupTablePins = (env: Readonly<Record<string, string | undefined>> = process.env): Record<Network, LookupTablePin> =>
+  ({ devnet: lookupTablePin("devnet", env), mainnet: lookupTablePin("mainnet", env) });
+
 /** The public JSON-RPC endpoints a verifier falls back to (read-only calls only). */
 export const PUBLIC_RPC_URLS: Record<Network, string> = { devnet: "https://api.devnet.solana.com", mainnet: "https://api.mainnet-beta.solana.com" };
 

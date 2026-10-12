@@ -44,8 +44,10 @@ describe("the landing page (site/burnticker/index.html)", () => {
     const h1 = /<h1 id="hero-h">([\s\S]*?)<\/h1>/.exec(html)![1].replace(/<[^>]+>/g, "");
     assert.equal(h1, HERO.title); assert.equal(HERO.title, "Memecoins that burn on real-world results.");
     assert.match(html, new RegExp(`<p class="sub">${HERO.sub.replace(/\./g, "\\.")}</p>`)); assert.equal(HERO.sub, "Every burn is a receipt.");
-    // audit 4 BT-21: search and social previews describe the pre-launch state; they never invite launching while launches are closed
-    assert.match(html, /<meta name="description" content="Memecoins that burn on real-world results\. Every burn is a receipt\. Burnticker is in pre-launch, and creator launches are closed\. You can inspect a real devnet burn/);
+    // audit 4 BT-21; website-13 (Claude site audit 2 item 1): the static previews carry the current headline. A static file cannot know
+    // the host's launch state, so it names none (the app's previews read launchAvailability.ts at request time)
+    assert.match(html, /<meta name="description" content="Memecoins that burn on real-world results\. Every burn is a receipt\. /);
+    for (const m of html.matchAll(/<(?:meta [^>]*content="([^"]*)"|title>([^<]*)<)/g)) assert.doesNotMatch(m[1] ?? m[2] ?? "", /creator launches are|pre-launch|devnet/i, "a static preview never states the launch state or the network");
     assert.doesNotMatch(/<meta (?:name|property)="(?:description|og:description|twitter:description)" content="([^"]*)"/g.exec(html)?.[0] ?? "", /Launch one/);
   });
   test("door 2 is generated from the leagues index: every league, never NFL-first, soccer included, no drift", () => {
@@ -74,9 +76,10 @@ describe("the landing page (site/burnticker/index.html)", () => {
     const { LAUNCH_CLOSED, LAUNCH_LABELS } = await import("@/lib/burnticker/siteNav.mjs");
     assert.match(html, /<a class="sh-launch" href="\/burnticker\/launch" data-launch-button>Launch a coin<\/a>/);
     assert.equal(LAUNCH_LABELS.button, "Launch a coin");
-    assert.match(html, /fetch\("\/api\/burnticker" \+ "\/catalogue"\)[\s\S]*open = !!\(j && j\.launches && j\.launches\.creators === true\)/);
+    // website-13: the site launch record (website-12's SiteLaunchState) through the home API decides; unreadable = the dialog
+    assert.match(html, /fetch\("\/api\/burnticker" \+ "\/home", \{ cache: "no-store" \}\)[\s\S]*open = !!\(l && l\.wizard === true\)/);
     assert.match(html, /if \(open\) return; e\.preventDefault\(\); dlg\.showModal\(\);/);
-    assert.ok(html.includes(`<p>${LAUNCH_CLOSED.body}</p>`)); assert.match(LAUNCH_CLOSED.body, /closed until the first coin has receipts/);
+    assert.ok(html.includes(`<p data-launch-sentence>${LAUNCH_CLOSED.body}</p>`)); assert.match(LAUNCH_CLOSED.body, /^Checking whether creator launches are open/, "the record's loading sentence until the read lands");
     assert.doesNotMatch(html, /type="email"|waitlist|countdown/i);
     // the nav says "Launch" in every state; the old "Launch · closed" label is gone
     assert.doesNotMatch(html, /Launch · closed/);
@@ -106,7 +109,8 @@ describe("the landing page (site/burnticker/index.html)", () => {
     if (!fs.existsSync(path.join("src", "app", "burnticker", "derby", "page.tsx"))) assert.doesNotMatch(text, /derby/i);
     else assert.match(html, /href="\/burnticker\/derby"/, "the Derby index exists on main: Seasons links it");
     assert.doesNotMatch(text, /coming soon/i);
-    assert.match(text, /When a league's season ends, the coin with the most receipts is named its champion\. That is a line on a scoreboard, and nobody receives anything for it\./);
+    // ChatGPT audit 6 A11: "Season titles are for the scoreboard only. There are no prizes."
+    assert.match(text, /When a league's season ends, the coin with the most receipts is named its champion\. Season titles are for the scoreboard only\. There are no prizes\./);
     assert.match(text, /Nothing is ever won\. Things are only burned\./, "the footer receipt carries it (brief rule 5)");
   });
   test("Seasons: no illustrative scoreboards on the homepage any more (site audit #7); the leagues page keeps its labelled example", () => {
@@ -129,7 +133,7 @@ describe("the landing page (site/burnticker/index.html)", () => {
   test("mobile-safe and linked: viewport meta, no horizontal scroll, the whitepaper linked", () => {
     assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
     assert.match(html, /body\{[^}]*overflow-x:hidden/);
-    assert.match(html, /href="whitepaper\.html"/);
+    assert.match(html, /href="\/whitepaper\.html"/, "the Learn menu and the footer link the whitepaper");
   });
 });
 
@@ -270,17 +274,25 @@ describe("the committed platform fixture and the brand", () => {
     }
     assert.doesNotMatch(fs.readFileSync("site/burnticker/brand/header.svg", "utf8"), /kalshi/i, "the retired SVG kit too");
   });
-  test("the app shell: footer line, the public layout's Open Graph title and description, the Seasons label", () => {
+  test("the app shell: footer line, the public layout's Open Graph title and description, the Seasons label", async () => {
     assert.match(fs.readFileSync("src/app/burnticker/_components/SiteFooter.tsx", "utf8"), /COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS/);
     const layout = fs.readFileSync("config/public-repo/overlay/src/app/layout.tsx", "utf8");
-    assert.match(layout, /const TITLE = "Burnticker — coins that burn on real-world results, with receipts"/);
-    // audit 4 BT-21, made phase-aware 2026-10-11: closed → says closed, never invites launching; open → says open
-    const closed = /const DESCRIPTION_CLOSED = "([^"]+)"/.exec(layout)![1], open = /const DESCRIPTION_OPEN = "([^"]+)"/.exec(layout)![1];
-    assert.match(closed, /^Coins that burn on real-world results, with receipts\. Creator launches are closed for now\. You can inspect a real devnet burn receipt\./);
-    assert.doesNotMatch(closed, /Launch one|launch a/i);
-    assert.match(open, /Creator launches are open on this host\./);
-    assert.match(layout, /const description = launchAvailability\(process[.]env\)\.open \? DESCRIPTION_OPEN : DESCRIPTION_CLOSED;/);
+    // audit 4 BT-21, made phase-aware 2026-10-11; website-13 (Claude site audit 2 item 1): the previews carry the current headline and
+    // the launch state in launchAvailability.ts's own words, read at request time. The layout types neither "open" nor "closed".
+    // spelled as two strings so the publish script's import scanner does not read this assertion as an import
+    assert.ok(layout.includes("import { META_TITLE as TITLE, metaDescription } " + 'from "@/lib/burnticker/siteMeta";'), "layout imports the shared meta helpers");
+    assert.match(layout, /const description = metaDescription\(process[.]env\);/);
+    assert.doesNotMatch(layout.replace(/^\s*(\/\/|\*|\/\*).*$/gm, ""), /launches are (open|closed)|DESCRIPTION_(OPEN|CLOSED)/i);
+    const { META_TITLE, metaDescription } = await import("@/lib/burnticker/siteMeta");
+    const { CREATOR_LAUNCHES_CLOSED } = await import("@/lib/burnticker/creatorLaunches");
+    const { PREVIEW_BANNER, siteLaunchState } = await import("@/lib/burnticker/launchAvailability");
+    assert.equal(META_TITLE, "Burnticker: Memecoins that burn on real-world results");
+    const closed = metaDescription({}), preview = metaDescription({ BURNTICKER_CREATOR_LAUNCHES_PREVIEW: "1" }), open = metaDescription({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" });
+    for (const d of [closed, preview, open]) assert.match(d, /^Memecoins that burn on real-world results\. Every burn is a receipt\. /);
+    assert.ok(closed.endsWith(CREATOR_LAUNCHES_CLOSED), closed); assert.doesNotMatch(closed, /Launch one|launch a/i);
+    assert.ok(preview.endsWith(PREVIEW_BANNER), preview);
+    assert.ok(open.endsWith(siteLaunchState({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" }).sentence), open);
     assert.doesNotMatch(layout, /burns on the news/i);
-    clean(closed, "OG description (closed)"); clean(open, "OG description (open)");
+    clean(closed, "OG description (closed)"); clean(preview, "OG description (preview)"); clean(open, "OG description (open)");
   });
 });

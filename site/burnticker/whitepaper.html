@@ -42,7 +42,8 @@
 .sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
 .sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
 .sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
-.sh-wallet{display:none;cursor:not-allowed;opacity:.6}.sh-ghost{cursor:pointer}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
 .sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
 .sh-menu>summary::-webkit-details-marker{display:none}
 .sh-menu{position:relative}
@@ -161,7 +162,7 @@ footer p{margin:0 0 6px;max-width:none}
     <form class="sh-search" role="search" action="/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
     <div class="sh-actions">
       <a class="sh-launch" href="/burnticker/launch" data-launch-button>Launch a coin</a>
-      <button type="button" class="sh-wallet" disabled title="No page here needs a wallet while creator launches are closed.">Connect wallet</button>
+      <a class="sh-wallet" href="/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet<span class="sh-sr">. Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.</span></a>
       <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
       <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
         <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
@@ -174,6 +175,7 @@ footer p{margin:0 0 6px;max-width:none}
           <a href="/whitepaper.html" aria-current="page">Whitepaper</a>
           <a href="/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+          <p class="sh-menu-wallet">A wallet is only needed for Your coins. <a href="/burnticker/me?connect=1" data-wallet-button>Connect wallet</a></p>
         </nav>
       </details>
     </div>
@@ -181,15 +183,17 @@ footer p{margin:0 0 6px;max-width:none}
   <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
 </header>
 <dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
-  <h2 id="sh-launch-closed-h">Creator launches are closed</h2>
-  <p>Creator launches are closed until the first coin has receipts. You can still look through the coins and check a real receipt.</p>
+  <h2 id="sh-launch-closed-h">Launching a coin</h2>
+  <p data-launch-sentence>Checking whether creator launches are open on this site.</p>
+  <p>You can still look through the coins and check a real receipt.</p>
   <p class="sh-modal-row"><a class="sh-launch" href="/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
 </dialog>
 <main class="wrap" id="main">
 <article class="slip">
-<p class="kicker">Technical paper · draft 1 · 2026-10-10</p>
+<p class="kicker">Technical paper, current specification, 2026-10-12</p>
 <h1>Burnticker: coins that burn on real-world results, with receipts</h1>
 <p class="stamp">Not audited by a security firm</p>
+<aside class="notice" role="note"><p><strong>Current specification, dated 2026-10-12.</strong> This paper describes the design in the code at public commit <a href="https://github.com/rfzfhn67yk-netizen/burnticker/tree/af52b4a4ea0b80168a4c2e0f47a32045d1035c91">af52b4a</a>. It includes the decisions of 2026-10-11, such as the winner-takes-the-burn rule for pairs in section 5.5 and the locked-liquidity fees in section 6. Live deployment and readiness are not part of this paper. They are on <a href="https://burnticker.com/burnticker/trust">the trust page</a> and at <a href="https://burnticker.com/api/burnticker/v1/current-status">/api/burnticker/v1/current-status</a>. Where a section states a status, such as the status table below or sections 9 to 11 on governance, reviews and the bounty, that status is as of 2026-10-10 and is kept for the record. The first draft, as it stood at the end of 2026-10-10, is archived unchanged at <a href="https://burnticker.com/whitepaper-2026-10-10.html">whitepaper-2026-10-10.html</a>.</p></aside>
 <nav class="toc" aria-label="Contents">
 <p>Contents</p>
 <ul>
@@ -208,9 +212,8 @@ footer p{margin:0 0 6px;max-width:none}
 <li><a href="#s-13-appendix">13. Appendix</a></li>
 </ul>
 </nav>
-<aside class="notice" role="note"><p><strong>Historical version — not the current status.</strong> This is draft 1 of the paper, as written on 2026-10-10. Its facts are not updated as things change, so what it says about status, governance (sections 9 to 11), reviews and the bounty describes that day. Several things have changed since then. Both programs were deployed on mainnet on 2026-10-11. The mainnet Squads vault exists. Its time lock is 0 for now, and a 48-hour lock is planned around 2026-10-23. The owner holds two of its three keys, so the owner alone can approve an upgrade. The bounty wallet is funded. The live facts are on <a href="https://burnticker.com/burnticker/trust">the trust page</a> and at <a href="https://burnticker.com/api/burnticker/v1/current-status">/api/burnticker/v1/current-status</a>. Draft 1 is dated 2026-10-10. This notice was added on 2026-10-11 during website audit 4. On the same day the wording was made plainer. The facts were not changed.</p></aside>
-<p>This is a technical paper, draft 1, dated 2026-10-10. It was written from the code and documents of the Burnticker repository at commit <code>76b9caa</code>. Every statement names its source file. Where a component does not exist, the paper says &quot;not built&quot; or &quot;not done&quot;.</p>
-<p><strong>Status at the time of writing.</strong> The program is deployed on devnet for the rehearsal of 2026-10-10 (<code>docs/burnkeeper/devnet-run.md</code>). Nothing is deployed on mainnet, and no mainnet key exists.</p>
+<p>Draft 1 of this technical paper was written on 2026-10-10 from the code and documents of the Burnticker repository at commit <code>76b9caa</code>. This version is dated 2026-10-12. Every statement names its source file. Where a component does not exist, the paper says &quot;not built&quot; or &quot;not done&quot;.</p>
+<p><strong>Status on 2026-10-10, kept for the record.</strong> The program is deployed on devnet for the rehearsal of 2026-10-10 (<code>docs/burnkeeper/devnet-run.md</code>). Nothing is deployed on mainnet, and no mainnet key exists.</p>
 <div class="tbl"><table>
 <thead><tr><th scope="col">Component</th><th scope="col">State</th><th scope="col">Source</th></tr></thead>
 <tbody>
@@ -707,9 +710,12 @@ v2 (buyback): &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt
   });
 })();
 (function () {
-  // "Launch a coin": the closed-launches dialog unless the host's catalogue says creator launches are open (unreadable = closed)
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
   var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
-  fetch("/api/burnticker" + "/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { open = !!(j && j.launches && j.launches.creators === true); }).catch(function () { open = false; });
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
   if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
@@ -718,7 +724,7 @@ v2 (buyback): &lt;PREFIX&gt;|&lt;YYYY-MM-DD&gt;|src=&lt;source&gt;|prev=&lt;v&gt
   // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+  window.btHome.then(function (j) {
     box.textContent = "";
     if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }

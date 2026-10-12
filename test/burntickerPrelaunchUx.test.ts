@@ -27,7 +27,9 @@ test("BT-16: each homepage card carries a readable state label; 1% and 2% sit be
   // tagged as the mainnet rehearsal, the devnet rehearsal coin tagged devnet with its own 1% rule, each read from its rules file
   const { featuredCoins } = await import("@/lib/burnticker/home");
   const f = featuredCoins(ROOT);
-  assert.deepEqual(f.map((c) => c.tags.map((t) => t.label).join(" ")), ["Featured", "Mainnet rehearsal", "Devnet"]);
+  // website-13: the badge row also says, while config/own-tokens.json has $DEFICIT planned, that the coin is not created yet
+  const planned = (JSON.parse(read("config/own-tokens.json")) as { tokens: { symbol: string; status: string }[] }).tokens.find((t) => t.symbol === "DEFICIT")!.status !== "launched";
+  assert.deepEqual(f.map((c) => c.tags.map((t) => t.label).join(" ")), [planned ? "Featured Not created yet" : "Featured", "Mainnet rehearsal", "Devnet"]);
   assert.match(f[0].rule, /^Spends 2% of its burn pool for each \$1B the U\.S\. national debt rises/);
   assert.match(f[2].rule, /^Spends 1% of its burn pool for each \$1B the U\.S\. national debt rises/);
   assert.doesNotMatch(home, /Illustrative example/, "no illustrative module left without its label");
@@ -43,7 +45,9 @@ test("BT-17: the intro leads with three plain steps (the How it works strip unde
 });
 
 test("BT-21: previews do not invite launching while launches are closed; robots.txt declares the sitemap", () => {
-  for (const m of home.matchAll(/<meta (?:name|property)="(?:description|og:description)" content="([^"]*)"/g)) { assert.doesNotMatch(m[1], /Launch one/); assert.match(m[1], /creator launches are closed/i); }
+  // website-13 (ChatGPT audit 6 A1, Claude site audit 2 item 1): a static file cannot know the host's launch state, so its previews state
+  // none, open or closed, and never invite launching; the app's previews read it at request time (src/lib/burnticker/siteMeta.ts)
+  for (const m of home.matchAll(/<meta (?:name|property)="(?:description|og:description)" content="([^"]*)"/g)) { assert.doesNotMatch(m[1], /Launch one/); assert.doesNotMatch(m[1], /creator launches are (open|closed)/i); }
   assert.doesNotMatch(read("config/public-repo/overlay/src/app/layout.tsx"), /Launch one\./);
   assert.match(read("site/burnticker/robots.txt"), /^Sitemap: https:\/\/burnticker\.com\/sitemap\.xml$/m);
 });

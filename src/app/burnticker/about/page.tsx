@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { deficitPrelaunch, type DeficitPrelaunch } from "@/lib/burnticker/deficitPrelaunch";
 import { leagueIndex } from "@/lib/burnticker/leagues";
-import { GLOSSARY, NO_WALLET_LINE } from "@/lib/burnticker/glossary";
+import { GLOSSARY } from "@/lib/burnticker/glossary";
+import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
+import { prerequisiteLineFor, PREREQUISITE_STATES } from "@/lib/burnticker/launchReview";
+import { SHARE_PRESETS, pctLabel } from "@/lib/burnticker/launchPresets";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { HOW_IT_WORKS } from "@/lib/burnticker/siteNav.mjs";
@@ -31,6 +34,7 @@ export default function AboutPage() {
   const sports = [...ix.sports].map((s) => s.label.toLowerCase()).sort();
   const sportList = sports.length > 1 ? `${sports.slice(0, -1).join(", ")} and ${sports[sports.length - 1]}` : sports.join("");
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-4 space-y-2";
+  const launch = siteLaunchState(process.env);
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-6 text-sm">
       <header className="space-y-2">
@@ -43,6 +47,8 @@ export default function AboutPage() {
         <ol className="list-decimal pl-5 space-y-2 text-neutral-200">
           {HOW_IT_WORKS.map((h) => <li key={h.title}><b>{h.title}.</b> {h.text}</li>)}
         </ol>
+        <p className="text-amber-200" data-prerequisite>{prerequisiteLineFor("launchlab")}</p>
+        <details className="text-neutral-400"><summary className="cursor-pointer">A result that qualifies does not always burn at once</summary><ul className="mt-1 list-disc space-y-0.5 pl-5">{PREREQUISITE_STATES.map((x) => <li key={x}>{x}</li>)}</ul></details>
         <p className="text-neutral-400">A key signs each result on chain before anything burns. The signature proves who signed the reading. It does not prove the reading is true, which is why every receipt also names its source, so anyone can compare the two.</p>
       </section>
 
@@ -53,23 +59,24 @@ export default function AboutPage() {
           <p className="text-neutral-200">{d.rehearsal.demo.summary}</p>
         </> : <p className="text-neutral-400">The rehearsal&apos;s summary could not be read just now. The receipt itself can still be checked.</p>}
         <p><Link className="bt-launch-btn" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link></p>
-        <p className="text-xs text-neutral-500">The check runs in your browser. It reads the devnet chain and the Treasury&apos;s own data. {NO_WALLET_LINE}</p>
+        <p className="text-xs text-neutral-500">The check runs in your browser. It reads the devnet chain and the Treasury&apos;s own data.</p>
       </section>
 
       <section className={card} aria-labelledby="about-launch">
         <h2 id="about-launch" className="text-lg font-medium">Launching a coin</h2>
         <ol className="list-decimal pl-5 space-y-2 text-neutral-200">
           <li>Describe the result, or browse by category. Each suggestion says where the result comes from, who checks it and when it settles.</li>
-          <li>Choose what triggers a burn. It can be a yes-or-no result, or every full unit of a settled number. Then choose the share of the fee pool each burn spends, between 1% and 10%.</li>
-          <li>Approve once in your wallet. That creates the coin on Raydium LaunchLab and records the rule. You pay the venue&apos;s creation cost and the network fee. Creators earn nothing from trading fees.</li>
+          <li>Choose what triggers a burn. It can be a yes-or-no result, or every full unit of a settled number. Then choose the burn budget per result: {SHARE_PRESETS.recurring.map(pctLabel).join(", ").replace(/, ([^,]+)$/, " or $1")} of the coin&apos;s burn budget each time for a rule that repeats, or {SHARE_PRESETS.oneShot.map(pctLabel).join(", ").replace(/, ([^,]+)$/, " or $1")} for a rule that resolves once. The tokens bought are burned, so the number burned varies. The API accepts other shares.</li>
+          <li>Connect a wallet, then approve the launch in it. A single coin is one transaction. The review lists every transaction before your wallet opens. That creates the coin on Raydium LaunchLab and records the rule. You pay the venue&apos;s creation cost and the network fee. Creators receive no trading-fee revenue, because the creator&apos;s share of the fees goes to the coin&apos;s burn pool.</li>
         </ol>
-        <p className="text-neutral-400">The rule is locked at launch. A different rule means a different coin. Creator launches are closed until the first coin has receipts.</p>
+        <p className="text-neutral-400">The rule is locked at launch. A different rule means a different coin.</p>
+        <p className="text-neutral-200" data-launch-state>{launch.sentence}</p>
       </section>
 
       <section className={card} aria-labelledby="about-seasons">
         <h2 id="about-seasons" className="text-lg font-medium">Seasons</h2>
         <p className="text-neutral-200">Each league gets one scoreboard per season. A board ranks that league&apos;s team coins by their receipts. The {ix.totals.leagues} leagues cover {sportList}. Rivalries and the Burn Derby keep a running count of burns.</p>
-        <p className="text-neutral-400">When a league&apos;s season ends, the coin with the most receipts is named its champion. That is a line on a scoreboard, and nobody receives anything for it.</p>
+        <p className="text-neutral-400">When a league&apos;s season ends, the coin with the most receipts is named its champion. The title is a line on the scoreboard and nothing more.</p>
         <p>{SEASONS_LINKS.map((l, i) => <span key={l.href}>{i > 0 && " · "}<Link className="underline" href={l.href}>{l.label}</Link></span>)}</p>
       </section>
 

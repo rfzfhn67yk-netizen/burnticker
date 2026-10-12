@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { WalletProviders } from "./WalletProviders";
+import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
 
 // website brief §8: the launch page's title, description and canonical (a server layout); the wallet providers stay client-side.
-const DESCRIPTION = "Burnticker's launch page. It says whether creator launches are open on this site, and they are closed before launch. It also explains what a coin is: one locked rule, burns paid for by the coin's own trading fees, and a receipt for every burn.";
-export const metadata: Metadata = {
-  title: "Launch", description: DESCRIPTION, alternates: { canonical: "/burnticker/launch" },
-  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker · Launch", description: DESCRIPTION, url: "/burnticker/launch", images: [{ url: "https://burnticker.com/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
-};
+// website-12 (Claude audit 2 item 1): the description reads the one launch-state record at request time, never a typed "closed".
+export const dynamic = "force-dynamic";
+export async function generateMetadata(): Promise<Metadata> {
+  const description = `${siteLaunchState(process.env).meta.description} The launch page explains what a coin is: one locked rule, a burn budget from the coin's own trading fees, and a receipt for every burn.`;
+  return {
+    title: "Launch", description, alternates: { canonical: "/burnticker/launch" },
+    openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker · Launch", description, url: "/burnticker/launch", images: [{ url: "https://burnticker.com/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+    twitter: { card: "summary_large_image", title: "Burnticker · Launch", description },
+  };
+}
 
 export default function LaunchLayout({ children }: { children: ReactNode }) {
-  return <WalletProviders>{children}</WalletProviders>;
+  // website-13 (2026-10-12): the one wallet provider is the shell's (ShellWalletProviders, mounted by the root layout); SignCard reads it
+  return children;
 }

@@ -39,7 +39,11 @@ export interface PairCounterpart {
 /** Market data for the coin card and the coin page (market.ts builds it; 2026-10-10). Read from chain as data, never a price claim. */
 export type CurvePhase = "curve" | "migrating" | "graduated";
 /** The LaunchLab curve: quote raised, the raise that completes the curve (graduation), the share done, what is left. Decimal strings. */
-export interface CurveJson { phase: CurvePhase; status: number; raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string }
+export interface CurveJson {
+  phase: CurvePhase; status: number; raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string;
+  /** Since website-13 (2026-10-12): the curve's market cap in the quote (current quote per token times total supply), read from the pool's reserves; null after graduation. Absent on older status files. */
+  marketCap?: string | null;
+}
 export interface HolderRow { account: string; owner: string | null; amount: string; pct: number; label: string | null }
 /** Where to trade: deep links only — Burnticker hosts no swap. */
 export interface TradeLinks { links: { id: "launchlab" | "raydium" | "jupiter"; label: string; url: string }[]; note: string | null }

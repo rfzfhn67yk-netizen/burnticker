@@ -98,7 +98,30 @@ body.bt-body {
 .bt-search input { width: 100%; max-width: 26rem; font: .9rem var(--font-sans); color: var(--bt-ink); background: var(--bt-counter); border: 1px solid var(--bt-line); border-radius: 6px; padding: 9px 12px; }
 .bt-search input:focus { outline: 2px solid var(--bt-stamp); outline-offset: 1px; }
 .bt-launch-head { padding: 9px 12px; font-size: .78rem; white-space: nowrap; cursor: pointer; }
-.bt-wallet { display: none; font: 700 .76rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 4px; padding: 9px 12px; white-space: nowrap; cursor: not-allowed; opacity: .6; }
+/* the real "Connect wallet" (website-13): never disabled; hidden from the header row under 640 px, where the phone menu carries it */
+.bt-wallet { display: none; align-items: center; gap: 6px; font: 700 .76rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-ink); background: transparent; border: 1px solid var(--bt-stamp); border-radius: 4px; padding: 9px 12px; white-space: nowrap; cursor: pointer; }
+.bt-wallet:hover { background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); color: var(--bt-stamp-ink); }
+.bt-wallet.is-connected { text-transform: none; letter-spacing: .02em; font-weight: 600; }
+.bt-wallet-menu { display: inline-flex; }
+.bt-wallet-dot { width: 8px; height: 8px; border-radius: 50%; background: #5ad38f; flex: 0 0 auto; }
+.bt-wallet-box { position: relative; display: inline-flex; }
+.bt-header-tools > .bt-wallet-box { display: none; }
+.bt-wallet-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; display: grid; min-width: 180px; padding: 6px; background: var(--bt-counter); border: 1px solid var(--bt-line); border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.35); }
+.bt-nav-wallet .bt-wallet-pop { left: 0; right: auto; }
+.bt-wallet-pop[hidden] { display: none; }
+.bt-wallet-pop a, .bt-wallet-pop button { text-align: left; font: 600 .9rem/1.2 var(--font-sans); color: var(--bt-ink); background: transparent; border: 0; border-radius: 6px; padding: 10px; text-decoration: none; cursor: pointer; }
+.bt-wallet-pop a:hover, .bt-wallet-pop button:hover, .bt-wallet-pop a:focus-visible, .bt-wallet-pop button:focus-visible { background: var(--bt-bg); }
+.bt-nav-wallet { padding: 12px 8px 4px; display: grid; gap: 8px; justify-items: start; }
+.bt-nav-wallet p { margin: 0; font-size: .8rem; color: var(--bt-dim); }
+@media (min-width: 640px) { .bt-nav-wallet { display: none; } .bt-header-tools > .bt-wallet-box { display: inline-flex; } }
+/* the wallet adapter's list in the receipt palette */
+.wallet-adapter-modal-wrapper { background: var(--bt-counter) !important; border: 1px solid var(--bt-line); font-family: var(--font-sans) !important; }
+.wallet-adapter-modal-title { color: var(--bt-ink) !important; }
+.wallet-adapter-modal-list .wallet-adapter-button { color: var(--bt-ink) !important; font-family: var(--font-sans) !important; }
+.wallet-adapter-modal-list .wallet-adapter-button:not([disabled]):hover { background: var(--bt-bg) !important; }
+.wallet-adapter-modal-list-more { color: var(--bt-dim) !important; }
+/* one search box per screen: the coin page's own box is the phone's; from 640 px the header's search is the one */
+@media (min-width: 640px) { .bt-grid-search { display: none; } }
 .bt-ticker { border-top: 1px dashed var(--bt-line); font: .78rem/1.3 var(--font-mono); color: var(--bt-dim); overflow-x: auto; white-space: nowrap; scrollbar-width: none; padding: 7px 16px; min-height: 31px; }
 .bt-ticker::-webkit-scrollbar { display: none; }
 .bt-ticker-item { color: var(--bt-ink); text-decoration: none; margin-right: 22px; }
@@ -110,7 +133,7 @@ body.bt-body {
 .bt-modal h2 { font: 700 1rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 10px; }
 .bt-modal p { margin: 0 0 8px; }
 .bt-modal-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px !important; }
-@media (min-width: 640px) { .bt-search { display: block; } .bt-wallet { display: inline-block; } }
+@media (min-width: 640px) { .bt-search { display: block; } .bt-wallet { display: inline-flex; } }
 @media (max-width: 420px) { .bt-launch-head { padding: 9px 9px; font-size: .7rem; } .bt-header-row { gap: 8px; } .bt-header-tools { gap: 4px; } }
 /* under 400 px the mark carries the brand alone, so the header row (mark, Launch a coin, theme, MENU) fits a 320 px phone */
 @media (max-width: 400px) { .bt-wordmark { display: none; } }
@@ -178,7 +201,7 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-tab { flex: 0 0 auto; font: 700 .76rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 99px; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
 .bt-tab:hover { color: var(--bt-ink); border-color: var(--bt-stamp); }
 .bt-tab.is-active { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
-.bt-tab-count { margin-left: 6px; opacity: .7; }
+.bt-tab-count { display: inline-block; margin-left: 2px; min-width: 1.5em; padding: 1px 5px; border: 1px solid currentColor; border-radius: 999px; font-size: .7em; line-height: 1.3; text-align: center; opacity: .8; }
 .bt-launch-btn { display: inline-block; font: 700 .85rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border: 2px solid var(--bt-stamp-solid); border-radius: 4px; padding: 11px 16px; text-decoration: none; }
 .bt-launch-btn:hover { filter: brightness(1.12); }
 .bt-ghost-btn { display: inline-block; font: 700 .8rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-ink); border: 1px solid var(--bt-line); border-radius: 4px; padding: 10px 14px; text-decoration: none; }

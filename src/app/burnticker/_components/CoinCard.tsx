@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { cardViewFromIndex, type CardView } from "@/lib/burnticker/cardView";
+import { CARD_LABELS, CARD_MEANINGS, ageText, cardViewFromIndex, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
 
 /**
- * THE COIN CARD (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md). Where pump.fun / bonk.fun / Pons put image,
- * name, ticker, market cap and a bonding-curve bar, Burnticker puts image, name, $TICKER, the rule's one-liner ("burns when the
- * Eagles lose"), the curve as SOL raised of the graduation threshold (no market cap: a price in disguise — the copy lint refuses it),
- * the burns tally with the last burn's age, the next result, and the venue chip. Every number not read reads "—" with a reason on hover.
- * Also used as the wizard's live preview (href null). No state but a broken-image fallback.
+ * THE COIN CARD (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md; the full field set since website-13, 2026-10-12,
+ * including the market cap by owner decision). ViewCard prints cardView.ts's fixed rows; the market cap is a bare number read from the
+ * curve, with no arrow and no commentary. Every number not read reads "—" with a reason on hover. Also used as the wizard's live preview
+ * (href null). No state but a broken-image fallback and the time the card was read.
  */
 
 export interface CoinCardData {
@@ -49,14 +47,17 @@ export function until(iso: string | null, now = Date.now()): string {
 
 export const roundStr = (s: string | null, dp = 2): string => { if (s === null) return "—"; const n = Number(s); return Number.isFinite(n) ? (Math.round(n * 10 ** dp) / 10 ** dp).toString() : s; };
 
-/** A receipt-paper placeholder with the ticker printed on it, for coins without an image (or whose image fails to load). */
+/**
+ * A coin without an image of its own (or whose image fails to load) gets a deliberate receipt-style identity instead of "NO IMAGE"
+ * (ChatGPT audit 6 A11, Claude site audit 2 item 2f): the wordmark, the coin's initials large, a torn rule and its $TICKER.
+ */
 export function ReceiptThumb({ ticker, size = 88 }: { ticker: string; size?: number }) {
   return (
-    <div aria-hidden="true" className="bt-thumb-receipt shrink-0" style={{ width: size, height: size }}>
+    <div aria-hidden="true" className="bt-thumb-receipt shrink-0" style={{ width: size, height: size }} data-thumb="receipt">
       <span className="bt-thumb-top">BURNTICKER</span>
-      <span className="bt-thumb-ticker" style={{ fontSize: Math.max(11, Math.round(size / (ticker.length > 6 ? 7 : 5))) }}>${ticker || "TICKER"}</span>
+      <span className="bt-thumb-ticker" style={{ fontSize: Math.max(14, Math.round(size / 2.6)) }}>{initialsOf(ticker || "TICKER")}</span>
       <span className="bt-thumb-rule" />
-      <span className="bt-thumb-top">NO IMAGE</span>
+      <span className="bt-thumb-top">${ticker || "TICKER"}</span>
     </div>
   );
 }
@@ -96,40 +97,52 @@ export function CurveBar({ c, compact = false }: { c: Pick<CoinCardData, "phase"
 /** The rule's one-liner as a sentence ("burns when the Eagles lose" → "Burns when the Eagles lose."). */
 const asSentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };
 
+/** One field: its text, or "—" with the reason on hover and for screen readers. */
+function Cell({ c }: { c: CardCell }) {
+  if (c.text !== null) return <span title={c.why ?? undefined}>{c.text}</span>;
+  return <span title={c.why ?? undefined}><span aria-hidden="true">—</span><span className="sr-only">{c.why ?? "Not available."}</span></span>;
+}
+
 /**
- * THE CARD, ONE FIELD ORDER (website-10, 2026-10-12; the owner's review item 5, brief rule 10): image, name, $TICKER, the rule in one
- * line, the next result (only when the rule has one), the total burned, the bonding curve (or the trading pool), then "Check receipt".
- * The order is src/lib/burnticker/cardView.ts CARD_ROWS; the static home page prints the same rows from the same JSON. The name and the
- * image link the coin's page; "Check receipt" is its own link, shown disabled with "No receipt yet" until the coin has a receipt.
+ * THE CARD, ONE FIELD ORDER (website-13, 2026-10-12; Claude site audit 2 item 7, ChatGPT audit 6 A10): image, name, $TICKER, badge, the
+ * rule in one line, the next result, the curve as "X / <raise> SOL raised", market cap, holders, age, burned with its share of supply,
+ * then "Check receipt". Every row is always printed; a field not read is "—" with its reason. The order is cardView.ts CARD_ROWS; the
+ * static home page prints the same rows from the same JSON. The name and the image link the coin's page; "Check receipt" is its own
+ * link to that coin's newest receipt, shown disabled with the reason until there is one.
  */
-export function ViewCard({ v, headingLevel = 3 }: { v: CardView; headingLevel?: 2 | 3 }) {
+export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLevel?: 2 | 3; now?: number }) {
   const H = headingLevel === 2 ? "h2" : "h3";
   const pct = v.curve.pct === null ? null : Math.max(0, Math.min(100, v.curve.pct));
+  const [t] = useState(() => now ?? Date.now());
+  const age = ageText(v.createdAt, t);
   return (
-    <article className={`bt-coin-card${v.tags.some((t) => t.tone === "featured") ? " is-featured" : ""}`} data-card={v.id}>
+    <article className={`bt-coin-card${v.tags.some((x) => x.tone === "featured") ? " is-featured" : ""}`} data-card={v.id} data-group={v.group}>
       <div className="flex gap-3">
-        <div data-row="image">{v.href ? <Link href={v.href} tabIndex={-1} aria-hidden="true"><CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} /></Link> : <CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} />}</div>
+        <div data-row="image">{v.href ? <a href={v.href} tabIndex={-1} aria-hidden="true"><CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} /></a> : <CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} />}</div>
         <div className="min-w-0 flex-1">
-          {v.tags.length > 0 && <div className="flex flex-wrap gap-1.5">{v.tags.map((t) => <span key={t.label} className={`bt-chip bt-tag-${t.tone}`}>{t.label}</span>)}</div>}
-          <H className="mt-1 text-base font-semibold leading-tight">
+          <H className="text-base font-semibold leading-tight">
             {v.href
-              ? <Link className="bt-card-link" href={v.href}><span className="bt-card-name" data-row="name">{v.name}</span> <span className="bt-card-ticker" data-row="ticker">${v.ticker}</span></Link>
+              ? <a className="bt-card-link" href={v.href}><span className="bt-card-name" data-row="name">{v.name}</span> <span className="bt-card-ticker" data-row="ticker">${v.ticker}</span></a>
               : <><span className="bt-card-name" data-row="name">{v.name}</span> <span className="bt-card-ticker" data-row="ticker">${v.ticker}</span></>}
           </H>
+          <div className="mt-1 flex flex-wrap gap-1.5" data-row="badge">{v.tags.map((x) => <span key={x.label} className={`bt-chip bt-tag-${x.tone}`}>{x.label}</span>)}</div>
           {v.note && <p className="mt-1 text-xs text-neutral-400">{v.note}</p>}
         </div>
       </div>
       <dl className="bt-card-rows">
-        <div data-row="rule"><dt>Rule</dt><dd>{v.rule}</dd></div>
-        {v.nextSettle && <div data-row="nextSettle"><dt>Next result</dt><dd>{v.nextSettle}</dd></div>}
-        <div data-row="burned"><dt>Burned</dt><dd>{v.burned}</dd></div>
-        <div data-row="curve"><dt>{v.curve.done ? "Pool" : "Curve"}</dt><dd>
-          <span>{v.curve.label}</span>
-          <span className="bt-curve mt-1 block" role="progressbar" aria-label="bonding curve progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}><span className={`bt-curve-fill block${v.curve.done ? " is-done" : ""}`} style={{ width: `${pct ?? 0}%` }} /></span>
+        <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}</dd></div>
+        <div data-row="nextSettle"><dt>{CARD_LABELS.nextSettle}</dt><dd><Cell c={v.nextSettle} /></dd></div>
+        <div data-row="curve"><dt title={CARD_MEANINGS.curve}>{CARD_LABELS.curve}</dt><dd>
+          <span title={v.curve.why ?? undefined}>{v.curve.raised === null ? <span aria-hidden="true">—</span> : v.curve.raised} / {v.curve.of} raised{v.curve.raised === null && <span className="sr-only">. {v.curve.why}</span>}</span>
+          <span className="bt-curve mt-1 block" role="progressbar" aria-label="Curve progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined} aria-valuetext={pct === null ? "Not read" : `${pct.toFixed(0)}%`}><span className={`bt-curve-fill block${v.curve.done ? " is-done" : ""}`} style={{ width: `${pct ?? 0}%` }} /></span>
         </dd></div>
+        <div data-row="mcap"><dt title={CARD_MEANINGS.mcap}>{CARD_LABELS.mcap}</dt><dd><Cell c={v.mcap} /></dd></div>
+        <div data-row="holders"><dt title={CARD_MEANINGS.holders}>{CARD_LABELS.holders}</dt><dd><Cell c={v.holders} /></dd></div>
+        <div data-row="age"><dt>{CARD_LABELS.age}</dt><dd><Cell c={{ text: age, why: age ? null : v.createdWhy }} /></dd></div>
+        <div data-row="burned"><dt title={CARD_MEANINGS.burned}>{CARD_LABELS.burned}</dt><dd><Cell c={v.burned} /></dd></div>
       </dl>
       <div className="bt-card-foot" data-row="receipt">
-        {v.receipt ? <Link className="bt-ghost-btn" href={v.receipt.href}>Check receipt</Link> : <><span className="bt-ghost-btn is-disabled" aria-disabled="true">Check receipt</span><span className="text-xs text-neutral-500">No receipt yet.</span></>}
+        {v.receipt ? <a className="bt-ghost-btn" href={v.receipt.href} title={CARD_MEANINGS.receipt}>Check receipt</a> : <><span className="bt-ghost-btn is-disabled" aria-disabled="true" title={v.receiptWhy ?? undefined}>Check receipt</span><span className="text-xs text-neutral-500">{v.receiptWhy}</span></>}
       </div>
       {v.mint && <p className="mt-2 text-[11px] text-neutral-500">{v.mint.label}: <code className="break-all">{v.mint.address}</code></p>}
     </article>
@@ -172,5 +185,5 @@ export function CoinCard({ c, href, prelaunch = false }: { c: CoinCardData; href
       </article>
     );
   }
-  return <ViewCard v={cardViewFromIndex({ ticker: c.ticker, name: c.name, mint: c.ticker, oneLiner: c.oneLiner, status: c.status, imageUrl: c.imageUrl, burned: c.burned ?? "0", burns: c.burns, nextCheckAt: c.nextAt, nextCloseTime: null, lastBurnAt: c.lastBurnAt, launchedAt: c.launchedAt, pairId: c.pairId ?? null, badge: c.badge ?? null, phase: c.phase, progressPct: c.progressPct })} />;
+  return <ViewCard v={cardViewFromIndex({ ticker: c.ticker, name: c.name, mint: c.ticker, oneLiner: c.oneLiner, status: c.status, imageUrl: c.imageUrl, burned: c.burned ?? "0", burns: c.burns, nextCheckAt: c.nextAt, nextCloseTime: null, lastBurnAt: c.lastBurnAt, launchedAt: c.launchedAt, pairId: c.pairId ?? null, badge: c.badge ?? null, phase: c.phase, progressPct: c.progressPct, raised: c.raised, threshold: c.threshold, quote: c.quote }, c.threshold)} />;
 }

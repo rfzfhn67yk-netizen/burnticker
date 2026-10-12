@@ -35,13 +35,13 @@ export const QUOTE_SYMBOLS: Record<string, string> = {
 /** The fields of a LaunchLab PoolState the card needs (amounts raw, as on chain). */
 export interface LaunchLabPoolView {
   status: number; decimalsA: number; decimalsB: number; migrateType: number;
-  supplyRaw: bigint; totalSellRaw: bigint; realARaw: bigint; realBRaw: bigint; totalFundRaisingRaw: bigint;
+  supplyRaw: bigint; totalSellRaw: bigint; virtualARaw: bigint; virtualBRaw: bigint; realARaw: bigint; realBRaw: bigint; totalFundRaisingRaw: bigint;
   configId: string; platformId: string; mintA: string; mintB: string; vaultA: string; vaultB: string; creator: string;
 }
 
 /** PoolState is 429 bytes: 8-byte discriminator, then the SDK's LaunchpadPool struct. Byte offsets below. */
 export const LAUNCHLAB_POOL_SIZE = 429;
-const OFF = { status: 17, decimalsA: 18, decimalsB: 19, migrateType: 20, supply: 21, totalSellA: 29, realA: 53, realB: 61, totalFundRaisingB: 69, configId: 141, platformId: 173, mintA: 205, mintB: 237, vaultA: 269, vaultB: 301, creator: 333 } as const;
+const OFF = { status: 17, decimalsA: 18, decimalsB: 19, migrateType: 20, supply: 21, totalSellA: 29, virtualA: 37, virtualB: 45, realA: 53, realB: 61, totalFundRaisingB: 69, configId: 141, platformId: 173, mintA: 205, mintB: 237, vaultA: 269, vaultB: 301, creator: 333 } as const;
 
 const u64 = (b: Uint8Array, o: number): bigint => { let v = BigInt(0); for (let i = 7; i >= 0; i--) v = (v << BigInt(8)) | BigInt(b[o + i]); return v; };
 const key = (b: Uint8Array, o: number): string => new PublicKey(b.subarray(o, o + 32)).toBase58();
@@ -51,7 +51,7 @@ export function decodeLaunchLabPool(data: Uint8Array): LaunchLabPoolView | null 
   if (data.length !== LAUNCHLAB_POOL_SIZE) return null;
   return {
     status: data[OFF.status], decimalsA: data[OFF.decimalsA], decimalsB: data[OFF.decimalsB], migrateType: data[OFF.migrateType],
-    supplyRaw: u64(data, OFF.supply), totalSellRaw: u64(data, OFF.totalSellA), realARaw: u64(data, OFF.realA), realBRaw: u64(data, OFF.realB), totalFundRaisingRaw: u64(data, OFF.totalFundRaisingB),
+    supplyRaw: u64(data, OFF.supply), totalSellRaw: u64(data, OFF.totalSellA), virtualARaw: u64(data, OFF.virtualA), virtualBRaw: u64(data, OFF.virtualB), realARaw: u64(data, OFF.realA), realBRaw: u64(data, OFF.realB), totalFundRaisingRaw: u64(data, OFF.totalFundRaisingB),
     configId: key(data, OFF.configId), platformId: key(data, OFF.platformId), mintA: key(data, OFF.mintA), mintB: key(data, OFF.mintB), vaultA: key(data, OFF.vaultA), vaultB: key(data, OFF.vaultB), creator: key(data, OFF.creator),
   };
 }
@@ -72,7 +72,22 @@ export function curveProgress(v: LaunchLabPoolView, poolId: string): CurveJson {
   const raisedRaw = phase === "graduated" && v.realBRaw < v.totalFundRaisingRaw ? v.totalFundRaisingRaw : v.realBRaw;
   const rem = v.totalFundRaisingRaw > raisedRaw ? v.totalFundRaisingRaw - raisedRaw : BigInt(0);
   const pct = v.totalFundRaisingRaw === BigInt(0) ? 0 : Math.min(100, Number((raisedRaw * BigInt(10_000)) / v.totalFundRaisingRaw) / 100);
-  return { phase, status: v.status, raised: rawToTokens(raisedRaw, v.decimalsB), threshold: rawToTokens(v.totalFundRaisingRaw, v.decimalsB), remaining: rawToTokens(rem, v.decimalsB), quote: QUOTE_SYMBOLS[v.mintB] ?? "quote", progressPct: phase === "graduated" ? 100 : pct, poolId };
+  return { phase, status: v.status, raised: rawToTokens(raisedRaw, v.decimalsB), threshold: rawToTokens(v.totalFundRaisingRaw, v.decimalsB), remaining: rawToTokens(rem, v.decimalsB), quote: QUOTE_SYMBOLS[v.mintB] ?? "quote", progressPct: phase === "graduated" ? 100 : pct, poolId, marketCap: curveMarketCap(v) };
+}
+
+/**
+ * THE CURVE'S MARKET CAP (website-13, 2026-10-12; owner decision on Claude site audit 2 item 7: "people like to see the market cap"). A
+ * number read from the pool, never a claim: the constant-product curve's current quote per token, (virtualB + realB) / (virtualA − realA)
+ * (the Raydium SDK's ConstantProductCurve.getPoolPrice), times the pool's total supply. Raw units cancel, so it is exact integer
+ * arithmetic in the quote's smallest unit. Only the constant-product curve (curve type 0) is read this way; Burnticker's launch builder
+ * refuses every other curve type (src/lib/burnKeeper/launch.ts). Null once the coin has left the curve (the trading pool is read
+ * separately) or when the reserves cannot give a value.
+ */
+export function curveMarketCap(v: LaunchLabPoolView): string | null {
+  if ((LAUNCHLAB_POOL_STATUS[v.status] ?? "curve") === "graduated") return null;
+  const a = v.virtualARaw - v.realARaw, b = v.virtualBRaw + v.realBRaw;
+  if (a <= BigInt(0) || b <= BigInt(0) || v.supplyRaw <= BigInt(0)) return null;
+  return rawToTokens((b * v.supplyRaw) / a, v.decimalsB);
 }
 
 /** What a reader brought back for one coin (all optional: a host without an RPC reads nothing). */

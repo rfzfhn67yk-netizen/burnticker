@@ -13,8 +13,9 @@ import { LOOKUP_TABLES, NETWORKS, type Network } from "@/lib/burnticker/networks
  * list) and the derived addresses are re-derived in that test (event authorities, LaunchLab's authority and platform fee vault, the
  * fee_keys PDA). The ORDER is the table's order: the browser checks that index i of the on-chain table is entry i of this list.
  *
- * The browser never trusts the table blindly: before anything is signed it fetches the table at the address pinned in networks.ts
- * (LOOKUP_TABLES), checks it is active, that every entry is at its index, and that its authority is the pinned operations key or none
+ * The browser never trusts the table blindly: before anything is signed it fetches the table at the pinned address (networks.ts
+ * lookupTablePin: the host's BURNTICKER_LOOKUP_TABLE on its own network, else LOOKUP_TABLES, served by GET /api/burnticker/launch so a
+ * pin needs no code release), checks it is active, that every entry is at its index, and that its authority is the pinned operations key or none
  * (frozen); otherwise "lookup table mismatch — nothing was sent". The transaction is then compiled against THIS list (the verified
  * prefix), never against whatever else the table holds. Client-safe: web3.js and networks.ts only.
  */
@@ -141,14 +142,15 @@ export function v0WireSize(instructions: readonly { programId: string; keys: rea
 /**
  * Steps that cannot be sent as one transaction even with the table, measured before anything is signed (re-check 2026-10-11: a LaunchLab
  * create WITH the creator's opening purchase is 1,281 bytes as v0 + the table — the purchase's wrap / account / close instructions do not
- * fit beside initialize_token and initialize_v2). [] = every step fits.
+ * fit beside initialize_token and initialize_v2). Since launch-10 (2026-10-12) the site never builds that shape (hostedLaunch.ts: no
+ * opening purchase), so this is the backstop for anything else that grows past the limit. [] = every step fits.
  */
 export function planSizeProblems(steps: readonly { label: string; instructions: Parameters<typeof v0WireSize>[0] }[], payer: string | null, network: Network | null): string[] {
   if (!payer || !network) return [];
   const out: string[] = [];
   steps.forEach((st, i) => {
     const size = v0WireSize(st.instructions, payer, network);
-    if (size === null || size > PACKET) out.push(`step ${i + 1} of ${steps.length} is ${size === null ? "more than 1,232" : size.toLocaleString("en-US")} bytes even with the lookup table, over the 1,232-byte limit, so it cannot be sent as one transaction${/first buy/i.test(st.label) ? "; launch without the opening purchase" : ""}`);
+    if (size === null || size > PACKET) out.push(`step ${i + 1} of ${steps.length} is ${size === null ? "more than 1,232" : size.toLocaleString("en-US")} bytes even with the lookup table, over the 1,232-byte limit, so it cannot be sent as one transaction`);
   });
   return out;
 }

@@ -1,17 +1,18 @@
 # Burnticker: coins that burn on real-world results, with receipts
 
-> **Historical version — not the current status.** This is draft 1 of the paper, as written on 2026-10-10. Its facts are not updated
-> as things change, so what it says about status, governance (sections 9 to 11), reviews and the bounty describes that day. Several
-> things have changed since then. Both programs were deployed on mainnet on 2026-10-11. The mainnet Squads vault exists. Its time
-> lock is 0 for now, and a 48-hour lock is planned around 2026-10-23. The owner holds two of its three keys, so the owner alone can
-> approve an upgrade. The bounty wallet is funded. The live facts are on [the trust page](https://burnticker.com/burnticker/trust)
-> and at [/api/burnticker/v1/current-status](https://burnticker.com/api/burnticker/v1/current-status). Draft 1 is dated 2026-10-10.
-> This notice was added on 2026-10-11 during website audit 4. On the same day the wording was made plainer. The facts were not changed.
+> **Current specification, dated 2026-10-12.** This paper describes the design in the code at public commit
+> [af52b4a](https://github.com/rfzfhn67yk-netizen/burnticker/tree/af52b4a4ea0b80168a4c2e0f47a32045d1035c91). It includes the decisions
+> of 2026-10-11, such as the winner-takes-the-burn rule for pairs in section 5.5 and the locked-liquidity fees in section 6. Live
+> deployment and readiness are not part of this paper. They are on [the trust page](https://burnticker.com/burnticker/trust) and at
+> [/api/burnticker/v1/current-status](https://burnticker.com/api/burnticker/v1/current-status). Where a section states a status, such as
+> the status table below or sections 9 to 11 on governance, reviews and the bounty, that status is as of 2026-10-10 and is kept for the
+> record. The first draft, as it stood at the end of 2026-10-10, is archived unchanged at
+> [whitepaper-2026-10-10.html](https://burnticker.com/whitepaper-2026-10-10.html).
 
-This is a technical paper, draft 1, dated 2026-10-10. It was written from the code and documents of the Burnticker repository at
-commit `76b9caa`. Every statement names its source file. Where a component does not exist, the paper says "not built" or "not done".
+Draft 1 of this technical paper was written on 2026-10-10 from the code and documents of the Burnticker repository at commit
+`76b9caa`. This version is dated 2026-10-12. Every statement names its source file. Where a component does not exist, the paper says "not built" or "not done".
 
-**Status at the time of writing.** The program is deployed on devnet for the rehearsal of 2026-10-10 (`docs/burnkeeper/devnet-run.md`).
+**Status on 2026-10-10, kept for the record.** The program is deployed on devnet for the rehearsal of 2026-10-10 (`docs/burnkeeper/devnet-run.md`).
 Nothing is deployed on mainnet, and no mainnet key exists.
 
 | Component | State | Source |

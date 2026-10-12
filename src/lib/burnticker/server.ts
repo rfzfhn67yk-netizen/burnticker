@@ -14,7 +14,9 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { SOL_MINT, usdPrice } from "@/lib/burnKeeper/jupiterSwap";
 import { FakeBurnProgram, programPageBlock, type BurnProgramClient } from "@/lib/burnticker/program";
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
-import { FakeLaunchLab, type LaunchLabClient } from "@/lib/burnticker/launchBundle";
+import type { LaunchLabClient } from "@/lib/burnticker/launchBundle";
+import { launchLabFromEnv, type LaunchLabAccountReader } from "@/lib/burnticker/launchLabChain";
+import { mainnetLaunchesAllowed } from "@/lib/burnticker/hostedLaunch";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
 import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairChainFields, pairClauseState, pairForwardsJson, type PairCounterpart, type TokenPageInput, type TokenStatusJson, type ReceiptJson } from "@/lib/burnticker/tokenPage";
 import { DECIMALS, TOTAL_SUPPLY, pairWinnerTakesBurn } from "@/lib/burnticker/rules";
@@ -32,7 +34,7 @@ import { derbyTitle } from "@/lib/burnticker/api/handlers";
 
 /**
  * THE APP'S WIRING (2026-10-09): one place that opens the registry, builds the oracle clients, and chooses the program / LaunchLab
- * clients — the FAKES until BURNTICKER_PROGRAM_ID (the deployed Receipts program) and an RPC exist; the pages say so. Nothing here
+ * clients — the FAKES until BURNTICKER_PROGRAM_ID (the deployed Receipts program), BURNTICKER_PLATFORM_ID and an RPC exist; the pages say so. Nothing here
  * reads a key or sends a transaction. Routes import `platform()`; scripts build their own with the same pieces.
  */
 
@@ -59,6 +61,8 @@ export interface Platform {
   allowHostedMetadata?: boolean;
   /** BURNTICKER_PIN_DAILY_CAP: coins pinned on Arweave (paid by the platform) per UTC day on this host (review N4); absent = DEFAULT_PIN_DAILY_CAP. */
   pinDailyCap?: number;
+  /** BURNTICKER_ALLOW_MAINNET_LAUNCHES on a mainnet host (hostedLaunch.ts): the owner's explicit allowance; absent/false = mainnet launches refused. */
+  allowMainnet?: boolean;
   /** Reads a launch transaction from the chain before a draft goes live (launchVerify.ts; review N1). Null/absent (no RPC): confirmations are refused. */
   launchVerifier?: LaunchVerifier | null;
 }
@@ -94,8 +98,14 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     stubs.push(programId ? `burn_receipts program ${programId}: no BURNTICKER_RPC_URL on this host (FakeBurnProgram in use)` : "burn_receipts program: no program id wired on this host (FakeBurnProgram — PDAs are placeholders, nothing is sent); program deployment is on the trust page");
   }
   const platformId = (env.BURNTICKER_PLATFORM_ID ?? "").trim() || null;
-  const launchLab = new FakeLaunchLab(platformId ?? undefined);
-  stubs.push(platformId ? `LaunchLab platform ${platformId}: the SDK adapter needs an RPC to decode the configs (FakeLaunchLab in use on this host)` : "LaunchLab platform config: not created (scripts/burnticker-platform-config.mts prints the dry run)");
+  // launch-10 (2026-10-12): the real LaunchLab client on a host with an RPC, the program id and the platform id (launchLabChain.ts);
+  // the fake elsewhere (tests, RPC-less hosts, BURNTICKER_LAUNCHLAB_CLIENT=fake). Mainnet launches stay refused unless the host sets
+  // BURNTICKER_ALLOW_MAINNET_LAUNCHES (hostedLaunch.ts; prepareLaunch passes it to the builder as allowMainnet).
+  const ll = launchLabFromEnv(env, { cluster, reader: rpc ? (new Connection(rpc, "confirmed") as unknown as LaunchLabAccountReader) : null });
+  const launchLab = ll.client;
+  stubs.push(ll.stub);
+  const allowMainnet = cluster === "mainnet" && mainnetLaunchesAllowed(env);
+  if (cluster === "mainnet" && !allowMainnet) stubs.push("mainnet launches: refused on this host (BURNTICKER_ALLOW_MAINNET_LAUNCHES is not set)");
   const kalshi = new KalshiClient();
   const polymarket = polymarketClient(env);
   // Bonding curve + top holders for the coin cards: read-only account reads over the same RPC (no key). Without one: "—" and the reason.
@@ -114,7 +124,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
     registry, derbyPools, derbyHermes,
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
-    devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
+    allowMainnet, devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),
     uploader: uploaderFromEnv(env, cluster), customImages: customImagesEnabled(env), allowHostedMetadata: allowHostedMetadata(env),
     pinDailyCap: /^\d+$/.test((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) ? Number((env.BURNTICKER_PIN_DAILY_CAP ?? "").trim()) : undefined,
     // Review-2 F3: the verifier decodes initialize_token and reads the TokenConfig (and the Pair) — it needs the program ids it checks

@@ -7,8 +7,18 @@ import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
 import { globalRefusal, typeRefusal } from "@/lib/burnticker/launchAvailability";
+import { lookupTablePins } from "@/lib/burnticker/networks";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * GET → the lookup-table pins the signing card checks (launch-10, 2026-10-12): `{ lookupTables: { devnet, mainnet } }`, each
+ * `{ address, authority }` from the host's BURNTICKER_LOOKUP_TABLE / _AUTHORITY on its own network, else networks.ts. Read at runtime so
+ * pinning a table needs no code release; the browser still checks every entry of the table it finds there before anything is signed.
+ */
+export async function GET() {
+  return NextResponse.json({ lookupTables: lookupTablePins(process.env) }, { headers: { "cache-control": "no-store" } });
+}
 
 /**
  * POST { ...LaunchInput } → the unsigned launch bundle (initialize_token + LaunchLab create under the Burnticker platform config, the

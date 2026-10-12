@@ -1,4 +1,4 @@
-import { ADMISSION_RULES, GUARDRAILS, GUARDRAIL_SUMMARY, SAFEGUARDS, WHO_GETS_WHAT } from "@/lib/burnticker/safeguards";
+import { ADMISSION_RULES, GUARDRAILS, GUARDRAIL_DETAIL, GUARDRAIL_KIND_LABEL, GUARDRAIL_SUMMARY, SAFEGUARDS, WHO_GETS_WHAT, type GuardrailKind } from "@/lib/burnticker/safeguards";
 
 /**
  * GUARDRAILS AND SAFEGUARDS ON THE TRUST PAGE (site audit #7/#8, 2026-10-11): moved here from the homepage, rendered once, from static
@@ -10,7 +10,12 @@ export default function SafeguardsSection({ card }: { card: string }) {
     <section className={card} id="safeguards" aria-labelledby="safeguards-h">
       <h2 id="safeguards-h" className="font-medium">Guardrails and safeguards</h2>
       <p className="text-xs text-neutral-300">{GUARDRAIL_SUMMARY}</p>
-      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-mono text-neutral-300" aria-label="The eleven guardrails" data-guardrails>{GUARDRAILS.map((g) => <li key={g}>✓ {g}</li>)}</ul>
+      {/* A9: each guardrail says what kind of promise it is (enforced, policy, observed, planned), in place of one check mark for all */}
+      <div className="mt-2 grid gap-3 md:grid-cols-2" data-guardrails>
+        {(Object.keys(GUARDRAIL_KIND_LABEL) as GuardrailKind[]).map((k) => { const rows = GUARDRAILS.map((g) => ({ g, ...GUARDRAIL_DETAIL[g] })).filter((r) => r.kind === k); return rows.length ? (
+          <div key={k} data-guardrail-kind={k}><h3 className="text-xs font-medium text-neutral-100">{GUARDRAIL_KIND_LABEL[k]}</h3><ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-neutral-300">{rows.map((r) => <li key={r.g}>{r.text}</li>)}</ul></div>
+        ) : null; })}
+      </div>
       <details className="mt-3 text-xs"><summary className="cursor-pointer text-neutral-300">What protects a burn</summary>
         <dl className="mt-2 grid gap-3 md:grid-cols-2">{SAFEGUARDS.map((s) => <div key={s.id}><dt className="font-medium text-neutral-100">{s.title}</dt><dd className="text-neutral-300">{s.text}</dd></div>)}</dl>
       </details>

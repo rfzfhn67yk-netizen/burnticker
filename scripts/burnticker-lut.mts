@@ -11,13 +11,15 @@
 // Without --send nothing is sent: the transaction is described and the command stops. On mainnet --send also needs --mainnet. The keypair
 // file is read only to sign; no key, seed or RPC URL is ever printed. RPC: --rpc, else BURNTICKER_RPC_URL when it serves --cluster
 // (networks.ts rpcUrlFor), else the public endpoint. After create + freeze, pin the printed address in networks.ts LOOKUP_TABLES (authority
-// null = frozen) and run verify.
+// null = frozen) and run verify. Since launch-10 (2026-10-12) the pin can instead be set on the host at runtime: BURNTICKER_LOOKUP_TABLE (and
+// BURNTICKER_LOOKUP_TABLE_AUTHORITY while not frozen) on a host serving that network; a passing `verify` prints the exact lines to paste.
 //
 //   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs scripts/burnticker-lut.mts verify --cluster devnet
 import fs from "node:fs";
 import { AddressLookupTableProgram, Connection, Keypair, PublicKey, TransactionMessage, VersionedTransaction, type TransactionInstruction } from "@solana/web3.js";
 import { LOOKUP_TABLE_ENTRIES, lookupTableKeys, lookupTableProblems } from "../src/lib/burnticker/lookupTable.ts";
-import { LOOKUP_TABLES, rpcUrlFor, type Network } from "../src/lib/burnticker/networks.ts";
+import { lookupTablePin, rpcUrlFor, type Network } from "../src/lib/burnticker/networks.ts";
+import { createHash } from "node:crypto";
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -43,15 +45,33 @@ function printDiff(address: string, problems: string[], have: string[]) {
   console.log(problems.length ? `MISMATCH:\n  - ${problems.join("\n  - ")}` : "matches the expected entries");
 }
 
+/** sha256 over the expected entries (one base58 key per line, table order): the same on every machine for a given repository state. */
+const entriesSha256 = (keys: readonly string[]) => createHash("sha256").update(keys.join("\n")).digest("hex");
+
 async function verify(): Promise<number> {
-  const address = opt("address") ?? LOOKUP_TABLES[cluster].address;
-  if (!address) { console.log(`no lookup table is pinned for ${cluster} (networks.ts LOOKUP_TABLES); pass --address to check one`); return 1; }
+  // launch-10 (2026-10-12): the default address is the pin the HOST serves (networks.ts lookupTablePin: BURNTICKER_LOOKUP_TABLE on the
+  // host's network, else LOOKUP_TABLES), so `verify` checks exactly what the signing card will check.
+  const served = lookupTablePin(cluster);
+  const address = opt("address") ?? served.address;
+  if (!address) { console.log(`no lookup table is pinned for ${cluster} (BURNTICKER_LOOKUP_TABLE on a ${cluster} host, or networks.ts LOOKUP_TABLES); pass --address to check one`); return 1; }
   const acc = await readTable(new PublicKey(address));
-  const pin = opt("address") ? { address, authority: LOOKUP_TABLES[cluster].authority } : LOOKUP_TABLES[cluster];
+  const pin = opt("address") ? { address, authority: served.authority } : served;
   const problems = lookupTableProblems(cluster, address, acc ? acc.state : null, pin);
   printDiff(address, problems, acc ? acc.state.addresses.map((a) => a.toBase58()) : []);
   if (acc) console.log(`authority: ${acc.state.authority ? acc.state.authority.toBase58() : "none (frozen)"}; active: ${acc.isActive()}`);
-  return problems.length ? 1 : 0;
+  if (problems.length || !acc) return 1;
+  // THE PASTE-ABLE RECORD: one line for the run-sheet or a review, then the exact pin lines (no secret is involved: a table address is public).
+  const authority = acc.state.authority ? acc.state.authority.toBase58() : null;
+  const slot = await connection.getSlot("confirmed").catch(() => null);
+  console.log("");
+  console.log("---- paste this record ----");
+  console.log(`burnticker lookup table verified: ${cluster} ${address}, ${want.length} of ${want.length} entries at their index, ${authority ? `authority ${authority} (NOT frozen)` : "frozen (no authority)"}, entries sha256 ${entriesSha256(want)}, read at slot ${slot ?? "unknown"} on ${new Date().toISOString()}`);
+  console.log("---- pin it on the host (no code release; restart the app after editing its environment) ----");
+  console.log(`BURNTICKER_LOOKUP_TABLE=${address}`);
+  console.log(authority ? `BURNTICKER_LOOKUP_TABLE_AUTHORITY=${authority}` : "# leave BURNTICKER_LOOKUP_TABLE_AUTHORITY unset: the table is frozen");
+  console.log(`---- or compile it in (src/lib/burnticker/networks.ts LOOKUP_TABLES.${cluster}) ----`);
+  console.log(`${cluster}: { address: "${address}", authority: ${authority ? `"${authority}"` : "null"} },`);
+  return 0;
 }
 
 function payer(): Keypair {

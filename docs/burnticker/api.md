@@ -318,3 +318,20 @@ derives all of it from the host's environment:
   without an on-chain market settle on its final — and registered pairs (election pair, Coin vs Coin) need
   `BURNTICKER_PAIR_CURVE_ENABLED`. An unavailable type is refused with 403 `{ code: "launch-type-unavailable", type }`.
 
+
+## Hosted launches: the real LaunchLab client, the mainnet allowance, no opening purchase, no vault mode (launch-10, 2026-10-12)
+
+- A host with `BURNTICKER_RPC_URL`, `BURNTICKER_PROGRAM_ID` and `BURNTICKER_PLATFORM_ID` now builds the real LaunchLab create
+  (`src/lib/burnticker/launchLabChain.ts`: it reads LaunchLab's global config and the platform config on every launch, checks the
+  LP-lock pins, and uses the CLI's own builder). The bundle then says `ready: true` with `pending: []`. Without those settings, or
+  with `BURNTICKER_LAUNCHLAB_CLIENT=fake`, the practice client stays and the bundle says `ready: false`.
+- A mainnet host refuses every launch with 403 `{ code: "mainnet-launches-off" }` unless its owner sets
+  `BURNTICKER_ALLOW_MAINNET_LAUNCHES=1`. The refusal comes before anything is pinned or registered.
+- `firstBuySol` must be `"0"` or absent. Anything else is refused with 400 `{ code: "opening-purchase-off" }`: a create with an
+  opening purchase does not fit one transaction. The creator trades on the curve after the create like anyone else. The offline SDK
+  builder and the operator's CLI (`scripts/burnkeeper-launch.mts --first-buy-sol`) keep the option.
+- A vault-mode rule is refused with 400 `{ code: "vault-off" }`: its bundle needs a signature from the burn program's fee PDA, which
+  no wallet can give.
+- `GET /api/burnticker/launch` answers `{ lookupTables: { devnet, mainnet } }`, the lookup-table pins the signing card checks. A host
+  sets its own network's pin at runtime with `BURNTICKER_LOOKUP_TABLE` (and `BURNTICKER_LOOKUP_TABLE_AUTHORITY` while the table is
+  not frozen); otherwise the values compiled into `networks.ts` apply. The card still checks every entry of the table it finds.

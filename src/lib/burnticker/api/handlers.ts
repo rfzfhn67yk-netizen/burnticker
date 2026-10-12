@@ -27,6 +27,7 @@ import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
 import { wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { buildLaunchBundle, buildPairBundles, launchProblems, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
+import { MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE, requestedOpeningPurchase } from "@/lib/burnticker/hostedLaunch";
 import { launchVenueOf } from "@/lib/burnticker/launchVerify";
 import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import type { PairRow, TokenRow } from "@/lib/burnticker/registry";
@@ -426,7 +427,7 @@ interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknow
 /**
  * Validation, refusals and the bundle — the launch route's whole pipeline. Refuses: invalid input, rules that do not lock, catalogue
  * rules that disagree with their feed, an unreadable Kalshi series, the refuse list (titles, categories, names), a taken ticker,
- * mainnet. `register` stores the DRAFT (and the keeper's attester row) as the wizard always has. `mint` = the caller's own mint public
+ * mainnet without the host's allowance, an opening purchase, vault mode. `register` stores the DRAFT (and the keeper's attester row) as the wizard always has. `mint` = the caller's own mint public
  * key (the public API: the secret never travels); absent = a fresh keypair whose secret rides in the bundle (the wizard).
  *
  * RIVALRY PAIRS: a body with `pair: { ticker, name, … }` launches side B with the derived (inverted) rule alongside side A
@@ -442,8 +443,14 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   const problems = launchProblems(input);
   if (o.mint !== undefined && o.mint !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(o.mint)) problems.push("The mint must be the public key of a new mint keypair that you made.");
   if (problems.length) return { error: fail(400, problems.join("; "), { problems }) };
+  // launch-10 (2026-10-12; hostedLaunch.ts): what a launch built by this site never carries, refused before anything is read, pinned or
+  // registered. Mainnet only with the host's explicit allowance (passed to the builder below as allowMainnet); no opening purchase (a
+  // create with one does not fit one transaction; the CLI keeps --first-buy-sol); no vault mode (it needs a signature no wallet can give).
+  if (p.cluster === "mainnet" && p.allowMainnet !== true) return { error: fail(403, MAINNET_OFF_SENTENCE, { code: "mainnet-launches-off" }) };
+  if (requestedOpeningPurchase(b.firstBuySol) !== 0) return { error: fail(400, NO_OPENING_PURCHASE_SENTENCE, { code: "opening-purchase-off" }) };
   let locked: LockedRule;
   try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, (e as Error).message) }; }
+  if (locked.mode === "vault") return { error: fail(400, VAULT_HIDDEN_SENTENCE, { code: "vault-off" }) };
   if (locked.rule.oracle === "kalshi" && p.kalshiEnabled === false) return { error: fail(503, KALSHI_UNAVAILABLE) };
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
@@ -542,7 +549,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     }
   };
   const uriFor = (ticker: string) => (m: string) => { const pin = pins.get(ticker); return pin ? pin.metadataUri : o.register ? `${publicOrigin()}/api/burnticker/metadata/${m}` : "ar://pending-upload-at-launch"; };
-  const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey };
+  const deps = { program: p.program, launchLab: p.launchLab, devFeeWallet: p.devFeeWallet, attesters: p.keeperPubkey ? [p.keeperPubkey] : [], quorum: 1, metadataUri: uriFor(input.ticker), keeperPubkey: p.keeperPubkey, allowMainnet: p.allowMainnet === true };
   const register = (bundle: LaunchBundle, ticker: string, imageUrl: string | null, links: { label: string; url: string }[], creatorNote = "", poolId: string | null = bundle.addresses.poolId): TokenRow => {
     const token = p.registry.register({ mint: bundle.mint, ticker, name: bundle.name, creator: input.creator, description: bundle.description, imageUrl, links, rulesText: bundle.rules.text, feePda: bundle.addresses.feePda, vault: bundle.addresses.vault, tokenConfig: bundle.addresses.tokenConfig, poolId, launchTx: null, cluster: p.cluster, platformId: bundle.addresses.platformId, baselineAt: new Date().toISOString(), status: "draft" });
     if (p.keeperPubkey) p.registry.addAttester({ mint: token.mint, pubkey: p.keeperPubkey, role: "data-key", addedAt: Date.now(), timelockUntil: null });

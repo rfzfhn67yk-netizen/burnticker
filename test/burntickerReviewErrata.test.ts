@@ -24,11 +24,11 @@ const BR = "programs/burn-receipts/programs/burn_receipts/src";
 const CHECKLIST = "docs/burnticker/reviews/checklist.md";
 const ERRATUM = "## Erratum 2026-10-10 (after the ChatGPT/Codex review)";
 /** Every dated erratum, in the order they were appended (each one after the last; the pre-registered text before the first never changes). */
-const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)", "## Erratum 2026-10-11 (pair-forward round-2 re-check, RI-2 wording)", "## Erratum 2026-10-11 (pair-forward round 3, after the re-check)"];
+const ERRATA = [ERRATUM, "## Erratum 2026-10-10 (LP locked forever, owner decision)", "## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)", "## Erratum 2026-10-11 (winner takes the burn, LAUNCHPAD-PATH §40)", "## Erratum 2026-10-11 (winner takes the burn round 2, after the pair-forward blind review)", "## Erratum 2026-10-11 (pair-forward round-2 re-check, RI-2 wording)", "## Erratum 2026-10-11 (pair-forward round 3, after the re-check)", "## Erratum 2026-10-12 (market cap on coin cards, owner decision)"];
 /** sha256 of the pre-registered checklist exactly as reviewed (everything before the erratum). It must never change. */
 const CHECKLIST_PREREGISTERED_SHA256 = "7af9866eb64157d77205e63b34e4695aa9d1ecac6b12c4cbff58c5a068ff5f3b";
 const LP_SENTENCE = "≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation";
-const UI_RULE = "no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence";
+const UI_RULE = "no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence";
 
 function walk(dir: string, exts: RegExp, acc: string[] = []): string[] {
   for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
@@ -172,16 +172,28 @@ describe("no market cap / price for any Burnticker coin (Claims and UI trust bou
   // The only places "market cap" may be rendered: Burn Derby's flippening, where it names OTHER coins' caps as the rule's input.
   const RULE_INPUT_SITES = new Set(["src/app/burnticker/launch/CoinVsCoinTile.tsx", "src/lib/burnticker/coinCard.ts"]);
 
-  test("no UI source reads a market-data field (cap, fdv, price, bid/ask, outcome prices)", () => {
+  // Erratum 2026-10-12 (owner decision): a coin card's market cap, a bare number read from the coin's own curve. The index card carries the
+  // field (declared once, read once from the curve), the card prints it in its row; nothing else reads a market-data field.
+  const CARD_MCAP = /^marketCap(\?: string \| null;|: c\?\.marketCap \?\? null, holders: s\.market\?\.holders\.count \?\? null,)$/;
+  // the coin page's market facts read the same curve field (coinPage.ts marketFacts); its one mention is the status type's curve shape
+  const PAGE_MCAP = (f: string, l: string) => f === "src/app/burnticker/t/[ticker]/page.tsx" && /^interface Market \{.*progressPct: number; poolId: string; marketCap\?: string \| null \} \| null;/.test(l.trim());
+  test("no UI source reads a market-data field (cap, fdv, price, bid/ask, outcome prices) except the card's own curve read", () => {
     const FIELD = /\b(marketCap|market_cap|marketcap|mcapUsd|fdv|priceUsd|usdPrice|priceNative|lastTradePrice|outcomePrices|bestBid|bestAsk)\b/;
-    const hits = UI.flatMap((f) => code(f).split("\n").map((l, i) => (FIELD.test(l) ? `${f}:${i + 1}: ${l.trim().slice(0, 140)}` : null)).filter((x): x is string => !!x));
+    const hits = UI.flatMap((f) => code(f).split("\n").map((l, i) => (FIELD.test(l) && !(f.endsWith("tokenPage.ts") && CARD_MCAP.test(l.trim())) && !PAGE_MCAP(f, l) ? `${f}:${i + 1}: ${l.trim().slice(0, 140)}` : null)).filter((x): x is string => !!x));
     assert.deepEqual(hits, []);
+    assert.equal(code("src/lib/burnticker/tokenPage.ts").split("\n").filter((l) => /\bmarketCap\b/.test(l)).length, 2, "the index card's field: declared once, read once");
+    const view = read("src/lib/burnticker/cardView.ts"), card = read("src/app/burnticker/_components/CoinCard.tsx");
+    assert.match(view, /const mcap: CardCell = t\.marketCap \? \{ text: `\$\{groupDigits\(t\.marketCap\)\} \$\{t\.quote \?\? "SOL"\}`, why: CARD_MEANINGS\.mcap \}/, "a bare number and its unit, no commentary");
+    assert.match(card, /<div data-row="mcap"><dt title=\{CARD_MEANINGS\.mcap\}>\{CARD_LABELS\.mcap\}<\/dt><dd><Cell c=\{v\.mcap\} \/><\/dd><\/div>/);
+    assert.doesNotMatch(code("src/lib/burnticker/market.ts"), /price/i, "the curve read computes a number, it names no price");
+    assert.match(read("src/lib/burnticker/coinPage.ts"), /value: `\$\{dec2\(i\.curve\.marketCap\)\} \$\{quote\}`/, "the coin page's row: a bare number and its unit");
   });
 
   test("\"market cap\" is rendered only at the documented rule-input sites, and only as another coin's rule input", () => {
     const outside: string[] = [];
     for (const f of UI) code(f).split("\n").forEach((l, i) => {
       if (!/market ?cap/i.test(l)) return;
+      if ((f.endsWith("tokenPage.ts") && CARD_MCAP.test(l.trim())) || PAGE_MCAP(f, l)) return; // the card's own field (Erratum 2026-10-12)
       if (!RULE_INPUT_SITES.has(f)) { outside.push(`${f}:${i + 1}: ${l.trim().slice(0, 140)}`); return; }
       // coinCard: the derby flippening one-liner names the two UNDERLYINGS (d.a / d.b), never the coin's own ticker
       if (f.endsWith("coinCard.ts")) assert.ok(/d\.a\.symbol/.test(l) && /d\.b\.symbol/.test(l) && !/ticker/i.test(l), `${f}:${i + 1}: a market-cap line must name the derby underlyings only`);

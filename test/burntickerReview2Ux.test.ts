@@ -38,7 +38,8 @@ describe("review 2 — one launch-availability state", () => {
   test("every launch CTA on the app's pages renders only while launches are open", () => {
     const cases: [string, RegExp[]][] = [
       // since 2026-10-12 the page's own "Launch a coin" moved into the header (SiteHeader.tsx: a link while open, the closed dialog otherwise)
-      ["src/app/burnticker/CoinsIndex.tsx", [/\{launch\.open && <div className="mt-3"><Link href="\/burnticker\/launch" className="underline">Launch the first one<\/Link><\/div>\}/, /\{launch\.open && <p className="mt-2"><Link className="underline" href="\/burnticker\/launch\?pair=1">/]],
+      // website-13: one gated link for both empty grids (coins and pairs), only when nothing is launched and launches are open
+      ["src/app/burnticker/CoinsIndex.tsx", [/\{state\.notLaunched && launch\.open && <div className="mt-2"><Link href=\{tab === "pairs" \? "\/burnticker\/launch\?pair=1" : "\/burnticker\/launch"\} className="underline">\{tab === "pairs" \? "Launch a pair" : "Launch the first one"\}<\/Link><\/div>\}/]],
       ["src/app/burnticker/_components/SiteHeader.tsx", [/\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch"/]],
       ["src/app/burnticker/leagues/[league]/[season]/page.tsx", [/\{launch\.open && <Link className="text-xs underline" href=\{t\.launchHref\}>/, /\{launch\.open && <Link className="underline" href=\{t\.launchHref\}>/, /No team-coin receipts for this season yet\. This page tracks processed coin receipts, not every game\.\{launch\.open \? " Pick a team below to launch one\." : ""\}/]],
       ["src/app/burnticker/templates/page.tsx", [/\{launch\.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href=\{t\.href\}>Start from this →<\/Link>\}/]],
@@ -171,16 +172,19 @@ describe("review 2 — the glossary at first use", () => {
     assert.doesNotMatch(home, /data-glossary|<abbr class="term"/, "no glossary or tooltip terms on the home");
     const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('id="coins"'));
     for (const w of ["reading signer", "burn budget", "keeper", "crank", "attester"]) assert.ok(!hero.toLowerCase().includes(w), `no "${w}" in the hero`);
-    assert.ok(home.includes(NO_WALLET_LINE));
+    // website-13 (Claude site audit 2 item 3): the no-wallet line is a repeated disclaimer, so the home and the coins page no longer print it
+    assert.ok(!home.includes(NO_WALLET_LINE));
     const about = read("src/app/burnticker/about/page.tsx");
     assert.match(about, /Object\.values\(GLOSSARY\)\.map\(\(g\) =>/, "the about page defines every term once");
+    // website-13 (Codex review 5 glossary): the coins page's tabs state their rule, and the card rows' meanings open on demand
     const coins = read("src/app/burnticker/CoinsIndex.tsx");
-    assert.match(coins, /label: "Moved to trading pool", hint: GLOSSARY\.graduation\.short/);
+    assert.match(coins, /Object\.values\(CARD_MEANINGS\)\.map/); assert.match(coins, /title=\{t\.rule\}/);
     assert.match(read("src/app/burnticker/trust/page.tsx"), /data-trust-evidence[\s\S]*<TermNote ids=\{\["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"\]\} \/>/, "beside the evidence that uses the words");
     const pair = read("src/app/burnticker/p/[pairId]/page.tsx");
-    assert.match(pair, /<TermNote ids=\{\["receipt", "burnPool"\]\} \/>/); assert.match(pair, /\{NO_WALLET_LINE\}/);
+    assert.match(pair, /<TermNote ids=\{\["receipt", "burnPool"\]\} \/>/); assert.doesNotMatch(pair, /\{NO_WALLET_LINE\}/, "website-13: no repeated disclaimer on the pair page");
     assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{esc\(NO_WALLET_LINE\)\} \$\{esc\(termLine\(\["receipt", "burnPool"\]\)\)\}/);
     assert.ok(termLine(["receipt"]).startsWith("receipt — "));
-    for (const f of ["src/app/burnticker/derby/page.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx", "src/app/burnticker/rivalries/page.tsx", "src/app/burnticker/CoinsIndex.tsx"]) assert.match(read(f), /\{NO_WALLET_LINE\}/, f);
+    for (const f of ["src/app/burnticker/derby/page.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx", "src/app/burnticker/rivalries/page.tsx"]) assert.match(read(f), /\{NO_WALLET_LINE\}/, f);
+    assert.doesNotMatch(read("src/app/burnticker/CoinsIndex.tsx"), /NO_WALLET_LINE/, "website-13: the coins page drops the repeated disclaimer");
   });
 });

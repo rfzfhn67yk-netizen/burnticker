@@ -191,7 +191,7 @@ export const SCHEMAS: Record<string, Schema> = {
     creator: { ...PUBKEY, description: "the wallet that pays and signs" },
     mint: { ...PUBKEY, description: "the PUBLIC key of a fresh mint keypair you generated; the secret never leaves your machine" },
     ticker: { type: "string", pattern: "^[A-Z0-9]{2,10}$" }, name: str, description: str, imageUrl: nstr,
-    links: arr(obj({ label: str, url: str }, ["label", "url"])), rule: ref("Rule"), firstBuySol: { type: "string", description: "decimal SOL, ≤ 50; \"0\" for none" },
+    links: arr(obj({ label: str, url: str }, ["label", "url"])), rule: ref("Rule"), firstBuySol: { type: "string", description: "must be \"0\" (or absent): bundles built by this API carry no opening purchase, because a create with one does not fit one transaction; anything else is refused with code opening-purchase-off. The offline SDK builder and the operator's CLI keep the option." },
     acknowledgements: obj({ ruleLocked: { const: true }, noReturns: { const: true } }, ["ruleLocked", "noReturns"]),
     recentBlockhash: { type: "string", description: "optional: a recent blockhash from your RPC; otherwise a placeholder you must replace before signing" },
     register: { type: "boolean", description: "default true: register the DRAFT (reserves the ticker for 24 h — confirm the launch within that window or the draft expires and the ticker is released; the keeper serves registered tokens only). false = review only." },

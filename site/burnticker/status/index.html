@@ -112,7 +112,8 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
 .sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
 .sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
 .sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
-.sh-wallet{display:none;cursor:not-allowed;opacity:.6}.sh-ghost{cursor:pointer}
+.sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
+.sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
 .sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
 .sh-menu>summary::-webkit-details-marker{display:none}
 .sh-menu{position:relative}
@@ -177,7 +178,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     <form class="sh-search" role="search" action="https://burnticker.com/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
     <div class="sh-actions">
       <a class="sh-launch" href="https://burnticker.com/burnticker/launch" data-launch-button>Launch a coin</a>
-      <button type="button" class="sh-wallet" disabled title="No page here needs a wallet while creator launches are closed.">Connect wallet</button>
+      <a class="sh-wallet" href="https://burnticker.com/burnticker/me?connect=1" title="Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect." data-wallet-button>Connect wallet<span class="sh-sr">. Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.</span></a>
       <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
       <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
         <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
@@ -190,6 +191,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
           <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
           <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
           <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+          <p class="sh-menu-wallet">A wallet is only needed for Your coins. <a href="https://burnticker.com/burnticker/me?connect=1" data-wallet-button>Connect wallet</a></p>
         </nav>
       </details>
     </div>
@@ -197,8 +199,9 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
 </header>
 <dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
-  <h2 id="sh-launch-closed-h">Creator launches are closed</h2>
-  <p>Creator launches are closed until the first coin has receipts. You can still look through the coins and check a real receipt.</p>
+  <h2 id="sh-launch-closed-h">Launching a coin</h2>
+  <p data-launch-sentence>Checking whether creator launches are open on this site.</p>
+  <p>You can still look through the coins and check a real receipt.</p>
   <p class="sh-modal-row"><a class="sh-launch" href="https://burnticker.com/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
 </dialog>
 <!-- site-shell:header:end -->
@@ -301,9 +304,12 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   });
 })();
 (function () {
-  // "Launch a coin": the closed-launches dialog unless the host's catalogue says creator launches are open (unreadable = closed)
+  // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
+  // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
   var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
-  fetch("https://burnticker.com/api/burnticker" + "/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { open = !!(j && j.launches && j.launches.creators === true); }).catch(function () { open = false; });
+  var said = dlg && dlg.querySelector("[data-launch-sentence]");
+  window.btHome = window.btHome || fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
   if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
@@ -312,7 +318,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+  window.btHome.then(function (j) {
     box.textContent = "";
     if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }

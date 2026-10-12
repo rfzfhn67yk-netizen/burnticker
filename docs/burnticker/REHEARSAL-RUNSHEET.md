@@ -922,26 +922,28 @@ state whether the keeper keeps attesting it. If attesting stops, nothing more is
 
 ---
 
-## C. $DEFICIT launch day (a weekday; the create goes out 08:00–09:00 Denver)
+## C. $DEFICIT launch day (WEDNESDAY 2026-10-14, EVENING Denver — owner decision 2026-10-12; reconciled 2026-10-12 after the third ChatGPT review)
+
+Timing: the create goes out Wednesday evening Denver, not in the morning. Treasury publishes the previous business day's Debt to the Penny at about 15:00 Eastern; the keeper polls at 16:30 and 20:00 New York (14:30 and 18:00 Denver). The first reading the keeper can attest after an evening create is therefore Thursday 2026-10-15 at the 14:30 Denver poll (record_date 2026-10-14); the reading attested at or right after the create is the baseline. A poll is not a promise of a unit, and a unit is not a burn: nothing burns before the curve fills at the configured raise (85 SOL), graduates, and the pool is registered and verified. The mint keypair already exists and its public key is pinned everywhere (C2); do not generate another. The rule is 2% per unit = 200 bps (C5 read-back). Upgrade authority stays with the Squads vault with a zero time lock on launch night; finalisation (C16) is a separate owner decision after the first mainnet burn and after the 48-hour lock is set (planned ~2026-10-23), never part of launch night.
 
 Preconditions: every gate in §C-gates is ticked; D-1 to D-8 are settled; the host is fully provisioned, with both keepers **installed and
 stopped**; the platform config and program come from B. `/tmp` is cleared on reboot, so copy every JSON into `$M/` as you go.
 
 | # | When (Denver) | WHO | Step | Expected / proof |
 |---|---|---|---|---|
-| C1 | day before | Claude | Confirm the program, Squads, platform dials and host state (no send) | `solana program show` → vault; platform dials as B9; host `--check` clean |
-| C2 | day before | owner + Claude | Mint keypair; `"mint"` into `deficit.rules.json`; D-4 edits; own-tokens; commit and ship | `jq .mint` = the mint pubkey |
-| C3 | day before | either | Rules sha → publish and set `BURNKEEPER_RULES_SHA` on the host | sha on the site / metadata |
-| C4 | day before | owner | Metadata JSON live at `<URI>` (name/symbol DEFICIT; description = rule sentence + disclaimer + rules sha; image) | `curl -s <URI> \| jq .` |
-| C5 | 07:30 | owner | `initialize_token` (mainnet) | read-back as A11, mainnet genesis |
-| C6 | 07:45 | owner + second reader | Dry run, then **the two-person pre-send read** (gate 4) | the initialed `/tmp/deficit-dry.json` |
-| C7 | 08:00–09:00 | owner | LaunchLab create `--send`, **no team buy** | `$M/deficit.json` |
+| C1 | Tue 10-13 | Claude | Confirm the program, Squads, platform dials and host state (no send) | `solana program show` → vault; platform dials as B9; host `--check` clean |
+| C2 | DONE 2026-10-12 | Claude | Mint keypair exists (`$M/mint-deficit.json`, pubkey `AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj`); `"mint"` written into `deficit.rules.json`, own-tokens (status stays `planned` until the create confirms) and transparency.json; published and deployed | `jq .mint` = `AJJ4…4oqj` on the Mac, the host and the served rules.json |
+| C3 | DONE 2026-10-12 (sha); host env at C10 | either | Rules sha `8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9` is on the site and in the metadata; `BURNKEEPER_RULES_SHA` goes into the host env at C10 (owner) | the served rules.json hashes to it; `--print-rules` on the host prints it |
+| C4 | Tue 10-13 | owner | Metadata JSON live at `<URI>` (name/symbol DEFICIT; description = rule sentence + disclaimer + rules sha; image) | `curl -s <URI> \| jq .` |
+| C5 | Wed, T−45 min | owner | `initialize_token` (mainnet) | read-back as A11, mainnet genesis |
+| C6 | Wed, T−30 min | owner + second reader | Dry run, then **the two-person pre-send read** (gate 4) | the initialed `/tmp/deficit-dry.json` |
+| C7 | Wed evening, T | owner | LaunchLab create `--send`, **no team buy** | `$M/deficit.json` |
 | C8 | right after | owner | Seed 3 SOL into the **fee PDA** | the seed signature |
 | C9 | right after | owner | Keeper key funded (≥ 0.1, budget 0.3 SOL) | balance |
-| C10 | right after | Claude (host) | Final `.env.local`; start `mct-burnkeeper` and `mct-burnticker-keeper`; publish the sites | log banners |
+| C10 | right after | owner (host env + units; Claude stages the one-liners) | Final `.env.local` (`BURNKEEPER_RULES_SHA=8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9`, `BURNKEEPER_MAINNET=1`); re-enable and start `mct-burnkeeper` (disabled 2026-10-12 after a restart loop) and `mct-burnticker-keeper`; flip own-tokens to `launched` and publish the sites only after the create is confirmed | log banners; the keeper banner prints the same sha |
 | C11 | +10 min | Claude | First receipt check | status.json fields |
 | C12 | after C11 | owner | Mint-first posts (gate 5) from `burnkeeper-post-draft.mts` drafts (gate 9) | bios + site |
-| C13 | 14:30 / 18:00 | Claude | First unit reading attested; curve claim | log + status |
+| C13 | Thu 10-15, 14:30 Denver poll (18:00 fallback) | Claude | First unit reading attested (record_date 2026-10-14); curve claim | log + status |
 | C14 | after graduation | anyone (Claude stages) | `register_pool` | confirmed |
 | C15 | +20–40 min | Claude | First crank defers (`TwapUnavailable`), then burns; receipt verified | `burns.json` verified |
 | C16 | after C15 | owner (Squads 2 of 3) | Finalise (D-1), with the pre-finalisation assertions | `Authority: none` |
@@ -962,7 +964,8 @@ CLUSTER=mainnet RPC="$MAINNET_RPC" PROGRAM_ID=<PROGRAM_ID> MINT=$(jq -r .mint "$
 ### C2. Mint, rules, refuse list (runbook launch step 3)
 
 ```bash
-solana-keygen new --no-bip39-passphrase --silent -o "$M/mint-deficit.json" && chmod 600 "$M/mint-deficit.json" && solana-keygen pubkey "$M/mint-deficit.json"
+# The keypair was made on 2026-10-11 and its public key is pinned (rules file, own-tokens, transparency, the site). NEVER run `solana-keygen new` here again; only read the pubkey back:
+solana-keygen pubkey "$M/mint-deficit.json"   # must print AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj
 ```
 
 Then (Claude):
@@ -992,7 +995,7 @@ CLUSTER=mainnet RPC="$MAINNET_RPC" PROGRAM_ID=<PROGRAM_ID> PAYER="$M/ops-payer.j
 ```
 
 Then the same with `SEND=1 BURNKEEPER_MAINNET=1`. Read back: `rulesSha256` = C3, attesters = [host keeper] quorum 1, admin = `<VAULT>`,
-`clusterGenesis` = `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d`, `rule.fraction_per_unit_bps` = 100, twap 300 / 1200, `floor_lamports` = D-5. The
+`clusterGenesis` = `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d`, `rule.fraction_per_unit_bps` = 200 (2% per unit; the 2026-10-10 owner decision superseded the 1% of this sheet's first draft), twap 300 / 1200, `floor_lamports` = D-5. The
 keeper refuses to run if the sha, mode, prefix or decimals differ.
 
 ### C6. Dry run and the two-person read (gate 4)
@@ -1076,7 +1079,9 @@ ACTION=register_pool CLUSTER=mainnet RPC="$MAINNET_RPC" PROGRAM_ID=<PROGRAM_ID> 
 Then the same with `SEND=1 BURNKEEPER_MAINNET=1`. The keeper's next cycle checks pool health and cranks. The first crank waits
 `TwapUnavailable` for about 20 min (window 1,200 s), then burns. Verify as in A23, on `data/burnkeeper-site/`.
 
-### C16. Finalise (D-1)
+### C16. Finalise (D-1) — NOT on launch night
+
+Status 2026-10-12: the upgrade authority is the Squads vault with a zero time lock (read from chain on the trust page). Finalisation is an owner decision taken after the first mainnet burn and after the 48-hour lock is set (~2026-10-23). Nothing in sections C5–C15 executes it, and the 48 h wait below refers to that later lock, not to launch night.
 
 Run README §5.3's assertions first:
 

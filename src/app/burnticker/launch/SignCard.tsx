@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { abandonedSentence, browserPlanStorage, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
+import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
+import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 
 /**
@@ -21,6 +23,10 @@ import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
  * Re-check 2026-10-11: every step is a version-0 transaction compiled against the network's lookup table, which is fetched and verified
  * (lookupTable.ts) before anything is signed. A plan that put something on chain but lost a mint key on reload is abandoned: each step
  * shows confirmed / sent / abandoned, the sentence gives the fee already spent, and the only action is a new plan.
+ *
+ * launch-10 (2026-10-12): the table's address is read from the host at runtime (GET /api/burnticker/launch; networks.ts lookupTablePin),
+ * so pinning a table needs no code release; until that answer arrives, or if it fails, nothing can be signed. The plan never carries an
+ * opening purchase (hostedLaunch.ts): the creator trades on the curve after the create like anyone else.
  */
 export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true }: { plan: SignPlan; creator: string | null; title: string; notes?: string[]; coinHref: (ticker: string) => string; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean }) {
   const wallet = useWallet();
@@ -36,8 +42,17 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   const [stopped, setStopped] = useState<Pick<SendResult, "failedAt" | "state" | "signature"> | null>(() => (stored?.pending ? { failedAt: stored.pending.step, state: "sent", signature: stored.pending.signature } : stored && abandonedAtMount ? { failedAt: stored.confirmed.length, state: "abandoned" } : null));
   const walletKey = wallet.publicKey?.toBase58() ?? null;
   const network = planNetwork(plan.steps.map((st) => st.instructions));
+  // the lookup-table pin from the host (undefined = still reading, null = the read failed)
+  const [pins, setPins] = useState<Record<Network, LookupTablePin> | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/burnticker/launch", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) setPins(j?.lookupTables ?? null); }).catch(() => { if (live) setPins(null); });
+    return () => { live = false; };
+  }, []);
+  const pin = network && pins ? pins[network] ?? null : null;
+  const pinProblems = pins === undefined ? ["this page is still reading which lookup table this site uses"] : pins === null ? ["this site's lookup table setting could not be read, so nothing can be signed here; reload the page to try again"] : lookupTablePinProblems(network, pin);
   const v0 = wallet.wallet?.adapter.supportedTransactionVersions;
-  const problems = [...planProblems(plan, creator), ...lookupTablePinProblems(network), ...planSizeProblems(plan.steps, creator, network), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet && !v0?.has(0) ? ["this wallet cannot sign version-0 transactions"] : [])];
+  const problems = [...planProblems(plan, creator), ...pinProblems, ...planSizeProblems(plan.steps, creator, network), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet && !v0?.has(0) ? ["this wallet cannot sign version-0 transactions"] : [])];
   /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
   const startNewPlan = () => { storage.remove(planStorageKey(plan)); window.location.assign(window.location.pathname); };
   const allLive = plan.confirms.length > 0 && plan.confirms.every((c) => confirmed.includes(c.mint));
@@ -51,7 +66,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       const r = await signAndSendPlan(plan, creator, {
         latestBlockhash: () => connection.getLatestBlockhash("confirmed"),
         signTransaction: (tx) => wallet.signTransaction!(tx),
-        lookupTable: () => verifiedLookupTable(connection, network),
+        lookupTable: () => verifiedLookupTable(connection, network, pin),
         sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
         confirm: async (sig, bh) => (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value,
         getSignatureStatus: async (sig) => (await connection.getSignatureStatuses([sig], { searchTransactionHistory: true })).value[0] ?? null,
@@ -76,7 +91,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   /** Plain step names: "Create $RAYS26" for the transaction the mint signs; "Link the two coins" for a pair-curve set-up; else the bundle's. */
   const stepName = (t: SignPlan["steps"][number], i: number) => {
     const c = plan.confirms.find((x) => x.step === i);
-    if (c) return `Create $${c.ticker} with its rule locked in${/first buy/i.test(t.label) ? ", and your opening purchase" : ""}`;
+    if (c) return `Create $${c.ticker} with its rule locked in`;
     if (/init_pair/.test(t.label)) return "Link the two coins as one pair";
     return t.label;
   };
@@ -103,6 +118,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         })}
         {plan.confirms.map((c) => <li key={c.mint} className="text-neutral-500">{confirmed.includes(c.mint) ? "✓" : "·"} ${c.ticker} recorded as launched</li>)}
       </ol>
+      <p className="text-xs text-neutral-500" data-no-opening-purchase>{NO_OPENING_PURCHASE_SENTENCE}</p>
       {notes.length > 0 && <ul className="list-disc pl-5 text-xs text-neutral-500">{notes.map((x) => <li key={x}>{x}</li>)}</ul>}
       {allLive ? (
         <p className="text-emerald-400">{plan.confirms.length > 1 ? "Both coins are live." : "Your coin is live — opening its page…"} {plan.confirms.map((c) => <a key={c.mint} className="ml-2 underline" href={coinHref(c.ticker)}>${c.ticker} →</a>)}</p>

@@ -81,7 +81,11 @@ describe("LP locked forever: no public surface still claims the LP is burned", (
 
   test("the policy line is the same words everywhere it is defined", () => {
     const LINE = "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)";
-    for (const f of ["src/lib/burnticker/lockFees.ts", "src/app/burnticker/launch/ReviewCard.tsx", "src/lib/burnticker/wizard.ts"]) assert.ok(fs.readFileSync(path.join(ROOT, f), "utf8").includes(LINE), f);
+    for (const f of ["src/lib/burnticker/lockFees.ts", "src/lib/burnticker/wizard.ts"]) assert.ok(fs.readFileSync(path.join(ROOT, f), "utf8").includes(LINE), f);
+    // website-12 (ChatGPT A4): the review card says the exact scope of the 80 / 20 split (the SOL side of the locked LP's fees) and that it funds the burn pool
+    const card = fs.readFileSync(path.join(ROOT, "src/app/burnticker/launch/ReviewCard.tsx"), "utf8");
+    assert.ok(card.includes("The pool's liquidity is locked forever. After graduation, the SOL side of the fees it earns goes 80% to the coin's burn pool and 20% to the operator, a split fixed in code."));
+    assert.ok(!card.includes(LINE), "the imprecise '80% burned' line is gone from the review card");
   });
 });
 

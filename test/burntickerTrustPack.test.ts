@@ -131,7 +131,7 @@ describe("TODO-OWNER.md: every placeholder, every pointer", () => {
   test("every TODO_ placeholder in the trust-pack files is on the page", () => {
     const files = ["config/burnticker/operator.json", "config/burnticker/expenses.json", "config/burnticker/transparency.json", "config/public-repo/overlay/SECURITY.md"];
     const all = new Set(files.flatMap((f) => placeholders(f.endsWith(".json") ? JSON.parse(read(f)) : read(f)).map((p) => p.value)));
-    assert.ok(all.size >= 9, `${all.size} placeholders`);   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11, the mainnet keeper and deployer keys later that day (website-9)
+    assert.ok(all.size >= 8, `${all.size} placeholders`);   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11, the mainnet keeper and deployer keys later that day (website-9); TODO_THIRD_SIGNER_NAME settled 2026-10-12 (owner: member C stays anonymous)
     for (const v of all) assert.ok(doc.includes(v), `${v} is missing from docs/burnticker/TODO-OWNER.md`);
   });
   test("every `file:line` (and `:line` after it) points at a line that holds the token named beside it", () => {
