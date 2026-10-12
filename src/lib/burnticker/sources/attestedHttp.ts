@@ -38,16 +38,36 @@ export interface HttpSourceConfig {
     regex?: { pattern: string; flags?: string };
     /** A single number (GitHub stars, Steam players, TVL, a block height): the reading is "today's value" at poll time. */
     snapshot?: { path: string };
+    /**
+     * A ONE-SHOT MILESTONE (sources-2, 2026-10-12: "burns when <repo> passes N stars"): the number at `path` is read at poll time and,
+     * once it is at or above `at` (the series parameter's N, set by the catalogue), the source gives ONE reading with the fixed id
+     * `reached-<N>` and value 1; below it, no reading at all. The id never changes, so the keeper's receipt for it is the only one
+     * (the rule then ends). `guard` refuses the read when another number in the body is under a bar (a channel too small to count as
+     * a public channel); a refusal is never a reading.
+     */
+    milestone?: { path: string; at?: number; guard?: { path: string; min: number; why: string } };
   };
   period: PeriodSpec & { kind: "day" | "month" | "week" | "quarter"; dropFirst?: boolean; completeAfterDays?: number; zeroFill?: boolean };
   unit: { size: number; label: string; definition: string }; direction: Direction; baseline: "previousSettlement" | number; carry: CarryPolicy; valueLabel: string;
   plausibility: { min: number; max: number; maxAbsDelta?: number };
   memoSource: string; fixture: string | null; flags: string[]; needsKey?: string | null; launchable: boolean; note?: string;
+  /**
+   * The environment variable that holds the key a `needsKey` source needs (sources-2: BURNTICKER_YOUTUBE_API_KEY). The URL names it as
+   * `{key}`; fetchBody substitutes it at request time and never stores or logs it. Unset: the read fails as unavailable, never a result.
+   */
+  keyEnv?: string;
+  /** An optional token for a keyless source's higher rate limit (GitHub: 60 an hour keyless); sent as `Authorization: Bearer` when set. */
+  tokenEnv?: string;
+  /** The publisher's terms, read before the source was added (sources-2): the page, the date it was read, one paragraph, the verdict. */
+  terms?: SourceTerms;
   /** Who runs the endpoint (the independence test of the settlement-coverage audit compares operators and domains). */
   operator?: string;
   /** The fact this source reads; sources sharing it are cross-reads of each other (sources/types.ts FactSpec). */
   fact?: FactSpec;
 }
+
+/** A terms read: where, when, what it says for this use, and whether settling a coin on it is allowed. */
+export interface SourceTerms { url: string; readAt: string; read: string; verdict: "allowed" | "allowed-with-limits" | "not-allowed" }
 
 // ---- selection primitives ----
 
@@ -133,6 +153,17 @@ export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): 
     const period = P.kind === "month" ? today.slice(0, 7) : today;
     return { readings: [mk(period, canonicalDecimal(numToDec(n)))], refusals };
   }
+  // MILESTONE: one reading, ever, once the number reaches N (the id is fixed, so a later poll repeats the same reading).
+  if (S.milestone) {
+    const raw = jsonOne(body, S.milestone.path), n = Number(raw);
+    if (raw === undefined || raw === null || raw === "" || !Number.isFinite(n)) return { readings: [], refusals: [`schema: milestone ${S.milestone.path} is not a number (${String(raw).slice(0, 40)})`] };
+    if (n < cfg.plausibility.min || n > cfg.plausibility.max) return { readings: [], refusals: [`level: ${n} is outside ${cfg.plausibility.min}–${cfg.plausibility.max}`] };
+    const g = S.milestone.guard;
+    if (g) { const gv = Number(jsonOne(body, g.path)); if (!Number.isFinite(gv) || gv < g.min) return { readings: [], refusals: [`guard: ${g.why} (${g.path} is ${Number.isFinite(gv) ? gv : "not given"})`] }; }
+    const at = S.milestone.at;
+    if (at === undefined || !(at > 0)) return { readings: [], refusals: ["schema: the milestone has no N (the series parameter names it)"] };
+    return { readings: n >= at ? [{ id: `reached-${at}`, at: today, result: null, value: "1", title: `${cfg.title}: ${n} read on ${today}, at or above ${at}`, sourceUrl }] : [], refusals };
+  }
   // REGEX over text (tier 5 pages): named groups period/value, one or many matches.
   if (S.regex) {
     const flags = S.regex.flags ?? "g";
@@ -204,11 +235,18 @@ export function expandUrl(tpl: string, nowMs: number): string {
   return tpl.replace(/\{yyyymmdd:today\}/g, today.replace(/-/g, "")).replace(/\{yyyymmdd:from:(\d+)\}/g, (_m, n) => addDays(today, -Number(n)).replace(/-/g, "")).replace(/\{today\}/g, today).replace(/\{from:(\d+)\}/g, (_m, n) => addDays(today, -Number(n)));
 }
 
-export async function fetchBody(cfg: HttpSourceConfig, nowMs: number, fetchImpl: FetchLike, timeoutMs = 20_000): Promise<unknown> {
-  if (cfg.needsKey) throw new Error(`${cfg.id}: needs a key (${cfg.needsKey}) — not configured`);
+/** The key a keyed source reads from its `keyEnv` (trimmed), or null. */
+export const sourceKey = (cfg: Pick<HttpSourceConfig, "keyEnv">, env: Readonly<Record<string, string | undefined>> = process.env): string | null => (cfg.keyEnv ? (env[cfg.keyEnv] ?? "").trim() || null : null);
+
+export async function fetchBody(cfg: HttpSourceConfig, nowMs: number, fetchImpl: FetchLike, timeoutMs = 20_000, env: Readonly<Record<string, string | undefined>> = process.env): Promise<unknown> {
+  // UNAVAILABLE, NEVER A RESULT: a keyed source without its key throws here, so the keeper records a failed fetch and writes no reading.
+  const key = sourceKey(cfg, env);
+  if (cfg.needsKey && !key) throw new Error(`${cfg.id}: unavailable: needs a key (${cfg.needsKey}) that is not configured`);
+  const token = cfg.tokenEnv ? (env[cfg.tokenEnv] ?? "").trim() : "";
+  const url = expandUrl(cfg.request.url, nowMs).split("{key}").join(encodeURIComponent(key ?? ""));
   const ac = new AbortController(); const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(expandUrl(cfg.request.url, nowMs), { signal: ac.signal, headers: { accept: cfg.request.format === "json" ? "application/json" : "*/*", "user-agent": "burnticker/0.1 (event-indexed burn receipts; polite polling)", ...(cfg.request.headers ?? {}) }, ...(cfg.request.method === "POST" ? { method: "POST", body: cfg.request.body } : {}) } as never);
+    const res = await fetchImpl(url, { signal: ac.signal, headers: { accept: cfg.request.format === "json" ? "application/json" : "*/*", "user-agent": "burnticker/0.1 (event-indexed burn receipts; polite polling)", ...(cfg.request.headers ?? {}), ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(cfg.request.method === "POST" ? { method: "POST", body: cfg.request.body } : {}) } as never);
     if (!res.ok) throw new Error(`HTTP ${res.status} from ${cfg.sourceName}`);
     if (cfg.request.format === "json") return await res.json();
     return res.text ? await res.text() : String(await res.json());

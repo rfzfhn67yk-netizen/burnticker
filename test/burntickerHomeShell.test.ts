@@ -105,8 +105,8 @@ describe("the featured cards (review items 12 and 13; Codex review 5 F4)", () =>
       assert.doesNotMatch(JSON.stringify(c), /Nothing burned yet|"0 \$DEFICIT/);
     }
   });
-  test("$REHEARSAL: who would fill its curve and that nobody is asked to; the devnet coin's total and receipt from its confirmed evidence", () => {
-    assert.match(f[1].note!, /The operator does not trade it and asks nobody to\. It can only burn if outside buyers fill its curve\./);
+  test("$REHEARSAL: the one rehearsal sentence (website-15 item 9); the devnet coin's total and receipt from its confirmed evidence", () => {
+    assert.equal(f[1].note, "A test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it.");
     assert.doesNotMatch(f[1].note!, /not for trading/); assert.equal(f[1].receipt, null); assert.equal(f[1].href, "/burnticker/trust#rehearsals");
     assert.equal(f[1].burned.text, null, "not read here: a dash with the operator's dated record as the reason");
     assert.match(read("src/app/burnticker/trust/page.tsx"), /id="rehearsals">Rehearsal coins</);
@@ -149,9 +149,9 @@ describe("the activity line (review item 4, brief rule 3; Codex review 5 F3): re
       assert.match(src, /noEvents/, `${f} prints the API's one line`); assert.doesNotMatch(code, /sample|mock|placeholder row/i, f);
     }
     const route = read("src/app/api/burnticker/home/route.ts");
-    assert.match(route, /homeData\(coins, process\.cwd\(\), now, index, status, siteLaunchState\(process[.]env, now\), keeper, upcoming\)/);
+    assert.match(route, /homeData\(coins, process\.cwd\(\), now, index, status, siteLaunchState\(process[.]env, now\), keeper, next, rehearsalCurve\)/);
     assert.match(route, /readOk: false/, "a coin whose page fails is marked unreadable, not dropped");
-    assert.match(route, /catch \{ coins = null; \}/, "an unreadable registry is null, never an empty list");
+    assert.match(route, /catch \(e\) \{ console\.error\("\[burnticker\/home\] the coin registry could not be read:", e\); coins = null; registered = null; \}/, "an unreadable registry is null, never an empty list");
   });
 });
 

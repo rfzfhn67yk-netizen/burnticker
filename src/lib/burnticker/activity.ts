@@ -14,8 +14,10 @@ import { groupDigits, shortDay } from "@/lib/burnticker/cardView";
  * Sources: a registered coin's status and receipts (the platform keeper, via the API), the $DEFICIT keeper's status.json and burns.json,
  * and the devnet rehearsal's evidence file. Pure and client-safe: the home API, the activity line and the coin pages' Burn log share it.
  */
-export type EventKind = "burn" | "reading" | "graduation" | "pool";
-export const EVENT_LABEL: Record<EventKind, string> = { burn: "Burn", reading: "Reading", graduation: "Graduated", pool: "Pool registered" };
+// website-15 item 15: two mainnet record kinds from the operator's own files, labelled as what they are: a coin created on mainnet (its
+// create transaction) and a mint address reserved before its coin exists (no date is claimed)
+export type EventKind = "burn" | "reading" | "graduation" | "pool" | "created" | "reserved";
+export const EVENT_LABEL: Record<EventKind, string> = { burn: "Burn", reading: "Reading", graduation: "Graduated", pool: "Pool registered", created: "Created", reserved: "Mint reserved" };
 
 export interface ActivityEvent {
   kind: EventKind;

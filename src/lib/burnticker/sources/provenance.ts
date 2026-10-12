@@ -51,6 +51,20 @@ export function leagueProvenance(league: LeagueId): { schedule: string; confirma
 }
 
 /**
+ * What a card shows when a league's schedule could not be read (website-15 item 8, Claude site audit 3 item 6): this one line, on the
+ * card only. The reason goes to the server log and the API's scheduleDetail, never into the page's copy.
+ */
+export const NEXT_GAME_UNAVAILABLE = "Next game: not available.";
+
+/**
+ * A source a creator cannot use yet, in one plain line (website-15 item 8, ChatGPT repair 4). A source that needs a key this host does
+ * not have is "not configured"; any other reason is "not available". The raw reason (a key name, a schema refusal) goes behind Details.
+ */
+export const SOURCE_NOT_CONFIGURED = "Unavailable: this data source is not configured on this site.";
+export const SOURCE_NOT_AVAILABLE = "Unavailable: this data source cannot be used for a launch yet.";
+export const sourceUnavailableLine = (why: string | null | undefined): string => (/needs a key|API_KEY|not configured|licen[cs]ed key/i.test(why ?? "") ? SOURCE_NOT_CONFIGURED : SOURCE_NOT_AVAILABLE);
+
+/**
  * L05: a schedule that could not be read is a DISPLAY problem, never a settlement one. The plain sentence for the picker, and the
  * technical detail kept apart (shown behind a disclosure, never as the sentence itself).
  */

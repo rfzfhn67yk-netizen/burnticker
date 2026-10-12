@@ -15,6 +15,8 @@ import { electionPairTemplate } from "@/lib/burnticker/electionPair";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { CROSS_LABEL, officialOf } from "@/lib/burnticker/sources/gameSettle";
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
+import { badgeCreatorImage } from "@/lib/burnticker/creatorBadge";
+import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
 import { describeRule } from "@/lib/burnticker/describe";
@@ -245,7 +247,7 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
   // schedules: MLB / NHL / NBA from their free official feeds, every other league from TheSportsDB (licensed key) — never ESPN
   // launch audit 5 L05: a schedule that cannot be read is a display problem only — the sentence says so; the technical reason is apart
   let scheduleNote: string | null = null, scheduleDetail: string | null = null;
-  const games = await espnClient().upcoming(league, 8).catch((e) => { const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; });
+  const games = await espnClient().upcoming(league, 8).catch((e) => { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; });
   const year = seasonYearAt(league, Date.now());
   const needle = (q.q ?? "").trim();
   const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
@@ -264,7 +266,7 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
   if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
   try {
     let games: Game[];
-    try { games = await espnClient().upcoming(league, 8); } catch (e) { const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's official feed." : "The schedule comes from TheSportsDB, with a licensed key.", scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
+    try { games = await espnClient().upcoming(league, 8); } catch (e) { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's official feed." : "The schedule comes from TheSportsDB, with a licensed key.", scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
     const needle = (q.q ?? "").trim();
     const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
     const rows = games.filter((g) => !g.completed && g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
@@ -400,6 +402,7 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
     const refusals = refusalsFor(loadRefuseList(), { titles: [info?.title ?? "", ...r.events.map((e) => e.title ?? "")], categories: info?.category ? [info.category] : [] });
     return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { seriesTitle: info?.title ?? null }), backtest: bt, sentence: backtestSentence(bt), refusals, seriesTitle: info?.title ?? null, settlementSourceUrl: r.settlementSourceUrl, awaitingFinal: r.awaitingFinal, oracleRefusals: r.refusals, matched: r.events.length });
   } catch (e) {
+    console.error("[burnticker/backtest] the back-test failed:", e);
     return fail(502, `The back-test could not run just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
   }
 }
@@ -468,10 +471,29 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // (every platform rule + no-affiliation: official, endorsed, partner…, links, handles) — a hit refuses with the category named.
   const note = typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note).trim() : "";
   if (note.length > NOTE_MAX) return { error: fail(400, `The creator's note can be at most ${NOTE_MAX} characters.`) };
-  const textProblems = creatorTextProblems({ name: input.name, ticker: input.ticker, note });
+  // website-15 item 13 (owner decisions 2026-10-12): the creator's own description (≤ 280), links and uploaded image. The description and
+  // every link label pass the same creator lint; the image is checked again here (type by its bytes, ≤ 2 MB) and needs the rights line.
+  const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
+  if (creatorText.length > DESCRIPTION_MAX) return { error: fail(400, `The description can be at most ${DESCRIPTION_MAX} characters.`, { code: "description-too-long" }) };
+  let uploaded: { bytes: Uint8Array; contentType: string; badge: boolean } | null = null;
+  if ((body as { image?: unknown }).image !== undefined && (body as { image?: unknown }).image !== null) {
+    if (!p.customImages) return { error: fail(400, "This site does not take custom images right now. The coin uses its generated receipt art.", { code: "custom-image-off" }) };
+    if ((body as { imageRights?: unknown }).imageRights !== true) return { error: fail(400, `Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };
+    const d = decodeCreatorImage((body as { image: unknown }).image);
+    if ("error" in d) return { error: fail(400, d.error, { code: "image-refused" }) };
+    // owner, 2026-10-12: the receipt mark is optional and on by default; when on it is composited before anything is pinned
+    if ((body as { imageBadge?: unknown }).imageBadge === false) uploaded = { bytes: d.ok.bytes, contentType: d.ok.contentType, badge: false };
+    else {
+      const badged = await badgeCreatorImage(d.ok.bytes, d.ok.contentType);
+      if ("error" in badged) return { error: fail(400, badged.error, { code: "image-refused" }) };
+      uploaded = { bytes: badged.ok.bytes, contentType: badged.ok.contentType, badge: true };
+    }
+  }
+  const textProblems = creatorTextProblems({ name: input.name, ticker: input.ticker, note, description: creatorText, linkLabels: input.links.map((l) => String(l?.label ?? "")) });
   if (textProblems.length) return { error: fail(403, `This launch is refused: ${textProblems.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(textProblems.map((x) => x.category))], problems: textProblems.map((x) => x.reason) }) };
   // THE IMAGE IS THE GENERATED RECEIPT ART (owner decision 2026-10-10); a creator's own image only with BURNTICKER_CUSTOM_IMAGES_ENABLED.
   if (input.imageUrl && !p.customImages) return { error: fail(400, "This site does not take custom images. Every coin's image is its generated receipt art.", { code: "custom-image-off" }) };
+  if (input.imageUrl && (body as { imageRights?: unknown }).imageRights !== true) return { error: fail(400, `Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };
   const native = locked.rule.oracle === "catalogue" ? nativeSourceById(locked.rule.series!) : null;
   if (native) {
     const np = nativeRuleProblems(native, locked.rule);
@@ -529,12 +551,13 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // THE DESCRIPTION IS GENERATED (coinText.ts): whatever `description` the request carried, the coin's is describe.ts's paragraph for
   // the locked rule (+ the rule footer the bundle appends); the request's descCtx is checked word by word before it reaches a template.
   const ctxA = serverDescribeCtx(locked.rule, (body as { descCtx?: unknown }).descCtx, { seriesTitle, feed: feedText });
-  input.description = generatedParagraph(locked.rule, input.ticker, ctxA);
+  // website-15 item 13: the generated paragraph (its first sentence is the rule) always comes first; the creator's text follows it
+  input.description = withCreatorText(generatedParagraph(locked.rule, input.ticker, ctxA), creatorText);
   // NOTHING ABOUT A COIN CAN CHANGE AFTER LAUNCH (pin.ts): the metadata JSON and the receipt art are pinned on Arweave before the
   // bundle is built, and the token URI is the arweave URL. An upload failure refuses the launch; the hosted JSON only behind
   // BURNTICKER_ALLOW_HOSTED_METADATA (devnet scripts). A preview bundle (register: false) pins nothing and says so.
   const pins = new Map<string, PinnedCoin | null>();
-  const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
+  const pinFor = async (sideRule: LockedRule, ticker: string, name: string, description: string, links: { label: string; url: string }[], imageUrl: string | null, image: { bytes: Uint8Array; contentType: string; badge?: boolean } | null = null): Promise<{ error: ApiResult } | { pin: PinnedCoin | null }> => {
     if (!o.register) return { pin: null };
     const registered = registeredDescription(sideRule, description);
     const uploader = p.uploader ?? null;
@@ -548,7 +571,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     try {
       if (!uploader) throw new Error("this site has no Arweave uploader set up");
       p.registry.setStatus(budgetKey, String(used + 1));
-      const pin = await pinCoin(uploader, { ticker, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl });
+      const pin = await pinCoin(uploader, { ticker, name, description: metadataDescription(sideRule, registered), oneLiner: describeRule(sideRule.rule, { ticker }).oneLiner, rule: sideRule.rule, rulesSha256: sideRule.sha256, origin: publicOrigin(), links, imageUrl, image });
       pins.set(ticker, pin);
       return { pin };
     } catch (e) {
@@ -604,10 +627,11 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   }
   if (locked.rule.pair) return { error: fail(400, "A rule that names a pair is launched through the pair steps. Send side B as a pair with its own ticker and name.") };
   try {
-    const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl);
+    const pr = await pinFor(locked, input.ticker, input.name.trim(), input.description, input.links, input.imageUrl, uploaded);
     if ("error" in pr) return pr;
     const bundle = await buildLaunchBundle(input, { ...deps, ...(o.mint ? { mint: o.mint } : {}) });
-    const token = o.register ? register(bundle, input.ticker, input.imageUrl, input.links, note) : null;
+    // an uploaded image is shown from its pinned Arweave copy (the card and the coin page read the registry's image)
+    const token = o.register ? register(bundle, input.ticker, uploaded && pr.pin ? pr.pin.imageUri : input.imageUrl, input.links, note) : null;
     return { ok: { bundle, token, seriesTitle, locked, preflight } };
   } catch (e) {
     return { error: fail(400, (e as Error).message) };

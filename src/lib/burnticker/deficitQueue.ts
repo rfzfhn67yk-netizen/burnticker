@@ -33,7 +33,8 @@ export interface DeficitQueue {
   card: string | null;
 }
 
-export interface KeeperFiles { status: Record<string, unknown> | null; burns: unknown; error: string | null }
+/** `burns` is null when burns.json is missing or unparsable (website-15: unavailable, never an empty history); `burnsError` says why. */
+export interface KeeperFiles { status: Record<string, unknown> | null; burns: unknown; error: string | null; burnsError?: string | null }
 
 export const keeperPublishDir = (env: Record<string, string | undefined> = process.env, root = process.cwd()): string =>
   path.resolve(root, env.BURNKEEPER_PUBLISH_DIR?.trim() || path.join("data", "burnkeeper-site"));
@@ -44,9 +45,11 @@ export function readKeeperFiles(env: Record<string, string | undefined> = proces
   let status: Record<string, unknown> | null = null;
   try { status = JSON.parse(fs.readFileSync(path.join(dir, "status.json"), "utf8")) as Record<string, unknown>; }
   catch (e) { return { status: null, burns: null, error: (e as NodeJS.ErrnoException).code === "ENOENT" ? "The keeper has not published a status file on this host." : "The keeper's status file could not be read." }; }
-  let burns: unknown = [];
-  try { burns = JSON.parse(fs.readFileSync(path.join(dir, "burns.json"), "utf8")); } catch { burns = []; }
-  return { status, burns, error: null };
+  let burns: unknown = null;
+  let burnsError: string | null = null;
+  try { burns = JSON.parse(fs.readFileSync(path.join(dir, "burns.json"), "utf8")); }
+  catch (e) { burns = null; burnsError = (e as NodeJS.ErrnoException).code === "ENOENT" ? "The keeper has not published a burn list on this host." : "The keeper's burn list could not be read."; }
+  return { status, burns, error: null, burnsError };
 }
 
 export function deficitQueue(files: KeeperFiles | null, now = Date.now()): DeficitQueue {

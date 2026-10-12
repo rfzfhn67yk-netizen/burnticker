@@ -1,5 +1,5 @@
 /**
- * THE TRUST PACK'S VISIBLE WORDS (2026-10-10). Every sentence the three sceptic pages (/burnticker/check, /burnticker/fees/ledger,
+ * THE TRUST PACK'S VISIBLE WORDS (2026-10-10). Every sentence the three skeptic pages (/burnticker/check, /burnticker/fees/ledger,
  * /burnticker/operator) and the trust page's trust-pack section print that is not data lives here, so test/burntickerTrustPack.test.ts
  * runs the copy lint (config/launch/copy-lint.json, including no-prizes) over all of it. Facts and gaps only: no promises, no
  * future tense about what the platform does next, never the word "audit" for a review, and no venue named that the settlement rules
@@ -8,7 +8,7 @@
 
 export const CHECK_COPY = {
   title: "Check this yourself",
-  intro: "This is a sceptic's checklist, written against ourselves. Every line says where to look, so you never have to take our word for anything. The receipt verifier runs in your browser and asks the chain and the original data source directly.",
+  intro: "This is a skeptic's checklist, written against ourselves. Every line says where to look, so you never have to take our word for anything. The receipt verifier runs in your browser and asks the chain and the original data source directly.",
   moneyTitle: "Where money can go",
   moneyIntro: "This table lists every instruction in both programs and the only place each one can move SOL or tokens. Neither program has an instruction that withdraws, sweeps or sends funds out.",
   powersTitle: "Who can do what",
@@ -49,7 +49,7 @@ export const LEDGER_COPY = {
 export const OPERATOR_LINE = "Operated by one independent operator (United States) — contact: contact@burnticker.com";
 
 export const OPERATOR_COPY = {
-  title: "Operator",
+  title: "Who runs this",
   intro: "This page says who runs Burnticker, lists every wallet the operator holds for the platform, and shows the checks that hold those wallets to the rules.",
   entityTitle: "Legal entity",
   walletsTitle: "Operator wallets",
@@ -72,7 +72,7 @@ export const OPERATOR_COPY = {
  */
 export const PLACEHOLDER_SENTENCES: Record<string, string> = {
   TODO_ENTITY: "Whether to form a legal entity is not decided yet.",
-  TODO_GITHUB_ORG: "The code has no GitHub organisation yet.",
+  TODO_GITHUB_ORG: "The code has no GitHub organization yet.",
   TODO_THIRD_SIGNER_NAME: "The third Squads signer is not named yet.",
   TODO_SIGNED_MESSAGE: "The operator statement is not signed yet.",
 };

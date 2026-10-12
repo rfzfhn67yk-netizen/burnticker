@@ -105,7 +105,7 @@ describe("$DEFICIT before launch (website brief §1)", () => {
     assert.match(html, /var LINKS = \{ trade: "" \}/);
     assert.doesNotMatch(html, /awaiting the keeper's status\.json|No receipts loaded/);
     assert.match(html, new RegExp(`"${EMPTY_STATE_COPY["not-launched"].heading}\\. \\$DEFICIT has not launched yet`));
-    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}\\. The live figures could not be read`));
+    assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}\\. The live figures did not load`));
   });
   test("the shared EmptyState replaces the ad-hoc loading / error lines on the coins, pair, coin, trust, operator, check and leagues pages", () => {
     for (const f of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/check/CheckClient.tsx", "src/app/burnticker/leagues/page.tsx"]) {
@@ -167,7 +167,9 @@ describe("one current-status source (website brief §4)", () => {
     const op = JSON.parse(fs.readFileSync("config/burnticker/operator.json", "utf8")) as { clusters: { mainnet: { squads: { timeLock: string } } } };
     assert.match(op.clusters.mainnet.squads.timeLock, /^0 now .*48 h planned/);
     for (const f of ["config/burnticker/transparency.json", "src/lib/burnticker/trustpack/checklist.ts", "docs/burn-receipts/powers-register.json", "docs/burnticker/CHECK-THIS-YOURSELF.md"]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /mainnet: 48 h\)|vault with a 48 h time lock|upgrade authority \(48 h time lock\)/, f);
-    for (const f of ["src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx"]) assert.match(fs.readFileSync(f, "utf8"), /<CurrentStatusSummary card=\{card\} \/>/, f);
+    // website-15 item 17: the full block on Trust; the operator page prints its first line and a link (the same one source)
+    assert.match(fs.readFileSync("src/app/burnticker/trust/page.tsx", "utf8"), /<CurrentStatusSummary card=\{card\} \/>/);
+    assert.match(fs.readFileSync("src/app/burnticker/operator/page.tsx", "utf8"), /<CurrentStatusSummary card=\{card\} compact \/>/);
     assert.match(fs.readFileSync("src/app/burnticker/_components/CurrentStatusSummary.tsx", "utf8"), /useJsonRead<CurrentStatus>\("\/api\/burnticker\/v1\/current-status"\)/);
     for (const f of ["site/burnticker/status/index.html"]) { const h = fs.readFileSync(f, "utf8"); assert.match(h, /data-current-status/, f); assert.match(h, /"\/api\/burnticker\/v1\/current-status"/, f); assert.match(h, /s\.lines\.forEach/, f); }
     // website-13: the home prints one status line, which the home API builds from the same source (currentStatusLive)

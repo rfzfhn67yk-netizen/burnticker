@@ -58,7 +58,27 @@ export const OUTFLOW_BY_INSTRUCTION: Record<ProgramName, Record<string, OutflowC
 };
 
 export interface MoneyRow { program: ProgramName; instruction: string; class: string; signers: string; outflow: string; outflowClass: OutflowClass; funds: string }
-export interface PowerRow { program: ProgramName; instruction: string; holder: string; can: string; timelock: string | null; funds: string }
+export interface PowerRow { program: ProgramName; instruction: string; holder: string; can: string; timelock: string | null; funds: string; /** website-15 item 11: the register's label and internal review ids, for a title or footnote, never the cell */ note: string | null }
+
+/**
+ * INTERNAL REVIEW IDS OUT OF THE CELLS (website-15 item 11, Claude site audit 3 item 8). The registers are generated from the programs and
+ * keep their reviewers' cross-references ("Re-check R3-4: …", "(re-check R3-2 — …)", "STRANDING RECOVERY: …"). A visitor reads the
+ * sentence; the label and the ids move to `note`, which the page shows as a footnote column and a title. The register files are untouched.
+ */
+export function splitReviewRefs(text: string): { text: string; note: string | null } {
+  const refs: string[] = [];
+  let label: string | null = null;
+  let t = text;
+  t = t.replace(/\s*\((?:re-check|pair-forward r\d) ([A-Z]{1,2}\d?-\d+)(?:: | — )([^)]*)\)/g, (_m, id: string, rest: string) => { refs.push(id); return ` (${rest})`; });
+  t = t.replace(/\s*\((?:re-check|pair-forward r\d) ([A-Z]{1,2}\d?-\d+)\)/g, (_m, id: string) => { refs.push(id); return ""; });
+  t = t.replace(/\bRe-check ([A-Z]{1,2}\d?-\d+): (\S)/g, (_m, id: string, c: string) => { refs.push(id); return c.toUpperCase(); });
+  t = t.replace(/^pair-forward blind review ([A-Z]-\d+) \/ r\d ((?:[A-Z]{1,2}-\d+)(?:, [A-Z]{1,2}-\d+)*): /, (_m, a: string, b: string) => { refs.push(a, ...b.split(", ")); return ""; });
+  t = t.replace(/^LAUNCHPAD-PATH (§\d+): /, (_m, id: string) => { refs.push(`LAUNCHPAD-PATH ${id}`); return ""; });
+  t = t.replace(/^([A-Z]{3,}(?: [A-Z]{3,})*): /, (_m, l: string) => { label = l.charAt(0) + l.slice(1).toLowerCase(); return ""; });
+  t = t.replace(/^./, (c) => c.toUpperCase()).replace(/\s{2,}/g, " ");
+  const note = [label ? `${label}.` : null, refs.length ? `Review references: ${refs.join(", ")}.` : null].filter(Boolean).join(" ") || null;
+  return { text: t, note };
+}
 export interface CheckItem { id: string; title: string; text: string; where: string; status?: string }
 export interface Checklist {
   schema: "burnticker.check/v1"; generatedFrom: string[];
@@ -88,8 +108,8 @@ export function buildChecklist(root = process.cwd()): Checklist {
     for (const ix of regs[name].instructions) {
       const cls = OUTFLOW_BY_INSTRUCTION[name][ix.name];
       if (!cls) throw new Error(`${REGISTER_FILES[name]}: instruction ${ix.name} has no outflow class in checklist.ts OUTFLOW_BY_INSTRUCTION`);
-      money.push({ program: name, instruction: ix.name, class: ix.class, signers: ix.signers.map((s) => s.role).join(" + "), outflow: OUTFLOW[cls], outflowClass: cls, funds: ix.funds ?? "None." });
-      if (ix.class === "privileged") powers.push({ program: name, instruction: ix.name, holder: ix.signers.map((s) => s.role).join(" + "), can: ix.can, timelock: ix.timelock, funds: ix.funds });
+      money.push({ program: name, instruction: ix.name, class: ix.class, signers: ix.signers.map((s) => s.role).join(" + "), outflow: OUTFLOW[cls], outflowClass: cls, funds: splitReviewRefs(ix.funds ?? "None.").text });
+      if (ix.class === "privileged") { const c = splitReviewRefs(ix.can); powers.push({ program: name, instruction: ix.name, holder: ix.signers.map((s) => s.role).join(" + "), can: c.text, timelock: ix.timelock, funds: ix.funds, note: c.note }); }
     }
   }
   const overFunds = powers.filter((p) => !/^None\.?$/.test(p.funds.trim()));
@@ -129,7 +149,7 @@ export function buildChecklist(root = process.cwd()): Checklist {
     programs: (["burn_receipts", "pair_curve"] as ProgramName[]).map((n) => ({ name: n, programId: regs[n].program.address_in_idl, idlSha256: regs[n].program.idl_sha256, register: REGISTER_FILES[n], privileged: regs[n].privileged_powers.length, overFunds: "none" as const })),
     money, nonPowers: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].non_powers.map((text) => ({ program: n, text }))),
     powers, upgradeAuthority: (["burn_receipts", "pair_curve"] as ProgramName[]).map((n) => ({ program: n, holder: regs[n].upgrade_authority.holder_at_launch, sunset: regs[n].upgrade_authority.sunset })),
-    external: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].external_powers.map((e) => ({ program: n, power: e.power, holder: e.holder, effect: e.effect ?? e.can ?? "" }))),
+    external: (["burn_receipts", "pair_curve"] as ProgramName[]).flatMap((n) => regs[n].external_powers.map((e) => ({ program: n, power: e.power, holder: e.holder, effect: splitReviewRefs(e.effect ?? e.can ?? "").text }))),
     locked, notDone, build,
   };
 }
@@ -138,7 +158,7 @@ export function buildChecklist(root = process.cwd()): Checklist {
 export function checklistMarkdown(c: Checklist): string {
   const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
   const L: string[] = [];
-  L.push("# Check this yourself", "", "This is a sceptic's checklist, written against ourselves.", "");
+  L.push("# Check this yourself", "", "This is a skeptic's checklist, written against ourselves.", "");
   L.push(`This file is GENERATED by \`node --import ./test/alias-hook.mjs scripts/burnticker-trustpack.mts check-doc --write\` from ${c.generatedFrom.map((f) => `\`${f}\``).join(", ")}. Do not edit it by hand. The page \`/burnticker/check\` and \`GET /api/burnticker/v1/check\` show the same data.`, "");
   L.push("Nothing here asks you to take our word. Every line names the file or the account that says it. The page also has a receipt verifier that runs in your browser. It fetches the transaction and the program's accounts from the public Solana RPC, and the source values from the Treasury API. Then it works out the units and the spend again.", "");
   L.push("## 1. Where money can go", "", "This table lists every instruction of both programs and the only place each one can move SOL or tokens. Neither program has an instruction to withdraw, sweep or send funds out.", "");
@@ -148,8 +168,8 @@ export function checklistMarkdown(c: Checklist): string {
   for (const n of c.nonPowers) L.push(`- (${n.program}) ${n.text}`);
   const progName: Record<ProgramName, string> = { burn_receipts: "The burn program (`burn_receipts`)", pair_curve: "The pair program (`pair_curve`)" };
   L.push("", "## 2. Who can do what", "", `Neither program has **any** power over funds. ${c.programs.map((p) => p.privileged === 0 ? `${progName[p.name]} has no privileged instructions.` : `${progName[p.name]} has ${p.privileged} privileged instruction${p.privileged === 1 ? "" : "s"}, and its register says "None." for the funds of every one.`).join(" ")}`, "");
-  L.push("| Program | Instruction | Holder | What it can do | Time lock |", "|---|---|---|---|---|");
-  for (const p of c.powers) L.push(`| ${p.program} | \`${p.instruction}\` | ${esc(p.holder)} | ${esc(p.can)} | ${esc(p.timelock ?? "—")} |`);
+  L.push("| Program | Instruction | Holder | What it can do | Time lock | Note |", "|---|---|---|---|---|---|");
+  for (const p of c.powers) L.push(`| ${p.program} | \`${p.instruction}\` | ${esc(p.holder)} | ${esc(p.can)} | ${esc(p.timelock ?? "—")} | ${esc(p.note ?? "")} |`);
   L.push("", "The upgrade authority sits outside the programs' instructions. It is the one power above everything else.", "");
   for (const u of c.upgradeAuthority) L.push(`- ${u.program}: ${u.holder} Sunset: ${u.sunset}`);
   L.push("", "Powers outside the programs that they depend on:", "");

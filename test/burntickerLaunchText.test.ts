@@ -45,7 +45,9 @@ describe("the creator's text is linted; the image is the receipt art", () => {
     const r = await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png" }), { register: false }) as Err;
     assert.equal(r.error.status, 400); assert.equal(r.error.body.code, "custom-image-off");
     w.p.customImages = true;
-    assert.ok(!("error" in await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png" }), { register: false })));
+    // website-15 item 13: an image of the creator's own carries the rights line they confirm
+    assert.equal((await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png" }), { register: false }) as Err).error.body.code, "image-rights");
+    assert.ok(!("error" in await prepareLaunch(w.p, body({ imageUrl: "https://example.org/x.png", imageRights: true }), { register: false })));
   });
 });
 

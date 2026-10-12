@@ -9,6 +9,7 @@ import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, POST_GRADUATION_FEES, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
 import { describeRule } from "@/lib/burnticker/describe";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
+import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
 import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
@@ -145,6 +146,10 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   }
   if (sides.length > 1 && sides[0].ticker === sides[1].ticker) problems.push("The two coins need different tickers.");
   if (note.length > NOTE_MAX) problems.push(`The note can be at most ${NOTE_MAX} characters.`);
+  // website-15 item 13: the creator's own description passes the same creator lint and fits 280 characters
+  const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
+  if (creatorText.length > DESCRIPTION_MAX) problems.push(`The description can be at most ${DESCRIPTION_MAX} characters.`);
+  for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorText })) problems.push(x.reason);
   const pp = presetProblem(locked.rule);
   if (pp) problems.push(pp);
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none

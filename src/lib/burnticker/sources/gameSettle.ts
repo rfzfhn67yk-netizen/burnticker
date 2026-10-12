@@ -179,7 +179,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
       else pending.push(f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet");
     } catch (e) { errors.push(`TheSportsDB: ${(e as Error).message.slice(0, 80)}`); }
   }
-  if (!market && !d.tsdbKey) return { kind: "held", why: "no primary: no moneyline market for the game and BURNTICKER_THESPORTSDB_KEY (the commercial licence) is not set" };
+  if (!market && !d.tsdbKey) return { kind: "held", why: "no primary: no moneyline market for the game and BURNTICKER_THESPORTSDB_KEY (the commercial license) is not set" };
   // the league's official feed (free) and API-Sports (optional)
   const off = officialOf(g.league);
   for (const id of [off, d.apiSportsKey ? "apisports.games" as const : null]) {

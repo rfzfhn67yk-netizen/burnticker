@@ -60,7 +60,11 @@ export function uploaderFromEnv(env: Readonly<Record<string, string | undefined>
   return payer ? new IrysUploader({ cluster, payer, rpcUrl: (env.BURNTICKER_RPC_URL ?? "").trim() || null }) : null;
 }
 export const allowHostedMetadata = (env: Readonly<Record<string, string | undefined>> = process.env): boolean => /^(1|true|on|yes)$/i.test((env.BURNTICKER_ALLOW_HOSTED_METADATA ?? "").trim());
-export const customImagesEnabled = (env: Readonly<Record<string, string | undefined>> = process.env): boolean => /^(1|true|on|yes)$/i.test((env.BURNTICKER_CUSTOM_IMAGES_ENABLED ?? "").trim());
+/**
+ * A creator's own image (website-15 item 13, owner decision 2026-10-12): ON by default. BURNTICKER_CUSTOM_IMAGES_ENABLED=0 (or false, off,
+ * no) turns it off on a host; anything else, or nothing, leaves it on.
+ */
+export const customImagesEnabled = (env: Readonly<Record<string, string | undefined>> = process.env): boolean => !/^(0|false|off|no)$/i.test((env.BURNTICKER_CUSTOM_IMAGES_ENABLED ?? "").trim());
 
 export interface PinInput {
   ticker: string; name: string;
@@ -68,18 +72,20 @@ export interface PinInput {
   description: string;
   oneLiner: string; rule: BurnRule; rulesSha256: string; origin: string;
   links: { label: string; url: string }[];
-  /** A custom image (only with BURNTICKER_CUSTOM_IMAGES_ENABLED): pinned by URL as given instead of the receipt art. */
+  /** A custom image by URL (API only): pinned by URL as given instead of the receipt art. */
   imageUrl?: string | null;
+  /** website-15 item 13: the creator's uploaded image, already checked (creatorProfile.ts decodeCreatorImage); uploaded as given. */
+  image?: { bytes: Uint8Array; contentType: string; /** the creator's receipt-mark choice, recorded in the metadata's attributes */ badge?: boolean } | null;
 }
 
 /** The metadata JSON (Metaplex token standard + `extensions`), byte-stable for the same inputs. */
-export function metadataJson(i: PinInput, imageUri: string): string {
+export function metadataJson(i: PinInput, imageUri: string, imageType = "image/png"): string {
   const ext: Record<string, string> = {};
   for (const l of i.links) { const k = /^x$/i.test(l.label) ? "twitter" : l.label.toLowerCase(); if (["website", "twitter", "telegram"].includes(k)) ext[k] = l.url; }
   return JSON.stringify({
     name: i.name, symbol: i.ticker, description: i.description, image: imageUri, external_url: `${i.origin.replace(/\/$/, "")}/burnticker/t/${i.ticker}`,
-    attributes: [{ trait_type: "rules sha256", value: i.rulesSha256 }],
-    properties: { category: "image", files: [{ uri: imageUri, type: "image/png" }] },
+    attributes: [{ trait_type: "rules sha256", value: i.rulesSha256 }, ...(i.image && typeof i.image.badge === "boolean" ? [{ trait_type: "Burnticker receipt mark", value: i.image.badge ? "on" : "off" }] : [])],
+    properties: { category: "image", files: [{ uri: imageUri, type: imageType }] },
     ...(Object.keys(ext).length ? { extensions: ext } : {}),
   });
 }
@@ -88,7 +94,11 @@ export function metadataJson(i: PinInput, imageUri: string): string {
 export async function pinCoin(uploader: PinUploader, i: PinInput): Promise<PinnedCoin> {
   const tags = [{ name: "App-Name", value: "Burnticker" }, { name: "Ticker", value: i.ticker }, { name: "Rules-Sha256", value: i.rulesSha256 }];
   let imageUri: string, imageTx: string, imageSha256: string;
-  if (i.imageUrl) { imageUri = i.imageUrl; imageTx = ""; imageSha256 = ""; }
+  let imageType = "image/png";
+  if (i.image) {
+    const up = await uploader.upload(i.image.bytes, i.image.contentType, tags);
+    imageUri = up.url; imageTx = up.id; imageSha256 = sha256Hex(i.image.bytes); imageType = i.image.contentType;
+  } else if (i.imageUrl) { imageUri = i.imageUrl; imageTx = ""; imageSha256 = ""; }
   else {
     const svg = renderCoinSvg({ ticker: i.ticker, oneLiner: i.oneLiner, rule: i.rule, sha256: i.rulesSha256 });
     const sharp = (await import("sharp")).default;
@@ -96,7 +106,7 @@ export async function pinCoin(uploader: PinUploader, i: PinInput): Promise<Pinne
     const up = await uploader.upload(png, "image/png", tags);
     imageUri = up.url; imageTx = up.id; imageSha256 = sha256Hex(png);
   }
-  const json = metadataJson(i, imageUri);
+  const json = metadataJson(i, imageUri, imageType);
   const up = await uploader.upload(new TextEncoder().encode(json), "application/json", tags);
   return { metadataUri: up.url, metadataTx: up.id, metadataSha256: sha256Hex(json), metadataJson: json, imageUri, imageTx, imageSha256, hosted: false };
 }

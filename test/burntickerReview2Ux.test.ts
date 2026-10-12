@@ -129,7 +129,7 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
   test("status and fallback pages: an unreadable status file stays unknown — no 'unaffected'", () => {
     const st = read("site/burnticker/status/index.html");
     // UX report 3 items 4/8 tightened it: every group the feed fills says unavailable (test/burntickerWebsite4.test.ts runs the script)
-    assert.match(st, /"The automation data could not be read just now \(status\.json: " \+ why \+ "\)\. The current-status summary is separate\. It does not show whether burns are being processed now\."/);
+    assert.match(st, /"The automation data did not load just now \(status\.json: " \+ why \+ "\)\. The current-status summary is separate\. It does not show whether burns are being processed now\."/);
     assert.doesNotMatch(st, /unaffected/);
     assert.doesNotMatch(read("site/burnticker/fallback/index.html"), /unaffected/);
   });

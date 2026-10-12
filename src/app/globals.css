@@ -264,6 +264,9 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-progress-step.is-done .bt-progress-dot { background: var(--bt-stamp-solid); }
 .bt-progress-step.is-current .bt-progress-dot { background: var(--bt-scorch); }
 .bt-progress-step.is-current { color: var(--bt-ink); }
+/* website-15 item 6: a step that does not apply to this coin (the devnet rehearsal coin had no curve): an outlined dot, never a lit one */
+.bt-progress-step.is-na .bt-progress-dot { background: transparent; box-shadow: inset 0 0 0 1px var(--bt-muted); }
+.bt-progress-na { text-transform: none; font-weight: 400; }
 .bt-progress.is-compact .bt-progress-steps { max-width: 9rem; gap: 3px; }
 .bt-progress-now { display: block; margin-top: 4px; font-size: .78rem; color: var(--bt-ink); }
 .bt-progress-next { margin: 4px 0 0; font-size: .74rem; color: var(--bt-dim); }
@@ -275,3 +278,30 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
   .bt-ticker { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
   .bt-ticker.is-end { -webkit-mask-image: none; mask-image: none; }
 }
+
+/* website-15 item 7: a value not read is a dash button; its reason opens under it on tap, click or keyboard focus (phones included) */
+.bt-why { position: relative; display: inline-block; }
+.bt-why-btn { font: inherit; color: inherit; background: none; border: 0; padding: 0 2px; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.bt-why-mark { display: inline-block; margin-left: 3px; min-width: 1.1em; height: 1.1em; line-height: 1.1em; border-radius: 99px; border: 1px solid var(--bt-line); font: 700 .62rem/1.05em var(--font-mono); text-align: center; color: var(--bt-muted); vertical-align: 1px; }
+.bt-why-tip { display: none; position: absolute; z-index: 20; left: 0; top: calc(100% + 4px); width: max-content; max-width: min(18rem, 80vw); padding: 6px 8px; border: 1px solid var(--bt-line); border-radius: 6px; background: var(--bt-counter, #1b1814); color: var(--bt-ink); font: 400 .75rem/1.35 var(--font-space-grotesk, system-ui), system-ui, sans-serif; text-transform: none; letter-spacing: 0; white-space: normal; }
+.bt-why-tip.is-open, .bt-why-btn:focus-visible + .bt-why-tip { display: block; }
+@media (hover: hover) { .bt-why:hover .bt-why-tip { display: block; } }
+/* website-15 item 13: the creator's image preview on the review card, always square */
+.bt-profile-square { width: 72px; height: 72px; border: 1px solid var(--bt-line); border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: var(--bt-counter); font: 700 .6rem/1.2 var(--font-mono); text-transform: uppercase; color: var(--bt-muted); text-align: center; }
+.bt-profile-square img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bt-profile-square { margin: 0; }
+.bt-profile-square.is-chosen { outline: 2px solid var(--bt-scorch); outline-offset: 1px; }
+/* website-15 item 18: the short receipt on short pages */
+.bt-footer-short { max-width: 72rem; margin: 24px auto 0; padding: 12px 16px 80px; font-size: .78rem; color: var(--bt-dim); }
+.bt-footer-short summary { cursor: pointer; margin-top: 6px; text-decoration: underline; }
+/* website-15 item 19: a horizontal scroll cue (scroll shadows): a dark edge shows on whichever side still has more to scroll */
+.bt-hscroll {
+  background:
+    linear-gradient(to right, var(--bt-counter) 30%, transparent) left center / 24px 100% no-repeat local,
+    linear-gradient(to left, var(--bt-counter) 30%, transparent) right center / 24px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, .55), transparent) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, .55), transparent) right center / 12px 100% no-repeat scroll,
+    var(--bt-counter);
+}
+/* website-15 item 7: on phones the reason opens in the flow under the dash, so it never runs off the card's edge */
+@media (max-width: 640px) { .bt-why { display: inline; } .bt-why-tip { position: static; width: auto; max-width: none; margin-top: 4px; } .bt-why-tip.is-open, .bt-why-btn:focus-visible + .bt-why-tip { display: block; } }

@@ -10,6 +10,7 @@ import OpsSection from "./OpsSection";
 import SafeguardsSection from "./SafeguardsSection";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
 import { RepoText } from "../_components/RepoText";
+import { MailSafe } from "../_components/MailSafe";
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 
@@ -37,7 +38,7 @@ export default function TrustPage() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold">Trust</h1><p className="text-neutral-400 text-xs">This page shows what the operator can and cannot do. Where it can, it reads the facts from the chain and from the published settings. Anything not set yet is marked as not set.{t ? <> This copy was built at {t.generatedAt} for {t.cluster}. {t.rpcConfigured ? "It reads the chain through a Solana node." : "This host has no connection to a Solana node."}</> : null}</p></header>
       <CurrentStatusSummary card={card} />
-      <section className={card}><p>{t?.operatorLine ?? OPERATOR_LINE}{t?.contactIsTodo && <span className="text-amber-400 text-xs"> The contact address is not set yet.</span>}</p>{t && <><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">{t.attesterStatus.line}</p></>}</section>
+      <section className={card}><p><MailSafe text={t?.operatorLine ?? OPERATOR_LINE} />{t?.contactIsTodo && <span className="text-amber-400 text-xs"> The contact address is not set yet.</span>}</p>{t && <><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">{t.attesterStatus.line}</p></>}</section>
       <TrustPackSection card={card} />
       <SafeguardsSection card={card} />
       {/* UX report 3 item 5: one current summary above (status, control, money, operator, bounty); every long disclosure below sits
@@ -86,7 +87,7 @@ export default function TrustPage() {
       <section className={card}><h2 className="font-medium">Incident log (append-only)</h2>{t.incidents.entries === 0 ? <p className="text-xs text-neutral-500">No incidents are recorded. The log is <RepoText text="docs/burnticker/incidents/LOG.md" />.</p> : <pre className="text-xs whitespace-pre-wrap">{t.incidents.markdown}</pre>}</section>
       {(() => { const x = t.transparency; const repo = x.publicRepo.url; const link = (rel: string) => <RepoText text={rel} />; /* audit 4 BT-14: pinned commit, never blob/main */ return (<>
       <section className={card}><h2 className="font-medium">Who runs this</h2>
-        <p>{x.whoRunsThis.operatorLine}{t.contactIsTodo && <span className="text-amber-400 text-xs"> The contact address is not set yet.</span>}</p>
+        <p><MailSafe text={x.whoRunsThis.operatorLine} />{t.contactIsTodo && <span className="text-amber-400 text-xs"> The contact address is not set yet.</span>}</p>
         <p className="text-neutral-300 mt-1">{x.whoRunsThis.alsoRuns}</p>
         <p className="text-neutral-300 mt-1">{x.whoRunsThis.refusal}</p>
         <p className="text-xs mt-1">The refusal code is in {link(x.whoRunsThis.refuseListCode)}, and the list is in {link(x.whoRunsThis.refuseListConfig)}. {x.whoRunsThis.refuseListPresent ? "Both files are on this host." : "They are not on this host."} {x.whoRunsThis.holdingsRule}</p>

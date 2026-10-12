@@ -197,7 +197,7 @@ const WSOL_MINT = "So11111111111111111111111111111111111111112";
  * getAccountInfo of the coin's LaunchLab pool (the SOL-quoted PDA unless `poolId` names it), decoded with the same layout as the coin
  * cards. Null when the cluster has no LaunchLab program, the account is missing or is not this mint's pool. Never throws.
  */
-export async function readKeeperCurve(conn: Pick<MarketReader, "getAccountInfo">, i: { cluster: string; mint: string; poolId?: string | null }, now = Date.now()): Promise<{ phase: CurvePhase; raised: string; threshold: string; quote: string; progressPct: number; poolId: string; readAt: string } | null> {
+export async function readKeeperCurve(conn: Pick<MarketReader, "getAccountInfo">, i: { cluster: string; mint: string; poolId?: string | null }, now = Date.now()): Promise<{ phase: CurvePhase; raised: string; threshold: string; quote: string; progressPct: number; poolId: string; readAt: string; marketCap?: string | null } | null> {
   try {
     const program = launchLabProgramFor(i.cluster as "mainnet" | "devnet");
     if (!program) return null;
@@ -207,7 +207,8 @@ export async function readKeeperCurve(conn: Pick<MarketReader, "getAccountInfo">
     const v = decodeLaunchLabPool(new Uint8Array(acc.data));
     if (!v || v.mintA !== i.mint) return null;
     const c = curveProgress(v, pool.toBase58());
-    return { phase: c.phase, raised: c.raised, threshold: c.threshold, quote: c.quote, progressPct: c.progressPct, poolId: c.poolId, readAt: new Date(now).toISOString() };
+    // website-15 item 9: the curve's market cap too (the $REHEARSAL card reads its pool with this; additive for the keeper's file)
+    return { phase: c.phase, raised: c.raised, threshold: c.threshold, quote: c.quote, progressPct: c.progressPct, poolId: c.poolId, readAt: new Date(now).toISOString(), marketCap: curveMarketCap(v) };
   } catch { return null; }
 }
 

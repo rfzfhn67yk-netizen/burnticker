@@ -26,7 +26,7 @@ export const SITE_NAV = [
 export const LEARN_NAV = [
   { label: "How it works", href: "/burnticker/about", kind: "app" },
   { label: "Trust", href: "/burnticker/trust", kind: "app" },
-  { label: "Operator", href: "/burnticker/operator", kind: "app" },
+  { label: "Who runs this", href: "/burnticker/operator", kind: "app" },   // website-15 item 16: the address stays /operator
   { label: "Whitepaper", href: "/whitepaper.html", kind: "static" },
   { label: "Docs and API", href: "/burnticker/docs", kind: "app" },
   { label: "X", href: "https://x.com/BurnTicker", kind: "external" },
@@ -44,7 +44,7 @@ export const LAUNCH_LABELS = { nav: "Launch", button: "Launch a coin" };
 export const LAUNCH_CLOSED = {
   title: "Launching a coin",
   body: "Checking whether creator launches are open on this site.",
-  unread: "Whether creator launches are open could not be read, so no launch controls are shown.",
+  unread: "Whether creator launches are open is unknown right now, so no launch controls are shown.",
   more: "You can still look through the coins and check a real receipt.",
   coins: "See the coins",
   close: "Close",
@@ -58,13 +58,13 @@ export const LAUNCH_CLOSED = {
 export const WALLET = { label: "Connect wallet", note: "Connecting a wallet only shares its public address with this site. It is used to list your coins on Your coins. Nothing is signed when you connect.", href: "/burnticker/me?connect=1", menuNote: "A wallet is only needed for Your coins." };
 
 /** The activity line's kind labels, the same words as src/lib/burnticker/activity.ts EVENT_LABEL (test/burntickerWebsite14.test.ts holds them equal). */
-export const EVENT_LABELS = { burn: "Burn", reading: "Reading", graduation: "Graduated", pool: "Pool registered" };
+export const EVENT_LABELS = { burn: "Burn", reading: "Reading", graduation: "Graduated", pool: "Pool registered", created: "Created", reserved: "Mint reserved" };
 
 /** The header search (review item 3): it searches the coin list. */
 export const SEARCH = { label: "Search coins", placeholder: "Search coins", href: "/burnticker" };
 
 /** The hero, one line and one subline (review item 7). */
-export const HERO = { title: "Memecoins that burn on real-world results.", sub: "Every burn is a receipt." };
+export const HERO = { title: "Memecoins that burn on real-world results.", sub: "Every burn leaves a receipt." };
 
 /**
  * TWO PATHS ON ARRIVAL (website-14, ChatGPT product idea 1): explore or create, one sentence each on what happens next. "Create a coin"
@@ -79,9 +79,10 @@ export const WALKTHROUGH_LINK = { label: "Watch how a burn works", href: "/burnt
 
 /** The "How it works" strip under the hero (review item 8). Plain words; the precise terms live on the about page and the coin page. */
 export const HOW_IT_WORKS = [
-  { title: "One locked rule", text: "Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches." },
-  { title: "The result settles", text: "When the result is published, fees from trading the coin buy back some of it from its pool." },
-  { title: "Burned, with a receipt", text: "Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it." },
+  // `line`: the one line a phone shows under the title before the step is opened (website-15 item 14)
+  { title: "One locked rule", text: "Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches.", line: "Each coin names one public result." },
+  { title: "The result settles", text: "When the result is published, fees from trading the coin buy back some of it from its pool.", line: "When the result is published, the coin's own fees pay for its burn." },
+  { title: "Burned, with a receipt", text: "Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it.", line: "Everything bought is burned, and the transaction is the receipt." },
 ];
 
 /**
@@ -357,10 +358,10 @@ export function shellScript(o = {}) {
   box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
   window.btHome.then(function (j) {
     box.textContent = "";
-    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); return; }
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); return; }
     if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
     j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : ${JSON.stringify(o.origin ?? "")}) + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
     edge();
-  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); });
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity did not load just now.")); edge(); });
 })();`;
 }

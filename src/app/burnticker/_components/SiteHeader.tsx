@@ -73,8 +73,40 @@ export function SiteHeader() {
   useEffect(() => { if (walletList) setOpen(false); }, [walletList]);
   // a link to "#launch-closed" opens the dialog (the static pages use the same hash)
   useEffect(() => { if (window.location.hash === "#launch-closed") setModal(true); }, []);
+  // website-15 item 5: one search state on the coins page. The page box sends "bt-search-sync" as it types; this box follows it and
+  // shows the ?q= it arrived with. Typing here filters the page in place ("bt-search-input"); Enter elsewhere opens the coins page.
+  const headerQ = useRef<HTMLInputElement>(null);
+  const onCoins = pathname?.replace(/\/+$/, "") === "/burnticker";
+  useEffect(() => {
+    const box = headerQ.current;
+    if (box) { try { box.value = onCoins ? new URLSearchParams(window.location.search).get("q") ?? "" : ""; } catch { /* ignore */ } }
+    const onSync = (e: Event) => { if (headerQ.current) headerQ.current.value = String((e as CustomEvent<string>).detail ?? ""); };
+    window.addEventListener("bt-search-sync", onSync);
+    return () => window.removeEventListener("bt-search-sync", onSync);
+  }, [onCoins]);
+  const typeQuery = (v: string) => {
+    if (!onCoins) return;
+    try { const u = new URL(window.location.href); if (v.trim()) u.searchParams.set("q", v); else u.searchParams.delete("q"); window.history.replaceState(null, "", u.pathname + u.search + u.hash); } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent("bt-search-input", { detail: v }));
+  };
   const menuBtn = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLElement>(null);
+  // website-15 item 12: the header's real height (row, wrapped search, ticker) as --bt-header-h, so sticky notices sit right under it
+  const headerEl = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const h = headerEl.current;
+    if (!h) return;
+    const set = () => document.documentElement.style.setProperty("--bt-header-h", `${Math.ceil(h.getBoundingClientRect().height)}px`);
+    set();
+    // the border-box (the dashed bottom border counts), after web fonts settle, and on any resize
+    void document.fonts?.ready.then(set);
+    window.addEventListener("resize", set); window.addEventListener("load", set);
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(set);
+    ro?.observe(h, { box: "border-box" });
+    // the activity line and the fonts arrive after the first paint; re-measure for a few seconds as a backstop
+    const poll = window.setInterval(set, 500), stop = window.setTimeout(() => window.clearInterval(poll), 6000);
+    return () => { ro?.disconnect(); window.clearInterval(poll); window.clearTimeout(stop); window.removeEventListener("resize", set); window.removeEventListener("load", set); };
+  }, []);
   useEffect(() => {
     if (!open) return;
     const links = () => Array.from(menu.current?.querySelectorAll<HTMLElement>("a[href],button") ?? []);
@@ -112,7 +144,7 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="bt-header">
+    <header className="bt-header" ref={headerEl}>
       <div className="bt-header-row">
         <a className="bt-brand" href={HOME_HREF} aria-label="Burnticker home">
           {/* eslint-disable-next-line @next/next/no-img-element -- a 96 px PNG; the image optimiser is not worth a request here */}
@@ -125,7 +157,7 @@ export function SiteHeader() {
         </nav>
         <form className="bt-search" role="search" action="/burnticker" method="get" onSubmit={search}>
           <label className="sr-only" htmlFor="bt-header-q">{SEARCH.label}</label>
-          <input id="bt-header-q" name="q" type="search" placeholder={SEARCH.placeholder} autoComplete="off" />
+          <input id="bt-header-q" ref={headerQ} name="q" type="search" placeholder={SEARCH.placeholder} autoComplete="off" onChange={(e) => typeQuery(e.target.value)} />
         </form>
         <div className="bt-header-tools">
           {launchOpen

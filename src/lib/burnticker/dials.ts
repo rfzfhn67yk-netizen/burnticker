@@ -1,6 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { LEAGUES, NEXT_MAX, gameSeries, parseEspnSeries, seasonYearAt, teamSeries, windowChoices, type EspnSeries, type Window, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
+import { INVERSE_CHOICE, inverseRefusal } from "@/lib/burnticker/inverse";
 
 /**
  * THE RULE DIALS (2026-10-10, the owner: "after we select a rule can we edit it? like the percentage burned?"). Every entry path — a
@@ -15,9 +16,11 @@ import { nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
  *   games      N for a next-N window, 1–20
  *   threshold  the °F or inches an NWS rule counts from
  *   unit, direction, baseline   Kalshi scalar rules (a first-party feed fixes its own unit, direction and baseline)
+ *   inverse    (sources-2) "Burn when it happens" / "Burn when it does not happen" on a recurring first-party feed rule (inverse.ts);
+ *              offered only where the rule allows it, and switched off by turning league mode on
  */
 
-export type DialId = "fraction" | "side" | "window" | "games" | "threshold" | "unit" | "direction" | "baseline" | "league" | "forward";
+export type DialId = "fraction" | "side" | "window" | "games" | "threshold" | "unit" | "direction" | "baseline" | "league" | "forward" | "inverse";
 /** What a window change needs besides the rule: the moment (a next-N window starts today) and the season in progress. */
 export interface DialCtx { nowMs?: number; seasonYear?: number | null; /** an outcome-list market's set (the championship card knows it) */ set?: { id: string; outcome: string } | null }
 /** rules.ts DEFAULT_ON_END, copied so this file stays client-safe (rules.ts reads node:crypto); a test pins the two equal. */
@@ -37,6 +40,8 @@ export interface DialSet {
   bounds: { min: number; max: number; step: number };
   /** League mode (rules.ts `set`, opt-in, off by default): a team coin of a league season, or an outcome of a market with a set. */
   league: { on: boolean; id: string; outcome: string; forwardBps: number } | null;
+  /** The fade side (sources-2): offered on recurring first-party feed rules; null where the rule cannot take it (inverse.ts). */
+  inverse: { on: boolean; options: { value: "off" | "on"; label: string }[] } | null;
 }
 
 const fractionOf = (r: BurnRule): number => {
@@ -58,8 +63,12 @@ export function leagueSetFor(r: BurnRule, c: DialCtx = {}): { id: string; outcom
 export function dialsFor(r: BurnRule, c: DialCtx = {}): DialSet {
   const oneShot = isOneShotRule(r);
   const ls = leagueSetFor(r, c);
-  const out: DialSet = { ids: ["fraction"], fraction: fractionOf(r), side: null, window: null, threshold: null, fixedUnit: null, bounds: oneShot ? ONE_SHOT_FRACTION : FRACTION, league: ls ? { on: !!r.set, id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: r.set?.forwardBps ?? 10_000 } : null };
+  // the fade side is offered whenever the rule could take it with league mode off (turning league mode on switches it off)
+  const invOk = inverseRefusal({ ...r, set: undefined }) === null;
+  const out: DialSet = { ids: ["fraction"], fraction: fractionOf(r), side: null, window: null, threshold: null, fixedUnit: null, bounds: oneShot ? ONE_SHOT_FRACTION : FRACTION, league: ls ? { on: !!r.set, id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: r.set?.forwardBps ?? 10_000 } : null,
+    inverse: invOk ? { on: r.inverse === true, options: [{ value: "off", label: INVERSE_CHOICE.off }, { value: "on", label: INVERSE_CHOICE.on }] } : null };
   if (ls) out.ids.push("league");
+  if (invOk) out.ids.push("inverse");
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;
   if (e) {
@@ -93,6 +102,14 @@ const withFraction = (r: BurnRule, f: number): BurnRule => {
 /** One dial's new value → the new rule (pure). Unknown or inapplicable dials return the rule unchanged. */
 export function applyDial(r: BurnRule, dial: DialId, value: string | number, c: DialCtx = {}): BurnRule {
   if (dial === "fraction") return withFraction(r, Number(value));
+  if (dial === "inverse") {
+    const { inverse: _drop, ...rest } = r as BurnRule & { inverse?: unknown };
+    if (value === "off" || value === 0 || value === "0") return rest as BurnRule;
+    if (value !== "on" && value !== 1 && value !== "1") return r;
+    if (inverseRefusal({ ...rest, set: undefined }) !== null) return r;
+    const { set: _set, ...noSet } = rest as BurnRule & { set?: unknown };
+    return { ...noSet, inverse: true } as BurnRule;
+  }
   if (dial === "league" || dial === "forward") {
     const ls = leagueSetFor(r, c);
     if (!ls) return r;
@@ -100,9 +117,11 @@ export function applyDial(r: BurnRule, dial: DialId, value: string | number, c: 
     if (dial === "league" && (value === "off" || value === 0 || value === "0")) return (r.set ? { ...rest, onEnd: { ...(r.onEnd ?? ON_END_DEFAULT), endSink: true } } : rest) as BurnRule;
     const bps = dial === "forward" ? Math.round(Math.min(10_000, Math.max(0, Number(value)))) : (r.set?.forwardBps ?? 10_000);
     if (dial === "forward" && !r.set) return r;
-    // §45: league-set end sinks are a later program round, so a league-mode coin keeps the wind-down (rules.ts refuses endSink with set)
+    // §45: league-set end sinks are a later program round, so a league-mode coin keeps the wind-down (rules.ts refuses endSink with set);
+    // sources-2: league mode on also drops the fade side (inverse.ts refuses inverse with set)
     const { endSink: _noSink, ...windDown } = (r.onEnd ?? ON_END_DEFAULT) as { windDownDays: number; sweepThresholdLamports: number; endSink?: true };
-    return { ...rest, onEnd: windDown, set: { id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: bps } } as BurnRule;
+    const { inverse: _inv, ...plain } = rest as BurnRule & { inverse?: unknown };
+    return { ...plain, onEnd: windDown, set: { id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: bps } } as BurnRule;
   }
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;

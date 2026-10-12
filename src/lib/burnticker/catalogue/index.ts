@@ -9,6 +9,10 @@ import { corroborate } from "@/lib/burnticker/catalogue/corroborate";
 import type { PriceFeedSourceConfig, ResolutionSource } from "@/lib/burnticker/sources/types";
 import { copycatSource, type CopycatSourceConfig, type CopycatSourceOptions } from "@/lib/burnticker/sources/copycats";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
+import { applyLl2Launch, applyLl2Provider } from "@/lib/burnticker/sources/launchLibrary";
+import { applyUsgsQuakes } from "@/lib/burnticker/sources/usgs";
+import { applyGithubMilestone, applyGithubReleases } from "@/lib/burnticker/sources/github";
+import { applyYoutubeMilestone } from "@/lib/burnticker/sources/youtube";
 
 /**
  * THE FIRST-PARTY CATALOGUE (tier 3–5) — config/burnticker/sources.json read through the generic attested-http adapter (2026-10-09:
@@ -48,19 +52,30 @@ export function copycatSourceFromConfig(o: CopycatSourceOptions = {}, root = pro
   return cfg ? copycatSource(cfg, o) : null;
 }
 
-/** Parameter placeholders a source's URL may carry, keyed by the series-id syntax ("github.stars:<owner>/<repo>"). */
-const PARAMS: Record<string, { placeholders: string[]; split?: string; re: RegExp }> = {
+/**
+ * Parameter placeholders a source's URL may carry, keyed by the series-id syntax ("github.stars:<owner>/<repo>"). A source with its own
+ * parameter rules (sources-2: Launch Library providers and launches, USGS magnitude and region, GitHub releases and milestones, YouTube
+ * milestones) names an `apply` hook in its module that validates the parameter and returns the whole configured entry.
+ */
+const PARAMS: Record<string, { placeholders: string[]; split?: string; re: RegExp; apply?: (cfg: HttpSourceConfig, param: string) => HttpSourceConfig }> = {
   "wiki.views": { placeholders: ["{article}"], re: /^[A-Za-z0-9_.-]{1,48}$/ },
   "github.stars": { placeholders: ["{owner}", "{repo}"], split: "/", re: /^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/ },
   "steam.players": { placeholders: ["{appid}"], re: /^\d{1,10}$/ },
   "defillama.tvl": { placeholders: ["{protocol}"], re: /^[a-z0-9-]{1,48}$/ },
   "edgar.8k": { placeholders: ["{cik}"], re: /^\d{1,10}$/ },
+  "ll2.provider": { placeholders: ["{provider}"], re: /^\d{1,5}$/, apply: applyLl2Provider },
+  "ll2.launch": { placeholders: ["{launch}"], re: /^[0-9a-f-]{36}$/, apply: applyLl2Launch },
+  "usgs.quakes": { placeholders: ["{magnitude}", "{bbox}"], re: /^\d(\.5)?(\/[a-z]+)?$/, apply: applyUsgsQuakes },
+  "github.releases": { placeholders: ["{owner}", "{repo}"], re: /^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/, apply: applyGithubReleases },
+  "github.milestone": { placeholders: ["{owner}", "{repo}", "N"], re: /^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}\.\d{3,8}$/, apply: applyGithubMilestone },
+  "youtube.milestone": { placeholders: ["{channel}", "subscribers|views", "N"], re: /^UC[A-Za-z0-9_-]{22}\/(subscribers|views)\.\d{4,12}$/, apply: applyYoutubeMilestone },
 };
 
 function withParam(cfg: HttpSourceConfig, param: string | null): HttpSourceConfig {
   const spec = PARAMS[cfg.id];
   if (!spec) return cfg;
   if (param === null || !spec.re.test(param)) throw new Error(`${cfg.id} needs a parameter (${cfg.id}:<${spec.placeholders.join("/")}>)`);
+  if (spec.apply) { const c = spec.apply(cfg, param); return { ...c, id: `${cfg.id}:${param}`, memoSource: c.memoSource === cfg.memoSource ? `${cfg.memoSource} ${param}`.slice(0, 80) : c.memoSource }; }
   const parts = spec.split ? param.split(spec.split) : [param];
   let url = cfg.request.url, sourceUrl = cfg.sourceUrl;
   spec.placeholders.forEach((ph, i) => { const v = encodeURIComponent(parts[i]); url = url.split(ph).join(v); sourceUrl = sourceUrl.split(ph).join(v); });
@@ -77,7 +92,9 @@ function toFeed(cfg: HttpSourceConfig, param: string | null, o: { fetchImpl?: Fe
 export function catalogue(root = process.cwd()): Feed[] {
   return loadSourcesConfig(root).map((c) => toFeed(c, PARAMS[c.id] ? DEFAULT_PARAMS[c.id] ?? null : null));
 }
-const DEFAULT_PARAMS: Record<string, string> = { "wiki.views": "Bitcoin", "github.stars": "anza-xyz/agave", "steam.players": "730", "defillama.tvl": "raydium", "edgar.8k": "0000320193" };
+/** The parameter each parameterised source's catalogue card shows (sources-2: real ids from the 2026-10-12 fixtures; NASA's channel). */
+export const DEFAULT_PARAMS: Record<string, string> = { "wiki.views": "Bitcoin", "github.stars": "anza-xyz/agave", "steam.players": "730", "defillama.tvl": "raydium", "edgar.8k": "0000320193",
+  "ll2.provider": "121", "ll2.launch": "7d1afb26-6f9c-429b-9ccf-29012fd1e519", "usgs.quakes": "6", "github.releases": "anza-xyz/agave", "github.milestone": "anza-xyz/agave.2000", "youtube.milestone": "UCLA_DiR1FfKNvjuUpBHmylQ/subscribers.15000000" };
 
 /** The six original feeds plus everything else launchable, in config order (the wizard's tier-2 cards). */
 export const CATALOGUE: readonly Feed[] = (() => { try { return catalogue(); } catch { return []; } })();

@@ -47,12 +47,20 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   // the header search (?q= on arrival, or an in-place search event) and the phone tab bar's Search (#search focuses the box)
   useEffect(() => {
     setQ(readQuery());
+    // website-15 item 5: the header box and this box are one search; the header sends "bt-search" (Enter) and "bt-search-input" (typing)
     const onSearch = (e: Event) => { setQ(String((e as CustomEvent<string>).detail ?? "")); setTab("new"); };
+    const onInput = (e: Event) => setQ(String((e as CustomEvent<string>).detail ?? ""));
     const onHash = () => { if (window.location.hash !== "#search") return; const box = searchBox.current && searchBox.current.offsetParent !== null ? searchBox.current : document.getElementById("bt-header-q"); box?.focus(); box?.scrollIntoView({ block: "center" }); };
     onHash();
-    window.addEventListener("bt-search", onSearch); window.addEventListener("hashchange", onHash);
-    return () => { window.removeEventListener("bt-search", onSearch); window.removeEventListener("hashchange", onHash); };
+    window.addEventListener("bt-search", onSearch); window.addEventListener("bt-search-input", onInput); window.addEventListener("hashchange", onHash);
+    return () => { window.removeEventListener("bt-search", onSearch); window.removeEventListener("bt-search-input", onInput); window.removeEventListener("hashchange", onHash); };
   }, []);
+  // typing here updates the header box and the address (?q=), so a reload or a shared link keeps the same search
+  const typeQuery = (v: string) => {
+    setQ(v);
+    try { const u = new URL(window.location.href); if (v.trim()) u.searchParams.set("q", v); else u.searchParams.delete("q"); window.history.replaceState(null, "", u.pathname + u.search + u.hash); } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent("bt-search-sync", { detail: v }));
+  };
   const pick = (t: GridTab) => { setTab(t); try { sessionStorage.setItem("bt-coins-tab", t); } catch { /* ignore */ } };
 
   const s = q.trim().toLowerCase();
@@ -63,7 +71,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
   const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet"));
-  const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : cards.length, query: q, generatedAt: ix?.generatedAt ?? null, now });
+  const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : cards.length, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
   const rule = GRID_TABS.find((t) => t.id === tab)!.rule;
 
   return (
@@ -75,7 +83,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
             {GRID_TABS.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} aria-controls="bt-coins-panel" title={t.rule} className={`bt-tab${tab === t.id ? " is-active" : ""}`} onClick={() => pick(t.id)}>{t.label}{t.id === "pairs" && ix ? <> <span className="bt-tab-count" aria-label={`${ix.pairs.length} pair${ix.pairs.length === 1 ? "" : "s"}`}>{ix.pairs.length}</span></> : null}</button>)}
           </div>
           {/* one search per screen: the header carries it from 640 px up; on phones this box is the search (the tab bar's Search focuses it) */}
-          <input id="search" ref={searchBox} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`${SEARCH.placeholder}: name, $TICKER, team or mint`} aria-label={SEARCH.label} className="bt-grid-search md:ml-auto w-full md:w-72 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm" />
+          <input id="search" ref={searchBox} type="search" value={q} onChange={(e) => typeQuery(e.target.value)} placeholder={SEARCH.placeholder} aria-label={SEARCH.label} className="bt-grid-search md:ml-auto w-full md:w-72 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm" />
         </div>
         <p className="text-xs text-neutral-500" id="bt-tab-rule">{rule}{tab === "following" ? ` ${WATCH_NOTE}` : ""}{tab !== "pairs" ? " Each coin's curve completes at the raise its creator chose, and the card reads it from the coin's own pool." : ""}</p>
 

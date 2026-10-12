@@ -191,6 +191,9 @@ export const SCHEMAS: Record<string, Schema> = {
     creator: { ...PUBKEY, description: "the wallet that pays and signs" },
     mint: { ...PUBKEY, description: "the PUBLIC key of a fresh mint keypair you generated; the secret never leaves your machine" },
     ticker: { type: "string", pattern: "^[A-Z0-9]{2,10}$" }, name: str, description: str, imageUrl: nstr,
+    creatorDescription: { type: "string", maxLength: 280, description: "website-15: the creator's own text, up to 280 characters. It follows the generated paragraph, whose first sentence is the rule, and passes the creator copy lint (no affiliation)." },
+    image: nullable(obj({ contentType: { enum: ["image/png", "image/jpeg", "image/gif", "image/webp"] }, base64: str }, ["contentType", "base64"])),
+    imageRights: { type: "boolean", description: "required true with image or imageUrl: the creator confirms \"I have the right to use this image. A team, league or company mark is used at my own risk.\"" },
     links: arr(obj({ label: str, url: str }, ["label", "url"])), rule: ref("Rule"), firstBuySol: { type: "string", description: "must be \"0\" (or absent): bundles built by this API carry no opening purchase, because a create with one does not fit one transaction; anything else is refused with code opening-purchase-off. The offline SDK builder and the operator's CLI keep the option." },
     acknowledgements: obj({ ruleLocked: { const: true }, noReturns: { const: true } }, ["ruleLocked", "noReturns"]),
     recentBlockhash: { type: "string", description: "optional: a recent blockhash from your RPC; otherwise a placeholder you must replace before signing" },
@@ -213,7 +216,7 @@ export const SCHEMAS: Record<string, Schema> = {
     refusal: nullable(obj({ code: { enum: ["kalshi-not-settlement", "stub-oracle", "not-primary", "primary-unreadable", "no-readings", "stale-primary", "no-cross-read", "cross-read-unreadable", "disagreement", "unknown-selector"] }, reason: str, status: int }, ["code", "reason"])),
     checkedAt: str,
   }, ["ok", "oracle", "selector", "primary", "agreement", "refusal"], { description: "The selector run live once before creation: the primary and its independent cross-read (Polymarket: the payout vector on Polygon and Gamma's report), the last reading, when the next is expected, whether the two agree, and the refusal if anything failed." }),
-  ReviewRequest: obj({ rule: ref("Rule"), ticker: str, name: str, note: str, descCtx: { type: "object" }, pair: nullable(obj({ ticker: str, name: str })), companion: nullable(obj({ ticker: str, name: str })), warnings: arr(str) }, ["rule"], { description: "since 1.14.0: what the review payload is computed from; no creator, mint or acknowledgement is needed" }),
+  ReviewRequest: obj({ rule: ref("Rule"), ticker: str, name: str, note: str, creatorDescription: str, descCtx: { type: "object" }, pair: nullable(obj({ ticker: str, name: str })), companion: nullable(obj({ ticker: str, name: str })), warnings: arr(str) }, ["rule"], { description: "since 1.14.0: what the review payload is computed from; no creator, mint or acknowledgement is needed" }),
   PreLaunchReview: obj({
     schema: { const: "burnticker.launch-review/v1" }, network: str, mode: { enum: ["closed", "preview", "open"] }, type: nstr, typeAvailable: bool, typeReason: nstr,
     signable: { ...bool, description: "true only when this host would build the bundle for this request now (open mode, the type available, no problem)" },

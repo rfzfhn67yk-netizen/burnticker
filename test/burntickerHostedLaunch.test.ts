@@ -197,7 +197,8 @@ describe("(b) the mainnet allowance, (c) no opening purchase, (d) no vault mode:
     const page = read("src/app/burnticker/launch/page.tsx");
     assert.doesNotMatch(page, /set\("mode", setMode\)/, "a stored vault mode is never restored");
     assert.deepEqual([...page.matchAll(/setMode\(("[a-z]+")\)/g)].map((m) => m[1]), ['"buyback"'], "the wizard only ever sets buyback");
-    assert.equal((page.match(/\{VAULT_HIDDEN_SENTENCE\}/g) ?? []).length, 1, "one sentence");
+    // website-15 item 12: the vault dev note is gone from the review; the sentence stays as the API's refusal (above)
+    assert.equal((page.match(/VAULT_HIDDEN_SENTENCE|data-vault-hidden/g) ?? []).length, 0, "no vault note on the review");
   });
 
   test("the three sentences are plain and pass the copy lint", () => {

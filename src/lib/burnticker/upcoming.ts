@@ -10,13 +10,14 @@ import { shortDay } from "@/lib/burnticker/cardView";
  *   attested    the reading is signed on chain and waits for its burn run
  *   burned      the latest result burned (its receipt is linked); the rule now waits for the next one
  *   deferred    a burn is due and on hold, with its recorded reason (for example, the pool is not registered yet)
+ *   unavailable the coin's own records could not be read (website-15): said so, never shown as "nothing due"
  *
  * Built from each coin's own status and receipts (the platform keeper, via the API) and, for $DEFICIT, its keeper's published files and
  * locked rule file (src/lib/burnKeeper/schedule.ts polls). Copy note: the page's heading says "Next results", because the copy lint
  * refuses the word "upcoming" in visible text; only the address keeps it. Pure and client-safe.
  */
-export type SettlementStatus = "waiting" | "published" | "attested" | "burned" | "deferred";
-export const SETTLEMENT_LABEL: Record<SettlementStatus, string> = { waiting: "Waiting for the source", published: "Published, not signed yet", attested: "Signed, waiting for its burn run", burned: "Burned", deferred: "On hold" };
+export type SettlementStatus = "waiting" | "published" | "attested" | "burned" | "deferred" | "unavailable";
+export const SETTLEMENT_LABEL: Record<SettlementStatus, string> = { waiting: "Waiting for the source", published: "Published, not signed yet", attested: "Signed, waiting for its burn run", burned: "Burned", deferred: "On hold", unavailable: "Unavailable" };
 
 export interface UpcomingRow {
   ticker: string; name: string; href: string; network: "mainnet" | "devnet";
@@ -37,6 +38,36 @@ export interface UpcomingRow {
 }
 
 export const UPCOMING_EMPTY = "No coin is registered on this site yet, so no result is being waited for. Each coin appears here once it is created and registered.";
+/** Every registered coin is a draft, expired or retired (website-15, code review 6 P2 2). */
+export const UPCOMING_NONE_ACTIVE = "No pending results. No coin registered on this site is active right now.";
+/** The registry itself could not be read: unavailable, never "no coin". */
+export const UPCOMING_UNAVAILABLE = "The next results are unavailable, because this site could not read its list of coins just now.";
+
+/**
+ * THE NEXT-RESULTS ANSWER (website-15, code review 6 P2 2). The rows that were read, the coins that could not be read, and one state:
+ *   ready        every registered coin was read (rows may be empty: no coin registered, or none active)
+ *   partial      some coins were read and some failed; the readable rows stay, with a notice naming the rest
+ *   unavailable  the registry could not be read, or every coin failed
+ * `registered` is the number of coins in a readable registry (null when the registry was not read); `active` counts the rows a coin
+ * could produce. A failure is never shown as an empty list.
+ */
+export interface UpcomingOmitted { ticker: string; reason: string }
+export interface UpcomingSet { state: "ready" | "partial" | "unavailable"; rows: UpcomingRow[]; omitted: UpcomingOmitted[]; registered: number | null }
+
+export function upcomingSet(rows: readonly UpcomingRow[], omitted: readonly UpcomingOmitted[], registered: number | null): UpcomingSet {
+  const state = registered === null || (omitted.length > 0 && rows.length === 0) ? "unavailable" : omitted.length > 0 ? "partial" : "ready";
+  return { state, rows: [...rows], omitted: [...omitted], registered };
+}
+
+/** The one sentence a next-results list shows beside (partial) or instead of (empty, unavailable) its rows; null when the rows say it all. */
+export function upcomingNotice(u: UpcomingSet | null | undefined): string | null {
+  if (!u || !Array.isArray(u.rows)) return UPCOMING_UNAVAILABLE;
+  if (u.state === "unavailable") return u.registered === null ? UPCOMING_UNAVAILABLE : `The next results are unavailable, because this site could not read ${tickers(u.omitted)} just now.`;
+  if (u.state === "partial") return `Some next results are missing, because this site could not read ${tickers(u.omitted)} just now.`;
+  if (u.rows.length) return null;
+  return u.registered === 0 ? UPCOMING_EMPTY : UPCOMING_NONE_ACTIVE;
+}
+const tickers = (o: readonly UpcomingOmitted[]) => { const t = o.map((x) => `$${x.ticker}`); return t.length <= 1 ? (t[0] ?? "a coin") : `${t.slice(0, -1).join(", ")} and ${t[t.length - 1]}`; };
 
 /** Words for a source, by oracle id. The event-contract venue is described, never named. */
 const SOURCE: Record<string, string> = { kalshi: "A prediction market's settled result", polymarket: "Polymarket's settled result, read on Polygon", catalogue: "The source's own published data" };
@@ -86,13 +117,17 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
 export function upcomingFromKeeper(statusFile: unknown, burnsFile: unknown, rules: { feedName: string; feedUrl: string | null; polls: readonly string[]; timeZone: string }): UpcomingRow | null {
   const s = statusFile as { schema?: string; ticker?: string; cluster?: string; feed?: { lastRecordDate: string | null; nextPollAt: string | null }; program?: { queue?: { lastOnChain: string | null } } | null } | null;
   if (!s || s.schema !== "burnkeeper.status/v1") return null;
-  const rows = (Array.isArray(burnsFile) ? burnsFile : (burnsFile as { burns?: unknown[] } | null)?.burns ?? []) as { recordDate: string; status: string; units: number; signature: string | null; waitReason: string | null; skippedReason: string | null }[];
+  const raw = Array.isArray(burnsFile) ? burnsFile : burnsFile && typeof burnsFile === "object" && Array.isArray((burnsFile as { burns?: unknown }).burns) ? (burnsFile as { burns: unknown[] }).burns : null;
+  // website-15 (code review 6, P2 1): a missing or wrong-shape burns.json is unavailable, never "counted no unit"
+  const valid = !!raw && raw.every((r) => !!r && typeof r === "object" && typeof (r as { status?: unknown }).status === "string" && typeof (r as { recordDate?: unknown }).recordDate === "string");
+  const rows = (valid ? raw : []) as { recordDate: string; status: string; units: number; signature: string | null; waitReason: string | null; skippedReason: string | null }[];
   const latest = [...rows].sort((a, b) => (a.recordDate < b.recordDate ? 1 : -1))[0] ?? null;
   const lastRead = s.feed?.lastRecordDate ?? null;
   const lastOnChain = s.program?.queue?.lastOnChain ?? null;
   const t = s.ticker ?? "DEFICIT";
   let status: SettlementStatus = "waiting", text = "No reading has been recorded since launch yet.", receiptHref: string | null = null;
-  if (latest && (!lastRead || latest.recordDate >= lastRead)) {
+  if (!valid) { status = "unavailable"; text = "Where the latest reading stands is unavailable, because the keeper's list of readings and burns did not load."; }
+  else if (latest && (!lastRead || latest.recordDate >= lastRead)) {
     const d = shortDay(latest.recordDate) ?? latest.recordDate;
     if (latest.status === "confirmed") { status = "burned"; text = `The reading for ${d} burned.`; receiptHref = latest.signature ? `/burnticker/check?sig=${encodeURIComponent(latest.signature)}&cluster=mainnet#verify` : null; }
     else if (latest.status === "skipped") { status = "waiting"; text = `The reading for ${d} bought nothing (${latest.skippedReason ?? "skipped"}). The rule waits for the next business day.`; }

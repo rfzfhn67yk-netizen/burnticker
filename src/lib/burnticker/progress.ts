@@ -10,11 +10,17 @@ import type { Readiness, ReadinessState } from "@/lib/burnticker/readiness";
  * its pool; an unread raise is named "its raise"). Pure and client-safe.
  */
 export const PROGRESS_STEPS = ["Created", "Trading on curve", "Graduated", "Pool registered", "Ready to burn", "Burned"] as const;
-export type ProgressStepState = "done" | "current" | "todo";
+/** website-15 item 6: "na" marks a step that does not apply to this coin (the devnet rehearsal coin had no curve), never invented history */
+export type ProgressStepState = "done" | "current" | "todo" | "na";
 export interface ProgressView {
   steps: { label: (typeof PROGRESS_STEPS)[number]; state: ProgressStepState }[];
   /** how many steps are done (0 to 6) */
   done: number;
+  /**
+   * The short heading beside the dots (website-15 item 6, Claude site audit 3 item 4a): "Not created" before the coin exists, then the
+   * next unmet milestone as "Next: graduated", and "Burned" once all six are done. Never "Now:" on a step that has not happened.
+   */
+  now: string;
   /** the next unmet condition, one plain sentence; when all six are done, what the next burn needs */
   next: string;
   /** the readiness state it was read from */
@@ -22,7 +28,11 @@ export interface ProgressView {
 }
 
 /** Steps done for each readiness state. A burn that is due but on hold is "Ready to burn"; a burned coin has done all six. */
-const DONE: Record<ReadinessState, number> = { "not-launched": 0, "on-curve": 1, "awaiting-registration": 3, "awaiting-event": 4, "below-floor": 4, deferred: 5, burned: 6 };
+// website-15 item 6: a coin on its curve has done "Created" and "Trading on curve"; its next unmet milestone is graduation
+export const PROGRESS_DONE: Record<ReadinessState, number> = { "not-launched": 0, "on-curve": 2, "awaiting-registration": 3, "awaiting-event": 4, "below-floor": 4, deferred: 5, burned: 6 };
+
+/** The heading for a number of done steps: "Not created", "Next: <step>" or "Burned". */
+export const progressNow = (done: number): string => (done <= 0 ? "Not created" : done >= PROGRESS_STEPS.length ? "Burned" : `Next: ${PROGRESS_STEPS[done].toLowerCase()}`);
 
 const n2 = (x: number) => (Math.round(x * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
@@ -32,11 +42,15 @@ export interface ProgressFacts {
   raiseSol?: number | null;
   /** queued units waiting for the pool (the $DEFICIT keeper's files), when read */
   queuedUnits?: number | null;
+  /** steps that do not apply to this coin (website-15: the devnet rehearsal coin's curve and graduation); shown as not applicable */
+  notApplicable?: readonly (typeof PROGRESS_STEPS)[number][];
 }
 
 export function progressOf(r: Readiness, f: ProgressFacts = {}): ProgressView {
-  const done = DONE[r.state];
-  const steps = PROGRESS_STEPS.map((label, k) => ({ label, state: (k < done ? "done" : k === done ? "current" : "todo") as ProgressStepState }));
+  const done = PROGRESS_DONE[r.state];
+  const na = new Set(f.notApplicable ?? []);
+  // a coin that is not created has no current step: nothing is lit (website-15 item 6)
+  const steps = PROGRESS_STEPS.map((label, k) => ({ label, state: (na.has(label) ? "na" : k < done ? "done" : k === done && done > 0 ? "current" : "todo") as ProgressStepState }));
   const raise = typeof f.raiseSol === "number" && f.raiseSol > 0 ? f.raiseSol : null;
   const raised = typeof f.raisedSol === "number" ? f.raisedSol : null;
   const queued = typeof f.queuedUnits === "number" && f.queuedUnits > 0 ? ` ${f.queuedUnits === 1 ? "One unit is" : `${f.queuedUnits} units are`} queued for that moment.` : "";
@@ -55,8 +69,14 @@ export function progressOf(r: Readiness, f: ProgressFacts = {}): ProgressView {
     case "deferred": next = `Next, the burn run has to go through. ${r.detail}`; break;
     case "burned": next = "This coin has burned. The next burn needs the next result that counts."; break;
   }
-  return { steps, done, next, from: r.state };
+  return { steps, done, now: progressNow(done), next, from: r.state };
 }
 
-/** "Step 3 of 6: Graduated" for a screen reader or a one-line summary. */
-export const progressSummary = (p: ProgressView): string => (p.done >= PROGRESS_STEPS.length ? `All ${PROGRESS_STEPS.length} steps are done.` : `${p.done} of ${PROGRESS_STEPS.length} steps are done. The current step is ${PROGRESS_STEPS[p.done].toLowerCase()}.`);
+/** "Step 3 of 6 is done. The next step is pool registered." for a screen reader and the readiness panel's heading. */
+export const progressSummary = (p: ProgressView): string => {
+  const na = p.steps.filter((x) => x.state === "na").map((x) => x.label.toLowerCase());
+  const naText = na.length ? ` ${na.length === 1 ? `The step ${na[0]} does` : `The steps ${na.slice(0, -1).join(", ")} and ${na[na.length - 1]} do`} not apply to this coin.` : "";
+  if (p.done <= 0) return `Step 0 of ${PROGRESS_STEPS.length}. The coin is not created yet.`;
+  if (p.done >= PROGRESS_STEPS.length) return `All ${PROGRESS_STEPS.length} steps are done.${naText}`;
+  return `Step ${p.done} of ${PROGRESS_STEPS.length} is done. The next step is ${PROGRESS_STEPS[p.done].toLowerCase()}.${naText}`;
+};

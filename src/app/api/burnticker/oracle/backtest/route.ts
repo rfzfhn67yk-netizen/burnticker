@@ -14,6 +14,12 @@ export async function POST(req: Request) {
   if (!isSameOrigin(req)) return NextResponse.json({ error: "cross-site request refused", code: "cross-origin" }, { status: 403 });
   let body: { rule?: unknown; months?: number };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
-  const r = await runBacktest(platform(), body);
-  return NextResponse.json(r.body, { status: r.status });
+  // website-15 item 4: anything the handler did not catch is logged here and answered as JSON, never a bare 502 page
+  try {
+    const r = await runBacktest(platform(), body);
+    return NextResponse.json(r.body, { status: r.status });
+  } catch (e) {
+    console.error("[burnticker/backtest] the back-test route failed:", e);
+    return NextResponse.json({ error: "The back-test could not run just now.", code: "backtest-unavailable" }, { status: 502 });
+  }
 }

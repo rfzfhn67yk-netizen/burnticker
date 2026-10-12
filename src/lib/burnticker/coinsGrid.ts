@@ -55,7 +55,13 @@ export function curveCoverage(list: readonly Coin[]): { read: number; unread: nu
  * The grid's state for one tab. `index` is null while loading; `error` is the read's failure. `all` is every listable coin (before the
  * search), `shown` what the tab and the search leave. `generatedAt` is the index's own read time.
  */
-export function gridState(i: { tab: GridTab; loading: boolean; error: string | null; all: readonly Coin[]; shown: number; query: string; generatedAt: string | null; now: number }): GridState {
+/** A search with no tradeable match: says how many featured coins match instead, or that nothing does. */
+export function searchMissSentence(query: string, featuredMatches: number): string {
+  if (featuredMatches > 0) return `No tradeable coin matches. ${featuredMatches === 1 ? "1 featured coin does" : `${featuredMatches} featured coins do`}.`;
+  return `No coin matches "${query.trim()}".`;
+}
+
+export function gridState(i: { tab: GridTab; loading: boolean; error: string | null; all: readonly Coin[]; shown: number; query: string; generatedAt: string | null; now: number; featuredMatches?: number }): GridState {
   if (i.error) return { kind: "error", body: dataStateSentence("error", "the coin list"), details: i.error };
   if (i.loading) return { kind: "loading" };
   const cov = curveCoverage(i.all);
@@ -65,7 +71,9 @@ export function gridState(i: { tab: GridTab; loading: boolean; error: string | n
     return { kind: "unavailable", body: curveProgressSentence("unavailable") };
   }
   if (i.shown === 0) {
-    if (i.query.trim()) return { kind: "empty", body: `No coin matches "${i.query.trim()}".`, notLaunched: false };
+    // website-15 item 5 (Claude site audit 3 item 3): one search over both lists, so the grid never says "no match" while the featured
+    // group below shows one
+    if (i.query.trim()) return { kind: "empty", body: searchMissSentence(i.query, i.featuredMatches ?? 0), notLaunched: false };
     if (i.all.length === 0) return { kind: "empty", body: i.tab === "following" ? "No coin anyone can trade is launched on this site yet, so there is nothing to follow in this list. The featured coins below can be followed." : i.tab === "pairs" ? "No rivalry pair is launched on this site yet." : "No coin anyone can trade is launched on this site yet.", notLaunched: true };
     const body = i.tab === "graduating" ? `${curveProgressSentence("empty")}${cov.unread ? ` ${cov.unread} coin${cov.unread === 1 ? "'s curve was" : "s' curves were"} not read and ${cov.unread === 1 ? "is" : "are"} left out.` : ""}`
       : i.tab === "graduated" ? "No coin has moved to a trading pool yet."

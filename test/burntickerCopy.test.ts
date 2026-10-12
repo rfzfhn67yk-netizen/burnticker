@@ -43,10 +43,10 @@ describe("the landing page (site/burnticker/index.html)", () => {
     const { HERO } = await import("@/lib/burnticker/siteNav.mjs");
     const h1 = /<h1 id="hero-h">([\s\S]*?)<\/h1>/.exec(html)![1].replace(/<[^>]+>/g, "");
     assert.equal(h1, HERO.title); assert.equal(HERO.title, "Memecoins that burn on real-world results.");
-    assert.match(html, new RegExp(`<p class="sub">${HERO.sub.replace(/\./g, "\\.")}</p>`)); assert.equal(HERO.sub, "Every burn is a receipt.");
+    assert.match(html, new RegExp(`<p class="sub">${HERO.sub.replace(/\./g, "\\.")}</p>`)); assert.equal(HERO.sub, "Every burn leaves a receipt.", "website-15 item 18");
     // audit 4 BT-21; website-13 (Claude site audit 2 item 1): the static previews carry the current headline. A static file cannot know
     // the host's launch state, so it names none (the app's previews read launchAvailability.ts at request time)
-    assert.match(html, /<meta name="description" content="Memecoins that burn on real-world results\. Every burn is a receipt\. /);
+    assert.match(html, /<meta name="description" content="Memecoins that burn on real-world results\. Every burn leaves a receipt\. /);
     for (const m of html.matchAll(/<(?:meta [^>]*content="([^"]*)"|title>([^<]*)<)/g)) assert.doesNotMatch(m[1] ?? m[2] ?? "", /creator launches are|pre-launch|devnet/i, "a static preview never states the launch state or the network");
     assert.doesNotMatch(/<meta (?:name|property)="(?:description|og:description|twitter:description)" content="([^"]*)"/g.exec(html)?.[0] ?? "", /Launch one/);
   });
@@ -288,7 +288,7 @@ describe("the committed platform fixture and the brand", () => {
     const { PREVIEW_BANNER, siteLaunchState } = await import("@/lib/burnticker/launchAvailability");
     assert.equal(META_TITLE, "Burnticker: Memecoins that burn on real-world results");
     const closed = metaDescription({}), preview = metaDescription({ BURNTICKER_CREATOR_LAUNCHES_PREVIEW: "1" }), open = metaDescription({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" });
-    for (const d of [closed, preview, open]) assert.match(d, /^Memecoins that burn on real-world results\. Every burn is a receipt\. /);
+    for (const d of [closed, preview, open]) assert.match(d, /^Memecoins that burn on real-world results\. Every burn leaves a receipt\. /);
     assert.ok(closed.endsWith(CREATOR_LAUNCHES_CLOSED), closed); assert.doesNotMatch(closed, /Launch one|launch a/i);
     assert.ok(preview.endsWith(PREVIEW_BANNER), preview);
     assert.ok(open.endsWith(siteLaunchState({ BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" }).sentence), open);

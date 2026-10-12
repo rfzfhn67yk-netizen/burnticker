@@ -15,13 +15,14 @@ import { findTeams } from "@/lib/burnticker/sources/espn";
  */
 
 export const NOTE_MAX = 140;
-export interface CreatorTextProblem { field: "name" | "ticker" | "note"; category: string; rule: string; phrase: string; reason: string }
+export interface CreatorTextProblem { field: "name" | "ticker" | "note" | "description" | "link label"; category: string; rule: string; phrase: string; reason: string }
 
 /** The copy lint over what the creator typed. Empty → clean. */
-export function creatorTextProblems(o: { name: string; ticker: string; note: string }): CreatorTextProblem[] {
+export function creatorTextProblems(o: { name: string; ticker: string; note: string; /** website-15 item 13 */ description?: string; linkLabels?: readonly string[] }): CreatorTextProblem[] {
   const cfg = loadCopyLintConfig();
   const out: CreatorTextProblem[] = [];
-  for (const [field, text] of [["name", o.name], ["ticker", o.ticker], ["note", o.note]] as const) {
+  const fields: [string, string][] = [["name", o.name], ["ticker", o.ticker], ["note", o.note], ["description", o.description ?? ""], ...(o.linkLabels ?? []).map((l) => ["link label", l] as [string, string])];
+  for (const [field, text] of fields as [CreatorTextProblem["field"], string][]) {
     if (!text.trim()) continue;
     for (const h of lintCopy(text, cfg, { scope: "creator" }).hits) out.push({ field, category: h.category, rule: h.rule, phrase: h.phrase, reason: `The ${field} "${text.slice(0, 60)}" contains "${h.phrase}", which is not allowed. Rule broken: ${h.category} (${h.why}).` });
   }

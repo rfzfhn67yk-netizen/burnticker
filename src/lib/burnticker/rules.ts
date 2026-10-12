@@ -1,5 +1,6 @@
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { derbySeriesId, derbySpecProblems, derbyStatement, isDerbySeries, type DerbySpec } from "@/lib/burnticker/derby/spec";
+import { inverseRefusal, KEEPER_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 
 /**
  * BURNTICKER RULES (2026-10-09; the owner's redesign the same evening: the event space is OPEN). A rule is a SELECTOR plus an
@@ -97,6 +98,12 @@ export interface BurnRule {
    * the bracket slot), the window, the measure and the season, locked with the rule. `series` is derived from it (derbySeriesId).
    */
   derby?: DerbySpec;
+  /**
+   * THE FADE SIDE (sources-2, 2026-10-12; inverse.ts): a recurring first-party scalar rule may burn on the periods its condition does
+   * NOT happen ("burns on every business day the debt stays flat or falls"): one unit per such period, none when it does happen.
+   * Absent on every other rule (their canonical bytes are unchanged); locked by the hash where present.
+   */
+  inverse?: true;
   /** A voided / cancelled market yields a VOID receipt and no burn. The only policy in v1. */
   onVoid: "skip";
   /** Buyback: below this (USD at execution) nothing is bought that period. Decimal string, ≤ 2 decimals. */
@@ -193,7 +200,11 @@ export const endSinkOf = (r: Pick<BurnRule, "onEnd" | "pair" | "kind" | "binary"
   return pairWinnerTakesBurn(r) ? "pair-winner" : "flagship";
 };
 export const ONE_SHOT_MAX_FRACTION = 1;
-export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby">): boolean => r.market !== null || (r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip === true);
+/**
+ * Resolves once: one market, a derby flippening, or (sources-2, 2026-10-12) a first-party one-shot that has exactly one reading ever: a
+ * named launch (ll2.launch), a star or channel milestone (github.milestone, youtube.milestone). The keeper ends those after the reading.
+ */
+export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby"> & { series?: string | null }): boolean => r.market !== null || (r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip === true) || (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? ""));
 
 export const RULE_BOUNDS = {
   /** Recurring rules: 1–10 % of the pool per unit. A one-shot may go to 100 % (ONE_SHOT_MAX_FRACTION; see "ONE-SHOT 100 %" above). */
@@ -318,7 +329,7 @@ export function validateRule(raw: unknown): BurnRule {
     if (r.oracle === "derby" && Object.keys(filter).length) p.push("derby: filter must be {} (the derby block is the whole selector)");
   }
   if (r.kind !== "binary" && r.kind !== "scalar") p.push('kind must be "binary" or "scalar"');
-  const oneShot = market !== null || (r.oracle === "derby" && (derby as { selector?: string; flip?: boolean } | undefined)?.selector === "coinvs" && (derby as { flip?: boolean }).flip === true);
+  const oneShot = market !== null || (r.oracle === "derby" && (derby as { selector?: string; flip?: boolean } | undefined)?.selector === "coinvs" && (derby as { flip?: boolean }).flip === true) || (r.oracle === "catalogue" && typeof series === "string" && KEEPER_ONE_SHOT_RE.test(series));
   const checkMapping = (label: string, m: unknown): void => {
     if (!isMapping(m)) { p.push(`${label} must be { fractionOfPool } or { tokens }`); return; }
     const mode = mappingMode(m);
@@ -387,6 +398,12 @@ export function validateRule(raw: unknown): BurnRule {
     const leagueSeason = r.oracle === "catalogue" && /^espn\.team:[a-z0-9.]+-[A-Z]{2,5}\.\d{1,6}-(win|loss|draw)-[sp]\d{4}$/.test(r.series ?? "");
     if ((r.kind === "scalar" || r.oracle === "catalogue") && !leagueSeason) p.push("an outcome set needs a selector with an outcome list (scalar feeds such as debt, CPI or weather have no winner)");
   }
+  // THE FADE SIDE (inverse.ts): true or absent; only where inverseRefusal allows it.
+  const inverse = (r as { inverse?: unknown }).inverse;
+  if (inverse !== undefined && inverse !== null) {
+    if (inverse !== true) p.push("inverse must be true or absent");
+    else { const why = inverseRefusal({ oracle: r.oracle as OracleId, kind: r.kind as BurnRule["kind"], series, market, pair: (r.pair ?? null) as BurnRule["pair"], set, derby }); if (why) p.push(`inverse: ${why}`); }
+  }
   const onEnd = (r as { onEnd?: unknown }).onEnd;
   if (onEnd !== undefined && onEnd !== null) {
     const o = onEnd as { windDownDays?: unknown; sweepThresholdLamports?: unknown; endSink?: unknown };
@@ -409,7 +426,7 @@ export function validateRule(raw: unknown): BurnRule {
       if (!Number.isInteger(vault.cliffDays) || vault.cliffDays < 0 || vault.cliffDays > 365) p.push("vault.cliffDays must be a whole number 0–365");
     }
   } else if (vault !== null) p.push("buyback mode: vault must be null");
-  for (const k of Object.keys(r)) if (!["schema", "oracle", "series", "market", "filter", "kind", "binary", "scalar", "onVoid", "floorUsd", "reserveSol", "vault", "pair", "derby", "onEnd", "set"].includes(k)) p.push(`${k} is not a known key`);
+  for (const k of Object.keys(r)) if (!["schema", "oracle", "series", "market", "filter", "kind", "binary", "scalar", "onVoid", "floorUsd", "reserveSol", "vault", "pair", "derby", "onEnd", "set", "inverse"].includes(k)) p.push(`${k} is not a known key`);
   if (p.length) throw new Error(`rule: ${p.join("; ")}`);
   return {
     schema: BURNTICKER_RULES_SCHEMA, oracle: r.oracle as OracleId, series, market, filter,
@@ -421,6 +438,7 @@ export function validateRule(raw: unknown): BurnRule {
     ...(set !== undefined && set !== null ? { set: { id: (set as { id: string }).id, outcome: (set as { outcome: string }).outcome, forwardBps: (set as { forwardBps: number }).forwardBps } } : {}),
     ...(onEnd !== undefined && onEnd !== null ? { onEnd: { windDownDays: (onEnd as { windDownDays: number }).windDownDays, sweepThresholdLamports: (onEnd as { sweepThresholdLamports: number }).sweepThresholdLamports, ...((onEnd as { endSink?: unknown }).endSink === true ? { endSink: true as const } : {}) } } : {}),
     ...(r.oracle === "derby" ? { derby: derby as DerbySpec } : {}),
+    ...(inverse === true ? { inverse: true as const } : {}),
   };
 }
 
@@ -552,6 +570,10 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
   }
   const s = r.scalar!;
   const base = s.baseline === "previousSettlement" ? "the previous settlement" : `a fixed baseline of ${s.baseline}`;
+  if (r.inverse) {
+    const did = s.direction === "up" ? "rise above" : s.direction === "down" ? "fall below" : "move away from";
+    return `Each time ${what} settles, a reading that does not ${did} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")}. A reading that does ${did} it, by any amount, burns nothing. A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
+  }
   const dir = s.direction === "up" ? "above" : s.direction === "down" ? "below" : "away from (either direction)";
   const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}${winnerTakesBurnText(r)}` : "";
   return `Each time ${what} settles, every full ${s.unit} ${dir} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")} (buyback spend compounds: pool × (1 − (1 − f)^units)).${pair} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
@@ -560,6 +582,6 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
 /** The description footer: feed/selector, the rule hash and the fixed disclaimer. */
 export function descriptionFooter(locked: LockedRule): string {
   const r = locked.rule;
-  const src = r.oracle === "derby" ? `Burn Derby ${r.series}` : r.oracle === "catalogue" ? `feed ${r.series}` : r.oracle === "polymarket" ? (r.market ? `Polymarket market ${r.market}` : `Polymarket ${r.series}`) : r.market ? `Kalshi market ${r.market}` : `Kalshi series ${r.series}${r.filter.tickerIncludes ? ` (ticker ∋ ${r.filter.tickerIncludes})` : ""}`;
+  const src = r.oracle === "derby" ? `Burn Derby ${r.series}` : r.oracle === "catalogue" ? `feed ${r.series}${r.inverse ? " (burns when it does not happen)" : ""}` : r.oracle === "polymarket" ? (r.market ? `Polymarket market ${r.market}` : `Polymarket ${r.series}`) : r.market ? `Kalshi market ${r.market}` : `Kalshi series ${r.series}${r.filter.tickerIncludes ? ` (ticker ∋ ${r.filter.tickerIncludes})` : ""}`;
   return `— ${src} · rule sha256:${locked.sha12} · ${DISCLAIMER_FOOTER}`;
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { OPERATOR_LINE, USE_OF_FEES } from "@/lib/burnticker/fees";
 import { FOOTER_COPY } from "@/lib/burnticker/siteNav.mjs";
 import { NAV, LEARN, API_BASE_PATH, type NavItem } from "./nav";
+import { MailSafe } from "./MailSafe";
 
 /**
  * THE FOOTER (B1 "thermal receipt"): the slip the product prints — torn top edge, label/value rows, dashed rules. Since 2026-10-12 (the
@@ -33,7 +34,7 @@ export function SiteFooter() {
         <p className="bt-slip-text bt-slip-dim">{FOOTER_COPY.sources}</p>
         <div className="bt-rule" />
         <dl className="bt-rows">
-          <div><dt>OPERATOR</dt><dd>{OPERATOR_LINE}</dd></div>
+          <div><dt>OPERATOR</dt><dd><MailSafe text={OPERATOR_LINE} /></dd></div>
           <div><dt>DEV FEE</dt><dd>{USE_OF_FEES}</dd></div>
           <div><dt>API</dt><dd><Link href="/burnticker/docs">{API_BASE_PATH}</Link></dd></div>
         </dl>
@@ -55,7 +56,7 @@ export function SiteFooter() {
 export function CompactFooter() {
   return (
     <footer className="bt-footer-compact" data-footer="compact">
-      <p><b>Not advice.</b> Memecoins can go to zero. A coin&apos;s rule describes what happens to its supply, never its price. {FOOTER_COPY.never} {FOOTER_COPY.affiliation} {OPERATOR_LINE}. <Link href="/burnticker#disclosure">Full disclosure</Link></p>
+      <p><b>Not advice.</b> Memecoins can go to zero. A coin&apos;s rule describes what happens to its supply, never its price. {FOOTER_COPY.never} {FOOTER_COPY.affiliation} <MailSafe text={OPERATOR_LINE} />. <Link href="/burnticker#disclosure">Full disclosure</Link></p>
       <nav aria-label="Footer">{[...NAV, ...LEARN].map((n) => <FooterLink key={n.href} n={n} />)}</nav>
     </footer>
   );

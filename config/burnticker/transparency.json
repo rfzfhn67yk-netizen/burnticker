@@ -213,7 +213,7 @@
       "date": "2026-10-11",
       "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
       "status": "done 2026-10-11, first reading signed, no burn yet",
-      "text": "$REHEARSAL is a throwaway coin, disclosed as one. It was created on 2026-10-11 under the real mainnet platform settings (94x5qDDJ…EfYy9) to prove that fees go where they should and that signed readings work on mainnet. Its LP is locked forever, and it is not for trading. Its mint is FwXiFscF…pzkp. Its rules hash (sha256) is 2d109965…f99d, which is the $DEFICIT rule with the ticker changed. The operator bought 0.1 SOL of it at creation, and that is the only trade from the operator's own wallets. Unrelated wallets bought into the pool within seconds. It does not prove a mainnet burn, because nothing burns unless the curve fills to 85 SOL. The curve has not filled, so nothing has burned. The evidence is in docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json."
+      "text": "A test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. It was created on 2026-10-11 under the real mainnet platform settings (94x5qDDJ…EfYy9) to prove that fees go where they should and that signed readings work on mainnet. Its LP is locked forever. Its mint is FwXiFscF…pzkp. Its rules hash (sha256) is 2d109965…f99d, which is the $DEFICIT rule with the ticker changed. The operator bought 0.1 SOL of it at creation, and that is the only trade from the operator's own wallets. Unrelated wallets bought into the pool within seconds. It does not prove a mainnet burn, because nothing burns unless the curve fills to 85 SOL. The curve has not filled, so nothing has burned. The evidence is in docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json."
     }
   ],
   "limitations": [
@@ -275,7 +275,7 @@
     {
       "id": "public-repo-not-created",
       "status": "done",
-      "text": "The public repository is live at https://github.com/rfzfhn67yk-netizen/burnticker. A script, scripts/ops/publish-public-repo.sh, copies it out of the private repository using the list of allowed files in config/public-repo.allowlist. Moving it to a GitHub organisation is a step for the owner (docs/burnticker/TODO-OWNER.md)."
+      "text": "The public repository is live at https://github.com/rfzfhn67yk-netizen/burnticker. A script, scripts/ops/publish-public-repo.sh, copies it out of the private repository using the list of allowed files in config/public-repo.allowlist. Moving it to a GitHub organization is a step for the owner (docs/burnticker/TODO-OWNER.md)."
     },
     {
       "id": "verified-build-interim",
@@ -360,7 +360,7 @@
     }
   ],
   "trustPack": {
-    "note": "These pages are for sceptics (2026-10-10). Each one reads only public files and the chain. Placeholders stay visible and are listed in docs/burnticker/TODO-OWNER.md.",
+    "note": "These pages are for skeptics (2026-10-10). Each one reads only public files and the chain. Placeholders stay visible and are listed in docs/burnticker/TODO-OWNER.md.",
     "pages": [
       {
         "path": "/burnticker/check",

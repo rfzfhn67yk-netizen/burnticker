@@ -37,7 +37,8 @@ export function heroHtml(): string {
     `<section class="wrap how-wrap" aria-label="How it works">`,
     `  <ol class="how">`,
     // step 2 carries the first-burn prerequisite (website-12's launchReview.ts prerequisiteLineFor, from the configured raise)
-    ...HOW_IT_WORKS.map((h: { title: string; text: string }, i: number) => `    <li><span class="how-n" aria-hidden="true">${i + 1}</span><div><p class="how-t">${esc(h.title)}</p><p class="how-x">${esc(h.text)}</p>${i === 1 ? `<p class="how-x how-pre" data-prerequisite>${esc(prerequisiteLineFor("launchlab"))}</p>` : ""}</div></li>`),
+    // website-15 item 14: each step is a disclosure (title, chevron, one line); phones start it closed, wide screens keep it open
+    ...HOW_IT_WORKS.map((h: { title: string; text: string; line: string }, i: number) => `    <li><details class="how-d" open><summary><span class="how-n" aria-hidden="true">${i + 1}</span><span class="how-t">${esc(h.title)}</span><span class="how-chev" aria-hidden="true"></span><span class="how-line" aria-hidden="true">${esc(h.line)}</span></summary><div class="how-b"><p class="how-x">${esc(h.text)}</p>${i === 1 ? `<p class="how-x how-pre" data-prerequisite>${esc(prerequisiteLineFor("launchlab"))}</p>` : ""}</div></details></li>`),
     `  </ol>`,
     `  <div class="how-more"><a href="/burnticker/about">Read how it works in full</a><details class="terms"><summary>What these words mean</summary><dl>`,
     ...FIRST_USE.map((t: { term: string; meaning: string }) => `    <div><dt>${esc(t.term)}</dt><dd>${esc(t.meaning)}</dd></div>`),

@@ -346,7 +346,7 @@ describe("L13 — Coin vs Coin says what it creates", () => {
 describe("site audit #10 / #18", () => {
   test("Enter moves to the first result; the search has a visible hint", () => {
     const page = read("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /if \(e\.key === "Enter"\) \{ e\.preventDefault\(\);/); assert.match(page, /data-first-result=\{ci === firstActionable/); assert.match(page, /id="search-hint"/);
+    assert.match(page, /if \(e\.key === "Enter"\) \{ e\.preventDefault\(\);/); assert.match(page, /data-first-result=\{ci === firstActionable/); assert.doesNotMatch(page, /search-hint|Results appear as you type/, "website-15 item 5: Enter jumps silently; no sentence describes the box");
   });
   test("one catalogue read per page load, shared by the page and the header", async () => {
     reloadCatalogue();

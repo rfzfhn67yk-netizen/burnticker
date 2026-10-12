@@ -86,7 +86,7 @@ describe("items 4 and 8: host diagnostics behind a disclosure; missing automatio
     const fetchFail = () => (rejected = Promise.resolve({ ok: false, status: 404 }));
     new Function("window", "document", "fetch", script)(win, doc, fetchFail);
     await rejected; await new Promise((r) => setTimeout(r, 0));
-    assert.match(els.loadnote.textContent, /The automation data could not be read just now \(status\.json: HTTP 404\)\. The current-status summary is separate\. It does not show whether burns are being processed now\./);
+    assert.match(els.loadnote.textContent, /The automation data did not load just now \(status\.json: HTTP 404\)\. The current-status summary is separate\. It does not show whether burns are being processed now\./);
     for (const g of ["alerts", "ends", "snapshot", "keepers"]) assert.match(els[g].textContent, /^Unavailable/, g);
     for (const g of ["feeds", "programs"]) assert.match(tbody(els[g]).textContent, /^Unavailable/, g);
     assert.doesNotMatch(Object.values(els).map((e) => e.textContent).join(" "), /\bnone\b|all ok|all \d+ ok|no live coins|no open alerts|No coins are winding down/);
@@ -107,7 +107,7 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
     assert.equal(OPERATOR_LINE, "Operated by one independent operator (United States) — contact: contact@burnticker.com");
     const { OPERATOR_LINE: fromFees } = await import("@/lib/burnticker/fees"); assert.equal(fromFees, OPERATOR_LINE);
     assert.match(read("src/lib/burnticker/trustpack/operator.ts"), /The wallet is set\. The statement is not signed yet\./);
-    assert.match(read("src/app/burnticker/operator/page.tsx"), /data-operator-line>\{OPERATOR_LINE\}/);
+    assert.match(read("src/app/burnticker/operator/page.tsx"), /data-operator-line><MailSafe text=\{OPERATOR_LINE\} \/>/, "verbatim, with the @ in its own element (website-15 item 3)");
   });
   test("bounty: recorded funding (owner statement), the funding transaction (from the read-back evidence file, never typed in) and the live balance are separate lines", async () => {
     const t = JSON.parse(read("config/burnticker/transparency.json")) as { howBuilt: { bounty: { recordedFunding: { sol: number; date: string; transaction: string | null; evidence: string } } } };

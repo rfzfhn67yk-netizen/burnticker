@@ -45,3 +45,6 @@ export function backtestSentence(b: Backtest): string {
   const voids = t.voids ? `, and ${t.voids} of those ${t.voids === 1 ? "was" : "were"} void` : "";
   return `This source settled ${t.events} ${t.events === 1 ? "time" : "times"} between ${b.from} and ${b.to}${voids}. Under this rule, it would have ${burned}.`;
 }
+
+/** What the launch review shows when the back-test request fails (website-15 item 4); the reason goes behind Details and the server log. */
+export const BACKTEST_UNAVAILABLE = "Backtest unavailable.";

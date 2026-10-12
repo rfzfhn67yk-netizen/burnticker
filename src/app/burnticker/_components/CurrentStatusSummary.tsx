@@ -28,12 +28,21 @@ function SummaryLine({ l }: { l: string }) {
   return <li><a className="underline" href={`#${hit.target}`} onClick={() => openList(hit.target)} data-summary-link={hit.target}>{l}</a></li>;
 }
 
-export function CurrentStatusSummary({ card }: { card: string }) {
+/**
+ * website-15 item 17 (Claude site audit 3 item 14): the full block renders once, on Trust. `compact` (the operator page) prints its first
+ * line and a link to the full record.
+ */
+export function CurrentStatusSummary({ card, compact = false }: { card: string; compact?: boolean }) {
   const { data: s, failure, loading, triedAt, retry } = useJsonRead<CurrentStatus>("/api/burnticker/v1/current-status");
   if (failure) return <ReadFailurePanel what="The current-status summary" failure={failure} triedAt={triedAt} loading={loading} retry={retry} />;
   if (!s) return <EmptyState kind="loading" body="Reading the current status." />;
+  if (compact) return (
+    <section className={card} aria-label="Current status" data-current-status-line>
+      <p className="text-xs text-neutral-200">{s.lines[0] ?? s.host.line} <a className="underline" href="/burnticker/trust#current-status">The full current status is on the Trust page.</a></p>
+    </section>
+  );
   return (
-    <section className={card} aria-label="Current status" data-current-status>
+    <section className={card} aria-label="Current status" id="current-status" data-current-status>
       <h2 className="font-medium">Current status <span className="text-xs font-normal text-neutral-500">Checked on {s.checkedAt}. Chain read at {s.readAt.slice(0, 16).replace("T", " ")} UTC.</span></h2>
       <ul className="mt-1 list-disc pl-5 text-xs text-neutral-200 space-y-0.5">{s.lines.map((l) => <SummaryLine key={l} l={l} />)}</ul>
       <p className="mt-1 text-xs text-neutral-500">{s.host.line}</p>

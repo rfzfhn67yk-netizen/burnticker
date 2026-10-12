@@ -72,6 +72,8 @@ export interface Suggestion {
   matchup: { league: string; eventId: string; title: string; startsAt: string; a: MatchupSide; b: MatchupSide } | null;
   /** When a card cannot offer its rule, why ("market lists no Rays outcome"). */
   note: string | null;
+  /** website-15 item 8: the league's schedule could not be read, so the card says "Next game: not available." (provenance.ts) */
+  scheduleUnavailable?: boolean;
   /** The confirmation source's own page (a link on the card; never inside a sentence). */
   crossReadUrl?: string | null;
   /** L04: the event as read — what, operator, when / timezone, recurrence — shown on the card before it is chosen. */
@@ -244,7 +246,7 @@ async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<S
   const games = d.espn ? await d.espn.season(t.league, t.abbr).catch((e) => { scheduleNote = e instanceof ScheduleUnavailable ? scheduleProblem(t.league, "needs-licence").line : scheduleProblem(t.league, "unreadable").line; return [] as Game[]; }) : [];
   const outcome: "win" | "loss" | "draw" = /\b(lose|loses|losing|loss|losses)\b/i.test(q) ? "loss" : LEAGUES[t.league].draws && /\b(draw|draws|tie|ties)\b/i.test(q) ? "draw" : "win";
   const rec = recurringCard(t, games, outcome, d.nowMs);
-  if (scheduleNote) rec.note = scheduleNote;
+  if (scheduleNote) { rec.scheduleUnavailable = true; console.warn(`[burnticker/search] ${t.league} schedule: ${scheduleNote}`); }
   const champ = await championshipCard(t, d);
   if (CHAMP_WORDS.test(q)) { champ.score = 3.1; }
   const pair = matchupCard(t, games, d.nowMs);
@@ -257,7 +259,8 @@ async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<S
     const g = games.find((x) => !x.completed && Date.parse(x.startsAt) > d.nowMs - 3 * 3_600_000 && denverDay(Date.parse(x.startsAt)) === want);
     for (const c of out) c.alternative = true;
     if (g) return [oneGameCard(t, g, outcome), ...out];
-    out[0].note = `No ${t.nickname} game is listed for ${day} in Denver time, so these cards are related rules.${scheduleNote ? ` ${scheduleNote}` : ""}`;
+    // an unread schedule is not "no game listed": the card says the next game is not available, and the note says only what is known
+    out[0].note = scheduleNote ? "These cards are related rules." : `No ${t.nickname} game is listed for ${day} in Denver time, so these cards are related rules.`;
     return out;
   }
   if (CHAMP_WORDS.test(q)) { rec.alternative = true; if (pair) pair.alternative = true; }

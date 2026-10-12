@@ -4,6 +4,7 @@ import { connectionLaunchVerifier, type LaunchVerifier, type TxReader } from "@/
 import { LAUNCHLAB_PROGRAM_ID, PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { envGameDeps, polymarketGameReaders } from "@/lib/burnticker/sources/gameSettle";
 import { allowHostedMetadata, customImagesEnabled, uploaderFromEnv, type PinUploader } from "@/lib/burnticker/pin";
+import fs from "node:fs";
 import path from "node:path";
 import { openRegistry, readingMatches, REGISTRY_FILE, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { KalshiClient } from "@/lib/burnticker/oracle/kalshi";
@@ -136,6 +137,12 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   return cached;
 }
 
+/** Whether the operator took a creator's image down (config/burnticker/image-takedowns.json `mints`); false when the file is unreadable. */
+export function imageTakenDown(mint: string, root = process.cwd()): boolean {
+  try { return ((JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "image-takedowns.json"), "utf8")) as { mints?: unknown[] }).mints ?? []).includes(mint); }
+  catch { return false; }
+}
+
 /** For tests: a platform over an in-memory registry and injected clients. */
 export function setPlatformForTests(p: Platform | null): void { cached = p; }
 
@@ -196,5 +203,8 @@ export async function pairCounterpart(p: Platform, t: TokenRow): Promise<PairCou
 export async function tokenPageData(p: Platform, t: TokenRow, now = Date.now(), opts: { live?: boolean } = {}): Promise<{ status: TokenStatusJson; receipts: ReceiptJson[]; readings: TokenPageInput["readings"]; rulesText: string; stubs: string[] }> {
   const input = await tokenPageInput(p, t, now, opts);
   const receipts = buildReceiptsJson(input);
-  return { status: buildTokenStatus(input, receipts), receipts, readings: input.readings, rulesText: t.rulesJson, stubs: p.stubs };
+  const status = buildTokenStatus(input, receipts);
+  // website-15 item 13: an image taken down on request (config/burnticker/image-takedowns.json) is no longer shown; the receipt art is
+  if (status.profile && imageTakenDown(t.mint)) status.profile = { ...status.profile, imageUrl: null };
+  return { status, receipts, readings: input.readings, rulesText: t.rulesJson, stubs: p.stubs };
 }

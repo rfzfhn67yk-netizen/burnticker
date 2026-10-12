@@ -18,7 +18,9 @@ import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 const ROOT = path.join(import.meta.dirname, "..");
 const read = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8");
 const PAGE = "src/app/burnticker/launch/page.tsx", TILE = "src/app/burnticker/launch/CoinVsCoinTile.tsx", REVIEW = "src/app/burnticker/launch/ReviewCard.tsx";
-const FILES = [PAGE, TILE, REVIEW];
+// website-15 item 13 (owner decision 2026-10-12): the creator's optional image, description and links are their own component
+const PROFILE = "src/app/burnticker/launch/ProfileFields.tsx";
+const FILES = [PAGE, TILE, REVIEW, PROFILE];
 
 /** Every interactive element: its tag text (attributes up to the closing > at brace depth 0) and its line. */
 function elements(src: string): { tag: string; line: number }[] {
@@ -44,7 +46,7 @@ describe("three decisions to a coin", () => {
     assert.ok(kinds.size <= 3, `decisions: ${[...kinds].join(", ")}`);
     for (const k of kinds) assert.ok(["what", "name", "launch"].includes(k), `an unexpected required decision "${k}"`);
     const optional = new Set(FILES.flatMap((f) => elements(read(f)).map((e) => /data-optional="([a-z]+)"/.exec(e.tag)?.[1]).filter((x): x is string => !!x)));
-    assert.deepEqual([...optional].sort(), ["note", "preset"], "the only optional controls: the preset row and the note link");
+    assert.deepEqual([...optional].sort(), ["note", "preset", "profile"], "the only optional controls: the preset row, the note link and the creator's image, description and links (website-15 item 13)");
   });
 
   test("the review card's happy state shows no field: name and ticker open on 'edit', the note on 'add a note'; Launch is the last decision", () => {
@@ -56,7 +58,9 @@ describe("three decisions to a coin", () => {
     assert.match(src, /useState\(false\), \[noteOpen/, "the name editor starts closed");
     const required = elements(src).filter((e) => decisionOf(e.tag)).map((e) => decisionOf(e.tag));
     assert.deepEqual([...new Set(required)], ["name", "launch"], "the review card asks only for the name (optional edit) and Launch");
-    assert.ok(!src.includes("<details"), "no disclosure of dials on the review card");
+    // website-15 item 12: the reading matter is collapsed below the button, but no dial or field hides in a disclosure
+    for (const d of src.match(/<details[\s\S]*?<\/details>/g) ?? []) assert.doesNotMatch(d, /role="radio"|<input|<textarea|data-decision|data-optional/, "no disclosure of dials on the review card");
+    assert.ok(src.indexOf("data-review-more") > src.indexOf('data-decision="launch"'), "the collapsed blocks sit below the launch button");
   });
 
   test("every path is pick → review → launch: the sentence, Team coin, Matchup, Any result, Elections, Any market and Coin vs Coin", () => {

@@ -111,6 +111,12 @@ export function unitStep(rule: BurnRule, ev: SettledEvent, prev: { value: string
   const delta = now - base;
   const dir: Direction = s.direction;
   const moved = dir === "up" ? delta : dir === "down" ? -delta : (delta < BigInt(0) ? -delta : delta);
+  // THE FADE SIDE (rules.ts `inverse`, inverse.ts): one unit when the value did NOT move the rule's way, none when it did; no carry.
+  if (rule.inverse) {
+    const kind = delta === BigInt(0) ? "flat" : delta > BigInt(0) ? "up" : "down";
+    if (moved <= BigInt(0)) return { units: 1, mapping: s.perUnit, kind, carryOut: "0", baseline: baselineStr, note: `${delta === BigInt(0) ? "no change" : `moved ${fromScaled(delta, scale)}`}: the condition did not happen, so this inverse rule counts 1 unit` };
+    return { units: 0, mapping: null, kind, carryOut: "0", baseline: baselineStr, note: `moved ${fromScaled(delta, scale)}: the condition happened, so this inverse rule burns nothing` };
+  }
   if (moved <= BigInt(0)) {
     const kind = delta === BigInt(0) ? "flat" : dir === "up" ? "down" : "up";
     return { units: 0, mapping: null, kind, carryOut: "0", baseline: baselineStr, note: delta === BigInt(0) ? "no change: no burn; carry reset" : `moved ${fromScaled(delta, scale)} (the wrong way for a "${dir}" rule): no burn; carry reset` };
