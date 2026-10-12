@@ -1,5 +1,13 @@
 # Burnticker: coins that burn on real-world results, with receipts
 
+> **Historical version — not the current status.** This is draft 1 as written on 2026-10-10 and it is not edited as facts change, so
+> its status, governance (sections 9–11), review and bounty statements describe that day. Since then, among others: both programs are
+> deployed on mainnet (2026-10-11); the mainnet Squads vault exists with a time lock of 0 now (48 h planned around 2026-10-23), and the
+> owner holds two of its three keys, so the owner alone can approve an upgrade; the bounty wallet is funded. The live facts are on
+> [the trust page](https://burnticker.com/burnticker/trust) and in
+> [/api/burnticker/v1/current-status](https://burnticker.com/api/burnticker/v1/current-status). Revision log: draft 1, 2026-10-10;
+> this notice added 2026-10-11 (website audit 4); the text below is unchanged.
+
 Technical paper, draft 1, 2026-10-10. Written from the code and documents of the Burnticker repository at commit `76b9caa`. Every
 statement names its source file; where a component does not exist, this paper says "not built" or "not done".
 

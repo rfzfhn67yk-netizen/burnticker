@@ -1,5 +1,5 @@
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
-import { b58decode, base64ToBytes, isSignature, sha256Hex, toHex } from "@/lib/burnticker/trustpack/base58";
+import { b58decode, base64ToBytes, sha256Hex, toHex } from "@/lib/burnticker/trustpack/base58";
 import { isAccount, readAccount } from "@/lib/burnticker/trustpack/idlReader";
 
 /**
@@ -31,9 +31,25 @@ export interface ReceiptFacts {
   signature: string; cluster: string; slot: number | null; blockTime: string | null; memo: string | null;
   ticker: string | null; recordDate: string | null; prevDate: string | null; units: string | null;
   readingAddress: string | null; configAddress: string | null; mint: string | null; rulesSha256: string | null;
-  sourceUrl: string | null; prevSourceUrl: string | null; explorerUrl: string;
+  /** null when the input is not a valid signature: no explorer link is ever built from a malformed value (audit 4 BT-07) */
+  sourceUrl: string | null; prevSourceUrl: string | null; explorerUrl: string | null;
 }
-export interface ReceiptCheckResult { verified: boolean; checks: ReceiptCheck[]; facts: ReceiptFacts }
+/** inputError: the input is missing or malformed — a field error, NOT a verdict on any receipt (no checks run, no explorer link). */
+export interface ReceiptCheckResult { verified: boolean; checks: ReceiptCheck[]; facts: ReceiptFacts; inputError?: { state: "missing" | "malformed"; reason: string } | null }
+
+/**
+ * What the visitor typed, before any check (audit 4 BT-07): missing (empty), malformed (not base58, or not 64 bytes once decoded) or a
+ * well-formed signature. Missing transaction (valid but not on chain), dependency unavailable and evidence mismatch are decided later, by
+ * the checks themselves, and never confused with a typing error.
+ */
+export function classifySignatureInput(raw: string): { state: "missing" | "malformed" | "valid"; reason: string | null } {
+  const s = raw.trim();
+  if (!s) return { state: "missing", reason: "paste a transaction signature" };
+  if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(s)) return { state: "malformed", reason: "a signature uses base58 characters only (no 0, O, I, l, spaces or punctuation)" };
+  const bytes = b58decode(s);
+  if (!bytes || bytes.length !== 64) return { state: "malformed", reason: `a signature is 64 bytes (about 88 base58 characters); this decodes to ${bytes ? bytes.length : 0} bytes` };
+  return { state: "valid", reason: null };
+}
 
 export interface Rpc { call<T>(method: string, params: unknown[]): Promise<T> }
 export type SourceFetch = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -176,7 +192,8 @@ export async function checkReceiptTx(o: CheckOptions): Promise<ReceiptCheckResul
     const core = (["tx", "program", "memo", "reading", "units"] as CheckId[]).every((id) => checks.find((c) => c.id === id)?.ok === true);
     return { verified: !failed && core, checks, facts };
   };
-  if (!isSignature(o.signature)) { add("tx", false, "that is not a transaction signature (88 base58 characters, 64 bytes)"); return done(); }
+  const input = classifySignatureInput(o.signature);
+  if (input.state !== "valid") return { verified: false, checks: [], facts: { ...facts, explorerUrl: null }, inputError: { state: input.state, reason: input.reason! } };
 
   // tx + program
   let tx: TxJson | null;

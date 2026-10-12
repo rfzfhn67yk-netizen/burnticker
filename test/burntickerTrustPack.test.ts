@@ -234,7 +234,9 @@ describe("transparency.json: the cold-read corrections and the trust-pack blocks
     assert.match(lim["devnet-rehearsal"].status, /^done 2026-10-10/); assert.match(lim["devnet-rehearsal"].text, /docs\/burnkeeper\/devnet-run\.md/);
     assert.equal(lim["public-repo-not-created"].status, "done"); assert.equal(t.publicRepo.todo, undefined);
     assert.equal(lim["contact-todo"].status, "done"); assert.equal(t.howBuilt.bounty.contact, "security@burnticker.com");
-    assert.equal(lim["program-not-deployed"].status, "devnet only"); assert.match(lim["program-not-deployed"].text, /AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM/);
+    // audit 4 BT-02: both programs deployed on mainnet 2026-10-11; deployed is not launched (the limitation keeps its id, its status says so)
+    assert.equal(lim["program-not-deployed"].status, "deployed on devnet and mainnet"); assert.match(lim["program-not-deployed"].text, /AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM/);
+    assert.match(lim["program-not-deployed"].text, /Deployed is not launched/); assert.doesNotMatch(JSON.stringify(t.limitations), /Neither is deployed on mainnet|mainnet wallet does not exist|vault cannot be created/);
     assert.equal(lim["paircurve-findings-open"].status, "not done");
     for (const id of ["verified-build-interim", "bounty-wallet", "entity", "third-signer", "signed-operator-message"]) assert.ok(lim[id], id);
     assert.equal(t.howBuilt.bounty.wallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u"); assert.match(t.howBuilt.bounty.walletTodo!, /developer fee/); assert.equal(t.howBuilt.bounty.status, "funded 2026-10-11");

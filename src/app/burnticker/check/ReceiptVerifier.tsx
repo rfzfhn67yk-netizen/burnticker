@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { checkReceiptTx, jsonRpc, PUBLIC_RPC, type ReceiptCheckResult } from "@/lib/burnticker/trustpack/receiptCheck";
+import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type ReceiptCheckResult } from "@/lib/burnticker/trustpack/receiptCheck";
 import { CHECK_COPY } from "@/lib/burnticker/trustpack/copy";
 import { verdictOf, type CheckStatus } from "@/lib/burnticker/verificationStatus";
 import { EmptyState } from "../_components/EmptyState";
+import { PROGRAM_IDS } from "@/lib/burnticker/networks";
 
 /**
  * THE RECEIPT VERIFIER, IN THE VISITOR'S BROWSER (trust pack, 2026-10-10). The sample list and the rules texts come from our API
@@ -27,22 +28,27 @@ export default function ReceiptVerifier({ card }: { card: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
   const [wantDemo, setWantDemo] = useState(false);
+  // audit 4 BT-07: a missing or malformed signature is a field error — no check runs, no verdict, no explorer link
+  const [sigError, setSigError] = useState<string | null>(null);
   // website brief §5: /burnticker/check?demo=1 pre-selects the featured devnet receipt (current-status.json `demo`) and runs the check
   useEffect(() => { fetch("/api/burnticker/v1/check/receipts").then((r) => r.json()).then((j: Samples) => { setSamples(j); const want = new URLSearchParams(window.location.search).get("demo") === "1"; const f = j.featured && j.receipts.some((r) => r.signature === j.featured) ? j.featured : j.receipts[0]?.signature; if (f) setSig(f); if (want && f) setDemo(true); }).catch((e) => setErr(String(e))); }, []);
   useEffect(() => { setWantDemo(new URLSearchParams(window.location.search).get("demo") === "1"); }, []);
   useEffect(() => { if (demo && sig && samples && !busy && !res) { setDemo(false); void run(); } }, [demo, sig, samples]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function run() {
+    const input = classifySignatureInput(sig);
+    if (input.state !== "valid") { setRes(null); setErr(null); setSigError(input.reason); return; }
+    setSigError(null);
     setBusy(true); setRes(null); setErr(null);
     try {
       const s = samples?.receipts.find((r) => r.signature === sig.trim());
       const out = await checkReceiptTx({
-        signature: sig.trim(), cluster: "devnet", programId: samples?.programId ?? "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        signature: sig.trim(), cluster: "devnet", programId: samples?.programId ?? PROGRAM_IDS.devnet.burn_receipts,
         rpc: jsonRpc(rpc.trim(), window.fetch.bind(window)),
         rulesText: s ? samples?.rules[s.rulesPath] ?? null : null,
         fetchSource: (u) => window.fetch(u, { headers: { accept: "application/json" } }),
       });
-      setRes(out);
+      if (out.inputError) setSigError(out.inputError.reason); else setRes(out);
     } catch (e) { setErr((e as Error).message); }
     setBusy(false);
   }
@@ -53,11 +59,11 @@ export default function ReceiptVerifier({ card }: { card: string }) {
     <section className={`${card} scroll-mt-24`} id="verify">
       <h2 className="font-medium">{CHECK_COPY.verifierTitle}</h2>
       <p className="text-xs text-neutral-300">{wantDemo ? CHECK_COPY.verifierDemoIntro : CHECK_COPY.verifierIntro}</p>
-      {wantDemo && !res && !err && <div className="mt-3" data-verdict="checking"><EmptyState compact kind="loading" body="Checking the featured devnet receipt in this browser." /></div>}
+      {wantDemo && !res && !err && !sigError && (busy || !samples) && <div className="mt-3" data-verdict="checking"><EmptyState compact kind="loading" body="Checking the featured devnet receipt in this browser." /></div>}
       {err && <p className="mt-2 text-xs text-amber-300">Could not check: {err}. This is not evidence that the receipt is invalid; try again or use another RPC.</p>}
       {res && (() => { const v = verdictOf(res.checks); return (
         <div className="mt-3 text-xs" data-verdict={v.verdict}>
-          <p className={`text-sm ${VERDICT_TONE[v.verdict]}`}>{v.line} <a className="text-xs underline" href={res.facts.explorerUrl} target="_blank" rel="noreferrer">transaction</a></p>
+          <p className={`text-sm ${VERDICT_TONE[v.verdict]}`}>{v.line} {res.facts.explorerUrl && <a className="text-xs underline" href={res.facts.explorerUrl} target="_blank" rel="noreferrer">transaction</a>}</p>
           <ul className="mt-2 grid gap-2 sm:grid-cols-3">{v.layers.map((l) => { const st = l.checks.map((c) => c.status); const sum: CheckStatus = st.includes("failed") ? "failed" : st.length && st.every((x) => x === "passed") ? "passed" : st.includes("unavailable") ? "unavailable" : "not checked"; const partly = sum === "not checked" && st.includes("passed"); return (
             <li key={l.layer} className="rounded border border-neutral-800 p-2" data-layer={l.layer}><div className={`font-medium ${TONE[sum]}`}>{MARK[sum]} {l.title} <span className="font-normal text-neutral-500">{partly ? "partly checked" : sum}</span></div><p className="mt-1 text-neutral-400">{l.what}</p><p className="mt-1 text-neutral-500">{l.checks.map((c) => `${c.label}: ${c.status}`).join(" · ") || "no check"}</p></li>); })}</ul>
           <details className="mt-2"><summary className="cursor-pointer text-neutral-300">Every check, the memo and the accounts</summary>
@@ -78,12 +84,13 @@ export default function ReceiptVerifier({ card }: { card: string }) {
             </select>
           </label>
           <label className="grid gap-1"><span className="text-neutral-400">Transaction signature</span>
-            <input className="rounded border border-neutral-700 bg-neutral-950 p-2 font-mono break-all" value={sig} onChange={(e) => setSig(e.target.value)} spellCheck={false} placeholder="88 base58 characters" />
+            <input className={`rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby={sigError ? "sig-error" : undefined} />
+            {sigError && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">Not checked: {sigError}. This is a typing problem, not evidence about any receipt.</span>}
           </label>
           <label className="grid gap-1"><span className="text-neutral-400">RPC endpoint (any devnet RPC you trust)</span>
             <input className="rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
           </label>
-          <div><button type="button" disabled={busy || !sig.trim()} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
+          <div><button type="button" disabled={busy} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
           <p className="text-neutral-500">{CHECK_COPY.verifierPrivacy} {CHECK_COPY.verifierScope}</p>
         </div>
       </details>

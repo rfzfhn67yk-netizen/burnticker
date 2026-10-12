@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 
 const DESCRIPTION = "Every league Burnticker covers — baseball, basketball, football, hockey, soccer — with one page per season: the team coins, their receipts and the games they settled. Leagues are never ranked against each other.";
 export const metadata: Metadata = {
-  title: "Leagues", description: DESCRIPTION, alternates: { canonical: "/burnticker/leagues" },
-  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker leagues", description: DESCRIPTION, url: "/burnticker/leagues", images: [{ url: "/burnticker/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
+  title: "Seasons by league", description: DESCRIPTION, alternates: { canonical: "/burnticker/leagues" },
+  openGraph: { type: "website", siteName: "Burnticker", title: "Burnticker seasons by league", description: DESCRIPTION, url: "/burnticker/leagues", images: [{ url: "/burnticker/brand/og.png", width: 1200, height: 630, alt: "Burnticker — a thermal receipt with the burned amount scorched out of it" }] },
 };
 
 /**
@@ -23,8 +23,8 @@ export default function LeaguesPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Leagues</h1>
-        <p className="text-neutral-400 max-w-3xl">{ix.totals.leagues} leagues, one page per season. Each page ranks that league&apos;s team coins by receipts, then by the share of supply burned. Leagues are listed by sport, alphabetically — never ranked against each other. Every league&apos;s scoreboard on one page, with rivalries and the Burn Derby: <Link className="underline" href="/burnticker/rivalries">all scoreboards</Link>.</p>
+        <h1 className="text-2xl font-semibold">Seasons <span className="text-neutral-500 text-base font-normal">by league</span></h1>
+        <p className="text-neutral-400 max-w-3xl">{ix.totals.leagues} leagues, one page per season. Each page ranks that league&apos;s team coins by receipts, then by the share of supply burned. Leagues are listed by sport, alphabetically — never ranked against each other. Every league&apos;s scoreboard on one page, with rivalries and the Burn Derby: <Link className="underline" href="/burnticker/rivalries">Scoreboards</Link>.</p>
       </header>
       {!err && ix.sports.every((sp) => sp.leagues.every((l) => l.coinsThisSeason === 0)) && (
         <EmptyState kind="not-launched" body="No team coin is launched on this host yet, so every league page is empty for now. Each page fills from the coins' own receipts, never from a list of games.">

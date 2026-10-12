@@ -5,11 +5,14 @@ import Link from "next/link";
 
 /**
  * VERIFY A MINT (growth batch 2026-10-10; src/lib/burnticker/verifyMint.ts): paste any Solana mint and get one plain answer — "Burnticker
- * coin: yes" with the rule sha, creator, launch date, receipts and the coin page; or "NOT registered with the burn_receipts program".
- * Reads GET /api/burnticker/v1/verify-mint/<mint> (the program's TokenConfig and the registry, compared; cached 60 s). `?mint=` prefills.
+ * coin: yes" with the rule sha, creator, launch date, receipts and the coin page; "NOT registered with the burn_receipts program" only when
+ * every network answered; "Unable to verify" when a chain read failed (audit 4 BT-01). Registration (the program, on devnet and mainnet)
+ * and catalogue membership (Burnticker's registry) are shown as two separate facts.
+ * Reads GET /api/burnticker/v1/verify-mint/<mint> (cached 60 s). `?mint=` prefills.
  */
 interface Check { id: string; ok: boolean | null; detail: string }
-interface V { verdict: string; headline: string; summary: string; mint: string; cluster: string; programId: string; program: { read: boolean; config: string | null; rulesSha256: string | null }; coin: { ticker: string; name: string; status: string; creator: string; launchedAt: string | null; rulesSha256: string; receipts: number; pageUrl: string; rulesMatch: boolean | null } | null; checks: Check[]; links: { verifier: string; page: string | null } }
+interface NetRead { network: string; programId: string; state: "registered" | "not-registered" | "unavailable"; config: string | null; rulesSha256: string | null; reason: string | null }
+interface V { verdict: string; headline: string; summary: string; mint: string; cluster: string; programId: string; registration?: { state: string; networks: NetRead[] }; catalogue?: { state: string; network: string }; disclosed?: { label: string } | null; program: { read: boolean; config: string | null; rulesSha256: string | null }; coin: { ticker: string; name: string; status: string; creator: string; launchedAt: string | null; rulesSha256: string; receipts: number; pageUrl: string; rulesMatch: boolean | null } | null; checks: Check[]; links: { verifier: string; page: string | null } }
 
 export default function VerifyMintPage() {
   const [mint, setMint] = useState("");
@@ -25,6 +28,8 @@ export default function VerifyMintPage() {
   };
   useEffect(() => { const m = new URLSearchParams(window.location.search).get("mint"); if (m) { setMint(m); void run(m); } }, []);
   const good = v?.verdict === "burnticker";
+  const unknown = v?.verdict === "unavailable";
+  const REG: Record<NetRead["state"], string> = { registered: "registered", "not-registered": "not registered", unavailable: "unable to verify" };
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-5 text-sm">
       <header className="space-y-1">
@@ -38,9 +43,14 @@ export default function VerifyMintPage() {
       </form>
       {err && <p className="text-red-400 text-xs">{err}</p>}
       {v && (
-        <section className={`rounded-lg border p-4 space-y-2 ${good ? "border-emerald-700" : "border-neutral-700"} bg-neutral-900`} aria-live="polite">
-          <h2 className={`text-lg font-semibold ${good ? "text-emerald-400" : ""}`}>{v.headline}</h2>
+        <section className={`rounded-lg border p-4 space-y-2 ${good ? "border-emerald-700" : unknown ? "border-amber-700" : "border-neutral-700"} bg-neutral-900`} aria-live="polite" data-verdict={v.verdict}>
+          <h2 className={`text-lg font-semibold ${good ? "text-emerald-400" : unknown ? "text-amber-300" : ""}`}>{v.headline}</h2>
           <p>{v.summary}</p>
+          {v.registration && v.catalogue && <dl className="grid gap-2 text-xs sm:grid-cols-2" data-separate-facts>
+            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">On-chain registration (burn_receipts program)</dt>
+              {v.registration.networks.map((n) => <dd key={n.network} className="mt-1"><span className={n.state === "registered" ? "text-emerald-400" : n.state === "unavailable" ? "text-amber-300" : "text-neutral-300"}>{n.network}: {REG[n.state]}</span> <span className="block break-all font-mono text-neutral-500">program {n.programId}</span></dd>)}</div>
+            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">Burnticker catalogue ({v.catalogue.network}, the network this host reads)</dt><dd className="mt-1">{v.catalogue.state === "absent" ? "not listed" : v.catalogue.state}</dd></div>
+          </dl>}
           {v.coin && <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
             <div><dt className="text-neutral-500">coin</dt><dd className="font-mono">${v.coin.ticker} · {v.coin.status}</dd></div>
             <div><dt className="text-neutral-500">launched</dt><dd className="font-mono">{v.coin.launchedAt ? v.coin.launchedAt.slice(0, 10) : "—"}</dd></div>
@@ -49,7 +59,7 @@ export default function VerifyMintPage() {
             <div className="col-span-2 sm:col-span-3"><dt className="text-neutral-500">rules sha256</dt><dd className="font-mono break-all">{v.coin.rulesSha256}</dd></div>
           </dl>}
           <ul className="space-y-1 text-xs">{v.checks.map((c) => <li key={c.id}><span className={c.ok === true ? "text-emerald-400" : c.ok === false ? "text-red-400" : "text-neutral-500"}>{c.ok === true ? "✓" : c.ok === false ? "✗" : "–"}</span> {c.detail}</li>)}</ul>
-          <p className="text-xs text-neutral-500 break-all">mint {v.mint} · {v.cluster} · program {v.programId}</p>
+          <p className="text-xs text-neutral-500 break-all">mint {v.mint} · catalogue read on {v.cluster}</p>
           <p className="text-xs">{v.links.page && <><Link className="underline" href={v.links.page}>coin page →</Link> · </>}<Link className="underline" href={v.links.verifier}>verify a receipt transaction →</Link></p>
         </section>
       )}

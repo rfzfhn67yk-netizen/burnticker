@@ -15,7 +15,8 @@
 # Layout (site/deficit/README.md "deploy"): the brand page's index.html is the root; the keeper's own index.html is kept beside it as
 # status.html ($DEFICIT) / tokens.html (Burnticker's platform index with the audit badge) because its links (t/<ticker>/, trust/) are
 # relative to the root. Everything else of the keepers' (status.json, burns.json, receipts.json, rules.json, audit.json, ops.json,
-# index.json, t/…) lands as is. Nothing is ever deleted from /var/www by this script; sample/ and README.md never ship.
+# index.json, t/…) lands as is. Nothing is ever deleted from /var/www by this script; sample/ and README.md never ship. The brand's
+# pre-launch status.json / burns.json / rules.json ship only while the keeper has not published its own (audit 4).
 # Prints only changed items (rsync -i), so the timer's log stays quiet; the exit code is rsync's.
 set -eu
 cd "$(dirname "$0")/../.."
@@ -48,7 +49,13 @@ add() { if [ -n "$1" ]; then OUT="$OUT$1
 site() {   # site <label> <brand dir> <publish dir> <www> <keeper index name>
   label="$1"; brand="$2"; pub="$3"; www="$4"; keeper_index="$5"
   if [ "$PUBLISH_ONLY" = 0 ] && [ -d "$brand" ]; then
-    add "$($RS --exclude='sample/' --exclude='README.md' --exclude='*.mjs' "$brand/" "$www/" | sed "s|^|  $label brand: |")"
+    # Audit 4 BT-03: the brand dir carries pre-launch evidence files (site/deficit/{status,burns,rules}.json: an explicit "not launched"
+    # state and the exact rule bytes) so the advertised links never 404. Once the keeper publishes its own copy of one, the keeper's wins:
+    # the brand copy is excluded and never overwrites live data.
+    KEEP=""
+    for f in status.json burns.json rules.json; do [ -f "$pub/$f" ] && KEEP="$KEEP --exclude=/$f"; done
+    # shellcheck disable=SC2086
+    add "$($RS --exclude='sample/' --exclude='README.md' --exclude='*.mjs' $KEEP "$brand/" "$www/" | sed "s|^|  $label brand: |")"
   fi
   if [ -d "$pub" ]; then
     add "$($RS --exclude='index.html' "$pub/" "$www/" | sed "s|^|  $label publish: |")"

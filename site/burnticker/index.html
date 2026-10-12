@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Burnticker — coins that burn on real-world results, with receipts</title>
-<meta name="description" content="Coins that burn on real-world results — with receipts. Launch one. Follow the season. Burnticker is a memecoin launchpad with locked rules: a settled result from a primary source, a burn run by a program, and a receipt anyone can recompute. Nothing is ever won; things are only burned.">
+<meta name="description" content="Coins that burn on real-world results — with receipts. Pre-launch: creator launches are closed; inspect a real devnet burn and check its receipt in your browser. Burnticker is a memecoin launchpad with locked rules: a settled result from a primary source, a burn run by a program, and a receipt anyone can recompute. Nothing is ever won; things are only burned.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0a0c">
 <meta property="og:title" content="Burnticker — coins that burn on real-world results, with receipts">
-<meta property="og:description" content="Launch one. Follow the season. Settled on primary sources, burned by a program, and every burn a receipt anyone can recompute.">
+<meta property="og:description" content="Pre-launch: creator launches are closed. Inspect a real devnet burn: settled on a primary source, burned by a program, and a receipt anyone can recompute in the browser.">
 <meta property="og:image" content="https://burnticker.com/brand/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -59,6 +59,18 @@ section.lead{border-top:0}
 .btn.amber{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
 .nav .btn{padding:7px 12px;font-size:.84rem;border-radius:999px}
 @media (max-width:639px){.nav a.sec{display:none}}
+/* audit 4 BT-09/BT-20: a skip link, and on phones one Menu with every destination (Escape closes it) */
+.skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--amber);color:var(--amber-ink);padding:8px 12px;border-radius:6px;font-weight:700}
+.skip:focus{left:12px}
+.menu{display:none;position:relative}
+@media (max-width:639px){.menu{display:block}}
+@media (max-width:419px){.nav>a:not(.btn){display:none}}
+.menu>summary{list-style:none;cursor:pointer;font-size:.84rem;color:var(--ink);padding:7px 12px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
+.menu>summary::-webkit-details-marker{display:none}
+.menu[open]>summary{border-color:var(--amber)}
+.menu .mlinks{position:absolute;right:0;top:calc(100% + 6px);z-index:50;display:grid;gap:2px;min-width:190px;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.menu .mlinks a{border:0;border-radius:8px;padding:9px 10px;font-size:.92rem}
+a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 
 /* hero: one sentence, the pre-launch status, the real receipt, the guardrails behind a disclosure, then the doors */
 .hero{padding:26px 16px 8px}
@@ -121,7 +133,11 @@ abbr.term{text-decoration:underline dotted;text-underline-offset:3px;cursor:help
 .slip .motto{margin:10px 0 0;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:#4a443c;text-align:center}
 .slip.hit{padding-bottom:44px}
 .slip .stamp{position:absolute;right:10px;bottom:16px;transform:rotate(-8deg);color:#5b3fa3;border:2px solid #5b3fa3;border-radius:3px;padding:0 5px;font:700 .82rem/1.2 var(--mono);letter-spacing:.12em;opacity:.82;mix-blend-mode:multiply;pointer-events:none}
-.mocknote{margin:8px 0 0;font:.7rem/1.4 var(--mono);letter-spacing:.06em;color:var(--muted);text-align:center}
+.mocknote{margin:8px 0 0;font:.8rem/1.4 var(--mono);letter-spacing:.04em;color:var(--dim);text-align:center}
+/* audit 4 BT-16: one persistent evidence-state label per module, readable on its own in a screenshot */
+.st{display:inline-block;margin:0 0 8px;font:700 .75rem/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;border-radius:4px;padding:4px 8px;border:1.5px solid}
+.st.ver{color:var(--violet);border-color:var(--violet)}.st.ill{color:var(--ember);border-color:var(--ember);border-style:dashed}.st.rep{color:var(--dim);border-color:var(--line)}.st.pro{color:var(--amber);border-color:var(--amber)}
+.three{margin:4px 0 14px;padding-left:1.3em;max-width:62ch;color:var(--ink)}.three li{margin:2px 0}
 
 /* the receipt is the product */
 .product{display:grid;grid-template-columns:1fr;gap:26px;align-items:start}
@@ -136,7 +152,7 @@ abbr.term{text-decoration:underline dotted;text-underline-offset:3px;cursor:help
 
 /* seasons: the scoreboard + rivalries */
 .exhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}
-.extag{font:700 .68rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ember);border:1.5px dashed var(--ember);border-radius:4px;padding:5px 8px}
+.extag{font:700 .75rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ember);border:1.5px dashed var(--ember);border-radius:4px;padding:5px 8px}
 .exhead p{margin:0;color:var(--muted);font-size:.84rem}
 .boards{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 12px}
 @media (min-width:700px){.boards{grid-template-columns:repeat(2,1fr)}}
@@ -153,6 +169,9 @@ abbr.term{text-decoration:underline dotted;text-underline-offset:3px;cursor:help
 .board .mark{display:inline-block;margin:0 0 0 8px;font:700 .6rem/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--violet);border:1.5px solid var(--violet);border-radius:3px;padding:2px 5px;vertical-align:1px;white-space:nowrap}
 .board .none{margin:6px 0 2px;font:.85rem/1.4 var(--mono);color:var(--dim)}
 @media (max-width:519px){.board .mark{display:block;width:max-content;margin:4px 0 0}.board table{font-size:12px}}
+/* audit 4 BT-08: each table scrolls inside its own card; the page never scrolls sideways (320 px measured) */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+@media (max-width:379px){.board{padding:12px 10px}.board table{font-size:11px}.board th,.board td{padding:5px 3px}.board th{letter-spacing:.04em}.board .mark{white-space:normal;width:auto;max-width:100%}}
 .allcount{margin:0 0 18px;font:600 .9rem/1.4 var(--mono);color:var(--dim)}
 .seasons{display:grid;grid-template-columns:1fr;gap:16px}
 @media (min-width:900px){.seasons{grid-template-columns:repeat(2,1fr)}}
@@ -246,6 +265,7 @@ footer .links a{color:var(--dim)}
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <header class="wrap">
   <div class="top">
     <a class="brand" href="./" aria-label="Burnticker">
@@ -256,22 +276,40 @@ footer .links a{color:var(--dim)}
       <a href="/burnticker">Coins</a>
       <a href="/burnticker/leagues">Seasons</a>
       <a class="sec" href="/burnticker/trust">Trust</a>
-      <a href="whitepaper.html">Whitepaper</a>
+      <a class="sec" href="whitepaper.html">Whitepaper</a>
       <a class="sec" href="https://deficit.burnticker.com/">$DEFICIT</a>
       <a class="sec" href="https://x.com/BurnTicker" rel="me noopener" target="_blank">@BurnTicker</a>
       <a class="btn amber" href="/burnticker/launch" data-launch-cta>Launch</a>
+      <details class="menu" id="menu"><summary aria-label="Menu: every page">Menu</summary>
+        <div class="mlinks">
+          <a href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>
+          <a href="/burnticker">Coins</a>
+          <a href="/burnticker/leagues">Seasons</a>
+          <a href="/burnticker/trust">Trust</a>
+          <a href="https://deficit.burnticker.com/">$DEFICIT</a>
+          <a href="whitepaper.html">Whitepaper</a>
+          <a href="/burnticker/docs">Docs/API</a>
+          <a href="https://x.com/BurnTicker" rel="me noopener" target="_blank">@BurnTicker</a>
+        </div>
+      </details>
     </nav>
   </div>
 </header>
 
-<main>
+<main id="main" tabindex="-1">
   <section class="hero wrap lead">
     <h1>Coins that burn on real-world results — <em>with receipts.</em></h1>
     <p class="sub"><span data-launch-cta>Launch one. </span>Follow the season.</p>
     <p class="state" data-launches-closed>Creator launches are closed.<span data-cluster-line></span></p>
+    <ol class="three" aria-label="How it works in three steps">
+      <li>A public result settles: a game, the weather, Treasury's daily debt figure.</li>
+      <li>The coin's own trading fees buy it back on its own pool.</li>
+      <li>A program burns everything bought; the transaction is the receipt you can check.</li>
+    </ol>
     <p class="def">A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program <abbr class="term" title="A burn destroys tokens held by the program and lowers the coin&#x27;s total supply; it never touches the tokens in your wallet.">burns</abbr> what they bought. The transaction is the <abbr class="term" title="A receipt records the source result, the rule&#x27;s calculation and the transaction; checking one can be complete, partial or unavailable.">receipt</abbr>.</p>
     <div class="verified" id="verified-burn" data-demo-receipt>
-      <p class="vk">a real verified burn · devnet rehearsal · 2026-10-06</p>
+      <span class="st ver">Verified devnet</span>
+      <p class="vk">a real verified burn · devnet rehearsal · 2026-10-06 · this coin ran 1% of the burn pool per $1B unit (the proposed mainnet rule is 2%)</p>
       <p class="vsum" data-demo-summary>Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06: 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool; one crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT and every token bought was burned in the same transaction; the rest carried to the next crank.</p>
       <p class="vg"><a class="btn amber" href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> <span class="muted small">This site currently shows devnet rehearsal evidence. The check runs in your browser against the devnet chain and Treasury's own data. No wallet is needed to read results or receipts. Devnet is a rehearsal network: nothing there has money value.</span></p>
     </div>
@@ -310,6 +348,7 @@ footer .links a{color:var(--dim)}
       <!-- door2:end -->
     </div>
   </section>
+  <div class="wrap"><span class="st ill">Illustrative example</span></div>
   <div class="tape" aria-label="A ticker of example burn receipts (pauses on hover or focus)" role="marquee" tabindex="0">
     <div class="reel" id="reel">
       <span><i>SPORTS.MLB</i>NYY 5 @ TB 2 final, MLB StatsAPI agrees → <b>$RAYS 1 unit</b> → burned <u>✓ receipt</u></span>
@@ -329,6 +368,7 @@ footer .links a{color:var(--dim)}
   <section class="wrap" id="receipt">
     <h2>The receipt is the product</h2>
     <div class="product">
+      <div><span class="st ill">Illustrative example</span>
       <div class="slipwrap"><div class="slip hit">
         <div class="sh">$RAYS</div><div class="ss">BURN RECEIPT #3 · 2026-10-09</div>
         <div class="dash"></div>
@@ -346,11 +386,11 @@ footer .links a{color:var(--dim)}
         <div class="row"><span>RECOMPUTED</span><b>✓ CHAIN = SOURCE</b></div>
         <p class="motto">nothing won · only burned</p>
         <span class="stamp" aria-hidden="true">BURNED ON-CHAIN</span>
-      </div><p class="mocknote">example receipt · illustrative numbers, not a live coin</p></div>
+      </div><p class="mocknote">example receipt · illustrative numbers, not a live coin</p></div></div>
       <div>
         <p class="lede">A Burnticker coin is a rule and its receipts. The rule says which settled result burns the coin and how much of its fee pool each burn spends. The receipt shows that it happened, in numbers anyone can check.</p>
         <ol>
-          <li><b>The result settles</b> on a primary source, and a second publisher on another domain reports the same fact.</li>
+          <li><b>The result settles</b> on a primary source, and a second publisher on another domain reports the same fact. Scope: for $DEFICIT the second publisher (FRED) is a quarterly series, so it confirms quarter ends, not each daily reading.</li>
           <li><b>The reading is signed</b> on chain before any burn uses it, by its <abbr class="term" title="A key that signs a reported source value; the signature proves who signed it, not that the value is true.">reading signer</abbr> (one required today: the operator's key). A signature shows who signed, not that the value is true; step 1 is the check of the value.</li>
           <li><b>The program burns.</b> <code>burn_receipts</code> spends the share the rule names from the coin's own <abbr class="term" title="One coin&#x27;s burn budget in SOL; nobody can withdraw it, and in a registered pair the other coin&#x27;s share joins it when this coin&#x27;s rule fires.">burn budget</abbr> (its fee pool), buys the coin on its own pool and burns every token it receives, in one instruction.</li>
           <li><b>The memo is the receipt:</b> the transaction's execution record, submitted by <abbr class="term" title="The keeper: software that submits the program instructions that are due; the program can still refuse or defer each one.">automation</abbr> and checked by the program; source, reading, units, pool, spent, got, burned, the swap and the rule hash. Each coin's page recomputes it from the source and shows <span class="okmark">✓</span> only when chain and feed agree.</li>
@@ -386,7 +426,9 @@ footer .links a{color:var(--dim)}
       <img src="deficit-avatar.png" alt="$DEFICIT avatar: a debt-clock board reading $1B, burns when America borrows" width="200" height="200">
       <div>
         <h3>$DEFICIT — burns when the U.S. national debt rises</h3>
-        <p>Every full $1,000,000,000 added to Treasury's Debt to the Penny since the previous business day is one unit; each unit spends 2% of the burn pool buying $DEFICIT at market, and everything bought is burned.</p>
+        <span class="st pro">Proposed mainnet rule · not launched</span>
+        <p>Every full $1,000,000,000 added to Treasury's Debt to the Penny since the previous business day is one unit; each unit spends 2% of the burn pool buying $DEFICIT at market, and everything bought is burned. (The devnet rehearsal coin ran the same rule text at 1% per unit.)</p>
+        <span class="st rep">Historical replay</span>
         <div class="stats">
           <div><b>235</b><span>burn days</span></div>
           <div><b>6,490</b><span>units</span></div>
@@ -401,29 +443,29 @@ footer .links a{color:var(--dim)}
   <section class="wrap" id="seasons">
     <h2>Seasons · a scoreboard of burns</h2>
     <p class="lede">One scoreboard per league and season, each ranking only that league's team coins by receipts and share of supply burned. Each final counts once a second scoreboard agrees (a second source, not a second signer). There is no ranking across leagues, and a champion is named only when a league's season ends.</p>
-    <div class="exhead"><span class="extag">example data</span><p>illustrative coins and counts, not live · receipts are season to date</p></div>
+    <div class="exhead"><span class="extag">Illustrative example</span><p>illustrative coins and counts, not live · receipts are season to date</p></div>
     <div class="boards">
       <div class="board">
         <p class="bh"><b>NHL 2026–27</b> <span>Oct 3 – 9 · 4 team coins</span></p>
-        <table>
+        <div class="tw"><table>
           <thead><tr><th>#</th><th>coin</th><th class="n">receipts</th><th class="n">burned</th></tr></thead>
           <tbody>
             <tr><td>1</td><td class="t">$OILERS <span class="mark">most receipts so far</span></td><td class="n">2</td><td class="n">0.98%</td></tr>
             <tr><td>2</td><td class="t">$BRUINS</td><td class="n">1</td><td class="n">0.51%</td></tr>
             <tr><td>3</td><td class="t">$FLAMES</td><td class="n">1</td><td class="n">0.49%</td></tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
       <div class="board">
         <p class="bh"><b>MLB 2026 postseason</b> <span>Oct 3 – 9 · 4 team coins</span></p>
-        <table>
+        <div class="tw"><table>
           <thead><tr><th>#</th><th>coin</th><th class="n">receipts</th><th class="n">burned</th></tr></thead>
           <tbody>
             <tr><td>1</td><td class="t">$RAYS <span class="mark">most receipts so far</span></td><td class="n">3</td><td class="n">1.47%</td></tr>
             <tr><td>2</td><td class="t">$DODGERS</td><td class="n">2</td><td class="n">0.99%</td></tr>
             <tr><td>3</td><td class="t">$CUBS</td><td class="n">1</td><td class="n">0.50%</td></tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
       <div class="board">
         <p class="bh"><b>NBA 2026–27</b> <span>Oct 3 – 9 · 3 team coins</span></p>
@@ -431,19 +473,20 @@ footer .links a{color:var(--dim)}
       </div>
       <div class="board">
         <p class="bh"><b>NFL 2026</b> <span>Oct 3 – 9 · 4 team coins</span></p>
-        <table>
+        <div class="tw"><table>
           <thead><tr><th>#</th><th>coin</th><th class="n">receipts</th><th class="n">burned</th></tr></thead>
           <tbody>
             <tr><td>1</td><td class="t">$JAGUARS <span class="mark">most receipts so far</span></td><td class="n">3</td><td class="n">1.46%</td></tr>
             <tr><td>2</td><td class="t">$EAGLES</td><td class="n">2</td><td class="n">0.98%</td></tr>
             <tr><td>3</td><td class="t">$CHIEFS</td><td class="n">2</td><td class="n">0.97%</td></tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
-    <p class="allcount">Yesterday (Oct 9) across all leagues: 5 team coins burned.</p>
+    <p class="allcount">Example day, Oct 9, 2026, across all leagues: 5 team coins burned.</p>
     <div class="seasons">
       <article class="match" aria-label="Example rivalry: $OILERS vs $FLAMES">
+        <span class="st ill">Illustrative example</span>
         <p class="mk">rivalry · <b>licensed final score</b> · Oilers–Flames, every game this season</p>
         <div class="slips">
           <div class="slipwrap"><div class="slip">
@@ -535,7 +578,7 @@ footer .links a{color:var(--dim)}
     <div class="econ">
       <div class="e"><div class="k">the coin</div><p>Its creator-fee share flows to its burn pool, which is the burn budget. Days with no trading are days with small burns. There is no team allocation and no team buy at launch.</p></div>
       <div class="e"><div class="k">the creator</div><p>Pays the venue's creation cost and gas, and earns nothing in cash from fees: the creator's slice is fixed at 0. What a creator gets is a coin whose burns are funded by its own trading. The review screen says this plainly.</p></div>
-      <div class="e"><div class="k">burnticker</div><p>A platform fee of 25 bps of curve volume, set in the LaunchLab platform config and read live on the trust page. After graduation the LP is locked forever and its fees are split by code: 80% to the coin's burn pool, 20% to the operator. Nothing from burn pools, ever. The platform never buys any coin launched here.</p></div>
+      <div class="e"><div class="k">burnticker</div><p>A platform fee of 25 bps of curve volume, set in the LaunchLab platform config and read live on the trust page. After graduation the LP is locked forever and its fees are split by code: 80% to the coin's burn pool, 20% to the operator. Nothing from burn pools, ever. The operator never trades a coin launched here; the only purchases are the program's burn-pool buybacks, and everything bought is burned.</p></div>
     </div>
   </section>
   </details>
@@ -600,6 +643,12 @@ footer .links a{color:var(--dim)}
     var line = document.querySelector("[data-cluster-line]");
     if (line && j && typeof j.cluster === "string") line.textContent = " This host currently shows " + j.cluster + " information.";
   }).catch(function () { /* closed */ });
+})();
+(function () {
+  // audit 4 BT-20: Escape closes the phone menu and returns focus to its summary; a click outside closes it too
+  var m = document.getElementById("menu"); if (!m) return;
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && m.open) { m.open = false; m.querySelector("summary").focus(); } });
+  document.addEventListener("click", function (e) { if (m.open && !m.contains(e.target)) m.open = false; });
 })();
 (function () {
   // Duplicate the reel once so the CSS loop is seamless (translateX(-50%) lands on the copy's first item).

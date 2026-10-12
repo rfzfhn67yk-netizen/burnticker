@@ -1,0 +1,48 @@
+# PROPOSED — NOT IMPORTED BY deploy/caddy/Caddyfile (website audit 4, BT-19 + BT-23, 2026-10-11). The owner applies it on the host.
+#
+# How to apply (on the Burnticker VPS, after review):
+#   1. copy the two snippets below into /etc/caddy/Caddyfile (above the site blocks), or `import` this file from it;
+#   2. add `import csp_report_only_static` inside the {$BURNTICKER_DOMAIN}, {$DEFICIT_DOMAIN} and {$BURNTICKER_STATUS_DOMAIN} blocks'
+#      static handlers, and `import csp_report_only_app` inside `handle @app` (NOT inside `handle @embed`: the embed pages send their
+#      own CSP — src/lib/burnticker/embed.ts);
+#   3. replace `header Cache-Control "no-store"` in (static_site) with `import static_cache` (see BT-23 below);
+#   4. `caddy validate --config /etc/caddy/Caddyfile` then `systemctl reload caddy`.
+#
+# ---- BT-19: Content-Security-Policy, REPORT-ONLY first ----
+# Report-only changes nothing a visitor sees; the browser console lists what an enforced policy would block. Inventory (measured
+# 2026-10-11 from the code; test/burntickerCsp.test.ts re-checks it against the pages):
+#   scripts      same-origin bundles (/_next/static) + inline scripts (Next's flight payload, the static pages' own <script> blocks)
+#   styles       same-origin + inline <style>; Google Fonts CSS (the $DEFICIT page's Oswald)
+#   fonts        fonts.gstatic.com
+#   connect      same origin and https://burnticker.com (the $DEFICIT site reads the current-status API cross-origin);
+#                api.fiscaldata.treasury.gov (receipt verifier + $DEFICIT curve); the public Solana RPCs (receipt verifier, wallet
+#                adapter fallback) incl. their websockets; arweave.net (+ subdomains) and gateway.irys.xyz (pinned-metadata check)
+#   images       same-origin, data:, arweave (coin art)
+#   frames       none may frame the site (frame-ancestors 'none' = the X-Frame-Options DENY already sent)
+# NOT covered and why it is report-only: (a) the receipt verifier lets a visitor type ANY RPC URL — an enforced connect-src blocks
+# hosts not listed; (b) the host's NEXT_PUBLIC_BURNTICKER_RPC_URL (the wallet adapter's RPC on /launch and /me) must be added as
+# {$BURNTICKER_PUBLIC_RPC_ORIGIN} (https + wss); (c) 'unsafe-inline' scripts stay until the app moves to per-request nonces (a Next
+# proxy that sets the nonce; every page then renders dynamically) and the static pages to sha256 hashes of their inline scripts.
+# Enforce only after (b) is set and a week of report-only shows no violations on the main journeys (home → check?demo=1 → 10 checks).
+(csp_report_only_static) {
+	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://arweave.net https://*.arweave.net; connect-src 'self' https://burnticker.com https://api.fiscaldata.treasury.gov https://api.devnet.solana.com https://api.mainnet-beta.solana.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+}
+(csp_report_only_app) {
+	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://arweave.net https://*.arweave.net https://gateway.irys.xyz https://devnet.irys.xyz; connect-src 'self' https://api.fiscaldata.treasury.gov https://api.devnet.solana.com wss://api.devnet.solana.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com https://arweave.net https://*.arweave.net https://gateway.irys.xyz https://devnet.irys.xyz {$BURNTICKER_PUBLIC_RPC_ORIGIN:https://api.devnet.solana.com}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+}
+#
+# ---- BT-23: caching that never serves a stale status ----
+# Measured 2026-10-11 (curl, one pass, Denver → Cloudflare → the box): / 53,989 B (15,836 B gzip, TTFB 0.23 s), /whitepaper.html
+# 97,168 B (32,603 B gzip), /burnticker/leagues/cfb/2026 265,953 B (31,339 B gzip; 170 KB of it is the RSC flight payload repeating
+# the ~765 rendered list items), mcbb/wcbb 2026-27 ~142 KB (19.4 KB gzip), every other league page ≤ 50 KB. All TTFB < 0.8 s. These are
+# transfer sizes, not Core Web Vitals; no performance claim is made from them.
+# Every static file is no-store today (the static_site snippet), so the whitepaper and brand images re-download on each visit. The
+# status JSON, the keeper's t/<ticker>/ pages and the $DEFICIT status/burns files must stay no-store (a page that says "no burn yet" an
+# hour late is wrong about the supply). Proposal: documents and images revalidate instead (ETag/Last-Modified from file_server → 304s),
+# everything else stays no-store.
+(static_cache) {
+	@revalidate path /whitepaper.html /brand/* /favicon.png /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
+	header @revalidate Cache-Control "public, max-age=300, must-revalidate"
+	@fresh not path /whitepaper.html /brand/* /favicon.png /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
+	header @fresh Cache-Control "no-store"
+}

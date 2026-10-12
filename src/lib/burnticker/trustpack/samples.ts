@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { demoSignature, readStatusFile } from "@/lib/burnticker/deficitPrelaunch";
+import { PROGRAM_IDS, PUBLIC_RPC_URLS } from "@/lib/burnticker/networks";
 
 /**
  * THE DEVNET RECEIPTS THE VERIFIER OFFERS (trust pack, 2026-10-10): every confirmed receipt of the 2026-10-10 rehearsals, read from the
@@ -18,7 +19,8 @@ export const SAMPLE_SETS = [
 export interface SampleReceipt { ticker: string; recordDate: string; units: number; status: string; signature: string; memo: string; explorerUrl: string; evidence: string; rulesPath: string; rulesSha256: string | null }
 export interface SampleList { cluster: "devnet"; programId: string; rpc: string; receipts: SampleReceipt[]; rules: Record<string, string>; /** the featured receipt (config/burnticker/current-status.json `demo`), pre-selected by /burnticker/check?demo=1 */ featured: string | null }
 
-export const DEVNET_PROGRAM_ID = "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM";
+/** The receipt verifier's program: the one per-network configuration (networks.ts, audit 4 BT-01) — the mint verifier reads the same. */
+export const DEVNET_PROGRAM_ID = PROGRAM_IDS.devnet.burn_receipts;
 
 export function sampleReceipts(root = process.cwd()): SampleList {
   const receipts: SampleReceipt[] = [], rules: Record<string, string> = {};
@@ -35,5 +37,5 @@ export function sampleReceipts(root = process.cwd()): SampleList {
   }
   let featured: string | null = null;
   try { const f = demoSignature(readStatusFile(root), root); featured = receipts.some((r) => r.signature === f) ? f : null; } catch { featured = null; }
-  return { cluster: "devnet", programId: DEVNET_PROGRAM_ID, rpc: "https://api.devnet.solana.com", receipts, rules, featured };
+  return { cluster: "devnet", programId: DEVNET_PROGRAM_ID, rpc: PUBLIC_RPC_URLS.devnet, receipts, rules, featured };
 }

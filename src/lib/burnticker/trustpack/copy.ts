@@ -12,7 +12,7 @@ export const CHECK_COPY = {
   moneyTitle: "Where money can go",
   moneyIntro: "Every instruction of both programs, with the only place it can move SOL or tokens. There is no withdraw, sweep or transfer-out instruction in either program.",
   powersTitle: "Who can do what",
-  powersIntro: "The Powers Registers are generated from the programs' own interface files. No key holds a power over funds in either program.",
+  powersIntro: "The Powers Registers are generated from the programs' own interface files. No instruction gives any key a power over funds in either program (current instruction permissions). Upgrade authority is a separate power: the Squads vault can replace the program code.",
   lockedTitle: "What is locked",
   notDoneTitle: "What is not done yet",
   notDoneIntro: "Open gaps, stated plainly. Each one is also on the trust page and in docs/burnticker/TODO-OWNER.md.",

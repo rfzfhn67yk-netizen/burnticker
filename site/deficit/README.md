@@ -10,6 +10,12 @@ files** and never recomputes the rule itself:
 | `rules.json` (the rule file's exact bytes) | `./rules.json` | linked from the page; its sha256 is the one in every memo |
 | `index.html` (the keeper's plain status page) | not used — this page replaces it | keep it as `status.html` if you want the plain view too |
 
+**Before launch** (audit 4, 2026-10-11) this folder ships its own `rules.json` (the locked `config/burnkeeper/deficit.rules.json`, byte
+for byte — test/deficitEvidence.test.ts holds them equal), a `status.json` with schema `burnkeeper.status/prelaunch-v1` (state
+`not-launched`, the rule's sha256, the devnet evidence links) and a `burns.json` with an empty `burns` list, so every link on the page
+answers. `scripts/ops/deploy-sites.sh` ships these only while the keeper's publish dir has no file of the same name; from the keeper's
+first cycle its live files win and are never overwritten.
+
 Everything degrades gracefully: with no `status.json` the page still renders the rule, the verify instructions and the disclaimer,
 and says the keeper has not published yet. With `burns.json` but no network it draws the debt curve from the readings inside the
 receipts; online it densifies the curve from the Treasury API directly (fail-soft, 7 s timeout).

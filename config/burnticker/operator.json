@@ -53,7 +53,7 @@
       ]
     },
     "mainnet": {
-      "status": "programs not deployed on mainnet yet; the platform config, Squads vault and wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
+      "status": "both programs deployed on mainnet 2026-10-11 (upgrade authority: the Squads vault below); LaunchLab platform config created 2026-10-11; no coin launched; the wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
       "programs": {
         "burn_receipts": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
         "pair_curve": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN"
@@ -86,7 +86,7 @@
     "cluster": "mainnet",
     "message": "Burnticker operator statement, signed by the developer fee wallet {PUBKEY}. I am the operator of burnticker.com and the burn_receipts and pair_curve programs. The wallets listed at https://burnticker.com/burnticker/operator are mine. The platform never buys any coin launched through it, and neither do I. Date: {DATE}.",
     "signature": null,
-    "how": "The statement is signed by the operator; the steps are in docs/burnticker/runbook.md (Signing the operator statement). Once a signature is added, GET /api/burnticker/v1/operator verifies it with ed25519 and this page shows the result."
+    "how": "Not signed yet. When the operator signs it (steps: docs/burnticker/runbook.md, Signing the operator statement) and the signature is added here, GET /api/burnticker/v1/operator verifies it with ed25519 and this page shows the result and the time it was checked."
   },
   "neverBuys": {
     "rule": "None of the wallets above ever acquires a coin launched through the platform. The monitor lists every token account those wallets hold and every recent transaction in which one of them gained a platform coin.",

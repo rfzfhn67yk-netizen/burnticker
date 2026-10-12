@@ -56,7 +56,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8 text-sm">
       {p.jsonLd.map((j, k) => <script key={k} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(j).replace(/</g, "\\u003c") }} />)}
-      <nav className="text-xs text-neutral-400" aria-label="breadcrumb"><Link className="underline" href="/burnticker">Burnticker</Link> / <Link className="underline" href={LEAGUES_PATH}>Leagues</Link> / {p.leagueLabel} {p.seasonLabel}</nav>
+      <nav className="text-xs text-neutral-400" aria-label="breadcrumb"><Link className="underline" href="/burnticker">Burnticker</Link> / <Link className="underline" href={LEAGUES_PATH}>Seasons</Link> / {p.leagueLabel} {p.seasonLabel}</nav>
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">{p.leagueLabel} {p.seasonLabel}</h1>
         <p className="text-neutral-400 max-w-3xl">Team coins for the {p.leagueLabel} {p.seasonLabel} season. Each coin burns supply on its own team&apos;s results under a locked rule, with a receipt per game. The scoreboard ranks coins inside this league only.</p>

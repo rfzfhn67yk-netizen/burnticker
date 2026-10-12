@@ -5,6 +5,7 @@ import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
 import { OPERATOR_COPY, OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
+import { RepoText } from "../_components/RepoText";
 
 /**
  * /burnticker/operator — WHO RUNS THIS (trust pack, 2026-10-10). Rendered from GET /api/burnticker/v1/operator
@@ -22,6 +23,7 @@ interface View {
   signedMessage: { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string };
   neverBuys: { rule: string; rehearsalNote: string; line: string; status: "clear" | "explained" | "red" | "not-run"; report: null | { ranAt: string; holdings: { role: string; wallet: string; symbol: string; amountRaw: string; tokenAccount: string }[]; acquisitions: { role: string; wallet: string; symbol: string; amountRaw: string; signature: string; blockTime: string | null; explainedBy: string | null }[]; scanned: { tokenAccounts: number; transactions: number }; errors: string[] } };
   placeholders: { path: string; value: string }[];
+  deployments?: Record<"devnet" | "mainnet", Record<string, { readAt: string; matchesBuild: boolean } | null>>;
 }
 
 const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -58,9 +60,9 @@ export default function OperatorPage() {
             <div key={c} className="mt-3">
               <h3 className="text-xs font-medium">{c} <span className="text-neutral-500 font-normal">— {cl.status}</span></h3>
               <div className="overflow-x-auto"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Role</th><th className="p-2">Public key</th><th className="p-2">Source</th></tr></thead>
-                <tbody>{cl.wallets.map((w) => <tr key={w.role} className="border-t border-neutral-800 align-top"><td className="p-2">{w.label}{w.name ? ` (${isTodo(w.name) ? w.name : w.name})` : ""}</td><td className="p-2">{key(w.pubkey, c)}</td><td className="p-2 text-neutral-500">{w.source ?? "—"}</td></tr>)}
+                <tbody>{cl.wallets.map((w) => <tr key={w.role} className="border-t border-neutral-800 align-top"><td className="p-2">{w.label}{w.name ? ` (${isTodo(w.name) ? w.name : w.name})` : ""}</td><td className="p-2">{key(w.pubkey, c)}</td><td className="p-2 text-neutral-500">{w.source ? <RepoText text={w.source} /> : "—"}</td></tr>)}
                   <tr className="border-t border-neutral-800 align-top"><td className="p-2">Squads multisig ({cl.squads.threshold}, time lock {cl.squads.timeLock})</td><td className="p-2">{key(cl.squads.multisig, c)}</td><td className="p-2 text-neutral-500">vault {isTodo(cl.squads.vault) ? cl.squads.vault : <code>{cl.squads.vault.slice(0, 8)}…</code>}</td></tr>
-                  {Object.entries(cl.programs).map(([n, id]) => <tr key={n} className="border-t border-neutral-800"><td className="p-2">program {n}</td><td className="p-2">{key(id, c)}</td><td className="p-2 text-neutral-500">{c === "mainnet" ? "reserved id, not deployed" : "deployed"}</td></tr>)}
+                  {Object.entries(cl.programs).map(([n, id]) => <tr key={n} className="border-t border-neutral-800"><td className="p-2">program {n}</td><td className="p-2">{key(id, c)}</td><td className="p-2 text-neutral-500">{(() => { const d = v.deployments?.[c]?.[n]; return d ? `deployed; bytes read back ${d.readAt}${d.matchesBuild ? ", equal to this repository's build" : ", DIFFER from this repository's build"}` : v.deployments ? "no deployment recorded" : "—"; })()}</td></tr>)}
                   <tr className="border-t border-neutral-800"><td className="p-2">LaunchLab platform config</td><td className="p-2">{key(cl.launchlabPlatform, c)}</td><td className="p-2" /></tr></tbody></table></div>
             </div>); })}
         </section>

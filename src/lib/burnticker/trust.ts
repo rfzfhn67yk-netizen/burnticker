@@ -176,7 +176,7 @@ export interface TransparencyBounty {
   status: string; rangeSol: [number, number]; fundedFrom: string; termsPath: string; contact: string | null;
   wallet?: string | null; walletTodo?: string; howReportsArePaid?: string;
   /** what the operator recorded funding the wallet with — shown beside, never instead of, the live balance (UX report 3 item 5) */
-  recordedFunding?: { sol: number; date: string; transaction: string | null; source: string } | null;
+  recordedFunding?: { sol: number; date: string; transaction: string | null; source: string; evidence?: string } | null;
   reports?: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string };
 }
 /** A wallet row as rendered: the pubkey from the file, else from the named environment variable, else TODO. */

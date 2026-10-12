@@ -4,6 +4,8 @@ import { platform } from "@/lib/burnticker/server";
 import { derbyPairJson, tournamentSummaries, type DerbyPairJson } from "@/lib/burnticker/derby/page";
 import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
+import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
+import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Burn Derby", description: "Coin vs Coin pairs and brackets. In a pair, fees from both coins burn the coin whose rule the day's result fires. The receipts are the scoreboard." };
@@ -17,6 +19,8 @@ interface Row { j: DerbyPairJson; a: string; b: string; statusA: string; statusB
 
 export default async function DerbyIndex({ searchParams }: { searchParams: Promise<{ a?: string; b?: string }> }) {
   const sp = await searchParams;
+  // audit 4 BT-10: the creation CTA matches the launch state — while creator launches are closed it says so and is not a link
+  const launchOpen = launchAvailability().open;
   const want = sp.a && sp.b ? [sp.a.toUpperCase(), sp.b.toUpperCase()] : null;
   let rows: Row[] = [], brackets: ReturnType<typeof tournamentSummaries> = [], err: string | null = null;
   try {
@@ -53,10 +57,12 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
         <p className="text-neutral-400 text-sm max-w-3xl">Two coins people already hold, compared each UTC day (or week) on Pyth&apos;s feeds or a pool&apos;s time-weighted value, cross-read against a second data publisher (a source check; one operator attester signs every reading). A tie burns neither. The receipts are the scoreboard.</p>
         <p className="text-amber-200 text-sm max-w-3xl" aria-label="pair rule">{PAIR_BURN_SENTENCE}</p>
         <p className="text-neutral-500 text-xs">{NO_WALLET_LINE}</p>
-        <Link className="inline-block rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={`/burnticker/launch?derby=1${want ? `&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}` : ""}`}>Coin vs Coin →</Link>
+        {launchOpen
+          ? <Link className="inline-block rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={`/burnticker/launch?derby=1${want ? `&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}` : ""}`}>Coin vs Coin →</Link>
+          : <p className="text-sm text-neutral-300" data-launch-closed>Creating a Coin vs Coin pair is closed: creator launches are not open. Meanwhile: <Link className="underline" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link>.</p>}
       </header>
       {err && <p className="text-red-400 text-sm">Registry unavailable: {err}</p>}
-      {want && !rows.some(matches) && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-3">No {want[0]} vs {want[1]} pair yet. <Link className="underline" href={`/burnticker/launch?derby=1&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}`}>Set one up with Coin vs Coin →</Link></p>}
+      {want && !rows.some(matches) && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-3">No {want[0]} vs {want[1]} pair yet. {launchOpen ? <Link className="underline" href={`/burnticker/launch?derby=1&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}`}>Set one up with Coin vs Coin →</Link> : "Creating one is closed while creator launches are not open."}</p>}
       <section className="space-y-2">
         <h2 className="font-medium">Open pairs</h2>
         {open.length ? <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{open.map(pairRow)}</ul> : <p className="text-sm text-neutral-500">No open coin-vs-coin pairs yet.</p>}

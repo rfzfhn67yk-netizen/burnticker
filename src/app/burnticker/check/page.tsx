@@ -6,6 +6,7 @@ import { EmptyState } from "../_components/EmptyState";
 import ReceiptVerifier from "./ReceiptVerifier";
 import { BurnMath } from "../_components/BurnMath";
 import { CHECK_COPY } from "@/lib/burnticker/trustpack/copy";
+import { RepoText } from "../_components/RepoText";
 
 /**
  * /burnticker/check — "CHECK THIS YOURSELF" (trust pack, 2026-10-10). The sceptic's checklist against ourselves, rendered from
@@ -22,7 +23,7 @@ interface Check {
   upgradeAuthority: { program: string; holder: string; sunset: string }[];
   external: { program: string; power: string; holder: string; effect: string }[];
   locked: Item[]; notDone: Item[];
-  build: { kind: string; kindNote: string; sourceCommit: string; programs: { library: string; programId: string; builds: Record<"mainnet" | "devnet", { features: string[]; hash: string }>; deployed: { devnet: { hash: string; matchesBuild: boolean; upgradeAuthority: string } | null } }[] };
+  build: { kind: string; kindNote: string; sourceCommit: string; programs: { library: string; programId: string; builds: Record<"mainnet" | "devnet", { features: string[]; hash: string }>; deployed: Partial<Record<"mainnet" | "devnet", { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string } | null>> }[] };
 }
 
 const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
@@ -70,13 +71,13 @@ export default function CheckPage() {
 
         <section className={card} id="locked">
           <h2 className="font-medium">{CHECK_COPY.lockedTitle}</h2>
-          <ul className="text-xs space-y-1 mt-1">{c.locked.map((l) => <li key={l.id}><b>{l.title}</b>{l.status && <span className="ml-1 rounded bg-neutral-800 px-1 text-neutral-300">{l.status}</span>} — {l.text} <span className="text-neutral-500">({l.where})</span></li>)}</ul>
+          <ul className="text-xs space-y-1 mt-1">{c.locked.map((l) => <li key={l.id}><b>{l.title}</b>{l.status && <span className="ml-1 rounded bg-neutral-800 px-1 text-neutral-300">{l.status}</span>} — <RepoText text={l.text} /> <span className="text-neutral-500">(<RepoText text={l.where} />)</span></li>)}</ul>
         </section>
 
         <section className={card} id="not-done">
           <h2 className="font-medium">{CHECK_COPY.notDoneTitle}</h2>
           <p className="text-xs text-neutral-300">{CHECK_COPY.notDoneIntro}</p>
-          <ul className="text-xs space-y-1 mt-1">{c.notDone.map((n) => <li key={n.id}><span className={`mr-2 rounded px-1 ${n.status === "done" ? "bg-neutral-800 text-neutral-300" : "bg-amber-900 text-amber-200"}`}>{n.status ?? "not done"}</span><b>{n.title}</b> — {n.text} <span className="text-neutral-500">({n.where})</span></li>)}</ul>
+          <ul className="text-xs space-y-1 mt-1">{c.notDone.map((n) => <li key={n.id}><span className={`mr-2 rounded px-1 ${n.status === "done" ? "bg-neutral-800 text-neutral-300" : "bg-amber-900 text-amber-200"}`}>{n.status ?? "not done"}</span><b>{n.title}</b> — <RepoText text={n.text} /> <span className="text-neutral-500">(<RepoText text={n.where} />)</span></li>)}</ul>
         </section>
 
         <section className={card} id="build">
@@ -84,7 +85,7 @@ export default function CheckPage() {
           <p className="text-xs text-neutral-300">{CHECK_COPY.buildIntro}</p>
           <p className="text-xs mt-1"><span className={`rounded px-1 ${c.build.kind === "docker" ? "bg-neutral-800" : "bg-amber-900 text-amber-200"}`}>{c.build.kind}</span> {c.build.kindNote} Source commit <code>{c.build.sourceCommit.slice(0, 12)}</code>.</p>
           <div className="overflow-x-auto mt-2"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Program</th><th className="p-2">Build</th><th className="p-2">Executable hash (this repository)</th><th className="p-2">Deployed on devnet</th></tr></thead>
-            <tbody>{c.build.programs.flatMap((p) => (["mainnet", "devnet"] as const).map((v) => <tr key={`${p.library}-${v}`} className="border-t border-neutral-800 align-top"><td className="p-2"><code>{p.library}</code></td><td className="p-2">{v}{p.builds[v].features.length ? ` (--features ${p.builds[v].features.join(",")})` : ""}</td><td className="p-2 break-all"><code>{p.builds[v].hash}</code></td><td className="p-2 break-all">{v === "devnet" && p.deployed.devnet ? <><code>{p.deployed.devnet.hash}</code> <span className={p.deployed.devnet.matchesBuild ? "text-emerald-400" : "text-red-400"}>{p.deployed.devnet.matchesBuild ? "✓ same bytes" : "✗ differs"}</span></> : v === "mainnet" ? <span className="text-neutral-500">not deployed on mainnet</span> : "—"}</td></tr>))}</tbody></table></div>
+            <tbody>{c.build.programs.flatMap((p) => (["mainnet", "devnet"] as const).map((v) => <tr key={`${p.library}-${v}`} className="border-t border-neutral-800 align-top"><td className="p-2"><code>{p.library}</code></td><td className="p-2">{v}{p.builds[v].features.length ? ` (--features ${p.builds[v].features.join(",")})` : ""}</td><td className="p-2 break-all"><code>{p.builds[v].hash}</code></td><td className="p-2 break-all">{(() => { const d = p.deployed[v]; return d ? <><code>{d.hash}</code> <span className={d.matchesBuild ? "text-emerald-400" : "text-red-400"}>{d.matchesBuild ? "✓ same bytes" : "✗ differs"}</span>{d.readAt ? <span className="text-neutral-500"> (read {d.readAt})</span> : null}</> : <span className="text-neutral-500">no deployed bytes recorded for {v}</span>; })()}</td></tr>))}</tbody></table></div>
           <p className="text-xs text-neutral-500 mt-1">Reproduce: <code>bash scripts/ops/verified-build.sh --local</code> (or <code>--docker</code> on Linux), then <code>--onchain devnet</code>. Steps: docs/burnticker/VERIFIED-BUILD.md.</p>
         </section>
       </>}

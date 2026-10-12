@@ -9,6 +9,7 @@ import CoverageSection from "./CoverageSection";
 import TrustPackSection from "./TrustPackSection";
 import OpsSection from "./OpsSection";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
+import { RepoText } from "../_components/RepoText";
 
 /**
  * THE TRUST PAGE (the owner, 2026-10-09: no room for suspicion). Rendered from /api/burnticker/trust: the Powers Register, the LIVE
@@ -78,7 +79,7 @@ export default function TrustPage() {
       <section className={card}><h2 className="font-medium">Public audit</h2>{t.audit ? <p className={t.audit.ok ? "text-emerald-400" : "text-red-400"}>{t.audit.ok ? "All receipts recompute" : `${t.audit.mismatches.length} mismatch(es)`} — {t.audit.receipts} receipt(s) across {t.audit.tokens} token(s), {t.audit.chainChecked ? "source + chain" : "source only"}, {t.audit.ranAt}</p> : <p className="text-neutral-500 text-xs">scripts/burnticker-audit.mts has not run on this host.</p>}{t.audit?.mismatches.map((m) => <p key={m.ticker + m.eventId} className="text-xs text-red-400">${m.ticker} {m.eventId}: {m.checks.join("; ")}</p>)}</section>
       <CoverageSection card={card} />
       <OpsSection card={card} repo={t.transparency.publicRepo.url} />
-      <section className={card}><h2 className="font-medium">Incident log (append-only)</h2>{t.incidents.entries === 0 ? <p className="text-xs text-neutral-500">No incidents recorded (docs/burnticker/incidents/LOG.md).</p> : <pre className="text-xs whitespace-pre-wrap">{t.incidents.markdown}</pre>}</section>
+      <section className={card}><h2 className="font-medium">Incident log (append-only)</h2>{t.incidents.entries === 0 ? <p className="text-xs text-neutral-500">No incidents recorded (<RepoText text="docs/burnticker/incidents/LOG.md" />).</p> : <pre className="text-xs whitespace-pre-wrap">{t.incidents.markdown}</pre>}</section>
       {(() => { const x = t.transparency; const repo = x.publicRepo.url; const link = (rel: string) => (repo ? <a className="underline" href={`${repo.replace(/\/$/, "")}/blob/main/${rel}`}>{rel}</a> : <code>{rel}</code>); return (<>
       <section className={card}><h2 className="font-medium">Who runs this</h2>
         <p>{x.whoRunsThis.operatorLine}{t.contactIsTodo && <span className="text-amber-400 text-xs"> (contact address: TODO)</span>}</p>
@@ -104,7 +105,7 @@ export default function TrustPage() {
       <section className={card}><h2 className="font-medium">Policies</h2><ul className="list-disc pl-5 text-xs">{x.policies.map((p) => <li key={p.id}>{p.text}</li>)}</ul></section>
       <section className={card}><h2 className="font-medium">Decision log (append-only, {x.decisions.entries} entries)</h2>{x.decisions.present ? <pre className="text-xs whitespace-pre-wrap">{x.decisions.markdown}</pre> : <p className="text-xs text-amber-400">{x.decisions.file} is not present on this host.</p>}</section>
       <section className={card}><h2 className="font-medium">Changelog ({x.changelog.entries} entries)</h2>{x.changelog.present ? <pre className="text-xs whitespace-pre-wrap">{x.changelog.markdown}</pre> : <p className="text-xs text-amber-400">{x.changelog.file} is not present on this host.</p>}</section>
-      <p className="text-xs text-neutral-500">Transparency data: <code>{x.file}</code>, updated {x.updatedAt}.</p>
+      <p className="text-xs text-neutral-500">Transparency data: <RepoText text={x.file} />, updated {x.updatedAt}.</p>
       </>); })()}
         </div>
       </details>

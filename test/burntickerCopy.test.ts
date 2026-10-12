@@ -44,7 +44,9 @@ describe("the landing page (site/burnticker/index.html)", () => {
     assert.equal(h1, SENTENCE);
     // review 2 §2: "Launch one." is a launch CTA — hidden until the catalogue says creator launches are open (data-launch-cta)
     assert.match(html, /<p class="sub"><span data-launch-cta>Launch one\. <\/span>Follow the season\.<\/p>/);
-    assert.match(html, /<meta name="description" content="Coins that burn on real-world results — with receipts\. Launch one\. Follow the season\./);
+    // audit 4 BT-21: search and social previews describe the pre-launch state; they never invite launching while launches are closed
+    assert.match(html, /<meta name="description" content="Coins that burn on real-world results — with receipts\. Pre-launch: creator launches are closed; inspect a real devnet burn/);
+    assert.doesNotMatch(/<meta (?:name|property)="(?:description|og:description|twitter:description)" content="([^"]*)"/g.exec(html)?.[0] ?? "", /Launch one/);
   });
   test("door 2 is generated from the leagues index: every league, never NFL-first, soccer included, no drift", () => {
     assert.equal(html, withDoor2(html), "site/burnticker/index.html door 2 differs from the leagues index: run scripts/burnticker-door2.mts");
@@ -108,8 +110,10 @@ describe("the landing page (site/burnticker/index.html)", () => {
     for (const b of boards) { assert.doesNotMatch(b, /<th[^>]*>league<\/th>|champion/i, "no league column, no champion during the season"); assert.ok((b.match(/most receipts so far/g) ?? []).length <= 1); }
     const sv = visibleText(sec);
     assert.doesNotMatch(sv, /\bweek \d|across \d+ leagues/i, "dates, not weeks; no cross-league tally line");
-    assert.match(sv, /Yesterday \(Oct 9\) across all leagues: 5 team coins burned\./, "the only cross-league line is a count");
-    assert.match(sec, /<span class="extag">example data<\/span>/);
+    // audit 4 BT-15: a fixed fixture is never described with an aging word (today/yesterday)
+    assert.match(sv, /Example day, Oct 9, 2026, across all leagues: 5 team coins burned\./, "the only cross-league line is a count");
+    assert.doesNotMatch(sv, /\b(yesterday|today)\b/i);
+    assert.match(sec, /<span class="extag">Illustrative example<\/span>/);
     assert.match(sv, /\$OILERS most receipts so far/, "the marker is its own word, never glued to the ticker");
     assert.match(sec, /\$OILERS <span class="mark">most receipts so far<\/span>/);
     clean(sv, "seasons");
@@ -272,7 +276,7 @@ describe("the committed platform fixture and the brand", () => {
     assert.match(fs.readFileSync("src/app/burnticker/_components/SiteFooter.tsx", "utf8"), /COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS/);
     const layout = fs.readFileSync("config/public-repo/overlay/src/app/layout.tsx", "utf8");
     assert.match(layout, /const TITLE = "Burnticker — coins that burn on real-world results, with receipts"/);
-    assert.match(layout, /const DESCRIPTION = "Coins that burn on real-world results — with receipts\. Launch one\. Follow the season\./);
+    assert.match(layout, /const DESCRIPTION = "Coins that burn on real-world results — with receipts\. Pre-launch: creator launches are closed; inspect a real devnet burn receipt\./);   // audit 4 BT-21
     assert.doesNotMatch(layout, /burns on the news/i);
     clean(/const DESCRIPTION = "([^"]+)"/.exec(layout)![1], "OG description");
   });
