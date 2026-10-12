@@ -19,6 +19,7 @@ import { derbyExplainer } from "@/lib/burnticker/launchDerby";
 import { PreWalletSummary } from "./PreWalletSummary";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { SHARE_PRESETS } from "@/lib/burnticker/launchPresets";
+import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileProblems, type ProfileValue } from "./ProfileFields";
 
 /**
  * "COIN VS COIN" — the Burn Derby wizard tile (2026-10-10; cut to presets the same day, the owner: "the UI needs to be simpler, even if it
@@ -72,7 +73,7 @@ function CoinPicker({ label, value, onPick, exclude, initial }: { label: string;
  * `blocked`: why the wallet cannot open (preview mode, a closed host, pairs off on this host) — the review card disables its button and
  * says so. `unavailable`: Coin vs Coin cannot launch on this host at all (launch audit 5 L02) — the tile says why before any picking.
  */
-export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null }: { pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null } = {}) {
+export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true }: { pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean } = {}) {
   const wallet = useWallet();
   const [open, setOpen] = useState(false);
   // `/burnticker/launch?derby=1&a=WIF&b=SHIB` (the Burn Derby page and the search card) opens the tile with both searches filled in.
@@ -91,6 +92,8 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   const window_ = "daily" as const, seasonDays = 30;
   const [flip, setFlip] = useState(false), [fraction, setFraction] = useState(0.02);
   const [names, setNames] = useState({ a: "", b: "", ta: "", tb: "" });
+  // website-18 (the owner: "I also don't see the ability to change the thumbnail pic"): each coin of the pair has its own image, description and links
+  const [profA, setProfA] = useState<ProfileValue>(EMPTY_PROFILE), [profB, setProfB] = useState<ProfileValue>(EMPTY_PROFILE);
   const [hash, setHash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ pairId: string; a: Bundle; b: Bundle; notes: string[] } | null>(null);
   const creator = wallet.publicKey?.toBase58() ?? "";
@@ -115,7 +118,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   const launch = async () => {
     if (!model?.rule || !creator || !reviewMatchesDraft(slot, curRev.current)) return;   // A6: only the reviewed draft is prepared
     setBusy(true); setErr(null); setOut(null); setPcOut(null);
-    const body = { creator, ticker: names.ta.toUpperCase(), name: names.a, description: model.sentence, imageUrl: null, links: [], rule: model.rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, pair: { ticker: names.tb.toUpperCase(), name: names.b, description: model.sentence, imageUrl: null, links: [] } };
+    const body = { creator, ticker: names.ta.toUpperCase(), name: names.a, description: model.sentence, imageUrl: null, rule: model.rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, ...profileBody(profA), pair: { ticker: names.tb.toUpperCase(), name: names.b, description: model.sentence, imageUrl: null, ...profileBody(profB) } };
     const run = async (v: PairVenue, retried: boolean): Promise<void> => {
       try {
         const j = await postPairLaunch((u, init) => fetch(u, init), body, v);
@@ -129,7 +132,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   // L06 / L13: the read-only review payload for the pair (the server's numbers), debounced; the pair's side B rule is derived at build
   // A6: keyed by the draft's revision (launchReviewSync.ts): a summary for an older pick or older names is never shown
   const [slot, setSlot] = useState<ReviewSlot<LaunchReview>>(EMPTY_REVIEW_SLOT);
-  const reviewKey = draftRevision([model?.rule ?? null, names]);
+  const reviewKey = draftRevision([model?.rule ?? null, names, profA.description, profB.description]);
   const curRev = useRef(reviewKey); curRev.current = reviewKey;
   const seqRef = useRef(0);
   useEffect(() => {
@@ -137,7 +140,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
     const seq = ++seqRef.current, rev = reviewKey;
     setSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
-      fetch("/api/burnticker/v1/launch/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: model.rule, ticker: names.ta.toUpperCase(), name: names.a, pair: { ticker: names.tb.toUpperCase(), name: names.b } }) })
+      fetch("/api/burnticker/v1/launch/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: model.rule, ticker: names.ta.toUpperCase(), name: names.a, creatorDescription: profA.description, pair: { ticker: names.tb.toUpperCase(), name: names.b, creatorDescription: profB.description } }) })
         .then(async (r) => { const j = await r.json().catch(() => null); if (!r.ok) throw new Error(r.status === 403 ? "creator launches are closed on this site" : `the review could not be read (HTTP ${r.status})`); return j as LaunchReview; })
         .then((j) => setSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
         .catch((e) => setSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: String((e as Error).message) })));
@@ -177,14 +180,17 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
       {model && !out && !pcOut && (
         <ReviewCard
           coins={[
-            { key: "a", name: names.a, ticker: names.ta, onName: (v) => setNames((n) => ({ ...n, a: v })), onTicker: (v) => setNames((n) => ({ ...n, ta: v })), image: art(model.rule, names.ta), oneLiner: model.rule ? ruleOneLiner(model.rule) : "", oracle: "derby", badge: null },
-            { key: "b", name: names.b, ticker: names.tb, onName: (v) => setNames((n) => ({ ...n, b: v })), onTicker: (v) => setNames((n) => ({ ...n, tb: v })), image: art(ruleB, names.tb), oneLiner: ruleB ? ruleOneLiner(ruleB) : "", oracle: "derby", badge: null },
+            { key: "a", name: names.a, ticker: names.ta, onName: (v) => setNames((n) => ({ ...n, a: v })), onTicker: (v) => setNames((n) => ({ ...n, ta: v })), image: profA.image ? chosenPreview(profA)! : art(model.rule, names.ta), oneLiner: model.rule ? ruleOneLiner(model.rule) : "", oracle: "derby", badge: null },
+            { key: "b", name: names.b, ticker: names.tb, onName: (v) => setNames((n) => ({ ...n, b: v })), onTicker: (v) => setNames((n) => ({ ...n, tb: v })), image: profB.image ? chosenPreview(profB)! : art(ruleB, names.tb), oneLiner: ruleB ? ruleOneLiner(ruleB) : "", oracle: "derby", badge: null },
           ]}
           sentence={model.sentence}
           pairLine={PAIR_REVIEW_LINE}
           pairFacts={winnerTakesBurnFacts(names.ta.toUpperCase() || "A", names.tb.toUpperCase() || "B")}
           ends={ends}
           shares={{ options: [...SHARE_PRESETS.recurring], value: fraction, onChange: setFraction }}
+          image={<div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images><ProfileFields value={profA} onChange={setProfA} part="image" who={`$${names.ta.toUpperCase() || "A"}`} customImages={customImages} /><ProfileFields value={profB} onChange={setProfB} part="image" who={`$${names.tb.toUpperCase() || "B"}`} customImages={customImages} /></div>}
+          profile={<div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profA} onChange={setProfA} part="text" who={`$${names.ta.toUpperCase() || "A"}`} /><ProfileFields value={profB} onChange={setProfB} part="text" who={`$${names.tb.toUpperCase() || "B"}`} /></div>}
+          profileProblems={[...profileProblems(profA).map((x) => `$${names.ta.toUpperCase() || "A"}: ${x}`), ...profileProblems(profB).map((x) => `$${names.tb.toUpperCase() || "B"}: ${x}`)]}
           problems={model.problems}
           error={err}
           busy={busy}

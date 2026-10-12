@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
-import { LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
+import { championSeries, LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { fedregEoText, isFedregEo } from "@/lib/burnticker/sources/fedreg";
 import { ll2Text, parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
@@ -146,10 +146,21 @@ const burnDown = (r: BurnRule): string => { const k = describeEndSink(r); return
 /** The void sentence that follows the window sentence of a rule with an end sink ("" otherwise). */
 export const END_SINK_VOID_SENTENCE = "If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead.";
 const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindOf(r) !== "perpetual" ? ` ${END_SINK_VOID_SENTENCE}` : "");
+/**
+ * THE CHAMPION PATH (website-18, the owner on 2026-10-12: "say I want to pick the Dodgers to win the World Series: it should burn every
+ * game they win until the last game of the World Series, then burn the remaining balance after they win. If they lose, it should ... burn
+ * $DEFICIT"). A team coin on a team's wins for the whole season, in a league whose schedule can tell a champion (espn.ts CHAMPION_KNOWN),
+ * whose end sink is $DEFICIT and that is not the fade side. The keeper (multiKeeper.recordWindowEnd, endSinkKeeper) reads this same test:
+ * a champion's coin ends on the ordinary wind-down on itself, any other end forwards the rest to $DEFICIT. The program can pin only
+ * $DEFICIT, a named existing coin or a pair partner when a coin is created, so "the champion's coin" is not offered.
+ */
+export const championPathRule = (r: BurnRule): boolean => r.oracle === "catalogue" && !r.inverse && !r.set && describeEndSink(r) === "flagship" && championSeries(r.series) !== null;
+/** The champion path's two end sentences, one per outcome (the review card and the locked description say both). */
+export const championEndSentences = (ref: string): [string, string] => [`If ${ref} win the championship, the rest of the pool burns here.`, "If they do not, the rest goes to $DEFICIT's burn."];
 export const PERPETUAL_SENTENCE = "This coin has no end date and does not retire.";
 /** One pattern per window kind; a description matches exactly one of them, exactly once (test/burntickerDescribe.test.ts). */
 export const WINDOW_SENTENCE: Record<WindowKind, RegExp> = {
-  season: /This coin covers the [^.]*? season only, including (?:the playoffs|every match of the competition)\. After [^.]*? last game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?/g,
+  season: /This coin covers the [^.]*? season only(?:, including (?:the playoffs|every match of the competition)\. After [^.]*? last game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?|\. If [^.]*? win the championship, the rest of the pool burns here\. If they do not, the rest goes to \$DEFICIT's burn\.)/g,
   post: /This coin covers [^.]*? postseason only\. After [^.]*? last playoff game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?/g,
   next: /This coin covers [^.]*? next \d+ games? only, from [^.]*?\d{4}\. After game \d+, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\./g,
   perpetual: /This coin has no end date and does not retire\./g,
@@ -229,6 +240,13 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
     const settle = inv ? `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it. A day with two games counts once, and a game day with a ${noun} burns nothing.` : `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it. Nothing happens on ${other}.`;
     const oneLiner = inv ? `burns on every game day ${ref} do not ${verb}` : `burns when ${ref} ${verb}`;
     const every = (scope: string) => inv ? `For every ${nick} game day without a ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}` : `For every ${nick} ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}`;
+    if (w.kind === "season" && championPathRule(r)) {
+      // the champion path: every win through the postseason, then the rest burns here (champion) or goes to $DEFICIT's burn
+      const L = seasonLabel(s.league, w.year);
+      return mk(`${nick} ${L} ${Noun}`, tickerFrom(nick, `${sfx}${yy(s.league, w.year)}`), oneLiner,
+        `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the postseason. Each burn buys $${t} on Raydium, with a receipt on chain. ${settle}`,
+        `This coin covers the ${L} season only. ${championEndSentences(ref).join(" ")}`, "season", "recurring");
+    }
     if (w.kind === "season") {
       const L = seasonLabel(s.league, w.year);
       return mk(`${nick} ${L} ${Noun}`, tickerFrom(nick, `${sfx}${yy(s.league, w.year)}`), oneLiner, every(`in the ${L} season`),

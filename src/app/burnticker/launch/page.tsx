@@ -21,7 +21,7 @@ import { ReviewCard } from "./ReviewCard";
 import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPairLaunch, venueFor, venueFrom409, type LaunchErrorBody, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { STATIONS, nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
-import { applyDial, dialsFor, type DialId } from "@/lib/burnticker/dials";
+import { applyDial, dialsFor, ON_END_DEFAULT, type DialId } from "@/lib/burnticker/dials";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { LaunchRecovery } from "./LaunchRecovery";
@@ -33,8 +33,8 @@ import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
-import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileProblems, type ProfileValue } from "./ProfileFields";
-import { creatorLinks } from "@/lib/burnticker/creatorProfile";
+import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileProblems, type ProfileValue } from "./ProfileFields";
+import { teamAdvancedDefaults } from "@/lib/burnticker/creatorCopy";
 import { wxThresholdProblem } from "@/lib/burnticker/launchFields";
 import { composeRule, fieldsFromRule, launchBody } from "@/lib/burnticker/launchDraft";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
@@ -42,10 +42,11 @@ import { LaunchGate } from "./LaunchGate";
 import { CreatorOnboarding } from "../_components/CreatorOnboarding";
 import { CreatorBenefitsList } from "../templates/CreatorBenefitsList";
 import { ExampleTickets } from "../templates/ExampleTickets";
+import { EXAMPLES_AND_BENEFITS_LABEL } from "@/lib/burnticker/exampleTickets";
 import { DuplicateNotice } from "./DuplicateNotice";
 import type { ExistingCoin } from "@/lib/burnticker/duplicateRule";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
-import { describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { championPathRule, describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
@@ -117,6 +118,9 @@ const denver = (iso: string | null) => (iso ? new Intl.DateTimeFormat("en-US", {
 function endsLine(t: CoinText | null): string | null {
   if (!t) return null;
   const w = t.windowSentence;
+  // website-18 the champion path (describe.ts championEndSentences): the end says where the rest goes, champion or not
+  const champ = /covers the (.+?) season only\. (If .+ win the championship.+)$/.exec(w);
+  if (champ) return `The rule ends after the team's last game of the ${champ[1]} season, playoffs included. ${champ[2]} If the result is voided or the season is cancelled, the rest burns down on this coin over four weeks instead.`;
   const season = /covers the (.+?) season only/.exec(w), post = /covers (.+?) postseason only/.exec(w), next = /next (\d+) games? only/.exec(w), once = /^(?:This coin r|R)esolves once,?(?: on ([A-Z][a-z]{2} \d{1,2}, \d{4}))?/.exec(w);
   // the deployed end of a rule: the coin's own pool burns down over 28 days, then the coin retires (no end-of-rule sink is deployed)
   const after = "Then its own burn pool burns down over 28 days, and the coin retires.";
@@ -216,6 +220,8 @@ export default function LaunchWizard() {
   const [ownImage, setOwnImage] = useState(false), [customImages, setCustomImages] = useState(false);
   // website-15 item 13: the creator's own image, description and links (ProfileFields.tsx); the image is never kept in the saved draft
   const [profile, setProfile] = useState<ProfileValue>(EMPTY_PROFILE);
+  // website-18 (the owner: "I also don't see the ability to change the thumbnail pic"): side B of a Matchup has its own profile
+  const [profileB, setProfileB] = useState<ProfileValue>(EMPTY_PROFILE);
   // the creator's note (≤ 140 chars): its own box on the coin page, never part of the description; linted on the server at launch
   const [note, setNote] = useState("");
   // website-14 (LAUNCHPAD-PATH §75): the graduation preset, 40 / 60 / 85 SOL, default 85; the server refuses anything else on mainnet
@@ -412,7 +418,9 @@ export default function LaunchWizard() {
   }, [pairOn, game, sideA, sideB, pairMode, leagueSeries, cardYear]);
   const baseRule: BurnRule | null = useMemo(() => {
     // a team coin: this season by default (the picker's selector), 2 % per game; the side, the window and the share are dials
-    if (flow === "team") return team?.series ? firstPartyRule(winLose === "win" ? team.series.win : team.series.loss, 0.02) : null;
+    // website-18: with the end clause every launch gets (dials.ts ON_END_DEFAULT = rules.ts DEFAULT_ON_END), so the review card says the
+    // end the coin really has: a wins coin in MLB, the NBA or the NHL takes the champion path (describe.ts championPathRule)
+    if (flow === "team") return team?.series ? { ...firstPartyRule(winLose === "win" ? team.series.win : team.series.loss, 0.02), onEnd: { ...ON_END_DEFAULT } } as BurnRule : null;
     if (flow === "pair") return pairRules?.a ?? null;
     return genericRule;
   }, [flow, team, winLose, pairRules, genericRule]);
@@ -510,14 +518,14 @@ export default function LaunchWizard() {
   // L06: the read-only review payload (POST /v1/launch/review) for the pre-wallet summary — the server's numbers, debounced. A6: every
   // request carries the draft's revision; an answer for an older revision or an older request is dropped (launchReviewSync.ts)
   const reviewSeq = useRef(0);
-  const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB] : null, srcWarnings, textCtx, raiseSol, pairOn ? "" : profile.description]);
+  const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB] : null, srcWarnings, textCtx, raiseSol, profile.description, pairOn ? profileB.description : ""]);
   const curRev = useRef(reviewKey); curRev.current = reviewKey;
   useEffect(() => {
     if (step !== "review" || !rule || gate.kind === "loading") return;
     const seq = ++reviewSeq.current, rev = reviewKey;
     setReviewSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
-      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: srcWarnings, raiseSol, ...(pairOn ? {} : { creatorDescription: profile.description }), ...(pairOn && ruleB ? { companion: { ticker: tickerB.toUpperCase(), name: nameB } } : {}) }) })
+      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: srcWarnings, raiseSol, creatorDescription: profile.description, ...(pairOn && ruleB ? { companion: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description } } : {}) }) })
         .then((j) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
         .catch((e) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: `${(e as Error).message} (${detailOf(e)})` })));
     }, 400);
@@ -540,28 +548,26 @@ export default function LaunchWizard() {
     try {
       if (pairOn && ruleB) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
-        const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, links: [], rule });
-        const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}, note: "", imageUrl: null, links: [], rule: ruleB });
+        // website-18: each coin carries its own image, description and links (pinned in its own metadata file)
+        const a = await post({ ...common, ticker: ticker.toUpperCase(), name, description: finalDescription, descCtx: textCtx, note, imageUrl: null, rule, ...profileBody(profile) });
+        const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}, note: "", imageUrl: null, rule: ruleB, ...profileBody(profileB) });
         setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [independentPairFacts(ticker.toUpperCase(), tickerB.toUpperCase()).moves] }); setBundle(a.bundle);
       } else {
         const body: Record<string, unknown> = { ...common, ...launchBody({ creator, ticker, name, description: finalDescription, descCtx: textCtx, note, rule, raiseSol }) };
         // website-15 item 13: a single coin carries the creator's description, links and uploaded image (with the confirmed rights line)
-        if (!pairOn) {
-          body.creatorDescription = profile.description.trim();
-          body.links = creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links;
-          if (profile.image) { body.image = { contentType: profile.image.contentType, base64: profile.image.base64 }; body.imageRights = profile.rights; body.imageBadge = profile.badge; }
-        }
+        // website-18: a registered pair's side A too; side B's profile rides in `pair`
+        Object.assign(body, profileBody(profile));
         if (pairOn) {
           // a rivalry pair (one shared selector): the venue this host uses — the pair curve (one transaction set, both graduate or
           // neither) or two LaunchLab bundles; a 409 naming the other venue switches the review line and waits for a second press
-          const j = await postPairLaunch((u, init) => fetch(u, init), { ...body, pair: { ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, imageUrl: null, links: [] } }, pairVenue);
+          const j = await postPairLaunch((u, init) => fetch(u, init), { ...body, pair: { ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, imageUrl: null, ...profileBody(profileB) } }, pairVenue);
           if (j.venue === "pair-curve") { setPairOut(null); setBundle(null); setPcOut({ pairId: j.pair.pairId, pc: j.pairCurve, keys: j.mintSecretKeys, notes: j.pair.notes ?? [] }); }
           else { setPairOut({ pairId: j.pair.pairId, a: j.bundles.a as Bundle, b: j.bundles.b as Bundle, notes: j.pair.notes ?? [] }); setBundle(j.bundles.a as Bundle); }
         } else setBundle((await post(body)).bundle);
       }
       setStep("launch");
     } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
-  }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title]);
+  }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, profile, profileB, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title]);
 
   // ---- navigation -----------------------------------------------------------------------------------------------------------------
   const order = ORDER[flow];
@@ -707,10 +713,6 @@ export default function LaunchWizard() {
       {/* website-15 item 12 (ChatGPT repair 1): sticks right under the shared header, whose measured height SiteHeader writes to --bt-header-h */}
       {preview && <p className="sticky z-30 rounded border border-amber-400 bg-neutral-950/95 px-3 py-2 text-sm font-medium text-amber-300" style={{ top: "var(--bt-header-h, 3.5rem)" }} role="status" data-preview-banner>{PREVIEW_BANNER}</p>}
       <LaunchRecovery />
-      {step === "choose" && <CreatorOnboarding />}
-      {/* website-17 wiring item 4: what a creator gets besides the coin, then the example tickets (the launch state passed once read) */}
-      {step === "choose" && <CreatorBenefitsList />}
-      {step === "choose" && <ExampleTickets site={site === SITE_LAUNCH_STATE_LOADING ? null : site} />}
 
       {step !== "choose" && (
         <div aria-label="Progress">
@@ -798,7 +800,7 @@ export default function LaunchWizard() {
                 {pairTile ? <div className="px-5 pb-4">{pairsWhy(`tile-${f}-why`)}</div> : why && <p id={`tile-${f}-why`} className="px-5 pb-4 text-xs text-amber-300">{why}</p>}
               </div>
             ); })}
-            <CoinVsCoinTile pairCurve={venues.pairCurve === true} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
+            <CoinVsCoinTile pairCurve={venues.pairCurve === true} customImages={customImages} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
           </div>
           <p className="text-xs text-neutral-500"><Link className="underline" href="/burnticker/templates">Start with one of {TEMPLATES.length} templates.</Link></p>
         </section>
@@ -1001,11 +1003,15 @@ export default function LaunchWizard() {
       {step === "review" && rule && (() => {
         const shareText = pct(shareValue);
         const A = sideA?.nickname ?? sideA?.name ?? "side A", B = sideB?.nickname ?? sideB?.name ?? "side B";
-        const coinA = { key: "a", name, ticker, onName: (v: string) => { setName(v); setNameAuto(false); noteEdit(); }, onTicker: (v: string) => { setTicker(v); setTickerAuto(false); noteEdit(); }, image: !pairOn && profile.image ? chosenPreview(profile)! : genImg(rule, ticker, oneLiner), oneLiner, oracle: pairOn ? "catalogue" : pick?.oracle ?? "catalogue", badge: text?.badge ?? null };
-        const coins = pairOn && ruleB ? [coinA, { key: "b", name: nameB, ticker: tickerB, onName: (v: string) => { setNameB(v); noteEdit(); }, onTicker: (v: string) => { setTickerB(v); noteEdit(); }, image: genImg(ruleB, tickerB, textB?.oneLiner ?? ""), oneLiner: textB?.oneLiner ?? ruleOneLiner(ruleB), oracle: "catalogue", badge: textB?.badge ?? null }] : [coinA];
+        const coinA = { key: "a", name, ticker, onName: (v: string) => { setName(v); setNameAuto(false); noteEdit(); }, onTicker: (v: string) => { setTicker(v); setTickerAuto(false); noteEdit(); }, image: profile.image ? chosenPreview(profile)! : genImg(rule, ticker, oneLiner), oneLiner, oracle: pairOn ? "catalogue" : pick?.oracle ?? "catalogue", badge: text?.badge ?? null };
+        // website-18 THE TEAM PATH: league, team, this card, Launch. The card says the defaults in one sentence each (the burn on every
+        // win through the postseason, then the champion and the not-champion ends); every other choice sits under one closed "Advanced"
+        const teamPath = flow === "team" && !pairOn && championPathRule(rule);
+        const imageField = (v: ProfileValue, set: (x: ProfileValue) => void, who: string | null) => <ProfileFields key={who ?? "a"} value={v} onChange={set} part="image" who={who} customImages={customImages} />;
+        const coins = pairOn && ruleB ? [coinA, { key: "b", name: nameB, ticker: tickerB, onName: (v: string) => { setNameB(v); noteEdit(); }, onTicker: (v: string) => { setTickerB(v); noteEdit(); }, image: profileB.image ? chosenPreview(profileB)! : genImg(ruleB, tickerB, textB?.oneLiner ?? ""), oneLiner: textB?.oneLiner ?? ruleOneLiner(ruleB), oracle: "catalogue", badge: textB?.badge ?? null }] : [coinA];
         const sentence = pairOn && sideA && sideB
           ? (season ? `$${ticker} spends ${shareText} of its burn budget every time the ${A} lose this season, and $${tickerB} does the same for the ${B}. They are two separate coins with two separate records.` : `When ${game?.title ?? "the game"} is final, the coin of the team that lost spends ${shareText} of its own burn budget: $${ticker} if the ${A} lose, $${tickerB} if the ${B} lose.`)
-          : text ? text.ruleBlock.split(/(?<=\.)\s/)[0] : plainSentence(rule, ticker, pick?.title ?? bt?.seriesTitle ?? null);
+          : text ? (teamPath ? `${text.ruleBlock.split(/(?<=\.)\s/)[0]} ${text.windowSentence.replace(/^This coin covers [^.]*\.\s*/, "")}` : text.ruleBlock.split(/(?<=\.)\s/)[0]) : plainSentence(rule, ticker, pick?.title ?? bt?.seriesTitle ?? null);
         const problems = btFresh ? [...(bt?.refusals ?? []), ...(pairOn ? btB?.refusals ?? [] : [])].map((r) => r.reason) : [];
         const ready = !!name.trim() && okTicker(ticker) && (!pairOn || (!!nameB.trim() && okTicker(tickerB) && ticker !== tickerB)) && !noteProblem;
         return (
@@ -1030,8 +1036,10 @@ export default function LaunchWizard() {
               duplicate={<DuplicateNotice existing={(shownReview.review as (LaunchReview & { existing?: ExistingCoin[] }) | null)?.existing ?? []} />}
               summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
               cost={shownReview.review && reviewCurrent ? `The estimated cost is about ${shownReview.review.costs.totalSol} SOL.` : null}
-              profile={pairOn ? null : <ProfileFields value={profile} onChange={setProfile} />}
-              profileProblems={pairOn ? [] : [...profileProblems(profile), ...(reviewCurrent ? (shownReview.review?.problems ?? []).filter((x) => /^The description /.test(x)) : [])]}
+              image={pairOn && ruleB ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`)}{imageField(profileB, setProfileB, `$${tickerB || "B"}`)}</div> : imageField(profile, setProfile, null)}
+              profile={pairOn && ruleB ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} part="text" who={`$${ticker || "A"}`} /><ProfileFields value={profileB} onChange={setProfileB} part="text" who={`$${tickerB || "B"}`} /></div> : <ProfileFields value={profile} onChange={setProfile} part="text" />}
+              advanced={teamPath ? { defaults: teamAdvancedDefaults({ sharePct: pct(shareValue), raiseSol: raiseSol, minForwardSol: String(ON_END_DEFAULT.sweepThresholdLamports / 1e9) }) } : null}
+              profileProblems={[...profileProblems(profile), ...(pairOn && ruleB ? profileProblems(profileB).map((x) => `$${tickerB || "B"}: ${x}`) : []), ...(reviewCurrent ? (shownReview.review?.problems ?? []).filter((x) => /^(Coin B\. )?The description /.test(x)) : [])]}
               blocked={walletBlocked(pairOn ? "matchup" : launchTypeOf(rule), pairOn)}
               warnings={srcWarnings}
               shareNotice={shareNotice}
@@ -1059,6 +1067,20 @@ export default function LaunchWizard() {
           </section>
         );
       })()}
+
+      {/* website-18 (the owner: "the examples and dev benefits take up too much space and force you to scroll to create a coin"): what a
+          creator gets and the example tickets, below the wizard in one disclosure, closed by default (the launch state passed once read) */}
+      {step === "choose" && (
+        <details className="rounded-lg border border-neutral-800 p-3" data-examples-benefits>
+          <summary className="cursor-pointer text-sm text-neutral-300">{EXAMPLES_AND_BENEFITS_LABEL}</summary>
+          <div className="mt-3 space-y-5">
+            {/* the onboarding block (what a creator does, the cost, what they get) moved here too: at 390 px it pushed the search box below the first screen */}
+            <CreatorOnboarding />
+            <CreatorBenefitsList />
+            <ExampleTickets site={site === SITE_LAUNCH_STATE_LOADING ? null : site} />
+          </div>
+        </details>
+      )}
     </main>
   );
 }

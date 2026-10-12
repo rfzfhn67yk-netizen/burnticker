@@ -161,6 +161,6 @@ describe("the receipt mark is optional, on by default (owner, 2026-10-12)", () =
     const pf = fs.readFileSync("src/app/burnticker/launch/ProfileFields.tsx", "utf8"), pg = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
     assert.match(pf, /badge: true, description/, "on by default"); assert.match(pf, /data-preview="badged"/); assert.match(pf, /data-preview="plain"/);
     assert.match(pf, /data-badge-toggle checked=\{value\.badge\}/); assert.match(pf, /<p data-badge-note>\{BADGE_NOTE\}<\/p>/);
-    assert.match(pg, /body\.imageBadge = profile\.badge;/); assert.match(pg, /profileBadge: profile\.badge/, "the choice is kept with the saved draft");
+    assert.match(pf, /out\.imageBadge = v\.badge;/); assert.match(pg, /profileBody\(profile\)/); assert.match(pg, /profileBadge: profile\.badge/, "the choice is kept with the saved draft");
   });
 });

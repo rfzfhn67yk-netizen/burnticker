@@ -12,6 +12,7 @@ import { pctLabel, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, type RaisePreset } fr
 import { RetirementFacts } from "../_components/RetirementFacts";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
+import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
 
 /**
  * THE REVIEW CARD (2026-10-10, the owner: "it feels overly complicated to get a coin set up … the UI needs to be simpler, even if it
@@ -62,6 +63,10 @@ export interface ReviewCardProps {
   cost?: string | null;
   /** website-15 item 13: the creator's image, description and links (ProfileFields.tsx), above the rule choices; null for pairs. */
   profile?: ReactNode;
+  /** website-18: the image control (ProfileFields part "image"), one per coin; always shown above the choices, never inside Advanced. */
+  image?: ReactNode;
+  /** website-18: the Team path's one "Advanced" disclosure (closed by default) around every other choice, with the defaults it set. */
+  advanced?: { defaults: string[] } | null;
   /** website-15 item 13: what still blocks the launch in those fields (listed beside the button). */
   profileProblems?: string[];
   /** L02 / site audit #4: why the wallet cannot open (preview mode, a closed host, a type this host cannot take); null = it can. */
@@ -90,6 +95,23 @@ export const BUDGET_LABEL = "Burn budget per result";
 export const RAISE_LABEL = "SOL raised before graduation";
 export const ACK_LINE = "By launching, you confirm the rule as written. You also confirm that you make no promises to anyone about this coin. The rule is stored with the coin, and no instruction in the program can change it.";
 const okTicker = (t: string) => /^[A-Z0-9]{2,10}$/.test(t);
+/**
+ * website-18 (the owner: "it feels overcomplicated to set up"): on the Team path every choice after the team sits in ONE disclosure,
+ * closed by default, that lists the defaults it already set. Without `advanced` the choices render in place, as before.
+ */
+function AdvancedWrap({ advanced, children }: { advanced: { defaults: string[] } | null; children: ReactNode }) {
+  if (!advanced) return <>{children}</>;
+  return (
+    <details className="min-w-0 rounded-lg border border-neutral-800 p-3" data-advanced>
+      <summary className="cursor-pointer text-sm text-neutral-200">{ADVANCED_LABEL}</summary>
+      <div className="mt-2 min-w-0 space-y-3">
+        <p className="text-xs text-neutral-400">{ADVANCED_NOTE}</p>
+        <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-neutral-300" data-advanced-defaults>{advanced.defaults.map((x) => <li key={x}>{x}</li>)}</ul>
+        {children}
+      </div>
+    </details>
+  );
+}
 export function ReviewCard(p: ReviewCardProps) {
   const [editState, setEditState] = useState(false), [noteOpen, setNoteOpen] = useState(!!p.note?.value);
   const [tickerNotes, setTickerNotes] = useState<Record<string, string | null>>({});
@@ -144,6 +166,10 @@ export function ReviewCard(p: ReviewCardProps) {
       )}
       {p.pairFacts ? <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-200" data-pair-facts={p.pairFacts.kind} aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul>
         : p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line>{p.pairLine} <FieldHelp id="pair-burn" /></p>}
+      {p.warnings && p.warnings.length > 0 && <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-300" aria-label="Source warnings">{p.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
+      {/* website-18: the image control stays on the card (one coin, or each side of a pair), above the Advanced disclosure */}
+      {p.image}
+      <AdvancedWrap advanced={p.advanced ?? null}>
       {p.profile}
       <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={BUDGET_LABEL} aria-describedby={`${uid}-budget`}>
         <span className="text-xs text-neutral-500" aria-hidden="true">{BUDGET_LABEL}</span>
@@ -172,10 +198,10 @@ export function ReviewCard(p: ReviewCardProps) {
         </div>
       )}
       {p.shareNotice && <p className="min-w-0 break-words text-xs text-amber-300" role="status" data-share-notice>{p.shareNotice}</p>}
-      {p.warnings && p.warnings.length > 0 && <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-300" aria-label="Source warnings">{p.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {p.note && (noteOpen ? (
         <label className="block text-xs text-neutral-400">A note from you, shown in its own box (optional, 140 characters, no links)<FieldHelp id="note" /><textarea data-help="note" data-optional="note" aria-invalid={!!p.note.problem} className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" rows={2} maxLength={140} value={p.note.value} onChange={(e) => p.note!.onChange(e.target.value)} />{p.note.problem && <span className="text-red-400">{p.note.problem}</span>}</label>
       ) : <button type="button" data-optional="note" className="text-xs underline text-neutral-400" onClick={() => setNoteOpen(true)}>add a note</button>)}
+      </AdvancedWrap>
       {p.problems.length > 0 && <p className="min-w-0 break-words text-red-400">Can&apos;t launch this rule: {p.problems.join("; ")}</p>}
       {p.error && <p className="min-w-0 break-words text-red-400" role="alert">{p.error}</p>}
       {p.cost && <p className="min-w-0 break-words text-sm text-neutral-200" data-cost-line>{p.cost}</p>}

@@ -16,6 +16,16 @@ A coin launched with `onEnd.endSink` in its hashed rule (every new launch: `rule
 - **void** (a voided market, a pair that voided, a cancelled season): the RuleEnd is recorded void and the coin keeps the 28-day
   wind-down on itself, then the self-burn sweep.
 
+**The champion path (website-18, 2026-10-12).** A wins coin for a whole season in MLB, the NBA or the NHL with the $DEFICIT sink
+(not the fade side; describe.ts `championPathRule`) ends by its team's result. If the team won the championship (its last postseason
+game was a win and nothing more was listed), the keeper records the end with the program's void outcome, the only one that keeps the
+pool on the coin, so the rest winds down on the coin itself; the reason, log, memo, status record and attested source URL say "won the
+championship: the rest burns on this coin" (the program's own signed end message still carries `outcome=void`). Any other end forwards
+the rest to $DEFICIT as resolved. The keeper waits, recording nothing, until the schedule gives a verdict and the coin's own receipt for
+that last game agrees (`championVerdict`). Other leagues' schedules cannot tell a champion (TheSportsDB round labels, bowls and the NIT,
+soccer tables), so their season coins keep the plain end. The champion's own coin is not offered as a sink: the program can pin only
+the flagship, a named existing coin or a pair partner at creation.
+
 Who the sink is: a single coin's sink is $DEFICIT (the flagship, compiled per cluster: mainnet `AJJ4XxCU…oqj`, devnet `4QnwyiBM…AM4F`,
 localnet/test `H4JcMPic…r9M`). A winner-takes-the-burn pair coin's sink is its partner when the partner won the end date's result and
 is still live, else $DEFICIT. The pair coin that won the end date is the sink itself: the keeper records no end for it, so it stays live,

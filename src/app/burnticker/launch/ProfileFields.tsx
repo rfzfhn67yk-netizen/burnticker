@@ -1,10 +1,11 @@
 "use client";
 
 import { useId, useState } from "react";
-import { DESCRIPTION_MAX, IMAGE_HELP, RIGHTS_LINE, imageFileProblem } from "@/lib/burnticker/creatorProfile";
+import { DESCRIPTION_MAX, IMAGE_HELP, RIGHTS_LINE, creatorLinks, imageFileProblem } from "@/lib/burnticker/creatorProfile";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
 import { LinkedWords } from "../_components/LinkedWords";
+import { CUSTOM_IMAGES_OFF_LINE } from "@/lib/burnticker/creatorCopy";
 
 /**
  * THE CREATOR'S IMAGE, DESCRIPTION AND LINKS ON THE REVIEW CARD (website-15 item 13; owner decisions 2026-10-12). Above the rule
@@ -22,6 +23,16 @@ export const EMPTY_PROFILE: ProfileValue = { image: null, rights: false, badge: 
 /** The preview that will be pinned. */
 export const chosenPreview = (v: ProfileValue): string | null => (v.image ? (v.badge ? v.image.badgedUrl : v.image.plainUrl) : null);
 
+/**
+ * website-18: the launch body fields for one coin's profile (a single coin, each coin of a Matchup, or `pair` for side B of a registered
+ * pair): the creator's description, links and, when one was chosen, the uploaded image with the rights line and the badge choice.
+ */
+export function profileBody(v: ProfileValue): { creatorDescription: string; links: { label: string; url: string }[]; image?: { contentType: string; base64: string }; imageRights?: boolean; imageBadge?: boolean } {
+  const out: ReturnType<typeof profileBody> = { creatorDescription: v.description.trim(), links: creatorLinks({ x: v.x, telegram: v.telegram, website: v.website }).links };
+  if (v.image) { out.image = { contentType: v.image.contentType, base64: v.image.base64 }; out.imageRights = v.rights; out.imageBadge = v.badge; }
+  return out;
+}
+
 /** What still blocks the launch in these fields (the review lists it beside the button). */
 export function profileProblems(v: ProfileValue): string[] {
   const out: string[] = [];
@@ -31,7 +42,12 @@ export function profileProblems(v: ProfileValue): string[] {
   return out;
 }
 
-export function ProfileFields({ value, onChange }: { value: ProfileValue; onChange: (v: ProfileValue) => void }) {
+/**
+ * website-18: `part` splits the fields so the image control stays on the review card ("image") while the description and links can sit
+ * in a disclosure ("text"); `who` names the side of a pair ("$LAKERS"); `customImages` false (the host takes no custom images) shows the
+ * generated art with CUSTOM_IMAGES_OFF_LINE instead of the file control.
+ */
+export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true }: { value: ProfileValue; onChange: (v: ProfileValue) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean }) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [fileErr, setFileErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
   const set = (p: Partial<ProfileValue>) => onChange({ ...value, ...p });
@@ -55,10 +71,19 @@ export function ProfileFields({ value, onChange }: { value: ProfileValue; onChan
     r.readAsDataURL(f);
   };
   const input = "mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm";
+  const showImage = part !== "text", showText = part !== "image";
+  const legend = part === "image" ? `${who ? `${who}: ` : ""}Image. It is optional.` : part === "text" ? `${who ? `${who}: ` : ""}Description and links. Each one is optional.` : `${who ? `${who}: ` : ""}Your coin's image, description and links. Each one is optional.`;
   return (
-    <fieldset className="min-w-0 space-y-2 rounded-lg border border-neutral-800 p-3 text-xs text-neutral-400" data-profile>
-      <legend className="px-1 text-neutral-300">Your coin&apos;s image, description and links. Each one is optional.</legend>
-      <div className="flex min-w-0 items-start gap-3">
+    <fieldset className="min-w-0 space-y-2 rounded-lg border border-neutral-800 p-3 text-xs text-neutral-400" data-profile={part}>
+      <legend className="px-1 text-neutral-300">{legend}</legend>
+      {/* website-18: when this site takes no custom images, the generated art and one sentence say so (never an empty space) */}
+      {showImage && !customImages && (
+        <div className="flex min-w-0 items-center gap-3" data-custom-images-off>
+          <div className="bt-profile-square shrink-0" aria-hidden="true"><span>Receipt art</span></div>
+          <p className="min-w-0 text-neutral-300">{CUSTOM_IMAGES_OFF_LINE}</p>
+        </div>
+      )}
+      {showImage && customImages && <div className="flex min-w-0 items-start gap-3" data-image-control>
         {value.image ? (
           // both previews side by side; the one that will be pinned is outlined
           <div className="flex shrink-0 gap-2" data-image-previews>
@@ -84,7 +109,8 @@ export function ProfileFields({ value, onChange }: { value: ProfileValue; onChan
             </>
           )}
         </div>
-      </div>
+      </div>}
+      {showText && <>
       <label className="block" htmlFor={`${uid}-desc`}>Description. It follows the rule sentence on the coin&apos;s page.</label>
       <textarea id={`${uid}-desc`} data-optional="profile" className={input} rows={3} maxLength={DESCRIPTION_MAX} value={value.description} onChange={(e) => set({ description: e.target.value })} aria-describedby={`${uid}-count`} />
       <p id={`${uid}-count`}>{value.description.length} of {DESCRIPTION_MAX} characters.</p>
@@ -93,6 +119,7 @@ export function ProfileFields({ value, onChange }: { value: ProfileValue; onChan
           <label key={k} className="block min-w-0">{label}<input type="url" inputMode="url" data-optional="profile" placeholder="https://" className={input} value={value[k]} onChange={(e) => set({ [k]: e.target.value } as Partial<ProfileValue>)} /></label>
         ))}
       </div>
+      </>}
     </fieldset>
   );
 }
