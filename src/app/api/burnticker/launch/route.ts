@@ -6,7 +6,7 @@ import { clientKey, limiter } from "@/lib/burnticker/api/http";
 import { RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { pairCurveEnabled } from "@/lib/burnticker/pairCurveLaunch";
 import { recordLaunchTimings } from "@/lib/burnticker/api/product";
-import { creatorLaunchRefusal } from "@/lib/burnticker/creatorLaunches";
+import { globalRefusal, typeRefusal } from "@/lib/burnticker/launchAvailability";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +22,9 @@ export async function POST(req: Request) {
   // Cross-site requests are refused before the body is read (the repo's rule for every mutating route). No PIN and no trusted-host
   // check here: creators are third parties using the wizard on this origin.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "cross-site request refused", code: "cross-origin" }, { status: 403 });
-  // BURNTICKER_CREATOR_LAUNCHES_ENABLED off (the default): no creator launch — the operator's coins launch through the CLI.
-  const closed = creatorLaunchRefusal(process.env);
+  // BURNTICKER_CREATOR_LAUNCHES_ENABLED off (the default): no creator launch — the operator's coins launch through the CLI. In preview
+  // mode (BURNTICKER_CREATOR_LAUNCHES_PREVIEW) the refusal says so (code launches-closed, preview: true): nothing builds or sends.
+  const closed = globalRefusal(process.env);
   if (closed) return NextResponse.json(closed.body, { status: closed.status });
   // ChatGPT/Codex review N4 (2026-10-10): the same per-client write bucket as /v1/launch/bundle and /v1/launch/confirm (one shared
   // bucket: a client cannot double its allowance by alternating routes). An Origin header is not authentication; this is the meter.
@@ -32,6 +33,9 @@ export async function POST(req: Request) {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "invalid JSON body" }, { status: 400 }); }
   const p = platform();
+  // launch audit 5 L02: a launch type this host cannot take (sports without its settlement source, pairs off on mainnet) is refused here
+  // too, with the plain reason — the page explains it before any form, the server enforces it.
+  if (body.action !== "launched") { const off = typeRefusal(body, process.env, p.cluster); if (off) return NextResponse.json(off.body, { status: off.status }); }
   // ChatGPT/Codex review N6 (2026-10-10): with BURNTICKER_PAIR_CURVE_ENABLED a rivalry pair launches ONLY through pair_curve (both
   // graduate or neither). A client must ask for that venue (`venue: "pair-curve"`) and gets the pair-curve transaction set and never
   // the two independent LaunchLab bundles; one that does not ask is refused BEFORE anything is pinned or registered — no silent

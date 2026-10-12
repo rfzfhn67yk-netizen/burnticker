@@ -14,6 +14,10 @@ import { SignCard } from "./SignCard";
 import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
 import type { SerializedIx } from "@/lib/burnticker/program";
 import { PAIR_REVIEW_LINE } from "@/lib/burnticker/describe";
+import { derbyExplainer } from "@/lib/burnticker/launchDerby";
+import { PreWalletSummary } from "./PreWalletSummary";
+import type { LaunchReview } from "@/lib/burnticker/launchReview";
+import { SHARE_PRESETS } from "@/lib/burnticker/launchPresets";
 
 /**
  * "COIN VS COIN" — the Burn Derby wizard tile (2026-10-10; cut to presets the same day, the owner: "the UI needs to be simpler, even if it
@@ -63,7 +67,11 @@ function CoinPicker({ label, value, onPick, exclude, initial }: { label: string;
   );
 }
 
-export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = {}) {
+/**
+ * `blocked`: why the wallet cannot open (preview mode, a closed host, pairs off on this host) — the review card disables its button and
+ * says so. `unavailable`: Coin vs Coin cannot launch on this host at all (launch audit 5 L02) — the tile says why before any picking.
+ */
+export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null }: { pairCurve?: boolean; blocked?: string | null; unavailable?: string | null } = {}) {
   const wallet = useWallet();
   const [open, setOpen] = useState(false);
   // `/burnticker/launch?derby=1&a=WIF&b=SHIB` (the Burn Derby page and the search card) opens the tile with both searches filled in.
@@ -93,7 +101,8 @@ export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = 
   const b64u = (x: string) => btoa(unescape(encodeURIComponent(x))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   /** The generated receipt art for a rule not launched yet (coinArt.ts via /burnticker/img/preview.svg), never "NO IMAGE". */
   const art = (r: BurnRule | null, tk: string) => (r ? `/burnticker/img/preview.svg?r=${b64u(JSON.stringify(r))}&t=${encodeURIComponent(tk || "TICKER")}&l=${encodeURIComponent(ruleOneLiner(r).slice(0, 120))}` : "");
-  const ends = choice ? (() => { const s = tileSpec(choice).season; const end = new Date(Date.parse(`${s.start}T00:00:00Z`) + s.days * 86_400_000); return `${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} (after ${s.days} days), then winds down`; })() : null;
+  // L13: the start boundary too, in UTC (the windows' clock) — the facts list above adds Denver time
+  const ends = choice ? (() => { const s = tileSpec(choice).season; const start = new Date(`${s.start}T00:00:00Z`), end = new Date(Date.parse(`${s.start}T00:00:00Z`) + s.days * 86_400_000); const d = (x: Date) => x.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); return `The windows run from ${d(start)} 00:00 UTC to ${d(end)} 00:00 UTC, which is ${s.days} daily windows. Then each coin's own burn pool burns down over 28 days and the coins retire.`; })() : null;
 
   // review N6: the venue this host uses for a pair (catalogue venues.pairCurve, passed down by the page). The venue is not shown before
   // launch (the owner's cut list); a 409 naming the other venue switches it and the build is retried once.
@@ -114,11 +123,26 @@ export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = 
     try { await run(venue, false); } finally { setBusy(false); }
   };
 
+  // L06 / L13: the read-only review payload for the pair (the server's numbers), debounced; the pair's side B rule is derived at build
+  const [review, setReview] = useState<LaunchReview | null>(null), [reviewBusy, setReviewBusy] = useState(false), [reviewErr, setReviewErr] = useState<string | null>(null);
+  const reviewKey = JSON.stringify([model?.rule ?? null, names]);
+  useEffect(() => {
+    if (!model?.rule) { setReview(null); return; }
+    let live = true; setReviewBusy(true); setReviewErr(null);
+    const t = setTimeout(() => {
+      fetch("/api/burnticker/v1/launch/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: model.rule, ticker: names.ta.toUpperCase(), name: names.a, pair: { ticker: names.tb.toUpperCase(), name: names.b } }) })
+        .then(async (r) => { const j = await r.json().catch(() => null); if (!r.ok) throw new Error(r.status === 403 ? "creator launches are closed on this host" : `the review could not be read (HTTP ${r.status})`); return j as LaunchReview; })
+        .then((j) => { if (live) setReview(j); }).catch((e) => { if (live) { setReview(null); setReviewErr(String((e as Error).message)); } }).finally(() => { if (live) setReviewBusy(false); });
+    }, 400);
+    return () => { live = false; clearTimeout(t); };
+  }, [reviewKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const tileButton = (
-    <button onClick={() => setOpen(true)} data-decision="what" className="w-full text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none" aria-label="Coin vs Coin">
+    <button onClick={() => setOpen(true)} data-decision="what" disabled={!!unavailable} aria-describedby={unavailable ? "cvc-why" : undefined} className="w-full text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none disabled:opacity-50" aria-label="Coin vs Coin">
       <div className="text-lg font-semibold">Coin vs Coin <span className="ml-1 rounded bg-amber-400/15 px-1.5 text-xs text-amber-300 align-middle">Burn Derby</span></div>
-      <p className="mt-1 text-sm text-neutral-300">Two coins people already hold race every day. The winner&apos;s coin burns.</p>
-      <p className="mt-3 text-xs text-neutral-500">e.g. $TEAMWIF burns every day WIF out-gains SHIB (Pyth, 00:00 UTC)</p>
+      <p className="mt-1 text-sm text-neutral-300">Pick two coins that people already hold. Burnticker only reads their published feeds. You launch two new coins that race on those feeds every day, and the new coin on the winning side burns.</p>
+      <p className="mt-3 text-xs text-neutral-500">e.g. $TEAMWIF burns on every UTC day WIF out-gains SHIB (Pyth, 00:00 UTC)</p>
+      {unavailable && <p id="cvc-why" className="mt-2 text-xs text-amber-300">{unavailable}</p>}
     </button>
   );
   if (!open) return tileButton;
@@ -126,10 +150,16 @@ export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = 
   return (
     <section className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-4 sm:col-span-2" aria-label="Coin vs Coin">
       <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">{flip ? "Flippening" : "Coin vs Coin"}</h3><span className="flex gap-3 text-xs"><a className="underline" href="/burnticker/derby">Burn Derby pairs and brackets →</a><button className="underline" data-nav onClick={() => setOpen(false)}>close</button></span></div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <CoinPicker key={`a-${initial.a}`} initial={initial.a} label={flip ? "The coin that would pass" : "Coin A"} value={a} onPick={setA} exclude={b?.symbol ?? null} />
-        <CoinPicker key={`b-${initial.b}`} initial={initial.b} label={flip ? "The coin it would pass" : "Coin B"} value={b} onPick={setB} exclude={a?.symbol ?? null} />
+      <p className="text-xs text-neutral-300" data-derby-explainer>The two coins you pick are <b>reference feeds</b>. Burnticker only reads their published feeds and never trades or burns them. Launching creates two <b>new</b> coins, and their own trading fees pay for their burns.</p>
+      <div className="grid min-w-0 gap-3 md:grid-cols-2">
+        <CoinPicker key={`a-${initial.a}`} initial={initial.a} label={flip ? "Reference coin A, the one that may pass the other" : "Reference coin A"} value={a} onPick={setA} exclude={b?.symbol ?? null} />
+        <CoinPicker key={`b-${initial.b}`} initial={initial.b} label={flip ? "Reference coin B, the one that may be passed" : "Reference coin B"} value={b} onPick={setB} exclude={a?.symbol ?? null} />
       </div>
+      {model && !out && !pcOut && (() => { const x = derbyExplainer(model.spec, { a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }); return (
+        <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-neutral-300" aria-label="What this creates" data-derby-facts>
+          <li>{x.references}</li><li>{x.created}</li><li>{x.window}</li><li>{x.start}</li><li>{x.end}</li><li>{x.tie}</li><li>{x.missing}</li>
+        </ul>
+      ); })()}
       {model && !out && !pcOut && (
         <ReviewCard
           coins={[
@@ -139,13 +169,15 @@ export function CoinVsCoinTile({ pairCurve = false }: { pairCurve?: boolean } = 
           sentence={model.sentence}
           pairLine={PAIR_REVIEW_LINE}
           ends={ends}
-          shares={{ options: [0.02, 0.05, 0.1], value: fraction, onChange: setFraction }}
+          shares={{ options: [...SHARE_PRESETS.recurring], value: fraction, onChange: setFraction }}
           problems={model.problems}
           error={err}
           busy={busy}
           ready={ready}
           creator={creator || null}
           onLaunch={() => { void launch(); }}
+          summary={<PreWalletSummary review={review} loading={reviewBusy} error={reviewErr} />}
+          blocked={blocked}
         />
       )}
       {(pcOut || out) && <SignCard plan={pcOut ? pairCurvePlan(pcOut.pc, pcOut.keys, { a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }) : launchlabPlan([out!.a, out!.b])} creator={creator || null} title={`Launch $${names.ta.toUpperCase()} and $${names.tb.toUpperCase()}`} coinHref={(t) => `/burnticker/t/${t}`} />}

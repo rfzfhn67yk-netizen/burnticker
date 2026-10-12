@@ -3,30 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV, HOME_HREF, activeNav, type NavItem } from "./nav";
+import { NAV, HOME_HREF, LAUNCH_LABELS, activeNav, type NavItem } from "./nav";
 import { useLaunchAvailability } from "./useLaunchAvailability";
+import { THEME_KEY, currentTheme, type Theme } from "./theme";
 
 /**
- * THE BURNTICKER HEADER (B1 "thermal receipt", 2026-10-10): the mark + wordmark on the left, the site's own six links on the right,
- * a MENU toggle under 768 px (Escape closes it and returns focus), and the light/dark switch. No other product's navigation, state or data — it reads only the pathname.
+ * THE BURNTICKER HEADER (B1 "thermal receipt", 2026-10-10): the mark + wordmark on the left, the shared Burnticker link set
+ * (src/lib/burnticker/siteNav.mjs — the same links in the same order as the home, the whitepaper and the $DEFICIT site) on the right,
+ * a MENU toggle under 900 px and the light/dark switch (one `bt-theme` preference shared with the static pages, ./theme.ts).
+ *
+ * The phone menu (site audit #16, 2026-10-11): opens and closes from the keyboard (Enter/Space on MENU), moves focus to its first link,
+ * keeps Tab and Shift+Tab inside the menu and its MENU button while open, closes on Escape (focus back on MENU), on a click outside and
+ * on navigation. Reads only the pathname and the launch state.
  */
-type Theme = "dark" | "light";
-const THEME_KEY = "bt-theme";
-
-function currentTheme(): Theme {
-  if (typeof document === "undefined") return "dark";
-  const set = document.documentElement.dataset.theme;
-  if (set === "light" || set === "dark") return set;
-  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
-}
-
-function NavLink({ item, active, onNavigate, launchOpen }: { item: NavItem; active: boolean; onNavigate?: () => void; launchOpen: boolean }) {
-  // audit 4 BT-10: Launch is emphasised only while creator launches are open; closed, it is a plain link labelled closed
-  const isLaunch = item.href === "/burnticker/launch";
-  const cls = `bt-nav-link${active ? " is-active" : ""}${isLaunch && launchOpen ? " is-launch" : ""}`;
-  if (isLaunch && !launchOpen) return <Link className={cls} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate}>{item.label} <span className="text-[10px] uppercase tracking-wider text-neutral-500">closed</span></Link>;
-  if (item.external) return <a className={cls} href={item.href} rel="noopener">{item.label}<span aria-hidden="true" className="bt-ext">↗</span></a>;
-  return <Link className={cls} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate}>{item.label}</Link>;
+function NavLink({ item, active, onNavigate, launchOpen, inMenu }: { item: NavItem; active: boolean; onNavigate?: () => void; launchOpen: boolean; inMenu?: boolean }) {
+  // audit 4 BT-10 / R06: Launch is always listed; emphasised only while creator launches are open, labelled "Launch · closed" otherwise
+  if (item.launch) {
+    const label = !launchOpen ? LAUNCH_LABELS.closed : inMenu ? LAUNCH_LABELS.open : LAUNCH_LABELS.openShort;
+    return <Link className={`bt-nav-link${active ? " is-active" : ""}${launchOpen ? " is-launch" : ""}`} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate} data-launch-link>{label}</Link>;
+  }
+  if (item.external) return <a className="bt-nav-link" href={item.href} target="_blank" rel="noopener" onClick={onNavigate}>{item.label}<span aria-hidden="true" className="bt-ext">↗</span><span className="sr-only"> (opens a new tab)</span></a>;
+  if (item.static) return <a className="bt-nav-link" href={item.href} onClick={onNavigate}>{item.label}</a>;
+  return <Link className={`bt-nav-link${active ? " is-active" : ""}`} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate}>{item.label}</Link>;
 }
 
 export function SiteHeader() {
@@ -37,13 +35,26 @@ export function SiteHeader() {
   const [theme, setTheme] = useState<Theme>("dark");
   useEffect(() => { setTheme(currentTheme()); }, []);
   useEffect(() => { setOpen(false); }, [pathname]);
-  // audit 4 BT-20: Escape closes the phone menu from anywhere and returns focus to the MENU button
   const menuBtn = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); menuBtn.current?.focus(); } };
+    const links = () => Array.from(menu.current?.querySelectorAll<HTMLElement>("a[href]") ?? []);
+    links()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); setOpen(false); menuBtn.current?.focus(); return; }
+      if (e.key !== "Tab") return;
+      // the focus trap: the menu's links and the MENU button form one loop while the menu is open
+      const ring = [menuBtn.current, ...links()].filter((x): x is HTMLElement => !!x);
+      const i = ring.indexOf(document.activeElement as HTMLElement);
+      if (i === -1) { e.preventDefault(); ring[0]?.focus(); return; }
+      const next = e.shiftKey ? (i - 1 + ring.length) % ring.length : (i + 1) % ring.length;
+      e.preventDefault(); ring[next]?.focus();
+    };
+    const onClick = (e: MouseEvent) => { const t = e.target as Node; if (!menu.current?.contains(t) && !menuBtn.current?.contains(t)) setOpen(false); };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onClick); };
   }, [open]);
 
   const toggleTheme = () => {
@@ -73,8 +84,8 @@ export function SiteHeader() {
           </button>
         </div>
       </div>
-      <nav id="bt-mobile-nav" className={`bt-nav-mobile${open ? " is-open" : ""}`} aria-label="Burnticker (menu)" hidden={!open}>
-        {NAV.map((n) => <NavLink key={n.href} item={n} active={active === n.href} launchOpen={launchOpen} onNavigate={() => setOpen(false)} />)}
+      <nav id="bt-mobile-nav" ref={menu} className={`bt-nav-mobile${open ? " is-open" : ""}`} aria-label="Burnticker (menu)" hidden={!open}>
+        {NAV.map((n) => <NavLink key={n.href} item={n} active={active === n.href} launchOpen={launchOpen} inMenu onNavigate={() => setOpen(false)} />)}
       </nav>
     </header>
   );

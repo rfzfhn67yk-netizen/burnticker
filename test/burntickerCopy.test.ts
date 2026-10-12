@@ -52,81 +52,80 @@ describe("the landing page (site/burnticker/index.html)", () => {
     assert.equal(html, withDoor2(html), "site/burnticker/index.html door 2 differs from the leagues index: run scripts/burnticker-door2.mts");
     const block = door2Html();
     assert.doesNotMatch(block, /MLB, NBA, NHL, NFL|NFL 2026/, "no hand-written league list");
-    assert.match(block, /Soccer \(\d+\)/); assert.match(block, new RegExp(`${leagueIndex([], Date.now()).totals.leagues} leagues`));
-    assert.ok(!/^[^—]*\bNFL\b/.test(block.split("<span class=\"ex\">")[1] ?? ""), "the chips do not open on the NFL");
+    assert.match(block, /soccer/); assert.match(block, new RegExp(`The ${leagueIndex([], Date.now()).totals.leagues} leagues cover`));
+    assert.ok(!/^[^.]*\bNFL\b/.test(block.split('<p class="ex">')[1] ?? ""), "the sports line does not open on the NFL");
   });
 
-  test("two doors above the fold — Launch and Seasons — before the tape, each a link to a page that exists", () => {
-    const hero = html.slice(html.indexOf('<section class="hero'), html.indexOf('<div class="tape"'));
-    const doors = [...hero.matchAll(/<a class="door[^"]*" href="([^"]+)"( data-launch-cta)?>[\s\S]*?<h3>([^<]+)<\/h3>/g)].map((m) => [m[3], m[1], !!m[2]]);
-    assert.deepEqual(doors, [["Launch", "/burnticker/launch", true], ["Seasons", "/burnticker/leagues", false]], "the Launch door is a gated CTA; Seasons is always there");
+  // site audit #7 (2026-10-11): hero, verified receipt, three product cards (Launch / Seasons / $DEFICIT), short status, actions
+  test("three product cards under one H2 — Launch (its CTA gated), Seasons, $DEFICIT — each linking a page that exists", () => {
+    const sec = html.slice(html.indexOf('<section class="wrap" id="products"'), html.indexOf('<section class="wrap" id="status"'));
+    assert.match(sec, /<h2 id="products-h">/);
+    assert.deepEqual([...sec.matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]), ["Launch", "Seasons", "$DEFICIT"]);
+    assert.match(sec, /<a class="go" href="\/burnticker\/launch" data-launch-cta>/, "the Launch card's action is a gated CTA");
+    assert.match(sec, /<a class="go" href="\/burnticker\/leagues">Leagues<\/a>/);
+    assert.match(sec, /href="https:\/\/deficit\.burnticker\.com\/" target="_blank" rel="noopener"/);
     assert.ok(fs.existsSync("src/app/burnticker/launch/page.tsx") && fs.existsSync("src/app/burnticker/leagues/page.tsx"));
-    assert.equal(NAV.find((n) => n.label === "Seasons")?.href, "/burnticker/leagues", "the Seasons door and the nav land on the same page");
-    assert.match(html, /\.doors\{display:grid;grid-template-columns:1fr;/, "one column on a phone");
+    assert.equal(NAV.find((n) => n.label === "Seasons")?.href, "/burnticker/leagues", "the Seasons card and the nav land on the same page");
+    assert.match(html, /\.cards\{display:grid;grid-template-columns:1fr;/, "one column on a phone");
   });
   test("review 2 §2: every launch CTA is hidden until the host's catalogue says creator launches are open; the closed line says so (fail closed)", () => {
-    const ctas = [...html.matchAll(/<a [^>]*href="\/burnticker\/launch"[^>]*>/g)].map((m) => m[0]);
-    assert.ok(ctas.length >= 3 && ctas.every((a) => a.includes("data-launch-cta")), ctas.join("\n"));
+    // R06 (2026-10-11): the shared nav lists Launch always, labelled "Launch · closed" (data-launch-link); every other launch link is a CTA
+    const all = [...html.matchAll(/<a [^>]*href="\/burnticker\/launch"[^>]*>[^<]*/g)].map((m) => m[0]);
+    const navLinks = all.filter((a) => a.includes("data-launch-link")), ctas = all.filter((a) => !a.includes("data-launch-link"));
+    assert.ok(navLinks.length >= 3 && navLinks.every((a) => a.endsWith(">Launch · closed")), navLinks.join("\n"));
+    assert.ok(ctas.length >= 1 && ctas.every((a) => a.includes("data-launch-cta")), ctas.join("\n"));
     assert.match(html, /html:not\(\.launches-open\) \[data-launch-cta\]\{display:none!important\}/);
-    assert.match(html, /fetch\("\/api\/burnticker\/catalogue"\)[\s\S]*launches\.creators === true\) root\.classList\.add\("launches-open"\)/);
+    assert.match(html, /fetch\("\/api\/burnticker\/catalogue"\)[\s\S]*launches\.creators === true\) \{\s*root\.classList\.add\("launches-open"\)/);
     assert.match(html, /<p class="state" data-launches-closed>Creator launches are closed\.<span data-cluster-line><\/span><\/p>/);
     // one served $DEFICIT destination
-    for (const m of html.matchAll(/<a [^>]*>\$DEFICIT<\/a>/g)) assert.match(m[0], /href="https:\/\/deficit\.burnticker\.com\/"/, m[0]);
+    const deficitLinks = [...html.matchAll(/<a [^>]*>\$DEFICIT(?:<span aria-hidden="true"> ↗<\/span>)?<\/a>/g)];
+    assert.ok(deficitLinks.length >= 3);
+    for (const m of deficitLinks) assert.match(m[0], /href="https:\/\/deficit\.burnticker\.com\/"/, m[0]);
   });
-  test("the guardrail strip: the eleven guardrails, in order, inside the hero", () => {
-    const strip = /<ul class="guard"[^>]*>([\s\S]*?)<\/ul>/.exec(html)![1];
-    assert.deepEqual([...strip.matchAll(/<li>([^<]+)<\/li>/g)].map((m) => m[1]), GUARDRAILS);
-    assert.ok(html.indexOf('<ul class="guard"') < html.indexOf('<div class="tape"'));
+  test("the eleven guardrails, in order, moved to the trust page (site audit #7); the homepage carries none of them", async () => {
+    const { GUARDRAILS: G } = await import("@/lib/burnticker/safeguards");
+    assert.deepEqual([...G], GUARDRAILS);
+    assert.doesNotMatch(html, /<ul class="guard"|The eleven guardrails/);
+    assert.match(fs.readFileSync("src/app/burnticker/trust/SafeguardsSection.tsx", "utf8"), /GUARDRAILS\.map/);
+    assert.match(fs.readFileSync("src/app/burnticker/trust/page.tsx", "utf8"), /<SafeguardsSection card=\{card\} \/>/);
   });
-  test("every league, no league first: no list of leagues starts with the NFL, the tape's first game is not an NFL game, and the examples rotate sports", () => {
-    const lists = leagueLists(text);
-    assert.ok(lists.length >= 2, "the page names its leagues");
-    for (const l of lists) assert.notEqual(l[0], "NFL", l.join(" "));
-    // website brief §4: no ESPN reads — the tape tags sports lines SPORTS.<league>
+  test("every league, no league first: no list of leagues starts with the NFL; no ESPN source", () => {
+    for (const l of leagueLists(text)) assert.notEqual(l[0], "NFL", l.join(" "));
+    // website brief §4: no ESPN reads
     assert.doesNotMatch(html.replace(/No ESPN reads\./g, ""), /ESPN/, "no ESPN source on the landing page");
-    const espn = [...html.matchAll(/<i>SPORTS\.([A-Z]+)<\/i>/g)].map((m) => m[1]);
-    assert.notEqual(espn[0], "NFL"); assert.deepEqual([...new Set(espn)].sort(), ["MLB", "NBA", "NFL", "NHL"]);
-    for (const team of ["$RAYS", "$LAKERS", "$OILERS", "$EAGLES"]) assert.ok(text.includes(team), team);
   });
-  test("sources: Kalshi is never named; Polymarket only as the on-chain payout; prediction markets are for discovery", () => {
+  test("sources: Kalshi is never named; Polymarket only as the on-chain payout; prediction markets are for discovery", async () => {
     assert.doesNotMatch(html, /kalshi|KX[A-Z]{3,}/i);
-    assert.match(text, /on-chain payout of an adjudicated Polymarket market/);
-    assert.match(text, /Prediction markets are for discovery/);
     assert.doesNotMatch(text, /Polymarket payout|POLYGON PAYOUT/);
+    // the source admission rules moved to the trust page with the safeguards (site audit #7)
+    const { ADMISSION_RULES } = await import("@/lib/burnticker/safeguards");
+    assert.match(ADMISSION_RULES, /on-chain payout of an adjudicated Polymarket market/);
+    assert.match(ADMISSION_RULES, /Prediction markets are for discovery/);
+    assert.doesNotMatch(ADMISSION_RULES, /kalshi/i);
   });
   test("nothing is invented: Derby appears only once its page exists; no 'coming soon'; the champion is a stat", () => {
     if (!fs.existsSync(path.join("src", "app", "burnticker", "derby", "page.tsx"))) assert.doesNotMatch(text, /derby/i);
     else assert.match(html, /href="\/burnticker\/derby"/, "the Derby index exists on main: Seasons links it");
     assert.doesNotMatch(text, /coming soon/i);
-    assert.match(text, /Only when a league's season ends is the coin with the most receipts its champion: a stat on a scoreboard, never a recipient of anything/);
-    assert.match(text, /Nothing is ever won here — things are only burned\./);
+    assert.match(text, /When a league's season ends, the coin with the most receipts is named its champion\. That is a line on a scoreboard, and nobody receives anything for it\./);
+    assert.match(text, /Nothing is ever won here\. Things are only burned\./);
   });
-  test("Seasons: one scoreboard per league and season, dated not numbered by week, no cross-league table, no champion mid-season, an example-data tag", () => {
-    const sec = html.slice(html.indexOf('<section class="wrap" id="seasons">'), html.indexOf('<section class="wrap" id="layers">'));
-    const boards = [...sec.matchAll(/<div class="board">([\s\S]*?)\n      <\/div>/g)].map((m) => m[1]);
-    assert.deepEqual(boards.map((b) => /<p class="bh"><b>([^<]+)<\/b> <span>([^<]+)<\/span>/.exec(b)!.slice(1)), [
-      ["NHL 2026–27", "Oct 3 – 9 · 4 team coins"], ["MLB 2026 postseason", "Oct 3 – 9 · 4 team coins"], ["NBA 2026–27", "Oct 3 – 9 · 3 team coins"], ["NFL 2026", "Oct 3 – 9 · 4 team coins"],
-    ]);
-    for (const b of boards) { assert.doesNotMatch(b, /<th[^>]*>league<\/th>|champion/i, "no league column, no champion during the season"); assert.ok((b.match(/most receipts so far/g) ?? []).length <= 1); }
-    const sv = visibleText(sec);
-    assert.doesNotMatch(sv, /\bweek \d|across \d+ leagues/i, "dates, not weeks; no cross-league tally line");
-    // audit 4 BT-15: a fixed fixture is never described with an aging word (today/yesterday)
-    assert.match(sv, /Example day, Oct 9, 2026, across all leagues: 5 team coins burned\./, "the only cross-league line is a count");
-    assert.doesNotMatch(sv, /\b(yesterday|today)\b/i);
-    assert.match(sec, /<span class="extag">Illustrative example<\/span>/);
-    assert.match(sv, /\$OILERS most receipts so far/, "the marker is its own word, never glued to the ticker");
-    assert.match(sec, /\$OILERS <span class="mark">most receipts so far<\/span>/);
-    clean(sv, "seasons");
+  test("Seasons: no illustrative scoreboards on the homepage any more (site audit #7); the leagues page keeps its labelled example", () => {
+    assert.doesNotMatch(html, /<div class="board">|class="tape"|Illustrative example/);
+    const l = fs.readFileSync("src/app/burnticker/leagues/page.tsx", "utf8");
+    assert.match(l, /Example data · illustrative coins and counts, not live/);
   });
-  test("the cold read's edits (docs/launch/gtm/COLD-READ.md): the one-line definition, labelled examples, nothing the code does not do", () => {
+  test("the cold read's edits (docs/launch/gtm/COLD-READ.md): the one-line definition stays; the safeguards it asked for moved to the trust page", async () => {
     // UX report 3 item 10: the definition's words are unchanged; "burns" and "receipt" carry their glossary sentence as context help (<abbr>)
     const def = /<p class="def">([\s\S]*?)<\/p>/.exec(html)![1];
     assert.equal(def.replace(/<[^>]+>/g, ""), "A Solana memecoin launchpad. Each coin has one locked rule; when its result settles, the coin's own trading fees buy it back on its own pool and a program burns what they bought. The transaction is the receipt.");
-    assert.match(text, /example receipt · illustrative numbers, not a live coin/);
-    assert.match(text, /a pre-audit list of up to three approved crankers can apply for at most 90 days, until the cap lifts/);
-    assert.match(text, /if the operator stops, readings stop and burns stop\. Holders keep their coins/);
-    assert.match(text, /After graduation the LP is locked forever and its fees are split by code: 80% to the coin's burn pool, 20% to the operator/);
-    for (const gone of [/anyone can crank/i, /if we disappear/i, /keep working/i, /set to none after review/i, /not built yet/i, /within 14 days/i, /nothing to trust/i, /<li>reviewed<\/li>/]) assert.doesNotMatch(html, gone, String(gone));
+    const { SAFEGUARDS, WHO_GETS_WHAT } = await import("@/lib/burnticker/safeguards");
+    const sg = SAFEGUARDS.map((x) => x.text).join(" "), wg = WHO_GETS_WHAT.map((x) => x.text).join(" ");
+    assert.match(sg, /a short list of up to three approved accounts can be required instead, for at most 90 days/);
+    assert.match(sg, /If the operator stops, readings stop and burns stop\. Holders keep their coins/);
+    assert.match(wg, /After a coin moves to its trading pool, the liquidity is locked forever\. The program splits the fees from that liquidity: 80% goes to the coin's burn pool and 20% goes to the operator/);
+    for (const t of [sg, wg]) clean(t, "safeguards");
+    for (const gone of [/anyone can crank/i, /if we disappear/i, /keep working/i, /set to none after review/i, /not built yet/i, /within 14 days/i, /nothing to trust/i, /<li>reviewed<\/li>/]) { assert.doesNotMatch(html, gone, String(gone)); assert.doesNotMatch(sg + wg, gone, String(gone)); }
   });
   test("mobile-safe and linked: viewport meta, no horizontal scroll, the whitepaper linked", () => {
     assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
@@ -276,8 +275,13 @@ describe("the committed platform fixture and the brand", () => {
     assert.match(fs.readFileSync("src/app/burnticker/_components/SiteFooter.tsx", "utf8"), /COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS/);
     const layout = fs.readFileSync("config/public-repo/overlay/src/app/layout.tsx", "utf8");
     assert.match(layout, /const TITLE = "Burnticker — coins that burn on real-world results, with receipts"/);
-    assert.match(layout, /const DESCRIPTION = "Coins that burn on real-world results — with receipts\. Pre-launch: creator launches are closed; inspect a real devnet burn receipt\./);   // audit 4 BT-21
+    // audit 4 BT-21, made phase-aware 2026-10-11: closed → says closed, never invites launching; open → says open
+    const closed = /const DESCRIPTION_CLOSED = "([^"]+)"/.exec(layout)![1], open = /const DESCRIPTION_OPEN = "([^"]+)"/.exec(layout)![1];
+    assert.match(closed, /^Coins that burn on real-world results, with receipts\. Creator launches are closed for now\. You can inspect a real devnet burn receipt\./);
+    assert.doesNotMatch(closed, /Launch one|launch a/i);
+    assert.match(open, /Creator launches are open on this host\./);
+    assert.match(layout, /const description = launchAvailability\(process[.]env\)\.open \? DESCRIPTION_OPEN : DESCRIPTION_CLOSED;/);
     assert.doesNotMatch(layout, /burns on the news/i);
-    clean(/const DESCRIPTION = "([^"]+)"/.exec(layout)![1], "OG description");
+    clean(closed, "OG description (closed)"); clean(open, "OG description (open)");
   });
 });

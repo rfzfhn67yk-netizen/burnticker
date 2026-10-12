@@ -66,6 +66,11 @@ section.first{border-top:0}
 .intro{margin:0 0 14px}
 .gap{margin-top:12px}
 
+/* the shared Burnticker link set, a thin bar above the board (site audit #6) */
+.sitebar{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--line);font:500 .72rem/1.4 var(--marquee);letter-spacing:.1em;text-transform:uppercase}
+.sitebar a{color:var(--dim)}.sitebar a:hover{color:var(--ink);text-decoration:none}.sitebar a[aria-current="page"]{color:var(--ink)}
+.sitebar .sb-brand{color:var(--ink);font-weight:600;letter-spacing:.16em;margin-right:4px}
+.sitelinks{margin-bottom:10px}
 /* top bar: the marquee wordmark */
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 14px;flex-wrap:wrap}
 .wordmark{font:700 1.75rem/1 var(--marquee);letter-spacing:.07em;color:var(--ink)}
@@ -215,6 +220,19 @@ html:not(.prelaunch) #prelaunch{display:none}
 </style>
 </head>
 <body>
+<!-- the shared Burnticker link set (src/lib/burnticker/siteNav.mjs; scripts/burnticker-site-nav.mts fills it): this page is $DEFICIT -->
+<nav class="sitebar wrap" aria-label="Burnticker" data-site-nav="sitebar">
+  <a class="sb-brand" href="https://burnticker.com/">BURNTICKER</a>
+    <!-- site-nav:sitebar:begin -->
+    <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch · closed</a>
+    <a href="https://burnticker.com/burnticker">Coins</a>
+    <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+    <a href="https://burnticker.com/burnticker/trust">Trust</a>
+    <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+    <a href="https://burnticker.com/burnticker/docs">Docs/API</a>
+    <a href="https://deficit.burnticker.com/" aria-current="page">$DEFICIT</a>
+    <!-- site-nav:sitebar:end -->
+</nav>
 <header class="wrap">
   <div class="top">
     <a class="wordmark" href="./" aria-label="$DEFICIT, home">$DEFICIT</a>
@@ -223,7 +241,6 @@ html:not(.prelaunch) #prelaunch{display:none}
       <a href="#receipts">Receipts</a>
       <a href="#verify">Verify</a>
       <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>
-      <a href="https://burnticker.com/" rel="noopener" target="_blank">Burnticker</a>
       <a class="primary off" id="tradeTop" aria-disabled="true" data-trade-unavailable title="Not available until launch">Trade: not available</a>
     </nav>
   </div>
@@ -380,9 +397,20 @@ burn  = every token the swap delivered</pre>
 </main>
 
 <footer class="wrap">
+  <nav class="links sitelinks" aria-label="Burnticker" data-site-nav="footer">
+    <!-- site-nav:footer:begin -->
+    <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch · closed</a>
+    <a href="https://burnticker.com/burnticker">Coins</a>
+    <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+    <a href="https://burnticker.com/burnticker/trust">Trust</a>
+    <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+    <a href="https://burnticker.com/burnticker/docs">Docs/API</a>
+    <a href="https://deficit.burnticker.com/" aria-current="page">$DEFICIT</a>
+    <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X · @BurnTicker<span aria-hidden="true"> ↗</span></a>
+    <!-- site-nav:footer:end -->
+  </nav>
   <div class="links">
     <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">X · @USA_DEFICIT</a>
-    <a href="https://burnticker.com/" rel="noopener" target="_blank">Burnticker, the launchpad</a>
     <a id="tradeFoot" class="off" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
     <a href="status.json">status.json</a>
     <a href="burns.json">burns.json</a>
@@ -730,5 +758,14 @@ burn  = every token the swap delivered</pre>
   });
 })();
 </script>
+<script>
+(function () {
+  // the shared link set (R06): "Launch · closed" until burnticker.com's current status says creator launches are open (unreadable = closed)
+  if (!window.fetch) return;
+  fetch("https://burnticker.com/api/burnticker/v1/current-status", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
+    if (s && s.host && s.host.creatorLaunchesOpen === true) Array.prototype.forEach.call(document.querySelectorAll("[data-launch-link]"), function (a) { a.textContent = "Launch"; });
+  }).catch(function () { /* closed */ });
+})();
+
 </body>
 </html>

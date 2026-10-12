@@ -108,6 +108,7 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/rules\/validate$/, "rules/validate", []],
   [/^\/launch\/bundle$/, "launch/bundle", []],
   [/^\/launch\/confirm$/, "launch/confirm", []],
+  [/^\/launch\/review$/, "launch/review", []],
   [/^\/tokens$/, "tokens", []],
   [/^\/tokens\/([^/]+)$/, "tokens/[ticker]", ["ticker"]],
   [/^\/tokens\/([^/]+)\/receipts$/, "tokens/[ticker]/receipts", ["ticker"]],

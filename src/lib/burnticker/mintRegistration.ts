@@ -49,11 +49,28 @@ export async function readRegistration(rpc: Rpc, network: Network, programId: st
   if (!isPubkey(mint) || !isPubkey(programId)) return { network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: "not a public key" };
   const config = configPda(new PublicKey(programId), new PublicKey(mint)).toBase58();
   try {
-    const r = await rpc.call<{ value: { owner: string; data: [string, string] } | null }>("getAccountInfo", [config, { encoding: "base64", commitment: "confirmed" }]);
-    return decodeRegistration(network, programId, config, r?.value ?? null);
+    const r = await rpc.call<unknown>("getAccountInfo", [config, { encoding: "base64", commitment: "confirmed" }]);
+    // Only an explicit `value: null` inside a getAccountInfo result means "no account". A missing result, a result without `value`,
+    // or an account that is not {owner, data:[base64, "base64"]} is NOT an answer about the mint (ChatGPT re-check 2026-10-11 F1).
+    const acct = accountInfoValue(r);
+    if (acct === undefined) return { ...unavailable(network, programId), config, reason: `the ${network} RPC answer was not a getAccountInfo result` };
+    return decodeRegistration(network, programId, config, acct);
   } catch (e) {
-    return { network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: `the ${network} RPC could not be read just now (${(e as Error).message.slice(0, 100)})` };
+    return { ...unavailable(network, programId), reason: `the ${network} RPC could not be read just now (${(e as Error).message.slice(0, 100)})` };
   }
+}
+
+const unavailable = (network: Network, programId: string): NetworkRegistration => ({ network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: null });
+
+/** The `value` of a getAccountInfo result: null (no account), an account record, or undefined when the answer is not one. */
+export function accountInfoValue(r: unknown): { owner: string; data: [string, string] } | null | undefined {
+  if (r === null || typeof r !== "object" || !("value" in r)) return undefined;
+  const v = (r as { value: unknown }).value;
+  if (v === null) return null;
+  if (v === null || typeof v !== "object") return undefined;
+  const a = v as { owner?: unknown; data?: unknown };
+  if (typeof a.owner !== "string" || !Array.isArray(a.data) || typeof a.data[0] !== "string" || a.data[1] !== "base64") return undefined;
+  return { owner: a.owner, data: [a.data[0], "base64"] };
 }
 
 /** The default reader: each network's RPC (rpcUrlFor: the host's own RPC only for the host's network), two attempts. */

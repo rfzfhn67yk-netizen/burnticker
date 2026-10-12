@@ -16,15 +16,16 @@ test("BT-10: the Derby creation CTA and the app header's Launch follow the launc
   assert.match(d, /\{launchOpen\s*\n?\s*\? <Link[^>]*href=\{`\/burnticker\/launch\?derby=1/);
   assert.match(d, /data-launch-closed/);
   const h = read("src/app/burnticker/_components/SiteHeader.tsx");
-  assert.match(h, /isLaunch && launchOpen \? " is-launch" : ""/); assert.match(h, /closed<\/span><\/Link>/);
+  assert.match(h, /\$\{launchOpen \? " is-launch" : ""\}/); assert.match(h, /!launchOpen \? LAUNCH_LABELS\.closed/);
 });
 
 test("BT-16: each homepage module carries a readable evidence-state label; 1% and 2% are explained where each appears", () => {
-  for (const [label, n] of [["st ver\">Verified devnet", 1], ["st ill\">Illustrative example", 3], ["st rep\">Historical replay", 1], ["st pro\">Proposed mainnet rule · not launched", 1]] as const)
+  // site audit #7 (2026-10-11) removed the illustrative modules (ticker tape, sample receipt, sample boards); the three that remain keep theirs
+  for (const [label, n] of [["st ver\">Verified devnet", 1], ["st rep\">Historical replay", 1], ["st pro\">Proposed mainnet rule · not launched", 1]] as const)
     assert.ok((home.match(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length >= n, label);
-  assert.match(home, /extag">Illustrative example</);
+  assert.doesNotMatch(home, /Illustrative example/, "no illustrative module left without its label");
   assert.match(home, /\.st\{display:inline-block;margin:0 0 8px;font:700 \.75rem/, "labels at a readable size (≥ 12 px)");
-  assert.match(home, /this coin ran 1% of the burn pool per \$1B unit \(the proposed mainnet rule is 2%\)/);
+  assert.match(home, /This rehearsal coin spent 1% of its burn pool for each \$1 billion unit\. The rule proposed for mainnet spends 2%\./);
   assert.match(home, /The devnet rehearsal coin ran the same rule text at 1% per unit/);
   assert.match(read("src/app/burnticker/_components/BurnMath.tsx"), /that rehearsal coin ran 1% of the burn pool per unit; the proposed mainnet \$DEFICIT rule is 2%/);
 });

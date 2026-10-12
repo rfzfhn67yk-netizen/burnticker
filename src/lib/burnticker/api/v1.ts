@@ -1,7 +1,7 @@
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { feedById, loadFixture, previewFromFixture } from "@/lib/burnticker/catalogue";
 import { TIER_LABEL } from "@/lib/burnticker/sources/types";
-import { CREATOR_LAUNCHES_CLOSED, creatorLaunchesEnabled } from "@/lib/burnticker/creatorLaunches";
+import { catalogueLaunches } from "@/lib/burnticker/launchAvailability";
 import { BURNTICKER_RULES_SCHEMA, DISCLAIMER_FOOTER, lockRule, oracleDisclosure, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { receiptFormatTemplate, receiptKey } from "@/lib/burnticker/receipt";
@@ -39,7 +39,7 @@ export function findToken(p: Platform, id: string): TokenRow | null {
 const links = (t: TokenRow) => ({ self: `${API_PREFIX}/tokens/${t.ticker}`, receipts: `${API_PREFIX}/tokens/${t.ticker}/receipts`, page: `/burnticker/t/${t.ticker}` });
 
 export function v1Catalogue(now = Date.now(), env: Record<string, string | undefined> = process.env): ApiResult {
-  return ok({ ...catalogueSources(now, { includeConfig: true }), launches: { creators: creatorLaunchesEnabled(env), note: creatorLaunchesEnabled(env) ? "creator launches are open on this host" : CREATOR_LAUNCHES_CLOSED }, kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series (tier 1, adjudicated markets) are searched live; settled results only, prices display-only" }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket binary markets (tier 1, adjudicated markets) are searched live on Gamma; each result is read from the Conditional Tokens payout vector on Polygon; prices display-only" } });
+  return ok({ ...catalogueSources(now, { includeConfig: true }), launches: catalogueLaunches(env), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series (tier 1, adjudicated markets) are searched live; settled results only, prices display-only" }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket binary markets (tier 1, adjudicated markets) are searched live on Gamma; each result is read from the Conditional Tokens payout vector on Polygon; prices display-only" } });
 }
 
 export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()): ApiResult {

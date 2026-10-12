@@ -6,6 +6,7 @@ import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
+import { SeasonsTabs } from "../_components/SeasonsTabs";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Burn Derby", description: "Coin vs Coin pairs and brackets. In a pair, fees from both coins burn the coin whose rule the day's result fires. The receipts are the scoreboard." };
@@ -53,6 +54,7 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6">
       <header className="space-y-2">
+        <SeasonsTabs current="/burnticker/derby" />
         <h1 className="text-2xl font-semibold">Burn Derby</h1>
         <p className="text-neutral-400 text-sm max-w-3xl">Two coins people already hold, compared each UTC day (or week) on Pyth&apos;s feeds or a pool&apos;s time-weighted value, cross-read against a second data publisher (a source check; one operator attester signs every reading). A tie burns neither. The receipts are the scoreboard.</p>
         <p className="text-amber-200 text-sm max-w-3xl" aria-label="pair rule">{PAIR_BURN_SENTENCE}</p>

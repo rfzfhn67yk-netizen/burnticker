@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { LAUNCH_AVAILABILITY_UNKNOWN, launchAvailabilityFromCatalogue, type LaunchAvailability } from "@/lib/burnticker/creatorLaunches";
+import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 
 /**
  * The creator-launch availability for client pages (creatorLaunches.ts): one catalogue read per page load, shared by every component
@@ -8,7 +9,8 @@ import { LAUNCH_AVAILABILITY_UNKNOWN, launchAvailabilityFromCatalogue, type Laun
  */
 let pending: Promise<LaunchAvailability> | null = null;
 function load(): Promise<LaunchAvailability> {
-  pending ??= fetch("/api/burnticker/catalogue").then((r) => (r.ok ? r.json() : null)).then(launchAvailabilityFromCatalogue).catch(() => LAUNCH_AVAILABILITY_UNKNOWN);
+  // site audit #18: the one shared catalogue read (catalogueClient.ts), the launch page's included
+  pending ??= loadCatalogue().then(launchAvailabilityFromCatalogue).catch(() => LAUNCH_AVAILABILITY_UNKNOWN);
   return pending;
 }
 export function useLaunchAvailability(): LaunchAvailability {

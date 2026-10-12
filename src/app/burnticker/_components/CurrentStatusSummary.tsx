@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { CurrentStatus } from "@/lib/burnticker/currentStatus";
 import { upgradeAuthorityText } from "@/lib/burnticker/currentStatusText";
 import { EmptyState } from "./EmptyState";
+import { useJsonRead, ReadFailurePanel } from "./useJsonRead";
 import { RepoText } from "./RepoText";
 import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
 
@@ -14,10 +14,8 @@ import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
  * append-only historical logs — three separate labelled blocks, the details behind disclosures.
  */
 export function CurrentStatusSummary({ card }: { card: string }) {
-  const [s, setS] = useState<CurrentStatus | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/burnticker/v1/current-status").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setS(j); }).catch((e) => setErr(String((e as Error).message ?? e))); }, []);
-  if (err) return <EmptyState kind="unavailable" body="The current-status summary could not be read just now." details={err} />;
+  const { data: s, failure, loading, triedAt, retry } = useJsonRead<CurrentStatus>("/api/burnticker/v1/current-status");
+  if (failure) return <ReadFailurePanel what="The current-status summary" failure={failure} triedAt={triedAt} loading={loading} retry={retry} />;
   if (!s) return <EmptyState kind="loading" body="Reading the current status." />;
   return (
     <section className={card} aria-label="Current status" data-current-status>

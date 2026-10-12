@@ -44,7 +44,8 @@ describe("creator launches flag", () => {
   test("the catalogue says launches.creators (both the app's and /v1)", async () => {
     delete process.env[CREATOR_LAUNCHES_FLAG];
     const off = v1Catalogue(Date.now(), {}).body as { launches: { creators: boolean; note: string } };
-    assert.deepEqual(off.launches, { creators: false, note: CREATOR_LAUNCHES_CLOSED });
+    assert.equal(off.launches.creators, false); assert.equal(off.launches.note, CREATOR_LAUNCHES_CLOSED);
+    assert.equal((off.launches as unknown as { mode: string }).mode, "closed", "since 1.14.0 the mode rides along");
     assert.equal((v1Catalogue(Date.now(), { [CREATOR_LAUNCHES_FLAG]: "1" }).body as { launches: { creators: boolean } }).launches.creators, true);
     const cat = await import("../src/app/api/burnticker/catalogue/route.ts");
     assert.equal(((await (await cat.GET()).json()) as { launches: { creators: boolean } }).launches.creators, false);

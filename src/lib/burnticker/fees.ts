@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { feeSplit as liveFeeSplit, PPM, ppmToBps, type AmmConfigView, type GlobalConfigView, type PlatformView } from "@/lib/burnKeeper/launch";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
-import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCKED_PCT, LP_POLICY_LINE, feeKeysPda } from "@/lib/burnticker/lockFees";
+import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCKED_PCT, LP_POLICY_LINE, feeKeysPda, operatorTreasuryRecord } from "@/lib/burnticker/lockFees";
 
 /**
  * BURNTICKER FEE SPLIT — the one place the DESIGNED numbers live (the owner, 2026-10-09; sources: docs/burnkeeper/fees.md, read from
@@ -20,8 +20,8 @@ import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, LP_LOCKED_PCT, LP_POLICY_LINE
  *   · LP LOCKED FOREVER (owner decision 2026-10-10, superseding the 10-09 "every coin burns 100% of its graduation LP"): 100% of the
  *     graduation LP is locked with Raydium's LP lock (migrateCpLockNftScale platformScale = 1e6, creatorScale 0, burnScale 0) — never
  *     withdrawable, not creator-configurable — and the Fee Key NFT is owned by the burn program's fee-keys PDA. The permissionless
- *     claim_lock_fees splits the LP fees by compiled constants: SOL side 80% → the coin's burn pool, 20% → the operator treasury (the
- *     Squads vault); the coin side is burned. Per swap after graduation (CPMM tier 0, 25 bps): 21 bps LP → 16.8 burn pool + 4.2 operator;
+ *     claim_lock_fees splits the LP fees by compiled constants: SOL side 80% → the coin's burn pool, 20% → the operator treasury
+ *     (lockFees.ts operatorTreasuryRecord: mainnet = the developer fee wallet, devnet = the rehearsal Squads vault); the coin side is burned. Per swap after graduation (CPMM tier 0, 25 bps): 21 bps LP → 16.8 burn pool + 4.2 operator;
  *     3 bps RAY buyback + 1 bp Raydium treasury; plus the burn pool's 4.75 bps/SOL from Raydium's FIXED CPMM creator fee (AmmConfig.
  *     creatorFeeRate 5 bps × (1 − creatorFeeShareRate 5%)), which no platform dial can change. So the operator earns 20% of the
  *     post-graduation LP fees (4.2 bps of volume) and ≈ 21.55 bps of every swap goes to the burn.
@@ -75,12 +75,17 @@ export const POST_GRADUATION_FEES: FeeSplit = {
   phase: "post-graduation",
   legs: [
     { label: "Raydium protocol", bps: 4.25, recipient: "Raydium (protocol 3 bps + fund 1 bp of the trade fee; 0.25 bp = 5% of the creator fee at collection)", dial: "AmmConfig.protocolFeeRate 12% + fundFeeRate 4% of the 25 bps trade fee; creatorFeeShareRate 5%", note: "fixed per tier" },
-    { label: "Burnticker (operator, LP fees)", bps: LP_FEES_TO_OPERATOR_BPS, recipient: "the operator treasury (the Squads vault): 20% of the locked LP's SOL-side fees, paid by the permissionless claim_lock_fees", dial: "84% of the 25 bps trade fee × LOCK_FEE_OPERATOR_BPS 2,000 — compiled into the program; no admin key, no config field", note: "owner decision 2026-10-10: the operator earns 20% of the post-graduation LP fees" },
+    { label: "Burnticker (operator, LP fees)", bps: LP_FEES_TO_OPERATOR_BPS, recipient: operatorTreasuryRecord("mainnet").text, dial: "84% of the 25 bps trade fee × LOCK_FEE_OPERATOR_BPS 2,000 — compiled into the program; no admin key, no config field", note: "owner decision 2026-10-10: the operator earns 20% of the post-graduation LP fees" },
     { label: "burn pool", bps: 4.75, recipient: "the burn program's fee PDA via CPMM collect_creator_fee_permissionless (pool_creator = the fee PDA, copied from the LaunchLab creator at migration)", dial: "AmmConfig.creatorFeeRate = 500 ppm (5 bps) × (1 − 5%) — fixed per tier; no platform dial changes it", note: "" },
     { label: "burn pool (LP fees)", bps: LP_FEES_TO_BURN_POOL_BPS, recipient: "the burn program's fee PDA: 80% of the locked LP's SOL-side fees via claim_lock_fees (the Fee Key is owned by the program's fee-keys PDA); the coin side is burned outright", dial: "84% of the 25 bps trade fee × LOCK_FEE_BURN_BPS 8,000 — compiled into the program", note: "LP locked forever (owner decision 2026-10-10)" },
   ],
   totalBps: CPMM_TRADE_BPS + CPMM_CREATOR_BPS,
 };
+
+/** The post-graduation split with the operator leg's recipient for a given cluster (audit R03: one record, lockFees.ts). */
+export function postGraduationFeesFor(cluster: string): FeeSplit {
+  return { ...POST_GRADUATION_FEES, legs: POST_GRADUATION_FEES.legs.map((l) => (l.label === "Burnticker (operator, LP fees)" ? { ...l, recipient: operatorTreasuryRecord(cluster).text } : l)) };
+}
 
 /**
  * PRE-AUDIT CAP (the owner, 2026-10-09): until the program is audited, a burn pool spends from at most 25 SOL; fee income above the cap

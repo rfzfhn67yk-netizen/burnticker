@@ -9,12 +9,12 @@ import { NETWORKS, PROGRAM_IDS, PUBLIC_RPC_URLS, hostNetwork, rpcUrlFor, explore
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { PAIR_CURVE_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { DEVNET_PROGRAM_ID, sampleReceipts } from "@/lib/burnticker/trustpack/samples";
-import { PUBLIC_RPC } from "@/lib/burnticker/trustpack/receiptCheck";
+import { PUBLIC_RPC, jsonRpc } from "@/lib/burnticker/trustpack/receiptCheck";
 import { serverRpcUrl, v1Bounty } from "@/lib/burnticker/trustpack/api";
 import { decodeRegistration, disclosedCoins, readRegistration, type RegistrationReader } from "@/lib/burnticker/mintRegistration";
 import { discriminatorOf } from "@/lib/burnticker/trustpack/idlReader";
 import { verifyMint, type MintFacts, type MintNetworkRead } from "@/lib/burnticker/verifyMint";
-import { clearVerifyMintMemo, verifyMintOn } from "@/lib/burnticker/verifyMintServe";
+import { clearVerifyMintMemo, setRegistrationReaderForTests, verifyMintOn } from "@/lib/burnticker/verifyMintServe";
 import { lintCopy, loadCopyLintConfig, formatHits } from "@/lib/launch/copyLint";
 import { makeWorld } from "./burntickerApiHelpers.ts";
 
@@ -87,6 +87,30 @@ describe("on-chain registration (mintRegistration.ts)", () => {
     const ok = await readRegistration({ call: async <T,>() => ({ value: null }) as T }, "devnet", PID, FEATURED_MINT);
     assert.equal(ok.state, "not-registered"); assert.equal(ok.config, "FqfwxFKaiLRaK1HAsBsRRkXAq3nzbEt92fX9qWQTZYPh", "the TokenConfig PDA of the featured mint");
   });
+  // ChatGPT re-check 2026-10-11 F1: a malformed or non-JSON-RPC answer used to decode as "no account" (HTTP 503 JSON, HTTP 200 `{}`,
+  // a result without `value`) because jsonRpc checked neither the status nor the envelope and the reader took `r?.value ?? null`.
+  const fetchOf = (status: number, body: string | null) => (async () => new Response(body, { status, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+  const viaRpc = (status: number, body: string | null) => readRegistration(jsonRpc("https://rpc.invalid", fetchOf(status, body), { attempts: 1, baseMs: 1 }), "devnet", PID, FEATURED_MINT);
+  test("F1: HTTP 503 with a non-envelope JSON body is unavailable, never not-registered", async () => {
+    const r = await viaRpc(503, JSON.stringify({ message: "service unavailable" }));
+    assert.equal(r.state, "unavailable"); assert.match(r.reason!, /HTTP 503/);
+  });
+  test("F1: HTTP 200 `{}` (no result member) is unavailable", async () => {
+    const r = await viaRpc(200, "{}");
+    assert.equal(r.state, "unavailable"); assert.match(r.reason!, /no result/);
+  });
+  test("F1: a result with context but no value is unavailable; an empty body and HTTP 4xx are unavailable", async () => {
+    assert.equal((await viaRpc(200, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { context: { slot: 1 } } }))).state, "unavailable");
+    assert.equal((await viaRpc(200, "")).state, "unavailable");
+    assert.equal((await viaRpc(403, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { context: { slot: 1 }, value: null } }))).state, "unavailable", "a forbidden answer's body is not trusted");
+    assert.equal((await viaRpc(200, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { context: { slot: 1 }, value: { lamports: 1 } } }))).state, "unavailable", "an account without owner/data is not an answer");
+  });
+  test("F1 controls: explicit result.value null is not-registered; a real TokenConfig account is registered", async () => {
+    const none = await viaRpc(200, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { context: { slot: 1 }, value: null } }));
+    assert.equal(none.state, "not-registered");
+    const reg = await viaRpc(200, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { context: { slot: 1 }, value: { owner: PID, data: [tokenConfigBytes(), "base64"], lamports: 1, executable: false } } }));
+    assert.equal(reg.state, "registered");
+  });
   test("the platform's own rehearsal coins are named from their rules files (devnet $DEFICIT, the pair coins, mainnet $REHEARSAL)", () => {
     const d = disclosedCoins(ROOT);
     assert.equal(d.find((c) => c.mint === FEATURED_MINT)?.network, "devnet");
@@ -141,5 +165,24 @@ describe("the featured mint through the served verifier (no RPC: an injected rea
     const w = await makeWorld(); clearVerifyMintMemo();
     const v = await verifyMintOn(w.p, FEATURED_MINT, NOW, { reader: down });
     assert.equal(v.verdict, "unavailable"); assert.equal(v.headline, "Unable to verify");
+  });
+  test("F1 two-network case: mainnet answers `value: null`, devnet's upstream answers HTTP 503 → registration unknown, Unable to verify, and the answer is not memoised", async () => {
+    const w = await makeWorld(); clearVerifyMintMemo();
+    const fetchFor = (status: number, body: string) => (async () => new Response(body, { status, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+    const outage: RegistrationReader = (network, programId, mint) => readRegistration(jsonRpc("https://rpc.invalid", network === "mainnet"
+      ? fetchFor(200, JSON.stringify({ jsonrpc: "2.0", id: 1, result: { context: { slot: 1 }, value: null } }))
+      : fetchFor(503, JSON.stringify({ message: "service unavailable" })), { attempts: 1, baseMs: 1 }), network, programId, mint);
+    try {
+      setRegistrationReaderForTests(outage);
+      const v = await verifyMintOn(w.p, FEATURED_MINT, NOW);
+      assert.equal(v.registration.state, "unknown"); assert.equal(v.verdict, "unavailable"); assert.equal(v.headline, "Unable to verify");
+      assert.doesNotMatch(v.headline + v.summary, /NOT registered/);
+      assert.equal(v.registration.networks.find((n) => n.network === "mainnet")?.state, "not-registered");
+      assert.equal(v.registration.networks.find((n) => n.network === "devnet")?.state, "unavailable");
+      // the chain comes back: the same paste within the 60 s window re-reads the chain instead of serving a cached verdict
+      setRegistrationReaderForTests(live);
+      const again = await verifyMintOn(w.p, FEATURED_MINT, NOW);
+      assert.equal(again.registration.state, "registered"); assert.equal(again.verdict, "program-only");
+    } finally { setRegistrationReaderForTests(null); }
   });
 });

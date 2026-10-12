@@ -129,12 +129,12 @@ Powers outside the programs that they depend on:
 
 Kind: **interim-local**. INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check.
 
-| Program | Build | Features | Executable hash | Deployed (devnet) |
-|---|---|---|---|---|
-| burn_receipts | mainnet | default | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | — |
-| burn_receipts | devnet | devnet | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` = build |
-| pair_curve | mainnet | default | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | — |
-| pair_curve | devnet | devnet | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` = build |
+| Program | Network | Features | Executable hash (this repository) | Deployed bytes on that network | Read | Evidence |
+|---|---|---|---|---|---|---|
+| burn_receipts | mainnet | default | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` = build | 2026-10-11 | docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json |
+| burn_receipts | devnet | devnet | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` = build | 2026-10-11 | docs/burnticker/VERIFIED-BUILD.md |
+| pair_curve | mainnet | default | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` = build | 2026-10-11 | docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json |
+| pair_curve | devnet | devnet | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` = build | 2026-10-11 | docs/burnticker/VERIFIED-BUILD.md |
 
 How to reproduce: docs/burnticker/VERIFIED-BUILD.md.
 

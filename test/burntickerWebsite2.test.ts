@@ -108,7 +108,7 @@ describe("$DEFICIT before launch (website brief §1)", () => {
     assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}: the live figures could not be read`));
   });
   test("the shared EmptyState replaces the ad-hoc loading / error lines on the coins, pair, coin, trust, operator, check and leagues pages", () => {
-    for (const f of ["src/app/burnticker/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/check/page.tsx", "src/app/burnticker/leagues/page.tsx"]) {
+    for (const f of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/check/page.tsx", "src/app/burnticker/leagues/page.tsx"]) {
       const s = fs.readFileSync(f, "utf8");
       assert.match(s, /<EmptyState kind=/, f);
       assert.doesNotMatch(s, />Loading…</, `${f}: no bare "Loading…"`);
@@ -168,7 +168,7 @@ describe("one current-status source (website brief §4)", () => {
     assert.match(op.clusters.mainnet.squads.timeLock, /^0 now .*48 h planned/);
     for (const f of ["config/burnticker/transparency.json", "src/lib/burnticker/trustpack/checklist.ts", "docs/burn-receipts/powers-register.json", "docs/burnticker/CHECK-THIS-YOURSELF.md"]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /mainnet: 48 h\)|vault with a 48 h time lock|upgrade authority \(48 h time lock\)/, f);
     for (const f of ["src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx"]) assert.match(fs.readFileSync(f, "utf8"), /<CurrentStatusSummary card=\{card\} \/>/, f);
-    assert.match(fs.readFileSync("src/app/burnticker/_components/CurrentStatusSummary.tsx", "utf8"), /fetch\("\/api\/burnticker\/v1\/current-status"\)/);
+    assert.match(fs.readFileSync("src/app/burnticker/_components/CurrentStatusSummary.tsx", "utf8"), /useJsonRead<CurrentStatus>\("\/api\/burnticker\/v1\/current-status"\)/);
     for (const f of ["site/burnticker/index.html", "site/burnticker/status/index.html"]) { const h = fs.readFileSync(f, "utf8"); assert.match(h, /data-current-status/, f); assert.match(h, /"\/api\/burnticker\/v1\/current-status"/, f); assert.match(h, /s\.lines\.forEach/, f); }
     assert.ok(fs.existsSync("src/app/api/burnticker/v1/current-status/route.ts"));
   });
@@ -213,21 +213,20 @@ describe("verification words and the featured receipt (website brief §3/§5)", 
   test("the homepage features that real receipt next to the hero, in the status file's own words, with the verify action", () => {
     const html = fs.readFileSync("site/burnticker/index.html", "utf8");
     const demo = (JSON.parse(fs.readFileSync("config/burnticker/current-status.json", "utf8")) as { demo: { summary: string; recordDate: string } }).demo;
-    const block = html.slice(html.indexOf("data-demo-receipt"), html.indexOf('<div class="tape"'));
-    assert.ok(html.indexOf("data-demo-receipt") < html.indexOf('<div class="tape"'), "inside the hero, before the tape");
+    const block = html.slice(html.indexOf("data-demo-receipt"), html.indexOf('<section class="wrap" id="products"'));
+    assert.ok(html.indexOf("data-demo-receipt") < html.indexOf('id="products"'), "right after the hero, before the products (site audit #7)");
     assert.ok(block.includes(demo.summary.replace(/&/g, "&amp;")), "the summary is current-status.json demo.summary verbatim");
-    assert.match(block, /devnet rehearsal · 2026-10-06/); assert.match(block, /href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</);
+    assert.match(block, /A real burn from the devnet rehearsal on October 6, 2026\./); assert.match(block, /href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</);
     clean(block.replace(/<[^>]+>/g, " "), "featured receipt");
   });
 });
 
 describe("layout, navigation and sharing metadata (website brief §8)", () => {
   const home = fs.readFileSync("site/burnticker/index.html", "utf8");
-  test("the guardrail strip wraps at its source (no nowrap on its items at any width); the ticker pauses on hover and focus and stops under reduced motion", () => {
-    assert.doesNotMatch(home, /\.guard li\{[^}]*white-space:nowrap/);
-    assert.match(home, /\.guard li\{min-width:0;max-width:100%;overflow-wrap:anywhere\}/);
-    assert.match(home, /\.tape:focus-within \.reel/); assert.match(home, /<div class="tape"[^>]*tabindex="0"/);
-    assert.match(home, /@media \(prefers-reduced-motion: reduce\)\{\.reel\{animation:none/);
+  test("site audit #7/#16: no ticker tape and no guardrail strip on the homepage (the two widest elements at 320 px); text wraps", () => {
+    assert.doesNotMatch(home, /class="tape"|class="reel"|<ul class="guard"/);
+    assert.match(home, /\.hero h1\{[^}]*overflow-wrap:anywhere/);
+    assert.match(home, /\.card\{[^}]*min-width:0/);
   });
   test("Seasons goes to /burnticker/leagues on every surface", () => {
     for (const m of home.matchAll(/<a [^>]*href="([^"]+)"[^>]*>Seasons<\/a>/g)) assert.equal(m[1], SEASONS_HREF);
@@ -307,21 +306,23 @@ describe("pair funds flow, by rule version (website brief §2)", () => {
 
 describe("the homepage around five questions, and an honest leagues directory (website brief §7)", () => {
   const home = fs.readFileSync("site/burnticker/index.html", "utf8");
-  test("order: what it does (hero) → a real verified example → how it works → current status, safeguards and limitations → the first coin and the seasons → implementation details behind a disclosure → a useful next action", () => {
+  test("order (site audit #7): hero → verified devnet receipt → three product cards → a short current status → actions; safeguards and implementation details moved to Trust", () => {
     const at = (m: string) => { const i = home.indexOf(m); assert.ok(i >= 0, m); return i; };
-    const order = ['<section class="hero', "data-demo-receipt", 'id="receipt"', 'id="status"', 'id="trust"', 'id="deficit"', 'id="seasons"', '<details class="wrap impl"', 'id="next"'].map(at);
+    const order = ['<section class="hero', 'id="verified-burn"', "data-demo-receipt", 'id="products"', 'id="status"', 'id="next"', "<footer"].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order);
-    const impl = home.slice(at('<details class="wrap impl"'), home.indexOf("</details>", at('<details class="wrap impl"')));
-    for (const id of ["layers", "how", "feeds", "economics"]) assert.match(impl, new RegExp(`id="${id}"`), `${id} is inside the disclosure`);
-    assert.match(home, /<h2>Safeguards and limitations<\/h2>/); assert.match(home, /data-current-limits/);
+    for (const gone of ["Safeguards and limitations", "data-current-limits", 'class="wrap impl"', 'id="layers"', 'id="feeds"', 'id="economics"']) assert.ok(!home.includes(gone), gone);
+    const status = home.slice(at('id="status"'), at('id="next"'));
+    assert.match(status, /data-current-status/); assert.match(status, /href="\/burnticker\/trust"/);
     const next = home.slice(at('id="next"'));
     assert.match(next, /<a class="btn amber" href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt<\/a>/);
     assert.match(next, /href="\/burnticker\/launch" data-launch-cta>/, "the launch action is gated like every launch CTA");
-    assert.match(home, /html:not\(\.launches-open\) \.doors\{grid-template-columns:1fr\}/, "one door fills the row while launches are closed");
+    assert.equal((next.slice(0, next.indexOf("</section>")).match(/class="btn amber"/g) ?? []).length, 1, "one primary action in the row (site audit #20)");
   });
   test("the leagues directory: honest availability and a clearly labelled example, no launch invitation", () => {
     const p = fs.readFileSync("src/app/burnticker/leagues/page.tsx", "utf8");
-    assert.match(p, /<EmptyState kind="not-launched" body="No team coin is launched on this host yet/);
+    // site audit #9 (2026-10-11): one plain banner, then a compact sport → leagues list while no league has a coin
+    assert.match(p, /data-prelaunch-banner>\s*<p className="font-medium text-neutral-100">No team coin has launched yet\.<\/p>/);
+    assert.match(p, /\{empty \? \(\s*<dl className="space-y-3" data-leagues-compact>/);
     assert.match(p, /Example data · illustrative coins and counts, not live/);
     assert.doesNotMatch(p, /launch one|Launch the first/i);
   });

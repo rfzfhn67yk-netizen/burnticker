@@ -12,8 +12,9 @@
 # Report-only changes nothing a visitor sees; the browser console lists what an enforced policy would block. Inventory (measured
 # 2026-10-11 from the code; test/burntickerCsp.test.ts re-checks it against the pages):
 #   scripts      same-origin bundles (/_next/static) + inline scripts (Next's flight payload, the static pages' own <script> blocks)
-#   styles       same-origin + inline <style>; Google Fonts CSS (the $DEFICIT page's Oswald)
-#   fonts        fonts.gstatic.com
+#   styles       same-origin + inline <style>; Google Fonts CSS (the $DEFICIT page's Oswald) — static policy only: since website-8
+#                the app self-hosts Courier Prime and Space Grotesk through next/font, so the app policy needs no Google host
+#   fonts        fonts.gstatic.com (static policy); 'self' (app)
 #   connect      same origin and https://burnticker.com (the $DEFICIT site reads the current-status API cross-origin);
 #                api.fiscaldata.treasury.gov (receipt verifier + $DEFICIT curve); the public Solana RPCs (receipt verifier, wallet
 #                adapter fallback) incl. their websockets; arweave.net (+ subdomains) and gateway.irys.xyz (pinned-metadata check)
@@ -36,13 +37,23 @@
 # 97,168 B (32,603 B gzip), /burnticker/leagues/cfb/2026 265,953 B (31,339 B gzip; 170 KB of it is the RSC flight payload repeating
 # the ~765 rendered list items), mcbb/wcbb 2026-27 ~142 KB (19.4 KB gzip), every other league page ≤ 50 KB. All TTFB < 0.8 s. These are
 # transfer sizes, not Core Web Vitals; no performance claim is made from them.
+# Re-measured 2026-10-11 ~19:50 Denver (curl --compressed, three runs each, first vs repeat; raw output in the website-8 report):
+#   /                    no-store, cf DYNAMIC   17.0 KB gzip   TTFB 0.29-0.69 s on every run (no repeat-view saving: nothing is kept)
+#   /whitepaper.html     no-store, cf DYNAMIC   32.8 KB gzip   TTFB 0.28-0.32 s on every run
+#   /brand/og.png        no-store, cf BYPASS    603,362 B      total 0.44-1.33 s on every run (fetched by link previews, not by the home)
+#   /deficit-avatar.png  no-store, cf BYPASS    45,536 B       re-downloaded every run (the website-8 home no longer shows it)
+#   /burnticker/brand/mark.png   public, max-age=14400 (Next)  304 on revalidation
+#   /_next/static/*.js   public, max-age=31536000, immutable, cf HIT — the app's 194 KB (gzip) of JS/CSS is already cached
+#   /api/burnticker/v1/current-status   public, max-age=60, s-maxage=60 (the app's own header), 4.0 KB gzip
+# A conditional GET with the ETag the static file_server already sends returns 304 with 0 bytes (checked on /brand/og.png), so the
+# revalidate split below saves the body on repeat views; it does not change TTFB (each revalidation is still a round trip to the box).
 # Every static file is no-store today (the static_site snippet), so the whitepaper and brand images re-download on each visit. The
 # status JSON, the keeper's t/<ticker>/ pages and the $DEFICIT status/burns files must stay no-store (a page that says "no burn yet" an
 # hour late is wrong about the supply). Proposal: documents and images revalidate instead (ETag/Last-Modified from file_server → 304s),
 # everything else stays no-store.
 (static_cache) {
-	@revalidate path /whitepaper.html /brand/* /favicon.png /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
+	@revalidate path /whitepaper.html /brand/* /favicon.png /favicon.ico /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
 	header @revalidate Cache-Control "public, max-age=300, must-revalidate"
-	@fresh not path /whitepaper.html /brand/* /favicon.png /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
+	@fresh not path /whitepaper.html /brand/* /favicon.png /favicon.ico /deficit-avatar.png /avatar.png /header.png /og.png /robots.txt
 	header @fresh Cache-Control "no-store"
 }

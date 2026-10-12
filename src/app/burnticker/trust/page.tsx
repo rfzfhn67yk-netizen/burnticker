@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { HostDiagnostics } from "../_components/HostDiagnostics";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
@@ -8,8 +7,11 @@ import { TermNote } from "../_components/Term";
 import CoverageSection from "./CoverageSection";
 import TrustPackSection from "./TrustPackSection";
 import OpsSection from "./OpsSection";
+import SafeguardsSection from "./SafeguardsSection";
 import { CurrentStatusSummary } from "../_components/CurrentStatusSummary";
 import { RepoText } from "../_components/RepoText";
+import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
+import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 
 /**
  * THE TRUST PAGE (the owner, 2026-10-09: no room for suspicion). Rendered from /api/burnticker/trust: the Powers Register, the LIVE
@@ -20,26 +22,27 @@ import { RepoText } from "../_components/RepoText";
  * known limitations, policies, the decision log, the changelog; config/burnticker/transparency.json). Facts, no marketing copy;
  * placeholders say so.
  */
-interface Trust { generatedAt: string; cluster: string; rpcConfigured: boolean; operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; preAuditCapSol: number; powers: { placeholder: boolean; generatedAt: string; powers: { id: string; power: string; holder: string | null; holderKind: string; timelock: string | null; sunset: string | null; canDo: string[]; cannotDo: string[]; source: string }[] }; operator: { can: string[]; cannot: string[] }; livePlatform: { platformId: string; found: boolean; comparison: { field: string; designed: string; live: string; matches: boolean }[]; readAt: string; error: string | null }; lpLock: { policy: string; line: string; lockedPct: number; lockProgram: string; lockAuthority: string; feeKeysPda: string | null; operatorTreasury: string | null; treasuryPinned: boolean; platform?: string | null; platformPinned?: boolean; split: { burnBps: number; operatorBps: number }; perSwapAfterGraduationBps: { lpFees: number; toBurnPool: number; toOperator: number; creatorFeeToBurnPool: number; burnedTotal: number }; instructions: { register: string; claim: string }; urls: { lockProgram: string; feeKeysPda: string | null; operatorTreasury: string | null } }; designedFees: { devFeeBps: number; lpBurnedPct: number; lpLockedPct?: number; creatorCashBps: number; teamAllocationPct: number; curve: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number }; postGraduation: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number } }; feeLedger: { wallet: string | null; entries: { signature: string; blockTime: string | null; delta: string; direction: string; counterparty: string | null; memo: string | null }[]; totalIn: string; totalOut: string; source: string; note: string }; team: { wallets: { label: string; pubkey: string }[]; ownTokensFile: string; ownTokensPresent: boolean; refusalRule: string }; attesters: { ticker: string; attesters: number; independent: number; quorum: number }[]; program: { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[]; hostWiring: string; chain: { library: string; programId: string; devnet: string; mainnet: string }[]; compiled: string }; incidents: { markdown: string; entries: number }; audit: { ranAt: string; tokens: number; receipts: number; mismatches: { ticker: string; eventId: string; checks: string[] }[]; chainChecked: boolean; ok: boolean } | null; statements: string[]; stubs: string[]; transparency: Transparency }
+interface Trust { generatedAt: string; cluster: string; rpcConfigured: boolean; operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; preAuditCapSol: number; powers: { placeholder: boolean; generatedAt: string; powers: { id: string; power: string; holder: string | null; holderKind: string; timelock: string | null; sunset: string | null; canDo: string[]; cannotDo: string[]; source: string }[] }; operator: { can: string[]; cannot: string[] }; livePlatform: { platformId: string; found: boolean; comparison: { field: string; designed: string; live: string; matches: boolean }[]; readAt: string; error: string | null }; lpLock: { policy: string; line: string; lockedPct: number; lockProgram: string; lockAuthority: string; feeKeysPda: string | null; operatorTreasury: string | null; operatorTreasuryHolder?: string; treasuryPinned: boolean; platform?: string | null; platformPinned?: boolean; split: { burnBps: number; operatorBps: number }; perSwapAfterGraduationBps: { lpFees: number; toBurnPool: number; toOperator: number; creatorFeeToBurnPool: number; burnedTotal: number }; instructions: { register: string; claim: string }; urls: { lockProgram: string; feeKeysPda: string | null; operatorTreasury: string | null } }; designedFees: { devFeeBps: number; lpBurnedPct: number; lpLockedPct?: number; creatorCashBps: number; teamAllocationPct: number; curve: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number }; postGraduation: { legs: { label: string; bps: number; recipient: string; dial: string }[]; totalBps: number } }; feeLedger: { wallet: string | null; entries: { signature: string; blockTime: string | null; delta: string; direction: string; counterparty: string | null; memo: string | null }[]; totalIn: string; totalOut: string; source: string; note: string }; team: { wallets: { label: string; pubkey: string }[]; ownTokensFile: string; ownTokensPresent: boolean; refusalRule: string }; attesters: { ticker: string; attesters: number; independent: number; quorum: number }[]; program: { programId: string | null; deployed: boolean; buildHash: string | null; verify: string[]; hostWiring: string; chain: { library: string; programId: string; devnet: string; mainnet: string }[]; compiled: string }; incidents: { markdown: string; entries: number }; audit: { ranAt: string; tokens: number; receipts: number; mismatches: { ticker: string; eventId: string; checks: string[] }[]; chainChecked: boolean; ok: boolean } | null; statements: string[]; stubs: string[]; transparency: Transparency }
 interface Transparency { updatedAt: string; file: string; publicRepo: { url: string | null; todo: string; whatIsPublished: string }; whoRunsThis: { operatorLine: string; alsoRuns: string; refusal: string; refuseListCode: string; refuseListConfig: string; refuseListPresent: boolean; holdingsRule: string }; howBuilt: { aiAssisted: boolean; statement: string; firmAudit: boolean; firmAuditStatement: string; reviews: { id: string; reviewer: string; status: string; reportPath: string | null }[]; tooling: string[]; toolingStatus: string; reviewsDir: string; reviewsRule: string; reviewsReadmePresent: boolean; reportsPresent: { id: string; present: boolean }[]; bounty: { status: string; rangeSol: [number, number]; fundedFrom: string; termsPath: string; contact: string | null } }; wallets: { role: string; label: string; resolved: string | null; source: string; envVar: string | null; description: string }[]; walletsTodo: number; rehearsals: { symbol: string; date: string | null; mint: string | null; status: string; text: string }[]; limitations: { id: string; status: string; text: string }[]; policies: { id: string; text: string }[]; decisions: { markdown: string; entries: number; file: string; present: boolean }; changelog: { markdown: string; entries: number; file: string; present: boolean } }
 
 export default function TrustPage() {
-  const [t, setT] = useState<Trust | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/burnticker/trust").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setT(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
-  if (err) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="unavailable" body="The trust page data could not be read just now." details={err} /></main>;
-  if (!t) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
+  // audit R01 / site audit #1: the live trust data is one section among several. A failed read (empty body, an HTML error page, a
+  // timeout, a rejected request) shows a Retry with the time of the last attempt where that section would be; the header, the current
+  // status, the check-it-yourself links, coverage and operations render regardless — never a raw Response.json error.
+  const { data: t, failure, loading, triedAt, retry } = useJsonRead<Trust>("/api/burnticker/trust");
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const sol = (l: string) => (Number(l) / 1e9).toFixed(4);
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
-      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold">Trust</h1><p className="text-neutral-400 text-xs">What the operator can and cannot do, read from the chain and the config where it can be; placeholders say so. Generated {t.generatedAt} · {t.cluster} · RPC {t.rpcConfigured ? "configured" : "not configured on this host"}.</p><div className="mt-2"></div></header>
+      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold">Trust</h1><p className="text-neutral-400 text-xs">What the operator can and cannot do, read from the chain and the config where it can be; placeholders say so.{t ? <> Generated {t.generatedAt} · {t.cluster} · RPC {t.rpcConfigured ? "configured" : "not configured on this host"}.</> : null}</p></header>
       <CurrentStatusSummary card={card} />
-      <section className={card}><p>{t.operatorLine}{t.contactIsTodo && <span className="text-amber-400 text-xs"> (contact address: TODO, owner to fill in)</span>}</p><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">Attesters: {t.attesterStatus.line}</p></section>
+      <section className={card}><p>{t?.operatorLine ?? OPERATOR_LINE}{t?.contactIsTodo && <span className="text-amber-400 text-xs"> (contact address: TODO, owner to fill in)</span>}</p>{t && <><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">Attesters: {t.attesterStatus.line}</p></>}</section>
       <TrustPackSection card={card} />
+      <SafeguardsSection card={card} />
       {/* UX report 3 item 5: one current summary above (status, control, money, operator, bounty); every long disclosure below sits
           behind one disclosure as the evidence for it, so no limit is stated twice in competing words. */}
-      <details className="space-y-6" data-trust-evidence>
+      {!t && (failure ? <ReadFailurePanel what="The trust page's live data (powers, platform config, fee ledger, wallets, program facts)" failure={failure} triedAt={triedAt} loading={loading} retry={retry} /> : <EmptyState kind="loading" body="Reading the trust page's live data." />)}
+      {t && <details className="space-y-6" data-trust-evidence>
         <summary className="cursor-pointer text-sm text-neutral-300">Evidence behind the summary: standing facts, LP lock and fee split, powers, live platform config, fee ledger, wallets, attesters, program, audit, coverage, operations, reviews and logs</summary>
         <div className="mt-4 space-y-6">
           {/* UX report 3 item 10: the words the evidence below uses, beside it rather than front-loaded in the page header */}
@@ -52,7 +55,7 @@ export default function TrustPage() {
         <ul className="text-xs mt-1">
           <li>Lock program: <a className="underline break-all" href={t.lpLock.urls.lockProgram}><code>{t.lpLock.lockProgram}</code></a></li>
           <li>Fee Key owner (burn program fee-keys PDA): {t.lpLock.feeKeysPda && t.lpLock.urls.feeKeysPda ? <a className="underline break-all" href={t.lpLock.urls.feeKeysPda}><code>{t.lpLock.feeKeysPda}</code></a> : <span className="text-amber-400">program id not set on this host</span>}</li>
-          <li>Operator treasury (20%): {t.lpLock.operatorTreasury && t.lpLock.urls.operatorTreasury ? <a className="underline break-all" href={t.lpLock.urls.operatorTreasury}><code>{t.lpLock.operatorTreasury}</code></a> : <span className="text-amber-400">not pinned in this cluster&apos;s program build: claims refuse and the fees stay in the lock until the owner pins the Squads vault</span>}</li>
+          <li>Operator treasury (20%): {t.lpLock.operatorTreasury && t.lpLock.urls.operatorTreasury ? <><a className="underline break-all" href={t.lpLock.urls.operatorTreasury}><code>{t.lpLock.operatorTreasury}</code></a>{t.lpLock.operatorTreasuryHolder ? <span className="text-neutral-400"> — {t.lpLock.operatorTreasuryHolder}</span> : null}</> : <span className="text-amber-400">not pinned in this cluster&apos;s program build: claims refuse and the fees stay in the lock until a build compiles the treasury</span>}</li>
           <li>Burnticker LaunchLab platform compiled into the program: {t.lpLock.platform ? <code className="break-all">{t.lpLock.platform}</code> : <span className="text-amber-400">not pinned in this cluster&apos;s program build: no coin can be initialised until the owner pins it</span>}</li>
           <li>Each coin&apos;s Fee Key and its claims are on its own page.</li>
         </ul>
@@ -76,11 +79,11 @@ export default function TrustPage() {
           {t.program.chain.map((c) => <li key={c.library}><span className="text-neutral-400">On chain — {c.library} <code>{c.programId}</code>:</span> devnet {c.devnet}; mainnet {c.mainnet}</li>)}
           <li><span className="text-neutral-400">Compiled value:</span> {t.program.compiled}</li>
         </ul><pre className="text-xs bg-neutral-950 rounded p-2 mt-1 whitespace-pre-wrap">{t.program.verify.join("\n")}</pre></section>
-      <section className={card}><h2 className="font-medium">Public audit</h2>{t.audit ? <p className={t.audit.ok ? "text-emerald-400" : "text-red-400"}>{t.audit.ok ? "All receipts recompute" : `${t.audit.mismatches.length} mismatch(es)`} — {t.audit.receipts} receipt(s) across {t.audit.tokens} token(s), {t.audit.chainChecked ? "source + chain" : "source only"}, {t.audit.ranAt}</p> : <p className="text-neutral-500 text-xs">scripts/burnticker-audit.mts has not run on this host.</p>}{t.audit?.mismatches.map((m) => <p key={m.ticker + m.eventId} className="text-xs text-red-400">${m.ticker} {m.eventId}: {m.checks.join("; ")}</p>)}</section>
+      <section className={card}><h2 className="font-medium">Public audit</h2>{t.audit ? <p className={t.audit.ok ? "text-emerald-400" : "text-red-400"}>{t.audit.ok ? "All receipts recompute" : `${t.audit.mismatches.length} mismatch(es)`} — {t.audit.receipts} receipt(s) across {t.audit.tokens} token(s), {t.audit.chainChecked ? "source + chain" : "source only"}, {t.audit.ranAt}</p> : <p className="text-neutral-500 text-xs">The public audit (<RepoText text="scripts/burnticker-audit.mts" />) has not run on this host.</p>}{t.audit?.mismatches.map((m) => <p key={m.ticker + m.eventId} className="text-xs text-red-400">${m.ticker} {m.eventId}: {m.checks.join("; ")}</p>)}</section>
       <CoverageSection card={card} />
       <OpsSection card={card} repo={t.transparency.publicRepo.url} />
       <section className={card}><h2 className="font-medium">Incident log (append-only)</h2>{t.incidents.entries === 0 ? <p className="text-xs text-neutral-500">No incidents recorded (<RepoText text="docs/burnticker/incidents/LOG.md" />).</p> : <pre className="text-xs whitespace-pre-wrap">{t.incidents.markdown}</pre>}</section>
-      {(() => { const x = t.transparency; const repo = x.publicRepo.url; const link = (rel: string) => (repo ? <a className="underline" href={`${repo.replace(/\/$/, "")}/blob/main/${rel}`}>{rel}</a> : <code>{rel}</code>); return (<>
+      {(() => { const x = t.transparency; const repo = x.publicRepo.url; const link = (rel: string) => <RepoText text={rel} />; /* audit 4 BT-14: pinned commit, never blob/main */ return (<>
       <section className={card}><h2 className="font-medium">Who runs this</h2>
         <p>{x.whoRunsThis.operatorLine}{t.contactIsTodo && <span className="text-amber-400 text-xs"> (contact address: TODO)</span>}</p>
         <p className="text-neutral-300 mt-1">{x.whoRunsThis.alsoRuns}</p>
@@ -108,8 +111,9 @@ export default function TrustPage() {
       <p className="text-xs text-neutral-500">Transparency data: <RepoText text={x.file} />, updated {x.updatedAt}.</p>
       </>); })()}
         </div>
-      </details>
-      <HostDiagnostics stubs={t.stubs} cluster={t.cluster} />
+      </details>}
+      {!t && <><CoverageSection card={card} /><OpsSection card={card} repo={null} /></>}
+      {t && <HostDiagnostics stubs={t.stubs} cluster={t.cluster} />}
     </main>
   );
 }

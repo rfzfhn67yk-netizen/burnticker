@@ -10,6 +10,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { siteNavHtml } from "../src/lib/burnticker/siteNav.mjs";
+
+/** The app layout's theme boot (src/app/burnticker/_components/theme.ts THEME_BOOT), verbatim: one `bt-theme` preference site-wide. */
+const THEME_BOOT_JS = "(function(){try{var t=localStorage.getItem('bt-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();";
 
 export const WHITEPAPER_MD = "docs/burnticker/WHITEPAPER.md";
 export const WHITEPAPER_HTML = "site/burnticker/whitepaper.html";
@@ -138,6 +142,7 @@ const page = `<!DOCTYPE html>
 <meta name="twitter:site" content="@BurnTicker">
 <meta name="twitter:image" content="https://burnticker.com/brand/og.png">
 <link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
+<script>${THEME_BOOT_JS}</script>
 <style>
 :root{
   --bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000;
@@ -163,6 +168,8 @@ a{color:var(--amber)}
 .nav a{font:.84rem/1 var(--sans);color:var(--dim);padding:8px 10px;border:1px solid var(--line);border-radius:999px;text-decoration:none;white-space:nowrap}
 .nav a:hover{border-color:var(--amber);color:var(--ink)}
 .nav a[aria-current="page"]{border-color:var(--amber);color:var(--ink)}
+.themebtn{font:1rem/1 var(--sans);color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:999px;width:34px;height:30px;cursor:pointer}
+.flinks{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 12px}.flinks a{color:var(--dim)}
 .slip{position:relative;background:var(--paper);color:var(--thermal);margin:10px 0 40px;padding:36px 22px 40px;
   background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px);
   -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/14px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/14px 51% repeat-x;
@@ -203,10 +210,9 @@ footer p{margin:0 0 6px;max-width:none}
       ${brandSvg}
       <b>BURNTICKER</b>
     </a>
-    <nav class="nav" aria-label="Links">
-      <a href="./">Home</a>
-      <a href="/burnticker/trust">Trust</a>
-      <a href="whitepaper.html" aria-current="page">Whitepaper</a>
+    <nav class="nav" aria-label="Burnticker" data-site-nav="header">
+${siteNavHtml({ current: "/whitepaper.html", indent: "      " })}
+      <button type="button" class="themebtn" data-theme-toggle aria-label="Switch theme">◐</button>
     </nav>
   </div>
 </header>
@@ -225,9 +231,29 @@ ${body.join("\n")}
 </article>
 </main>
 <footer class="wrap">
+  <nav class="flinks" aria-label="Footer" data-site-nav="footer">
+${siteNavHtml({ current: "/whitepaper.html", footer: true, indent: "    " })}
+  </nav>
   <p>A memecoin platform. The rule says what the supply does, not what the price does. Nobody is promised anything.</p>
   <p>Operated by one independent operator (United States); contact@burnticker.com. Source of this page: <code>docs/burnticker/WHITEPAPER.md</code>.</p>
 </footer>
+<script>
+(function () {
+  // ONE THEME PREFERENCE (site audit #6): the same "bt-theme" key and switch as the app header and the home page
+  var b = document.querySelector("[data-theme-toggle]"), root = document.documentElement; if (!b) return;
+  function cur() { var t = root.dataset.theme; return t === "light" || t === "dark" ? t : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); }
+  function label() { var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); }
+  b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
+  label();
+})();
+(function () {
+  // R06: "Launch · closed" until this host's catalogue says creator launches are open (unreadable = closed)
+  if (!window.fetch) return;
+  fetch("/api/burnticker/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    if (j && j.launches && j.launches.creators === true) Array.prototype.forEach.call(document.querySelectorAll("[data-launch-link]"), function (a) { a.textContent = "Launch"; });
+  }).catch(function () { /* closed */ });
+})();
+</script>
 </body>
 </html>
 `;

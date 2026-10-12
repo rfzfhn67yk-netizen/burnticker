@@ -1,4 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
+import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import { LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 
@@ -214,9 +215,10 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
       (t) => `For every ${f.unitLabel}, ${spends(r, t)}, with a receipt on chain. Settled on ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Nothing happens on a move smaller than one unit.`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "polymarket" && r.market) {
-    const phrase = (ctx.eventPhrase ?? "the market resolves YES").replace(/\s*\(resolves once\)$/, "");
-    const subj = phrase.replace(/^the /i, "").split(/\s+(?:wins?|win)\b/i)[0];
-    return build(`${subj.replace(/\s*\([A-Z]\)$/, "").split(" ").pop() ?? "Event"} Wins`.slice(0, 32), tickerFrom(subj.replace(/\s*\([A-Z]\)$/, "").split(" ").pop() ?? "EVENT"), `burns if ${phrase}`,
+    const phrase0 = (ctx.eventPhrase ?? "the market resolves YES").replace(/\s*\(resolves once\)$/, "");
+    // L12 (launch audit 5): the name and ticker come from the event's subject and outcome (eventIdentity.ts), never its last word
+    const id = eventIdentity(phrase0), phrase = id.verb ? id.phrase : phrase0;
+    return build(id.verb && id.confident ? id.name : "Event Coin", id.verb && id.confident ? id.ticker : tickerFrom(id.ticker), `burns if ${phrase}`,
       (t) => `If it happens, ${spends(r, t)} once, with a receipt on chain. Settled on Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}. Nothing happens otherwise.`, oneShotSentence(ctx.endsAt), "one-shot");
   }
   const what = ctx.eventPhrase ?? r.series ?? r.market ?? "the source";

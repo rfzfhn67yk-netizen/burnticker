@@ -4,8 +4,9 @@ import { PublicKey } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
-import { lpLockPolicyJson, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
-import { compareLivePlatform, CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
+import { upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
+import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
+import { compareLivePlatform, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
 
 /**
  * THE TRUST PAGE'S DATA (the owner, 2026-10-09: the platform must leave no room for suspicion that the operator is corrupt). Facts, no
@@ -32,14 +33,14 @@ export interface PowersRegister { schema: "burnticker.powers/v1"; placeholder: b
 export const POWERS_REGISTER_FILE = path.join("docs", "burn-receipts", "powers-register.json");
 
 /** The register from docs/burn-receipts/powers-register.json when it exists; else the typed placeholder from env pubkeys. */
-export function loadPowersRegister(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now()): PowersRegister {
+export function loadPowersRegister(env: Readonly<Record<string, string | undefined>> = process.env, root = process.cwd(), now = Date.now(), upgradeTimeLockSecs: number | null = null): PowersRegister {
   const file = path.join(root, POWERS_REGISTER_FILE);
   if (fs.existsSync(file)) {
     const j = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<PowersRegister>;
     if (j.schema === "burnticker.powers/v1" && Array.isArray(j.powers)) return { schema: "burnticker.powers/v1", placeholder: false, generatedAt: String(j.generatedAt ?? ""), powers: j.powers as Power[] };
     // Review 2 §2 (2026-10-11): the register the program ships (programs/burn-receipts/scripts/powers-register.mjs) has its own schema;
     // it was never recognised here, so the trust page showed the env placeholder with "placeholder until … ships" although it ships.
-    const shipped = registerPowersFromShipped(j as unknown as ShippedRegister);
+    const shipped = registerPowersFromShipped(j as unknown as ShippedRegister, upgradeTimeLockSecs);
     if (shipped) return { schema: "burnticker.powers/v1", placeholder: false, generatedAt: String((j as { generatedAt?: string }).generatedAt ?? ""), powers: shipped };
   }
   const key = (name: string): string | null => { const v = (env[name] ?? "").trim(); return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? v : null; };
@@ -49,7 +50,7 @@ export function loadPowersRegister(env: Readonly<Record<string, string | undefin
       { id: "keeper-data-key", power: "sign feed readings (attester, quorum 1) and crank burns", holder: key("BURNTICKER_KEEPER_PUBKEY"), holderKind: "key", timelock: null, sunset: "quorum 2 with an independent attester (v2)", canDo: ["submit a settled reading it read from the public source", "crank a burn the rule computes from that reading"], cannotDo: ["change a rule", "burn more than the rule says", "withdraw from any fee PDA or vault", "touch a holder's balance"], source: "placeholder: BURNTICKER_KEEPER_PUBKEY" },
       { id: "platform-admin", power: "LaunchLab PlatformConfig admin: may change the platform fee bps, the claim wallet and the LP split for FUTURE launches", holder: key("BURNTICKER_PLATFORM_ADMIN"), holderKind: "key", timelock: "none on chain (LaunchLab has no timelock); changes are visible on this page within one cycle", sunset: "transfer to a multisig before P3", canDo: ["raise or lower the developer fee within 0..500 bps for new trades", "change the developer wallet", "change the LP split for future graduations"], cannotDo: ["change any token's rule or burn", "take from a burn pool", "change the creator fee above 50 bps (program cap)", "redirect a coin's Fee Key or LP fees (initialize_token and every buyback crank refuse a platform whose lock-NFT wallet is not the burn program's fee-keys PDA or whose LP is not 100 % locked; the 80/20 claim split is compiled)"], source: "placeholder: BURNTICKER_PLATFORM_ADMIN" },
       { id: "dev-fee-wallet", power: "receives the developer's platform fee", holder: devFeeWallet(env), holderKind: "key", timelock: null, sunset: null, canDo: ["claim the platform fee vault"], cannotDo: ["anything to a token"], source: "BURNTICKER_FEE_WALLET" },
-      { id: "program-upgrade-authority", power: "upgrade the burn_receipts program", holder: key("BURNTICKER_UPGRADE_AUTHORITY"), holderKind: key("BURNTICKER_UPGRADE_AUTHORITY") ? "multisig" : "none", timelock: "Squads multisig (planned), then renounced after audit", sunset: "renounce after audit (LAUNCHPAD-PATH §2)", canDo: ["deploy new program code"], cannotDo: ["anything without a new deployment, which is public"], source: "placeholder: BURNTICKER_UPGRADE_AUTHORITY; the program is not deployed yet" },
+      { id: "program-upgrade-authority", power: "upgrade the burn_receipts program", holder: key("BURNTICKER_UPGRADE_AUTHORITY"), holderKind: key("BURNTICKER_UPGRADE_AUTHORITY") ? "multisig" : "none", timelock: "Squads multisig (planned), then renounced after audit", sunset: "renounce after audit (LAUNCHPAD-PATH §2)", canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: ["anything without a new deployment, which is public"], source: "placeholder: BURNTICKER_UPGRADE_AUTHORITY; the program is not deployed yet" },
     ],
   };
 }
@@ -63,7 +64,8 @@ interface ShippedRegister {
   external_powers?: { power?: string; holder?: string; timelock?: string; can?: string }[];
 }
 /** The shipped register as Power rows: every privileged instruction, the upgrade authority and the external powers; null if not that schema. */
-export function registerPowersFromShipped(j: ShippedRegister): Power[] | null {
+/** `upgradeTimeLockSecs`: the mainnet Squads time lock read from chain (null = not read) — the upgrade row's "can do" says what it allows (R04). */
+export function registerPowersFromShipped(j: ShippedRegister, upgradeTimeLockSecs: number | null = null): Power[] | null {
   if (j?.schema !== "burn-receipts.powers-register/v1" || !Array.isArray(j.instructions)) return null;
   const src = "docs/burn-receipts/powers-register.json";
   const kind = (role: string): Power["holderKind"] => (/squads|multisig|vault/i.test(j.roles?.[role] ?? "") ? "multisig" : role === "anyone" ? "none" : "key");
@@ -71,7 +73,7 @@ export function registerPowersFromShipped(j: ShippedRegister): Power[] | null {
     const role = (i.signers ?? []).map((x) => x.role).find((r) => r !== "anyone") ?? "anyone";
     return { id: i.name, power: i.name.replace(/_/g, " "), holder: role, holderKind: kind(role), timelock: i.timelock ?? null, sunset: i.sunset ?? null, canDo: i.can ? [i.can] : [], cannotDo: i.cannot ? [i.cannot] : [], source: `${src} → instructions.${i.name}` };
   });
-  if (j.upgrade_authority) rows.push({ id: "program-upgrade-authority", power: j.upgrade_authority.power ?? "program upgrade authority", holder: "upgrade_authority", holderKind: "multisig", timelock: j.upgrade_authority.holder_at_launch ?? null, sunset: j.upgrade_authority.sunset ?? null, canDo: ["deploy new program code (a public, time-locked proposal)"], cannotDo: [], source: `${src} → upgrade_authority` });
+  if (j.upgrade_authority) rows.push({ id: "program-upgrade-authority", power: j.upgrade_authority.power ?? "program upgrade authority", holder: "upgrade_authority", holderKind: "multisig", timelock: j.upgrade_authority.holder_at_launch ?? null, sunset: j.upgrade_authority.sunset ?? null, canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: [], source: `${src} → upgrade_authority` });
   for (const [k, e] of (j.external_powers ?? []).entries()) rows.push({ id: `external-${k}`, power: e.power ?? "external power", holder: e.holder ?? null, holderKind: "key", timelock: e.timelock ?? null, sunset: null, canDo: e.can ? [e.can] : [], cannotDo: [], source: `${src} → external_powers[${k}]` });
   return rows.length ? rows : null;
 }
@@ -339,24 +341,25 @@ export interface TrustPage {
   operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; preAuditCapSol: number;
 }
 
-export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; now?: number; cluster?: string }): Promise<TrustPage> {
+export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; now?: number; cluster?: string; upgradeTimeLockSecs?: number | null }): Promise<TrustPage> {
   const env = i.env ?? process.env, root = i.root ?? process.cwd(), now = i.now ?? Date.now();
-  const powers = loadPowersRegister(env, root, now);
+  const powers = loadPowersRegister(env, root, now, i.upgradeTimeLockSecs ?? null);
   const transparency = buildTransparency(root, env);
   const platformId = (env.BURNTICKER_PLATFORM_ID ?? "").trim() || null;
+  const cluster = i.cluster ?? ((env.BURNTICKER_CLUSTER ?? "").trim() || "devnet");
   return {
     generatedAt: new Date(now).toISOString(),
     operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL,
     powers, operator: operatorPowersSummary(powers),
     livePlatform: await readLivePlatform(i.reader, platformId, env, now),
-    designedFees: { curve: CURVE_FEES, postGraduation: POST_GRADUATION_FEES, devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: LP_FEES_TO_BURN_POOL_BPS, operatorBps: LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
-    lpLock: lpLockPolicyJson(i.cluster ?? ((env.BURNTICKER_CLUSTER ?? "").trim() || "devnet"), (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null),
+    designedFees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(cluster), devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: LP_FEES_TO_BURN_POOL_BPS, operatorBps: LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
+    lpLock: lpLockPolicyJson(cluster, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null),
     feeLedger: await readFeeLedger(i.reader, devFeeWallet(env)),
     team: teamWallets(env, root), attesters: i.attesters, program: programFacts(env, root), incidents: readIncidents(root), audit: readAudit(i.siteDir),
     transparency,
     statements: [
       `LP locked forever at graduation: ${LP_LOCKED_PCT}% (platformScale 1,000,000, creatorScale 0, burnScale 0; Raydium's LP lock, never withdrawable) — not creator-configurable. The Fee Key is owned by the burn program's fee-keys PDA and the permissionless claim_lock_fees splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury, fixed in code; the coin side is burned. The program's own LP floor for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `The operator earns 20% of post-graduation LP fees: ${LP_FEES_TO_OPERATOR_BPS} bps of every swap after graduation, paid to the operator treasury (the developer fee wallet, not the Squads vault, which holds no fee stream); ${LP_FEES_TO_BURN_POOL_BPS} bps goes to the coin's burn pool. On the curve the developer slice is ${BURNTICKER_DEV_FEE_BPS} bps. No admin key can change the 80/20 split.`,
+      `The operator earns 20% of post-graduation LP fees: ${LP_FEES_TO_OPERATOR_BPS} bps of every swap after graduation, paid to ${operatorTreasuryRecord(cluster).who}; ${LP_FEES_TO_BURN_POOL_BPS} bps goes to the coin's burn pool. On the curve the developer slice is ${BURNTICKER_DEV_FEE_BPS} bps. No admin key can change the 80/20 split.`,
       "Creator cash from fees: 0 bps. The creator-fee slot pays the token's burn pool, 100%.",
       "Team allocation: 0%. No presale, no private round, no airdrop to insiders; the platform holds no tokens at launch.",
       "Rules, readings and receipts are append-only: SQL triggers refuse updates and deletes; a rule change is a new token.",

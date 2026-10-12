@@ -14,6 +14,7 @@ import { espnClient, fecClient, nativeRuleProblems, nativeSourceById } from "@/l
 import { electionPairTemplate } from "@/lib/burnticker/electionPair";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { CROSS_LABEL, officialOf } from "@/lib/burnticker/sources/gameSettle";
+import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
 import { describeRule } from "@/lib/burnticker/describe";
@@ -230,14 +231,15 @@ export async function electionPair(p: Platform, q: { slug?: string | null; a?: s
 
 const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league).find((x) => x.abbr === s.abbr); return { abbr: s.abbr, name: s.name || t?.name || s.abbr, nickname: s.nickname || t?.nickname || s.abbr, ticker: t?.ticker ?? s.abbr, record: s.record }; };
 
-/** GET /v1/sports/teams?league= — the team picker for team coins (ESPN scoreboard): the static team table with each team's next game and record. No league → the leagues. */
+/** GET /v1/sports/teams?league= — the team picker for team coins (the league's own schedule or TheSportsDB; no ESPN reads): the static team table with each team's next game and record. No league → the leagues. */
 export async function sportsTeams(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
   if (!league) return ok({ leagues: Object.values(LEAGUES).map((l) => { const off = officialOf(l.id); return { id: l.id, label: l.label, sport: l.sport, crossRead: off ? CROSS_LABEL[off] : "the on-chain payout and the licensed final confirm each other", crossReadMissing: false, schedule: off ? `${CROSS_LABEL[off]} (free)` : "TheSportsDB (licensed key)", scheduleAvailable: espnClient().scheduleAvailable(l.id), draws: l.draws, teams: teamsOf(l.id).length }; }), sports: SPORTS, source: "schedules: the league's official feed (MLB, NHL, NBA) or TheSportsDB (licensed)" });
   if (!isLeague(league)) return fail(400, `league must be one of ${Object.keys(LEAGUES).join(", ")}`);
   // schedules: MLB / NHL / NBA from their free official feeds, every other league from TheSportsDB (licensed key) — never ESPN
-  let scheduleNote: string | null = null;
-  const games = await espnClient().upcoming(league, 8).catch((e) => { scheduleNote = e instanceof ScheduleUnavailable ? SCHEDULE_NEEDS_KEY : `the schedule could not be read just now (${(e as Error).message.slice(0, 80)})`; return [] as Game[]; });
+  // launch audit 5 L05: a schedule that cannot be read is a display problem only — the sentence says so; the technical reason is apart
+  let scheduleNote: string | null = null, scheduleDetail: string | null = null;
+  const games = await espnClient().upcoming(league, 8).catch((e) => { const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; });
   const year = seasonYearAt(league, Date.now());
   const needle = (q.q ?? "").trim();
   const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
@@ -247,24 +249,24 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
     const me = g ? (g.home.abbr === t.abbr ? g.home : g.away) : null;
     return { abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league, series: { win: teamSeries(league, t.abbr, "win", { kind: "season", year }), loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, record: me?.record ?? null, next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr } : null };
   });
-  return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "schedule: the league's official feed" : "schedule: TheSportsDB (licensed)", scheduleNote, teams });
+  return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "schedule: the league's official feed" : "schedule: TheSportsDB (licensed)", scheduleNote, scheduleDetail, teams });
 }
 
-/** GET /v1/sports/games?league=&q= — upcoming games for matchups (ESPN scoreboard, the next 8 days): both sides and each side's one-game loss selector. */
+/** GET /v1/sports/games?league=&q= — upcoming games for matchups (the league's own schedule or TheSportsDB, the next 8 days; no ESPN reads): both sides and each side's one-game loss selector. */
 export async function sportsGames(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
   if (!isLeague(league)) return fail(400, `league must be one of ${Object.keys(LEAGUES).join(", ")}`);
   try {
     let games: Game[];
-    try { games = await espnClient().upcoming(league, 8); } catch (e) { if (e instanceof ScheduleUnavailable) return ok({ league, label: LEAGUES[league].label, source: "schedule: TheSportsDB (licensed)", scheduleNote: SCHEDULE_NEEDS_KEY, games: [], count: 0 }); throw e; }
+    try { games = await espnClient().upcoming(league, 8); } catch (e) { const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "schedule: the league's official feed" : "schedule: TheSportsDB (licensed)", scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
     const needle = (q.q ?? "").trim();
     const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
     const rows = games.filter((g) => !g.completed && g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
       eventId: g.eventId, league, title: g.name, startsAt: g.startsAt, detail: g.detail, a: sideOf(league, g.away), b: sideOf(league, g.home),
       series: { aLoss: gameSeries(league, g.eventId, g.away.abbr, "loss"), bLoss: gameSeries(league, g.eventId, g.home.abbr, "loss") },
     }));
-    return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "schedule: the league's official feed" : "schedule: TheSportsDB (licensed)", scheduleNote: null, games: rows, count: rows.length });
-  } catch (e) { return fail(502, `ESPN unavailable: ${(e as Error).message.slice(0, 160)}`); }
+    return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "schedule: the league's official feed" : "schedule: TheSportsDB (licensed)", scheduleNote: null, scheduleDetail: null, games: rows, count: rows.length });
+  } catch (e) { return fail(502, `the schedule could not be read just now: ${(e as Error).message.slice(0, 160)}`); }
 }
 
 /** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */

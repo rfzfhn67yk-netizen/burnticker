@@ -1,0 +1,116 @@
+# Burnticker re-check — 11 October 2026
+
+**One new P2 defect is confirmed:** a malformed or non-JSON-RPC response can make the new mint verifier call a registered coin unregistered. The previous ProgramData/upgrade-authority defect is resolved in the exercised cases. The targeted TypeScript regressions pass, but “all old issues resolved” would be inaccurate: a real single-coin launch transaction still exceeds the packet limit, incomplete launch recovery remains disclosed, and Rust fixes could only be checked in source here.
+
+## Scope and pinning
+
+Connected GitHub authentication returned `rfzfhn67yk-netizen` before repository content was accessed. Reviewed [PR #1](https://github.com/rfzfhn67yk-netizen/burnticker/pull/1), an audit view, at head **`6a2d9047b3ed3614cbc82ee0dd5765cdd4bb2c54`**, base/merge base **`5a2c28b2b76fabbb6e92ac157b14eaf37818f7f6`**. Private review run: `76dec1aa-fedc-409b-847b-3a226b6dbb6d`.
+
+A new detached checkout from the verified repository was used. The complete local comparison has **1,206 files, 231,489 additions, zero deletions**, matching the private snapshot and connected PR metadata. All 13 pages of the connected file listing were fetched: the complete 1,206-name set matches the local set exactly and every returned blob URL names the pinned head. GitHub’s per-file additions sum is truncated/incomplete (189,779); those stats were not used as the patch. The complete local binary-capable patch has SHA-256 `4536a715edacd7cad36c367d69d68968c2d26af894f8fd4c647e016e3228befd`. No files were omitted from the available comparison; this does not mean 231,489 lines were individually re-audited.
+
+Priority scope: **`191d3b3b25286e799f9678c18ed319d3c8c5cec8..6a2d9047…`: 156 files, 9,354 additions, 439 deletions, 18 commits including merge commits.** The former head is an ancestor. The earlier scoped base `782e31ec9b4d64ac4161293a64bb2d4ac6abb6c2` is an ancestor of `191d3b3b…`; it was not silently replaced with a guessed merge count. Neither Solana program nor keeper money-moving logic changed in this new interval. Related unchanged source/tests were inspected to check old dispositions, not relabeled as new defects.
+
+The checklist and all dated errata were read before candidate formation; independent candidates were recorded before published reviews. No applicable `AGENTS.md`/`AGENTS.override.md` was found. Repository descriptions and fix claims were treated as evidence to test. The checkout remained unchanged; no transaction, commit, merge, push or external message was made.
+
+All source paths below refer to the pinned head. “Resolved” describes the named failure and stated evidence, not a security certification or a claim that every surrounding state was covered.
+
+## F1 — new P2: unavailable mint registration becomes a definitive negative
+
+**Anchor:** [`src/lib/burnticker/mintRegistration.ts:53`](https://github.com/rfzfhn67yk-netizen/burnticker/blob/6a2d9047b3ed3614cbc82ee0dd5765cdd4bb2c54/src/lib/burnticker/mintRegistration.ts#L53), newly added in this interval and a right-side line of the full pinned PR.
+
+The reader calls `decodeRegistration(..., r?.value ?? null)`. Only an explicit successful RPC `value: null` means the TokenConfig does not exist. Missing `result`, missing `value`, and a JSON proxy failure are currently normalized to the same value. The underlying `jsonRpc` checks neither non-429 HTTP status nor the existence of `result`.
+
+**Prerequisite/scenario:** check a genuine devnet-only registration from the mainnet host; mainnet correctly answers `value: null`, while devnet’s upstream returns HTTP 503 with JSON `{ "message": "service unavailable" }`. Actual: both states become `not-registered`, and the page/API can say **“NOT registered with the burn_receipts program.”** Expected: devnet unavailable, combined registration unknown, “Unable to verify.” No wallet or authentication is required to encounter it. The false negative can enter the normal 60-second memo cache. It changes public evidence, not balances.
+
+**Executed reproduction:** `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs ../mint-response-repro.mjs` (scratch file outside the checkout). Real `Response` objects through the production `jsonRpc` and `readRegistration` functions:
+
+- HTTP 503 JSON without a JSON-RPC envelope → **not-registered**.
+- HTTP 200 `{}` → **not-registered**.
+- HTTP 200 `result` with `context` but no `value` → **not-registered**.
+- HTTP 200 explicit `result.value: null` control → correctly **not-registered**.
+- Combined normal-mainnet-absence/devnet-outage → **registration not-registered**, definitive negative headline.
+
+**Fix:** reject unsuccessful HTTP responses and invalid JSON-RPC envelopes; validate that `value` is present and either explicit null or a valid account before decoding. Missing/invalid data must return unavailable. Add the first three negative tests, explicit-null control, valid-account control and the two-network integration case; assert unknown/unavailable answers are not negatively cached. This is a new instance in the mint verifier, distinct from the resolved earlier authority decoder bug. No production outage was induced or observed.
+
+## Old-issue closure matrix
+
+### Previous ChatGPT/Codex findings
+
+| Prior issue | Current disposition | Source and meaningful evidence |
+|---|---|---|
+| Round 1 N1: launch replay moves the baseline | **Resolved in tested cases** | `registry.ts:343` returns on the same signature, refuses other launched states, and retains the SQL baseline trigger; `api/handlers.ts:607` verifies transaction time. Executed `burntickerCodexReview` N1: same-signature no-op, SQL refusal, invented signature/no-RPC refusal. |
+| N2: generic settlement omits runtime cross-reads | **Resolved for the reported generic path; accepted residual** | `catalogue/corroborate.ts`, catalogue runtime wiring; N2 tests exercise agreeing, wrong, unavailable and lagged secondary values and keeper withholding. Treasury/FRED remains a readable, overlapping-quarter series check, not daily independent corroboration. No daily-source closure claimed. |
+| N3: SDK memo-only evidence | **Resolved in tested cases** | `packages/burnticker-sdk/src/verify.ts` `burnProvenance` binds program CPI memo, SPL burn, mint and processed Reading. Executed N3 rejects memo-only, wrong mint/burn/unprocessed Reading; valid control passes. SDK suite and import-graph leak test pass. |
+| N4: unmetered legacy uploads | **Resolved as bounded mitigation** | Legacy route shares write limiter; `api/handlers.ts:524` checks daily pin budget before uploads. N4 tests confirm 429/shared bucket/daily cap. Rotating clients may still spend the configured daily budget; signed-wallet funding is an accepted unchanged design gap. |
+| N5: public-export symlinks | **Resolved in tested cases** | `scripts/ops/public-repo-lib.mjs` lstat/realpath/O_NOFOLLOW and staged rescan. All six symlink regressions pass, including ancestor/overlay/dangling links. No real publication was run. |
+| N6: wizard discards pair-curve venue | **Resolved in tested server/signing flow** | `api/handlers.ts` requires venue and builds pair bundle before drafts; launch UI consumes the pair plan; `signPlan.ts` signs each step with its intended mint. CodexReview N6, PairLaunch and SignCard tests pass. Live signing stayed wallet/gate unavailable. Packet-size limitation below is separate. |
+| N7: late-final event skipped by cursor | **Resolved for independent events; accepted limits** | `multiKeeper.ts:177–196` uses unseen event identity for binary/fixed-no-carry rules and alerts instead of reapplying ordered deltas; registry cursor never rewinds. N7 exercises late/tied IDs, baseline, ordered carry and fetch anchor. The existing bounded Polymarket discovery window remains. |
+| C1: disabled Kalshi still read | **Resolved in tested case** | `multiKeeper.ts:139–146` holds before adapter read; C1 regression asserts no read or planned/attested settlement for existing coins with flag off. This is not a licensing opinion. |
+| Round 2 F1: failover fence before planning | **Resolved in tested orchestration** | `multiKeeper.ts:725–760` plans then fences before active-pair attestation, and fences again after end-of-rule planning. `burntickerTrustOps` runs production `KeeperOps.cycle`: single, pair, wind-down and unreadable-config refusal pass. Unit-total adoption still does not authenticate event identities. |
+| F2: age cutoff abandons old graduated pair work | **Resolved in tested cases** | `pairCurveCrank`/`pairCurve/client.ts` retain outstanding lock, registration, FeeKey and fee-claim work. `pairCurveClient` tests day 8 retry, day 31 burn fallback, day 40 registration and complete-pair age-out pass. |
+| F3: launch confirmation trusts unused account key | **Resolved in tested acceptance boundary** | `launchVerify.ts` decodes initialize-token/venue evidence and checks current TokenConfig rule/creator/mint. CodexReview F3 rejects signed zero-transfer decoy, wrong discriminator/mint/rules/owner/venue and incomplete pair; intended legacy/v0 controls pass. These tests authenticate fixtures, not deliverability of an oversized transaction. Numeric venue terms and CPI initialization remain outside this verifier’s stated scope. |
+| F4: uncertain signed send forgotten/rebuilt | **Resolved for ambiguous-send identity; incomplete overall recovery** | `signPlan.ts:278–279` serializes then persists identity before send; reconciliation waits for original confirmation or proved failure/expiry. SignCard tests cover lost send/confirmation, no duplicate create, blockhash live/processed status, storage reload and HTTP confirm errors. After reload, unsent mint-key-dependent steps still cannot be rebuilt because mint keys are deliberately not stored. |
+| F5 / RN-1 / RN-2: healthy pair permissionlessly unlinked | **Source fix verified; Rust execution unverified here** | `instructions/pair.rs:663–693` accepts only terminal Pair evidence or LaunchLab locked voidBy expiry; no 30-day generic unlink. `register_pair_pool.rs:57` allows terminal-unlinked survivor registration. `pair_curve/tests/review_pair_r2.rs:440` asserts day-30/day-59 refusal then both pools register; read-before-link test also exists and is not ignored. The relevant Rust tests were inspected, not run. |
+| F6: pair direction reversed in copy | **Resolved in tested shared copy** | `describe.ts` shared sentence names the coin whose rule fires; templates/pair/Derby consumers use it. Executed named Broncos/Chiefs semantic fixture and copy tests. Live homepage explicitly says “the coin whose rule fires, not the team that won.” |
+| Round 3 F1: unreadable ProgramData says immutable/none | **Resolved in exercised cases** | `currentStatus.ts:43–49,74–82` distinguishes decoded None/Some from unavailable; `currentStatusText.ts` renders provenance. Executed Website2 regression covers second read throwing, absent ProgramData, missing value array, wrong owner/type, truncation, invalid option and incomplete Some; successful None/Some controls pass. Failed mainnet read remains unknown when no recorded deployment supports a fact. |
+
+### Other published program/re-check issues and known residuals
+
+| Issue group | Disposition and evidence |
+|---|---|
+| Known oversized single launch | **Incomplete, unchanged; independently reproduced.** `signPlan.ts:66–74` still constructs a legacy transaction and `:279` serializes it. A scratch copy of the real SDK F3 fixture produces **1,258 wire bytes**; `tx.serialize()` throws `Transaction too large` against the 1,232-byte limit. Invoked `node --import ./test/alias-hook.mjs --test --test-name-pattern='audit residual' ../launch-size-repro.ts`: one reproduction assertion passes. The earlier response already reported this category (1,254 bytes then); it is not a new finding. Resolve before creator launches open. |
+| Pair-forward H-1, M-2 and L-1–L-4 | **Mechanisms present; Rust runtime unverified.** `pair.rs` requires servable readings, provides 72-hour fallback, excludes pre-link periods via `pair_after_date`, requires partner linkage, and synchronizes native WSOL. Executed PairForward/ReceiptsPairs tests cover keeper behavior and client shapes. A dead but verified partner may still delay each period; accepted residual, not new. |
+| Pair-forward re-check M-1, RI-1, RI-4 | **Source fix verified; runtime unverified.** Pairing requires a common attester set; both quorums govern results and partner quorum co-signs paired rotation. Forward deadline is enforced and carried spend is excluded. `review_pair_r2.rs` contains non-ignored M1/RN2/72-hour tests; TS PairForward r3 tests pass. One common operator quorum can still withhold or choose results: explicitly disclosed authority, not removed trust. |
+| Pair-forward RL-1/RL-2, RI-2/RI-3/RI-5 | **Resolved in tested client cases / documentation presence.** `multiKeeper.ts:295` adopts already-forwarded readings through stored or discovered signatures; pair-crank refuses terminal/reported-unlinked relinks and checks drift. PairForward tests exercise external/lost-confirmation adoption and relink refusal. Timeout wording is corrected; r2 and r3 run logs/evidence now exist. Layout-offset claims were checked against source/tests, not deployed binary execution. |
+| LP-lock RL-2/RL-3/L-1/L-2/L-3 | **Source fixes verified, TS integration tested; Rust runtime unverified.** `lock_fees.rs:114–155` binds locker and lock-vault majority rather than live pool supply; policy-0 registration requires FeeKey proof and compiled platform pin. Claims use `fee_key.pool` (`:240`) and `u64::MAX` (`:317`); `pair_curve/lock_lp.rs:220` permits only the 30-day burn fallback. `lock_fees` Rust test source checks replacement claims/locker/amount; executed `burntickerLockFees` verifies client order and recording. Mutable external protocols and locked-LP dilution cases outside the named fix are not certified. |
+| Pair-curve deadline/void race and own-vault WSOL donation | **Source fixes verified; runtime unverified.** `trade.rs:145` refuses non-redemption sells at/after deadline; `graduate.rs:149` syncs before measuring WSOL. The inverted `review_pc3` and lifecycle donation tests encode the intended boundaries. |
+| Pair-curve older prefunding, precreated ATA, graduated-close, accrued developer fees, dust/rounding and affordability fixes | **No regression established; source/test-record verification only for Rust.** Current init/graduate/close/trade/commit checks retain the named fixes; published PC1/PC2/recheck IDs and closing test names are in `docs/burn-receipts/CHANGELOG.md:3–57`. Thirty-day stuck-side recovery and executable-recipient residue handling are present. This rerun did not execute those Rust cases. |
+| burn_receipts earlier blind-review fixes | **Unchanged source, limited re-check, not blanket closure.** Domains/quorum, resets, CPI post-checks, fixed supply, TWAP/caps and health/governance protections remain in source. Executed `burnReceiptsClient` covers genesis, memo selection, account builders/platform pins and URL redaction; no new dynamic claim for old on-chain exploits. Changelog R3-1–R3-6 fixes retain top-level/untouched-pool guards, policy expiry/veto/fallback restrictions and allowlist expiry. External bundles, pre-graduation mutable platform settings and trusted upgrade authority remain accepted risks. |
+| Operational/UX release work | **Incomplete or unverified, not new code findings.** Pre-wallet actual transaction/cost/network summary is still deferred; no wallet flow was exercised. Docker-reproducible build, independent attester, source licences, signed operator statement and mainnet time lock are still listed as open. First-observation seeding requires a funded working actor; program-side TWAP liveness beyond that mitigation was not newly proved. |
+
+## Validation actually executed
+
+- Node **26.8.2**, `npm ci --ignore-scripts --no-audit --no-fund`: completed. No install lifecycle scripts ran.
+- **434 repository tests passed, zero failed or skipped, 110 suites**, in two purposeful groups. First 328 exercise recent and prior findings; second 106 fill client/LP/SDK/coverage closure gaps. This is not the full repository suite.
+- First group: `burntickerCodexReview`, `burntickerPublicRepoSymlink`, `burntickerSdkLeak`, `burntickerTrustOps`, `burntickerSignCard`, `pairCurveClient`, `burntickerPairForward`, `burnReceiptsPairs`, `burntickerPairLaunch`, `burntickerWebsite2`, `burntickerWebsite4`, `burntickerNetworks`, `burntickerTrustJson`, `burntickerInputValidation`, `burntickerReadiness`, `burntickerTrustLinks`, `burntickerReviewErrata`, `burntickerTemplates`, `burntickerInitPlatform`, `burntickerCsp` (all `test/*.test.ts`).
+- Second group: `burnReceiptsClient`, `burntickerLockFees`, `burntickerSdk`, `burntickerCoverage`, `burntickerLpCopyGuard`.
+- Invocation prefix for both groups: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs --test --test-concurrency=1`, followed by those paths.
+- `npm run typecheck`: passed.
+- New malformed-RPC reproduction: executed with five scenarios described above. Known launch-size reproduction: one targeted scratch assertion passed. Initial scratch runs failed module resolution before the dependency path was corrected; no repository changes were made.
+- `git diff --check`: reports only whitespace/new-blank-line issues in newly added raw devnet evidence logs. These are not security findings. Tracked checkout stayed clean.
+- **Cargo is unavailable.** No Rust/LiteSVM, validator, program build, production deployment, real signing or transaction tests ran. Published devnet evidence and build hashes are operator records, not substitutes for an independent Rust run or deployed-byte verification.
+
+## Selective live verification
+
+Read-only browser observations **11 October 2026, approximately 19:02–19:08 MDT (America/Denver)**. A web deployment SHA was not established; these observations cannot prove the website serves this commit. No wallet was connected and no transaction or launch request was made.
+
+- Home says **“Creator launches are closed. This host currently shows mainnet information.”** The primary receipt action is near the opening content; long guardrails are collapsed. This rerun did not repeat the earlier physical/mobile layout measurement.
+- Trust loads its data (the earlier BigInt/500 fix is supported by `burntickerTrustJson` and the functioning page). It states **“3 keys, 2 controllers”**, owner alone meets the threshold, and **“mainnet Squads time lock: 0 (none) now, read from chain; 48 h planned (around 2026-10-23).”** These are observed UI claims, not a fresh independent authority audit.
+- Trust bounty shows **“live balance: 5.0000 SOL”**, funded 5, paid 0, and **“they agree.”** It separates recorded funding from live balance.
+- `/burnticker/verify?mint=4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F` says **“Registered on devnet: a disclosed Burnticker rehearsal coin”**, devnet registered/mainnet not registered, catalogue not listed. It reports four readings/two burns. This validates the ordinary per-network fix, not its outage case.
+- `/burnticker/check?demo=1#verify` says **“Verified: all 10 checks passed.”** Source, attestation and execution are separate, with a note that signatures do not prove source truth. This is one browser-observed rehearsal result, not full economic/deployment evidence.
+
+## Checklist coverage and limits
+
+1–9: unchanged program areas; inspected relevant old fix paths and current errata (31 burn_receipts / 9 pair_curve entrypoints, locked LP, compiled 80/20 LP fee split, terminal unlink/common-quorum forwarding). No blanket PASS and no fresh runtime certification of every instruction, CPI, arithmetic/governance/health/init edge. 10: targeted client/genesis/signing/memo/SDK tests. 11: prior lifecycle recovery source/TS checks; Rust unavailable. 12: actual wire serialization reproduced the outstanding launch-size defect; worst-case CU/account-size tests not executed. 13: keeper fence, adoption, pair aging and write-ahead/recovery regressions tested. 14: launch semantics, registry baseline, API metering, SDK closure and new mint verifier tested; F1 above remains. 15: exporter symlink tests and changed deploy/CSP proposal inspected; live firewall, units, installed Caddy config and full secret absence not verified. 16: checked updated evidence/build records and one live browser receipt; did not rerun the signature scanner or authenticate every historical reserve/burn. 17: generic cross-read, Kalshi-off and coverage tests; not a fresh live provider-availability/licensing audit across all categories.
+
+## Records consulted and remaining work
+
+The repository contains **13 review reports plus 3 response files**; tables, relevant findings and/or named fix records were consulted rather than assuming a count from old copy. Under `docs/burnticker/reviews/`:
+
+- `2026-10-09-claude-blind-1.md`; `2026-10-10-claude-blind-2.md`; `2026-10-10-claude-blind-3.md` (including embedded re-check).
+- `2026-10-10-pair-curve-blind-1.md`; `2026-10-10-pair-curve-blind-2.md`; `2026-10-10-pair-curve-recheck.md`.
+- `2026-10-11-lp-lock-blind.md`; `2026-10-11-pair-forward-blind.md`; `2026-10-11-pair-forward-recheck.md`.
+- `2026-10-10-chatgpt-pr-review.md` and `2026-10-10-chatgpt-pr-review-response.md`.
+- `2026-10-11-chatgpt-pr-review-2.md` and `2026-10-11-chatgpt-pr-review-2-response.md`.
+- `2026-10-11-chatgpt-pr-review-3.md`; `2026-10-11-chatgpt-ux-review-3.md`; `2026-10-11-chatgpt-review-3-response.md`.
+
+Also consulted: checklist/README, `docs/burn-receipts/CHANGELOG.md`, root and Burnticker CHANGELOG, current-status/transparency/operator/verified-build configuration, verified-build documentation, pair-forward r2/r3 run-log presence and r3 evidence. No prior chat-output artifact was read. No round-4 website report file was found in this pinned review directory; BT-* assertions in tests were checked as source claims, not invented prior findings.
+
+For the follow-up implementation prompt:
+
+1. Fix the new RPC/registration shape bug first with the five cases above and a real-account control; keep explicit absence separate from unknown and preserve provenance.
+2. Treat the oversized legacy launch as **existing incomplete work**. Build a deliverable transaction plan (e.g. supported v0/lookup-table strategy or carefully verified split), measure the actual signed wire size with real SDK instructions and metadata, and update confirmation/recovery semantics as required. Do not “fix” only the mock tests or silently change economic rules.
+3. Finish the deferred pre-wallet transaction-count/network/cost summary and define recovery for a partially completed plan whose unsent mint keys are no longer available. Keep launches gated until the real plan/recovery is verified.
+4. On a Rust-capable isolated environment, run the relevant LP-lock, pair-forward r3 and pair-curve boundary regressions and report exact results. Do not label source-only closures independently runtime-verified. Keep published accepted risks separate from bugs.
+5. Re-run focused tests/typecheck, document remaining limitations and provide a concrete diff. No deployment, governance change, wallet action or production transaction is authorized by this report.

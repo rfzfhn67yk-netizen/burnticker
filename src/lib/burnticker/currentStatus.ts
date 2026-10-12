@@ -5,7 +5,7 @@ import { jsonRpc, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
 import { rpcUrlFor } from "@/lib/burnticker/networks";
 import { CURRENT_STATUS_FILE, readStatusFile } from "@/lib/burnticker/deficitPrelaunch";
 import type { AuthoritySource } from "@/lib/burnticker/currentStatusText";
-export { upgradeAuthorityText, type AuthoritySource } from "@/lib/burnticker/currentStatusText";
+export { upgradeAuthorityText, upgradeDelaySummary, type AuthoritySource } from "@/lib/burnticker/currentStatusText";
 
 /**
  * ONE AUTHORITATIVE CURRENT STATUS (website brief 2026-10-11 §4). Every repeated "what is true now" claim on the homepage, the trust,
@@ -47,7 +47,8 @@ export const upgradeAuthorityOf = (d: Uint8Array): string | null | undefined => 
   return undefined;
 };
 
-export const fmtSecs = (s: number): string => (s === 0 ? "0 (none)" : s % 3600 === 0 ? `${s / 3600} h` : s % 60 === 0 ? `${s / 60} min` : `${s} s`);
+import { fmtSecs } from "@/lib/burnticker/currentStatusText";
+export { fmtSecs };
 
 interface Acct { owner: string; data: [string, string] }
 async function accounts(rpc: Rpc, keys: string[]): Promise<(Acct | null)[]> {

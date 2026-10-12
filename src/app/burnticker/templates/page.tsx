@@ -24,7 +24,9 @@ export default function TemplatesPage() {
             <div className="flex items-center gap-2"><h2 className="font-medium">{t.title}</h2><span className="bt-chip">{shapeLabel[t.shape]}</span></div>
             <p className="mt-2 text-sm text-neutral-200">{t.example}</p>
             {t.pairLine && <p className="mt-1 text-xs text-amber-200" aria-label="pair rule">{t.pairLine}</p>}
-            <p className="mt-2 text-xs text-neutral-500">Settled on: {t.settles}</p>
+            <p className="mt-2 text-xs text-neutral-500">It settles on {t.settles}.</p>
+            {/* launch audit 5 L10: what "Start from this" opens, said before the click */}
+            <p className="mt-1 text-xs text-neutral-400" data-template-lands={t.lands}>{t.operatorOnly ? `${t.operatorOnly} ` : ""}{t.lands === "review" ? "Start from this opens the review card with exactly this example." : `Start from this opens the launch page so you can ${t.choices}.`}</p>
             {launch.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href={t.href}>Start from this →</Link>}
           </li>
         ))}
