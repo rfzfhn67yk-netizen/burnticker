@@ -18,7 +18,7 @@ export const DESCRIPTION_MAX = 280;
 export const LINK_LABELS = ["X", "Telegram", "Website"] as const;
 
 export const RIGHTS_LINE = "I have the right to use this image. A team, league or company mark is used at my own risk.";
-export const TAKEDOWN_LINE = "To ask for an image to be removed from this site, email contact@burnticker.com; the site stops showing it within one day. The copy on Arweave is permanent and cannot be removed.";
+export const TAKEDOWN_LINE = "To ask for an image to be removed from this site, email contact@burnticker.com. The copy on Arweave is permanent and cannot be removed.";
 export const IMAGE_HELP = "PNG, JPG, GIF or WebP, up to 2 MB. It is shown square. Without one, the coin uses its generated receipt art.";
 
 /** The image type from its first bytes (the declared type is never trusted alone). Null for anything else. */

@@ -178,7 +178,7 @@ describe("no market cap / price for any Burnticker coin (Claims and UI trust bou
 
   // Erratum 2026-10-12 (owner decision): a coin card's market cap, a bare number read from the coin's own curve. The index card carries the
   // field (declared once, read once from the curve), the card prints it in its row; nothing else reads a market-data field.
-  const CARD_MCAP = /^marketCap(\?: string \| null;|: c\?\.marketCap \?\? null, holders: s\.market\?\.holders\.count \?\? null,)$/;
+  const CARD_MCAP = /^marketCap(\?: string \| null;|: c\?\.marketCap \?\? s\.market\?\.pool\?\.marketCap \?\? null, holders: s\.market\?\.holders\.count \?\? null,)$/;
   // the coin page's market facts read the same curve field (coinPage.ts marketFacts); its one mention is the status type's curve shape
   const PAGE_MCAP = (f: string, l: string) => f === "src/app/burnticker/t/[ticker]/page.tsx" && /^interface Market \{.*progressPct: number; poolId: string; marketCap\?: string \| null \} \| null;/.test(l.trim());
   test("no UI source reads a market-data field (cap, fdv, price, bid/ask, outcome prices) except the card's own curve read", () => {
@@ -187,7 +187,7 @@ describe("no market cap / price for any Burnticker coin (Claims and UI trust bou
     assert.deepEqual(hits, []);
     assert.equal(code("src/lib/burnticker/tokenPage.ts").split("\n").filter((l) => /\bmarketCap\b/.test(l)).length, 2, "the index card's field: declared once, read once");
     const view = read("src/lib/burnticker/cardView.ts"), card = read("src/app/burnticker/_components/CoinCard.tsx");
-    assert.match(view, /const mcap: CardCell = t\.marketCap \? \{ text: `\$\{groupDigits\(t\.marketCap\)\} \$\{t\.quote \?\? "SOL"\}`, why: CARD_MEANINGS\.mcap \}/, "a bare number and its unit, no commentary");
+    assert.match(view, /const mcap: CardCell = t\.marketCap \? \{ text: `\$\{groupDigits\(t\.marketCap\)\} \$\{t\.quote \?\? "SOL"\}`, why: t\.phase === "graduated" \? MCAP_POOL_MEANING : CARD_MEANINGS\.mcap \}/, "a bare number and its unit, no commentary");
     assert.match(card, /<div data-row="mcap"><dt title=\{CARD_MEANINGS\.mcap\}>\{CARD_LABELS\.mcap\}<\/dt><dd><Cell c=\{v\.mcap\} \/><\/dd><\/div>/);
     assert.doesNotMatch(code("src/lib/burnticker/market.ts"), /price/i, "the curve read computes a number, it names no price");
     assert.match(read("src/lib/burnticker/coinPage.ts"), /value: `\$\{dec2\(i\.curve\.marketCap\)\} \$\{quote\}`/, "the coin page's row: a bare number and its unit");

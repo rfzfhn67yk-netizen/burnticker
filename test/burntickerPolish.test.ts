@@ -66,7 +66,7 @@ describe("item 1: the terms and privacy pages", () => {
     assert.match(all, /never trades, never takes an order and never pays anything/);
     assert.match(all, /confirms that they have the right to use it/);
     assert.match(all, /marks are used at the creator's own risk/);
-    assert.match(TAKEDOWN_SENTENCE, /contact@burnticker\.com/); assert.match(TAKEDOWN_SENTENCE, /within one day/); assert.match(TAKEDOWN_SENTENCE, /Arweave.*permanent/);
+    assert.match(TAKEDOWN_SENTENCE, /contact@burnticker\.com/); assert.match(TAKEDOWN_SENTENCE, /Arweave.*permanent/);
     assert.match(all, /There are no accounts on Burnticker/);
     assert.match(all, /holds no accounts and no tokens for anyone/);
     assert.match(all, /no warranty of any kind/);

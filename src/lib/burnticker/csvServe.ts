@@ -2,6 +2,7 @@ import { tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { readKeeperFiles, type KeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { burnRowsFromKeeper, burnRowsFromReceipts, csvResponse, readingRowsFromKeeper, readingRowsFromRegistry } from "@/lib/burnticker/csvExport";
 import { feedError } from "@/lib/burnticker/feeds";
+import { CSV_LINK_COPY, csvHref } from "@/lib/burnticker/exportLinks";
 
 /**
  * The CSV routes' one handler (polish-1): a registered coin from the registry (its recomputed receipts and readings, the same data the
@@ -11,11 +12,10 @@ import { feedError } from "@/lib/burnticker/feeds";
 export const CSV_COPY = {
   unknown: (t: string) => `No coin with the ticker $${t} is on this site.`,
   unavailable: "This coin's records could not be read just now. Try again in a few minutes.",
-  /** the coin page's Burn log links (WIRING.md) */
-  burnsLink: "Download the burns as a CSV file",
-  readingsLink: "Download the readings as a CSV file",
+  /** the coin page's Burn log links (exportLinks.ts) */
+  ...CSV_LINK_COPY,
 };
-export const csvHref = (ticker: string, kind: "burns" | "readings") => `/api/burnticker/coins/${encodeURIComponent(ticker.toUpperCase())}/${kind}.csv`;
+export { csvHref };
 const DEBT_SOURCE = "https://fiscaldata.treasury.gov/datasets/debt-to-the-penny/";
 
 export async function coinCsv(p: Platform, rawTicker: string, kind: "burns" | "readings", keeper: () => KeeperFiles = () => readKeeperFiles()): Promise<Response> {

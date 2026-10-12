@@ -1,5 +1,8 @@
 "use client";
 
+import type { StatedJson } from "@/lib/burnticker/pageTypes";
+import { statedSentences } from "@/lib/burnticker/sources/polyStated";
+
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
@@ -38,6 +41,8 @@ export interface ReviewCardProps {
   /** "Ends Sep 30, 2027, then winds down" — null when the rule has no end. */
   ends: string | null;
   shares: { options: number[]; value: number; onChange: (v: number) => void };
+  /** sources-2: the fade side, "Burn when it happens" / "Burn when it does not happen" (dials.ts dialsFor(rule).inverse); null when the rule cannot take it. */
+  inverse?: { options: Chip<string>[]; value: string; onChange: (v: string) => void } | null;
   /** website-14 (LAUNCHPAD-PATH §75): the graduation preset, 40 / 60 / 85 SOL (default 85); `line` is the review's own sentence on the chosen raise and the pool it starts. Null for paired launches. */
   raise?: { options: RaisePreset[]; value: RaisePreset; onChange: (v: RaisePreset) => void; line: string | null } | null;
   durations?: { options: Chip<string>[]; value: string; onChange: (v: string) => void } | null;
@@ -66,7 +71,7 @@ export interface ReviewCardProps {
   /** L01: a share that was moved onto the preset row, said out loud (null when nothing moved). */
   shareNotice?: string | null;
   /** L06 / L12: the event exactly as the source states it — the full question, its link, the outcome that fires, when it resolves. */
-  event?: { question: string; url: string | null; outcome: string | null; resolves: string | null; criteria: string | null } | null;
+  event?: { question: string; url: string | null; outcome: string | null; resolves: string | null; criteria: string | null; /** sources-2: Polymarket's stated source and dispute window for one market */ stated?: StatedJson | null } | null;
   /** L12: the generated name is uncertain — the editor opens with this request. */
   namePrompt?: string | null;
 }
@@ -132,6 +137,8 @@ export function ReviewCard(p: ReviewCardProps) {
       {p.event && (
         <div className="min-w-0 break-words rounded border border-neutral-800 p-2 text-xs text-neutral-300" data-event>
           <p>The source states the event as “{p.event.question}”.{p.event.outcome ? ` The coin burns if it resolves ${p.event.outcome}.` : ""}{p.event.resolves ? ` The market is due to close around ${p.event.resolves}.` : ""}{p.event.url && <> <a className="underline" href={p.event.url} rel="noopener" target="_blank">Open the market ↗</a></>}</p>
+          {p.event.stated && <p className="mt-1" data-stated>{statedSentences(p.event.stated, p.event.stated.finalAfter)}</p>}
+          {p.event.stated?.text && <details className="mt-1 text-neutral-400"><summary className="cursor-pointer">Details</summary><p className="break-words">“{p.event.stated.text}”</p><p>{p.event.stated.finalAfter.ifDisputed}</p></details>}
           {p.event.criteria && <p className="mt-1 whitespace-pre-wrap text-neutral-400">{p.event.criteria.length > 600 ? `${p.event.criteria.slice(0, 600)}… The full rules are on the market page.` : p.event.criteria}</p>}
         </div>
       )}
@@ -142,6 +149,11 @@ export function ReviewCard(p: ReviewCardProps) {
         <span className="text-xs text-neutral-500" aria-hidden="true">{BUDGET_LABEL}</span>
         {p.shares.options.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
       </div>
+      {p.inverse && (
+        <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="When the coin burns" data-inverse>
+          {p.inverse.options.map((o) => <button key={o.value} type="button" role="radio" aria-checked={p.inverse!.value === o.value} data-optional="preset" className={chip(p.inverse!.value === o.value)} onClick={() => p.inverse!.onChange(o.value)}>{o.label}</button>)}
+        </div>
+      )}
       <p id={`${uid}-budget`} className="min-w-0 break-words text-xs text-neutral-400" data-budget-line>Spend {pctLabel(p.shares.value)} of the available burn budget each time. The tokens bought are burned, and the token amount varies.</p>
       {p.raise && (
         <div className="min-w-0 space-y-1" data-raise>

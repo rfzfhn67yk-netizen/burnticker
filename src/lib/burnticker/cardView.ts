@@ -1,5 +1,7 @@
 import type { Readiness } from "@/lib/burnticker/readiness";
 import { progressOf, type ProgressView } from "@/lib/burnticker/progress";
+import { statedSentences } from "@/lib/burnticker/sources/polyStated";
+import type { StatedJson } from "@/lib/burnticker/pageTypes";
 /**
  * ONE COIN CARD, ONE FIELD ORDER (website-10, 2026-10-12; rebuilt by website-13 the same day for Claude site audit 2 item 7 and ChatGPT
  * audit 6 A10 / A11, with the owner's decision to show the market cap). Every surface that lists coins prints the same rows in the same
@@ -48,6 +50,8 @@ export interface CardView {
   /** website-15 item 13: the creator's own text and links, under the rule (registered coins only) */
   creatorText?: string | null;
   links?: { label: string; url: string }[];
+  /** sources-2: a Polymarket coin's stated source and dispute window, one line under the rule (polyStated.ts statedSentences) */
+  stated?: string | null;
   /** market cap in SOL (a bare number), read from the curve before graduation */
   mcap: CardCell;
   holders: CardCell;
@@ -84,11 +88,14 @@ export const CARD_MEANINGS = {
 
 export const NOT_READ = {
   holders: "Counting holders needs an indexer that lists every token account of the coin. This site does not run one.",
-  mcapPool: "After graduation this number comes from the Raydium pool, and this site does not read that pool's reserves yet.",
+  mcapPool: "After graduation this number comes from the Raydium pool, and this site could not read that pool.",
   mcapNotRead: "This site has not read the coin's curve.",
   curveNotRead: "This site has not read the coin's curve.",
   nextNone: "This rule has no scheduled result.",
 } as const;
+
+/** A graduated coin's market cap, read from its Raydium pool (indexer-1): the card's hover text and the coin page's note. */
+export const MCAP_POOL_MEANING = "The Raydium pool's SOL reserve divided by its token reserve, times the current supply, read on chain.";
 
 /** The curve row's words: "35.7 / 85 SOL raised"; "— raised" when the raise was not read (never a typed 85). */
 export const curveLine = (c: CardView["curve"]): string => (c.na ? "Not applicable" : c.of === null ? `${c.raised ?? "—"} raised` : `${c.raised ?? "—"} / ${c.of} raised`);
@@ -143,6 +150,10 @@ export interface IndexCoin {
   /** website-14: where the coin stands (readiness.ts), computed by the API from its status and receipts; absent when not read */
   readiness?: Readiness | null;
   raised?: string | null; threshold?: string | null; quote?: string | null; pctOfSupply?: number; marketCap?: string | null; holders?: number | null;
+  /** indexer-1: why the holder count or the graduated pool was not read (status.json market.holders.countNote, market.poolNote) */
+  holdersNote?: string | null; poolNote?: string | null;
+  /** sources-2: a one-market Polymarket coin's stated source and dispute window */
+  stated?: StatedJson | null;
 }
 
 /** "14.81" from a decimal string, two places at most. */
@@ -169,17 +180,18 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
   if (t.pairId) tags.push({ label: "Pair", tone: "neutral" });
   if (t.badge) tags.push({ label: t.badge, tone: "neutral" });
   const curve = curveCell(t, raiseSol);
-  const mcap: CardCell = t.marketCap ? { text: `${groupDigits(t.marketCap)} ${t.quote ?? "SOL"}`, why: CARD_MEANINGS.mcap }
-    : { text: null, why: t.phase === "graduated" ? NOT_READ.mcapPool : NOT_READ.mcapNotRead };
+  const mcap: CardCell = t.marketCap ? { text: `${groupDigits(t.marketCap)} ${t.quote ?? "SOL"}`, why: t.phase === "graduated" ? MCAP_POOL_MEANING : CARD_MEANINGS.mcap }
+    : { text: null, why: t.phase === "graduated" ? t.poolNote || NOT_READ.mcapPool : NOT_READ.mcapNotRead };
   const pct = typeof t.pctOfSupply === "number" ? t.pctOfSupply : null;
   return {
     id: t.mint, ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
     rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()), creatorText: t.creatorText ?? null, links: t.links ?? [],
+    stated: t.stated ? statedSentences(t.stated, t.stated.finalAfter) : null,
     progress: t.readiness ? progressOf(t.readiness, { raiseSol: t.threshold ? Number(t.threshold) : null, raisedSol: t.raised ? Number(t.raised) : null }) : null,
     progressWhy: t.readiness ? null : "This site did not read where this coin stands.",
     nextSettle: next ? { text: `${shortDay(next)}`, why: null } : { text: null, why: NOT_READ.nextNone },
     curve, mcap,
-    holders: typeof t.holders === "number" ? { text: groupDigits(t.holders), why: null } : { text: null, why: NOT_READ.holders },
+    holders: typeof t.holders === "number" ? { text: groupDigits(t.holders), why: null } : { text: null, why: t.holdersNote || NOT_READ.holders },
     createdAt: t.launchedAt, createdWhy: t.launchedAt ? null : "This coin is not launched yet.",
     burned: { text: `${groupDigits(t.burned)} $${t.ticker}${pct === null ? "" : `, ${pctOfSupply(pct)}`}`, why: t.burns > 0 ? `${t.burns} burn${t.burns === 1 ? "" : "s"} so far.` : "No burn has confirmed yet." },
     mint: null,

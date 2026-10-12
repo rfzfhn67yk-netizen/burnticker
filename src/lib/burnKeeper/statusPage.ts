@@ -9,6 +9,7 @@ import { buybackSpend, centsToUsd, debtStep, rawToTokens, spendablePool, tokensT
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { dateIn } from "@/lib/burnKeeper/schedule";
 import { readinessOf, type Readiness } from "@/lib/burnticker/readiness";
+import type { PoolMarketJson } from "@/lib/burnticker/pageTypes";
 
 /**
  * THE STATUS PAGE (SPEC §5 — "the product people actually see"; 2026-10-09). A STATIC SITE the keeper publishes every cycle:
@@ -78,7 +79,12 @@ export interface StatusInput {
   program?: ProgramStatusInput | null;
   /** The coin's LaunchLab curve as read this cycle (src/lib/burnticker/market.ts curveProgress); null or absent when not read. */
   curve?: KeeperCurve | null;
+  /** indexer-1 (WIRING.md step 5): after graduation, the registered Raydium pool as read (market.ts readCpmmMarket); null or absent when not read. */
+  poolMarket?: KeeperPoolMarket | null;
 }
+
+/** market.ts readCpmmMarket's answer, as status.json carries it: the pool's figures, or the read's error. */
+export interface KeeperPoolMarket { market: PoolMarketJson | null; error: string | null }
 
 /** The curve fields status.json carries (website-14): the raise is the coin's own, read from its pool, never a typed 85. */
 export interface KeeperCurve { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string; quote: string; progressPct: number; poolId: string; readAt: string }
@@ -158,6 +164,8 @@ export interface StatusJson {
   program: ProgramStatusJson | null;
   /** The LaunchLab curve read this cycle (website-14): the raise that completes it is read from the pool. Absent on older files; null when not read. */
   curve?: KeeperCurve | null;
+  /** indexer-1: the registered Raydium pool as read after graduation. Absent on older files; null when not read. */
+  poolMarket?: KeeperPoolMarket | null;
   /** Where the coin stands on the way to its burns (src/lib/burnticker/readiness.ts; docs/burnticker/FIRST-BURN-PATH.md). Absent on older files. */
   readiness?: Readiness;
   /** Buyback mode only (null in vault mode). SOL amounts as decimal strings. */
@@ -319,6 +327,7 @@ export function buildStatus(i: StatusInput, burnsJson: readonly BurnJson[] = bui
     execution: i.program ? "program" : "legacy",
     program: i.program ? buildProgramStatus(i.program, i.burns, i.chain.cluster, dec) : null,
     curve: i.curve ?? null,
+    poolMarket: i.poolMarket ?? null,
     readiness: (() => {
       // one derivation for every page: no curve read here (null → "unavailable"), the program's pool flag, the newest burn row
       const last = [...i.burns].sort((x, y) => (x.recordDate < y.recordDate ? 1 : -1))[0] ?? null;

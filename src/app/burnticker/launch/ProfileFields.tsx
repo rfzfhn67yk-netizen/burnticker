@@ -3,6 +3,8 @@
 import { useId, useState } from "react";
 import { DESCRIPTION_MAX, IMAGE_HELP, RIGHTS_LINE, imageFileProblem } from "@/lib/burnticker/creatorProfile";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
+import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
+import { LinkedWords } from "../_components/LinkedWords";
 
 /**
  * THE CREATOR'S IMAGE, DESCRIPTION AND LINKS ON THE REVIEW CARD (website-15 item 13; owner decisions 2026-10-12). Above the rule
@@ -70,6 +72,7 @@ export function ProfileFields({ value, onChange }: { value: ProfileValue; onChan
           <label htmlFor={`${uid}-img`} className="block text-neutral-300">Image</label>
           <input id={`${uid}-img`} type="file" data-optional="profile" accept="image/png,image/jpeg,image/gif,image/webp" aria-describedby={`${uid}-imghelp`} className="block w-full min-w-0 text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} />
           <p id={`${uid}-imghelp`}>{IMAGE_HELP}</p>
+          <p data-image-rights><LinkedWords text={IMAGE_RIGHTS_LINE} links={[{ words: "terms of use", href: "/burnticker/terms" }]} /></p>
           {busy && <p role="status">Adding the receipt mark.</p>}
           {fileErr && <p className="text-red-400" role="alert">{fileErr}</p>}
           {value.image && <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" data-badge-toggle checked={value.badge} onChange={(e) => set({ badge: e.target.checked })} /><span>{BADGE_TOGGLE}</span></label>}

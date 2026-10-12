@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { OPERATOR_LINE, USE_OF_FEES } from "@/lib/burnticker/fees";
-import { FOOTER_COPY } from "@/lib/burnticker/siteNav.mjs";
+import { FOOTER_COPY, FOOTER_LEGAL_LINKS } from "@/lib/burnticker/siteNav.mjs";
 import { NAV, LEARN, API_BASE_PATH, type NavItem } from "./nav";
 import { MailSafe } from "./MailSafe";
+import { LinkedWords } from "./LinkedWords";
 
 /**
  * THE FOOTER (B1 "thermal receipt"): the slip the product prints — torn top edge, label/value rows, dashed rules. Since 2026-10-12 (the
@@ -32,6 +33,7 @@ export function SiteFooter() {
         <p className="bt-slip-text"><b>*** NOT ADVICE ***</b> {FOOTER_COPY.notAdvice}</p>
         <p className="bt-slip-text">{FOOTER_COPY.affiliation} {FOOTER_COPY.chain}</p>
         <p className="bt-slip-text bt-slip-dim">{FOOTER_COPY.sources}</p>
+        <p className="bt-slip-text"><LinkedWords text={FOOTER_COPY.legal} links={FOOTER_LEGAL_LINKS} /></p>
         <div className="bt-rule" />
         <dl className="bt-rows">
           <div><dt>OPERATOR</dt><dd><MailSafe text={OPERATOR_LINE} /></dd></div>

@@ -1,7 +1,9 @@
 import { PublicKey } from "@solana/web3.js";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
 import { CPMM_PROGRAM_ID as CPMM_PROGRAM, launchLabPoolId, launchLabProgramFor, launchLabVault } from "@/lib/burnKeeper/launchlab";
-import type { ChartJson, CurveJson, CurvePhase, HolderRow, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
+import type { ChartJson, CurveJson, CurvePhase, HolderRow, LifecycleDatesJson, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
+import type { HoldersRead } from "@/lib/burnticker/holders";
+import { NOT_READ, MCAP_POOL_MEANING } from "@/lib/burnticker/cardView";
 
 export type { ChartJson, CurveJson, CurvePhase, HolderRow, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
 
@@ -122,17 +124,27 @@ export function chartFor(cluster: string, curvePool: string | null, graduatedPoo
   return { provider: "geckoterminal", embedUrl: `https://www.geckoterminal.com/solana/pools/${p}?embed=1&info=0&swaps=0&grayscale=0&light_chart=0`, pageUrl: `https://www.geckoterminal.com/solana/pools/${p}`, note: "This market data comes from GeckoTerminal. It is shown for information, and no rule ever reads it." };
 }
 
+/** Why the graduated pool's figure is missing: the card's sentence, then the read's own error as a sentence. */
+const poolNotRead = (error: string | null) => (error ? `${NOT_READ.mcapPool} ${error.charAt(0).toUpperCase()}${error.slice(1)}.` : NOT_READ.mcapPool);
+
 /** The market block of status.json from what the reader brought back (or nothing). */
-export function buildMarketJson(i: { cluster: string; mint: string; status: string; poolId: string | null; graduatedPool: string | null; read: MarketInput | null | undefined }): MarketJson {
+export function buildMarketJson(i: { cluster: string; mint: string; status: string; poolId: string | null; graduatedPool: string | null; read: MarketInput | null | undefined;
+  /** indexer-1 (WIRING.md step 3): the graduated pool, the holder count and the lifecycle dates as read this cycle */
+  cpmm?: { market: CpmmMarket | null; error: string | null } | null; holders?: HoldersRead | null; dates?: LifecycleDatesJson | null }): MarketJson {
   const pool = i.read?.pool ?? null;
   const curve = pool && i.poolId ? curveProgress(pool, i.poolId) : null;
   const phase: CurvePhase | null = curve?.phase ?? (i.graduatedPool ? "graduated" : null);
+  const h = i.holders ?? null;
   const curveNote = curve ? "" : i.status === "draft" || i.status === "expired" ? "This coin is not launched, so there is no curve yet." : !i.read ? "This site has not read the LaunchLab pool, because no RPC is set up." : i.read.poolError ? `The LaunchLab pool could not be read (${i.read.poolError}).` : "The LaunchLab pool account was not found.";
   return {
     phase, curve, curveNote, graduatedPool: i.graduatedPool,
-    holders: { count: null, countNote: HOLDER_COUNT_NOTE, top: i.read?.top ?? null, topNote: i.read?.top ? "These are the 20 largest token accounts, with their owners looked up on chain." : !i.read ? "This site has not read the holders, because no RPC is set up." : "The holders were not read." },
+    holders: { count: h?.state === "read" ? h.holders : null, countNote: !h ? HOLDER_COUNT_NOTE : h.state === "read" ? "" : h.reason, top: i.read?.top ?? null, topNote: i.read?.top ? "These are the 20 largest token accounts, with their owners looked up on chain." : !i.read ? "This site has not read the holders, because no RPC is set up." : "The holders were not read.",
+      top10: h?.state === "read" ? h.top10 : null, top10Pct: h?.state === "read" ? h.top10Pct : null, top10PctUnlabelled: h?.state === "read" ? h.top10PctUnlabelled : null },
     trade: tradeLinks(i.cluster, i.mint, phase, i.status), chart: chartFor(i.cluster, curve ? i.poolId : null, i.graduatedPool, phase),
     readAt: i.read?.readAt ? new Date(i.read.readAt).toISOString() : null, error: i.read?.error ?? null,
+    pool: i.cpmm?.market ?? null,
+    poolNote: i.cpmm?.market ? MCAP_POOL_MEANING : poolNotRead(i.cpmm?.error ?? null),
+    dates: i.dates ?? null,
   };
 }
 

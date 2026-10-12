@@ -82,7 +82,7 @@ describe("the coin page (t/[ticker])", () => {
   test("tabs in order, Burn log first; Holders rendered only with holder data; no thread", () => {
     const at = (s: string) => src.indexOf(s);
     assert.ok(at('id="panel-burns"') < at('id="panel-rule"') && at('id="panel-rule"') < at('id="panel-holders"'));
-    assert.match(src, /\{hasHolders && m\?\.holders\.top && \(\s*<div id="panel-holders"/);
+    assert.match(src, /\{hasHolders && m\?\.holders\.top10 && \(\s*<div id="panel-holders"/);
     assert.match(src, /const tabs = coinTabs\(hasHolders\)/);
     assert.doesNotMatch(src, /thread|comment|reply/i);
   });

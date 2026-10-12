@@ -28,7 +28,11 @@ import type { FetchLike, OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { connectionPoolPort, type PoolPort } from "@/lib/burnticker/derby/pools";
 import { HermesClient } from "@/lib/burnticker/derby/pyth";
 import { DerbyAdapter } from "@/lib/burnticker/derby/adapter";
-import { readMarket, type MarketReader } from "@/lib/burnticker/market";
+import { curveProgress, readCpmmMarket, readMarket, type CpmmReader, type MarketReader } from "@/lib/burnticker/market";
+import { poolOwnerLabels, readHolders } from "@/lib/burnticker/holders";
+import { readLifecycleDates } from "@/lib/burnticker/lifecycleDates";
+import { jsonRpc } from "@/lib/burnticker/trustpack/receiptCheck";
+import { rpcUrlFor } from "@/lib/burnticker/networks";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "@/lib/burnticker/venues";
 import { nativeSourceById, setNativeClients } from "@/lib/burnticker/sources/native";
 import { derbyTitle } from "@/lib/burnticker/api/handlers";
@@ -165,17 +169,32 @@ export async function tokenPageInput(p: Platform, t: TokenRow, now = Date.now(),
   const feedState = p.registry.feedState(t.selectorKey);
   const feed = locked.rule.oracle === "catalogue" && locked.rule.series ? feedById(locked.rule.series) : null;
   const [supplyRaw, feePdaLamports, vaultRaw] = await Promise.all([p.program.supplyRaw(t.mint).catch(() => null), p.program.feePdaBalanceLamports(t.mint).catch(() => null), locked.mode === "vault" ? p.program.vaultBalanceRaw(t.mint).catch(() => null) : Promise.resolve(null)]);
-  const market = p.market && opts.live !== false && t.status !== "draft" && t.status !== "expired"
+  const live = !!p.market && opts.live !== false && t.status !== "draft" && t.status !== "expired";
+  const market = live && p.market
     ? await readMarket(p.market, { cluster: p.cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: supplyRaw ?? tokensToRaw(TOTAL_SUPPLY, DECIMALS), decimals: DECIMALS }, now).catch(() => null)
     : null;
+  const programBlock = await programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading"));
+  // indexer-1 (WIRING.md step 1): the graduated pool's market cap, the holder count and the lifecycle dates, read on chain; each read
+  // returns its own "unavailable" reason, never a guess
+  const poolRegistered = programBlock?.config ? !!programBlock.config.poolRegistered : null;
+  const poolAddress = programBlock?.config?.pool ?? null;
+  const network = p.cluster === "localnet" ? null : p.cluster;
+  const rpc = live && network ? jsonRpc(rpcUrlFor(network)) : null;
+  const [cpmm, holders, dates] = await Promise.all([
+    live && p.market && poolRegistered && poolAddress ? readCpmmMarket(p.market as unknown as CpmmReader, { cluster: p.cluster, mint: t.mint, poolId: poolAddress }, now) : Promise.resolve(null),
+    rpc ? readHolders(rpc, { cluster: p.cluster, mint: t.mint, labels: { ...poolOwnerLabels(p.cluster), [t.feePda]: "burn pool", [t.creator]: "creator" } }, now) : Promise.resolve(null),
+    rpc && network ? readLifecycleDates(rpc, { network, mint: t.mint, launchTx: t.launchTx, curvePool: t.poolId, phase: market?.pool && t.poolId ? curveProgress(market.pool, t.poolId).phase : null, poolRegistered }, now) : Promise.resolve(null),
+  ]);
   return {
-    market,
+    market, cpmm, holders, dates,
+    // sources-2 (WIRING-SOURCES.md section 2): a one-market Polymarket coin's stated source and dispute window, from the same Gamma read
+    stated: info && "stated" in info && info.stated ? info.stated : null,
     lp: await lpLockBlock(p.registry, p.program, p.cluster, t.mint),
     pair: await pairCounterpart(p, t),
     lifecycle: lifecycleFrom(p.registry, t, locked.rule, feePdaLamports),
     meta: p.registry.tokenMeta(t.mint),
     token: t, locked, readings, receipts: p.registry.receipts(t.mint), attesters: p.registry.attesters(t.mint), state, feedState,
-    chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: await programPageBlock(p.program, t.mint, p.registry.lastProgramTx(t.mint, "reading")) },
+    chain: { cluster: p.cluster, programId: p.program.programId, supplyRaw, feePdaLamports, vaultRaw, program: programBlock },
     now, nextCheckAt: feedState.nextFetchAt, implied, seriesTitle: info?.title ?? feed?.title ?? (locked.rule.oracle === "catalogue" && locked.rule.series ? nativeSourceById(locked.rule.series)?.title ?? null : null), selectorPending: 0,
     operator: operatorPowersSummary(loadPowersRegister()),
   };
