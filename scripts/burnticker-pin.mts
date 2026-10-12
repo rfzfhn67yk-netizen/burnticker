@@ -35,7 +35,12 @@ const origin = opt("origin") ?? "https://burnticker.com";
 const links: { label: string; url: string }[] = [];
 if (opt("website")) links.push({ label: "website", url: opt("website")! });
 if (opt("twitter")) links.push({ label: "x", url: opt("twitter")! });
-const description = `${r.statement}\n\nRule: ${r.rule?.burnPerUnitTokens ? `${r.rule.burnPerUnitTokens} per unit` : "see the rules file"}; rules sha256 ${loaded.sha256}. Memecoin: the rule says what supply does, not what price does. Not advice.`;
+// The dial line names the mode's real dial: buyback mode spends a fraction of the burn pool per unit (the legacy burnPerUnitTokens
+// field is not what a buyback coin does; $REHEARSAL's immutable metadata carries the old wording, 2026-10-12).
+const fraction = r.mode === "buyback" && r.buyback?.fractionPerUnit ? Number(r.buyback.fractionPerUnit) : null;
+const dialLine = fraction !== null ? `${(fraction * 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}% of the burn pool per unit`
+  : r.rule?.burnPerUnitTokens ? `${r.rule.burnPerUnitTokens} tokens per unit` : "see the rules file";
+const description = `${r.statement}\n\nRule: ${dialLine}; rules sha256 ${loaded.sha256}. Memecoin: the rule says what supply does, not what price does. Not advice.`;
 // pinCoin's `rule` only feeds the generated art; we pin our own PNG, so the BurnRule is not consulted (metadataJson does not read it).
 const input: PinInput = { ticker, name, description, oneLiner: r.statement.slice(0, 140), rule: {} as BurnRule, rulesSha256: loaded.sha256, origin, links, imageUrl: null };
 

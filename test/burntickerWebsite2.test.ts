@@ -74,7 +74,7 @@ describe("$DEFICIT before launch (website brief §1)", () => {
     const { deficitPrelaunch } = await import("@/lib/burnticker/deficitPrelaunch");
     const d = deficitPrelaunch();
     assert.equal(d.dial.percent, "2%"); assert.equal(d.dial.unitLabel, "$1B");
-    assert.equal(d.rulesSha256, "78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58", "the mainnet rule the owner picked on 2026-10-10");
+    assert.equal(d.rulesSha256, "8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9", "the mainnet rule the owner picked on 2026-10-10");
     assert.equal(d.canonical, "https://deficit.burnticker.com/"); assert.equal(d.launch.date, null);
     assert.equal(d.rehearsal.demo.checkHref, EXPLORE_VERIFIED_BURN.href);
     clean(`${d.oneSentence} ${d.launch.note} ${d.rehearsal.note} ${d.rehearsal.demo.summary}`, "pre-launch copy");

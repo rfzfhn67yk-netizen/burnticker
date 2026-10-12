@@ -4,7 +4,7 @@
   "ticker": "DEFICIT",
   "chain": "solana",
   "mode": "buyback",
-  "mint": null,
+  "mint": "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj",
   "totalSupply": "1000000000",
   "decimals": 6,
   "buyback": {

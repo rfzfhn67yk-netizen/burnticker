@@ -7,8 +7,8 @@
   "note": "$DEFICIT is not launched, so there is no live status yet: no mint, no readings, no burns. This file is the explicit pre-launch state. From the keeper's first cycle after launch it is replaced by the keeper's live status.json (schema burnkeeper.status/v1). No launch date is announced.",
   "rules": {
     "file": "rules.json",
-    "sha256": "78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58",
-    "sha12": "78f4c327552e",
+    "sha256": "8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9",
+    "sha12": "8e3e8b66748a",
     "status": "proposed mainnet rule (2% of the burn pool per $1B unit); fixed at launch, and any different file is a different coin",
     "check": "shasum -a 256 rules.json"
   },
