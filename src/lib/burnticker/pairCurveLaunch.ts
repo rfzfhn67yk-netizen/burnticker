@@ -2,6 +2,7 @@ import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeType, encodeInstruction } from "@/lib/burnReceipts/idlCoder";
 import { POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
+import { CPMM_CONFIG_ID } from "@/lib/burnticker/cpmmTier";
 import { END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endSink";
 import { linkPairIx } from "@/lib/burnReceipts/pairs";
 import { pairPda, vaultPda } from "@/lib/pairCurve/accounts";
@@ -30,12 +31,8 @@ export { pairCurveEnabled, PAIR_CURVE_FLAG };
 
 export const PAIR_CURVE_BADGE = { id: "pair-curve", label: "Pair curve", text: "Both coins graduate together, or neither does. One launch program runs the pair." } as const;
 
-/** Raydium CPMM AmmConfig index 0 per cluster (devnet: read 2026-10-10, docs/burnkeeper/devnet-run-log-2026-10-10.md). init_pair re-checks it against the TokenConfigs' pin. */
-export const DEFAULT_CP_CONFIG: Record<"mainnet" | "devnet" | "localnet", string> = {
-  mainnet: "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2",
-  devnet: "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy",
-  localnet: "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2",
-};
+/** The Raydium CPMM AmmConfig the platform points at, per cluster (cpmmTier.ts: mainnet tier 9, devnet index 0). init_pair re-checks it against the TokenConfigs' pin. */
+export const DEFAULT_CP_CONFIG: Record<"mainnet" | "devnet" | "localnet", string> = CPMM_CONFIG_ID;
 
 export interface PairCurveParams {
   virtualSolLamports: bigint;

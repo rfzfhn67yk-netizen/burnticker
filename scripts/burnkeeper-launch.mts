@@ -50,6 +50,7 @@ import { base58Encode, clusterOfGenesis, explorerUrl, type Cluster } from "../sr
 import { LAUNCHLAB_PROGRAM, WSOL_MINT } from "../src/lib/burnKeeper/launchlab.ts";
 import { buildCreateTx, buildPlatformTx, platformSiteRefusal, PLATFORM_SITE_UNSET, buildVestingTx, decodeAmmConfig, decodeGlobalConfig, decodePlatform, DEFAULT_PLATFORM, DEFAULT_SOL_CONFIG, feeSplit, launchRefusal, lpLockProblems, planLaunch, platformProblems, platformViewOf, type DescribedIx, type LaunchInput, type PlannedTx, type PlatformInput } from "../src/lib/burnKeeper/launch.ts";
 import { getCpmmPdaAmmConfigId } from "@raydium-io/raydium-sdk-v2";
+import { CPMM_TIER } from "../src/lib/burnticker/cpmmTier.ts";
 import { CPMM_PROGRAM_ID } from "../src/lib/burnKeeper/launchlab.ts";
 import { burnPoolFor, isLocalnetProgramId } from "../src/lib/burnKeeper/burnPool.ts";
 import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
@@ -139,7 +140,7 @@ if (MODE === "platform") {
   if (siteRefusal) die(siteRefusal);
   const platformWarnings: string[] = [];
   if (!opt("web") || !opt("img")) platformWarnings.push(`--web / --img not given: this dry run shows ${PLATFORM_SITE_UNSET}; --send refuses until both are explicit https URLs (they are written on chain)`);
-  const cpConfigId = pubkeyArg(opt("cp-config"), "--cp-config") ?? getCpmmPdaAmmConfigId(CPMM_PROGRAM_ID[flagCluster], 0).publicKey;
+  const cpConfigId = pubkeyArg(opt("cp-config"), "--cp-config") ?? getCpmmPdaAmmConfigId(CPMM_PROGRAM_ID[flagCluster], CPMM_TIER[flagCluster].index).publicKey;   // the tier the platform points at (cpmmTier.ts)
   // LP LOCKED FOREVER (owner decision 2026-10-10): the Fee Key goes to the burn program's fee-keys PDA, 100 % of the LP locked.
   const feeKeysOwner = feeKeysPda(pubkeyArg(opt("program") ?? process.env.BURNTICKER_PROGRAM_ID, "--program") ?? BURN_RECEIPTS_LOCALNET_PROGRAM_ID);
   const p: PlatformInput = { programId, admin, claimFeeWallet: feeWallet, lockNftWallet: pubkeyArg(opt("lock-nft-wallet"), "--lock-nft-wallet") ?? feeKeysOwner, vestingWallet: feeWallet, cpConfigId,

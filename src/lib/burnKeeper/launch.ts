@@ -146,7 +146,7 @@ export function feeSplit(i: {
     lockedLeg,
     leg(lpBurned, "nobody (burned LP's share of LP fees stays in the pool, unclaimable)", "burnScale/1e6 of the LP share"),
     leg(protocol + fund, "Raydium (protocol + fund shares of the trade fee)", "AmmConfig.protocolFeeRate + fundFeeRate of the trade fee — fixed per tier"),
-    leg(creatorNet, burnPoolCpmm, "AmmConfig.creatorFeeRate × (1 − creatorFeeShareRate) — fixed per tier (5 bps − 5% on mainnet tier 0); the platform cannot raise it"),
+    leg(creatorNet, burnPoolCpmm, "AmmConfig.creatorFeeRate × (1 − creatorFeeShareRate) — fixed per tier (the platform chooses the tier through its cpConfigId); the platform cannot raise it"),
     leg(creatorToProtocol, "Raydium (protocol share of the creator fee, at collection)", "AmmConfig.creatorFeeShareRate (or a CreatorFeeShare PDA)"),
     ...operatorLeg,
   ];

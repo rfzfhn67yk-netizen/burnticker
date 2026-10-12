@@ -29,7 +29,7 @@ const toSol = (l: bigint): string => { const w = l / LAMPORTS, f = (l % LAMPORTS
 
 /**
  * The split for a phase ("curve" before graduation, "post-graduation" after), optionally applied to a volume:
- * `split({ volumeSol: "1" })` → every leg's lamports per 1 SOL traded. bps may be fractional (4.25, 4.75): computed in ppm, exact.
+ * `split({ volumeSol: "1" })` → every leg's lamports per 1 SOL traded. bps may be fractional (7.75, 71.25): computed in ppm, exact.
  */
 export function split(o: { phase?: FeeSplit["phase"]; volumeSol?: string } = {}): SplitResult {
   const s = (o.phase ?? "curve") === "curve" ? CURVE_FEES : POST_GRADUATION_FEES;

@@ -1,7 +1,7 @@
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
-import { CURVE_FEES, POST_GRADUATION_FEES, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
+import { CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { badgeFromText, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
 import { creatorTextOf } from "@/lib/burnticker/creatorProfile";
@@ -366,7 +366,7 @@ export function buildTokenStatus(i: TokenPageInput, receipts: readonly ReceiptJs
     next: { nextCheckAt: i.nextCheckAt ? new Date(i.nextCheckAt).toISOString() : null, impliedChance: null, impliedBasis: i.implied?.chance == null ? (i.implied?.basis ?? null) : null, nextMarket: i.implied?.marketTicker ?? null, nextCloseTime: i.implied?.closeTime ?? null, awaitingFinal: i.selectorPending },
     feed: { lastEventId: i.state.lastEventId, lastValue: i.state.lastValue, lastSettledAt: i.state.lastSettledAt, readings: i.readings.length, lastFetchAt: i.feedState.lastFetchAt ? new Date(i.feedState.lastFetchAt).toISOString() : null, lastError: i.feedState.lastError, failures: i.feedState.failures },
     attesters: i.attesters.map((a) => ({ pubkey: a.pubkey, role: a.role, active: a.active })), quorum: i.chain.program?.config?.quorum ?? Math.max(1, Math.min(activeAtt.length, 1)),
-    fees: { curve: CURVE_FEES, postGraduation: POST_GRADUATION_FEES, sentence: feeSplitSentence(), creatorSliceBps: 0 },
+    fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(i.chain.cluster), sentence: feeSplitSentence(i.chain.cluster), creatorSliceBps: 0 },
     health: { pending: i.receipts.filter((b) => b.status === "planned" || b.status === "sending").length, unverified: receipts.filter((r) => r.status === "confirmed" && !r.verify.verified).length, lastError: i.receipts.find((b) => b.lastError)?.lastError ?? i.feedState.lastError },
     disclosure: { disclaimer: DISCLAIMER_FOOTER, eventContract: oracleDisclosure(rule.oracle) },
     trust: { lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpPolicy: "locked-forever", creatorCashBps: 0, teamAllocationPct: 0, operator: i.operator, registerUrl: "/burnticker/trust" },
@@ -440,6 +440,8 @@ function programSection(p: TokenProgramJson | null): string {
 
 const esc = (s: string | number | null | undefined) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? `.${f}` : ""); };
+/** One post-graduation leg as a percent of every swap ("0.7125%"), read from the split the page carries. */
+const postLegPct = (f: FeeSplit, label: FeeSplit["legs"][number]["label"]): string => `${(f.legs.find((l) => l.label === label)?.bps ?? 0) / 100}%`;
 const feeTable = (f: FeeSplit) => `<table><thead><tr><th>${esc(f.phase)}</th><th>Basis points</th><th>SOL per 1 SOL traded</th><th>Paid to</th><th>Setting</th></tr></thead><tbody>${f.legs.map((l) => `<tr><td>${esc(l.label)}</td><td class="num">${l.bps}</td><td class="num">${esc(bpsPerSol(l.bps))}</td><td>${esc(l.recipient)}</td><td class="muted">${esc(l.dial)}</td></tr>`).join("")}<tr><td>total</td><td class="num">${f.totalBps}</td><td class="num">${esc(bpsPerSol(f.totalBps))}</td><td></td><td></td></tr></tbody></table>`;
 
 export function renderTokenHtml(s: TokenStatusJson, receipts: readonly ReceiptJson[], readings: readonly ReadingRow[]): string {
@@ -507,7 +509,7 @@ ${programSection(s.program)}
 <p>${esc(s.fees.sentence)}</p>
 <div class="scroll">${feeTable(s.fees.curve)}</div>
 <div class="scroll" style="margin-top:8px">${feeTable(s.fees.postGraduation)}</div>
-<p class="muted">The creator's share of fees is ${s.fees.creatorSliceBps / 100}%. Creators earn no cash from fees, because the creator-fee slot pays the burn pool. At graduation, ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. Of every swap, 0.168% goes to the burn pool and 0.042% goes to the operator. That 80/20 split is fixed in code. Raydium's fixed 0.0475% CPMM creator fee also goes to the burn pool.</p>
+<p class="muted">The creator's share of fees is ${s.fees.creatorSliceBps / 100}%. Creators earn no cash from fees, because the creator-fee slot pays the burn pool. At graduation, ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. Of every swap, ${postLegPct(s.fees.postGraduation, "burn pool (LP fees)")} goes to the burn pool and ${postLegPct(s.fees.postGraduation, "Burnticker (operator, LP fees)")} goes to the operator. That 80/20 split is fixed in code. Raydium's fixed CPMM creator fee also gives the burn pool ${postLegPct(s.fees.postGraduation, "burn pool")} of every swap.</p>
 ${lpLockHtml(s.lp)}
 <h2>What the operator can and cannot do</h2>
 <p class="muted">These lists come from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>.${s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees go 80% to the burn pool and 20% to the operator. ${s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} The team allocation is ${s.trust.teamAllocationPct}%.</p>

@@ -242,7 +242,7 @@ operator treasury (fixed in code; the coin side is burned). All additions, nothi
   2000 }, `operatorTreasury` (null = not pinned on this cluster: claims refuse `TreasuryNotPinned`), `lastClaim` { at, signature, sol,
   toBurnPool, toOperator, tokenBurnedRaw, txUrl, line } and `totals`. `status.trust.lpBurnedPct` is 0 from 1.8.0; read `lpLockedPct`.
 - `GET /trust` → `lpLock` (`LpLockPolicy`): the cluster's lock program and authority, the fee-keys PDA, the treasury, the split and the
-  per-swap numbers (16.8 bps to the burn pool, 4.2 bps to the operator, 21.55 bps toward the burn with the creator fee); `fees.designed`
+  per-swap numbers for the host's cluster (mainnet CPMM tier 9: 16.8 bps to the burn pool, 4.2 bps to the operator, 88.05 bps to the burn pool with the creator fee; it was 21.55 on tier 0); `fees.designed`
   gains `lpLockedPct` and `lpFeeSplit`.
 - `GET /fees/ledger` → `lpFees`: the operator's LP-fee line (claims, SOL to the operator and to burn pools, the treasury).
 - A claim's receipt is its memo, `<PREFIX>|lockfees|wsol=…|burnpool=…|operator=…|burned=…|nft=<first 12 of the Fee Key>|v1`; the SDK's

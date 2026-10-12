@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { PublicKey } from "@solana/web3.js";
 import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
+import { CPMM_TIER, postGraduationBps } from "@/lib/burnticker/cpmmTier";
 import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURNTICKER_PLATFORM as PROGRAM_BURNTICKER_PLATFORM, LAUNCHLAB_VAULT_AUTH, LOCK_CPMM_AUTHORITY, LOCK_CPMM_PROGRAM_ID, LOCK_FEE_BURN_BPS as PROGRAM_LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS as PROGRAM_LOCK_FEE_OPERATOR_BPS, OPERATOR_TREASURY as PROGRAM_OPERATOR_TREASURY, SEED_FEE_KEY, SEED_FEE_KEYS } from "@/lib/burnReceipts/constants";
 
 /**
@@ -16,8 +17,9 @@ import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURNTICKER_PLATFORM as PROGRAM_BURNT
  *   coin side burned outright
  *
  * Integer lamports: the operator's share is floor(sol × 2,000 / 10,000) and the burn pool gets the rest, so any odd lamport goes to the
- * burn pool (`splitLockFees`). Post-graduation economics per swap: Raydium CPMM 25 bps = 21 LP (→ 16.8 burned + 4.2 operator) + 3 RAY
- * buyback + 1 Raydium treasury; plus the existing 4.75 bps creator-fee line to the burn pool.
+ * burn pool (`splitLockFees`). Post-graduation economics per swap (mainnet CPMM tier 9, owner decision 2026-10-12; cpmmTier.ts): trade fee
+ * 25 bps = 21 LP (→ 16.8 burned + 4.2 operator) + 3 RAY buyback + 1 Raydium treasury; plus the 75 bps creator fee, 71.25 bps of it to the
+ * burn pool (88.05 bps to the burn pool in all).
  *
  * THIS FILE IS THE ADAPTER the keeper, the pages and the API code against (the program change, its IDL and the verified build are the
  * program builder's). The names, seeds and accounts below are the program's final interface (LOCK_FEES_INTERFACE); the fake
@@ -404,7 +406,7 @@ export function lpLockPolicyJson(cluster: string, burnProgramId: string | null):
     lockProgram, lockAuthority: lpLockAuthorityFor(cluster), feeKeysPda: keys, operatorTreasury: treasury, treasuryPinned: !!treasury, operatorTreasuryHolder: operatorTreasuryRecord(cluster).holder,
     platform, platformPinned: !!platform, launchLabLocker: launchLabLockerFor(cluster),
     split: { burnBps: LOCK_FEE_BURN_BPS, operatorBps: LOCK_FEE_OPERATOR_BPS, coinSide: "burned", fixedInCode: true },
-    perSwapAfterGraduationBps: { lpFees: 21, toBurnPool: 16.8, toOperator: 4.2, creatorFeeToBurnPool: 4.75, burnedTotal: 21.55 },
+    perSwapAfterGraduationBps: (() => { const b = postGraduationBps(CPMM_TIER[cluster === "devnet" ? "devnet" : cluster === "localnet" ? "localnet" : "mainnet"], LOCK_FEE_BURN_BPS); return { lpFees: b.lpFees, toBurnPool: b.lpToBurnPool, toOperator: b.lpToOperator, creatorFeeToBurnPool: b.creatorToBurnPool, burnedTotal: b.burnPoolTotal }; })(),
     instructions: { register: LOCK_FEES_INTERFACE.instructions.register, claim: LOCK_FEES_INTERFACE.instructions.claim },
     urls: { lockProgram: solscanUrl(cluster, lockProgram), feeKeysPda: solscanUrl(cluster, keys), operatorTreasury: treasury ? solscanUrl(cluster, treasury) : null },
   };

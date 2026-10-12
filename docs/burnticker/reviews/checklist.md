@@ -108,6 +108,9 @@ the platform. The facts a reviewer checks instead:
 - **Economics a reviewer can recompute.** Per swap after graduation (CPMM tier 0, 25 bps): 21 bps LP fees → 16.8 bps burn pool + 4.2 bps
   operator; 3 bps RAY buyback + 1 bp Raydium treasury; plus the 4.75 bps creator fee to the burn pool. The operator earns 20 % of the
   post-graduation LP fees; this is new income for the operator and is stated on the trust page and in the fee tables.
+- **CPMM tier 9 (owner decision 2026-10-12, after this review).** The platform's `cpConfigId` moves to AmmConfig index 9 (25 bps trade
+  fee + 75 bps creator fee): traders pay 100 bps per swap; burn pool 16.8 + 71.25 = 88.05 bps; operator 4.2 bps; Raydium 4 + 3.75 =
+  7.75 bps. A coin keeps the tier it pinned at initialize_token. Numbers derive from `src/lib/burnticker/cpmmTier.ts`.
 
 ## Erratum 2026-10-11 (LP lock round 2, after the LP-lock blind review)
 

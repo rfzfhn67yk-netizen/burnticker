@@ -95,7 +95,7 @@ belongs to the side's holders (§5.3), not to a fee PDA that will never have a p
 
 **After graduation.** The pools are created through CPMM's public `initialize` (the permissioned path LaunchLab uses needs a Raydium
 permission PDA we do not have), which sets `enable_creator_fee = false`: the burn pool earns **nothing** from post-graduation CPMM
-volume on a pair coin (a LaunchLab coin earns 4.75 bps there). The CPMM trade fee's LP share accrues to the pool's LP, which is
+volume on a pair coin (a LaunchLab coin earns 71.25 bps there on mainnet CPMM tier 9, the tier since 2026-10-12; 4.75 bps on tier 0). The CPMM trade fee's LP share accrues to the pool's LP, which is
 **locked forever** in Raydium's CPMM lock (LAUNCHPAD-PATH §35, owner decision 2026-10-10; §5.1 step 6): its Fee Key NFT is held by
 burn_receipts' FEE_KEYS PDA, and burn_receipts' permissionless `claim_lock_fees` collects those fees and splits the SOL side 80 % to
 the side's burn pool and 20 % to the operator treasury (compiled constants, no admin) and burns the coin side. Raydium keeps its
