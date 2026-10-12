@@ -8,11 +8,14 @@
 //   init-pair   --mint-a <keypath> --mint-b <keypath> --creator <keypath> --admin <pubkey> --attester <pubkey> --launchlab-platform <pubkey>
 //               --rules-a <file> --rules-b <file> --pair-id <string> [--cp-config <pubkey>] [--virtual-sol 30] [--target-sol 85]
 //               [--share-bps 2500] [--deadline-secs 86400 | --deadline <ISO>] [--floor-lamports 1000000] [--twap-window 600]
-//               [--twap-deviation-bps 300] [--pre-create-vault-ata]
+//               [--twap-deviation-bps 300] [--pre-create-vault-ata] [--end-sink-a <kind>[:<mint>]:<min lamports>] [--end-sink-b …]
+//               (LAUNCHPAD-PATH §45: kind flagship | mint | pair-winner — e.g. `flagship:50000000`, `pair-winner:<partner>:50000000`;
+//               `pair-winner` alone names the other mint of the pair)
 //               (--pre-create-vault-ata: REHEARSAL ONLY — tx 2 also creates the vault's token account for mint A from the payer before
 //               init_pair, the blind-review-2 H-3 grief; init_pair must accept it.)
 //               Three transactions: (1) mint A (6 decimals, no freeze authority, mint authority = the pair's SOL vault) + its
-//               burn_receipts initialize_token with registration policy 2; (2) the same for B; (3) init_pair. A dry run simulates (1).
+//               burn_receipts initialize_token with registration policy 2; (2) the same for B; (3) init_pair + burn_receipts.link_pair
+//               (re-check P3-1). A dry run simulates (1).
 //   buy         --pair <pubkey> --side A|B --sol <amount> [--min-tokens <raw>]       (quotes with src/lib/pairCurve/pricing.ts first)
 //   sell        --pair <pubkey> --side A|B --amount all|<pct>%|<raw> [--min-lamports <n>] [--no-auto-void]
 //               (Voided / refunding side: pro-rata redemption, no fee; an Open pair past its deadline is voided in the same transaction)
@@ -42,7 +45,9 @@ import crypto from "node:crypto";
 import { Connection, Keypair, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, type Cluster, GENESIS_HASH, OPERATOR_TREASURY, POOL_POLICY_PAIR_CURVE, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
-import { claimLockFeesIx, initializeTokenIx, operatorAttester } from "../src/lib/burnReceipts/instructions.ts";
+import { claimLockFeesIx, initializeTokenIx, initializeTokenLayoutFromEnv, operatorAttester } from "../src/lib/burnReceipts/instructions.ts";
+import { END_SINK_FLAGSHIP, END_SINK_MINT, END_SINK_PAIR_WINNER } from "../src/lib/burnReceipts/endSink.ts";
+import { linkPairIx } from "../src/lib/burnReceipts/pairs.ts";
 import { configPda, feePda } from "../src/lib/burnReceipts/pda.ts";
 import { decodeTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
@@ -130,16 +135,27 @@ if (CMD === "init-pair") {
   const problems = initParamProblems(params, now, createPoolFee, rentOf);
   if (problems.length) die(`parameters: ${problems.join("; ")}`);
   const rent = await connection.getMinimumBalanceForRentExemption(82);
-  const tokenIx = (mint: PublicKey, file: string): { ix: TransactionInstruction; sha: string } => {
+  // LAUNCHPAD-PATH §45: an optional end sink per side ("flagship:<min>", "mint:<mint>:<min>", "pair-winner[:<mint>]:<min>").
+  const endSinkOf = (flagName: string, other: PublicKey): { kind: number; sinkMint?: PublicKey; minForwardLamports: bigint } | undefined => {
+    const v = opt(flagName);
+    if (!v) return undefined;
+    const parts = v.split(":");
+    const min = BigInt(parts[parts.length - 1]);
+    if (parts[0] === "flagship" && parts.length === 2) return { kind: END_SINK_FLAGSHIP, minForwardLamports: min };
+    if (parts[0] === "mint" && parts.length === 3) return { kind: END_SINK_MINT, sinkMint: pk(parts[1], `--${flagName}`), minForwardLamports: min };
+    if (parts[0] === "pair-winner" && (parts.length === 2 || parts.length === 3)) return { kind: END_SINK_PAIR_WINNER, sinkMint: parts.length === 3 ? pk(parts[1], `--${flagName}`) : other, minForwardLamports: min };
+    return die(`--${flagName}: flagship:<min> | mint:<mint>:<min> | pair-winner[:<mint>]:<min>`);
+  };
+  const tokenIx = (mint: PublicKey, file: string, endSink?: { kind: number; sinkMint?: PublicKey; minForwardLamports: bigint }): { ix: TransactionInstruction; sha: string } => {
     const loaded = loadRules(file);
     if (loaded.rules.mint && loaded.rules.mint !== mint.toBase58()) die(`${file} names mint ${loaded.rules.mint}, not ${mint.toBase58()}`);
     const rule = ruleParamsFromKeeperRules(loaded.rules, { floorLamports: BigInt(opt("floor-lamports") ?? 1_000_000), maxTwapDeviationBps: Number(opt("twap-deviation-bps") ?? 300), twapWindowSecs: Number(opt("twap-window") ?? 600) });
     rule.pool_policy = POOL_POLICY_PAIR_CURVE;
-    const ix = initializeTokenIx({ programId: burnReceipts, payer: payer.publicKey, creator: creator.publicKey, mint, launchlabPlatform: platform, args: { feed_id: loaded.rules.feed.id, memo_prefix: loaded.rules.memo.prefix, memo_source: loaded.rules.feed.memoSource, rules_sha256: Buffer.from(loaded.sha256, "hex"), rule, attesters: [operatorAttester(attester)], quorum: 1, fixed_pool: PublicKey.default, admin } });
+    const ix = initializeTokenIx({ programId: burnReceipts, payer: payer.publicKey, creator: creator.publicKey, mint, launchlabPlatform: platform, args: { feed_id: loaded.rules.feed.id, memo_prefix: loaded.rules.memo.prefix, memo_source: loaded.rules.feed.memoSource, rules_sha256: Buffer.from(loaded.sha256, "hex"), rule, attesters: [operatorAttester(attester)], quorum: 1, fixed_pool: PublicKey.default, admin }, layout: endSink || opt("program-round") === "4" ? "r4" : opt("program-round") === "3" ? "r3" : initializeTokenLayoutFromEnv(), ...(endSink ? { endSink } : {}) });
     return { ix, sha: loaded.sha256 };
   };
-  const a = tokenIx(mintA.publicKey, opt("rules-a") ?? die("--rules-a <file> is required"));
-  const b = tokenIx(mintB.publicKey, opt("rules-b") ?? die("--rules-b <file> is required"));
+  const a = tokenIx(mintA.publicKey, opt("rules-a") ?? die("--rules-a <file> is required"), endSinkOf("end-sink-a", mintB.publicKey));
+  const b = tokenIx(mintB.publicKey, opt("rules-b") ?? die("--rules-b <file> is required"), endSinkOf("end-sink-b", mintA.publicKey));
   const pairId = opt("pair-id") ?? die("--pair-id <string> is required");
   const initPair = initPairIx({ payer: payer.publicKey, creator: creator.publicKey, mintA: mintA.publicKey, mintB: mintB.publicKey, launchlabPlatform: platform, ammConfig: cpConfig, burnReceiptsProgramId: burnReceipts,
     args: { pair_id: Uint8Array.from(crypto.createHash("sha256").update(pairId, "utf8").digest()), virtual_sol_lamports: params.virtualSolLamports, virtual_token_amount: params.virtualTokenAmount, curve_supply: params.curveSupply, target_raise_lamports: params.targetRaiseLamports, min_side_share_bps: params.minSideShareBps, deadline: BigInt(deadline) } });
@@ -156,7 +172,8 @@ if (CMD === "init-pair") {
   const r2 = await simulateAndSend(ctx, tx2, [payer, creator, mintB]);
   steps.mintAndConfigB = short(r2);
   if (!r2.ok) print({ plan, steps }, 1);
-  const r3 = await simulateAndSend(ctx, [initPair], [payer, creator]);
+  // re-check P3-1: link_pair in the same transaction as init_pair (the Pair exists inside it), so the pair is never left unlinked
+  const r3 = await simulateAndSend(ctx, [initPair, linkPairIx({ programId: burnReceipts, payer: payer.publicKey, pair, mintA: mintA.publicKey, mintB: mintB.publicKey })], [payer, creator]);
   steps.initPair = short(r3);
   print({ plan, steps, after: r3.ok ? await statusOf(pair) : null }, r3.ok ? 0 : 1);
 }

@@ -212,12 +212,20 @@ export function forwardMissingAlert(reg: Registry, t: Pick<TokenRow, "mint" | "t
   const rows = reg.receiptsForReading(t.mint, D);
   if (!rows.some((b) => b.pairRole === "lost")) return;
   const pr = reg.pairOf(t.mint);
+  // re-check P3-I3: after unlink_pair the coin is plain — its period burned as a plain coin, which is not a missing forward
+  const unlinked = pr ? reg.getStatus(unlinkedKey(pr.pairId)) : null;
+  if (unlinked !== null) {
+    const at = (() => { try { return new Date(Number((JSON.parse(unlinked) as { at?: number }).at)).toISOString().slice(0, 10); } catch { return "an earlier day"; } })();
+    log(`  [pair] $${t.ticker} ${formatDate(D)}: burned as a plain coin (the pair was unlinked on ${at}); no forward was due`);
+    return;
+  }
   alert(reg, now, log, "pair-forward-missing", alertKey("pair-forward-missing", pr?.pairId ?? t.mint, D), `$${t.ticker} ${formatDate(D)}: lost the period but no forward landed within 72 hours of its reading, so the program cranked it unpaired (PairForwardMissing) — the fuel burned $${t.ticker}, not the winner`, { mint: t.mint, recordDate: D, outcome });
 }
 
 /**
  * UNLINK (r2 M-2): for every pair still paired on chain, the keeper sends the permissionless unlink_pair once the program's evidence holds —
- * a voided pair curve, a refunding side, or one coin still without a verified pool 30 days after the pairing. Both coins are plain
+ * a voided pair curve, a refunding side, or (round 3) a LaunchLab pair whose locked voidBy day ended with a coin still without a verified
+ * pool; there is no time-based evidence. Both coins are plain
  * afterwards (new receipts carry no pair role); the pages say "unpaired (reason)". A pair someone else unlinked is recorded too.
  */
 export async function pairUnlinkStep(reg: Registry, program: Pick<BurnProgramClient, "pairForward">, now: number, dryRun: boolean, log: (s: string) => void, o: { send?: boolean } = {}): Promise<{ pairId: string; reason: UnlinkReason | null; signature: string | null }[]> {

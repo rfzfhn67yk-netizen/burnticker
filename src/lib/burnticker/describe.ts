@@ -115,14 +115,31 @@ export function pairResultSentence(a: { ticker: string; rule: Pick<BurnRule, "ki
 }
 const pairSentence = (r: BurnRule): string => (r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn ? ` ${PAIR_DESCRIPTION_SENTENCE}` : "");
 const BURN_DOWN = "it burns down whatever is left over four weeks and then retires";
+/**
+ * END SINKS (LAUNCHPAD-PATH §45; rules.ts endSinkOf, copied here because rules.ts is not client-safe): a rule with `onEnd.endSink` sends
+ * whatever is left at a resolved end to its sink's burn pool, so its window sentence says where the leftover burns, and one more sentence
+ * says what a void end does instead. A test pins this copy equal to rules.ts endSinkOf.
+ */
+export const describeEndSink = (r: Pick<BurnRule, "onEnd" | "pair" | "kind" | "binary" | "scalar">): "flagship" | "pair-winner" | null => {
+  if (r.onEnd?.endSink !== true) return null;
+  const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { tokens?: number } | null | undefined;
+  if (m?.tokens !== undefined) return null;
+  return (r.pair as { winnerTakesBurn?: boolean } | null | undefined)?.winnerTakesBurn ? "pair-winner" : "flagship";
+};
+const sinkPhrase = (k: "flagship" | "pair-winner"): string => (k === "pair-winner" ? "whatever is left burns the winning coin, or $DEFICIT if there isn't one," : "whatever is left burns $DEFICIT,");
+/** The window sentence's ending: the four-week burn-down, or (end sinks) where the leftover burns. */
+const burnDown = (r: BurnRule): string => { const k = describeEndSink(r); return k ? `${sinkPhrase(k)} and the coin retires` : BURN_DOWN; };
+/** The void sentence that follows the window sentence of a rule with an end sink ("" otherwise). */
+export const END_SINK_VOID_SENTENCE = "If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead.";
+const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindOf(r) !== "perpetual" ? ` ${END_SINK_VOID_SENTENCE}` : "");
 export const PERPETUAL_SENTENCE = "This coin has no end date and does not retire.";
 /** One pattern per window kind; a description matches exactly one of them, exactly once (test/burntickerDescribe.test.ts). */
 export const WINDOW_SENTENCE: Record<WindowKind, RegExp> = {
-  season: /This coin covers the [^.]*? season only, including (?:the playoffs|every match of the competition)\. After [^.]*? last game, it burns down whatever is left over four weeks and then retires\.(?: It does not continue into [^.]+\.)?/g,
-  post: /This coin covers [^.]*? postseason only\. After [^.]*? last playoff game, it burns down whatever is left over four weeks and then retires\.(?: It does not continue into [^.]+\.)?/g,
-  next: /This coin covers [^.]*? next \d+ games? only, from [^.]*?\d{4}\. After game \d+, it burns down whatever is left over four weeks and then retires\./g,
+  season: /This coin covers the [^.]*? season only, including (?:the playoffs|every match of the competition)\. After [^.]*? last game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?/g,
+  post: /This coin covers [^.]*? postseason only\. After [^.]*? last playoff game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?/g,
+  next: /This coin covers [^.]*? next \d+ games? only, from [^.]*?\d{4}\. After game \d+, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\./g,
   perpetual: /This coin has no end date and does not retire\./g,
-  "one-shot": /This coin resolves once(?:, on [A-Z][a-z]{2} \d{1,2}, \d{4}|, on [^.]+?)?\. Then it burns down over four weeks and retires\./g,
+  "one-shot": /This coin resolves once(?:, on [A-Z][a-z]{2} \d{1,2}, \d{4}|, on [^.]+?)?\. Then (?:it burns down over four weeks and retires|whatever is left burns [^.]*?, and the coin retires)\./g,
 };
 const fractionText = (r: BurnRule): string => {
   const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { fractionOfPool?: number; tokens?: number } | null | undefined;
@@ -143,7 +160,10 @@ const yy = (league: LeagueId, year: number) => String(seasonStartYear(league, ye
 const nextSeason = (league: LeagueId, year: number) => seasonLabel(league, year + 1);
 /** League mode (rules.ts `set`): the conditional forward, in the description whenever the rule carries it. */
 export const leagueSentence = (r: BurnRule): string => (r.set && r.set.forwardBps > 0 ? ` In league mode, ${Math.round(r.set.forwardBps) / 100}% of the leftover goes to the winning coin of set ${r.set.id} if the forwarding instruction is live by season end. Otherwise it burns down on this coin.` : "");
-const oneShotSentence = (iso: string | null | undefined, onWhat: string | null = null) => (onWhat ? `This coin resolves once, on ${onWhat}. Then it burns down over four weeks and retires.` : `This coin resolves once${iso ? `, on ${day(iso)}` : ""}. Then it burns down over four weeks and retires.`);
+const oneShotSentence = (r: BurnRule, iso: string | null | undefined, onWhat: string | null = null) => {
+  const k = describeEndSink(r), then = k ? `${sinkPhrase(k)} and the coin retires` : "it burns down over four weeks and retires";
+  return onWhat ? `This coin resolves once, on ${onWhat}. Then ${then}.` : `This coin resolves once${iso ? `, on ${day(iso)}` : ""}. Then ${then}.`;
+};
 
 /** The coin's window kind from its rule alone. */
 export function windowKindOf(r: BurnRule): WindowKind {
@@ -185,7 +205,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const cross = CROSS[s.league] ?? "a second independent source";
   const badge = windowBadge(r, c);
   const mk = (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]): CoinText => {
-    const ruleBlock = `${rules} ${windowSentence}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
+    const ruleBlock = `${rules} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
     return { name: name.slice(0, 32), ticker, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, windowSentence, windowKind, badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
   };
   if (s.kind === "team") {
@@ -196,17 +216,17 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
     if (w.kind === "season") {
       const L = seasonLabel(s.league, w.year);
       return mk(`${nick} ${L} ${Noun}`, tickerFrom(nick, `${sfx}${yy(s.league, w.year)}`), oneLiner, every(`in the ${L} season`),
-        `This coin covers the ${L} ${nick} season only, including ${noPlayoffs(s.league) ? "every match of the competition" : "the playoffs"}. After ${poss} last game, ${BURN_DOWN}. It does not continue into ${nextSeason(s.league, w.year)}.`, "season", "recurring");
+        `This coin covers the ${L} ${nick} season only, including ${noPlayoffs(s.league) ? "every match of the competition" : "the playoffs"}. After ${poss} last game, ${burnDown(r)}. It does not continue into ${nextSeason(s.league, w.year)}.`, "season", "recurring");
     }
     if (w.kind === "post") {
       const L = seasonLabel(s.league, w.year);
       return mk(`${nick} ${L} Playoffs`, tickerFrom(nick, `${sfx}P${yy(s.league, w.year)}`), `${oneLiner} in the postseason`, every(`in the ${L} postseason`),
-        `This coin covers ${poss} ${L} postseason only. After ${poss} last playoff game, ${BURN_DOWN}. It does not continue into ${nextSeason(s.league, w.year)}.`, "post", "recurring");
+        `This coin covers ${poss} ${L} postseason only. After ${poss} last playoff game, ${burnDown(r)}. It does not continue into ${nextSeason(s.league, w.year)}.`, "post", "recurring");
     }
     if (w.kind === "next") {
       const from = `${w.from.slice(0, 4)}-${w.from.slice(4, 6)}-${w.from.slice(6)}`;
       return mk(`${nick} Next ${w.n}`, tickerFrom(nick, `${sfx}${w.n}G`), `${oneLiner} in their next ${w.n === 1 ? "game" : `${w.n} games`}`, every(`in their next ${w.n === 1 ? "game" : `${w.n} games`}`),
-        `This coin covers ${poss} next ${w.n} game${w.n === 1 ? "" : "s"} only, from ${day(from)}. After game ${w.n}, ${BURN_DOWN}.`, "next", "recurring");
+        `This coin covers ${poss} next ${w.n} game${w.n === 1 ? "" : "s"} only, from ${day(from)}. After game ${w.n}, ${burnDown(r)}.`, "next", "recurring");
     }
     if (w.kind === "perpetual") {
       return mk(`${nick} ${Noun}`, o === "win" ? tickerFrom(nick) : tickerFrom(nick, o === "draw" ? "DRAW" : "LOSE"), oneLiner, `${every("in any game, every season")} Nothing is read in the off-season. The pool keeps filling, and readings start again with the next season's first game.`,
@@ -214,13 +234,13 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
     }
     const scope = w.scope === "post" ? "this postseason" : w.scope === "reg" ? "for the rest of the regular season" : "this season";
     return mk(`${nick} ${Noun}`, tickerFrom(nick, o === "win" ? "WIN" : o === "draw" ? "DRAW" : "LOSE"), oneLiner, every(scope),
-      w.scope === "post" ? `This coin covers ${poss} current postseason only. After ${poss} last playoff game, ${BURN_DOWN}.` : `This coin covers the current ${nick} season only, including the playoffs. After ${poss} last game, ${BURN_DOWN}.`, w.scope === "post" ? "post" : "season", "recurring");
+      w.scope === "post" ? `This coin covers ${poss} current postseason only. After ${poss} last playoff game, ${burnDown(r)}.` : `This coin covers the current ${nick} season only, including the playoffs. After ${poss} last game, ${burnDown(r)}.`, w.scope === "post" ? "post" : "season", "recurring");
   }
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
   const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : ` in game ${s.eventId}`;
   const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " that game"}`;
   return mk(`${nick} ${o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tickerFrom(nick, o === "win" ? "WIN" : o === "draw" ? "DRAW" : "LOSE"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it. Nothing happens otherwise${o === "draw" ? "" : `, and a ${tie} burns nothing`}.`,
-    oneShotSentence(c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
+    oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
 }
 
 /** The coin's name, ticker, one-liner and paragraph from its rule. `ctx.ticker` is the ticker the text names (the suggestion when empty). */
@@ -232,7 +252,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
   const badge = windowBadge(r, ctx);
   const build = (name0: string, tk0: string, oneLiner: string, block: (t: string) => string, windowSentence: string, shape: CoinText["shape"]): CoinText => {
     const name = ctx.suggest?.name ?? name0, tk = ctx.suggest?.ticker ?? tk0;
-    const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
+    const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
     return { name: name.slice(0, 32), ticker: tk, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, windowSentence, windowKind: windowKindOf(r), badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
   };
   if (n) {
@@ -242,7 +262,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const oneLiner = n.metric === "high" ? `burns on every ${st.city} day at ${n.threshold} °F or hotter` : n.metric === "rain" ? `burns on every ${st.city} day with ${n.threshold.toFixed(2)} in of rain` : `burns on ${possessive(st.city)} first snow`;
     return build(`${st.city} ${n.metric === "high" ? "Heat" : n.metric === "rain" ? "Rain" : "Snow"}`, tickerFrom(st.code, n.metric === "high" ? "HOT" : n.metric === "rain" ? "RAIN" : "SNOW"), oneLiner,
       (t) => `${what[0].toUpperCase()}${what.slice(1)}, ${spends(r, t)}${n.metric === "snow" ? " once" : ""}, with a receipt on chain. The result comes from the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet. Nothing happens on ${other}.`,
-      n.metric === "snow" ? oneShotSentence(null, `the first snow`) : PERPETUAL_SENTENCE, n.metric === "snow" ? "one-shot" : "recurring");
+      n.metric === "snow" ? oneShotSentence(r, null, `the first snow`) : PERPETUAL_SENTENCE, n.metric === "snow" ? "one-shot" : "recurring");
   }
   if (r.oracle === "catalogue" && ctx.feed) {
     const f = ctx.feed;
@@ -254,14 +274,14 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     // L12 (launch audit 5): the name and ticker come from the event's subject and outcome (eventIdentity.ts), never its last word
     const id = eventIdentity(phrase0), phrase = id.verb ? id.phrase : phrase0;
     return build(id.verb && id.confident ? id.name : "Event Coin", id.verb && id.confident ? id.ticker : tickerFrom(id.ticker), `burns if ${phrase}`,
-      (t) => `If it happens, ${spends(r, t)} once, with a receipt on chain. The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}. Nothing happens otherwise.`, oneShotSentence(ctx.endsAt), "one-shot");
+      (t) => `If it happens, ${spends(r, t)} once, with a receipt on chain. The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}. Nothing happens otherwise.`, oneShotSentence(r, ctx.endsAt), "one-shot");
   }
   const what = ctx.eventPhrase ?? r.series ?? r.market ?? "the source";
   const yes = r.kind !== "binary" || !!r.binary?.onYes;
   const once = windowKindOf(r) === "one-shot";
   return build("Event Coin", tickerFrom(what), r.kind === "binary" ? `burns when ${what} settles ${yes ? "YES" : "NO"}` : `burns on each settled reading of ${what}`,
     (t) => `${r.kind === "binary" ? `Each time ${what} settles ${yes ? "YES" : "NO"}` : `Each time ${what} settles`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${r.oracle === "polymarket" ? "Polymarket's on-chain payout" : "its published source"}${ctx.crossRead ? `, cross-checked against ${ctx.crossRead}` : ""}. Nothing happens otherwise.`,
-    once ? oneShotSentence(ctx.endsAt) : PERPETUAL_SENTENCE, once ? "one-shot" : "recurring");
+    once ? oneShotSentence(r, ctx.endsAt) : PERPETUAL_SENTENCE, once ? "one-shot" : "recurring");
 }
 
 /**

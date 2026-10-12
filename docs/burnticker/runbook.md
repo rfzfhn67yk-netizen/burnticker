@@ -88,6 +88,36 @@ as `[alert] …`. The morning block (`## Burnticker` in the check-in, `https://b
 | `bt-keeper-takeover` | the standby took over after N missed leader heartbeats | Find out why the leader stopped (host down, Caddy down, network); then fail back by hand (below). An incident if both were active (INCIDENTS.md §6). |
 | webhook FAILING (ops.json / morning block) | alerts stay on this host | `curl -s -o /dev/null -w '%{http_code}' -X POST -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"kind":"bt-test","key":"bt-test:'$(date +%s)'","text":"webhook test"}' "$BURNTICKER_ALERT_WEBHOOK"` → 200 expected; 403 = the Host is not trusted (use the tailnet address), 503 = `MCT_ALERT_INTAKE_TOKEN` unset on the trading VPS, 401 = token mismatch. |
 
+### Phone push (polish-1, 2026-10-12)
+
+Five states reach the owner's phone directly, so they are seen even when nobody opens the check-in. The rest stay in the registry, the
+log and the morning block.
+
+| Push title | Raised by | Do |
+|---|---|---|
+| Burnticker keeper refused to start | `bt-keeper-refused`: the keeper threw before its first cycle (mainnet without `BURNTICKER_MAINNET=1`, the treasury's key file named, a key that does not match `BURNTICKER_KEEPER_PUBKEY`, testnet). The push carries the reason. | Read the reason, fix the setting in the host's environment file, `systemctl --user restart mct-burnticker-keeper`, then `tail -n 30 logs/burnticker-keeper.log`. |
+| Burnticker keeper is not publishing | `scripts/ops/keeper-status-check.sh` (the publish timer, every minute): `status/status.json` stale or missing for more than two hours. Repeats every two hours while it lasts; "Burnticker keeper is back" when it is fresh again. | `sh scripts/ops/probe-burnticker.sh --box` says which link of the status chain broke; then the `bt-keeper-stale` row above. |
+| Burnticker reading held | `cosigner-disagree`: the second signer did not agree with the keeper's reading, so nothing was sent for that date | Read the source for that date by hand and both signers' logs. Nothing burns until they agree; a disagreement you settle by hand is an incident (INCIDENTS.md §7). |
+| Burnticker upload failed | `bt-pin-failed` (a launch refused because its details could not be pinned on Arweave) or `bt-snapshot-failed` (the daily snapshot) | Check the upload payer's balance and `BURNTICKER_UPLOAD_PAYER`; the `bt-snapshot-failed` row above. |
+| Burnticker burn run failing | `bt-crank-failed`: one receipt failed three times in a row | The `bt-crank-failed` row above. |
+| Burnticker all quiet (or daily line) | once per Denver day after 08:00 | Nothing, when it says quiet. **A missing daily line means the keeper is not running its alert check**: treat it like the not-publishing push. |
+
+How it works: the keeper reads the registry's `alerts` table on its five-minute alert check (`src/lib/burnticker/push.ts`
+`runPushCheck`) and sends a plain-text POST to `BURNTICKER_PUSH_URL` with `Title` and `Priority` headers and
+`Authorization: Bearer <BURNTICKER_PUSH_TOKEN>`. Rate limit: one push per kind per hour and six per hour in all; what is held back is
+counted in the next push and in the daily line, and every alert stays in the registry. Its state is the registry status row
+`push.state`. A failed send is logged as `[push] … not delivered` and never stops the keeper. Unset `BURNTICKER_PUSH_URL`: nothing is
+sent, nothing else changes.
+
+Owner setup (once): create a push topic or app on a phone push service that accepts a plain-text POST with a bearer token, then put
+`BURNTICKER_PUSH_URL=<its https publish address>` and `BURNTICKER_PUSH_TOKEN=<its token>` in the host's environment file (the keeper and
+the publish timer both read it), restart the keeper between cycles, and check the banner line says `+ phone push`. To test without
+waiting for trouble, from `~/meme-coin-trader` as mct:
+
+```sh
+sqlite3 data/burnticker.db "UPDATE status SET value=json_set(value,'$.lastDaily',NULL) WHERE key='push.state'"   # the next check after 08:00 Denver sends the daily line
+```
+
 Every alert that changed anything gets a line in `docs/burnticker/incidents/LOG.md` (append-only, rendered on the trust page) — and, when it is an incident under [INCIDENTS.md](INCIDENTS.md), a public postmortem within 48 hours from [incidents/TEMPLATE.md](incidents/TEMPLATE.md).
 
 ## Add a token by hand

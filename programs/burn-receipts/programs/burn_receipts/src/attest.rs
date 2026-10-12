@@ -94,6 +94,23 @@ pub fn canonical_pair_attester_change_message(program_id: &Pubkey, mint: &Pubkey
     )
 }
 
+/// LAUNCHPAD-PATH §45: what a quorum of the coin's attesters signs to end its rule —
+/// `BURNRECEIPTS-END-v1|<genesis>|<program>|<mint>|<YYYY-MM-DD>|outcome=resolved|void|src=<64hex>|proof=<64hex>`.
+pub fn canonical_end_message(program_id: &Pubkey, mint: &Pubkey, record_date: u32, outcome: u8, source_url_hash: &[u8; 32], proof_hash: &[u8; 32]) -> String {
+    let o = if outcome == END_STATE_RESOLVED { "resolved" } else { "void" };
+    format!(
+        "{}|{}|{}|{}|{}|outcome={}|src={}|proof={}",
+        END_ATTESTATION_DOMAIN,
+        CLUSTER_GENESIS_HASH,
+        program_id,
+        mint,
+        format_date(record_date),
+        o,
+        hex(source_url_hash),
+        hex(proof_hash)
+    )
+}
+
 fn hex(b: &[u8; 32]) -> String {
     let mut s = String::with_capacity(64);
     for x in b {

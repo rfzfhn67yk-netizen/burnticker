@@ -21,7 +21,7 @@ export type DialId = "fraction" | "side" | "window" | "games" | "threshold" | "u
 /** What a window change needs besides the rule: the moment (a next-N window starts today) and the season in progress. */
 export interface DialCtx { nowMs?: number; seasonYear?: number | null; /** an outcome-list market's set (the championship card knows it) */ set?: { id: string; outcome: string } | null }
 /** rules.ts DEFAULT_ON_END, copied so this file stays client-safe (rules.ts reads node:crypto); a test pins the two equal. */
-export const ON_END_DEFAULT = { windDownDays: 28, sweepThresholdLamports: 50_000_000 } as const;
+export const ON_END_DEFAULT = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
 /** One-shot rules may spend up to 100 % (rules.ts ONE_SHOT_MAX_FRACTION); recurring ones 1–10 %. */
 export const ONE_SHOT_FRACTION = { min: 0.01, max: 1, step: 0.01 } as const;
 export const FRACTION = { min: 0.01, max: 0.1, step: 0.005 } as const;
@@ -97,10 +97,12 @@ export function applyDial(r: BurnRule, dial: DialId, value: string | number, c: 
     const ls = leagueSetFor(r, c);
     if (!ls) return r;
     const { set: _drop, ...rest } = r as BurnRule & { set?: unknown };
-    if (dial === "league" && (value === "off" || value === 0 || value === "0")) return rest as BurnRule;
+    if (dial === "league" && (value === "off" || value === 0 || value === "0")) return (r.set ? { ...rest, onEnd: { ...(r.onEnd ?? ON_END_DEFAULT), endSink: true } } : rest) as BurnRule;
     const bps = dial === "forward" ? Math.round(Math.min(10_000, Math.max(0, Number(value)))) : (r.set?.forwardBps ?? 10_000);
     if (dial === "forward" && !r.set) return r;
-    return { ...rest, onEnd: r.onEnd ?? { ...ON_END_DEFAULT }, set: { id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: bps } } as BurnRule;
+    // §45: league-set end sinks are a later program round, so a league-mode coin keeps the wind-down (rules.ts refuses endSink with set)
+    const { endSink: _noSink, ...windDown } = (r.onEnd ?? ON_END_DEFAULT) as { windDownDays: number; sweepThresholdLamports: number; endSink?: true };
+    return { ...rest, onEnd: windDown, set: { id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: bps } } as BurnRule;
   }
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;

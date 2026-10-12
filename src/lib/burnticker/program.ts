@@ -7,9 +7,10 @@ import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { solToLamports } from "@/lib/burnKeeper/rules";
-import { DECIMALS, TOTAL_SUPPLY, ruleMappings, type BurnRule, type RuleMode } from "@/lib/burnticker/rules";
+import { DECIMALS, TOTAL_SUPPLY, endSinkOf, ruleMappings, type BurnRule, type RuleMode } from "@/lib/burnticker/rules";
 import { FakeLockFees, fakeLockAddress, operatorTreasuryFor, type LockFeesClient } from "@/lib/burnticker/lockFees";
 import { FakePairForward, type PairForwardClient } from "@/lib/burnticker/pairForward";
+import { FakeEndSink, type EndSinkClient } from "@/lib/burnticker/endSinkClient";
 
 /**
  * THE RECEIPTS PROGRAM, FROM THE BURNTICKER KEEPER'S SIDE (2026-10-10). Every registered token runs on the deployed burn_receipts
@@ -45,6 +46,8 @@ import { FakePairForward, type PairForwardClient } from "@/lib/burnticker/pairFo
  */
 export type ConfirmOutcome = { status: "confirmed"; slot: number | null } | { status: "failed"; err: string } | { status: "expired" };
 
+/** The fake's flagship ($DEFICIT stand-in): a test that exercises end sinks initialises a coin at this mint. */
+export const FAKE_FLAGSHIP_MINT = new PublicKey(crypto.createHash("sha256").update("burnticker fake flagship").digest()).toBase58();
 export const PLACEHOLDER_PROGRAM_ID = new PublicKey(crypto.createHash("sha256").update("burn_receipts placeholder program id — not deployed").digest());
 
 export interface SerializedIx { programId: string; keys: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; dataBase64: string; label: string }
@@ -90,6 +93,23 @@ export interface BurnProgramClient {
    * Optional: absent until the program change is bound; the keeper then plans no forwards (each coin burns its own fuel).
    */
   readonly pairForward?: PairForwardClient;
+  /**
+   * END SINKS (LAUNCHPAD-PATH §45, endSinkClient.ts): EndSink / RuleEnd reads, submit_rule_end and forward_on_end. Optional: absent on
+   * a client bound to a program without round 4; the keeper then keeps the wind-down for every end.
+   */
+  readonly endSink?: EndSinkClient;
+}
+
+/**
+ * The EndSink a rule pins at initialize_token (rules.ts endSinkOf), or null: FLAGSHIP for a single coin, PAIR_WINNER for a
+ * winner-takes-the-burn pair coin (the partner = `pairMint`; a pair without one is refused), nothing for a rule without `onEnd.endSink`
+ * or in vault mode. The minimum forward is the rule's onEnd.sweepThresholdLamports.
+ */
+export function endSinkPin(rule: BurnRule | undefined, pairMint: string | null | undefined): { kind: "flagship" | "pair-winner"; minForwardLamports: bigint } | null {
+  const k = rule ? endSinkOf(rule) : null;
+  if (!k || !rule?.onEnd) return null;
+  if (k === "pair-winner" && !pairMint) throw new Error("initialize_token: a winner-takes-the-burn pair coin pins its partner as its end sink, and no partner mint was given");
+  return { kind: k, minForwardLamports: BigInt(rule.onEnd.sweepThresholdLamports) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -190,7 +210,18 @@ export class FakeBurnProgram implements BurnProgramClient {
   readonly lockFees: FakeLockFees;
   /** The pair rules in memory (pairForward.ts FakePairForward): results, forwards and each paired coin's crank gate. */
   readonly pairForward: FakePairForward;
-  constructor(cluster = "localnet") { this.cluster = cluster; this.pairForward = new FakePairForward((m) => this.fake(m), () => this.now()); this.lockFees = new FakeLockFees(this.programId, cluster, operatorTreasuryFor(cluster) ?? fakeLockAddress("fake operator treasury"), (mint, l) => { this.tokens.get(mint)?.deposit(l); }); }
+  /** End sinks in memory (endSinkClient.ts FakeEndSink); the flagship is FAKE_FLAGSHIP_MINT unless a test initialises another. */
+  readonly endSink: FakeEndSink;
+  /**
+   * Does the fake model a round-4 program (initialize_token pins the rule's EndSink)? Off by default: the fake then behaves as a program
+   * without end sinks (nothing pinned; the keeper winds every end down), the path every coin launched before §45 keeps. The real client's
+   * counterpart is BURNTICKER_END_SINKS_LIVE (programClient.ts), which refuses instead of launching a coin whose sink was not pinned.
+   */
+  pinEndSinks = false;
+  constructor(cluster = "localnet", flagship = FAKE_FLAGSHIP_MINT) {
+    this.cluster = cluster; this.pairForward = new FakePairForward((m) => this.fake(m), () => this.now());
+    this.endSink = new FakeEndSink(flagship, (m) => this.fake(m), () => this.now());
+    this.endSink.partnerWon = (m, partner, date) => { const p = this.pairForward.port(m, partner); return p.paired && p.results.get(date)?.winner === partner; }; this.lockFees = new FakeLockFees(this.programId, cluster, operatorTreasuryFor(cluster) ?? fakeLockAddress("fake operator treasury"), (mint, l) => { this.tokens.get(mint)?.deposit(l); }); }
 
   /** Creator fees / a seed arriving in the token's fee PDA. */
   deposit(mint: string, lamports: bigint): void { this.fake(mint).deposit(lamports); }
@@ -216,6 +247,9 @@ export class FakeBurnProgram implements BurnProgramClient {
           valueDecimals: 0, unitValue: BigInt(1), carryRule: CARRY_NONE, maxAbsDelta: c.rule.max_abs_delta, fractionPerUnitBps: c.rule.fraction_per_unit_bps, floorLamports: c.rule.floor_lamports,
           reserveLamports: c.rule.reserve_lamports, tokensPerUnit: c.rule.tokens_per_unit, vaultAllocation: c.rule.vault_allocation, attesters: i.attesters, quorum: i.quorum, heldKeys: this.heldKeys ?? i.attesters, decimals: DECIMALS, now: () => this.now() }));
         if (i.mode === "buyback" && this.autoRegisterPool) this.tokens.get(i.mint)!.registerPool();
+        // §45: the EndSink the rule pins (the program refuses one on the flagship itself)
+        const pin = endSinkPin(i.rule, i.pairMint);
+        if (pin && this.pinEndSinks && i.mint !== this.endSink.flagship) this.endSink.port(i.mint).pinned = { kind: pin.kind, sinkMint: pin.kind === "pair-winner" ? i.pairMint! : this.endSink.flagship, minForwardLamports: pin.minForwardLamports };
         this.lockFees.port(i.mint).memoPrefix = c.memoPrefix;
         // round 2: register_pool runs after register_fee_key through the lock path; it registers the pool on the coin's fake program too
         this.lockFees.port(i.mint).onRegisterPool = () => { const f = this.tokens.get(i.mint); if (f && !f.cfg.poolRegistered) f.registerPool(); };

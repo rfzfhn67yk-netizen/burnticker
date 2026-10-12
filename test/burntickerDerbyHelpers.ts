@@ -78,10 +78,11 @@ export function coinvsRule(spec: CoinVsSpec, fraction = 0.01): BurnRule {
 export interface DerbyWorld { registry: Registry; program: FakeBurnProgram; adapter: DerbyAdapter; deps: KeeperDeps; clock: { now: number }; a: TokenRow; b: TokenRow; pairId: string; logs: string[] }
 
 /** A derby pair launched and live (baseline before the season), with the keeper's deps wired to the derby adapter. */
-export async function derbyWorld(spec: DerbySpec, o: { tickers?: [string, string]; voidBy?: string; autoRegisterPool?: boolean; now?: number; pools?: PoolPort | null; fetchImpl?: FetchLike; rule?: BurnRule; hermes?: HermesLike | null } = {}): Promise<DerbyWorld> {
+export async function derbyWorld(spec: DerbySpec, o: { tickers?: [string, string]; voidBy?: string; autoRegisterPool?: boolean; now?: number; pools?: PoolPort | null; fetchImpl?: FetchLike; rule?: BurnRule; hermes?: HermesLike | null; /** §45: the fake pins each rule's EndSink (a round-4 program). */ endSinks?: boolean } = {}): Promise<DerbyWorld> {
   const registry = openRegistry(":memory:");
   const program = new FakeBurnProgram("devnet");
   program.autoRegisterPool = o.autoRegisterPool ?? true;
+  program.pinEndSinks = o.endSinks ?? false;
   const clock = { now: o.now ?? B(12) + 3 * 3600_000 };
   program.now = () => clock.now;
   const logs: string[] = [];

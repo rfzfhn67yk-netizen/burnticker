@@ -118,6 +118,9 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
         (c.rule, c.mint, c.fee_bump, c.cpmm_pool)
     };
     let units = ctx.accounts.reading.units;
+    // LAUNCHPAD-PATH §45: after a RESOLVED end only readings dated on or before the end burn (the result reading that ended the rule);
+    // the rest of the fuel goes to the end sink through forward_on_end.
+    require!(crate::instructions::end::reading_allowed_after_end(&ctx.accounts.config, ctx.accounts.reading.record_date), BurnError::ForwardOnEndRequired);
     require_fixed_supply(&ctx.accounts.mint)?;
     // LAUNCHPAD-PATH §40: a paired coin that LOST this period's result does not burn — forward_to_winner moves its fuel.
     let pair_gate = crate::instructions::pair::crank_pair_gate(

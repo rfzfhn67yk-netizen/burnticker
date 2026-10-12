@@ -521,7 +521,7 @@ Pairs made before then keep their bytes.
 - **Each result.** One `PairResult` account (`["pair_result", mint_lo, mint_hi, date]`) names the winner or a draw. The winner is the
   coin whose rule the result fires. No result may name a date before the pairing day, or a date on or before `pair_after_date`
   (`PairPeriodUnpaired`). Every result needs both coins' quorums. The two coins share one attester set, so one set of signatures covers
-  both. A win is recorded only when both coins have a reading for the date and the loser's reading is still unprocessed. Otherwise the
+  both; a rotation applies to both coins at once (`apply_paired_attester_change`, program round 4). A win is recorded only when both coins have a reading for the date and the loser's reading is still unprocessed. Otherwise the
   call fails with `PairResultNotServable`. There is no pool condition. When the winner had nothing to read that day, the keeper first
   attests a flat 0-unit reading for it. A draw is posted only for a true draw and needs both quorums. The loser's `crank_buyback` for
   that period refuses (`ForwardRequired`). Anyone can then call `forward_to_winner`. It moves exactly what the loser's own rule would
@@ -786,7 +786,7 @@ terms are drafted in `SECURITY.md` but not published.
 - **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
   `crankers[3]`, `cranker_count`, reserved.
 
-### 13.3 Instructions (31, generated from `src/lib/burnReceipts/idl.ts`)
+### 13.3 Instructions (33, generated from `src/lib/burnReceipts/idl.ts`)
 
 | Instruction | Arguments | Signers | Class |
 |---|---|---|---|
@@ -804,6 +804,8 @@ terms are drafted in `SECURITY.md` but not published.
 | `forward_to_winner` | record_date | cranker | permissionless |
 | `unlink_pair` | — | cranker | permissionless |
 | `apply_paired_attester_change` | — | caller (+ the partner's quorum via Ed25519) | permissionless |
+| `submit_rule_end` | record_date, outcome, source_url_hash, proof_hash | payer (+ quorum via Ed25519) | permissionless |
+| `forward_on_end` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `register_fee_key` | — | payer | permissionless |
 | `claim_lock_fees` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `check_pool_health` | — | caller | permissionless |
@@ -822,12 +824,13 @@ terms are drafted in `SECURITY.md` but not published.
 | `renounce_platform_authority` | — | authority | privileged |
 | `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
 
-The program has 34 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
-BurnPoolCapBound, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, FeeKeyRegistered,
-ForwardedToWinner, LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked, PairResultMissing, PairResultSubmitted
-(plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered, PoolReplaced, PoolUntradeableCleared,
-PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted, RegistrationPolicyApplied, RegistrationPolicyCancelled,
-RegistrationPolicyProposed, SpendCapBound, SpendCarried, TokenInitialized. Error codes: 100.
+The program has 37 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
+BurnPoolCapBound, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, EndSinkPinned,
+FeeKeyRegistered, ForwardedOnEnd, ForwardedToWinner, LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked,
+PairResultMissing, PairResultSubmitted (plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered,
+PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted,
+RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, RuleEnded, SpendCapBound, SpendCarried,
+TokenInitialized. Error codes: 110.
 
 The pair program (`pair_curve`, IDL in `src/lib/pairCurve/idl.ts`) has 9 entrypoints. `init_pair` takes args, is signed by the payer
 and the creator, and creates the pair. The two curve-trade instructions take a side, an amount and a slippage bound, and the trader

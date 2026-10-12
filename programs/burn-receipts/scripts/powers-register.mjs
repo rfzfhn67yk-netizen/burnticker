@@ -36,8 +36,8 @@ const POWERS = {
   initialize_token: {
     class: "creation",
     signers: { payer: "anyone", creator: "creator", mint: "mint_keypair" },
-    can: "Create the ONE TokenConfig of a mint: the burn rule (immutable thereafter), the feed id, the memo text, the rules-file hash, the attester set and quorum; fund the fee PDA with the rule's reserve; for buyback policies 0 and 2, read and PIN the LaunchLab platform — only the operator's compiled BURNTICKER_PLATFORM (per cluster; the mainnet placeholder refuses: lp-lock blind review RL-3) — (its cpConfigId; platformCpCreator must be unset or the fee PDA) and, for policy 0, require it to lock 100 % of the migrated LP with the Fee Key to the program's FEE_KEYS PDA (platformLockNftWallet = FEE_KEYS, platformScale 1,000,000, creator and burn scale 0 — LAUNCHPAD-PATH §35). Optionally (LAUNCHPAD-PATH §40, policies 0/1) name the partner mint of a winner-takes-the-burn pair: the coin's PairLink is written provisional, and both coins become paired only if the partner's initialize_token names this mint back within 7 days (an unanswered coin stays a plain coin for good).",
-    cannot: "Run twice for a mint; be run by anyone without the mint keypair; change anything afterwards.",
+    can: "Create the ONE TokenConfig of a mint: the burn rule (immutable thereafter), the feed id, the memo text, the rules-file hash, the attester set and quorum; fund the fee PDA with the rule's reserve; for buyback policies 0 and 2, read and PIN the LaunchLab platform — only the operator's compiled BURNTICKER_PLATFORM (per cluster; the mainnet placeholder refuses: lp-lock blind review RL-3) — (its cpConfigId; platformCpCreator must be unset or the fee PDA) and, for policy 0, require it to lock 100 % of the migrated LP with the Fee Key to the program's FEE_KEYS PDA (platformLockNftWallet = FEE_KEYS, platformScale 1,000,000, creator and burn scale 0 — LAUNCHPAD-PATH §35). Optionally (LAUNCHPAD-PATH §40, policies 0/1) name the partner mint of a winner-takes-the-burn pair: the coin's PairLink is written provisional, and both coins become paired only if the partner's initialize_token names this mint back within 7 days (an unanswered coin stays a plain coin for good). Optionally (LAUNCHPAD-PATH §45, buyback) pin the coin's END SINK — the platform flagship ($DEFICIT, compiled per cluster as BURNTICKER_FLAGSHIP: mainnet AJJ4XxCU…), a named coin, or the pair partner — and the minimum a forward on end moves; written once in an EndSink account [\"end_sink\", mint].",
+    cannot: "Run twice for a mint; be run by anyone without the mint keypair; change anything afterwards (the end sink included); pin a league-set sink (not supported yet) or an end sink on the flagship itself.",
     timelock: null, sunset: "Single use per mint.", funds: "Payer → fee PDA: the reserve only (rent for the PDA).",
   },
   register_pool: {
@@ -255,6 +255,21 @@ const POWERS = {
     cannot: "Apply early; apply a proposal that lowers the quorum (re-checked); apply to a PAIRED coin (pair-forward r3 M-1: use apply_paired_attester_change).",
     timelock: "Executable only after the proposal's ETA.", sunset: "None.", funds: "None.",
   },
+  submit_rule_end: {
+    class: "permissionless",
+    signers: { payer: "anyone" },
+    gated_by: "attesters",
+    can: "LAUNCHPAD-PATH §45: end a coin's rule once — date and outcome RESOLVED or VOID — over BURNRECEIPTS-END-v1 ‖ cluster genesis ‖ program ‖ mint ‖ date ‖ outcome ‖ source hash ‖ proof locator, signed by the coin's attester quorum; only for a coin with an end sink. After a RESOLVED end no reading dated later can be submitted or cranked (the coin's remaining fuel goes to its sink through forward_on_end); a VOID end keeps the coin's hashed wind-down. The payer pays the RuleEnd account's rent.",
+    cannot: "End a coin twice, a coin without an end sink, with a date in the future or before the coin's last reading, or with another outcome; reuse a signature made for another cluster, coin, date or outcome; move any funds.",
+    timelock: null, sunset: "Once per coin.", funds: "Payer pays the RuleEnd account's rent (kept forever).",
+  },
+  forward_on_end: {
+    class: "permissionless",
+    signers: { cranker: "anyone" },
+    can: "LAUNCHPAD-PATH §45: after a RESOLVED end, once the coin's readings inside its window are processed (or it has no verified pool), move min(the fee PDA's SOL above the reserve + its WSOL, the burn-pool cap while in force) to the destination's fee PDA — SOL first, then WSOL into the destination fee PDA's WSOL account — if at least the end sink's minimum; write memo `<PREFIX>|endfwd|to=…|lamports=N|v1`. The program chooses the destination: the flagship; a named coin while it is live (a verified pool, its own rule not ended), else the flagship; the pair partner only if the end date's pair result names it winner and it is live and still paired, else the flagship. Callable again for later fee income.",
+    cannot: "Choose the amount or the destination (only a burn_receipts fee PDA, which spends only through crank_buyback); run before a resolved end, under the minimum, below the reserve, or while the coin's window readings are unprocessed; send to a sink that is not live, or to a flagship without a verified pool (then nothing moves); run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+    timelock: null, sunset: "None.", funds: "Resolved coin's fee PDA SOL / WSOL → the end sink's (or the flagship's) fee PDA SOL / WSOL account (then burned by that coin's cranks).",
+  },
   apply_paired_attester_change: {
     class: "permissionless",
     signers: { caller: "anyone" },
@@ -266,7 +281,7 @@ const POWERS = {
 };
 
 const NON_POWERS = [
-  "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) and inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period); tokens leave only by burn.",
+  "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses); tokens leave only by burn.",
   "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).",
   "No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.",
   "No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.",

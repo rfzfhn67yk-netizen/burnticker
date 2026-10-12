@@ -567,7 +567,8 @@ describe("pair copy: the locked description, the review line, help and templates
 describe("r2: initialize_token at launch always carries the partner's PairLink (L-3)", () => {
   test("side A (first): pair_mint, its own PairLink and the partner's (empty) PairLink; side B (second): plus the partner's TokenConfig; a single coin: none", async () => {
     const programId = new PublicKey("AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM"), admin = Keypair.generate().publicKey;
-    const client = new ProgramBurnClient({ connection: {} as never, programId, cluster: "devnet", payer: null, admin, solUsd: async () => 150 });
+    // round-4 layout (end sinks live), so the args decode with this IDL as they are; the default round-3 layout is pinned in burnReceiptsClient.test.ts
+    const client = new ProgramBurnClient({ connection: {} as never, programId, cluster: "devnet", payer: null, admin, solUsd: async () => 150, endSinksLive: true });
     const locked = lockRule(BRONCOS_LOSE);
     const [mA, mB, creator] = [Keypair.generate().publicKey, Keypair.generate().publicKey, Keypair.generate().publicKey].map((k) => k.toBase58());
     const base = { creator, ticker: "BRONCOS", rulesSha256: locked.sha256, selectorKey: "kalshi:KXNFLGAME:-DEN", mode: "buyback" as const, attesters: [creator], quorum: 1, vault: null, rule: locked.rule };

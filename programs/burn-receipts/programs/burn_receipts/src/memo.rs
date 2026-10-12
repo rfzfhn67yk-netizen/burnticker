@@ -89,6 +89,12 @@ pub fn format_forward(prefix: &str, from: &Pubkey, to: &Pubkey, record_date: u32
     )
 }
 
+/// LAUNCHPAD-PATH §45 end-sink receipt: `<PREFIX>|endfwd|to=<sink mint 12>|lamports=N|v1`.
+pub fn format_end_forward(prefix: &str, to: &Pubkey, lamports: u64) -> String {
+    let t = to.to_string();
+    format!("{prefix}|endfwd|to={}|lamports={lamports}|v1", &t[..12.min(t.len())])
+}
+
 pub fn emit_memo<'info>(memo_program: &AccountInfo<'info>, memo: &str) -> Result<()> {
     require_keys_eq!(*memo_program.key, MEMO_PROGRAM_ID, BurnError::InvalidMemoProgram);
     require!(memo.len() <= MEMO_MAX_BYTES, BurnError::MemoTooLong);

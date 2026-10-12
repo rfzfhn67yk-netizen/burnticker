@@ -60,6 +60,8 @@ import type { FetchLike } from "../src/lib/burnticker/oracle/types.ts";
 // TRUST OPS (2026-10-10 night): leader/standby role + the foreign-reading fence, feed health, the daily Arweave snapshot, status/status.json.
 import { KeeperOps } from "../src/lib/burnticker/ops/keeperOps.ts";
 import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
+// PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
+import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -102,7 +104,8 @@ async function buildProgram(): Promise<{ program: BurnProgramClient; real: boole
     solUsd: async () => { const px = await usdPrice(SOL_MINT); if (px === null) throw new Error("SOL price unavailable"); return px; }, allowMainnet: process.env.BURNTICKER_MAINNET === "1", log });
   return { program, real: true, why: `program ${PROGRAM_ID} on ${actual}, keeper ${kp.publicKey.toBase58()}`, chain: { connection, cluster: actual, payer: kp } };
 }
-const built = await buildProgram();
+// A startup refusal (mainnet without the flag, the treasury's key file, a key that does not match) reaches the owner's phone before the process exits.
+const built = await buildProgram().catch(async (e: unknown) => { await pushKeeperRefused({ registry, env: process.env, now: Date.now(), reason: (e as Error).message, log }); throw e; });
 const program = built.program;
 log(`claim_lock_fees crank: ${program.lockFees ? `on (fee-keys PDA ${program.lockFees.feeKeysPda()}, operator treasury ${program.lockFees.operatorTreasury() ?? "NOT PINNED on this cluster — claims wait, the fees stay in the lock"})` : "off (no lock-fee client)"}`);
 // BURN DERBY (2026-10-10): Pyth on Solana (keyless) / Hermes (BURNTICKER_PYTH_API_KEY), pool TWAPs and mint supplies are MAINNET facts
@@ -170,13 +173,14 @@ async function opsCheck(now: number, paused: boolean): Promise<void> {
   const r = await runBurntickerAlertCheck({ registry, siteDir: SITE, now, paused, balances, crankStreaks: tracker.snapshot(), sink });
   for (const a of r.raised) log(`  [alert] ${a.kind}: ${a.text.slice(0, 160)}`);
   for (const a of await ops.alerts(sink, now)) log(`  [alert] ${a.slice(0, 160)}`);
+  try { const p = await runPushCheck({ registry, env: process.env, now, log }); for (const m of p.sent) log(`  [push] ${m.kind}: ${m.title}`); } catch (e) { log(`  [push] check failed: ${(e as Error).message.slice(0, 160)}`); }
   const launched = registry.tokens("live").map((t) => Date.parse(t.baselineAt)).filter((x) => Number.isFinite(x));
   let alerts: { ts: number; kind: string; text: string; seenAt: number | null; sent: boolean }[] | null = null;
   try { alerts = registryAlertRows(registry, now); } catch { alerts = null; }
   publishOps(SITE, buildOpsJson({ now, snapshot: r.snapshot, delta: devFeeDelta(registry, now), alerts, firstLaunchAt: launched.length ? Math.min(...launched) : null, webhook }));
 }
 
-log(`burnticker keeper starting — ${registry.tokens("live").length} live token(s) · ledger ${DB} · site ${SITE} · ${cluster}${DRY ? " · DRY RUN" : ""} · program ${program.programId} (${built.real ? `REAL: ${built.why}` : `FAKE — ${built.why}; nothing is sent`}) · ${ops.banner()} · alerts ${ALERTS ? `every ${ALERT_EVERY_MS / 60_000} min${RPC ? " with balances" : " (no BURNTICKER_RPC_URL: balances unknown)"}${webhook.configured ? " → webhook" : " (no BURNTICKER_ALERT_WEBHOOK: local only)"}` : "off (--once)"}`);
+log(`burnticker keeper starting — ${registry.tokens("live").length} live token(s) · ledger ${DB} · site ${SITE} · ${cluster}${DRY ? " · DRY RUN" : ""} · program ${program.programId} (${built.real ? `REAL: ${built.why}` : `FAKE — ${built.why}; nothing is sent`}) · ${ops.banner()} · alerts ${ALERTS ? `every ${ALERT_EVERY_MS / 60_000} min${RPC ? " with balances" : " (no BURNTICKER_RPC_URL: balances unknown)"}${webhook.configured ? " → webhook" : " (no BURNTICKER_ALERT_WEBHOOK: local only)"}${pushConfigFromEnv(process.env) ? " + phone push" : ""}` : "off (--once)"}`);
 while (!stopping) {
   const paused = fs.existsSync(PAUSE);
   if (paused && !DRY) log(`  ${PAUSE} present — cranks held, reading and publishing go on`);

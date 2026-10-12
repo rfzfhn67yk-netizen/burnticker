@@ -43,6 +43,8 @@ pub fn handle_submit_reading(ctx: Context<SubmitReading>, record_date: u32, valu
     require!(math::valid_date(record_date), BurnError::InvalidDate);
     let clock = Clock::get()?;
     require!(record_date <= math::utc_date(clock.unix_timestamp), BurnError::FutureDate);
+    // LAUNCHPAD-PATH §45: after a RESOLVED end nothing dated later than the end (a VOID end keeps its wind-down readings).
+    require!(crate::instructions::end::reading_allowed_after_end(&ctx.accounts.config, record_date), BurnError::RuleEnded);
     require!(value > 0 && value <= i64::MAX as u64, BurnError::InvalidValue);
     require!(source_url_hash != [0u8; 32], BurnError::InvalidValue);
 

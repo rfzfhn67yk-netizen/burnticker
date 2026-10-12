@@ -4,7 +4,7 @@ import { ONCHAIN_FACTS, onchainSource } from "@/lib/burnticker/sources/onchain";
 import { driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
 import { TIER_LABEL } from "@/lib/burnticker/sources/types";
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
-import { validateRule, lockRule, ruleStatement, BURNTICKER_RULES_SCHEMA, DEFAULT_ON_END, type LockedRule } from "@/lib/burnticker/rules";
+import { validateRule, lockRule, ruleStatement, BURNTICKER_RULES_SCHEMA, defaultOnEndFor, type LockedRule } from "@/lib/burnticker/rules";
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
@@ -442,9 +442,9 @@ interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknow
 export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
   const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
-  // NO BURN POOL IS EVER LEFT BEHIND (owner, 2026-10-10): every new launch carries the onEnd wind-down + retired-coin sweep unless the
-  // rule names its own (rules.ts DEFAULT_ON_END; it is part of the canonical rule, so the hash locks it).
-  if (input.rule && typeof input.rule === "object" && !Array.isArray(input.rule) && (input.rule as { onEnd?: unknown }).onEnd === undefined) input.rule = { ...(input.rule as object), onEnd: { ...DEFAULT_ON_END } };
+  // NO BURN POOL IS EVER LEFT BEHIND (owner, 2026-10-10): every new launch carries the onEnd clause unless the rule names its own —
+  // since §45 with the end sink (rules.ts DEFAULT_ON_END / defaultOnEndFor; it is part of the canonical rule, so the hash locks it).
+  if (input.rule && typeof input.rule === "object" && !Array.isArray(input.rule) && (input.rule as { onEnd?: unknown }).onEnd === undefined) input.rule = { ...(input.rule as object), onEnd: defaultOnEndFor(input.rule) };
   const problems = launchProblems(input);
   if (o.mint !== undefined && o.mint !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(o.mint)) problems.push("The mint must be the public key of a new mint keypair that you made.");
   // website-14 (LAUNCHPAD-PATH §75): on mainnet the graduation raise is 40, 60 or 85 SOL, nothing else (launchBundle.ts raiseProblem)
@@ -553,6 +553,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       return { pin };
     } catch (e) {
       if (p.allowHostedMetadata) { pins.set(ticker, null); return { pin: null }; }
+      // polish-1: the owner's phone hears about a refused pin (push.ts reads the alerts table; one row per ticker per Denver day)
+      try { p.registry.recordAlert({ kind: "bt-pin-failed", key: `bt-pin-failed:${ticker}`, text: `$${ticker}: the coin's details could not be saved on Arweave, so its launch was refused. ${(e as Error).message.slice(0, 160)}`, meta: { ticker } }); } catch { /* the alert never changes the answer */ }
       return { error: fail(502, `The coin's details could not be saved on Arweave, so the launch is refused. A coin's details are never kept on a server that could change them. The reason given was: ${(e as Error).message.slice(0, 160)}`, { code: "pin-failed" }) };
     }
   };

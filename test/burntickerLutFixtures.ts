@@ -6,7 +6,9 @@
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { buildLaunchBundle, buildPairBundles, SdkLaunchLab, type LaunchBundle } from "@/lib/burnticker/launchBundle";
 import { buildPairCurveLaunch, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
-import { counterRule, FakeBurnProgram } from "@/lib/burnticker/program";
+import { counterRule, endSinkPin, FakeBurnProgram } from "@/lib/burnticker/program";
+import { END_SINK_FLAGSHIP, END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endSink";
+import { DEFAULT_ON_END } from "@/lib/burnticker/rules";
 import { initializeTokenIx, operatorAttester } from "@/lib/burnReceipts/instructions";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { configPda, vaultAddress } from "@/lib/burnReceipts/pda";
@@ -28,7 +30,10 @@ export class RealIdProgram extends FakeBurnProgram {
   override async initializeToken(i: Parameters<FakeBurnProgram["initializeToken"]>[0]) {
     const c = counterRule(i.rule!, i.ticker, i.selectorKey, { floorLamports: this.floorLamports });
     const programId = new PublicKey(this.programId), mint = new PublicKey(i.mint), creator = new PublicKey(i.creator);
-    const ix = initializeTokenIx({ programId, payer: creator, creator, mint, launchlabPlatform: BURNTICKER_PLATFORM[this.network], args: {
+    // §45: the EndSink exactly as ProgramBurnClient pins it (a real account + the Option-encoded args)
+    const pin = endSinkPin(i.rule, i.pairMint);
+    const endSink = pin ? { kind: pin.kind === "pair-winner" ? END_SINK_PAIR_WINNER : END_SINK_FLAGSHIP, minForwardLamports: pin.minForwardLamports } : undefined;
+    const ix = initializeTokenIx({ ...(endSink ? { endSink } : {}), programId, payer: creator, creator, mint, launchlabPlatform: BURNTICKER_PLATFORM[this.network], args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: [operatorAttester(ADMIN)], quorum: 1, fixed_pool: PublicKey.default, admin: ADMIN,
     }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy } : {}) });
@@ -52,7 +57,7 @@ export interface Fixture { name: string; signers: Keypair[][]; steps: { label: s
 const WORST_URI = (m: string) => `https://burnticker.com/api/burnticker/metadata/${m}`;
 export async function singleCoin(network: Network, o: { creator?: Keypair; firstBuySol?: string; vault?: boolean; worst?: boolean } = {}): Promise<{ bundle: LaunchBundle; creator: Keypair; mint: Keypair }> {
   const creator = o.creator ?? Keypair.generate(), mint = Keypair.generate();
-  const bundle = await buildLaunchBundle({ creator: creator.publicKey.toBase58(), ticker: o.worst ? "ABCDEFGHIJ" : "REALL", name: o.worst ? "N".repeat(32) : "Real launch", description: "a test", imageUrl: null, links: [], rule: o.vault ? VAULT_RULE : BRONCOS, firstBuySol: o.firstBuySol ?? "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: network },
+  const bundle = await buildLaunchBundle({ creator: creator.publicKey.toBase58(), ticker: o.worst ? "ABCDEFGHIJ" : "REALL", name: o.worst ? "N".repeat(32) : "Real launch", description: "a test", imageUrl: null, links: [], rule: o.vault ? VAULT_RULE : { ...BRONCOS, onEnd: { ...DEFAULT_ON_END } }, firstBuySol: o.firstBuySol ?? "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: network },
     { program: new RealIdProgram(network), launchLab: realLaunchLab(network), devFeeWallet: null, attesters: [ADMIN.toBase58()], quorum: 1, metadataUri: o.worst ? WORST_URI : URI, mintKeypair: mint, allowMainnet: true });
   return { bundle, creator, mint };
 }

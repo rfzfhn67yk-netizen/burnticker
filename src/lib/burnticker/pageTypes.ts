@@ -26,7 +26,7 @@ export interface PairCounterpart {
   winnerTakesBurn?: boolean;
   /** Since 1.10.0: every forward between the two coins, oldest first. */
   forwards?: PairForwardJson[];
-  /** Since 1.11.0: unlink_pair ran (a voided pair curve, a refunding side, or no verified pool 30 days after pairing) — two plain coins now. */
+  /** Since 1.11.0: unlink_pair ran (a voided pair curve, a refunding side, or a LaunchLab pair whose voidBy day ended with a coin unverified) — two plain coins now. */
   unpaired?: { reason: string; at: string; signature: string | null } | null;
   /** Since 1.12.0 (pair-forward round 3), from the chain: none / provisional / paired / unlinked; null when not read. */
   pairState?: "none" | "provisional" | "paired" | "unlinked" | null;

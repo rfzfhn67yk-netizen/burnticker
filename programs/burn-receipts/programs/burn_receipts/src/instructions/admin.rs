@@ -165,8 +165,9 @@ fn apply_pending(c: &mut TokenConfig, config: Pubkey, caller: Pubkey) -> Result<
 
 /// Pair-forward r3 M-1. PERMISSIONLESS once the timelock has elapsed: applies a PAIRED coin's pending attester change when a quorum of
 /// the PARTNER's current attesters signed attest::canonical_pair_attester_change_message over the pending set (Ed25519SigVerify in the
-/// same transaction). The coin's PairLink then records the new set. Results need both coins' quorums (submit_pair_result), so after a
-/// change the partner's attesters — who approved it — and the new set must both sign.
+/// same transaction). Pair-forward round-3 re-check P3-2: the SAME set is applied to BOTH coins in this one instruction (the partner's
+/// own pending proposal, if any, is replaced), and both PairLinks record it, so a pair is never on two sets and no key that only one
+/// side chose can veto results. The partner's quorum may not drop (QuorumLowered).
 #[event_cpi]
 #[derive(Accounts)]
 pub struct ApplyPairedAttesterChange<'info> {
@@ -176,8 +177,11 @@ pub struct ApplyPairedAttesterChange<'info> {
     pub config: Box<Account<'info, TokenConfig>>,
     #[account(mut, seeds = [PAIR_LINK_SEED, config.mint.as_ref()], bump = link.bump)]
     pub link: Box<Account<'info, PairLink>>,
-    #[account(seeds = [CONFIG_SEED, partner_config.mint.as_ref()], bump = partner_config.bump)]
+    #[account(mut, seeds = [CONFIG_SEED, partner_config.mint.as_ref()], bump = partner_config.bump)]
     pub partner_config: Box<Account<'info, TokenConfig>>,
+    /// P3-2: the partner's PairLink records the same set.
+    #[account(mut, seeds = [PAIR_LINK_SEED, partner_config.mint.as_ref()], bump = partner_link.bump)]
+    pub partner_link: Box<Account<'info, PairLink>>,
     /// CHECK: address-checked: the instructions sysvar.
     #[account(address = solana_instructions_sysvar::ID)]
     pub instructions: UncheckedAccount<'info>,
@@ -186,6 +190,8 @@ pub struct ApplyPairedAttesterChange<'info> {
 pub fn handle_apply_paired_attester_change(ctx: Context<ApplyPairedAttesterChange>) -> Result<()> {
     let a = &ctx.accounts;
     require!(a.config.pair_state == PAIR_STATE_PAIRED && a.link.paired && a.link.pair_mint == a.partner_config.mint, BurnError::NotPaired);
+    require!(a.partner_config.pair_state == PAIR_STATE_PAIRED && a.partner_link.paired && a.partner_link.pair_mint == a.config.mint, BurnError::NotPaired);
+    require!(a.config.pending_quorum >= a.partner_config.quorum, BurnError::QuorumLowered);
     require!(a.config.pending_eta != 0, BurnError::NoPendingChange);
     let pending = set_hash(a.config.pending_quorum, &a.config.pending_attesters[..a.config.pending_count as usize]);
     let msg = canonical_pair_attester_change_message(&crate::ID, &a.config.mint, &a.partner_config.mint, &pending, a.config.pending_eta);
@@ -195,7 +201,24 @@ pub fn handle_apply_paired_attester_change(ctx: Context<ApplyPairedAttesterChang
     let config = a.config.key();
     let ev = apply_pending(&mut ctx.accounts.config, config, caller)?;
     ctx.accounts.link.attester_set_hash = pending;
+    // P3-2: the same set on the partner, atomically (kept keys keep their membership date there too)
+    let (attesters, count, quorum) = (ctx.accounts.config.attesters, ctx.accounts.config.attester_count, ctx.accounts.config.quorum);
+    let partner_key = ctx.accounts.partner_config.key();
+    let p = &mut ctx.accounts.partner_config;
+    let now = Clock::get()?.unix_timestamp;
+    let mut added_at = [0i64; MAX_ATTESTERS];
+    for (i, a) in attesters[..count as usize].iter().enumerate() {
+        added_at[i] = p.attester_slice().iter().position(|b| b.key == a.key).map(|j| p.attester_added_at[j]).unwrap_or(now);
+    }
+    p.attesters = attesters;
+    p.attester_count = count;
+    p.quorum = quorum;
+    p.attester_added_at = added_at;
+    clear_pending(p);
+    let partner_ev = AttesterChangeApplied { config: partner_key, applied_by: caller, attesters: attesters[..count as usize].to_vec(), quorum, governance_hash: governance_hash(&p.admin, quorum, &attesters[..count as usize]) };
+    ctx.accounts.partner_link.attester_set_hash = pending;
     emit_cpi!(ev);
+    emit_cpi!(partner_ev);
     Ok(())
 }
 

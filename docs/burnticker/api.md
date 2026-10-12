@@ -276,7 +276,7 @@ additions, nothing removed:
 ## Pair-forward round 2 (API 1.11.0)
 
 The pair-forward blind review's fixes (2026-10-11), all additive: `status.pair.unpaired` { reason, at, signature } once `unlink_pair` ran
-(a voided pair curve, a refunding side, or one coin without a verified pool 30 days after pairing) — two plain coins from then on, later
+(a voided pair curve, a refunding side, or, since round 3, a LaunchLab pair whose locked voidBy day ended with a coin still without a verified pool) — two plain coins from then on, later
 receipts carry no `pairRole`; the pair page says "unpaired (reason)"; `status/status.json` `pairs[].unpaired`. A forward against a side
 without a verified pool is a `forwarded` receipt with `spent` 0 (the program always writes the memo, `lamports=0`). The keeper's new alerts:
 `pair-result-unservable` (a win could not be recorded yet; no draw is substituted), `pair-forward-missing` (a lost period cranked unpaired after 72 h),
@@ -337,3 +337,42 @@ derives all of it from the host's environment:
 - `GET /api/burnticker/launch` answers `{ lookupTables: { devnet, mainnet } }`, the lookup-table pins the signing card checks. A host
   sets its own network's pin at runtime with `BURNTICKER_LOOKUP_TABLE` (and `BURNTICKER_LOOKUP_TABLE_AUTHORITY` while the table is
   not frozen); otherwise the values compiled into `networks.ts` apply. The card still checks every entry of the table it finds.
+
+## Feeds (RSS 2.0 and JSON Feed 1.1; polish-1, 2026-10-12)
+
+Not under `/v1`: these are reader feeds, built from the same rows the pages read (`src/lib/burnticker/feedsData.ts` collects them the
+way the home API does: each registered coin's status and receipts, the $DEFICIT keeper's published `status.json` and `burns.json`
+while $DEFICIT is not registered here, and the devnet rehearsal's evidence; `src/lib/burnticker/feeds.ts` renders them).
+
+| Path | What |
+|---|---|
+| `/api/burnticker/feeds/receipts.rss` · `.json` | every confirmed burn this site shows, newest first; each item links to its own receipt check |
+| `/api/burnticker/feeds/coin/{TICKER}.rss` · `.json` | one coin's burns, signed readings, graduation and pool registration, newest first; each item links to its evidence |
+| `/api/burnticker/feeds/next-results.rss` · `.json` | the next result each coin waits for and where its latest result stands (the `/burnticker/upcoming` page); one item per coin, whose `id` changes when the coin's state changes |
+
+- Content types: `application/rss+xml; charset=utf-8` and `application/feed+json; charset=utf-8`. `Cache-Control: public,
+  max-age=300, stale-while-revalidate=600`, an `ETag` of the content (a conditional GET with `If-None-Match` answers 304), CORS open.
+- RSS items carry `title`, `link`, `description`, a non-permalink `guid` (`burn:<signature>`, `reading:<signature>`, `next:<TICKER>:…`)
+  and `pubDate` when the row's time is read; graduation and pool rows have no date, and their text says the site does not read it.
+  JSON Feed items carry `id`, `url`, `title`, `content_text` and `date_published` on the same terms, plus the extension object
+  `_burnticker` { `feed`, `rss`, `updated`, `empty` }.
+- Devnet rows say they are devnet. No item carries a price, a market figure or a promised date.
+- Empty states: a feed with nothing to show is a valid feed with no items, and its description (and `_burnticker.empty`) says why in a
+  sentence. A registry that cannot be read answers **503** in plain text, never an empty feed. An unknown coin is **404**. $DEFICIT has a
+  feed before it is registered here; it stays empty until its keeper publishes.
+
+## CSV export (polish-1, 2026-10-12)
+
+| Path | Columns |
+|---|---|
+| `/api/burnticker/coins/{TICKER}/burns.csv` | `date, value, units, signature, spent, got, burned, memo, verified, status` |
+| `/api/burnticker/coins/{TICKER}/readings.csv` | `date, event, result, value, units, signature, source` |
+
+UTF-8, a header row, RFC 4180 quoting, CRLF line ends, streamed; `Content-Type: text/csv; charset=utf-8; header=present` and
+`Content-Disposition: attachment; filename="<TICKER>-burns.csv"`; cached 60 s. The rows are the coin page's Burn log: a registered coin's
+receipts recomputed at request time (`verified` is the receipt's own check, `status` its state), oldest first, and the readings its
+rule counted (`units` summed over the receipts of that reading; `signature` filled when this site holds the reading's transaction).
+For $DEFICIT before it is registered here, the rows come from its keeper's published files and `verified` stays empty (this site does
+not recompute them). `spent` is SOL, `got` and `burned` are whole tokens, `value` is the source's own figure. An empty cell means the value
+does not exist yet or was not checked here. A text cell that starts like a spreadsheet formula gets a leading apostrophe. Unknown coin
+**404**; a keeper file that exists and cannot be read **503**; a keeper that has not published yet gives the header row alone.

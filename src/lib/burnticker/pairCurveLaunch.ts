@@ -2,6 +2,8 @@ import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeType, encodeInstruction } from "@/lib/burnReceipts/idlCoder";
 import { POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
+import { END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endSink";
+import { linkPairIx } from "@/lib/burnReceipts/pairs";
 import { pairPda, vaultPda } from "@/lib/pairCurve/accounts";
 import { createPairMintIxs, initPairIx, type InitPairArgs } from "@/lib/pairCurve/client";
 import { DEFAULT_CURVE_SUPPLY, DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEFAULT_VIRTUAL_SOL_LAMPORTS, DEFAULT_VIRTUAL_TOKEN_AMOUNT, initParamProblems, TOTAL_SUPPLY } from "@/lib/pairCurve/pricing";
@@ -81,8 +83,12 @@ const ser = (ix: TransactionInstruction, label: string): SerializedIx => ({ prog
  */
 export function toPairCurvePolicy(ix: SerializedIx, burnReceiptsProgramId: string, launchlabPlatform: string): SerializedIx | null {
   const def = BURN_RECEIPTS_IDL.instructions.find((i) => i.name === "initialize_token")!;
-  const data = Buffer.from(ix.dataBase64, "base64");
-  if (ix.programId !== burnReceiptsProgramId || data.length < 8 || !data.subarray(0, 8).equals(Buffer.from(def.discriminator))) return null;
+  const data0 = Buffer.from(ix.dataBase64, "base64");
+  if (ix.programId !== burnReceiptsProgramId || data0.length < 8 || !data0.subarray(0, 8).equals(Buffer.from(def.discriminator))) return null;
+  // §45: a round-3 layout (instructions.ts initializeTokenIx "r3") has one account fewer and no end-sink args: decode it as round 4 with
+  // the empty end-sink args appended, and cut them (and the slot) again below
+  const r3 = ix.keys.length === def.accounts.length - 1;
+  const data = r3 ? Buffer.concat([data0, Buffer.alloc(10)]) : data0;
   const args = decodeType(BURN_RECEIPTS_IDL, def.args[0].type, data, 8).value as { rule: { pool_policy: number } };
   args.rule.pool_policy = POOL_POLICY_PAIR_CURVE;
   // r3: a pair-curve coin pairs through link_pair, so initialize_token carries no pair_mint and pair_void_by must be 0
@@ -92,8 +98,16 @@ export function toPairCurvePolicy(ix: SerializedIx, burnReceiptsProgramId: strin
   // (the program refuses InvalidPairMint for policy 2) — the LaunchLab bundle's pair accounts become Anchor's "omitted" placeholder.
   const PAIR_SLOTS = new Set(["pair_mint", "pair_link", "partner_link", "partner_config"]);
   const omit = new Set(def.accounts.map((a, i) => (PAIR_SLOTS.has(a.name) ? i : -1)).filter((i) => i >= 0));
-  const keys = ix.keys.map((k, i) => (i === slot ? { pubkey: launchlabPlatform, isSigner: false, isWritable: false } : omit.has(i) ? { pubkey: burnReceiptsProgramId, isSigner: false, isWritable: false } : k));
-  return { ...ix, keys, dataBase64: encodeInstruction(BURN_RECEIPTS_IDL, "initialize_token", { args }).toString("base64"), label: `${ix.label} — registration policy 2 (pair curve)` };
+  // §45: a PAIR_WINNER EndSink names its partner through pair_mint in a LaunchLab create (end_sink_mint None); with pair_mint omitted the
+  // pair-curve create names the partner in end_sink_mint instead (the program requires it for policy 2)
+  const pairSlot = def.accounts.findIndex((a) => a.name === "pair_mint");
+  const endSinkSlot = def.accounts.findIndex((a) => a.name === "end_sink");
+  const at = (i: number): number => (r3 && i > endSinkSlot ? i - 1 : i);   // r3 lists no end_sink slot (it sits before event_authority)
+  const es = args as { end_sink_kind?: number; end_sink_mint?: PublicKey | null };
+  if (es.end_sink_kind === END_SINK_PAIR_WINNER && !es.end_sink_mint && pairSlot >= 0 && ix.keys[pairSlot] && ix.keys[pairSlot].pubkey !== burnReceiptsProgramId) es.end_sink_mint = new PublicKey(ix.keys[pairSlot].pubkey);
+  const keys = ix.keys.map((k, i) => (i === at(slot) ? { pubkey: launchlabPlatform, isSigner: false, isWritable: false } : [...omit].some((j) => at(j) === i) ? { pubkey: burnReceiptsProgramId, isSigner: false, isWritable: false } : k));
+  const enc = encodeInstruction(BURN_RECEIPTS_IDL, "initialize_token", { args });
+  return { ...ix, keys, dataBase64: (r3 ? enc.subarray(0, enc.length - 10) : enc).toString("base64"), label: `${ix.label} — registration policy 2 (pair curve)` };
 }
 
 export async function buildPairCurveLaunch(pair: PairBundles, creator: string, deps: PairCurveLaunchDeps): Promise<PairCurveLaunchBundle> {
@@ -125,7 +139,10 @@ export async function buildPairCurveLaunch(pair: PairBundles, creator: string, d
   }
   const pairIdHash = await import("node:crypto").then(({ createHash }) => Uint8Array.from(createHash("sha256").update(pair.pairId, "utf8").digest()));
   const args: InitPairArgs = { pair_id: pairIdHash, virtual_sol_lamports: p.virtualSolLamports, virtual_token_amount: p.virtualTokenAmount, curve_supply: p.curveSupply, target_raise_lamports: p.targetRaiseLamports, min_side_share_bps: p.minSideShareBps, deadline: BigInt(p.deadline) };
-  txs.push({ label: "pair_curve.init_pair (mint both supplies into the vaults, revoke the mint authority, fix the parameters)", signers: ["creator"], instructions: [ser(initPairIx({ payer: creatorKey, creator: creatorKey, mintA, mintB, args, launchlabPlatform: new PublicKey(platform), ammConfig: new PublicKey(cpConfig), burnReceiptsProgramId: new PublicKey(deps.burnReceiptsProgramId) }), "pair_curve.init_pair")] });
+  // Pair-forward round-3 re-check P3-1: link_pair rides in the SAME transaction, right after init_pair (the Pair exists inside it), so
+  // no pair is ever left unlinked by a keeper outage or a later refusal.
+  const link = ser(linkPairIx({ programId: new PublicKey(deps.burnReceiptsProgramId), payer: creatorKey, pair: pairAddress, mintA, mintB }), "burn_receipts.link_pair (both coins paired, the Pair as witness)");
+  txs.push({ label: "pair_curve.init_pair (mint both supplies into the vaults, revoke the mint authority, fix the parameters) + burn_receipts.link_pair", signers: ["creator"], instructions: [ser(initPairIx({ payer: creatorKey, creator: creatorKey, mintA, mintB, args, launchlabPlatform: new PublicKey(platform), ammConfig: new PublicKey(cpConfig), burnReceiptsProgramId: new PublicKey(deps.burnReceiptsProgramId) }), "pair_curve.init_pair"), link] });
   pending.push("Metaplex metadata for the two mints is not in this bundle yet (create the mint with your key, add metadata, then hand the mint authority to the vault)");
   return {
     version: "burnticker.pair-curve-launch/v1", ready: pending.length === 1, pending, badge: PAIR_CURVE_BADGE, pairId: pair.pairId, pair: pairAddress.toBase58(), vault: vault.toBase58(),

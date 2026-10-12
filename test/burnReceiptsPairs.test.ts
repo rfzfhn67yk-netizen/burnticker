@@ -179,7 +179,12 @@ describe("burnReceipts pairs — round 3 (one attester set, voidBy, paired attes
     const plain = initializeTokenIx({ programId: PID, payer: a.publicKey, creator: a.publicKey, mint: a.publicKey, args });
     const paired = initializeTokenIx({ programId: PID, payer: a.publicKey, creator: a.publicKey, mint: a.publicKey, args, pairMint: b.publicKey, pairVoidBy: 20261120 });
     assert.equal(paired.data.length, plain.data.length);
+    // the default layout is round 3 (the deployed programs): pair_void_by is the last field
     assert.equal(plain.data.readUInt32LE(plain.data.length - 4), 0);
     assert.equal(paired.data.readUInt32LE(paired.data.length - 4), 20261120);
+    // round 4: pair_void_by sits before the three end-sink args (u8 kind, Option<Pubkey> mint — 1 byte when none —, u64 minimum: 10 bytes)
+    const paired4 = initializeTokenIx({ programId: PID, payer: a.publicKey, creator: a.publicKey, mint: a.publicKey, args, pairMint: b.publicKey, pairVoidBy: 20261120, layout: "r4" });
+    assert.equal(paired4.data.length, paired.data.length + 10); assert.equal(paired4.keys.length, paired.keys.length + 1);
+    assert.equal(paired4.data.readUInt32LE(paired4.data.length - 14), 20261120);
   });
 });

@@ -8,6 +8,11 @@
 //   initialize-token           --mint <keypath|pubkey> --creator <keypath|pubkey> --admin <pubkey> [--rules config/burnkeeper/deficit.rules.json]
 //                              [--attester <pubkey>]... [--quorum 1] [--launchlab-platform <pubkey>] [--floor-lamports 1000000]
 //                              [--twap-window 1200] [--twap-deviation-bps 300] [--fixed-pool <pubkey>]
+//                              [--end-sink flagship:<min lamports> | mint:<mint>:<min> | pair-winner:<partner>:<min>]   (§45: pins the
+//                              coin's EndSink; omitted = none, the hashed wind-down. The flagship itself never takes one.)
+//                              [--program-round 3|4]   the deployed program's initialize_token layout: default from
+//                              BURNTICKER_INITIALIZE_TOKEN_LAYOUT (r3 | r4), else 3 (mainnet and devnet until the round-4 upgrade);
+//                              --end-sink implies 4
 //                              Prints the rules file's sha256 it will PIN on chain (publish it) and the RuleParams derived from the file.
 //                              Buyback + pool policy 0 needs --launchlab-platform (its cpConfigId / LP scales / platformCpCreator are pinned).
 //   register-pool              --mint <pubkey> --pool <pubkey> [--fixed]       (policy 0 passes the token's LaunchLab pool automatically)
@@ -31,6 +36,10 @@
 //   unlink-pair                --mint-a <pubkey> --mint-b <pubkey> [--pair <pair_curve Pair>]   (r3: terminal evidence only — the Pair
 //                              Voided / a side refunding (required for policy 2), or a LaunchLab pair's voidBy ended without both pools)
 //   pair-status                --mint <pubkey> [--date YYYYMMDD]   READ-ONLY: pair_state, the PairLink, the period's PairResult
+//   LAUNCHPAD-PATH §45 — end sinks:
+//   submit-rule-end            --mint <pubkey> --date YYYYMMDD --outcome resolved|void --attester <keypath>... [--source-url <url>]
+//   forward-on-end             --mint <pubkey>   (after a RESOLVED end: the program's destination, computed by planForwardOnEnd)
+//   end-status                 --mint <pubkey>   READ-ONLY: end_state, the EndSink, the RuleEnd and what forward_on_end would do
 //   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
 //                              (the cap is always the 25 SOL default at creation; ≤ 3 crankers, enforced only while the cap is in force)
 //   set-registration-policy    --mint <pubkey> --admin <keypath|pubkey> --policy 0|1 [--pool <pubkey>]   (48 h timelock; stranding recovery)
@@ -65,19 +74,20 @@ import { BURN_RECEIPTS_IDL } from "../src/lib/burnReceipts/idl.ts";
 import { decodeType } from "../src/lib/burnReceipts/idlCoder.ts";
 import { decodeLockedLiquidity, decodePlatformConfig, decodeTokenConfig, fetchFeeKeyRecord, fetchTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
 import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURN_RECEIPTS_TEST_PROGRAM_ID, CPMM_PROGRAM_ID, type Cluster, assertSignableGenesis, GENESIS_HASH, LAUNCHLAB_PROGRAM_ID, LOCK_CPMM_PROGRAM_ID, NATIVE_MINT, MODE_BUYBACK, OPERATOR_TREASURY, POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_FIXED } from "../src/lib/burnReceipts/constants.ts";
-import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, createAtaIdempotentIx, initializePlatformIx, initializeTokenIx, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx } from "../src/lib/burnReceipts/instructions.ts";
+import { applyRegistrationPolicyIx, cancelRegistrationPolicyIx, checkPoolHealthIx, claimLaunchlabCreatorFeeIx, claimLockFeesIx, registerFeeKeyIx, createAtaIdempotentIx, initializePlatformIx, initializeTokenIx, initializeTokenLayoutFromEnv, operatorAttester, registerPoolIx, setRegistrationPolicyIx, submitReadingIx, vetoRegistrationPolicyIx } from "../src/lib/burnReceipts/instructions.ts";
 import { verifyPlatformPins } from "../src/lib/burnReceipts/platformPins.ts";
 import { checkLpLockPins } from "../src/lib/burnticker/lpLockPins.ts";
 import { associatedTokenAddress, configPda, cpmmPoolPda, feeKeyRecordPda, launchlabMigrationLocker, feeKeysPda, feePda, feeWsolAddress, platformPda, readingPda } from "../src/lib/burnReceipts/pda.ts";
 import { ruleParamsFromKeeperRules } from "../src/lib/burnReceipts/math.ts";
 import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, linkPairIx, PAIR_STATE_PAIRED, pairLinkPda, pairResultFor, pairResultPda, submitPairResultIx, unlinkPairIx } from "../src/lib/burnReceipts/pairs.ts";
+import { attestRuleEnd, END_SINK_FLAGSHIP, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_RESOLVED, END_STATE_VOID, fetchEndSink, fetchRuleEnd, endSinkPda, planForwardOnEnd, ruleEndPda, submitRuleEndIx } from "../src/lib/burnReceipts/endSink.ts";
 import { attestReading, sourceUrlHash } from "../src/lib/burnReceipts/attestation.ts";
 import { fetchCpmmPool } from "../src/lib/burnReceipts/cpmm.ts";
 import { confirmByPolling, planCrank, poolAccountsOrStandIns, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
 
 const args = process.argv.slice(2);
-const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "unlink-pair", "pair-status"] as const;
+const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "unlink-pair", "pair-status", "submit-rule-end", "forward-on-end", "end-status"] as const;
 type Command = (typeof COMMANDS)[number];
 const CMD = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : null;
 const flag = (n: string) => args.includes(`--${n}`);
@@ -196,6 +206,15 @@ if (CMD === "verify-platform-pins") {
   say("platform pins hold: platformCpCreator, LP lock/burn scales and cpConfigId are as pinned at initialize_token; 100 % of the LP is locked and the Fee Key goes to the fee-keys PDA");
   process.exit(0);
 }
+// READ-ONLY (no payer): LAUNCHPAD-PATH §45 end state.
+if (CMD === "end-status") {
+  const mint = pubkeyOf(opt("mint"), "--mint") ?? die("--mint <pubkey> is required");
+  const cfg = (await fetchTokenConfig(connection, programId, mint)) ?? die(`no TokenConfig for ${mint.toBase58()}`);
+  const plan = await planForwardOnEnd(connection, programId, cluster, mint, PublicKey.default);
+  const view = "target" in plan ? { status: plan.status, target: plan.target.toBase58(), intended: plan.intended.toBase58(), sinkKind: plan.sinkKind } : plan;
+  console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), end_state: cfg.config.end_state, end_date: cfg.config.end_date, crank_cursor: cfg.config.crank_cursor, last_record_date: cfg.config.last_record_date, endSink: await fetchEndSink(connection, programId, mint), ruleEnd: await fetchRuleEnd(connection, programId, mint), forwardOnEnd: view }), null, 2));
+  process.exit(0);
+}
 // READ-ONLY (no payer): LAUNCHPAD-PATH §40 pair state.
 if (CMD === "pair-status") {
   const mint = pubkeyOf(opt("mint"), "--mint") ?? die("--mint <pubkey> is required");
@@ -229,12 +248,24 @@ if (CMD === "initialize-token") {
   if (!attesters.length) die("--attester <pubkey> (the keeper's data key) is required, up to 5");
   const launchlabPlatform = pubkeyOf(opt("launchlab-platform"), "--launchlab-platform") ?? undefined;
   if (rule.mode === MODE_BUYBACK && rule.pool_policy === POOL_POLICY_CREATOR_IS_FEE_PDA && !launchlabPlatform) die("buyback with pool policy 0 needs --launchlab-platform <pubkey> (pinned at init)");
-  const ix = initializeTokenIx({ programId, payer: payer.publicKey, creator: creator.publicKey, mint: mint.publicKey, launchlabPlatform, args: {
+  // LAUNCHPAD-PATH §45: an optional EndSink (a LaunchLab pair coin names its partner here; this command passes no pair_mint)
+  const es = opt("end-sink");
+  const endSink = !es ? undefined : (() => {
+    const parts = es.split(":"), min = BigInt(parts[parts.length - 1] ?? "0");
+    if (parts[0] === "flagship" && parts.length === 2) return { kind: END_SINK_FLAGSHIP, minForwardLamports: min };
+    if (parts[0] === "mint" && parts.length === 3) return { kind: END_SINK_MINT, sinkMint: pubkeyOf(parts[1], "--end-sink")!, minForwardLamports: min };
+    if (parts[0] === "pair-winner" && parts.length === 3) return { kind: END_SINK_PAIR_WINNER, sinkMint: pubkeyOf(parts[1], "--end-sink")!, minForwardLamports: min };
+    return die("--end-sink flagship:<min> | mint:<mint>:<min> | pair-winner:<partner>:<min>");
+  })();
+  const round = opt("program-round") ?? (endSink || initializeTokenLayoutFromEnv() === "r4" ? "4" : "3");
+  if (round !== "3" && round !== "4") die("--program-round 3|4");
+  if (endSink && round !== "4") die("--end-sink needs --program-round 4 (the round-4 program)");
+  const ix = initializeTokenIx({ programId, payer: payer.publicKey, creator: creator.publicKey, mint: mint.publicKey, launchlabPlatform, layout: round === "4" ? "r4" : "r3", ...(endSink ? { endSink } : {}), args: {
     feed_id: loaded.rules.feed.id, memo_prefix: loaded.rules.memo.prefix, memo_source: loaded.rules.feed.memoSource, rules_sha256: Buffer.from(loaded.sha256, "hex"), rule,
     attesters, quorum: Number(opt("quorum") ?? 1), fixed_pool: fixedPool ?? PublicKey.default, admin,
   } });
   say(`rules ${rulesFile}: sha256 ${loaded.sha256} — this is the hash the program PINS; publish it`);
-  await run([ix], payer, [creator, mint], tokenWatch(mint.publicKey), { rulesFile, rulesSha256: loaded.sha256, ruleParams: rule, feePda: feePda(programId, mint.publicKey).toBase58(), config: configPda(programId, mint.publicKey).toBase58() });
+  await run([ix], payer, [creator, mint], [...tokenWatch(mint.publicKey), ...(endSink ? [{ address: endSinkPda(programId, mint.publicKey), kind: "lamports" as const }] : [])], { rulesFile, rulesSha256: loaded.sha256, ruleParams: rule, ...(endSink ? { endSink: endSinkPda(programId, mint.publicKey).toBase58() } : {}), feePda: feePda(programId, mint.publicKey).toBase58(), config: configPda(programId, mint.publicKey).toBase58() });
 }
 if (CMD === "register-pool") {
   const mint = mintArg();
@@ -356,6 +387,22 @@ if (CMD === "unlink-pair") {
   const mintB = pubkeyOf(opt("mint-b"), "--mint-b") ?? die("--mint-b is required");
   const pair = pubkeyOf(opt("pair"), "--pair") ?? undefined;
   await run([unlinkPairIx({ programId, cranker: payer.publicKey, mintA, mintB, pair })], payer, [], [...tokenWatch(mintA), ...tokenWatch(mintB), { address: pairLinkPda(programId, mintA), kind: "lamports" }, { address: pairLinkPda(programId, mintB), kind: "lamports" }]);
+}
+if (CMD === "submit-rule-end") {
+  const mint = mintArg();
+  const recordDate = dateArg();
+  const o = opt("outcome") ?? die("--outcome resolved|void is required");
+  const outcome = o === "resolved" ? END_STATE_RESOLVED : o === "void" ? END_STATE_VOID : die("--outcome resolved|void");
+  const genesis = await signableGenesis(mint);
+  const src = sourceUrlHash(opt("source-url") ?? `burnticker:end:${mint.toBase58()}:${recordDate}:${o}`);
+  const att = attestRuleEnd({ genesisHash: genesis, programId, mint, recordDate, outcome, sourceUrlHash: src, signers: await attesterKeys() });
+  await run([att.instruction, submitRuleEndIx({ programId, payer: payer.publicKey, mint, recordDate, outcome, sourceUrlHash: src })], payer, [], [...tokenWatch(mint), { address: ruleEndPda(programId, mint), kind: "lamports" }], { ruleEnd: ruleEndPda(programId, mint).toBase58(), message: att.message.toString("utf8") });
+}
+if (CMD === "forward-on-end") {
+  const mint = mintArg();
+  const plan = await planForwardOnEnd(connection, programId, cluster, mint, payer.publicKey);
+  if (plan.status !== "ready") { console.log(JSON.stringify({ command: CMD, cluster, mint: mint.toBase58(), plan }, null, 2)); process.exit(plan.status === "not-ended" || plan.status === "void" ? 0 : 1); }
+  await run(plan.instructions, payer, [], [...tokenWatch(mint), { address: feePda(programId, plan.target), kind: "lamports" }], { target: plan.target.toBase58(), intended: plan.intended.toBase58(), sinkKind: plan.sinkKind });
 }
 if (CMD === "forward-to-winner") {
   const loser = pubkeyOf(opt("loser"), "--loser") ?? die("--loser <mint> is required");

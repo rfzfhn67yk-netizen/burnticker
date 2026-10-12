@@ -54,7 +54,6 @@ pub fn handle_register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
     // Policy-2 coins can only be paired by link_pair (initialize_token refuses a partner for them), so PAIRED means "paired to the
     // other mint of this Pair". Pair-forward r3 (RN-1): a coin unlinked on terminal evidence (its partner side voided / refunding)
     // still registers its own pool — it burns as a plain coin.
-    require!(c.pair_state == PAIR_STATE_PAIRED || c.pair_state == PAIR_STATE_UNLINKED, BurnError::PairNotLinked);
     require_fixed_supply(&a.mint)?;
     let mint = c.mint;
 
@@ -64,6 +63,12 @@ pub fn handle_register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
     // Graduated, or Graduating with this side's pool already recorded (graduate runs once per side).
     require!(pair.status == PAIR_STATUS_GRADUATED || pair.status == PAIR_STATUS_GRADUATING, BurnError::PairNotGraduated);
     let side = pair.mints.iter().position(|m| *m == mint).ok_or(BurnError::NotPairPool)?;
+    // Pair-forward round-3 re-check P3-1: a coin whose link_pair never landed (PAIR_STATE_NONE) registers anyway when the Pair shows the
+    // OTHER side refunding — the same terminal evidence unlink_pair accepts, read from this very Pair (owner, PDA and mints checked
+    // above/below) — and becomes UNLINKED (a plain coin), so its graduated pool and burn escrow are never frozen. Chosen over an
+    // unlink without PairLinks: no new accounts, no account closing, and the evidence is checked where the Pair is already loaded.
+    let never_linked_terminal = c.pair_state == PAIR_STATE_NONE && pair.refunding[1 - side];
+    require!(c.pair_state == PAIR_STATE_PAIRED || c.pair_state == PAIR_STATE_UNLINKED || never_linked_terminal, BurnError::PairNotLinked);
     let pool_key = a.pool_state.key();
     require_keys_eq!(pool_key, pair.pools[side], BurnError::NotPairPool);
     require_keys_eq!(pool_key, pair_pool(&pair_key, side as u8), BurnError::NotPairPool);
@@ -92,6 +97,10 @@ pub fn handle_register_pair_pool(ctx: Context<RegisterPairPool>) -> Result<()> {
     let c = &mut ctx.accounts.config;
     c.cpmm_pool = pool_key;
     c.pool_verified = true;
+    if never_linked_terminal {
+        c.pair_state = PAIR_STATE_UNLINKED;
+        c.pair_unlinked_at = Clock::get()?.unix_timestamp;
+    }
     let config = c.key();
     emit_cpi!(PoolRegistered { config, pool: pool_key, registrar: ctx.accounts.registrar.key() });
     Ok(())

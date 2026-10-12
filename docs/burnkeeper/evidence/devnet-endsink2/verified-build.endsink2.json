@@ -1,0 +1,95 @@
+{
+  "schema": "burnticker.verified-build/v1",
+  "updatedAt": "2026-10-12",
+  "note": "ROUND-4 STAGING TABLE (branch burnticker/endsink2), NOT the published table: the burn_receipts builds of this branch's source for `scripts/squads-program-upgrade.mts --table` on the devnet upgrade. config/burnticker/verified-build.json stays the deployed truth until the upgrade lands; then `verified-build.sh --local --write` rewrites it. Hashes from `OUT=<scratch> bash scripts/ops/verified-build.sh --local` on the operator's Mac, 2026-10-12.",
+  "kind": "interim-local",
+  "kindNote": "INTERIM: built with cargo build-sbf on the operator's Mac (no Docker on that host), not inside solana-verify's Docker image. These hashes are reproducible on that toolchain (a clean build in a fresh checkout gave the same bytes) and the devnet ones equal the bytes deployed on devnet, read back from chain. A Docker build on Linux may give different numbers; when it runs, it replaces this table (kind: docker) and the Docker numbers become the ones to check.",
+  "sourceCommit": "29f6f5de19f1916945992fae711cefc36927d856",
+  "sourceCommitNote": "the last commit on burnticker/endsink2 that changed the burn_receipts program sources",
+  "toolchain": {
+    "solanaCli": "4.3.0",
+    "cargoBuildSbf": "4.4.0",
+    "platformTools": "v1.57",
+    "rustc": "1.95.0-sbpf-solana-v1.57",
+    "anchor": "1.2.1",
+    "host": "macOS (arm64)",
+    "sbpf": "v3 (cargo-build-sbf 4.4.0 default --arch v3; ELF e_flags 0x3 on all four builds)"
+  },
+  "workspace": "programs/burn-receipts",
+  "programs": [
+    {
+      "library": "burn_receipts",
+      "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+      "builds": {
+        "mainnet": {
+          "features": [],
+          "bytes": 826384,
+          "hash": "d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae",
+          "status": "round 4 (end sinks + the pair-forward round-3 re-check fixes); NOT deployed on mainnet (Squads upgrade planned 2026-10-16)"
+        },
+        "devnet": {
+          "features": [
+            "devnet"
+          ],
+          "bytes": 826392,
+          "hash": "87d20b26f9e4c8e4fb4847b7a6d0ae3f938e049008c4fa5c124d4e396687630a"
+        }
+      },
+      "deployed": {
+        "devnet": {
+          "hash": "90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35",
+          "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+          "readAt": "2026-10-11",
+          "matchesBuild": false
+        },
+        "mainnet": {
+          "hash": "e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19",
+          "sha256": "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+          "readAt": "2026-10-11",
+          "matchesBuild": false,
+          "programData": "CqKa66TxEaqLXAuFyJdha4uosBosEEf2CBccNiE8gbKn"
+        }
+      }
+    },
+    {
+      "library": "pair_curve",
+      "programId": "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN",
+      "builds": {
+        "mainnet": {
+          "features": [],
+          "bytes": 411296,
+          "hash": "50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef",
+          "sha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
+          "status": "deployed 2026-10-11; on-chain bytes read back and equal to this build (sha256 of the padded program data, trailing zeros stripped)"
+        },
+        "devnet": {
+          "features": [
+            "devnet"
+          ],
+          "bytes": 411296,
+          "hash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42"
+        }
+      },
+      "deployed": {
+        "devnet": {
+          "hash": "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42",
+          "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG",
+          "upgradeAuthority": "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD",
+          "readAt": "2026-10-11",
+          "matchesBuild": true
+        },
+        "mainnet": {
+          "hash": "50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef",
+          "sha256": "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767",
+          "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
+          "readAt": "2026-10-11",
+          "matchesBuild": true,
+          "programData": "D7yNbaLY1BSZXXvkcuDjEtkRVsUjZy3RtRPAzenoUKTG"
+        }
+      },
+      "note": "pair_curve is NOT upgraded in this round. Its bytes built from this branch differ (mainnet 567f3700\u2026a895, devnet 364eac3d\u202601cf) only because it links burn_receipts as a library (state::TokenConfig gained end_state / end_date inside the old reserved bytes; same size); the deployed pair_curve reads the new layout correctly. Its rows stay the deployed build."
+    }
+  ]
+}

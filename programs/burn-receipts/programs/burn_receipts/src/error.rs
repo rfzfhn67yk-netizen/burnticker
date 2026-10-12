@@ -202,4 +202,24 @@ pub enum BurnError {
     PairTerminal,
     #[msg("pair result: the period predates the pairing (readings already existed when the coins were paired)")]
     PairPeriodUnpaired,
+    #[msg("end sink: invalid kind, sink mint or minimum (league sets are not supported yet; the flagship has no end sink)")]
+    InvalidEndSink,
+    #[msg("end sink: this build pins no flagship (BURNTICKER_FLAGSHIP is the placeholder)")]
+    FlagshipNotPinned,
+    #[msg("the coin's rule has ended (no new end; after a resolved end, no reading dated later)")]
+    RuleEnded,
+    #[msg("submit_rule_end: the end date must be a valid date, not in the future, on or after the last reading; outcome resolved or void")]
+    InvalidRuleEnd,
+    #[msg("the coin's rule ended resolved: its fuel goes to its end sink (forward_on_end)")]
+    ForwardOnEndRequired,
+    #[msg("forward_on_end: the coin's rule has not ended resolved")]
+    NotEndedResolved,
+    #[msg("forward_on_end: a reading inside the window is still unprocessed")]
+    EndReadingsPending,
+    #[msg("forward_on_end: the target is not the coin's end sink (or the flagship when the sink is not live)")]
+    EndSinkMismatch,
+    #[msg("forward_on_end: less than the end sink's minimum to forward")]
+    NothingToForward,
+    #[msg("forward_on_end: the flagship has no verified pool")]
+    FlagshipNotLive,
 }

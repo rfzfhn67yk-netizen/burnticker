@@ -2,13 +2,15 @@ import { type Connection, type Keypair, PublicKey } from "@solana/web3.js";
 import { fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { BURNTICKER_PLATFORM as PROGRAM_BURNTICKER_PLATFORM, MODE_BUYBACK } from "@/lib/burnReceipts/constants";
 import { memoFromTransaction } from "@/lib/burnReceipts/crank";
-import { initializeTokenIx, operatorAttester } from "@/lib/burnReceipts/instructions";
+import { initializeTokenIx, initializeTokenLayoutFromEnv, operatorAttester } from "@/lib/burnReceipts/instructions";
 import { configPda, vaultAddress } from "@/lib/burnReceipts/pda";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { programClusterOf, solanaProgramPort } from "@/lib/burnKeeper/programAdapter";
 import type { Cluster } from "@/lib/burnKeeper/solana";
-import { counterRule, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
+import { counterRule, endSinkPin, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
+import { ChainEndSink } from "@/lib/burnticker/endSinkChain";
+import { END_SINK_FLAGSHIP, END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endSink";
 import { ChainLockFees } from "@/lib/burnticker/lockFeesChain";
 import { ChainPairForward } from "@/lib/burnticker/pairForwardChain";
 import { dateU32 } from "@/lib/burnticker/pairForward";
@@ -37,7 +39,15 @@ export interface ProgramBurnClientOpts {
   launchLabPlatform?: PublicKey | null;
   cpmmProgram?: PublicKey | null;
   log?: (s: string) => void;
+  /**
+   * END SINKS (LAUNCHPAD-PATH §45): true once the program this host talks to runs round 4 (submit_rule_end / forward_on_end). Until then
+   * initialize_token refuses a rule with onEnd.endSink rather than launch a coin whose description promises a sink the program would not
+   * pin. Default: BURNTICKER_END_SINKS_LIVE (off unless 1/true/yes/on).
+   */
+  endSinksLive?: boolean;
 }
+export const END_SINKS_LIVE_FLAG = "BURNTICKER_END_SINKS_LIVE";
+export const endSinksLiveFromEnv = (env: Record<string, string | undefined> = process.env): boolean => /^(1|true|yes|on)$/i.test((env[END_SINKS_LIVE_FLAG] ?? "").trim());
 
 const serialize = (ix: { programId: PublicKey; keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[]; data: Buffer }, label: string): SerializedIx =>
   ({ programId: ix.programId.toBase58(), keys: ix.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(ix.data).toString("base64"), label });
@@ -52,12 +62,15 @@ export class ProgramBurnClient implements BurnProgramClient {
   readonly lockFees: ChainLockFees;
   /** Winner takes the burn (LAUNCHPAD-PATH §40): pair links, submit_pair_result and forward_to_winner (pairForwardChain.ts). */
   readonly pairForward: ChainPairForward;
+  /** End sinks (LAUNCHPAD-PATH §45): EndSink / RuleEnd reads, submit_rule_end, forward_on_end (endSinkChain.ts). */
+  readonly endSink: ChainEndSink;
   constructor(o: ProgramBurnClientOpts) {
     this.o = o;
     this.programId = o.programId.toBase58();
     this.cluster = o.cluster;
     this.canSign = !!o.payer;
     this.lockFees = new ChainLockFees({ connection: o.connection, programId: o.programId, cluster: programClusterOf(o.cluster), payer: o.payer, allowMainnet: o.allowMainnet });
+    this.endSink = new ChainEndSink({ connection: o.connection, programId: o.programId, cluster: programClusterOf(o.cluster), payer: o.payer, attesters: o.attesters ?? (o.payer ? [o.payer] : undefined), allowMainnet: o.allowMainnet });
     this.pairForward = new ChainPairForward({ connection: o.connection, programId: o.programId, cluster: programClusterOf(o.cluster), payer: o.payer, attesters: o.attesters ?? (o.payer ? [o.payer] : undefined), allowMainnet: o.allowMainnet });
   }
   async initializeToken(i: InitializeTokenInput) {
@@ -68,6 +81,10 @@ export class ProgramBurnClient implements BurnProgramClient {
     const floorLamports = BigInt(Math.ceil((Number(i.rule.floorUsd) / solUsd) * 1e9));
     const c = counterRule(i.rule, i.ticker, i.selectorKey, { floorLamports });
     const mint = new PublicKey(i.mint), creator = new PublicKey(i.creator);
+    // §45: the EndSink the rule pins — refused on a program without round 4 (the description would promise a sink nobody pinned)
+    const endPin = endSinkPin(i.rule, i.pairMint);
+    if (endPin && !(this.o.endSinksLive ?? endSinksLiveFromEnv())) throw new Error(`initialize_token: this rule sends its leftover to an end sink, and end sinks are not live on this program yet (${END_SINKS_LIVE_FLAG} is off)`);
+    const endSink = endPin ? { kind: endPin.kind === "pair-winner" ? END_SINK_PAIR_WINNER : END_SINK_FLAGSHIP, minForwardLamports: endPin.minForwardLamports } : undefined;
     if (!/^[0-9a-f]{64}$/.test(i.rulesSha256)) throw new Error("initialize_token: rulesSha256 must be 64 hex characters");
     // policies 0 and 2: the program refuses unless launchlab_platform == BURNTICKER_PLATFORM (round 2) — pass the host's or the pinned one
     const pin = PROGRAM_BURNTICKER_PLATFORM[programClusterOf(this.o.cluster)];
@@ -75,7 +92,7 @@ export class ProgramBurnClient implements BurnProgramClient {
     const ix = initializeTokenIx({ programId: this.o.programId, payer: creator, creator, mint, ...(launchlabPlatform ? { launchlabPlatform } : {}), args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: i.attesters.map((a) => operatorAttester(new PublicKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
-    }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });
+    }, layout: (this.o.endSinksLive ?? endSinksLiveFromEnv()) ? "r4" : initializeTokenLayoutFromEnv(), ...(endSink ? { endSink } : {}), ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });
     return { tokenConfig: configPda(this.o.programId, mint).toBase58(), instructions: [serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)] };
   }
   feePdaFor(mint: string) { return burnPoolFor(this.o.programId, new PublicKey(mint)).feePda.toBase58(); }

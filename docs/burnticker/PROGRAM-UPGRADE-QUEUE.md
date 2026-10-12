@@ -14,6 +14,11 @@ Powers Register entries `register_fee_key` / `claim_lock_fees`.
 
 ## 1. `sweep_retired` — a permissionless instruction
 
+**Status 2026-10-12 (end-sink round 4, `burnticker/endsink2`): not built in that round.** The round added the on-chain end flag this item
+waited for (RuleEnd, `TokenConfig.end_state`), and a RESOLVED coin's later fee income already moves permissionlessly through
+`forward_on_end` to its end sink. What remains is a VOID coin's trickle, which the keeper still sweeps on the coin itself; building it
+needs the swap-and-burn core of `crank_buyback` factored out, so it waits for a round of its own (docs/burnticker/END-SINK.md).
+
 **Why.** A retired coin's fee PDA keeps receiving the 4.75 bps post-graduation creator fee from Raydium trading, so its burn pool
 refills slowly. Today the keeper sweeps it (`src/lib/burnticker/multiKeeper.ts` planRuleEnd: when the spendable balance minus the reserve
 passes `onEnd.sweepThresholdLamports`, one quorum-signed `clock` reading of full-spend units, cranked across days under the per-crank cap,

@@ -7,7 +7,7 @@ import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { readingMatches, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
-import { DECIMALS, isOneShot, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, endSinkOf, isOneShot, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { solToLamports } from "@/lib/burnKeeper/rules";
@@ -17,6 +17,7 @@ import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFee
 import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 import { fenceToken, type FenceReport } from "@/lib/burnticker/ops/readingFence";
+import { endSinkStep } from "@/lib/burnticker/endSinkKeeper";
 import { askCosigner, type Cosigner } from "@/lib/burnticker/attesters/cosign";
 import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
 
@@ -608,7 +609,7 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
   if (end.mode === "winddown" && !locked.rule.onEnd) return null;   // a rule made before the clause has no wind-down
   if (d.dryRun) return end;
   const rec = d.registry.markRuleEnded(t.mint, end.mode, end.reason, end.at);
-  d.log(`  [end] $${t.ticker}: the rule ENDED — ${rec.reason}; ${rec.mode === "drain" ? "the pool drains (one unit a day at 100 %)" : `the pool winds down over ${locked.rule.onEnd!.windDownDays} days`}`);
+  d.log(`  [end] $${t.ticker}: the rule ENDED — ${rec.reason}; ${rec.mode === "drain" ? "the pool drains (one unit a day at 100 %)" : endSinkOf(locked.rule) && d.program.endSink ? "a coin with an end sink records the end; a result forwards what is left to the sink, a void winds down" : `the pool winds down over ${locked.rule.onEnd!.windDownDays} days`}`);
   return rec;
 }
 
@@ -626,7 +627,21 @@ export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule
   const reg = d.registry, rule = locked.rule, out: { mint: string; eventId: string; status: string }[] = [];
   if (locked.mode !== "buyback") return out;
   const end = detectRuleEnd(d, t, locked, gate);
-  if (!end || d.dryRun) return out;
+  if (!end) return out;
+  // END SINKS (LAUNCHPAD-PATH §45, endSinkKeeper.ts): a coin with an EndSink records its end on chain; a RESOLVED end forwards what is
+  // left to the sink (no wind-down) and the later trickle follows it; a VOID end falls through to the wind-down below. A one-shot YES at
+  // 100 % ("burns everything") drains on its own coin first (the drain below), and only then records the end and forwards the trickle.
+  let selfBurn: boolean;
+  if (end.mode !== "drain" || t.status === "retired") {
+    const es = await endSinkStep({ ...d, cosignReading: (port, cfg, input) => cosignReading(d, t, port, cfg, input, []) }, t, locked, gate, end);
+    if (es.note) d.log(`  [end] ${es.note}`);
+    if (es.handled) return out;
+    selfBurn = es.selfBurn;
+  } else {
+    // still draining: the sweep waits for the next cycle's end-sink step on an end-sink coin
+    selfBurn = !(d.program.endSink && endSinkOf(rule) !== null && (await d.program.endSink.port(t.mint).endSink()) !== null);
+  }
+  if (d.dryRun) return out;
   const f = ruleMappings(rule)[0]?.mapping.fractionOfPool ?? 0;
   if (!(f > 0)) return out;
   const today = isoDay(d.now());
@@ -670,8 +685,8 @@ export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule
     reg.setStatus(`rule.retired.${t.mint}`, JSON.stringify({ reason: end.reason, at: d.now(), mode: end.mode }));
     d.log(`  [end] $${t.ticker} RETIRED — ${end.mode === "drain" ? "the pool is drained" : "the wind-down is done"} (${end.reason})`);
   }
-  // The retired-coin sweep.
-  if ((done || t.status === "retired") && rule.onEnd && quiet()) {
+  // The retired-coin sweep (an end-sink coin's trickle follows its sink instead: endSinkStep, from the next cycle).
+  if ((done || t.status === "retired") && rule.onEnd && quiet() && selfBurn) {
     const sweeps = mine("sweep");
     const startKey = `sweep.start.${t.mint}`, lastStart = reg.getStatus(startKey);
     const continuing = sweeps.length > 0 && lastStart !== null && carrying();

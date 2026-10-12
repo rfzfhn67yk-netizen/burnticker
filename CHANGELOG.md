@@ -884,3 +884,11 @@ Owner-approved ("build them all"). Public API **1.7.0**, which adds to the produ
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `209308d514373bdf45d920ff0724cbf27e1812f4ff2e49c84dc8c1aae9c02d55`
 - allowlist sha256 (config/public-repo.allowlist): `f2b9bec2accd99971553d6804d08c38e6ee256dfa7fb2a1d3704cc2366625214`
 - files published: 1319
+
+## 2026-10-12 — publish from 15d6baf7e9bf
+
+- monorepo commit: `15d6baf7e9bfcad41a082cf2dc3b6fb6b231b648` (the working tree had uncommitted changes when this tag was written)
+- program hash: `7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a` — sha256 of programs/burn-receipts/target/deploy/burn_receipts.so on the publishing host
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `decc3a1e20d516b664feb5929f69c4995225f3d01c5caaadffb9c43bdcfc0322`
+- allowlist sha256 (config/public-repo.allowlist): `f2b9bec2accd99971553d6804d08c38e6ee256dfa7fb2a1d3704cc2366625214`
+- files published: 1368

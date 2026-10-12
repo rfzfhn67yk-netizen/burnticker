@@ -3,7 +3,7 @@
 // sweep (threshold, once a week), the outcome-set opt-in in the schema, the clock days' proof=, and the sentences under the copy lint.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_ON_END, lockRule, onEndText, ruleStatement, validateRule } from "@/lib/burnticker/rules";
+import { DEFAULT_ON_END, WIND_DOWN_ON_END, lockRule, onEndText, ruleStatement, validateRule } from "@/lib/burnticker/rules";
 import { firstWindDownDay, fullSpendUnits, windDownSchedule, windDownUnits } from "@/lib/burnticker/units";
 import { runCycle, clockProofHex } from "@/lib/burnticker/multiKeeper";
 import { oneShotAllLiner, plainSentence, ruleOneLiner } from "@/lib/burnticker/coinCard";
@@ -13,7 +13,7 @@ import type { CoinVsSpec } from "@/lib/burnticker/derby/spec";
 import { B, BONK, BONK_FEED, BONK_MINT, SHIB, WIF, WIF_FEED, WIF_MINT, coinvsRule, derbyWorld, seedCross } from "./burntickerDerbyHelpers.ts";
 
 const lint = (t: string) => lintCopy(t, loadCopyLintConfig()).hits.map((h) => `${h.phrase}:${h.rule}`);
-const KALSHI_ONE_SHOT = { schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: `0x${"ab".repeat(32)}`, filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: 1 }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, pair: null, onEnd: DEFAULT_ON_END };
+const KALSHI_ONE_SHOT = { schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: `0x${"ab".repeat(32)}`, filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: 1 }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, pair: null, onEnd: WIND_DOWN_ON_END };
 
 describe("the schema", () => {
   test("a one-shot may spend 100 %; a recurring rule stays ≤ 10 %; onEnd and the outcome set are locked by the hash", () => {
@@ -23,7 +23,7 @@ describe("the schema", () => {
     const withSet = lockRule({ ...KALSHI_ONE_SHOT, set: { id: "nfl-2026", outcome: "PHI", forwardBps: 10_000 } });
     assert.notEqual(withSet.sha256, lockRule(KALSHI_ONE_SHOT).sha256);
     assert.throws(() => validateRule({ ...KALSHI_ONE_SHOT, onEnd: undefined, set: { id: "nfl-2026", outcome: "PHI", forwardBps: 10_000 } }), /needs the onEnd clause/);
-    assert.throws(() => validateRule({ schema: "burnticker.rules/v1", oracle: "catalogue", series: "treasury.debt", market: null, filter: {}, kind: "scalar", scalar: { unit: 1e9, perUnit: { fractionOfPool: 0.05 }, baseline: "previousSettlement", direction: "up" }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, onEnd: DEFAULT_ON_END, set: { id: "x-set", outcome: "a", forwardBps: 1 } }), /outcome list/);
+    assert.throws(() => validateRule({ schema: "burnticker.rules/v1", oracle: "catalogue", series: "treasury.debt", market: null, filter: {}, kind: "scalar", scalar: { unit: 1e9, perUnit: { fractionOfPool: 0.05 }, baseline: "previousSettlement", direction: "up" }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, onEnd: WIND_DOWN_ON_END, set: { id: "x-set", outcome: "a", forwardBps: 1 } }), /outcome list/);
     // A rule without onEnd keeps its bytes (rules made before the clause are unchanged).
     assert.ok(!lockRule({ ...KALSHI_ONE_SHOT, onEnd: undefined }).text.includes("onEnd"));
   });
@@ -32,10 +32,27 @@ describe("the schema", () => {
     const r = lockRule(KALSHI_ONE_SHOT).rule;
     assert.equal(oneShotAllLiner(r, "the Eagles win the Super Bowl", "2027-02-14"), "burns everything if the Eagles win the Super Bowl. If not, the pool burns down over four weeks after 2027-02-14");
     assert.match(ruleOneLiner(r, "the Eagles win the Super Bowl"), /^burns everything if the Eagles win the Super Bowl\. If not, the pool burns down over four weeks after it settles$/);
-    const texts = [oneShotAllLiner(r, "X happens", "2027-02-14")!, plainSentence(r, "EAGLES", "the Eagles win the Super Bowl"), onEndText({ onEnd: DEFAULT_ON_END, set: { id: "nfl-2026", outcome: "PHI", forwardBps: 2500 } }), plainSentence(coinvsRule({ selector: "coinvs", a: WIF, b: SHIB, window: "daily", measure: "pct", season: { start: "2026-10-05", days: 7 }, flip: false }), "TEAMWIF")];
+    const texts = [oneShotAllLiner(r, "X happens", "2027-02-14")!, plainSentence(r, "EAGLES", "the Eagles win the Super Bowl"), onEndText({ onEnd: WIND_DOWN_ON_END, set: { id: "nfl-2026", outcome: "PHI", forwardBps: 2500 }, pair: null, kind: "binary", binary: { onYes: { fractionOfPool: 1 }, onNo: null }, scalar: null }), plainSentence(coinvsRule({ selector: "coinvs", a: WIF, b: SHIB, window: "daily", measure: "pct", season: { start: "2026-10-05", days: 7 }, flip: false }), "TEAMWIF")];
     for (const t of texts) assert.deepEqual(lint(t), [], t);
     assert.match(ruleStatement(r), /spends the whole fee pool \(100%\).*burns down on a daily clock over four weeks/);
     assert.match(texts[2], /25% of the leftover burns the winning coin of set nfl-2026 .*all of it stays here/);
+  });
+
+  test("END SINKS (LAUNCHPAD-PATH §45): new launches carry onEnd.endSink; the hash locks it; league mode cannot carry it yet; the sentences say where the leftover burns", () => {
+    const sink = lockRule({ ...KALSHI_ONE_SHOT, onEnd: DEFAULT_ON_END });
+    assert.deepEqual(sink.rule.onEnd, { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true });
+    assert.notEqual(sink.sha256, lockRule(KALSHI_ONE_SHOT).sha256, "the end sink is part of the hashed rule");
+    assert.ok(!lockRule(KALSHI_ONE_SHOT).text.includes("endSink"), "a rule without the field keeps its bytes");
+    assert.throws(() => lockRule({ ...KALSHI_ONE_SHOT, onEnd: { ...DEFAULT_ON_END, endSink: false } }), /onEnd must be/);
+    assert.throws(() => lockRule({ ...KALSHI_ONE_SHOT, onEnd: DEFAULT_ON_END, set: { id: "nfl-2026", outcome: "PHI", forwardBps: 10_000 } }), /cannot be combined with an outcome set/);
+    const r = sink.rule;
+    assert.equal(oneShotAllLiner(r, "the Eagles win the Super Bowl", "2027-02-14"), "burns everything if the Eagles win the Super Bowl. If not, whatever is left burns $DEFICIT after 2027-02-14");
+    const pair = lockRule({ ...KALSHI_ONE_SHOT, onEnd: DEFAULT_ON_END, pair: { pairId: "pair-1", side: "A", counterpartMint: null, winnerTakesBurn: true } }).rule;
+    assert.equal(oneShotAllLiner(pair, "X happens", null), "burns everything if X happens. If not, whatever is left burns the winning coin, or $DEFICIT if there isn't one after it settles");
+    const texts = [oneShotAllLiner(r, "X happens", "2027-02-14")!, plainSentence(r, "EAGLES", "the Eagles win the Super Bowl"), onEndText(r), onEndText(pair)];
+    for (const t of texts) assert.deepEqual(lint(t), [], t);
+    assert.match(onEndText(r), /ends with a result.*moves to \$DEFICIT's burn pool.*ends void.*burns down on this coin on a daily clock over four weeks/);
+    assert.match(onEndText(pair), /the winning coin's burn pool when the partner coin won the last result and is still live, and \$DEFICIT's burn pool otherwise/);
   });
 });
 
@@ -58,7 +75,7 @@ describe("the schedules", () => {
 describe("through the keeper and the program", () => {
   test("a one-shot YES at 100 %: the pool drains across daily cranks under the 2 %-of-reserve cap, then the coin retires; the clock days' proof= is the date + rules sha", async () => {
     const spec: CoinVsSpec = { selector: "coinvs", a: WIF, b: BONK, window: "daily", measure: "mcap", season: { start: "2026-10-05", days: 5 }, flip: true };
-    const rule = lockRule({ ...coinvsRule(spec, 1), onEnd: DEFAULT_ON_END }).rule;
+    const rule = lockRule({ ...coinvsRule(spec, 1), onEnd: WIND_DOWN_ON_END }).rule;
     const w = await derbyWorld(spec, { rule, tickers: ["TEAMWIF", "TEAMBONK"], hermes: null });
     // 50 SOL of WSOL reserve → one crank spends at most 1 SOL; the pool holds 5 SOL.
     w.program.fake(w.a.mint).poolReserveWsol = BigInt(50) * BigInt(1_000_000_000);
