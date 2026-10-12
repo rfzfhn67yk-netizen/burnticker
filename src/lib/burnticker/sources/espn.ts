@@ -413,7 +413,47 @@ export async function gamesFor(client: EspnClient, s: EspnSeries, sinceIso: stri
 export const SEASON_END_GRACE_MS = 4 * 86_400_000;
 /** A listed game still to be played: not final, not postponed or cancelled (ESPN state "post" without a result), not a stale listing. */
 const isOpen = (g: Game, nowMs: number) => !g.completed && g.state !== "post" && Date.parse(g.startsAt) > nowMs - 3 * 86_400_000;
-export interface WindowStatus { perpetual: boolean; ended: boolean; endsAt: string | null; lastGame: Game | null; reason: string }
+export interface WindowStatus {
+  perpetual: boolean; ended: boolean; endsAt: string | null; lastGame: Game | null; reason: string;
+  /**
+   * website-18 (the champion path): once a season window has ENDED, whether the team won the championship, from its last game of the
+   * window (championOf). true or false only for a league in CHAMPION_KNOWN; null when the source cannot tell; absent before the end.
+   */
+  champion?: boolean | null;
+  /** The UTC date of the team's last POSTSEASON game, which `champion` was read from (null when it did not reach the postseason); the
+   *  coin's own receipt for that day must agree before the keeper acts. */
+  championDate?: string | null;
+}
+/**
+ * THE LEAGUES WHOSE SCHEDULE CAN TELL A CHAMPION FROM AN ELIMINATED TEAM (website-18). In a single-elimination postseason every team but
+ * one loses its last game, so "the team won its last postseason game and nothing more was listed" means it won the title. That needs a
+ * schedule that marks postseason games exactly: MLB StatsAPI (game types F, D, L, W), the NHL feed (game type 3) and the NBA feed (game
+ * ids 004 and 005). TheSportsDB marks the postseason by its round label, which is not exact for the NFL or the WNBA; college football and
+ * basketball have bowls, the NIT and conference tournaments, where many teams win their last game; soccer leagues crown the table
+ * leader. Those leagues are left out: their season coins keep the plain end (the rest goes to $DEFICIT's burn).
+ */
+export const CHAMPION_KNOWN: ReadonlySet<LeagueId> = new Set<LeagueId>(["mlb", "nba", "nhl"]);
+/**
+ * The champion path's series: a team coin on a team's WINS for a whole season (regular season and playoffs), in a league whose schedule
+ * can tell a champion (CHAMPION_KNOWN). Null for anything else. The rule-level test (an end sink to the flagship, not the fade side) is
+ * describe.ts championPathRule, which the keeper reads too.
+ */
+export function championSeries(series: string | null | undefined): Extract<EspnSeries, { kind: "team" }> | null {
+  const e = series ? parseEspnSeries(series) : null;
+  return e?.kind === "team" && e.outcome === "win" && e.window.kind === "season" && CHAMPION_KNOWN.has(e.league) ? e : null;
+}
+/**
+ * Did the team win the championship? From its last completed game of an ended season window: a regular-season game (it did not reach the
+ * postseason) is false; a postseason game it won is true, one it lost is false; anything else (no scores, a tie, an unmarked game, a
+ * league outside CHAMPION_KNOWN) is null, and the keeper waits.
+ */
+export function championOf(s: Extract<EspnSeries, { kind: "team" }>, last: Game | null): boolean | null {
+  if (!CHAMPION_KNOWN.has(s.league) || !last || !last.completed) return null;
+  if (last.seasonType === 2) return false;
+  if (last.seasonType !== 3) return null;
+  const o = outcomeOf(last, s.abbr, s.teamId);
+  return o === "win" ? true : o === "loss" ? false : null;
+}
 /**
  * Where a series' window stands: open or ended, and its end (the last listed game, provisional while games remain). A season or
  * postseason ends once every listed game is final and SEASON_END_GRACE_MS has passed with nothing new listed (eliminated, champion,
@@ -436,8 +476,10 @@ export function windowStatus(s: EspnSeries, games: readonly Game[], nowMs: numbe
   if (!sorted.length || sorted.some((g) => isOpen(g, nowMs))) return { perpetual: false, ended: false, endsAt: null, lastGame: last, reason: "no listed games in the window yet" };
   const lastAt = Date.parse(last!.startsAt);
   if (nowMs - lastAt < SEASON_END_GRACE_MS) return { perpetual: false, ended: false, endsAt: null, lastGame: last, reason: "every listed game is final; waiting for the next round to be listed" };
-  const endG = scope.filter((g) => g.completed).pop() ?? scope[scope.length - 1] ?? last!;
-  return { perpetual: false, ended: true, endsAt: endG.startsAt, lastGame: last, reason: scope.length ? `the team's last game of the window was ${endG.date}` : `no postseason games: the season ended ${last!.date}` };
+  const lastDone = scope.filter((g) => g.completed).pop() ?? null;
+  const endG = lastDone ?? scope[scope.length - 1] ?? last!;
+  const champ = w.kind === "season" && CHAMPION_KNOWN.has(s.league) ? { champion: championOf(s, lastDone), championDate: lastDone?.seasonType === 3 ? lastDone.date : null } : {};
+  return { perpetual: false, ended: true, endsAt: endG.startsAt, lastGame: last, reason: scope.length ? `the team's last game of the window was ${endG.date}` : `no postseason games: the season ended ${last!.date}`, ...champ };
 }
 
 /** True when the rule is an ESPN catalogue rule. */

@@ -3,7 +3,7 @@
 // dials; each dial is a pure rewrite of the rule; suggested tickers are unique against the registry and the refuse list.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { describeEndSink, describeRule, windowBadge, windowKindOf, WINDOW_SENTENCE, DESCRIPTION_MAX, PERPETUAL_SENTENCE, type DescribeCtx, type WindowKind } from "@/lib/burnticker/describe";
+import { championEndSentences, championPathRule, describeEndSink, describeRule, windowBadge, windowKindOf, WINDOW_SENTENCE, DESCRIPTION_MAX, PERPETUAL_SENTENCE, type DescribeCtx, type WindowKind } from "@/lib/burnticker/describe";
 import { applyDial, dialsFor, leagueSetFor, ON_END_DEFAULT } from "@/lib/burnticker/dials";
 import { nativeRule } from "@/lib/burnticker/sources/native";
 import { teamSeries, gameSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
@@ -46,6 +46,10 @@ const FIXTURES: { label: string; rule: BurnRule; ctx: Omit<DescribeCtx, "ticker"
   { label: "league mode (Rays, MLB 2026)", rule: applyDial(team("mlb", "TB", "win", S(2026)), "league", "on"), ctx: {}, kind: "season" },
   // END SINKS (LAUNCHPAD-PATH §45): every new launch carries onEnd.endSink (rules.ts DEFAULT_ON_END)
   { label: "end sink · Rays win · this season", rule: { ...team("mlb", "TB", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "season" },
+  // website-18: the champion path with the longest MLB / NBA / NHL nicknames (the paragraph stays inside the launch limit)
+  { label: "champion path · Golden Knights · 2026–27", rule: { ...team("nhl", "VGK", "win", S(2027)), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "season" },
+  { label: "champion path · Trail Blazers · 2026–27", rule: { ...team("nba", "POR", "win", S(2027), 0.1), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "season" },
+  { label: "champion path · Diamondbacks · 2026", rule: { ...team("mlb", "ARI", "win", S(2026), 0.05), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "season" },
   { label: "end sink · Rays win · postseason", rule: { ...team("mlb", "TB", "win", { kind: "post", year: 2026 }), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "post" },
   { label: "end sink · Rays win · next 5", rule: { ...team("mlb", "TB", "win", { kind: "next", n: 5, from: "20261010" }), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "next" },
   { label: "end sink · Rays win · perpetual", rule: { ...team("mlb", "TB", "win", { kind: "perpetual" }), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "perpetual" },
@@ -70,9 +74,10 @@ describe("the generated description", () => {
   });
 
   test("END SINKS (LAUNCHPAD-PATH §45): the season coin, word for word; the pair coin names the winning coin; the copy matches rules.ts", () => {
-    const r = { ...team("mlb", "TB", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
+    // website-18: an MLB / NBA / NHL wins coin takes the champion path (its own test below); the NFL keeps the plain end
+    const r = { ...team("nfl", "PHI", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
     const t = describeRule(r, { ticker: "" });
-    assert.match(t.paragraph, /This coin covers the 2026 Rays season only, including the playoffs\. After the Rays' last game, whatever is left burns \$DEFICIT, and the coin retires\. It does not continue into 2027\. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead\. The creator earns nothing\./);
+    assert.match(t.paragraph, /This coin covers the 2026 Eagles season only, including the playoffs\. After the Eagles' last game, whatever is left burns \$DEFICIT, and the coin retires\. It does not continue into 2027\. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead\. The creator earns nothing\./);
     const pair = { ...r, pair: { pairId: "p1", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule;
     assert.match(describeRule(pair, { ticker: "" }).paragraph, /whatever is left burns the winning coin, or \$DEFICIT if there isn't one, and the coin retires\./);
     const one = describeRule({ ...polyRule(WS, 0.1), onEnd: { ...DEFAULT_ON_END } } as BurnRule, { ticker: "", eventPhrase: "the Rays win the 2026 World Series", endsAt: "2026-10-31T23:55:00Z" });
@@ -80,6 +85,20 @@ describe("the generated description", () => {
     // a perpetual coin never ends with a result, so it gets no void sentence; a vault rule has no burn pool and no sink
     assert.doesNotMatch(describeRule({ ...team("mlb", "TB", "win", { kind: "perpetual" }), onEnd: { ...DEFAULT_ON_END } } as BurnRule, { ticker: "" }).paragraph, /voided or the season is cancelled/);
     for (const x of [r, pair, { ...r, onEnd: { ...WIND_DOWN_ON_END } } as BurnRule, { ...r, scalar: { ...r.scalar!, perUnit: { tokens: 1000 } } } as BurnRule]) assert.equal(describeEndSink(x), endSinkOf(x), "describe.ts mirrors rules.ts endSinkOf");
+  });
+
+  test("website-18 the champion path: the Dodgers' coin word for word; only MLB, NBA and NHL wins coins with the $DEFICIT sink take it", () => {
+    const r = { ...team("mlb", "LAD", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
+    const t = describeRule(r, { ticker: "" });
+    assert.equal(t.ticker, "DODGERS26");
+    assert.equal(t.paragraph, "$DODGERS26 burns when the Dodgers win. This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason. Each burn buys $DODGERS26 on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
+    assert.equal(t.ruleBlock.split(/(?<=\.)\s/)[0], "This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason.", "the review card's sentence");
+    assert.deepEqual(championEndSentences("the Dodgers"), ["If the Dodgers win the championship, the rest of the pool burns here.", "If they do not, the rest goes to $DEFICIT's burn."]);
+    assert.equal(championPathRule(r), true);
+    // not the champion path: no end sink (an older rule), the fade side, a losses coin, the postseason window, the NFL, a pair coin
+    for (const x of [team("mlb", "LAD", "win", S(2026)), { ...r, inverse: true }, { ...team("mlb", "LAD", "loss", S(2026)), onEnd: { ...DEFAULT_ON_END } }, { ...team("mlb", "LAD", "win", { kind: "post", year: 2026 }), onEnd: { ...DEFAULT_ON_END } }, { ...team("nfl", "PHI", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } }, { ...r, pair: { pairId: "p1", side: "A", counterpartMint: null, winnerTakesBurn: true } }] as BurnRule[]) {
+      assert.equal(championPathRule(x), false); assert.doesNotMatch(describeRule(x, { ticker: "" }).paragraph, /championship/);
+    }
   });
 
   test("the Rays' season coin, word for word (the owner's target, with the window sentence and the year in the ticker)", () => {

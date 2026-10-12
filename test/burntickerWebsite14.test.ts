@@ -390,7 +390,7 @@ describe("item 12: creator onboarding, copy only", () => {
     for (const t of s) clean(t, t);
     const comp = read("src/app/burnticker/_components/CreatorOnboarding.tsx");
     assert.match(comp, /onboardingSentences\(launchLabCostSol\(\)\)/); assert.match(comp, /\{NO_FEE_REVENUE_LINE\}/);
-    assert.match(read("src/app/burnticker/templates/page.tsx"), /<CreatorOnboarding \/>/); assert.match(read("src/app/burnticker/launch/page.tsx"), /\{step === "choose" && <CreatorOnboarding \/>\}/);
+    assert.match(read("src/app/burnticker/templates/page.tsx"), /<CreatorOnboarding \/>/); assert.match(read("src/app/burnticker/launch/page.tsx"), /data-examples-benefits>[\s\S]*<CreatorOnboarding \/>/, "website-18: in the closed disclosure below the wizard");
     assert.match(read("src/app/burnticker/launch/page.tsx"), /\/search\/miss/, "the search-miss telemetry stays");
   });
 });

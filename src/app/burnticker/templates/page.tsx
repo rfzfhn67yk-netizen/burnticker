@@ -33,9 +33,10 @@ export default function TemplatesPage() {
         {TEMPLATES.map((t) => { const launch = { open: site.wizard && !unavailable(t) }; return (
           <li key={t.id} className={`flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 p-4${unavailable(t) ? " border-dashed" : ""}`} data-unavailable={unavailable(t) ? "" : undefined}>
             <div className="flex items-center gap-2"><h2 className="font-medium">{t.title}</h2><span className="bt-chip">{shapeLabel[t.shape]}</span></div>
-            <p className="mt-2 text-sm text-neutral-200">{t.example}</p>
+            {/* website-18 (the owner: "be more brief"): the example's first sentence on the card; the settlement source one tap away */}
+            <p className="mt-2 text-sm text-neutral-200" data-template-example>{t.example.split(/(?<=[A-Za-z0-9)%][.!?])\s(?=[A-Z$])/)[0]}</p>
             {t.pairLine && <p className="mt-1 text-xs text-amber-200" aria-label="pair rule">{t.pairLine}</p>}
-            <p className="mt-2 text-xs text-neutral-500">It settles on {t.settles}.</p>
+            <details className="mt-2 text-xs text-neutral-500" data-template-settles><summary className="cursor-pointer">How it settles</summary><p className="mt-1">{t.example.split(/(?<=[A-Za-z0-9)%][.!?])\s(?=[A-Z$])/).slice(1).join(" ")}{t.example.split(/(?<=[A-Za-z0-9)%][.!?])\s(?=[A-Z$])/).length > 1 ? " " : ""}It settles on {t.settles}.</p></details>
             {/* launch audit 5 L10: what "Start from this" opens, said before the click */}
             <p className="mt-1 text-xs text-neutral-400" data-template-lands={t.lands}>{t.operatorOnly ? `${t.operatorOnly} ` : ""}{t.lands === "review" ? "Start from this opens the review card with exactly this example." : t.id === "team-season" ? "Choose a league and team on the next screen." : `Start from this opens the launch page so you can ${t.choices}.`}</p>
             {unavailable(t) ? <details className="mt-auto pt-3 text-xs text-amber-300" data-pairs-blocked={isPair(t) ? "" : undefined}><summary className="cursor-pointer">{unavailable(t)}</summary><p className="mt-1 text-neutral-300">{isPair(t) ? site.pairs.detail : site.types[t.type].reason}</p></details>

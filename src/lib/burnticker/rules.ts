@@ -183,7 +183,7 @@ export const DEFAULT_ON_END = { windDownDays: DEFAULT_WIND_DOWN_DAYS, sweepThres
  *       any fee income that arrives later, moves to the coin's END SINK's burn pool and burns that coin (burn_receipts forward_on_end):
  *       a winner-takes-the-burn pair coin's sink is its partner when the partner won the last result and is still live; every other
  *       coin's sink, and the fall-through, is $DEFICIT (the platform's flagship, compiled into the program per cluster);
- *   the rule ends VOID (a voided market, a pair that voided, a cancelled season)  the onEnd wind-down below, on the coin itself.
+ *   the rule ends VOID (a voided market, a pair that voided, a cancelled season)  the onEnd wind-down below, on the coin itself. A champion-path season coin whose team won the title (website-18, endSinkKeeper.ts) ends this way too.
  * The EndSink is pinned on chain at initialize_token (the launch bundle passes it) and never changes; nobody is paid. League sets (a
  * league season's champion coin) are a later round: a rule with `set` cannot carry `endSink` yet. Vault-mode rules have no burn pool,
  * so `endSink` changes nothing for them (endSinkOf returns null). Rules without the field keep the wind-down for every end.

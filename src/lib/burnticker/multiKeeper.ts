@@ -17,7 +17,8 @@ import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFee
 import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 import { fenceToken, type FenceReport } from "@/lib/burnticker/ops/readingFence";
-import { endSinkStep } from "@/lib/burnticker/endSinkKeeper";
+import { championVerdict, endSinkStep } from "@/lib/burnticker/endSinkKeeper";
+import { championPathRule } from "@/lib/burnticker/describe";
 import { askCosigner, type Cosigner } from "@/lib/burnticker/attesters/cosign";
 import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
 
@@ -115,9 +116,18 @@ export function recordWindowEnd(d: Pick<KeeperDeps, "registry" | "dryRun" | "log
   const out: string[] = [];
   for (const t of tokens) {
     if (t.status !== "live" || d.registry.ruleEnd(t.mint)) continue;
-    if (!d.registry.lockedRule(t).rule.onEnd) continue;
-    if (!d.dryRun) d.registry.markRuleEnded(t.mint, "winddown", `the coin's window ended: ${w.reason}`, Number.isFinite(at) ? at : Date.now());
-    d.log(`  [end] $${t.ticker}: the window ended (${w.reason}) — the pool winds down from the next day`);
+    const rule = d.registry.lockedRule(t).rule;
+    if (!rule.onEnd) continue;
+    let reason = `the coin's window ended: ${w.reason}`;
+    // website-18 THE CHAMPION PATH (describe.ts championPathRule): the end waits until the source and the coin's own receipt agree on
+    // whether the team won the championship; a champion's coin winds down on itself, any other end forwards the rest to $DEFICIT
+    if (championPathRule(rule)) {
+      const v = championVerdict(d.registry, t, w);
+      if ("hold" in v) { d.log(`  [end] $${t.ticker}: the season is over, but ${v.hold}; the end waits and nothing moves`); continue; }
+      reason = v.reason;
+    }
+    if (!d.dryRun) d.registry.markRuleEnded(t.mint, "winddown", reason, Number.isFinite(at) ? at : Date.now());
+    d.log(`  [end] $${t.ticker}: the window ended (${reason})${championPathRule(rule) ? "" : " — the pool winds down from the next day"}`);
     out.push(t.mint);
   }
   return out;

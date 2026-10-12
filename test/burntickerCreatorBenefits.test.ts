@@ -8,7 +8,7 @@ import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint"
 import { ordinal, rankLines, receiptsThisWeek, weeklySummary, WEEK_MEANING } from "@/lib/burnticker/coinRank";
 import { FEATURED_LABELS, FEATURED_RULES_LINE, featuredSlots, type FeaturedInput } from "@/lib/burnticker/featuredSlots";
 import { ANALYTICS_COPY, CREATOR_BENEFITS, CREATOR_BENEFITS_TITLE, CREATOR_PAGE, SHARE_COPY, createdBy, creatorHref } from "@/lib/burnticker/creatorBenefits";
-import { EXAMPLE_CELL, EXAMPLE_PREREQUISITE, EXAMPLE_TAG, EXAMPLE_TICKETS, EXAMPLES_INTRO, NOT_OFFERED, exampleCardView, exampleStrings } from "@/lib/burnticker/exampleTickets";
+import { EXAMPLE_TAG, EXAMPLE_TICKETS, EXAMPLES_AFFILIATION, EXAMPLES_AND_BENEFITS_LABEL, EXAMPLES_INTRO, NOT_OFFERED, exampleStrings } from "@/lib/burnticker/exampleTickets";
 import { RANK_MEANING, cardViewFromIndex, type IndexCoin } from "@/lib/burnticker/cardView";
 import { loadSourceEntries } from "@/lib/burnticker/catalogue";
 import { LIVE_ORACLES, type BurnRule } from "@/lib/burnticker/rules";
@@ -129,14 +129,14 @@ describe("item 7: the example tickets", () => {
   const tile = fs.readFileSync("src/app/burnticker/launch/CoinVsCoinTile.tsx", "utf8");
   test("every sentence is lint-clean", () => {
     for (const e of EXAMPLE_TICKETS) for (const s of exampleStrings(e)) clean(s, `${e.ticker}: ${s}`);
-    for (const s of [EXAMPLE_TAG, EXAMPLE_PREREQUISITE, EXAMPLES_INTRO, EXAMPLE_CELL]) clean(s, s);
+    for (const s of [EXAMPLE_TAG, EXAMPLES_INTRO, EXAMPLES_AFFILIATION, EXAMPLES_AND_BENEFITS_LABEL]) clean(s, s);
   });
   test("each names its source: a catalogue id in sources.json, or the Polymarket adapter; no source means not offered", () => {
     for (const e of EXAMPLE_TICKETS) {
       if (e.source?.kind === "catalogue") assert.ok(ids.has(e.source.id), `${e.ticker}: ${e.source.id} is not in sources.json`);
       else if (e.source?.kind === "oracle") assert.ok(LIVE_ORACLES.includes(e.source.id), `${e.ticker}: ${e.source.id} is not a live adapter`);
       else assert.equal(e.opens, null, `${e.ticker} has no source, so it cannot open a wizard path`);
-      assert.ok(e.sourceLine.startsWith("Source: "), e.ticker);
+      assert.ok(e.sourceLine.split(" ").length <= 3 && !/[.]/.test(e.sourceLine), `${e.ticker}: the source in two or three words`);
     }
     assert.equal(EXAMPLE_TICKETS.find((e) => e.ticker === "TSLAvAAPL")!.source!.id, "pyth.equity");
     assert.equal(EXAMPLE_TICKETS.find((e) => e.ticker === "SOLvETH")!.source!.id, "pyth.crypto");
@@ -163,13 +163,13 @@ describe("item 7: the example tickets", () => {
   test("public figures and companies carry the no-affiliation line", () => {
     for (const e of EXAMPLE_TICKETS) if (/Trump|Elon|Tesla|Apple|Truth Social/.test(`${e.name} ${e.rule} ${e.sourceLine}`)) assert.match(e.affiliation ?? "", /^This example is not affiliated with /, e.ticker);
   });
-  test("drawn as the real card: the example tag where a badge goes, and market cap, holders and burned say Example", () => {
+  test("website-18 brief cards: the ticker, the name, one short rule sentence, the source in a few words and the tag; nothing else", () => {
     for (const e of EXAMPLE_TICKETS) {
-      const v = exampleCardView(e);
-      assert.deepEqual(v.tags, [{ label: EXAMPLE_TAG, tone: "neutral" }]);
-      for (const k of ["mcap", "holders", "burned"] as const) assert.equal(v[k].text, EXAMPLE_CELL);
-      assert.equal(v.href, null); assert.equal(v.receipt, null); assert.equal(v.group, "test");
-      assert.ok(v.note!.startsWith(EXAMPLE_PREREQUISITE));
+      assert.ok(e.rule.split(/\s+/).length <= 12, `${e.ticker}: ${e.rule}`);
+      assert.equal((e.rule.match(/[.!?](\s|$)/g) ?? []).length, 1, `${e.ticker}: one sentence`);
     }
+    const card = fs.readFileSync("src/app/burnticker/templates/ExampleTickets.tsx", "utf8");
+    assert.doesNotMatch(card, /ViewCard|e\.notOffered|e\.affiliation|PREREQUISITE|next/, "no next-result line, no prerequisite, no per-card reason or affiliation");
+    assert.match(card, /\{EXAMPLE_TAG\}/); assert.match(card, /\{SOURCE_LABEL\}: \{e\.sourceLine\}/); assert.match(card, /\{EXAMPLES_INTRO\} \{EXAMPLES_AFFILIATION\}/);
   });
 });

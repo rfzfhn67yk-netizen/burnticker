@@ -430,7 +430,7 @@ async function polymarketBacktest(p: Platform, locked: LockedRule, months: numbe
 
 export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule; preflight: PreflightResult | null }
 export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null; /** BURNTICKER_PAIR_CURVE_ENABLED: the pair launches through pair_curve (sign this instead of the two LaunchLab bundles). */ pairCurve?: PairCurveLaunchBundle }
-interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown }
+interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown; /** website-18: side B's own creator text and uploaded image */ creatorDescription?: unknown; image?: unknown; imageRights?: unknown; imageBadge?: unknown }
 
 /**
  * Validation, refusals and the bundle — the launch route's whole pipeline. Refuses: invalid input, rules that do not lock, catalogue
@@ -476,20 +476,22 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // every link label pass the same creator lint; the image is checked again here (type by its bytes, ≤ 2 MB) and needs the rights line.
   const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
   if (creatorText.length > DESCRIPTION_MAX) return { error: fail(400, `The description can be at most ${DESCRIPTION_MAX} characters.`, { code: "description-too-long" }) };
-  let uploaded: { bytes: Uint8Array; contentType: string; badge: boolean } | null = null;
-  if ((body as { image?: unknown }).image !== undefined && (body as { image?: unknown }).image !== null) {
-    if (!p.customImages) return { error: fail(400, "This site does not take custom images right now. The coin uses its generated receipt art.", { code: "custom-image-off" }) };
-    if ((body as { imageRights?: unknown }).imageRights !== true) return { error: fail(400, `Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };
-    const d = decodeCreatorImage((body as { image: unknown }).image);
-    if ("error" in d) return { error: fail(400, d.error, { code: "image-refused" }) };
+  // website-18: the same checks for side A (the body) and, in a rivalry pair, side B (`pair.image`, `pair.imageRights`, `pair.imageBadge`)
+  const uploadOf = async (src: { image?: unknown; imageRights?: unknown; imageBadge?: unknown }, who: string): Promise<{ error: ApiResult } | { up: { bytes: Uint8Array; contentType: string; badge: boolean } | null }> => {
+    if (src.image === undefined || src.image === null) return { up: null };
+    if (!p.customImages) return { error: fail(400, `${who}This site does not take custom images right now. The coin uses its generated receipt art.`, { code: "custom-image-off" }) };
+    if (src.imageRights !== true) return { error: fail(400, `${who}Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };
+    const d = decodeCreatorImage(src.image);
+    if ("error" in d) return { error: fail(400, `${who}${d.error}`, { code: "image-refused" }) };
     // owner, 2026-10-12: the receipt mark is optional and on by default; when on it is composited before anything is pinned
-    if ((body as { imageBadge?: unknown }).imageBadge === false) uploaded = { bytes: d.ok.bytes, contentType: d.ok.contentType, badge: false };
-    else {
-      const badged = await badgeCreatorImage(d.ok.bytes, d.ok.contentType);
-      if ("error" in badged) return { error: fail(400, badged.error, { code: "image-refused" }) };
-      uploaded = { bytes: badged.ok.bytes, contentType: badged.ok.contentType, badge: true };
-    }
-  }
+    if (src.imageBadge === false) return { up: { bytes: d.ok.bytes, contentType: d.ok.contentType, badge: false } };
+    const badged = await badgeCreatorImage(d.ok.bytes, d.ok.contentType);
+    if ("error" in badged) return { error: fail(400, `${who}${badged.error}`, { code: "image-refused" }) };
+    return { up: { bytes: badged.ok.bytes, contentType: badged.ok.contentType, badge: true } };
+  };
+  const upA = await uploadOf(body as { image?: unknown; imageRights?: unknown; imageBadge?: unknown }, "");
+  if ("error" in upA) return upA;
+  const uploaded = upA.up;
   const textProblems = creatorTextProblems({ name: input.name, ticker: input.ticker, note, description: creatorText, linkLabels: input.links.map((l) => String(l?.label ?? "")) });
   if (textProblems.length) return { error: fail(403, `This launch is refused: ${textProblems.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(textProblems.map((x) => x.category))], problems: textProblems.map((x) => x.reason) }) };
   // THE IMAGE IS THE GENERATED RECEIPT ART (owner decision 2026-10-10); a creator's own image only with BURNTICKER_CUSTOM_IMAGES_ENABLED.
@@ -595,7 +597,14 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (b.pair) {
     if (o.mint) return { error: fail(400, "A rivalry pair is launched through the pair steps on the launch page, with two new mints. The public API takes one coin at a time.") };
     const side = { ticker: String(b.pair.ticker ?? "").toUpperCase(), name: String(b.pair.name ?? ""), description: String(b.pair.description ?? ""), imageUrl: b.pair.imageUrl ? String(b.pair.imageUrl) : null, links: Array.isArray(b.pair.links) ? b.pair.links as { label: string; url: string }[] : [] };
-    const sideText = creatorTextProblems({ name: side.name, ticker: side.ticker, note: "" });
+    // website-18 (the owner: "I also don't see the ability to change the thumbnail pic"): side B carries its own creator description,
+    // links and uploaded image, checked like side A's and pinned in its own metadata file
+    const pb = b.pair as PairSideInput;
+    const creatorTextB = typeof pb.creatorDescription === "string" ? pb.creatorDescription.trim() : "";
+    if (creatorTextB.length > DESCRIPTION_MAX) return { error: fail(400, `Side B: the description can be at most ${DESCRIPTION_MAX} characters.`, { code: "description-too-long" }) };
+    const upB = await uploadOf(pb, "Side B: ");
+    if ("error" in upB) return upB;
+    const sideText = creatorTextProblems({ name: side.name, ticker: side.ticker, note: "", description: creatorTextB, linkLabels: side.links.map((l) => String(l?.label ?? "")) });
     if (sideText.length) return { error: fail(403, `Side B is refused: ${sideText.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(sideText.map((x) => x.category))], problems: sideText.map((x) => x.reason) }) };
     if (side.imageUrl && !p.customImages) return { error: fail(400, "Side B cannot use a custom image. This site does not take custom images. Every coin's image is its generated receipt art.", { code: "custom-image-off" }) };
     const bProblems = launchProblems({ ...input, ...side });
@@ -608,12 +617,15 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
       const probe = await buildPairBundles({ a: input, b: { ...side, description: "" }, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });
       const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
-      side.description = generatedParagraph(lockedB.rule, side.ticker, serverDescribeCtx(lockedB.rule, null, { seriesTitle, feed: feedText }));
-      input.description = generatedParagraph(lockedA.rule, input.ticker, ctxA);
-      for (const [lk, tk, nm, desc, links, img] of [[lockedA, input.ticker, input.name, input.description, input.links, input.imageUrl], [lockedB, side.ticker, side.name, side.description, side.links, side.imageUrl]] as const) {
-        const r = await pinFor(lk, tk, nm.trim(), desc, links, img);
+      side.description = withCreatorText(generatedParagraph(lockedB.rule, side.ticker, serverDescribeCtx(lockedB.rule, null, { seriesTitle, feed: feedText })), creatorTextB);
+      input.description = withCreatorText(generatedParagraph(lockedA.rule, input.ticker, ctxA), creatorText);
+      for (const [lk, tk, nm, desc, links, img, up] of [[lockedA, input.ticker, input.name, input.description, input.links, input.imageUrl, uploaded], [lockedB, side.ticker, side.name, side.description, side.links, side.imageUrl, upB.up]] as const) {
+        const r = await pinFor(lk, tk, nm.trim(), desc, links, img, up);
         if ("error" in r) return r;
       }
+      // an uploaded image is shown from its pinned Arweave copy, per side
+      const shownImage = (tk: string, url: string | null, up: unknown) => (up ? pins.get(tk)?.imageUri ?? url : url);
+      input.imageUrl = shownImage(input.ticker, input.imageUrl, uploaded); side.imageUrl = shownImage(side.ticker, side.imageUrl, upB.up);
       const pair = await buildPairBundles({ a: input, b: side, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab

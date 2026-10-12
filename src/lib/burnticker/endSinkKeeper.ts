@@ -14,6 +14,8 @@ import type { Cosignature, ProgramConfigView, ProgramPort, ReadingInput } from "
  *
  *   outcome    VOID when the end is a void (the pair voided, the one-shot's market voided, a derby or season that was voided or
  *              cancelled); RESOLVED otherwise (a season over, a one-shot settled YES or NO, a derby season over, a bracket slot lost).
+ *              CHAMPION (website-18): a champion-path coin whose team won the championship is recorded with the program's void outcome
+ *              (the wind-down on the coin itself) and every keeper word says "won the championship: the rest burns on this coin".
  *   record     once nothing is left to attest or crank (no planned or sending receipts): submit_rule_end, quorum-signed, dated the
  *              later of the end's UTC day and the coin's last reading (the program refuses an earlier date), never after today.
  *   RESOLVED   no drain, no wind-down: forward_on_end moves what is left to the sink (the program picks the destination), the coin
@@ -59,9 +61,42 @@ const mine = (outcome: EndOutcome, note: string | null): EndSinkStepResult => ({
 /** The end's UTC day: the day the end falls in, a midnight end counting for the day before (a season over at 00:00 ends the last day). */
 const endDayOf = (atMs: number): number => u32(isoDay(atMs - 1));
 
-/** Resolved or void, from the same facts detectRuleEnd used. */
+/**
+ * THE CHAMPION PATH (website-18; describe.ts championPathRule says it on the coin): a season wins coin whose team WON THE CHAMPIONSHIP
+ * keeps the rest of its pool and burns it on itself (the ordinary wind-down, then the self-burn sweep); a team that did not win forwards
+ * the rest to $DEFICIT like any resolved end. The program has two end outcomes and only "void" leaves the pool on the coin, so the champion's
+ * end is recorded on chain with that outcome; every word the keeper writes (the end reason the coin page shows, the log, the memo, the
+ * status record and the attested source URL) says "won the championship" instead. multiKeeper.recordWindowEnd writes the reason, and
+ * only once the source and the coin's own receipt agree (championVerdict).
+ */
+export const CHAMPION_END_LINE = "won the championship: the rest burns on this coin";
+export const championEndReason = (date: string): string => `${CHAMPION_END_LINE} (the last game was ${date})`;
+export const NOT_CHAMPION_END_LINE = "did not win the championship: the rest goes to $DEFICIT's burn";
+export const notChampionEndReason = (why: string): string => `${NOT_CHAMPION_END_LINE} (${why})`;
+export const isChampionEnd = (reason: string): boolean => reason.startsWith(CHAMPION_END_LINE);
+/** The words the keeper writes for an end outcome: the champion line for a champion's end, else the outcome itself. */
+const endLabel = (outcome: EndOutcome, reason: string): string => (isChampionEnd(reason) ? CHAMPION_END_LINE : outcome);
+/** The outcome word in the attested source URL ("champion" for a champion's end). */
+const endCode = (outcome: EndOutcome, reason: string): EndOutcome | "champion" => (isChampionEnd(reason) ? "champion" : outcome);
+
+/**
+ * The champion verdict for a champion-path coin whose season window ended: the end reason to record, or why the keeper holds (nothing is
+ * recorded, nothing moves). Fail safe: the source must say champion or not (espn.ts championOf; null = it cannot tell), and the coin's own
+ * receipt for the last game's day must agree: a champion's last game is a win, so it has a burn receipt that day; an eliminated team's last
+ * postseason game is a loss, so it has none.
+ */
+export function championVerdict(reg: Pick<Registry, "receipts">, t: Pick<TokenRow, "mint">, w: { reason: string; champion?: boolean | null; championDate?: string | null }): { reason: string } | { hold: string } {
+  if (w.champion !== true && w.champion !== false) return { hold: "the source cannot tell yet whether the team won the championship" };
+  const won = w.championDate ? reg.receipts(t.mint).some((b) => b.eventId === w.championDate && b.units > 0 && b.status !== "void" && b.status !== "voided") : false;
+  if (w.champion) return won ? { reason: championEndReason(w.championDate!) } : { hold: `the schedule says the team won its last game${w.championDate ? ` (${w.championDate})` : ""}, but the coin has no burn recorded for it yet` };
+  if (won) return { hold: `the schedule says the team lost its last game (${w.championDate}), but the coin recorded a win that day` };
+  return { reason: notChampionEndReason(w.reason) };
+}
+
+/** Resolved or void, from the same facts detectRuleEnd used. A champion's end is "void" on chain: the program's wind-down on the coin. */
 export function endOutcomeOf(reg: Pick<Registry, "receipts">, t: Pick<TokenRow, "mint">, locked: LockedRule, gate: PairGate | null, end: { reason: string }): EndOutcome {
   if (gate?.state === "voided") return "void";
+  if (isChampionEnd(end.reason)) return "void";
   if (isOneShot(locked.rule)) {
     const ev = reg.receipts(t.mint).filter((b) => !["winddown", "drain", "sweep"].includes(b.kind) && b.status !== "pending-pair")[0];
     if (ev && ev.status === "voided") return "void";
@@ -70,7 +105,7 @@ export function endOutcomeOf(reg: Pick<Registry, "receipts">, t: Pick<TokenRow, 
 }
 
 /** The source the end attestation commits to: the coin, the date, the outcome and why (anyone can read the reason back). */
-export const ruleEndSourceUrl = (ticker: string, date: string, outcome: EndOutcome, reason: string): string =>
+export const ruleEndSourceUrl = (ticker: string, date: string, outcome: EndOutcome | "champion", reason: string): string =>
   `burnticker://${ticker}/end/${date}?outcome=${outcome}&reason=${encodeURIComponent(reason.slice(0, 200))}`;
 
 async function sendOnce(d: EndSinkStepDeps, port: Pick<EndSinkPort, "simulate" | "send" | "confirm">, t: TokenRow, key: string, tx: { signature: string; raw: Uint8Array; blockhash: string; lastValidBlockHeight: number }, memo: string): Promise<"confirmed" | string> {
@@ -91,6 +126,7 @@ export async function endSinkStep(d: EndSinkStepDeps, t: TokenRow, locked: Locke
   const sink = await port.endSink();
   if (!sink) return NOT_MINE;   // launched without an EndSink (a coin from before §45): its hashed wind-down applies
   const outcome = endOutcomeOf(reg, t, locked, gate, end);
+  const label = endLabel(outcome, end.reason);
   const today = isoDay(d.now());
   let rec = await port.ruleEnd();
   const cfg = rec ? null : await d.program.port(t.mint).config();
@@ -107,7 +143,7 @@ export async function endSinkStep(d: EndSinkStepDeps, t: TokenRow, locked: Locke
   }
   // ----- record the end (once), after everything inside the window is attested and cranked -----
   if (!rec) {
-    if (reg.pending(t.mint).length > 0) return mine(outcome, `$${t.ticker}: the rule ended (${outcome}); its last results are still being burned`);
+    if (reg.pending(t.mint).length > 0) return mine(outcome, `$${t.ticker}: the rule ended (${label}); its last results are still being burned`);
     if (recordDate === 0) {
       // a coin that never read (its only result was a void, a tie, or none before the end): one flat baseline reading dated the end's
       // day (the unit counter at its base, 0 units, the clock proof) gives the end a date; the end is recorded on the next cycle
@@ -121,13 +157,15 @@ export async function endSinkStep(d: EndSinkStepDeps, t: TokenRow, locked: Locke
       const r = await sendOnce(d, pp, t, `reading:${dayIso}`, tx, JSON.stringify({ message: tx.message, events: [], value: COUNTER_BASE.toString(), flat: "the reading the end is dated at" }));
       return mine(outcome, `$${t.ticker}: flat reading for ${dayIso} before the end: ${r}`);
     }
-    if (d.dryRun) { d.log(`  [dry-run] $${t.ticker}: would record the rule's end (${outcome}, ${recordDate})`); return mine(outcome, null); }
+    if (d.dryRun) { d.log(`  [dry-run] $${t.ticker}: would record the rule's end (${label}, ${recordDate})`); return mine(outcome, null); }
     const dateIso = `${String(recordDate).slice(0, 4)}-${String(recordDate).slice(4, 6)}-${String(recordDate).slice(6)}`;
-    const tx = await port.buildRuleEnd({ recordDate, outcome, sourceUrl: ruleEndSourceUrl(t.ticker, dateIso, outcome, end.reason), proofHash: crypto.createHash("sha256").update(`${t.rulesSha}|${end.reason}`).digest() });
-    const r = await sendOnce(d, port, t, `rule-end:${outcome}`, tx, JSON.stringify({ message: tx.message, outcome, reason: end.reason }));
-    d.log(`  [end] $${t.ticker}: rule end (${outcome}, ${dateIso}) ${r === "confirmed" ? `recorded on chain — ${tx.signature}` : r}`);
+    // a champion's end: the program's outcome argument is the wind-down one; the source URL, memo, log and status name the championship
+    const code = endCode(outcome, end.reason);
+    const tx = await port.buildRuleEnd({ recordDate, outcome, sourceUrl: ruleEndSourceUrl(t.ticker, dateIso, code, end.reason), proofHash: crypto.createHash("sha256").update(`${t.rulesSha}|${end.reason}`).digest() });
+    const r = await sendOnce(d, port, t, `rule-end:${code}`, tx, JSON.stringify({ message: tx.message, outcome: label, reason: end.reason }));
+    d.log(`  [end] $${t.ticker}: rule end (${label}, ${dateIso}) ${r === "confirmed" ? `recorded on chain — ${tx.signature}` : r}`);
     if (r !== "confirmed") return mine(outcome, `$${t.ticker}: recording the rule's end: ${r}`);
-    reg.setStatus(`rule.endsink.${t.mint}`, { outcome, recordDate, sinkKind: sink.kind, sinkMint: sink.sinkMint, signature: tx.signature }, d.now());
+    reg.setStatus(`rule.endsink.${t.mint}`, { outcome: code, line: label, recordDate, sinkKind: sink.kind, sinkMint: sink.sinkMint, signature: tx.signature }, d.now());
     rec = await port.ruleEnd();
     if (!rec) return mine(outcome, null);
   }

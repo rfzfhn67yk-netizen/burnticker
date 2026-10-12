@@ -30,7 +30,7 @@ import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, 
  */
 
 /** `pair` = side B of a registered pair (its rule is derived from side A's); `companion` = a second, independent coin launched alongside (a matchup's other team). */
-export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown } | null; companion?: { ticker?: unknown; name?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
+export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
 export interface ReviewCost { label: string; sol: string; kind: "rent" | "reserve" | "fee" }
 export interface LaunchReview {
   schema: "burnticker.launch-review/v1";
@@ -42,7 +42,8 @@ export interface LaunchReview {
   /** True only when this host would build the bundle for this request now (open mode, type available, no problem). */
   signable: boolean;
   rule: { text: string; sha256: string; sha12: string; statement: string; sentence: string; share: string; presets: string; endsLine: string };
-  coins: { side: "A" | "B"; name: string; ticker: string; description: string | null }[];
+  /** website-18: `profile` is the creator's own description for that side (a pair carries one per side) */
+  coins: { side: "A" | "B"; name: string; ticker: string; description: string | null; profile: { description: string } }[];
   allocation: { supply: string; curve: string; locked: string; reserve: string; teamAllocationPct: 0; lpLockedPct: number };
   feesPerSol: { phase: "curve" | "post-graduation"; legs: { label: string; sol: string }[]; totalSol: string }[];
   transactions: { count: number; steps: { label: string; signers: string[] }[]; note: string };
@@ -150,6 +151,10 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
   if (creatorText.length > DESCRIPTION_MAX) problems.push(`The description can be at most ${DESCRIPTION_MAX} characters.`);
   for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorText })) problems.push(x.reason);
+  // website-18: a pair's side B has its own description, checked the same way
+  const creatorTextB = second && typeof second.creatorDescription === "string" ? second.creatorDescription.trim() : "";
+  if (creatorTextB.length > DESCRIPTION_MAX) problems.push(`Coin B. The description can be at most ${DESCRIPTION_MAX} characters.`);
+  for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorTextB })) problems.push(`Coin B. ${x.reason}`);
   const pp = presetProblem(locked.rule);
   if (pp) problems.push(pp);
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
@@ -222,7 +227,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
     rule: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule, { seriesTitle: o.seriesTitle ?? null }), sentence: text.ruleBlock.split(/(?<=\.)\s/)[0], share: shareText, presets: `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, text.windowKind === "perpetual") },
-    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null })),
+    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB } })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
     transactions: { count: n, steps, note: n === 1 ? "You sign the transaction in your wallet. The wallet shows the exact accounts and amount first, and nothing is sent until you approve." : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it." },
