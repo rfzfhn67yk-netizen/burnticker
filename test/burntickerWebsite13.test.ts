@@ -60,7 +60,7 @@ describe("the grid's states (ChatGPT audit 6 A5): unavailable is never empty", (
     assert.deepEqual(tabCoins("graduated", list).map((c) => c.ticker), ["D"]);
     assert.deepEqual(tabCoins("next", list).map((c) => c.ticker), ["E"]);
     assert.deepEqual(curveCoverage(list), { read: 2, unread: 2 });
-    assert.deepEqual(GRID_TABS.map((t) => t.id), ["new", "next", "graduating", "graduated", "pairs"]);
+    assert.deepEqual(GRID_TABS.map((t) => t.id), ["new", "next", "graduating", "graduated", "pairs", "following"], "website-14 adds the browser-local Following tab");
     for (const t of GRID_TABS) clean(t.rule, t.id);
   });
   test("the coins page: list first, no hero, the PAIRS0 label fixed, one search box per screen", () => {
@@ -199,10 +199,10 @@ describe("website-12's site launch record, consumed (coordinator, 2026-10-12)", 
     assert.match(home, /open = !!\(l && l\.wizard === true\); if \(said\) said\.textContent = l && l\.sentence \? l\.sentence : "Whether creator launches are open could not be read, so no launch controls are shown\.";/);
     assert.equal(siteLaunchStateFromCatalogue(null, { failure: "x" }).sentence, SITE_SENTENCE.unavailable);
   });
-  test("the home strip's step 2 carries the first-burn prerequisite from the configured raise", () => {
+  test("the home strip's step 2 carries the first-burn prerequisite with the creator's raise choices (website-14, §75: no typed 85)", () => {
     const home = read("site/burnticker/index.html");
     assert.ok(home.includes(`<p class="how-x how-pre" data-prerequisite>${prerequisiteLineFor("launchlab")}</p>`));
-    assert.match(prerequisiteLineFor("launchlab"), /85 SOL/);
+    assert.match(prerequisiteLineFor("launchlab"), /the amount its creator chose \(40, 60 or 85 SOL\)/);
     clean(prerequisiteLineFor("launchlab"), "prerequisite");
   });
   test("Claude 2e: the summary's counted lines link to their own lists; Claude 3: the steps say the coin's own trading fees nowhere", () => {

@@ -40,7 +40,7 @@ describe("item 3: zero data → one explanation and one evidence link; populated
     const p = read("src/app/burnticker/CoinsIndex.tsx");
     // website-13 (ChatGPT audit 6 A5 and A10): the tabs filter the coins anyone can trade; the featured coin and the test receipts are a
     // separate group below, never mixed into a tab's results
-    assert.match(p, /const cards: CardView\[\] = coins\.map\(\(t\) => cardViewFromIndex\(t, raise, ix\?\.cluster \?\? "mainnet"\)\);/);
+    assert.match(p, /const cards: CardView\[\] = coins\.map\(\(t\) => cardViewFromIndex\(t, null, ix\?\.cluster \?\? "mainnet"\)\);/);
     assert.ok(p.indexOf('className="bt-tabs" role="tablist"') < p.indexOf("cards.map((v) => <ViewCard"), "tabs above the grid");
     assert.ok(p.indexOf("cards.map((v) => <ViewCard") < p.indexOf("featured.map((v) => <ViewCard"), "the test group after the tab's results");
     assert.match(p, /<h2 id="bt-featured-h" className="text-lg font-semibold">Featured coin and test receipts<\/h2>/);
@@ -176,7 +176,7 @@ describe("item 7: the verifier shows the example's outcome first; controls under
     assert.match(v, /This is not evidence that the receipt is invalid/, "an unavailable check stays distinct from a failed one");
   });
   test("the check page puts the verifier first for ?demo=1 (the checklist loading above cannot push the anchor away)", async () => {
-    const p = read("src/app/burnticker/check/page.tsx");
+    const p = read("src/app/burnticker/check/CheckClient.tsx");
     assert.match(p, /\{verifierAt === "top" && <ReceiptVerifier card=\{card\} \/>\}\s*\{failure && /); assert.match(p, /\{verifierAt === "bottom" && <ReceiptVerifier card=\{card\} \/>\}/);
     const { CHECK_COPY } = await import("@/lib/burnticker/trustpack/copy");
     assert.doesNotMatch(CHECK_COPY.intro, /at the bottom/);

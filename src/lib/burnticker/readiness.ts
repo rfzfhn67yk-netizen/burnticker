@@ -1,7 +1,8 @@
 /**
  * WHERE A COIN STANDS ON THE WAY TO ITS BURNS (website follow-up 2026-10-11; docs/burnticker/FIRST-BURN-PATH.md). A coin cannot burn
  * before graduation: crank_buyback requires a registered, verified CPMM pool (`require!(c.pool_verified, PoolNotVerified)`), and the
- * LaunchLab curve graduates only at 85 SOL raised (launchBundle.ts totalFundRaisingB) — a seed gift to the burn pool does not count
+ * LaunchLab curve graduates only at its raise (the coin's own totalFundRaisingB, read from its pool; website-14 removed the typed 85 from
+ * these sentences: a raise this site has not read is named as "its raise", never a constant) — a seed gift to the burn pool does not count
  * toward it. So every coin page shows exactly ONE of these states, derived here from what the page already has (the TokenConfig as
  * the program block reads it, the LaunchLab curve, the latest receipt). Never an unexplained zero, never a bare tick.
  *
@@ -23,6 +24,7 @@ export interface ReadinessInput {
   launched: boolean;
   /** LaunchLab curve phase, null when not read */ phase: "curve" | "migrating" | "graduated" | null;
   /** SOL raised on the curve, null when not read */ raisedSol: number | null;
+  /** the raise that completes the coin's curve, read from its pool; undefined when not read (the sentences then say "its raise") */
   graduationSol?: number;
   /** TokenConfig: cpmm_pool set AND pool_verified; null when the program account was not read */ poolVerified: boolean | null;
   /** the newest receipt (by reading / settle time), or null */
@@ -34,15 +36,16 @@ const unitsText = (n: number) => `${n} unit${n === 1 ? "" : "s"}`;
 const n2 = (x: number) => (Math.round(x * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 export function readinessOf(i: ReadinessInput): Readiness {
-  const grad = i.graduationSol ?? GRADUATION_SOL;
+  const g = typeof i.graduationSol === "number" && i.graduationSol > 0 ? i.graduationSol : null;
+  const reached = g === null ? "The curve reached its raise" : `The curve reached ${n2(g)} SOL`;
   const R = (state: ReadinessState, label: string, detail: string, ok: boolean | null = null): Readiness => ({ state, step: READINESS_ORDER.indexOf(state) + 1, label, detail, ok });
   if (!i.launched) return R("not-launched", "Not launched", "No coin is registered on this site yet. There is no curve, reading or receipt to show.");
   // a confirmed burn proves the pool was verified even when the program account was not read here
   const pv = i.poolVerified ?? (i.latest?.status === "confirmed" ? true : null);
   if (pv !== true) {
-    if ((i.phase === "graduated" || i.phase === "migrating") && pv === null) return R("awaiting-registration", "Graduated, but this site could not check the pool", `The curve reached ${grad} SOL. This site could not read the program, so it cannot tell whether the pool has been registered and verified (register_pool). Burns need that step first.`);
-    if (i.phase === "graduated" || i.phase === "migrating") return R("awaiting-registration", "Graduated, waiting for pool registration", `The curve reached ${grad} SOL and moved to a Raydium CPMM pool. Burns start only after that pool is registered with the program (register_pool) and the program verifies it. Until then, nothing can burn.`);
-    const raised = i.raisedSol === null ? `This site could not read the curve, so the SOL raised is not shown. Graduation needs ${grad} SOL.` : `${n2(i.raisedSol)} of ${grad} SOL raised so far.`;
+    if ((i.phase === "graduated" || i.phase === "migrating") && pv === null) return R("awaiting-registration", "Graduated, but this site could not check the pool", `${reached}. This site could not read the program, so it cannot tell whether the pool has been registered and verified (register_pool). Burns need that step first.`);
+    if (i.phase === "graduated" || i.phase === "migrating") return R("awaiting-registration", "Graduated, waiting for pool registration", `${reached} and moved to a Raydium CPMM pool. Burns start only after that pool is registered with the program (register_pool) and the program verifies it. Until then, nothing can burn.`);
+    const raised = i.raisedSol === null ? `This site could not read the curve, so the SOL raised is not shown. Graduation needs ${g === null ? "the raise set when the coin was created" : `${n2(g)} SOL`}.` : g === null ? `${n2(i.raisedSol)} SOL raised so far. This site could not read the raise that completes the curve.` : `${n2(i.raisedSol)} of ${n2(g)} SOL raised so far.`;
     return R("on-curve", "On the curve, waiting for graduation", `${raised} Trading fees collect in the burn pool, but nothing can burn before the curve graduates and its pool is registered. A seed gift to the burn pool does not count toward graduation.`);
   }
   const l = i.latest;
@@ -67,7 +70,7 @@ export function readinessFromStatus(s: { status: string; market?: { phase: "curv
   const latest = [...receipts].sort((a, b) => (a.settledAt < b.settledAt ? 1 : -1))[0] ?? null;
   const c = s.market?.curve ?? null;
   return readinessOf({
-    launched: true, phase: s.market?.phase ?? null, raisedSol: c ? Number(c.raised) : null, graduationSol: c && Number(c.threshold) > 0 ? Number(c.threshold) : GRADUATION_SOL,
+    launched: true, phase: s.market?.phase ?? null, raisedSol: c ? Number(c.raised) : null, graduationSol: c && Number(c.threshold) > 0 ? Number(c.threshold) : undefined,
     poolVerified: s.program ? (s.program.initialized ? s.program.pool.registered : false) : null,
     latest: latest ? { status: latest.status, units: latest.units, skippedReason: latest.skippedReason, waitReason: latest.waitReason, checks: latest.verify?.checks, verified: latest.verify?.verified, burned: latest.burned ?? null, readingDate: latest.readingDate ?? null } : null,
   });

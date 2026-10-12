@@ -76,7 +76,12 @@ export interface StatusInput {
   lastError: string | null;
   funding?: FundingDisclosure | null;
   program?: ProgramStatusInput | null;
+  /** The coin's LaunchLab curve as read this cycle (src/lib/burnticker/market.ts curveProgress); null or absent when not read. */
+  curve?: KeeperCurve | null;
 }
+
+/** The curve fields status.json carries (website-14): the raise is the coin's own, read from its pool, never a typed 85. */
+export interface KeeperCurve { phase: "curve" | "migrating" | "graduated"; raised: string; threshold: string; quote: string; progressPct: number; poolId: string; readAt: string }
 
 export interface BurnJson {
   recordDate: string;
@@ -120,6 +125,8 @@ export interface ProgramStatusJson {
     attesters: { key: string; kind: string; url: string; heldByKeeper: boolean }[]; quorum: number; keeperHolds: number; quorumMet: boolean;
     pendingChange: { attesters: string[]; eta: string | null } | null; adminRenounced: boolean;
     lastReading: { recordDate: string; value: string; status: string; units: number | null; signature: string | null; txUrl: string | null } | null;
+    /** Every reading on chain, newest first, at most 60 (website-14: the activity line's reading rows). Absent on older files. */
+    readings?: { recordDate: string; value: string; units: number | null; signature: string | null; txUrl: string | null }[];
     held: { recordDate: string; status: string; why: string | null } | null;
   };
   queue: { lastOnChain: string | null; crankCursor: string | null; readingsNotOnChain: number; awaitingCrank: number; carriedSpendSol: string; carriedRemainderUsd: string; waits: { recordDate: string; reason: string }[]; partials: { recordDate: string; note: string }[] };
@@ -140,11 +147,17 @@ export interface StatusJson {
   burned: { total: string; pctOfSupply: number; today: string; thisMonth: string; burnsToday: number; burnsThisMonth: number; count: number };
   shortfall: { outstanding: string };
   vault: { allocation: string; balance: string | null; allocationLeft: string; trailing30d: string; projectedLifeDays: number | null; vesting: { kind: string; cliffDays: number; vestDays: number } };
-  feed: { name: string; lastRecordDate: string | null; lastAmount: string | null; readings: number; lastPollAt: string | null; lastPollOutcome: string | null; nextPollAt: string | null };
+  feed: {
+    name: string; lastRecordDate: string | null; lastAmount: string | null; readings: number; lastPollAt: string | null; lastPollOutcome: string | null; nextPollAt: string | null;
+    /** The first reading after launch (the baseline nothing is burned for), so a page can say how far the debt has risen since launch (website-14, LAUNCHPAD-PATH §73). Absent on older files. */
+    baseline?: { recordDate: string; amount: string } | null;
+  };
   health: { pending: number; lastError: string | null; unverified: number; waiting: number };
   mode: "buyback" | "vault";
   execution: "program" | "legacy";
   program: ProgramStatusJson | null;
+  /** The LaunchLab curve read this cycle (website-14): the raise that completes it is read from the pool. Absent on older files; null when not read. */
+  curve?: KeeperCurve | null;
   /** Where the coin stands on the way to its burns (src/lib/burnticker/readiness.ts; docs/burnticker/FIRST-BURN-PATH.md). Absent on older files. */
   readiness?: Readiness;
   /** Buyback mode only (null in vault mode). SOL amounts as decimal strings. */
@@ -283,6 +296,7 @@ export function buildStatus(i: StatusInput, burnsJson: readonly BurnJson[] = bui
   const left = allocationRaw - totalRaw;
   const perDay = Number(trailing) / 30;
   const lastReading = i.readings.length ? i.readings[i.readings.length - 1] : null;
+  const baseline = [...i.readings].sort((a, b) => (a.recordDate < b.recordDate ? -1 : 1)).find((r) => r.kind === "baseline") ?? null;
   const current = i.chain.supplyRaw ?? supplyRaw - totalRaw;
   const addr = (a: string | null) => (a ? explorerUrl(i.chain.cluster, a, "address") : null);
   return {
@@ -298,16 +312,19 @@ export function buildStatus(i: StatusInput, burnsJson: readonly BurnJson[] = bui
       vesting: { kind: rules.vault.kind, cliffDays: rules.vault.cliffDays, vestDays: rules.vault.vestDays },
     },
     feed: { name: rules.feed.name, lastRecordDate: lastReading?.recordDate ?? null, lastAmount: lastReading?.amount ?? null, readings: i.readings.length,
-      lastPollAt: i.lastPoll ? new Date(i.lastPoll.at).toISOString() : null, lastPollOutcome: i.lastPoll?.outcome ?? null, nextPollAt: i.nextPollAt ? new Date(i.nextPollAt).toISOString() : null },
+      lastPollAt: i.lastPoll ? new Date(i.lastPoll.at).toISOString() : null, lastPollOutcome: i.lastPoll?.outcome ?? null, nextPollAt: i.nextPollAt ? new Date(i.nextPollAt).toISOString() : null,
+      baseline: baseline ? { recordDate: baseline.recordDate, amount: baseline.amount } : null },
     health: { pending: i.burns.filter((b) => b.status === "planned" || b.status === "sending" || b.status === "swap-sent" || b.status === "swapped").length, lastError: i.lastError, unverified: burnsJson.filter((b) => b.status === "confirmed" && !b.verify.verified).length, waiting: i.burns.filter((b) => b.waitReason && (b.status === "planned" || b.status === "sending")).length },
     mode: rules.mode,
     execution: i.program ? "program" : "legacy",
     program: i.program ? buildProgramStatus(i.program, i.burns, i.chain.cluster, dec) : null,
+    curve: i.curve ?? null,
     readiness: (() => {
       // one derivation for every page: no curve read here (null → "unavailable"), the program's pool flag, the newest burn row
       const last = [...i.burns].sort((x, y) => (x.recordDate < y.recordDate ? 1 : -1))[0] ?? null;
       const lj = last ? burnsJson.find((b) => b.recordDate === last.recordDate) ?? null : null;
-      return readinessOf({ launched: !!i.chain.mint, phase: null, raisedSol: null, poolVerified: i.program ? !!i.program.config?.poolRegistered : null,
+      const c = i.curve ?? null;
+      return readinessOf({ launched: !!i.chain.mint, phase: c?.phase ?? null, raisedSol: c ? Number(c.raised) : null, graduationSol: c && Number(c.threshold) > 0 ? Number(c.threshold) : undefined, poolVerified: i.program ? !!i.program.config?.poolRegistered : null,
         latest: last ? { status: last.status, units: last.units, skippedReason: last.skippedReason, waitReason: last.waitReason ?? null, checks: lj?.verify.checks, verified: lj?.verify.verified, burned: last.burnRaw !== null ? rawToTokens(last.burnRaw, dec) : null, readingDate: last.recordDate } : null });
     })(),
     buyback: rules.mode !== "buyback" ? null : (() => {
@@ -351,6 +368,7 @@ export function buildProgramStatus(p: ProgramStatusInput, burns: readonly BurnRo
       pendingChange: c && c.pendingAttesters.length ? { attesters: c.pendingAttesters.map((a) => a.key), eta: c.pendingEta ? new Date(c.pendingEta * 1000).toISOString() : null } : null,
       adminRenounced: c?.adminRenounced ?? false,
       lastReading: last ? { recordDate: last.recordDate, value: centsToUsd(BigInt(last.value)), status: last.status, units: last.units, signature: last.signature, txUrl: last.signature ? explorerUrl(cluster, last.signature) : null } : null,
+      readings: [...onChain].sort((a, b) => (a.recordDate < b.recordDate ? 1 : -1)).slice(0, 60).map((r) => ({ recordDate: r.recordDate, value: centsToUsd(BigInt(r.value)), units: r.units, signature: r.signature, txUrl: r.signature ? explorerUrl(cluster, r.signature) : null })),
       held: held && (!last || held.recordDate > last.recordDate) ? { recordDate: held.recordDate, status: held.status, why: held.error } : null,
     },
     queue: {

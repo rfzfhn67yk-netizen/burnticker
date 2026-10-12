@@ -17,6 +17,9 @@ export const STATIC_PAGES: { path: string; changefreq: SitemapEntry["changefreq"
   { path: "/burnticker", changefreq: "hourly", priority: 0.9 },
   { path: "/burnticker/launch", changefreq: "weekly", priority: 0.8 },
   { path: "/burnticker/about", changefreq: "monthly", priority: 0.7 },
+  // website-14: the next result each coin waits for, and the devnet receipt walked through step by step
+  { path: "/burnticker/upcoming", changefreq: "hourly", priority: 0.7 },
+  { path: "/burnticker/how-a-burn-works", changefreq: "monthly", priority: 0.6 },
   { path: "/burnticker/rivalries", changefreq: "hourly", priority: 0.7 },
   { path: LEAGUES_PATH, changefreq: "daily", priority: 0.7 },
   { path: "/burnticker/derby", changefreq: "daily", priority: 0.5 },

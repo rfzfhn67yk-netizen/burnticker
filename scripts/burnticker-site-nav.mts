@@ -10,7 +10,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS, FIRST_USE } from "../src/lib/burnticker/siteNav.mjs";
+import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS, FIRST_USE, TWO_PATHS, WALKTHROUGH_LINK } from "../src/lib/burnticker/siteNav.mjs";
+import { deficitQueueCore } from "../src/lib/burnticker/deficitQueueCore.mjs";
 import { OPERATOR_LINE } from "../src/lib/burnticker/trustpack/copy.ts";
 import { prerequisiteLineFor } from "../src/lib/burnticker/launchReview.ts";
 
@@ -27,6 +28,11 @@ export function heroHtml(): string {
     `<section class="hero wrap" aria-labelledby="hero-h">`,
     `  <h1 id="hero-h">${esc(HERO.title)}</h1>`,
     `  <p class="sub">${esc(HERO.sub)}</p>`,
+    // website-14 (product idea 1): two paths on arrival, one sentence each; "Create a coin" opens the closed-launches dialog while closed
+    `  <div class="paths" data-two-paths>`,
+    ...TWO_PATHS.map((p: { id: string; label: string; href: string; text: string }) => `    <a class="path path-${p.id}" href="${p.href}"${p.id === "create" ? " data-launch-button" : ""}><span class="path-t">${esc(p.label)}</span><span class="path-x">${esc(p.text)}</span></a>`),
+    `  </div>`,
+    `  <p class="walk"><a href="${WALKTHROUGH_LINK.href}">${esc(WALKTHROUGH_LINK.label)}</a>. ${esc(WALKTHROUGH_LINK.text)}</p>`,
     `</section>`,
     `<section class="wrap how-wrap" aria-label="How it works">`,
     `  <ol class="how">`,
@@ -48,6 +54,15 @@ const shell = (file: string, origin: string): Region[] => [
   { file, name: "script", render: () => `<script>\n${shellScript({ origin })}\n</script>` },
 ];
 
+/**
+ * The $DEFICIT site's queued-units counter (website-14, LAUNCHPAD-PATH §73): the SAME function the app runs (deficitQueueCore.mjs),
+ * written into the page as source so the static site and the app cannot say different things. test/burntickerWebsite14.test.ts runs
+ * both on the same keeper files.
+ */
+export function deficitQueueScript(): string {
+  return `<script>\nwindow.deficitQueueCore = ${deficitQueueCore.toString()};\n</script>`;
+}
+
 /** Every marked region: file, region name, renderer. */
 export const REGIONS: Region[] = [
   ...shell("site/burnticker/index.html", ""),
@@ -55,6 +70,7 @@ export const REGIONS: Region[] = [
   ...shell("site/burnticker/status/index.html", SITE_ORIGIN),
   ...shell("site/burnticker/fallback/index.html", ""),
   ...shell("site/deficit/index.html", SITE_ORIGIN),
+  { file: "site/deficit/index.html", name: "queue-core", render: deficitQueueScript },
 ];
 
 export function renderRegions(read: (f: string) => string = (f) => fs.readFileSync(path.join(ROOT, f), "utf8")): Map<string, string> {

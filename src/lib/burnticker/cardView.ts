@@ -1,10 +1,13 @@
+import type { Readiness } from "@/lib/burnticker/readiness";
+import { progressOf, type ProgressView } from "@/lib/burnticker/progress";
 /**
  * ONE COIN CARD, ONE FIELD ORDER (website-10, 2026-10-12; rebuilt by website-13 the same day for Claude site audit 2 item 7 and ChatGPT
  * audit 6 A10 / A11, with the owner's decision to show the market cap). Every surface that lists coins prints the same rows in the same
  * order, and never hides one:
  *
- *   image · name · $TICKER · badge · rule (one line) · next result · progress ("X / <raise> SOL raised", the raise read from the curve or
- *   the configured threshold, never a typed 85) · market cap · holders · age · burned (amount and share of supply) · Check receipt
+ *   image · name · $TICKER · badge · progress (six steps, website-14) · rule (one line) · next result · curve ("X / <raise> SOL raised",
+ *   the raise read from the coin's own pool, never a typed 85; "— raised" when not read) · market cap · holders · age · burned (amount
+ *   and share of supply) · Check receipt
  *
  * A field this site has not read prints "—" and carries the reason (shown on hover and to screen readers). Nothing is invented: a number
  * appears only when it was read from the pool, the curve, the registry or the keeper's files. The market cap is a bare number with no
@@ -36,8 +39,11 @@ export interface CardView {
   rule: string;
   /** when the next result settles */
   nextSettle: CardCell;
-  /** the bonding curve: raised of the raise; `of` is always printed ("85 SOL"), `raised` is null when not read */
-  curve: { raised: string | null; of: string; pct: number | null; done: boolean; why: string | null };
+  /** where the coin stands in six steps (progress.ts, a view of readiness.ts); null when this site does not read it (progressWhy says why) */
+  progress: ProgressView | null;
+  progressWhy: string | null;
+  /** the bonding curve: raised of the coin's own raise ("85 SOL"); `of` is null when the raise was not read, `raised` null when not read */
+  curve: { raised: string | null; of: string | null; pct: number | null; done: boolean; why: string | null };
   /** market cap in SOL (a bare number), read from the curve before graduation */
   mcap: CardCell;
   holders: CardCell;
@@ -57,13 +63,14 @@ export interface CardView {
 }
 
 /** The fixed row order, by key. test/burntickerHomeShell.test.ts holds the component and the static renderer to it. */
-export const CARD_ROWS = ["image", "name", "ticker", "badge", "rule", "nextSettle", "curve", "mcap", "holders", "age", "burned", "receipt"] as const;
+export const CARD_ROWS = ["image", "name", "ticker", "badge", "progress", "rule", "nextSettle", "curve", "mcap", "holders", "age", "burned", "receipt"] as const;
 
 /** The row labels, the same on the app and the static page. Data labels, not prose. */
-export const CARD_LABELS = { rule: "Rule", nextSettle: "Next result", curve: "Curve", mcap: "Market cap", holders: "Holders", age: "Age", burned: "Burned" } as const;
+export const CARD_LABELS = { progress: "Progress", rule: "Rule", nextSettle: "Next result", curve: "Curve", mcap: "Market cap", holders: "Holders", age: "Age", burned: "Burned" } as const;
 
 /** What a card's fields mean, for the "What these mean" note and hover text (Codex review 5 glossary, first use on a card). */
 export const CARD_MEANINGS = {
+  progress: "Six steps from creation to the first burn: created, trading on the curve, graduated, pool registered, ready to burn, burned.",
   curve: "A new coin first trades on a bonding curve. When buyers have put in the raise, the coin graduates to its own Raydium trading pool.",
   mcap: "This number is the curve's current SOL per token times the total supply, read from the pool on chain.",
   holders: "How many wallets hold the coin.",
@@ -78,6 +85,9 @@ export const NOT_READ = {
   curveNotRead: "This site has not read the coin's curve.",
   nextNone: "This rule has no scheduled result.",
 } as const;
+
+/** The curve row's words: "35.7 / 85 SOL raised"; "— raised" when the raise was not read (never a typed 85). */
+export const curveLine = (c: CardView["curve"]): string => (c.of === null ? `${c.raised ?? "—"} raised` : `${c.raised ?? "—"} / ${c.of} raised`);
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "Oct 6" from an ISO date or time (UTC calendar day). */
@@ -125,6 +135,8 @@ export interface IndexCoin {
   ticker: string; name: string; mint: string; oneLiner: string; status: string; imageUrl: string | null; burned: string; burns: number;
   nextCheckAt: string | null; nextCloseTime: string | null; lastBurnAt: string | null; launchedAt: string | null; pairId: string | null; badge?: string | null;
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null;
+  /** website-14: where the coin stands (readiness.ts), computed by the API from its status and receipts; absent when not read */
+  readiness?: Readiness | null;
   raised?: string | null; threshold?: string | null; quote?: string | null; pctOfSupply?: number; marketCap?: string | null; holders?: number | null;
 }
 
@@ -135,14 +147,14 @@ const two = (s: string) => groupDigits(s);
 export function curveCell(c: { phase: IndexCoin["phase"]; progressPct: number | null; raised?: string | null; threshold?: string | null; quote?: string | null }, raiseSol: string | null, notRead: string = NOT_READ.curveNotRead): CardView["curve"] {
   const quote = c.quote ?? "SOL";
   const raise = c.threshold ?? raiseSol;
-  const of = raise === null ? "the raise" : `${two(raise)} ${quote}`;
+  const of = raise === null ? null : `${two(raise)} ${quote}`;
   if (c.phase === "graduated") return { raised: raise === null ? null : two(raise), of, pct: 100, done: true, why: "The curve is complete, and the coin trades in its own Raydium pool." };
   const pct = c.progressPct === null ? null : Math.max(0, Math.min(100, c.progressPct));
   if (c.raised === null || c.raised === undefined || pct === null) return { raised: null, of, pct: null, done: false, why: notRead };
   return { raised: two(c.raised), of, pct, done: false, why: c.phase === "migrating" ? "The curve is full, and the coin is moving to its Raydium pool." : null };
 }
 
-/** A registered coin as a card: the same rows as the featured cards, read from the index. `raiseSol` is the configured raise. */
+/** A registered coin as a card: the same rows as the featured cards, read from the index. `raiseSol` is a raise the caller read from the coin's pool (null otherwise; never a configured constant). */
 export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster = "mainnet"): CardView {
   const next = t.nextCloseTime ?? t.nextCheckAt;
   const tags: CardTag[] = [];
@@ -158,6 +170,8 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
   return {
     id: t.mint, ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
     rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()),
+    progress: t.readiness ? progressOf(t.readiness, { raiseSol: t.threshold ? Number(t.threshold) : null, raisedSol: t.raised ? Number(t.raised) : null }) : null,
+    progressWhy: t.readiness ? null : "This site did not read where this coin stands.",
     nextSettle: next ? { text: `${shortDay(next)}`, why: null } : { text: null, why: NOT_READ.nextNone },
     curve, mcap,
     holders: typeof t.holders === "number" ? { text: groupDigits(t.holders), why: null } : { text: null, why: NOT_READ.holders },

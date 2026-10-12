@@ -26,7 +26,8 @@ import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
 import { wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
-import { buildLaunchBundle, buildPairBundles, launchProblems, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
+import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
+import { buildLaunchBundle, buildPairBundles, launchProblems, raiseProblem, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import { MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE, requestedOpeningPurchase } from "@/lib/burnticker/hostedLaunch";
 import { launchVenueOf } from "@/lib/burnticker/launchVerify";
 import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
@@ -187,7 +188,11 @@ export async function search(p: Platform, q: { q?: string | null }, now = Date.n
   // suggested tickers: unique against the registry and clear of the refuse list's name patterns (RAYS26 → RAYS262 when taken)
   const list = loadRefuseList();
   const cards = dedupeTickers(r.cards, (t) => { try { return p.registry.tokenByTicker(t) !== null; } catch { return false; } }, (t) => nameRefusals(list, "", t).length > 0);
-  return ok({ ...r, cards, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
+  // website-14 (product idea 6): a card whose rule's canonical selector is already registered names those coins (duplicateRule.ts)
+  let tokens: Parameters<typeof existingCoinsFor>[1] = [];
+  try { tokens = p.registry.tokens(); } catch { tokens = []; }
+  const withExisting = cards.map((c) => { const rule = (c as { rule?: unknown }).rule; const existing = rule ? existingCoinsFor(rule, tokens) : []; return existing.length ? { ...c, existing } : c; });
+  return ok({ ...r, cards: withExisting, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
 }
 
 /** GET /v1/elections?type=&state= — the guided Elections & Politics flow (src/lib/burnticker/elections.ts), from Polymarket's open midterm races. */
@@ -436,12 +441,15 @@ interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknow
  */
 export async function prepareLaunch(p: Platform, body: Record<string, unknown>, o: { register: boolean; mint?: string | null; preflight?: { strict?: boolean; deps?: PreflightDeps } }): Promise<{ error: ApiResult } | { ok: PreparedLaunch } | { pair: PreparedPair }> {
   const b = body as Partial<LaunchInput> & { acknowledgements?: { ruleLocked?: unknown; noReturns?: unknown }; pair?: PairSideInput | null };
-  const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster };
+  const input: LaunchInput = { creator: String(b.creator ?? ""), ticker: String(b.ticker ?? "").toUpperCase(), name: String(b.name ?? ""), description: String(b.description ?? ""), imageUrl: b.imageUrl ? String(b.imageUrl) : null, links: Array.isArray(b.links) ? b.links : [], rule: b.rule, firstBuySol: String(b.firstBuySol ?? "0"), acknowledgements: { ruleLocked: !!b.acknowledgements?.ruleLocked, noReturns: !!b.acknowledgements?.noReturns }, cluster: p.cluster, ...(b.raiseSol === undefined || b.raiseSol === null ? {} : { raiseSol: String(b.raiseSol) }) };
   // NO BURN POOL IS EVER LEFT BEHIND (owner, 2026-10-10): every new launch carries the onEnd wind-down + retired-coin sweep unless the
   // rule names its own (rules.ts DEFAULT_ON_END; it is part of the canonical rule, so the hash locks it).
   if (input.rule && typeof input.rule === "object" && !Array.isArray(input.rule) && (input.rule as { onEnd?: unknown }).onEnd === undefined) input.rule = { ...(input.rule as object), onEnd: { ...DEFAULT_ON_END } };
   const problems = launchProblems(input);
   if (o.mint !== undefined && o.mint !== null && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(o.mint)) problems.push("The mint must be the public key of a new mint keypair that you made.");
+  // website-14 (LAUNCHPAD-PATH §75): on mainnet the graduation raise is 40, 60 or 85 SOL, nothing else (launchBundle.ts raiseProblem)
+  const raiseOff = raiseProblem(input.raiseSol, p.cluster);
+  if (raiseOff) return { error: fail(400, raiseOff, { code: "raise-not-preset", problems }) };
   if (problems.length) return { error: fail(400, problems.join("; "), { problems }) };
   // launch-10 (2026-10-12; hostedLaunch.ts): what a launch built by this site never carries, refused before anything is read, pinned or
   // registered. Mainnet only with the host's explicit allowance (passed to the builder below as allowMainnet); no opening purchase (a

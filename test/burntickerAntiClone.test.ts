@@ -91,7 +91,7 @@ describe("verify a mint (route + platform)", () => {
     const page = fs.readFileSync(new URL("../src/app/burnticker/t/[ticker]/page.tsx", import.meta.url), "utf8");
     assert.match(page, /verified by program · mint \{short\(s\.mint\)\}/); assert.match(page, /\/burnticker\/verify\?mint=/);
     assert.match(page, /<CopyButton text=\{s\.mint\} label="copy address" \/>\s*\n\s*\{\/\* growth batch/);
-    const check = fs.readFileSync(new URL("../src/app/burnticker/check/page.tsx", import.meta.url), "utf8");
+    const check = fs.readFileSync(new URL("../src/app/burnticker/check/CheckClient.tsx", import.meta.url), "utf8");
     assert.match(check, /href="\/burnticker\/verify"/);
   });
 });

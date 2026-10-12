@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { CoinCard } from "../_components/CoinCard";
 import { FieldHelp } from "../_components/FieldHelp";
-import { pctLabel } from "@/lib/burnticker/launchPresets";
+import { pctLabel, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, type RaisePreset } from "@/lib/burnticker/launchPresets";
+import { RetirementFacts } from "../_components/RetirementFacts";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 
@@ -37,6 +38,8 @@ export interface ReviewCardProps {
   /** "Ends Sep 30, 2027, then winds down" — null when the rule has no end. */
   ends: string | null;
   shares: { options: number[]; value: number; onChange: (v: number) => void };
+  /** website-14 (LAUNCHPAD-PATH §75): the graduation preset, 40 / 60 / 85 SOL (default 85); `line` is the review's own sentence on the chosen raise and the pool it starts. Null for paired launches. */
+  raise?: { options: RaisePreset[]; value: RaisePreset; onChange: (v: RaisePreset) => void; line: string | null } | null;
   durations?: { options: Chip<string>[]; value: string; onChange: (v: string) => void } | null;
   note?: { value: string; onChange: (v: string) => void; problem: string | null } | null;
   problems: string[];
@@ -46,6 +49,8 @@ export interface ReviewCardProps {
   ready: boolean;
   creator: string | null;
   onLaunch: () => void;
+  /** website-14 (product idea 6): the coins already registered with this rule (DuplicateNotice.tsx), under the sentence. */
+  duplicate?: ReactNode;
   /** Launch audit 5 L06: the pre-wallet summary (PreWalletSummary.tsx), shown above the button. */
   summary?: ReactNode;
   /** L02 / site audit #4: why the wallet cannot open (preview mode, a closed host, a type this host cannot take); null = it can. */
@@ -70,6 +75,8 @@ export const RECEIPTS_LINE = "Every burn posts a public receipt: the reading it 
 export const LP_LINE = "The pool's liquidity is locked forever. After graduation, the SOL side of the fees it earns goes 80% to the coin's burn pool and 20% to the operator, a split fixed in code.";
 /** A4: the dial's name. The share is of the coin's burn budget, never of its supply. */
 export const BUDGET_LABEL = "Burn budget per result";
+/** website-14: the graduation preset's name. */
+export const RAISE_LABEL = "SOL raised before graduation";
 export const ACK_LINE = "By launching, you confirm the rule as written. You also confirm that you make no promises to anyone about this coin. The rule is stored with the coin, and no instruction in the program can change it.";
 const okTicker = (t: string) => /^[A-Z0-9]{2,10}$/.test(t);
 export function ReviewCard(p: ReviewCardProps) {
@@ -115,6 +122,7 @@ export function ReviewCard(p: ReviewCardProps) {
       </div>
       {p.namePrompt && <p className="text-xs text-amber-300" role="status">{p.namePrompt}</p>}
       <p className="min-w-0 break-words text-base text-neutral-100" data-summary>{p.sentence}</p>
+      {p.duplicate}
       {p.event && (
         <div className="min-w-0 break-words rounded border border-neutral-800 p-2 text-xs text-neutral-300" data-event>
           <p>The source states the event as “{p.event.question}”.{p.event.outcome ? ` The coin burns if it resolves ${p.event.outcome}.` : ""}{p.event.resolves ? ` The market is due to close around ${p.event.resolves}.` : ""}{p.event.url && <> <a className="underline" href={p.event.url} rel="noopener" target="_blank">Open the market ↗</a></>}</p>
@@ -123,13 +131,23 @@ export function ReviewCard(p: ReviewCardProps) {
       )}
       {p.pairFacts ? <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-200" data-pair-facts={p.pairFacts.kind} aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul>
         : p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line>{p.pairLine} <FieldHelp id="pair-burn" /></p>}
-      {p.ends && <p className="min-w-0 break-words text-xs text-neutral-300" data-ends>{p.ends}</p>}
+      {p.ends && <div className="min-w-0 break-words text-xs text-neutral-300" data-ends><p>{p.ends}</p>{!/no end date/.test(p.ends) && <RetirementFacts className="mt-1" />}</div>}
       <p className="min-w-0 break-words text-xs text-neutral-400">{RECEIPTS_LINE} {LP_LINE}</p>
       <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={BUDGET_LABEL} aria-describedby={`${uid}-budget`}>
         <span className="text-xs text-neutral-500" aria-hidden="true">{BUDGET_LABEL}</span>
         {p.shares.options.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
       </div>
       <p id={`${uid}-budget`} className="min-w-0 break-words text-xs text-neutral-400" data-budget-line>Spend {pctLabel(p.shares.value)} of the available burn budget each time. The tokens bought are burned, and the token amount varies.</p>
+      {p.raise && (
+        <div className="min-w-0 space-y-1" data-raise>
+          <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={RAISE_LABEL} aria-describedby={`${uid}-raise`}>
+            <span className="text-xs text-neutral-500" aria-hidden="true">{RAISE_LABEL}</span>
+            {p.raise.options.map((x) => <button key={x} type="button" role="radio" aria-checked={p.raise!.value === x} data-optional="preset" className={chip(p.raise!.value === x)} onClick={() => p.raise!.onChange(x)}>{x} SOL</button>)}
+          </div>
+          <p id={`${uid}-raise`} className="min-w-0 break-words text-xs text-neutral-400" data-raise-line>{RAISE_PRESET_TEXT[p.raise.value]} {RAISE_PRESET_SHARED}</p>
+          <p className="min-w-0 break-words text-xs text-neutral-300" data-raise-review>{p.raise.line ?? `The curve is complete once buyers have put in ${p.raise.value} SOL, and the coin moves to its Raydium pool, which starts with roughly ${p.raise.value} SOL.`}</p>
+        </div>
+      )}
       {p.durations && p.durations.options.length > 1 && (
         <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="How long the coins run">
           <span className="text-xs text-neutral-500" aria-hidden="true">Runs</span>

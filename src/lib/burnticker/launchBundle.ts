@@ -6,6 +6,7 @@ import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type Globa
 import { CURVE_FEES, POST_GRADUATION_FEES, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, LP_LOCKED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
 import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
 
 /**
@@ -24,8 +25,21 @@ import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, typ
  * so the migration reserve stays at LaunchLab's 15% minimum (docs/burnkeeper/launchlab-devnet.md).
  */
 
-/** The SOL a LaunchLab curve raises before it graduates (the bundle's totalFundRaisingB). The launch review reads this, never a typed 85. */
+/** LaunchLab's standard raise (85 SOL), the DEFAULT of the creator's graduation preset. A coin's own raise is `raiseSol` (below). */
 export const LAUNCHLAB_RAISE_LAMPORTS: bigint = STANDARD_RAISE_LAMPORTS; // one source: src/lib/burnKeeper/launch.ts
+
+/**
+ * THE GRADUATION RAISE (website-14, LAUNCHPAD-PATH §75): the coin's own totalFundRaisingB. On mainnet only the presets 40, 60 and 85 SOL
+ * (launchPresets.ts RAISE_PRESETS_SOL); elsewhere any amount from 0.1 to 85 SOL (devnet rehearsals use small raises, as the CLI's
+ * --raise-sol does). Absent = 85. The review and the bundle read the same function, so they cannot disagree.
+ */
+export function raiseProblem(raiseSol: string | undefined, cluster: string): string | null {
+  if (raiseSol === undefined) return null;
+  if (cluster === "mainnet") return isRaisePreset(raiseSol) ? null : `The graduation raise must be ${RAISE_PRESETS_SOL.slice(0, -1).join(", ")} or ${RAISE_PRESETS_SOL[RAISE_PRESETS_SOL.length - 1]} SOL on mainnet.`;
+  return /^\d+(\.\d{1,9})?$/.test(raiseSol) && Number(raiseSol) >= 0.1 && Number(raiseSol) <= 85 ? null : "The graduation raise must be an amount of SOL from 0.1 to 85.";
+}
+/** The raise in lamports for a launch input (85 SOL when it names none). Call raiseProblem first. */
+export const raiseLamportsOf = (raiseSol: string | undefined): bigint => (raiseSol === undefined ? LAUNCHLAB_RAISE_LAMPORTS : BigInt(Math.round(Number(raiseSol) * 1e9)));
 
 export interface LaunchLabCreateInput {
   cluster: "devnet" | "mainnet" | "localnet";
@@ -97,6 +111,8 @@ export interface LaunchInput {
   firstBuySol: string;
   acknowledgements: { ruleLocked: boolean; noReturns: boolean };
   cluster: "devnet" | "mainnet" | "localnet";
+  /** website-14: the graduation raise in SOL ("40", "60" or "85" on mainnet); absent = 85 (LaunchLab's standard). */
+  raiseSol?: string;
 }
 
 export interface LaunchBundle {
@@ -142,6 +158,8 @@ export function launchProblems(i: LaunchInput): string[] {
   if (!i.acknowledgements?.ruleLocked) p.push("you must acknowledge that the rule cannot be changed");
   if (!i.acknowledgements?.noReturns) p.push("you must acknowledge that you are not promising anyone anything");
   if (i.cluster !== "devnet" && i.cluster !== "localnet" && i.cluster !== "mainnet") p.push("cluster must be devnet, localnet or mainnet");
+  const rp = raiseProblem(i.raiseSol, i.cluster);
+  if (rp) p.push(rp);
   return p;
 }
 
@@ -214,7 +232,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
   const burnPoolAuthority = feePda;
   const create = await deps.launchLab.createLaunchIxs({
     cluster: input.cluster, platformId: deps.launchLab.platformId, creator: input.creator, mint, name: input.name.trim(), symbol: input.ticker, uri: deps.metadataUri(mint), decimals: 6,
-    supply: toRaw(alloc.supply), totalSellA: toRaw(alloc.curve), totalFundRaisingB: LAUNCHLAB_RAISE_LAMPORTS, totalLockedAmount: toRaw(alloc.locked),
+    supply: toRaw(alloc.supply), totalSellA: toRaw(alloc.curve), totalFundRaisingB: raiseLamportsOf(input.raiseSol), totalLockedAmount: toRaw(alloc.locked),
     cliffPeriod: (alloc.cliffDays ?? 0) * 86_400, unlockPeriod: (alloc.vestDays ?? 0) * 86_400, creatorFeeRecipient: burnPoolAuthority, firstBuyLamports: BigInt(Math.round(Number(input.firstBuySol) * 1e9)),
   });
   const description = `${input.description.trim()}${input.description.trim() ? " " : ""}${descriptionFooter(locked)}`;

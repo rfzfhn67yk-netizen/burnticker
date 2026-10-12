@@ -31,7 +31,7 @@ const ROOT = path.join(import.meta.dirname, "..");
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 const cfg = loadCopyLintConfig(ROOT);
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}: ${t.slice(0, 120)}\n${formatHits(r)}`); };
-const PAGES = ["src/app/burnticker/check/page.tsx", "src/app/burnticker/check/ReceiptVerifier.tsx", "src/app/burnticker/fees/ledger/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/trust/TrustPackSection.tsx"];
+const PAGES = ["src/app/burnticker/check/CheckClient.tsx", "src/app/burnticker/check/ReceiptVerifier.tsx", "src/app/burnticker/fees/ledger/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/trust/TrustPackSection.tsx"];
 const strings = (j: unknown, out: string[] = []): string[] => { if (typeof j === "string") out.push(j); else if (Array.isArray(j)) j.forEach((v) => strings(v, out)); else if (j && typeof j === "object") Object.values(j).forEach((v) => strings(v, out)); return out; };
 /** JSX text nodes and the literal titles of a page file (code between > and < is skipped when it carries a semicolon). */
 const jsxText = (src: string) => [...src.replace(/=>/g, "  ").matchAll(/>([^<>{}]*[A-Za-z][^<>{}]*)</g)].map((m) => m[1]).filter((s) => !/;/.test(s)).concat([...src.matchAll(/(?:title|what): "([^"]+)"/g)].map((m) => m[1]));

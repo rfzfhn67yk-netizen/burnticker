@@ -9,14 +9,14 @@ import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint"
 
 const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
-const base: ReadinessInput = { launched: true, phase: "curve", raisedSol: 12.3456, poolVerified: false, latest: null };
+const base: ReadinessInput = { launched: true, phase: "curve", raisedSol: 12.3456, graduationSol: 85, poolVerified: false, latest: null };
 
 describe("readinessOf: one state per situation", () => {
-  test("the facts it rests on: 85 SOL graduation in the launch bundle, pool_verified required by crank_buyback", () => {
+  test("the facts it rests on: the coin's own raise in the launch bundle (default 85 SOL), pool_verified required by crank_buyback", () => {
     assert.equal(GRADUATION_SOL, 85);
-    // website-12: the builder's raise is one named constant, which the launch review also reads
+    // website-14 (§75): the builder's raise is the coin's own preset (40 / 60 / 85), default LaunchLab's standard; the review reads the same function
     const lb = fs.readFileSync("src/lib/burnticker/launchBundle.ts", "utf8");
-    assert.match(lb, /export const LAUNCHLAB_RAISE_LAMPORTS: bigint = STANDARD_RAISE_LAMPORTS;/); assert.match(lb, /totalFundRaisingB: LAUNCHLAB_RAISE_LAMPORTS,/);
+    assert.match(lb, /export const LAUNCHLAB_RAISE_LAMPORTS: bigint = STANDARD_RAISE_LAMPORTS;/); assert.match(lb, /totalFundRaisingB: raiseLamportsOf\(input\.raiseSol\),/);
     assert.match(fs.readFileSync("programs/burn-receipts/programs/burn_receipts/src/instructions/crank_buyback.rs", "utf8"), /require!\(c\.pool_verified, BurnError::PoolNotVerified\)/);
   });
   test("each of the seven states, in order", () => {
@@ -24,6 +24,9 @@ describe("readinessOf: one state per situation", () => {
       [{ ...base, launched: false }, "not-launched", /No coin is registered/],
       [base, "on-curve", /12\.35 of 85 SOL raised.*nothing can burn before the curve graduates.*seed gift/],
       [{ ...base, raisedSol: null, phase: null }, "on-curve", /could not read the curve, so the SOL raised is not shown/],
+      // website-14 (§75): a raise this site did not read is never printed as a typed 85
+      [{ ...base, graduationSol: undefined }, "on-curve", /^(?![\s\S]*85)[\s\S]*12\.35 SOL raised so far\. This site could not read the raise that completes the curve\./],
+      [{ ...base, graduationSol: 40, phase: "graduated" }, "awaiting-registration", /The curve reached 40 SOL/],
       [{ ...base, phase: "graduated" }, "awaiting-registration", /register_pool/],
       [{ ...base, phase: "graduated", poolVerified: null }, "awaiting-registration", /could not read the program/],
       [{ ...base, poolVerified: true }, "awaiting-event", /No reading has been published since the pool was verified/],
@@ -39,7 +42,7 @@ describe("readinessOf: one state per situation", () => {
       assert.equal(r.step, READINESS_ORDER.indexOf(r.state) + 1);
       assert.doesNotMatch(r.detail, /^\s*0\s*$/); clean(`${r.label}. ${r.detail}`, state);
     }
-    assert.equal(readinessOf(cases[9][0]).ok, true); assert.equal(readinessOf(cases[10][0]).ok, false);
+    assert.equal(readinessOf(cases[11][0]).ok, true); assert.equal(readinessOf(cases[12][0]).ok, false);
     assert.equal(readinessOf({ ...base, poolVerified: true, latest: { status: "confirmed", units: 1, skippedReason: null, waitReason: null } }).label, "Burned, not yet rechecked", "never a bare tick");
     assert.equal(readinessOf({ ...base, poolVerified: null, latest: { status: "confirmed", units: 1, skippedReason: null, waitReason: null, verified: true, checks: [] } }).state, "burned", "a confirmed burn implies a verified pool");
   });
@@ -59,7 +62,8 @@ describe("where the state is shown", () => {
     assert.match(coin, /const ready = readinessFromStatus\(/); assert.match(coin, /<ReadinessPanel r=\{ready\} /);
     assert.match(coin, /const preBurn = ready\.state === "on-curve" \|\| ready\.state === "awaiting-registration"/, "the coin page's 'burns begin after graduation' line follows the readiness state");
     const pre = fs.readFileSync("src/app/burnticker/t/[ticker]/DeficitPrelaunch.tsx", "utf8");
-    assert.match(pre, /<ReadinessPanel r=\{readinessOf\(\{ launched: false/); assert.match(pre, /Nothing burns until the curve fills and the debt rises/);
+    // website-14: the keeper's own readiness (from its curve read) once its files are read; not launched otherwise
+    assert.match(pre, /const r = d\.keeper\?\.readiness \?\? readinessOf\(\{ launched: false/); assert.match(pre, /<ReadinessPanel r=\{r\} /); assert.match(pre, /Nothing burns until the curve fills and the debt rises/);
     assert.match(fs.readFileSync("src/lib/burnKeeper/statusPage.ts", "utf8"), /readiness: \(\(\) => \{[\s\S]*readinessOf\(/);
     const site = fs.readFileSync("site/deficit/index.html", "utf8");
     assert.match(site, /id="readiness" data-readiness="not-launched"/); assert.match(site, /s\.readiness && s\.readiness\.label/);

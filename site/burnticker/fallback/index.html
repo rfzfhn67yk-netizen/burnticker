@@ -97,6 +97,7 @@ main{padding:40px 0 60px}
 .sh-ticker a{color:var(--sh-ink);text-decoration:none;margin-right:22px}.sh-ticker a:hover{text-decoration:underline}
 .sh-ticker .sh-net{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-scorch)}
 .sh-ticker-skel{display:inline-block;width:min(420px,70%);height:10px;border-radius:4px;background:var(--sh-line)}
+.sh-ticker .sh-kind{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-dim)}
 .sh-modal{max-width:min(28rem,calc(100vw - 32px));background:var(--sh-counter);color:var(--sh-ink);border:1px solid var(--sh-line);border-radius:10px;padding:20px;font-family:var(--sh-sans)}
 .sh-modal::backdrop{background:rgba(0,0,0,.6)}
 .sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
@@ -122,6 +123,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   .sh-tabbar a span:first-child{font-size:18px;line-height:1}
   .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
 }
+@media (max-width:899px){.sh-ticker{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}.sh-ticker.is-end{-webkit-mask-image:none;mask-image:none}}
 @media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
 @media (max-width:400px){.sh-word{display:none}}
 </style>
@@ -169,7 +171,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       </details>
     </div>
   </div>
-  <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
+  <div class="sh-ticker" data-activity tabindex="0" aria-label="Latest activity on chain"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest activity.</span></div>
 </header>
 <dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
   <h2 id="sh-launch-closed-h">Launching a coin</h2>
@@ -292,24 +294,30 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 (function () {
   // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
   // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
-  var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
+  var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
   var said = dlg && dlg.querySelector("[data-launch-sentence]");
   window.btHome = window.btHome || fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
   window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
-  if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
+  if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
 })();
 (function () {
-  // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
+  // THE ACTIVITY LINE (website-14): burns, signed readings, graduations and pool registrations from GET /api/burnticker/home, each
+  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. On phones the strip
+  // scrolls sideways, so its right edge fades until the end is reached.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
+  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered"};
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function edge() { box.classList.toggle("is-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 4); }
+  box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
   window.btHome.then(function (j) {
     box.textContent = "";
-    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
-    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }
-    j.events.forEach(function (ev) { var a = el("a", ""); a.href = "" + ev.href; if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
-  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest burns could not be read just now.")); });
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); return; }
+    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
+    j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : "") + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
+    edge();
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); });
 })();
 </script>
 <!-- site-shell:script:end -->

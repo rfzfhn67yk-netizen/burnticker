@@ -46,3 +46,6 @@ export function snapToPreset(f: number, shape: ShareShape): { value: number; cha
   const value = opts.reduce((b, x) => (Math.abs(x - f) < Math.abs(b - f) ? x : b), opts[0] as number);
   return { value, changed: Math.abs(value - f) > 1e-9 };
 }
+
+/** The graduation preset (website-14, LAUNCHPAD-PATH §75) lives in raisePresets.ts, which imports nothing, so the SDK's launch builder can read it. */
+export { DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset, raiseLamports, type RaisePreset } from "@/lib/burnticker/raisePresets";

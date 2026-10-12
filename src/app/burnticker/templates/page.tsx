@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { TEMPLATES } from "@/lib/burnticker/templates";
 import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
+import { CreatorOnboarding } from "../_components/CreatorOnboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default function TemplatesPage() {
         <p className="max-w-3xl text-sm text-neutral-400">A coin&apos;s rule can take one of twelve shapes.{launch.open ? <> Pick one to open the create screen with it filled in. Every dial stays editable until launch. On any coin or pair page, &ldquo;Launch one like this&rdquo; starts from that coin&apos;s own shape.</> : <> The shapes are shown so you can read what each kind of rule does.</>}</p>
         <p className="max-w-3xl text-sm text-neutral-300" data-launch-state>{site.sentence}</p>
       </header>
+      <CreatorOnboarding />
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="templates">
         {TEMPLATES.map((t) => { const launch = { open: site.wizard && !unavailable(t) }; return (
           <li key={t.id} className={`flex flex-col rounded-lg border border-neutral-800 bg-neutral-900 p-4${unavailable(t) ? " opacity-60" : ""}`} data-unavailable={unavailable(t) ? "" : undefined}>

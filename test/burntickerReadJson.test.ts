@@ -52,7 +52,7 @@ test("timeout: a body that never arrives ends as a timeout", async () => {
 const read = (f: string) => fs.readFileSync(f, "utf8");
 
 test("the trust surfaces never call Response.json() themselves; they read through useJsonRead and offer a Retry", () => {
-  for (const f of ["src/app/burnticker/trust/page.tsx", "src/app/burnticker/trust/CoverageSection.tsx", "src/app/burnticker/trust/OpsSection.tsx", "src/app/burnticker/trust/TrustPackSection.tsx", "src/app/burnticker/_components/CurrentStatusSummary.tsx", "src/app/burnticker/check/page.tsx"]) {
+  for (const f of ["src/app/burnticker/trust/page.tsx", "src/app/burnticker/trust/CoverageSection.tsx", "src/app/burnticker/trust/OpsSection.tsx", "src/app/burnticker/trust/TrustPackSection.tsx", "src/app/burnticker/_components/CurrentStatusSummary.tsx", "src/app/burnticker/check/CheckClient.tsx"]) {
     const s = read(f);
     assert.doesNotMatch(s, /\.json\(\)/, `${f} parses a Response itself`);
     assert.match(s, /useJsonRead/, f);

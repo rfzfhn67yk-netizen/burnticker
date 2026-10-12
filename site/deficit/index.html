@@ -218,6 +218,7 @@ html:not(.prelaunch) #prelaunch{display:none}
 #prelaunch .pl{border:1px dashed var(--line);padding:14px 16px;max-width:72ch}#prelaunch .pl p{margin:0 0 8px}#prelaunch .pl p:last-child{margin:0}
 .ready{margin:14px 0 0;border:1px dashed var(--line);padding:12px 14px;max-width:72ch}.ready p{margin:0}.ready .rk{font:500 .72rem/1.3 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.ready .rl{margin:4px 0;font-weight:600}.ready .rd{color:var(--dim);font-size:.9rem}
 .ready.ready-top{margin:0 0 16px}
+.queue{margin:0 0 16px;border:1px solid var(--line);padding:12px 14px;max-width:72ch}.queue p{margin:0}.queue .qk{font:500 .72rem/1.3 var(--marquee);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.queue .qh{margin:4px 0;font-weight:600}.queue .ql{color:var(--dim);font-size:.9rem;margin-top:4px}.queue .ql.stale{color:var(--amber,#ffb000)}
 </style>
 <!-- site-shell:css:begin -->
 <style>
@@ -256,6 +257,7 @@ html:not(.prelaunch) #prelaunch{display:none}
 .sh-ticker a{color:var(--sh-ink);text-decoration:none;margin-right:22px}.sh-ticker a:hover{text-decoration:underline}
 .sh-ticker .sh-net{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-scorch)}
 .sh-ticker-skel{display:inline-block;width:min(420px,70%);height:10px;border-radius:4px;background:var(--sh-line)}
+.sh-ticker .sh-kind{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-dim)}
 .sh-modal{max-width:min(28rem,calc(100vw - 32px));background:var(--sh-counter);color:var(--sh-ink);border:1px solid var(--sh-line);border-radius:10px;padding:20px;font-family:var(--sh-sans)}
 .sh-modal::backdrop{background:rgba(0,0,0,.6)}
 .sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
@@ -281,6 +283,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   .sh-tabbar a span:first-child{font-size:18px;line-height:1}
   .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
 }
+@media (max-width:899px){.sh-ticker{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}.sh-ticker.is-end{-webkit-mask-image:none;mask-image:none}}
 @media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
 @media (max-width:400px){.sh-word{display:none}}
 </style>
@@ -329,7 +332,7 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
       </details>
     </div>
   </div>
-  <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
+  <div class="sh-ticker" data-activity tabindex="0" aria-label="Latest activity on chain"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest activity.</span></div>
 </header>
 <dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
   <h2 id="sh-launch-closed-h">Launching a coin</h2>
@@ -357,7 +360,13 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     <div class="ready ready-top" id="readiness" data-readiness="not-launched" aria-live="polite">
       <p class="rk" id="readyStep">Step 1 of 7 toward a first burn</p>
       <p class="rl" id="readyLabel">Not launched</p>
-      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once 85 SOL has been raised, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
+      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once buyers have put in its raise, which this page reads from the coin's own pool after launch, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
+    </div>
+    <!-- the queued-units counter (website-14, LAUNCHPAD-PATH §73): filled in from status.json and burns.json by deficitQueueCore below -->
+    <div class="queue" id="queue" data-queue="loading" aria-live="polite">
+      <p class="qk">Readings waiting for the pool</p>
+      <p class="qh" id="queueHead">Reading the keeper's published files.</p>
+      <div id="queueLines"></div>
     </div>
     <div class="board">
       <div class="face">
@@ -863,8 +872,16 @@ burn  = every token the swap delivered</pre>
     checkRules(s.rules && s.rules.sha256);
     if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
   }
+  // the queued-units counter: the same function as the app (src/lib/burnticker/deficitQueueCore.mjs), on the same two files
+  function renderQueue(st, b) {
+    var box = $("queue"); if (!box || !window.deficitQueueCore) return;
+    var q = window.deficitQueueCore(st, b, Date.now());
+    box.setAttribute("data-queue", q.state); $("queueHead").textContent = q.headline;
+    var ls = $("queueLines"); ls.textContent = "";
+    q.lines.forEach(function (l) { var p = document.createElement("p"); p.className = "ql" + (/out of date/.test(l) ? " stale" : ""); p.textContent = l; ls.appendChild(p); });
+  }
   getJson("status.json").then(function (s) {
-    if (s && (s.state === "not-launched" || /prelaunch/.test(String(s.schema)))) { status = null; prelaunchState(s); return "prelaunch"; }
+    if (s && (s.state === "not-launched" || /prelaunch/.test(String(s.schema)))) { status = null; prelaunchState(s); renderQueue(s, null); return "prelaunch"; }
     status = s; renderStatus(s); document.documentElement.classList.remove("prelaunch");
     var cta = $("receiptsCta"); if (cta) { cta.href = "#receipts"; cta.textContent = "Read the receipts"; }
     if (s.rules && s.rules.sha256) checkRules(s.rules.sha256);
@@ -873,11 +890,12 @@ burn  = every token the swap delivered</pre>
     if (b === "prelaunch") return;
     burns = Array.isArray(b) ? b : (b && Array.isArray(b.burns) ? b.burns : []);
     var deep = /^#r-(\d+)$/.exec(location.hash); if (deep && Number(deep[1]) <= burns.length - LIMIT) showAll = true;
-    renderBurns(); renderHero(); renderToday(); buildSeries(); draw();
+    renderBurns(); renderHero(); renderToday(); buildSeries(); draw(); renderQueue(status, b);
     if (deep && $("r-" + deep[1])) $("r-" + deep[1]).scrollIntoView();
     fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
   }).catch(function (e) {
     var missing = /^404 /.test(String(e && e.message));
+    renderQueue(missing ? { state: "not-launched", ticker: "DEFICIT" } : null, null);
     checkRules("8e3e8b66748a7630b9fe0e9793583434a076f2a03e335cad3d4c965758a15be9");
     if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
     offline(missing ? "Not launched. $DEFICIT has not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
@@ -886,6 +904,91 @@ burn  = every token the swap delivered</pre>
   });
 })();
 </script>
+<!-- site-shell:queue-core:begin -->
+<script>
+window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now) {
+  var PENDING = ["planned", "sending", "swap-sent", "swapped"], STALE = 60 * 60 * 1000;
+  var ticker = status && status.ticker ? String(status.ticker) : "DEFICIT";
+  function out(state, o) {
+    return { state: state, riseUsd: o.riseUsd == null ? null : o.riseUsd, units: o.units || 0, unsigned: o.unsigned || 0, sharePct: o.sharePct == null ? null : o.sharePct,
+      formula: o.formula || null, readingDate: o.readingDate || null, generatedAt: o.generatedAt || null, stale: !!o.stale, raiseSol: o.raiseSol || null,
+      headline: o.headline, lines: o.lines || [], card: o.card || null };
+  }
+  if (!status || typeof status !== "object") return out("unavailable", { headline: "The queue is unavailable, because the keeper's published status could not be read.", card: null });
+  if (status.state === "not-launched" || /prelaunch/.test(String(status.schema || ""))) {
+    return out("not-launched", { headline: "$" + ticker + " is not created yet, so no reading has been recorded and nothing is queued.", generatedAt: status.generatedAt || null });
+  }
+  if (status.schema !== "burnkeeper.status/v1") return out("unavailable", { headline: "The queue is unavailable, because the keeper's status file is in a format this page does not read." });
+  var rows = Array.isArray(burnsFile) ? burnsFile : burnsFile && Array.isArray(burnsFile.burns) ? burnsFile.burns : [];
+  var gen = Date.parse(status.generatedAt);
+  var stale = isFinite(gen) && now - gen > STALE;
+  var feed = status.feed || {};
+  var prog = status.program || null;
+  var lastOnChain = prog && prog.queue ? prog.queue.lastOnChain : null;
+  var units = 0, unsigned = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r || PENDING.indexOf(r.status) < 0) continue;
+    var n = Number(r.units) || 0;
+    // a reading counts as queued once it is on chain; with no program block the keeper's own record is all there is
+    if (!prog || (lastOnChain && String(r.recordDate) <= String(lastOnChain))) units += n; else unsigned += n;
+  }
+  var riseUsd = null;
+  if (feed.baseline && feed.baseline.amount != null && feed.lastAmount != null) {
+    var rise = Number(feed.lastAmount) - Number(feed.baseline.amount);
+    if (isFinite(rise)) riseUsd = rise.toFixed(2);
+  }
+  var f = status.buyback && status.buyback.fractionPerUnit != null ? Number(status.buyback.fractionPerUnit) : NaN;
+  var keep = isFinite(f) ? Math.round((1 - f) * 10000) / 10000 : null;
+  var share = keep === null ? null : (1 - Math.pow(keep, units)) * 100;
+  var sharePct = share === null ? null : share.toFixed(2);
+  var formula = keep === null ? null : "1 − " + keep + "^" + units;
+  var curve = status.curve || null;
+  var raiseSol = curve && curve.threshold ? trimNum(curve.threshold) : null;
+  var poolOpen = !!(prog && prog.pool && prog.pool.registered);
+  var readingDate = feed.lastRecordDate || null;
+  var base = { riseUsd: riseUsd, units: units, unsigned: unsigned, sharePct: sharePct, formula: formula, readingDate: readingDate, generatedAt: status.generatedAt || null, stale: stale, raiseSol: raiseSol };
+  var lines = [];
+  var freshness = "The keeper published this " + (isFinite(gen) ? "at " + denver(gen) + " Denver time" : "at a time it did not record") + "." + (stale ? " That was more than an hour ago, so it may be out of date." : "");
+  if (!readingDate) {
+    base.headline = "The keeper has not published a reading since launch yet. The first reading is the baseline, and nothing is counted for it.";
+    base.lines = [freshness];
+    return out("no-reading", base);
+  }
+  var riseText = riseUsd === null ? null : Number(riseUsd) >= 0 ? "The debt has risen " + usd(riseUsd) + " since launch." : "The debt is " + usd(String(-Number(riseUsd))) + " lower than at launch.";
+  var unitsText = units === 1 ? "One unit is queued." : units === 0 ? "No units are queued." : groupInt(units) + " units are queued.";
+  if (!poolOpen) {
+    base.headline = [riseText, unitsText].filter(Boolean).join(" ");
+    if (units > 0 && sharePct !== null) lines.push("When the curve fills" + (raiseSol ? " at " + raiseSol + " SOL" : "") + " and its pool is registered, the queued readings run in order and together spend " + formula + " of the burn pool, which is " + sharePct + "%. One burn run spends at most 2% of the trading pool's SOL, and the rest carries to the next run.");
+    else if (units === 0) lines.push("A unit is queued for each full $1B the debt rises from one business day to the next. Nothing burns before the curve fills and its pool is registered.");
+    if (riseUsd === null) lines.push("The rise since launch is not in the keeper's published file yet.");
+    if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
+    lines.push("The latest reading is the Treasury figure for " + readingDate + ". " + freshness);
+    base.lines = lines;
+    base.card = units > 0 ? "0 $" + ticker + ", " + (units === 1 ? "1 unit" : groupInt(units) + " units") + " queued" : null;
+    return out("queued", base);
+  }
+  base.headline = [riseText, units === 0 ? "The pool is registered, and no units are waiting." : "The pool is registered. " + (units === 1 ? "One unit is" : groupInt(units) + " units are") + " waiting for a burn run."].filter(Boolean).join(" ");
+  if (unsigned > 0) lines.push((unsigned === 1 ? "One more unit is" : groupInt(unsigned) + " more units are") + " recorded by the keeper and not yet signed on chain.");
+  lines.push("The latest reading is the Treasury figure for " + readingDate + ". " + freshness);
+  base.lines = lines;
+  return out("pool-open", base);
+
+  function groupInt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function trimNum(s) { var t = String(s); return t.indexOf(".") >= 0 ? t.replace(/0+$/, "").replace(/\.$/, "") : t; }
+  function usd(s) {
+    var v = Number(s);
+    if (v >= 1e9) return "$" + (Math.round(v / 1e7) / 100).toFixed(2) + " billion";
+    if (v >= 1e6) return "$" + (Math.round(v / 1e4) / 100).toFixed(2) + " million";
+    return "$" + groupInt(Math.round(v));
+  }
+  function denver(ms) {
+    try { return new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(ms)); }
+    catch (e) { return new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC"; }
+  }
+};
+</script>
+<!-- site-shell:queue-core:end -->
 <!-- site-shell:script:begin -->
 <script>
 (function () {
@@ -919,24 +1022,30 @@ burn  = every token the swap delivered</pre>
 (function () {
   // "Launch a coin": the launch page when the site's launch record (GET /api/burnticker/home → launch, website-12's SiteLaunchState) says
   // the wizard is available; otherwise the dialog with the record's own sentence. Unreadable = the dialog with the unavailable sentence.
-  var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
+  var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
   var said = dlg && dlg.querySelector("[data-launch-sentence]");
   window.btHome = window.btHome || fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
   window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : "Whether creator launches are open could not be read, so no launch controls are shown."; });
-  if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
+  if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
 })();
 (function () {
-  // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
+  // THE ACTIVITY LINE (website-14): burns, signed readings, graduations and pool registrations from GET /api/burnticker/home, each
+  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. On phones the strip
+  // scrolls sideways, so its right edge fades until the end is reached.
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
+  var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered"};
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function edge() { box.classList.toggle("is-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 4); }
+  box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
   window.btHome.then(function (j) {
     box.textContent = "";
-    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
-    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }
-    j.events.forEach(function (ev) { var a = el("a", ""); a.href = "https://burnticker.com" + ev.href; if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
-  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest burns could not be read just now.")); });
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); return; }
+    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); edge(); return; }
+    j.events.forEach(function (ev) { var a = el("a", ""); a.href = (/^https?:/.test(ev.href) ? "" : "https://burnticker.com") + ev.href; a.setAttribute("data-kind", ev.kind || "burn"); a.appendChild(el("span", "sh-kind", KIND[ev.kind] || KIND.burn)); if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
+    edge();
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest activity could not be read just now.")); edge(); });
 })();
 </script>
 <!-- site-shell:script:end -->

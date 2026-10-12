@@ -26,7 +26,7 @@ import { LaunchRecovery } from "./LaunchRecovery";
 import { LAUNCH_GATE_LOADING, launchGateFromCatalogue, wizardMayRender, type LaunchGateState } from "@/lib/burnticker/launchGateState";
 import { availabilityFromCatalogue, launchTypeOf, PREVIEW_BANNER, siteLaunchStateFromCatalogue, SITE_LAUNCH_STATE_LOADING, type LaunchAvailabilityModel, type LaunchType, type SiteLaunchState } from "@/lib/burnticker/launchAvailability";
 import { draftRevision, EMPTY_REVIEW_SLOT, reviewAnswered, reviewFor, reviewMatchesDraft, reviewRequested, REVIEW_UPDATING, type ReviewSlot } from "@/lib/burnticker/launchReviewSync";
-import { DEFAULT_SHARE, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset } from "@/lib/burnticker/launchPresets";
+import { DEFAULT_SHARE, SHARE_PRESETS, presetRowLabel, pctLabel as presetPct, snapToPreset, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, type RaisePreset } from "@/lib/burnticker/launchPresets";
 import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
@@ -35,6 +35,9 @@ import { wxThresholdProblem } from "@/lib/burnticker/launchFields";
 import { composeRule, fieldsFromRule, launchBody } from "@/lib/burnticker/launchDraft";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { LaunchGate } from "./LaunchGate";
+import { CreatorOnboarding } from "../_components/CreatorOnboarding";
+import { DuplicateNotice } from "./DuplicateNotice";
+import type { ExistingCoin } from "@/lib/burnticker/duplicateRule";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
 import { describeRule, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
@@ -155,7 +158,7 @@ export default function LaunchWizard() {
   // weather (Browse → Weather & Climate): station + threshold
   const [wx, setWx] = useState<{ metric: "high" | "rain" | "snow"; station: string; threshold: string } | null>(null);
   // the universal search (GET /v1/search): describe the event, get ready-made rules; one click lands on the create screen
-  const [uq, setUq] = useState(""), [ures, setUres] = useState<{ cards: Suggestion[]; empty: boolean; categories: { id: string; label: string; blurb: string }[] } | null>(null), [ubusy, setUbusy] = useState(false);
+  const [uq, setUq] = useState(""), [ures, setUres] = useState<{ cards: (Suggestion & { existing?: ExistingCoin[] })[]; empty: boolean; categories: { id: string; label: string; blurb: string }[] } | null>(null), [ubusy, setUbusy] = useState(false);
   const [howSettles, setHowSettles] = useState<string | null>(null), [settleNote, setSettleNote] = useState<string | null>(null);
   const [pasted, setPasted] = useState("");
   const creator = wallet.publicKey?.toBase58() ?? (PUB.test(pasted.trim()) ? pasted.trim() : "");
@@ -207,6 +210,8 @@ export default function LaunchWizard() {
   const [ownImage, setOwnImage] = useState(false), [customImages, setCustomImages] = useState(false);
   // the creator's note (≤ 140 chars): its own box on the coin page, never part of the description; linted on the server at launch
   const [note, setNote] = useState("");
+  // website-14 (LAUNCHPAD-PATH §75): the graduation preset, 40 / 60 / 85 SOL, default 85; the server refuses anything else on mainnet
+  const [raiseSol, setRaiseSol] = useState<RaisePreset>(DEFAULT_RAISE_SOL);
   const [cardWin, setCardWin] = useState<Record<string, number>>({});
   // an event card's outcome picker (polySearch.ts): which card is open and the picker's own filter text
   const [outPick, setOutPick] = useState<{ id: string; q: string } | null>(null);
@@ -496,14 +501,14 @@ export default function LaunchWizard() {
   // L06: the read-only review payload (POST /v1/launch/review) for the pre-wallet summary — the server's numbers, debounced. A6: every
   // request carries the draft's revision; an answer for an older revision or an older request is dropped (launchReviewSync.ts)
   const reviewSeq = useRef(0);
-  const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB] : null, srcWarnings, textCtx]);
+  const reviewKey = draftRevision([rule, ticker, name, note, pairOn ? [tickerB, nameB, ruleB] : null, srcWarnings, textCtx, raiseSol]);
   const curRev = useRef(reviewKey); curRev.current = reviewKey;
   useEffect(() => {
     if (step !== "review" || !rule || gate.kind === "loading") return;
     const seq = ++reviewSeq.current, rev = reviewKey;
     setReviewSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
-      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: srcWarnings, ...(pairOn && ruleB ? { companion: { ticker: tickerB.toUpperCase(), name: nameB } } : {}) }) })
+      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: srcWarnings, raiseSol, ...(pairOn && ruleB ? { companion: { ticker: tickerB.toUpperCase(), name: nameB } } : {}) }) })
         .then((j) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
         .catch((e) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: `${(e as Error).message} (${detailOf(e)})` })));
     }, 400);
@@ -522,7 +527,7 @@ export default function LaunchWizard() {
     mark("launch");
     // pressing Launch is the acknowledgement (the line under the button states both); socials and a custom image are API-only; no launch built here carries an opening purchase (hostedLaunch.ts)
     flowStats.current.decisions++;
-    const common = { creator, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, timings: { ...stepTimes.current, screens: flowStats.current.screens, decisions: flowStats.current.decisions } };
+    const common = { creator, firstBuySol: "0", raiseSol, acknowledgements: { ruleLocked: true, noReturns: true }, timings: { ...stepTimes.current, screens: flowStats.current.screens, decisions: flowStats.current.decisions } };
     try {
       if (pairOn && ruleB) {
         // A matchup: two coins, one per team — two launches (each its own selector; a registered pair needs one shared selector).
@@ -530,7 +535,7 @@ export default function LaunchWizard() {
         const b = await post({ ...common, firstBuySol: "0", ticker: tickerB.toUpperCase(), name: nameB, description: finalDescriptionB, descCtx: pairMode === "game" && game && sideA ? { game: { opponent: sideA.nickname ?? sideA.name, home: !aHome, startsAt: game.expectedAt ?? "" } } : {}, note: "", imageUrl: null, links: [], rule: ruleB });
         setPairOut({ pairId: null, a: a.bundle, b: b.bundle, notes: [independentPairFacts(ticker.toUpperCase(), tickerB.toUpperCase()).moves] }); setBundle(a.bundle);
       } else {
-        const body = { ...common, ...launchBody({ creator, ticker, name, description: finalDescription, descCtx: textCtx, note, rule }) };
+        const body = { ...common, ...launchBody({ creator, ticker, name, description: finalDescription, descCtx: textCtx, note, rule, raiseSol }) };
         if (pairOn) {
           // a rivalry pair (one shared selector): the venue this host uses — the pair curve (one transaction set, both graduate or
           // neither) or two LaunchLab bundles; a 409 naming the other venue switches the review line and waits for a second press
@@ -541,7 +546,7 @@ export default function LaunchWizard() {
       }
       setStep("launch");
     } catch (e) { const v = venueFrom409(e); if (v) setPairVenue(v); setLaunchErr(String((e as Error).message)); } finally { setBusy(false); }
-  }, [reviewSlot, rule, ruleB, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title]);
+  }, [reviewSlot, rule, ruleB, raiseSol, season, pairOn, pairVenue, creator, ticker, name, finalDescription, finalDescriptionB, imageUrl, ownImage, customImages, note, textCtx, pairMode, aHome, sideA, linksOf, firstBuy, ackLocked, ackNoReturns, tickerB, nameB, imageB, game?.title]);
 
   // ---- navigation -----------------------------------------------------------------------------------------------------------------
   const order = ORDER[flow];
@@ -686,6 +691,7 @@ export default function LaunchWizard() {
       </header>
       {preview && <p className="sticky top-14 z-30 rounded border border-amber-400 bg-neutral-950/95 px-3 py-2 text-sm font-medium text-amber-300" role="status" data-preview-banner>{PREVIEW_BANNER}</p>}
       <LaunchRecovery />
+      {step === "choose" && <CreatorOnboarding />}
 
       {step !== "choose" && (
         <div aria-label="Progress">
@@ -728,6 +734,7 @@ export default function LaunchWizard() {
                   <p className="mt-1 text-xs text-neutral-400 break-words">It settles on {c.settlement}.{c.crossReadUrl && <> <a className="underline" href={c.crossReadUrl} rel="noopener" target="_blank">Open {c.crossRead ?? "the source"} ↗</a></>}</p>
                   {tx && <p className="mt-2 text-xs text-neutral-300"><span className="font-mono">${tx.ticker}</span> — {tx.oneLiner}.</p>}
                   {c.note && <p className="mt-2 text-xs text-amber-300">{c.note}</p>}
+                  {c.existing && c.existing.length > 0 && <DuplicateNotice existing={c.existing} />}
                   {cardBlocked(c) && <p className="mt-2 text-xs text-amber-300" data-type-blocked>{cardBlocked(c)}</p>}
                   {c.refused.length > 0 ? <p className="mt-2 text-xs text-red-400">{refusedLine(c.refused)}</p>
                     : c.venue === "tile" ? (pairsBlocked ? null : c.href ? <Link className="mt-2 inline-block underline text-amber-300 text-xs" href={c.href}>Open Coin vs Coin →</Link> : <p className="mt-2 text-xs text-neutral-500">Coin vs Coin — not built yet</p>)
@@ -993,6 +1000,7 @@ export default function LaunchWizard() {
               pairFacts={pairOn && sideA && sideB ? (ruleB ? independentPairFacts(ticker || "A", tickerB || "B", { a: `the ${A}`, b: `the ${B}` }) : winnerTakesBurnFacts(ticker || "A", tickerB || "B")) : null}
               ends={endsLine(text)}
               shares={{ options: [...shareOptions], value: shareValue, onChange: (v) => { flowStats.current.decisions++; setDial("fraction", v); } }}
+              raise={pairOn ? null : { options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: (v) => { flowStats.current.decisions++; setRaiseSol(v); }, line: shownReview.review?.raise?.line ?? null }}
               durations={pairOn ? { options: [{ value: "game", label: "until the result" }, { value: "season", label: "this season" }], value: pairMode === "game" ? "game" : "season", onChange: (v) => { flowStats.current.decisions++; setPairMode(v === "game" ? "game" : "season"); } } : null}
               note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}
               problems={problems}
@@ -1001,6 +1009,7 @@ export default function LaunchWizard() {
               ready={ready}
               creator={creator || null}
               onLaunch={() => { void launch(); }}
+              duplicate={<DuplicateNotice existing={(shownReview.review as (LaunchReview & { existing?: ExistingCoin[] }) | null)?.existing ?? []} />}
               summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
               blocked={walletBlocked(pairOn ? "matchup" : launchTypeOf(rule), pairOn)}
               warnings={srcWarnings}

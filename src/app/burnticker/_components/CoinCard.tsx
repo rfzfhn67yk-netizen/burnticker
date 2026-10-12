@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CARD_LABELS, CARD_MEANINGS, ageText, cardViewFromIndex, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
+import { CARD_LABELS, CARD_MEANINGS, ageText, cardViewFromIndex, curveLine, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
+import { ProgressStrip } from "./ProgressStrip";
+import { FollowButton } from "./FollowButton";
 
 /**
  * THE COIN CARD (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md; the full field set since website-13, 2026-10-12,
@@ -130,10 +132,11 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
         </div>
       </div>
       <dl className="bt-card-rows">
+        <div data-row="progress"><dt title={CARD_MEANINGS.progress}>{CARD_LABELS.progress}</dt><dd>{v.progress ? <ProgressStrip p={v.progress} compact /> : <Cell c={{ text: null, why: v.progressWhy }} />}</dd></div>
         <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}</dd></div>
         <div data-row="nextSettle"><dt>{CARD_LABELS.nextSettle}</dt><dd><Cell c={v.nextSettle} /></dd></div>
         <div data-row="curve"><dt title={CARD_MEANINGS.curve}>{CARD_LABELS.curve}</dt><dd>
-          <span title={v.curve.why ?? undefined}>{v.curve.raised === null ? <span aria-hidden="true">—</span> : v.curve.raised} / {v.curve.of} raised{v.curve.raised === null && <span className="sr-only">. {v.curve.why}</span>}</span>
+          <span title={v.curve.why ?? undefined}>{curveLine(v.curve)}{(v.curve.raised === null || v.curve.of === null) && v.curve.why && <span className="sr-only">. {v.curve.why}</span>}</span>
           <span className="bt-curve mt-1 block" role="progressbar" aria-label="Curve progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined} aria-valuetext={pct === null ? "Not read" : `${pct.toFixed(0)}%`}><span className={`bt-curve-fill block${v.curve.done ? " is-done" : ""}`} style={{ width: `${pct ?? 0}%` }} /></span>
         </dd></div>
         <div data-row="mcap"><dt title={CARD_MEANINGS.mcap}>{CARD_LABELS.mcap}</dt><dd><Cell c={v.mcap} /></dd></div>
@@ -143,6 +146,7 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
       </dl>
       <div className="bt-card-foot" data-row="receipt">
         {v.receipt ? <a className="bt-ghost-btn" href={v.receipt.href} title={CARD_MEANINGS.receipt}>Check receipt</a> : <><span className="bt-ghost-btn is-disabled" aria-disabled="true" title={v.receiptWhy ?? undefined}>Check receipt</span><span className="text-xs text-neutral-500">{v.receiptWhy}</span></>}
+        {v.group === "public" || v.id === "deficit" ? <span className="ml-auto"><FollowButton ticker={v.ticker} /></span> : null}
       </div>
       {v.mint && <p className="mt-2 text-[11px] text-neutral-500">{v.mint.label}: <code className="break-all">{v.mint.address}</code></p>}
     </article>

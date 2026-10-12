@@ -20,7 +20,7 @@ test("BT-14: repository paths become links pinned to a 40-hex public commit (fol
   const parts = splitRepoPaths("Records: docs/burnkeeper/devnet-run.md and config/burnticker/transparency.json → limitations.");
   assert.deepEqual(parts.filter((p) => p.path).map((p) => p.path), ["docs/burnkeeper/devnet-run.md", "config/burnticker/transparency.json"]);
   assert.equal(parts.map((p) => p.text).join(""), "Records: docs/burnkeeper/devnet-run.md and config/burnticker/transparency.json → limitations.");
-  for (const f of ["src/app/burnticker/_components/CurrentStatusSummary.tsx", "src/app/burnticker/check/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/trust/page.tsx"]) assert.match(read(f), /<RepoText /, f);
+  for (const f of ["src/app/burnticker/_components/CurrentStatusSummary.tsx", "src/app/burnticker/check/CheckClient.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/trust/page.tsx"]) assert.match(read(f), /<RepoText /, f);
   assert.doesNotMatch(read("src/app/burnticker/_components/CurrentStatusSummary.tsx"), /\(<code>\{h\.path\}<\/code>\)/, "history paths are links, not plain text");
 });
 

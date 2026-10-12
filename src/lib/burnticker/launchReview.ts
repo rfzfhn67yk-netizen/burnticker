@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { lockRule, ruleStatement, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
-import { allocationFor, LAUNCHLAB_RAISE_LAMPORTS } from "@/lib/burnticker/launchBundle";
+import { allocationFor, raiseLamportsOf, raiseProblem } from "@/lib/burnticker/launchBundle";
 import { pairCurveEnabled } from "@/lib/burnKeeper/pairCurveCrank";
 import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS as PAIR_DEV_FEE_BPS, FEE_BPS as PAIR_FEE_BPS } from "@/lib/pairCurve/pricing";
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
@@ -9,9 +9,10 @@ import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, POST_GRADUATION_FEES, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
 import { describeRule } from "@/lib/burnticker/describe";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
-import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel } from "@/lib/burnticker/launchPresets";
+import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
+import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
 
 /**
  * THE READ-ONLY REVIEW PAYLOAD (ChatGPT launch audit 5, L02 / L06, 2026-10-11): everything a creator should see before connecting a
@@ -28,7 +29,7 @@ import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
  */
 
 /** `pair` = side B of a registered pair (its rule is derived from side A's); `companion` = a second, independent coin launched alongside (a matchup's other team). */
-export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown } | null; companion?: { ticker?: unknown; name?: unknown } | null; warnings?: unknown }
+export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown } | null; companion?: { ticker?: unknown; name?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
 export interface ReviewCost { label: string; sol: string; kind: "rent" | "reserve" | "fee" }
 export interface LaunchReview {
   schema: "burnticker.launch-review/v1";
@@ -46,6 +47,8 @@ export interface LaunchReview {
   transactions: { count: number; steps: { label: string; signers: string[] }[]; note: string };
   costs: { lines: ReviewCost[]; totalSol: string; note: string };
   prerequisites: string[];
+  /** website-14 (LAUNCHPAD-PATH §75): the chosen graduation raise, the pool it starts, the three choices and what each means. */
+  raise: { sol: string; poolSol: string; presets: readonly string[]; choices: { sol: string; sentence: string }[]; shared: string; line: string } | null;
   /** website-12 (Codex F1): the venue the bundle route would build for this request; every number below is that venue's. */
   venue: "launchlab" | "pair-curve";
   /** A4: the prerequisite chain in one line, shown by default (the states it can be in follow in `prerequisiteStates`). */
@@ -65,14 +68,7 @@ export interface LaunchReview {
   problems: string[];
 }
 
-/** Rent-exempt minimum for an account of `bytes` (Solana: (bytes + 128) × 3,480 lamports/byte-year × 2 years). */
-export const rentLamports = (bytes: number): number => (bytes + 128) * 3480 * 2;
-/** Byte sizes the launch creates per coin (programs/burn-receipts TokenConfig, measured 2026-10-10; REHEARSAL-RUNSHEET §0.1). */
-export const TOKEN_CONFIG_BYTES = 863;
-/** LaunchLab create's account rent (pool state, two vaults, metadata), measured on the 2026-10-10 rehearsal (REHEARSAL-RUNSHEET §0.1). */
-export const LAUNCHLAB_CREATE_RENT_SOL = 0.03;
-export const LAMPORTS_PER_SIGNATURE = 5000;
-const sol = (lamports: number) => (lamports / 1e9).toFixed(lamports < 1_000_000 ? 6 : 4).replace(/0+$/, "").replace(/\.$/, "");
+export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
 
 /** The deployed end-of-rule behaviour, in one sentence (the end-of-rule sink, program round 4, is not deployed and is not described). */
 export const WIND_DOWN_LINE = `When the rule ends, the coin's own burn pool burns down what is left over ${DEFAULT_WIND_DOWN_DAYS} days. Then the coin retires. A retired coin's pool keeps burning any fees it still receives. The wind-down only burns this coin and sends nothing to another coin.`;
@@ -88,11 +84,14 @@ export const PREREQUISITE_STATES = [
   `Capped: until the program is audited, each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL. Anything above that waits.`,
 ];
 const solOf = (lamports: bigint): string => (Number(lamports) / 1e9).toLocaleString("en-US", { maximumFractionDigits: 3 });
-/** The compact prerequisite line for a venue, from the numbers the builder uses (launchBundle.ts, pairCurve/pricing.ts). */
-export function prerequisiteLineFor(venue: "launchlab" | "pair-curve"): string {
+/**
+ * The compact prerequisite line for a venue, from the numbers the builder uses (launchBundle.ts, pairCurve/pricing.ts). For LaunchLab the
+ * raise is the coin's own (the creator's preset); with none chosen yet, the line names the three choices instead of a typed 85.
+ */
+export function prerequisiteLineFor(venue: "launchlab" | "pair-curve", raiseSol?: string | null): string {
   return venue === "pair-curve"
     ? `Before the first burn, the pair's shared curve must raise ${solOf(DEFAULT_TARGET_RAISE_LAMPORTS)} SOL with each coin holding at least ${DEFAULT_MIN_SIDE_SHARE_BPS / 100}% of it, both coins must move to their own Raydium pools, and each pool must be registered and verified by the burn program.`
-    : `Before the first burn, the curve must raise ${solOf(LAUNCHLAB_RAISE_LAMPORTS)} SOL from buyers, the coin must move to its Raydium pool, and that pool must be registered and verified by the burn program.`;
+    : `Before the first burn, the curve must raise ${raiseSol ? `${solOf(raiseLamportsOf(raiseSol))} SOL` : `the amount its creator chose (${RAISE_PRESETS_SOL.slice(0, -1).join(", ")} or ${RAISE_PRESETS_SOL[RAISE_PRESETS_SOL.length - 1]} SOL)`} from buyers, the coin must move to its Raydium pool, and that pool must be registered and verified by the burn program.`;
 }
 /** The pair curve's fees per 1 SOL traded (pairCurve/pricing.ts and docs/burnticker/PAIR-CURVE.md: no creator fee after graduation). */
 export const PAIR_CURVE_FEES = {
@@ -148,6 +147,10 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   if (note.length > NOTE_MAX) problems.push(`The note can be at most ${NOTE_MAX} characters.`);
   const pp = presetProblem(locked.rule);
   if (pp) problems.push(pp);
+  // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
+  const raiseSol = body.raiseSol === undefined || body.raiseSol === null ? DEFAULT_RAISE_SOL : String(body.raiseSol);
+  const rp = raiseProblem(raiseSol, cluster);
+  if (rp) problems.push(rp);
   const model = availabilityFromEnv(env, cluster);
   const type = launchTypeOf(locked.rule, { pair: !!pair });
   const ta = type ? model.types[type] : null;
@@ -189,7 +192,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       { label: "Rent for the LaunchLab pool, its vaults and the coin's metadata. This figure was measured on the rehearsal launch.", sol: sol(create * coins), kind: "rent" },
       { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * coins), kind: "fee" },
     ];
-    total = (rentConfig + reserve + create + fee) * coins;
+    total = launchLabCostLamports(locked.rule.reserveSol, coins);
     steps = coins > 1
       ? [{ label: `Create $${tk(0)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }, { label: pair ? `Create $${tk(1)} and link the two coins` : `Create $${tk(1)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }]
       : [{ label: `Create $${ticker || "TICKER"} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }];
@@ -220,12 +223,17 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     transactions: { count: n, steps, note: n === 1 ? "You sign the transaction in your wallet. The wallet shows the exact accounts and amount first, and nothing is sent until you approve." : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it." },
     costs: { lines, totalSol: sol(total), note: costNote },
     prerequisites: [
-      prerequisiteLineFor(venue),
+      prerequisiteLineFor(venue, venue === "launchlab" ? raiseSol : null),
       `Until the program is audited, each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL. Fees above that amount wait.`,
       "Every burn needs a reading that the operator's keeper signs. Today one signature is enough, and the operator holds it.",
     ],
     venue,
-    prerequisiteLine: prerequisiteLineFor(venue),
+    prerequisiteLine: prerequisiteLineFor(venue, venue === "launchlab" ? raiseSol : null),
+    raise: venue === "launchlab" ? {
+      sol: raiseSol, poolSol: raiseSol, presets: RAISE_PRESETS_SOL,
+      choices: RAISE_PRESETS_SOL.map((x) => ({ sol: x, sentence: RAISE_PRESET_TEXT[x] })), shared: RAISE_PRESET_SHARED,
+      line: `The curve is complete once buyers have put in ${raiseSol} SOL, and the coin moves to its Raydium pool, which starts with roughly ${raiseSol} SOL.${isRaisePreset(raiseSol) ? "" : " This raise is not one of the three choices, so it is only accepted off mainnet."}`,
+    } : null,
     prerequisiteStates: PREREQUISITE_STATES,
     budget: share === null ? "This rule moves a fixed vault amount instead of a share of the burn budget." : budgetLine(shareText),
     recovery,
