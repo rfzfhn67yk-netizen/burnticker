@@ -11,6 +11,7 @@ import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { PLACEHOLDER_PROGRAM_ID } from "@/lib/burnticker/program";
 import { PLACEHOLDER_BLOCKHASH } from "@/lib/burnticker/transactions";
 import { claimLockFeesFor } from "@/lib/burnticker/lockFeesKeeper";
+import { postGraduationBpsFor } from "@/lib/burnticker/fees";
 import { API, CREATOR, HOST, POST_HEADERS, ROUTE_MODULES, callRoute, makeWorld, validateSchema, type World } from "./burntickerApiHelpers.ts";
 import { BRONCOS, DENVER_HIGH, DEBT_RULE } from "./burntickerHelpers.ts";
 
@@ -125,7 +126,10 @@ describe("v1 read endpoints", () => {
     const lp = body.lpLock as { policy: string; treasuryPinned: boolean; operatorTreasury: string; split: { burnBps: number; operatorBps: number }; perSwapAfterGraduationBps: { toBurnPool: number; toOperator: number; burnedTotal: number } };
     assert.equal(lp.policy, "locked-forever");
     assert.deepEqual([lp.split.burnBps, lp.split.operatorBps], [8000, 2000]);
-    assert.deepEqual([lp.perSwapAfterGraduationBps.toBurnPool, lp.perSwapAfterGraduationBps.toOperator, lp.perSwapAfterGraduationBps.burnedTotal], [16.8, 4.2, 21.55]);
+    // the test host is devnet: its CPMM tier (index 0, creator fee 25 bps, no protocol share) is not mainnet's tier 9
+    const devnet = postGraduationBpsFor("devnet");
+    assert.deepEqual([lp.perSwapAfterGraduationBps.toBurnPool, lp.perSwapAfterGraduationBps.toOperator, lp.perSwapAfterGraduationBps.burnedTotal], [devnet.lpToBurnPool, devnet.lpToOperator, devnet.burnPoolTotal]);
+    assert.deepEqual([devnet.lpToBurnPool, devnet.lpToOperator, devnet.burnPoolTotal], [16.8, 4.2, 41.8]);
     assert.equal(lp.operatorTreasury, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     const d = (body.fees as { designed: { lpBurnedPct: number; lpLockedPct: number } }).designed;
     assert.deepEqual([d.lpBurnedPct, d.lpLockedPct], [0, 100]);

@@ -5,10 +5,13 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
+import { getCpmmPdaAmmConfigId } from "@raydium-io/raydium-sdk-v2";
 import { claimCreatorFee as sdkClaimCreatorFee, claimVestedToken as sdkClaimVestedToken, getPdaCreatorFeeVaultAuth, getPdaCreatorVault, getPdaLaunchpadAuth, getPdaLaunchpadVaultId, getPdaVestId, getATAAddress, LaunchpadConfig, PlatformConfig, CpmmConfigInfoLayout, DEVNET_PROGRAM_ID, LAUNCHPAD_PROGRAM } from "@raydium-io/raydium-sdk-v2";
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, associatedTokenAddress, closeAccountIx, syncNativeIx } from "@/lib/burnKeeper/solana";
 import { claimCreatorFeeIxs, claimVestedTokenIx, CPMM_PROGRAM_ID, LAUNCHLAB_PROGRAM, launchLabCreatorFeeVault, launchLabVault, WSOL_MINT } from "@/lib/burnKeeper/launchlab";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
+import { CPMM_DEVNET_TIER_0, CPMM_MAINNET_TIER_0, CPMM_MAINNET_TIER_9, CPMM_TIER, type CpmmTier } from "@/lib/burnticker/cpmmTier";
+import { BURN_POOL_POST_GRADUATION_BPS, CREATOR_FEE_TO_BURN_POOL_BPS, POST_GRADUATION_FEES, postGraduationBpsFor } from "@/lib/burnticker/fees";
 import { buildCreateTx, buildPlatformTx, buildVestingTx, CPMM_PROGRAM, decodeAmmConfig, decodeGlobalConfig, decodePlatform, DEFAULT_PLATFORM, feeSplit, LAUNCHLAB_PROGRAM_SDK, launchRefusal, lpLockProblems, LP_LOCK_PLATFORM_SCALE_PPM, planLaunch, platformProblems, platformSiteRefusal, PLATFORM_SITE_UNSET, platformViewOf, ppmLamportsPerSol, ppmToBps, STANDARD_TOTAL_SELL_RAW, totalSellForLock, type AmmConfigView, type GlobalConfigView, type LaunchInput, type PlatformInput, type PlatformView } from "@/lib/burnKeeper/launch";
 
 const same = (a: TransactionInstruction, b: TransactionInstruction) => {
@@ -47,8 +50,11 @@ describe("the keeper's hand-encoded LaunchLab instructions == the SDK's builders
 
 // Raydium's live configs as read on 2026-10-09 (scripts/_probe2 — mainnet SOL config 6s1xP3…, platform 4Bu96…, CPMM AmmConfig index 0 D4FPEru…).
 export const MAINNET_GLOBAL: GlobalConfigView = { curveType: 0, index: 0, migrateFee: BigInt(0), tradeFeeRate: BigInt(2500), maxShareFeeRate: BigInt(10000), minSupplyA: BigInt(10_000_000), maxLockRate: BigInt(800_000), minSellRateA: BigInt(200_000), minMigrateRateA: BigInt(150_000), minFundRaisingB: BigInt(24_000_000_000), mintB: WSOL_MINT };
-export const RAYDIUM_PLATFORM: PlatformView = { feeRate: BigInt(7500), creatorFeeRate: BigInt(500), platformScale: BigInt(0), creatorScale: BigInt(100_000), burnScale: BigInt(900_000), cpConfigId: new PublicKey("D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"), platformCpCreator: PublicKey.default, platformClaimFeeWallet: new PublicKey("rayfqP1sEWfE1SJTSa5Z1szTW1hYpLWoBNwwPGRoJgV"), platformLockNftWallet: new PublicKey("RaysvGD275FiXmL6AhWo3ZPhR9GnpMRsRLUvHYKaY4P"), platformVestingScale: BigInt(0), restrictCurveParam: 0, name: "Raydium" };
+export const RAYDIUM_PLATFORM: PlatformView = { feeRate: BigInt(7500), creatorFeeRate: BigInt(500), platformScale: BigInt(0), creatorScale: BigInt(100_000), burnScale: BigInt(900_000), cpConfigId: new PublicKey(CPMM_MAINNET_TIER_0.id), platformCpCreator: PublicKey.default, platformClaimFeeWallet: new PublicKey("rayfqP1sEWfE1SJTSa5Z1szTW1hYpLWoBNwwPGRoJgV"), platformLockNftWallet: new PublicKey("RaysvGD275FiXmL6AhWo3ZPhR9GnpMRsRLUvHYKaY4P"), platformVestingScale: BigInt(0), restrictCurveParam: 0, name: "Raydium" };
 export const AMM0: AmmConfigView = { index: 0, tradeFeeRate: BigInt(2500), protocolFeeRate: BigInt(120_000), fundFeeRate: BigInt(40_000), creatorFeeRate: BigInt(500), creatorFeeShareRate: BigInt(50_000), createPoolFee: BigInt(150_000_000) };
+// Our platform's tier (owner decision 2026-10-12): mainnet AmmConfig index 9, from the one record (cpmmTier.ts).
+const ammOf = (t: CpmmTier): AmmConfigView => ({ index: t.index, tradeFeeRate: BigInt(t.tradeFeeRate), protocolFeeRate: BigInt(t.protocolFeeRate), fundFeeRate: BigInt(t.fundFeeRate), creatorFeeRate: BigInt(t.creatorFeeRate), creatorFeeShareRate: BigInt(t.creatorFeeShareRate), createPoolFee: BigInt(150_000_000) });
+export const AMM9: AmmConfigView = ammOf(CPMM_MAINNET_TIER_9);
 const DEVNET_GLOBAL: GlobalConfigView = { ...MAINNET_GLOBAL, maxLockRate: BigInt(999_999), minSellRateA: BigInt(1), minMigrateRateA: BigInt(1), minFundRaisingB: BigInt(1) };
 
 // The creator is the burn program's fee PDA for the mint (review H-2); `keeper` below IS that PDA (named for the older tests' prose).
@@ -195,28 +201,41 @@ describe("the Burnticker platform config (the owner's dials)", () => {
     const d = Buffer.from(ix.dataHex, "hex");
     assert.equal(d.readBigUInt64LE(8), BigInt(100_000)); assert.equal(d.readBigUInt64LE(16), BigInt(0)); assert.equal(d.readBigUInt64LE(24), BigInt(900_000)); assert.equal(d.readBigUInt64LE(32), BigInt(2500));
   });
-  test("under our platform (25 dev + 50 burn + 25 Raydium): 100 bps on the curve; after graduation the burn pool still gets 4.75 bps and the Fee Key 21 × platformScale", () => {
+  test("the CPMM tier record: tier 0 is the live AMM0 above; every id is the AmmConfig PDA of its index on its cluster's CPMM program", () => {
+    assert.deepEqual(ammOf(CPMM_MAINNET_TIER_0), AMM0);
+    for (const t of [CPMM_MAINNET_TIER_0, CPMM_MAINNET_TIER_9, CPMM_DEVNET_TIER_0]) assert.equal(getCpmmPdaAmmConfigId(CPMM_PROGRAM[t.cluster], t.index).publicKey.toBase58(), t.id, `${t.cluster} index ${t.index}`);
+    assert.equal(CPMM_TIER.mainnet.id, "LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC");
+    assert.equal(CPMM_TIER.devnet.id, "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy", "devnet keeps the rehearsal's pin (no creator-fee tier like index 9 there)");
+  });
+  test("under our platform (25 dev + 50 burn + 25 Raydium): 100 bps on the curve; after graduation on tier 9 the burn pool gets 71.25 bps of creator fee and the Fee Key 21 × platformScale", () => {
     const view = platformViewOf(P({ platformScalePpm: BigInt(1_000_000) }));
-    const s = feeSplit({ global: MAINNET_GLOBAL, platform: view, amm: AMM0, creatorIsBurnPool: true });
+    const s = feeSplit({ global: MAINNET_GLOBAL, platform: view, amm: AMM9, creatorIsBurnPool: true });
     assert.equal(s.preGraduation.totalBps, 100);
     assert.deepEqual(s.preGraduation.legs.map((l) => l.bps), [25, 25, 50]);
     assert.equal(s.postGraduation.legs[0].bps, 21, "100% of the LP to the platform Fee Key: 84% of 25 bps");
     assert.equal(s.postGraduation.legs[1].bps, 0);
-    assert.equal(s.postGraduation.legs[3].bps, 4.75);
-    const burnAll = feeSplit({ global: MAINNET_GLOBAL, platform: platformViewOf(P()), amm: AMM0, creatorIsBurnPool: true });
+    assert.equal(s.postGraduation.legs[3].bps, CREATOR_FEE_TO_BURN_POOL_BPS, "75 bps creator fee less Raydium's 5%");
+    const burnAll = feeSplit({ global: MAINNET_GLOBAL, platform: platformViewOf(P()), amm: AMM9, creatorIsBurnPool: true });
     assert.equal(burnAll.postGraduation.legs[0].bps, 0); assert.equal(burnAll.postGraduation.legs[1].bps, 21);
   });
-  test("LP LOCKED FOREVER (2026-10-10): with the Fee Key at the burn program's fee-keys PDA the locked 21 bps split 16.8 burn pool / 4.2 operator; nothing burned", () => {
+  test("LP LOCKED FOREVER (2026-10-10) on tier 9 (2026-10-12): with the Fee Key at the burn program's fee-keys PDA the locked 21 bps split 16.8 burn pool / 4.2 operator; nothing burned", () => {
     const feeKeys = Keypair.generate().publicKey, treasury = Keypair.generate().publicKey;
-    const s = feeSplit({ global: MAINNET_GLOBAL, platform: platformViewOf(P({ platformScalePpm: BigInt(1_000_000), lockNftWallet: feeKeys })), amm: AMM0, creatorIsBurnPool: true, feeKeysPda: feeKeys, operatorTreasury: treasury });
+    const s = feeSplit({ global: MAINNET_GLOBAL, platform: platformViewOf(P({ platformScalePpm: BigInt(1_000_000), lockNftWallet: feeKeys })), amm: AMM9, creatorIsBurnPool: true, feeKeysPda: feeKeys, operatorTreasury: treasury });
     const post = s.postGraduation.legs;
-    assert.deepEqual(post.map((l) => l.bps), [16.8, 0, 4, 4.75, 0.25, 4.2]);
+    assert.deepEqual(post.map((l) => l.bps), [16.8, 0, 4, 71.25, 3.75, 4.2]);
     assert.match(post[0].to, /burn pool \(80 %/); assert.match(post[0].to, new RegExp(feeKeys.toBase58()));
     assert.match(post[5].to, new RegExp(`operator treasury ${treasury.toBase58()}`));
     assert.equal(BigInt(post[0].lamportsPer1Sol) + BigInt(post[5].lamportsPer1Sol), BigInt(2_100_000), "21 bps of 1 SOL, every lamport accounted for");
-    assert.equal(s.postGraduation.totalBps, 30);
-    // burned per swap after graduation: 16.8 (LP fees) + 4.75 (creator fee) = 21.55 bps; operator 4.2 bps
-    assert.equal(Math.round((post[0].bps + post[3].bps) * 100) / 100, 21.55);
+    assert.equal(s.postGraduation.totalBps, 100, "traders pay 25 bps trade fee + 75 bps creator fee");
+    // to the burn pool per swap after graduation: 16.8 (LP fees) + 71.25 (creator fee) = 88.05 bps; operator 4.2; Raydium 4 + 3.75 = 7.75
+    assert.equal(Math.round((post[0].bps + post[3].bps) * 100) / 100, 88.05);
+    assert.equal(Math.round((post[2].bps + post[4].bps) * 100) / 100, 7.75);
+    // the keeper's split over the tier and the designed split (fees.ts) agree leg for leg
+    const b = postGraduationBpsFor("mainnet");
+    assert.deepEqual([post[0].bps, post[5].bps, post[3].bps, post[2].bps + post[4].bps, s.postGraduation.totalBps], [b.lpToBurnPool, b.lpToOperator, b.creatorToBurnPool, b.raydiumTotal, b.tradersPay]);
+    assert.deepEqual([b.burnPoolTotal, b.lpToOperator, b.raydiumTotal, b.tradersPay], [BURN_POOL_POST_GRADUATION_BPS, 4.2, 7.75, 100]);
+    assert.equal(POST_GRADUATION_FEES.totalBps, 100);
+    assert.equal(POST_GRADUATION_FEES.legs.reduce((a, l) => a + l.bps * 100, 0) / 100, 100, "the designed legs sum to what traders pay");
   });
   test("lpLockProblems: 100 % to the Fee Key and the lock-NFT wallet at the fee-keys PDA, or the platform is refused", () => {
     const feeKeys = Keypair.generate().publicKey;

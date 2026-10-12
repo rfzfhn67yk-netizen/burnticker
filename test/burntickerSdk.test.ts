@@ -15,6 +15,7 @@ import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { encodeType } from "@/lib/burnReceipts/idlCoder";
 import { configPda, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
 import { MODE_VAULT } from "@/lib/burnReceipts/constants";
+import { CREATOR_FEE_TO_BURN_POOL_BPS } from "@/lib/burnticker/fees";
 import { base58Encode } from "@/lib/burnKeeper/solana";
 import { API, BLOCKHASH, CREATOR, FakeConnection, MAINNET_GENESIS, encodeAccount, makeWorld, programReceiptTx, routeFetch, upstreamFetch, zeroOf, type World } from "./burntickerApiHelpers.ts";
 import { BRONCOS, DENVER_HIGH, NOW } from "./burntickerHelpers.ts";
@@ -44,7 +45,9 @@ describe("rules + fees (local, no network)", () => {
     assert.equal(s.totalBps, 100); assert.equal(s.creatorSliceBps, 0);
     assert.deepEqual(s.amounts!.map((a) => a.lamports), ["2500000", "2500000", "5000000"]);
     const post = fees.split({ phase: "post-graduation", volumeSol: "2" });
-    assert.equal(post.amounts!.find((a) => a.label === "burn pool")!.lamports, "950000", "4.75 bps of 2 SOL");
+    // mainnet CPMM tier 9: 75 bps creator fee less Raydium's 5% = 71.25 bps of 2 SOL
+    assert.equal(post.amounts!.find((a) => a.label === "burn pool")!.lamports, String((BigInt(2_000_000_000) * BigInt(Math.round(CREATOR_FEE_TO_BURN_POOL_BPS * 100))) / BigInt(1_000_000)), "the creator-fee leg of 2 SOL");
+    assert.equal(post.amounts!.find((a) => a.label === "burn pool")!.lamports, "14250000");
     assert.throws(() => fees.split({ volumeSol: "abc" }));
   });
   test("feePdaFor = burn_receipts [\"fee\", mint] — the same address the bundle records as LaunchLab's creator", () => {

@@ -80,8 +80,8 @@
           "lpFees": 21,
           "toBurnPool": 16.8,
           "toOperator": 4.2,
-          "creatorFeeToBurnPool": 4.75,
-          "burnedTotal": 21.55
+          "creatorFeeToBurnPool": 25,
+          "burnedTotal": 41.8
         },
         "instructions": {
           "register": "register_fee_key",
@@ -148,8 +148,8 @@
           "lpFees": 21,
           "toBurnPool": 16.8,
           "toOperator": 4.2,
-          "creatorFeeToBurnPool": 4.75,
-          "burnedTotal": 21.55
+          "creatorFeeToBurnPool": 71.25,
+          "burnedTotal": 88.05
         },
         "instructions": {
           "register": "register_fee_key",

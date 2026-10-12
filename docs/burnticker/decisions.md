@@ -158,3 +158,23 @@ shas); a PairResult per period is signed by both coins' attester quorums; the lo
 window); pair_curve pairs through `link_pair`, which `register_pair_pool` now requires. burn_receipts goes from 26 to 29 entrypoints;
 the pre-registered checklist carries a dated erratum. Pairs ship behind their flags; a single coin's path is unchanged. Devnet pair 6
 (2026-10-11): one forward moved 79,306,876 lamports from side B to side A, whose paired cranks then burned its coin.
+
+## 2026-10-12 — Raydium CPMM fee tier 9 (replaces tier 0 under the 2026-10-10 table)
+
+Every coin that graduates after the platform change migrates into Raydium CPMM AmmConfig index 9
+(`LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC`) instead of index 0 (`D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2`), both read from
+mainnet that day: the same 25 bps trade fee (protocol 12 % + fund 4 %), and a 75 bps creator fee instead of 5 bps (5 % of it to Raydium
+at collection). The vault changes the LaunchLab platform's `cpConfigId` in a separate signed step; burn_receipts pins the platform's
+`cpConfigId` into each coin at `initialize_token`, so a coin keeps the tier it pinned. Devnet has no matching creator-fee tier, so the
+rehearsal platform stays on its index 0 and cannot exercise this tier. Ids and rates: `src/lib/burnticker/cpmmTier.ts`; every page
+number derives from it.
+
+| Per swap after graduation (CPMM tier 9) | bps of volume | goes to |
+|---|---|---|
+| LP fees (84 % of the 25 bps trade fee) | 21 | the locked LP's Fee Key → `claim_lock_fees`: 16.8 burn pool, 4.2 operator |
+| RAY buyback + Raydium treasury | 3 + 1 | Raydium |
+| Creator fee (75 bps, less Raydium's 5 % share) | 71.25 | the coin's burn pool → bought back and burned |
+| Raydium's share of the creator fee | 3.75 | Raydium |
+| **Traders pay** | **100** | (30 on tier 0) |
+| **To the burn pool, per swap** | **≈ 88.05** | (21.55 on tier 0) |
+| Operator / Raydium | 4.2 / 7.75 | (4.2 / 4.25 on tier 0) |

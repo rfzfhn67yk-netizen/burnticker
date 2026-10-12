@@ -113,7 +113,7 @@ the LP locked forever (its fees fund the burn: 80 % burned, 20 % operator, fixed
 - **Flag:** `BURNTICKER_PAIR_CURVE_ENABLED=1` (default off) makes the wizard's matchup / election pair launch through pair_curve:
   `src/lib/burnticker/pairCurveLaunch.ts` turns `buildPairBundles`' two LaunchLab bundles into three transactions (mint A + its
   TokenConfig with registration policy 2, the same for B, `init_pair`) and exports the badge (`PAIR_CURVE_BADGE`); the launch API returns
-  it as `pair.pairCurve`. `BURNTICKER_CP_CONFIG_ID` overrides the AmmConfig (default: CPMM index 0 per cluster). Off = the LaunchLab
+  it as `pair.pairCurve`. `BURNTICKER_CP_CONFIG_ID` overrides the AmmConfig (default: the tier the platform points at, `src/lib/burnticker/cpmmTier.ts`: mainnet index 9, devnet index 0). Off = the LaunchLab
   path with the rules-level "both or neither" clause.
 - **Client:** `src/lib/pairCurve/{pricing,accounts,client,idl}.ts` — the curve math mirrored in bigint, PDAs and Pair decoding, IDL-driven
   builders, the crank planner.
@@ -563,8 +563,9 @@ Sources: [Unchained](https://unchainedcrypto.com/kalshi-powered-tokenized-predic
 
 Developer slice 25 bps of curve volume via the platform slot to `BURNTICKER_FEE_WALLET`; creators earn no cash from fees (creator-fee
 slot → burn pool, 100 %, 50 bps cap); graduation LP 100 % locked forever since 2026-10-10 (was: burned) — its Fee Key is owned by the burn program and
-claim_lock_fees pays 80 % of the LP fees to the burn pool and 20 % to the operator (fixed in code), plus Raydium's fixed 4.75 bps/SOL CPMM
-creator fee to the burn pool; no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
+claim_lock_fees pays 80 % of the LP fees to the burn pool and 20 % to the operator (fixed in code), plus Raydium's fixed CPMM
+creator fee to the burn pool (CPMM tier 9 since the 2026-10-12 decision: 75 bps, 71.25 bps/SOL to the burn pool after Raydium's 5 %;
+it was tier 0's 4.75 bps; a coin keeps the tier it pinned at initialize_token); no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";
 keeper-enforced today, program-enforced later — that seam is open); refuse list as above with elections allowed; anonymous creators
 allowed, wallet always shown; one-shot markets allowed; hosting on one VPS behind Caddy.
 

@@ -19,7 +19,7 @@ waited for (RuleEnd, `TokenConfig.end_state`), and a RESOLVED coin's later fee i
 `forward_on_end` to its end sink. What remains is a VOID coin's trickle, which the keeper still sweeps on the coin itself; building it
 needs the swap-and-burn core of `crank_buyback` factored out, so it waits for a round of its own (docs/burnticker/END-SINK.md).
 
-**Why.** A retired coin's fee PDA keeps receiving the 4.75 bps post-graduation creator fee from Raydium trading, so its burn pool
+**Why.** A retired coin's fee PDA keeps receiving the post-graduation creator fee from Raydium trading (71.25 bps on mainnet CPMM tier 9, 4.75 bps on tier 0), so its burn pool
 refills slowly. Today the keeper sweeps it (`src/lib/burnticker/multiKeeper.ts` planRuleEnd: when the spendable balance minus the reserve
 passes `onEnd.sweepThresholdLamports`, one quorum-signed `clock` reading of full-spend units, cranked across days under the per-crank cap,
 at most once a week; receipt kind `sweep`). That still needs the keeper and its attester signature.

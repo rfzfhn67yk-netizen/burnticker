@@ -8,6 +8,7 @@ import { type Connection, PublicKey } from "@solana/web3.js";
 import { fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { type Cluster, LAUNCHLAB_PROGRAM_ID, LL_PLATFORM_CP_CONFIG_ID, LL_PLATFORM_CP_CREATOR, LL_PLATFORM_LOCK_NFT_WALLET, LL_PLATFORM_SCALES, REQUIRED_LL_PLATFORM_SCALES_PPM } from "@/lib/burnReceipts/constants";
 import { feeKeysPda, feePda } from "@/lib/burnReceipts/pda";
+import { cpmmTierLabel } from "@/lib/burnticker/cpmmTier";
 
 /** initialize_token reads the platform only up to platformCpCreator (byte 800 + 32). */
 const LL_PLATFORM_MIN_LEN = LL_PLATFORM_CP_CREATOR + 32;
@@ -50,7 +51,7 @@ export function checkPlatformPins(account: { owner: PublicKey; data: Uint8Array 
   }
   if (!creator.equals(PublicKey.default) && !creator.equals(pinned.feePda)) mismatches.push(`platformCpCreator is ${creator.toBase58()} — neither default nor the fee PDA ${pinned.feePda.toBase58()} (the migrated pool would fail both registration policies)`);
   if (sum !== pinned.lockScalePpm) mismatches.push(`LP lock+burn scales sum to ${sum} ppm, pinned ${pinned.lockScalePpm} ppm`);
-  if (!cpConfig.equals(pinned.cpConfig)) mismatches.push(`cpConfigId is ${cpConfig.toBase58()}, pinned ${pinned.cpConfig.toBase58()} (register_pool would refuse the migration pool)`);
+  if (!cpConfig.equals(pinned.cpConfig)) mismatches.push(`cpConfigId is ${cpmmTierLabel(cpConfig.toBase58())}, pinned ${cpmmTierLabel(pinned.cpConfig.toBase58())} (register_pool would refuse the migration pool)`);
   out.ok = mismatches.length === 0;
   return out;
 }

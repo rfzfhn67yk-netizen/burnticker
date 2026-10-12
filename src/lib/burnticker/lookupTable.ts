@@ -1,5 +1,6 @@
 import { AddressLookupTableAccount, PublicKey, TransactionInstruction, TransactionMessage } from "@solana/web3.js";
 import { LOOKUP_TABLES, NETWORKS, type Network } from "@/lib/burnticker/networks";
+import { CPMM_CONFIG_ID } from "@/lib/burnticker/cpmmTier";
 
 /**
  * THE PER-NETWORK ADDRESS LOOKUP TABLE (re-check 2026-10-11, "known oversized single launch"). A real single-coin launch — burn_receipts
@@ -17,7 +18,7 @@ import { LOOKUP_TABLES, NETWORKS, type Network } from "@/lib/burnticker/networks
  * lookupTablePin: the host's BURNTICKER_LOOKUP_TABLE on its own network, else LOOKUP_TABLES, served by GET /api/burnticker/launch so a
  * pin needs no code release), checks it is active, that every entry is at its index, and that its authority is the pinned operations key or none
  * (frozen); otherwise "lookup table mismatch — nothing was sent". The transaction is then compiled against THIS list (the verified
- * prefix), never against whatever else the table holds. Client-safe: web3.js and networks.ts only.
+ * prefix), never against whatever else the table holds. Client-safe: web3.js, networks.ts and cpmmTier.ts only.
  */
 
 export interface LookupTableEntry { key: string; what: string }
@@ -46,7 +47,7 @@ export const LOOKUP_TABLE_ENTRIES: Record<Network, readonly LookupTableEntry[]> 
     { key: "5xqNaZXX5eUi4p5HU4oz9i5QnwRNT2y6oN7yyn4qENeq", what: "LaunchLab authority PDA" },
     { key: "4uAB7seenFJKPUXqYewAdfra2u6baBgjiXU8x1SC7Ycz", what: "LaunchLab event authority PDA" },
     { key: "AzXYBNjojqRJfPnwASTTrikTWYWcuBW2UYszXFW1QptE", what: "LaunchLab platform fee vault (Burnticker platform, WSOL)" },
-    { key: "5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy", what: "Raydium CPMM AmmConfig (pair curve)" },
+    { key: CPMM_CONFIG_ID.devnet, what: "Raydium CPMM AmmConfig (pair curve)" },
     { key: "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3", what: "burn_receipts fee_keys PDA" },
     { key: "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD", what: "operator treasury (devnet Squads vault)" },
     ...COMMON_TAIL,
@@ -62,7 +63,7 @@ export const LOOKUP_TABLE_ENTRIES: Record<Network, readonly LookupTableEntry[]> 
     { key: "WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh", what: "LaunchLab authority PDA" },
     { key: "2DPAtwB8L12vrMRExbLuyGnC7n2J5LNoZQSejeQGpwkr", what: "LaunchLab event authority PDA" },
     { key: "EcXnhWsJmc6vcart32M5ZXMmmCzXE3fiUz9qxqrWQKSn", what: "LaunchLab platform fee vault (Burnticker platform, WSOL)" },
-    { key: "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2", what: "Raydium CPMM AmmConfig (pair curve)" },
+    { key: CPMM_CONFIG_ID.mainnet, what: "Raydium CPMM AmmConfig (pair curve)" },
     { key: "Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3", what: "burn_receipts fee_keys PDA" },
     { key: "8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5", what: "operator treasury" },
     ...COMMON_TAIL,

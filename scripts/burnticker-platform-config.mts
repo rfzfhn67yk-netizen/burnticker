@@ -1,5 +1,5 @@
 // BURNTICKER PLATFORM CONFIG — a DRY RUN that prints the LaunchLab create_platform_config transaction with the owner's dials
-// (2026-10-09): developer fee 25 bps (BURNTICKER_PLATFORM_FEE_BPS, env), creator-fee slot = the burn pool at the 50 bps cap, CPMM tier 0,
+// (2026-10-09): developer fee 25 bps (BURNTICKER_PLATFORM_FEE_BPS, env), creator-fee slot = the burn pool at the 50 bps cap, CPMM tier 9 on mainnet (2026-10-12; devnet index 0),
 // platformCpCreator left default so the launch creator (the burn-pool authority) is the CPMM creator-fee beneficiary. LP LOCKED FOREVER
 // (owner decision 2026-10-10, supersedes "LP 100% burned"): --lp-platform-pct 100 (the default; platform 1,000,000 / creator 0 / burn 0 ppm,
 // not creator-configurable) and the lock-NFT wallet = the burn program's fee-keys PDA (--program / BURNTICKER_PROGRAM_ID), so the Fee
@@ -17,6 +17,7 @@ import { WSOL_MINT } from "../src/lib/burnKeeper/launchlab.ts";
 import { BURNTICKER_DEV_FEE_BPS, BURN_POOL_CURVE_BPS, devFeeWallet } from "../src/lib/burnticker/fees.ts";
 import { LP_LOCKED_PCT, feeKeysPda, operatorTreasuryFor } from "../src/lib/burnticker/lockFees.ts";
 import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
+import { CPMM_TIER } from "../src/lib/burnticker/cpmmTier.ts";
 import { lpLockProblems } from "../src/lib/burnKeeper/launch.ts";
 
 const args = process.argv.slice(2);
@@ -31,8 +32,9 @@ const burnProgram = new PublicKey(opt("program") ?? process.env.BURNTICKER_PROGR
 const feeKeys = feeKeysPda(burnProgram);
 const treasury = operatorTreasuryFor(cluster);
 
-// CPMM AmmConfig index 0 (the 25 bps tier) per cluster — docs/burnkeeper/fees.md.
-const CP_CONFIG = { mainnet: new PublicKey("D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"), devnet: new PublicKey("5MxLgy9oPdTC3YgkiePHqr3EoCRD9uLVYRQS2ANAs7wy") }[cluster];
+// The CPMM AmmConfig the platform points at, per cluster (cpmmTier.ts): mainnet tier 9 (owner decision 2026-10-12), devnet index 0.
+const TIER = CPMM_TIER[cluster];
+const CP_CONFIG = new PublicKey(TIER.id);
 const admin = new PublicKey(adminS);
 const claimFeeWallet = feeWalletS ? new PublicKey(feeWalletS) : PublicKey.default;
 const input = {
@@ -47,7 +49,7 @@ const { platformId, tx } = buildPlatformTx(input);
 
 // The documented live values (fees.md §1), used here so the dry run prints the split without an RPC; the trust page reads the chain.
 const global: GlobalConfigView = { curveType: 0, index: 0, migrateFee: BigInt(0), tradeFeeRate: BigInt(2500), maxShareFeeRate: BigInt(10_000), minSupplyA: BigInt(0), maxLockRate: BigInt(cluster === "mainnet" ? 800_000 : 999_999), minSellRateA: BigInt(cluster === "mainnet" ? 200_000 : 1), minMigrateRateA: BigInt(cluster === "mainnet" ? 150_000 : 1), minFundRaisingB: BigInt(cluster === "mainnet" ? 24_000_000_000 : 1), mintB: WSOL_MINT };
-const amm: AmmConfigView = { index: 0, tradeFeeRate: BigInt(2500), protocolFeeRate: BigInt(120_000), fundFeeRate: BigInt(40_000), creatorFeeRate: BigInt(cluster === "mainnet" ? 500 : 2500), creatorFeeShareRate: BigInt(cluster === "mainnet" ? 50_000 : 0), createPoolFee: BigInt(0) };
+const amm: AmmConfigView = { index: TIER.index, tradeFeeRate: BigInt(TIER.tradeFeeRate), protocolFeeRate: BigInt(TIER.protocolFeeRate), fundFeeRate: BigInt(TIER.fundFeeRate), creatorFeeRate: BigInt(TIER.creatorFeeRate), creatorFeeShareRate: BigInt(TIER.creatorFeeShareRate), createPoolFee: BigInt(0) };
 const split = feeSplit({ global, platform: platformViewOf(input), amm, creatorIsBurnPool: true, feeKeysPda: feeKeys, operatorTreasury: treasury ? new PublicKey(treasury) : null });
 
 const out = {

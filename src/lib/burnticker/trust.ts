@@ -106,7 +106,7 @@ export function jsonSafe<T>(v: T): unknown {
   return v;
 }
 
-export async function readLivePlatform(reader: ChainReader | null, platformId: string | null, env: Readonly<Record<string, string | undefined>> = process.env, now = Date.now()): Promise<LivePlatform> {
+export async function readLivePlatform(reader: ChainReader | null, platformId: string | null, env: Readonly<Record<string, string | undefined>> = process.env, now = Date.now(), cluster = (env.BURNTICKER_CLUSTER ?? "").trim() || "devnet"): Promise<LivePlatform> {
   const readAt = new Date(now).toISOString();
   if (!platformId) return { platformId: "", found: false, view: null, comparison: [], readAt, error: "This site does not name a platform settings account, because it has not been created yet." };
   if (!reader) return { platformId, found: false, view: null, comparison: [], readAt, error: "This site has no connection to a Solana node, so it cannot read the live platform settings." };
@@ -117,7 +117,7 @@ export async function readLivePlatform(reader: ChainReader | null, platformId: s
     // The decoded view carries bigint fee rates / scales and PublicKeys; the page is served as JSON (NextResponse.json has no
     // replacer), so it is made JSON-safe here. First seen 2026-10-11 on the mainnet host: the route threw "Do not know how to
     // serialize a BigInt" and the Trust page read "data unavailable" (site audit R01).
-    return { platformId, found: true, view: jsonSafe(view) as unknown as PlatformView, comparison: compareLivePlatform(view, devFeeWallet(env), (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null), readAt, error: null };
+    return { platformId, found: true, view: jsonSafe(view) as unknown as PlatformView, comparison: compareLivePlatform(view, devFeeWallet(env), (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null, cluster), readAt, error: null };
   } catch (e) { return { platformId, found: false, view: null, comparison: [], readAt, error: (e as Error).message.slice(0, 200) }; }
 }
 
@@ -352,7 +352,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     generatedAt: new Date(now).toISOString(),
     operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL,
     powers, operator: operatorPowersSummary(powers),
-    livePlatform: await readLivePlatform(i.reader, platformId, env, now),
+    livePlatform: await readLivePlatform(i.reader, platformId, env, now, cluster),
     designedFees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(cluster), devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: LP_FEES_TO_BURN_POOL_BPS, operatorBps: LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
     lpLock: lpLockPolicyJson(cluster, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null),
     feeLedger: await readFeeLedger(i.reader, devFeeWallet(env)),
