@@ -110,7 +110,7 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
   out.push({
     id: "deficit", ticker: "DEFICIT", name: "Deficit", imageUrl: "/burnticker/brand/deficit.png", group: "test",
     tags: [{ label: "Featured", tone: "featured" }, ...(created ? [] : [{ label: "Not created yet", tone: "neutral" as const }])],
-    note: created ? "The operator's first coin. Its rules were locked before it was created." : "The operator's first coin. Its rules are locked, and the coin is not created yet.",
+    note: created ? "The operator's first coin, said like DeFi-cit: decentralized finance pointed at the national deficit. Its rules were locked before it was created." : "The operator's first coin, said like DeFi-cit: decentralized finance pointed at the national deficit. Its rules are locked, and the coin is not created yet.",
     rule: debtRule(d.dial.percent, d.dial.unitLabel), nextSettle: DEBT_NEXT,
     progress: readiness ? progressOf(readiness, { raiseSol: Number.isFinite(raiseNum) && raiseNum > 0 ? raiseNum : null, raisedSol: Number.isFinite(raisedNum) ? raisedNum : null, queuedUnits: queue.state === "queued" ? queue.units : null }) : null,
     progressWhy: readiness ? null : unreadWhy,
