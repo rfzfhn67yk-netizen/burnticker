@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { OPERATOR_LINE, USE_OF_FEES } from "@/lib/burnticker/fees";
-import { NAV, FOOTER_EXTRA, API_BASE_PATH, type NavItem } from "./nav";
-
-/** The site-wide memecoin disclaimer (the token pages carry the per-coin DISCLAIMER_FOOTER and their rule on top of this). */
-export const SITE_DISCLAIMER = "Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing: a rule says what a coin's supply does when a settled public event says so — never what its price does. Nothing on this site is investment advice.";
-export const SOURCES_LINE = "The public sources the rules read (U.S. Treasury, BLS, NOAA and the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia, Polymarket and others) are not affiliated with and do not endorse any coin.";
+import { FOOTER_COPY } from "@/lib/burnticker/siteNav.mjs";
+import { NAV, LEARN, API_BASE_PATH, type NavItem } from "./nav";
 
 /**
- * THE FOOTER (B1 "thermal receipt"): the slip the product prints — torn top edge, label/value rows, dashed rules — carrying the
- * disclaimer, the operator line from src/lib/burnticker/fees.ts (verbatim, so the footer and the trust page can never disagree) and the
- * site's own links. Server-rendered; no client state.
+ * THE FOOTER (B1 "thermal receipt"): the slip the product prints — torn top edge, label/value rows, dashed rules. Since 2026-10-12 (the
+ * owner's review item 9, brief rule 5) it is the ONE place the disclaimers are printed: "Nothing is ever won. Things are only burned.",
+ * the not-advice paragraph, the no-affiliation line and the sources line, all from src/lib/burnticker/siteNav.mjs FOOTER_COPY (the
+ * static pages print the same words), plus the operator line from src/lib/burnticker/fees.ts verbatim, so the footer and the trust page
+ * can never disagree. Server-rendered; no client state.
  */
 /** One footer link, by the shared set's rules (siteNav.mjs): external → new tab + ↗; static → plain <a>; app → Link. */
 export function FooterLink({ n }: { n: NavItem }) {
@@ -28,8 +27,10 @@ export function SiteFooter() {
           <span className="bt-slip-sub">COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS</span>
         </div>
         <div className="bt-rule" />
-        <p className="bt-slip-text"><b>*** NOT ADVICE ***</b> {SITE_DISCLAIMER}</p>
-        <p className="bt-slip-text bt-slip-dim">{SOURCES_LINE}</p>
+        <p className="bt-slip-text bt-slip-never"><b>{FOOTER_COPY.never}</b></p>
+        <p className="bt-slip-text"><b>*** NOT ADVICE ***</b> {FOOTER_COPY.notAdvice}</p>
+        <p className="bt-slip-text">{FOOTER_COPY.affiliation} {FOOTER_COPY.chain}</p>
+        <p className="bt-slip-text bt-slip-dim">{FOOTER_COPY.sources}</p>
         <div className="bt-rule" />
         <dl className="bt-rows">
           <div><dt>OPERATOR</dt><dd>{OPERATOR_LINE}</dd></div>
@@ -38,7 +39,7 @@ export function SiteFooter() {
         </dl>
         <div className="bt-rule" />
         <nav className="bt-slip-links" aria-label="Footer">
-          {[...NAV, ...FOOTER_EXTRA].map((n) => <FooterLink key={n.href} n={n} />)}
+          {[...NAV, ...LEARN].map((n) => <FooterLink key={n.href} n={n} />)}
         </nav>
         <p className="bt-slip-end">— {year} · KEEP THIS RECEIPT —</p>
       </div>
@@ -54,8 +55,8 @@ export function SiteFooter() {
 export function CompactFooter() {
   return (
     <footer className="bt-footer-compact" data-footer="compact">
-      <p><b>Not advice.</b> Memecoins can go to zero. A coin&apos;s rule describes what happens to its supply, never its price. {OPERATOR_LINE}. <Link href="/burnticker#disclosure">Full disclosure</Link></p>
-      <nav aria-label="Footer">{[...NAV, ...FOOTER_EXTRA].map((n) => <FooterLink key={n.href} n={n} />)}</nav>
+      <p><b>Not advice.</b> Memecoins can go to zero. A coin&apos;s rule describes what happens to its supply, never its price. {FOOTER_COPY.never} {FOOTER_COPY.affiliation} {OPERATOR_LINE}. <Link href="/burnticker#disclosure">Full disclosure</Link></p>
+      <nav aria-label="Footer">{[...NAV, ...LEARN].map((n) => <FooterLink key={n.href} n={n} />)}</nav>
     </footer>
   );
 }

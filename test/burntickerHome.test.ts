@@ -1,4 +1,5 @@
-// THE SHORT HOMEPAGE (site audit #7/#8/#15/#20, ChatGPT audit R07 and BT-17, 2026-10-11). The page was 2,660 words and stated the
+// THE SHORT HOMEPAGE (site audit #7/#8/#15/#20, ChatGPT audit R07 and BT-17, 2026-10-11; list-first since website-10, 2026-10-12: hero,
+// How it works, the coin grid, Follow the season, the short status). The page was 2,660 words and stated the
 // same facts three or four times. Now: hero → verified devnet receipt → three product cards → a short current status (from the API,
 // linking Trust) → one row of actions → footer, at most 1,000 words, every fact once, headings in order, one primary button per section.
 import { test } from "node:test";
@@ -24,12 +25,13 @@ test("site audit #8: each fact once — the attester and time-lock lines are not
   assert.match(home, /var SHORT = \/signs every reading\|holds the upgrade authority\|still open before release\/;/);
   // the status box fails in plain words with a Retry, never a raw parser message
   assert.match(home, /We could not read the current status just now\./); assert.match(home, /b\.addEventListener\("click", load\)/);
-  const statusScript = home.slice(home.indexOf("THE ONE CURRENT-STATUS SOURCE"), home.indexOf("How launching works\" in the hero"));
+  const statusScript = home.slice(home.indexOf("THE ONE CURRENT-STATUS SOURCE"), home.indexOf("<!-- site-shell:script:begin -->"));
   assert.doesNotMatch(statusScript, /r\.json\(\)/);
 });
 
-test("site audit #15: headings run H1 → H2 → H3 with no skipped level; product cards are H3s under an H2", () => {
-  const levels = [...body.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+test("site audit #15: headings in the page's main run H1 → H2 → H3 with no skipped level (the closed-launches dialog's H2 sits outside it)", () => {
+  const main = body.slice(body.indexOf("<main"), body.indexOf("</main>"));
+  const levels = [...main.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
   assert.equal(levels[0], 1); assert.equal(levels.filter((l) => l === 1).length, 1);
   for (let k = 1; k < levels.length; k++) assert.ok(levels[k] <= levels[k - 1] + 1, `h${levels[k - 1]} → h${levels[k]}`);
 });

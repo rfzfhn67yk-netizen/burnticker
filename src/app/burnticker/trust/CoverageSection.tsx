@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "../_components/EmptyState";
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { RepoText } from "../_components/RepoText";
 import type { CoverageMatrix, Verdict } from "@/lib/burnticker/coverage/types";
@@ -18,7 +19,7 @@ const categories = (n: number) => `${n} ${n === 1 ? "category" : "categories"}`;
 export default function CoverageSection({ card }: { card: string }) {
   const { data: m, failure, loading, triedAt, retry } = useJsonRead<CoverageMatrix>("/api/burnticker/v1/coverage");
   if (failure) return <section className={card}><h2 className="font-medium">Settlement coverage</h2><ReadFailurePanel what="The coverage table" failure={failure} triedAt={triedAt} loading={loading} retry={retry} /></section>;
-  if (!m) return <section className={card}><h2 className="font-medium">Settlement coverage</h2><p className="text-xs text-neutral-500">Loading…</p></section>;
+  if (!m) return <section className={card}><h2 className="font-medium">Settlement coverage</h2><EmptyState compact kind="loading" /></section>;
   return (
     <section className={card}>
       <h2 className="font-medium">Settlement coverage</h2>

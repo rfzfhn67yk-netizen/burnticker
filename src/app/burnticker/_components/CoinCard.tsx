@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { cardViewFromIndex, type CardView } from "@/lib/burnticker/cardView";
 
 /**
  * THE COIN CARD (2026-10-10, launchpad conventions — docs/burnticker/ui-conventions.md). Where pump.fun / bonk.fun / Pons put image,
@@ -15,13 +16,16 @@ export interface CoinCardData {
   ticker: string; name: string; imageUrl: string | null; oneLiner: string; oracle: string; status: string;
   phase: "curve" | "migrating" | "graduated" | null; progressPct: number | null; raised: string | null; threshold: string | null; quote: string | null;
   burns: number; lastBurnAt: string | null; nextAt: string | null; launchedAt: string | null; pairId?: string | null;
+  /** the total burned, a decimal string of tokens (the coins index's `burned`) */
+  burned?: string;
   /** The window badge (describe.ts windowBadge): "2026 SEASON", "PERPETUAL", "ONE-SHOT · Oct 31, 2026". */
   badge?: string | null;
   /** Why the curve shows "—" (hover text). */
   curveNote?: string;
 }
 
-const VENUE: Record<string, string> = { kalshi: "Kalshi", polymarket: "Polymarket", catalogue: "Feed" };
+// brief rule 8 (2026-10-12): the venue is named in plain words and Kalshi is never named; the class name stays for the chip colour
+const VENUE: Record<string, string> = { kalshi: "Prediction market", polymarket: "Polymarket", catalogue: "Feed" };
 
 /** "3m ago" / "2d ago" from an ISO time; "—" without one. */
 export function ago(iso: string | null, now = Date.now()): string {
@@ -89,38 +93,84 @@ export function CurveBar({ c, compact = false }: { c: Pick<CoinCardData, "phase"
   );
 }
 
+/** The rule's one-liner as a sentence ("burns when the Eagles lose" → "Burns when the Eagles lose."). */
+const asSentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };
+
 /**
- * `prelaunch` (the launch review card, 2026-10-10): the coin does not exist yet, so the card shows only what the rule fixes — the
- * generated art, name, $TICKER, the one-liner, the badge — and none of the live rows (curve, burns, last burn, next result) or the
- * draft / not-launched chips, which read as a broken coin before launch (the owner's paste: "NO IMAGE · draft · not launched · burns 0").
+ * THE CARD, ONE FIELD ORDER (website-10, 2026-10-12; the owner's review item 5, brief rule 10): image, name, $TICKER, the rule in one
+ * line, the next result (only when the rule has one), the total burned, the bonding curve (or the trading pool), then "Check receipt".
+ * The order is src/lib/burnticker/cardView.ts CARD_ROWS; the static home page prints the same rows from the same JSON. The name and the
+ * image link the coin's page; "Check receipt" is its own link, shown disabled with "No receipt yet" until the coin has a receipt.
  */
-export function CoinCard({ c, href, now, prelaunch = false }: { c: CoinCardData; href: string | null; now?: number; prelaunch?: boolean }) {
-  const t = now ?? Date.now();
-  const body = (
-    <article className="bt-coin-card">
+export function ViewCard({ v, headingLevel = 3 }: { v: CardView; headingLevel?: 2 | 3 }) {
+  const H = headingLevel === 2 ? "h2" : "h3";
+  const pct = v.curve.pct === null ? null : Math.max(0, Math.min(100, v.curve.pct));
+  return (
+    <article className={`bt-coin-card${v.tags.some((t) => t.tone === "featured") ? " is-featured" : ""}`} data-card={v.id}>
       <div className="flex gap-3">
-        <CoinThumb src={c.imageUrl} ticker={c.ticker} generated={!!href} />
+        <div data-row="image">{v.href ? <Link href={v.href} tabIndex={-1} aria-hidden="true"><CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} /></Link> : <CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} />}</div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <VenueChip oracle={c.oracle} />
-            {c.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}
-            {c.status === "draft" && !prelaunch && <span className="bt-chip bt-chip-draft" title="Registered but not launched. Nothing trades yet.">draft</span>}
-            {c.pairId && <span className="bt-chip">pair</span>}
-            {c.badge && <span className="bt-chip bt-chip-window" title="The coin's window, fixed in its rule">{c.badge}</span>}
-            {!prelaunch && <span className="ml-auto text-[11px] text-neutral-500" title={c.launchedAt ?? "not launched"}>{c.launchedAt ? ago(c.launchedAt, t) : "not launched"}</span>}
-          </div>
-          <h3 className="mt-1 truncate text-base font-semibold leading-tight">{c.name || "Coin name"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>
-          <p className="mt-0.5 line-clamp-2 text-sm text-neutral-300">{c.oneLiner}</p>
-          <p className="mt-0.5 text-[10px] leading-tight text-neutral-500">This coin is not affiliated with any team, league, candidate, agency or market.</p>
+          {v.tags.length > 0 && <div className="flex flex-wrap gap-1.5">{v.tags.map((t) => <span key={t.label} className={`bt-chip bt-tag-${t.tone}`}>{t.label}</span>)}</div>}
+          <H className="mt-1 text-base font-semibold leading-tight">
+            {v.href
+              ? <Link className="bt-card-link" href={v.href}><span className="bt-card-name" data-row="name">{v.name}</span> <span className="bt-card-ticker" data-row="ticker">${v.ticker}</span></Link>
+              : <><span className="bt-card-name" data-row="name">{v.name}</span> <span className="bt-card-ticker" data-row="ticker">${v.ticker}</span></>}
+          </H>
+          {v.note && <p className="mt-1 text-xs text-neutral-400">{v.note}</p>}
         </div>
       </div>
-      {!prelaunch && <><div className="mt-3"><CurveBar c={c} compact /></div>
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-        <div><dt className="text-neutral-500">burns</dt><dd className="font-mono tabular-nums text-neutral-200">{c.burns}</dd></div>
-        <div><dt className="text-neutral-500">last burn</dt><dd className="font-mono text-neutral-200">{ago(c.lastBurnAt, t)}</dd></div>
-        <div><dt className="text-neutral-500">next result</dt><dd className="font-mono text-neutral-200" title={c.nextAt ?? "No result is scheduled yet."}>{until(c.nextAt, t)}</dd></div>
-      </dl></>}
+      <dl className="bt-card-rows">
+        <div data-row="rule"><dt>Rule</dt><dd>{v.rule}</dd></div>
+        {v.nextSettle && <div data-row="nextSettle"><dt>Next result</dt><dd>{v.nextSettle}</dd></div>}
+        <div data-row="burned"><dt>Burned</dt><dd>{v.burned}</dd></div>
+        <div data-row="curve"><dt>{v.curve.done ? "Pool" : "Curve"}</dt><dd>
+          <span>{v.curve.label}</span>
+          <span className="bt-curve mt-1 block" role="progressbar" aria-label="bonding curve progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}><span className={`bt-curve-fill block${v.curve.done ? " is-done" : ""}`} style={{ width: `${pct ?? 0}%` }} /></span>
+        </dd></div>
+      </dl>
+      <div className="bt-card-foot" data-row="receipt">
+        {v.receipt ? <Link className="bt-ghost-btn" href={v.receipt.href}>Check receipt</Link> : <><span className="bt-ghost-btn is-disabled" aria-disabled="true">Check receipt</span><span className="text-xs text-neutral-500">No receipt yet.</span></>}
+      </div>
+      {v.mint && <p className="mt-2 text-[11px] text-neutral-500">{v.mint.label}: <code className="break-all">{v.mint.address}</code></p>}
     </article>
   );
-  return href ? <Link href={href} className="block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bt-stamp,#9b84e6)]">{body}</Link> : body;
+}
+
+/** A loading card with the same footprint (review item 18): grey bars where the rows go, never words standing in for data. */
+export function SkeletonCard() {
+  return (
+    <div className="bt-coin-card bt-skel-card" aria-hidden="true">
+      <div className="flex gap-3"><div className="bt-skel" style={{ width: 64, height: 64 }} /><div className="flex-1 space-y-2 pt-1"><div className="bt-skel h-3 w-1/3" /><div className="bt-skel h-4 w-2/3" /></div></div>
+      <div className="mt-4 space-y-2"><div className="bt-skel h-3 w-full" /><div className="bt-skel h-3 w-5/6" /><div className="bt-skel h-3 w-1/2" /><div className="bt-skel h-2 w-full" /></div>
+      <div className="mt-4 bt-skel h-8 w-32" />
+    </div>
+  );
+}
+
+/** A grid of skeleton cards, with one line for screen readers. */
+export function SkeletonGrid({ n = 3, label = "Loading the coins." }: { n?: number; label?: string }) {
+  return <div role="status" aria-live="polite" aria-busy="true"><span className="sr-only">{label}</span><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: n }, (_, i) => <SkeletonCard key={i} />)}</div></div>;
+}
+
+/**
+ * The legacy entry point: the coins index's row data, or (with `prelaunch`, the launch review card) a coin that does not exist yet, which
+ * shows only what the rule fixes: the art, name, $TICKER, the rule in one line and the window badge (the owner's paste, 2026-10-10:
+ * "NO IMAGE · draft · not launched · burns 0" read as a broken coin before launch).
+ */
+export function CoinCard({ c, href, prelaunch = false }: { c: CoinCardData; href: string | null; now?: number; prelaunch?: boolean }) {
+  if (prelaunch) {
+    return (
+      <article className="bt-coin-card">
+        <div className="flex gap-3">
+          <CoinThumb src={c.imageUrl} ticker={c.ticker} size={64} generated={!!href} />
+          <div className="min-w-0 flex-1">
+            {c.badge && <div className="flex flex-wrap gap-1.5"><span className="bt-chip bt-chip-window" title="The coin's window, fixed in its rule">{c.badge}</span></div>}
+            <h3 className="mt-1 truncate text-base font-semibold leading-tight">{c.name || "Coin name"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>
+          </div>
+        </div>
+        <dl className="bt-card-rows"><div data-row="rule"><dt>Rule</dt><dd>{asSentence(c.oneLiner)}</dd></div></dl>
+      </article>
+    );
+  }
+  return <ViewCard v={cardViewFromIndex({ ticker: c.ticker, name: c.name, mint: c.ticker, oneLiner: c.oneLiner, status: c.status, imageUrl: c.imageUrl, burned: c.burned ?? "0", burns: c.burns, nextCheckAt: c.nextAt, nextCloseTime: null, lastBurnAt: c.lastBurnAt, launchedAt: c.launchedAt, pairId: c.pairId ?? null, badge: c.badge ?? null, phase: c.phase, progressPct: c.progressPct })} />;
 }

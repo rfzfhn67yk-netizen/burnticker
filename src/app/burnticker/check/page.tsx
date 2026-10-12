@@ -34,7 +34,7 @@ export default function CheckPage() {
   // UX report 3 item 7: /check?demo=1#verify puts the verifier first, under the header, so the checklist loading above it cannot push
   // the anchored result off screen; without ?demo=1 it stays after the checklist. null until the URL is read (no double mount).
   const [verifierAt, setVerifierAt] = useState<"top" | "bottom" | null>(null);
-  useEffect(() => { setVerifierAt(new URLSearchParams(window.location.search).get("demo") === "1" ? "top" : "bottom"); }, []);
+  useEffect(() => { const q = new URLSearchParams(window.location.search); setVerifierAt(q.get("demo") === "1" || q.has("sig") ? "top" : "bottom"); }, []);
   const { data: c, failure, loading, triedAt, retry } = useJsonRead<Check>("/api/burnticker/v1/check");
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">

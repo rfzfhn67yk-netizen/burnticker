@@ -53,7 +53,9 @@ describe("readinessOf: one state per situation", () => {
 
 describe("where the state is shown", () => {
   test("the coin page, the $DEFICIT pre-launch page, the keeper's status.json and the static $DEFICIT site", () => {
-    assert.match(fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8"), /<ReadinessPanel r=\{readinessFromStatus\(/);
+    const coin = fs.readFileSync("src/app/burnticker/t/[ticker]/page.tsx", "utf8");
+    assert.match(coin, /const ready = readinessFromStatus\(/); assert.match(coin, /<ReadinessPanel r=\{ready\} /);
+    assert.match(coin, /const preBurn = ready\.state === "on-curve" \|\| ready\.state === "awaiting-registration"/, "the coin page's 'burns begin after graduation' line follows the readiness state");
     const pre = fs.readFileSync("src/app/burnticker/t/[ticker]/DeficitPrelaunch.tsx", "utf8");
     assert.match(pre, /<ReadinessPanel r=\{readinessOf\(\{ launched: false/); assert.match(pre, /Nothing burns until the curve fills and the debt rises/);
     assert.match(fs.readFileSync("src/lib/burnKeeper/statusPage.ts", "utf8"), /readiness: \(\(\) => \{[\s\S]*readinessOf\(/);

@@ -38,7 +38,7 @@ export default function NotBurntickerPage() {
           </li>
         ))}</ul>
       )}
-      <p className="text-xs text-neutral-500">The same list is available as JSON at <a className="underline" href="/api/burnticker/v1/clones">/api/burnticker/v1/clones</a>. These are memecoins. A rule says what happens to a coin&apos;s supply, never its price.</p>
+      <p className="text-xs text-neutral-500">The same list is available as JSON at <a className="underline" href="/api/burnticker/v1/clones">/api/burnticker/v1/clones</a>.</p>
     </main>
   );
 }

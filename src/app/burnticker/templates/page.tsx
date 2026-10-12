@@ -31,7 +31,6 @@ export default function TemplatesPage() {
           </li>
         ))}
       </ul>
-      <p className="text-xs text-neutral-500">These are memecoins. Each rule says what happens to a coin&apos;s supply, never its price. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );
 }

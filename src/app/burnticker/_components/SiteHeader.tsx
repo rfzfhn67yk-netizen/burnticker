@@ -1,40 +1,69 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { NAV, HOME_HREF, LAUNCH_LABELS, activeNav, type NavItem } from "./nav";
+import { usePathname, useRouter } from "next/navigation";
+import { NAV, LEARN, HOME_HREF, LAUNCH_LABELS, activeNav, inLearn, type NavItem } from "./nav";
 import { useLaunchAvailability } from "./useLaunchAvailability";
 import { THEME_KEY, currentTheme, type Theme } from "./theme";
+import { ActivityTicker } from "./ActivityTicker";
+import { LaunchClosedModal } from "./LaunchClosedModal";
+import { SEARCH, WALLET } from "@/lib/burnticker/siteNav.mjs";
 
 /**
- * THE BURNTICKER HEADER (B1 "thermal receipt", 2026-10-10): the mark + wordmark on the left, the shared Burnticker link set
- * (src/lib/burnticker/siteNav.mjs — the same links in the same order as the home, the whitepaper and the $DEFICIT site) on the right,
- * a MENU toggle under 900 px and the light/dark switch (one `bt-theme` preference shared with the static pages, ./theme.ts).
+ * THE BURNTICKER HEADER (B1 "thermal receipt", 2026-10-10; the launchpad skeleton since 2026-10-12, the owner's review items 3, 4 and
+ * 11): the mark and wordmark, the primary links Coins · Seasons · Launch with a Learn menu, a search box for the coin list, "Launch a
+ * coin" as the one primary button, a disabled "Connect wallet", the light/dark switch, a MENU toggle under 900 px, and the activity
+ * line under the row. Every word comes from src/lib/burnticker/siteNav.mjs, which the static pages render too.
+ *
+ * "Launch a coin" goes to the launch page while creator launches are open. While they are closed (or the state cannot be read) it opens
+ * the closed-launches dialog instead: no date, no waitlist, a link to the coins (brief rule 1).
  *
  * The phone menu (site audit #16, 2026-10-11): opens and closes from the keyboard (Enter/Space on MENU), moves focus to its first link,
  * keeps Tab and Shift+Tab inside the menu and its MENU button while open, closes on Escape (focus back on MENU), on a click outside and
  * on navigation. Reads only the pathname and the launch state.
  */
-function NavLink({ item, active, onNavigate, launchOpen, inMenu }: { item: NavItem; active: boolean; onNavigate?: () => void; launchOpen: boolean; inMenu?: boolean }) {
-  // audit 4 BT-10 / R06: Launch is always listed; emphasised only while creator launches are open, labelled "Launch · closed" otherwise
-  if (item.launch) {
-    const label = !launchOpen ? LAUNCH_LABELS.closed : inMenu ? LAUNCH_LABELS.open : LAUNCH_LABELS.openShort;
-    return <Link className={`bt-nav-link${active ? " is-active" : ""}${launchOpen ? " is-launch" : ""}`} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate} data-launch-link>{label}</Link>;
-  }
+function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   if (item.external) return <a className="bt-nav-link" href={item.href} target="_blank" rel="noopener" onClick={onNavigate}>{item.label}<span aria-hidden="true" className="bt-ext">↗</span><span className="sr-only"> (opens a new tab)</span></a>;
   if (item.static) return <a className="bt-nav-link" href={item.href} onClick={onNavigate}>{item.label}</a>;
-  return <Link className={`bt-nav-link${active ? " is-active" : ""}`} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate}>{item.label}</Link>;
+  return <Link className={`bt-nav-link${active ? " is-active" : ""}`} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate} {...(item.launch ? { "data-launch-link": true } : {})}>{item.label}</Link>;
+}
+
+/** The Learn menu: a button and a list, closed by Escape, a click outside or a navigation. */
+function LearnMenu({ active, current }: { active: string | null; current: boolean }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onClick = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("keydown", onKey); document.addEventListener("mousedown", onClick);
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onClick); };
+  }, [open]);
+  return (
+    <div className="bt-learn" ref={box}>
+      <button type="button" className={`bt-nav-link${current ? " is-active" : ""}`} aria-expanded={open} aria-controls="bt-learn-menu" onClick={() => setOpen((o) => !o)}>Learn<span aria-hidden="true" className="bt-ext">▾</span></button>
+      <div id="bt-learn-menu" className="bt-learn-menu" hidden={!open}>
+        {LEARN.map((n) => <NavLink key={n.href} item={n} active={active === n.href} onNavigate={() => setOpen(false)} />)}
+      </div>
+    </div>
+  );
 }
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const active = activeNav(pathname);
   const launchOpen = useLaunchAvailability().open;
   const [open, setOpen] = useState(false);
+  const [modal, setModal] = useState(false);
   const [theme, setTheme] = useState<Theme>("dark");
   useEffect(() => { setTheme(currentTheme()); }, []);
   useEffect(() => { setOpen(false); }, [pathname]);
+  // a link to "#launch-closed" opens the dialog (the static pages use the same hash)
+  useEffect(() => { if (window.location.hash === "#launch-closed") setModal(true); }, []);
   const menuBtn = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -64,6 +93,15 @@ export function SiteHeader() {
     setTheme(next);
   };
 
+  // the header search filters the coin list: on the coins page in place (CoinsIndex listens), elsewhere by opening it with ?q=
+  const search = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const q = String(new FormData(e.currentTarget).get("q") ?? "").trim();
+    const url = q ? `/burnticker?q=${encodeURIComponent(q)}` : "/burnticker";
+    if (pathname?.replace(/\/+$/, "") === "/burnticker") { window.history.replaceState(null, "", url); window.dispatchEvent(new CustomEvent("bt-search", { detail: q })); }
+    else router.push(url);
+  };
+
   return (
     <header className="bt-header">
       <div className="bt-header-row">
@@ -73,9 +111,18 @@ export function SiteHeader() {
           <span className="bt-wordmark">BURNTICKER</span>
         </a>
         <nav className="bt-nav-desktop" aria-label="Burnticker">
-          {NAV.map((n) => <NavLink key={n.href} item={n} active={active === n.href} launchOpen={launchOpen} />)}
+          {NAV.map((n) => <NavLink key={n.href} item={n} active={active === n.href} />)}
+          <LearnMenu active={active} current={inLearn(pathname)} />
         </nav>
+        <form className="bt-search" role="search" action="/burnticker" method="get" onSubmit={search}>
+          <label className="sr-only" htmlFor="bt-header-q">{SEARCH.label}</label>
+          <input id="bt-header-q" name="q" type="search" placeholder={SEARCH.placeholder} autoComplete="off" />
+        </form>
         <div className="bt-header-tools">
+          {launchOpen
+            ? <Link className="bt-launch-btn bt-launch-head" href="/burnticker/launch" data-launch-button>{LAUNCH_LABELS.button}</Link>
+            : <button type="button" className="bt-launch-btn bt-launch-head" onClick={() => setModal(true)} aria-haspopup="dialog" data-launch-button>{LAUNCH_LABELS.button}</button>}
+          <button type="button" className="bt-wallet" disabled title={WALLET.note}>{WALLET.label}<span className="sr-only">. {WALLET.note}</span></button>
           <button type="button" className="bt-icon-btn" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={theme === "dark" ? "Light theme" : "Dark theme"}>
             {theme === "dark" ? "☀" : "☾"}
           </button>
@@ -85,8 +132,10 @@ export function SiteHeader() {
         </div>
       </div>
       <nav id="bt-mobile-nav" ref={menu} className={`bt-nav-mobile${open ? " is-open" : ""}`} aria-label="Burnticker (menu)" hidden={!open}>
-        {NAV.map((n) => <NavLink key={n.href} item={n} active={active === n.href} launchOpen={launchOpen} inMenu onNavigate={() => setOpen(false)} />)}
+        {[...NAV, ...LEARN].map((n) => <NavLink key={n.href} item={n} active={active === n.href} onNavigate={() => setOpen(false)} />)}
       </nav>
+      <ActivityTicker />
+      {modal && <LaunchClosedModal onClose={() => { setModal(false); if (window.location.hash === "#launch-closed") window.history.replaceState(null, "", window.location.pathname + window.location.search); }} />}
     </header>
   );
 }

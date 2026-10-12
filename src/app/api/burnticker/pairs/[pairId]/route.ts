@@ -6,7 +6,7 @@ import { derbyPairBlock } from "@/lib/burnticker/api/derby";
 
 export const dynamic = "force-dynamic";
 
-/** One rivalry pair: both sides' status + receipts, the running tally (last settlement with its result, next market) and the share line. */
+/** One rivalry pair: both sides' status + receipts + exact rules.json text, the running tally (last settlement with its result, next market) and the share line. */
 export async function GET(req: Request, { params }: { params: Promise<{ pairId: string }> }) {
   const { pairId } = await params;
   const p = platform();
@@ -21,5 +21,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ pairId: 
   const share = pairDailyText(tally, site, da.status.profile?.badge ?? null);
   // Burn Derby (2026-10-10): the running score, the day strip with both readings, the season end, the proof links, the day post.
   const derby = pair.selectorKey.startsWith("derby:") ? await derbyPairBlock(p, pairId, site, now).catch(() => null) : null;
-  return NextResponse.json({ pair, a: { status: da.status, receipts: da.receipts }, b: { status: db.status, receipts: db.receipts }, tally, share, derby, stubs: p.stubs });
+  return NextResponse.json({ pair, a: { status: da.status, receipts: da.receipts, rulesText: da.rulesText }, b: { status: db.status, receipts: db.receipts, rulesText: db.rulesText }, tally, share, derby, stubs: p.stubs });
 }

@@ -63,7 +63,6 @@ export default function LeaguesPage() {
           ))}</ul>
         </section>
       ))}
-      <p className="text-neutral-500 text-xs">These are memecoins. Each rule describes what happens to a coin&apos;s supply, never its price. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );
 }

@@ -109,7 +109,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       </section>
 
       </>}
-      <p className="text-neutral-500 text-xs">These are memecoins. Each rule says what happens to a coin&apos;s supply, never its price. Team names are used only to describe the result a rule reads. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
+      <p className="text-neutral-500 text-xs">Team names are used only to describe the result a rule reads.</p>
     </main>
   );
 }

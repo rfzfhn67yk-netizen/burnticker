@@ -63,7 +63,7 @@ export default function VerifyMintPage() {
           <p className="text-xs">{v.links.page && <><Link className="underline" href={v.links.page}>coin page →</Link> · </>}<Link className="underline" href={v.links.verifier}>verify a receipt transaction →</Link></p>
         </section>
       )}
-      <p className="text-xs text-neutral-500">The same answer is available as JSON at <code>/api/burnticker/v1/verify-mint/&lt;mint&gt;</code>. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
+      <p className="text-xs text-neutral-500">The same answer is available as JSON at <code>/api/burnticker/v1/verify-mint/&lt;mint&gt;</code>.</p>
     </main>
   );
 }

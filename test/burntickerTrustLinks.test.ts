@@ -44,5 +44,6 @@ test("BT-18: categorical claims carry their actor and scope", () => {
   assert.match(USE_OF_FEES, /operator and its wallets never trade any coin/); assert.match(USE_OF_FEES, /program-run burn-pool purchases/);
   assert.doesNotMatch(USE_OF_FEES, /The platform never buys back any coin/);
   assert.match(CHECK_COPY.powersIntro, /current instruction permissions/); assert.match(CHECK_COPY.powersIntro, /Upgrade authority is a separate power/);
-  assert.match(read("site/burnticker/index.html"), /The second publisher, FRED, reports this debt only once a quarter\. It can confirm the quarter ends but not each daily reading\./);
+  // the $DEFICIT replay moved from the static home to the about page with the rest of the explainer (website-10, 2026-10-12)
+  assert.match(read("src/app/burnticker/about/page.tsx"), /The second publisher, FRED, reports this debt only once a quarter\. It can confirm the quarter ends but not each daily reading\./);
 });

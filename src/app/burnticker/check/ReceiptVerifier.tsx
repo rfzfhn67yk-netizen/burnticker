@@ -30,9 +30,11 @@ export default function ReceiptVerifier({ card }: { card: string }) {
   const [wantDemo, setWantDemo] = useState(false);
   // audit 4 BT-07: a missing or malformed signature is a field error — no check runs, no verdict, no explorer link
   const [sigError, setSigError] = useState<string | null>(null);
+  // website-11: a coin page's "Check receipt" links here with ?sig=<signature>&cluster=<network>; the check runs on that network
+  const [cluster, setCluster] = useState<"devnet" | "mainnet">("devnet");
   // website brief §5: /burnticker/check?demo=1 pre-selects the featured devnet receipt (current-status.json `demo`) and runs the check
-  useEffect(() => { fetch("/api/burnticker/v1/check/receipts").then((r) => r.json()).then((j: Samples) => { setSamples(j); const want = new URLSearchParams(window.location.search).get("demo") === "1"; const f = j.featured && j.receipts.some((r) => r.signature === j.featured) ? j.featured : j.receipts[0]?.signature; if (f) setSig(f); if (want && f) setDemo(true); }).catch((e) => setErr(String(e))); }, []);
-  useEffect(() => { setWantDemo(new URLSearchParams(window.location.search).get("demo") === "1"); }, []);
+  useEffect(() => { fetch("/api/burnticker/v1/check/receipts").then((r) => r.json()).then((j: Samples) => { setSamples(j); const q = new URLSearchParams(window.location.search); const linked = q.get("sig")?.trim() || null; const want = q.get("demo") === "1" || !!linked; const f = linked ?? (j.featured && j.receipts.some((r) => r.signature === j.featured) ? j.featured : j.receipts[0]?.signature); if (f) setSig(f); if (want && f) setDemo(true); }).catch((e) => setErr(String(e))); }, []);
+  useEffect(() => { const q = new URLSearchParams(window.location.search); setWantDemo(q.get("demo") === "1"); if (q.get("cluster") === "mainnet") { setCluster("mainnet"); setRpc(PUBLIC_RPC.mainnet); } }, []);
   useEffect(() => { if (demo && sig && samples && !busy && !res) { setDemo(false); void run(); } }, [demo, sig, samples]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function run() {
@@ -43,7 +45,7 @@ export default function ReceiptVerifier({ card }: { card: string }) {
     try {
       const s = samples?.receipts.find((r) => r.signature === sig.trim());
       const out = await checkReceiptTx({
-        signature: sig.trim(), cluster: "devnet", programId: samples?.programId ?? PROGRAM_IDS.devnet.burn_receipts,
+        signature: sig.trim(), cluster, programId: cluster === "devnet" ? samples?.programId ?? PROGRAM_IDS.devnet.burn_receipts : PROGRAM_IDS.mainnet.burn_receipts,
         rpc: jsonRpc(rpc.trim(), window.fetch.bind(window)),
         rulesText: s ? samples?.rules[s.rulesPath] ?? null : null,
         fetchSource: (u) => window.fetch(u, { headers: { accept: "application/json" } }),
@@ -87,7 +89,7 @@ export default function ReceiptVerifier({ card }: { card: string }) {
             <input className={`w-full min-w-0 rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby={sigError ? "sig-error" : undefined} />
             {sigError && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">Not checked: {sigError}. This is a typing problem. It says nothing about any receipt.</span>}
           </label>
-          <label className="grid min-w-0 gap-1"><span className="text-neutral-400">RPC endpoint (use any devnet RPC you trust)</span>
+          <label className="grid min-w-0 gap-1"><span className="text-neutral-400">{cluster === "mainnet" ? "RPC endpoint (use any mainnet RPC you trust)" : "RPC endpoint (use any devnet RPC you trust)"}</span>
             <input className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
           </label>
           <div><button type="button" disabled={busy} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>

@@ -16,6 +16,7 @@ export const STATIC_PAGES: { path: string; changefreq: SitemapEntry["changefreq"
   { path: "/", changefreq: "daily", priority: 1 },
   { path: "/burnticker", changefreq: "hourly", priority: 0.9 },
   { path: "/burnticker/launch", changefreq: "weekly", priority: 0.8 },
+  { path: "/burnticker/about", changefreq: "monthly", priority: 0.7 },
   { path: "/burnticker/rivalries", changefreq: "hourly", priority: 0.7 },
   { path: LEAGUES_PATH, changefreq: "daily", priority: 0.7 },
   { path: "/burnticker/derby", changefreq: "daily", priority: 0.5 },

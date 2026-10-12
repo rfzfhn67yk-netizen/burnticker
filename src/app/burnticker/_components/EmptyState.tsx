@@ -5,7 +5,7 @@ import { EMPTY_STATE_COPY, type EmptyKind } from "@/lib/burnticker/emptyState";
  * ONE EMPTY STATE FOR EVERY SURFACE (src/lib/burnticker/emptyState.ts): not launched / no activity / loading / data unavailable. The
  * heading is always the kind's own words; `body` replaces the default sentence with a surface-specific one; `details` (operational
  * diagnostics: an HTTP status, an env-var name, an error message) sits behind a disclosure so a visitor reads ordinary words first.
- * `loading` renders a neutral skeleton with the same footprint, never the content it stands in for.
+ * `loading` renders a neutral skeleton with the same footprint, never the content it stands in for, and no visible words.
  */
 export function EmptyState({ kind, body, details, children, compact = false }: { kind: EmptyKind; body?: ReactNode; details?: string | null; children?: ReactNode; compact?: boolean }) {
   const c = EMPTY_STATE_COPY[kind];
@@ -13,11 +13,13 @@ export function EmptyState({ kind, body, details, children, compact = false }: {
   return (
     <div role={kind === "loading" ? "status" : undefined} aria-live={kind === "loading" ? "polite" : undefined} aria-busy={kind === "loading" ? true : undefined}
       data-empty-state={kind} className={`rounded-lg border border-dashed ${tone} ${compact ? "p-3" : "p-5"} text-sm text-neutral-300`}>
-      <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{c.heading}</p>
+      {/* review item 18 (2026-10-12): a loading state is a skeleton, not words; the heading and sentence stay for screen readers */}
+      <p className={kind === "loading" ? "sr-only" : "font-mono text-[11px] uppercase tracking-widest text-neutral-500"}>{c.heading}</p>
       {kind === "loading" ? (
-        <div className="mt-2 space-y-2" aria-hidden="true">
-          <div className="h-3 w-2/3 rounded bg-neutral-800 motion-safe:animate-pulse" />
-          <div className="h-3 w-1/2 rounded bg-neutral-800 motion-safe:animate-pulse" />
+        <div className="space-y-2" aria-hidden="true" data-skeleton>
+          <div className="bt-skel h-3 w-1/3 motion-safe:animate-pulse" />
+          <div className="bt-skel h-3 w-2/3 motion-safe:animate-pulse" />
+          <div className="bt-skel h-3 w-1/2 motion-safe:animate-pulse" />
         </div>
       ) : null}
       <p className={kind === "loading" ? "sr-only" : "mt-1"}>{body ?? c.body}</p>

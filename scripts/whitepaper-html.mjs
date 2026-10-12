@@ -10,7 +10,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { siteNavHtml } from "../src/lib/burnticker/siteNav.mjs";
+import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS } from "../src/lib/burnticker/siteNav.mjs";
+
+/** The trust copy's operator line, verbatim (src/lib/burnticker/trustpack/copy.ts OPERATOR_LINE), for the shared footer receipt. */
+export function operatorLine(root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")) {
+  const m = /export const OPERATOR_LINE = "([^"]+)";/.exec(fs.readFileSync(path.join(root, "src/lib/burnticker/trustpack/copy.ts"), "utf8"));
+  if (!m) throw new Error("src/lib/burnticker/trustpack/copy.ts: OPERATOR_LINE not found");
+  return m[1];
+}
 
 /** The app layout's theme boot (src/app/burnticker/_components/theme.ts THEME_BOOT), verbatim: one `bt-theme` preference site-wide. */
 const THEME_BOOT_JS = "(function(){try{var t=localStorage.getItem('bt-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}})();";
@@ -20,8 +27,6 @@ export const WHITEPAPER_HTML = "site/burnticker/whitepaper.html";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = "docs/burnticker/";
 
-/** The B1 mark: a thermal receipt with a scorch hole (the landing page's header mark). */
-const BRAND_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true"><defs><radialGradient id="bt-scorch" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1f1c19"/><stop offset=".46" stop-color="#1f1c19"/><stop offset=".56" stop-color="#0e0b08"/><stop offset=".66" stop-color="#3a2411"/><stop offset=".78" stop-color="#8a5a24"/><stop offset=".9" stop-color="#cfa65c" stop-opacity=".6"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/></radialGradient></defs><rect width="64" height="64" rx="12" fill="#1f1c19"/><g transform="rotate(-5 32 32)"><path d="M14 11 L17.5 7.5 L21 11 L24.5 7.5 L28 11 L31.5 7.5 L35 11 L38.5 7.5 L42 11 L45.5 7.5 L49 11 L49 55 L45.5 58.5 L42 55 L38.5 58.5 L35 55 L31.5 58.5 L28 55 L24.5 58.5 L21 55 L17.5 58.5 L14 55 Z" fill="#f2eee4"/><rect x="18" y="15" width="25" height="4" fill="#1b1916"/><rect x="18" y="22" width="14" height="1.6" fill="#4a443c"/><path d="M18 27 H45" stroke="#2a2622" stroke-width="1.2" stroke-dasharray="2 1.5"/><rect x="18" y="31" width="9" height="1.6" fill="#1b1916"/><rect x="34" y="31" width="11" height="1.6" fill="#1b1916"/><rect x="18" y="36" width="8" height="1.6" fill="#1b1916"/><path d="M28.5 45.5 C28 40.5 32 37.5 36.5 38 C41.5 37.5 45.5 41 44.5 45.5 C44 50 40 52.5 36 52 C31.5 52.5 29 49.5 28.5 45.5 Z" fill="url(#bt-scorch)" transform="translate(36.5 45) scale(1.45) translate(-36.5 -45)"/><path d="M33 44.5 C33 42 35 40.8 37 41.2 C39.5 41 40.6 43 40.2 45 C40 47.2 38.2 48.6 36.2 48.3 C34.2 48.4 33 46.8 33 44.5 Z" fill="#1f1c19"/></g></svg>';
 
 export function publicRepoBase(root = ROOT) {
   try {
@@ -33,7 +38,6 @@ export function publicRepoBase(root = ROOT) {
 
 export function renderWhitepaper(mdText, repoBase = publicRepoBase()) {
 const md = mdText.replace(/\r/g, "");
-const brandSvg = BRAND_SVG;
 const REPO = repoBase;
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -143,15 +147,13 @@ const page = `<!DOCTYPE html>
 <meta name="twitter:image" content="https://burnticker.com/brand/og.png">
 <link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
 <script>${THEME_BOOT_JS}</script>
+<style>${SHELL_CSS}</style>
 <style>
 :root{
   --bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000;
   --paper:#f2eee4;--thermal:#1b1916;--faded:#4a443c;--rule:#2a2622;--stamp:#5b3fa3;--paper2:#e8e3d6;--link:#5b3fa3;
   --mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
-}
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){--bg:#dcd6c8;--surface:#cfc8b8;--line:#bdb5a3;--ink:#1b1916;--dim:#3a352f;--muted:#5d564b;--amber:#9a5b00}
 }
 :root[data-theme="light"]{--bg:#dcd6c8;--surface:#cfc8b8;--line:#bdb5a3;--ink:#1b1916;--dim:#3a352f;--muted:#5d564b;--amber:#9a5b00}
 :root[data-theme="dark"]{--bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000}
@@ -204,19 +206,8 @@ footer p{margin:0 0 6px;max-width:none}
 </style>
 </head>
 <body>
-<header class="wrap">
-  <div class="top">
-    <a class="brand" href="./" aria-label="Burnticker home">
-      ${brandSvg}
-      <b>BURNTICKER</b>
-    </a>
-    <nav class="nav" aria-label="Burnticker" data-site-nav="header">
-${siteNavHtml({ current: "/whitepaper.html", indent: "      " })}
-      <button type="button" class="themebtn" data-theme-toggle aria-label="Switch theme">◐</button>
-    </nav>
-  </div>
-</header>
-<main class="wrap">
+${shellHeaderHtml({ current: "/whitepaper.html" })}
+<main class="wrap" id="main">
 <article class="slip">
 <p class="kicker">Technical paper · draft 1 · 2026-10-10</p>
 <h1>${inline(title)}</h1>
@@ -231,28 +222,11 @@ ${body.join("\n")}
 </article>
 </main>
 <footer class="wrap">
-  <nav class="flinks" aria-label="Footer" data-site-nav="footer">
-${siteNavHtml({ current: "/whitepaper.html", footer: true, indent: "    " })}
-  </nav>
-  <p>A memecoin platform. The rule says what the supply does, not what the price does. Nobody is promised anything.</p>
-  <p>Operated by one independent operator (United States); contact@burnticker.com. Source of this page: <code>docs/burnticker/WHITEPAPER.md</code>.</p>
+  <p>Source of this page: <code>docs/burnticker/WHITEPAPER.md</code>.</p>
 </footer>
+${shellFooterHtml({ current: "/whitepaper.html", operatorLine: operatorLine() })}
 <script>
-(function () {
-  // ONE THEME PREFERENCE (site audit #6): the same "bt-theme" key and switch as the app header and the home page
-  var b = document.querySelector("[data-theme-toggle]"), root = document.documentElement; if (!b) return;
-  function cur() { var t = root.dataset.theme; return t === "light" || t === "dark" ? t : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); }
-  function label() { var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); }
-  b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
-  label();
-})();
-(function () {
-  // R06: "Launch · closed" until this host's catalogue says creator launches are open (unreadable = closed)
-  if (!window.fetch) return;
-  fetch("/api/burnticker/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
-    if (j && j.launches && j.launches.creators === true) Array.prototype.forEach.call(document.querySelectorAll("[data-launch-link]"), function (a) { a.textContent = "Launch"; });
-  }).catch(function () { /* closed */ });
-})();
+${shellScript()}
 </script>
 </body>
 </html>
