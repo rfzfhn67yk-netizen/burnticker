@@ -9,6 +9,7 @@ import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { EmptyState } from "../_components/EmptyState";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 import { SeasonsTabs } from "../_components/SeasonsTabs";
+import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Scoreboards", description: "Burnticker keeps one scoreboard for each league and season, ranked by receipts. Rivalry pairs and Burn Derby brackets are listed below the scoreboards." };
@@ -21,6 +22,7 @@ export const metadata: Metadata = { title: "Scoreboards", description: "Burntick
  */
 export default function SeasonsPage() {
   let boards: SeasonBoard[] = [], yesterday = 0, pairs: { pairId: string; a: string; b: string; selectorKey: string; createdAt: number }[] = [], brackets: { id: string; title: string; createdAt: number }[] = [];
+  let shared = new Set<string>();
   let err: string | null = null;
   const launch = launchAvailability(process.env);
   const yday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
@@ -32,6 +34,7 @@ export default function SeasonsPage() {
       return { ticker: t.ticker, mint: t.mint, rule: p.registry.lockedRule(t).rule, burns, burnedPct: Number((p.registry.totalBurnedRaw(t.mint) * BigInt(1_000_000)) / supplyRaw) / 10_000, ended: p.registry.ruleEnd(t.mint) !== null };
     });
     boards = seasonBoards(coins);
+    shared = sharedTickers(coins);   // tickers are not unique (owner 2026-10-12): a shared ticker links by mint
     yesterday = coinsBurnedOn(coins, yday);
     pairs = p.registry.pairs().map((pr) => ({ pairId: pr.pairId, a: p.registry.token(pr.mintA)?.ticker ?? pr.mintA.slice(0, 6), b: p.registry.token(pr.mintB)?.ticker ?? pr.mintB.slice(0, 6), selectorKey: pr.selectorKey, createdAt: pr.createdAt }));
     try { brackets = derbyStore(p.registry.db).tournaments().map((r) => { let title = r.id; try { title = (JSON.parse(r.json) as { title?: string }).title ?? r.id; } catch { /* keep the id */ } return { id: r.id, title, createdAt: r.createdAt }; }); } catch { brackets = []; }
@@ -63,7 +66,7 @@ export default function SeasonsPage() {
             <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="font-medium">{b.label}</h2><span className="text-xs text-neutral-500">{dateRange(b.from, b.to)}{b.ended ? " · season over" : ""}</span></div>
             {b.leader && <p className="mt-1 text-xs"><span className="bt-chip bt-chip-window">{b.leader.title}</span> <span className="font-mono">${b.leader.ticker}</span></p>}
             <table className="mt-2 w-full text-xs"><thead className="text-left text-neutral-500"><tr><th className="py-1">#</th><th>Coin</th><th>Burns on</th><th className="text-right">Receipts</th><th className="text-right">Supply burned</th></tr></thead>
-              <tbody>{b.rows.map((r) => <tr key={r.mint} className="border-t border-neutral-800"><td className="py-1">{r.rank}</td><td><Link className="font-mono underline" href={`/burnticker/t/${r.ticker}`}>${r.ticker}</Link></td><td>{r.outcome === "win" ? "a win" : r.outcome === "draw" ? "a draw" : "a loss"}</td><td className="text-right tabular-nums">{r.receipts}</td><td className="text-right tabular-nums">{r.burnedPct.toFixed(2)}%</td></tr>)}</tbody></table>
+              <tbody>{b.rows.map((r) => <tr key={r.mint} className="border-t border-neutral-800"><td className="py-1">{r.rank}</td><td><Link className="font-mono underline" href={coinPageHref(r, shared)}>${r.ticker}</Link></td><td>{r.outcome === "win" ? "a win" : r.outcome === "draw" ? "a draw" : "a loss"}</td><td className="text-right tabular-nums">{r.receipts}</td><td className="text-right tabular-nums">{r.burnedPct.toFixed(2)}%</td></tr>)}</tbody></table>
           </article>
         ))}</div>
       </section>

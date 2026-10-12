@@ -3,7 +3,7 @@ import { coinImage } from "@/lib/burnticker/coinArtServe";
 
 export const dynamic = "force-dynamic";
 
-/** GET /burnticker/img/<TICKER>.svg|.png — the coin's generated image (coinArt.ts); `preview.svg?t=&r=` for the wizard's live preview. */
+/** GET /burnticker/img/<TICKER or MINT>.svg|.png — the coin's generated image (coinArt.ts); `preview.svg?t=&r=` for the wizard's live preview. */
 export async function GET(req: Request, { params }: { params: Promise<{ file: string }> }) {
   const { file } = await params;
   const r = await coinImage({ registry: platform().registry, file, query: new URL(req.url).searchParams });

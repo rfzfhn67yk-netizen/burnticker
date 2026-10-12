@@ -5,6 +5,7 @@ import { readAudit } from "@/lib/burnticker/trust";
 import { readinessFromStatus, type Readiness } from "@/lib/burnticker/readiness";
 import { rankLines } from "@/lib/burnticker/coinRank";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
+import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,8 @@ export async function GET() {
   const now = Date.now();
   const statuses = [];
   const ready = new Map<string, Readiness>();
-  for (const t of p.registry.tokens()) { try { const d = await tokenPageData(p, t, now); statuses.push(d.status); ready.set(d.status.ticker, readinessFromStatus(d.status, d.receipts)); } catch { /* a token whose page fails is left out, not invented */ } }
+  // owner decision 2026-10-12: a mainnet host lists no registry row on the devnet cluster (devnetHide.ts)
+  for (const t of publicRegistryRows(p.registry.tokens(), p.cluster)) { try { const d = await tokenPageData(p, t, now); statuses.push(d.status); ready.set(d.status.ticker, readinessFromStatus(d.status, d.receipts)); } catch { /* a token whose page fails is left out, not invented */ } }
   const audit = readAudit(p.publishDir);
   const index = buildPlatformIndex(statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null);
   // website-17 wiring item 2: each coin's rank line (coinRank.ts), null when the registry could not be ranked (never a guessed rank)

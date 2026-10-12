@@ -98,7 +98,8 @@ export function settlementOf(receipts: readonly ReceiptLike[], cluster: string):
 }
 
 /** One registered coin's row. */
-export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike[]): UpcomingRow | null {
+/** `key`: the coin's URL key (coinKey.ts), its ticker while it alone holds it and its mint once the ticker is shared. */
+export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike[], key: string = s.ticker): UpcomingRow | null {
   if (s.status === "draft" || s.status === "expired" || s.status === "retired") return null;
   const st = settlementOf(receipts, s.cluster);
   const close = s.next.nextCloseTime, check = s.next.nextCheckAt;
@@ -107,7 +108,7 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
     : "This rule has no scheduled result that this site knows of.";
   const latestSrc = [...receipts].reverse().find((r) => r.settlementSourceUrl)?.settlementSourceUrl ?? null;
   return {
-    ticker: s.ticker, name: s.name, href: `/burnticker/t/${encodeURIComponent(s.ticker)}`, network: s.cluster === "devnet" ? "devnet" : "mainnet",
+    ticker: s.ticker, name: s.name, href: `/burnticker/t/${encodeURIComponent(key)}`, network: s.cluster === "devnet" ? "devnet" : "mainnet",
     event: s.next.nextMarket ? `${s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey}, market ${s.next.nextMarket}` : s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey,
     source: SOURCE[s.oracle] ?? "The source named in the rule", sourceUrl: latestSrc, schedule, nextAt: close ?? check, status: st.status, statusText: st.text, receiptHref: st.receiptHref,
   };

@@ -24,7 +24,7 @@ describe("draft expiry", () => {
     const reg = openRegistry(":memory:");
     const a = draft(reg, "SQUAT", T0);
     assert.equal(reg.tickerTaken("SQUAT", T0 + DRAFT_TTL_MS - 60_000), true);
-    assert.throws(() => draft(reg, "SQUAT", T0 + 3_600_000), /ticker SQUAT is taken/);
+    { const other = openRegistry(":memory:"); draft(other, "SQUAT", T0); assert.doesNotThrow(() => draft(other, "SQUAT", T0 + 3_600_000), "tickers are not unique (owner 2026-10-12)"); assert.equal(other.tokensByTicker("SQUAT").length, 2); }
     assert.equal(reg.tickerTaken("SQUAT", T0 + DRAFT_TTL_MS + 1), false);
     assert.equal(reg.token(a.mint)!.status, "expired", "the row stays, marked expired");
     const b = draft(reg, "SQUAT", T0 + DRAFT_TTL_MS + 2);
@@ -64,11 +64,12 @@ describe("draft expiry", () => {
     reg.close();
     const again = openRegistry(file); assert.equal(again.tokens().length, 2, "reopening is a no-op"); again.close();
   });
-  test("through the public API: a ticker held by a fresh draft is 409; once that draft is 24 h old the same ticker launches", async () => {
+  test("through the public API: a ticker held by a fresh draft launches again (tickers are not unique); a 24 h old draft expires on the next launch", async () => {
     const w = await makeWorld();
     const held = draft(w.registry, "HELD", Date.now() - DRAFT_TTL_MS + 3_600_000);
     const body = (mint: string) => JSON.stringify({ creator: CREATOR, mint, ticker: "HELD", name: "held", rule: DENVER_HIGH, acknowledgements: { ruleLocked: true, noReturns: true } });
-    assert.equal((await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: body(Keypair.generate().publicKey.toBase58()) })).status, 409);
+    assert.equal((await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: body(Keypair.generate().publicKey.toBase58()) })).status, 200);
+    assert.equal(w.registry.tokensByTicker("HELD").length, 2);
     const stale = draft(w.registry, "STALE2", Date.now() - DRAFT_TTL_MS - 1);
     const r = await callRoute(`${API}/launch/bundle`, { method: "POST", headers: POST_HEADERS, body: body(Keypair.generate().publicKey.toBase58()).replace('"HELD"', '"STALE2"') });
     assert.equal(r.status, 200, JSON.stringify(await r.clone().json()).slice(0, 200));

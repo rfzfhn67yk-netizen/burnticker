@@ -68,6 +68,8 @@ export const customImagesEnabled = (env: Readonly<Record<string, string | undefi
 
 export interface PinInput {
   ticker: string; name: string;
+  /** The coin's mint: when given, external_url is the mint page, the address that stays the coin's own even if another coin later shares the ticker (owner 2026-10-12). */
+  mint?: string | null;
   /** The token metadata description: the window badge line + the generated paragraph + the rule footer (handlers.metadataDescription). */
   description: string;
   oneLiner: string; rule: BurnRule; rulesSha256: string; origin: string;
@@ -83,7 +85,7 @@ export function metadataJson(i: PinInput, imageUri: string, imageType = "image/p
   const ext: Record<string, string> = {};
   for (const l of i.links) { const k = /^x$/i.test(l.label) ? "twitter" : l.label.toLowerCase(); if (["website", "twitter", "telegram"].includes(k)) ext[k] = l.url; }
   return JSON.stringify({
-    name: i.name, symbol: i.ticker, description: i.description, image: imageUri, external_url: `${i.origin.replace(/\/$/, "")}/burnticker/t/${i.ticker}`,
+    name: i.name, symbol: i.ticker, description: i.description, image: imageUri, external_url: `${i.origin.replace(/\/$/, "")}/burnticker/t/${encodeURIComponent(i.mint ?? i.ticker)}`,
     attributes: [{ trait_type: "rules sha256", value: i.rulesSha256 }, ...(i.image && typeof i.image.badge === "boolean" ? [{ trait_type: "Burnticker receipt mark", value: i.image.badge ? "on" : "off" }] : [])],
     properties: { category: "image", files: [{ uri: imageUri, type: imageType }] },
     ...(Object.keys(ext).length ? { extensions: ext } : {}),

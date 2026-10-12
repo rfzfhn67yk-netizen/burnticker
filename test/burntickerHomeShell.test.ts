@@ -149,7 +149,7 @@ describe("the activity line (review item 4, brief rule 3; Codex review 5 F3): re
       assert.match(src, /noEvents/, `${f} prints the API's one line`); assert.doesNotMatch(code, /sample|mock|placeholder row/i, f);
     }
     const route = read("src/app/api/burnticker/home/route.ts");
-    assert.match(route, /homeData\(coins, process\.cwd\(\), now, index, status, siteLaunchState\(process[.]env, now\), keeper, next, rehearsalCurve\)/);
+    assert.match(route, /homeData\(coins, process\.cwd\(\), now, index, status, siteLaunchState\(process[.]env, now\), keeper, next, rehearsalCurve, p\.cluster\)/);
     assert.match(route, /readOk: false/, "a coin whose page fails is marked unreadable, not dropped");
     assert.match(route, /catch \(e\) \{ console\.error\("\[burnticker\/home\] the coin registry could not be read:", e\); coins = null; registered = null; \}/, "an unreadable registry is null, never an empty list");
   });

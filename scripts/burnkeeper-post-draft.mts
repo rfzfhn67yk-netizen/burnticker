@@ -145,9 +145,10 @@ function main(): void {
     const receiptsByTicker: Record<string, ReceiptJson[]> = {};
     const lpClaims: { ticker: string; at: string; line: string }[] = [];
     for (const t of ix.tokens) {
-      receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
+      // tickers are not unique (owner 2026-10-12): the map is keyed by mint, and a coin's directory is its siteKey when it has one
+      receiptsByTicker[t.mint] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.siteKey ?? t.ticker, "receipts.json")) ?? [];
       // LP locked forever (2026-10-10): the coin's last claim_lock_fees receipt line, from its status.json
-      const last = readJson<{ lp?: { lastClaim?: { at: string; line: string } | null } | null }>(path.join(platformDir, "t", t.ticker, "status.json"))?.lp?.lastClaim;
+      const last = readJson<{ lp?: { lastClaim?: { at: string; line: string } | null } | null }>(path.join(platformDir, "t", t.siteKey ?? t.ticker, "status.json"))?.lp?.lastClaim;
       if (last) lpClaims.push({ ticker: t.ticker, at: last.at, line: last.line });
     }
     const day = args.get("date") ?? new Date(now).toISOString().slice(0, 10);
@@ -178,7 +179,7 @@ function main(): void {
     const ix = readJson<PlatformIndexJson>(path.join(platformDir, "index.json"));
     if (!ix) { console.error(`no index.json in ${platformDir} (pass --platform-dir=…)`); process.exit(2); }
     const receiptsByTicker: Record<string, ReceiptJson[]> = {};
-    for (const t of ix.tokens) receiptsByTicker[t.ticker] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.ticker, "receipts.json")) ?? [];
+    for (const t of ix.tokens) receiptsByTicker[t.mint] = readJson<ReceiptJson[]>(path.join(platformDir, "t", t.siteKey ?? t.ticker, "receipts.json")) ?? [];
     const day = args.get("date") ?? new Date(now - 86_400_000).toISOString().slice(0, 10);
     const top = args.has("top") ? Number(args.get("top")) : undefined;
     const leagues = args.has("league") ? [args.get("league")!.toUpperCase()] : scoreboardLeagues(ix);

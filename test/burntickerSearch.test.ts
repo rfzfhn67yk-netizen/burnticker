@@ -69,7 +69,7 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
     const top = r.cards[0];
     assert.equal(top.venue, "polymarket");
     assert.equal(top.title, "Abdul El-Sayed (D) wins the Michigan Senate race, which settles on 2026-11-04.");
-    assert.ok(top.rule?.market?.startsWith(DEM)); assert.equal(top.rule?.oracle, "polymarket"); assert.deepEqual(top.rule?.binary, { onYes: { fractionOfPool: 0.1 }, onNo: null }, "a one-shot defaults to 10 % of the pool");
+    assert.ok(top.rule?.market?.startsWith(DEM)); assert.equal(top.rule?.oracle, "polymarket"); assert.deepEqual(top.rule?.binary, { onYes: { fractionOfPool: 1 }, onNo: null }, "a one-shot defaults to the whole pool (website-19)");
     assert.match(top.howSettles ?? "", /Democratic nominee/); assert.match(top.howSettles ?? "", /Resolution rules \(Polymarket\)/);
     assert.equal(top.suggestedTicker, "ELSAYED");
     assertNoMarketData(r, "search payload");
@@ -185,7 +185,7 @@ describe("the election-pair template (El-Sayed vs Rogers, Michigan Senate 2026)"
     const r = race(), [a, b] = r.outcomes;
     const t = electionPairTemplate(r, a, b, { a: "S6MI00418", b: "S4MI00595" });
     assert.equal(t.a.components.fecBeats?.series, "fec.beats:S6MI00418-S4MI00595"); assert.equal(t.b.components.fecBeats?.series, "fec.beats:S4MI00595-S6MI00418");
-    assert.equal(t.a.components.winner.market, a.conditionId); assert.deepEqual(t.a.components.winner.binary, { onYes: { fractionOfPool: 0.1 }, onNo: null });
+    assert.equal(t.a.components.winner.market, a.conditionId); assert.deepEqual(t.a.components.winner.binary, { onYes: { fractionOfPool: 1 }, onNo: null });
     assert.equal(t.a.ticker, "ELSAYED"); assert.equal(t.b.ticker, "ROGERS");
     assert.equal(t.launchable.component, "winner");
     assert.ok(t.pending.some((p) => /composite rules/.test(p))); assert.ok(t.pending.some((p) => /same operator/.test(p)));

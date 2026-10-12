@@ -6,6 +6,7 @@ import { WAIT_REASONS, WAIT_RETRY_MS, type ProgramConfigView, type ProgramPort, 
 import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
+import { isFirstSnowSeries, snowSeasonEnd, snowSeasonVoidFromMs } from "@/lib/burnticker/sources/nws";
 import { readingMatches, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { DECIMALS, endSinkOf, isOneShot, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
@@ -205,7 +206,9 @@ export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: 
   const carry = carryFor(locked.rule);
   const independent = independentReadings(locked.rule, carry);
   const ahead = (r: { at: string; id: string }) => r.at > after || (r.at === after && state.lastEventId !== null && r.id > state.lastEventId);
-  const unseen = d.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r) && !d.registry.receipt(t.mint, r.id));
+  // the first snow covers the season it was created in (nws.ts snowSeasonEnd): a later season's first snow is never planned
+  const snowEnd = locked.rule.oracle === "catalogue" && isFirstSnowSeries(locked.rule.series) ? snowSeasonEnd(t.baselineAt) : null;
+  const unseen = d.registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r) && !d.registry.receipt(t.mint, r.id) && (snowEnd === null || r.at.slice(0, 10) <= snowEnd));
   const fresh: SettledEvent[] = independent ? unseen : unseen.filter(ahead);
   if (!independent) for (const r of unseen.filter((x) => !ahead(x))) {
     const text = `$${t.ticker} ${r.id} (${r.at}) arrived behind the settlement cursor (${after}); this rule measures each value against the last processed one, so the change through ${r.id} is already inside the next processed delta and is not applied again`;
@@ -611,6 +614,14 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
       const all = ev.units > 0 && ev.status !== "voided" && (ev.mapping?.fractionOfPool ?? 0) >= 1;
       end = { mode: all ? "drain" : "winddown", reason: all ? `the one-shot settled ${(ev.result ?? "YES").toUpperCase()} at 100 % of the pool` : `the one-shot settled ${(ev.result ?? ev.kind).toUpperCase()}`, at: Date.parse(ev.settledAt) || d.now() };
     }
+  } else if (locked.rule.oracle === "catalogue" && isFirstSnowSeries(locked.rule.series)) {
+    // THE FIRST SNOW RESOLVES ONCE (owner intent 2026-10-12; a keeper correction to match the promised rule, not an economics change):
+    // the coin ends after its first qualifying snow of the season it was created in, or VOID once that season's June 30 has passed with
+    // none. Daily readings of 0 are not the result; only a day that burned (units > 0) is.
+    const seasonEnd = snowSeasonEnd(t.baselineAt);
+    const ev = d.registry.receipts(t.mint).find((b) => !END_KINDS.has(b.kind) && b.status !== "pending-pair" && b.units > 0);
+    if (ev) end = { mode: "winddown", reason: `the first snow of the season fell (${ev.eventId})`, at: Date.parse(ev.settledAt) || d.now() };
+    else if (d.now() >= snowSeasonVoidFromMs(seasonEnd)) end = { mode: "winddown", reason: `void: the snow season ended on ${seasonEnd} with no first snow after launch`, at: Date.parse(`${seasonEnd}T23:59:59Z`) };
   } else if (d.derby?.ended && t.selectorKey.startsWith("derby:")) {
     const x = d.derby.ended(t);
     if (x) end = { mode: "winddown", reason: x.reason, at: x.atMs };

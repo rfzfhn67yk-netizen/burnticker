@@ -54,9 +54,17 @@ export function PreWalletSummary({ review, loading, error, updating = false }: {
         <p className="mt-1 break-words">The supply is {n(review.allocation.supply)} coins. Of these, {n(review.allocation.curve)} are sold on the curve and {n(review.allocation.reserve)} are kept for the move to the Raydium pool. There is no team allocation. The pool&apos;s liquidity is {review.allocation.lpLockedPct}% locked.</p>
       </details>
       <details className="min-w-0">
-        <summary className="cursor-pointer text-neutral-400">The exact rule text and its fingerprint</summary>
-        <p className="mt-1 break-all font-mono text-[11px]" data-sha256>sha256 {review.rule.sha256}</p>
-        <pre className="mt-1 max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-900 p-2 font-mono text-[11px]">{review.rule.text}</pre>
+        <summary className="cursor-pointer text-neutral-400">{(review.rules?.length ?? 1) > 1 ? "The exact rule of each coin and its fingerprint" : "The exact rule text and its fingerprint"}</summary>
+        {/* website-19 (intent audit item 8): every rule the creator signs, labelled with its coin and its transaction number */}
+        {(review.rules && review.rules.length ? review.rules : [{ side: "A" as const, ticker: review.coins[0]?.ticker ?? "", name: review.coins[0]?.name ?? "", step: 1, text: review.rule.text, sha256: review.rule.sha256, derived: false }]).map((r) => (
+          <div key={r.side} className="mt-2 min-w-0" data-rule-side={r.side}>
+            {(review.rules?.length ?? 1) > 1 && <p className="break-words text-neutral-300">Coin {r.side}, ${r.ticker || "TICKER"} ({r.name || "no name yet"}), signed in transaction {r.step}.</p>}
+            {r.derived ? <p className="break-words text-neutral-400">This coin&apos;s rule is built from coin A&apos;s with the result swapped, when the launch is prepared. Its exact text and fingerprint are on the coin&apos;s page once it is registered.</p> : <>
+              <p className="mt-1 break-all font-mono text-[11px]" data-sha256>sha256 {r.sha256}</p>
+              <pre className="mt-1 max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-900 p-2 font-mono text-[11px]">{r.text}</pre>
+            </>}
+          </div>
+        ))}
       </details>
       </div>
     </details>

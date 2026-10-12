@@ -62,6 +62,7 @@ import { KeeperOps } from "../src/lib/burnticker/ops/keeperOps.ts";
 import { uploaderFromEnv } from "../src/lib/burnticker/pin.ts";
 // PHONE PUSH (polish-1, 2026-10-12): the five states that matter, rate-limited, plus a daily line (BURNTICKER_PUSH_URL / _TOKEN; unset = off).
 import { pushConfigFromEnv, pushKeeperRefused, runPushCheck } from "../src/lib/burnticker/push.ts";
+import { siteKeysOf } from "../src/lib/burnticker/coinKey.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -125,8 +126,11 @@ const marketReader: MarketReader | null = RPC ? (new Connection(RPC, { commitmen
 
 async function publishAll(now: number): Promise<void> {
   const statuses: TokenStatusJson[] = [];
+  // keyed by mint (tickers are not unique, owner 2026-10-12); each coin's site directories from coinKey.ts siteKeysOf
   const receiptsByTicker: Record<string, ReturnType<typeof buildReceiptsJson>> = {};
-  for (const t of registry.tokens()) {
+  const all = registry.tokens();
+  const siteKeys = siteKeysOf(all.map((t) => ({ ticker: t.ticker, mint: t.mint, status: t.status, launchedAt: t.launchTx ? t.baselineAt : null })));
+  for (const t of all) {
     try {
       const locked = registry.lockedRule(t);
       const readings = registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
@@ -147,12 +151,12 @@ async function publishAll(now: number): Promise<void> {
         market: marketReader && t.status !== "draft" && t.status !== "expired" ? await readMarket(marketReader, { cluster, mint: t.mint, poolId: t.poolId, feePda: t.feePda, creator: t.creator, totalSupplyRaw: (await program.supplyRaw(t.mint).catch(() => null)) ?? BigInt(TOTAL_SUPPLY) * BigInt(10) ** BigInt(DECIMALS), decimals: DECIMALS }, now).catch(() => null) : null };
       const receipts = buildReceiptsJson(input);
       const status = buildTokenStatus(input, receipts);
-      publishTokenSite(SITE, status, receipts, readings, t.rulesJson);
-      statuses.push(status); receiptsByTicker[t.ticker] = receipts;
+      publishTokenSite(SITE, status, receipts, readings, t.rulesJson, siteKeys.get(t.mint) ?? [t.ticker]);
+      statuses.push(status); receiptsByTicker[t.mint] = receipts;
     } catch (e) { log(`  [publish] $${t.ticker}: ${(e as Error).message.slice(0, 160)}`); }
   }
   const audit = readAudit(SITE);
-  publishPlatformIndex(SITE, statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null, receiptsByTicker);
+  publishPlatformIndex(SITE, statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null, receiptsByTicker, siteKeys);
 }
 
 let stopping = false;

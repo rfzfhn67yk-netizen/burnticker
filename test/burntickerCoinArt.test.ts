@@ -49,7 +49,7 @@ describe("coin art", () => {
     const real = globalThis.fetch;
     globalThis.fetch = (() => { throw new Error("no network in coin art"); }) as typeof fetch;
     try {
-      const reg = { tokenByTicker: () => null, lockedRule: () => { throw new Error("unused"); } } as never;
+      const reg = { token: () => null, tokenByTicker: () => null, tokensByTicker: () => [], lockedRule: () => { throw new Error("unused"); } } as never;
       const r = Buffer.from(JSON.stringify(RAYS)).toString("base64url");
       const svg = await coinImage({ registry: reg, file: "preview.svg", query: new URLSearchParams({ r, t: "RAYS26" }) });
       assert.equal(svg.status, 200); assert.equal(svg.type, "image/svg+xml");

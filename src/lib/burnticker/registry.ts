@@ -86,8 +86,10 @@ CREATE TABLE IF NOT EXISTS tokens (
   oracle TEXT NOT NULL, selector_key TEXT NOT NULL, rules_json TEXT NOT NULL, rules_sha TEXT NOT NULL, mode TEXT NOT NULL, fee_pda TEXT NOT NULL, vault TEXT,
   token_config TEXT, pool_id TEXT, launch_tx TEXT, cluster TEXT NOT NULL, platform_id TEXT, baseline_at TEXT NOT NULL, created_at INTEGER NOT NULL, status TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS tokens_by_selector ON tokens (selector_key, status);
--- One holder per ticker among tokens that are not expired: an expired draft releases its ticker (the row itself stays).
-CREATE UNIQUE INDEX IF NOT EXISTS tokens_ticker_held ON tokens (ticker) WHERE status <> 'expired';
+-- Owner 2026-10-12: tickers are not unique; every lookup and link resolves by mint (coinKey.ts). The old one-holder-per-ticker index
+-- is dropped on open, and a plain index serves tokensByTicker.
+DROP INDEX IF EXISTS tokens_ticker_held;
+CREATE INDEX IF NOT EXISTS tokens_by_ticker ON tokens (ticker, status);
 CREATE TABLE IF NOT EXISTS readings (
   oracle TEXT NOT NULL, selector_key TEXT NOT NULL, event_id TEXT NOT NULL, settled_at TEXT NOT NULL, result TEXT, value TEXT, title TEXT, source_url TEXT NOT NULL,
   settlement_source_url TEXT, method TEXT, attested_by TEXT NOT NULL DEFAULT '[]', fetched_at INTEGER NOT NULL,
@@ -323,7 +325,7 @@ export class Registry {
   register(i: RegisterInput, now = Date.now()): TokenRow {
     const locked: LockedRule = lockRule(JSON.parse(i.rulesText));
     if (locked.text !== i.rulesText) throw new Error("registry: rules text is not canonical");
-    if (this.tickerTaken(i.ticker, now)) throw new Error(`registry: ticker ${i.ticker} is taken`);
+    this.expireDrafts(now);   // owner 2026-10-12: tickers are not unique, so a held ticker no longer refuses; stale drafts still expire here
     this.db.prepare(`INSERT INTO tokens (mint, ticker, name, creator, description, image_url, links_json, oracle, selector_key, rules_json, rules_sha, mode, fee_pda, vault, token_config, pool_id, launch_tx, cluster, platform_id, baseline_at, created_at, status)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(i.mint, i.ticker, i.name, i.creator, i.description, i.imageUrl, JSON.stringify(i.links), locked.rule.oracle, selectorKeyOf(locked.rule), locked.text, locked.sha256, locked.mode, i.feePda, i.vault, i.tokenConfig, i.poolId, i.launchTx, i.cluster, i.platformId, i.baselineAt, now, i.status);
@@ -333,6 +335,8 @@ export class Registry {
   token(mint: string): TokenRow | null { const r = this.db.prepare("SELECT * FROM tokens WHERE mint=?").get(mint) as Row | undefined; return r ? toToken(r) : null; }
   /** The token holding a ticker; when only expired drafts carry it, the newest of those (pages and lookups still resolve). */
   tokenByTicker(ticker: string): TokenRow | null { const r = this.db.prepare("SELECT * FROM tokens WHERE ticker=? ORDER BY (status = 'expired'), created_at DESC LIMIT 1").get(ticker.toUpperCase()) as Row | undefined; return r ? toToken(r) : null; }
+  /** website-19 (owner, 2026-10-12: tickers are not unique): every token holding a ticker that is not expired, newest first. */
+  tokensByTicker(ticker: string): TokenRow[] { return (this.db.prepare("SELECT * FROM tokens WHERE ticker=? AND status <> 'expired' ORDER BY created_at DESC").all(ticker.toUpperCase()) as Row[]).map(toToken); }
   tokens(status?: TokenStatus): TokenRow[] { return (status ? this.db.prepare("SELECT * FROM tokens WHERE status=? ORDER BY created_at").all(status) : this.db.prepare("SELECT * FROM tokens ORDER BY created_at").all()).map((r) => toToken(r as Row)); }
   setTokenStatus(mint: string, status: TokenStatus): void { this.db.prepare("UPDATE tokens SET status=? WHERE mint=?").run(status, mint); }
   /**

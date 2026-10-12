@@ -71,12 +71,12 @@ function assertCardChain(c: Suggestion) {
 }
 
 describe("L01 / L10 — one typed draft from every card and template to the program", () => {
-  test("the presets are one definition: recurring 2 / 5 / 10 % (default 2), one-shot 10 / 50 / 100 % (default 10)", () => {
-    assert.deepEqual(SHARE_PRESETS, { recurring: [0.02, 0.05, 0.1], oneShot: [0.1, 0.5, 1] });
-    assert.deepEqual(DEFAULT_SHARE, { recurring: 0.02, oneShot: 0.1 });
-    assert.equal(presetRowLabel("recurring"), "2, 5 or 10%");
-    assert.deepEqual(snapToPreset(0.01, "recurring"), { value: 0.02, changed: true }, "a 1 % share is moved, and the move is reported");
-    assert.match(presetProblem(firstPartyRule(nwsSeries("high", "DTW", 90), 0.01))!, /burns 1% each time/);
+  test("the presets are one definition: recurring 1, 2 or 5 % (default 2), one-shot 100 or 50 % (default 100; website-19)", () => {
+    assert.deepEqual(SHARE_PRESETS, { recurring: [0.01, 0.02, 0.05], oneShot: [1, 0.5] });
+    assert.deepEqual(DEFAULT_SHARE, { recurring: 0.02, oneShot: 1 });
+    assert.equal(presetRowLabel("recurring"), "1, 2 or 5%");
+    assert.deepEqual(snapToPreset(0.1, "recurring"), { value: 0.05, changed: true }, "a 10 % share is moved, and the move is reported");
+    assert.match(presetProblem(firstPartyRule(nwsSeries("high", "DTW", 90), 0.1))!, /burns 10% each time/);
   });
 
   test("the weather card (the audit's case): 'Detroit high above 90' burns 2 %, and the review, request and program all say 2 %", async () => {
@@ -101,7 +101,7 @@ describe("L01 / L10 — one typed draft from every card and template to the prog
     assert.match(page, /firstPartyRule\(series, DEFAULT_SHARE\.recurring\)/);
     assert.match(page, /composeRule\(pick, \{/, "the reviewed rule is composeRule's (launchDraft.ts)");
     assert.match(page, /launchBody\(\{ creator, ticker, name/, "the single-coin request body is launchBody's");
-    for (const [rule, label] of [[firstPartyRule("espn.game:mlb-401999999-TB-loss", 0.1), "matchup game"], [firstPartyRule("espn.team:mlb-TB.30-win-s2026", 0.02), "team season"]] as const) assert.equal(presetProblem(rule), null, label);
+    for (const [rule, label] of [[firstPartyRule("espn.game:mlb-401999999-TB-loss", 0.02), "matchup game"], [firstPartyRule("espn.team:mlb-TB.30-win-s2026", 0.02), "team season"]] as const) assert.equal(presetProblem(rule), null, label);
   });
 
   test("every template: the example names the template's share, the share is its row's default, and its start exists", () => {
@@ -212,7 +212,7 @@ describe("L02 — availability: closed, preview and open, per type, per source, 
     assert.match(v.operator, /contact@burnticker\.com/);
     for (const t of [v.authority, WIND_DOWN_LINE, v.transactions.note, v.costs.note, ...v.prerequisites, ...v.costs.lines.map((l) => l.label), v.rule.presets]) lintOk(t, "review");
     const bad = buildLaunchReview({ rule: firstPartyRule(nwsSeries("high", "DTW", 90), 0.01), ticker: "A B", name: "" }, { env: {} });
-    assert.ok("review" in bad); assert.equal(bad.review.signable, false); assert.ok(bad.review.problems.length >= 3, bad.review.problems.join(" | "));
+    assert.ok("review" in bad); assert.equal(bad.review.signable, false); assert.ok(bad.review.problems.length >= 2, bad.review.problems.join(" | "));
   });
 });
 
@@ -243,7 +243,7 @@ describe("L04 — the interpreted event", () => {
 describe("L05 — provenance from the resolver; schedule problems are display problems", () => {
   test("no ESPN in the provenance lines, the Browse sports card, or the launch page's rendered text", () => {
     for (const t of [sportsProvenanceLine(), SPORTS_PROVENANCE.settlement, SPORTS_PROVENANCE.confirmation, SPORTS_PROVENANCE.schedule]) { assert.doesNotMatch(t, /ESPN scoreboard|from ESPN/); }
-    assert.match(sportsProvenanceLine(), /reads no ESPN data/); assert.match(sportsProvenanceLine(), /on-chain payout/); assert.match(sportsProvenanceLine(), /TheSportsDB/);
+    assert.match(sportsProvenanceLine(), /ESPN is not a source for any result/); assert.match(sportsProvenanceLine(), /on-chain payout/); assert.match(sportsProvenanceLine(), /TheSportsDB/);
     const sports = categoryCards(loadCategories().find((c) => c.id === "sports")!, { feeds: [], polymarket: [], kalshi: [] });
     for (const c of sports) { assert.doesNotMatch(`${c.venueLabel} ${c.sourceName} ${c.sourceUrl ?? ""} ${c.flags.join(" ")}`, /espn/i, c.id); }
     const page = read("src/app/burnticker/launch/page.tsx").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
@@ -283,7 +283,7 @@ describe("L08 — accessibility in the review card and the wallet dialog", () =>
   test("labels per control, Coin A / B, two radiogroups, the wallet close button named, focus returned", () => {
     const card = read("src/app/burnticker/launch/ReviewCard.tsx");
     assert.match(card, /<label htmlFor=\{nId\}>\{who\}Name<\/label>/); assert.match(card, /Coin \$\{i === 0 \? "A" : "B"\}/);
-    assert.match(card, /role="radiogroup" aria-label=\{BUDGET_LABEL\}/); assert.match(card, /export const BUDGET_LABEL = "Burn budget per result";/);   // website-12 (A4): the dial is a share of the burn budget assert.match(card, /role="radiogroup" aria-label="How long the coins run"/);
+    assert.match(card, /role="radiogroup" aria-label=\{p\.budget\?\.label \?\? BUDGET_LABEL\}/); assert.match(card, /export const BUDGET_LABEL = "Burn budget per result";/);   // website-12 (A4): the dial is a share of the burn budget assert.match(card, /role="radiogroup" aria-label="How long the coins run"/);
     assert.match(read("src/app/burnticker/launch/WalletProviders.tsx"), /aria-label", "Close the wallet list"/);
     assert.match(card, /launchBtn\.current\?\.focus\(\)/);
   });

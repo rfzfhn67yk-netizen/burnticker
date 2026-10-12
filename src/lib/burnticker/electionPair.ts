@@ -4,6 +4,7 @@ import type { Race, RaceOutcome } from "@/lib/burnticker/elections";
 import { fecSeries } from "@/lib/burnticker/sources/fec";
 import { nativeRule } from "@/lib/burnticker/sources/native";
 import { defaultVoidBy } from "@/lib/burnticker/launchBundle";
+import { DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 
 /**
  * THE ELECTION-PAIR TEMPLATE (owner-approved 2026-10-10): candidate A vs candidate B for one race → two coins, one per candidate, each
@@ -45,7 +46,7 @@ const winnerRule = (conditionId: string, fraction: number): BurnRule => ({ schem
 const pct = (f: number) => `${Math.round(f * 1000) / 10}%`;
 
 export function electionPairTemplate(race: Race, a: RaceOutcome, b: RaceOutcome, fec: { a: string | null; b: string | null }, o: { winnerFraction?: number; fecFraction?: number } = {}): ElectionPair {
-  const wf = o.winnerFraction ?? 0.10, ff = o.fecFraction ?? 0.01;
+  const wf = o.winnerFraction ?? DEFAULT_SHARE.oneShot, ff = o.fecFraction ?? 0.01;
   const side = (me: RaceOutcome, them: RaceOutcome, meFec: string | null, themFec: string | null): ElectionPairSide => {
     const sur = surnameOf(me), other = surnameOf(them);
     const fecRule = meFec && themFec ? nativeRule(fecSeries(meFec, themFec), { fractionOfPool: ff }) : null;

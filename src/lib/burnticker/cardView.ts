@@ -2,6 +2,7 @@ import type { Readiness } from "@/lib/burnticker/readiness";
 import { progressOf, type ProgressView } from "@/lib/burnticker/progress";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import type { StatedJson } from "@/lib/burnticker/pageTypes";
+import { coinPageHref } from "@/lib/burnticker/coinKey";
 /**
  * ONE COIN CARD, ONE FIELD ORDER (website-10, 2026-10-12; rebuilt by website-13 the same day for Claude site audit 2 item 7 and ChatGPT
  * audit 6 A10 / A11, with the owner's decision to show the market cap). Every surface that lists coins prints the same rows in the same
@@ -177,8 +178,13 @@ export function curveCell(c: { phase: IndexCoin["phase"]; progressPct: number | 
   return { raised: two(c.raised), of, pct, done: false, why: c.phase === "migrating" ? "The curve is full, and the coin is moving to its Raydium pool." : null };
 }
 
-/** A registered coin as a card: the same rows as the featured cards, read from the index. `raiseSol` is a raise the caller read from the coin's pool (null otherwise; never a configured constant). */
-export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster = "mainnet"): CardView {
+/**
+ * A registered coin as a card: the same rows as the featured cards, read from the index. `raiseSol` is a raise the caller read from the
+ * coin's pool (null otherwise; never a configured constant). `shared`: whether its ticker is shared, or the set from coinKey.ts
+ * sharedTickers; a coin on a shared ticker links by its mint (owner 2026-10-12: tickers are not unique).
+ */
+export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster = "mainnet", shared: boolean | ReadonlySet<string> = false): CardView {
+  const page = coinPageHref(t, shared);
   const next = t.nextCloseTime ?? t.nextCheckAt;
   const tags: CardTag[] = [];
   if (cluster !== "mainnet") tags.push({ label: cluster === "devnet" ? "Devnet" : cluster, tone: "devnet" });
@@ -203,8 +209,8 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
     createdAt: t.launchedAt, createdWhy: t.launchedAt ? null : "This coin is not launched yet.",
     burned: { text: `${groupDigits(t.burned)} $${t.ticker}${pct === null ? "" : `, ${pctOfSupply(pct)}`}`, why: t.burns > 0 ? `${t.burns} burn${t.burns === 1 ? "" : "s"} so far.` : "No burn has confirmed yet." },
     mint: null,
-    href: `/burnticker/t/${t.ticker}`,
-    receipt: t.burns > 0 ? { href: `/burnticker/t/${t.ticker}#receipts` } : null,
+    href: page,
+    receipt: t.burns > 0 ? { href: `${page}#receipts` } : null,
     receiptWhy: t.burns > 0 ? null : "This coin has no receipt yet.",
   };
 }

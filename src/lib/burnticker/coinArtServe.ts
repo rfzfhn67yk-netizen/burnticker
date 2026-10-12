@@ -3,6 +3,7 @@ import { lockRule } from "@/lib/burnticker/rules";
 import { describeRule } from "@/lib/burnticker/describe";
 import { renderCoinSvg } from "@/lib/burnticker/coinArt";
 import type { Registry } from "@/lib/burnticker/registry";
+import { lookupCoin, sharedTickerText } from "@/lib/burnticker/coinLookup";
 
 /**
  * Serving the coin image (coinArt.ts): `<TICKER>.svg|.png` from the registry's locked rule, or `preview.svg|.png?t=&r=` from a rule the
@@ -12,8 +13,9 @@ import type { Registry } from "@/lib/burnticker/registry";
 const cache = new Map<string, { body: Uint8Array; type: string }>();
 const MAX = 500;
 
-export async function coinImage(o: { registry: Pick<Registry, "tokenByTicker" | "lockedRule">; file: string; query: URLSearchParams }): Promise<{ status: number; body: Uint8Array | string; type: string }> {
-  const m = /^([A-Za-z0-9]{2,10}|preview)\.(svg|png)$/.exec(o.file);
+/** `<TICKER>.svg` while one coin holds the ticker, `<MINT>.svg` always; a ticker several coins share answers 300 naming their mints (owner 2026-10-12). */
+export async function coinImage(o: { registry: Pick<Registry, "token" | "tokenByTicker" | "tokensByTicker" | "lockedRule">; file: string; query: URLSearchParams }): Promise<{ status: number; body: Uint8Array | string; type: string }> {
+  const m = /^([A-Za-z0-9]{2,44}|preview)\.(svg|png)$/.exec(o.file);
   if (!m) return { status: 404, body: "not found", type: "text/plain; charset=utf-8" };
   const [, name, fmt] = m;
   let ticker: string, rule, sha: string, oneLiner: string | null = null;
@@ -24,8 +26,10 @@ export async function coinImage(o: { registry: Pick<Registry, "tokenByTicker" | 
       ticker = (o.query.get("t") ?? "TICKER").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) || "TICKER";
       rule = locked.rule; sha = locked.sha256; oneLiner = (o.query.get("l") ?? "").slice(0, 120) || null;
     } else {
-      const t = o.registry.tokenByTicker(name);
-      if (!t) return { status: 404, body: `no coin $${name.toUpperCase()}`, type: "text/plain; charset=utf-8" };
+      const l = lookupCoin(o.registry, name);
+      if (l.kind === "many") return { status: 300, body: sharedTickerText(l), type: "text/plain; charset=utf-8" };
+      if (l.kind === "none") return { status: 404, body: name.length >= 32 ? `no coin with the mint ${name}` : `no coin $${name.toUpperCase()}`, type: "text/plain; charset=utf-8" };
+      const t = l.token;
       const locked = o.registry.lockedRule(t);
       ticker = t.ticker; rule = locked.rule; sha = locked.sha256;
     }

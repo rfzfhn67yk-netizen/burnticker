@@ -1,6 +1,7 @@
 import "server-only";
 import { tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { findToken } from "@/lib/burnticker/api/v1";
+import { registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { BADGE_CACHE_SEC, badgePayloadProblems, coinBadge, pairBadge, renderBadgeSvg, type BadgeJson, type SideInput } from "@/lib/burnticker/badge";
 import type { TokenRow } from "@/lib/burnticker/registry";
 
@@ -15,12 +16,12 @@ const MAX = 500;
 
 async function side(p: Platform, t: TokenRow, origin: string, now: number): Promise<SideInput> {
   const d = await tokenPageData(p, t, now);
-  return { status: d.status, receipts: d.receipts, rule: p.registry.lockedRule(t).rule, origin, now };
+  return { status: d.status, receipts: d.receipts, rule: p.registry.lockedRule(t).rule, origin, now, key: registryCoinKey(p.registry, t) };
 }
 
 const badged = (t: TokenRow | null): t is TokenRow => !!t && t.status !== "draft" && t.status !== "expired";
 
-/** A coin's badge payload, or null when there is no launched coin by that ticker (or mint). */
+/** A coin's badge payload, or null when there is no launched coin by that mint (or ticker, when one coin holds it; the route answers a shared ticker with the list). */
 export async function coinBadgeData(p: Platform, id: string, origin: string, now = Date.now()): Promise<BadgeJson | null> {
   const t = findToken(p, id);
   if (!badged(t)) return null;

@@ -15,6 +15,7 @@ import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
 import { CARD_MEANINGS, cardViewFromIndex, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
 import { GRID_TABS, gridState, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
+import { sharedTickers } from "@/lib/burnticker/coinKey";
 
 /**
  * THE COINS PAGE (/burnticker; list-first since 2026-10-12: Claude site audit 2 item 5, ChatGPT audit 6 A5 and A10, Codex review 5
@@ -67,13 +68,15 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const s = q.trim().toLowerCase();
   const featured: CardView[] = useMemo(() => (home.data?.featured ?? []).filter((v) => !s || `${v.ticker} ${v.name} ${v.rule} ${v.mint?.address ?? ""}`.toLowerCase().includes(s)), [home.data, s]);
   const listable = useMemo(() => (ix?.tokens ?? []).filter((t) => t.status !== "expired"), [ix]);
+  // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
+  const sharedSet = useMemo(() => sharedTickers(listable), [listable]);
   const coins = useMemo(() => tabCoins(tab, listable.filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), watch.list.coins), [listable, tab, s, watch.list.coins]);
   const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s)), [ix, s]);
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
   // website-17 wiring item 3: the earned slots lead the public grid in rule order, each tagged with its rule's label; the rest keep their order
   const slots = home.data?.featuredSlots ?? [];
-  const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet")).map((v) => { const sl = slots.find((x) => x.ticker === v.ticker); return sl && v.group === "public" ? { ...v, tags: [{ label: sl.label, tone: "featured" as const }, ...v.tags] } : v; })
+  const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet)).map((v) => { const sl = slots.find((x) => x.ticker === v.ticker); return sl && v.group === "public" ? { ...v, tags: [{ label: sl.label, tone: "featured" as const }, ...v.tags] } : v; })
     .sort((a, b) => { const r = (v: CardView) => { const k = v.group === "public" ? slots.findIndex((x) => x.ticker === v.ticker) : -1; return k < 0 ? slots.length : k; }; return r(a) - r(b); });
   const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : cards.length, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
   const rule = GRID_TABS.find((t) => t.id === tab)!.rule;

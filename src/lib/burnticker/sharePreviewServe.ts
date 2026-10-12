@@ -5,6 +5,7 @@ import { platform, tokenPageData } from "@/lib/burnticker/server";
 import { sampleReceipts } from "@/lib/burnticker/trustpack/samples";
 import { memoBurn } from "@/lib/burnticker/home";
 import { coinPreview, receiptPreview, DEFAULT_OG, type SharePreview } from "@/lib/burnticker/sharePreview";
+import { lookupCoin, registryCoinKey } from "@/lib/burnticker/coinLookup";
 
 /**
  * The share previews' data (website-14, product idea 9): a registered coin's status and receipts (the verified ones only count toward
@@ -12,16 +13,18 @@ import { coinPreview, receiptPreview, DEFAULT_OG, type SharePreview } from "@/li
  * page keeps its default preview. Server only.
  */
 const ORIGIN = "https://burnticker.com";
-export async function coinSharePreview(ticker: string, now = Date.now()): Promise<SharePreview | null> {
+/** `key` is a mint or a ticker; a ticker several coins share keeps the default preview (owner 2026-10-12: tickers are not unique). */
+export async function coinSharePreview(key: string, now = Date.now()): Promise<SharePreview | null> {
   try {
     const p = platform();
-    const t = p.registry.tokenByTicker(ticker);
+    const l = lookupCoin(p.registry, key);
+    const t = l.kind === "one" ? l.token : null;
     if (!t || t.status === "expired") return null;
     const d = await tokenPageData(p, t, now);
     const ok = d.receipts.filter((r) => r.status === "confirmed" && r.verify.verified);
     const total = ok.reduce((a, r) => a + Number(r.burned ?? 0), 0);
     const supply = Number(d.status.supply.initial);
-    return coinPreview({ ticker: d.status.ticker, name: d.status.name, rule: d.status.profile?.oneLiner ?? d.status.seriesTitle ?? d.status.selectorKey, cluster: d.status.cluster, verifiedBurned: String(total), verifiedCount: ok.length, pctOfSupply: supply > 0 ? (total / supply) * 100 : null, badgeUrl: d.status.status === "draft" ? null : `${ORIGIN}/api/burnticker/v1/badge/${d.status.ticker}.png` });
+    return coinPreview({ ticker: d.status.ticker, name: d.status.name, rule: d.status.profile?.oneLiner ?? d.status.seriesTitle ?? d.status.selectorKey, cluster: d.status.cluster, verifiedBurned: String(total), verifiedCount: ok.length, pctOfSupply: supply > 0 ? (total / supply) * 100 : null, badgeUrl: d.status.status === "draft" ? null : `${ORIGIN}/api/burnticker/v1/badge/${encodeURIComponent(registryCoinKey(p.registry, t))}.png` });
   } catch { return null; }
 }
 
@@ -34,7 +37,7 @@ export async function receiptSharePreview(signature: string, cluster: string, no
       const d = await tokenPageData(p, t, now);
       const r = d.receipts.find((x) => x.signature === signature);
       if (!r) return null;
-      return receiptPreview({ ticker: d.status.ticker, cluster: d.status.cluster, settledAt: r.settledAt, event: r.title ?? r.market, units: r.units, burned: r.burned, verified: r.verify.verified, status: r.status, badgeUrl: `${ORIGIN}/api/burnticker/v1/badge/${d.status.ticker}.png` });
+      return receiptPreview({ ticker: d.status.ticker, cluster: d.status.cluster, settledAt: r.settledAt, event: r.title ?? r.market, units: r.units, burned: r.burned, verified: r.verify.verified, status: r.status, badgeUrl: `${ORIGIN}/api/burnticker/v1/badge/${encodeURIComponent(registryCoinKey(p.registry, t))}.png` });
     }
   } catch { /* the devnet evidence below */ }
   try {

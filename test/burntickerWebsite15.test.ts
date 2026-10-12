@@ -262,7 +262,7 @@ describe("item 8: feed and source diagnostics out of the UI (Claude site audit 3
     const c = feedCard({ id: "eia.gas", tier: 3, tierLabel: "x", title: "Gas", sourceName: "EIA", sourceUrl: "", cadence: "weekly", unit: null, launchable: { ok: false, why: "needs a key: EIA_API_KEY" }, flags: [], lastReading: null, refusals: ["schema: no rows at response.data[*]"] });
     assert.deepEqual(c.refused, [], "a parse refusal is not the refuse list"); assert.deepEqual(c.diagnostics, ["schema: no rows at response.data[*]"]);
     const pg = read("src/app/burnticker/launch/page.tsx");
-    assert.match(pg, /data-source-unavailable>\{sourceUnavailableLine\(c\.launchable\.why\)\}/); assert.doesNotMatch(pg, /not launchable\{c\.launchable\.why/);
+    assert.match(pg, /data-source-unavailable>\{.*sourceUnavailableLine\(c\.launchable\.why\)\}/); assert.doesNotMatch(pg, /not launchable\{c\.launchable\.why/);
   });
 });
 
@@ -318,7 +318,7 @@ describe("item 11: Powers Register without internal review ids in its cells (Cla
 describe("item 12: the launch review, short by default (Claude site audit 3 item 9; ChatGPT repairs 1 and 6)", () => {
   test("by default: card, rule sentence, budget, raise, cost line, button; the rest collapsed below the button, the wind-down once", () => {
     const rc = read("src/app/burnticker/launch/ReviewCard.tsx"), pw = read("src/app/burnticker/launch/PreWalletSummary.tsx"), pg = read("src/app/burnticker/launch/page.tsx");
-    const order = ["data-summary>", "role=\"radiogroup\" aria-label={BUDGET_LABEL}", "aria-label={RAISE_LABEL}", "data-cost-line", "data-decision=\"launch\"", "data-review-more", "What the end of the rule means", "{p.summary}", "What you confirm by launching"].map((k) => rc.indexOf(k));
+    const order = ["data-summary>", "role=\"radiogroup\" aria-label={p.budget?.label ?? BUDGET_LABEL}", "aria-label={RAISE_LABEL}", "data-cost-line", "data-decision=\"launch\"", "data-review-more", "What the end of the rule means", "{p.summary}", "What you confirm by launching"].map((k) => rc.indexOf(k));
     assert.ok(order.every((x) => x > 0), JSON.stringify(order)); assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.match(pw, /<details className="min-w-0 rounded-lg[^"]*" aria-label="Before you connect a wallet" data-prewallet>/); assert.match(pw, /<summary className="cursor-pointer text-neutral-300">Who controls what today<\/summary>/);
     assert.doesNotMatch(pw, /endsLine/, "the end of the rule is said once, in its own block");

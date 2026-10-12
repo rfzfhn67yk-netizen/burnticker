@@ -13,6 +13,9 @@ import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
 import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
+import { EVENT_LEVEL_REFUSAL, eventLevelRule, graduationExplainer } from "@/lib/burnticker/guidedLaunch";
+import { statedSentences } from "@/lib/burnticker/sources/polyStated";
+import { RESERVED_REFUSAL, isReserved, loadReserved } from "@/lib/burnticker/reservedNames";
 import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
 
 /**
@@ -30,7 +33,7 @@ import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, 
  */
 
 /** `pair` = side B of a registered pair (its rule is derived from side A's); `companion` = a second, independent coin launched alongside (a matchup's other team). */
-export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
+export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
 export interface ReviewCost { label: string; sol: string; kind: "rent" | "reserve" | "fee" }
 export interface LaunchReview {
   schema: "burnticker.launch-review/v1";
@@ -68,6 +71,15 @@ export interface LaunchReview {
   operator: string;
   warnings: string[];
   problems: string[];
+  /** website-19: what graduation means, with the raise choices and the fee rates (guidedLaunch.ts graduationExplainer). */
+  graduation: string[];
+  /**
+   * website-19 (ChatGPT launch-intent audit item 8): every rule the creator is asked to sign, each with its coin, its transaction number
+   * and its fingerprint. A two-coin Matchup lists both locked rules; a registered pair lists side A's rule and says side B's is derived.
+   */
+  rules: { side: "A" | "B"; ticker: string; name: string; step: number; text: string; sha256: string; derived: boolean }[];
+  /** website-19 (walkthrough snag 16): the dispute-window sentence on every one-market Polymarket review, whichever path built it. */
+  dispute: string | null;
 }
 
 export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
@@ -124,14 +136,25 @@ export function authorityLine(root = process.cwd()): string {
   return `The coin's rule is fixed when it launches. A fingerprint of the rule is stored on chain with the coin, and no instruction in the program can change it. The program itself can still be upgraded. An upgrade needs ${threshold} that control the operator's Squads vault, a shared wallet that needs several signatures. The trust page shows how long an approved upgrade must wait before it runs.`;
 }
 
+/** The dispute-window sentence when the server could not read the market's own window (UMA's documented default). */
+export const DISPUTE_DEFAULT = "It settles on Polymarket's on-chain payout. The result becomes final after the dispute window, which is about 2 hours unless the market sets its own.";
+const bpsPct = (bps: number): string => `${Math.round(bps) / 100}%`;
+/** website-19: the graduation block with this cluster's numbers (the raise presets, the curve's fee legs, the pool's tier fee). */
+export function graduationLines(cluster: string): string[] {
+  const burn = CURVE_FEES.legs.filter((l) => l.label === "burn pool").reduce((a, l) => a + l.bps, 0);
+  return graduationExplainer({ raises: RAISE_PRESETS_SOL, curveFeePct: bpsPct(CURVE_FEES.totalBps), curveBurnPoolPct: bpsPct(burn), poolFeePct: bpsPct(postGraduationFeesFor(cluster).totalBps) });
+}
+
 const endsLine = (windowSentence: string, perpetual: boolean): string => (perpetual ? "This coin has no end date and does not retire." : `${windowSentence} ${WIND_DOWN_LINE}`.trim());
 
-export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"] } = {}): { review: LaunchReview } | { problems: string[] } {
+export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"] } = {}): { review: LaunchReview } | { problems: string[] } {
   const env = o.env ?? process.env;
   const cluster = hostCluster(env);
   const problems: string[] = [];
   if (!body.rule || typeof body.rule !== "object" || Array.isArray(body.rule)) return { problems: ["rule is required (a burnticker.rules/v1 object)"] };
   const raw = (body.rule as { onEnd?: unknown }).onEnd === undefined ? { ...(body.rule as object), onEnd: { ...DEFAULT_ON_END } } : body.rule;
+  // website-19 (intent audit 2, item 1): an event-level market is refused in plain words before anything else
+  if (eventLevelRule(raw as BurnRule)) return { problems: [EVENT_LEVEL_REFUSAL] };
   let locked: LockedRule;
   try { locked = lockRule(raw); } catch (e) { return { problems: [(e as Error).message] }; }
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
@@ -146,6 +169,11 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     for (const x of creatorTextProblems({ name: s.name, ticker: s.ticker, note: s.side === "A" ? note : "" })) problems.push(`${p}${x.reason}`);
   }
   if (sides.length > 1 && sides[0].ticker === sides[1].ticker) problems.push("The two coins need different tickers.");
+  if (sides.length > 1 && sides[0].name.trim() && sides[0].name.toUpperCase().replace(/[^A-Z0-9]/g, "") === sides[1].name.toUpperCase().replace(/[^A-Z0-9]/g, "")) problems.push("The two coins need different names.");
+  // website-19 (owner, 2026-10-12): the platform's reserved names, for the ticker and the name of every side
+  let reserved: ReadonlySet<string> = new Set();
+  try { reserved = o.reserved ?? loadReserved(); } catch { /* an unreadable list refuses nothing here; the launch route reads it again */ }
+  for (const s of sides) if (isReserved(s.ticker, reserved) || isReserved(s.name, reserved)) problems.push(`${sides.length > 1 ? `Coin ${s.side}. ` : ""}${RESERVED_REFUSAL}`);
   if (note.length > NOTE_MAX) problems.push(`The note can be at most ${NOTE_MAX} characters.`);
   // website-15 item 13: the creator's own description passes the same creator lint and fits 280 characters
   const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
@@ -155,6 +183,13 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const creatorTextB = second && typeof second.creatorDescription === "string" ? second.creatorDescription.trim() : "";
   if (creatorTextB.length > DESCRIPTION_MAX) problems.push(`Coin B. The description can be at most ${DESCRIPTION_MAX} characters.`);
   for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorTextB })) problems.push(`Coin B. ${x.reason}`);
+  // website-19 (intent audit item 8): a Matchup's second coin carries its own rule; it is locked here like side A's so its exact text and
+  // fingerprint are shown before signing
+  let companionLocked: LockedRule | null = null;
+  const cr = !pair && body.companion && typeof body.companion === "object" ? (body.companion as { rule?: unknown }).rule : undefined;
+  if (cr && typeof cr === "object" && !Array.isArray(cr)) {
+    try { companionLocked = lockRule((cr as { onEnd?: unknown }).onEnd === undefined ? { ...(cr as object), onEnd: { ...DEFAULT_ON_END } } : cr); } catch (e) { problems.push(`Coin B. ${(e as Error).message}`); }
+  }
   const pp = presetProblem(locked.rule);
   if (pp) problems.push(pp);
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
@@ -226,7 +261,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const review: LaunchReview = {
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
-    rule: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule, { seriesTitle: o.seriesTitle ?? null }), sentence: text.ruleBlock.split(/(?<=\.)\s/)[0], share: shareText, presets: `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, text.windowKind === "perpetual") },
+    rule: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule, { seriesTitle: o.seriesTitle ?? null }), sentence: text.lead, share: shareText, presets: `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, text.windowKind === "perpetual") },
     coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB } })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
@@ -253,6 +288,13 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     operator: OPERATOR_LINE,
     warnings,
     problems,
+    graduation: graduationLines(cluster),
+    rules: [
+      { side: "A" as const, ticker: tk(0), name, step: 1, text: locked.text, sha256: locked.sha256, derived: false },
+      ...(companionLocked ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: 2, text: companionLocked.text, sha256: companionLocked.sha256, derived: false }] : []),
+      ...(pair ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: 2, text: "", sha256: "", derived: true }] : []),
+    ],
+    dispute: locked.rule.oracle === "polymarket" && locked.rule.market ? (o.stated ? statedSentences(o.stated, o.stated.finalAfter) : DISPUTE_DEFAULT) : null,
   };
   return { review };
 }

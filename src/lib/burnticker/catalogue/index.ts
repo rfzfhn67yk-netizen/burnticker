@@ -4,7 +4,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { backtest, type Backtest } from "@/lib/burnticker/oracle/backtest";
-import { fetchBody, httpSource, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { expandUrl, fetchBody, httpSource, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import { corroborate } from "@/lib/burnticker/catalogue/corroborate";
 import type { PriceFeedSourceConfig, ResolutionSource } from "@/lib/burnticker/sources/types";
 import { copycatSource, type CopycatSourceConfig, type CopycatSourceOptions } from "@/lib/burnticker/sources/copycats";
@@ -107,6 +107,24 @@ export function feedById(id: string, o: { fetchImpl?: FetchLike; now?: () => num
   if (PARAMS[base] && param === null) return null;
   if (!PARAMS[base] && param !== null) return null;
   try { return toFeed(cfg, param, o); } catch { return null; }
+}
+
+/**
+ * THE LINK A VISITOR OPENS TO CHECK A SOURCE (intent audit 4 item 20: the Steam link had no appid; the Wikipedia link showed
+ * "{yyyymmdd:from:40}"). The source page with the selected parameter and the dates resolved (UTC), or, when that page does not carry the
+ * parameter, the exact keyless URL the keeper reads. A keyed request is never linked (no credential in a link): the publisher's terms or
+ * documentation page instead. Display only: the settlement source URL on readings is unchanged.
+ */
+export function verifyUrl(feed: Feed, nowMs: number): string {
+  const c = feed.config;
+  const token = feed.param ? feed.param.split(/[/.]/)[0] : null;
+  const carries = (u: string) => !u.includes("{") && (token === null || u.includes(token) || u.includes(encodeURIComponent(token)));
+  const page = expandUrl(feed.sourceUrl, nowMs);
+  if (carries(page)) return page;
+  const keyed = !!c.keyEnv || /\{key\}/.test(c.request.url);
+  const req = keyed ? null : expandUrl(c.request.url, nowMs);
+  if (req && carries(req)) return req;
+  return c.terms?.url ?? new URL(page.replace(/\{[^}]*\}/g, "")).origin;
 }
 
 export const isCatalogueId = (id: string): boolean => feedById(id) !== null;

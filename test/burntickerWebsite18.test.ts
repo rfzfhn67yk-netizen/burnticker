@@ -30,6 +30,9 @@ describe("A: the create flow first; examples and benefits at the bottom, closed"
     const search = page.indexOf('aria-label="Describe the event"'), disc = page.indexOf("data-examples-benefits");
     assert.ok(search > 0 && disc > search, "the search box comes first");
     assert.ok(page.indexOf("<CreatorBenefitsList />") > disc && page.indexOf("<ExampleTickets site=") > disc, "both inside the disclosure");
+    assert.match(page, /<p className="z-30 sm:sticky [^"]*"[^>]*data-preview-banner>/, "the preview banner sticks from the sm width up only (at 390 it covered the links)");
+    const sum = card.indexOf("data-summary"), launch = card.indexOf('data-decision="launch"');
+    assert.ok(sum > 0 && sum < launch, "the card's sentences sit above the Launch button");
     assert.ok(page.indexOf("<CreatorOnboarding />") > disc, "the onboarding block too: measured at 390 by 844 it pushed the search box off the first screen");
     assert.match(page, /<details className="[^"]*" data-examples-benefits>\s*<summary[^>]*>\{EXAMPLES_AND_BENEFITS_LABEL\}<\/summary>/, "closed by default (no open attribute)");
     assert.equal((page.match(/<CreatorBenefitsList \/>/g) ?? []).length, 1); assert.equal((page.match(/<ExampleTickets /g) ?? []).length, 1);
@@ -49,13 +52,14 @@ describe("B: the Team path", () => {
     const r = { ...firstPartyRule(teamSeries("mlb", "LAD", "win", { kind: "season", year: 2026 }), 0.02), onEnd: { ...ON_END_DEFAULT } } as never;
     const t = describeRule(r, { ticker: "DODGERS26" });
     // the page builds the card's sentence this way (teamPath)
-    assert.match(page, /teamPath \? `\$\{text\.ruleBlock\.split\(\/\(\?<=\\\.\)\\s\/\)\[0\]\} \$\{text\.windowSentence\.replace\(\/\^This coin covers \[\^\.\]\*\\\.\\s\*\/, ""\)\}`/);
-    const sentence = `${t.ruleBlock.split(/(?<=\.)\s/)[0]} ${t.windowSentence.replace(/^This coin covers [^.]*\.\s*/, "")}`;
+    // website-19 (intent audit item 7): the whole lead sentence (describe.ts leadSentence), never a split on ". "
+    assert.match(page, /teamPath \? `\$\{text\.lead\} \$\{text\.windowSentence\.replace\(\/\^This coin covers \[\^\.\]\*\\\.\\s\*\/, ""\)\}`/);
+    const sentence = `${t.lead} ${t.windowSentence.replace(/^This coin covers [^.]*\.\s*/, "")}`;
     assert.equal(sentence, "This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn.");
   });
   test("everything else sits under one closed Advanced disclosure that lists the defaults; the image stays above it", () => {
     assert.match(card, /<details className="[^"]*" data-advanced>\s*<summary[^>]*>\{ADVANCED_LABEL\}<\/summary>/);
-    const img = card.indexOf("{p.image}"), wrap = card.indexOf("<AdvancedWrap advanced"), prof = card.indexOf("{p.profile}"), share = card.indexOf("aria-label={BUDGET_LABEL}"), inv = card.indexOf("data-inverse"), raise = card.indexOf("data-raise>"), note = card.indexOf('data-optional="note"'), end = card.indexOf("</AdvancedWrap>");
+    const img = card.indexOf("{p.image}"), wrap = card.indexOf("<AdvancedWrap advanced"), prof = card.indexOf("{p.profile}"), share = card.indexOf("aria-label={p.budget?.label ?? BUDGET_LABEL}"), inv = card.indexOf("data-inverse"), raise = card.indexOf("data-raise>"), note = card.indexOf('data-optional="note"'), end = card.indexOf("</AdvancedWrap>");
     assert.ok(img > 0 && img < wrap, "the image control is above Advanced");
     for (const [k, i] of Object.entries({ prof, share, inv, raise, note })) assert.ok(i > wrap && i < end, `${k} is inside Advanced`);
     assert.match(page, /advanced=\{teamPath \? \{ defaults: teamAdvancedDefaults\(/);

@@ -273,7 +273,9 @@ describe("ChatGPT A3: pair economics in one voice", () => {
     for (const x of pairFactLines(f)) lintOk(x, "independent");
     assert.doesNotMatch(WIND_DOWN_LINE, /Nothing is sent to another coin\./); assert.match(WIND_DOWN_LINE, /wind-down only burns this coin/);
     const page = read("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /pairFacts=\{pairOn && sideA && sideB \? \(ruleB \? independentPairFacts/);
+    // website-19 (intent audit item 3): the two-coin facts are read from the two rules (guidedLaunch.ts matchupFacts), fade side included
+    assert.match(page, /ruleB \? \(elPick \? candidateFacts\(.*\) : matchupFacts\(\{/);
+    assert.match(page, /pairFacts=\{facts\}/);
     assert.match(read("src/app/burnticker/launch/CoinVsCoinTile.tsx"), /pairFacts=\{winnerTakesBurnFacts\(/);
   });
 });

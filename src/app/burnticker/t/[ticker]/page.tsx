@@ -32,6 +32,7 @@ import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
 import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
 import type { LifecycleDatesJson, PoolMarketJson, StatedJson } from "@/lib/burnticker/pageTypes";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
+import { CHOOSER_COPY, chooserRows, isMintKey, type CoinCandidate } from "@/lib/burnticker/coinKey";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; re-ordered by website-11 on 2026-10-12 for the owner's review items 6 and 8, as the website brief
@@ -106,16 +107,21 @@ export default function TokenPage() {
   // the time the page was read; "launched 3d ago" and "last burn 2h ago" are past records, and nothing on this page counts down
   const [now] = useState(() => Date.now());
   const [tab, setTab] = useState<CoinTab>("burns");
-  useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
+  // owner 2026-10-12, tickers are not unique: the segment is a mint or a ticker, and a ticker several coins share answers 300 with the coins
+  const [choices, setChoices] = useState<{ ticker: string; candidates: CoinCandidate[] } | null>(null);
+  useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (r.status === 300) { setChoices(j); return; } if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
   // website-17 wiring item 1: the rank line from the creator summary; nothing when the read fails (never a guessed rank)
   const [rank, setRank] = useState<string | null>(null);
   useEffect(() => { const c = d?.status.addresses.creator, t = d?.status.ticker; if (!c || !t) return; fetch(`/burnticker/creator/${encodeURIComponent(c)}/summary`).then((r) => (r.ok ? r.json() : null)).then((j: { coins?: { ticker: string; rank: string | null }[] } | null) => setRank(j?.coins?.find((x) => x.ticker === t)?.rank ?? null)).catch(() => setRank(null)); }, [d]);
   const hasHolders = !!d?.status.market?.holders.top10?.length;
   useEffect(() => { if (d) setTab(initialTab(window.location.hash, coinTabs(hasHolders))); }, [d, hasHolders]);
   // review 2 §2: a ticker this host has no record of explains itself (and $DEFICIT links its served page) instead of a bare error line
+  if (choices) return <TickerChooser ticker={choices.ticker} candidates={choices.candidates} />;
   if (err) return /no token/i.test(err) ? <NotRegistered ticker={ticker} /> : <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="unavailable" body={`The page for $${ticker.toUpperCase()} could not be read just now.`} details={err} /></main>;
   if (!d) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
   const s = d.status, m = s.market, prof = s.profile;
+  // the coin's own links: by mint when it was opened by its mint, else by its ticker (one coin holds it, or the API would have listed several)
+  const key = isMintKey(ticker) ? ticker : s.ticker;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const rows = [...d.receipts].reverse();
   const venue = s.oracle === "kalshi" ? "the prediction market that settles it" : s.oracle === "polymarket" ? "Polymarket, with each result read on Polygon" : "the source's own published data";
@@ -229,7 +235,7 @@ export default function TokenPage() {
         <section aria-label="Burn log">
           <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {s.burned.pctOfSupply.toFixed(2)}% of the supply. Each receipt below can be checked in your browser.</p>
           {rank && <p className="mb-2 text-xs text-neutral-400" data-rank title={RANK_MEANING}>{rank}</p>}
-          <p className="mb-2 flex flex-wrap gap-x-4 text-xs"><a className="underline" href={csvHref(s.ticker, "burns")} download>{CSV_LINK_COPY.burnsLink}</a><a className="underline" href={csvHref(s.ticker, "readings")} download>{CSV_LINK_COPY.readingsLink}</a><a className="underline" href={feedHref({ coin: s.ticker }, "rss")}>{COIN_FEED_LINK}</a></p>
+          <p className="mb-2 flex flex-wrap gap-x-4 text-xs"><a className="underline" href={csvHref(key, "burns")} download>{CSV_LINK_COPY.burnsLink}</a><a className="underline" href={csvHref(key, "readings")} download>{CSV_LINK_COPY.readingsLink}</a><a className="underline" href={feedHref({ coin: key }, "rss")}>{COIN_FEED_LINK}</a></p>
           {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? afterGraduation : "The next result that counts prints the first one."}</p> : (
             <ol className="bt-tape">
               {rows.map((b) => (
@@ -265,7 +271,7 @@ export default function TokenPage() {
 
       <div id="panel-rule" role="tabpanel" aria-labelledby="tab-rule" hidden={tab !== "rule"} className="space-y-5">
         <section className={card + " bt-rule-card"} aria-label="The rule">
-          <div className="flex items-baseline justify-between"><h2 className="font-mono text-xs uppercase tracking-widest">The rule, locked at launch</h2><a className="text-[11px] underline" href={`/api/burnticker/tokens/${s.ticker}?format=rules`}>rules.json</a></div>
+          <div className="flex items-baseline justify-between"><h2 className="font-mono text-xs uppercase tracking-widest">The rule, locked at launch</h2><a className="text-[11px] underline" href={`/api/burnticker/tokens/${encodeURIComponent(key)}?format=rules`}>rules.json</a></div>
           <p className="mt-2">{s.rules.statement}</p>
           <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
             <div><dt className="text-neutral-500">The dial</dt><dd>{facts.dial ?? "The rule file does not name a share of the burn pool."}</dd></div>
@@ -308,7 +314,7 @@ export default function TokenPage() {
         </div>
       )}
 
-      {s.status !== "draft" && s.status !== "expired" && <section className={card + " text-xs"} aria-label={SHARE_COPY.heading}><h2 className="font-medium text-sm">{SHARE_COPY.heading}</h2><div className="mt-2"><ShareBlock ticker={s.ticker} /></div></section>}
+      {s.status !== "draft" && s.status !== "expired" && <section className={card + " text-xs"} aria-label={SHARE_COPY.heading}><h2 className="font-medium text-sm">{SHARE_COPY.heading}</h2><div className="mt-2"><ShareBlock ticker={s.ticker} id={key} /></div></section>}
       <HostDiagnostics stubs={d.stubs} />
     </main>
   );
@@ -333,8 +339,29 @@ function LpLockCard({ lp, card }: { lp: LpBlock; card: string }) {
   );
 }
 
+/** A ticker several coins share (tickers are not unique, owner 2026-10-12): each coin by name, mint, creator and rule, linked by its mint. */
+function TickerChooser({ ticker, candidates }: { ticker: string; candidates: CoinCandidate[] }) {
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-6 space-y-3 text-sm" data-ticker-chooser>
+      <p className="text-xs"><Link className="underline" href="/burnticker">← Coins</Link></p>
+      <h1 className="text-xl font-semibold">${ticker}</h1>
+      <p className="text-neutral-300">{CHOOSER_COPY.intro(ticker)}</p>
+      <ul className="space-y-2">
+        {chooserRows(candidates).map((c) => (
+          <li key={c.mint} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3" data-candidate={c.mint}>
+            <Link className="font-medium underline" href={c.href}>{c.name} <span className="font-mono text-neutral-400">${c.ticker}</span></Link>
+            <p className="mt-1 text-neutral-300">{c.rule}</p>
+            <p className="mt-1 text-xs text-neutral-500"><span title={c.mint}>{CHOOSER_COPY.mint} <span className="font-mono">{c.mintShort}</span></span>. {CHOOSER_COPY.creator} <span className="font-mono">{c.creatorShort}</span>.</p>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+
 /** A ticker with no record on this host: say so plainly; $DEFICIT's own page is served at DEFICIT_SITE until it is registered here. */
 function NotRegistered({ ticker }: { ticker: string }) {
+  if (isMintKey(ticker)) return <main className="mx-auto max-w-3xl px-4 py-6 space-y-2 text-sm" data-not-registered><EmptyState kind="not-launched" compact body="No coin with this mint address is registered on this site, so there is no rule, receipt or reading to show here." /><p><Link className="underline" href={`/burnticker/verify?mint=${ticker}`}>Check this address with the burn program</Link>.</p></main>;
   const t = ticker.toUpperCase();
   // website brief §1: $DEFICIT gets a real pre-launch page (canonical: DEFICIT_SITE) instead of the one-line notice
   if (t === "DEFICIT") return <DeficitPrelaunch fallbackSite={DEFICIT_SITE} />;

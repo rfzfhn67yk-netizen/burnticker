@@ -1,0 +1,20 @@
+{
+  "schema": "burnticker.reserved-tickers/v1",
+  "note": "Tickers and coin names reserved for the platform. Read at request time by the launch review and the launch route, for tickers and names alike, ignoring case, spaces and punctuation. Add one line to reserve another; no code change is needed.",
+  "refusal": "That name is reserved for the platform.",
+  "reserved": [
+    "BURNTICKER",
+    "BURNTICKR",
+    "BURNTCKR",
+    "BRNTICKER",
+    "BURNTICK",
+    "DEFICIT",
+    "DEFICIT2",
+    "DEFICITX",
+    "USADEFICIT",
+    "USDEFICIT",
+    "DEBT",
+    "REHEARSAL",
+    "USA_DEFICIT"
+  ]
+}

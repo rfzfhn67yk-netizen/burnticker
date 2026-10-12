@@ -144,11 +144,11 @@ describe("the rule dials", () => {
     assert.equal(a.fraction, 0.02); assert.deepEqual(a.bounds, { min: 0.01, max: 0.1, step: 0.005 });
   });
 
-  test("the one-shot card: fraction 1–100 % (default 10 %), YES / NO, league mode from the card's set", async () => {
+  test("the one-shot card: fraction 1–100 % (default 100 %, website-19), YES / NO, league mode from the card's set", async () => {
     const r = await universalSearch("Rays win the World Series", deps);
     const card = r.cards.find((c) => c.shape === "one-shot")! as Suggestion;
     const d = dialsFor(card.rule!, { ...ctx, set: card.leagueSet });
-    assert.equal(d.fraction, 0.1); assert.deepEqual(d.bounds, { min: 0.01, max: 1, step: 0.01 }); assert.equal(d.side!.value, "yes");
+    assert.equal(d.fraction, 1); assert.deepEqual(d.bounds, { min: 0.01, max: 1, step: 0.01 }); assert.equal(d.side!.value, "yes");
     assert.deepEqual(d.league, { on: false, id: "champ-mlb-2026", outcome: "TB", forwardBps: 10_000 });
     assert.equal((applyDial(card.rule!, "fraction", 1) as BurnRule).binary!.onYes!.fractionOfPool, 1, "a one-shot may spend the whole pool");
     assert.equal((applyDial(card.rule!, "fraction", 3) as BurnRule).binary!.onYes!.fractionOfPool, 1);

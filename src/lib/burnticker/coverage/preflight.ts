@@ -16,6 +16,7 @@ import { samplePool, type PoolPort } from "@/lib/burnticker/derby/pools";
 import { mulDec, truncDec } from "@/lib/burnticker/derby/measure";
 import { marketHours } from "@/lib/burnticker/derby/adapter";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
+import { isOneTimeSeries, oneShotEligibility } from "@/lib/burnticker/oneShotEligibility";
 
 /**
  * THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit). Before a coin is created on a selector, the selector is run live
@@ -95,14 +96,20 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
   if (!elig.ok) return result(rule, now, { primary: primaryBase }, { code: "not-primary", reason: `${feed.id} cannot settle a coin. The reason is: ${elig.why}.` });
   const fetchImpl = deps.fetchImpl ?? (fetch as unknown as FetchLike);
   let pr: { readings: SettledEvent[]; refusals: string[] };
-  try { pr = await readLive(feed, now, fetchImpl); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${(e as Error).message.slice(0, 160)}`, status: 502 }); }
+  let body: unknown;
+  try { body = await fetchBody(feed.config, now, fetchImpl); pr = parseBody(feed.config, body, now); } catch (e) { return result(rule, now, { primary: { ...primaryBase, error: (e as Error).message.slice(0, 200) } }, { code: "primary-unreadable", reason: `${feed.id} could not be read just now. The error was: ${(e as Error).message.slice(0, 160)}`, status: 502 }); }
   const last = pr.readings[pr.readings.length - 1] ?? null;
   const next = nextExpected(feed.config, last?.id ?? null, now);
   const primary = { ...primaryBase, lastReading: reading(last), error: pr.refusals.length ? pr.refusals.slice(0, 2).join("; ") : null };
-  if (!last) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-readings", reason: `${feed.id} returned no complete reading.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
+  // intent audit 2 item 2: a one-time event whose result is already known is refused (oneShotEligibility.ts); one still to come has
+  // no reading yet by design, so "no reading" is not a refusal for it
+  const once = oneShotEligibility(feed.id, feed.config, body, now);
+  if (once.decided) return result(rule, now, { primary }, { code: "already-decided", reason: once.reason! });
+  const oneTime = isOneTimeSeries(feed.id);
+  if (!last && !oneTime) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-readings", reason: `${feed.id} returned no complete reading.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
   // A read that parses but stops short (a plausibility refusal, a frozen endpoint) leaves an old last reading: the schedule says a newer
   // one was due more than STALE_GRACE_MS ago → refused, with the parser's refusal as the reason (FRED's full-history CSV, 10-10).
-  if (next.at && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id}, but the next one was due on ${next.at.slice(0, 10)}.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
+  if (last && next.at && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id}, but the next one was due on ${next.at.slice(0, 10)}.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
   const crosses = crossReadsOf(desc, all);
   if (!crosses.length) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-cross-read", reason: `${feed.id} has no independent second source for the same fact, run by another operator on another domain. So it cannot settle a coin on its own reading.` });
   const feeds = catalogue(deps.root);
@@ -143,7 +150,7 @@ async function preflightNative(rule: BurnRule, deps: PreflightDeps, now: number)
   const primary = { ...primaryBase, lastReading: p.last ? { ...p.last, result: null } : null };
   const crossRead = { id: cross.id, operator: cross.operator, lastReading: p.crossLast ? { ...p.crossLast, result: null } : null, error: null };
   const part = { primary, crossRead, nextExpectedAt: p.nextAt, nextExpectedBasis: p.nextBasis, agreement: p.agreement, agreementBasis: p.basis || "n/a" };
-  if (p.problem) return result(rule, now, part, { code: p.problem.code, reason: p.problem.reason, status: p.problem.code === "disagreement" ? 400 : 502 });
+  if (p.problem) return result(rule, now, part, { code: p.problem.code, reason: p.problem.reason, status: p.problem.code === "disagreement" || p.problem.code === "already-decided" ? 400 : 502 });
   return result(rule, now, part, null);
 }
 

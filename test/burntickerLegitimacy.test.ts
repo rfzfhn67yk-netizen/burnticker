@@ -189,7 +189,7 @@ describe("website-17's wiring, applied by website-16 (WIRING-17.md items 1 to 5)
     const page = read("src/app/burnticker/t/[ticker]/page.tsx");
     assert.match(page, /href=\{creatorHref\(s\.addresses\.creator\)\} data-created-by>\{createdBy\(shortAddress\(s\.addresses\.creator\)\)\}/);
     assert.match(page, /fetch\(`\/burnticker\/creator\/\$\{encodeURIComponent\(c\)\}\/summary`\)/); assert.match(page, /\{rank && <p [^>]*data-rank title=\{RANK_MEANING\}>\{rank\}<\/p>\}/);
-    assert.match(page, /<ShareBlock ticker=\{s\.ticker\} \/>/);
+    assert.match(page, /<ShareBlock ticker=\{s\.ticker\} id=\{key\} \/>/);
   });
   test("cards print the rank under Burned (no new row); the tokens and home routes fill it with rankLines", () => {
     assert.match(read("src/app/burnticker/_components/CoinCard.tsx"), /<Cell c=\{v\.burned\} \/>\{v\.rank && <span [^>]*data-rank title=\{RANK_MEANING\}>\{v\.rank\}<\/span>\}/);

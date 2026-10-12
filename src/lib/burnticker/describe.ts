@@ -57,7 +57,8 @@ export interface DescribeCtx {
 }
 /** The window kinds a coin can have; every description carries exactly one sentence of its kind (WINDOW_SENTENCE). */
 export type WindowKind = "season" | "post" | "next" | "perpetual" | "one-shot";
-export interface CoinText { name: string; ticker: string; oneLiner: string; flavour: string; ruleBlock: string; windowSentence: string; windowKind: WindowKind; badge: string; paragraph: string; shape: "recurring" | "one-shot" }
+/** `lead`: the rule block's first sentence, whole (leadSentence), for the cards and the review that show one sentence. */
+export interface CoinText { name: string; ticker: string; oneLiner: string; flavour: string; ruleBlock: string; lead: string; windowSentence: string; windowKind: WindowKind; badge: string; paragraph: string; shape: "recurring" | "one-shot" }
 
 const CLOSER = "The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.";
 /**
@@ -90,7 +91,8 @@ export interface PairFacts { kind: "winner-takes-the-burn" | "independent"; trig
 export function winnerTakesBurnFacts(a: string, b: string): PairFacts {
   return {
     kind: "winner-takes-the-burn",
-    trigger: `A result decides a winner by firing one coin's rule. The winner is the coin whose rule fires. That can be a coin whose team lost the game.`,
+    // walkthrough snag 14: no sports words inside a crypto pair's facts
+    trigger: `A result decides a winner by firing one coin's rule. The winner is the coin whose rule fires, whichever side that is.`,
     burned: "Only the winner's tokens are bought and burned. The loser's supply is untouched.",
     pays: "The winner's burn pool pays its own share. The loser's burn pool pays the share it would have spent if it had won.",
     moves: "SOL does move between the two pools. The loser's share for that result moves to the winner's burn pool. Nothing is paid to holders, and a draw or a void moves nothing.",
@@ -158,6 +160,66 @@ export const championPathRule = (r: BurnRule): boolean => r.oracle === "catalogu
 /** The champion path's two end sentences, one per outcome (the review card and the locked description say both). */
 export const championEndSentences = (ref: string): [string, string] => [`If ${ref} win the championship, the rest of the pool burns here.`, "If they do not, the rest goes to $DEFICIT's burn."];
 export const PERPETUAL_SENTENCE = "This coin has no end date and does not retire.";
+/**
+ * The first-snow season in the coin's own text (intent audit item 11; weatherIntent.ts FIRST_SNOW_SEASON has the long form): the report's
+ * season-to-date total starts each July 1, and only readings after the launch are planned (multiKeeper.ts planToken).
+ */
+export const SNOW_SEASON_SENTENCE = "The season runs July 1 to June 30, and only a first snow after launch day counts. With no snow by June 30, the coin ends without a burn.";
+
+/**
+ * THE LEAD SENTENCE (intent audit item 7: the fade side of "U.S. unemployment rate" showed only "For every reading of U.S."). The first
+ * sentence of a text, where a period ends a sentence only when it is followed by a space and a capital letter, a "$" or a digit, and it
+ * does not close an abbreviation: a run of single letters with periods ("U.S.", "D.C.", "e.g."), or a short title or place word ("St.",
+ * "Mt.", "No.", "vs.", "Inc."). A decimal ("0.1") never has a space after its period. CoinText.lead carries it, so no page splits text.
+ */
+/**
+ * A generated coin name, at most `max` characters, cut at a word boundary and never mid-word (intent audit 4 item 19: "Wikipedia daily
+ * views of an arti"). A trailing small word ("of", "the", "a", "an", "and") is dropped with the cut.
+ */
+export function capName(name: string, max = 32): string {
+  const s = name.replace(/\s+/g, " ").trim();
+  if (s.length <= max) return s;
+  const words = s.slice(0, max + 1).split(" ");
+  if (words.length > 1) words.pop();
+  while (words.length > 1 && /^(of|the|a|an|and|for|on|in|by|to|—|-)$/i.test(words[words.length - 1])) words.pop();
+  const out = words.join(" ").replace(/[,:;—-]+$/, "").trim();
+  return out.length ? out.slice(0, max) : s.slice(0, max);
+}
+
+/**
+ * The selected subject of a parameterized series, its short name and what each reading measures, read from the series id itself (the same
+ * on the page and on the server). The window words follow each adapter (config/burnticker/sources.json): a per-day total, or a once-a-day
+ * snapshot measured against the previous reading.
+ */
+export function paramSubject(series: string): { name: string; ticker: string; what: string; window: string } | null {
+  const i = series.indexOf(":");
+  if (i < 0) return null;
+  const fam = series.slice(0, i), p = series.slice(i + 1);
+  const snap = "a snapshot of the count taken once a day and measured against the previous reading";
+  if (fam === "wiki.views") { const a = decodeURIComponent(p).replace(/_/g, " "); return { name: `${a} Wiki Views`, ticker: a, what: `on the English Wikipedia article “${a}”`, window: "the total views of one UTC day, read once the day is over" }; }
+  if (fam === "steam.players") return { name: `Steam App ${p} Players`, ticker: `STEAM${p}`, what: `in the concurrent player count of Steam app ${p}`, window: snap };
+  if (fam === "github.stars") { const repo = p.split("/")[1] ?? p; return { name: `${repo} Stars`, ticker: `${repo}STAR`, what: `on the ${p} GitHub repository`, window: snap }; }
+  if (fam === "defillama.tvl") return { name: `${p} TVL`, ticker: `${p}TVL`, what: `of total value locked in ${p}, as DefiLlama reports it`, window: snap };
+  if (fam === "edgar.8k") return { name: `CIK ${p} 8-K Filings`, ticker: `EDGAR${p.replace(/^0+/, "")}`, what: `on Form 8-K by SEC filer CIK ${p}`, window: "the number of filings on one UTC day" };
+  return null;
+}
+
+/** "the Lakers win the 2027 NBA championship" → "the Lakers did NOT win the 2027 NBA championship"; anything else → "NO on “…”". */
+export function negatePhrase(phrase: string): string {
+  const m = /^(.+?) (?:win|wins|will win) (.+)$/.exec(phrase.trim());
+  return m ? `${m[1]} did NOT win ${m[2]}` : `NO on “${phrase.trim()}”`;
+}
+
+const ABBREV =/(?:\b(?:[A-Za-z]\.){2,}|\b(?:St|Mt|Ft|Dr|Mr|Mrs|Ms|Jr|Sr|No|vs|Inc|Co|Corp|Ltd|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|approx|est)\.)$/;
+export function leadSentence(text: string): string {
+  const t = text.trim();
+  for (const m of t.matchAll(/[.!?](?=\s+[A-Z$0-9“"(])/g)) {
+    const head = t.slice(0, m.index + 1);
+    if (m[0] === "." && ABBREV.test(head)) continue;
+    return head;
+  }
+  return t;
+}
 /** One pattern per window kind; a description matches exactly one of them, exactly once (test/burntickerDescribe.test.ts). */
 export const WINDOW_SENTENCE: Record<WindowKind, RegExp> = {
   season: /This coin covers the [^.]*? season only(?:, including (?:the playoffs|every match of the competition)\. After [^.]*? last game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?|\. If [^.]*? win the championship, the rest of the pool burns here\. If they do not, the rest goes to \$DEFICIT's burn\.)/g,
@@ -233,7 +295,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const badge = windowBadge(r, c);
   const mk = (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]): CoinText => {
     const ruleBlock = `${rules} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
-    return { name: name.slice(0, 32), ticker, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, windowSentence, windowKind, badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
+    return { name: capName(name), ticker, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, lead: leadSentence(ruleBlock), windowSentence, windowKind, badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
   };
   if (s.kind === "team") {
     const w: Window = s.window;
@@ -287,14 +349,16 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
   const build = (name0: string, tk0: string, oneLiner: string, block: (t: string) => string, windowSentence: string, shape: CoinText["shape"]): CoinText => {
     const name = ctx.suggest?.name ?? name0, tk = ctx.suggest?.ticker ?? tk0;
     const t = ctx.ticker || tk, ruleBlock = `${block(t)} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
-    return { name: name.slice(0, 32), ticker: tk, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, windowSentence, windowKind: windowKindOf(r), badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
+    return { name: capName(name), ticker: tk, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, lead: leadSentence(ruleBlock), windowSentence, windowKind: windowKindOf(r), badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
   };
   if (n && r.inverse && n.metric !== "snow") {
     // THE FADE SIDE: the days the threshold is NOT reached
+    // intent audit item 1: the report gives whole °F, so "below T" is said as the inclusive "T − 1 °F or colder" (the same form as the
+    // plain side's "T °F or hotter"), and a day with no reading counts as nothing, never as a cold day
     const st = stationByCode(n.station)!, hot = n.metric === "high";
-    const what = hot ? `every day ${possessive(st.city)} official high stays below ${n.threshold} °F` : `every day ${st.city} gets less than ${n.threshold.toFixed(2)} in of rain`;
-    return build(`${st.city} ${hot ? "Cool" : "Dry"}`, tickerFrom(st.code, hot ? "COOL" : "DRY"), hot ? `burns on every ${st.city} day below ${n.threshold} °F` : `burns on every ${st.city} day with less than ${n.threshold.toFixed(2)} in of rain`,
-      (t) => `For ${what}, ${spends(r, t)}, with a receipt on chain. The result comes from the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet. Nothing happens on ${hot ? `a day at ${n.threshold} °F or hotter` : `a day with ${n.threshold.toFixed(2)} in of rain or more`}.`,
+    const what = hot ? `every day ${possessive(st.city)} official high is ${n.threshold - 1} °F or colder` : `every day ${st.city} gets less than ${n.threshold.toFixed(2)} in of rain`;
+    return build(`${st.city} ${hot ? "Cold" : "Dry"}`, tickerFrom(st.code, hot ? "COLD" : "DRY"), hot ? `burns on every ${st.city} day at ${n.threshold - 1} °F or colder` : `burns on every ${st.city} day with less than ${n.threshold.toFixed(2)} in of rain`,
+      (t) => `For ${what}, ${spends(r, t)}, with a receipt on chain. The result comes from the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet. Nothing happens on ${hot ? `a day at ${n.threshold} °F or hotter` : `a day with ${n.threshold.toFixed(2)} in of rain or more`}, or on a day with no reading.`,
       PERPETUAL_SENTENCE, "recurring");
   }
   if (n) {
@@ -303,7 +367,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const other = n.metric === "high" ? "a cooler day" : n.metric === "rain" ? "a drier day" : "a day without snow";
     const oneLiner = n.metric === "high" ? `burns on every ${st.city} day at ${n.threshold} °F or hotter` : n.metric === "rain" ? `burns on every ${st.city} day with ${n.threshold.toFixed(2)} in of rain` : `burns on ${possessive(st.city)} first snow`;
     return build(`${st.city} ${n.metric === "high" ? "Heat" : n.metric === "rain" ? "Rain" : "Snow"}`, tickerFrom(st.code, n.metric === "high" ? "HOT" : n.metric === "rain" ? "RAIN" : "SNOW"), oneLiner,
-      (t) => `${what[0].toUpperCase()}${what.slice(1)}, ${spends(r, t)}${n.metric === "snow" ? " once" : ""}, with a receipt on chain. The result comes from the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet. Nothing happens on ${other}.`,
+      (t) => `${what[0].toUpperCase()}${what.slice(1)}, ${spends(r, t)}${n.metric === "snow" ? " once" : ""}, with a receipt on chain. The result comes from the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet. Nothing happens on ${other}.${n.metric === "snow" ? ` ${SNOW_SEASON_SENTENCE}` : ""}`,
       n.metric === "snow" ? oneShotSentence(r, null, `the first snow`) : PERPETUAL_SENTENCE, n.metric === "snow" ? "one-shot" : "recurring");
   }
   // sources-2 (2026-10-12): the publishers with their own text — executive orders, launches, earthquake counts, GitHub, YouTube
@@ -316,13 +380,26 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
       (t) => `This coin burns on the days the debt stays flat or falls. For every business day the national debt stays flat or falls, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. A day the debt rises, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
     const not = r.scalar?.baseline === 0 ? "reads zero" : dir === "up" ? "does not rise" : dir === "down" ? "does not fall" : "does not move";
     const did = r.scalar?.baseline === 0 ? "is above zero" : dir === "up" ? "rises" : dir === "down" ? "falls" : "moves";
-    return build(`No Move ${title}`.slice(0, 32), tickerFrom(`NO${title.replace(/^U\.?S\.?\s+/i, "")}`), `burns on every reading of ${title} that ${not}`,
-      (t) => `For every reading of ${title} that ${not}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}. A reading that ${did}, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
+    const sub = paramSubject(series), what = sub ? sub.name : title;
+    return build(sub ? `No Move ${sub.name}` : `No Move ${title}`, tickerFrom(`NO${sub ? sub.ticker : title.replace(/^U\.?S\.?\s+/i, "")}`), `burns on every reading of ${what} that ${not}`,
+      (t) => `For every reading of ${what} that ${not}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}.${sub ? ` Each reading is ${sub.window}.` : ""} A reading that ${did}, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "catalogue" && ctx.feed) {
-    const f = ctx.feed;
-    return build(f.title.split(/[(—,]/)[0].trim().slice(0, 32), tickerFrom(f.title.replace(/^U\.?S\.?\s+/i, "").split(/[\s(,—-]/)[0]), `burns for every ${f.unitLabel} (${f.title.split(/[(—,]/)[0].trim()})`,
+    const f = ctx.feed, sub = paramSubject(series);
+    // intent audit 4 item 19: a parameterized source names its subject, its source and what each reading measures, never "an article"
+    if (sub) return build(sub.name, tickerFrom(sub.ticker), `burns for every ${f.unitLabel} ${sub.what}`,
+      (t) => `For every ${f.unitLabel} ${sub.what}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Each reading is ${sub.window}. Nothing happens on a move smaller than one unit.`, PERPETUAL_SENTENCE, "recurring");
+    return build(f.title.split(/[(—,]/)[0].trim(), tickerFrom(f.title.replace(/^U\.?S\.?\s+/i, "").split(/[\s(,—-]/)[0]), `burns for every ${f.unitLabel} (${f.title.split(/[(—,]/)[0].trim()})`,
       (t) => `For every ${f.unitLabel}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Nothing happens on a move smaller than one unit.`, PERPETUAL_SENTENCE, "recurring");
+  }
+  if (r.oracle === "polymarket" && r.market && r.binary && !r.binary.onYes && r.binary.onNo) {
+    // intent audit 3 item 4: the NO side ("the Lakers do not win the 2027 NBA championship") burns on a NO payout only. The keeper reads
+    // a voided or unsettled market as no burn (units.ts unitStep, onVoid "skip"), and the one-shot then ends void: never a NO.
+    const phrase0 = (ctx.eventPhrase ?? "the market's event happens").replace(/\s*\(resolves once\)$/, "");
+    const id = eventIdentity(phrase0), phrase = id.verb ? id.phrase : phrase0, not = negatePhrase(phrase);
+    const settle = ctx.stated ? statedSentences(ctx.stated, ctx.stated.finalAfter) : `The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}.`;
+    return build(`${id.verb && id.confident ? id.name : "Event"} No`.slice(0, 32), `NO${tickerFrom(id.ticker)}`.slice(0, 10), `burns if the Polymarket market settles NO, meaning ${not}`,
+      (t) => `If the Polymarket market settles NO, meaning ${not}, ${spends(r, t)} once, with a receipt on chain. ${settle} If it settles YES, nothing burns. A voided or cancelled market never counts as a NO, and nothing burns for it.`, oneShotSentence(r, ctx.endsAt), "one-shot");
   }
   if (r.oracle === "polymarket" && r.market) {
     const phrase0 = (ctx.eventPhrase ?? "the market resolves YES").replace(/\s*\(resolves once\)$/, "");

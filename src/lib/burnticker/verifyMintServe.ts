@@ -3,6 +3,7 @@ import type { Platform } from "@/lib/burnticker/server";
 import { isSolanaAddress, verifyMint, type MintFacts, type MintVerification } from "@/lib/burnticker/verifyMint";
 import { PROGRAM_IDS, type Network } from "@/lib/burnticker/networks";
 import { chainRegistrationReader, disclosedCoins, readAllRegistrations, type RegistrationReader } from "@/lib/burnticker/mintRegistration";
+import { tickerShared } from "@/lib/burnticker/coinLookup";
 
 /**
  * The facts verifyMint.ts decides on, read from this host (website audit 4, BT-01): the registry row for the mint (the catalogue, on the
@@ -27,7 +28,7 @@ export async function mintFacts(p: Platform, mint: string, o: { reader?: Registr
   const t = p.registry.token(mint);
   const coin = t ? (() => {
     const rs = p.registry.receipts(t.mint);
-    return { ticker: t.ticker, name: t.name, status: t.status, creator: t.creator, launchedAt: t.launchTx ? t.baselineAt : null, rulesSha256: t.rulesSha, receipts: rs.length, burns: rs.filter((b) => b.status === "confirmed" && (b.burnRaw ?? BigInt(0)) > BigInt(0)).length, platformId: t.platformId };
+    return { ticker: t.ticker, name: t.name, status: t.status, creator: t.creator, launchedAt: t.launchTx ? t.baselineAt : null, rulesSha256: t.rulesSha, receipts: rs.length, burns: rs.filter((b) => b.status === "confirmed" && (b.burnRaw ?? BigInt(0)) > BigInt(0)).length, platformId: t.platformId, tickerShared: tickerShared(p.registry, t) };
   })() : null;
   const d = disclosedCoins().find((c) => c.mint === mint) ?? null;
   return { mint, cluster: net, programId: PROGRAM_IDS[net].burn_receipts, program, networks, disclosed: d ? { network: d.network, ticker: d.ticker, label: d.label } : null, coin };

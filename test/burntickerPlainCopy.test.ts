@@ -137,7 +137,13 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   // website-16 (2026-10-12): the legitimacy pass, the changelog, incidents, bounty, press kit, walk-through and history pages
   "historyCopy.ts", "settlementCopy.ts",
   // website-17 (2026-10-12): the creator benefits, the rank line, the featured-placement rules and the example tickets
-  "creatorBenefits.ts", "coinRank.ts", "featuredSlots.ts", "exampleTickets.ts"]
+  "creatorBenefits.ts", "coinRank.ts", "featuredSlots.ts", "exampleTickets.ts",
+  // intent audit (2026-10-12): the weather intent's refusals, conversions and the first-snow season
+  "weatherIntent.ts", "oneShotEligibility.ts",
+  // devnet hide (owner decision 2026-10-12): the devnet practice page's words
+  "devnetCopy.ts",
+  // website-19 (2026-10-12): the guided launch, the ticker check at review and the reserved names
+  "guidedLaunch.ts", "tickerCheck.ts", "reservedNames.ts"]
   .map((f) => `src/lib/burnticker/${f}`);
 
 describe("plain-English copy: no shorthand on any page (website-9)", () => {

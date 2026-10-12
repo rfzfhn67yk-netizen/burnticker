@@ -27,7 +27,8 @@ export const SPORTS_PROVENANCE = {
   settlement: `${SETTLED_ON["on-chain payout"]} when Polymarket lists a market for it, and otherwise ${SETTLED_ON.TheSportsDB} from TheSportsDB`,
   confirmation: `a second, independent source, such as ${list(OFFICIAL_FEEDS)}`,
   confirmationOther: `For other leagues, the on-chain payout and the licensed score confirm each other, or ${CROSS_LABEL["apisports.games"]} does.`,
-  noEspn: "Burnticker reads no ESPN data.",
+  // walkthrough snag 15: a rule's series name starts with "espn", an older label; say that instead of a flat denial next to it
+  noEspn: "Some rule names start with espn, an older label. ESPN is not a source for any result.",
 } as const;
 
 /** The chip on sports cards (venueLabel). */

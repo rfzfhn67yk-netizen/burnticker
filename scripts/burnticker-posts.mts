@@ -116,7 +116,7 @@ function build(f: PostFormat, data: Data): Draft[] {
         if (!chosen.length) notes.push(`$DEFICIT: no confirmed burn for ${day}`);
         out.push(...chosen.map(({ b }) => deficitReceiptDraft(status, burns, b, deficitSite)));
       } else if (wantDeficit) notes.push(`$DEFICIT: no status.json + burns.json in ${deficitDir}`);
-      const tickers = ticker ? [ticker] : all ? (data.index?.tokens.filter((t) => t.status === "live" && t.ticker !== "DEFICIT").map((t) => t.ticker) ?? []) : [];
+      const tickers = ticker ? [ticker] : all ? (data.index?.tokens.filter((t) => t.status === "live" && t.ticker !== "DEFICIT").map((t) => t.siteKey ?? t.ticker) ?? []) : [];
       for (const t of tickers) {
         const s = data.status(t); if (!s) { if (ticker) notes.push(`no status.json for $${t}`); continue; }
         const rs = data.receipts(t);
@@ -136,7 +136,8 @@ function build(f: PostFormat, data: Data): Draft[] {
         if (!data.index) notes.push(`no index.json in ${platformDir}`);
         else {
           const receiptsByTicker: Record<string, ReceiptJson[]> = {};
-          for (const t of data.index.tokens) receiptsByTicker[t.ticker] = data.receipts(t.ticker);
+          // keyed by mint, read from the coin's own directory (tickers are not unique, owner 2026-10-12)
+          for (const t of data.index.tokens) receiptsByTicker[t.mint] = data.receipts(t.siteKey ?? t.ticker);
           const sbDay = all && fixtures ? "2026-10-09" : day;
           out.push(...scoreboardDrafts({ index: data.index, receiptsByTicker, day: sbDay, league: args.get("league") ?? null, season: args.get("season") ?? null, seasonOver: args.has("season-over"), site }));
         }
