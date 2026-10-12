@@ -3,14 +3,14 @@
 // dials; each dial is a pure rewrite of the rule; suggested tickers are unique against the registry and the refuse list.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { describeRule, windowBadge, windowKindOf, WINDOW_SENTENCE, DESCRIPTION_MAX, PERPETUAL_SENTENCE, type DescribeCtx, type WindowKind } from "@/lib/burnticker/describe";
+import { describeEndSink, describeRule, windowBadge, windowKindOf, WINDOW_SENTENCE, DESCRIPTION_MAX, PERPETUAL_SENTENCE, type DescribeCtx, type WindowKind } from "@/lib/burnticker/describe";
 import { applyDial, dialsFor, leagueSetFor, ON_END_DEFAULT } from "@/lib/burnticker/dials";
 import { nativeRule } from "@/lib/burnticker/sources/native";
 import { teamSeries, gameSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { nwsSeries } from "@/lib/burnticker/sources/nws";
 import { polyRule, uniqueTicker, dedupeTickers, universalSearch, type Suggestion } from "@/lib/burnticker/search";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
-import { BURNTICKER_RULES_SCHEMA, DEFAULT_ON_END, validateRule, type BurnRule } from "@/lib/burnticker/rules";
+import { BURNTICKER_RULES_SCHEMA, DEFAULT_ON_END, WIND_DOWN_ON_END, endSinkOf, validateRule, type BurnRule } from "@/lib/burnticker/rules";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { catalogueSources } from "@/lib/burnticker/api/handlers";
 import { ESPN_NOW, espnFixtureClient, exactFetch, CHAMPIONSHIPS } from "./burntickerFirstPartyHelpers.ts";
@@ -44,6 +44,12 @@ const FIXTURES: { label: string; rule: BurnRule; ctx: Omit<DescribeCtx, "ticker"
   { label: "Rays win the World Series", rule: polyRule(WS, 0.1), ctx: { eventPhrase: "the Rays win the 2026 World Series", crossRead: "MLB's official results", endsAt: "2026-10-31T23:55:00Z", suggest: { name: "Rays World Series", ticker: "RAYSWS" } }, kind: "one-shot" },
   { label: "El-Sayed wins Michigan Senate", rule: polyRule("0xbfeb6d4cf3" + "0".repeat(54)), ctx: { eventPhrase: "Abdul El-Sayed (D) wins the Michigan Senate race", crossRead: "the Michigan certified result", endsAt: "2026-11-04" }, kind: "one-shot" },
   { label: "league mode (Rays, MLB 2026)", rule: applyDial(team("mlb", "TB", "win", S(2026)), "league", "on"), ctx: {}, kind: "season" },
+  // END SINKS (LAUNCHPAD-PATH §45): every new launch carries onEnd.endSink (rules.ts DEFAULT_ON_END)
+  { label: "end sink · Rays win · this season", rule: { ...team("mlb", "TB", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "season" },
+  { label: "end sink · Rays win · postseason", rule: { ...team("mlb", "TB", "win", { kind: "post", year: 2026 }), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "post" },
+  { label: "end sink · Rays win · next 5", rule: { ...team("mlb", "TB", "win", { kind: "next", n: 5, from: "20261010" }), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "next" },
+  { label: "end sink · Rays win · perpetual", rule: { ...team("mlb", "TB", "win", { kind: "perpetual" }), onEnd: { ...DEFAULT_ON_END } }, ctx: {}, kind: "perpetual" },
+  { label: "end sink · Rays win the World Series", rule: { ...polyRule(WS, 0.1), onEnd: { ...DEFAULT_ON_END } }, ctx: { eventPhrase: "the Rays win the 2026 World Series", crossRead: "MLB's official results", endsAt: "2026-10-31T23:55:00Z", suggest: { name: "Rays World Series", ticker: "RAYSWS" } }, kind: "one-shot" },
 ];
 
 describe("the generated description", () => {
@@ -61,6 +67,19 @@ describe("the generated description", () => {
     assert.ok(t.paragraph.endsWith("The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn."));
     assert.ok(t.paragraph.startsWith(`$${t.ticker} burns `));
     assert.equal(t.badge, windowBadge(f.rule, f.ctx));
+  });
+
+  test("END SINKS (LAUNCHPAD-PATH §45): the season coin, word for word; the pair coin names the winning coin; the copy matches rules.ts", () => {
+    const r = { ...team("mlb", "TB", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
+    const t = describeRule(r, { ticker: "" });
+    assert.match(t.paragraph, /This coin covers the 2026 Rays season only, including the playoffs\. After the Rays' last game, whatever is left burns \$DEFICIT, and the coin retires\. It does not continue into 2027\. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead\. The creator earns nothing\./);
+    const pair = { ...r, pair: { pairId: "p1", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule;
+    assert.match(describeRule(pair, { ticker: "" }).paragraph, /whatever is left burns the winning coin, or \$DEFICIT if there isn't one, and the coin retires\./);
+    const one = describeRule({ ...polyRule(WS, 0.1), onEnd: { ...DEFAULT_ON_END } } as BurnRule, { ticker: "", eventPhrase: "the Rays win the 2026 World Series", endsAt: "2026-10-31T23:55:00Z" });
+    assert.match(one.windowSentence, /^This coin resolves once, on Oct 31, 2026\. Then whatever is left burns \$DEFICIT, and the coin retires\.$/);
+    // a perpetual coin never ends with a result, so it gets no void sentence; a vault rule has no burn pool and no sink
+    assert.doesNotMatch(describeRule({ ...team("mlb", "TB", "win", { kind: "perpetual" }), onEnd: { ...DEFAULT_ON_END } } as BurnRule, { ticker: "" }).paragraph, /voided or the season is cancelled/);
+    for (const x of [r, pair, { ...r, onEnd: { ...WIND_DOWN_ON_END } } as BurnRule, { ...r, scalar: { ...r.scalar!, perUnit: { tokens: 1000 } } } as BurnRule]) assert.equal(describeEndSink(x), endSinkOf(x), "describe.ts mirrors rules.ts endSinkOf");
   });
 
   test("the Rays' season coin, word for word (the owner's target, with the window sentence and the year in the ticker)", () => {
@@ -131,10 +150,12 @@ describe("the rule dials", () => {
     assert.equal(applyDial(next, "games", 99, ctx).series, "espn.team:mlb-TB.30-win-n20.20261010");
     assert.equal(applyDial(nativeRule(nwsSeries("high", "DTW", 90)), "threshold", 95).series, "nws.high:DTW-95");
     const lg = applyDial(r, "league", "on", ctx) as BurnRule;
-    assert.deepEqual(lg.set, { id: "mlb-2026-win", outcome: "TB.30", forwardBps: 10_000 }); assert.deepEqual(lg.onEnd, DEFAULT_ON_END);
+    // §45: league-set end sinks are a later program round, so league mode keeps the wind-down (and turning it off brings the sink back)
+    assert.deepEqual(lg.set, { id: "mlb-2026-win", outcome: "TB.30", forwardBps: 10_000 }); assert.deepEqual(lg.onEnd, WIND_DOWN_ON_END);
     assert.doesNotThrow(() => validateRule(lg));
     assert.equal((applyDial(lg, "forward", 2500) as BurnRule).set!.forwardBps, 2500);
     assert.equal((applyDial(lg, "league", "off") as BurnRule).set, undefined);
+    assert.deepEqual((applyDial(lg, "league", "off") as BurnRule).onEnd, DEFAULT_ON_END);
     assert.match(describeRule(lg, { ticker: "" }).paragraph, /In league mode, 100% of the leftover goes to the winning coin of set mlb-2026-win if the forwarding instruction is live by season end\. Otherwise it burns down on this coin\./);
     assert.equal(leagueSetFor(applyDial(r, "window", "perpetual", ctx)), null, "a perpetual coin has no season to win");
     assert.equal(leagueSetFor(feed("treasury.debt", 1e9)), null, "a scalar feed has no winner");

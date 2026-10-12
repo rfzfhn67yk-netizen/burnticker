@@ -26,6 +26,7 @@ This table lists every instruction of both programs and the only place each one 
 | burn_receipts | `crank_buyback` | anyone | **SOL from the burn pool is swapped for the coin, and every token received is burned** | Fee PDA SOL → its WSOL account → CPMM pool vault; tokens received → burned (supply reduced). |
 | burn_receipts | `crank_no_units` | anyone | **none** | None. |
 | burn_receipts | `crank_vault` | anyone | **tokens from the vault are burned** | Vault tokens → burned. |
+| burn_receipts | `forward_on_end` | anyone | **a coin whose rule ended with a result sends its remaining fuel, and any fees that arrive later, to its end sink's burn pool (the named coin while it is live, otherwise the flagship $DEFICIT), and that coin's own burns spend it** | Resolved coin's fee PDA SOL / WSOL → the end sink's (or the flagship's) fee PDA SOL / WSOL account (then burned by that coin's cranks). |
 | burn_receipts | `forward_to_winner` | anyone | **a paired coin's fuel for a period it lost goes to the winner's burn pool, in the formula's amount, and the winner's own burns spend it** | Loser fee PDA SOL / WSOL → winner fee PDA SOL / WSOL account (then burned by the winner's cranks). |
 | burn_receipts | `initialize_platform` | anyone + upgrade_authority | **rent only, paid by the caller** | Payer pays the PlatformConfig's rent. |
 | burn_receipts | `initialize_token` | anyone + creator + mint_keypair | **rent only, paid by the caller** | Payer → fee PDA: the reserve only (rent for the PDA). |
@@ -41,6 +42,7 @@ This table lists every instruction of both programs and the only place each one 
 | burn_receipts | `set_registration_policy` | config_authority | **none** | None. |
 | burn_receipts | `submit_pair_result` | anyone | **rent only, paid by the caller** | Payer pays the PairResult account's rent (kept forever). |
 | burn_receipts | `submit_reading` | anyone | **rent only, paid by the caller** | Payer pays the reading account's rent (kept forever; readings are never closed). |
+| burn_receipts | `submit_rule_end` | anyone | **rent only, paid by the caller** | Payer pays the RuleEnd account's rent (kept forever). |
 | burn_receipts | `unlink_pair` | anyone | **rent only, paid by the caller** | PairLink rent → each coin's fee PDA. |
 | burn_receipts | `veto_registration_policy` | attester_key | **none** | None. |
 | pair_curve | `burn_lp` | anyone | **fallback only: if lock_lp cannot run for 30 days, burn_lp destroys the side's LP tokens, and there are no LP fees after that** | Vault LP → burned; emptied LP account's rent → the side's burn pool. |
@@ -55,7 +57,7 @@ This table lists every instruction of both programs and the only place each one 
 
 What does not exist, in the registers' own words:
 
-- (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) and inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period); tokens leave only by burn.
+- (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses); tokens leave only by burn.
 - (burn_receipts) No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).
 - (burn_receipts) No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.
 - (burn_receipts) No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.

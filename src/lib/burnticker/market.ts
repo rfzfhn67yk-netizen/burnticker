@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
-import { launchLabPoolId, launchLabProgramFor, launchLabVault } from "@/lib/burnKeeper/launchlab";
+import { CPMM_PROGRAM_ID as CPMM_PROGRAM, launchLabPoolId, launchLabProgramFor, launchLabVault } from "@/lib/burnKeeper/launchlab";
 import type { ChartJson, CurveJson, CurvePhase, HolderRow, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
 
 export type { ChartJson, CurveJson, CurvePhase, HolderRow, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
@@ -209,4 +209,145 @@ export async function readKeeperCurve(conn: Pick<MarketReader, "getAccountInfo">
     const c = curveProgress(v, pool.toBase58());
     return { phase: c.phase, raised: c.raised, threshold: c.threshold, quote: c.quote, progressPct: c.progressPct, poolId: c.poolId, readAt: new Date(now).toISOString() };
   } catch { return null; }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// After graduation: the Raydium CPMM pool (indexer-1, 2026-10-12; PLATFORM-NEXT-2 item 3)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * THE TRADING POOL'S MARKET CAP. Once a coin leaves its curve it trades in a Raydium CPMM pool (constant product), and the card's market
+ * cap comes from that pool instead:
+ *
+ *   reserve = vault balance − protocol fees − fund fees − creator fees owed     (the Raydium SDK's own reserve, cpmm/cpmm.ts)
+ *   price   = SOL reserve / token reserve                                         (SOL per whole token)
+ *   cap     = price × the mint's current supply                                    (burns already subtracted: an SPL burn lowers supply)
+ *
+ * Raw units cancel, so the cap is exact integer arithmetic in lamports: solReserveRaw × supplyRaw ÷ tokenReserveRaw. Like the curve read,
+ * it returns the cap as a bare number and names no per-token figure (test/burntickerReviewErrata.test.ts holds market.ts to that). The supply is the
+ * whole mint supply as the chain reports it (tokens still on vesting or in the burn pool count; burned tokens do not). Layout: the SDK's
+ * CpmmPoolInfoLayout (raydium-sdk-V2 src/raydium/cpmm/layout.ts, 637 bytes), pinned in test/burntickerCpmmMarket.test.ts against the
+ * SDK decoder and two real pools (config/burnticker/fixtures/cpmm). Only a pool owned by the cluster's CPMM program, pairing this mint
+ * with wrapped SOL, with vaults that hold those mints, gives a number. Anything else is an error string, never a guess.
+ */
+export const CPMM_POOL_SIZE = 637;
+export interface CpmmPoolView {
+  configId: string; poolCreator: string; vault0: string; vault1: string; lpMint: string; mint0: string; mint1: string; tokenProgram0: string; tokenProgram1: string;
+  status: number; decimals0: number; decimals1: number;
+  protocolFees0Raw: bigint; protocolFees1Raw: bigint; fundFees0Raw: bigint; fundFees1Raw: bigint; openTime: bigint; enableCreatorFee: boolean; creatorFees0Raw: bigint; creatorFees1Raw: bigint;
+}
+const CPMM_OFF = { configId: 8, poolCreator: 40, vault0: 72, vault1: 104, lpMint: 136, mint0: 168, mint1: 200, tokenProgram0: 232, tokenProgram1: 264, status: 329, decimals0: 331, decimals1: 332, protocolFees0: 341, protocolFees1: 349, fundFees0: 357, fundFees1: 365, openTime: 373, enableCreatorFee: 390, creatorFees0: 397, creatorFees1: 405 } as const;
+
+/** Decodes a Raydium CPMM PoolState; null when the bytes cannot be one (wrong size). */
+export function decodeCpmmPool(data: Uint8Array): CpmmPoolView | null {
+  if (data.length !== CPMM_POOL_SIZE) return null;
+  const o = CPMM_OFF;
+  return {
+    configId: key(data, o.configId), poolCreator: key(data, o.poolCreator), vault0: key(data, o.vault0), vault1: key(data, o.vault1), lpMint: key(data, o.lpMint),
+    mint0: key(data, o.mint0), mint1: key(data, o.mint1), tokenProgram0: key(data, o.tokenProgram0), tokenProgram1: key(data, o.tokenProgram1),
+    status: data[o.status], decimals0: data[o.decimals0], decimals1: data[o.decimals1],
+    protocolFees0Raw: u64(data, o.protocolFees0), protocolFees1Raw: u64(data, o.protocolFees1), fundFees0Raw: u64(data, o.fundFees0), fundFees1Raw: u64(data, o.fundFees1),
+    openTime: u64(data, o.openTime), enableCreatorFee: data[o.enableCreatorFee] === 1, creatorFees0Raw: u64(data, o.creatorFees0), creatorFees1Raw: u64(data, o.creatorFees1),
+  };
+}
+
+const TOKEN_PROGRAMS = new Set(["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]);
+/** An SPL Token or Token-2022 mint's supply and decimals (the 82-byte base layout both share); null when the bytes are not an initialized mint. */
+export function decodeMintSupply(data: Uint8Array): { supplyRaw: bigint; decimals: number } | null {
+  if (data.length < 82 || data[45] !== 1) return null;
+  // a Token-2022 mint with extensions is padded to 165 bytes and marks itself account type 1 (Mint) at byte 165
+  if (data.length > 82 && (data.length <= 165 || data[165] !== 1)) return null;
+  return { supplyRaw: u64(data, 36), decimals: data[44] };
+}
+/** A token account's mint and raw amount (the 165-byte base layout both token programs share); null when the bytes are not one. */
+export function decodeTokenAccount(data: Uint8Array): { mint: string; owner: string; amountRaw: bigint } | null {
+  if (data.length < 165 || (data[108] !== 1 && data[108] !== 2)) return null; // state: 1 initialized, 2 frozen
+  if (data.length > 165 && data[165] !== 2) return null; // Token-2022 account type 2 (Account)
+  return { mint: key(data, 0), owner: key(data, 32), amountRaw: u64(data, 64) };
+}
+
+/** What a CPMM read brings back for the card and the coin page. Amounts are decimal strings; `marketCap` is in SOL. */
+export interface CpmmMarket {
+  poolId: string; mint: string; quote: "SOL";
+  /** the reserves the price is taken from (vault balance minus the fees the pool owes), whole tokens and SOL */
+  tokenReserve: string; solReserve: string;
+  /** the mint's supply as read (burns already subtracted), whole tokens */
+  supply: string;
+  marketCap: string;
+  /** the pool's status bits as on chain (Raydium: 1 deposit off, 2 withdraw off, 4 swap off) */
+  status: number;
+  readAt: string;
+}
+
+/**
+ * The pool's market cap from the decoded pool, the two vault balances and the mint's supply. Null when the pool does not pair
+ * `mint` with wrapped SOL or a reserve is not positive (an empty or fully owed pool has no price).
+ */
+export function cpmmMarketCap(pool: CpmmPoolView, vault0Raw: bigint, vault1Raw: bigint, mint: string, supplyRaw: bigint, tokenDecimals: number): Omit<CpmmMarket, "poolId" | "readAt" | "status"> | null {
+  const r0 = vault0Raw - pool.protocolFees0Raw - pool.fundFees0Raw - pool.creatorFees0Raw;
+  const r1 = vault1Raw - pool.protocolFees1Raw - pool.fundFees1Raw - pool.creatorFees1Raw;
+  const tokenIs0 = pool.mint0 === mint && pool.mint1 === WSOL_MINT, tokenIs1 = pool.mint1 === mint && pool.mint0 === WSOL_MINT;
+  if (!tokenIs0 && !tokenIs1) return null;
+  const tokenRes = tokenIs0 ? r0 : r1, solRes = tokenIs0 ? r1 : r0, solDec = tokenIs0 ? pool.decimals1 : pool.decimals0;
+  if ((tokenIs0 ? pool.decimals0 : pool.decimals1) !== tokenDecimals) return null;
+  if (tokenRes <= BigInt(0) || solRes <= BigInt(0) || supplyRaw < BigInt(0)) return null;
+  return { mint, quote: "SOL", tokenReserve: rawToTokens(tokenRes, tokenDecimals), solReserve: rawToTokens(solRes, solDec), supply: rawToTokens(supplyRaw, tokenDecimals), marketCap: rawToTokens((solRes * supplyRaw) / tokenRes, solDec) };
+}
+
+/** The slice of @solana/web3.js Connection the CPMM read uses (one round trip in the usual case). */
+export interface CpmmReader { getMultipleAccountsInfo(pks: PublicKey[]): Promise<({ data: Uint8Array | Buffer; owner: PublicKey } | null)[]> }
+
+const cpmmCache = new Map<string, { at: number; v: { market: CpmmMarket | null; error: string | null } }>();
+export const CPMM_CACHE_MS = 30_000;
+/** For tests. */
+export function clearCpmmCache(): void { cpmmCache.clear(); }
+const CPMM_VAULT_SEED = Buffer.from("pool_vault", "utf8");
+const cpmmVault = (program: PublicKey, pool: PublicKey, mint: PublicKey) => PublicKey.findProgramAddressSync([CPMM_VAULT_SEED, pool.toBuffer(), mint.toBuffer()], program)[0];
+
+/**
+ * Reads a graduated coin's CPMM pool: one getMultipleAccountsInfo of [pool, its two vaults (Raydium's PDAs), the mint], and a second
+ * only when the pool names vaults other than those PDAs. `poolId` is the pool the burn program registered (status.json
+ * market.graduatedPool), never a guess. Returns `{ market, error }`; a failure is the error in a few words, never thrown, and never a
+ * number. Cached 30 seconds per pool, like the curve read.
+ */
+export async function readCpmmMarket(conn: CpmmReader, i: { cluster: string; mint: string; poolId: string }, now = Date.now()): Promise<{ market: CpmmMarket | null; error: string | null }> {
+  const ck = `${i.cluster}:${i.mint}:${i.poolId}`;
+  const hit = cpmmCache.get(ck);
+  if (hit && now - hit.at < CPMM_CACHE_MS) return hit.v;
+  const v = await readCpmmUncached(conn, i, now);
+  cpmmCache.set(ck, { at: now, v });
+  return v;
+}
+
+async function readCpmmUncached(conn: CpmmReader, i: { cluster: string; mint: string; poolId: string }, now: number): Promise<{ market: CpmmMarket | null; error: string | null }> {
+  const fail = (error: string) => ({ market: null, error });
+  const program = i.cluster === "mainnet" ? CPMM_PROGRAM.mainnet : i.cluster === "devnet" ? CPMM_PROGRAM.devnet : null;
+  if (!program) return fail(`no Raydium CPMM program on ${i.cluster}`);
+  let poolPk: PublicKey, mintPk: PublicKey;
+  try { poolPk = new PublicKey(i.poolId); mintPk = new PublicKey(i.mint); } catch { return fail("the pool or mint is not a public key"); }
+  try {
+    const vToken = cpmmVault(program, poolPk, mintPk), vSol = cpmmVault(program, poolPk, new PublicKey(WSOL_MINT));
+    const [poolAcc, aTok, aSol, mintAcc] = await conn.getMultipleAccountsInfo([poolPk, vToken, vSol, mintPk]);
+    if (!poolAcc) return fail("the pool account was not found");
+    if (!poolAcc.owner.equals(program)) return fail("the pool is not owned by the Raydium CPMM program");
+    const pool = decodeCpmmPool(new Uint8Array(poolAcc.data));
+    if (!pool) return fail("the pool account has an unexpected size");
+    if (!mintAcc || !TOKEN_PROGRAMS.has(mintAcc.owner.toBase58())) return fail("the mint account was not found");
+    const supply = decodeMintSupply(new Uint8Array(mintAcc.data));
+    if (!supply) return fail("the mint account is not a token mint");
+    // the vault accounts, by the addresses the pool itself names (the PDAs fetched above in the usual case)
+    if (pool.mint0 !== i.mint && pool.mint1 !== i.mint) return fail("the pool is for another mint");
+    if (pool.mint0 !== WSOL_MINT && pool.mint1 !== WSOL_MINT) return fail("the pool does not trade against SOL");
+    const want0 = pool.vault0, want1 = pool.vault1;
+    const derived: Record<string, { data: Uint8Array | Buffer; owner: PublicKey } | null> = { [vToken.toBase58()]: aTok, [vSol.toBase58()]: aSol };
+    let acc0 = derived[want0], acc1 = derived[want1];
+    if (acc0 === undefined || acc1 === undefined) [acc0, acc1] = await conn.getMultipleAccountsInfo([new PublicKey(want0), new PublicKey(want1)]);
+    const d0 = acc0 && TOKEN_PROGRAMS.has(acc0.owner.toBase58()) ? decodeTokenAccount(new Uint8Array(acc0.data)) : null;
+    const d1 = acc1 && TOKEN_PROGRAMS.has(acc1.owner.toBase58()) ? decodeTokenAccount(new Uint8Array(acc1.data)) : null;
+    if (!d0 || !d1) return fail("a pool vault could not be read");
+    if (d0.mint !== pool.mint0 || d1.mint !== pool.mint1) return fail("a pool vault holds a different mint than the pool names");
+    const m = cpmmMarketCap(pool, d0.amountRaw, d1.amountRaw, i.mint, supply.supplyRaw, supply.decimals);
+    if (!m) return fail("the pool reserves give no market cap (an empty reserve, or decimals that disagree with the mint)");
+    return { market: { ...m, poolId: i.poolId, status: pool.status, readAt: new Date(now).toISOString() }, error: null };
+  } catch (e) { return fail(rpcErrorText(e)); }
 }

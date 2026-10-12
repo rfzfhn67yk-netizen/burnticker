@@ -42,7 +42,7 @@ use crate::state::{pair_link_address, pair_order, pair_result_address, PairLink,
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 /// Creates a program-owned PDA account (Anchor `init` semantics: an address someone pre-funded is topped up, allocated, assigned).
-fn create_pda<'info>(payer: &AccountInfo<'info>, acc: &AccountInfo<'info>, _system: &AccountInfo<'info>, space: usize, seeds: &[&[u8]]) -> Result<()> {
+pub(crate) fn create_pda<'info>(payer: &AccountInfo<'info>, acc: &AccountInfo<'info>, _system: &AccountInfo<'info>, space: usize, seeds: &[&[u8]]) -> Result<()> {
     let need = Rent::get()?.minimum_balance(space);
     let have = acc.lamports();
     if have == 0 {
@@ -278,7 +278,8 @@ pub fn handle_link_pair(ctx: Context<LinkPair>) -> Result<()> {
 /// PERMISSIONLESS submission (Ed25519SigVerify in the same transaction, as for submit_reading). Configs in byte order of their mints.
 /// Who must sign (pair-forward r3 M-1): EVERY result — win or draw — needs both coins' quorums. Pairing requires the two coins to share
 /// one attester set and quorum, and a paired coin's set changes only with the partner's quorum co-signing
-/// (apply_paired_attester_change), so one set of signatures meets both: no side's attesters can sign its wins and withhold its losses.
+/// (apply_paired_attester_change applies the same set to BOTH coins at once, re-check P3-2), so one set of signatures meets both: no
+/// side's attesters can sign its wins and withhold its losses.
 /// (Residual: whoever holds that common quorum decides every result; on Burnticker that is the operator keeper alone, quorum 1.)
 /// What a WIN needs on chain (H-1(a), L-2): both coins' readings for the date exist (reading_lo / reading_hi) and the loser's is still
 /// unprocessed — so forward_to_winner can always run. Pools are NOT required: a side without a verified pool makes the forward a
@@ -508,7 +509,7 @@ pub struct ForwardToWinner<'info> {
 }
 
 /// A native WSOL account's synced balance (lamports − its rent reserve), as the crank measures it; 0 if the account does not exist.
-fn wsol_synced_or_zero(acc: &AccountInfo) -> Result<u64> {
+pub(crate) fn wsol_synced_or_zero(acc: &AccountInfo) -> Result<u64> {
     use anchor_lang::solana_program::program_pack::Pack;
     if acc.owner != &token::ID || acc.data_is_empty() {
         return Ok(0);
@@ -532,17 +533,17 @@ pub fn handle_forward_to_winner(ctx: Context<ForwardToWinner>, record_date: u32)
     if a.loser_reading.processed && a.loser_reading.outcome == OUTCOME_FORWARDED {
         return Ok(());
     }
+    // Pair-forward round-3 re-check P3-I1: after unlink_pair both coins are plain — a result recorded before the unlink no longer
+    // forwards, so the loser's own crank burns that period (the crank gate passes UNLINKED coins).
+    require!(a.loser_config.pair_state == PAIR_STATE_PAIRED && a.winner_config.pair_state == PAIR_STATE_PAIRED, BurnError::NotPaired);
     require!(a.loser_config.rule.mode == MODE_BUYBACK && a.winner_config.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
     require_next_in_line(&a.loser_config, &a.loser_reading)?;
     // r3 RI-1: the 72 h time-out ends the forward window — from then on the period belongs to the loser's own crank (no race).
     require!(now < a.loser_reading.submitted_at.saturating_add(PAIR_RESULT_GRACE_SECS), BurnError::ForwardWindowClosed);
     let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
     require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
-    // H-1(b): a side without a verified pool (or unlinked since) forwards nothing — the reading is still processed.
-    let live = a.loser_config.pool_verified
-        && a.winner_config.pool_verified
-        && a.loser_config.pair_state == PAIR_STATE_PAIRED
-        && a.winner_config.pair_state == PAIR_STATE_PAIRED;
+    // H-1(b): a side without a verified pool forwards nothing — the reading is still processed. (Unlinked: refused above, P3-I1.)
+    let live = a.loser_config.pool_verified && a.winner_config.pool_verified;
 
     let rule = a.loser_config.rule;
     let units = a.loser_reading.units;

@@ -199,7 +199,7 @@ describe("L02 — availability: closed, preview and open, per type, per source, 
     const rule = firstPartyRule(nwsSeries("high", "DTW", 90), 0.02);
     const r = buildLaunchReview({ rule, ticker: "DTWHOT", name: "Detroit Heat" }, { env: { BURNTICKER_CLUSTER: "mainnet", [CREATOR_LAUNCHES_FLAG]: "1" } });
     assert.ok("review" in r); const v = r.review;
-    assert.equal(v.network, "mainnet"); assert.equal(v.signable, true); assert.equal(v.rule.sha256, lockRule({ ...rule, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000 } }).sha256);
+    assert.equal(v.network, "mainnet"); assert.equal(v.signable, true); assert.equal(v.rule.sha256, lockRule({ ...rule, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } }).sha256, "§45: a rule sent without onEnd gets the end sink");
     assert.equal(v.transactions.count, 1); assert.deepEqual(v.transactions.steps[0].signers, ["your wallet", "a new key made for this coin"]);
     assert.ok(Number(v.costs.totalSol) > 0.05 && Number(v.costs.totalSol) < 0.07, v.costs.totalSol);
     assert.equal(rentLamports(TOKEN_CONFIG_BYTES), 6_897_360);

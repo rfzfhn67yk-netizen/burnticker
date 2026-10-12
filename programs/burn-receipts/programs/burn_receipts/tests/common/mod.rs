@@ -450,6 +450,9 @@ pub fn init_args_entries(rule: RuleParams, attesters: Vec<AttesterEntry>, quorum
         fixed_pool: Pubkey::default(),
         admin: Pubkey::default(),
         pair_void_by: 0,
+        end_sink_kind: 0,
+        end_sink_mint: None,
+        end_sink_min_lamports: 0,
     }
 }
 
@@ -493,6 +496,7 @@ pub fn ix_initialize_full(
     if pair_mint.is_some() && args.pair_void_by == 0 {
         args.pair_void_by = TEST_PAIR_VOID_BY;
     }
+    let args_min_end = args.end_sink_min_lamports;
     Instruction::new_with_bytes(
         burn_receipts::ID,
         &burn_receipts::instruction::InitializeToken { args }.data(),
@@ -509,6 +513,8 @@ pub fn ix_initialize_full(
             // pair-forward blind review L-3: the partner's PairLink address always rides with pair_mint.
             partner_link: pair_mint.map(|m| pair_link_pda(&m)),
             partner_config: pair_mint.filter(|_| partner_first).map(|m| config_pda(&m)),
+            // LAUNCHPAD-PATH §45: the harness pins an end sink whenever the args carry a minimum (end_sink_min_lamports != 0).
+            end_sink: (args_min_end != 0).then(|| end_sink_pda(mint)),
             event_authority: event_authority(),
             program: burn_receipts::ID,
         }
@@ -965,6 +971,7 @@ pub fn ix_apply_paired_attester_change(caller: &Pubkey, mint: &Pubkey, partner: 
             config: config_pda(mint),
             link: pair_link_pda(mint),
             partner_config: config_pda(partner),
+            partner_link: pair_link_pda(partner),
             instructions: solana_instructions_sysvar::ID,
             event_authority: event_authority(),
             program: burn_receipts::ID,
@@ -990,4 +997,92 @@ pub fn submit_pair_result_v0(env: &mut Env, a: &Pubkey, b: &Pubkey, date: u32, w
     let addrs: Vec<Pubkey> = ix.accounts.iter().filter(|m| !m.is_signer && m.pubkey != burn_receipts::ID).map(|m| m.pubkey).collect();
     let table = env.create_lookup_table(&addrs);
     env.send_v0(&[ed25519_shared(&entries, &msg), ix], &[], &[table])
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// LAUNCHPAD-PATH §45 — end sinks
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// The harness flagship's mint keypair: its public key is the test-pins build's BURNTICKER_FLAGSHIP.
+pub fn flagship_keypair() -> Keypair {
+    Keypair::new_from_array([0x46; 32])
+}
+
+pub fn end_sink_pda(mint: &Pubkey) -> Pubkey {
+    burn_receipts::state::end_sink_address(mint).0
+}
+
+pub fn rule_end_pda(mint: &Pubkey) -> Pubkey {
+    burn_receipts::state::rule_end_address(mint).0
+}
+
+pub fn end_message(mint: &Pubkey, date: u32, outcome: u8, src: [u8; 32], proof: [u8; 32]) -> Vec<u8> {
+    burn_receipts::attest::canonical_end_message(&burn_receipts::ID, mint, date, outcome, &src, &proof).into_bytes()
+}
+
+pub fn ix_submit_rule_end(payer: &Pubkey, mint: &Pubkey, date: u32, outcome: u8, src: [u8; 32], proof: [u8; 32]) -> Instruction {
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::SubmitRuleEnd { record_date: date, outcome, source_url_hash: src, proof_hash: proof }.data(),
+        burn_receipts::accounts::SubmitRuleEnd {
+            payer: *payer,
+            config: config_pda(mint),
+            end_sink: end_sink_pda(mint),
+            rule_end: rule_end_pda(mint),
+            instructions: solana_instructions_sysvar::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// submit_rule_end signed by `signers`.
+pub fn submit_rule_end(env: &mut Env, mint: &Pubkey, date: u32, outcome: u8, signers: &[&Keypair]) -> TxResult {
+    let msg = end_message(mint, date, outcome, src_hash(), [0u8; 32]);
+    let entries: Vec<_> = signers.iter().map(|k| (k.pubkey(), sign(k, &msg))).collect();
+    let payer = env.payer.pubkey();
+    env.send(&[ed25519_shared(&entries, &msg), ix_submit_rule_end(&payer, mint, date, outcome, src_hash(), [0u8; 32])], &[])
+}
+
+/// forward_on_end for `mint` → `target`. `sink` = the EndSink's named coin (MINT / PAIR_WINNER); `pair` = (partner, end date) for
+/// PAIR_WINNER (this coin's PairLink and that date's PairResult are passed).
+pub fn ix_forward_on_end(cranker: &Pubkey, mint: &Pubkey, target: &Pubkey, sink: Option<Pubkey>, pair: Option<(Pubkey, u32)>) -> Instruction {
+    let (f, tf) = (fee_pda(mint), fee_pda(target));
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::ForwardOnEnd {}.data(),
+        burn_receipts::accounts::ForwardOnEnd {
+            cranker: *cranker,
+            platform: platform_pda(),
+            config: config_pda(mint),
+            fee_vault: f,
+            fee_wsol: get_associated_token_address(&f, &NATIVE_MINT),
+            end_sink: end_sink_pda(mint),
+            rule_end: rule_end_pda(mint),
+            target_config: config_pda(target),
+            target_fee_vault: tf,
+            target_fee_wsol: get_associated_token_address(&tf, &NATIVE_MINT),
+            token_program: anchor_spl::token::spl_token::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+            memo_program: MEMO_PROGRAM_ID,
+            sink_config: sink.map(|s| config_pda(&s)),
+            pair_link: pair.map(|_| pair_link_pda(mint)),
+            pair_result: pair.map(|(p, d)| pair_result_pda(mint, &p, d)),
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+pub fn end_sink(env: &Env, mint: &Pubkey) -> Option<burn_receipts::state::EndSink> {
+    use anchor_lang::AccountDeserialize;
+    env.svm.get_account(&end_sink_pda(mint)).filter(|a| !a.data.is_empty()).map(|a| burn_receipts::state::EndSink::try_deserialize(&mut a.data.as_slice()).unwrap())
+}
+
+pub fn rule_end(env: &Env, mint: &Pubkey) -> Option<burn_receipts::state::RuleEnd> {
+    use anchor_lang::AccountDeserialize;
+    env.svm.get_account(&rule_end_pda(mint)).filter(|a| !a.data.is_empty()).map(|a| burn_receipts::state::RuleEnd::try_deserialize(&mut a.data.as_slice()).unwrap())
 }

@@ -362,3 +362,51 @@ pub const LL_PLATFORM_CP_CREATOR: usize = 800;
 pub const LL_PLATFORM_MIN_LEN: usize = 832;
 /// LaunchpadPool.migrateType: 0 = AMM v4, 1 = CPMM (instrument.ts encodes `migrateType === "amm" ? 0 : 1`).
 pub const LL_MIGRATE_TYPE_CPMM: u8 = 1;
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// LAUNCHPAD-PATH §45 (owner decision 2026-10-11): end-of-rule fuel goes to a sink, not a self-burn
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// RuleEnd ["rule_end", mint] — the quorum-signed end of a coin's rule (submit_rule_end).
+#[constant]
+pub const RULE_END_SEED: &[u8] = b"rule_end";
+/// EndSink ["end_sink", mint] — where a resolved coin's remaining fuel goes, pinned at initialize_token (immutable).
+#[constant]
+pub const END_SINK_SEED: &[u8] = b"end_sink";
+/// TokenConfig.end_state: the rule is live / ended RESOLVED (season over, one-shot resolved YES or NO) / ended VOID (market voided,
+/// no award, cancelled season). RuleEnd.outcome uses the same two end values.
+#[constant]
+pub const END_STATE_LIVE: u8 = 0;
+#[constant]
+pub const END_STATE_RESOLVED: u8 = 1;
+#[constant]
+pub const END_STATE_VOID: u8 = 2;
+/// EndSink.sink_kind: the platform flagship (BURNTICKER_FLAGSHIP) / a named coin / a league set's attested champion (field reserved;
+/// initialize_token refuses it until league sets land) / the coin's pair partner when the partner won the final period.
+#[constant]
+pub const END_SINK_FLAGSHIP: u8 = 0;
+#[constant]
+pub const END_SINK_MINT: u8 = 1;
+#[constant]
+pub const END_SINK_LEAGUE_SET: u8 = 2;
+#[constant]
+pub const END_SINK_PAIR_WINNER: u8 = 3;
+/// EndSink.min_forward_lamports bounds (the rules' onEnd.sweepThresholdLamports range): forward_on_end moves nothing smaller.
+#[constant]
+pub const END_FORWARD_MIN_LAMPORTS_FLOOR: u64 = 1_000_000;
+#[constant]
+pub const END_FORWARD_MIN_LAMPORTS_CEIL: u64 = 10_000_000_000u64;
+/// The rule-end attestation domain.
+#[constant]
+pub const END_ATTESTATION_DOMAIN: &str = "BURNRECEIPTS-END-v1";
+
+/// The platform flagship ($DEFICIT) — every end sink's fall-through, compiled per cluster like BURNTICKER_PLATFORM. Mainnet = the owner's
+/// $DEFICIT mint AJJ4XxCU… (compiled 2026-10-11); devnet = the devnet $DEFICIT (docs/burnkeeper/evidence/devnet-2026-10-10/status.json);
+/// test-pins / localnet = the LiteSVM harness's flagship (the ed25519 keypair seeded with [0x46; 32]). A build left at the all-zero
+/// placeholder refuses every initialize_token that pins an end sink (FlagshipNotPinned).
+#[cfg(not(any(feature = "devnet", feature = "test-pins")))]
+pub const BURNTICKER_FLAGSHIP: Pubkey = pubkey!("AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj");
+#[cfg(feature = "devnet")]
+pub const BURNTICKER_FLAGSHIP: Pubkey = pubkey!("4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F");
+#[cfg(all(feature = "test-pins", not(feature = "devnet")))]
+pub const BURNTICKER_FLAGSHIP: Pubkey = pubkey!("H4JcMPicKkHcxxDjkyyrLoQj7Kcibd9t815ak4UvTr9M");

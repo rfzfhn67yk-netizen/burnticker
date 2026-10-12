@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { TEAM_ALIASES, type TeamAlias } from "@/lib/burnticker/oracle/events";
-import { describeRule } from "@/lib/burnticker/describe";
+import { describeEndSink, describeRule } from "@/lib/burnticker/describe";
 
 /**
  * THE COIN CARD'S ONE-LINER (2026-10-10): the few words a launchpad card has room for — "burns when the Eagles lose" — derived from
@@ -25,6 +25,8 @@ export function oneShotAllLiner(rule: BurnRule, event: string, endDate: string |
   const m = rule.kind === "binary" && rule.binary ? rule.binary.onYes ?? rule.binary.onNo : null;
   if (!m || (m.fractionOfPool ?? 0) < 1 || !(rule.market !== null || (rule.derby?.selector === "coinvs" && rule.derby.flip))) return null;
   const weeks = rule.onEnd ? (rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`) : null;
+  const sink = describeEndSink(rule);
+  if (sink) return `burns everything if ${event}. If not, whatever is left burns ${sink === "pair-winner" ? "the winning coin, or $DEFICIT if there isn't one" : "$DEFICIT"} after ${endDate ?? "it settles"}`;
   return `burns everything if ${event}${weeks ? `. If not, the pool burns down over ${weeks} after ${endDate ?? "it settles"}` : ""}`;
 }
 
@@ -85,7 +87,10 @@ export function plainSentence(rule: BurnRule, ticker: string, title: string | nu
   const t = ticker || "TICKER";
   const what = (title ?? "").trim() || rule.market || rule.series || "the source";
   const all = oneShotAllLiner(rule, what.replace(/\s*\(resolves once\)$/, ""), endDate ?? rule.pair?.voidBy ?? null);
-  const tail = rule.onEnd ? ` When the rule ends, whatever is left in $${t}'s burn pool burns down over ${rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`}.` : "";
+  const sink = describeEndSink(rule), weeks = rule.onEnd ? (rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`) : "";
+  const tail = !rule.onEnd ? "" : sink
+    ? ` When the rule ends with a result, whatever is left in $${t}'s burn pool burns ${sink === "pair-winner" ? "the winning coin, or $DEFICIT if there isn't one" : "$DEFICIT"}. If it ends void, it burns down on $${t} over ${weeks}.`
+    : ` When the rule ends, whatever is left in $${t}'s burn pool burns down over ${weeks}.`;
   if (all) return `$${t} ${all}.`;
   return plainCore(rule, t, what) + tail;
 }

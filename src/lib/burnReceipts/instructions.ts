@@ -4,7 +4,7 @@ import type { BuybackPoolAccounts } from "@/lib/burnReceipts/cpmm";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { encodeInstruction } from "@/lib/burnReceipts/idlCoder";
 import type { RuleParams } from "@/lib/burnReceipts/math";
-import { associatedTokenAddress, configPda, cpmmAuthority, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lockedLiquidityPda, lpLockVault, pairLinkPda, pairResultPda, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
+import { associatedTokenAddress, configPda, cpmmAuthority, endSinkPda, feeKeyRecordPda, feeKeysPda, feeNftAccount, feePda, feeTokenAddress, feeWsolAddress, launchlabCreatorFeeVault, launchlabPoolPda, launchlabVaultAuthority, lockedLiquidityPda, lpLockVault, pairLinkPda, pairResultPda, platformPda, programDataAddress, readingPda, vaultAddress } from "@/lib/burnReceipts/pda";
 
 /**
  * Instruction builders. Data comes from the IDL coder; account ORDER and writable/signer flags come from the IDL too (each builder
@@ -67,6 +67,10 @@ export interface InitializeTokenArgs {
   /** Pair-forward r3 (RN-2): with pair_mint, the pair's locked voidBy as YYYYMMDD (UTC; today or later; both coins the same); 0 without.
    *  initializeTokenIx fills it from `pairVoidBy` (default 0). */
   pair_void_by?: number;
+  /** LAUNCHPAD-PATH §45 (with the end_sink account; all zero without): initializeTokenIx fills them from `endSink`. */
+  end_sink_kind?: number;
+  end_sink_mint?: PublicKey | null;
+  end_sink_min_lamports?: bigint | number;
 }
 
 /**
@@ -85,7 +89,48 @@ export interface InitializeTokenArgs {
  * both coins; once that day has ended with a coin still lacking a verified pool, unlink_pair may unpair the two. Also r3 (M-1): the
  * partner must have the SAME attester set and quorum (same keys, same order), or the second coin's initialize_token is refused.
  */
-export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; creator: PublicKey; mint: PublicKey; args: InitializeTokenArgs; launchlabPlatform?: PublicKey; pairMint?: PublicKey; partnerFirst?: boolean; pairVoidBy?: number }): TransactionInstruction {
+/**
+ * LAUNCHPAD-PATH §45: `endSink` pins the coin's end sink (endSink.ts): kind END_SINK_FLAGSHIP (sinkMint omitted) / END_SINK_MINT /
+ * END_SINK_PAIR_WINNER (sinkMint = the partner; omit it for a LaunchLab pair, where it is `pairMint`; required for a pair_curve coin), and the minimum forward_on_end moves
+ * (1,000,000–10,000,000,000 lamports: the rules' onEnd.sweepThresholdLamports). Omitted = no end sink (the hashed wind-down; the coin
+ * cannot submit_rule_end). The mainnet build refuses every end sink until its flagship is compiled in (FlagshipNotPinned).
+ */
+/**
+ * WHICH initialize_token LAYOUT (LAUNCHPAD-PATH §45, program round 4). Round 4 adds the optional `end_sink` account and three args.
+ * `#[event_cpi]` appends event_authority + program AFTER every account, so the round-4 account list (end_sink slot, then
+ * event_authority) is NOT accepted by a round-3 program (it reads the end_sink slot as event_authority: ConstraintAddress 2012), and
+ * the round-3 list is not accepted by a round-4 program. The deployed programs (mainnet and devnet, 2026-10-12) are ROUND 3, so the
+ * default is "r3": the end_sink slot is dropped and the three end-sink args are cut (a round-3 program reads its args and ignores
+ * nothing else; the bytes are exactly round 3's). "r4" is required with `endSink`, and for any create on an upgraded program.
+ * FLIP the default to "r4" once both deployments run round 4 (docs/burnticker/END-SINK.md "What flips").
+ */
+export type InitializeTokenLayout = "r3" | "r4";
+export const INITIALIZE_TOKEN_DEFAULT_LAYOUT: InitializeTokenLayout = "r3";
+/** The host flag that flips the default without a code release (the opening sets it to r4 once both deployments run round 4). */
+export const INITIALIZE_TOKEN_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
+/**
+ * The default layout on this host: BURNTICKER_INITIALIZE_TOKEN_LAYOUT ("r3" | "r4"), else INITIALIZE_TOKEN_DEFAULT_LAYOUT. Any other
+ * value is refused, so a typo can never silently send the wrong bytes.
+ */
+export function initializeTokenLayoutFromEnv(env: Readonly<Record<string, string | undefined>> = typeof process !== "undefined" ? process.env : {}): InitializeTokenLayout {
+  const v = (env[INITIALIZE_TOKEN_LAYOUT_ENV] ?? "").trim();
+  if (v === "") return INITIALIZE_TOKEN_DEFAULT_LAYOUT;
+  if (v === "r3" || v === "r4") return v;
+  throw new Error(`${INITIALIZE_TOKEN_LAYOUT_ENV} must be r3 or r4, not "${v}".`);
+}
+/** The bytes the three round-4 args take when no end sink is pinned: u8 kind 0, Option None (1 byte), u64 0. */
+const R4_EMPTY_END_SINK_ARG_BYTES = 10;
+
+export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; creator: PublicKey; mint: PublicKey; args: InitializeTokenArgs; launchlabPlatform?: PublicKey; pairMint?: PublicKey; partnerFirst?: boolean; pairVoidBy?: number; endSink?: { kind: number; sinkMint?: PublicKey; minForwardLamports: bigint | number }; layout?: InitializeTokenLayout }): TransactionInstruction {
+  const layout = o.layout ?? (o.endSink ? "r4" : initializeTokenLayoutFromEnv());
+  if (layout === "r3" && (o.endSink || o.args.end_sink_kind || o.args.end_sink_mint || o.args.end_sink_min_lamports)) throw new Error("initialize_token: an end sink needs the round-4 program (layout r4)");
+  const ix = initializeTokenIxR4(o);
+  if (layout === "r4") return ix;
+  const slot = IDL.instructions.find((i) => i.name === "initialize_token")!.accounts.findIndex((a) => a.name === "end_sink");
+  return new TransactionInstruction({ programId: ix.programId, keys: ix.keys.filter((_, i) => i !== slot), data: Buffer.from(ix.data.subarray(0, ix.data.length - R4_EMPTY_END_SINK_ARG_BYTES)) });
+}
+
+function initializeTokenIxR4(o: Parameters<typeof initializeTokenIx>[0]): TransactionInstruction {
   return build(o.programId, "initialize_token", {
     payer: o.payer,
     creator: o.creator,
@@ -96,7 +141,17 @@ export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; c
     // r2 L-3: the partner's PairLink address always rides with pairMint (empty when this coin is first).
     ...(o.pairMint ? { pair_mint: o.pairMint, pair_link: pairLinkPda(o.programId, o.mint), partner_link: pairLinkPda(o.programId, o.pairMint) } : {}),
     ...(o.pairMint && o.partnerFirst ? { partner_config: configPda(o.programId, o.pairMint) } : {}),
-  }, { args: { ...o.args, pair_void_by: o.pairVoidBy ?? o.args.pair_void_by ?? 0 } });
+    ...(o.endSink ? { end_sink: endSinkPda(o.programId, o.mint) } : {}),
+  }, {
+    args: {
+      ...o.args,
+      pair_void_by: o.pairVoidBy ?? o.args.pair_void_by ?? 0,
+      end_sink_kind: o.endSink?.kind ?? o.args.end_sink_kind ?? 0,
+      // an Option on chain: null = none (FLAGSHIP; PAIR_WINNER with pairMint = the partner) — 31 bytes fewer in the create
+      end_sink_mint: o.endSink ? o.endSink.sinkMint ?? null : o.args.end_sink_mint ?? null,
+      end_sink_min_lamports: BigInt(o.endSink?.minForwardLamports ?? o.args.end_sink_min_lamports ?? 0),
+    },
+  });
 }
 
 /**

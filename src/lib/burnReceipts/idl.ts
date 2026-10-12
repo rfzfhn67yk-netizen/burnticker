@@ -187,6 +187,7 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         },
         {
           "name": "partner_config",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -198,6 +199,36 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
                   102,
                   105,
                   103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "partner_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "partner_link",
+          "docs": [
+            "P3-2: the partner's PairLink records the same set."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  105,
+                  114,
+                  95,
+                  108,
+                  105,
+                  110,
+                  107
                 ]
               },
               {
@@ -1699,6 +1730,227 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "forward_on_end",
+      "discriminator": [
+        204,
+        229,
+        195,
+        116,
+        92,
+        218,
+        186,
+        209
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_wsol",
+          "writable": true
+        },
+        {
+          "name": "end_sink",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  100,
+                  95,
+                  115,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rule_end",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  117,
+                  108,
+                  101,
+                  95,
+                  101,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "target_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "target_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_fee_wsol",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "memo_program",
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "sink_config",
+          "docs": [
+            "(blind review H-1: a named coin that never launched): then the sink is not live and the fuel goes to the flagship."
+          ],
+          "optional": true
+        },
+        {
+          "name": "pair_link",
+          "optional": true
+        },
+        {
+          "name": "pair_result",
+          "optional": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "forward_to_winner",
       "docs": [
         "LAUNCHPAD-PATH §40: the loser's fuel for the period → the winner's fee PDA. Permissionless, idempotent."
@@ -2193,6 +2445,11 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
               }
             ]
           }
+        },
+        {
+          "name": "end_sink",
+          "writable": true,
+          "optional": true
         },
         {
           "name": "event_authority"
@@ -3332,6 +3589,143 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "submit_rule_end",
+      "discriminator": [
+        215,
+        253,
+        160,
+        195,
+        20,
+        96,
+        187,
+        191
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "end_sink",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  100,
+                  95,
+                  115,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rule_end",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  117,
+                  108,
+                  101,
+                  95,
+                  101,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "record_date",
+          "type": "u32"
+        },
+        {
+          "name": "outcome",
+          "type": "u8"
+        },
+        {
+          "name": "source_url_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "proof_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "unlink_pair",
       "docs": [
         "pair-forward blind review M-2: undo a pairing on on-chain evidence that one coin can never be live. Permissionless."
@@ -3567,6 +3961,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
   ],
   "accounts": [
     {
+      "name": "EndSink",
+      "discriminator": [
+        38,
+        81,
+        147,
+        224,
+        87,
+        147,
+        145,
+        197
+      ]
+    },
+    {
       "name": "FeeKeyRecord",
       "discriminator": [
         46,
@@ -3629,6 +4036,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         201,
         134,
         113
+      ]
+    },
+    {
+      "name": "RuleEnd",
+      "discriminator": [
+        168,
+        113,
+        143,
+        14,
+        96,
+        13,
+        201,
+        26
       ]
     },
     {
@@ -3777,6 +4197,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "EndSinkPinned",
+      "discriminator": [
+        113,
+        187,
+        38,
+        253,
+        145,
+        203,
+        249,
+        242
+      ]
+    },
+    {
       "name": "FeeKeyRegistered",
       "discriminator": [
         144,
@@ -3787,6 +4220,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         147,
         138,
         81
+      ]
+    },
+    {
+      "name": "ForwardedOnEnd",
+      "discriminator": [
+        20,
+        157,
+        72,
+        16,
+        188,
+        252,
+        189,
+        158
       ]
     },
     {
@@ -4047,6 +4493,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         117,
         191,
         39
+      ]
+    },
+    {
+      "name": "RuleEnded",
+      "discriminator": [
+        246,
+        117,
+        240,
+        134,
+        144,
+        23,
+        52,
+        159
       ]
     },
     {
@@ -4589,6 +5048,56 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6099,
       "name": "PairPeriodUnpaired",
       "msg": "pair result: the period predates the pairing (readings already existed when the coins were paired)"
+    },
+    {
+      "code": 6100,
+      "name": "InvalidEndSink",
+      "msg": "end sink: invalid kind, sink mint or minimum (league sets are not supported yet; the flagship has no end sink)"
+    },
+    {
+      "code": 6101,
+      "name": "FlagshipNotPinned",
+      "msg": "end sink: this build pins no flagship (BURNTICKER_FLAGSHIP is the placeholder)"
+    },
+    {
+      "code": 6102,
+      "name": "RuleEnded",
+      "msg": "the coin's rule has ended (no new end; after a resolved end, no reading dated later)"
+    },
+    {
+      "code": 6103,
+      "name": "InvalidRuleEnd",
+      "msg": "submit_rule_end: the end date must be a valid date, not in the future, on or after the last reading; outcome resolved or void"
+    },
+    {
+      "code": 6104,
+      "name": "ForwardOnEndRequired",
+      "msg": "the coin's rule ended resolved: its fuel goes to its end sink (forward_on_end)"
+    },
+    {
+      "code": 6105,
+      "name": "NotEndedResolved",
+      "msg": "forward_on_end: the coin's rule has not ended resolved"
+    },
+    {
+      "code": 6106,
+      "name": "EndReadingsPending",
+      "msg": "forward_on_end: a reading inside the window is still unprocessed"
+    },
+    {
+      "code": 6107,
+      "name": "EndSinkMismatch",
+      "msg": "forward_on_end: the target is not the coin's end sink (or the flagship when the sink is not live)"
+    },
+    {
+      "code": 6108,
+      "name": "NothingToForward",
+      "msg": "forward_on_end: less than the end sink's minimum to forward"
+    },
+    {
+      "code": 6109,
+      "name": "FlagshipNotLive",
+      "msg": "forward_on_end: the flagship has no verified pool"
     }
   ],
   "types": [
@@ -4894,6 +5403,91 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "EndSink",
+      "docs": [
+        "LAUNCHPAD-PATH §45: where a RESOLVED coin's remaining fuel (and any later fee trickle) goes — pinned once at initialize_token,",
+        "never changed. [\"end_sink\", mint]."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "sink_kind",
+            "docs": [
+              "END_SINK_FLAGSHIP / _MINT / _LEAGUE_SET (reserved) / _PAIR_WINNER."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "sink_mint",
+            "docs": [
+              "FLAGSHIP: BURNTICKER_FLAGSHIP at init; MINT: the named coin; PAIR_WINNER: the partner coin."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "min_forward_lamports",
+            "docs": [
+              "forward_on_end moves nothing smaller than this (the rules' onEnd.sweepThresholdLamports)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "EndSinkPinned",
+      "docs": [
+        "LAUNCHPAD-PATH §45: initialize_token pinned the coin's end sink."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "sink_kind",
+            "type": "u8"
+          },
+          {
+            "name": "sink_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "min_forward_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "FeeKeyRecord",
       "docs": [
         "LAUNCHPAD-PATH §35: the coin's permanent LP lock (Raydium's CPMM lock program) and its Fee Key, held by the FEE_KEYS PDA.",
@@ -5035,6 +5629,55 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "ForwardedOnEnd",
+      "docs": [
+        "LAUNCHPAD-PATH §45: a resolved coin's fuel moved to its end sink's fee PDA (or the flagship's when the sink was not live)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "to_mint",
+            "docs": [
+              "Where it went."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "intended_mint",
+            "docs": [
+              "The sink the coin's EndSink named for this end (the flagship for kind 0, or for a pair partner that did not win the final period)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "sink_kind",
+            "type": "u8"
+          },
+          {
+            "name": "lamports",
+            "type": "u64"
+          },
+          {
+            "name": "sol_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "wsol_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "ForwardedToWinner",
       "docs": [
         "LAUNCHPAD-PATH §40: the loser's fuel for a period moved to the winner's fee PDA (lamports = sol_lamports + wsol_lamports)."
@@ -5169,6 +5812,28 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
               "date) — once that day has ended with a coin still lacking a verified pool, unlink_pair may unpair the two. 0 without pair_mint."
             ],
             "type": "u32"
+          },
+          {
+            "name": "end_sink_kind",
+            "docs": [
+              "LAUNCHPAD-PATH §45 — with the `end_sink` account: END_SINK_FLAGSHIP / _MINT / _PAIR_WINNER (_LEAGUE_SET is refused for now),",
+              "the named coin (MINT: required; PAIR_WINNER: None = the pair_mint named in this instruction, required for a pair_curve coin;",
+              "FLAGSHIP: None or the flagship — an Option so a LaunchLab pair's create still fits one 1,232-byte transaction), and the minimum",
+              "forward_on_end moves",
+              "(1,000,000–10,000,000,000 lamports: the rules' onEnd.sweepThresholdLamports). All zero without the account (a coin without an",
+              "end sink keeps the hashed wind-down at its end and cannot submit_rule_end)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "end_sink_mint",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "end_sink_min_lamports",
+            "type": "u64"
           }
         ]
       }
@@ -6247,6 +6912,137 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "RuleEnd",
+      "docs": [
+        "LAUNCHPAD-PATH §45: the quorum-signed end of a coin's rule. [\"rule_end\", mint]; written once by submit_rule_end; forward_on_end",
+        "keeps the running totals."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "type": "u32"
+          },
+          {
+            "name": "outcome",
+            "docs": [
+              "END_STATE_RESOLVED / END_STATE_VOID."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "signers_mask",
+            "type": "u8"
+          },
+          {
+            "name": "source_url_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "submitted_at",
+            "type": "i64"
+          },
+          {
+            "name": "forwarded_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "forwards",
+            "type": "u32"
+          },
+          {
+            "name": "last_forward_at",
+            "type": "i64"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RuleEnded",
+      "docs": [
+        "LAUNCHPAD-PATH §45: the coin's rule ended (outcome END_STATE_RESOLVED or END_STATE_VOID), signed by its attester quorum."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "type": "u32"
+          },
+          {
+            "name": "outcome",
+            "type": "u8"
+          },
+          {
+            "name": "signers_mask",
+            "type": "u8"
+          },
+          {
+            "name": "source_url_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "submitter",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "RuleParams",
       "docs": [
         "The burn rule, fixed at init and never writable afterwards (no instruction takes a `&mut RuleParams`).",
@@ -6791,11 +7587,25 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
             "type": "i64"
           },
           {
+            "name": "end_state",
+            "docs": [
+              "LAUNCHPAD-PATH §45: END_STATE_LIVE / _RESOLVED / _VOID, set once by submit_rule_end (only for a coin with an EndSink)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "end_date",
+            "docs": [
+              "The RuleEnd's record_date (YYYYMMDD; 0 while live). After a RESOLVED end no reading may be dated later."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                6
+                1
               ]
             }
           }
@@ -6922,6 +7732,78 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
   ],
   "constants": [
     {
+      "name": "END_ATTESTATION_DOMAIN",
+      "docs": [
+        "The rule-end attestation domain."
+      ],
+      "type": "string",
+      "value": "\"BURNRECEIPTS-END-v1\""
+    },
+    {
+      "name": "END_FORWARD_MIN_LAMPORTS_CEIL",
+      "type": "u64",
+      "value": "10000000000"
+    },
+    {
+      "name": "END_FORWARD_MIN_LAMPORTS_FLOOR",
+      "docs": [
+        "EndSink.min_forward_lamports bounds (the rules' onEnd.sweepThresholdLamports range): forward_on_end moves nothing smaller."
+      ],
+      "type": "u64",
+      "value": "1000000"
+    },
+    {
+      "name": "END_SINK_FLAGSHIP",
+      "docs": [
+        "EndSink.sink_kind: the platform flagship (BURNTICKER_FLAGSHIP) / a named coin / a league set's attested champion (field reserved;",
+        "initialize_token refuses it until league sets land) / the coin's pair partner when the partner won the final period."
+      ],
+      "type": "u8",
+      "value": "0"
+    },
+    {
+      "name": "END_SINK_LEAGUE_SET",
+      "type": "u8",
+      "value": "2"
+    },
+    {
+      "name": "END_SINK_MINT",
+      "type": "u8",
+      "value": "1"
+    },
+    {
+      "name": "END_SINK_PAIR_WINNER",
+      "type": "u8",
+      "value": "3"
+    },
+    {
+      "name": "END_SINK_SEED",
+      "docs": [
+        "EndSink [\"end_sink\", mint] — where a resolved coin's remaining fuel goes, pinned at initialize_token (immutable)."
+      ],
+      "type": "bytes",
+      "value": "[101, 110, 100, 95, 115, 105, 110, 107]"
+    },
+    {
+      "name": "END_STATE_LIVE",
+      "docs": [
+        "TokenConfig.end_state: the rule is live / ended RESOLVED (season over, one-shot resolved YES or NO) / ended VOID (market voided,",
+        "no award, cancelled season). RuleEnd.outcome uses the same two end values."
+      ],
+      "type": "u8",
+      "value": "0"
+    },
+    {
+      "name": "END_STATE_RESOLVED",
+      "type": "u8",
+      "value": "1"
+    },
+    {
+      "name": "END_STATE_VOID",
+      "type": "u8",
+      "value": "2"
+    },
+    {
       "name": "OUTCOME_FORWARDED",
       "docs": [
         "LAUNCHPAD-PATH §40 (winner takes the burn): the coin LOST this period's pair result; forward_to_winner moved the fuel it would",
@@ -7041,6 +7923,14 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "name": "PAIR_WITNESS_PAIR_CURVE",
       "type": "u8",
       "value": "1"
+    },
+    {
+      "name": "RULE_END_SEED",
+      "docs": [
+        "RuleEnd [\"rule_end\", mint] — the quorum-signed end of a coin's rule (submit_rule_end)."
+      ],
+      "type": "bytes",
+      "value": "[114, 117, 108, 101, 95, 101, 110, 100]"
     },
     {
       "name": "UNLINK_PAIR_VOIDED",

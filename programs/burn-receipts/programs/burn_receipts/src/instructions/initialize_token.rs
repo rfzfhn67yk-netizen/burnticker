@@ -28,6 +28,15 @@ pub struct InitializeTokenArgs {
     /// Pair-forward r3 (RN-2): with pair_mint, the pair's locked voidBy (YYYYMMDD, UTC; today or later; the partner names the same
     /// date) — once that day has ended with a coin still lacking a verified pool, unlink_pair may unpair the two. 0 without pair_mint.
     pub pair_void_by: u32,
+    /// LAUNCHPAD-PATH §45 — with the `end_sink` account: END_SINK_FLAGSHIP / _MINT / _PAIR_WINNER (_LEAGUE_SET is refused for now),
+    /// the named coin (MINT: required; PAIR_WINNER: None = the pair_mint named in this instruction, required for a pair_curve coin;
+    /// FLAGSHIP: None or the flagship — an Option so a LaunchLab pair's create still fits one 1,232-byte transaction), and the minimum
+    /// forward_on_end moves
+    /// (1,000,000–10,000,000,000 lamports: the rules' onEnd.sweepThresholdLamports). All zero without the account (a coin without an
+    /// end sink keeps the hashed wind-down at its end and cannot submit_rule_end).
+    pub end_sink_kind: u8,
+    pub end_sink_mint: Option<Pubkey>,
+    pub end_sink_min_lamports: u64,
 }
 
 #[event_cpi]
@@ -71,6 +80,9 @@ pub struct InitializeToken<'info> {
     /// The partner's TokenConfig — when the partner initialized first (its pair_state becomes PAIRED).
     #[account(mut, seeds = [CONFIG_SEED, partner_config.mint.as_ref()], bump = partner_config.bump)]
     pub partner_config: Option<Box<Account<'info, TokenConfig>>>,
+    /// CHECK: LAUNCHPAD-PATH §45 — this coin's EndSink PDA ["end_sink", mint] (address-checked; created here) when it pins an end sink.
+    #[account(mut)]
+    pub end_sink: Option<UncheckedAccount<'info>>,
 }
 
 /// Review-3 M-3: (platform, cpConfigId, lock+burn scales in 10⁻⁶) read from a LaunchLab PlatformConfig and checked: the AmmConfig is
@@ -302,7 +314,9 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
     c.pair_void_by = 0;
     c.pair_after_date = 0;
     c.pair_unlinked_at = 0;
-    c.reserved = [0u8; 6];
+    c.end_state = END_STATE_LIVE;
+    c.end_date = 0;
+    c.reserved = [0u8; 1];
 
     // LAUNCHPAD-PATH §40: the partner coin (optional).
     let pairing = match ctx.accounts.pair_mint.as_ref() {
@@ -332,6 +346,24 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
         }
         None => {
             require!(args.pair_void_by == 0, BurnError::InvalidPairVoidBy);
+            None
+        }
+    };
+    // LAUNCHPAD-PATH §45: the end sink (optional; immutable once written).
+    let end_sink = match ctx.accounts.end_sink.as_ref() {
+        Some(acc) => Some(crate::instructions::end::pin_end_sink(
+            &ctx.accounts.payer.to_account_info(),
+            &acc.to_account_info(),
+            &ctx.accounts.system_program.to_account_info(),
+            &mint,
+            args.rule.mode,
+            args.rule.pool_policy,
+            ctx.accounts.pair_mint.as_ref().map(|m| m.key()),
+            &crate::instructions::end::EndSinkArgs { kind: args.end_sink_kind, sink_mint: args.end_sink_mint, min_forward_lamports: args.end_sink_min_lamports },
+            ctx.accounts.config.created_at,
+        )?),
+        None => {
+            require!(args.end_sink_kind == 0 && args.end_sink_mint.is_none() && args.end_sink_min_lamports == 0, BurnError::InvalidEndSink);
             None
         }
     };
@@ -365,6 +397,9 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
         if l.paired {
             emit_cpi!(crate::events::PairLinked { mint: l.pair_mint, pair_mint: l.mint, paired: true, witness: l.witness, pairing_deadline: 0 });
         }
+    }
+    if let Some(ev) = end_sink {
+        emit_cpi!(ev);
     }
     Ok(())
 }

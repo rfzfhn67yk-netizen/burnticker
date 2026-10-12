@@ -1114,6 +1114,18 @@ program show` must print `Authority: none`. Then set `BURNTICKER_UPGRADE_AUTHORI
 
 ---
 
+## C-pairs. Operating rules for rivalry pairs (from the 2026-10-12 round-3 re-check; in force from the creator opening)
+
+1. **A pair is linked inside its create.** The launch bundle's init_pair transaction carries link_pair; a pair whose link never landed is never
+   offered for trading. The keeper alerts on EVERY link_pair refusal (PairTerminal, PairAttestersDiffer, or any other), not only PairTerminal.
+2. **Both coins must read `pair_state = 2` before either curve can fill.** The keeper checks this each cycle while a pair is Open; if it is
+   not true, the alert "pair-not-linked" fires and the operator decides (void before the deadline, never let one side graduate alone).
+3. **A paired coin's attesters change only together with its partner's**, in one proposal applied to both coins in the same step; a
+   one-sided change is refused by the runbook and, after round 4, by the program (atomic paired rotation).
+4. **After an unlink, a period belongs to the coin's own crank.** forward_to_winner is refused once unlinked (round 4); until then the
+   keeper never calls it for an unlinked pair.
+5. **Readings for a pair are one set, one quorum.** The second signer must hold the pair's set before the quorum is raised on either coin.
+
 ## D. Rollback and abort points
 
 The rule: **nothing destructive, no key reuse.** A step that failed is left as it is. Read the chain before you retry. A mint keypair that

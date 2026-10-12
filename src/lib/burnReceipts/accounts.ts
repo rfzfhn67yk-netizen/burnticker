@@ -41,6 +41,9 @@ export interface TokenConfigAccount {
   pair_after_date: number;
   /** r3: when unlink_pair ran (0 = never). */
   pair_unlinked_at: bigint;
+  /** LAUNCHPAD-PATH §45: 0 live / 1 ended resolved / 2 ended void (endSink.ts), and the end date (0 while live). */
+  end_state: number;
+  end_date: number;
   // conveniences
   feedId: string; memoPrefix: string; memoSource: string; activeAttesters: AttesterEntry[]; adminRenounced: boolean; poolRegistered: boolean;
 }

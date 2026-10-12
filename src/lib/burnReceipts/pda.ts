@@ -82,3 +82,7 @@ export function pairResultPda(programId: PublicKey, a: PublicKey, b: PublicKey, 
   d.writeUInt32LE(recordDate);
   return PublicKey.findProgramAddressSync([Buffer.from("pair_result", "utf8"), lo.toBuffer(), hi.toBuffer(), d], programId)[0];
 }
+
+/** LAUNCHPAD-PATH §45: the coin's EndSink ["end_sink", mint] and RuleEnd ["rule_end", mint] (endSink.ts). */
+export const endSinkPda = (programId: PublicKey, mint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([Buffer.from("end_sink", "utf8"), mint.toBuffer()], programId)[0];
+export const ruleEndPda = (programId: PublicKey, mint: PublicKey): PublicKey => PublicKey.findProgramAddressSync([Buffer.from("rule_end", "utf8"), mint.toBuffer()], programId)[0];

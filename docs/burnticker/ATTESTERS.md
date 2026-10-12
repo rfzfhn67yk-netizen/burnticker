@@ -45,9 +45,22 @@ devnet the keeper key is both coins' attester). Two notes for anyone checking or
   only through `apply_paired_attester_change`: a quorum of the PARTNER's attesters signs
   `BURNRECEIPTS-PAIR-ATTESTER-CHANGE-v1|<genesis>|<program>|<mint>|<partner>|set=<sha256 of the pending set>|eta=<pending eta>`
   (`pairAttesterChangeMessage`, `pairSetHash`), packed in one Ed25519SigVerify instruction in the same transaction;
-  `apply_attester_change` refuses a paired coin (`PairedAttesterChange`). To keep the two coins on one set, propose the same set on both and
-  apply each with the other's co-signature. The keeper never rotates attesters on its own: a rotation is the operator's (Squads vault)
+  `apply_attester_change` refuses a paired coin (`PairedAttesterChange`). Since program round 4 (re-check P3-2; built, deployed with the
+  end sinks) the one apply sets the new set on BOTH coins at once and records it on both PairLinks, so a pair is never on two sets; until
+  that upgrade the runbook rule holds: change a paired coin's set only together with its partner's. The keeper never rotates attesters on its own: a rotation is the operator's (Squads vault)
   decision, run by hand with the admin CLI.
+
+The end of a coin's rule (program round 4, LAUNCHPAD-PATH §45; built, not deployed yet) is signed the same way: a quorum of the coin's
+own attesters signs one message, once per coin, and only a coin launched with an end sink can end on chain (`attestRuleEnd`,
+`ruleEndMessage` in `src/lib/burnReceipts/endSink.ts`):
+
+```
+BURNRECEIPTS-END-v1|<cluster genesis>|<program id>|<mint>|<YYYY-MM-DD>|outcome=resolved|void|src=<sha256 of the source URL>|proof=<hex>
+```
+
+Plainly: whoever holds the coin's quorum decides when its rule ended and whether it ended with a result. After a resolved end the
+program accepts no reading dated later, and anyone can move what is left to the end sink the program picks (`forward_on_end`).
+
 - **What a win needs on chain.** The two coins paired to each other, a date on or after the pairing day (`PairDateBeforePairing`) and after
   `pair_after_date` (periods read before the pairing stay unpaired: `PairPeriodUnpaired`), both
   coins' readings for the date (the keeper attests a flat 0-unit winner reading first when needed) and the loser's still unprocessed —

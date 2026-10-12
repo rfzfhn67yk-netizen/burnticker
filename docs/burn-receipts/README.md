@@ -112,6 +112,47 @@ pool is registered by `register_pair_pool` (`src/instructions/register_pair_pool
 `crank_buyback`, `check_pool_health` and the fee PDA work the same; `replace_pool` stays policy-0 only; the stranding switch cannot
 select policy 2.
 
+### End sinks — LAUNCHPAD-PATH §45 (owner decision 2026-10-11; program round 4)
+
+A coin burns only on its results inside its window. When its rule ENDS RESOLVED (season over; a one-shot resolved YES or NO), what is
+left in its fee PDA — and any fee income that arrives later — is forwarded, as a burn, to its **end sink**'s fee PDA, where that coin's
+ordinary cranks buy and burn it. When the rule ends VOID (market voided, no award, cancelled season) nothing changes: the hashed 28-day
+self-burn wind-down applies. Never a refund or a payout. (`src/instructions/end.rs`.)
+
+- **EndSink** `["end_sink", mint]`, pinned once by `initialize_token` (optional account `end_sink`; args `end_sink_kind`,
+  `end_sink_mint`, `end_sink_min_lamports`), never changed. Kinds: `END_SINK_FLAGSHIP` (the platform flagship $DEFICIT, compiled per
+  cluster as `BURNTICKER_FLAGSHIP`: mainnet `AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj`, devnet `4QnwyiBM…`), `END_SINK_MINT` (a named coin), `END_SINK_PAIR_WINNER` (the pair partner; for a LaunchLab pair it must be the
+  `pair_mint` named at init, and `end_sink_mint` may be None to mean it; a pair_curve coin names it here and is paired later), `END_SINK_LEAGUE_SET` (reserved; refused until league
+  sets land). The minimum a forward moves is 1,000,000–10,000,000,000 lamports (the rules' `onEnd.sweepThresholdLamports`). Buyback
+  coins only; the flagship itself has none (perpetual). A coin without an EndSink (launched before §45) keeps its hashed wind-down and
+  cannot end on chain.
+- **RuleEnd** `["rule_end", mint]` — `submit_rule_end(record_date, outcome, src, proof)`, permissionless with a quorum of the coin's
+  attesters over `BURNRECEIPTS-END-v1|<genesis>|<program>|<mint>|<YYYY-MM-DD>|outcome=resolved|void|src=<64hex>|proof=<64hex>`. Once per
+  coin; the date is not in the future and on or after the coin's last reading. Sets `TokenConfig.end_state` (0 live / 1 resolved /
+  2 void) and `end_date`.
+- After a **resolved** end, `submit_reading` refuses any date later than the end (`RuleEnded`) and `crank_buyback` refuses such a reading
+  (`ForwardOnEndRequired`); the result reading that ended the rule (dated on or before the end) cranks normally.
+- **forward_on_end** — permissionless (cranker allowlist while the cap is in force), after a resolved end once every reading inside the
+  window is processed (not required of a coin without a verified pool, whose readings can never crank): min(fee PDA SOL above the
+  reserve + synced WSOL, the burn-pool cap) → the destination's fee PDA (SOL first, then WSOL), refused under the minimum
+  (`NothingToForward`); callable again for the later trickle; clears the coin's carried spend; memo `<PREFIX>|endfwd|to=<12>|lamports=N|v1`
+  and event `ForwardedOnEnd`; RuleEnd keeps the totals. The program decides the destination: FLAGSHIP → the flagship; MINT → the named
+  coin while live (a verified pool, its own rule not ended, buyback), else the flagship; PAIR_WINNER → the partner only if the PairResult
+  of the end date names it winner and it is live and still paired — the same "live" as `forward_to_winner` — else the flagship. During
+  the contest a loser's fuel already moves by `forward_to_winner`; the end sink takes only the remainder. A flagship without a verified
+  pool receives nothing (`FlagshipNotLive`; the fuel waits).
+- `end_sink_mint` is an `Option<Pubkey>` (None for the flagship, or for a LaunchLab pair's partner), so a LaunchLab pair's create with its
+  EndSink account still fits one 1,232-byte transaction (the longest names measure 1,223 bytes as v0 with the lookup table).
+- **Layouts.** `#[event_cpi]` appends event_authority and the program after the new optional `end_sink` slot, so a round-4
+  `initialize_token` is refused by a round-3 program and a round-3 one by a round-4 program. The TS builder defaults to the round-3
+  bytes until both deployments run round 4 (`INITIALIZE_TOKEN_DEFAULT_LAYOUT`, `src/lib/burnReceipts/instructions.ts`); the admin CLI
+  takes `--program-round 3|4`.
+- The keeper (`src/lib/burnticker/endSinkKeeper.ts`): records the end once the coin's receipts are done; a pair coin that won the end
+  date records nothing, stays live and winds down on itself (it is the sink); the loser and single coins forward and retire; the trickle
+  follows weekly. `sweep_retired` is not built (PROGRAM-UPGRADE-QUEUE item 1).
+- Trust: whoever holds a coin's attester quorum can end it (as they can sign its readings); on Burnticker that is the operator keeper,
+  and the flagship is the operator's own coin — disclosed on the coin page.
+
 ## 2. Trust model, level by level
 
 | Level | Who can lie about the number | Who holds the money | What a stranger checks |

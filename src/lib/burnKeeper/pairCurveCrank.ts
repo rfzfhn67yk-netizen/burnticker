@@ -26,7 +26,7 @@ import { pairErrorSentence } from "@/lib/burnticker/pairForward";
  *                                       PairLinks do not name each other yet — permissionless, a no-op once paired; register_pair_pool
  *                                       refuses PairNotLinked without it (it also accepts an UNLINKED coin). Round 3: a coin that read first
  *                                       is fine (its periods so far stay unpaired, pair_after_date); refused only for a voided Pair or a
- *                                       refunding side (PairTerminal — alert `pair-link-refused`). Never for an unlinked pair. Its own transaction.
+ *                                       refunding side (PairTerminal); every refusal raises the alert `pair-link-refused` (re-check P3-1). Never for an unlinked pair. Its own transaction.
  *   a graduated side with lp_locked 0 → lock_lp; from 30 days after the commit also burn_lp (LP-lock round 2: the fallback, the only
  *                                       path that destroys LP) — and an alert `pair-side-unlocked` every cycle the side stays unlocked
  *
@@ -72,8 +72,10 @@ export function unlockedSides(pairs: readonly { address: PublicKey; pair: Pick<P
 }
 
 /**
- * Winner takes the burn: link_pair is due as soon as both mints have a TokenConfig (right after init_pair; round 2 refuses it once
- * either coin has a reading) and the two PairLinks do not already name each other as paired; never for a voided Pair. Pure.
+ * Winner takes the burn: link_pair is due as soon as both mints have a TokenConfig (since the round-3 re-check P3-1 the launch bundle
+ * sends it inside the init_pair transaction; this is the catch-up) and the two PairLinks do not already name each other as paired;
+ * never for a voided Pair or a refunding side. Round 3 accepts coins that already read (those periods stay unpaired, pair_after_date)
+ * and refuses only a terminal Pair (PairTerminal) or differing attester sets (PairAttestersDiffer). Pure.
  */
 export function linkPairDue(pair: Pick<PairAccount, "mints" | "status" | "refunding">, configs: [boolean, boolean], links: [PairLinkAccount | null, PairLinkAccount | null], unlinked = false): boolean {
   // review RL-2: never for a voided Pair, a side that is refunding (the unlink evidence), or a pair the registry records as unlinked
@@ -138,7 +140,8 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
       if (linkPairDue(pair, configs, links, unlinked)) {
         const result = await simulateAndSend(d.ctx, [linkPairIx({ programId: B, payer: d.cranker.publicKey, pair: address, mintA: pair.mints[0], mintB: pair.mints[1] })], [d.cranker], { dryRun: d.dryRun });
         d.log(`  [pair-curve] ${address.toBase58().slice(0, 8)}… link_pair: ${result.ok ? (result.signature ?? "simulated ok") : `refused — ${pairErrorSentence(result.error)}`}`);
-        if (!result.ok && result.error === "PairTerminal") d.alert?.("pair-link-refused", `pair-link-refused:${address.toBase58()}`, `pair ${address.toBase58().slice(0, 8)}…: ${pairErrorSentence(result.error)}`, { pair: address.toBase58() });
+        // re-check P3-1: EVERY refusal is an alert (PairAttestersDiffer, an outage's errors…), repeated each cycle while the pair is unlinked
+        if (!result.ok && !d.dryRun) d.alert?.("pair-link-refused", `pair-link-refused:${address.toBase58()}`, `pair ${address.toBase58().slice(0, 8)}…: ${pairErrorSentence(result.error)}`, { pair: address.toBase58() });
         (out.links ??= []).push({ pair: address.toBase58(), result });
       }
       const steps = await crankPair(d.ctx, d.cranker, address, { now, dryRun: d.dryRun, log: d.log, skipClusterCheck: true });

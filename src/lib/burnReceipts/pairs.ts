@@ -286,6 +286,8 @@ export function applyPairedAttesterChangeIx(o: { programId: PublicKey; caller: P
     config: configPda(o.programId, o.mint),
     link: pairLinkPda(o.programId, o.mint),
     partner_config: configPda(o.programId, o.partnerMint),
+    // re-check P3-2: the same set lands on the partner too, and its PairLink records it
+    partner_link: pairLinkPda(o.programId, o.partnerMint),
     instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
   }, {});
 }

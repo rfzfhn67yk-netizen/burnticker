@@ -202,3 +202,28 @@ coin's market cap may be a rule input, shown only as the rule sentence. What a r
   the pool's total supply (`src/lib/burnticker/market.ts` `curveMarketCap`, pinned against the Raydium SDK on real mainnet pools). After
   graduation the Raydium pool's reserves; until this site reads them the row shows a dash with that reason. Never an estimate.
 
+## Erratum 2026-10-12 (end sinks, LAUNCHPAD-PATH §45, program round 4)
+
+The text above and the earlier errata stay as written. Round 4 adds the end-of-rule sink; a coin launched without an EndSink (every coin
+before this round) is unchanged:
+
+- **Instruction count (item 1).** burn_receipts now has **33 entrypoints**: the 31 above plus `submit_rule_end` and `forward_on_end`. The
+  IDL, the Powers Register and the whitepaper's §13.3 list 33 (37 event types, 110 error codes).
+- **EndSink.** `initialize_token` may pin an EndSink (["end_sink", mint], never changed): the flagship ($DEFICIT, compiled per cluster as
+  `BURNTICKER_FLAGSHIP`), a named coin, or the pair winner (the partner named in the same create). League sets are refused for now. The
+  flagship itself cannot have one.
+- **RuleEnd.** `submit_rule_end` records a quorum-signed end (`BURNRECEIPTS-END-v1`, outcome resolved or void) once per coin with an
+  EndSink. After a RESOLVED end no reading dated later than the end is accepted (`RuleEnded`) or cranked (`ForwardOnEndRequired`); the
+  reading that ended the rule still cranks. A VOID end changes nothing on chain: the coin's wind-down applies.
+- **forward_on_end.** Permissionless (the cranker allowlist applies while the pre-audit cap is in force). After a resolved end, once every
+  reading inside the window is processed, it moves the fee PDA's spendable SOL and WSOL (under the burn-pool cap, at least the EndSink's
+  minimum) to the destination the program picks: the named coin while it is live, the partner only when the end date's PairResult names
+  it and the pair is still paired, otherwise the flagship. The caller chooses no amount and no destination. Callable again for the later
+  fee trickle. The coin's carried spend is cleared by the first forward.
+- **What a reviewer checks.** SOL leaves a fee PDA in three places now: `crank_buyback`, `forward_to_winner`, and `forward_on_end`; the
+  last only to another coin's fee PDA chosen by the program, and never as a refund or a payout.
+- **Pair-forward round-3 re-check, fixed in the same upgrade.** P3-1: `register_pair_pool` also admits a coin whose `link_pair` never
+  landed when the Pair shows the OTHER side refunding, and records it unlinked (a plain coin); the launch bundle sends `link_pair` in the
+  `init_pair` transaction. P3-2: `apply_paired_attester_change` sets the one new set on BOTH coins and both PairLinks in one instruction
+  (it now takes the partner's PairLink). P3-I1: `forward_to_winner` refuses `NotPaired` after an unlink, so the plain loser burns its own
+  period. The entrypoint, event and error counts above are unchanged.

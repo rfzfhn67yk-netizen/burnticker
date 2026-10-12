@@ -152,7 +152,11 @@ pub struct TokenConfig {
     pub pair_after_date: u32,
     /// Pair-forward r3: when unlink_pair ran (pair_state is then PAIR_STATE_UNLINKED); 0 = never.
     pub pair_unlinked_at: i64,
-    pub reserved: [u8; 6],
+    /// LAUNCHPAD-PATH §45: END_STATE_LIVE / _RESOLVED / _VOID, set once by submit_rule_end (only for a coin with an EndSink).
+    pub end_state: u8,
+    /// The RuleEnd's record_date (YYYYMMDD; 0 while live). After a RESOLVED end no reading may be dated later.
+    pub end_date: u32,
+    pub reserved: [u8; 1],
 }
 
 impl TokenConfig {
@@ -403,4 +407,51 @@ pub fn pair_result_address(a: &Pubkey, b: &Pubkey, record_date: u32) -> (Pubkey,
 
 pub fn pair_link_address(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(&[PAIR_LINK_SEED, mint.as_ref()], &crate::ID)
+}
+
+/// LAUNCHPAD-PATH §45: where a RESOLVED coin's remaining fuel (and any later fee trickle) goes — pinned once at initialize_token,
+/// never changed. ["end_sink", mint].
+#[account]
+#[derive(InitSpace)]
+pub struct EndSink {
+    pub version: u8,
+    pub bump: u8,
+    pub mint: Pubkey,
+    /// END_SINK_FLAGSHIP / _MINT / _LEAGUE_SET (reserved) / _PAIR_WINNER.
+    pub sink_kind: u8,
+    /// FLAGSHIP: BURNTICKER_FLAGSHIP at init; MINT: the named coin; PAIR_WINNER: the partner coin.
+    pub sink_mint: Pubkey,
+    /// forward_on_end moves nothing smaller than this (the rules' onEnd.sweepThresholdLamports).
+    pub min_forward_lamports: u64,
+    pub created_at: i64,
+    pub reserved: [u8; 32],
+}
+
+/// LAUNCHPAD-PATH §45: the quorum-signed end of a coin's rule. ["rule_end", mint]; written once by submit_rule_end; forward_on_end
+/// keeps the running totals.
+#[account]
+#[derive(InitSpace)]
+pub struct RuleEnd {
+    pub version: u8,
+    pub bump: u8,
+    pub mint: Pubkey,
+    pub record_date: u32,
+    /// END_STATE_RESOLVED / END_STATE_VOID.
+    pub outcome: u8,
+    pub signers_mask: u8,
+    pub source_url_hash: [u8; 32],
+    pub proof_hash: [u8; 32],
+    pub submitted_at: i64,
+    pub forwarded_lamports: u64,
+    pub forwards: u32,
+    pub last_forward_at: i64,
+    pub reserved: [u8; 32],
+}
+
+pub fn end_sink_address(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[END_SINK_SEED, mint.as_ref()], &crate::ID)
+}
+
+pub fn rule_end_address(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[RULE_END_SEED, mint.as_ref()], &crate::ID)
 }

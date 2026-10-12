@@ -22,6 +22,8 @@
 //!   propose_attesters / cancel_attester_change / renounce_admin    admin only (48 h timelock on proposals)
 //!   apply_attester_change  permissionless after the timelock (unpaired coins)
 //!   apply_paired_attester_change  permissionless after the timelock, a paired coin: the partner's quorum co-signs the new set
+//!   submit_rule_end        permissionless; a quorum of the coin's attesters ends its rule (resolved | void) — coins with an end sink
+//!   forward_on_end         permissionless after a RESOLVED end: the remaining fuel (and later trickle) → the end sink's fee PDA
 //!   initialize_platform    upgrade-authority-signed, once: the program-wide pre-audit burn-pool cap (sunsets automatically)
 //!   propose_cap_raise / cancel_cap_raise / renounce_platform_authority    platform authority (48 h timelock; raise only)
 //!   apply_cap_raise        permissionless after the timelock
@@ -147,6 +149,14 @@ pub mod burn_receipts {
 
     pub fn apply_paired_attester_change(ctx: Context<ApplyPairedAttesterChange>) -> Result<()> {
         instructions::admin::handle_apply_paired_attester_change(ctx)
+    }
+
+    pub fn submit_rule_end(ctx: Context<SubmitRuleEnd>, record_date: u32, outcome: u8, source_url_hash: [u8; 32], proof_hash: [u8; 32]) -> Result<()> {
+        instructions::end::handle_submit_rule_end(ctx, record_date, outcome, source_url_hash, proof_hash)
+    }
+
+    pub fn forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
+        instructions::end::handle_forward_on_end(ctx)
     }
 
     pub fn set_registration_policy(ctx: Context<RegistrationPolicyAdmin>, policy: u8, pool: Pubkey) -> Result<()> {

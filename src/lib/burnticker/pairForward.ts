@@ -188,7 +188,7 @@ const fakeSig = (label: string): string => crypto.createHash("sha256").update(la
  * amount in spentLamports, and ALWAYS writes the forward memo. unlink_pair needs `unlinkReason` (else PairStillLive).
  * Round 3: no result for a period on or before `pairAfterDate` (PairPeriodUnpaired; the gate passes it unpaired); a forward is refused
  * 72 h after the loser's reading (ForwardWindowClosed) unless it already landed; the basis leaves the loser's carried spend; an unlink
- * leaves both coins in state 3 (unlinked).
+ * leaves both coins in state 3 (unlinked), and a forward after it is refused NotPaired (re-check P3-I1).
  * Knobs: `paired`, `pairedAtSec`, `pairAfterDate`, `pairVoidBy`, `simErr`, `dropSends`, `winnerLive` (false = the winner has no verified
  * pool), `unlinkReason`.
  */
@@ -279,6 +279,7 @@ export class FakePairForwardPort implements PairForwardPort {
     const rd = loser.readings.get(b.recordDate);
     if (!rd) return "AccountNotInitialized";
     if (rd.processed) return null;   // already forwarded: a no-op
+    if (!this.paired) return "NotPaired";   // re-check P3-I1: after an unlink the loser's own crank burns the period
     if (rd.prevDate !== loser.cfg.crankCursor) return "OutOfOrder";
     // r3 RI-1: the forward window closes 72 h after the loser's reading — the period then belongs to the loser's own crank
     const at = loser.readingSubmittedAt.get(b.recordDate);

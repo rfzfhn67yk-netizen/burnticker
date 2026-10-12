@@ -96,6 +96,11 @@ export class FakeProgram implements ProgramPort {
   /** Round 2: the PairForwardMissing / PairResultMissing events the crank gate emitted (a lost or result-less period cranked unpaired after 72 h). */
   pairEvents: { name: "PairForwardMissing" | "PairResultMissing"; recordDate: number }[] = [];
   readingSubmittedAt = new Map<number, number>();
+  /**
+   * END SINKS (LAUNCHPAD-PATH §45; installed by src/lib/burnticker/endSinkClient.ts's fake): after a RESOLVED end no reading dated
+   * later than the end lands (RuleEnded) and no such reading cranks (ForwardOnEndRequired); a VOID end changes nothing here.
+   */
+  endState: { state: "live" | "resolved" | "void"; date: number } = { state: "live", date: 0 };
 
   constructor(i: FakeProgramInit) {
     this.programId = i.programId ?? "BurnReceiptsFakeProgram11111111111111111111";
@@ -191,6 +196,7 @@ export class FakeProgram implements ProgramPort {
     const have = this.readings.get(p.recordDate);
     if (have) return have.value === p.value ? { memo: null } : { err: "ConflictingReading" };
     if (c.hasBaseline && p.recordDate <= c.lastRecordDate) return { err: "StaleReading" };
+    if (this.endState.state === "resolved" && p.recordDate > this.endState.date) return { err: "RuleEnded" };
     const signedPrev = c.hasBaseline ? c.lastRecordDate : 0;
     const slots = p.prevDate === signedPrev ? c.attesters.map((a, i) => (p.keys.includes(a.key) ? 1 << i : 0)).reduce((x, y) => x | y, 0) : 0;
     const counted = slots.toString(2).replace(/0/g, "").length;
@@ -241,6 +247,7 @@ export class FakeProgram implements ProgramPort {
     }
     if (this.cfg.mode !== "buyback") return { err: "WrongMode" };
     if (!this.cfg.poolRegistered) return { err: "PoolNotRegistered" };
+    if (this.endState.state === "resolved" && D > this.endState.date) return { err: "ForwardOnEndRequired" };
     const g = this.pairGate ? this.pairGate(D, this.readingSubmittedAt.get(D) ?? null) : null;
     if (g === "lost") return { err: "ForwardRequired" };
     if (g === "pending") return { err: "PairResultPending" };

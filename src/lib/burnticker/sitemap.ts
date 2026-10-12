@@ -29,6 +29,9 @@ export const STATIC_PAGES: { path: string; changefreq: SitemapEntry["changefreq"
   { path: "/burnticker/not-burnticker", changefreq: "daily", priority: 0.5 },
   { path: "/burnticker/fees/ledger", changefreq: "weekly", priority: 0.4 },
   { path: "/burnticker/operator", changefreq: "monthly", priority: 0.4 },
+  // polish-1: the terms and privacy pages
+  { path: "/burnticker/terms", changefreq: "monthly", priority: 0.3 },
+  { path: "/burnticker/privacy", changefreq: "monthly", priority: 0.3 },
 ];
 export const DOC_PAGES: string[] = ["/burnticker/docs", "/whitepaper.html", "/api/burnticker/v1/openapi.json"];
 

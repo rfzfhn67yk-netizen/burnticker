@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID as PID, CPMM_PROGRAM_ID, LAUNCHLAB_PROGRAM_ID, LOCALNET_GENESIS_TAG, LOCK_CPMM_AUTHORITY, NATIVE_MINT, TOKEN_PROGRAM_ID } from "../src/lib/burnReceipts/constants.ts";
-import { configPda, feePda, associatedTokenAddress, cpmmAuthority, launchlabPoolPda, vaultAddress } from "../src/lib/burnReceipts/pda.ts";
+import { configPda, feePda, feeKeysPda, associatedTokenAddress, cpmmAuthority, launchlabPoolPda, vaultAddress } from "../src/lib/burnReceipts/pda.ts";
 import { createAtaIdempotentIx, operatorAttester, initializePlatformIx, initializeTokenIx } from "../src/lib/burnReceipts/instructions.ts";
 import { confirmByPolling, crankAll, crankNext, type ProgramContext, registerPool, submitAttestedReading } from "../src/lib/burnReceipts/crank.ts";
 import { fetchReading, fetchTokenConfig } from "../src/lib/burnReceipts/accounts.ts";
@@ -21,6 +21,8 @@ import type { CosignRequest } from "../src/lib/burnticker/attesters/cosign.ts";
 import { buildBurnsJson, buildStatus } from "../src/lib/burnKeeper/statusPage.ts";
 import { rulesFromText, usdToCents, type LoadedRules } from "../src/lib/burnKeeper/rules.ts";
 import type { DebtReading } from "../src/lib/burnKeeper/feeds/treasury.ts";
+import { END_SINK_FLAGSHIP, FLAGSHIP_MINT, forwardOnEndIx } from "../src/lib/burnReceipts/endSink.ts";
+import { ChainEndSink } from "../src/lib/burnticker/endSinkChain.ts";
 
 /**
  * END-TO-END ON A LOCAL VALIDATOR, through the TypeScript client only (the keeper's path): a fresh solana-test-validator loads
@@ -36,7 +38,11 @@ const ROOT = path.join(import.meta.dirname, "..", "programs", "burn-receipts");
 // Review-3 I-1: the validator runs the `--features localnet` build (its signed messages bind the localnet tag, never mainnet's genesis;
 // the client refuses to sign mainnet-bound messages off mainnet). Built by `anchor test` (scripts/test.sh) or:
 //   cargo-build-sbf --manifest-path programs/burn-receipts/programs/burn_receipts/Cargo.toml --features localnet --sbf-out-dir programs/burn-receipts/target/deploy-localnet
-const SO = path.join(ROOT, "target", "deploy-localnet", "burn_receipts.so");
+// BURN_RECEIPTS_LOCALNET_SO points the validator at another build — e.g. the DEPLOYED (round-3) source's localnet build, to show this
+// client's initialize_token (the round-4 end-sink args and the omitted end_sink slot appended) still lands on the program before the upgrade.
+const SO = process.env.BURN_RECEIPTS_LOCALNET_SO ?? path.join(ROOT, "target", "deploy-localnet", "burn_receipts.so");
+/** The initialize_token layout of that build: round 4 for this source's build; BURN_RECEIPTS_LOCALNET_LAYOUT=r3 for a round-3 build. */
+const LAYOUT: "r3" | "r4" = process.env.BURN_RECEIPTS_LOCALNET_LAYOUT === "r3" ? "r3" : "r4";
 // Re-check R3-6: only scripts/test.sh (`anchor test` in programs/burn-receipts) produces target/deploy-localnet — say so when skipping.
 const BUILD_FIRST = "run `anchor test` (programs/burn-receipts/scripts/test.sh) first: it builds target/deploy-localnet/burn_receipts.so";
 const SKIP: string | false = !RUN
@@ -76,7 +82,11 @@ let ledger = "";
 const upgradeAuthority = Keypair.generate();
 /** The buyback tests' mints are deterministic, so LaunchLab's side of their migrations can be preloaded into the validator (review-2 F5). */
 const BUYBACK_MINTS = [11, 13, 14].map((b) => Keypair.fromSeed(new Uint8Array(32).fill(b)));
-const LL_PLATFORM = Keypair.fromSeed(new Uint8Array(32).fill(12)).publicKey;
+/** LAUNCHPAD-PATH §45: the localnet build's flagship (test-pins: the ed25519 keypair seeded with 0x46 × 32), preloaded like the others. */
+const FLAGSHIP = Keypair.fromSeed(new Uint8Array(32).fill(0x46));
+// The localnet build (localnet → test-pins) compiles BURNTICKER_PLATFORM = [0x5a; 32] (constants.rs): initialize_token refuses any other
+// LaunchLab platform for policy 0 (PlatformNotAllowed since the LP-lock r2 platform pin), so the preloaded platform lives there.
+const LL_PLATFORM = new PublicKey(new Uint8Array(32).fill(0x5a));
 const AMM0 = PublicKey.findProgramAddressSync([Buffer.from("amm_config"), Buffer.from([0, 0])], CPMM_PROGRAM_ID.localnet)[0];
 
 /** LaunchLab's pool (["pool", mint, WSOL]: creator = fee PDA, platform, migrate type CPMM) and platform (cpConfigId = AmmConfig 0),
@@ -87,9 +97,12 @@ function launchlabAccountFiles(dir: string): string[] {
   const platformData = Buffer.alloc(944);
   AMM0.toBuffer().copy(platformData, 688);
   // LP lock/burn scales (platform, creator, burn; 10⁻⁶) — initialize_token pins them (review-3 M-3); platformCpCreator @800 stays unset.
-  [500_000, 400_000, 100_000].forEach((v, i) => platformData.writeBigUInt64LE(BigInt(v), 80 + 8 * i));
+  // LAUNCHPAD-PATH §35 (policy 0): the platform locks 100 % of the LP (1,000,000 / 0 / 0) and sends the Fee Key to the FEE_KEYS PDA
+  // (platformLockNftWallet @48), or initialize_token refuses PlatformNotAllowed.
+  [1_000_000, 0, 0].forEach((v, i) => platformData.writeBigUInt64LE(BigInt(v), 80 + 8 * i));
+  feeKeysPda(PID).toBuffer().copy(platformData, 48);
   const accounts: [PublicKey, Buffer][] = [[LL_PLATFORM, platformData]];
-  for (const m of BUYBACK_MINTS) {
+  for (const m of [...BUYBACK_MINTS, FLAGSHIP]) {
     const poolData = Buffer.alloc(429);
     poolData[20] = 1;
     LL_PLATFORM.toBuffer().copy(poolData, 173);
@@ -151,7 +164,7 @@ async function initToken(mint: Keypair, attester: Keypair | Keypair[], r: RulePa
   const attesters = (Array.isArray(attester) ? attester : [attester]).map((k) => operatorAttester(k.publicKey));
   // Buyback + policy 0 pins the (preloaded) LaunchLab platform at init (review-3 M-3).
   const launchlabPlatform = r.mode === 0 && r.pool_policy === 0 ? LL_PLATFORM : undefined;
-  await send([initializeTokenIx({ programId: PID, payer: payer.publicKey, creator: payer.publicKey, mint: mint.publicKey, launchlabPlatform, args: {
+  await send([initializeTokenIx({ programId: PID, payer: payer.publicKey, creator: payer.publicKey, mint: mint.publicKey, launchlabPlatform, layout: LAYOUT, args: {
     feed_id: "treasury.debt_to_penny", memo_prefix: "DEBT", memo_source: "fiscaldata.treasury.gov debt_to_penny", rules_sha256: rulesSha256, rule: r,
     attesters, quorum, fixed_pool: PublicKey.default, admin: payer.publicKey,
   } })], [payer, mint]);
@@ -296,7 +309,7 @@ describe("burn_receipts on a local validator (TypeScript client end to end)", { 
     await submitAttestedReading(ctx, { payer, recordDate: 20260901, value: V1, attesters: att, sourceUrl: TREASURY_URL });
     await submitAttestedReading(ctx, { payer, recordDate: 20260902, value: V1 + B(21) * UNIT, attesters: att, sourceUrl: TREASURY_URL });
     assert.equal((await crankNext(ctx, payer)).status, "waiting-for-pool");
-    assert.equal((await registerPool(ctx, payer, pool)).ok, true);
+    { const rp = await registerPool(ctx, payer, pool); assert.equal(rp.ok, true, `register_pool: ${rp.error}`); }
 
     // Creator fees arrive in the fee PDA (SOL).
     await send([SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: fee, lamports: 10 * LAMPORTS_PER_SOL })], [payer]);
@@ -424,6 +437,74 @@ describe("burn_receipts on a local validator (TypeScript client end to end)", { 
     assert.equal(rd.burned, B(2_100_000) * TOKEN);
   });
 
+  // ---- END SINKS (LAUNCHPAD-PATH §45, program round 4) through the keeper's chain client (src/lib/burnticker/endSinkChain.ts) ----------
+  test("END SINKS: an EndSink pinned at initialize_token → quorum-signed RESOLVED end (once) → later readings refused → forward_on_end refuses a flagship that is not live and any other target; a VOID end forwards nothing and keeps readings", { skip: LAYOUT === "r3" && "a round-3 build has no end sinks" }, async () => {
+    assert.ok(FLAGSHIP.publicKey.equals(FLAGSHIP_MINT.localnet), "the localnet build compiles this flagship");
+    const att = Keypair.generate(), attK = [{ publicKey: att.publicKey, secretKey: att.secretKey }];
+    // the platform (cap 25 SOL) — created by the buyback test when it ran first
+    if (!(await connection.getAccountInfo(PublicKey.findProgramAddressSync([Buffer.from("platform")], PID)[0]))) {
+      await airdrop(upgradeAuthority.publicKey, 1);
+      await send([initializePlatformIx({ programId: PID, payer: payer.publicKey, upgradeAuthority: upgradeAuthority.publicKey, authority: payer.publicKey, burnPoolCapLamports: B(25_000_000_000), capSunsetTs: B(Math.floor(Date.now() / 1000) + 30 * 86_400) })], [payer, upgradeAuthority]);
+    }
+    // the flagship: a plain coin (no end sink). Its pool cannot be verified on this validator (register_pool needs the LP in Raydium's
+    // lock program since LAUNCHPAD-PATH §35, which is not loaded here), so it is NOT live: forward_on_end must refuse FlagshipNotLive.
+    // The landed forward (SOL and WSOL legs, the cap, the minimum, the trickle) is covered in the LiteSVM suite (tests/end_sink.rs).
+    await initToken(FLAGSHIP, att, rule({}));
+    // two coins that pin a FLAGSHIP end sink (minimum 0.01 SOL); never graduated (no pool), so their readings need no crank first
+    const mkCoin = async (): Promise<Keypair> => {
+      const m = Keypair.generate();
+      await send([initializeTokenIx({ programId: PID, payer: payer.publicKey, creator: payer.publicKey, mint: m.publicKey, launchlabPlatform: LL_PLATFORM, endSink: { kind: END_SINK_FLAGSHIP, minForwardLamports: B(10_000_000) }, args: {
+        feed_id: "treasury.debt_to_penny", memo_prefix: "ENDX", memo_source: "end sink localnet", rules_sha256: new Uint8Array(32).fill(0xcd), rule: rule({}),
+        attesters: [operatorAttester(att.publicKey)], quorum: 1, fixed_pool: PublicKey.default, admin: payer.publicKey,
+      } })], [payer, m]);
+      const ctx: ProgramContext = { connection, programId: PID, mint: m.publicKey, cluster: "localnet" };
+      const V1 = B("4027300000000000");
+      assert.equal((await submitAttestedReading(ctx, { payer, recordDate: 20260901, value: V1, attesters: attK, sourceUrl: TREASURY_URL })).status, "submitted");
+      assert.equal((await submitAttestedReading(ctx, { payer, recordDate: 20260902, value: V1 + B(3) * UNIT, attesters: attK, sourceUrl: TREASURY_URL })).status, "submitted");
+      await send([SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: feePda(PID, m.publicKey), lamports: 2 * LAMPORTS_PER_SOL })], [payer]);
+      return m;
+    };
+    const client = new ChainEndSink({ connection, programId: PID, cluster: "localnet", payer, attesters: [att] });
+    const land = async (port: ReturnType<typeof client.port>, tx: { signature: string; raw: Uint8Array; blockhash: string; lastValidBlockHeight: number }) => {
+      const sim = await port.simulate(tx.raw);
+      assert.equal(sim.err, null, sim.logs.join("\n"));
+      await port.send(tx.raw);
+      assert.equal((await port.confirm(tx)).status, "confirmed");
+    };
+    // RESOLVED
+    const x = await mkCoin(), px = client.port(x.publicKey.toBase58());
+    assert.deepEqual(await px.endSink(), { kind: "flagship", sinkMint: FLAGSHIP.publicKey.toBase58(), minForwardLamports: B(10_000_000) });
+    assert.equal((await px.planForward()).status, "not-ended");
+    const endTx = await px.buildRuleEnd({ recordDate: 20260902, outcome: "resolved", sourceUrl: "burnticker://ENDX/end/2026-09-02?outcome=resolved" });
+    assert.match(endTx.message, /^BURNRECEIPTS-END-v1\|.*\|2026-09-02\|outcome=resolved\|src=[0-9a-f]{64}\|proof=0{64}$/);
+    await land(px, endTx);
+    const re = (await px.ruleEnd())!;
+    assert.deepEqual([re.outcome, re.recordDate, re.forwards], ["resolved", 20260902, 0]);
+    const cfg = (await fetchTokenConfig(connection, PID, x.publicKey))!.config;
+    assert.deepEqual([cfg.end_state, cfg.end_date], [1, 20260902]);
+    // a second end, and any reading after a resolved end, are refused
+    const again = await px.buildRuleEnd({ recordDate: 20260902, outcome: "void", sourceUrl: "burnticker://ENDX/end/2026-09-02?outcome=void" });
+    assert.notEqual((await px.simulate(again.raw)).err, null);
+    const late = await submitAttestedReading({ connection, programId: PID, mint: x.publicKey, cluster: "localnet" }, { payer, recordDate: 20260903, value: B("4027300000000000") + B(4) * UNIT, attesters: attK, sourceUrl: TREASURY_URL });
+    assert.deepEqual([late.status, late.error], ["refused", "RuleEnded"]);
+    // the forward: the destination is the flagship, which is not live here — the client says so, and the program refuses it
+    assert.equal((await px.planForward()).status, "flagship-not-live");
+    assert.equal(await px.spendableLamports(), B(2) * B(LAMPORTS_PER_SOL), "2 SOL above the reserve");
+    const fFee = feePda(PID, FLAGSHIP.publicKey);
+    await assert.rejects(send([createAtaIdempotentIx({ payer: payer.publicKey, owner: fFee, mint: NATIVE_MINT, ata: associatedTokenAddress(fFee, NATIVE_MINT) }), forwardOnEndIx({ programId: PID, cranker: payer.publicKey, mint: x.publicKey, target: FLAGSHIP.publicKey })], [payer]), /custom program error: 0x17dd/);
+    assert.equal(await px.spendableLamports(), B(2) * B(LAMPORTS_PER_SOL), "nothing moved");
+    // a forward aimed anywhere else is refused too (the destination is the program's, never the caller's)
+    const stranger = await mkCoin();
+    await assert.rejects(send([createAtaIdempotentIx({ payer: payer.publicKey, owner: feePda(PID, stranger.publicKey), mint: NATIVE_MINT, ata: associatedTokenAddress(feePda(PID, stranger.publicKey), NATIVE_MINT) }), forwardOnEndIx({ programId: PID, cranker: payer.publicKey, mint: x.publicKey, target: stranger.publicKey })], [payer]), /custom program error: 0x17db/);
+    // VOID: recorded, nothing forwards, readings go on (the wind-down)
+    const y = await mkCoin(), py = client.port(y.publicKey.toBase58());
+    await land(py, await py.buildRuleEnd({ recordDate: 20260902, outcome: "void", sourceUrl: "burnticker://ENDX/end/2026-09-02?outcome=void" }));
+    assert.equal((await py.ruleEnd())!.outcome, "void");
+    assert.equal((await py.planForward()).status, "void");
+    const after = await submitAttestedReading({ connection, programId: PID, mint: y.publicKey, cluster: "localnet" }, { payer, recordDate: 20260903, value: B("4027300000000000") + B(4) * UNIT, attesters: attK, sourceUrl: TREASURY_URL });
+    assert.equal(after.status, "submitted", "a void end keeps the wind-down's readings");
+  });
+
   // signer-2 (2026-10-12): the keeper holds ONE key; the second key lives with the second signer, which recomputes each reading (here
   // from the same two Treasury rows) and co-signs only on agreement — the keeper carries its signature in the one Ed25519 instruction.
   test("KEEPER + SECOND SIGNER, quorum 2: the co-signed readings land with both bits set; a disagreement holds the day and sends nothing", async () => {
@@ -465,7 +546,7 @@ describe("burn_receipts on a local validator (TypeScript client end to end)", { 
     await airdrop(cliPayer.publicKey, 2);
     const cli = (extra: string[]) => spawnSync(process.execPath, ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--import", "./test/alias-hook.mjs", "scripts/burnreceipts-admin.mts", "initialize-token",
       "--cluster", "localnet", "--rpc", connection.rpcEndpoint, "--program", PID.toBase58(), "--admin", payer.publicKey.toBase58(), "--attester", attester.publicKey.toBase58(),
-      "--launchlab-platform", LL_PLATFORM.toBase58(), "--rules", "config/burnkeeper/deficit.rules.json", ...extra], { cwd: path.join(import.meta.dirname, ".."), encoding: "utf8" });
+      "--launchlab-platform", LL_PLATFORM.toBase58(), "--rules", "config/burnkeeper/deficit.rules.json", "--program-round", LAYOUT === "r4" ? "4" : "3", ...extra], { cwd: path.join(import.meta.dirname, ".."), encoding: "utf8" });
     const dry = cli(["--payer", cliPayer.publicKey.toBase58(), "--mint", mint.publicKey.toBase58(), "--creator", creator.publicKey.toBase58()]);
     assert.equal(dry.status, 0, dry.stderr + dry.stdout);
     const out = JSON.parse(dry.stdout);

@@ -364,3 +364,39 @@ pub struct PairUnlinked {
     pub reason: u8,
     pub cranker: Pubkey,
 }
+
+/// LAUNCHPAD-PATH §45: initialize_token pinned the coin's end sink.
+#[event]
+pub struct EndSinkPinned {
+    pub mint: Pubkey,
+    pub sink_kind: u8,
+    pub sink_mint: Pubkey,
+    pub min_forward_lamports: u64,
+}
+
+/// LAUNCHPAD-PATH §45: the coin's rule ended (outcome END_STATE_RESOLVED or END_STATE_VOID), signed by its attester quorum.
+#[event]
+pub struct RuleEnded {
+    pub mint: Pubkey,
+    pub record_date: u32,
+    pub outcome: u8,
+    pub signers_mask: u8,
+    pub source_url_hash: [u8; 32],
+    pub proof_hash: [u8; 32],
+    pub submitter: Pubkey,
+}
+
+/// LAUNCHPAD-PATH §45: a resolved coin's fuel moved to its end sink's fee PDA (or the flagship's when the sink was not live).
+#[event]
+pub struct ForwardedOnEnd {
+    pub mint: Pubkey,
+    /// Where it went.
+    pub to_mint: Pubkey,
+    /// The sink the coin's EndSink named for this end (the flagship for kind 0, or for a pair partner that did not win the final period).
+    pub intended_mint: Pubkey,
+    pub sink_kind: u8,
+    pub lamports: u64,
+    pub sol_lamports: u64,
+    pub wsol_lamports: u64,
+    pub cranker: Pubkey,
+}
