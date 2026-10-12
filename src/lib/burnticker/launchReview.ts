@@ -7,7 +7,7 @@ import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS 
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
-import { describeRule } from "@/lib/burnticker/describe";
+import { describeRule, type DescribeCtx } from "@/lib/burnticker/describe";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
 import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
@@ -125,7 +125,7 @@ export function authorityLine(root = process.cwd()): string {
 
 const endsLine = (windowSentence: string, perpetual: boolean): string => (perpetual ? "This coin has no end date and does not retire." : `${windowSentence} ${WIND_DOWN_LINE}`.trim());
 
-export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; seriesTitle?: string | null; timeLockSecs?: number | null } = {}): { review: LaunchReview } | { problems: string[] } {
+export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"] } = {}): { review: LaunchReview } | { problems: string[] } {
   const env = o.env ?? process.env;
   const cluster = hostCluster(env);
   const problems: string[] = [];
@@ -165,7 +165,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const typeReason = twoCoinBlocked ? `${PAIRS_UNAVAILABLE_LINE} ${model.types.pairs.reason ?? ""}`.trim() : ta?.reason ?? (type ? null : "The web launcher does not offer this kind of rule.");
   // Codex F1: the venue the bundle route selects (handlers.ts prepareLaunch: a registered pair goes to pair_curve when the flag is on)
   const venue: "launchlab" | "pair-curve" = pair && pairCurveEnabled(env) ? "pair-curve" : "launchlab";
-  const ctx = serverDescribeCtx(locked.rule, body.descCtx, { seriesTitle: o.seriesTitle ?? null });
+  const ctx = serverDescribeCtx(locked.rule, body.descCtx, { seriesTitle: o.seriesTitle ?? null, stated: o.stated ?? null });
   const text = describeRule(locked.rule, { ticker: ticker || "TICKER", ...ctx });
   const alloc = allocationFor(locked);
   const per = (s: typeof CURVE_FEES) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });

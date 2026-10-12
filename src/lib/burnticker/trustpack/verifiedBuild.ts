@@ -14,11 +14,11 @@ export interface ProgramBuild { features: string[]; bytes: number; hash: string 
 export interface Deployed { hash: string; programData: string; upgradeAuthority: string; readAt: string; matchesBuild: boolean; /** added by the checklist (DEPLOY_EVIDENCE), not stored in the table */ evidence?: string }
 /**
  * Where each network's deployed-bytes read is recorded (audit R05, 2026-10-11): the check page's build table names it per row. Mainnet:
- * the deploy evidence file (signatures, on-chain sha256, upgrade authority); devnet: the verified-build doc (scripts/ops/verified-build.sh
+ * the round-4 upgrade read-back (2026-10-12; the 2026-10-11 first deploy is in docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json); devnet: the verified-build doc (scripts/ops/verified-build.sh
  * --onchain devnet).
  */
 export const DEPLOY_EVIDENCE: Record<BuildVariant, string> = {
-  mainnet: "docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json",
+  mainnet: "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log",
   devnet: "docs/burnticker/VERIFIED-BUILD.md",
 };
 export interface VerifiedBuild {

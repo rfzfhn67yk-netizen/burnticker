@@ -40,6 +40,8 @@ import { composeRule, fieldsFromRule, launchBody } from "@/lib/burnticker/launch
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { LaunchGate } from "./LaunchGate";
 import { CreatorOnboarding } from "../_components/CreatorOnboarding";
+import { CreatorBenefitsList } from "../templates/CreatorBenefitsList";
+import { ExampleTickets } from "../templates/ExampleTickets";
 import { DuplicateNotice } from "./DuplicateNotice";
 import type { ExistingCoin } from "@/lib/burnticker/duplicateRule";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
@@ -706,6 +708,9 @@ export default function LaunchWizard() {
       {preview && <p className="sticky z-30 rounded border border-amber-400 bg-neutral-950/95 px-3 py-2 text-sm font-medium text-amber-300" style={{ top: "var(--bt-header-h, 3.5rem)" }} role="status" data-preview-banner>{PREVIEW_BANNER}</p>}
       <LaunchRecovery />
       {step === "choose" && <CreatorOnboarding />}
+      {/* website-17 wiring item 4: what a creator gets besides the coin, then the example tickets (the launch state passed once read) */}
+      {step === "choose" && <CreatorBenefitsList />}
+      {step === "choose" && <ExampleTickets site={site === SITE_LAUNCH_STATE_LOADING ? null : site} />}
 
       {step !== "choose" && (
         <div aria-label="Progress">

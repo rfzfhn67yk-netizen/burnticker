@@ -11,6 +11,9 @@ import { deficitRuleSchedule, readKeeperFiles } from "@/lib/burnticker/deficitQu
 import { upcomingFromKeeper, upcomingFromStatus, upcomingSet, type UpcomingOmitted, type UpcomingRow } from "@/lib/burnticker/upcoming";
 import { deficitCreated, rehearsalCreate, type RehearsalCurve } from "@/lib/burnticker/home";
 import { readKeeperCurve } from "@/lib/burnticker/market";
+import { featuredSlots, type FeaturedInput } from "@/lib/burnticker/featuredSlots";
+import { rankLines } from "@/lib/burnticker/coinRank";
+import { leagueData } from "@/lib/burnticker/leaguesServe";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +33,8 @@ export async function GET() {
   const omitted: UpcomingOmitted[] = [];
   let registered: number | null = null;
   let coins: HomeCoin[] | null = [];
+  // website-17 wiring item 3: the earned featured slots, from each coin's own receipts, creation time and readiness (featuredSlots.ts)
+  const slotInputs: FeaturedInput[] = [];
   try {
     const tokens = p.registry.tokens();
     registered = tokens.length;
@@ -40,6 +45,7 @@ export async function GET() {
         const latest = d.receipts.filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
         const readiness = readinessFromStatus(d.status, d.receipts);
         coins.push({ ...homeCoinOf(d.status), cluster: d.status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(d.status, d.receipts) });
+        slotInputs.push({ ticker: d.status.ticker, group: d.status.cluster === "mainnet" && d.status.status !== "draft" ? "public" : "test", burns: d.receipts.filter((r) => r.status === "confirmed").map((r) => ({ settledAt: r.settledAt })), createdAt: d.status.launchedAt ?? null, poolRegistered: ["awaiting-event", "below-floor", "deferred", "burned"].includes(readiness.state) });
         const row = upcomingFromStatus(d.status, d.receipts);
         if (row) upcoming.push(row);
       } catch (e) {
@@ -68,7 +74,11 @@ export async function GET() {
   let rehearsalCurve: RehearsalCurve = null;
   const rh = rehearsalCreate();
   if (rh && p.market && p.cluster === "mainnet") rehearsalCurve = await readKeeperCurve(p.market, { cluster: "mainnet", mint: rh.mint, poolId: rh.poolId }, now);
-  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve), cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
+  // website-17 wiring items 2 and 3: each coin's rank line (never a guessed rank) and the earned featured slots
+  const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
+  if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
+  const slots = coins === null ? null : featuredSlots(slotInputs, now);
+  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve), featuredSlots: slots, cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
 }
 
 function homeCoinOf(s: Parameters<typeof buildPlatformIndex>[0][number]): HomeCoin {

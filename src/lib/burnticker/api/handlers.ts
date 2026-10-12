@@ -17,7 +17,7 @@ import { CROSS_LABEL, officialOf } from "@/lib/burnticker/sources/gameSettle";
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
 import { badgeCreatorImage } from "@/lib/burnticker/creatorBadge";
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
-import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx } from "@/lib/burnticker/coinText";
+import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
 import { describeRule } from "@/lib/burnticker/describe";
 import { universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
@@ -467,6 +467,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   let seriesTitle: string | null = null;
   let feedText: { title: string; sourceName: string; unitLabel: string } | null = null;
+  let statedText: ReturnType<typeof statedCtx> = null;
   // THE CREATOR'S TEXT (owner decision 2026-10-10): the name, the ticker and the optional note pass the copy lint with the creator scope
   // (every platform rule + no-affiliation: official, endorsed, partner…, links, handles) — a hit refuses with the category named.
   const note = typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note).trim() : "";
@@ -516,6 +517,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const info = await p.polymarket.seriesInfo(key).catch(() => null);
     if (!info) return { error: fail(502, `${key} could not be read from Polymarket. The condition id, tag or event may be unknown, or Gamma did not answer. Please try again.`) };
     seriesTitle = info.title;
+    statedText = statedCtx(info);
     refusals.push(...refusalsFor(list, { titles: [info.title] }));
     if (locked.rule.market) {
       const m = await p.polymarket.marketByCondition(locked.rule.market).catch(() => null);
@@ -550,7 +552,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   }
   // THE DESCRIPTION IS GENERATED (coinText.ts): whatever `description` the request carried, the coin's is describe.ts's paragraph for
   // the locked rule (+ the rule footer the bundle appends); the request's descCtx is checked word by word before it reaches a template.
-  const ctxA = serverDescribeCtx(locked.rule, (body as { descCtx?: unknown }).descCtx, { seriesTitle, feed: feedText });
+  const ctxA = serverDescribeCtx(locked.rule, (body as { descCtx?: unknown }).descCtx, { seriesTitle, feed: feedText, stated: statedText });
   // website-15 item 13: the generated paragraph (its first sentence is the rule) always comes first; the creator's text follows it
   input.description = withCreatorText(generatedParagraph(locked.rule, input.ticker, ctxA), creatorText);
   // NOTHING ABOUT A COIN CAN CHANGE AFTER LAUNCH (pin.ts): the metadata JSON and the receipt art are pinned on Arweave before the

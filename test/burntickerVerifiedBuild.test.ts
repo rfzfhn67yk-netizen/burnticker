@@ -73,8 +73,8 @@ describe("scripts/ops/reproducible-build-host.sh", () => {
       assert.equal(val("EXE", p.library), p.builds.mainnet.hash, p.library);
       assert.equal(val("SHA", p.library), (p.builds.mainnet as { sha256?: string }).sha256, p.library);
     }
-    assert.equal(val("SHA", "burn_receipts"), "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a");
-    assert.equal(val("SHA", "pair_curve"), "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767");
+    assert.equal(val("SHA", "burn_receipts"), "b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7"); // round 4, 2026-10-12
+    assert.equal(val("SHA", "pair_curve"), "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2");
   });
   test("it builds the commit the site pins, compares with mainnet read-only, and the page explains it", async () => {
     const { PUBLIC_REPO_COMMIT } = await import("@/lib/burnticker/currentStatusLinks");

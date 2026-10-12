@@ -13,7 +13,7 @@ const MATCH: Record<string, string[]> = {
   // Your coins (/burnticker/me) lights no tab: it lives under the wallet menu (owner, 2026-10-12)
   "/burnticker/launch": ["/burnticker/templates"],
   // the Learn pages: the trust page owns its check and fee-ledger pages
-  "/burnticker/trust": ["/burnticker/check", "/burnticker/fees", "/burnticker/verify"],
+  "/burnticker/trust": ["/burnticker/check", "/burnticker/fees", "/burnticker/verify", "/burnticker/history"],
   // a coin page and a pair page belong to Coins (website-11 merge note, 2026-10-12: a pair page lit SEASONS)
   "/burnticker": ["/burnticker/t/", "/burnticker/p/"],
   // "Seasons" lands on the per-league index (the owner, 2026-10-10: the landing door and the nav go to the same place); the all-seasons
@@ -53,7 +53,7 @@ export function activeNav(pathname: string | null): string | null {
 }
 
 /** The phone tab bar (TabBar.tsx, under 900 px, on every page since 2026-10-12): Coins, Search, Launch, Seasons and Learn. */
-export interface TabItem { label: string; href: string; glyph: string }
+export interface TabItem { label: string; href: string; icon: string }
 export const TABS: TabItem[] = SITE_TABS;
 export const LEARN_TAB = "/burnticker/about";
 

@@ -225,7 +225,7 @@ describe("/.well-known/burnticker.json", () => {
     assert.equal(w.links.github, loadTransparency(ROOT).publicRepo.url);
     assert.deepEqual(w.links.x, ["https://x.com/burnticker", "https://x.com/USA_DEFICIT"]);
     assert.equal(w.clusters.devnet.programs.burn_receipts.programId, "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM");
-    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42"); // pair-forward r3 build on devnet (vault transaction 18, 2026-10-11)
+    assert.equal(w.clusters.devnet.programs.pair_curve.executableHash, "364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf"); // round-4 build on devnet (vault transaction 20, 2026-10-12); before it ae947d59… (r3, transaction 18, 2026-10-11)
     assert.equal(w.clusters.devnet.squads.vault, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     assert.equal(w.clusters.mainnet.squads.vault, "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV");
     assert.equal(w.security.bountyWallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u");

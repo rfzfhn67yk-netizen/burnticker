@@ -83,9 +83,19 @@ export async function fetchPair(connection: Connection, pair: PublicKey): Promis
 }
 
 /** Every Pair of the program (optionally only one status) — what the keeper's crank scans; no registry needed. */
-export async function fetchPairs(connection: Connection, o: { programId?: PublicKey; status?: number } = {}): Promise<{ address: PublicKey; pair: PairAccount }[]> {
+/**
+ * Every Pair the program owns (optionally one status). An account the current layout cannot decode (devnet round-4 campaign, 2026-10-12:
+ * one 888-byte Pair from an older layout aborted the keeper's whole scan, so no pair was cranked) is SKIPPED and reported through
+ * `onUndecodable`, never thrown: one stale account must not stop every other pair's crank.
+ */
+export async function fetchPairs(connection: Connection, o: { programId?: PublicKey; status?: number; onUndecodable?: (address: PublicKey, error: Error, bytes: number) => void } = {}): Promise<{ address: PublicKey; pair: PairAccount }[]> {
   const filters: ({ memcmp: { offset: number; bytes: string } })[] = [{ memcmp: { offset: 0, bytes: bs58(pairDiscriminator()) } }];
   if (o.status !== undefined) filters.push({ memcmp: { offset: 11, bytes: bs58(Uint8Array.from([o.status])) } });
   const list = await connection.getProgramAccounts(o.programId ?? PAIR_CURVE_PROGRAM_ID, { commitment: "confirmed", filters });
-  return list.map((x) => ({ address: x.pubkey, pair: decodePair(x.account.data) }));
+  const out: { address: PublicKey; pair: PairAccount }[] = [];
+  for (const x of list) {
+    try { out.push({ address: x.pubkey, pair: decodePair(x.account.data) }); }
+    catch (e) { o.onUndecodable?.(x.pubkey, e as Error, x.account.data.length); }
+  }
+  return out;
 }

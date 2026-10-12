@@ -354,3 +354,35 @@ native sources with their cross-reads, the elections flow and the election-pair 
 - Holder **count** is always "—", because it needs an indexer.
 - Chart embed and trade links: mainnet only.
 - Image, links and one-liner: live from the registry.
+
+## Burnticker's own system (legitimacy pass, website-16, 2026-10-12)
+
+The tokens live in the overlay's `src/app/globals.css` (`:root`), so the public tree carries them. The newer pages use them through the
+page parts in `src/app/burnticker/_components/Panel.tsx`; the older pages use the Tailwind classes these tokens mirror.
+
+| Token | Values | What it is for |
+|---|---|---|
+| `--bt-fs-xs` … `--bt-fs-2xl` | .75, .875, 1, 1.125, 1.25, 1.5 rem | the one type scale: the same steps as Tailwind's `text-xs` … `text-2xl` the pages already use |
+| `--bt-sp-1` … `--bt-sp-6` | 4, 8, 12, 16, 24, 32 px | the one spacing scale |
+| `--bt-radius` | 8 px | panels, sub-panels, tables (the `rounded-lg` of the older cards) |
+| `--bt-dur` | 150 ms | the one transition duration; `prefers-reduced-motion: reduce` turns every animation and transition off |
+| `--bt-focus` | the stamp violet | the one focus ring, `:focus-visible` on every link, button, field, summary and focusable block |
+
+- **Page parts.** `Page`, `PageHeader`, `Panel` (the one card), `.bt-subpanel` (a dashed card inside a panel), `.bt-table` in
+  `.bt-table-wrap` (scrolls sideways on a phone), `.bt-list`, `.bt-bullets`, `.bt-dl`, `.bt-eyebrow`, `.bt-meta`, `.bt-pre`.
+- **Empty states.** `EmptyState` draws the receipt mark (`ReceiptMark`, an inline SVG slip with a torn foot) beside its heading and one
+  sentence. Loading stays a skeleton with no visible words.
+- **Icons.** One set: `SITE_ICONS` in `src/lib/burnticker/siteNav.mjs`, inline SVG strokes on a 24-unit grid in the text colour, drawn
+  by `_components/Icon.tsx` in the app and by `iconSvg` on the static pages. No icon font, no glyph characters in the tab bar.
+- **Labels.** Sentence case for headings, buttons and links ("Verify it yourself", "History and reviews"); the mono eyebrow and the
+  receipt rows are upper case by CSS only, so the words stay sentence case in the markup.
+- **Colors.** No default Tailwind gray, slate, zinc or stone anywhere under `src/app/burnticker`; the neutral scale is the palette (warm
+  for dark, inverted for paper).
+
+Measured contrast (WCAG ratio, `test/burntickerLegitimacy.test.ts` computes it from the CSS on every run), text on the page background,
+the panel and the counter, both themes: neutral 200 to 500, ink, dim, muted and the stamp all pass 4.5:1. The lowest is neutral 500 on
+the light panel, 4.60:1. Neutral 600 measured 2.32:1 to 2.87:1, so it is no longer used for text (the Derby bracket's three uses moved to
+neutral 500).
+
+Lighthouse was not run in this pass: the `lighthouse` package is not installed in this repository, and installing it means a download
+the owner has not approved. The scores for /, /burnticker, a coin page and the launch page at phone emulation are an open item.

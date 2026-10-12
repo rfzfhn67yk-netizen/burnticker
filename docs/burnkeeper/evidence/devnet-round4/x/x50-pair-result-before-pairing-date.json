@@ -1,0 +1,124 @@
+{
+  "case": "x50-pair-result-before-pairing-date",
+  "expected": "PairDateBeforePairing",
+  "observed": "PairDateBeforePairing",
+  "match": true,
+  "exitCode": 1,
+  "command": "BR submit-pair-result --payer ~/.config/meme-coin-trader/devnet/r4x-payer.json --mint-a 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz --mint-b iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg --date 20261011 --winner 2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz --attester ~/.config/meme-coin-trader/devnet/keeper.json",
+  "simulationErr": "{\"InstructionError\":[2,{\"Custom\":6091}]}",
+  "errorLogLines": [
+    "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:351. Error Code: PairDateBeforePairing. Error Number: 6091. Error Message: pair result: the date is before the coins were paired.",
+    "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17cb"
+  ],
+  "stderr": [],
+  "output": {
+    "command": "submit-pair-result",
+    "cluster": "devnet",
+    "rpc": "https://api.devnet.solana.com",
+    "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+    "dryRun": true,
+    "pairResult": "G8MhaCMdi1C9HWLn5Q42JcSTZ6Z2QtZ8JgzLD9AMHXVV",
+    "message": "BURNRECEIPTS-PAIR-v1|EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG|AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM|iJhkwouWchLzuXiwHsJsZRoARHXnPQxN7U5As28khNg|2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz|2026-10-11|winner=2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz|src=3d3b43e641b77f043abd1905ad78726010803726abacdf7704fdf90f1a2b174c|proof=0000000000000000000000000000000000000000000000000000000000000000",
+    "instructions": [
+      {
+        "program": "Ed25519SigVerify111111111111111111111111111",
+        "accounts": [],
+        "dataHex": "01003000ffff1000ffff70009201ffffb4509319e3c2632f0a8bceaca76b346d3f2354c10a1e6db1c5cf3c68b39032a57921a4f3db25e49ea80c6f0a23a37d061f99c0a9c59e728097131d73ec240c5a0a8ec10777710f35b196b1536df0e5075181291079eca25ef8ba276ceb0261094255524e52454345495054532d504149522d76317c457457545241425a61597136694d6665594b6f75527531363656553278716131776361576f78506b725a42477c4175516a6f5367713775706d7950427632697477793254535a31566a6f5669707979347a397764377a684d4d7c694a686b776f755763684c7a7558697748734a735a526f415248586e5051784e375535417332386b684e677c3244764433556b643741564a676a42326536435276356969726276466148514a674c7152434774365a6b557a7c323032362d31302d31317c77696e6e65723d3244764433556b643741564a676a42326536435276356969726276466148514a674c7152434774365a6b557a7c7372633d336433623433653634316237376630343361626431393035616437383732363031303830333732366162616364663737303466646639306631613262313734637c70726f6f663d30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030"
+      },
+      {
+        "program": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
+        "instruction": "submit_pair_result",
+        "accounts": [
+          {
+            "name": "payer",
+            "pubkey": "2WGWTuMX5rXgLNBFBp2fFUoFgrh7nztEMB3uaJvp6Ehk",
+            "signer": true,
+            "writable": true
+          },
+          {
+            "name": "config_lo",
+            "pubkey": "HuGy9S3AfnhjgXKKqUrrdG6JiSDwvyN7FcVPaWVs8h94",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "config_hi",
+            "pubkey": "3fjc8YtBzS5FRhRBga3iferJDKJbEbiiEdSWoGqH2EvZ",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "link_lo",
+            "pubkey": "CfbdXZduEvrRJdCnzbJawy1UUop9Veb8a8qghe9QSrqY",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "link_hi",
+            "pubkey": "7PRNoZRxuaY7z3eAr6C6YHMfKxEDCaJwDZ7s4absx1b4",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "pair_result",
+            "pubkey": "G8MhaCMdi1C9HWLn5Q42JcSTZ6Z2QtZ8JgzLD9AMHXVV",
+            "signer": false,
+            "writable": true
+          },
+          {
+            "name": "instructions",
+            "pubkey": "Sysvar1nstructions1111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "system_program",
+            "pubkey": "11111111111111111111111111111111",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "reading_lo",
+            "pubkey": "BLxH6pFNGvLw2Gha93CwMQ9BDWoQeXpoaU58Ph6vDmgM",
+            "signer": false,
+            "writable": false
+          },
+          {
+            "name": "reading_hi",
+            "pubkey": "CWefmAWqvJZkYtPV3hwzPKnGPSbenFRQHy6GJVhGUCXT",
+            "signer": false,
+            "writable": false
+          }
+        ],
+        "args": {
+          "record_date": 20261011,
+          "winner": "2DvD3Ukd7AVJgjB2e6CRv5iirbvFaHQJgLqRCGt6ZkUz",
+          "source_url_hash": "3d3b43e641b77f043abd1905ad78726010803726abacdf7704fdf90f1a2b174c",
+          "proof_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    ],
+    "simulation": {
+      "err": "{\"InstructionError\":[2,{\"Custom\":6091}]}",
+      "unitsConsumed": 43372,
+      "logs": [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM invoke [1]",
+        "Program log: Instruction: SubmitPairResult",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: AnchorError thrown in programs/burn_receipts/src/instructions/pair.rs:351. Error Code: PairDateBeforePairing. Error Number: 6091. Error Message: pair result: the date is before the coins were paired.",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM consumed 43222 of 399850 compute units",
+        "Program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM failed: custom program error: 0x17cb"
+      ]
+    },
+    "resultingAccounts": [
+      {
+        "address": "G8MhaCMdi1C9HWLn5Q42JcSTZ6Z2QtZ8JgzLD9AMHXVV",
+        "kind": "lamports",
+        "state": null
+      }
+    ]
+  }
+}

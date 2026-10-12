@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TABS, activeTab } from "./nav";
 import { useLaunchAvailability } from "./useLaunchAvailability";
+import { Icon } from "./Icon";
 
 /**
  * THE PHONE TAB BAR (2026-10-10, launchpad conventions; global with Search since 2026-10-12, the owner's review item 16). Under 900 px a
@@ -18,7 +19,7 @@ export function TabBar() {
     <nav className="bt-tabbar" aria-label="Burnticker sections">
       {TABS.map((t) => (
         <Link key={t.href} href={t.href} className={`bt-tabbar-item${active === t.href ? " is-active" : ""}${t.href === "/burnticker/launch" && launchOpen ? " is-launch" : ""}`} aria-current={active === t.href ? "page" : undefined}>
-          <span aria-hidden="true" className="bt-tabbar-glyph">{t.glyph}</span>
+          <span aria-hidden="true" className="bt-tabbar-glyph"><Icon name={t.icon} /></span>
           <span>{t.label}</span>
         </Link>
       ))}

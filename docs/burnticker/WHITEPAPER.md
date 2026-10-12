@@ -174,6 +174,19 @@ are both read. Creation is refused on a Kalshi rule, a missing cross-read, a fai
 The coverage matrix is served at `GET /api/burnticker/v1/coverage`, drawn on the trust page and rendered to
 `docs/burnticker/SETTLEMENT-COVERAGE.md`. The test suite fails when any category is uncovered.
 
+### 3.5 How burns are settled
+
+A coin settled by a market is read every 5 minutes. A coin settled by a published data feed is read on that feed's own schedule, and a
+feed with no schedule of its own is read every 60 minutes. $DEFICIT reads the Treasury's debt figure at 4:30 p.m. and 8:00 p.m. New
+York time on business days. A result counts only when it is final: a game when its feed marks it final, a Polymarket market only after
+its on-chain payout is recorded, which follows UMA's dispute window of about 2 hours (longer if a proposal is disputed), and a scheduled
+publisher's number when it is posted. The cycle that sees a final result submits the reading and runs the burn in the same pass. Before
+it swaps, the program checks the pool's current rate against its average over the last 10 to 20 minutes, which a trading pool already
+has. One burn spends at most 2% of the pool's SOL reserve, and the rest carries to the next burn, so a large burn arrives in slices.
+Typical times after the event are about 5 to 25 minutes for sports results and scheduled data, and about 2 hours plus a few minutes for
+Polymarket markets. When the transaction confirms, the receipt appears on the coin's page. The page
+[How burns are settled](https://burnticker.com/burnticker/how-burns-settle) states the same facts, each number read from the code.
+
 ## 4. Settlement on chain: the burn receipts program
 
 ### 4.1 Accounts

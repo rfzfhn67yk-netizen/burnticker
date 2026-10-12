@@ -1,0 +1,7 @@
+[2026-10-12 21:29:37Z] claim_lock_fees crank: on (fee-keys PDA Bj4XCAoGHy9JTcDtQovijFwpG7NsSG6Snqmf8kFi2Yt3, operator treasury A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD)
+[2026-10-12 21:29:37Z] burnticker keeper starting — 1 live token(s) · ledger /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/k/data2/burnticker.db · site /private/tmp/claude-501/-Users-shanecassidy/22ac3f49-48c5-42a4-b835-a5ad37cfc3a2/scratchpad/r4x/k/site · devnet · program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM (REAL: program AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM on devnet, keeper D8seUoC1RZUs7918Atcc7TbFwRf1khqFvPdjkB4qktbn) · role leader · host bcc00ad890cfa434 · snapshots REFUSED (no BURNTICKER_UPLOAD_PAYER) · alerts off (--once)
+[2026-10-12 21:29:37Z]   [role] leader ACTIVE — leader (no peer configured)
+[2026-10-12 21:29:38Z]   [r4x-filter] pair scan limited to 2 pair(s): 792sAKMe,7Ebs5oCp
+[2026-10-12 21:29:41Z]   [pair-curve] 792sAKMe… void: 3htboZvh7R4v… · 21101 CU
+[2026-10-12 21:29:50Z] pair curve: 2 pair(s) scanned, 1 cranked
+[2026-10-12 21:29:54Z] burnticker keeper stopped

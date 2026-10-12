@@ -108,7 +108,7 @@ export async function crankPairCurves(d: PairCurveCrankDeps): Promise<PairCurveC
   let pairs: Awaited<ReturnType<typeof fetchPairs>> = [];
   try {
     await assertPairCurveCluster(d.ctx);
-    for (const status of [STATUS_OPEN, STATUS_GRADUATING, STATUS_GRADUATED]) pairs.push(...(await fetchPairs(d.ctx.connection, { programId: d.ctx.programId, status })));
+    for (const status of [STATUS_OPEN, STATUS_GRADUATING, STATUS_GRADUATED]) pairs.push(...(await fetchPairs(d.ctx.connection, { programId: d.ctx.programId, status, onUndecodable: (address, e, bytes) => out.errors.push(`skipped ${address.toBase58()}: ${bytes} bytes, ${e.message.slice(0, 80)}`) })));
   } catch (e) {
     out.errors.push(`scan: ${(e as Error).message.slice(0, 160)}`);
     return out;

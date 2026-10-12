@@ -39,7 +39,7 @@ function CoinPicker({ label, value, onPick, exclude, initial }: { label: string;
     if (s.length < 2) { setHits([]); return; }
     const t = setTimeout(() => {
       setBusy(true); setErr(null);
-      fetch(`/api/burnticker/v1/derby/search?q=${encodeURIComponent(s)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setHits(j.hits ?? []); }).catch((e) => setErr(String(e.message ?? e))).finally(() => setBusy(false));
+      fetch(`/api/burnticker/v1/derby/search?q=${encodeURIComponent(s)}&assets=all`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setHits(j.hits ?? []); }).catch((e) => setErr(String(e.message ?? e))).finally(() => setBusy(false));
     }, 300);
     return () => clearTimeout(t);
   }, [q]);

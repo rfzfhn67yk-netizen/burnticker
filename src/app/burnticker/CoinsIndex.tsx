@@ -14,6 +14,7 @@ import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
 import { CARD_MEANINGS, cardViewFromIndex, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
 import { GRID_TABS, gridState, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
+import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 
 /**
  * THE COINS PAGE (/burnticker; list-first since 2026-10-12: Claude site audit 2 item 5, ChatGPT audit 6 A5 and A10, Codex review 5
@@ -70,7 +71,10 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s)), [ix, s]);
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
-  const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet"));
+  // website-17 wiring item 3: the earned slots lead the public grid in rule order, each tagged with its rule's label; the rest keep their order
+  const slots = home.data?.featuredSlots ?? [];
+  const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet")).map((v) => { const sl = slots.find((x) => x.ticker === v.ticker); return sl && v.group === "public" ? { ...v, tags: [{ label: sl.label, tone: "featured" as const }, ...v.tags] } : v; })
+    .sort((a, b) => { const r = (v: CardView) => { const k = v.group === "public" ? slots.findIndex((x) => x.ticker === v.ticker) : -1; return k < 0 ? slots.length : k; }; return r(a) - r(b); });
   const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : cards.length, query: q, generatedAt: ix?.generatedAt ?? null, now, featuredMatches: s ? featured.length : 0 });
   const rule = GRID_TABS.find((t) => t.id === tab)!.rule;
 
@@ -94,6 +98,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
           {state.kind === "empty" && <EmptyState compact kind={state.notLaunched ? "not-launched" : "no-activity"} body={state.body}>{state.notLaunched && launch.open && <div className="mt-2"><Link href={tab === "pairs" ? "/burnticker/launch?pair=1" : "/burnticker/launch"} className="underline">{tab === "pairs" ? "Launch a pair" : "Launch the first one"}</Link></div>}</EmptyState>}
           {state.kind === "results" && <>
             {state.note && <p className="mb-2 text-xs text-amber-300" role="status">{state.note}</p>}
+            {tab !== "pairs" && <p className="mb-2 text-xs text-neutral-400" data-featured-rules>{FEATURED_RULES_LINE}</p>}
             {tab !== "pairs" ? (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{cards.map((v) => <ViewCard key={v.id} v={v} now={now} />)}</div>
             ) : (

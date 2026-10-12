@@ -14,6 +14,9 @@ import { progressOf } from "@/lib/burnticker/progress";
 import { RAISE_PRESETS_SOL } from "@/lib/burnticker/launchPresets";
 import { upcomingSet, type UpcomingSet } from "@/lib/burnticker/upcoming";
 import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
+import { historyCounts } from "@/lib/burnticker/history";
+import { historyCountsLine } from "@/lib/burnticker/historyCopy";
+import type { FeaturedSlot } from "@/lib/burnticker/featuredSlots";
 export { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 
 /**
@@ -53,6 +56,8 @@ export interface HomeData {
   statusLine: string | null;
   /** website-12's site launch record (launchAvailability.ts siteLaunchState), for the static pages' launch dialog; null when not passed. */
   launch: SiteLaunchState | null;
+  /** website-17 item 3: the earned featured slots in rule order (featuredSlots.ts), set by the home route; null when the registry was not read */
+  featuredSlots?: FeaturedSlot[] | null;
 }
 
 /** One registered coin as the home route read it: the index card fields plus its newest confirmed receipt. `readOk` false = its page failed. */
@@ -62,6 +67,8 @@ export interface HomeCoin extends Pick<IndexCoin, "ticker" | "burns" | "lastBurn
   cluster?: string; latestSignature?: string | null; readOk?: boolean;
   /** website-14: the coin's own activity rows (activity.ts eventsFromStatus) and where it stands (readiness.ts) */
   events?: ActivityEvent[]; readiness?: Readiness | null;
+  /** website-17 item 2: the coin's rank line (coinRank.ts rankLines); null when not read */
+  rank?: string | null;
 }
 
 export const NO_EVENTS_LINE = "Nothing has happened on chain yet. Burns, signed readings, graduations and pool registrations appear here once they are recorded.";
@@ -306,6 +313,7 @@ export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(
   return {
     schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...mainnetRecordEvents(root)], 12), noEvents: NO_EVENTS_LINE,
     raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null), samples),
-    statusLine: [homeStatusLine(rec), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
+    // legitimacy pass: the one surface hint of the history pages, the dated counts (reviews published, releases since Oct 10)
+    statusLine: [homeStatusLine(rec), historyCountsLine(historyCounts(root)), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
   };
 }

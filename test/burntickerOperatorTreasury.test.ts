@@ -81,7 +81,7 @@ test("R05: the build table has a Network column; each row's deployed bytes, read
   const md = checklistMarkdown(c);
   assert.match(md, /\| Program \| Network \| Features \| Executable hash \(this repository\) \| Deployed bytes on that network \| Read \| Evidence \|/);
   assert.doesNotMatch(md, /Deployed \(devnet\)/);
-  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*same as the build \| 2026-10-11 \| docs\/burnkeeper\/evidence\/mainnet-deploy-2026-10-11\/deploy\.json \|/);
+  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*same as the build \| 2026-10-12 \| docs\/burnkeeper\/evidence\/mainnet-round4\/onchain-verify-after-pc\.log \|/);
   const page = fs.readFileSync("src/app/burnticker/check/CheckClient.tsx", "utf8");
   assert.doesNotMatch(page, /Deployed on devnet/);
   assert.match(page, /<th className="p-2">Network<\/th>[\s\S]*<th className="p-2">Read<\/th><th className="p-2">Evidence<\/th>/);

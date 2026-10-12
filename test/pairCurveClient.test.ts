@@ -329,3 +329,17 @@ describe("review 2 F2 — the wrapper keeps an incomplete graduated pair in the 
     assert.equal((await crank(fresh.pair, fresh.address, { complete: true })).r.scanned, 1);
   });
 });
+
+test("fetchPairs skips an account the layout cannot decode and reports it, instead of aborting the scan (devnet round-4 finding)", async () => {
+  const { fetchPairs } = await import("../src/lib/pairCurve/accounts.ts");
+  const { PublicKey } = await import("@solana/web3.js");
+  const good = new Uint8Array(946); good.set(Buffer.from("00".repeat(8), "hex"));
+  const list = [
+    { pubkey: new PublicKey("5etkAGv1111111111111111111111111111111111111".padEnd(44, "1").slice(0, 44).replace(/[^1-9A-HJ-NP-Za-km-z]/g, "1")), account: { data: Buffer.alloc(888) } },
+  ];
+  const fake = { getProgramAccounts: async () => list } as unknown as import("@solana/web3.js").Connection;
+  const skipped: string[] = [];
+  const pairs = await fetchPairs(fake, { onUndecodable: (a, e, bytes) => skipped.push(`${bytes}:${e.message.length > 0}`) });
+  assert.equal(pairs.length, 0);
+  assert.deepEqual(skipped, ["888:true"]);
+});

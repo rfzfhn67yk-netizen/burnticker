@@ -26,9 +26,16 @@ export const SITE_NAV = [
 export const LEARN_NAV = [
   { label: "How it works", href: "/burnticker/about", kind: "app" },
   { label: "Trust", href: "/burnticker/trust", kind: "app" },
+  { label: "Verify it yourself", href: "/burnticker/verify-yourself", kind: "app" },   // legitimacy pass item 7
   { label: "Who runs this", href: "/burnticker/operator", kind: "app" },   // website-15 item 16: the address stays /operator
   { label: "Whitepaper", href: "/whitepaper.html", kind: "static" },
   { label: "Docs and API", href: "/burnticker/docs", kind: "app" },
+  { label: "How burns are settled", href: "/burnticker/how-burns-settle", kind: "app" },   // owner, 2026-10-12
+  // legitimacy pass items 1, 2, 3, 6 (owner, 2026-10-12: history is available, not on display; two clicks deep, never on the home page)
+  { label: "Changelog", href: "/burnticker/changelog", kind: "app" },
+  { label: "Incidents", href: "/burnticker/incidents", kind: "app" },
+  { label: "Bounty", href: "/burnticker/bounty", kind: "app" },
+  { label: "Press", href: "/burnticker/press", kind: "app" },
   { label: "Terms", href: "/burnticker/terms", kind: "app" },
   { label: "Privacy", href: "/burnticker/privacy", kind: "app" },
   { label: "X", href: "https://x.com/BurnTicker", kind: "external" },
@@ -121,13 +128,28 @@ export const FOOTER_LEGAL_LINKS = [
   { words: "privacy page", href: "/burnticker/privacy" },
 ];
 
-/** The phone tab bar, on every page under 900 px (review item 16). @type {{ label: string; href: string; glyph: string }[]} */
+/**
+ * THE ONE ICON SET (legitimacy pass item 4, 2026-10-12): inline SVG strokes on a 24-unit grid, drawn in the text colour, no icon font and
+ * no glyph characters. Each icon is a list of path data; the app (_components/TabBar.tsx) and the static pages (tabsHtml below) draw the
+ * same paths. @type {Record<string, string[]>}
+ */
+export const SITE_ICONS = {
+  coins: ["M4 4h7v7H4z", "M13 4h7v7h-7z", "M4 13h7v7H4z", "M13 13h7v7h-7z"],
+  search: ["M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z", "M15.5 15.5 20 20"],
+  launch: ["M12 5v14", "M5 12h14"],
+  seasons: ["M5 7h14", "M15 3l4 4-4 4", "M19 17H5", "M9 13l-4 4 4 4"],
+  learn: ["M6 3h12v17l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z", "M9 8h6", "M9 12h6"],
+};
+/** One icon as SVG markup for a static page (the app draws the same paths in JSX). */
+export const iconSvg = (name, cls = "sh-icon") => `<svg class="${cls}" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${(SITE_ICONS[name] ?? []).map((d) => `<path d="${d}"/>`).join("")}</svg>`;
+
+/** The phone tab bar, on every page under 900 px (review item 16). @type {{ label: string; href: string; icon: string }[]} */
 export const SITE_TABS = [
-  { label: "Coins", href: "/burnticker", glyph: "▦" },
-  { label: "Search", href: "/burnticker#search", glyph: "⌕" },
-  { label: "Launch", href: "/burnticker/launch", glyph: "+" },
-  { label: "Seasons", href: "/burnticker/leagues", glyph: "⇄" },
-  { label: "Learn", href: "/burnticker/about", glyph: "?" },
+  { label: "Coins", href: "/burnticker", icon: "coins" },
+  { label: "Search", href: "/burnticker#search", icon: "search" },
+  { label: "Launch", href: "/burnticker/launch", icon: "launch" },
+  { label: "Seasons", href: "/burnticker/leagues", icon: "seasons" },
+  { label: "Learn", href: "/burnticker/about", icon: "learn" },
 ];
 
 /**
@@ -234,7 +256,7 @@ export function shellFooterHtml(o) {
     `  </div>`,
     `</footer>`,
     `<nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">`,
-    ...SITE_TABS.map((t) => `  <a href="${origin}${t.href}"${t.href === o.current ? ' aria-current="page"' : ""}><span aria-hidden="true">${t.glyph}</span><span>${t.label}</span></a>`),
+    ...SITE_TABS.map((t) => `  <a href="${origin}${t.href}"${t.href === o.current ? ' aria-current="page"' : ""}><span aria-hidden="true">${iconSvg(t.icon)}</span><span>${t.label}</span></a>`),
     `</nav>`,
   ].join("\n");
 }
@@ -302,7 +324,8 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
   body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
   .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:color-mix(in srgb,var(--sh-bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
   .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;font:700 10px/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
-  .sh-tabbar a span:first-child{font-size:18px;line-height:1}
+  .sh-tabbar a span:first-child{display:block;line-height:0}
+  .sh-icon{width:20px;height:20px;display:block}
   .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
 }
 @media (max-width:899px){.sh-ticker{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}.sh-ticker.is-end{-webkit-mask-image:none;mask-image:none}}

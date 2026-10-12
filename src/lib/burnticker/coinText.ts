@@ -36,7 +36,7 @@ const CROSS_OK = /^(MLB's official results|the NBA's official results|the NHL's 
  * only from the platform's own phrases; an end date only as an ISO date; a game opponent only a known team nickname. Anything else is
  * dropped and the template's neutral words are used. A feed's title and unit always come from the server's catalogue.
  */
-export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle: string | null; feed?: { title: string; sourceName: string; unitLabel: string } | null }): Omit<DescribeCtx, "ticker"> {
+export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle: string | null; feed?: { title: string; sourceName: string; unitLabel: string } | null; /** the server's own read of the market (statedCtx); the request's `stated` is never used */ stated?: DescribeCtx["stated"] }): Omit<DescribeCtx, "ticker"> {
   const c = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const out: Omit<DescribeCtx, "ticker"> = {};
   const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.length <= max ? v.trim() : null);
@@ -54,7 +54,20 @@ export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle
     if (opp && findTeams(opp).some((t) => t.nickname.toLowerCase() === opp.toLowerCase()) && at && ISO.test(at)) out.game = { opponent: opp, home: g.home === true, startsAt: at };
   }
   if (o.feed) out.feed = o.feed;
+  // legitimacy pass fix b: a one-market Polymarket coin keeps Polymarket's stated source and dispute window in its pinned text, so it
+  // matches the preview; the words come from the server's own market read, never from the request
+  if (rule.oracle === "polymarket" && rule.market && o.stated) out.stated = o.stated;
   return out;
+}
+
+/**
+ * The describe context's `stated` from the server's read of one Polymarket market (oracle/polymarket.ts seriesInfo → polyStated), in
+ * the same shape the launch page passes to describeRule. Null when the read carried none (a tag or event series, or no read).
+ */
+export function statedCtx(summary: { stated?: { resolutionSource: { phrase: string | null; crossRead: { text: string } | null }; finalAfter: { text: string } } } | null | undefined): NonNullable<DescribeCtx["stated"]> | null {
+  const s = summary?.stated;
+  if (!s) return null;
+  return { phrase: s.resolutionSource.phrase, crossRead: s.resolutionSource.crossRead ? { text: s.resolutionSource.crossRead.text } : null, finalAfter: { text: s.finalAfter.text } };
 }
 
 /** The generated paragraph for a launch (the registry stores it + the rule footer; see metadataDescription). */

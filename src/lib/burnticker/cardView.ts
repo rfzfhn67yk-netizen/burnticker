@@ -52,6 +52,8 @@ export interface CardView {
   links?: { label: string; url: string }[];
   /** sources-2: a Polymarket coin's stated source and dispute window, one line under the rule (polyStated.ts statedSentences) */
   stated?: string | null;
+  /** website-17 item 2: the coin's line on the scoreboard (coinRank.ts rankLines), read from the registry; null or absent when not read */
+  rank?: string | null;
   /** market cap in SOL (a bare number), read from the curve before graduation */
   mcap: CardCell;
   holders: CardCell;
@@ -93,6 +95,9 @@ export const NOT_READ = {
   curveNotRead: "This site has not read the coin's curve.",
   nextNone: "This rule has no scheduled result.",
 } as const;
+
+/** website-17 item 2: what the rank line under "Burned" means (hover text). A rank is a line on a scoreboard and nothing more. */
+export const RANK_MEANING = "The coin's place on the scoreboard by confirmed receipts, read from the coin registry. A rank pays nothing and unlocks nothing.";
 
 /** A graduated coin's market cap, read from its Raydium pool (indexer-1): the card's hover text and the coin page's note. */
 export const MCAP_POOL_MEANING = "The Raydium pool's SOL reserve divided by its token reserve, times the current supply, read on chain.";
@@ -154,6 +159,8 @@ export interface IndexCoin {
   holdersNote?: string | null; poolNote?: string | null;
   /** sources-2: a one-market Polymarket coin's stated source and dispute window */
   stated?: StatedJson | null;
+  /** website-17 item 2: the coin's line on the scoreboard (coinRank.ts), when the serving route read it */
+  rank?: string | null;
 }
 
 /** "14.81" from a decimal string, two places at most. */
@@ -187,6 +194,7 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
     id: t.mint, ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
     rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()), creatorText: t.creatorText ?? null, links: t.links ?? [],
     stated: t.stated ? statedSentences(t.stated, t.stated.finalAfter) : null,
+    rank: t.rank ?? null,
     progress: t.readiness ? progressOf(t.readiness, { raiseSol: t.threshold ? Number(t.threshold) : null, raisedSol: t.raised ? Number(t.raised) : null }) : null,
     progressWhy: t.readiness ? null : "This site did not read where this coin stands.",
     nextSettle: next ? { text: `${shortDay(next)}`, why: null } : { text: null, why: NOT_READ.nextNone },

@@ -23,6 +23,8 @@ import { gammaResult, parseEventsBody, parseMarketsBody, PolymarketClient, polyS
 import { loadRefuseList, refusalsFor } from "@/lib/burnticker/oracle/refuse";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { DEBT_RULE, fx } from "./burntickerHelpers.ts";
+import fs from "node:fs";
+import { serverDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 
 const NOW = Date.parse("2026-10-12T20:00:00Z");
 const cfg = loadCopyLintConfig();
@@ -271,6 +273,26 @@ describe("C. Polymarket: the stated source, the dispute window, and proposed is 
     assert.match(s2, /Polymarket states it resolves this from official information from relevant state electoral authorities/);
     const none = statedSentences({ phrase: null, crossRead: null }, finalAfter({})); lint(none);
     assert.match(none, /Polymarket does not state a source for this market\. The result becomes final after the dispute window of about 2 hours\./);
+  });
+
+  test("legitimacy pass fix b: the server keeps the stated source in the pinned text, from its own market read, never the request's", () => {
+    const ws = ev("mlb-world-series-champion-2026").markets.find((m) => /Tampa Bay Rays/.test(m.question))!;
+    const st = polyStated(ws);
+    const rule = validateRule({ schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: ws.conditionId, filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: 0.1 }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null } as BurnRule);
+    const clientCtx = { eventPhrase: "the Rays win the 2026 World Series", stated: { phrase: st.resolutionSource.phrase, crossRead: st.resolutionSource.crossRead ? { text: st.resolutionSource.crossRead.text } : null, finalAfter: { text: st.finalAfter.text } } };
+    const preview = describeRule(rule, { ticker: "RAYS", ...clientCtx }).paragraph;
+    const server = statedCtx({ stated: st });
+    assert.deepEqual(server, clientCtx.stated, "the server's read has the launch page's shape");
+    const pinned = describeRule(rule, { ticker: "RAYS", ...serverDescribeCtx(rule, clientCtx, { seriesTitle: ws.question, stated: server }) }).paragraph;
+    assert.equal(pinned, preview, "the pinned paragraph matches the preview");
+    const forged = { ...clientCtx, stated: { phrase: "a source the client made up", crossRead: null, finalAfter: { text: "about 1 minute" } } };
+    assert.equal(serverDescribeCtx(rule, forged, { seriesTitle: ws.question }).stated, undefined, "the request's stated is never used");
+    assert.deepEqual(serverDescribeCtx(rule, forged, { seriesTitle: ws.question, stated: server }).stated, server);
+    assert.equal(serverDescribeCtx({ ...rule, market: null, series: "polymarket:tag:mlb" } as BurnRule, null, { seriesTitle: "MLB", stated: server }).stated, undefined, "a series rule names no one market");
+    assert.equal(statedCtx(null), null); assert.equal(statedCtx({}), null);
+    const src = (f: string) => fs.readFileSync(f, "utf8");
+    assert.match(src("src/lib/burnticker/api/handlers.ts"), /statedText = statedCtx\(info\);[\s\S]*serverDescribeCtx\(locked\.rule, \(body as \{ descCtx\?: unknown \}\)\.descCtx, \{ seriesTitle, feed: feedText, stated: statedText \}\)/);
+    assert.match(src("src/app/api/burnticker/v1/launch/review/route.ts"), /platform\(\)\.polymarket\.seriesInfo\(rule\.market\)[\s\S]*buildLaunchReview\(body, \{ timeLockSecs: cachedTimeLockSecs\(cluster\), stated \}\)/);
   });
 
   test("a proposed-but-not-final payout is never read as settled (real market inside its dispute window, chain payout 0)", async () => {
