@@ -20,6 +20,21 @@ export const LINK_LABELS = ["X", "Telegram", "Website"] as const;
 export const RIGHTS_LINE = "I have the right to use this image. A team, league or company mark is used at my own risk.";
 export const TAKEDOWN_LINE = "To ask for an image to be removed from this site, email contact@burnticker.com. The copy on Arweave is permanent and cannot be removed.";
 export const IMAGE_HELP = "PNG, JPG, GIF or WebP, up to 2 MB. It is shown square. Without one, the coin uses its generated receipt art.";
+/** website-19 (owner, 2026-10-12: "can you copy and paste an image in as a thumbnail?"): the three ways in, said once. */
+export const IMAGE_WAYS = "Choose a file, drop one here, or paste an image.";
+/**
+ * The image in a paste or a drop (a DataTransfer's files or items), or null when it holds none. A pasted image has no file name, so it gets
+ * a generated one ("pasted-image.png"). Whatever it returns goes through the same check as a chosen file (imageFileProblem).
+ */
+export function imageFromTransfer(dt: { files?: ArrayLike<{ name: string; size: number; type: string }> | null; items?: ArrayLike<{ kind: string; type: string; getAsFile(): { name: string; size: number; type: string } | null }> | null } | null): { name: string; size: number; type: string } | null {
+  if (!dt) return null;
+  const files = Array.from(dt.files ?? []).filter((f) => f.type.startsWith("image/"));
+  let f: { name: string; size: number; type: string } | null = files[0] ?? null;
+  if (!f) for (const it of Array.from(dt.items ?? [])) if (it.kind === "file" && it.type.startsWith("image/")) { f = it.getAsFile(); if (f) break; }
+  return f;
+}
+/** The name a pasted image is given when it has none. */
+export const pastedImageName = (type: string): string => `pasted-image.${({ "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" } as Record<string, string>)[type] ?? "img"}`;
 
 /** The image type from its first bytes (the declared type is never trusted alone). Null for anything else. */
 export function sniffImageType(b: Uint8Array): ImageType | null {

@@ -92,7 +92,7 @@ export interface CoverageMatrix {
 }
 
 /** The preflight's answer for one selector (src/lib/burnticker/coverage/preflight.ts). */
-export type PreflightCode = "kalshi-not-settlement" | "stub-oracle" | "not-primary" | "primary-unreadable" | "no-readings" | "stale-primary" | "no-cross-read" | "cross-read-unreadable" | "disagreement" | "unknown-selector";
+export type PreflightCode = "kalshi-not-settlement" | "stub-oracle" | "not-primary" | "primary-unreadable" | "no-readings" | "stale-primary" | "no-cross-read" | "cross-read-unreadable" | "disagreement" | "unknown-selector" | "already-decided";
 export interface PreflightReading { id: string; value: string | null; result: string | null; at: string }
 export interface PreflightResult {
   ok: boolean;

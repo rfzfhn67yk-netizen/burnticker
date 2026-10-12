@@ -29,7 +29,7 @@ export const CATALOGUE_ONE_SHOT_RE = /^(espn\.game|nws\.snow|ll2\.launch|github\
 export const KEEPER_ONE_SHOT_RE = /^(ll2\.launch|github\.milestone|youtube\.milestone):/;
 
 /** The plain choice the review card shows (WIRING-SOURCES.md). */
-export const INVERSE_CHOICE = { off: "Burn when it happens", on: "Burn when it does not happen" } as const;
+export const INVERSE_CHOICE = { off: "Burn when it happens", on: "Burn on the days it does not happen" } as const;
 
 /** Why this rule cannot take `inverse` (null: it can). Pure; validateRule uses it, so the wizard and the server refuse the same rules. */
 export function inverseRefusal(r: Pick<BurnRule, "oracle" | "kind" | "series" | "market" | "pair"> & { set?: unknown; derby?: unknown }): string | null {

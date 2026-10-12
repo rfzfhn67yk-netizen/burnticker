@@ -202,13 +202,13 @@ describe("B. the fade side: inverse rules", () => {
     const league = applyDial(nativeRule(teamSeries("mlb", "TB", "win", { kind: "season", year: 2026 })), "league", "on");
     assert.throws(() => validateRule({ ...league, inverse: true }), /League mode cannot be combined/);
     assert.equal(canInvert(validateRule(DEBT_RULE)), true); assert.equal(inverseRefusal(validateRule(nativeRule(nwsSeries("high", "DTW", 90)))), null);
-    assert.deepEqual(INVERSE_CHOICE, { off: "Burn when it happens", on: "Burn when it does not happen" });
+    assert.deepEqual(INVERSE_CHOICE, { off: "Burn when it happens", on: "Burn on the days it does not happen" });
   });
 
   test("the review card's plain choice is a dial: a pure rewrite, offered only where allowed, switched off by league mode", () => {
     const debt = validateRule(DEBT_RULE);
     const d = dialsFor(debt);
-    assert.ok(d.ids.includes("inverse")); assert.deepEqual(d.inverse, { on: false, options: [{ value: "off", label: "Burn when it happens" }, { value: "on", label: "Burn when it does not happen" }] });
+    assert.ok(d.ids.includes("inverse")); assert.deepEqual(d.inverse, { on: false, options: [{ value: "off", label: "Burn when it happens" }, { value: "on", label: "Burn on the days it does not happen" }] });
     const on = applyDial(debt, "inverse", "on");
     assert.equal(validateRule(on).inverse, true); assert.equal(dialsFor(on).inverse!.on, true);
     assert.equal(lockRule(applyDial(on, "inverse", "off")).sha256, lockRule(debt).sha256, "off restores the plain rule's bytes");
@@ -227,7 +227,7 @@ describe("B. the fade side: inverse rules", () => {
     const feed = { title: "U.S. national debt (Debt to the Penny)", sourceName: "U.S. Treasury Fiscal Data", unitLabel: "$1B added", crossRead: "FRED's GFDEBTN series" };
     const debt = text(validateRule({ ...DEBT_RULE, inverse: true }), { ticker: "", feed });
     lint(debt.paragraph); assert.match(debt.paragraph, /This coin burns on the days the debt stays flat or falls\./); assert.equal(debt.windowKind, "perpetual");
-    const cool = text(validateRule({ ...nativeRule(nwsSeries("high", "DTW", 90)), inverse: true })); lint(cool.paragraph); assert.match(cool.paragraph, /below 90 °F/);
+    const cool = text(validateRule({ ...nativeRule(nwsSeries("high", "DTW", 90)), inverse: true })); lint(cool.paragraph); assert.match(cool.paragraph, /89 °F or colder/); assert.match(cool.paragraph, /Nothing happens on a day at 90 °F or hotter, or on a day with no reading/);
     const cpi = text(validateRule({ ...DEBT_RULE, series: "fred.CPIAUCSL", scalar: { unit: 1, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "up" }, inverse: true }), { ticker: "", feed: { title: "Consumer Price Index (CPI-U)", sourceName: "FRED (St. Louis Fed)", unitLabel: "1 index point" } });
     lint(cpi.paragraph); assert.match(cpi.paragraph, /every reading of Consumer Price Index that does not rise/);
     for (const p of [debt, cool, cpi]) assert.equal((p.paragraph.match(new RegExp(WINDOW_SENTENCE.perpetual.source, "g")) ?? []).length, 1);

@@ -14,6 +14,7 @@ import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { catalogueSources, markLaunched, prepareLaunch, runBacktest, kalshiSearch, kalshiEvents, kalshiTeams, kalshiCategories, browse, search, elections, electionPair, sportsTeams, sportsGames, polymarketSearch, publicConfig } from "@/lib/burnticker/api/handlers";
 import type { FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
+import { lookupCoin, registryCoinKey, sharedTickerBody, type CoinLookup } from "@/lib/burnticker/coinLookup";
 import { API_PREFIX, buildOpenApi } from "@/lib/burnticker/api/spec";
 import { buildCoverage, type CoverageMatrix } from "@/lib/burnticker/coverage";
 import { logNoCardSearch, recordLaunchTimings } from "@/lib/burnticker/api/product";
@@ -30,13 +31,20 @@ const ZERO = BigInt(0);
 /** decodeURIComponent that never throws (a malformed escape is looked up as written, and simply not found). */
 const decode = (s: string): string => { try { return decodeURIComponent(s); } catch { return s; } };
 
-/** A token by ticker (case-insensitive) or by mint address. */
+/** A coin by mint address, or by ticker (case-insensitive) when one coin holds it; tickers are not unique (owner 2026-10-12, coinKey.ts). */
+export function findCoin(p: Platform, id: string): CoinLookup { return lookupCoin(p.registry, id); }
+
+/** The one token for an id; null when there is none, or when several coins share the ticker (findCoin tells those apart). */
 export function findToken(p: Platform, id: string): TokenRow | null {
-  const s = decode(id).trim();
-  return s.length >= 32 ? p.registry.token(s) : p.registry.tokenByTicker(s);
+  const l = findCoin(p, id);
+  return l.kind === "one" ? l.token : null;
 }
 
-const links = (t: TokenRow) => ({ self: `${API_PREFIX}/tokens/${t.ticker}`, receipts: `${API_PREFIX}/tokens/${t.ticker}/receipts`, page: `/burnticker/t/${t.ticker}` });
+/** A 300 for a ticker several coins share (the candidates, each with its mint), or a 404 when nothing matches. */
+const notOne = (p: Platform, l: Exclude<CoinLookup, { kind: "one" }>, id: string): ApiResult =>
+  l.kind === "many" ? { status: 300, body: sharedTickerBody(p.registry, l) } : fail(404, `There is no token called ${decode(id)}.`);
+
+const links = (t: TokenRow, key: string = t.ticker) => ({ self: `${API_PREFIX}/tokens/${encodeURIComponent(key)}`, receipts: `${API_PREFIX}/tokens/${encodeURIComponent(key)}/receipts`, page: `/burnticker/t/${encodeURIComponent(key)}` });
 
 export function v1Catalogue(now = Date.now(), env: Record<string, string | undefined> = process.env): ApiResult {
   return ok({ ...catalogueSources(now, { includeConfig: true }), launches: catalogueLaunches(env), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series are tier 1 adjudicated markets, searched live. Only settled results count, and prices are shown for display only." }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket yes-or-no markets are tier 1 adjudicated markets, searched live on Gamma. Each result is read from the on-chain payout on Polygon. Prices are shown for display only." } });
@@ -144,29 +152,32 @@ export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {
     const burned = confirmed.reduce((a, b) => a + (b.burnRaw ?? ZERO), ZERO);
     const burns = confirmed.filter((b) => (b.burnRaw ?? ZERO) > ZERO);
     const lastBurnAt = burns.map((b) => b.settledAt).sort().pop() ?? null;
-    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t) };
+    return { ticker: t.ticker, name: t.name, mint: t.mint, status: t.status, oracle: t.oracle, selectorKey: t.selectorKey, mode: t.mode, rulesSha256: t.rulesSha, creator: t.creator, cluster: t.cluster, baselineAt: t.baselineAt, receipts: rows.length, burns: burns.length, burnedTokens: rawToTokens(burned, 6), imageUrl: t.imageUrl, lastBurnAt, links: links(t, registryCoinKey(p.registry, t)) };
   });
   return ok({ tokens: page, count: page.length, total: all.length, cluster: p.cluster });
 }
 
 export async function v1Token(p: Platform, id: string): Promise<ApiResult> {
-  const t = findToken(p, id);
-  if (!t) return fail(404, `There is no token called ${decode(id)}.`);
+  const l = findCoin(p, id);
+  if (l.kind !== "one") return notOne(p, l, id);
+  const t = l.token;
   const d = await tokenPageData(p, t);
   return ok({ status: d.status, receipts: d.receipts, readings: d.readings.map((r) => ({ id: r.id, at: r.at, result: r.result, value: r.value, title: r.title, sourceUrl: r.sourceUrl, settlementSourceUrl: r.settlementSourceUrl, method: r.method, proof: r.proof ?? null, attestedBy: r.attestedBy })), rulesText: d.rulesText, stubs: d.stubs });
 }
 
 export async function v1Receipts(p: Platform, id: string): Promise<ApiResult> {
-  const t = findToken(p, id);
-  if (!t) return fail(404, `There is no token called ${decode(id)}.`);
+  const l = findCoin(p, id);
+  if (l.kind !== "one") return notOne(p, l, id);
+  const t = l.token;
   const d = await tokenPageData(p, t, Date.now(), { live: false });
   return ok({ ticker: t.ticker, mint: t.mint, rulesSha256: t.rulesSha, count: d.receipts.length, receipts: d.receipts });
 }
 
 /** Server-side verification: the same checks as the SDK's verifyReceipt, with the platform's Kalshi client and program client. */
 export async function v1Verify(p: Platform, id: string, eventId: string, o: { fetchImpl?: FetchLike; rpcFetch?: RpcFetchLike; now?: number } = {}): Promise<ApiResult> {
-  const t = findToken(p, id);
-  if (!t) return fail(404, `There is no token called ${decode(id)}.`);
+  const l = findCoin(p, id);
+  if (l.kind !== "one") return notOne(p, l, id);
+  const t = l.token;
   const ev = decode(eventId);
   const d = await tokenPageData(p, t, o.now ?? Date.now(), { live: false });
   const receipt = d.receipts.find((r) => r.eventId === ev);

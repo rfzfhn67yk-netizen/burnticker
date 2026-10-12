@@ -18,7 +18,8 @@ import { draftRevision, EMPTY_REVIEW_SLOT, reviewAnswered, reviewFor, reviewMatc
 import { derbyExplainer } from "@/lib/burnticker/launchDerby";
 import { PreWalletSummary } from "./PreWalletSummary";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
-import { SHARE_PRESETS } from "@/lib/burnticker/launchPresets";
+import { DEFAULT_RAISE_SOL, DEFAULT_SHARE, RAISE_PRESETS_SOL, SHARE_PRESETS, type RaisePreset } from "@/lib/burnticker/launchPresets";
+import { endSentences, pairIdentityProblems, pairNames, pairTickers, patternOptions, PATTERNS } from "@/lib/burnticker/guidedLaunch";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileProblems, type ProfileValue } from "./ProfileFields";
 
 /**
@@ -35,12 +36,19 @@ interface Bundle { mint: string; ticker: string; ready: boolean; pending: string
 
 function CoinPicker({ label, value, onPick, exclude, initial }: { label: string; value: Hit | null; onPick: (h: Hit | null) => void; exclude: string | null; initial?: string }) {
   const [q, setQ] = useState(initial ?? ""), [hits, setHits] = useState<Hit[]>([]), [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null);
+  // walkthrough snag 6: a link that names a coin (?derby=1&a=SOL&b=ETH) selects it once its search answers, not only types it
+  const autoPicked = useRef(false);
+  useEffect(() => { if (autoPicked.current || value || !initial) return; const h = hits.find((x) => x.symbol.toUpperCase() === initial.toUpperCase() && !!x.underlying); if (h) { autoPicked.current = true; onPick(h); } }, [hits]); // eslint-disable-line react-hooks/exhaustive-deps
+  // intent audit item 12: only the answer to the latest query is shown (a sequence number drops a slow answer to an older one)
+  const seq = useRef(0);
   useEffect(() => {
     const s = q.trim();
     if (s.length < 2) { setHits([]); return; }
+    const my = ++seq.current;
+    setHits([]);
     const t = setTimeout(() => {
       setBusy(true); setErr(null);
-      fetch(`/api/burnticker/v1/derby/search?q=${encodeURIComponent(s)}&assets=all`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setHits(j.hits ?? []); }).catch((e) => setErr(String(e.message ?? e))).finally(() => setBusy(false));
+      fetch(`/api/burnticker/v1/derby/search?q=${encodeURIComponent(s)}&assets=all`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); if (my === seq.current) setHits(j.hits ?? []); }).catch((e) => { if (my === seq.current) setErr(String(e.message ?? e)); }).finally(() => { if (my === seq.current) setBusy(false); });
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
@@ -73,9 +81,9 @@ function CoinPicker({ label, value, onPick, exclude, initial }: { label: string;
  * `blocked`: why the wallet cannot open (preview mode, a closed host, pairs off on this host) — the review card disables its button and
  * says so. `unavailable`: Coin vs Coin cannot launch on this host at all (launch audit 5 L02) — the tile says why before any picking.
  */
-export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true }: { pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean } = {}) {
+export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true, startOpen = false }: { pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean; /** website-19: the guided path opens it as question 2, with the burn pattern and the end beside the review */ startOpen?: boolean } = {}) {
   const wallet = useWallet();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   // `/burnticker/launch?derby=1&a=WIF&b=SHIB` (the Burn Derby page and the search card) opens the tile with both searches filled in.
   const [initial, setInitial] = useState<{ a: string; b: string }>({ a: "", b: "" });
   useEffect(() => {
@@ -90,7 +98,11 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   const [a, setA] = useState<Hit | null>(null), [b, setB] = useState<Hit | null>(null);
   // fixed on the web: daily windows, a 30-day run; the share is a preset (2 / 5 / 10 %, default 2 %); the flippening only via its template
   const window_ = "daily" as const, seasonDays = 30;
-  const [flip, setFlip] = useState(false), [fraction, setFraction] = useState(0.02);
+  const [flip, setFlip] = useState(false), [fraction, setFraction] = useState<number>(DEFAULT_SHARE.recurring);
+  // website-19 (walkthrough snag 2): the raise is picked once and shared by both coins (the review answers null for the pair curve)
+  const [raiseSol, setRaiseSol] = useState<RaisePreset>(DEFAULT_RAISE_SOL);
+  // the flippening resolves once: the one-shot presets (100 or 50 %); the daily race keeps the recurring ones
+  useEffect(() => { setFraction(flip ? DEFAULT_SHARE.oneShot : DEFAULT_SHARE.recurring); }, [flip]);
   const [names, setNames] = useState({ a: "", b: "", ta: "", tb: "" });
   // website-18 (the owner: "I also don't see the ability to change the thumbnail pic"): each coin of the pair has its own image, description and links
   const [profA, setProfA] = useState<ProfileValue>(EMPTY_PROFILE), [profB, setProfB] = useState<ProfileValue>(EMPTY_PROFILE);
@@ -98,8 +110,14 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ pairId: string; a: Bundle; b: Bundle; notes: string[] } | null>(null);
   const creator = wallet.publicKey?.toBase58() ?? "";
   const now = useMemo(() => Date.now(), []);
-  useEffect(() => { if (a) setNames((n) => ({ ...n, a: n.a || defaultName(a.symbol), ta: n.ta || defaultTicker(a.symbol) })); }, [a]);
-  useEffect(() => { if (b) setNames((n) => ({ ...n, b: n.b || defaultName(b.symbol), tb: n.tb || defaultTicker(b.symbol) })); }, [b]);
+  // website-19 (owner, 2026-10-12: "two teamwifs"): both sides are named by the matchup ($WIFVBONK and $BONKVWIF; "WIF vs BONK, WIF side"),
+  // generated until the creator types their own
+  const [edited, setEdited] = useState(false);
+  useEffect(() => {
+    if (edited) return;
+    if (a && b) { const t = pairTickers(a.symbol, b.symbol), n = pairNames(a.symbol, b.symbol); setNames({ a: n.a, b: n.b, ta: t.a, tb: t.b }); }
+    else { if (a) setNames((n) => ({ ...n, a: n.a || defaultName(a.symbol), ta: n.ta || defaultTicker(a.symbol) })); if (b) setNames((n) => ({ ...n, b: n.b || defaultName(b.symbol), tb: n.tb || defaultTicker(b.symbol) })); }
+  }, [a, b, edited]);
   const choice: TileChoice | null = a?.underlying && b?.underlying ? { a: a.underlying, b: b.underlying, window: window_, seasonDays, flip, fraction, now } : null;
   useEffect(() => { setHash(null); if (choice) sha256HexWeb(tileHashInput(choice)).then(setHash).catch(() => setHash(null)); }, [a, b, flip, fraction]); // eslint-disable-line react-hooks/exhaustive-deps
   const model = choice && hash ? tileRule(choice, hash, { a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }) : null;
@@ -118,7 +136,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   const launch = async () => {
     if (!model?.rule || !creator || !reviewMatchesDraft(slot, curRev.current)) return;   // A6: only the reviewed draft is prepared
     setBusy(true); setErr(null); setOut(null); setPcOut(null);
-    const body = { creator, ticker: names.ta.toUpperCase(), name: names.a, description: model.sentence, imageUrl: null, rule: model.rule, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, ...profileBody(profA), pair: { ticker: names.tb.toUpperCase(), name: names.b, description: model.sentence, imageUrl: null, ...profileBody(profB) } };
+    const body = { creator, ticker: names.ta.toUpperCase(), name: names.a, description: model.sentence, imageUrl: null, rule: model.rule, firstBuySol: "0", raiseSol, acknowledgements: { ruleLocked: true, noReturns: true }, ...profileBody(profA), pair: { ticker: names.tb.toUpperCase(), name: names.b, description: model.sentence, imageUrl: null, ...profileBody(profB) } };
     const run = async (v: PairVenue, retried: boolean): Promise<void> => {
       try {
         const j = await postPairLaunch((u, init) => fetch(u, init), body, v);
@@ -132,7 +150,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   // L06 / L13: the read-only review payload for the pair (the server's numbers), debounced; the pair's side B rule is derived at build
   // A6: keyed by the draft's revision (launchReviewSync.ts): a summary for an older pick or older names is never shown
   const [slot, setSlot] = useState<ReviewSlot<LaunchReview>>(EMPTY_REVIEW_SLOT);
-  const reviewKey = draftRevision([model?.rule ?? null, names, profA.description, profB.description]);
+  const reviewKey = draftRevision([model?.rule ?? null, names, profA.description, profB.description, raiseSol]);
   const curRev = useRef(reviewKey); curRev.current = reviewKey;
   const seqRef = useRef(0);
   useEffect(() => {
@@ -140,7 +158,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
     const seq = ++seqRef.current, rev = reviewKey;
     setSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
-      fetch("/api/burnticker/v1/launch/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: model.rule, ticker: names.ta.toUpperCase(), name: names.a, creatorDescription: profA.description, pair: { ticker: names.tb.toUpperCase(), name: names.b, creatorDescription: profB.description } }) })
+      fetch("/api/burnticker/v1/launch/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: model.rule, ticker: names.ta.toUpperCase(), name: names.a, raiseSol, creatorDescription: profA.description, pair: { ticker: names.tb.toUpperCase(), name: names.b, creatorDescription: profB.description } }) })
         .then(async (r) => { const j = await r.json().catch(() => null); if (!r.ok) throw new Error(r.status === 403 ? "creator launches are closed on this site" : `the review could not be read (HTTP ${r.status})`); return j as LaunchReview; })
         .then((j) => setSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
         .catch((e) => setSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: String((e as Error).message) })));
@@ -163,10 +181,29 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
     </div>
   ) : tileButton;
   if (!open || unavailable) return tile;
-  const ready = !!model?.rule && !model.problems.length && /^[A-Z0-9]{2,10}$/.test(names.ta) && /^[A-Z0-9]{2,10}$/.test(names.tb) && names.ta !== names.tb && !!names.a.trim() && !!names.b.trim();
+  // intent audit item 5: the two sides must be told apart (ticker and name, any case or spacing)
+  const identity = pairIdentityProblems({ ticker: names.ta, name: names.a }, { ticker: names.tb, name: names.b });
+  const ready = !!model?.rule && !model.problems.length && /^[A-Z0-9]{2,10}$/.test(names.ta) && /^[A-Z0-9]{2,10}$/.test(names.tb) && identity.length === 0 && !!names.a.trim() && !!names.b.trim();
+  // website-19: the burn pattern (each day's winner, or once: the flippening) and the end, read from the rule
+  const po = patternOptions({ follow: "coins", rule: model?.rule ?? null });
+  const end = model?.rule ? endSentences(model.rule) : null;
   return (
     <section className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-4 sm:col-span-2" aria-label="Coin vs Coin">
       <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">{flip ? "Flippening" : "Coin vs Coin"}</h3><span className="flex gap-3 text-xs"><a className="underline" href="/burnticker/derby">Burn Derby pairs and brackets →</a><button className="underline" data-nav onClick={() => setOpen(false)}>close</button></span></div>
+      {startOpen && (
+        <div className="space-y-2" data-guided-derby>
+          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Burn pattern">
+            {po.options.filter((o) => o.id === "winner" || o.id === "once").map((o) => { const on = o.id === "once" ? flip : !flip; return (
+              <button key={o.id} type="button" role="radio" aria-checked={on} data-decision="what" data-pattern={o.id} onClick={() => setFlip(o.id === "once")} className={`rounded-lg border p-3 text-left text-sm ${on ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"}`}>
+                <span className="block font-medium">{o.id === "once" ? "Once: the flippening" : PATTERNS.winner.label}</span>
+                <span className="mt-0.5 block text-xs text-neutral-300">{o.id === "once" ? "Read once a day at 00:00 UTC for 30 days. The first day coin A's value is above coin B's, coin A's rule fires once. If that day never comes, coin B's rule fires once at the end of the run." : "Read once a day at 00:00 UTC for 30 days. Each day, the coin whose reference gained more fires its rule, and the other coin's share for that day moves to its burn pool."}</span>
+              </button>
+            ); })}
+          </div>
+          <p className="text-xs text-neutral-400" data-pattern-greyed>{po.options.filter((o) => !o.available).map((o) => `${o.label}: ${o.reason}`).join(" ")}</p>
+          {end && <div className="space-y-0.5 text-xs text-neutral-300" data-end-sentences><p className="font-medium text-neutral-200">At the end</p>{end.sentences.map((x) => <p key={x}>{x}</p>)}</div>}
+        </div>
+      )}
       <p className="text-xs text-neutral-300" data-derby-explainer>The two coins you pick are <b>reference feeds</b>. Burnticker only reads their published feeds and never trades or burns them. Launching creates two <b>new</b> coins, and their own trading fees pay for their burns.</p>
       <div className="grid min-w-0 gap-3 md:grid-cols-2">
         <CoinPicker key={`a-${initial.a}`} initial={initial.a} label={flip ? "Reference coin A, the one that may pass the other" : "Reference coin A"} value={a} onPick={setA} exclude={b?.symbol ?? null} />
@@ -180,17 +217,19 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
       {model && !out && !pcOut && (
         <ReviewCard
           coins={[
-            { key: "a", name: names.a, ticker: names.ta, onName: (v) => setNames((n) => ({ ...n, a: v })), onTicker: (v) => setNames((n) => ({ ...n, ta: v })), image: profA.image ? chosenPreview(profA)! : art(model.rule, names.ta), oneLiner: model.rule ? ruleOneLiner(model.rule) : "", oracle: "derby", badge: null },
-            { key: "b", name: names.b, ticker: names.tb, onName: (v) => setNames((n) => ({ ...n, b: v })), onTicker: (v) => setNames((n) => ({ ...n, tb: v })), image: profB.image ? chosenPreview(profB)! : art(ruleB, names.tb), oneLiner: ruleB ? ruleOneLiner(ruleB) : "", oracle: "derby", badge: null },
+            { key: "a", name: names.a, ticker: names.ta, onName: (v) => { setEdited(true); setNames((n) => ({ ...n, a: v })); }, onTicker: (v) => { setEdited(true); setNames((n) => ({ ...n, ta: v })); }, image: profA.image ? chosenPreview(profA)! : art(model.rule, names.ta), oneLiner: model.rule ? ruleOneLiner(model.rule) : "", oracle: "derby", badge: null },
+            { key: "b", name: names.b, ticker: names.tb, onName: (v) => { setEdited(true); setNames((n) => ({ ...n, b: v })); }, onTicker: (v) => { setEdited(true); setNames((n) => ({ ...n, tb: v })); }, image: profB.image ? chosenPreview(profB)! : art(ruleB, names.tb), oneLiner: ruleB ? ruleOneLiner(ruleB) : "", oracle: "derby", badge: null },
           ]}
           sentence={model.sentence}
           pairLine={PAIR_REVIEW_LINE}
           pairFacts={winnerTakesBurnFacts(names.ta.toUpperCase() || "A", names.tb.toUpperCase() || "B")}
           ends={ends}
-          shares={{ options: [...SHARE_PRESETS.recurring], value: fraction, onChange: setFraction }}
-          image={<div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images><ProfileFields value={profA} onChange={setProfA} part="image" who={`$${names.ta.toUpperCase() || "A"}`} customImages={customImages} /><ProfileFields value={profB} onChange={setProfB} part="image" who={`$${names.tb.toUpperCase() || "B"}`} customImages={customImages} /></div>}
+          shares={{ options: [...(flip ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring)], value: fraction, onChange: setFraction }}
+          raise={shown.review?.raise ? { options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: setRaiseSol, line: shown.review.raise.line } : null}
+          graduation={shown.review?.graduation ?? null}
+          image={<div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images><ProfileFields value={profA} onChange={setProfA} part="image" who={`$${names.ta.toUpperCase() || "A"}`} customImages={customImages} /><ProfileFields value={profB} onChange={setProfB} part="image" who={`$${names.tb.toUpperCase() || "B"}`} customImages={customImages} pasteTarget={false} /></div>}
           profile={<div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profA} onChange={setProfA} part="text" who={`$${names.ta.toUpperCase() || "A"}`} /><ProfileFields value={profB} onChange={setProfB} part="text" who={`$${names.tb.toUpperCase() || "B"}`} /></div>}
-          profileProblems={[...profileProblems(profA).map((x) => `$${names.ta.toUpperCase() || "A"}: ${x}`), ...profileProblems(profB).map((x) => `$${names.tb.toUpperCase() || "B"}: ${x}`)]}
+          profileProblems={[...profileProblems(profA).map((x) => `$${names.ta.toUpperCase() || "A"}: ${x}`), ...profileProblems(profB).map((x) => `$${names.tb.toUpperCase() || "B"}: ${x}`), ...identity]}
           problems={model.problems}
           error={err}
           busy={busy}

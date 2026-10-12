@@ -28,6 +28,7 @@ import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { PAIR_STATE_NAMES, parseForwardMemo, type PairLinks } from "@/lib/burnticker/pairForward";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
 import { LP_POLICY_BADGE, buildLpLockJson, feeKeysPda, operatorTreasuryFor, solscanUrl, type LpLockJson } from "@/lib/burnticker/lockFees";
+import { byCoin, siteKeysOf } from "@/lib/burnticker/coinKey";
 
 /**
  * THE TOKEN PAGE (LAUNCHPAD-PATH §6; 2026-10-09), generalised from the $DEFICIT status page to N tokens: supply and burned, the feed
@@ -548,6 +549,11 @@ export interface PlatformIndexToken {
   holdersNote?: string | null; poolNote?: string | null;
   /** sources-2: a one-market Polymarket coin's stated source and dispute window */
   stated?: StatedJson | null;
+  /**
+   * The coin's directory under t/ when it is not its ticker (owner 2026-10-12: tickers are not unique; coinKey.ts siteKeysOf): a coin
+   * that shares its ticker with an earlier launched coin publishes at t/<MINT>. Absent means t/<TICKER>.
+   */
+  siteKey?: string;
 }
 export interface AuditBadge { ok: boolean; ranAt: string; receipts: number; mismatches: number; chainChecked: boolean }
 export interface PlatformIndexJson { schema: "burnticker.index/v1"; generatedAt: string; tokens: PlatformIndexToken[]; pairs: { pairId: string; selectorKey: string; seriesTitle: string | null; a: PairSideSummary; b: PairSideSummary; winnerTakesBurn?: boolean; forwardedAtoB?: string; forwardedBtoA?: string }[]; totals: { tokens: number; live: number; burns: number; burnedTokens: string; pairs: number }; audit: AuditBadge | null }
@@ -576,11 +582,12 @@ export function indexToken(s: TokenStatusJson): PlatformIndexToken {
   };
 }
 
-export function buildPlatformIndex(statuses: readonly TokenStatusJson[], now: number, audit: AuditBadge | null = null): PlatformIndexJson {
+/** `siteKeys`: each coin's site directories by mint (coinKey.ts siteKeysOf); the keeper passes its own, else they are worked out from the statuses. */
+export function buildPlatformIndex(statuses: readonly TokenStatusJson[], now: number, audit: AuditBadge | null = null, siteKeys: ReadonlyMap<string, readonly string[]> = statusSiteKeys(statuses)): PlatformIndexJson {
   const pairs = groupPairs(statuses);
   return {
     schema: "burnticker.index/v1", generatedAt: new Date(now).toISOString(), audit, pairs,
-    tokens: statuses.map((s) => indexToken(s)),
+    tokens: statuses.map((s) => { const k = siteKeys.get(s.mint)?.[0]; return k && k !== s.ticker ? { ...indexToken(s), siteKey: k } : indexToken(s); }),
     totals: { tokens: statuses.length, live: statuses.filter((s) => s.status === "live").length, burns: statuses.reduce((a, s) => a + s.burned.count, 0), burnedTokens: statuses.reduce((a, s) => a + BigInt(s.burned.total.split(".")[0]), ZERO).toString(), pairs: pairs.length },
   };
 }
@@ -605,7 +612,7 @@ ${ix.pairs.length ? `<h2>Rivalry pairs</h2>
 <div class="tiles">${ix.pairs.map((p) => `<div class="tile"><div class="label">${esc(p.seriesTitle ?? p.selectorKey)}</div><div class="value"><a href="t/${esc(p.a.ticker)}/">$${esc(p.a.ticker)}</a> ${p.a.burns} : ${p.b.burns} <a href="t/${esc(p.b.ticker)}/">$${esc(p.b.ticker)}</a></div><div class="sub">Tokens burned ${fmt(p.a.burned)} : ${fmt(p.b.burned)}. Supply ${fmt(p.a.supply)} : ${fmt(p.b.supply)}. <a href="p/${esc(p.pairId)}/">Open the pair page</a>.</div></div>`).join("")}</div>` : ""}
 <h2>Tokens</h2>
 ${ix.tokens.length ? `<div class="scroll"><table><thead><tr><th>Ticker</th><th>Name</th><th>Event</th><th>Mode</th><th>Burned</th><th>Burns</th><th>Status</th></tr></thead><tbody>
-${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.ticker)}/">$${esc(t.ticker)}</a></td><td>${esc(t.name)}</td><td title="${esc(t.selectorKey)}">${esc(t.seriesTitle ?? t.selectorKey)}</td><td>${esc(t.mode)}</td><td class="num">${fmt(t.burned)} (${t.pctOfSupply.toFixed(2)}%)</td><td class="num">${t.burns}</td><td>${esc(t.status)}</td></tr>`).join("\n")}
+${ix.tokens.filter((t) => !t.pairId).map((t) => `<tr><td><a href="t/${esc(t.siteKey ?? t.ticker)}/">$${esc(t.ticker)}</a></td><td>${esc(t.name)}</td><td title="${esc(t.selectorKey)}">${esc(t.seriesTitle ?? t.selectorKey)}</td><td>${esc(t.mode)}</td><td class="num">${fmt(t.burned)} (${t.pctOfSupply.toFixed(2)}%)</td><td class="num">${t.burns}</td><td>${esc(t.status)}</td></tr>`).join("\n")}
 </tbody></table></div>` : `<p class="muted">There are no tokens yet.</p>`}
 <h2>How it works</h2>
 <ol><li>A creator picks an event source, such as a Kalshi series or market or a source's own published data. Then the creator picks a rule that says what each settled outcome burns. The rule is hashed and locked at launch.</li><li>The token launches on Raydium LaunchLab through Burnticker's platform settings. Its creator-fee slot pays all of its fees to its own burn pool.</li><li>When the event settles, the keeper reads the settled result, never a price. It works out the units with the published rule and runs the burn program. The program spends the rule's share of the pool buying the token at market and burns everything it gets, or it burns tokens from a vesting vault. It also writes the receipt memo on chain.</li><li>Anyone can recompute every receipt from the source and the rule. If we stop, anyone can run the burn with the same public readings.</li></ol>
@@ -678,19 +685,29 @@ export function publishPairSite(dir: string, tally: PairTally, a: TokenStatusJso
   publishSite(`${dir}/p/${tally.pairId}`, { "pair.json": toJson({ schema: "burnticker.pair/v1", generatedAt: a.generatedAt, tally }), "index.html": renderPairHtml(tally, a, b, receiptsA, receiptsB) });
 }
 
-/** Writes one token's site: t/<ticker>/{status.json, receipts.json, rules.json, index.html}. */
-export function publishTokenSite(dir: string, s: TokenStatusJson, receipts: readonly ReceiptJson[], readings: readonly ReadingRow[], rulesText: string): void {
-  publishSite(`${dir}/t/${s.ticker}`, { "status.json": toJson(s), "receipts.json": toJson(receipts), "rules.json": rulesText, "index.html": renderTokenHtml(s, receipts, readings) });
+/**
+ * Writes one token's site: t/<key>/{status.json, receipts.json, rules.json, index.html} for each of its keys (coinKey.ts siteKeysOf: the
+ * ticker, the mint, or both when the ticker is shared). Without keys, t/<ticker> as before.
+ */
+export function publishTokenSite(dir: string, s: TokenStatusJson, receipts: readonly ReceiptJson[], readings: readonly ReadingRow[], rulesText: string, keys: readonly string[] = [s.ticker]): void {
+  const files = { "status.json": toJson(s), "receipts.json": toJson(receipts), "rules.json": rulesText, "index.html": renderTokenHtml(s, receipts, readings) };
+  for (const k of keys) publishSite(`${dir}/t/${k}`, files);
 }
 
-export function publishPlatformIndex(dir: string, statuses: readonly TokenStatusJson[], now: number, audit: AuditBadge | null = null, receiptsByTicker: Record<string, readonly ReceiptJson[]> = {}): PlatformIndexJson {
-  const ix = buildPlatformIndex(statuses, now, audit);
+/** The site keys worked out from published statuses (registry order; launch time from status.json). */
+export function statusSiteKeys(statuses: readonly TokenStatusJson[]): Map<string, string[]> {
+  return siteKeysOf(statuses.map((s) => ({ ticker: s.ticker, mint: s.mint, status: s.status, launchedAt: s.launchedAt ?? null })));
+}
+
+/** `receiptsByTicker` is read by mint first, then by ticker (coinKey.ts byCoin); the keeper keys it by mint. */
+export function publishPlatformIndex(dir: string, statuses: readonly TokenStatusJson[], now: number, audit: AuditBadge | null = null, receiptsByTicker: Record<string, readonly ReceiptJson[]> = {}, siteKeys?: ReadonlyMap<string, readonly string[]>): PlatformIndexJson {
+  const ix = buildPlatformIndex(statuses, now, audit, siteKeys ?? statusSiteKeys(statuses));
   publishSite(dir, { "index.json": toJson(ix), "index.html": renderPlatformIndexHtml(ix, receiptsByTicker) });
   // Each pair's scoreboard page (the index cards and the versus headers link to p/<pairId>/).
   for (const p of ix.pairs) {
-    const a = statuses.find((s) => s.ticker === p.a.ticker), b = statuses.find((s) => s.ticker === p.b.ticker);
+    const a = statuses.find((s) => s.mint === p.a.mint), b = statuses.find((s) => s.mint === p.b.mint);
     if (!a || !b) continue;
-    const ra = receiptsByTicker[a.ticker] ?? [], rb = receiptsByTicker[b.ticker] ?? [];
+    const ra = byCoin(receiptsByTicker, a) ?? [], rb = byCoin(receiptsByTicker, b) ?? [];
     publishPairSite(dir, pairTally(a, b, ra, rb), a, b, ra, rb);
   }
   return ix;

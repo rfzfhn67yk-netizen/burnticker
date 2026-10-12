@@ -69,7 +69,8 @@ export function ll2Text(s: NonNullable<ReturnType<typeof parseLl2Series>>, spend
     return { name: `${p.name} Launches`.slice(0, 32), ticker: `${p.abbrev}LAUNCH`.slice(0, 10), oneLiner: `burns for every successful ${p.name} launch`, oneShot: false,
       block: `For every successful orbital launch by ${p.name}, ${spends}, with a receipt on chain. Two launches on one day burn twice. ${src} Each day is read once it is over in UTC. A failed launch, a suborbital flight or a day with no launch burns nothing.` };
   }
-  const what = launchName ? `the launch named ${launchName}` : "this launch";
+  // intent audit 2 item 2: never a bare "this launch"; with no name known, the immutable id the rule locks
+  const what = launchName ? `the launch named ${launchName}` : `the launch with Launch Library 2 id ${s.launch}`;
   return { name: "Launch Success", ticker: "LAUNCHOK", oneLiner: `burns if ${what} succeeds`, oneShot: true,
     block: `If ${what} succeeds, ${spends} once, with a receipt on chain. ${src} The status is read the day after the launch, once it says success, failure or partial failure. A failure, a partial failure or a scrubbed launch burns nothing.` };
 }

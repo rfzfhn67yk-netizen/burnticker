@@ -204,7 +204,7 @@ describe("coin page snippet box", () => {
   test("the coin page mounts the Share block (website-17: ShareBlock carries the same iframe and badge) and the verifier section has the #verify anchor the badge links to", async () => {
     const fs = await import("node:fs");
     const page = fs.readFileSync(new URL("../src/app/burnticker/t/[ticker]/page.tsx", import.meta.url), "utf8");
-    assert.match(page, /<ShareBlock ticker=\{s\.ticker\} \/>/); assert.doesNotMatch(page, /<EmbedSnippet kind="coin"/); assert.match(page, /id="verify"/);
+    assert.match(page, /<ShareBlock ticker=\{s\.ticker\} id=\{key\} \/>/); assert.doesNotMatch(page, /<EmbedSnippet kind="coin"/); assert.match(page, /id="verify"/);
     const pair = fs.readFileSync(new URL("../src/app/burnticker/p/[pairId]/page.tsx", import.meta.url), "utf8");
     assert.match(pair, /<EmbedSnippet kind="pair"/);
     const box = fs.readFileSync(new URL("../src/app/burnticker/_components/EmbedSnippet.tsx", import.meta.url), "utf8");

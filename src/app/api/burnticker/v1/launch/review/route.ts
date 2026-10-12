@@ -3,6 +3,8 @@ import { fail, ok, readJson, runV1 } from "@/lib/burnticker/api/http";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { statedCtx } from "@/lib/burnticker/coinText";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
+import { tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
+import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
 import { cachedTimeLockSecs, currentStatusLive } from "@/lib/burnticker/currentStatus";
@@ -34,6 +36,13 @@ export async function POST(req: Request) {
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];
     try { existing = existingCoinsFor((body as { rule?: unknown }).rule, platform().registry.tokens()); } catch { existing = []; }
-    return ok({ ...r.review, existing });
+    // website-19 (owner, 2026-10-12: tickers are not enforced unique): the coins already holding each side's ticker, as a warning with two
+    // free suggestions; the creator may keep the ticker. A registry that cannot be read leaves the list empty.
+    let tickers: TickerCheck[] = [];
+    try {
+      const reg = platform().registry, reserved = loadReserved();
+      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson })), reserved });
+    } catch { tickers = []; }
+    return ok({ ...r.review, existing, tickers });
   });
 }

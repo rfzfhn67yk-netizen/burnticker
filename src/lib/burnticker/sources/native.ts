@@ -3,6 +3,7 @@ import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
 import { EspnClient, LEAGUES, SETTLE_AFTER_START_MS, ScheduleUnavailable, espnSeriesTitle, gamesFor, parseEspnSeries, teamByAbbr, type EspnSeries } from "@/lib/burnticker/sources/espn";
 import { CROSS_LABEL, envGameDeps, officialOf, operatorsFor, settleGame, sportsSettled, type GameDeps } from "@/lib/burnticker/sources/gameSettle";
 import { FecClient, fecSettled, parseFecSeries } from "@/lib/burnticker/sources/fec";
+import { ALREADY_DECIDED_SENTENCE, gameEligibility } from "@/lib/burnticker/oneShotEligibility";
 import { NwsClient, crossCheck, iemFor, nwsSeriesTitle, nwsSettled, parseNwsSeries, qualifies, stationByCode, type NwsSeries } from "@/lib/burnticker/sources/nws";
 
 /**
@@ -25,13 +26,15 @@ export interface NativeSource {
   settledSince(rule: BurnRule, sinceIso: string | null, o?: { crossRead?: boolean }): Promise<ResolvedSelector>;
   /** The creation preflight's live check (coverage/preflight.ts): the latest reading, its cross-read verdict, when the next is expected. */
   preflight(nowMs: number): Promise<NativePreflight>;
+  /** A one-time native series (one game): whether its result is already known, and its status line (oneShotEligibility.ts). */
+  eligibility?(): Promise<{ decided: boolean; reason: string | null; line: string } | null>;
 }
 
 export interface NativePreflight {
   last: { id: string; value: string | null; at: string } | null; crossLast: { id: string; value: string | null; at: string } | null;
   agreement: boolean | null; basis: string; nextAt: string | null; nextBasis: string;
   /** A refusal the source itself raises (the cross-read could not be read for the latest reading; a stale source). */
-  problem: { code: "cross-read-unreadable" | "stale-primary" | "primary-unreadable" | "disagreement"; reason: string } | null;
+  problem: { code: "cross-read-unreadable" | "stale-primary" | "primary-unreadable" | "disagreement" | "already-decided"; reason: string } | null;
 }
 
 let espn: EspnClient | null = null, nws: NwsClient | null = null, fec: FecClient | null = null;
@@ -57,12 +60,15 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
     flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent sources must read every game and agree (a source check; one operator attester signs the reading)"],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",
     settledSince: (_rule, sinceIso) => sportsSettled(espnClient(), s, sinceIso, deps()),
+    ...(s.kind === "game" ? { eligibility: async () => { const g = (await gamesFor(espnClient(), s))[0]; return g ? gameEligibility(g) : null; } } : {}),
     preflight: async (nowMs) => {
       const c = espnClient(), d = deps();
       const none = { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis: "" };
       let games;
       try { games = await gamesFor(c, s); } catch (e) { return { ...none, problem: { code: "primary-unreadable", reason: e instanceof ScheduleUnavailable ? (e as Error).message : `the game list could not be read: ${(e as Error).message.slice(0, 120)}` } }; }
       if (s.kind === "game" && !games.length) return { ...none, problem: { code: "primary-unreadable", reason: `game ${s.eventId} is not listed for ${t.name}` } };
+      // the intent audit (oneShotEligibility.ts): a single game that is already final has its result; a new coin on it is refused
+      if (s.kind === "game" && games[0].completed) return { ...none, problem: { code: "already-decided", reason: gameEligibility(games[0]).reason! } };
       const next = games.find((g) => !g.completed && Date.parse(g.startsAt) > nowMs - SETTLE_AFTER_START_MS) ?? null;
       const nextAt = next?.startsAt ?? null, nextBasis = next ? `the next game's start (schedule): ${next.name}` : "no scheduled game listed";
       const done = games.filter((g) => g.completed && Date.parse(g.startsAt) + SETTLE_AFTER_START_MS <= nowMs);
@@ -102,6 +108,8 @@ function nwsSource(id: string, s: NwsSeries): NativeSource {
       const nextAt = d ? new Date(Date.parse(`${d.date}T00:00:00Z`) + 2 * 86_400_000 + 12 * 3_600_000).toISOString() : null;
       const nextBasis = "the next day's final report, issued the following morning (local)";
       if (!d) return { last: null, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis, problem: { code: "primary-unreadable", reason: `no final climate report with the value this rule needs at ${st.code}` } };
+      // intent audit 2 item 2 (oneShotEligibility.ts): this season's first snow already fell, so a coin made now could not burn on it
+      if (s.metric === "snow" && d.snowSeason !== null && d.snowSeason >= 0.1) return { last: { id: d.date, value: `${d.snow} in (season ${d.snowSeason})`, at: d.date }, crossLast: null, agreement: null, basis: "", nextAt: null, nextBasis, problem: { code: "already-decided", reason: `${ALREADY_DECIDED_SENTENCE} ${st.label} has ${d.snowSeason} in of snow since July 1 in the report for ${d.date}, so this season's first snow already fell.` } };
       if (Date.parse(`${d.date}T00:00:00Z`) + 9 * 86_400_000 < nowMs) return { last: { id: d.date, value: null, at: d.date }, crossLast: null, agreement: null, basis: "", nextAt, nextBasis, problem: { code: "stale-primary", reason: `the newest final climate report at ${st.code} is for ${d.date}` } };
       const iem = await iemFor(c, st, [d], s.metric);
       const v = crossCheck(s, d, iem.asos.get(d.date), iem.cli.get(d.date));

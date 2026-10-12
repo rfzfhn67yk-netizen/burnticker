@@ -2,6 +2,7 @@ import type { BurnJson, StatusJson } from "@/lib/burnKeeper/statusPage";
 import { dateIn } from "@/lib/burnKeeper/schedule";
 import type { PairTally, PlatformIndexJson, ReceiptJson, TokenStatusJson } from "@/lib/burnticker/tokenPage";
 import { BURNTICKER_DEV_FEE_BPS } from "@/lib/burnticker/fees";
+import { byCoin } from "@/lib/burnticker/coinKey";
 
 /**
  * THE DAILY POST (the owner, 2026-10-09: "come up with a daily post for updates we can post on the website and twitter"). Five
@@ -199,7 +200,7 @@ export function platformDailyText(i: PlatformDailyInput): string {
   const today: string[] = [];
   let burnsToday = 0;
   for (const t of ix.tokens) {
-    for (const r of i.receiptsByTicker[t.ticker] ?? []) {
+    for (const r of byCoin(i.receiptsByTicker, t) ?? []) {
       if (!onDay(r, i.day)) continue;
       if (r.status === "confirmed" && Number(r.burned ?? 0) > 0) { burnsToday++; today.push(`$${t.ticker} — ${t.seriesTitle ?? t.selectorKey} ${r.eventId}, ${plural(r.units, "unit")} → ${fmtInt(r.burned)} burned`); }
       else if (r.status === "skipped") today.push(`$${t.ticker} — ${t.seriesTitle ?? t.selectorKey} ${r.eventId}, ${plural(r.units, "unit")}, nothing bought (${r.skippedReason ?? "under the floor"})`);
@@ -418,7 +419,7 @@ export function scoreboardLeagues(ix: PlatformIndexJson): string[] {
 export function scoreboardText(i: ScoreboardInput): string {
   const league = i.league.toUpperCase();
   const coins = teamCoins(i.index).filter((t) => teamLeagueOf(t.selectorKey) === league);
-  const burned = coins.filter((t) => burnedOn(i.receiptsByTicker[t.ticker], i.day)).length;
+  const burned = coins.filter((t) => burnedOn(byCoin(i.receiptsByTicker, t), i.day)).length;
   const ranked = [...coins].sort((a, b) => b.burns - a.burns || b.pctOfSupply - a.pctOfSupply || a.ticker.localeCompare(b.ticker));
   const lead = ranked[0]?.burns ?? 0;
   const leaders = lead > 0 ? ranked.filter((t) => t.burns === lead) : [];
@@ -435,6 +436,6 @@ export function scoreboardText(i: ScoreboardInput): string {
 
 /** The one cross-league line allowed: a count, never a table — "Yesterday (Oct 9) across all leagues: 9 team coins burned." */
 export function allLeaguesLine(ix: PlatformIndexJson, receiptsByTicker: Record<string, readonly ReceiptJson[]>, day: string): string {
-  const n = teamCoins(ix).filter((t) => burnedOn(receiptsByTicker[t.ticker], day)).length;
+  const n = teamCoins(ix).filter((t) => burnedOn(byCoin(receiptsByTicker, t), day)).length;
   return `Yesterday (${fmtDay(day)}) across all leagues: ${plural(n, "team coin")} burned.`;
 }

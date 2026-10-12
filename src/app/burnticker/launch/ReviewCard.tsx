@@ -13,6 +13,8 @@ import { RetirementFacts } from "../_components/RetirementFacts";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
+import { GRADUATION_LABEL } from "@/lib/burnticker/guidedLaunch";
+import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 
 /**
  * THE REVIEW CARD (2026-10-10, the owner: "it feels overly complicated to get a coin set up … the UI needs to be simpler, even if it
@@ -79,6 +81,16 @@ export interface ReviewCardProps {
   event?: { question: string; url: string | null; outcome: string | null; resolves: string | null; criteria: string | null; /** sources-2: Polymarket's stated source and dispute window for one market */ stated?: StatedJson | null } | null;
   /** L12: the generated name is uncertain — the editor opens with this request. */
   namePrompt?: string | null;
+  /** website-19 (intent audit item 6): the budget row's label and sentence from the rule's own unit (guidedLaunch.ts budgetCopy). */
+  budget?: { label: string; line: string } | null;
+  /** website-19 (snag 16): the dispute-window sentence on every one-market Polymarket review (the review payload's `dispute`). */
+  dispute?: string | null;
+  /** website-19: what graduation means, beside the raise choice (the review payload's `graduation`). */
+  graduation?: string[] | null;
+  /** website-19 (owner, 2026-10-12): the coins already holding a side's ticker, with free suggestions; a warning, never a refusal. */
+  tickerChecks?: TickerCheck[] | null;
+  /** website-19 (snag 11): extra plain lines under the rule sentence, such as a result due before graduation. */
+  notes?: string[] | null;
 }
 
 export const RECEIPTS_LINE = "Every burn posts a public receipt: the reading it settled on, the amount and the transaction, on the coin's page.";
@@ -150,11 +162,22 @@ export function ReviewCard(p: ReviewCardProps) {
           );
         })}
       </div>
+      {(p.tickerChecks ?? []).filter((t) => t.warning || t.reserved).map((t) => {
+        const coin = p.coins[t.side === "A" ? 0 : 1];
+        return (
+          <div key={t.side} className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-ticker-check={t.side}>
+            {t.reserved ? <p>{many ? `Coin ${t.side}: ` : ""}That name is reserved for the platform.</p> : <p>{many ? `Coin ${t.side}: ` : ""}${t.ticker} is in use by <a className="underline" href={t.inUse[0].href}>{t.inUse[0].name}</a>: {t.inUse[0].rule.replace(/\.$/, "")}.{t.inUse.length > 1 ? ` It is also used by ${t.inUse.length - 1} other coin${t.inUse.length === 2 ? "" : "s"}.` : ""} You can keep it, or pick a free one.</p>}
+            {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2">Free: {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
+          </div>
+        );
+      })}
       <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
         <button type="button" data-decision="name" className="underline disabled:no-underline disabled:opacity-60" aria-expanded={editing} disabled={editing && fieldProblems.length > 0} onClick={() => setEditState(!editState)}>{editing ? (fieldProblems.length ? "Fix the fields above first" : "done") : many ? "edit the names and tickers" : "edit the name or ticker"}</button>
       </div>
       {p.namePrompt && <p className="text-xs text-amber-300" role="status">{p.namePrompt}</p>}
       <p className="min-w-0 break-words text-base text-neutral-100" data-summary>{p.sentence}</p>
+      {p.notes && p.notes.length > 0 && <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-neutral-300" data-review-notes>{p.notes.map((x) => <li key={x}>{x}</li>)}</ul>}
+      {p.dispute && !p.event?.stated && <p className="min-w-0 break-words text-xs text-neutral-300" data-dispute>{p.dispute}</p>}
       {p.duplicate}
       {p.event && (
         <div className="min-w-0 break-words rounded border border-neutral-800 p-2 text-xs text-neutral-300" data-event>
@@ -171,8 +194,8 @@ export function ReviewCard(p: ReviewCardProps) {
       {p.image}
       <AdvancedWrap advanced={p.advanced ?? null}>
       {p.profile}
-      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={BUDGET_LABEL} aria-describedby={`${uid}-budget`}>
-        <span className="text-xs text-neutral-500" aria-hidden="true">{BUDGET_LABEL}</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={p.budget?.label ?? BUDGET_LABEL} aria-describedby={`${uid}-budget`}>
+        <span className="text-xs text-neutral-500" aria-hidden="true">{p.budget?.label ?? BUDGET_LABEL}</span>
         {p.shares.options.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
       </div>
       {p.inverse && (
@@ -180,7 +203,7 @@ export function ReviewCard(p: ReviewCardProps) {
           {p.inverse.options.map((o) => <button key={o.value} type="button" role="radio" aria-checked={p.inverse!.value === o.value} data-optional="preset" className={chip(p.inverse!.value === o.value)} onClick={() => p.inverse!.onChange(o.value)}>{o.label}</button>)}
         </div>
       )}
-      <p id={`${uid}-budget`} className="min-w-0 break-words text-xs text-neutral-400" data-budget-line>Spend {pctLabel(p.shares.value)} of the available burn budget each time. The tokens bought are burned, and the token amount varies.</p>
+      <p id={`${uid}-budget`} className="min-w-0 break-words text-xs text-neutral-400" data-budget-line>{p.budget?.line ?? `Each result that fires the rule spends ${pctLabel(p.shares.value)} of the available burn budget. The tokens bought are burned, and the token amount varies.`}</p>
       {p.raise && (
         <div className="min-w-0 space-y-1" data-raise>
           <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={RAISE_LABEL} aria-describedby={`${uid}-raise`}>
@@ -188,6 +211,13 @@ export function ReviewCard(p: ReviewCardProps) {
             {p.raise.options.map((x) => <button key={x} type="button" role="radio" aria-checked={p.raise!.value === x} data-optional="preset" className={chip(p.raise!.value === x)} onClick={() => p.raise!.onChange(x)}>{x} SOL</button>)}
           </div>
           <p id={`${uid}-raise`} className="min-w-0 break-words text-xs text-neutral-400" data-raise-line>{RAISE_PRESET_TEXT[p.raise.value]} {RAISE_PRESET_SHARED}</p>
+          {p.graduation && p.graduation.length > 0 && (
+            <details className="min-w-0 text-xs text-neutral-300" data-graduation>
+              <summary className="cursor-pointer text-neutral-300">{GRADUATION_LABEL}</summary>
+              {p.graduation.map((x) => <p key={x} className="mt-1 break-words">{x}</p>)}
+              <p className="mt-1"><Link className="underline" href="/burnticker/how-burns-settle">How burns are settled</Link></p>
+            </details>
+          )}
           <p className="min-w-0 break-words text-xs text-neutral-300" data-raise-review>{p.raise.line ?? `The curve is complete once buyers have put in ${p.raise.value} SOL, and the coin moves to its Raydium pool, which starts with roughly ${p.raise.value} SOL.`}</p>
         </div>
       )}

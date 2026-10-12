@@ -14,6 +14,8 @@ import { readKeeperCurve } from "@/lib/burnticker/market";
 import { featuredSlots, type FeaturedInput } from "@/lib/burnticker/featuredSlots";
 import { rankLines } from "@/lib/burnticker/coinRank";
 import { leagueData } from "@/lib/burnticker/leaguesServe";
+import { publicRegistryRows } from "@/lib/burnticker/devnetHide";
+import { coinKey, sharedTickers } from "@/lib/burnticker/coinKey";
 
 export const dynamic = "force-dynamic";
 
@@ -36,17 +38,21 @@ export async function GET() {
   // website-17 wiring item 3: the earned featured slots, from each coin's own receipts, creation time and readiness (featuredSlots.ts)
   const slotInputs: FeaturedInput[] = [];
   try {
-    const tokens = p.registry.tokens();
+    // owner decision 2026-10-12: a mainnet host lists no registry row on the devnet cluster (devnetHide.ts)
+    const tokens = publicRegistryRows(p.registry.tokens(), p.cluster);
     registered = tokens.length;
+    // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
+    const shared = sharedTickers(tokens);
     for (const t of tokens) {
+      const key = coinKey(t, shared);
       try {
         const d = await tokenPageData(p, t, now);
         statuses.push(d.status);
         const latest = d.receipts.filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
         const readiness = readinessFromStatus(d.status, d.receipts);
-        coins.push({ ...homeCoinOf(d.status), cluster: d.status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(d.status, d.receipts) });
+        coins.push({ ...homeCoinOf(d.status), cluster: d.status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(d.status, d.receipts, key) });
         slotInputs.push({ ticker: d.status.ticker, group: d.status.cluster === "mainnet" && d.status.status !== "draft" ? "public" : "test", burns: d.receipts.filter((r) => r.status === "confirmed").map((r) => ({ settledAt: r.settledAt })), createdAt: d.status.launchedAt ?? null, poolRegistered: ["awaiting-event", "below-floor", "deferred", "burned"].includes(readiness.state) });
-        const row = upcomingFromStatus(d.status, d.receipts);
+        const row = upcomingFromStatus(d.status, d.receipts, key);
         if (row) upcoming.push(row);
       } catch (e) {
         console.error(`[burnticker/home] ${t.ticker}: the coin's page could not be read:`, e);
@@ -78,7 +84,7 @@ export async function GET() {
   const ranks = (() => { try { return rankLines(leagueData(p, now).coins); } catch { return null; } })();
   if (coins && ranks) coins = coins.map((c) => ({ ...c, rank: ranks.get(c.ticker)?.line ?? null }));
   const slots = coins === null ? null : featuredSlots(slotInputs, now);
-  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve), featuredSlots: slots, cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
+  return NextResponse.json({ ...homeData(coins, process.cwd(), now, index, status, siteLaunchState(process.env, now), keeper, next, rehearsalCurve, p.cluster), featuredSlots: slots, cluster: p.cluster }, { headers: { "cache-control": "public, max-age=60", "access-control-allow-origin": "*" } });
 }
 
 function homeCoinOf(s: Parameters<typeof buildPlatformIndex>[0][number]): HomeCoin {

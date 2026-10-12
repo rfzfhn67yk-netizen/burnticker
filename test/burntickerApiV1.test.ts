@@ -182,13 +182,14 @@ describe("v1 POST endpoints", () => {
     }
     assert.equal(w.registry.token(mint), null);
   });
-  test("POST /launch/bundle registers a draft by default; the ticker is then taken (409); /launch/confirm takes it live; bad input → 400", async () => {
+  test("POST /launch/bundle registers a draft by default; a second coin may share the ticker; /launch/confirm takes it live; bad input → 400", async () => {
     const mint = Keypair.generate().publicKey.toBase58();
     const blockhash = "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi";
     const { body } = await call("buildLaunchBundle", {}, { body: { creator: CREATOR, mint, ticker: "HEAT", name: "Heat", rule: DENVER_HIGH, acknowledgements: { ruleLocked: true, noReturns: true }, recentBlockhash: blockhash } });
     assert.deepEqual(body.registered, { status: "draft", ticker: "HEAT", mint });
     assert.equal((body.transactions as { recentBlockhash: string }[])[0].recentBlockhash, blockhash);
-    await call("buildLaunchBundle", {}, { body: { creator: CREATOR, mint: Keypair.generate().publicKey.toBase58(), ticker: "HEAT", name: "Heat again", rule: DENVER_HIGH, acknowledgements: { ruleLocked: true, noReturns: true } }, expect: 409 });
+    const twin = await call("buildLaunchBundle", {}, { body: { creator: CREATOR, mint: Keypair.generate().publicKey.toBase58(), ticker: "HEAT", name: "Heat again", rule: DENVER_HIGH, acknowledgements: { ruleLocked: true, noReturns: true } } });
+    assert.equal((twin.body.registered as { ticker: string }).ticker, "HEAT", "tickers are not unique (owner 2026-10-12)");
     const sig = "5".repeat(88);
     const c = await call("confirmLaunch", {}, { body: { mint, signature: sig } });
     assert.equal(c.body.status, "live");

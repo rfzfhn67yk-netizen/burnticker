@@ -27,7 +27,7 @@ const polyGet = async (u: string) => { asked.push(u); if (TABLE.has(u)) return T
 const deps = { venues: { kalshi: false, polymarket: true, feeds: true }, feeds: catalogueSources(ESPN_NOW).sources as unknown as FeedLike[], espn: null, polyGet, refuse: () => [], kalshiSearch: null, derbyHref: null, nowMs: ESPN_NOW };
 const search = (q: string) => universalSearch(q, deps);
 const BP_WINNER = "polyevent:oscars-2027-best-picture-winner-20260727173620857";
-const VFX_TITLE = "Burns 10% once, if Spider-Man: Brand New Day wins Best Visual Effects at the 99th Academy Awards resolves YES";
+const VFX_TITLE = "Burns 100% once, if Spider-Man: Brand New Day wins Best Visual Effects at the 99th Academy Awards resolves YES";
 
 const noMarketData = (v: unknown, at = "$"): string[] => {
   if (Array.isArray(v)) return v.flatMap((x, i) => noMarketData(x, `${at}[${i}]`));
@@ -45,7 +45,7 @@ describe("the owner's three Best Picture queries", () => {
       const r = await search(q);
       assert.equal(r.cards[0].id, BP_WINNER, r.cards.map((c) => c.id).join(", "));
       const top = r.cards[0];
-      assert.equal(top.title, "Pick a film: Oscars 2027: Best Picture Winner — your coin burns 10% once if it wins");
+      assert.equal(top.title, "Pick a film: Oscars 2027: Best Picture Winner — your coin burns 100% once if it wins");
       assert.equal(top.picker!.outcomes.length, 23, "the 23 named films; placeholders (Film E … Film Z, Other) are never offered");
       assert.ok(!top.picker!.outcomes.some((o) => /^(Film [A-Z]|Other)$/.test(o.label)));
       assert.ok(top.picker!.outcomes.some((o) => o.label === "Dune: Part Three" && o.ticker === "DUNE"));
@@ -55,7 +55,7 @@ describe("the owner's three Best Picture queries", () => {
       assert.ok(vfx, "the nearest Spider-Man Oscars market is offered");
       assert.equal(vfx!.suggestedTicker, "SPIDER");
       assert.equal(vfx!.pick?.oracle, "polymarket"); assert.ok(vfx!.pick?.market, "one market, resolves once — never the event's every-market selector");
-      assert.equal(vfx!.rule?.binary?.onYes && (vfx!.rule.binary.onYes as { fractionOfPool: number }).fractionOfPool, 0.1);
+      assert.equal(vfx!.rule?.binary?.onYes && (vfx!.rule.binary.onYes as { fractionOfPool: number }).fractionOfPool, 1);
     });
   }
 
@@ -65,7 +65,7 @@ describe("the owner's three Best Picture queries", () => {
     assert.equal(r.cards[0].title, VFX_TITLE);
     assert.equal(r.cards[0].suggestedTicker, "SPIDER");
     assert.equal(r.cards[1].id, BP_WINNER);
-    assert.equal(r.cards[1].title, "Pick one: Oscars 2027: Best Picture Winner — your coin burns 10% once if your pick wins");
+    assert.equal(r.cards[1].title, "Pick one: Oscars 2027: Best Picture Winner — your coin burns 100% once if your pick wins");
   });
 
   test(`"spider" alone: every market of every hit event is read (Spider-Man is market 20-odd of the box-office events, not market 1)`, async () => {
@@ -132,7 +132,7 @@ describe("the pieces", () => {
       assert.deepEqual(noMarketData(r), [], q);
       for (const c of r.cards) for (const t of ownText(c)) assert.ok(lintCopy(t, cfg).ok, `${q}: ${t}`);
       for (const c of r.cards) for (const t of allText(c)) {
-        assert.ok(!/\b\d+(\.\d+)?\s*%/.test(t.replace(/\b10% once\b/g, "")), `${q}: a percentage other than the burn share: ${t}`);
+        assert.ok(!/\b\d+(\.\d+)?\s*%/.test(t.replace(/\b100% once\b/g, "")), `${q}: a percentage other than the burn share: ${t}`);
         assert.ok(!/¢|\bodds\b|\bchance\b/i.test(t), `${q}: ${t}`);
       }
     }

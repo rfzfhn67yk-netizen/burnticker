@@ -10,7 +10,7 @@ import { parseEspnSeries, seasonLabel } from "@/lib/burnticker/sources/espn";
  * market cap, no implied chance, no volume. `badgePayloadProblems` is the guard the routes and tests run over every payload.
  *
  * Pure (no I/O): badgeServe.ts feeds it from the registry; the routes are
- *   GET /api/burnticker/v1/badge/<TICKER>.svg|.png|.json            (60 s cache)
+ *   GET /api/burnticker/v1/badge/<TICKER or MINT>.svg|.png|.json    (60 s cache; a shared ticker answers 300 with the coins)
  *   GET /api/burnticker/v1/badge/pairs/<pairId>.svg|.png|.json
  *   GET /burnticker/embed/<TICKER> · /burnticker/embed/pairs/<pairId>   (iframe-safe page: the same card + a live next-settlement line)
  */
@@ -64,7 +64,7 @@ export function seasonScope(rule: Pick<BurnRule, "oracle" | "series">, nowMs: nu
   return { label: `in ${y}`, from: `${y}-01-01` };
 }
 
-export interface SideInput { status: TokenStatusJson; receipts: readonly ReceiptJson[]; rule: Pick<BurnRule, "oracle" | "series">; origin: string; now: number }
+export interface SideInput { status: TokenStatusJson; receipts: readonly ReceiptJson[]; rule: Pick<BurnRule, "oracle" | "series">; origin: string; now: number; /** the coin's URL key (coinKey.ts): its ticker while it alone holds it, its mint once the ticker is shared; defaults to the ticker */ key?: string }
 
 export function badgeSide(i: SideInput): BadgeSide {
   const s = i.status, o = i.origin.replace(/\/$/, "");
@@ -72,7 +72,7 @@ export function badgeSide(i: SideInput): BadgeSide {
   const scope = seasonScope(i.rule, i.now);
   const inScope = scope.from ? burns.filter((r) => r.settledAt.slice(0, 10) >= scope.from!) : burns;
   const last = [...burns].sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
-  const page = `${o}/burnticker/t/${encodeURIComponent(s.ticker)}`;
+  const page = `${o}/burnticker/t/${encodeURIComponent(i.key ?? s.ticker)}`;
   return {
     ticker: s.ticker, name: s.name, oneLiner: s.profile?.oneLiner || s.seriesTitle || s.selectorKey, window: s.profile?.badge || null, status: s.status,
     lastBurn: last ? { at: last.settledAt, units: last.units, burned: last.burned ?? "0" } : null,
@@ -95,7 +95,7 @@ export function snippets(o: { origin: string; embedPath: string; badgePath: stri
 }
 
 export function coinBadge(i: SideInput): CoinBadgeJson {
-  const side = badgeSide(i), o = i.origin.replace(/\/$/, ""), t = encodeURIComponent(i.status.ticker);
+  const side = badgeSide(i), o = i.origin.replace(/\/$/, ""), t = encodeURIComponent(i.key ?? i.status.ticker);
   const badgePath = `/api/burnticker/v1/badge/${t}`;
   return {
     schema: BADGE_SCHEMA, kind: "coin", generatedAt: new Date(i.now).toISOString(), ...side,

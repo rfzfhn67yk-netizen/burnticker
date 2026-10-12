@@ -3,7 +3,9 @@ import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
 import { findTeams, gameSeries, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
-import { findStations, nwsSeries, nwsSeriesTitle, parseNwsSeries, type NwsMetric } from "@/lib/burnticker/sources/nws";
+import { findStations, type NwsMetric } from "@/lib/burnticker/sources/nws";
+import { gameLine } from "@/lib/burnticker/oneShotEligibility";
+import { climateDaySentence, FIRST_SNOW_SEASON, leastReportable, parseWeatherIntent, planWeather, type WeatherIntent, type WeatherPlan } from "@/lib/burnticker/weatherIntent";
 import { nativeRule, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { loadRaces, outcomeCardTitle, outcomeSettlesNote, searchRaces, tokens, type Race } from "@/lib/burnticker/elections";
 import { eventPageUrl, parseEventsBody, searchUrl, type GammaEvent, type TitleRefuser } from "@/lib/burnticker/oracle/polymarket";
@@ -123,7 +125,7 @@ const CROSS_NAME = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: str
 const OFFICIAL = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => OFFICIAL_[lg as LeagueId] ?? `the ${LEAGUES[lg as LeagueId]?.label ?? "league"}'s official results` });
 const OFFICIAL_SHORT = new Proxy({} as Record<LeagueId, string>, { get: (_t, lg: string) => OFFICIAL_SHORT_[lg as LeagueId] ?? "the league's official results" });
 /** Friendlier names and tickers for the common feeds (else the title's first word). */
-const FEED_SUGGEST: Record<string, { name: string; ticker: string }> = { "treasury.debt": { name: "Debt Clock", ticker: "DEBT" }, "fred.CPIAUCSL": { name: "CPI Mover", ticker: "CPI" }, "fred.UNRATE": { name: "Jobless Rate", ticker: "JOBLESS" }, "bls.eggs": { name: "Egg Index", ticker: "EGGS" }, "ll2.launches": { name: "Launch Day", ticker: "LAUNCH" }, "noaa.flares": { name: "Solar Flare", ticker: "FLARE" }, "jpl.neo": { name: "Near Miss", ticker: "NEARMISS" }, "fred.GFDEBTN": { name: "Federal Debt", ticker: "FEDDEBT" } };
+const FEED_SUGGEST: Record<string, { name: string; ticker: string }> = { "treasury.debt": { name: "Debt Clock", ticker: "DEBTUP" }, "fred.CPIAUCSL": { name: "CPI Mover", ticker: "CPI" }, "fred.UNRATE": { name: "Jobless Rate", ticker: "JOBLESS" }, "bls.eggs": { name: "Egg Index", ticker: "EGGS" }, "ll2.launches": { name: "Launch Day", ticker: "LAUNCH" }, "noaa.flares": { name: "Solar Flare", ticker: "FLARE" }, "jpl.neo": { name: "Near Miss", ticker: "NEARMISS" }, "fred.GFDEBTN": { name: "Federal Debt", ticker: "FEDDEBT" } };
 /** Each league's championship query on Gamma and the event title that is the winner market (not a conference, a division or an MVP). */
 export const CHAMPIONSHIP: Partial<Record<LeagueId, { query: string; title: RegExp; name: (year: string) => string }>> = {
   mlb: { query: "World Series Champion", title: /^MLB World Series Champion (\d{4})$/, name: (y) => `the ${y} World Series` },
@@ -171,31 +173,56 @@ function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "lo
   };
 }
 
-async function championshipCard(t: EspnTeam, d: SearchDeps): Promise<Suggestion> {
+/**
+ * THE TEAM INTENT (intent audit 3, items 3 and 4: "Lakers win the 2028 NBA championship" offered the 2027 market unlabelled; "Lakers do
+ * not win the 2027 NBA championship" became a YES coin). The year and the polarity the query names are part of the intent and are
+ * compared with the market the card proposes: an exact year leads; another year is labelled a related rule with the year named; a
+ * negated query takes the NO side of the binary rule (binary.onNo), which burns only on a NO payout.
+ */
+export interface TeamIntent { year: number | null; negated: boolean }
+const NEGATED = /\b(?:do|does|did|will|would|could)\s+not\s+win\b|\b(?:don't|doesn't|didn't|won't|wouldn't|can't|cannot)\s+win\b|\bnot\s+win\b|\bnever\s+wins?\b|\bfails?\s+to\s+win\b|\bfall\s+short\b/i;
+export function readTeamIntent(q: string): TeamIntent {
+  const y = /\b(20\d{2})(?:[-–](?:20)?\d{2})?\b/.exec(q)?.[1];
+  return { year: y ? Number(y) : null, negated: NEGATED.test(q) };
+}
+/** A one-shot NO rule on one market: burns only if the market pays NO (a void pays neither side, so it burns nothing). */
+export const polyRuleNo = (conditionId: string, fraction: number = DEFAULT_SHARE.oneShot): BurnRule => ({ ...polyRule(conditionId, fraction), binary: { onYes: null, onNo: { fractionOfPool: fraction } } } as BurnRule);
+
+async function championshipCard(t: EspnTeam, d: SearchDeps, ti: TeamIntent = { year: null, negated: false }): Promise<Suggestion> {
   const c = CHAMPIONSHIP[t.league];
-  const card = (o: Partial<Suggestion>): Suggestion => ({ ...base, id: `champ:${t.league}:${t.abbr}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} win the championship`, subtitle: t.name, settlement: "Polymarket's on-chain payout", crossRead: OFFICIAL[t.league], score: 2.9, ...o });
+  const verb = ti.negated ? "do not win" : "win";
+  const card = (o: Partial<Suggestion>): Suggestion => ({ ...base, id: `champ:${t.league}:${t.abbr}${ti.negated ? ":no" : ""}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} ${verb} the championship`, subtitle: t.name, settlement: "Polymarket's on-chain payout", crossRead: OFFICIAL[t.league], score: 2.9, ...o });
   if (!c) return card({ note: `No championship market is set up for the ${LEAGUES[t.league].label} yet.` });
   if (!d.venues.polymarket || !d.polyGet) return card({ note: "Polymarket search is turned off on this site, so there is no championship market to use." });
-  let ev: GammaEvent | undefined;
-  try { ev = parseEventsBody(await d.polyGet(searchUrl(c.query, "open", 8))).find((e) => c.title.test(e.title) && !e.closed); } catch { ev = undefined; }
-  if (!ev) return card({ note: `No open ${LEAGUES[t.league].label} championship market was found.` });
+  let open: GammaEvent[] = [];
+  try { open = parseEventsBody(await d.polyGet(searchUrl(c.query, "open", 8))).filter((e) => c.title.test(e.title) && !e.closed); } catch { open = []; }
+  const yearOf = (e: GammaEvent) => Number(c.title.exec(e.title)?.[1] ?? NaN);
+  const exact = ti.year !== null ? open.find((e) => yearOf(e) === ti.year) : open[0];
+  const ev = exact ?? open[0];
+  if (!ev) return card({ note: ti.year !== null ? `No open ${LEAGUES[t.league].label} championship market for ${ti.year} was found.` : `No open ${LEAGUES[t.league].label} championship market was found.` });
   const year = c.title.exec(ev.title)?.[1] ?? "";
+  // a different year from the one typed: the card is a related rule, and it says which year it is
+  const otherYear = ti.year !== null && !exact ? `There is no open ${LEAGUES[t.league].label} championship market for ${ti.year} on Polymarket. This card is the ${year} market, a different year from the one you typed.` : null;
   const champ = c.name(year);
-  const title = `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} win ${champ}`;
+  const title = `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} ${verb} ${champ}`;
   const m = ev.markets.find((x) => !x.inactive && (x.groupItemTitle?.toLowerCase() === t.name.toLowerCase() || x.groupItemTitle?.toLowerCase() === t.nickname.toLowerCase()));
-  if (!m) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `The market has no outcome for the ${t.nickname}.` });
-  if (m.closed) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `The ${t.nickname} outcome is closed on Polymarket. The team is out, or the market has already settled.` });
-  const rule = polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
+  const rel = otherYear ? { alternative: true, score: 2.85 } : {};
+  if (!m) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: [otherYear, `The market has no outcome for the ${t.nickname}.`].filter(Boolean).join(" "), ...rel });
+  if (m.closed) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: [otherYear, `The ${t.nickname} outcome is closed on Polymarket. The team is out, or the market has already settled.`].filter(Boolean).join(" "), ...rel });
+  const rule = ti.negated ? polyRuleNo(m.conditionId, DEFAULT_SHARE.oneShot) : polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
   const phrase = `${teamRef(t)} win ${champ}`;
   const code = championshipCode(t.league);
-  const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest: { name: `${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`.slice(0, 32), ticker: tickerFrom(t.nickname, code) } };
+  const suggest = ti.negated ? { name: `${t.nickname} Fall Short`.slice(0, 32), ticker: tickerFrom(t.nickname, "SHORT") } : { name: `${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`.slice(0, 32), ticker: tickerFrom(t.nickname, code) };
+  const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest };
   const text = describeRule(rule, { ticker: "", ...descCtx });
+  const side = ti.negated ? `the NO side: it burns only if the market settles NO, meaning the ${t.nickname} did not win ${champ}. A voided or cancelled market never counts as a NO` : `the YES side: it burns if Polymarket's payout says the ${t.nickname} won ${champ}`;
   return card({
     title, subtitle: `${t.name}, in ${ev.title}`, nextAt: ev.endDate, settleAt: ev.endDate, endAt: ev.endDate, endText: "ends when the market resolves",
     howSettles: `Settles on Polymarket's on-chain payout for "${m.groupItemTitle}" in ${ev.title}; ${OFFICIAL[t.league]} are the published cross-check.${ev.description ? `\n\nResolution rules (Polymarket): ${ev.description}` : ""}`,
-    rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${teamRef(t)} win ${champ} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" },
-    text, descCtx, leagueSet: { id: `champ-${t.league}-${year || "season"}`, outcome: t.abbr }, href: `https://polymarket.com/event/${ev.slug}`, suggestedName: text.name, suggestedTicker: text.ticker,
-    interpreted: `This reads whether the ${t.nickname} win ${champ}. It settles once, when the Polymarket market “${ev.title}” resolves.`,
+    rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${teamRef(t)} ${verb} ${champ} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" },
+    text, descCtx, leagueSet: ti.negated ? null : { id: `champ-${t.league}-${year || "season"}`, outcome: t.abbr }, href: `https://polymarket.com/event/${ev.slug}`, suggestedName: text.name, suggestedTicker: text.ticker,
+    interpreted: `This reads whether the ${t.nickname} win ${champ}, in the Polymarket market “${ev.title}”. The coin takes ${side}. It settles once, when the market resolves.`,
+    note: otherYear, ...rel,
   });
 }
 
@@ -224,7 +251,8 @@ export function queryDay(q: string): "today" | "tomorrow" | null {
 function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Suggestion {
   const own = g.home.abbr === t.abbr ? g.home : g.away, opp = own === g.home ? g.away : g.home;
   const series = gameSeries(t.league, g.eventId, t.abbr, outcome);
-  const share = DEFAULT_SHARE.oneShot, rule = nativeRule(series, { fractionOfPool: share });
+  // website-19: a single game keeps the recurring presets (the keeper drains a 100 % one-shot only for markets and named releases)
+  const share = DEFAULT_SHARE.recurring, rule = nativeRule(series, { fractionOfPool: share });
   const descCtx = { game: { opponent: opp.nickname || opp.name, home: own === g.home, startsAt: g.startsAt } };
   const text = describeRule(rule, { ticker: "", ...descCtx });
   const verb = outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose";
@@ -236,7 +264,7 @@ function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Su
     howSettles: outcome === "draw" ? `This coin covers one game, ${g.name}. It burns only on a draw.` : `This coin covers one game, ${g.name}. A ${LEAGUES[t.league].draws ? "draw" : "tie"} burns nothing.`, rule, pick: { oracle: "catalogue", series, market: null, title: `${t.name} ${verb} — ${g.name} (resolves once)` },
     source: { unit: { size: 1, label: "the game", definition: "one burn if the result is the one the rule names" }, baseline: 0, direction: "up" },
     text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score: 3.2,
-    interpreted: `This reads one game, ${g.name}. It starts ${denverTime(g.startsAt)} Denver time. The coin covers that game only, and then its burn pool burns down and it retires.`,
+    interpreted: `This reads one game. ${gameLine(g)} The coin covers that game only, and then its burn pool burns down and it retires.`,
   };
 }
 
@@ -247,8 +275,11 @@ async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<S
   const outcome: "win" | "loss" | "draw" = /\b(lose|loses|losing|loss|losses)\b/i.test(q) ? "loss" : LEAGUES[t.league].draws && /\b(draw|draws|tie|ties)\b/i.test(q) ? "draw" : "win";
   const rec = recurringCard(t, games, outcome, d.nowMs);
   if (scheduleNote) { rec.scheduleUnavailable = true; console.warn(`[burnticker/search] ${t.league} schedule: ${scheduleNote}`); }
-  const champ = await championshipCard(t, d);
-  if (CHAMP_WORDS.test(q)) { champ.score = 3.1; }
+  const ti = readTeamIntent(q);
+  const champ = await championshipCard(t, d, ti);
+  if (CHAMP_WORDS.test(q)) { champ.score = champ.alternative ? 3.05 : 3.1; }   // the championship asked about leads; another year stays labelled
+  // a negated query ("do not win") is never a win card: the recurring and matchup cards are related rules that say so
+  if (ti.negated) { rec.alternative = true; rec.note = [rec.note, `You asked about the ${t.nickname} not winning. This card counts their wins, so it is a related rule.`].filter(Boolean).join(" "); }
   const pair = matchupCard(t, games, d.nowMs);
   const out = [rec, champ, ...(pair ? [pair] : [])];
   // L04: "tonight" / "today" / "tomorrow" names one game. Its own one-game card leads when the schedule lists a game that day; every
@@ -268,61 +299,79 @@ async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<S
 }
 
 /**
- * L04 (launch audit 5): "Detroit high above 90" must not become "at or above 90". The NWS rule counts a day whose reading is AT OR ABOVE
- * its threshold (nws.ts), and the climate report gives whole °F and hundredths of an inch, so a strict "above / over / more than X" is
- * the threshold X + 1 °F (or X + 0.01 in), and the card says what it read. "at least / reaches / X or more / X+" keeps X.
+ * L04 (launch audit 5) and the intent audit (2026-10-12, items 1, 2, 9, 11): a weather query is read ONCE into a normalized intent
+ * (weatherIntent.ts: station, metric, comparison strict or inclusive, number, unit, date scope) and planned into the rule it can be,
+ * or refused in words. The card's title, its note, the rule it carries (series + `inverse`) and the coin text (describe.ts, from the
+ * rule) all come from that one plan, never from a word match. `readWeatherThreshold` is kept for older callers and tests.
  */
 export interface WeatherReading { metric: NwsMetric; threshold: number | null; strict: boolean; wrote: string | null }
 export function readWeatherThreshold(q: string, metric: NwsMetric): WeatherReading {
-  const t = q.replace(/\s*°\s*f?\b/i, "");
-  const n = /(-?\d+(?:\.\d+)?)/.exec(t)?.[1];
-  if (metric === "snow") return { metric, threshold: null, strict: false, wrote: null };
-  const strict = !!n && /\b(above|over|more than|greater than|exceeds?|exceeding|higher than|hotter than|>)\s*-?\d/i.test(t) && !/\bor (more|above|higher)\b|\+/.test(t);
-  const wrote = n ? (/\b(above|over|more than|greater than|exceeds?|exceeding|higher than|hotter than|at least|reaches|reach|hits?|>=?)\s*-?\d+(?:\.\d+)?/i.exec(t)?.[0] ?? n) : null;
-  if (metric === "rain") {
-    const x = n && Number(n) > 0 && Number(n) < 10 ? Number(n) : 0.5;
-    return { metric, threshold: leastReportable(x, 100, strict), strict, wrote };
-  }
-  const x = n && Number(n) >= 0 ? Number(n) : 90;
-  return { metric, threshold: leastReportable(x, 1, strict), strict, wrote };
+  const i = parseWeatherIntent(`${q} DTW`)[0];
+  if (metric === "snow" || !i) return { metric, threshold: null, strict: false, wrote: null };
+  const p = planWeather({ ...i, metric, dateScope: null });
+  const plan = p.ok ? p : p.alternative;
+  return { metric, threshold: plan?.ok ? plan.threshold : null, strict: i.op === "gt" || i.op === "lt", wrote: i.wrote };
+}
+export { leastReportable };
+
+const NWS_LABEL = "NWS daily climate report, a first-party source";
+const METRIC_WORD: Record<WeatherIntent["metric"], string> = { high: "high", low: "low", rain: "rain", snow: "snow" };
+/** What the query asked, in words ("Denver's high below 32 tomorrow"). */
+const askedPhrase = (i: WeatherIntent): string => `${i.station.city}'s ${METRIC_WORD[i.metric]}${i.wrote ? ` ${i.wrote}` : ""}${i.dateScope ? ` ${i.dateScope.trim()}` : ""}`;
+/** The refusal's plain category for the page's refused line ("Burnticker does not offer coins on one day's weather."). */
+function refusedNouns(i: WeatherIntent): string[] {
+  const out: string[] = [];
+  if (i.dateScope) out.push("one day's weather");
+  if (i.metric === "low") out.push("the daily low temperature");
+  if (i.op === "eq") out.push("days at exactly one temperature or amount");
+  if (i.op === "range") out.push("a range of temperatures or amounts");
+  if (i.unit === "K") out.push("temperatures in kelvin");
+  if (i.metric === "snow" && (i.value !== null || i.op !== null)) out.push("a snowfall amount");
+  return out;
 }
 
-/**
- * THE THRESHOLD LATTICE (ChatGPT code review 5, F2, 2026-10-12: "Detroit high above 90.5" became 92, so a 91 °F day did not burn). The
- * climate report gives whole °F and hundredths of an inch, and the rule counts a reading AT OR ABOVE its threshold. So the threshold is
- * the least reportable reading that satisfies what was typed: strictly above x → the least step strictly greater than x (floor(x) + 1
- * for whole degrees); at least x → the least step at or above x (ceil(x)). `per` is the steps per unit: 1 for °F, 100 for inches. Integer
- * arithmetic on the scaled value, so 0.29 does not become 0.28999… and land a hundredth low.
- */
-export function leastReportable(x: number, per: number, strict: boolean): number {
-  const scaled = Math.round(x * per * 1e6) / 1e6;   // 90.5 → 90.5, 0.29 × 100 → 29 (not 28.999…)
-  const step = strict ? Math.floor(scaled) + 1 : Math.ceil(scaled);
-  return step / per;
+function weatherPlanCard(p: Extract<WeatherPlan, { ok: true }>, alternative: boolean): Suggestion | null {
+  const s = p.intent.station, series = p.series, src = nativeSourceById(series);
+  if (!src) return null;
+  const share = DEFAULT_SHARE.recurring;
+  const rule = (p.inverse ? { ...nativeRule(series, { fractionOfPool: share }), inverse: true } : nativeRule(series, { fractionOfPool: share })) as BurnRule;
+  const text = describeRule(rule, { ticker: "" });
+  const what = p.metric === "high" ? `every day ${s.city}'s official high is ${p.boundary}` : p.metric === "rain" ? `every day ${s.city} gets ${p.boundary}` : `once, on ${s.city}'s first snow of the season`;
+  const seriesTitle = p.inverse ? `${s.city} daily ${p.metric === "high" ? `high below ${p.threshold} °F` : `rain below ${Number(p.threshold).toFixed(2)} in`} (NWS)` : src.title;
+  const how = p.metric === "snow" ? `${src.unit.definition}. ${FIRST_SNOW_SEASON}` : p.inverse ? `a day whose official ${p.metric === "high" ? "high" : "precipitation"} at ${s.label} was ${p.boundary}. A day with no reading counts as nothing.` : src.unit.definition;
+  const reads = p.metric === "snow" ? `The coin burns once, on the season's first measurable snow. ${FIRST_SNOW_SEASON}` : `The coin burns on each day ${p.metric === "high" ? `the official high is ${p.boundary}` : `with ${p.boundary}`}. ${climateDaySentence(s)} There is no end date.`;
+  return {
+    ...base, id: `nws:${series}${p.inverse ? ":inverse" : ""}`, venue: "nws", venueLabel: NWS_LABEL, shape: p.metric === "snow" ? "one-shot" : "recurring",
+    title: `Burns ${pctLabel(share)} ${what}`, subtitle: `${seriesTitle}, at station ${s.code}`, settlement: "the National Weather Service's daily climate report", crossRead: "the Iowa Environmental Mesonet",
+    endText: p.metric === "snow" ? "ends after the first snow" : "no end date", howSettles: how, rule, pick: { oracle: "catalogue", series, market: null, title: seriesTitle },
+    source: { unit: src.unit, baseline: 0, direction: "up" }, text, descCtx: {}, suggestedName: text.name, suggestedTicker: text.ticker, score: alternative || p.example ? 2.9 : 3,
+    interpreted: `This reads the ${s.label} weather station, code ${s.code}. ${reads}`,
+    note: alternative ? `This is the recurring rule, not the one day you typed. ${p.note ?? ""}`.trim() : p.note, alternative: alternative || p.example,
+  };
 }
 
-function weatherCards(q: string): Suggestion[] {
-  const st = findStations(q);
-  if (!st.length) return [];
-  const n = /(-?\d+(?:\.\d+)?)/.exec(q.replace(/\s*°\s*f?\b/i, ""))?.[1];
-  const metrics: NwsMetric[] = /\bsnow/i.test(q) ? ["snow"] : /\b(rain|rainfall|precip|precipitation|wet)\b/i.test(q) ? ["rain"] : /\b(high|hot|heat|temp|temperature|degrees|above|over|°)\b/i.test(q) || n ? ["high"] : ["high", "rain", "snow"];
+function weatherRefusalCard(p: Extract<WeatherPlan, { ok: false }>): Suggestion {
+  const i = p.intent, s = i.station;
+  return {
+    ...base, id: `nws-refused:${s.code}:${i.metric}:${i.op ?? "none"}:${i.value ?? ""}:${i.unit ?? ""}:${(i.dateScope ?? "").trim().toLowerCase()}`, venue: "nws", venueLabel: NWS_LABEL, shape: "recurring",
+    title: `A coin on ${askedPhrase(i)} is not offered as written`, subtitle: `${s.label}, station ${s.code}`, settlement: "the National Weather Service's daily climate report", crossRead: "the Iowa Environmental Mesonet",
+    note: p.refusal, refused: refusedNouns(i), score: 3,
+    interpreted: `This reads the ${s.label} weather station, code ${s.code}. The climate report gives the daily high in whole degrees Fahrenheit, rain in hundredths of an inch and the season's first snow. ${climateDaySentence(s)}`,
+  };
+}
+
+
+function weatherCards(q: string, intents: readonly WeatherIntent[]): Suggestion[] {
   const out: Suggestion[] = [];
-  for (const s of st.slice(0, 2)) for (const m of metrics) {
-    const rd = readWeatherThreshold(q, m), thr = rd.threshold;
-    const series = nwsSeries(m, s.code, thr), src = nativeSourceById(series);
-    if (!src) continue;
-    const share = DEFAULT_SHARE.recurring;
-    const rule = nativeRule(series, { fractionOfPool: share }), text = describeRule(rule, { ticker: "" });
-    const what = m === "high" ? `every day ${s.city}'s official high is ${thr} °F or hotter` : m === "rain" ? `every day ${s.city} gets ${Number(thr).toFixed(2)} in of rain or more` : `once, on ${s.city}'s first snow of the season`;
-    const note = rd.strict && rd.wrote ? `You wrote “${rd.wrote}”. The climate report gives ${m === "high" ? `whole degrees, so strictly above that means ${thr} °F or hotter` : `hundredths of an inch, so strictly above that means ${Number(thr).toFixed(2)} in or more`}.` : null;
-    out.push({
-      ...base, id: `nws:${series}`, venue: "nws", venueLabel: "NWS daily climate report, a first-party source", shape: m === "snow" ? "one-shot" : "recurring",
-      title: `Burns ${pctLabel(share)} ${what}`,
-      subtitle: `${nwsSeriesTitle(parseNwsSeries(series)!)}, at station ${s.code}`, settlement: "the National Weather Service's daily climate report", crossRead: "the Iowa Environmental Mesonet",
-      endText: m === "snow" ? "ends after the first snow" : "no end date", howSettles: src.unit.definition, rule, pick: { oracle: "catalogue", series, market: null, title: src.title }, source: { unit: src.unit, baseline: 0, direction: "up" },
-      text, descCtx: {}, suggestedName: text.name, suggestedTicker: text.ticker, score: 1.5,
-      interpreted: `This reads the ${s.label} weather station, code ${s.code}. ${m === "high" ? `The coin burns on each day the official high is ${thr} °F or hotter.` : m === "rain" ? `The coin burns on each day with ${Number(thr).toFixed(2)} in of rain or more.` : "The coin burns once a season, on the first measurable snow."} Each day follows the climate report's local standard time and is read the next morning.${m === "snow" ? "" : " There is no end date."}`,
-      note,
-    });
+  for (const i0 of intents) {
+    // "Denver weather": no metric word, no number, no comparison → the three rules the station offers, each its own card
+    const bare = i0.op === null && i0.value === null && i0.metric === "high" && !/\b(high|highs|hot|hotter|heat|temp|temps|temperature|degrees?|warm|warmer)\b|°/i.test(q);
+    for (const i of bare ? (["high", "rain", "snow"] as const).map((metric) => ({ ...i0, metric })) : [i0]) {
+      const p = planWeather(i);
+      if (p.ok) { const c = weatherPlanCard(p, false); if (c) out.push(c); continue; }
+      out.push(weatherRefusalCard(p));
+      if (p.alternative?.ok) { const c = weatherPlanCard(p.alternative, true); if (c) out.push(c); }
+    }
   }
   return out;
 }
@@ -385,6 +434,18 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
   // a query carrying an event phrase ("spider man oscar", "spider-man best picture") is never read as a person's name
   const split = splitQuery(query);
   const person = looksLikePerson(query) && !split.phrase;
+  // the intent audit (item 9): a city weather query ("Denver high below 32 tomorrow") is a WEATHER query, read before any team, race or
+  // market: a city team, a state race or a market never rank above it. A weak word ("high", "hot") next to a team's nickname
+  // ("Nuggets high") stays a team query (weatherIntent.ts).
+  const nq = norm(query);
+  const teamNamed = findTeams(query).some((t) => t.nickname.length >= 3 && nq.includes(` ${t.nickname.toLowerCase().replace(/[^a-z0-9$.]+/g, " ").trim()} `) && !findStations(t.nickname).length);
+  const wx = parseWeatherIntent(query, { teamNamed });
+  if (wx.length) {
+    const wc = [...weatherCards(query, wx), ...feedCards(query, d.feeds)];
+    const ranked = wc.filter((c) => c.score >= MIN_SCORE).sort((a, b) => b.score - a.score).slice(0, MAX_CARDS);
+    const order = [...new Set(ranked.map(groupOf))];
+    return scrubMarketData({ query, cards: withBadges(order.flatMap((g) => ranked.filter((c) => groupOf(c) === g)).map((c) => ({ ...c, group: groupOf(c) }))), empty: ranked.length === 0, errors });
+  }
   const team = findTeams(query).find((t) => namesTeam(query, t) && nameMatch(query, [t.name, t.nickname, ...t.alt]).nameHits > 0) ?? null;
   // a person-looking query ("lakers tonight" is not one; "el sayed" is) goes to the people only when a candidate's name matches it
   let personHit = false;
@@ -394,7 +455,7 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
     const tc = await teamIntentCards(query, team, d);
     return scrubMarketData({ query, cards: withBadges(tc.sort((a, b) => b.score - a.score)).map((c) => ({ ...c, group: groupOf(c) })), empty: false, errors });
   }
-  cards.push(...weatherCards(query), ...feedCards(query, d.feeds));
+  cards.push(...feedCards(query, d.feeds));   // a weather query returned above (weatherCards)
   if (d.venues.polymarket && d.polyGet) {
     // an award / event phrase ("oscars", "best picture", "emmys") is never a race query: no candidate cards for it
     if (!split.phrase) { try { cards.push(...raceCards(await loadRaces(d.polyGet, d.refuse), query)); } catch (e) { errors.push(`elections: ${(e as Error).message.slice(0, 80)}`); } }
@@ -445,7 +506,7 @@ export function uniqueTicker(ticker: string, taken: (t: string) => boolean, refu
 }
 const renameText = (x: CoinText, from: string, to: string): CoinText => {
   const sw = (s: string) => s.split(`$${from}`).join(`$${to}`);
-  return { ...x, ticker: to, flavour: sw(x.flavour), ruleBlock: sw(x.ruleBlock), paragraph: sw(x.paragraph) };
+  return { ...x, ticker: to, flavour: sw(x.flavour), ruleBlock: sw(x.ruleBlock), lead: sw(x.lead), paragraph: sw(x.paragraph) };
 };
 /** Every suggested ticker on the cards (and on both sides of a matchup), made unique against the registry and the refuse list. */
 export function dedupeTickers(cards: Suggestion[], taken: (t: string) => boolean, refused: (t: string) => boolean = () => false): Suggestion[] {

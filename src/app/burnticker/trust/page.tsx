@@ -14,6 +14,7 @@ import { MailSafe } from "../_components/MailSafe";
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { CHANGELOG_COPY, HISTORY_COPY } from "@/lib/burnticker/historyCopy";
+import { DEVNET_COPY, DEVNET_HREF } from "@/lib/burnticker/devnetCopy";
 
 /**
  * THE TRUST PAGE (the owner, 2026-10-09: no room for suspicion). Rendered from /api/burnticker/trust: the Powers Register, the LIVE
@@ -41,6 +42,8 @@ export default function TrustPage() {
       <CurrentStatusSummary card={card} />
       {/* legitimacy pass (owner, 2026-10-12): the history pages sit behind this one link, never on the home page */}
       <p className="text-xs" data-history-link><Link className="underline" href="/burnticker/history">{HISTORY_COPY.trustLink}</Link></p>
+      {/* owner decision 2026-10-12: the devnet practice coins and burns, hidden from the public pages on a mainnet host, live on one page */}
+      <p className="text-xs" data-devnet-link><Link className="underline" href={DEVNET_HREF}>{DEVNET_COPY.linkLabel}</Link></p>
       <section className={card}><p><MailSafe text={t?.operatorLine ?? OPERATOR_LINE} />{t?.contactIsTodo && <span className="text-amber-400 text-xs"> The contact address is not set yet.</span>}</p>{t && <><p className="text-neutral-300">{t.useOfFees}</p><p className="text-xs text-neutral-400">{t.attesterStatus.line}</p></>}</section>
       <TrustPackSection card={card} />
       <SafeguardsSection card={card} />

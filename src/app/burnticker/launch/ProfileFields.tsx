@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
-import { DESCRIPTION_MAX, IMAGE_HELP, RIGHTS_LINE, creatorLinks, imageFileProblem } from "@/lib/burnticker/creatorProfile";
+import { useEffect, useId, useRef, useState } from "react";
+import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, imageFileProblem, imageFromTransfer, pastedImageName } from "@/lib/burnticker/creatorProfile";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
 import { LinkedWords } from "../_components/LinkedWords";
@@ -47,13 +47,15 @@ export function profileProblems(v: ProfileValue): string[] {
  * in a disclosure ("text"); `who` names the side of a pair ("$LAKERS"); `customImages` false (the host takes no custom images) shows the
  * generated art with CUSTOM_IMAGES_OFF_LINE instead of the file control.
  */
-export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true }: { value: ProfileValue; onChange: (v: ProfileValue) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean }) {
+export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true, pasteTarget = true }: { value: ProfileValue; onChange: (v: ProfileValue) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean; /** website-19: an image pasted anywhere on the page lands here (side A of a pair; side B takes drops) */ pasteTarget?: boolean }) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [fileErr, setFileErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
   const set = (p: Partial<ProfileValue>) => onChange({ ...value, ...p });
-  const pick = (f: File | null) => {
+  const pick = (f0: File | null) => {
     setFileErr(null);
-    if (!f) return;
+    if (!f0) return;
+    // a pasted image has no name of its own; it gets one, and then takes the same checks and preview as a chosen file
+    const f = f0.name ? f0 : new File([f0], pastedImageName(f0.type), { type: f0.type });
     const bad = imageFileProblem({ size: f.size, type: f.type });
     if (bad) { setFileErr(bad); return; }
     const r = new FileReader();
@@ -71,6 +73,23 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
     r.readAsDataURL(f);
   };
   const input = "mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm";
+  // website-19 (owner, 2026-10-12): paste an image anywhere on the page (Cmd or Ctrl and V), or drop one on the control. A paste into a
+  // text field stays text. Both go through pick(), so the size and type checks and the preview are the chosen file's.
+  const pickRef = useRef(pick); pickRef.current = pick;
+  const [dragOver, setDragOver] = useState(false);
+  const imageOn = part !== "text" && customImages;
+  useEffect(() => {
+    if (!imageOn || !pasteTarget) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const f = imageFromTransfer(e.clipboardData) as File | null;
+      if (!f) return;
+      e.preventDefault(); pickRef.current(f);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [imageOn, pasteTarget]);
   const showImage = part !== "text", showText = part !== "image";
   const legend = part === "image" ? `${who ? `${who}: ` : ""}Image. It is optional.` : part === "text" ? `${who ? `${who}: ` : ""}Description and links. Each one is optional.` : `${who ? `${who}: ` : ""}Your coin's image, description and links. Each one is optional.`;
   return (
@@ -83,7 +102,7 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
           <p className="min-w-0 text-neutral-300">{CUSTOM_IMAGES_OFF_LINE}</p>
         </div>
       )}
-      {showImage && customImages && <div className="flex min-w-0 items-start gap-3" data-image-control>
+      {showImage && customImages && <div className={`flex min-w-0 items-start gap-3 rounded${dragOver ? " outline outline-2 outline-amber-400" : ""}`} data-image-control onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={(e) => { e.preventDefault(); setDragOver(false); pick(imageFromTransfer(e.dataTransfer) as File | null); }}>
         {value.image ? (
           // both previews side by side; the one that will be pinned is outlined
           <div className="flex shrink-0 gap-2" data-image-previews>
@@ -96,7 +115,7 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
         <div className="min-w-0 flex-1 space-y-1">
           <label htmlFor={`${uid}-img`} className="block text-neutral-300">Image</label>
           <input id={`${uid}-img`} type="file" data-optional="profile" accept="image/png,image/jpeg,image/gif,image/webp" aria-describedby={`${uid}-imghelp`} className="block w-full min-w-0 text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} />
-          <p id={`${uid}-imghelp`}>{IMAGE_HELP}</p>
+          <p id={`${uid}-imghelp`}>{IMAGE_WAYS} {IMAGE_HELP}</p>
           <p data-image-rights><LinkedWords text={IMAGE_RIGHTS_LINE} links={[{ words: "terms of use", href: "/burnticker/terms" }]} /></p>
           {busy && <p role="status">Adding the receipt mark.</p>}
           {fileErr && <p className="text-red-400" role="alert">{fileErr}</p>}

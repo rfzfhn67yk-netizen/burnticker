@@ -17,6 +17,8 @@ import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 import { historyCounts } from "@/lib/burnticker/history";
 import { historyCountsLine } from "@/lib/burnticker/historyCopy";
 import type { FeaturedSlot } from "@/lib/burnticker/featuredSlots";
+import { publicHomeData, siteCluster } from "@/lib/burnticker/devnetHide";
+import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 export { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 
 /**
@@ -223,11 +225,12 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
  */
 export function activityEvents(tokens: readonly HomeCoin[], samples: SampleList | null, limit = 12, keeper: KeeperFiles | null = null): ActivityEvent[] {
   const ev: ActivityEvent[] = [];
+  const shared = sharedTickers(tokens.map((t) => ({ ticker: t.ticker, mint: t.mint ?? t.ticker })));
   for (const t of tokens) {
     if (t.events) { ev.push(...t.events); continue; }
     if (!t.lastBurnAt || t.burns < 1) continue;
     const net = t.cluster === "devnet" ? "devnet" : "mainnet";
-    ev.push({ kind: "burn", at: t.lastBurnAt, network: net, ticker: t.ticker, signature: t.latestSignature ?? null, href: checkReceiptHref(t.latestSignature ?? null, net) ?? `/burnticker/t/${t.ticker}#receipts`, text: `$${t.ticker} burned on ${shortDay(t.lastBurnAt)}. It has burned ${t.burns} time${t.burns === 1 ? "" : "s"}.` });
+    ev.push({ kind: "burn", at: t.lastBurnAt, network: net, ticker: t.ticker, signature: t.latestSignature ?? null, href: checkReceiptHref(t.latestSignature ?? null, net) ?? `${coinPageHref({ ticker: t.ticker, mint: t.mint ?? t.ticker }, shared)}#receipts`, text: `$${t.ticker} burned on ${shortDay(t.lastBurnAt)}. It has burned ${t.burns} time${t.burns === 1 ? "" : "s"}.` });
   }
   if (keeper) ev.push(...eventsFromKeeper(keeper.status, keeper.burns, { includeBurns: !tokens.some((t) => t.ticker === "DEFICIT" && t.readOk !== false) }));
   for (const r of samples?.receipts ?? []) {
@@ -302,7 +305,7 @@ export function mainnetRecordEvents(root = process.cwd()): ActivityEvent[] {
   return out;
 }
 
-export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingSet | null = null, rehearsalCurve: RehearsalCurve = null): HomeData {
+export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(), now = Date.now(), index: { totals: { burns: number; burnedTokens: string }; audit: { ok: boolean; receipts: number; mismatches: number; chainChecked?: boolean } | null } | null = null, statusRecord: unknown = undefined, launch: SiteLaunchState | null = null, keeper: KeeperFiles | null = null, upcoming: UpcomingSet | null = null, rehearsalCurve: RehearsalCurve = null, host: string = siteCluster()): HomeData {
   let samples: SampleList | null = null;
   try { samples = sampleReceipts(root); } catch { samples = null; }
   let featured: CardView[] = [];
@@ -310,10 +313,11 @@ export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(
   let rec: StatusRecord | null = null;
   if (statusRecord !== undefined) rec = statusRecord as StatusRecord | null;
   else { try { rec = JSON.parse(fs.readFileSync(path.join(root, STATUS_FILE), "utf8")) as StatusRecord; } catch { rec = null; } }
-  return {
+  // owner decision 2026-10-12: a mainnet host serves no devnet item (devnetHide.ts); a devnet host keeps them
+  return publicHomeData({
     schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...mainnetRecordEvents(root)], 12), noEvents: NO_EVENTS_LINE,
     raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null), samples),
     // legitimacy pass: the one surface hint of the history pages, the dated counts (reviews published, releases since Oct 10)
     statusLine: [homeStatusLine(rec), historyCountsLine(historyCounts(root)), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
-  };
+  }, host);
 }

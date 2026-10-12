@@ -1,3 +1,4 @@
+import { registryCoinKey } from "@/lib/burnticker/coinLookup";
 import { opsDenied } from "@/lib/burnticker/opsAuth";
 import { tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { productStore } from "@/lib/burnticker/productStore";
@@ -85,7 +86,7 @@ export async function v1Creator(p: Platform, wallet: string, now = Date.now()): 
     const reads = last?.method ? last.method.split("+").length : 0;
     const post = tokenDayText(s, rs, day), lint = lintCopy(post);
     coins.push({
-      ticker: s.ticker, name: s.name, mint: s.mint, page: `/burnticker/t/${s.ticker}`, state: stateOf(s), badge: s.profile?.badge ?? null,
+      ticker: s.ticker, name: s.name, mint: s.mint, page: `/burnticker/t/${encodeURIComponent(registryCoinKey(p.registry, t))}`, state: stateOf(s), badge: s.profile?.badge ?? null,
       queuedUnits: queued, nextSettlementAt: s.next.nextCheckAt, lastReading: last ? { id: last.id, value: last.value, at: last.at } : null,
       agreement: { reads, methods: last?.method ?? null, held: s.feed.lastError }, receipts: rs.filter((r) => r.status === "confirmed").length,
       windDown: s.lifecycle?.line ?? null, pairId: s.pair?.pairId ?? null, todayPost: { text: post, lintOk: lint.ok, hits: lint.hits.map((h) => h.phrase) },

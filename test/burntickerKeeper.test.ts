@@ -48,12 +48,14 @@ beforeEach(() => {
 });
 
 describe("registry", () => {
-  test("register stores the canonical rule text + hash, refuses a taken ticker and a non-canonical text; readings dedupe and refuse a changed result", async () => {
+  test("register stores the canonical rule text + hash, lets a second coin share a ticker (owner 2026-10-12), refuses a non-canonical text; readings dedupe and refuse a changed result", async () => {
     const t = await launch(BRONCOS, "BRONCO");
     assert.equal(t.rulesSha, lockRule(BRONCOS).sha256);
     assert.equal(t.selectorKey, "kalshi:KXNFLGAME:binary");
     assert.equal(t.status, "live");
-    await assert.rejects(launch(BRONCOS, "BRONCO"), /ticker BRONCO is taken/);
+    const twin = await launch(BRONCOS, "BRONCO");
+    assert.notEqual(twin.mint, t.mint);
+    assert.deepEqual(reg.tokensByTicker("BRONCO").map((x) => x.mint).sort(), [t.mint, twin.mint].sort());
     assert.throws(() => reg.register({ mint: "M2", ticker: "X2", name: "x", creator: CREATOR, description: "", imageUrl: null, links: [], rulesText: JSON.stringify(BRONCOS), feePda: "F", vault: null, tokenConfig: null, poolId: null, launchTx: null, cluster: "devnet", platformId: null, baselineAt: "2026-01-01T00:00:00Z", status: "draft" }), /not canonical/);
     const ev = { id: "A", at: "2026-10-01T00:00:00Z", result: "yes" as const, value: null, title: "x", sourceUrl: "https://x" };
     assert.equal(reg.putReadings("kalshi", "k", [ev], { settlementSourceUrl: null, attestedBy: [ATTESTER] }), 1);

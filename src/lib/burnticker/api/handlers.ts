@@ -1,5 +1,13 @@
 import type { Platform } from "@/lib/burnticker/server";
-import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems } from "@/lib/burnticker/catalogue";
+import { EVENT_LEVEL_REFUSAL, eventLevelRule } from "@/lib/burnticker/guidedLaunch";
+import { reservedProblem } from "@/lib/burnticker/reservedNames";
+import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
+import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
+
+/** intent audit 2 item 2: a one-time series judged on its saved sample, only when the sample is of this very series (oneShotEligibility.ts). */
+export function sampleEligibility(f: Feed, now: number): Eligibility {
+  try { return oneShotEligibility(f.id, f.config, loadFixture(f).body, now); } catch { return { decided: false, reason: null, subject: null }; }
+}
 import { ONCHAIN_FACTS, onchainSource } from "@/lib/burnticker/sources/onchain";
 import { driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
 import { TIER_LABEL } from "@/lib/burnticker/sources/types";
@@ -92,7 +100,11 @@ export function catalogueSources(now: number, o: { includeConfig?: boolean } = {
       const rule = validateRule({ schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: f.id, market: null, filter: {}, kind: "scalar", scalar: { unit: f.unit!.size, perUnit: { fractionOfPool: 0.02 }, baseline: f.baseline!, direction: f.direction! }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null });
       const pv = previewFromFixture(f, rule, now); preview = { window: pv.window, units: pv.totals.units, burnEvents: pv.totals.burnEvents, poolFractionSpent: pv.totals.poolFractionSpent };
     } catch { /* no fixture: the card says so */ }
-    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: TIER_LABEL[f.tier], title: f.title, sourceName: f.sourceName, sourceUrl: f.sourceUrl, cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: f.launchable, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
+    // intent audit 2 item 2: a one-time event that already has its result is listed, not offered; a named launch shows its mission,
+    // provider, time, status, page and id (never a bare id)
+    const elig = sampleEligibility(f, now);
+    const title = elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : f.title;
+    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: TIER_LABEL[f.tier], title, sourceName: f.sourceName, sourceUrl: elig.subject?.url ?? verifyUrl(f, now), cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: elig.decided ? { ok: false, why: elig.reason } : f.launchable, eligibility: { decided: elig.decided, reason: elig.reason }, subject: elig.subject, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
   });
   const onchain = (Object.keys(ONCHAIN_FACTS) as (keyof typeof ONCHAIN_FACTS)[]).map((id) => { const s = onchainSource(id, null); return { id, kind: s.kind, tier: s.tier, tierLabel: TIER_LABEL[s.tier], title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: s.unit, direction: s.direction, baseline: s.baseline, carry: s.carry, valueLabel: s.valueLabel, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }; });
   const stubs = [polymarketCard(), umaStub(), driftBetStub(), hedgehogStub()].map((s) => ({ id: s.id, kind: s.kind, tier: s.tier, tierLabel: TIER_LABEL[s.tier], title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: null, direction: null, baseline: null, carry: s.carry, valueLabel: null, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }));
@@ -379,16 +391,19 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
       const np = nativeRuleProblems(src, locked.rule);
       if (np.length) return fail(400, np.join("; "), { problems: np });
       const since = new Date(now); since.setUTCMonth(since.getUTCMonth() - months);
+      // the intent audit: a single game already final is refused in the review with the shared sentence (oneShotEligibility.ts)
+      const gameElig = src.eligibility ? await src.eligibility().catch(() => null) : null;
       const r = await src.settledSince(locked.rule, since.toISOString().slice(0, 10), { crossRead: false });
       const b = backtest(locked.rule, r.events, now, months);
       const pv = { ...b, window: { from: r.events[0]?.at ?? "", to: r.events[r.events.length - 1]?.at ?? "" }, lastReading: r.events[r.events.length - 1] ?? null };
-      return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { feedTitle: src.title }), backtest: pv, sentence: `${backtestSentence(b)} This was read live from ${src.sourceName.split(" · ")[0]} and is for display only.${src.crossRead ? ` The keeper also checks ${src.crossRead}.` : ""}`, refusals: [], seriesTitle: src.title, matched: r.events.length });
+      return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { feedTitle: src.title }), backtest: pv, sentence: `${backtestSentence(b)} This was read live from ${src.sourceName.split(" · ")[0]} and is for display only.${src.crossRead ? ` The keeper also checks ${src.crossRead}.` : ""}${gameElig ? ` ${gameElig.line}` : ""}`, refusals: gameElig?.decided ? [{ reason: gameElig.reason! }] : [], seriesTitle: src.title, matched: r.events.length });
     }
     if (locked.rule.oracle === "catalogue") {
       const feed = feedById(locked.rule.series!);
       if (!feed) return fail(400, `There is no feed called ${locked.rule.series}.`);
       const pv = previewFromFixture(feed, locked.rule, now);
-      return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), backtest: pv, sentence: `${backtestSentence(pv)} This comes from the feed's saved sample, from ${pv.window.from} to ${pv.window.to}.`, refusals: [], seriesTitle: feed.title, matched: pv.rows.length });
+      const elig = sampleEligibility(feed, now);
+      return ok({ rule: locked.rule, text: locked.text, sha256: locked.sha256, sha12: locked.sha12, mode: locked.mode, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), backtest: pv, sentence: `${backtestSentence(pv)} This comes from the feed's saved sample, from ${pv.window.from} to ${pv.window.to}.`, refusals: elig.decided ? [{ reason: elig.reason! }] : [], seriesTitle: elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : feed.title, subject: elig.subject, matched: pv.rows.length });
     }
     if (locked.rule.oracle === "polymarket") { if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE); return await polymarketBacktest(p, locked, months); }
     if (locked.rule.oracle !== "kalshi") return fail(400, `The ${locked.rule.oracle} source is not live yet. Kalshi, Polymarket and our own feeds are live.`);
@@ -459,12 +474,16 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // create with one does not fit one transaction; the CLI keeps --first-buy-sol); no vault mode (it needs a signature no wallet can give).
   if (p.cluster === "mainnet" && p.allowMainnet !== true) return { error: fail(403, MAINNET_OFF_SENTENCE, { code: "mainnet-launches-off" }) };
   if (requestedOpeningPurchase(b.firstBuySol) !== 0) return { error: fail(400, NO_OPENING_PURCHASE_SENTENCE, { code: "opening-purchase-off" }) };
+  // website-19 (ChatGPT launch-intent audit 2, item 1): a set of outcomes is never one coin's rule; the creator picks one outcome's market
+  if (input.rule && typeof input.rule === "object" && eventLevelRule(input.rule as Parameters<typeof eventLevelRule>[0])) return { error: fail(400, EVENT_LEVEL_REFUSAL, { code: "pick-one-outcome" }) };
   let locked: LockedRule;
   try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, (e as Error).message) }; }
   if (locked.mode === "vault") return { error: fail(400, VAULT_HIDDEN_SENTENCE, { code: "vault-off" }) };
   if (locked.rule.oracle === "kalshi" && p.kalshiEnabled === false) return { error: fail(503, KALSHI_UNAVAILABLE) };
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
+  // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name
+  { const rp = reservedProblem(input); if (rp) return { error: fail(403, rp, { code: "reserved" }) }; }
   let seriesTitle: string | null = null;
   let feedText: { title: string; sourceName: string; unitLabel: string } | null = null;
   let statedText: ReturnType<typeof statedCtx> = null;
@@ -508,7 +527,10 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     feedText = feed.unit ? { title: feed.title, sourceName: feed.sourceName, unitLabel: feed.unit.label } : null;
     const fp = feedRuleProblems(feed, locked.rule);
     if (fp.length) return { error: fail(400, fp.join("; "), { problems: fp }) };
-    seriesTitle = feed.title;
+    // intent audit 2 item 2: eligibility does not wait for the launch gate or the strict preflight; the live preflight checks it again
+    const elig = sampleEligibility(feed, Date.now());
+    if (elig.decided) return { error: fail(400, elig.reason!, { code: "already-decided", problems: [elig.reason!] }) };
+    seriesTitle = elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : feed.title;
   } else if (locked.rule.oracle === "kalshi") {
     const info = await p.kalshi.seriesInfo(locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null);
     if (!info) return { error: fail(502, "The Kalshi series could not be read. Please try again.") };
@@ -541,7 +563,6 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     seriesTitle = derbyTitle(locked.rule);
   } else return { error: fail(400, `Coins cannot launch on the ${locked.rule.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.`) };
   if (refusals.length) return { error: fail(403, `This launch is refused: ${refusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals }) };
-  if (p.registry.tickerTaken(input.ticker)) return { error: fail(409, `The ticker ${input.ticker} is taken.`, { code: "ticker-taken" }) };
   if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `The mint ${o.mint} is already registered.`, { code: "mint-taken" }) };
   { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read
@@ -610,8 +631,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const bProblems = launchProblems({ ...input, ...side });
     if (bProblems.length) return { error: fail(400, `Side B has a problem: ${bProblems.join("; ")}`, { problems: bProblems }) };
     const bRefusals = nameRefusals(list, side.name, side.ticker);
+    { const rp = reservedProblem(side); if (rp) return { error: fail(403, `Side B: ${rp}`, { code: "reserved" }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
-    if (p.registry.tickerTaken(side.ticker)) return { error: fail(409, `The ticker ${side.ticker} is taken.`, { code: "ticker-taken" }) };
     { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.

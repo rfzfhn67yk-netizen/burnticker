@@ -9,11 +9,12 @@ import { SHARE_COPY } from "@/lib/burnticker/creatorBenefits";
  * link preview shows (the badge's PNG, which the coin page's Open Graph tags name). Built from the page's own origin; nothing is fetched
  * except the preview image. Used on the creator page; the coin page can use it too (WIRING-17.md). Words: creatorBenefits.ts SHARE_COPY.
  */
-export function ShareBlock({ ticker }: { ticker: string }) {
+/** `id`: the coin's URL key, its ticker while it alone holds it and its mint once the ticker is shared (coinKey.ts); defaults to the ticker. */
+export function ShareBlock({ ticker, id = ticker }: { ticker: string; id?: string }) {
   const [origin, setOrigin] = useState("https://burnticker.com");
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => { setOrigin(window.location.origin); }, []);
-  const t = encodeURIComponent(ticker);
+  const t = encodeURIComponent(id);
   const page = `${origin}/burnticker/t/${t}`, badge = `${origin}/api/burnticker/v1/badge/${t}.svg`, embed = `${origin}/burnticker/embed/${t}`;
   const alt = `$${ticker} receipts on Burnticker`.replace(/[[\]"<>]/g, "");
   const rows = [

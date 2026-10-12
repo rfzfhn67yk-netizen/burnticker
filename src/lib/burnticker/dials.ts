@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { LEAGUES, NEXT_MAX, gameSeries, parseEspnSeries, seasonYearAt, teamSeries, windowChoices, type EspnSeries, type Window, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
-import { INVERSE_CHOICE, inverseRefusal } from "@/lib/burnticker/inverse";
+import { INVERSE_CHOICE, KEEPER_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 
 /**
  * THE RULE DIALS (2026-10-10, the owner: "after we select a rule can we edit it? like the percentage burned?"). Every entry path — a
@@ -51,7 +51,10 @@ const fractionOf = (r: BurnRule): number => {
 
 const yearOf = (e: Extract<EspnSeries, { kind: "team" }>, c: DialCtx) => (e.window.kind === "season" || e.window.kind === "post" ? e.window.year : c.seasonYear ?? seasonYearAt(e.league, c.nowMs ?? Date.now()));
 
-const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? e.kind === "game" : r.kind === "binary" && !!r.market; };
+// website-19: the one-shot presets (100 or 50 %) wherever the keeper drains a 100 % one-shot (rules.ts isOneShot: a market, a named launch,
+// a milestone, the flippening). A single game and the first snow keep the 1–10 % bounds: the keeper does not drain them, so a 100 % share
+// would leave most of the pool to the end sink after one capped burn run.
+const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? false : (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? "")) || (r.oracle === "derby" && (r as { derby?: { flip?: boolean } }).derby?.flip === true) || (r.kind === "binary" && !!r.market); };
 /** The set a rule can join: a team coin's league season (id <league>-<year>-<win|loss>, outcome <ABBR>.<ESPN id>), or the market's set. */
 export function leagueSetFor(r: BurnRule, c: DialCtx = {}): { id: string; outcome: string } | null {
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
@@ -82,7 +85,7 @@ export function dialsFor(r: BurnRule, c: DialCtx = {}): DialSet {
   }
   const n = series ? parseNwsSeries(series) : null;
   if (n) {
-    if (n.metric !== "snow") { out.ids.push("threshold"); out.threshold = n.metric === "high" ? { value: n.threshold, label: "high at or above (°F)", step: 1, min: -40, max: 130 } : { value: n.threshold, label: "rain at or above (inches)", step: 0.05, min: 0.01, max: 10 }; }
+    if (n.metric !== "snow") { out.ids.push("threshold"); out.threshold = n.metric === "high" ? { value: n.threshold, label: r.inverse ? "burns when the high is below (°F)" : "high at or above (°F)", step: 1, min: -40, max: 130 } : { value: n.threshold, label: r.inverse ? "burns when the rain is below (inches)" : "rain at or above (inches)", step: 0.05, min: 0.01, max: 10 }; }
     return out;
   }
   if (r.oracle === "catalogue") { out.fixedUnit = r.scalar ? `fixed by the source: unit ${r.scalar.unit}, direction ${r.scalar.direction}, baseline ${String(r.scalar.baseline)}` : null; return out; }

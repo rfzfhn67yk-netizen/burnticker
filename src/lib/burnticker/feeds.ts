@@ -9,7 +9,7 @@ export { FEEDS_PATH, feedHref, COIN_FEED_LINK, type FeedFormat } from "@/lib/bur
  * same rows the pages read (feedsData.ts collects them the way the home API does):
  *
  *   receipts       every confirmed burn this site shows (the home page's activity rows of kind "burn"), each linking its own receipt check
- *   coin/<TICKER>  one coin's rows of every kind: burns, signed readings, graduation and pool registration (activity.ts)
+ *   coin/<TICKER or MINT>  one coin's rows of every kind: burns, signed readings, graduation and pool registration (activity.ts)
  *   next-results   the next result each coin waits for and where its latest result stands (upcoming.ts, the /burnticker/upcoming page)
  *
  * Pure: the routes pass the rows, the origin and the clock. An empty feed is a valid feed with no items whose description says why in a
@@ -39,6 +39,7 @@ export const FEED_COPY = {
   undated: "This site does not read the date of this event.",
   unavailable: "This feed could not be read just now. Nothing is wrong with the coins themselves. Try again in a few minutes.",
   unknownCoin: (t: string) => `No coin with the ticker $${t} is on this site.`,
+  unknownMint: "No launched coin with that mint address is on this site.",
   badPath: "Feed addresses end in .rss or .json, for example receipts.rss or coin/DEFICIT.json.",
 };
 
@@ -72,10 +73,11 @@ export function receiptsFeed(events: readonly ActivityEvent[], origin: string, n
   return { id: "receipts", title: FEED_COPY.receiptsTitle, description: FEED_COPY.receiptsDescription, homeUrl: `${origin}/burnticker`, ...urls(origin, "receipts"), items, emptyText: items.length ? null : FEED_COPY.receiptsEmpty, updated: new Date(now).toISOString() };
 }
 
-export function coinFeed(ticker: string, events: readonly ActivityEvent[], origin: string, now: number, homeUrl?: string): FeedDoc {
-  const t = ticker.toUpperCase();
-  const items = events.filter((e) => e.ticker.toUpperCase() === t).map((e) => eventItem(e, origin)).sort(byDate).slice(0, FEED_ITEM_LIMIT);
-  return { id: `coin:${t}`, title: `$${t} on Burnticker`, description: FEED_COPY.coinDescription(t), homeUrl: homeUrl ?? `${origin}/burnticker/t/${encodeURIComponent(t)}`, ...urls(origin, `coin/${encodeURIComponent(t)}`), items, emptyText: items.length ? null : FEED_COPY.coinEmpty(t), updated: new Date(now).toISOString() };
+/** `mint`: the coin's mint when its ticker is shared (or it was asked for by mint); its rows are then read by mint and its addresses use the mint. */
+export function coinFeed(ticker: string, events: readonly ActivityEvent[], origin: string, now: number, homeUrl?: string, mint?: string | null): FeedDoc {
+  const t = ticker.toUpperCase(), key = mint ?? t;
+  const items = events.filter((e) => (mint ? e.mint === mint : e.ticker.toUpperCase() === t)).map((e) => eventItem(e, origin)).sort(byDate).slice(0, FEED_ITEM_LIMIT);
+  return { id: `coin:${key}`, title: `$${t} on Burnticker`, description: FEED_COPY.coinDescription(t), homeUrl: homeUrl ?? `${origin}/burnticker/t/${encodeURIComponent(key)}`, ...urls(origin, `coin/${encodeURIComponent(key)}`), items, emptyText: items.length ? null : FEED_COPY.coinEmpty(t), updated: new Date(now).toISOString() };
 }
 
 /** One item per coin; its id changes whenever the coin's state or sentence changes, so a reader sees each change as a new item. */

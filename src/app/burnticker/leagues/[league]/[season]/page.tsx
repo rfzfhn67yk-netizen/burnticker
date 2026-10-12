@@ -8,6 +8,7 @@ import { LEAGUES_PATH, leagueSeasonPage, resolveLeagueSeason, type LeagueSeasonP
 import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
+import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 
 export const dynamic = "force-dynamic";
 
@@ -18,14 +19,14 @@ export const dynamic = "force-dynamic";
  */
 type Params = { params: Promise<{ league: string; season: string }> };
 
-function load(league: string, season: string): { page: LeagueSeasonPage | null; err: string | null } {
+function load(league: string, season: string): { page: LeagueSeasonPage | null; err: string | null; shared?: Set<string> } {
   const r = resolveLeagueSeason(league, season);
   if (!r) return { page: null, err: null };
   const origin = publicOrigin();
   const og = `${origin}${LEAGUES_PATH}/${encodeURIComponent(r.league)}/${encodeURIComponent(season)}/og`;
   try {
     const d = leagueData(platform());
-    return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: d.coins, readings: d.readings, nowMs: Date.now(), origin, ogImage: og }), err: null };
+    return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: d.coins, readings: d.readings, nowMs: Date.now(), origin, ogImage: og }), err: null, shared: sharedTickers(d.tickers) };
   } catch (e) {
     return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: [], readings: [], nowMs: Date.now(), origin, ogImage: og }), err: e instanceof Error ? e.message : String(e) };
   }
@@ -45,7 +46,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function LeagueSeasonRoute({ params }: Params) {
   const { league, season } = await params;
-  const { page: p, err } = load(league, season);
+  const { page: p, err, shared = new Set<string>() } = load(league, season);
   if (!p) notFound();
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const withCoins = p.teams.filter((t) => t.coins.length > 0), rest = p.teams.filter((t) => t.coins.length === 0);
@@ -89,7 +90,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
               <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-medium">{b.label}</h3><span className="text-xs text-neutral-500">{dateRange(b.from, b.to)}{b.ended ? " · season over" : ""}</span></div>
               {b.leader && <p className="mt-1 text-xs"><span className="bt-chip bt-chip-window">{b.leader.title}</span> <span className="font-mono">${b.leader.ticker}</span></p>}
               <table className="mt-2 w-full text-xs"><thead className="text-left text-neutral-500"><tr><th className="py-1">#</th><th>Coin</th><th>Burns on</th><th className="text-right">Receipts</th><th className="text-right">Supply burned</th></tr></thead>
-                <tbody>{b.rows.map((r) => <tr key={r.mint} className="border-t border-neutral-800"><td className="py-1">{r.rank}</td><td><Link className="font-mono underline" href={`/burnticker/t/${r.ticker}`}>${r.ticker}</Link></td><td>{r.outcome === "win" ? "a win" : r.outcome === "draw" ? "a draw" : "a loss"}</td><td className="text-right tabular-nums">{r.receipts}</td><td className="text-right tabular-nums">{r.burnedPct.toFixed(2)}%</td></tr>)}</tbody></table>
+                <tbody>{b.rows.map((r) => <tr key={r.mint} className="border-t border-neutral-800"><td className="py-1">{r.rank}</td><td><Link className="font-mono underline" href={coinPageHref(r, shared)}>${r.ticker}</Link></td><td>{r.outcome === "win" ? "a win" : r.outcome === "draw" ? "a draw" : "a loss"}</td><td className="text-right tabular-nums">{r.receipts}</td><td className="text-right tabular-nums">{r.burnedPct.toFixed(2)}%</td></tr>)}</tbody></table>
             </article>
           ))}</div>
         )}

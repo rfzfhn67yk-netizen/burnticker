@@ -1,6 +1,7 @@
 import { LEAGUES, seasonYearAt, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { coinSeason, leaguePath, LEAGUES_PATH } from "@/lib/burnticker/leagues";
 import type { SeasonCoinInput } from "@/lib/burnticker/seasons";
+import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 
 /**
  * THE SITEMAP (growth batch 2026-10-10): /sitemap.xml (Caddy rewrites the apex path to /burnticker/sitemap.xml). Lists the public pages
@@ -10,7 +11,7 @@ import type { SeasonCoinInput } from "@/lib/burnticker/seasons";
  */
 
 export interface SitemapEntry { loc: string; lastmod?: string; changefreq?: "hourly" | "daily" | "weekly" | "monthly"; priority?: number }
-export interface SitemapInput { origin: string; nowMs: number; coins: readonly { ticker: string; status: string; at: number }[]; pairs: readonly { pairId: string }[]; seasonCoins: readonly SeasonCoinInput[] }
+export interface SitemapInput { origin: string; nowMs: number; coins: readonly { ticker: string; mint?: string; status: string; at: number }[]; pairs: readonly { pairId: string }[]; seasonCoins: readonly SeasonCoinInput[] }
 
 export const STATIC_PAGES: { path: string; changefreq: SitemapEntry["changefreq"]; priority: number }[] = [
   { path: "/", changefreq: "daily", priority: 1 },
@@ -46,10 +47,11 @@ export const DOC_PAGES: string[] = ["/burnticker/docs", "/whitepaper.html", "/ap
 export function sitemapEntries(i: SitemapInput): SitemapEntry[] {
   const o = i.origin.replace(/\/$/, "");
   const today = new Date(i.nowMs).toISOString().slice(0, 10);
+  const shared = sharedTickers(i.coins);   // tickers are not unique (owner 2026-10-12): a shared ticker is listed by mint
   const out: SitemapEntry[] = [
     ...STATIC_PAGES.map((s) => ({ loc: `${o}${s.path}`, changefreq: s.changefreq, priority: s.priority })),
     ...DOC_PAGES.map((p) => ({ loc: `${o}${p}`, changefreq: "weekly" as const, priority: 0.5 })),
-    ...i.coins.filter((c) => c.status === "live" || c.status === "paused" || c.status === "retired").map((c) => ({ loc: `${o}/burnticker/t/${encodeURIComponent(c.ticker)}`, lastmod: today, changefreq: (c.status === "retired" ? "weekly" : "daily") as SitemapEntry["changefreq"], priority: 0.6 })),
+    ...i.coins.filter((c) => c.status === "live" || c.status === "paused" || c.status === "retired").map((c) => ({ loc: `${o}${coinPageHref({ ticker: c.ticker, mint: c.mint ?? c.ticker }, shared)}`, lastmod: today, changefreq: (c.status === "retired" ? "weekly" : "daily") as SitemapEntry["changefreq"], priority: 0.6 })),
     ...i.pairs.map((p) => ({ loc: `${o}/burnticker/p/${encodeURIComponent(p.pairId)}`, changefreq: "daily" as const, priority: 0.5 })),
   ];
   const seasons = new Set<string>();

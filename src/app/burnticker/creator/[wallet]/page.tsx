@@ -61,7 +61,7 @@ export default async function CreatorPage({ params }: Params) {
                 <dt className="text-neutral-500">{CREATOR_PAGE.labels.next}</dt><dd>{shortDay(c.nextAt) ?? CREATOR_PAGE.noNext}</dd>
                 <dt className="text-neutral-500" title={RANK_MEANING}>{CREATOR_PAGE.labels.rank}</dt><dd data-rank>{c.rank?.line ?? CREATOR_PAGE.unavailable}</dd>
               </dl>
-              <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Share ${c.ticker}</summary><div className="mt-2"><ShareBlock ticker={c.ticker} /></div></details>
+              <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Share ${c.ticker}</summary><div className="mt-2"><ShareBlock ticker={c.ticker} id={c.key} /></div></details>
             </li>
           ))}
         </ul>

@@ -11,9 +11,9 @@ import type { GameReading } from "@/lib/burnticker/leagues";
  */
 
 const TTL_MS = 60_000;
-let memo: { at: number; registry: unknown; v: { coins: SeasonCoinInput[]; readings: GameReading[]; pairs: { pairId: string }[]; tickers: { ticker: string; status: string; at: number }[] } } | null = null;
+let memo: { at: number; registry: unknown; v: { coins: SeasonCoinInput[]; readings: GameReading[]; pairs: { pairId: string }[]; tickers: { ticker: string; mint: string; status: string; at: number }[] } } | null = null;
 
-export function leagueData(p: Platform, nowMs = Date.now()): { coins: SeasonCoinInput[]; readings: GameReading[]; pairs: { pairId: string }[]; tickers: { ticker: string; status: string; at: number }[] } {
+export function leagueData(p: Platform, nowMs = Date.now()): { coins: SeasonCoinInput[]; readings: GameReading[]; pairs: { pairId: string }[]; tickers: { ticker: string; mint: string; status: string; at: number }[] } {
   if (memo && memo.registry === p.registry && nowMs - memo.at < TTL_MS) return memo.v;
   const supplyRaw = BigInt(TOTAL_SUPPLY) * BigInt(10) ** BigInt(DECIMALS);
   const rows = [...p.registry.tokens("live"), ...p.registry.tokens("paused"), ...p.registry.tokens("retired")];
@@ -25,7 +25,7 @@ export function leagueData(p: Platform, nowMs = Date.now()): { coins: SeasonCoin
   const keys = [...new Set(rows.filter((t) => /^catalogue:espn\.(team|game):/.test(t.selectorKey)).map((t) => t.selectorKey))];
   const readings: GameReading[] = keys.flatMap((k) => p.registry.readings(k, since).map((r) => ({ selectorKey: k, at: r.at, title: r.title ?? null })));
   const pairs = p.registry.pairs().map((x) => ({ pairId: x.pairId }));
-  const tickers = rows.map((t) => ({ ticker: t.ticker, status: t.status, at: t.createdAt }));
+  const tickers = rows.map((t) => ({ ticker: t.ticker, mint: t.mint, status: t.status, at: t.createdAt }));
   const v = { coins, readings, pairs, tickers };
   memo = { at: nowMs, registry: p.registry, v };
   return v;

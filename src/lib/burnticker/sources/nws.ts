@@ -53,6 +53,22 @@ export function parseNwsSeries(id: string): NwsSeries | null {
   if (m && stationByCode(m[1])) return { metric: "snow", station: m[1], threshold: null };
   return null;
 }
+/**
+ * THE FIRST-SNOW COIN'S SEASON (owner intent, 2026-10-12: "first snow" resolves once and retires). The climate report's snow season runs
+ * July 1 to June 30 (its "since July 1" total). A first-snow coin covers the season it was created in: the season holding its launch
+ * day (UTC date of the launch time). The keeper (multiKeeper.ts) plans only readings up to that season's June 30, ends the coin after
+ * its first qualifying snow, and ends it VOID once that June 30 has passed with none (checked from July 3 UTC, so the June 30 final
+ * report, issued the next morning, and its cross-read have been read).
+ */
+export const isFirstSnowSeries = (series: string | null | undefined): boolean => !!series && /^nws\.snow:[A-Z]{3}$/.test(series);
+export function snowSeasonEnd(launchIso: string): string {
+  const day = /^\d{4}-\d{2}-\d{2}/.test(launchIso) ? launchIso.slice(0, 10) : new Date(Date.parse(launchIso)).toISOString().slice(0, 10);
+  const y = Number(day.slice(0, 4)), m = Number(day.slice(5, 7));
+  return `${m >= 7 ? y + 1 : y}-06-30`;
+}
+/** The keeper's void check for a season with no first snow: from this UTC instant on. */
+export const snowSeasonVoidFromMs = (seasonEnd: string): number => Date.parse(`${seasonEnd}T00:00:00Z`) + 3 * 86_400_000;
+
 export function nwsSeriesTitle(s: NwsSeries): string {
   const st = stationByCode(s.station)!;
   return s.metric === "high" ? `${st.city} daily high ≥ ${s.threshold} °F (NWS)` : s.metric === "rain" ? `${st.city} rain day ≥ ${s.threshold.toFixed(2)} in (NWS)` : `${st.city} first snow of the season (NWS)`;

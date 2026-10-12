@@ -193,6 +193,8 @@ export const HISTORY_COPY = {
     { href: "/burnticker/bounty", label: "Security bounty", text: "How to report a problem, the wallet and every decided report." },
     { href: "/burnticker/verify-yourself", label: "Verify a receipt yourself", text: "Recompute a real receipt in a terminal." },
     { href: "/burnticker/press", label: "Press kit", text: "Logo files, a short description and the contact address." },
+    // owner decision 2026-10-12: the devnet practice coins left the public pages; their one page is linked here and from the Trust page
+    { href: "/burnticker/devnet", label: "Devnet practice runs", text: "The test coins and burns from the practice runs on devnet." },
   ],
   reviewsTitle: "Published reviews",
   reviewsIntro: "Every review is published in full in the public repository, with the response to it where there is one. None of them is an audit by a security firm.",

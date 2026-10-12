@@ -30,6 +30,8 @@ export interface ActivityEvent {
   href: string;
   /** the signature behind the row, when there is one */
   signature?: string | null;
+  /** the coin's mint, when the row comes from a registered coin (tickers are not unique, owner 2026-10-12) */
+  mint?: string;
 }
 
 const netOf = (cluster: string | null | undefined): "mainnet" | "devnet" => (cluster === "devnet" ? "devnet" : "mainnet");
@@ -39,15 +41,17 @@ const day = (iso: string | null) => shortDay(iso) ?? iso ?? "";
 
 /** The slice of a registered coin's status.json (pageTypes.ts TokenStatusJson) the rows need. */
 export interface StatusForEvents {
-  ticker: string; cluster: string;
+  ticker: string; cluster: string; mint?: string;
   market?: { phase: "curve" | "migrating" | "graduated" | null; graduatedPool: string | null; dates?: LifecycleDatesJson | null } | null;
   program?: { lastReading: { date: string; signature: string; txUrl?: string } | null; pool: { registered: boolean; address: string | null } } | null;
 }
 export interface ReceiptForEvents { status: string; settledAt: string; units: number; value: string | null; signature: string | null; readingDate?: string | null; burned?: string | null }
 
 /** A registered coin's rows: its confirmed burns, its last signed reading, its graduation and its pool registration. */
-export function eventsFromStatus(s: StatusForEvents, receipts: readonly ReceiptForEvents[] = []): ActivityEvent[] {
+export function eventsFromStatus(s: StatusForEvents, receipts: readonly ReceiptForEvents[] = [], key: string = s.ticker): ActivityEvent[] {
   const net = netOf(s.cluster), t = s.ticker, out: ActivityEvent[] = [];
+  // `key` is the coin's URL key (coinKey.ts): its ticker while it alone holds it, its mint once the ticker is shared
+  const page = `/burnticker/t/${encodeURIComponent(key)}`;
   for (const r of receipts) {
     if (r.status !== "confirmed" || !r.signature) continue;
     out.push({ kind: "burn", at: r.settledAt, network: net, ticker: t, signature: r.signature, href: checkReceiptHref(r.signature, net)!, text: `$${t} burned ${r.burned ? `${groupDigits(r.burned)} tokens` : "its purchase"} on ${day(r.settledAt)}, from ${unitsText(r.units)}.` });
@@ -62,12 +66,12 @@ export function eventsFromStatus(s: StatusForEvents, receipts: readonly ReceiptF
   }
   // indexer-1: the graduation and the pool registration are dated when their transactions were read on chain (lifecycleDates.ts)
   const gd = s.market?.dates?.graduated, rd = s.market?.dates?.registered;
-  if (gd?.state === "read") out.push({ kind: "graduation", at: gd.at, network: net, ticker: t, signature: gd.signature, href: `/burnticker/t/${encodeURIComponent(t)}`, text: `$${t} graduated from its curve to its Raydium pool on ${day(gd.at)}.` });
-  else if (s.market?.phase === "graduated") out.push({ kind: "graduation", at: null, network: net, ticker: t, href: `/burnticker/t/${encodeURIComponent(t)}`, text: `$${t} graduated from its curve to its Raydium pool. This site does not read the date.` });
+  if (gd?.state === "read") out.push({ kind: "graduation", at: gd.at, network: net, ticker: t, signature: gd.signature, href: page, text: `$${t} graduated from its curve to its Raydium pool on ${day(gd.at)}.` });
+  else if (s.market?.phase === "graduated") out.push({ kind: "graduation", at: null, network: net, ticker: t, href: page, text: `$${t} graduated from its curve to its Raydium pool. This site does not read the date.` });
   if (s.program?.pool.registered && s.program.pool.address) out.push(rd?.state === "read"
     ? { kind: "pool", at: rd.at, network: net, ticker: t, signature: rd.signature, href: explorer(net, s.program.pool.address, "address"), text: `$${t}'s Raydium pool was registered with the burn program on ${day(rd.at)}.` }
     : { kind: "pool", at: null, network: net, ticker: t, href: explorer(net, s.program.pool.address, "address"), text: `$${t}'s Raydium pool is registered with the burn program. This site does not read the date.` });
-  return out;
+  return s.mint ? out.map((e) => ({ ...e, mint: s.mint })) : out;
 }
 
 /** The $DEFICIT keeper's rows from its status.json and burns.json (statusPage.ts StatusJson and BurnJson). Unknown shapes give no rows. */
@@ -99,6 +103,6 @@ const trillions = (v: string) => { const n = Number(v); return Number.isFinite(n
 /** Newest first, mainnet before devnet, undated rows after the dated ones of their network; one row per signature. */
 export function sortEvents(evs: readonly ActivityEvent[], limit = 12): ActivityEvent[] {
   const seen = new Set<string>();
-  const uniq = evs.filter((e) => { const k = e.signature ? `${e.kind}:${e.signature}` : `${e.kind}:${e.network}:${e.ticker}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  const uniq = evs.filter((e) => { const k = e.signature ? `${e.kind}:${e.signature}` : `${e.kind}:${e.network}:${e.mint ?? e.ticker}`; if (seen.has(k)) return false; seen.add(k); return true; });
   return uniq.sort((a, b) => (a.network !== b.network ? (a.network === "mainnet" ? -1 : 1) : a.at === b.at ? 0 : a.at === null ? 1 : b.at === null ? -1 : b.at.localeCompare(a.at))).slice(0, limit);
 }
