@@ -12,7 +12,7 @@ import { BURN_RECEIPTS_LOCALNET_PROGRAM_ID, BURNTICKER_PLATFORM as PROGRAM_BURNT
  * field):
  *
  *   SOL side  80 % → the coin's burn pool (its fee PDA ["fee", mint])     LOCK_FEE_BURN_BPS     8,000
- *             20 % → the operator treasury (the Squads vault)             LOCK_FEE_OPERATOR_BPS 2,000
+ *             20 % → the operator treasury (operatorTreasuryRecord below) LOCK_FEE_OPERATOR_BPS 2,000
  *   coin side burned outright
  *
  * Integer lamports: the operator's share is floor(sol × 2,000 / 10,000) and the burn pool gets the rest, so any odd lamport goes to the
@@ -86,6 +86,32 @@ export const OPERATOR_TREASURY: Record<ClusterKey, string | null> = {
   localnet: pinnedOrNull(PROGRAM_OPERATOR_TREASURY.localnet),
 };
 export const operatorTreasuryFor = (cluster: string): string | null => OPERATOR_TREASURY[clusterKey(cluster)];
+
+/**
+ * THE OPERATOR TREASURY, ONE RECORD (audit R03, 2026-10-11). The fee tables, the trust statements, the fee ledger and the operator page
+ * once disagreed about who receives the operator's 20 % of the locked LP's SOL fees ("the Squads vault" in one, the developer fee
+ * wallet in another). The answer is per cluster and compiled into the program (src/lib/burnReceipts/constants.ts OPERATOR_TREASURY);
+ * every surface takes its address, holder, link and sentence from here.
+ *   mainnet  8cwwy895… — the developer fee wallet (the owner's hardware wallet, also LaunchLab's platform fee wallet). NOT the Squads
+ *            vault: the vault holds upgrade and config authority and no fee stream.
+ *   devnet   the rehearsal Squads vault (the devnet build compiles it).
+ */
+export const OPERATOR_TREASURY_HOLDER: Record<ClusterKey, { holder: string; isSquadsVault: boolean }> = {
+  mainnet: { holder: "the developer fee wallet (the owner's hardware wallet, also the LaunchLab platform fee wallet), not the Squads vault", isSquadsVault: false },
+  devnet: { holder: "the devnet Squads vault (rehearsal network)", isSquadsVault: true },
+  localnet: { holder: "the test suites' treasury", isSquadsVault: false },
+};
+/** `who` names the recipient (address + holder); `text` adds what it receives — the fee tables' recipient cell. */
+export interface OperatorTreasuryRecord { cluster: ClusterKey; address: string | null; role: string; holder: string; isSquadsVault: boolean; url: string | null; who: string; text: string }
+export const OPERATOR_TREASURY_ROLE = "operator treasury: 20% of the locked LP's SOL-side fees, paid by the permissionless claim_lock_fees (compiled into the program)";
+export function operatorTreasuryRecord(cluster: string): OperatorTreasuryRecord {
+  const c = clusterKey(cluster), address = OPERATOR_TREASURY[c], h = OPERATOR_TREASURY_HOLDER[c];
+  const who = address ? `the operator treasury ${address} on ${c} — ${h.holder}` : `the operator treasury (not pinned in the ${c} program build)`;
+  const text = address
+    ? `${who}: 20% of the locked LP's SOL-side fees, paid by the permissionless claim_lock_fees`
+    : `${who}: claims refuse (${TREASURY_NOT_PINNED}) and the fees stay in the lock`;
+  return { cluster: c, address, role: OPERATOR_TREASURY_ROLE, holder: h.holder, isSquadsVault: h.isSquadsVault, url: address ? solscanUrl(c, address) : null, who, text };
+}
 /** The program error a claim gets while the cluster's treasury is all zeros. */
 export const TREASURY_NOT_PINNED = "TreasuryNotPinned";
 
@@ -259,7 +285,7 @@ export interface LockFeesClient {
   readonly programId: string;
   readonly cluster: string;
   feeKeysPda(): string;
-  /** The operator treasury compiled into the program for this cluster (the Squads vault); null while not pinned (mainnet today). */
+  /** The operator treasury compiled into the program for this cluster (operatorTreasuryRecord); null while not pinned. */
   operatorTreasury(): string | null;
   port(mint: string): LockFeesPort;
 }
@@ -359,6 +385,8 @@ export interface LpLockPolicyJson {
   policy: typeof LP_POLICY; line: string; lockedPct: number;
   /** Never null (2026-10-11 live check): a fixed PDA of the program id, derived from the IDL's id when BURNTICKER_PROGRAM_ID is unset. */
   lockProgram: string; lockAuthority: string; feeKeysPda: string; operatorTreasury: string | null; treasuryPinned: boolean;
+  /** audit R03: who the operator treasury is, from operatorTreasuryRecord (never a hand-written "the vault") */
+  operatorTreasuryHolder: string;
   /** Round 2: the LaunchLab platform compiled into the program (initialize_token refuses any other); null = not pinned (PlatformNotPinned). */
   platform: string | null; platformPinned: boolean; launchLabLocker: string;
   split: { burnBps: number; operatorBps: number; coinSide: "burned"; fixedInCode: true };
@@ -373,7 +401,7 @@ export function lpLockPolicyJson(cluster: string, burnProgramId: string | null):
   const treasury = operatorTreasuryFor(cluster), lockProgram = lpLockProgramFor(cluster);
   return {
     policy: LP_POLICY, line: LP_POLICY_LINE, lockedPct: LP_LOCKED_PCT,
-    lockProgram, lockAuthority: lpLockAuthorityFor(cluster), feeKeysPda: keys, operatorTreasury: treasury, treasuryPinned: !!treasury,
+    lockProgram, lockAuthority: lpLockAuthorityFor(cluster), feeKeysPda: keys, operatorTreasury: treasury, treasuryPinned: !!treasury, operatorTreasuryHolder: operatorTreasuryRecord(cluster).holder,
     platform, platformPinned: !!platform, launchLabLocker: launchLabLockerFor(cluster),
     split: { burnBps: LOCK_FEE_BURN_BPS, operatorBps: LOCK_FEE_OPERATOR_BPS, coinSide: "burned", fixedInCode: true },
     perSwapAfterGraduationBps: { lpFees: 21, toBurnPool: 16.8, toOperator: 4.2, creatorFeeToBurnPool: 4.75, burnedTotal: 21.55 },

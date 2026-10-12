@@ -81,9 +81,16 @@ export function jsonRpc(url: string, fetchImpl: typeof fetch = fetch, o: { attem
         if (wait > 0) await new Promise((ok) => setTimeout(ok, wait));
         last = Date.now();
         const r = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
-        if (r.status === 429) { await new Promise((ok) => setTimeout(ok, base * 2 ** attempt)); continue; }
-        const j = (await r.json()) as { result?: T; error?: { message: string } };
+        // 429 and 5xx are retried; any other non-OK status is a failed read. A failed read THROWS — it is never an empty result
+        // (ChatGPT re-check 2026-10-11 F1: a 503 JSON body or a bodyless 200 used to come back as `undefined` and read as "no account").
+        if (r.status === 429 || r.status >= 500) { if (attempt + 1 < attempts) { await new Promise((ok) => setTimeout(ok, base * 2 ** attempt)); continue; } throw new Error(`${method}: the RPC answered HTTP ${r.status}`); }
+        if (!r.ok) throw new Error(`${method}: the RPC answered HTTP ${r.status}`);
+        let j: { jsonrpc?: string; result?: T; error?: { message: string } };
+        try { j = (await r.json()) as typeof j; } catch { throw new Error(`${method}: the RPC answered HTTP ${r.status} with a body that is not JSON`); }
+        if (j === null || typeof j !== "object") throw new Error(`${method}: the RPC answer is not a JSON-RPC envelope`);
         if (j.error) throw new Error(`${method}: ${j.error.message}`);
+        // a JSON-RPC success carries a `result` member (null is a real answer for getTransaction); a body without one is not an answer
+        if (!("result" in j)) throw new Error(`${method}: the RPC answer has no result (not a JSON-RPC envelope)`);
         return j.result as T;
       }
       throw new Error(`${method}: rate-limited by the RPC`);

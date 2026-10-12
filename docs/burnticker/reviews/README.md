@@ -6,19 +6,24 @@ AI reviews, free tooling and a public bounty, all published here in full. This f
 
 ## Status
 
-**Latest disposition:** the third ChatGPT/Codex code review and its live UX review (2026-10-11, scoped `782e31ec..191d3b3b`) —
+**Latest disposition:** the fourth ChatGPT/Codex re-check (2026-10-11, PR #1 at `6a2d9047`, scoped `191d3b3b..6a2d9047`) —
+[response](2026-10-11-chatgpt-recheck-4-response.md): F1 (P2, a malformed RPC answer read as "NOT registered") fixed with regression
+tests; the Rust suites the reviewer could not run were run here (202 passed, 0 failed, 0 ignored; table in the response); the oversized
+single launch transaction and the partial-plan recovery are in work (v0 + lookup table) and creator launches stay closed until then.
+Before it: the third ChatGPT/Codex code review and its live UX review (2026-10-11, scoped `782e31ec..191d3b3b`) —
 [response](2026-10-11-chatgpt-review-3-response.md): F1 (P2, an unreadable ProgramData account shown as "no upgrade authority") fixed
 with regression tests; nine of the ten UX changes done, the pre-wallet launch summary deferred while creator launches stay closed.
 Before it: the second ChatGPT/Codex review (public commit `07b7b4f5`) — [response](2026-10-11-chatgpt-pr-review-2-response.md): F1, F2,
 F3, F4 and F6 fixed with regression tests; F5 (= pair-forward re-check RN-1/RN-2) is fixed in pair round 3 (`burnticker/pair-forward-r3`).
 
-The folder holds **thirteen review reports** (ten before 2026-10-11, as review 2 counted them; the third blind Claude review carries
-its own re-check as its last section; the third ChatGPT round is two reports, code and UX, with one response). Three responses, this README and the pre-registered checklist are documents about the reviews, not
+The folder holds **fourteen review reports** (ten before 2026-10-11, as review 2 counted them; the third blind Claude review carries
+its own re-check as its last section; the third ChatGPT round is two reports, code and UX, with one response; the fourth ChatGPT round is a re-check with its own response). Four responses, this README and the pre-registered checklist are documents about the reviews, not
 reviews. "Blind" is each report's own description of how it was run, not an independent check of the reviewer's independence. Latest
 first:
 
 | Review | Reviewer | Status | Report |
 |---|---|---|---|
+| chatgpt-recheck-4 | ChatGPT/Codex: fourth round, a re-check of PR #1 at 6a2d9047 (scoped 191d3b3b..6a2d9047) | completed 2026-10-11 (one new P2, F1, fixed; old findings re-closed in the exercised cases; launch transaction size + recovery open, in work; disposition in [2026-10-11-chatgpt-recheck-4-response.md](2026-10-11-chatgpt-recheck-4-response.md)) | [2026-10-11-chatgpt-recheck-4.md](2026-10-11-chatgpt-recheck-4.md) |
 | chatgpt-adversarial-3 | ChatGPT/Codex: third code review, scoped 782e31ec..191d3b3b (public commit 191d3b3b) | completed 2026-10-11 (one P2, F1; disposition in [2026-10-11-chatgpt-review-3-response.md](2026-10-11-chatgpt-review-3-response.md)) | [2026-10-11-chatgpt-pr-review-3.md](2026-10-11-chatgpt-pr-review-3.md) |
 | chatgpt-ux-3 | ChatGPT: third live UX + feature review of the public site (against public commit 191d3b3b) | completed 2026-10-11 (ten changes: nine done, one deferred; same response file) | [2026-10-11-chatgpt-ux-review-3.md](2026-10-11-chatgpt-ux-review-3.md) |
 | chatgpt-adversarial-2 | ChatGPT/Codex: second adversarial code review + live-site UX audit, the same checklist (reviewed public commit 07b7b4f5) | completed 2026-10-11 (3 P1, 3 P2, UX cuts, ten explanation mismatches; per-finding disposition in [2026-10-11-chatgpt-pr-review-2-response.md](2026-10-11-chatgpt-pr-review-2-response.md)) | [2026-10-11-chatgpt-pr-review-2.md](2026-10-11-chatgpt-pr-review-2.md) |

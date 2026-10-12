@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
-import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, operatorTreasuryFor, type LockFeeClaimFacts } from "@/lib/burnticker/lockFees";
+import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, operatorTreasuryFor, operatorTreasuryRecord, type LockFeeClaimFacts } from "@/lib/burnticker/lockFees";
 
 /**
  * THE FEE LEDGER (trust pack, 2026-10-10; /burnticker/fees/ledger, GET /api/burnticker/v1/fees/ledger). Every lamport the developer fee
@@ -57,8 +57,8 @@ export interface FeeLedgerDoc {
 
 /**
  * THE OPERATOR'S LP-FEE LINE (owner decision 2026-10-10: LP locked forever, its fees fund the burn). claim_lock_fees pays 20 % of every
- * coin's locked-LP fees (SOL side) to the operator treasury — the Squads vault compiled into the program, not the developer fee wallet
- * above — and 80 % to the coin's burn pool. The totals are the keeper's recorded claims (each one read from the claim transaction's memo
+ * coin's locked-LP fees (SOL side) to the operator treasury compiled into the program (lockFees.ts operatorTreasuryRecord: on mainnet
+ * the developer fee wallet above, on devnet the rehearsal Squads vault) — and 80 % to the coin's burn pool. The totals are the keeper's recorded claims (each one read from the claim transaction's memo
  * after confirmation; every claim is a public transaction); the treasury's own history is on the explorer.
  */
 export interface LpFeeLine {
@@ -73,7 +73,7 @@ export function lpFeeLine(cluster: string, claims: readonly Pick<LockFeeClaimFac
     treasury, treasuryPinned: !!treasury, split: { burnBps: LOCK_FEE_BURN_BPS, operatorBps: LOCK_FEE_OPERATOR_BPS },
     claims: claims?.length ?? 0, solLamports: sum("solLamports"), toOperatorLamports: sum("toOperatorLamports"), toBurnPoolLamports: sum("toBurnPoolLamports"),
     source: claims ? "keeper records" : "none",
-    note: `Every claim_lock_fees pays 20% of the LP fees' SOL side to the operator treasury and 80% to the coin's burn pool (fixed in code; the coin side is burned). This is operator income on top of the 25 bps curve fee above.${treasury ? "" : ` The treasury is not compiled into the ${cluster} program build yet: claims refuse (TreasuryNotPinned) and the fees stay in the lock.`}`,
+    note: `Every claim_lock_fees pays 20% of the LP fees' SOL side to ${operatorTreasuryRecord(cluster).who} and 80% to the coin's burn pool (fixed in code; the coin side is burned). This is operator income on top of the 25 bps curve fee above.${treasury ? "" : ` The treasury is not compiled into the ${cluster} program build yet: claims refuse (TreasuryNotPinned) and the fees stay in the lock.`}`,
   };
 }
 

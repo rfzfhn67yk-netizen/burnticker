@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { browserPlanStorage, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planProblems, planStepStates, recordFailureSentence, sentRecoverySentence, signAndSendPlan, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 
 /**
@@ -16,6 +17,10 @@ import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
  * Review-2 F4: every signed transaction is written to sessionStorage (signPlan.ts PlanRecord) before it is sent. A step whose
  * confirmation was lost shows "Sent; confirmation unavailable — signature …" (never "Nothing was sent"), and the next press looks that
  * signature up on chain before anything new is built. On mount the card reads the stored record for these drafts and shows it.
+ *
+ * Re-check 2026-10-11: every step is a version-0 transaction compiled against the network's lookup table, which is fetched and verified
+ * (lookupTable.ts) before anything is signed. A plan that put something on chain but lost a mint key on reload is abandoned: each step
+ * shows confirmed / sent / abandoned, the sentence gives the fee already spent, and the only action is a new plan.
  */
 export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart = true }: { plan: SignPlan; creator: string | null; title: string; notes?: string[]; coinHref: (ticker: string) => string; /** the review card's Launch already was the decision: open the wallet's signature prompt at once (default) */ autoStart?: boolean }) {
   const wallet = useWallet();
@@ -25,11 +30,16 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   const [storage] = useState(() => browserPlanStorage());
   const [stored] = useState(() => loadPlanRecord(storage, plan));
   const [busy, setBusy] = useState(false), [done, setDone] = useState<string[]>(() => stored?.confirmed ?? []), [confirmed, setConfirmed] = useState<string[]>(() => stored?.recorded ?? []);
-  const [err, setErr] = useState<string | null>(() => (stored?.pending ? sentRecoverySentence(stored.pending, plan.steps.length, stored.confirmed) : null));
-  /** the step a run stopped at: its state ("sent" = outcome unknown) and signature */
-  const [stopped, setStopped] = useState<Pick<SendResult, "failedAt" | "state" | "signature"> | null>(() => (stored?.pending ? { failedAt: stored.pending.step, state: "sent", signature: stored.pending.signature } : null));
+  const abandonedAtMount = planAbandoned(plan, stored) && (stored?.confirmed.length ?? 0) < plan.steps.length;
+  const [err, setErr] = useState<string | null>(() => (stored?.pending ? sentRecoverySentence(stored.pending, plan.steps.length, stored.confirmed) : stored && abandonedAtMount ? abandonedSentence({ ...stored, confirms: plan.confirms, steps: plan.steps.length }) : null));
+  /** the step a run stopped at: its state ("sent" = outcome unknown; "abandoned" = a mint key lost on reload) and signature */
+  const [stopped, setStopped] = useState<Pick<SendResult, "failedAt" | "state" | "signature"> | null>(() => (stored?.pending ? { failedAt: stored.pending.step, state: "sent", signature: stored.pending.signature } : stored && abandonedAtMount ? { failedAt: stored.confirmed.length, state: "abandoned" } : null));
   const walletKey = wallet.publicKey?.toBase58() ?? null;
-  const problems = [...planProblems(plan, creator), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : [])];
+  const network = planNetwork(plan.steps.map((st) => st.instructions));
+  const v0 = wallet.wallet?.adapter.supportedTransactionVersions;
+  const problems = [...planProblems(plan, creator), ...lookupTablePinProblems(network), ...planSizeProblems(plan.steps, creator, network), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet && !v0?.has(0) ? ["this wallet cannot sign version-0 transactions"] : [])];
+  /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
+  const startNewPlan = () => { storage.remove(planStorageKey(plan)); window.location.assign(window.location.pathname); };
   const allLive = plan.confirms.length > 0 && plan.confirms.every((c) => confirmed.includes(c.mint));
   const n = plan.steps.length;
   // a single coin goes to its page once it is live (a pair keeps the card with both links)
@@ -41,6 +51,7 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       const r = await signAndSendPlan(plan, creator, {
         latestBlockhash: () => connection.getLatestBlockhash("confirmed"),
         signTransaction: (tx) => wallet.signTransaction!(tx),
+        lookupTable: () => verifiedLookupTable(connection, network),
         sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
         confirm: async (sig, bh) => (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value,
         getSignatureStatus: async (sig) => (await connection.getSignatureStatuses([sig], { searchTransactionHistory: true })).value[0] ?? null,
@@ -79,13 +90,14 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
           const st = states[i], sig = st === "confirmed" ? done[i] : stopped?.failedAt === i ? stopped.signature : undefined;
           return (
             <li key={`${i}-${t.label}`} className="flex flex-wrap items-baseline gap-2" data-step-state={st}>
-              <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] ${st === "confirmed" ? "border-emerald-400 text-emerald-400" : st === "sent" || (busy && i === done.length) ? "border-amber-400 text-amber-300" : st === "failed" ? "border-red-400 text-red-400" : "border-neutral-600 text-neutral-400"}`}>{st === "confirmed" ? "✓" : i + 1}</span>
+              <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] ${st === "confirmed" ? "border-emerald-400 text-emerald-400" : st === "sent" || (busy && i === done.length) ? "border-amber-400 text-amber-300" : st === "failed" || st === "abandoned" ? "border-red-400 text-red-400" : "border-neutral-600 text-neutral-400"}`}>{st === "confirmed" ? "✓" : i + 1}</span>
               <span className="text-neutral-200" title={t.label}>{stepName(t, i)}</span>
               <span className="text-neutral-500">signed by {t.signers.map(signerName).join(" + ")}</span>
               {st === "confirmed" && <span className="text-neutral-500">· {stepStatusText("confirmed", sig)}</span>}
               {st === "sent" && <span className="text-amber-300 break-all">· {stepStatusText("sent", sig)}</span>}
               {st === "failed" && <span className="text-red-400">· {stepStatusText("failed", sig)}</span>}
               {st === "not-sent" && stopped?.failedAt === i && <span className="text-neutral-500">· {stepStatusText("not-sent")}</span>}
+              {st === "abandoned" && <span className="text-red-400">· {stepStatusText("abandoned")}</span>}
             </li>
           );
         })}
@@ -94,6 +106,8 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       {notes.length > 0 && <ul className="list-disc pl-5 text-xs text-neutral-500">{notes.map((x) => <li key={x}>{x}</li>)}</ul>}
       {allLive ? (
         <p className="text-emerald-400">{plan.confirms.length > 1 ? "Both coins are live." : "Your coin is live — opening its page…"} {plan.confirms.map((c) => <a key={c.mint} className="ml-2 underline" href={coinHref(c.ticker)}>${c.ticker} →</a>)}</p>
+      ) : stopped?.state === "abandoned" ? (
+        <button type="button" data-decision="new-plan" className="rounded border border-amber-400 px-5 py-2 text-base font-semibold text-amber-300" onClick={startNewPlan}>Start a new plan</button>
       ) : problems.length > 0 ? (
         <div className="text-amber-400 text-xs"><p>Not signable here yet:</p><ul className="list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul></div>
       ) : (

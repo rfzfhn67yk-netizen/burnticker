@@ -77,13 +77,19 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
   test("'Eagles win' → a team card (the NFL schedule needs the licensed key: said, not faked); 'US debt rises $1B' → Treasury; 'Detroit high above 90' → NWS; 'WIF vs SHIB' → the Coin vs Coin tile", async () => {
     const eagles = await universalSearch("Eagles win", deps());
     assert.equal(eagles.cards[0].venue, "espn"); assert.equal(eagles.cards[0].rule?.series, "espn.team:nfl-PHI.21-win-s2026", "this season by default, the team pinned by its ESPN id"); assert.equal(eagles.cards[0].venueLabel, "On-chain payout · league's official feed"); assert.doesNotMatch(eagles.cards[0].settlement, /ESPN/);
-    assert.equal(eagles.cards[0].note, "schedule needs the licensed key (BURNTICKER_THESPORTSDB_KEY)", "no TheSportsDB key on this host: no NFL schedule, and never a fallback to ESPN");
+    // launch audit 5 L05: said in plain words (no env-var name in user copy), and never a fallback to ESPN
+    assert.match(eagles.cards[0].note ?? "", /NFL's schedule comes from TheSportsDB's licensed feed, which is not linked on this host/, "no TheSportsDB key on this host: no NFL schedule, and never a fallback to ESPN");
+    assert.doesNotMatch(eagles.cards[0].note ?? "", /BURNTICKER_|ESPN/);
     assert.ok(!eagles.cards.some((c) => c.matchup), "no next game without a schedule");
     assert.ok(!eagles.cards.some((c) => c.venue === "kalshi"));
     const debt = await universalSearch("US debt rises $1B", deps());
     assert.equal(debt.cards[0].rule?.series, "treasury.debt"); assert.match(debt.cards[0].title, /^Burns 2% per \$1B added — /);
     const wx = await universalSearch("Detroit high above 90", deps());
-    assert.equal(wx.cards[0].venue, "nws"); assert.equal(wx.cards[0].rule?.series, "nws.high:DTW-90");
+    // launch audit 5 L04: "above 90" is strictly above — the report gives whole °F, so 91 or hotter, and the card says what it read
+    assert.equal(wx.cards[0].venue, "nws"); assert.equal(wx.cards[0].rule?.series, "nws.high:DTW-91");
+    assert.match(wx.cards[0].note ?? "", /You wrote “above 90”/); assert.match(wx.cards[0].interpreted ?? "", /91 °F or hotter/);
+    const wxAt = await universalSearch("Detroit high reaches 90", deps());
+    assert.equal(wxAt.cards[0].rule?.series, "nws.high:DTW-90"); assert.equal(wxAt.cards[0].note, null);
     const derby = await universalSearch("WIF vs SHIB", deps());
     assert.equal(derby.cards.length, 1); assert.equal(derby.cards[0].venue, "tile"); assert.equal(derby.cards[0].href, null); assert.equal(derby.cards[0].subtitle, "not built yet", "the copy lint forbids \"coming soon\"");
     const derbyLive = await universalSearch("WIF vs SHIB", deps({ derbyHref: "/burnticker/derby" }));
@@ -163,9 +169,9 @@ describe("the API: /search, /elections, /elections/pair, /sports — schemas, no
     const g = await get("/sports/games?league=mlb&q=dodgers", "listSportsGames") as { games: { eventId: string; a: { abbr: string }; b: { abbr: string }; series: { aLoss: string; bLoss: string } }[] };
     assert.equal(g.games[0].eventId, "849809"); assert.equal(g.games[0].series.aLoss, "espn.game:mlb-849809-LAD-loss"); assert.equal(g.games[0].series.bLoss, "espn.game:mlb-849809-MIL-loss");
     const nfl = await get("/sports/teams?league=nfl&q=eagles", "listSportsTeams") as { teams: { abbr: string; next: unknown }[]; scheduleNote: string | null };
-    assert.equal(nfl.teams[0].abbr, "PHI"); assert.equal(nfl.teams[0].next, null); assert.match(nfl.scheduleNote ?? "", /schedule needs the licensed key/);
+    assert.equal(nfl.teams[0].abbr, "PHI"); assert.equal(nfl.teams[0].next, null); assert.match(nfl.scheduleNote ?? "", /licensed feed, which is not linked on this host/); assert.match((nfl as { scheduleDetail?: string }).scheduleDetail ?? "", /schedule needs the licensed key/, "the technical reason rides apart from the sentence (L05)");
     const nflGames = await get("/sports/games?league=nfl", "listSportsGames") as { games: unknown[]; scheduleNote: string | null };
-    assert.equal(nflGames.games.length, 0); assert.match(nflGames.scheduleNote ?? "", /schedule needs the licensed key/);
+    assert.equal(nflGames.games.length, 0); assert.match(nflGames.scheduleNote ?? "", /licensed feed, which is not linked on this host/);
     await get("/sports/games?league=xfl", "listSportsGames", 400);
     setNativeClients({ espn: null, nws: null });
   });
@@ -206,6 +212,7 @@ describe("the election-pair template (El-Sayed vs Rogers, Michigan Senate 2026)"
   test("raceCards: the outcome card links the race and the SoS page", () => {
     const cards = raceCards([race()], "Rogers Michigan Senate");
     assert.equal(cards[0].title.startsWith("Mike Rogers (R) wins the Michigan Senate race"), true);
-    assert.match(cards[0].settlement, /michigan\.gov\/sos/);
+    // launch audit 5 L05: no raw URL in the settlement sentence; the SoS page is a link of its own
+    assert.doesNotMatch(cards[0].settlement, /https?:\/\//); assert.match(cards[0].crossReadUrl ?? "", /michigan\.gov\/sos/);
   });
 });

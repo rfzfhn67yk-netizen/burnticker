@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import Link from "next/link";
 import { TRUSTPACK_SECTION_COPY } from "@/lib/burnticker/trustpack/copy";
 
@@ -19,12 +19,9 @@ const PAGES = [
 ];
 
 export default function TrustPackSection({ card }: { card: string }) {
-  const [b, setB] = useState<Bounty | null>(null);
-  const [op, setOp] = useState<Op | null>(null);
-  useEffect(() => {
-    fetch("/api/burnticker/v1/bounty").then((r) => r.json()).then(setB).catch(() => setB(null));
-    fetch("/api/burnticker/v1/operator").then((r) => r.json()).then(setOp).catch(() => setOp(null));
-  }, []);
+  // audit R01: both reads go through readJson — a failed one says so with a Retry instead of a silent "Loading…" forever
+  const bounty = useJsonRead<Bounty>("/api/burnticker/v1/bounty");
+  const b = bounty.data, op = useJsonRead<Op>("/api/burnticker/v1/operator").data;
   const tone = op?.neverBuys.status === "red" ? "text-red-400" : op?.neverBuys.status === "clear" ? "text-emerald-400" : "text-amber-300";
   return (
     <section className={card} id="check-it-yourself">
@@ -33,7 +30,7 @@ export default function TrustPackSection({ card }: { card: string }) {
       <ul className="text-xs list-disc pl-5 mt-1">{PAGES.map((p) => <li key={p.href}><Link className="underline" href={p.href}>{p.title}</Link> — {p.what}</li>)}</ul>
       {op && <p className={`text-xs mt-2 ${tone}`}>Never buys a platform coin ({op.cluster}): {op.neverBuys.line}</p>}
       <h3 className="text-xs font-medium mt-3">{TRUSTPACK_SECTION_COPY.bountyTitle}</h3>
-      {!b ? <p className="text-xs text-neutral-500">Loading…</p> : b.wallet
+      {!b ? (bounty.failure ? <ReadFailurePanel what="The bounty wallet" failure={bounty.failure} triedAt={bounty.triedAt} loading={bounty.loading} retry={bounty.retry} /> : <p className="text-xs text-neutral-500">Loading…</p>) : b.wallet
         ? <ul className="text-xs space-y-0.5" data-bounty><li><code className="break-all">{b.wallet}</code> (mainnet)</li>
             {/* UX report 3 item 5: the recorded funding and the live read are two separate facts; neither stands in for the other */}
             <li>recorded funding (owner statement): {b.recordedFunding ? `${b.recordedFunding.sol} SOL on ${b.recordedFunding.date}` : "none recorded"}</li>

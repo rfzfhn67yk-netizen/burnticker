@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState } from "../_components/EmptyState";
 import ReceiptVerifier from "./ReceiptVerifier";
+import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { BurnMath } from "../_components/BurnMath";
 import { CHECK_COPY } from "@/lib/burnticker/trustpack/copy";
 import { RepoText } from "../_components/RepoText";
@@ -23,20 +24,18 @@ interface Check {
   upgradeAuthority: { program: string; holder: string; sunset: string }[];
   external: { program: string; power: string; holder: string; effect: string }[];
   locked: Item[]; notDone: Item[];
-  build: { kind: string; kindNote: string; sourceCommit: string; programs: { library: string; programId: string; builds: Record<"mainnet" | "devnet", { features: string[]; hash: string }>; deployed: Partial<Record<"mainnet" | "devnet", { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string } | null>> }[] };
+  build: { kind: string; kindNote: string; sourceCommit: string; programs: { library: string; programId: string; builds: Record<"mainnet" | "devnet", { features: string[]; hash: string }>; deployed: Partial<Record<"mainnet" | "devnet", { hash: string; matchesBuild: boolean; upgradeAuthority: string; readAt?: string; evidence?: string } | null>> }[] };
 }
 
 const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
 const flowTone: Record<string, string> = { none: "text-neutral-500", rent: "text-neutral-400", intoPool: "text-emerald-400", swapBurn: "text-emerald-400", burn: "text-emerald-400", trade: "text-neutral-200", graduate: "text-neutral-200", close: "text-neutral-300" };
 
 export default function CheckPage() {
-  const [c, setC] = useState<Check | null>(null);
-  const [err, setErr] = useState<string | null>(null);
   // UX report 3 item 7: /check?demo=1#verify puts the verifier first, under the header, so the checklist loading above it cannot push
   // the anchored result off screen; without ?demo=1 it stays after the checklist. null until the URL is read (no double mount).
   const [verifierAt, setVerifierAt] = useState<"top" | "bottom" | null>(null);
   useEffect(() => { setVerifierAt(new URLSearchParams(window.location.search).get("demo") === "1" ? "top" : "bottom"); }, []);
-  useEffect(() => { fetch("/api/burnticker/v1/check").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setC(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
+  const { data: c, failure, loading, triedAt, retry } = useJsonRead<Check>("/api/burnticker/v1/check");
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
       <header>
@@ -46,14 +45,17 @@ export default function CheckPage() {
         <p className="text-xs text-neutral-500 mt-1"><a className="underline" href="#money">{CHECK_COPY.moneyTitle}</a> · <a className="underline" href="#powers">{CHECK_COPY.powersTitle}</a> · <a className="underline" href="#locked">{CHECK_COPY.lockedTitle}</a> · <a className="underline" href="#not-done">{CHECK_COPY.notDoneTitle}</a> · <a className="underline" href="#build">{CHECK_COPY.buildTitle}</a> · <a className="underline" href="#verify">{CHECK_COPY.verifierTitle}</a></p>
       </header>
       {verifierAt === "top" && <ReceiptVerifier card={card} />}
-      {err && <EmptyState kind="unavailable" body="The checklist could not be read just now." details={err} />}
-      {!c && !err && <EmptyState kind="loading" />}
+      {failure && <ReadFailurePanel what="The checklist" failure={failure} triedAt={triedAt} loading={loading} retry={retry} />}
+      {!c && !failure && <EmptyState kind="loading" />}
       {c && <>
         <section className={card} id="money">
           <h2 className="font-medium">{CHECK_COPY.moneyTitle}</h2>
           <p className="text-xs text-neutral-300">{CHECK_COPY.moneyIntro}</p>
-          <div className="overflow-x-auto mt-2"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Program</th><th className="p-2">Instruction</th><th className="p-2">Who signs</th><th className="p-2">Where money can go</th></tr></thead>
+          {/* site audit #14 (2026-10-11): the verifier result stays first; the ~40-row instruction table is collapsed by default */}
+          <details className="mt-2 text-xs" data-money-table><summary className="cursor-pointer text-neutral-300">Show every instruction of both programs and where each one can move money ({c.money.length} instructions)</summary>
+          <div className="overflow-x-auto mt-2 max-w-full"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Program</th><th className="p-2">Instruction</th><th className="p-2">Who signs</th><th className="p-2">Where money can go</th></tr></thead>
             <tbody>{c.money.map((m) => <tr key={`${m.program}-${m.instruction}`} className="border-t border-neutral-800 align-top"><td className="p-2 text-neutral-500">{m.program}</td><td className="p-2"><code>{m.instruction}</code></td><td className="p-2">{m.signers}</td><td className="p-2"><span className={flowTone[m.outflowClass] ?? ""}>{m.outflow}</span><details className="text-neutral-500"><summary className="cursor-pointer">register</summary>{m.funds}</details></td></tr>)}</tbody></table></div>
+          </details>
           <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">What does not exist ({c.nonPowers.length})</summary><ul className="list-disc pl-5 mt-1 space-y-1">{c.nonPowers.map((n, i) => <li key={i}><span className="text-neutral-500">{n.program}:</span> {n.text}</li>)}</ul></details>
         </section>
 
@@ -84,15 +86,16 @@ export default function CheckPage() {
           <h2 className="font-medium">{CHECK_COPY.buildTitle}</h2>
           <p className="text-xs text-neutral-300">{CHECK_COPY.buildIntro}</p>
           <p className="text-xs mt-1"><span className={`rounded px-1 ${c.build.kind === "docker" ? "bg-neutral-800" : "bg-amber-900 text-amber-200"}`}>{c.build.kind}</span> {c.build.kindNote} Source commit <code>{c.build.sourceCommit.slice(0, 12)}</code>.</p>
-          <div className="overflow-x-auto mt-2"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Program</th><th className="p-2">Build</th><th className="p-2">Executable hash (this repository)</th><th className="p-2">Deployed on devnet</th></tr></thead>
-            <tbody>{c.build.programs.flatMap((p) => (["mainnet", "devnet"] as const).map((v) => <tr key={`${p.library}-${v}`} className="border-t border-neutral-800 align-top"><td className="p-2"><code>{p.library}</code></td><td className="p-2">{v}{p.builds[v].features.length ? ` (--features ${p.builds[v].features.join(",")})` : ""}</td><td className="p-2 break-all"><code>{p.builds[v].hash}</code></td><td className="p-2 break-all">{(() => { const d = p.deployed[v]; return d ? <><code>{d.hash}</code> <span className={d.matchesBuild ? "text-emerald-400" : "text-red-400"}>{d.matchesBuild ? "✓ same bytes" : "✗ differs"}</span>{d.readAt ? <span className="text-neutral-500"> (read {d.readAt})</span> : null}</> : <span className="text-neutral-500">no deployed bytes recorded for {v}</span>; })()}</td></tr>))}</tbody></table></div>
-          <p className="text-xs text-neutral-500 mt-1">Reproduce: <code>bash scripts/ops/verified-build.sh --local</code> (or <code>--docker</code> on Linux), then <code>--onchain devnet</code>. Steps: docs/burnticker/VERIFIED-BUILD.md.</p>
+          {/* audit R05: one row per program and network — a Network column, and each row's deployed bytes, read date and evidence are that network's own */}
+          <div className="overflow-x-auto mt-2"><table className="w-full text-xs" data-build-table><thead className="text-neutral-400 text-left"><tr><th className="p-2">Program</th><th className="p-2">Network</th><th className="p-2">Executable hash (this repository)</th><th className="p-2">Deployed bytes on that network</th><th className="p-2">Read</th><th className="p-2">Evidence</th></tr></thead>
+            <tbody>{c.build.programs.flatMap((p) => (["mainnet", "devnet"] as const).map((v) => { const d = p.deployed[v]; return <tr key={`${p.library}-${v}`} className="border-t border-neutral-800 align-top"><td className="p-2"><code>{p.library}</code></td><td className="p-2">{v}{p.builds[v].features.length ? <span className="text-neutral-500"> (--features {p.builds[v].features.join(",")})</span> : null}</td><td className="p-2 break-all"><code>{p.builds[v].hash}</code></td><td className="p-2 break-all">{d ? <><code>{d.hash}</code> <span className={d.matchesBuild ? "text-emerald-400" : "text-red-400"}>{d.matchesBuild ? "✓ same bytes" : "✗ differs"}</span></> : <span className="text-neutral-500">no deployed bytes recorded for {v}</span>}</td><td className="p-2 whitespace-nowrap">{d?.readAt ?? "—"}</td><td className="p-2">{d?.evidence ? <RepoText text={d.evidence} /> : "—"}</td></tr>; }))}</tbody></table></div>
+          <p className="text-xs text-neutral-500 mt-1">Reproduce: <code>bash scripts/ops/verified-build.sh --local</code> (or <code>--docker</code> on Linux), then <code>--onchain devnet</code> or <code>--onchain mainnet</code>. Steps: <RepoText text="docs/burnticker/VERIFIED-BUILD.md" />.</p>
         </section>
       </>}
       {verifierAt === "bottom" && <ReceiptVerifier card={card} />}
       <BurnMath />
       <p className="text-xs text-neutral-400">The verifier refuses a transaction for a mint the burn_receipts program does not know. To ask about a mint itself — is it a Burnticker coin at all — use <a className="underline" href="/burnticker/verify">Verify a mint</a>; lookalikes are listed on <a className="underline" href="/burnticker/not-burnticker">Not Burnticker</a>.</p>
-      <p className="text-xs text-neutral-500">JSON: <code>/api/burnticker/v1/check</code> · <code>/api/burnticker/v1/check/receipts</code> · <code>/api/burnticker/v1/check/receipts/&lt;signature&gt;</code> · doc: docs/burnticker/CHECK-THIS-YOURSELF.md</p>
+      <p className="text-xs text-neutral-500">JSON: <code>/api/burnticker/v1/check</code> · <code>/api/burnticker/v1/check/receipts</code> · <code>/api/burnticker/v1/check/receipts/&lt;signature&gt;</code> · doc: <RepoText text="docs/burnticker/CHECK-THIS-YOURSELF.md" /></p>
     </main>
   );
 }

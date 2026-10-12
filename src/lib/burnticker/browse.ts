@@ -3,6 +3,8 @@ import path from "node:path";
 import type { BrowseSeries } from "@/lib/burnticker/oracle/browse";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import type { VenueFlags } from "@/lib/burnticker/venues";
+import { leagueProvenance, SPORTS_CHIP, SPORTS_SOURCE_NAME } from "@/lib/burnticker/sources/provenance";
+import type { LeagueId } from "@/lib/burnticker/sources/espn";
 
 /**
  * BROWSE, VENUE-AGNOSTIC (2026-10-10). The owner asked for Kalshi-style navigation ("weather, elections, anything like that"); the
@@ -17,7 +19,7 @@ import type { VenueFlags } from "@/lib/burnticker/venues";
  * refuse-list verdict, and the `pick` the wizard sets), so the page reads the same with a venue on or off. Pure apart from the loader.
  */
 
-export interface CategoryDef { id: string; label: string; blurb: string; feeds: string[]; polymarket: string[]; kalshi: string[]; native?: string[]; guided?: "elections" | null; adjudicatedOnly?: boolean }
+export interface CategoryDef { id: string; label: string; blurb: string; feeds: string[]; polymarket: string[]; kalshi: string[]; native?: string[]; guided?: "elections" | null; adjudicatedOnly?: boolean; /** L11: a Polymarket event joins this category only when its title matches (a broad Gamma tag carries unrelated markets) */ polymarketTitle?: string | null }
 export const CATEGORIES_FILE = path.join("config", "burnticker", "categories.json");
 
 export function parseCategories(raw: unknown): CategoryDef[] {
@@ -29,7 +31,7 @@ export function parseCategories(raw: unknown): CategoryDef[] {
     if (typeof x.id !== "string" || !/^[a-z][a-z0-9-]{1,23}$/.test(x.id) || seen.has(x.id)) throw new Error(`categories.json: bad or duplicate id ${String(x.id)}`);
     seen.add(x.id);
     const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
-    return { id: x.id, label: String(x.label ?? x.id), blurb: String(x.blurb ?? ""), feeds: list(x.feeds), polymarket: list(x.polymarket), kalshi: list(x.kalshi), native: list(x.native), guided: x.guided === "elections" ? "elections" : null, adjudicatedOnly: x.adjudicatedOnly === true };
+    return { id: x.id, label: String(x.label ?? x.id), blurb: String(x.blurb ?? ""), feeds: list(x.feeds), polymarket: list(x.polymarket), kalshi: list(x.kalshi), native: list(x.native), polymarketTitle: typeof x.polymarketTitle === "string" && x.polymarketTitle ? x.polymarketTitle : null, guided: x.guided === "elections" ? "elections" : null, adjudicatedOnly: x.adjudicatedOnly === true };
   });
 }
 
@@ -56,12 +58,11 @@ export interface SourceCard {
 }
 
 const LEAGUE_LABEL: Record<string, string> = { nfl: "NFL", nba: "NBA", mlb: "MLB", nhl: "NHL" };
-const CROSS: Record<string, string> = { nfl: "TheSportsDB", nba: "TheSportsDB", mlb: "MLB StatsAPI (league official)", nhl: "the NHL score feed (league official)" };
 /** The category's native first-party families as cards (espn:<league>, nws:<metric>). */
 export function nativeCards(c: CategoryDef): SourceCard[] {
   return (c.native ?? []).map((n): SourceCard | null => {
     const [fam, arg] = n.split(":");
-    if (fam === "espn" && LEAGUE_LABEL[arg]) return { id: `native:${n}`, venue: "feed", venueLabel: "ESPN scoreboard", tier: 4, tierLabel: "keeper-read primary API", title: `${LEAGUE_LABEL[arg]} team results — pick a team`, cadence: "every game day", kind: "scalar", next: null, example: "burns every time your team wins (or loses)", launchable: { ok: true, why: null }, refused: [], flags: [`cross-read: ${CROSS[arg]}`], sourceName: "ESPN scoreboard · first-party", sourceUrl: `https://www.espn.com/${arg}/scoreboard`, pick: { oracle: "catalogue", series: null, market: null, title: `${LEAGUE_LABEL[arg]} team results` }, configure: { kind: "team", league: arg } };
+    if (fam === "espn" && LEAGUE_LABEL[arg]) return { id: `native:${n}`, venue: "feed", venueLabel: SPORTS_CHIP, tier: 4, tierLabel: "keeper-read primary API", title: `${LEAGUE_LABEL[arg]} team results — pick a team`, cadence: "every game day", kind: "scalar", next: null, example: "burns every time your team wins (or loses)", launchable: { ok: true, why: null }, refused: [], flags: [`confirmed by: ${leagueProvenance(arg as LeagueId).confirmation}`, `schedule: ${leagueProvenance(arg as LeagueId).schedule}`], sourceName: SPORTS_SOURCE_NAME, sourceUrl: null, pick: { oracle: "catalogue", series: null, market: null, title: `${LEAGUE_LABEL[arg]} team results` }, configure: { kind: "team", league: arg } };
     if (fam === "nws" && ["high", "rain", "snow"].includes(arg)) { const m = arg as "high" | "rain" | "snow"; return { id: `native:${n}`, venue: "feed", venueLabel: "National Weather Service", tier: 4, tierLabel: "keeper-read primary API", title: m === "high" ? "Daily high at a station" : m === "rain" ? "Rain day at a station" : "First snow of the season", cadence: m === "snow" ? "once a season" : "daily (the morning after)", kind: "scalar", next: null, example: m === "high" ? "burns every day the high reaches your threshold" : m === "rain" ? "burns every day the rain reaches your threshold" : "burns once, on the first measurable snow", launchable: { ok: true, why: null }, refused: [], flags: ["official daily climate report (CLI), final reports only"], sourceName: "NWS daily climate · first-party, public domain", sourceUrl: "https://api.weather.gov", pick: { oracle: "catalogue", series: null, market: null, title: "" }, configure: { kind: "weather", metric: m } }; }
     return null;
   }).filter((x): x is SourceCard => x !== null);
@@ -111,7 +112,10 @@ export function categoryCards(c: CategoryDef, parts: { feeds: readonly FeedCardI
   const order = (id: string) => { const i = c.feeds.indexOf(baseId(id)); return i < 0 ? 999 : i; };
   const feeds = parts.feeds.filter((f) => c.feeds.includes(baseId(f.id))).sort((a, b) => order(a.id) - order(b.id)).map(feedCard);
   const seen = new Set<string>();
-  const poly = parts.polymarket.filter((e) => (seen.has(e.slug) ? false : (seen.add(e.slug), true))).map(polymarketCard);
+  // launch audit 5 L11: a category with a title pattern keeps only the events that are about it (the weather tags carried IPO, moon
+  // landing and pandemic markets); the pattern is the category's own (categories.json), never a policy decision
+  const fits = c.polymarketTitle ? new RegExp(c.polymarketTitle, "i") : null;
+  const poly = parts.polymarket.filter((e) => (!fits || fits.test(e.title)) && (seen.has(e.slug) ? false : (seen.add(e.slug), true))).map(polymarketCard);
   const kal = parts.kalshi.map(kalshiCard);
   const q = (o.q ?? "").trim().toLowerCase();
   return [...nativeCards(c), ...feeds, ...poly, ...kal].filter((s) => !q || `${s.title} ${s.venueLabel} ${s.sourceName ?? ""} ${s.id}`.toLowerCase().includes(q));

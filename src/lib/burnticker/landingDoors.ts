@@ -12,15 +12,17 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 export function door2Html(ix: LeagueIndex = leagueIndex([], Date.UTC(2026, 9, 10))): string {
   const all = ix.sports.flatMap((s) => s.leagues).map((l) => l.label).sort((a, b) => a.localeCompare(b));
-  const sports = [...ix.sports].sort((a, b) => a.label.localeCompare(b.label)).map((s) => `${s.label} (${s.leagues.length})`);
+  const sports = [...ix.sports].sort((a, b) => a.label.localeCompare(b.label)).map((s) => s.label.toLowerCase());
+  const list = sports.length > 1 ? `${sports.slice(0, -1).join(", ")} and ${sports[sports.length - 1]}` : sports.join("");
+  // site audit #7/#15 (2026-10-11): the Seasons product card, an <article> with an H3 under the products section's H2; the links name the
+  // three Seasons pages the way every surface does (siteNav.mjs SEASONS_NAV). Plain sentences (owner copy rule, 2026-10-11).
   return [
-    `      <a class="door" href="${LEAGUES_PATH}">`,
-    `        <span class="k">the show</span>`,
+    `      <article class="card" id="seasons">`,
     `        <h3>Seasons</h3>`,
-    `        <p>One scoreboard per league and season — every league Burnticker covers, from the ${esc(all[0])} to the ${esc(all[all.length - 1])} — ranking that league's team coins by receipts. Rivalries and the Burn Derby keep a running tally of burns.</p>`,
-    `        <span class="ex">${esc(sports.join(" · "))} — ${ix.totals.leagues} leagues, one scoreboard each</span>`,
-    `        <span class="go">Follow the season</span>`,
-    `      </a>`,
+    `        <p>Each league gets one scoreboard per season, from the ${esc(all[0])} to the ${esc(all[all.length - 1])}. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>`,
+    `        <p class="ex">The ${ix.totals.leagues} leagues cover ${esc(list)}.</p>`,
+    `        <p class="links"><a class="go" href="${LEAGUES_PATH}">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>`,
+    `      </article>`,
   ].join("\n");
 }
 

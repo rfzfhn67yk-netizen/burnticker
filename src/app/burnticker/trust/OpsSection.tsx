@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
+import { RepoText } from "../_components/RepoText";
 
 /**
  * TRUST OPS ON THE TRUST PAGE (2026-10-10 night): which keeper is active, an attesters line per coin, the latest registry snapshot on
@@ -10,11 +11,11 @@ interface KeeperView { source: string; url: string | null; reachable: boolean; r
 interface TrustOps { keepers: KeeperView[]; activeSummary: string; attesters: { ticker: string; count: number; line: string }[]; snapshot: { date: string; sha256: string; arweaveTxId: string; url: string; rowCounts: Record<string, number> } | null; snapshotsApi: string; incidents: { policy: string; template: string; log: string }; statusPage: string }
 
 export default function OpsSection({ card, repo }: { card: string; repo?: string | null }) {
-  const [t, setT] = useState<TrustOps | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/burnticker/trust/ops").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setT(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
-  const link = (rel: string) => (repo ? <a className="underline" href={`${repo.replace(/\/$/, "")}/blob/main/${rel}`}>{rel}</a> : <code>{rel}</code>);
-  if (err) return <section className={card}><h2 className="font-medium">Keepers, attesters, snapshots</h2><p className="text-xs text-amber-400">{err}</p></section>;
+  const { data: t, failure, loading, triedAt, retry } = useJsonRead<TrustOps>("/api/burnticker/trust/ops");
+  // audit 4 BT-14: repository paths open the public repository at the pinned commit, never a moving branch
+  void repo;
+  const link = (rel: string) => <RepoText text={rel} />;
+  if (failure) return <section className={card}><h2 className="font-medium">Keepers, attesters, snapshots</h2><ReadFailurePanel what="The operations summary" failure={failure} triedAt={triedAt} loading={loading} retry={retry} /></section>;
   if (!t) return <section className={card}><h2 className="font-medium">Keepers, attesters, snapshots</h2><p className="text-xs text-neutral-500">Loading…</p></section>;
   return (<>
     <section className={card}><h2 className="font-medium">Keepers — which one is active</h2>

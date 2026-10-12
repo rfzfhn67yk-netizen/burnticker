@@ -37,7 +37,7 @@ describe("review 2 — one launch-availability state", () => {
 
   test("every launch CTA on the app's pages renders only while launches are open", () => {
     const cases: [string, RegExp[]][] = [
-      ["src/app/burnticker/page.tsx", [/\{launch\.open && <Link href="\/burnticker\/launch" className="bt-launch-btn">Launch a coin<\/Link>\}/, /\{launch\.open && <div className="mt-3"><Link href="\/burnticker\/launch" className="underline">Launch the first one →<\/Link><\/div>\}/, /\{launch\.open && <p className="mt-2"><Link className="underline" href="\/burnticker\/launch\?pair=1">/]],
+      ["src/app/burnticker/CoinsIndex.tsx", [/\{launch\.open && <Link href="\/burnticker\/launch" className="bt-launch-btn">Launch a coin<\/Link>\}/, /\{launch\.open && <div className="mt-3"><Link href="\/burnticker\/launch" className="underline">Launch the first one →<\/Link><\/div>\}/, /\{launch\.open && <p className="mt-2"><Link className="underline" href="\/burnticker\/launch\?pair=1">/]],
       ["src/app/burnticker/leagues/[league]/[season]/page.tsx", [/\{launch\.open && <Link className="text-xs underline" href=\{t\.launchHref\}>/, /\{launch\.open && <Link className="underline" href=\{t\.launchHref\}>/, /No team-coin receipts for this season yet\. This page tracks processed coin receipts, not every game\.\{launch\.open \? " Pick a team below to launch one\." : ""\}/]],
       ["src/app/burnticker/templates/page.tsx", [/\{launch\.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href=\{t\.href\}>Start from this →<\/Link>\}/]],
       ["src/app/burnticker/t/[ticker]/page.tsx", [/\{launch\.open && <p><Link [^>]*href=\{likeHref\(s\.ticker\)\}>Launch one like this →/]],
@@ -46,7 +46,7 @@ describe("review 2 — one launch-availability state", () => {
     ];
     for (const [file, res] of cases) { const src = read(file); for (const re of res) assert.match(src, re, `${file}: ${re}`); }
     // no ungated "Pick a team below to launch one." / "Launch the first one" anywhere in the app
-    for (const file of ["src/app/burnticker/page.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx"]) assert.doesNotMatch(read(file), /yet\. Pick a team below to launch one\.<\/p>/);
+    for (const file of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx"]) assert.doesNotMatch(read(file), /yet\. Pick a team below to launch one\.<\/p>/);
   });
 });
 
@@ -62,7 +62,7 @@ describe("review 2 — one served $DEFICIT destination", () => {
     assert.match(coin, /\/no token\/i\.test\(err\) \? <NotRegistered ticker=\{ticker\} \/>/);
     // website brief §1: $DEFICIT's not-registered state is the pre-launch page, canonical to DEFICIT_SITE
     assert.match(coin, /if \(t === "DEFICIT"\) return <DeficitPrelaunch fallbackSite=\{DEFICIT_SITE\} \/>/);
-    for (const f of ["src/app/burnticker/launch/page.tsx", "src/app/burnticker/page.tsx", "src/app/burnticker/_components/nav.ts"]) assert.doesNotMatch(read(f), /href="\/burnticker\/t\/DEFICIT"/, f);
+    for (const f of ["src/app/burnticker/launch/page.tsx", "src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/_components/nav.ts"]) assert.doesNotMatch(read(f), /href="\/burnticker\/t\/DEFICIT"/, f);
   });
 });
 
@@ -76,7 +76,7 @@ describe("review 2 — no trust badge over an empty audit", () => {
     const html = renderPlatformIndexHtml(buildPlatformIndex([], Date.parse("2026-10-11T00:00:00Z"), { ok: true, ranAt: "2026-10-11T00:00:00Z", receipts: 0, mismatches: 0, chainChecked: false }));
     assert.match(html, /No receipts available to check on this host/);
     assert.doesNotMatch(html, /all receipts recompute/);
-    assert.match(read("src/app/burnticker/page.tsx"), /\["Public audit", audit\.text\]/);
+    assert.match(read("src/app/burnticker/CoinsIndex.tsx"), /\["Public audit", audit\.text\]/);
   });
 });
 
@@ -164,9 +164,9 @@ describe("review 2 — the glossary at first use", () => {
     assert.doesNotMatch(home, /data-glossary/, "no front-loaded glossary on the landing page");
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
     for (const id of ["burn", "receipt", "burnPool", "attester", "keeper"] as TermId[]) assert.ok(home.includes(`<abbr class="term" title="${esc(GLOSSARY[id].short)}">`), id);
-    assert.ok(home.indexOf('<abbr class="term" title="' + esc(GLOSSARY.burn.short)) < home.indexOf('<div class="tape"'), "burn is explained at its first use, in the hero");
+    assert.ok(home.indexOf('<abbr class="term" title="' + esc(GLOSSARY.burn.short)) < home.indexOf('id="verified-burn"'), "burn is explained at its first use, in the hero");
     assert.ok(home.includes(NO_WALLET_LINE));
-    const coins = read("src/app/burnticker/page.tsx");
+    const coins = read("src/app/burnticker/CoinsIndex.tsx");
     assert.match(coins, /<Term id="burn">burns<\/Term>/); assert.match(coins, /<Term id="receipt" \/>/);
     assert.match(coins, /label: "Moved to trading pool", hint: GLOSSARY\.graduation\.short/);
     assert.match(read("src/app/burnticker/trust/page.tsx"), /data-trust-evidence[\s\S]*<TermNote ids=\{\["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"\]\} \/>/, "beside the evidence that uses the words");
@@ -174,6 +174,6 @@ describe("review 2 — the glossary at first use", () => {
     assert.match(pair, /<TermNote ids=\{\["receipt", "burnPool"\]\} \/>/); assert.match(pair, /\{NO_WALLET_LINE\}/);
     assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{esc\(NO_WALLET_LINE\)\} \$\{esc\(termLine\(\["receipt", "burnPool"\]\)\)\}/);
     assert.ok(termLine(["receipt"]).startsWith("receipt — "));
-    for (const f of ["src/app/burnticker/derby/page.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx", "src/app/burnticker/rivalries/page.tsx", "src/app/burnticker/page.tsx"]) assert.match(read(f), /\{NO_WALLET_LINE\}/, f);
+    for (const f of ["src/app/burnticker/derby/page.tsx", "src/app/burnticker/leagues/[league]/[season]/page.tsx", "src/app/burnticker/rivalries/page.tsx", "src/app/burnticker/CoinsIndex.tsx"]) assert.match(read(f), /\{NO_WALLET_LINE\}/, f);
   });
 });

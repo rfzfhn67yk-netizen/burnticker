@@ -96,7 +96,7 @@ export default function OperatorPage() {
             <li>Code <a className="underline" href={v.links.github}>{v.links.github}</a>{isTodo(v.links.githubOrg) && <span className="text-amber-400"> (GitHub organisation: {v.links.githubOrg})</span>}</li>
             <li>X {v.links.x.map((x) => <a key={x} className="underline mr-2" href={x}>{x.replace("https://x.com/", "@")}</a>)}</li>
           </ul>
-          <details className="text-xs mt-2"><summary className="cursor-pointer text-neutral-300">Placeholders on this page ({v.placeholders.length}) — each is on docs/burnticker/TODO-OWNER.md</summary><ul className="mt-1">{v.placeholders.map((p) => <li key={p.path + p.value}><code className="text-amber-400">{p.value}</code> <span className="text-neutral-500">{p.path}</span></li>)}</ul></details>
+          <details className="text-xs mt-2"><summary className="cursor-pointer text-neutral-300">Placeholders on this page ({v.placeholders.length}) </summary><p className="mt-1">Each one is listed in <RepoText text="docs/burnticker/TODO-OWNER.md" />.</p><ul className="mt-1">{v.placeholders.map((p) => <li key={p.path + p.value}><code className="text-amber-400">{p.value}</code> <span className="text-neutral-500">{p.path}</span></li>)}</ul></details>
         </section>
       </>}
     </main>

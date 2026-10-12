@@ -4,7 +4,7 @@
 // signed in order, each mint transaction by its mint key and then the wallet, resumable at the failed step.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { Keypair, SystemProgram, type Transaction } from "@solana/web3.js";
+import { Keypair, SystemProgram, type VersionedTransaction } from "@solana/web3.js";
 import { limiter } from "@/lib/burnticker/api/http";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
@@ -113,7 +113,8 @@ describe("signing the pair-curve set", () => {
     const log: string[] = [];
     const deps = {
       latestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 100 }),
-      signTransaction: async (tx: Transaction) => { const signed = tx.signatures.filter((s) => s.signature).map((s) => s.publicKey.toBase58()); log.push(`wallet sees ${signed.length} mint sig(s)`); tx.partialSign(creator); return tx; },
+      signTransaction: async (tx: VersionedTransaction) => { const signed = tx.signatures.filter((s) => s.some((b) => b !== 0)); log.push(`wallet sees ${signed.length} mint sig(s)`); tx.sign([creator]); return tx; },
+      lookupTable: async () => null,
       sendRaw: async (raw: Uint8Array) => { log.push(`send ${raw.length > 0}`); return `sig${log.filter((l) => l.startsWith("send")).length}`; },
       confirm: async (sig: string) => { log.push(`confirm ${sig}`); return { err: null }; },
     };
@@ -126,7 +127,8 @@ describe("signing the pair-curve set", () => {
     assert.deepEqual([noKeys.failedAt, noKeys.signatures, none], [0, [], []]);
     assert.deepEqual(launchedSignatures(pc, r.signatures), [{ mint: pc.mints.a, launchTx: "sig1" }, { mint: pc.mints.b, launchTx: "sig2" }], "tx 1 confirms A, tx 2 confirms B — never init_pair");
     const t1 = buildPairCurveTx(pc.transactions[0], creator.publicKey.toBase58(), keys, "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi");
-    assert.equal(t1.signatures.find((s) => s.publicKey.equals(mintA.publicKey))?.signature?.length, 64);
+    const at = t1.message.staticAccountKeys.findIndex((k) => k.equals(mintA.publicKey));
+    assert.ok(at > 0 && t1.signatures[at].length === 64 && t1.signatures[at].some((b) => b !== 0), "mint A signed its transaction");
     assert.throws(() => buildPairCurveTx(pc.transactions[1], creator.publicKey.toBase58(), null, "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi"), /mintB/);
   });
 
@@ -134,7 +136,8 @@ describe("signing the pair-curve set", () => {
     let refuse = true; const sent: number[] = [];
     const deps = {
       latestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 1 }),
-      signTransaction: async (tx: Transaction) => { if (refuse && tx.instructions[0].keys.some((k) => k.pubkey.equals(mintB.publicKey))) throw new Error("User rejected the request."); tx.partialSign(creator); return tx; },
+      signTransaction: async (tx: VersionedTransaction) => { if (refuse && tx.message.staticAccountKeys.some((k) => k.equals(mintB.publicKey))) throw new Error("User rejected the request."); tx.sign([creator]); return tx; },
+      lookupTable: async () => null,
       sendRaw: async () => { sent.push(sent.length + 1); return `s${sent.length}`; },
       confirm: async () => ({ err: null }),
     };

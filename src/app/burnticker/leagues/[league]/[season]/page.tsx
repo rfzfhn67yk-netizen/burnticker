@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * ONE LEAGUE, ONE SEASON (growth batch 2026-10-10; src/lib/burnticker/leagues.ts): the league's scoreboard cards (seasons.ts, the
- * Seasons page's own logic), its teams with a launch link each, the games our coins settled in the last seven days with their
+ * Seasons page's own logic), its teams first (with a launch link each only while creator launches are open), the games our coins settled in the last seven days with their
  * settlement source line and the plain ESPN link, JSON-LD. Server-rendered from a 60 s registry memo (leaguesServe.ts).
  */
 type Params = { params: Promise<{ league: string; season: string }> };
@@ -56,7 +56,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8 text-sm">
       {p.jsonLd.map((j, k) => <script key={k} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(j).replace(/</g, "\\u003c") }} />)}
-      <nav className="text-xs text-neutral-400" aria-label="breadcrumb"><Link className="underline" href="/burnticker">Burnticker</Link> / <Link className="underline" href={LEAGUES_PATH}>Seasons</Link> / {p.leagueLabel} {p.seasonLabel}</nav>
+      <nav className="text-xs text-neutral-400" aria-label="breadcrumb"><Link className="underline" href="/burnticker">Burnticker</Link> / <Link className="underline" href={LEAGUES_PATH}>Leagues</Link> / {p.leagueLabel} {p.seasonLabel}</nav>
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">{p.leagueLabel} {p.seasonLabel}</h1>
         <p className="text-neutral-400 max-w-3xl">Team coins for the {p.leagueLabel} {p.seasonLabel} season. Each coin burns supply on its own team&apos;s results under a locked rule, with a receipt per game. The scoreboard ranks coins inside this league only.</p>
@@ -64,6 +64,21 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       </header>
       {err && <p className="text-red-400 text-xs">Registry unavailable: {err}</p>}
 
+      {/* site audit #9: league pages lead with the Teams list */}
+      <section className="space-y-2" aria-label="teams">
+        <h2 className="text-lg font-medium">Teams</h2>
+        {withCoins.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{withCoins.map((t) => (
+          <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{launch.open && <Link className="text-xs underline" href={t.launchHref}>launch a coin for this team</Link>}</li>
+        ))}</ul>}
+        <details open={withCoins.length === 0 && rest.length <= 40} className="text-xs" data-teams><summary className="cursor-pointer text-neutral-400">{withCoins.length ? "Teams with no coin this season" : "Every team"} ({rest.length})</summary>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span>{launch.open && <Link className="underline" href={t.launchHref}>launch a coin for this team</Link>}</li>)}</ul>
+        </details>
+      </section>
+      {/* site audit #9 / BT-10 (2026-10-11): before any coin has a receipt, the empty scoreboard and settled-games sections collapse into one
+          line under the teams; with receipts they render in full */}
+      {p.boards.length === 0 && p.games.rows.length === 0 && p.champions.length === 0 ? (
+        <p className="text-neutral-400 border border-dashed border-neutral-800 rounded p-3 text-xs" data-league-empty>No team coin in the {p.leagueLabel} has a receipt this season yet. The scoreboard and the list of settled games fill in from the coins&apos; own receipts. {NO_WALLET_LINE}{launch.open ? "" : ` ${launch.closedLine}`}</p>
+      ) : <>
       <section className="space-y-3" aria-label="scoreboard">
         <h2 className="text-lg font-medium">Scoreboard</h2>
         <p className="text-xs text-neutral-500">{NO_WALLET_LINE}{launch.open ? "" : ` ${launch.closedLine}`}</p>
@@ -86,22 +101,14 @@ export default async function LeagueSeasonRoute({ params }: Params) {
         {p.games.rows.length === 0 ? <p className="text-neutral-400 border border-neutral-800 rounded p-4">No games settled for {p.leagueLabel} coins in these dates.</p> : (
           <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{p.games.rows.map((g) => (
             <li key={`${g.date}-${g.away.abbr}-${g.home.abbr}`} className="p-3 space-y-1">
-              <div className="flex flex-wrap items-baseline justify-between gap-2"><span><span className="font-mono text-xs text-neutral-500">{g.date}</span> {g.away.name} <b className="tabular-nums">{g.away.score ?? ""}</b> at {g.home.name} <b className="tabular-nums">{g.home.score ?? ""}</b></span><a className="text-xs underline" href={g.espnUrl} rel="noopener nofollow" target="_blank">see on ESPN →</a></div>
+              <div className="flex flex-wrap items-baseline justify-between gap-2"><span><span className="font-mono text-xs text-neutral-500">{g.date}</span> {g.away.name} <b className="tabular-nums">{g.away.score ?? ""}</b> at {g.home.name} <b className="tabular-nums">{g.home.score ?? ""}</b></span><a className="text-xs underline" href={g.espnUrl} rel="noopener nofollow" target="_blank">See it on ESPN<span aria-hidden="true"> ↗</span></a></div>
               <div className="text-xs text-neutral-400">{g.source}</div>
             </li>
           ))}</ul>
         )}
       </section>
 
-      <section className="space-y-2" aria-label="teams">
-        <h2 className="text-lg font-medium">Teams</h2>
-        {withCoins.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{withCoins.map((t) => (
-          <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{launch.open && <Link className="text-xs underline" href={t.launchHref}>launch a coin for this team</Link>}</li>
-        ))}</ul>}
-        <details open={withCoins.length === 0 && rest.length <= 40} className="text-xs"><summary className="cursor-pointer text-neutral-400">{withCoins.length ? "Teams with no coin this season" : "Every team"} ({rest.length})</summary>
-          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span>{launch.open && <Link className="underline" href={t.launchHref}>launch a coin for this team</Link>}</li>)}</ul>
-        </details>
-      </section>
+      </>}
       <p className="text-neutral-500 text-xs">Memecoins. Each rule says what its supply does, not what price does. Team names are used to describe the result a rule reads. Not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );

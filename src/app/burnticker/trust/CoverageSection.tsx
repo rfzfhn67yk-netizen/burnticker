@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
+import { RepoText } from "../_components/RepoText";
 import type { CoverageMatrix, Verdict } from "@/lib/burnticker/coverage/types";
 
 /**
@@ -14,10 +15,8 @@ const VERDICT_TEXT: Record<Verdict, string> = { settleable: "settleable", "adjud
 const pct = (x: number | null) => (x === null ? "n/a" : `${(x * 100).toFixed(x === 0 || x === 1 ? 0 : 1)}%`);
 
 export default function CoverageSection({ card }: { card: string }) {
-  const [m, setM] = useState<CoverageMatrix | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/burnticker/v1/coverage").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setM(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
-  if (err) return <section className={card}><h2 className="font-medium">Settlement coverage</h2><p className="text-xs text-red-400">{err}</p></section>;
+  const { data: m, failure, loading, triedAt, retry } = useJsonRead<CoverageMatrix>("/api/burnticker/v1/coverage");
+  if (failure) return <section className={card}><h2 className="font-medium">Settlement coverage</h2><ReadFailurePanel what="The coverage table" failure={failure} triedAt={triedAt} loading={loading} retry={retry} /></section>;
   if (!m) return <section className={card}><h2 className="font-medium">Settlement coverage</h2><p className="text-xs text-neutral-500">Loading…</p></section>;
   return (
     <section className={card}>
@@ -34,7 +33,7 @@ export default function CoverageSection({ card }: { card: string }) {
             <td className="p-2">{c.polymarket.tags.join(", ") || <span className="text-neutral-500">none</span>}</td>
           </tr>))}</tbody></table></div>
       {m.uncovered.length > 0 && <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-300">What cannot be settled today ({m.uncovered.length})</summary><ul className="list-disc pl-5 mt-1 space-y-1">{m.uncovered.map((u) => <li key={`${u.category}-${u.kind}`}><span className="text-neutral-400">{m.categories.find((c) => c.id === u.category)?.label ?? u.category} · {u.kind}:</span> {u.why}</li>)}</ul></details>}
-      <p className="text-xs text-neutral-500 mt-2">Kalshi is never a primary or a cross-read: its terms forbid settling products on its data. JSON: <code>/api/burnticker/v1/coverage</code> · full table: <code>docs/burnticker/SETTLEMENT-COVERAGE.md</code>.</p>
+      <p className="text-xs text-neutral-500 mt-2">Kalshi is never a primary or a cross-read: its terms forbid settling products on its data. JSON: <code>/api/burnticker/v1/coverage</code> · full table: <RepoText text="docs/burnticker/SETTLEMENT-COVERAGE.md" />.</p>
     </section>
   );
 }

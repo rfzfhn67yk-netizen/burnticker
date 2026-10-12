@@ -9,7 +9,7 @@ import { EmptyState } from "../_components/EmptyState";
  * answers, the closed page (the refusal sentence, the network this host shows, and the pre-launch action — explore a real, verified
  * devnet burn), or "data unavailable" with the diagnostics behind a disclosure. No search box, tile, review card or wallet button.
  */
-export function LaunchGate({ state, deficitHref, noWalletLine }: { state: Exclude<LaunchGateState, { kind: "open" }>; deficitHref: string; noWalletLine?: string }) {
+export function LaunchGate({ state, deficitHref, noWalletLine }: { state: Exclude<LaunchGateState, { kind: "open" | "preview" }>; deficitHref: string; noWalletLine?: string }) {
   if (state.kind === "loading") return (
     <main className="mx-auto max-w-4xl px-4 py-6 space-y-3" data-launch-gate="loading">
       <h1 className="text-2xl font-semibold">Launch a coin</h1>

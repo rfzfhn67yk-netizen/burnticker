@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
-import { findTeams, gameSeries, teamSeries, LEAGUES, SCHEDULE_NEEDS_KEY, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
+import { findTeams, gameSeries, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { findStations, nwsSeries, nwsSeriesTitle, parseNwsSeries, type NwsMetric } from "@/lib/burnticker/sources/nws";
 import { nativeRule, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { loadRaces, outcomeCardTitle, outcomeSettlesNote, searchRaces, tokens, type Race } from "@/lib/burnticker/elections";
@@ -12,6 +12,8 @@ import { looksLikePerson, meaningful, nameMatch, queryTokens } from "@/lib/burnt
 import { matchPolymarket, plainQuestion, outcomeLabel, outcomeTicker, searchQueries, splitQuery, type PickerOutcome } from "@/lib/burnticker/polySearch";
 import { championshipCode, describeRule, tickerFrom, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
+import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets";
+import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenance";
 
 /**
  * INTENT → RULE CARDS (2026-10-10, the owner thinks in sentences, not sources). One box on the launch page takes a plain phrase and
@@ -70,6 +72,12 @@ export interface Suggestion {
   matchup: { league: string; eventId: string; title: string; startsAt: string; a: MatchupSide; b: MatchupSide } | null;
   /** When a card cannot offer its rule, why ("market lists no Rays outcome"). */
   note: string | null;
+  /** The confirmation source's own page (a link on the card; never inside a sentence). */
+  crossReadUrl?: string | null;
+  /** L04: the event as read — what, operator, when / timezone, recurrence — shown on the card before it is chosen. */
+  interpreted?: string | null;
+  /** L04: true when the card is a related rule, not the query's exact event (the page labels it "Alternative"). */
+  alternative?: boolean;
   /** An event card (polySearch.ts): pick one of the event's named outcomes, then the normal dials. No numbers. */
   picker?: { slug: string; title: string; noun: string; outcomes: PickerOutcome[] } | null;
   href: string | null; suggestedName: string | null; suggestedTicker: string | null; refused: string[]; score: number;
@@ -126,7 +134,7 @@ const poss = (n: string) => (n.endsWith("s") ? `${n}'` : `${n}'s`);
 /** "the Rays" / "the Lakers", but "Arsenal", "Inter Miami", "Georgia" (clubs and colleges take no article). */
 export const teamRef = (t: EspnTeam): string => (LEAGUES[t.league].sport === "soccer" || t.league === "cfb" || t.league === "mcbb" || t.league === "wcbb" ? t.nickname : `the ${t.nickname}`);
 function windowTitle(t: EspnTeam, outcome: "win" | "loss" | "draw", kind: WindowKind, phrase: string): string {
-  const head = `Burns 2% every time ${teamRef(t)} ${outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose"} a ${LEAGUES[t.league].sport === "soccer" ? "match" : "game"}`;
+  const head = `Burns ${pctLabel(DEFAULT_SHARE.recurring)} every time ${teamRef(t)} ${outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose"} a ${LEAGUES[t.league].sport === "soccer" ? "match" : "game"}`;
   if (kind === "perpetual") return `${head} — every season, no end date — this coin does not retire`;
   if (kind === "season") return `${head} — this season (${phrase.replace(/^the | season(, playoffs included)?$/g, "")}${/playoffs included/.test(phrase) ? ", playoffs included" : ""})`;
   if (kind === "next") return `${head} — their ${phrase.replace(/^the /, "").replace(/ from .*$/, "")} only`;
@@ -140,8 +148,10 @@ function windowEndText(t: EspnTeam, kind: WindowKind, phrase: string): string {
 
 function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "loss" | "draw", nowMs: number): Suggestion {
   const w = windowFor(t.league, games, nowMs);
-  const windows: WindowOption[] = windowChoices(t.league, w.year, nowMs).map((c) => {
-    const series = teamSeries(t.league, t.abbr, outcome, c.window), rule = nativeRule(series, { fractionOfPool: 0.02 });
+  const choices = windowChoices(t.league, w.year, nowMs);
+  const phrase0 = choices[0] ? windowPhrase(t.league, choices[0].window) : "every season";
+  const windows: WindowOption[] = choices.map((c) => {
+    const series = teamSeries(t.league, t.abbr, outcome, c.window), rule = nativeRule(series, { fractionOfPool: DEFAULT_SHARE.recurring });
     const phrase = windowPhrase(t.league, c.window);
     const text = describeRule(rule, { ticker: "", endsAt: c.kind === "season" ? w.endsAt : null });
     return { kind: c.kind, label: c.label, title: windowTitle(t, outcome, c.kind, phrase), rule, text, endText: windowEndText(t, c.kind, phrase) };
@@ -150,17 +160,18 @@ function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "lo
   const series = def.rule.series!, src = nativeSourceById(series)!;
   const descCtx = { endsAt: w.endsAt };
   return {
-    ...base, id: `espn:${series}`, venue: "espn", venueLabel: "On-chain payout · league's official feed", shape: "recurring",
+    ...base, id: `espn:${series}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "recurring",
     title: def.title, subtitle: `${t.name} (${LEAGUES[t.league].label})`,
     settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: w.next?.startsAt ?? null, settleAt: w.next?.startsAt ?? null, endAt: w.endsAt, endText: def.endText,
     howSettles: src.unit.definition, rule: def.rule, pick: { oracle: "catalogue", series, market: null, title: src.title }, source: { unit: src.unit, baseline: 0, direction: "up" },
     text: def.text, descCtx, badge: def.text.badge, windows, seasonYear: w.year, suggestedName: def.text.name, suggestedTicker: def.text.ticker, score: 3,
+    interpreted: `This reads every ${LEAGUES[t.league].sport === "soccer" ? "match" : "game"} the ${t.nickname} ${outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose"} in ${phrase0}. Game times are shown in Denver time. ${def.kind === "perpetual" ? "The coin has no end date and does not retire." : `The coin ${def.endText.replace(/, then /, ". Then it ")}.`}`,
   };
 }
 
 async function championshipCard(t: EspnTeam, d: SearchDeps): Promise<Suggestion> {
   const c = CHAMPIONSHIP[t.league];
-  const card = (o: Partial<Suggestion>): Suggestion => ({ ...base, id: `champ:${t.league}:${t.abbr}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns 10% once, if ${teamRef(t)} win the championship`, subtitle: t.name, settlement: "Polymarket's on-chain payout", crossRead: OFFICIAL[t.league], score: 2.9, ...o });
+  const card = (o: Partial<Suggestion>): Suggestion => ({ ...base, id: `champ:${t.league}:${t.abbr}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} win the championship`, subtitle: t.name, settlement: "Polymarket's on-chain payout", crossRead: OFFICIAL[t.league], score: 2.9, ...o });
   if (!c) return card({ note: `no championship market is mapped for ${LEAGUES[t.league].label} yet` });
   if (!d.venues.polymarket || !d.polyGet) return card({ note: "Polymarket discovery is off on this host: no championship market to bind to" });
   let ev: GammaEvent | undefined;
@@ -168,11 +179,11 @@ async function championshipCard(t: EspnTeam, d: SearchDeps): Promise<Suggestion>
   if (!ev) return card({ note: `no open ${LEAGUES[t.league].label} championship market was found` });
   const year = c.title.exec(ev.title)?.[1] ?? "";
   const champ = c.name(year);
-  const title = `Burns 10% once, if ${teamRef(t)} win ${champ}`;
+  const title = `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} win ${champ}`;
   const m = ev.markets.find((x) => !x.inactive && (x.groupItemTitle?.toLowerCase() === t.name.toLowerCase() || x.groupItemTitle?.toLowerCase() === t.nickname.toLowerCase()));
   if (!m) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `market lists no ${t.nickname} outcome` });
   if (m.closed) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: `the ${t.nickname} outcome is closed on Polymarket (eliminated or already resolved)` });
-  const rule = polyRule(m.conditionId, 0.10);
+  const rule = polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
   const phrase = `${teamRef(t)} win ${champ}`;
   const code = championshipCode(t.league);
   const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest: { name: `${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`.slice(0, 32), ticker: tickerFrom(t.nickname, code) } };
@@ -182,6 +193,7 @@ async function championshipCard(t: EspnTeam, d: SearchDeps): Promise<Suggestion>
     howSettles: `Settles on Polymarket's on-chain payout for "${m.groupItemTitle}" in ${ev.title}; ${OFFICIAL[t.league]} are the published cross-check.${ev.description ? `\n\nResolution rules (Polymarket): ${ev.description}` : ""}`,
     rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${teamRef(t)} win ${champ} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" },
     text, descCtx, leagueSet: { id: `champ-${t.league}-${year || "season"}`, outcome: t.abbr }, href: `https://polymarket.com/event/${ev.slug}`, suggestedName: text.name, suggestedTicker: text.ticker,
+    interpreted: `This reads whether the ${t.nickname} win ${champ}. It settles once, when the Polymarket market “${ev.title}” resolves.`,
   });
 }
 
@@ -191,23 +203,85 @@ function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Sugges
   const side = (s: Game["home"]): MatchupSide => ({ abbr: s.abbr, name: s.name, nickname: s.nickname || s.abbr, ticker: tickerFrom(s.nickname || s.abbr, "LOSE"), series: gameSeries(t.league, g.eventId, s.abbr, "loss") });
   const a = side(g.away), b = side(g.home);
   return {
-    ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: "On-chain payout · league's official feed", shape: "pair",
+    ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "pair",
     title: `Two coins on ${g.name}: the losing team's coin burns`, subtitle: g.detail || g.startsAt, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league],
     nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game", howSettles: "One coin per team; each burns once if its team loses. A tie burns neither.",
     matchup: { league: t.league, eventId: g.eventId, title: g.name, startsAt: g.startsAt, a, b }, score: 2.8,
   };
 }
 
+/** Denver calendar day of an instant (the page shows times in Denver). */
+const denverDay = (ms: number): string => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+const denverTime = (iso: string): string => new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+/** L04: a query that names one game day ("tonight", "today", "tomorrow"), or null. */
+export function queryDay(q: string): "today" | "tomorrow" | null {
+  return /\b(tonight|today|this evening|this afternoon)\b/i.test(q) ? "today" : /\b(tomorrow|tmrw)\b/i.test(q) ? "tomorrow" : null;
+}
+
+/** L04: "<Team> win tonight" — that one game as a one-shot coin (the one-shot default preset), when the schedule lists it. */
+function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Suggestion {
+  const own = g.home.abbr === t.abbr ? g.home : g.away, opp = own === g.home ? g.away : g.home;
+  const series = gameSeries(t.league, g.eventId, t.abbr, outcome);
+  const share = DEFAULT_SHARE.oneShot, rule = nativeRule(series, { fractionOfPool: share });
+  const descCtx = { game: { opponent: opp.nickname || opp.name, home: own === g.home, startsAt: g.startsAt } };
+  const text = describeRule(rule, { ticker: "", ...descCtx });
+  const verb = outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose";
+  const oppName = opp.nickname || opp.name, oppRef = LEAGUES[t.league].sport === "soccer" || t.league === "cfb" || t.league === "mcbb" || t.league === "wcbb" ? oppName : `the ${oppName}`;
+  return {
+    ...base, id: `game:${series}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "one-shot",
+    title: `Burns ${pctLabel(share)} once if ${teamRef(t)} ${outcome === "win" ? "beat" : outcome === "draw" ? "draw with" : "lose to"} ${oppRef} on ${denverTime(g.startsAt)} Denver time`,
+    subtitle: `${g.name} · this game only`, settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: g.startsAt, settleAt: g.startsAt, endAt: g.startsAt, endText: "ends after that game",
+    howSettles: outcome === "draw" ? `This coin covers one game, ${g.name}. It burns only on a draw.` : `This coin covers one game, ${g.name}. A ${LEAGUES[t.league].draws ? "draw" : "tie"} burns nothing.`, rule, pick: { oracle: "catalogue", series, market: null, title: `${t.name} ${verb} — ${g.name} (resolves once)` },
+    source: { unit: { size: 1, label: "the game", definition: "one burn if the result is the one the rule names" }, baseline: 0, direction: "up" },
+    text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score: 3.2,
+    interpreted: `This reads one game, ${g.name}. It starts ${denverTime(g.startsAt)} Denver time. The coin covers that game only, and then its burn pool burns down and it retires.`,
+  };
+}
+
 async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<Suggestion[]> {
   let scheduleNote: string | null = null;
-  const games = d.espn ? await d.espn.season(t.league, t.abbr).catch((e) => { scheduleNote = e instanceof ScheduleUnavailable ? SCHEDULE_NEEDS_KEY : null; return [] as Game[]; }) : [];
+  // L05: a schedule that cannot be read is said in plain words (provenance.ts); the card's rule still settles on its own sources
+  const games = d.espn ? await d.espn.season(t.league, t.abbr).catch((e) => { scheduleNote = e instanceof ScheduleUnavailable ? scheduleProblem(t.league, "needs-licence").line : scheduleProblem(t.league, "unreadable").line; return [] as Game[]; }) : [];
   const outcome: "win" | "loss" | "draw" = /\b(lose|loses|losing|loss|losses)\b/i.test(q) ? "loss" : LEAGUES[t.league].draws && /\b(draw|draws|tie|ties)\b/i.test(q) ? "draw" : "win";
   const rec = recurringCard(t, games, outcome, d.nowMs);
   if (scheduleNote) rec.note = scheduleNote;
   const champ = await championshipCard(t, d);
   if (CHAMP_WORDS.test(q)) { champ.score = 3.1; }
   const pair = matchupCard(t, games, d.nowMs);
-  return [rec, champ, ...(pair ? [pair] : [])];
+  const out = [rec, champ, ...(pair ? [pair] : [])];
+  // L04: "tonight" / "today" / "tomorrow" names one game. Its own one-game card leads when the schedule lists a game that day; every
+  // other card is labelled an alternative, and when no game is listed that day every card is an alternative and the first says so.
+  const day = queryDay(q);
+  if (day) {
+    const want = denverDay(d.nowMs + (day === "tomorrow" ? 86_400_000 : 0));
+    const g = games.find((x) => !x.completed && Date.parse(x.startsAt) > d.nowMs - 3 * 3_600_000 && denverDay(Date.parse(x.startsAt)) === want);
+    for (const c of out) c.alternative = true;
+    if (g) return [oneGameCard(t, g, outcome), ...out];
+    out[0].note = `No ${t.nickname} game is listed for ${day} in Denver time, so these cards are related rules.${scheduleNote ? ` ${scheduleNote}` : ""}`;
+    return out;
+  }
+  if (CHAMP_WORDS.test(q)) { rec.alternative = true; if (pair) pair.alternative = true; }
+  return out;
+}
+
+/**
+ * L04 (launch audit 5): "Detroit high above 90" must not become "at or above 90". The NWS rule counts a day whose reading is AT OR ABOVE
+ * its threshold (nws.ts), and the climate report gives whole °F and hundredths of an inch, so a strict "above / over / more than X" is
+ * the threshold X + 1 °F (or X + 0.01 in), and the card says what it read. "at least / reaches / X or more / X+" keeps X.
+ */
+export interface WeatherReading { metric: NwsMetric; threshold: number | null; strict: boolean; wrote: string | null }
+export function readWeatherThreshold(q: string, metric: NwsMetric): WeatherReading {
+  const t = q.replace(/\s*°\s*f?\b/i, "");
+  const n = /(-?\d+(?:\.\d+)?)/.exec(t)?.[1];
+  if (metric === "snow") return { metric, threshold: null, strict: false, wrote: null };
+  const strict = !!n && /\b(above|over|more than|greater than|exceeds?|exceeding|higher than|hotter than|>)\s*-?\d/i.test(t) && !/\bor (more|above|higher)\b|\+/.test(t);
+  const wrote = n ? (/\b(above|over|more than|greater than|exceeds?|exceeding|higher than|hotter than|at least|reaches|reach|hits?|>=?)\s*-?\d+(?:\.\d+)?/i.exec(t)?.[0] ?? n) : null;
+  if (metric === "rain") {
+    const base = n && Number(n) < 10 ? Number(n) : 0.5;
+    return { metric, threshold: strict ? Math.round((base + 0.01) * 100) / 100 : base, strict, wrote };
+  }
+  const base = n && Number(n) >= 0 ? Math.round(Number(n)) : 90;
+  return { metric, threshold: strict ? base + 1 : base, strict, wrote };
 }
 
 function weatherCards(q: string): Suggestion[] {
@@ -217,16 +291,21 @@ function weatherCards(q: string): Suggestion[] {
   const metrics: NwsMetric[] = /\bsnow/i.test(q) ? ["snow"] : /\b(rain|rainfall|precip|precipitation|wet)\b/i.test(q) ? ["rain"] : /\b(high|hot|heat|temp|temperature|degrees|above|over|°)\b/i.test(q) || n ? ["high"] : ["high", "rain", "snow"];
   const out: Suggestion[] = [];
   for (const s of st.slice(0, 2)) for (const m of metrics) {
-    const thr = m === "snow" ? null : m === "rain" ? (n && Number(n) < 10 ? Number(n) : 0.5) : (n && Number(n) >= 0 ? Math.round(Number(n)) : 90);
+    const rd = readWeatherThreshold(q, m), thr = rd.threshold;
     const series = nwsSeries(m, s.code, thr), src = nativeSourceById(series);
     if (!src) continue;
-    const rule = nativeRule(series, { fractionOfPool: 0.01 }), text = describeRule(rule, { ticker: "" });
+    const share = DEFAULT_SHARE.recurring;
+    const rule = nativeRule(series, { fractionOfPool: share }), text = describeRule(rule, { ticker: "" });
+    const what = m === "high" ? `every day ${s.city}'s official high is ${thr} °F or hotter` : m === "rain" ? `every day ${s.city} gets ${Number(thr).toFixed(2)} in of rain or more` : `once, on ${s.city}'s first snow of the season`;
+    const note = rd.strict && rd.wrote ? `You wrote “${rd.wrote}”. The climate report gives ${m === "high" ? `whole degrees, so strictly above that means ${thr} °F or hotter` : `hundredths of an inch, so strictly above that means ${Number(thr).toFixed(2)} in or more`}.` : null;
     out.push({
       ...base, id: `nws:${series}`, venue: "nws", venueLabel: "NWS daily climate · first-party", shape: m === "snow" ? "one-shot" : "recurring",
-      title: `Burns 1% ${m === "high" ? `every day ${s.city}'s high reaches ${thr} °F` : m === "rain" ? `every day ${s.city} gets ${Number(thr).toFixed(2)} in of rain or more` : `once, on ${s.city}'s first snow of the season`}`,
+      title: `Burns ${pctLabel(share)} ${what}`,
       subtitle: `${nwsSeriesTitle(parseNwsSeries(series)!)} · station ${s.code}`, settlement: "the National Weather Service's daily climate report", crossRead: "the Iowa Environmental Mesonet",
       endText: m === "snow" ? "ends after the first snow" : "no end date", howSettles: src.unit.definition, rule, pick: { oracle: "catalogue", series, market: null, title: src.title }, source: { unit: src.unit, baseline: 0, direction: "up" },
       text, descCtx: {}, suggestedName: text.name, suggestedTicker: text.ticker, score: 1.5,
+      interpreted: `This reads the ${s.label} weather station, code ${s.code}. ${m === "high" ? `The coin burns on each day the official high is ${thr} °F or hotter.` : m === "rain" ? `The coin burns on each day with ${Number(thr).toFixed(2)} in of rain or more.` : "The coin burns once a season, on the first measurable snow."} Each day follows the climate report's local standard time and is read the next morning.${m === "snow" ? "" : " There is no end date."}`,
+      note,
     });
   }
   return out;
@@ -240,11 +319,11 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
     const kw = (FEED_WORDS[f.id.split(":")[0]] ?? []).filter((w) => nq.includes(` ${w} `)).length;
     const score = kw ? 1.4 + kw * 0.1 : overlap(q, `${f.title} ${f.sourceName}`) >= 0.5 ? 1 : 0;
     if (!score) continue;
-    const rule = { schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: f.id, market: null, filter: {}, kind: "scalar", scalar: { unit: f.unit.size, perUnit: { fractionOfPool: 0.02 }, baseline: f.baseline, direction: f.direction }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null } as BurnRule;
+    const rule = { schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: f.id, market: null, filter: {}, kind: "scalar", scalar: { unit: f.unit.size, perUnit: { fractionOfPool: DEFAULT_SHARE.recurring }, baseline: f.baseline, direction: f.direction }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null } as BurnRule;
     const descCtx = { feed: { title: f.title, sourceName: f.sourceName, unitLabel: f.unit.label }, suggest: FEED_SUGGEST[f.id.split(":")[0]] ?? null };
     const text = describeRule(rule, { ticker: "", ...descCtx });
     out.push({
-      ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName} · first-party`, shape: "recurring", title: `Burns 2% per ${f.unit.label} — ${f.title}`, subtitle: f.cadence,
+      ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName} · first-party`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} per ${f.unit.label} — ${f.title}`, subtitle: f.cadence,
       settlement: f.sourceName, crossRead: "an independent publisher of the same figure", endText: "no end date", howSettles: f.unit.definition, rule,
       pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, source: { unit: f.unit, baseline: typeof f.baseline === "number" ? f.baseline : 0, direction: "up" }, text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score,
     });
@@ -252,8 +331,8 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
   return out;
 }
 
-/** A one-shot Polymarket rule: 10 % of the pool by default (the create screen's one-shot dial goes 1–100 %). */
-export const polyRule = (conditionId: string, fraction = 0.1): BurnRule => ({ schema: BURNTICKER_RULES_SCHEMA, oracle: "polymarket", series: null, market: conditionId, filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: fraction }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null } as BurnRule);
+/** A one-shot Polymarket rule: the one-shot default preset (launchPresets.ts; the web offers 10 / 50 / 100 %, the API 1–100 %). */
+export const polyRule = (conditionId: string, fraction: number = DEFAULT_SHARE.oneShot): BurnRule => ({ schema: BURNTICKER_RULES_SCHEMA, oracle: "polymarket", series: null, market: conditionId, filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: fraction }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null } as BurnRule);
 
 export function raceCards(races: readonly Race[], q: string): Suggestion[] {
   return searchRaces(races, q).slice(0, 3).map(({ race: r, outcome: o, score }) => {
@@ -264,7 +343,7 @@ export function raceCards(races: readonly Race[], q: string): Suggestion[] {
     return {
       ...base, id: `polymarket:${o.conditionId}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot",
       title: outcomeCardTitle(r, o), subtitle: `${r.title}${r.hiddenPlaceholders ? ` · ${r.hiddenPlaceholders} unnamed placeholder market(s) hidden` : ""}`,
-      settlement: `${r.settlement} — ${r.sos.name}: ${r.sos.url}`, crossRead: `${r.sos.name}`, nextAt: r.settlesOn, settleAt: r.settlesOn, endAt: r.settlesOn, endText: "ends when the race resolves",
+      settlement: `${r.settlement} — ${r.sos.name}`, crossRead: `${r.sos.name}`, crossReadUrl: r.sos.url, nextAt: r.settlesOn, settleAt: r.settlesOn, endAt: r.settlesOn, endText: "ends when the race resolves",
       howSettles: `${outcomeSettlesNote(r, o)}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, rule,
       pick: { oracle: "polymarket", series: null, market: o.conditionId, title: `${o.label} wins the ${raceName} race (resolves once)`, yes: o.yes, no: o.no },
       text, descCtx, href: r.url, suggestedName: text.name, suggestedTicker: text.ticker, refused: r.refused, score: 1 + score,
@@ -315,11 +394,11 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
           const label = outcomeLabel(m), sentence = plainQuestion(m.question), rule = polyRule(m.conditionId);
           const descCtx = { eventPhrase: sentence, endsAt: m.endDate };
           const text = describeRule(rule, { ticker: outcomeTicker(label), ...descCtx });
-          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns 10% once, if ${sentence} resolves YES`, subtitle: `${e.title} · YES = ${m.outcomes[0] ?? "Yes"}, NO = ${m.outcomes[1] ?? "No"}`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.outcomes[0] ?? "Yes"}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" }, text, descCtx, suggestedTicker: outcomeTicker(label), suggestedName: label.slice(0, 32), href: eventPageUrl(e.slug), score: mm.score });
+          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.oneShot)} once, if ${sentence} resolves YES`, subtitle: `${e.title} · YES = ${m.outcomes[0] ?? "Yes"}, NO = ${m.outcomes[1] ?? "No"}`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.outcomes[0] ?? "Yes"}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" }, text, descCtx, suggestedTicker: outcomeTicker(label), suggestedName: label.slice(0, 32), href: eventPageUrl(e.slug), score: mm.score });
         }
         for (const em of found.events) {
           const e = em.event;
-          cards.push({ ...base, id: `polyevent:${e.slug}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: em.noun === "outcome" ? `Pick one: ${e.title.trim()} — your coin burns 10% once if your pick wins` : `Pick a ${em.noun}: ${e.title.trim()} — your coin burns 10% once if it wins`, subtitle: `${em.outcomes.length} named ${em.noun === "outcome" ? "outcomes" : `${em.noun}s`}; each is its own yes/no market`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: e.endDate, settleAt: e.endDate, endAt: e.endDate, endText: "ends when the market resolves", howSettles: "Settles on the market for the outcome you pick resolving YES; every other outcome is ignored.", note: em.note, href: eventPageUrl(e.slug), picker: { slug: e.slug, title: e.title.trim(), noun: em.noun, outcomes: em.outcomes }, score: em.score });
+          cards.push({ ...base, id: `polyevent:${e.slug}`, venue: "polymarket", venueLabel: "Polymarket · adjudicated, on-chain payout", shape: "one-shot", title: em.noun === "outcome" ? `Pick one: ${e.title.trim()} — your coin burns ${pctLabel(DEFAULT_SHARE.oneShot)} once if your pick wins` : `Pick a ${em.noun}: ${e.title.trim()} — your coin burns ${pctLabel(DEFAULT_SHARE.oneShot)} once if it wins`, subtitle: `${em.outcomes.length} named ${em.noun === "outcome" ? "outcomes" : `${em.noun}s`}; each is its own yes/no market`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: e.endDate, settleAt: e.endDate, endAt: e.endDate, endText: "ends when the market resolves", howSettles: "Settles on the market for the outcome you pick resolving YES; every other outcome is ignored.", note: em.note, href: eventPageUrl(e.slug), picker: { slug: e.slug, title: e.title.trim(), noun: em.noun, outcomes: em.outcomes }, score: em.score });
         }
       } catch (e) { errors.push(`polymarket: ${(e as Error).message.slice(0, 80)}`); }
     }

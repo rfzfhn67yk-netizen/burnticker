@@ -3,7 +3,8 @@
 // docs/burnticker/reviews/2026-10-10-chatgpt-pr-review-response.md.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, TransactionMessage, VersionedMessage, VersionedTransaction } from "@solana/web3.js";
+import { AddressLookupTableAccount, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, TransactionMessage, VersionedMessage, VersionedTransaction } from "@solana/web3.js";
+import { lookupTableKeys } from "@/lib/burnticker/lookupTable";
 import { openRegistry } from "@/lib/burnticker/registry";
 import { counterRule, FakeBurnProgram } from "@/lib/burnticker/program";
 import { buildLaunchBundle, buildPairBundles, FakeLaunchLab, SdkLaunchLab } from "@/lib/burnticker/launchBundle";
@@ -645,6 +646,23 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp], true)), [cfg]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
     const noProgram = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), { ...opts, burnProgramId: null }).verify("s", exp);
     assert.equal(noProgram.ok, false, "no burn_receipts program id on the host: refused (fail closed)");
+  });
+  test("v0 + lookup table control (re-check 2026-10-11, the browser's shape): accounts loaded from the table resolve through meta.loadedAddresses; dropped addresses are refused", async () => {
+    const { mintKp, exp, ixs, cfg } = await singleCoin();
+    // the devnet table plus this fixture's own (random) platform and LaunchLab config, so the venue accounts come from the table
+    const lut = new AddressLookupTableAccount({ key: Keypair.generate().publicKey, state: { deactivationSlot: BigInt("18446744073709551615"), lastExtendedSlot: 0, lastExtendedSlotStartIndex: 0, addresses: [...lookupTableKeys("devnet"), PLATFORM.toBase58(), LL_CONFIG.toBase58()].map((k) => new PublicKey(k)) } });
+    const vt = new VersionedTransaction(new TransactionMessage({ payerKey: creatorKp.publicKey, recentBlockhash: BLOCKHASH, instructions: ixs }).compileToV0Message([lut]));
+    vt.sign([creatorKp, mintKp]);
+    const msg = VersionedMessage.deserialize(vt.message.serialize());
+    assert.equal(msg.addressTableLookups.length, 1);
+    const l = msg.addressTableLookups[0];
+    const loadedAddresses = { writable: l.writableIndexes.map((i) => lut.state.addresses[i]), readonly: l.readonlyIndexes.map((i) => lut.state.addresses[i]) };
+    assert.ok(loadedAddresses.readonly.some((k) => k.equals(PLATFORM)), "the LaunchLab platform (initialize_v2 account 3) is loaded from the table, not static");
+    assert.ok(!msg.staticAccountKeys.some((k) => k.equals(PLATFORM)));
+    const withLut = (loaded: typeof loadedAddresses) => ({ blockTime: NOW / 1000, meta: { err: null, loadedAddresses: loaded }, transaction: { message: msg } });
+    assert.deepEqual(await connectionLaunchVerifier(chain(withLut(loadedAddresses), [cfg]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    const dropped = await connectionLaunchVerifier(chain(withLut({ writable: [], readonly: [] }), [cfg]), opts).verify("s", exp);
+    assert.equal(dropped.ok, false, "an RPC answer without the loaded addresses cannot show the platform: refused, never accepted");
   });
 
   /** A pair-curve set built by the real builders (initialize_token re-encoded with policy 2; init_pair) and both mint keypairs. */

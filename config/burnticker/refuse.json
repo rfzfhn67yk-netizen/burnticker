@@ -8,7 +8,7 @@
     { "id": "terror", "pattern": "\\b(terror|terrorist|terrorism|hostage|kidnap|hijack)\\b", "reason": "markets about terror" },
     { "id": "casualties", "pattern": "\\b(casualt(y|ies)|death toll|body count|wounded|injur(ed|ies) count|how many (people )?(will )?(die|be killed))\\b", "reason": "casualty counts" },
     { "id": "private-individual", "pattern": "\\b(private citizen|named individual|will .* be (arrested|indicted|charged|convicted|sentenced|divorced|pregnant|fired))\\b", "reason": "named private individuals' lives" },
-    { "id": "disaster", "pattern": "\\b(earthquake|tsunami|hurricane landfall|wildfire acres|flood deaths|pandemic deaths)\\b", "reason": "disasters (LAUNCHPAD-PATH §3: not a disaster)" }
+    { "id": "disaster", "pattern": "\\b(earthquake|tsunami|hurricane landfall|wildfire acres|flood deaths|pandemic deaths)\\b", "reason": "markets about disasters" }
   ],
   "namePatterns": [
     { "id": "impersonation", "pattern": "^(official|real|the)\\s+", "reason": "names that claim to be official" }

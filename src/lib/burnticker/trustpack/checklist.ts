@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadTransparency, TRANSPARENCY_FILE } from "@/lib/burnticker/trust";
-import { loadVerifiedBuild, VERIFIED_BUILD_FILE, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { DEPLOY_EVIDENCE, loadVerifiedBuild, VERIFIED_BUILD_FILE, type VerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { loadOperator, OPERATOR_FILE } from "@/lib/burnticker/trustpack/operator";
 
 /**
@@ -76,7 +76,9 @@ export function buildChecklist(root = process.cwd()): Checklist {
   const regs = { burn_receipts: loadRegister(root, "burn_receipts"), pair_curve: loadRegister(root, "pair_curve") };
   const t = loadTransparency(root);
   const op = loadOperator(root);
-  const build = loadVerifiedBuild(root);
+  const vb = loadVerifiedBuild(root);
+  // audit R05: each deployed record names its own evidence (mainnet deploy file / devnet verified-build doc)
+  const build: VerifiedBuild = { ...vb, programs: vb.programs.map((p) => ({ ...p, deployed: { devnet: p.deployed.devnet ? { ...p.deployed.devnet, evidence: DEPLOY_EVIDENCE.devnet } : null, mainnet: p.deployed.mainnet ? { ...p.deployed.mainnet, evidence: DEPLOY_EVIDENCE.mainnet } : null } })) };
   const money: MoneyRow[] = [], powers: PowerRow[] = [];
   for (const name of ["burn_receipts", "pair_curve"] as ProgramName[]) {
     for (const ix of regs[name].instructions) {
@@ -152,8 +154,9 @@ export function checklistMarkdown(c: Checklist): string {
   L.push("", "## 4. What is not done yet", "");
   for (const n of c.notDone) L.push(`- **${n.title}** (${n.status ?? "not done"}) — ${n.text} *Where:* ${n.where}`);
   L.push("", "## 5. Is the deployed code this code?", "", `Kind: **${c.build.kind}**. ${c.build.kindNote}`, "");
-  L.push("| Program | Build | Features | Executable hash | Deployed (devnet) |", "|---|---|---|---|---|");
-  for (const p of c.build.programs) for (const v of ["mainnet", "devnet"] as const) L.push(`| ${p.library} | ${v} | ${p.builds[v].features.join(", ") || "default"} | \`${p.builds[v].hash}\` | ${v === "devnet" && p.deployed.devnet ? `\`${p.deployed.devnet.hash}\` ${p.deployed.devnet.matchesBuild ? "= build" : "≠ build"}` : "—"} |`);
+  // audit R05: one row per program and network; the deployed bytes, their read date and evidence are that network's own
+  L.push("| Program | Network | Features | Executable hash (this repository) | Deployed bytes on that network | Read | Evidence |", "|---|---|---|---|---|---|---|");
+  for (const p of c.build.programs) for (const v of ["mainnet", "devnet"] as const) { const d = p.deployed[v]; L.push(`| ${p.library} | ${v} | ${p.builds[v].features.join(", ") || "default"} | \`${p.builds[v].hash}\` | ${d ? `\`${d.hash}\` ${d.matchesBuild ? "= build" : "≠ build"}` : "none recorded"} | ${d?.readAt ?? "—"} | ${d?.evidence ?? "—"} |`); }
   L.push("", "How to reproduce: docs/burnticker/VERIFIED-BUILD.md.", "");
   L.push("## 6. Verify a receipt", "", "On the page: paste a receipt's transaction signature (or pick a devnet receipt). The checks, each ✓ / ✗ / – (not checkable here, with the reason): the transaction exists and succeeded; it ran the pinned program's `crank_buyback`; the memo parses; the program-owned Reading account agrees with the memo; the TokenConfig is the Reading's own; the published rules file hashes to the on-chain rules hash; the Reading's `source_url_hash` is sha256 of the Treasury URL for that date and the Treasury API gives the same two values; the units recompute; the spend recomputes in the program's fixed point; the transaction's Burn instructions burned exactly what the swap bought.", "");
   L.push("Without the page: `curl -s https://burnticker.com/api/burnticker/v1/check/receipts` lists the devnet receipts; `curl -s https://burnticker.com/api/burnticker/v1/check/receipts/<signature>` runs the same checks on our server (the same code, src/lib/burnticker/trustpack/receiptCheck.ts).", "");

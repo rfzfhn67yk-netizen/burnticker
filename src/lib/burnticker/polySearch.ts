@@ -1,4 +1,5 @@
 import { fold, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
+import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import type { GammaEvent, GammaMarket } from "@/lib/burnticker/oracle/polymarket";
 
 /**
@@ -62,11 +63,11 @@ const live = (m: GammaMarket) => m.outcomes.length === 2 && !m.closed && !m.inac
 /** An outcome's display name: the event's name for it, else its question without "Will … ?". */
 export const outcomeLabel = (m: GammaMarket): string => m.groupItemTitle?.trim() || m.question.replace(/\?$/, "").replace(/^will\s+/i, "");
 /** "Will X win Best Picture at …?" → "X wins Best Picture at …" (the card sentence). */
-const VERB3: Record<string, string> = { win: "wins", be: "is", have: "has", reach: "reaches", cross: "crosses", get: "gets", make: "makes", receive: "receives", finish: "finishes", hit: "hits", say: "says", become: "becomes" };
+/** The market question as a plain third-person sentence (eventIdentity.ts: subject + conjugated verb + the rest; L12). */
 export const plainQuestion = (q: string): string => {
   const t = q.replace(/\?$/, "");
-  const m = /^will\s+(.+?)\s+(win|be|have|reach|cross|get|make|receive|finish|hit|say|become)\b(.*)$/i.exec(t);
-  return m ? `${m[1]} ${VERB3[m[2].toLowerCase()]}${m[3]}` : t.replace(/^will\s+/i, "");
+  const id = eventIdentity(t);
+  return id.verb ? id.phrase : t.replace(/^will\s+/i, "");
 };
 
 const TICKER_SKIP = new Set(["the", "a", "an", "of", "la", "le", "el", "los", "las", "part", "and", "mr", "mrs", "dr", "st"]);

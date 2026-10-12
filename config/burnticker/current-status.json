@@ -117,7 +117,7 @@
       "category": "Sports (team coins, matchups)",
       "primary": "the game's Polymarket on-chain payout where a moneyline market exists, else TheSportsDB's licensed final score",
       "check": "the league's own free feed (MLB, NHL, NBA) or the other of the two; no ESPN reads",
-      "status": "not available: the TheSportsDB licence key is not linked yet"
+      "status": "available: the TheSportsDB licence key is configured on the host (2026-10-11)"
     },
     {
       "category": "Elections, one-shot results",
@@ -293,8 +293,8 @@
     },
     {
       "id": "sports-licence",
-      "text": "Link the TheSportsDB licence key (sports settlement)",
-      "status": "open"
+      "text": "Link the TheSportsDB licence key (sports settlement) — done 2026-10-11: the key is configured on the mainnet host",
+      "status": "done"
     },
     {
       "id": "docker-build",

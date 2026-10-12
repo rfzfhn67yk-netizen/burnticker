@@ -8,6 +8,7 @@ import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { EmptyState } from "../_components/EmptyState";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
+import { SeasonsTabs } from "../_components/SeasonsTabs";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Scoreboards", description: "Burnticker seasons: one scoreboard per league and season, ranked by receipts; rivalry pairs and Burn Derby brackets below." };
@@ -41,15 +42,16 @@ export default function SeasonsPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8">
       <header className="space-y-1">
+        <SeasonsTabs current="/burnticker/rivalries" />
         <h1 className="text-2xl font-semibold">Scoreboards</h1>
-        <p className="text-neutral-400 text-sm max-w-3xl">One scoreboard per league and season. Each card ranks only that league&apos;s team coins, by receipts, then by the share of supply burned. Leagues are never ranked against each other. One page per league and season: <Link className="underline" href="/burnticker/leagues">Seasons by league</Link>.</p>
+        <p className="text-neutral-400 text-sm max-w-3xl">One scoreboard per league and season. Each card ranks only that league&apos;s team coins, by receipts, then by the share of supply burned. Leagues are never ranked against each other. One page per league and season: <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
         {!err && !empty && <p className="text-sm text-neutral-300" aria-label="across all leagues">Yesterday ({yday}) across all leagues: {yesterday} coin{yesterday === 1 ? "" : "s"} burned.</p>}
       </header>
       {err && <EmptyState kind="unavailable" body="The coin registry could not be read just now, so the scoreboards, rivalries and brackets are not shown." details={err} />}
       {empty && (
         <EmptyState kind="not-launched" body={<>No team coin, rivalry pair or Burn Derby bracket is registered on this host yet, so there is no scoreboard to show. Each fills from the coins&apos; own receipts. {launch.open ? null : launch.closedLine} {NO_WALLET_LINE}</>}>
           <p className="mt-3" data-empty-evidence><Link className="underline" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link> <span className="text-xs text-neutral-500">— {EXPLORE_VERIFIED_BURN.blurb}</span></p>
-          <p className="mt-1 text-xs text-neutral-500">An example scoreboard, clearly labelled, is on <Link className="underline" href="/burnticker/leagues">Seasons by league</Link>.</p>
+          <p className="mt-1 text-xs text-neutral-500">An example scoreboard, clearly labelled, is on <Link className="underline" href="/burnticker/leagues">Leagues</Link>.</p>
         </EmptyState>
       )}
 

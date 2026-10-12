@@ -12,30 +12,31 @@ const read = (f: string) => fs.readFileSync(f, "utf8");
 
 describe("item 2: a short homepage — status, then the real receipt, then the rest", () => {
   const home = read("site/burnticker/index.html");
-  const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('<div class="tape"'));
+  const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('<section class="wrap" id="verified-burn"'));
   test("no orphan door number; the primary action is 'Inspect the devnet receipt' on every surface", () => {
     assert.doesNotMatch(home, /door [0-9] ·/i);
     assert.equal(EXPLORE_VERIFIED_BURN.label, "Inspect the devnet receipt");
     assert.doesNotMatch(home, /Explore a verified burn/);
-    assert.equal([...home.matchAll(/href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</g)].length, 3, "hero, the phone menu (audit 4 BT-09) and 'what you can do now'");
+    // the phone menu is the shared link set since 2026-10-11 (R06), so the action appears in the hero and the action row
+    assert.equal([...home.matchAll(/href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</g)].length, 2, "hero and 'what you can do now'");
   });
-  test("in the hero: the closed-launch status line, then the receipt action, then the guardrails behind a disclosure, then the doors", () => {
+  test("R07: the hero is three plain steps, then two next steps — a verified example and how launching works; the guardrails moved to Trust", () => {
     const at = (m: string) => { const i = hero.indexOf(m); assert.ok(i >= 0, m); return i; };
-    const order = ["data-launches-closed", "data-demo-receipt", "Inspect the devnet receipt", 'class="guardsum"', '<details class="guards">', '<div class="doors">'].map(at);
+    const order = ["data-launches-closed", '<ol class="three"', '<p class="def">', 'href="#verified-burn">See a verified example', 'href="#how" data-open-how>How launching works'].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order);
-    const details = hero.slice(at('<details class="guards">'), hero.indexOf("</details>", at('<details class="guards">')));
-    assert.match(details, /<ul class="guard"/, "the eleven guardrails sit inside the disclosure");
-    const sum = /<p class="guardsum">([^<]+)<\/p>/.exec(hero)![1];
-    assert.equal((sum.match(/\. |\.$/g) ?? []).length, 2, "two sentences");
-    assert.match(sum, /One operator signs every reading/); assert.match(sum, /not a firm audit/);
-    clean(sum, "guardrail summary");
-    assert.match(hero, /This site currently shows devnet rehearsal evidence/); assert.match(hero, /no wallet is needed/i);
+    assert.doesNotMatch(hero, /guardsum|<details class="guards">|<ul class="guard"/);
+    assert.match(hero, /<a class="btn amber" href="#verified-burn">/, "one primary action in the hero");
+    assert.equal((hero.match(/class="btn amber"/g) ?? []).length, 1);
+    const card = home.slice(home.indexOf("data-demo-receipt"), home.indexOf('<section class="wrap" id="products"'));
+    assert.match(card, /This site currently shows devnet rehearsal evidence/);
+    assert.match(home, /No wallet is needed to read results or receipts/);
+    clean(card.replace(/<[^>]+>/g, " "), "receipt card");
   });
 });
 
 describe("item 3: zero data → one explanation and one evidence link; populated states keep their navigation", () => {
   test("the coins page hides the tabs, search and zero totals when the host has no coin and no pair", () => {
-    const p = read("src/app/burnticker/page.tsx");
+    const p = read("src/app/burnticker/CoinsIndex.tsx");
     assert.match(p, /const empty = !!ix && ix\.tokens\.length === 0 && ix\.pairs\.length === 0;/);
     assert.match(p, /\{!empty && <div className="flex flex-col gap-3 md:flex-row md:items-center">\s*<div className="bt-tabs"/, "tabs and search only with records");
     assert.match(p, /\{ix && !empty && tab !== "pairs"/); assert.match(p, /\{ix && !empty && tab === "pairs"/); assert.match(p, /\{ix && !empty && \(\s*<section className="grid grid-cols-2/);
@@ -56,7 +57,7 @@ describe("item 3: zero data → one explanation and one evidence link; populated
 
 describe("items 4 and 8: host diagnostics behind a disclosure; missing automation evidence says unavailable", () => {
   test("no page prints the raw 'On this host:' notes inline; each uses the HostDiagnostics disclosure", () => {
-    for (const f of ["src/app/burnticker/page.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx"]) {
+    for (const f of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx"]) {
       const s = read(f); assert.doesNotMatch(s, /On this host: \$\{|On this host: \{/, f); assert.match(s, /<HostDiagnostics stubs=\{/, f);
     }
     const c = read("src/app/burnticker/_components/HostDiagnostics.tsx");
@@ -132,10 +133,13 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
     const page = read("src/app/burnticker/trust/page.tsx");
     const at = (m: string) => { const i = page.indexOf(m); assert.ok(i >= 0, m); return i; };
     assert.ok(at("<CurrentStatusSummary card={card} />") < at("<TrustPackSection card={card} />") && at("<TrustPackSection card={card} />") < at("data-trust-evidence"));
-    const ev = page.slice(at("data-trust-evidence"), page.indexOf("</details>\n      <HostDiagnostics"));
+    const ev = page.slice(at("data-trust-evidence"), page.indexOf("</details>}"));
     for (const h of ["Standing facts", "Powers Register", "Developer fee wallet and ledger", "Who runs this", "How this was built", "Every wallet"]) assert.ok(ev.includes(h), h);
     assert.doesNotMatch(page, /BURNTICKER_FEE_WALLET unset/);
-    assert.match(read("src/lib/burnticker/trust.ts"), /paid to the operator treasury \(the developer fee wallet, not the Squads vault, which holds no fee stream\)/);
+    // audit R03: the recipient comes from the one operator-treasury record (mainnet: the developer fee wallet, not the Squads vault)
+    assert.match(read("src/lib/burnticker/trust.ts"), /paid to \$\{operatorTreasuryRecord\(cluster\)\.who\}/);
+    const { operatorTreasuryRecord } = await import("@/lib/burnticker/lockFees");
+    assert.match(operatorTreasuryRecord("mainnet").who, /the developer fee wallet .*not the Squads vault/);
   });
 });
 
@@ -154,7 +158,7 @@ describe("item 6: one signer vs two publishers; the rule's winner is not the tea
     const s = pairResultSentence({ ticker: "A", rule: rule(true) }, { ticker: "B", rule: rule(false) }, "yes");
     assert.match(s, /^This result fires \$A's rule/); assert.doesNotMatch(s, /\bwinner\b/i); clean(s, "named pair sentence");
     for (const f of ["src/lib/burnticker/pairFundsFlow.ts", "src/lib/burnticker/fieldHelp.ts", "src/lib/burnticker/api/spec.ts", "docs/burnticker/WHITEPAPER.md", "docs/burnticker/api.md", "site/burnticker/index.html", "site/burnticker/whitepaper.html"]) assert.doesNotMatch(read(f), /nobody is paid/i, f);
-    assert.match(read("site/burnticker/index.html"), /season ends is the coin with the most receipts its champion: a stat on a scoreboard/, "a champion stays a statistic");
+    assert.match(read("site/burnticker/index.html"), /the coin with the most receipts is named its champion\. That is a line on a scoreboard, and nobody receives anything for it/, "a champion stays a statistic");
   });
 });
 
@@ -170,7 +174,7 @@ describe("item 7: the verifier shows the example's outcome first; controls under
   });
   test("the check page puts the verifier first for ?demo=1 (the checklist loading above cannot push the anchor away)", async () => {
     const p = read("src/app/burnticker/check/page.tsx");
-    assert.match(p, /\{verifierAt === "top" && <ReceiptVerifier card=\{card\} \/>\}\s*\{err && /); assert.match(p, /\{verifierAt === "bottom" && <ReceiptVerifier card=\{card\} \/>\}/);
+    assert.match(p, /\{verifierAt === "top" && <ReceiptVerifier card=\{card\} \/>\}\s*\{failure && /); assert.match(p, /\{verifierAt === "bottom" && <ReceiptVerifier card=\{card\} \/>\}/);
     const { CHECK_COPY } = await import("@/lib/burnticker/trustpack/copy");
     assert.doesNotMatch(CHECK_COPY.intro, /at the bottom/);
     for (const k of ["verifierDemoIntro", "verifierCaveat", "checkAnotherTitle"] as const) clean(CHECK_COPY[k], k);

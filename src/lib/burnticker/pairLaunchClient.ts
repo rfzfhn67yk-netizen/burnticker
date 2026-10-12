@@ -1,4 +1,4 @@
-import type { Transaction } from "@solana/web3.js";
+import type { VersionedTransaction } from "@solana/web3.js";
 import { buildStepTx, confirmPlan, pairCurvePlan, planProblems, signAndSendPlan, type ConfirmResult, type SendDeps, type SendResult } from "@/lib/burnticker/signPlan";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 
@@ -87,7 +87,7 @@ export { base58ToBytes, type SendDeps, type SendResult, type ConfirmResult } fro
 /** Why the pair-curve set cannot be signed in this browser, or [] when it can. */
 export const pairCurveSignProblems = (pc: PairCurveLaunchBundle, creator: string | null, keys: { a: string; b: string } | null): string[] => planProblems(pairCurvePlan(pc, keys), creator);
 /** One pair-curve transaction, built and signed by the mint keypair(s) it names (the wallet signs after). */
-export const buildPairCurveTx = (t: PairCurveLaunchBundle["transactions"][number], creator: string, keys: { a: string; b: string } | null, recentBlockhash: string): Transaction =>
+export const buildPairCurveTx = (t: PairCurveLaunchBundle["transactions"][number], creator: string, keys: { a: string; b: string } | null, recentBlockhash: string): VersionedTransaction =>
   buildStepTx({ label: t.label, signers: [...t.signers], instructions: t.instructions }, creator, { mintA: keys?.a, mintB: keys?.b }, recentBlockhash);
 /** The three transactions in order (signAndSendPlan); `prior` resumes at the failed step. */
 export const signAndSendPairCurve = (pc: PairCurveLaunchBundle, creator: string, keys: { a: string; b: string } | null, d: SendDeps, onStep?: (i: number, sig: string) => void, prior: string[] = []): Promise<SendResult> =>

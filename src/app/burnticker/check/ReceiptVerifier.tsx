@@ -77,18 +77,18 @@ export default function ReceiptVerifier({ card }: { card: string }) {
       <details className="mt-3" open={!wantDemo} data-check-another>
         <summary className="cursor-pointer text-xs text-neutral-300">{CHECK_COPY.checkAnotherTitle}</summary>
         <div className="mt-2 grid gap-2 text-xs">
-          <label className="grid gap-1"><span className="text-neutral-400">Devnet receipt</span>
-            <select className="rounded border border-neutral-700 bg-neutral-950 p-2" value={samples?.receipts.some((r) => r.signature === sig) ? sig : ""} onChange={(e) => setSig(e.target.value)}>
+          <label className="grid min-w-0 gap-1"><span className="text-neutral-400">Devnet receipt</span>
+            <select className="w-full min-w-0 max-w-full truncate rounded border border-neutral-700 bg-neutral-950 p-2" value={samples?.receipts.some((r) => r.signature === sig) ? sig : ""} onChange={(e) => setSig(e.target.value)}>
               <option value="">— paste a signature below —</option>
               {samples?.receipts.map((r) => <option key={r.signature} value={r.signature}>${r.ticker} · reading {r.recordDate} · {r.units} unit(s) · {r.status}</option>)}
             </select>
           </label>
-          <label className="grid gap-1"><span className="text-neutral-400">Transaction signature</span>
-            <input className={`rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby={sigError ? "sig-error" : undefined} />
+          <label className="grid min-w-0 gap-1"><span className="text-neutral-400">Transaction signature</span>
+            <input className={`w-full min-w-0 rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby={sigError ? "sig-error" : undefined} />
             {sigError && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">Not checked: {sigError}. This is a typing problem, not evidence about any receipt.</span>}
           </label>
-          <label className="grid gap-1"><span className="text-neutral-400">RPC endpoint (any devnet RPC you trust)</span>
-            <input className="rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
+          <label className="grid min-w-0 gap-1"><span className="text-neutral-400">RPC endpoint (any devnet RPC you trust)</span>
+            <input className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
           </label>
           <div><button type="button" disabled={busy} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
           <p className="text-neutral-500">{CHECK_COPY.verifierPrivacy} {CHECK_COPY.verifierScope}</p>

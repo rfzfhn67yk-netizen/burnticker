@@ -18,6 +18,17 @@ export const PROGRAM_IDS: Record<Network, { burn_receipts: string; pair_curve: s
   mainnet: { burn_receipts: "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM", pair_curve: "2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN" },
 };
 
+/**
+ * The address lookup table every browser launch step is compiled against (re-check 2026-10-11; src/lib/burnticker/lookupTable.ts holds
+ * its expected entries). `address` null = not created on that network yet: the signing card refuses to sign there. `authority` = the
+ * operations key allowed to hold the table before it is frozen; null = the table must be frozen (no authority). Created, extended and
+ * frozen with scripts/burnticker-lut.mts; `verify` prints the diff against the expected entries.
+ */
+export const LOOKUP_TABLES: Record<Network, { address: string | null; authority: string | null }> = {
+  devnet: { address: null, authority: null },
+  mainnet: { address: null, authority: null },
+};
+
 /** The public JSON-RPC endpoints a verifier falls back to (read-only calls only). */
 export const PUBLIC_RPC_URLS: Record<Network, string> = { devnet: "https://api.devnet.solana.com", mainnet: "https://api.mainnet-beta.solana.com" };
 

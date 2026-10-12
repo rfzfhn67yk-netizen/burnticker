@@ -81,9 +81,10 @@ describe("review 2 F6 — one factual pair sentence, checked against the engine"
       }
     }
     assert.match(read("src/app/burnticker/templates/page.tsx"), /\{t\.pairLine && /, "the gallery renders the pair line");
-    // the landing page (static HTML): the sentence verbatim, and the old line is gone
+    // the landing page (static HTML): since site audit #7 (2026-10-11) it names rivalries and the Derby without explaining the pair rule;
+    // if it ever explains it again, it carries the sentence verbatim. The old lines stay gone.
     const home = read("site/burnticker/index.html");
-    assert.ok(home.includes(`<span data-pair-sentence>${PAIR_BURN_SENTENCE}</span>`), "landing page carries the sentence");
+    if (/data-pair-sentence|both coins fund/i.test(home)) assert.ok(home.includes(`<span data-pair-sentence>${PAIR_BURN_SENTENCE}</span>`), "landing page carries the sentence");
     assert.doesNotMatch(home, /neither pool can pay/i);
     assert.doesNotMatch(home, /winning side burns part of its own pool/i);
     // the review card (launch page + the Coin vs Coin tile pass PAIR_REVIEW_LINE), Derby, the pair pages (Next + static twin)

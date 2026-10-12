@@ -47,6 +47,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | POST | `/rules/validate` `{ rule, ticker? }` | — | read | `canonical` (the exact bytes `rules.json` holds), `sha256`, `statement`, `receiptFormat`; 400 lists every problem |
 | POST | `/launch/bundle` | — | write | unsigned base64 transactions + the review payload the wizard shows; registers a DRAFT unless `register: false`; never signs. Since 1.3.0 the selector's creation **preflight** runs first (primary + independent cross-read, or the Polymarket payout vector + Gamma) and a failure refuses the bundle (400 `code: "preflight"`, or 502 when a read failed) with the `preflight` result attached; every Kalshi rule is refused. On success the bundle carries `preflight` (null when `BURNTICKER_PREFLIGHT_STRICT` is off on the host) |
 | POST | `/launch/confirm` `{ mint, signature }` | — | write | the landed launch transaction takes the draft live; settlements after this moment count (409 once the draft has expired) |
+| POST | `/launch/review` `{ rule, ticker, name, note?, descCtx?, pair?, companion?, warnings? }` | — | read | (API 1.14.0, launch audit 5 L02 / L06; `src/lib/burnticker/launchReview.ts`) the read-only pre-wallet review: network, launch type and availability, canonical rule + sha256, names and tickers, allocation, fee split per 1 SOL, transactions and signer roles, estimated SOL, prerequisites, who can change what, problems. Builds, pins, registers and reads nothing; answers in preview and open modes (closed: 403 `creator-launches-closed`) |
 | GET | `/tokens?status=&limit=&offset=` | 30 s | read | the registry: status (`draft` / `live` / `paused` / `retired` / `expired`), rule hash, receipt and burn counts (no network calls) |
 | GET | `/tokens/{ticker}` | 30 s | read | `status` (supply, burned, pool, `next` = next possible burn + implied chance), `receipts`, `readings` (each with `sourceUrl`, `method` and, for Polymarket, `proof` = the Polygon payout locator), exact `rulesText`; `{ticker}` may be the mint |
 | GET | `/tokens/{ticker}/receipts` | 30 s | read | every receipt, recomputed at request time (`verify.verified`) |
@@ -79,6 +80,20 @@ SDK does this). While `ready` is `false`, send nothing. Refusals: 400 for invali
 ticker or mint is taken, 502 if Kalshi or Polymarket is unreachable (or the Polymarket selector is unknown). A Polymarket tag series
 must settle at most one keeper scan of markets a week (600 at the defaults); a denser tag is refused with a hint to add a market type
 (`tag:nfl/moneyline`) or an event pattern (`tag:nfl/moneyline:nfl-*den-*`). **A draft reserves its ticker for 24 hours.** Confirm the launch within that window. After it, the draft becomes `expired`: the row stays, the ticker is free for anyone, and confirming is refused, so build a fresh bundle. Mainnet is refused until the program and the LaunchLab adapter are live.
+
+**Wire size: version-0 transactions and the lookup table (re-check 2026-10-11).** A real single-coin create (`initialize_token` plus
+LaunchLab's `initialize_v2`) is 1,262 bytes as a legacy transaction, over Solana's 1,232-byte packet limit, so the launch page's
+signing plan (`src/lib/burnticker/signPlan.ts`) compiles every step as a version-0 transaction against the network's address lookup
+table: the fixed accounts every launch touches (both programs, LaunchLab's program, global config, authority, event authority and
+Burnticker's platform and its fee vault, the CPMM config, the fee-keys PDA, the operator treasury, the token, system, rent, metadata
+and memo programs, the WSOL mint) come from the table, and the creator, the mint and its accounts stay in the message. The entries
+and their order are `src/lib/burnticker/lookupTable.ts`; the address is pinned per network in `src/lib/burnticker/networks.ts`
+(`LOOKUP_TABLES`); the browser reads the table and checks every entry, its index and its authority (the operations key or none)
+before anything is signed, and stops with "lookup table mismatch — nothing was sent" otherwise. `scripts/burnticker-lut.mts verify
+--cluster devnet|mainnet` prints the same comparison. Measured: a single coin 988 bytes, the two LaunchLab pair steps 1,079 and 1,111,
+the pair-curve steps 807, 807 and 566. A create together with the creator's opening purchase is 1,281 bytes even with the table; the
+page lists it as not signable before the wallet opens. A caller of this endpoint who signs `message` as a legacy transaction meets the
+same limit (the `transaction` field is null when the legacy form does not fit): compile `instructions` as version 0 with that table.
 
 ### Polymarket rules (since 2026-10-10, API 1.1.0)
 
@@ -287,3 +302,19 @@ read and decoded — then, and only then, a null `upgradeAuthority` means no upg
 partial or did not decode (the dated `verified-build.json` record is carried beside it as `recordedUpgradeAuthority` / `recordedAt`), and
 `verified-build` when no live read was made. `mainnet.deployed` is `true`, `false` or `null` (`source: "unavailable"`, line "mainnet
 deployment unknown (the chain read failed)") — a failed lookup never reads as "not deployed".
+
+## Launch availability and preview mode (API 1.14.0)
+
+`GET /catalogue` → `launches` keeps `creators` (true only when creator launches are open) and adds `mode` (`closed` / `preview` /
+`open`), `banner`, `types` (team, matchup, markets, elections, feeds, weather, derby, pairs — each `{ label, available, reason }`) and
+`sources` (sports settlement and schedules, Polymarket, NWS, publishers, the pair curve). `src/lib/burnticker/launchAvailability.ts`
+derives all of it from the host's environment:
+
+- `BURNTICKER_CREATOR_LAUNCHES_ENABLED=1` → `open`. `BURNTICKER_CREATOR_LAUNCHES_PREVIEW=1` (with ENABLED off) → `preview`: the wizard
+  and the review card render under the banner "Preview: creator launches are closed; nothing here builds or sends a transaction.",
+  `POST /launch/bundle`, `/launch/confirm` and the wizard's `/api/burnticker/launch` refuse with 403 `{ code: "launches-closed",
+  preview: true }`, and `POST /launch/review` answers. Neither → `closed` (403 `creator-launches-closed`, `preview: false`).
+- Per type: on a mainnet host sports (team coins, matchups) need TheSportsDB's licence key (`BURNTICKER_THESPORTSDB_KEY`) — games
+  without an on-chain market settle on its final — and registered pairs (election pair, Coin vs Coin) need
+  `BURNTICKER_PAIR_CURVE_ENABLED`. An unavailable type is refused with 403 `{ code: "launch-type-unavailable", type }`.
+
