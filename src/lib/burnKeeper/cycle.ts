@@ -1,4 +1,5 @@
 import type { FeedValidation } from "@/lib/burnKeeper/feeds/treasury";
+import type { Cosigner } from "@/lib/burnticker/attesters/cosign";
 import type { Ledger, BurnRow, SignatureRow, SigKind } from "@/lib/burnKeeper/ledger";
 import type { AttesterGate } from "@/lib/burnKeeper/attesters/gate";
 import { burnMemo, planReadings, type PlanStep } from "@/lib/burnKeeper/plan";
@@ -61,6 +62,11 @@ export interface KeeperCtx {
    * never gated: a burn that landed is a fact, whatever the attester says now.
    */
   attester?: AttesterGate | null;
+  /**
+   * The second reading signer on its own host (signer-2, 2026-10-12; src/lib/burnticker/attesters/cosign.ts). Program path only: each
+   * reading is co-signed there before submit_reading, or held when the signer disagrees. Unset: nothing changes.
+   */
+  cosigner?: Cosigner | null;
 }
 
 /** The attester gate at the one point per leg where something new would be signed: null = proceed; a string = hold, both figures logged. */

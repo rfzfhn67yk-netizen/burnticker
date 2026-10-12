@@ -26,9 +26,8 @@ import type { SettledEvent } from "@/lib/burnticker/units";
  *                   config authority (the Squads vault) is asked to sign it
  *
  * No program change: the program already takes up to 5 attesters and a quorum up to 3, every change waits 48 hours in public, and a
- * key may vouch for a new key only after 7 days in the set. NOT BUILT (said in ATTESTERS.md): the keeper collecting an external
- * attester's signature into its submit_reading transaction — until it is, a coin whose quorum needs your key waits for a reading
- * that only you and the keeper together can sign.
+ * key may vouch for a new key only after 7 days in the set. The keeper's intake for a second signature is built (signer-2,
+ * 2026-10-12: cosign.ts / cosignSigner.ts / scripts/burnticker-signer.mts); no second signer is running yet (ATTESTERS.md).
  */
 
 // ---- keys ----

@@ -62,3 +62,26 @@ describe("the executable hash", () => {
     }
   });
 });
+
+// OPS-2 (2026-10-12): the throwaway-Linux-host script the owner runs prints the comparison against the same numbers as this table.
+describe("scripts/ops/reproducible-build-host.sh", () => {
+  const host = fs.readFileSync(path.join(ROOT, "scripts", "ops", "reproducible-build-host.sh"), "utf8");
+  const val = (arr: string, lib: string) => new RegExp(`${arr}\\[${lib}\\]="([^"]+)"`).exec(host)?.[1];
+  test("its expected mainnet hashes and program ids are the table's", () => {
+    for (const p of table.programs) {
+      assert.equal(val("ID", p.library), p.programId, p.library);
+      assert.equal(val("EXE", p.library), p.builds.mainnet.hash, p.library);
+      assert.equal(val("SHA", p.library), (p.builds.mainnet as { sha256?: string }).sha256, p.library);
+    }
+    assert.equal(val("SHA", "burn_receipts"), "7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a");
+    assert.equal(val("SHA", "pair_curve"), "f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767");
+  });
+  test("it builds the commit the site pins, compares with mainnet read-only, and the page explains it", async () => {
+    const { PUBLIC_REPO_COMMIT } = await import("@/lib/burnticker/currentStatusLinks");
+    assert.equal(/^COMMIT="([0-9a-f]{40})"$/m.exec(host)?.[1], PUBLIC_REPO_COMMIT);
+    assert.match(host, /solana-verify get-program-hash -u "\$RPC"/);
+    assert.doesNotMatch(host, /solana program deploy|solana transfer|keypair|--keypair|-k /, "no key, no send");
+    assert.match(doc, /### Throwaway Linux host/); assert.match(doc, /ssh root@<server ip> 'bash -s' < scripts\/ops\/reproducible-build-host\.sh/);
+    assert.ok(fs.readFileSync(path.join(ROOT, "config", "public-repo.allowlist"), "utf8").split("\n").includes("scripts/ops/reproducible-build-host.sh"));
+  });
+});

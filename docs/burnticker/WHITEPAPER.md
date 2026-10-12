@@ -607,8 +607,9 @@ checks only signatures and the quorum. Proof checking happens off chain by desig
 | 3 | a quorum of independent operators or relayers whose proofs are public | a colluding quorum, against public proofs | nobody | the proof system and the source |
 
 **Current status.** Level 1 is the launch design. Switchboard, the planned second signer, ended all oracle services on 2026-09-25. Its
-attester was built, then removed from the program the same day (commit `f94089c5`). The replacement is a Reclaim zkTLS proof of the
-source response posted by a relayer key, a second human operator, or both. None of these is built. The decision log names "attester two
+attester was built, then removed from the program the same day (commit `f94089c5`). The candidate replacements were a Reclaim zkTLS proof of the
+source response posted by a relayer key, a second human operator, or both. The second-operator signer is built in the repository and not
+running (`docs/burnticker/SIGNER-TWO.md`). The relayer was set aside, because Reclaim's keys cannot sign what the program checks. The decision log names "attester two
 within 14 days of the first launch", and that line is a schedule. For Kalshi, no independent on-chain attestation exists. Kalshi
 publishes settlement through its own API. There were reports of Kalshi markets tokenised on Solana through DFlow, but they could not be
 confirmed from a primary source (`docs/burnticker/README.md` section 8). At every level, the upgrade authority remains until it is

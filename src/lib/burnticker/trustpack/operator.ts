@@ -91,12 +91,35 @@ export const pinnedDevFeeWallet = (cfg: OperatorConfig, cluster: Cluster): strin
  * key. Pure apart from node:crypto; returns false (never throws) on malformed input.
  */
 export function verifySignedMessage(message: string, signatureB58: string, pubkeyB58: string): boolean {
+  return verifyBytes(Buffer.from(message, "utf8"), signatureB58, pubkeyB58);
+}
+
+function verifyBytes(bytes: Buffer, signatureB58: string, pubkeyB58: string): boolean {
   const sig = b58decode(signatureB58), pk = b58decode(pubkeyB58);
   if (!sig || sig.length !== 64 || !pk || pk.length !== 32) return false;
   try {
     const key = crypto.createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: Buffer.from(pk).toString("base64url") }, format: "jwk" });
-    return crypto.verify(null, Buffer.from(message, "utf8"), key, Buffer.from(sig));
+    return crypto.verify(null, bytes, key, Buffer.from(sig));
   } catch { return false; }
+}
+
+/**
+ * A Solana off-chain message, version 0, as `solana sign-offchain-message` (Agave CLI 4.3.0, checked 2026-10-12 with a throwaway key)
+ * and a Ledger through that CLI sign it: the signing domain "\xffsolana offchain", the version byte 0, a format byte (0 restricted
+ * ASCII, 1 limited UTF-8, 2 extended UTF-8), the length as u16 little-endian, then the text. A hardware wallet cannot sign raw bytes,
+ * so the developer fee wallet (a hardware wallet) signs this way (ops-2, 2026-10-12).
+ */
+export function offchainMessageV0(message: string, format: 0 | 1 | 2): Buffer {
+  const text = Buffer.from(message, "utf8"), len = Buffer.alloc(2);
+  len.writeUInt16LE(text.length);
+  return Buffer.concat([Buffer.from([0xff]), Buffer.from("solana offchain", "ascii"), Buffer.from([0, format]), len, text]);
+}
+
+/** Which way the statement was signed: the raw text, or the text wrapped as a Solana off-chain message; null when neither verifies. */
+export function statementSignatureFormat(message: string, signatureB58: string, pubkeyB58: string): "raw" | "offchain" | null {
+  if (verifySignedMessage(message, signatureB58, pubkeyB58)) return "raw";
+  if (Buffer.byteLength(message, "utf8") <= 0xffff) for (const f of [0, 1, 2] as const) if (verifyBytes(offchainMessageV0(message, f), signatureB58, pubkeyB58)) return "offchain";
+  return null;
 }
 
 export interface SignedMessageView { status: "todo" | "signed" | "invalid"; signer: string | null; message: string; signature: string | null; verified: boolean | null; how: string; detail: string }
@@ -107,6 +130,8 @@ export function signedMessageView(cfg: OperatorConfig): SignedMessageView {
   const signer = walletOf(cfg, s.cluster, s.signerRole);
   const message = s.message.replace("{PUBKEY}", signer ?? "{PUBKEY}");
   if (!s.signature || TODO_RE.test(s.status) || !signer) return { status: "todo", signer, message, signature: null, verified: null, how: s.how, detail: signer ? "The wallet is set. The statement is not signed yet." : "The wallet is not set yet, so the statement is not signed." };
-  const ok = /\{DATE\}/.test(message) ? false : verifySignedMessage(message, s.signature, signer);
-  return { status: ok ? "signed" : "invalid", signer, message, signature: s.signature, verified: ok, how: s.how, detail: ok ? `The ed25519 signature by ${signer} over the exact text above is valid.` : "The signature does not match the text and the signer, or the date in the text is still blank." };
+  const format = /\{DATE\}/.test(message) ? null : statementSignatureFormat(message, s.signature, signer);
+  const ok = format !== null;
+  const how = format === "offchain" ? " It was signed as a Solana off-chain message, the form the Solana command line and hardware wallets use." : "";
+  return { status: ok ? "signed" : "invalid", signer, message, signature: s.signature, verified: ok, how: s.how, detail: ok ? `The ed25519 signature by ${signer} over the exact text above is valid.${how}` : "The signature does not match the text and the signer, or the date in the text is still blank." };
 }

@@ -1,11 +1,11 @@
 import { type AddressLookupTableAccount, type Connection, type Keypair, PublicKey, type TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
-import { attestReading, sourceUrlHash } from "@/lib/burnReceipts/attestation";
+import { attestationMessage, ed25519SharedMessageInstruction, signAttestation, sourceUrlHash, verifyAttestation, ZERO_HASH } from "@/lib/burnReceipts/attestation";
 import { fetchReading, fetchTokenConfig, type ReadingAccount, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, type Cluster as ProgramCluster, LAUNCHLAB_PROGRAM_ID, MAX_QUORUM, MODE_BUYBACK, OUTCOME_NAMES, POOL_REPLACEMENT_DELAY_SECS, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
 import { anchorErrorName, assertClusterAllowed, checkPoolHealth as programCheckPoolHealth, claimLaunchLabCreatorFee, DEFERRABLE_ERRORS, memoFromTransaction, planCrank as programPlanCrank, type ProgramContext, signTransaction } from "@/lib/burnReceipts/crank";
 import { submitReadingIx } from "@/lib/burnReceipts/instructions";
 import { configPda, feePda, launchlabCreatorFeeVault, readingPda } from "@/lib/burnReceipts/pda";
-import type { ProgramConfigView, ProgramPort, ProgramReadingView, SignedTx } from "@/lib/burnKeeper/programPort";
+import type { Cosignature, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
 import { planGraduatedCreatorFeeClaim } from "@/lib/burnKeeper/creatorFees";
 import { CPMM_PROGRAM_ID as KEEPER_CPMM, launchLabProgramFor } from "@/lib/burnKeeper/launchlab";
 import type { Cluster } from "@/lib/burnKeeper/solana";
@@ -30,6 +30,8 @@ import type { Cluster } from "@/lib/burnKeeper/solana";
  *   · readings carry the pool used (ProgramReadingView.pool); the config view carries the untradeable spell's last observation;
  *   · quorum ≤ 3. A process signs with at most `maxLocalAttesters` keys (default 1 — until an off-machine attester exists the keeper
  *     signs with its one key; tests and multi-key operators raise it, up to 3).
+ *   · signer-2 (2026-10-12): `cosignatures` made on another host over the SAME message join the one shared-message instruction. Each is
+ *     verified against the message here (a bad one throws); a key the TokenConfig does not list is dropped (it would only add bytes).
  */
 
 export function configView(programId: PublicKey, mint: PublicKey, c: TokenConfigAccount): ProgramConfigView {
@@ -90,6 +92,22 @@ export interface SolanaProgramPortOpts {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * signer-2: the other hosts' signatures that may join a reading — verified over `message` (a signature that does not verify throws: a
+ * co-signer that answers with a bad signature is broken, never silently ignored), listed in the TokenConfig, not a key held here, once
+ * each. Shared with the pair-result path (pairForwardChain.ts).
+ */
+export function cosignatureEntries(message: Uint8Array, cosignatures: readonly Cosignature[], listed: readonly string[], held: readonly string[]): { publicKey: PublicKey; signature: Uint8Array }[] {
+  const out: { publicKey: PublicKey; signature: Uint8Array }[] = [];
+  for (const cs of cosignatures) {
+    const pk = new PublicKey(cs.key);
+    if (cs.signature.length !== 64 || !verifyAttestation(pk, message, cs.signature)) throw new Error(`the signature from ${cs.key.slice(0, 8)}… does not verify over this message`);
+    if (!listed.includes(cs.key) || held.includes(cs.key) || out.some((e) => e.publicKey.equals(pk))) continue;
+    out.push({ publicKey: pk, signature: cs.signature });
+  }
+  return out;
+}
+
 export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
   const c = o.connection;
   const ctx: ProgramContext = { connection: c, programId: o.programId, mint: o.mint, cluster: programClusterOf(o.cluster), allowMainnet: o.allowMainnet, lookupTable: o.lookupTable };
@@ -97,6 +115,7 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
   const maxLocal = Math.min(o.maxLocalAttesters ?? 1, MAX_QUORUM);
   let rpcGenesis: string | null = null;
   const checkCluster = async (): Promise<string> => { if (!rpcGenesis) rpcGenesis = await assertClusterAllowed(ctx); return rpcGenesis; };
+  const messageFor = (genesis: string, i: ReadingInput): Buffer => attestationMessage(genesis, o.programId, o.mint, i.feedId, i.prevDate, i.recordDate, i.value, i.valueDecimals, sourceUrlHash(i.sourceUrl), i.proofHash ?? ZERO_HASH);
   const sign = async (ixs: TransactionInstruction[]): Promise<SignedTx> => {
     const s = await signTransaction(ctx, ixs, [o.payer]);
     return { signature: s.signature, raw: s.raw, blockhash: s.blockhash, lastValidBlockHeight: s.lastValidBlockHeight };
@@ -116,6 +135,14 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       return r ? readingView(r) : null;
     },
     attesterKeys: () => o.attesters.map((k) => k.publicKey.toBase58()),
+    async readingMessage(i) {
+      const genesisRpc = await checkCluster();
+      const cfg = await fetchTokenConfig(c, o.programId, o.mint);
+      if (!cfg) throw new Error(`no burn_receipts config for mint ${o.mint.toBase58()}`);
+      const genesis = cfg.config.cluster_genesis.toBase58();
+      assertSignableGenesis(genesis, ctx.cluster, genesisRpc);
+      return messageFor(genesis, i).toString("utf8");
+    },
     async buildReading(i) {
       if (o.attesters.length > maxLocal) throw new Error(`this process may sign a reading with at most ${maxLocal} attester key(s) (holds ${o.attesters.length}; maxLocalAttesters, quorum ≤ ${MAX_QUORUM})`);
       const genesisRpc = await checkCluster();
@@ -126,9 +153,14 @@ export function solanaProgramPort(o: SolanaProgramPortOpts): ProgramPort {
       assertSignableGenesis(genesis, ctx.cluster, genesisRpc);
       const srcHash = sourceUrlHash(i.sourceUrl);
       // proof= (2026-10-10): Burn Derby readings commit to their proof hash (the Pyth update bytes' digest); zero for every other source.
-      const att = attestReading({ genesisHash: genesis, programId: o.programId, mint: o.mint, feedId: i.feedId, prevDate: i.prevDate, recordDate: i.recordDate, value: i.value, valueDecimals: i.valueDecimals, sourceUrlHash: srcHash, ...(i.proofHash ? { proofHash: i.proofHash } : {}), signers: o.attesters.map((k) => ({ publicKey: k.publicKey, secretKey: k.secretKey })) });
-      const tx = await sign([att.instruction, submitReadingIx({ programId: o.programId, payer: o.payer.publicKey, mint: o.mint, recordDate: i.recordDate, value: i.value, sourceUrlHash: srcHash, ...(i.proofHash ? { proofHash: i.proofHash } : {}) })]);
-      return { ...tx, message: att.message.toString("utf8") };
+      const message = messageFor(genesis, i);
+      const local = o.attesters.map((k) => ({ publicKey: k.publicKey, signature: signAttestation(k.secretKey, message) }));
+      const listed = cfg.config.activeAttesters.map((a) => a.key.toBase58());
+      const extra = cosignatureEntries(message, i.cosignatures ?? [], listed, local.map((l) => l.publicKey.toBase58()));
+      if (local.length + extra.length > MAX_QUORUM) throw new Error(`a reading carries at most ${MAX_QUORUM} signatures (${local.length} held here + ${extra.length} from other hosts)`);
+      const instruction = ed25519SharedMessageInstruction(message, [...local, ...extra]);
+      const tx = await sign([instruction, submitReadingIx({ programId: o.programId, payer: o.payer.publicKey, mint: o.mint, recordDate: i.recordDate, value: i.value, sourceUrlHash: srcHash, ...(i.proofHash ? { proofHash: i.proofHash } : {}) })]);
+      return { ...tx, message: message.toString("utf8") };
     },
     async planCrank() {
       await checkCluster();

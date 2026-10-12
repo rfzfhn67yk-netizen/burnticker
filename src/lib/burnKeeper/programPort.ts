@@ -10,6 +10,16 @@ export type ConfirmOutcome = { status: "confirmed"; slot: number | null } | { st
 
 export interface AttesterView { key: string; kind: number }
 
+/**
+ * A SIGNATURE FROM ANOTHER HOST (signer-2, 2026-10-12): an attester key this process does not hold signed the exact reading message on
+ * its own machine (scripts/burnticker-signer.mts). The adapter checks it against the message before it goes into the one shared-message
+ * Ed25519SigVerify instruction, and drops a key the TokenConfig does not list.
+ */
+export interface Cosignature { key: string; signature: Uint8Array }
+
+/** What a reading is built from (buildReading's input; readingMessage turns it into the exact signed bytes). */
+export interface ReadingInput { recordDate: number; prevDate: number; value: bigint; sourceUrl: string; feedId: string; valueDecimals: number; /** 32 bytes for the signed message's proof= (Burn Derby: the reading's proof hash); zero when absent. */ proofHash?: Uint8Array }
+
 /** TokenConfig, as the keeper and the status page read it (strings for keys, bigint for amounts). */
 export interface ProgramConfigView {
   programId: string; config: string; feePda: string; mint: string;
@@ -46,7 +56,9 @@ export interface ProgramPort {
   /** Public keys of the attester keys this process holds (it signs readings with all of them). */
   attesterKeys(): string[];
   /** Signs the canonical message with every held attester key (≤ 3) and builds [Ed25519SigVerify (one shared message), submit_reading]; signed, not sent. */
-  buildReading(o: { recordDate: number; prevDate: number; value: bigint; sourceUrl: string; feedId: string; valueDecimals: number; /** 32 bytes for the signed message's proof= (Burn Derby: the reading's proof hash); zero when absent. */ proofHash?: Uint8Array }): Promise<SignedTx & { message: string }>;
+  buildReading(o: ReadingInput & { /** Signatures made on another host over the same message (signer-2); each is checked, unlisted keys are dropped. */ cosignatures?: readonly Cosignature[] }): Promise<SignedTx & { message: string }>;
+  /** The exact bytes the program verifies for this reading (UTF-8), so a co-signer can be asked to sign them. Optional: older ports lack it. */
+  readingMessage?(o: ReadingInput): Promise<string>;
   /** The next reading in line and its crank (signed only on build()) — or why there is nothing to crank. */
   planCrank(): Promise<CrankPlan>;
   /** `err` is the Anchor error name when the logs carry one ("TwapUnavailable"), else the raw error. */

@@ -17,6 +17,8 @@ import { claimLockFeesFor, type LockFeesOutcome } from "@/lib/burnticker/lockFee
 import { parseForwardMemo, type ForwardFacts } from "@/lib/burnticker/pairForward";
 import { ensurePairResult, forwardLoss, forwardMissingAlert, pairCtxFor, pairUnlinkStep, pairUnmatchedAlerts, recordForward, type PairCtx } from "@/lib/burnticker/pairForwardKeeper";
 import { fenceToken, type FenceReport } from "@/lib/burnticker/ops/readingFence";
+import { askCosigner, type Cosigner } from "@/lib/burnticker/attesters/cosign";
+import type { Cosignature, ReadingInput } from "@/lib/burnKeeper/programPort";
 
 /**
  * THE MULTI-TOKEN KEEPER (LAUNCHPAD-PATH §2; 2026-10-09): one loop over every registered token. Each cycle:
@@ -54,6 +56,12 @@ export interface KeeperDeps {
   derby?: { sample(tokens: readonly TokenRow[]): Promise<unknown>; plan(): string[]; /** Why and when a derby token's rule ended (season over, flippening settled, knocked out, voided). */ ended?(t: TokenRow): { reason: string; atMs: number } | null };
   /** The keeper's data key (attester v1); recorded on every reading. */
   attester: string;
+  /**
+   * THE SECOND SIGNER (signer-2, 2026-10-12; attesters/cosign.ts). When set, every reading is first sent to the signer host, which
+   * recomputes it and co-signs the exact message only when it agrees. A listed key's signature joins the reading; a disagreement is an
+   * alert and no reading; "cannot check" is a wait only when the quorum needs the signer. Unset: the keeper behaves exactly as before.
+   */
+  cosigner?: Cosigner;
   log: (line: string) => void;
   now: () => number;
   dryRun: boolean;
@@ -337,7 +345,7 @@ export async function executePending(d: KeeperDeps, t: TokenRow, locked: LockedR
     // the planner and does not repeat that time-out. A period dated before the pairing day has no PairResult (PairDateBeforePairing).
     // r3: a period on or before pair_after_date was read before the pairing — no PairResult (PairPeriodUnpaired); it cranks as plain.
     if (pairCtx?.active && (plan.kind === "buyback" || plan.kind === "forward") && (pairCtx.pairedOn == null || D >= pairCtx.pairedOn) && D > (pairCtx.pairAfterDate ?? 0)) {
-      const pr = await ensurePairResult(pairCtx, reg, D, { now, dryRun: d.dryRun, log: d.log, winnerReading: () => winnerFlatReading(d, pairCtx, D) });
+      const pr = await ensurePairResult(pairCtx, reg, D, { now, dryRun: d.dryRun, log: d.log, winnerReading: () => winnerFlatReading(d, pairCtx, D), ...(d.cosigner ? { cosigner: d.cosigner } : {}) });
       if ("waiting" in pr) {
         if (plan.kind === "forward") { hold(`pair result for ${Ds}: ${pr.waiting}`, rows); break; }
         // no result: the paired buyback's simulation decides — PairResultPending (a wait) until 72 h after the reading, then unpaired
@@ -404,6 +412,22 @@ async function adoptForward(d: KeeperDeps, ctx: PairCtx, D: number, rd: ProgramR
   recordForward(d.registry, ctx, D, facts, tx.signature, tx.slot, d.now(), d.log);
 }
 
+/**
+ * signer-2: ask the second signer (when one is configured) to co-sign this reading's exact message. Returns the co-signatures to carry
+ * (only a key the TokenConfig lists), a HOLD when the signer disagrees (an alert is raised; no reading is sent), or a note on why there
+ * is no usable signature (the caller waits only when the quorum needs one).
+ */
+export async function cosignReading(d: Pick<KeeperDeps, "cosigner" | "registry" | "log" | "now">, t: Pick<TokenRow, "mint" | "ticker">, port: ProgramPort, cfg: ProgramConfigView, input: ReadingInput, eventIds: readonly string[]): Promise<{ cosignatures: Cosignature[]; hold: string | null; note: string | null }> {
+  const r = await askCosigner(d.cosigner, port, cfg, input, { ticker: t.ticker, eventIds }, d.log);
+  if (r.disagree) {
+    const Ds = formatDate(input.recordDate);
+    const text = `$${t.ticker} ${Ds}: the second signer did not agree with the keeper's reading, so no reading was sent. ${r.disagree}`;
+    if (d.registry.recordAlert({ kind: "cosigner-disagree", key: `cosigner-disagree:${t.mint}:${Ds}`, text, meta: { mint: t.mint, recordDate: Ds } }, d.now())) d.log(`  [alert] cosigner-disagree: ${text}`);
+    return { cosignatures: [], hold: "Held. The second signer worked out a different reading for this day, so no reading is sent until the two agree.", note: null };
+  }
+  return { cosignatures: r.cosignatures, hold: null, note: r.note };
+}
+
 /** Attests every closed day's units (baseline first). Returns the refreshed config. */
 async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPort, cfg0: ProgramConfigView, out: ExecOutcome[]): Promise<{ cfg: ProgramConfigView }> {
   const reg = d.registry, mint = t.mint;
@@ -427,14 +451,19 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
       return true;
     }
     const mine = port.attesterKeys().filter((k) => cfg.attesters.some((a) => a.key === k));
-    if (mine.length < cfg.quorum) return wait(`Waiting for signatures. The program needs ${cfg.quorum} signer ${cfg.quorum === 1 ? "signature" : "signatures"}, and this keeper holds ${mine.length}.`);
+    // With a second signer configured its listed key may make up the quorum (it is asked below, never in a dry run).
+    if (mine.length + (d.cosigner ? 1 : 0) < cfg.quorum) return wait(`Waiting for signatures. The program needs ${cfg.quorum} signer ${cfg.quorum === 1 ? "signature" : "signatures"}, and this keeper holds ${mine.length}.`);
     if (d.dryRun) { d.log(`  [dry-run] $${t.ticker} ${Ds}: would attest the unit counter ${value} (${ids.length} ${ids.length === 1 ? "receipt" : "receipts"}: ${ids.join(", ") || "baseline"})`); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "dry-run", why: `reading ${Ds} = ${value}` }); return false; }
     // Burn Derby: the counted readings' proof hash (the Pyth update digests behind the window) goes into the signed message's proof=.
     // End-of-rule clock days: proof = sha256("clock|<date>|<rules sha256>") — date-based and deterministic, anyone recomputes it.
     const derbyProof = t.selectorKey.startsWith("derby:") ? derbyProofHash(ids.map((id) => reg.readings(t.selectorKey).find((r) => r.id === id)?.proof ?? null)) : undefined;
     const clockProof = counted.some((b) => END_KINDS.has(b.kind)) ? Buffer.from(clockProofHex(Ds, t.rulesSha), "hex") : undefined;
     const proofHash = derbyProof && clockProof ? Buffer.from(rulesSha256(`${Buffer.from(derbyProof).toString("hex")},${clockProof.toString("hex")}`), "hex") : derbyProof ?? clockProof;
-    const tx = await port.buildReading({ recordDate: D, prevDate: cfg.hasBaseline ? cfg.lastRecordDate : 0, value, sourceUrl: counterSourceUrl(t.ticker, Ds, ids), feedId: cfg.feedId, valueDecimals: 0, ...(proofHash ? { proofHash } : {}) });
+    const input: ReadingInput = { recordDate: D, prevDate: cfg.hasBaseline ? cfg.lastRecordDate : 0, value, sourceUrl: counterSourceUrl(t.ticker, Ds, ids), feedId: cfg.feedId, valueDecimals: 0, ...(proofHash ? { proofHash } : {}) };
+    const co = await cosignReading(d, t, port, cfg, input, ids);
+    if (co.hold) return wait(co.hold);
+    if (mine.length + co.cosignatures.length < cfg.quorum) return wait(`Waiting for signatures. The program needs ${cfg.quorum} signer ${cfg.quorum === 1 ? "signature" : "signatures"}, and this keeper holds ${mine.length}.${co.note ? ` ${co.note}` : ""}`);
+    const tx = await port.buildReading({ ...input, ...(co.cosignatures.length ? { cosignatures: co.cosignatures } : {}) });
     const sim = await port.simulate(tx.raw);
     if (sim.err) {
       if (sim.err === "QuorumNotMet") return wait("Waiting for signatures. The program did not count enough signer signatures.");
@@ -683,8 +712,12 @@ export async function winnerFlatReading(d: KeeperDeps, ctx: PairCtx, D: number):
   if ("waiting" in res) return { waiting: res.waiting };
   if ("landed" in res) { d.registry.setSignatureStatus(res.landed.signature, "confirmed", null, res.landed.slot); return "submitted"; }
   const mine = port.attesterKeys().filter((k) => cfg.attesters.some((a) => a.key === k));
-  if (mine.length < cfg.quorum) return { waiting: `quorum short for $${w.ticker}'s flat reading` };
-  const tx = await port.buildReading({ recordDate: D, prevDate: cfg.lastRecordDate, value: cfg.lastValue, sourceUrl: counterSourceUrl(w.ticker, Ds, []), feedId: cfg.feedId, valueDecimals: 0, proofHash: Buffer.from(clockProofHex(Ds, w.rulesSha), "hex") });
+  if (mine.length + (d.cosigner ? 1 : 0) < cfg.quorum) return { waiting: `quorum short for $${w.ticker}'s flat reading` };
+  const input: ReadingInput = { recordDate: D, prevDate: cfg.lastRecordDate, value: cfg.lastValue, sourceUrl: counterSourceUrl(w.ticker, Ds, []), feedId: cfg.feedId, valueDecimals: 0, proofHash: Buffer.from(clockProofHex(Ds, w.rulesSha), "hex") };
+  const co = await cosignReading(d, w, port, cfg, input, []);
+  if (co.hold) return { waiting: co.hold };
+  if (mine.length + co.cosignatures.length < cfg.quorum) return { waiting: `quorum short for $${w.ticker}'s flat reading${co.note ? `. ${co.note}` : ""}` };
+  const tx = await port.buildReading({ ...input, ...(co.cosignatures.length ? { cosignatures: co.cosignatures } : {}) });
   const sim = await port.simulate(tx.raw);
   if (sim.err) return { waiting: `$${w.ticker}'s flat reading refused: ${sim.err}` };
   d.registry.recordSignature({ signature: tx.signature, mint: w.mint, eventId: key, memo: JSON.stringify({ message: tx.message, events: [], value: cfg.lastValue.toString(), flat: `winner reading for $${ctx.me.ticker}'s forward` }), burnRaw: BigInt(0), spendLamports: BigInt(0), blockhash: tx.blockhash, lastValidBlockHeight: tx.lastValidBlockHeight, sentAt: now });

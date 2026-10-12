@@ -142,6 +142,53 @@ bash scripts/ops/verified-build.sh --docker --write   # if the numbers differ, r
 `SV_BASE_IMAGE=solanafoundation/solana-verifiable-build:<version>` pins the image when solana-verify cannot pick one for the
 workspace's Solana version (4.3.0 at the time of writing).
 
+### Throwaway Linux host (the Docker build, owner-run; ops-2 2026-10-12)
+
+Docker is not installed on the operator's Mac and the Linux research box was deleted on 2026-10-06, so the Docker build runs on a server
+created for it and deleted after it. It needs no key and no wallet, and it sends nothing to any chain.
+`scripts/ops/reproducible-build-host.sh` does every step and prints one table.
+
+1. Create the server at any cloud provider: image **Ubuntu 24.04**, the smallest shared **x86** type with 2 vCPU and 4 GB (about one
+   US cent an hour). Not an ARM type: solana-verify's image is amd64. Add your SSH key; no volume, no backups.
+2. From the repository on the Mac, run the script on it (it is streamed over ssh; about 30 to 40 minutes, most of it compiling
+   solana-verify and pulling the build image):
+
+   ```sh
+   ssh root@<server ip> 'bash -s' < scripts/ops/reproducible-build-host.sh
+   # another commit: ssh root@<server ip> 'bash -s -- --commit <public commit>' < scripts/ops/reproducible-build-host.sh
+   ```
+
+   By hand, the same steps are:
+
+   ```sh
+   apt-get update && apt-get install -y docker.io git curl build-essential pkg-config libssl-dev libudev-dev
+   curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && . "$HOME/.cargo/env"
+   cargo install solana-verify --locked
+   git clone https://github.com/rfzfhn67yk-netizen/burnticker && cd burnticker && git checkout af52b4a4ea0b80168a4c2e0f47a32045d1035c91
+   solana-verify build programs/burn-receipts --library-name burn_receipts
+   solana-verify build programs/burn-receipts --library-name pair_curve
+   sha256sum programs/burn-receipts/target/deploy/{burn_receipts,pair_curve}.so
+   solana-verify get-executable-hash programs/burn-receipts/target/deploy/burn_receipts.so
+   solana-verify get-executable-hash programs/burn-receipts/target/deploy/pair_curve.so
+   solana-verify get-program-hash -u https://api.mainnet-beta.solana.com AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM
+   solana-verify get-program-hash -u https://api.mainnet-beta.solana.com 2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN
+   ```
+
+3. Read the table. The numbers to expect (the mainnet rows above):
+
+   | Program | sha256 of the .so (the Mac build) | Executable hash (build and chain) |
+   |---|---|---|
+   | burn_receipts | `7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a` | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` |
+   | pair_curve | `f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767` | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` |
+
+   `MATCH` on both programs means the deployed bytes are what anyone gets from the public commit in solana-verify's image: record it
+   with `bash scripts/ops/verified-build.sh --docker --write` on the same server (it changes the table's `kind` to `docker`), or paste
+   the table to the operator, and the registry step below can follow. `DIFFER` means the Docker image's toolchain produces other bytes
+   than the Mac build that was deployed (the interim warning above). Nothing is wrong on chain in that case, but the programs cannot be
+   called verified until a Docker-built buffer is deployed through the Squads vault, after launch week and never on a launch night.
+   If solana-verify cannot choose an image for Solana 4.3.0, set `SV_BASE_IMAGE=solanafoundation/solana-verifiable-build:<tag>`.
+4. Delete the server in the provider's console. Billing stops at deletion.
+
 ### `solana-verify verify-from-repo`
 
 `<PUBLIC_REPO_COMMIT>` is the public repository's commit that carries these sources (each publish records it in

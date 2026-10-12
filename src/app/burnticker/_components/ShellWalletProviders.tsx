@@ -34,7 +34,8 @@ export function ShellWalletProviders({ cluster, children }: { cluster: string; c
   const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], []);
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect={false}>
+      {/* autoConnect: a wallet the visitor already approved for this site reconnects silently on reload (owner, 2026-10-12: a reload dropped the connection); nothing is signed by connecting */}
+      <WalletProvider wallets={wallets} autoConnect={true}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

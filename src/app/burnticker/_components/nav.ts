@@ -10,7 +10,8 @@ import { SITE_NAV, LEARN_NAV, LAUNCH_LABELS, SEASONS_NAV, SITE_TABS } from "@/li
 export interface NavItem { label: string; href: string; external?: boolean; static?: boolean; launch?: boolean; /** the header's active match: the href itself plus these prefixes */ match?: string[] }
 
 const MATCH: Record<string, string[]> = {
-  "/burnticker/launch": ["/burnticker/templates", "/burnticker/me"],
+  // Your coins (/burnticker/me) lights no tab: it lives under the wallet menu (owner, 2026-10-12)
+  "/burnticker/launch": ["/burnticker/templates"],
   // the Learn pages: the trust page owns its check and fee-ledger pages
   "/burnticker/trust": ["/burnticker/check", "/burnticker/fees", "/burnticker/verify"],
   // a coin page and a pair page belong to Coins (website-11 merge note, 2026-10-12: a pair page lit SEASONS)

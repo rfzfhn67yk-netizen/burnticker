@@ -116,7 +116,9 @@ on Kalshi: a Polymarket game is one market whose YES is whichever team its title
 
 ## 4. Rate limits
 
-These are per client IP: the right-most `X-Forwarded-For` hop, which the platform's own Caddy appends. Each limit is a token bucket:
+These are per client IP: the right-most `X-Forwarded-For` hop, which the platform's own Caddy appends. When that hop is one of
+Cloudflare's published addresses, the client is the visitor address Cloudflare sends in `CF-Connecting-IP` instead; that header is
+ignored on any other request. An IPv6 client is counted per /64. Each limit is a token bucket:
 
 | Bucket | Limit | Endpoints |
 |---|---|---|
