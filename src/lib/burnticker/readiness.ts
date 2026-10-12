@@ -30,34 +30,35 @@ export interface ReadinessInput {
 }
 export interface Readiness { state: ReadinessState; step: number; label: string; detail: string; ok: boolean | null }
 
+const unitsText = (n: number) => `${n} unit${n === 1 ? "" : "s"}`;
 const n2 = (x: number) => (Math.round(x * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 export function readinessOf(i: ReadinessInput): Readiness {
   const grad = i.graduationSol ?? GRADUATION_SOL;
   const R = (state: ReadinessState, label: string, detail: string, ok: boolean | null = null): Readiness => ({ state, step: READINESS_ORDER.indexOf(state) + 1, label, detail, ok });
-  if (!i.launched) return R("not-launched", "Not launched", "No mint is registered on this host yet, so there is no curve, reading or receipt to show.");
+  if (!i.launched) return R("not-launched", "Not launched", "No coin is registered on this site yet. There is no curve, reading or receipt to show.");
   // a confirmed burn proves the pool was verified even when the program account was not read here
   const pv = i.poolVerified ?? (i.latest?.status === "confirmed" ? true : null);
   if (pv !== true) {
-    if ((i.phase === "graduated" || i.phase === "migrating") && pv === null) return R("awaiting-registration", "Graduated; pool registration not read on this host", `The curve reached ${grad} SOL. Whether register_pool has recorded and verified the pool could not be read on this host (no program read); burns need it.`);
-    if (i.phase === "graduated" || i.phase === "migrating") return R("awaiting-registration", "Graduated, waiting for pool registration", `The curve reached ${grad} SOL and moved to a Raydium CPMM pool. Burns start only after register_pool records that pool and the program verifies it (TokenConfig.pool_verified); until then nothing can burn.`);
-    const raised = i.raisedSol === null ? `SOL raised: unavailable on this host (the curve was not read). Graduation needs ${grad} SOL.` : `${n2(i.raisedSol)} of ${grad} SOL raised.`;
-    return R("on-curve", "On the curve, waiting for graduation", `${raised} Trading fees collect in the burn pool, but nothing can burn before the curve graduates and its pool is registered; a seed gift to the burn pool does not count toward graduation.`);
+    if ((i.phase === "graduated" || i.phase === "migrating") && pv === null) return R("awaiting-registration", "Graduated, but this site could not check the pool", `The curve reached ${grad} SOL. This site could not read the program, so it cannot tell whether the pool has been registered and verified (register_pool). Burns need that step first.`);
+    if (i.phase === "graduated" || i.phase === "migrating") return R("awaiting-registration", "Graduated, waiting for pool registration", `The curve reached ${grad} SOL and moved to a Raydium CPMM pool. Burns start only after that pool is registered with the program (register_pool) and the program verifies it. Until then, nothing can burn.`);
+    const raised = i.raisedSol === null ? `This site could not read the curve, so the SOL raised is not shown. Graduation needs ${grad} SOL.` : `${n2(i.raisedSol)} of ${grad} SOL raised so far.`;
+    return R("on-curve", "On the curve, waiting for graduation", `${raised} Trading fees collect in the burn pool, but nothing can burn before the curve graduates and its pool is registered. A seed gift to the burn pool does not count toward graduation.`);
   }
   const l = i.latest;
   if (!l || l.status === "nothing" || l.status === "void" || (l.units === 0 && l.status !== "confirmed")) return R("awaiting-event", "Pool verified, waiting for a qualifying reading", l ? `The latest reading${l.readingDate ? ` (${l.readingDate})` : ""} counted no units, so nothing was due. The next burn needs a reading with at least one unit.` : "No reading has been published since the pool was verified. The first burn needs a reading with at least one unit.");
-  if (l.status === "skipped" && /floor/i.test(l.skippedReason ?? "")) return R("below-floor", "Reading recorded, budget below the spend floor", `The reading${l.readingDate ? ` of ${l.readingDate}` : ""} counted ${l.units} unit(s), but the rule's spend was under the spend floor fixed at launch: nothing was bought and the burn pool kept the SOL.`);
+  if (l.status === "skipped" && /floor/i.test(l.skippedReason ?? "")) return R("below-floor", "Reading recorded, but the spend was below the spend floor", `The reading${l.readingDate ? ` of ${l.readingDate}` : ""} counted ${unitsText(l.units)}. The rule's spend came in under the spend floor set at launch, so nothing was bought and the burn pool kept the SOL.`);
   if (l.status === "planned" || l.status === "sending" || l.status === "pending-pair" || (l.status === "skipped" && !/floor/i.test(l.skippedReason ?? ""))) {
-    const why = l.waitReason ?? l.skippedReason ?? (l.status === "pending-pair" ? "both coins of the pair need a registered pool first" : l.status === "sending" ? "the transaction is being sent" : "queued behind the program's next crank");
-    return R("deferred", "Burn due, execution deferred", `A reading with ${l.units} unit(s) is waiting: ${why}.`);
+    const why = l.waitReason ?? l.skippedReason ?? (l.status === "pending-pair" ? "both coins of the pair need a registered pool first" : l.status === "sending" ? "the transaction is being sent" : "the next call to the program has not happened yet");
+    return R("deferred", "Burn due, but on hold", `A reading with ${unitsText(l.units)} is due, and the burn is on hold. The recorded reason is: ${why}.`);
   }
   if (l.status === "confirmed") {
     const failed = (l.checks ?? []).length > 0;
-    if (failed) return R("burned", "Burned; recomputation failed", `The latest burn executed, but its recomputation does not match: ${(l.checks ?? []).join("; ")}.`, false);
-    if (l.verified) return R("burned", "Burned and verified", `The latest burn executed${l.burned ? ` (${l.burned} tokens burned)` : ""} and its rule arithmetic and memo recompute on this host; the browser check re-fetches the source.`, true);
-    return R("burned", "Burned; not yet recomputed", "The latest burn executed; its recomputation has not run on this host.", null);
+    if (failed) return R("burned", "Burned, but the recheck failed", `The latest burn went through, but working it out again does not match: ${(l.checks ?? []).join("; ")}.`, false);
+    if (l.verified) return R("burned", "Burned and verified", `The latest burn went through${l.burned ? ` and burned ${l.burned} tokens` : ""}. This site worked out its rule arithmetic and memo again, and they match. The check page fetches the source again in your browser.`, true);
+    return R("burned", "Burned, not yet rechecked", "The latest burn went through. This site has not worked it out again yet.", null);
   }
-  return R("deferred", "Burn due, execution deferred", `The latest receipt is ${l.status}${l.skippedReason ? `: ${l.skippedReason}` : ""}.`);
+  return R("deferred", "Burn due, but on hold", `The latest receipt's status is "${l.status}".${l.skippedReason ? ` The recorded reason is: ${l.skippedReason}.` : ""}`);
 }
 
 /** From the app's status.json (TokenStatusJson) and its receipts. */

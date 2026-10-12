@@ -73,7 +73,7 @@ export function lpFeeLine(cluster: string, claims: readonly Pick<LockFeeClaimFac
     treasury, treasuryPinned: !!treasury, split: { burnBps: LOCK_FEE_BURN_BPS, operatorBps: LOCK_FEE_OPERATOR_BPS },
     claims: claims?.length ?? 0, solLamports: sum("solLamports"), toOperatorLamports: sum("toOperatorLamports"), toBurnPoolLamports: sum("toBurnPoolLamports"),
     source: claims ? "keeper records" : "none",
-    note: `Every claim_lock_fees pays 20% of the LP fees' SOL side to ${operatorTreasuryRecord(cluster).who} and 80% to the coin's burn pool (fixed in code; the coin side is burned). This is operator income on top of the 25 bps curve fee above.${treasury ? "" : ` The treasury is not compiled into the ${cluster} program build yet: claims refuse (TreasuryNotPinned) and the fees stay in the lock.`}`,
+    note: `Each claim of the locked LP's fees (claim_lock_fees) pays 20% of the SOL side to ${operatorTreasuryRecord(cluster).who} and 80% to the coin's burn pool. Both shares are fixed in the code, and the coin side is burned. This is operator income on top of the 0.25% curve fee above.${treasury ? "" : ` The treasury is not built into the ${cluster} program yet. Until it is, claims are refused (TreasuryNotPinned) and the fees stay in the lock.`}`,
   };
 }
 
@@ -129,13 +129,13 @@ export function buildFeeLedgerDoc(i: { cluster: string; wallet: string | null; h
   const generatedAt = new Date(i.now ?? Date.now()).toISOString();
   const placeholders = i.expenses.items.filter((e) => e.placeholder && e.todo).map((e) => e.todo as string);
   if (!i.wallet || !i.history) {
-    return { schema: "burnticker.fee-ledger/v1", generatedAt, cluster: i.cluster, wallet: i.wallet, source: "unavailable", note: i.wallet ? `the chain could not be read: ${i.error ?? "no RPC"}` : `no developer fee wallet is pinned for ${i.cluster} yet (TODO_MAINNET_DEV_FEE_WALLET)`, balanceLamports: null, totals: { inLamports: "0", outLamports: "0", transactions: 0, complete: false }, months: [], entries: [], expenses: i.expenses, placeholders, lpFees };
+    return { schema: "burnticker.fee-ledger/v1", generatedAt, cluster: i.cluster, wallet: i.wallet, source: "unavailable", note: i.wallet ? `the chain could not be read: ${i.error ?? "no RPC"}` : `No developer fee wallet is set for ${i.cluster} yet.`, balanceLamports: null, totals: { inLamports: "0", outLamports: "0", transactions: 0, complete: false }, months: [], entries: [], expenses: i.expenses, placeholders, lpFees };
   }
   const months = groupByMonth(i.history.entries);
   const tin = months.reduce((a, m) => a + BigInt(m.inLamports), BigInt(0)), tout = months.reduce((a, m) => a + BigInt(m.outLamports), BigInt(0));
   return {
     schema: "burnticker.fee-ledger/v1", generatedAt, cluster: i.cluster, wallet: i.wallet, source: "chain",
-    note: `${i.history.entries.length} balance-changing transaction(s) of ${i.wallet}, read from the ${i.cluster} RPC${i.history.complete ? " (the whole history)" : " (the most recent 2,000 signatures; older ones are not shown)"}`,
+    note: `${i.history.entries.length} ${i.history.entries.length === 1 ? "transaction" : "transactions"} changed the balance of ${i.wallet}, read from the ${i.cluster} RPC. ${i.history.complete ? "This is the whole history." : "Only the most recent 2,000 signatures are read, so older ones are not shown."}`,
     balanceLamports: i.history.balanceLamports, totals: { inLamports: tin.toString(), outLamports: tout.toString(), transactions: i.history.entries.length, complete: i.history.complete },
     months, entries: i.history.entries, expenses: i.expenses, placeholders, lpFees,
   };

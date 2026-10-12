@@ -17,7 +17,7 @@ export async function auditRegistry(registry: Registry, o: { program: BurnProgra
   for (const t of tokens) {
     let locked;
     try { locked = registry.lockedRule(t); } catch (e) { mismatches.push({ ticker: t.ticker, eventId: "-", checks: [`rule text does not re-lock: ${(e as Error).message}`] }); continue; }
-    if (locked.sha256 !== t.rulesSha) mismatches.push({ ticker: t.ticker, eventId: "-", checks: [`stored rules_sha ${t.rulesSha} ≠ sha256 of the stored text ${locked.sha256}`] });
+    if (locked.sha256 !== t.rulesSha) mismatches.push({ ticker: t.ticker, eventId: "-", checks: [`The stored rules hash is ${t.rulesSha}, but the stored rules text hashes to ${locked.sha256}.`] });
     const readings = registry.readings(t.selectorKey, t.baselineAt).filter((r) => readingMatches(locked.rule, r));
     const rows = registry.receipts(t.mint);
     const json = buildReceiptsJson({ token: t, locked, readings, receipts: rows, attesters: registry.attesters(t.mint), state: registry.state(t.mint), feedState: registry.feedState(t.selectorKey), chain: { cluster: t.cluster, programId: o.program?.programId ?? "", supplyRaw: null, feePdaLamports: null, vaultRaw: null }, now: o.now, nextCheckAt: null, implied: null, seriesTitle: null, selectorPending: 0, operator: { can: [], cannot: [], placeholder: true }, pair: null });
@@ -28,9 +28,9 @@ export async function auditRegistry(registry: Registry, o: { program: BurnProgra
         // Program receipts carry the program's memo ("<TICKER>|<reading date>|…"); the v3 receipt memo is keyed by the event.
         const key = r.execution === "program" && r.memo ? `${r.memo.split("|").slice(0, 2).join("|")}|` : receiptKey(t.ticker, r.eventId);
         const found = await o.program.findReceiptOnChain(t.mint, key);
-        if (!found) checks.push("no receipt memo for this event found on chain");
-        else if (found.memo !== r.memo) checks.push(`memo on chain ≠ memo on the row (${found.signature.slice(0, 12)}…)`);
-        else if (r.signature && found.signature !== r.signature) checks.push(`on-chain signature ${found.signature.slice(0, 12)}… ≠ recorded ${r.signature.slice(0, 12)}…`);
+        if (!found) checks.push("No receipt memo for this event was found on chain.");
+        else if (found.memo !== r.memo) checks.push(`The memo on chain does not match the memo on the receipt. The chain transaction is ${found.signature.slice(0, 12)}…`);
+        else if (r.signature && found.signature !== r.signature) checks.push(`The signature on chain, ${found.signature.slice(0, 12)}…, does not match the recorded one, ${r.signature.slice(0, 12)}…`);
       }
       if (checks.length) mismatches.push({ ticker: t.ticker, eventId: r.eventId, checks });
     }

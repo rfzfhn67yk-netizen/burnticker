@@ -200,9 +200,9 @@ describe("GET /api/burnticker/v1/browse — venue-agnostic, Kalshi behind BURNTI
     const firstNonFeed = page.cards.findIndex((c) => c.venue !== "feed");
     assert.ok(page.counts.feeds > 0 && firstNonFeed === page.counts.feeds, "feeds come first");
     assert.equal(page.cards[0].id, "feed:treasury.debt", "in the taxonomy's order");
-    assert.equal(page.cards[0].pick.oracle, "catalogue"); assert.equal(page.cards[0].example, "burns per $1B added");
+    assert.equal(page.cards[0].pick.oracle, "catalogue"); assert.equal(page.cards[0].example, "burns for every $1B added");
     assert.ok(page.counts.kalshi > 0 && page.cards.some((c) => c.id === "kalshi:KXFEDDECISION"));
-    assert.ok(page.errors.some((e) => /^Polymarket economy/.test(e)), "a venue without data is named, the page still renders");
+    assert.ok(page.errors.some((e) => /^Polymarket's economy events could not be read/.test(e)), "a venue without data is named, the page still renders");
     const cfg = loadCopyLintConfig();
     for (const c of page.cards) assert.ok(lintCopy(c.example, cfg).ok, `${c.id}: "${c.example}"`);
     await call("/browse?category=nope", "browse", 404);
@@ -214,7 +214,7 @@ describe("GET /api/burnticker/v1/browse — venue-agnostic, Kalshi behind BURNTI
     const list = await call("/browse", "browse") as { categories: { kalshi: string[] }[]; venues: { kalshi: boolean } };
     assert.equal(list.venues.kalshi, false); assert.ok(list.categories.every((c) => c.kalshi.length === 0));
     const page = await call("/browse?category=economics", "browse") as { cards: { venue: string }[]; note: string };
-    assert.ok(page.cards.length > 0 && page.cards.every((c) => c.venue !== "kalshi")); assert.match(page.note, /not enabled/);
+    assert.ok(page.cards.length > 0 && page.cards.every((c) => c.venue !== "kalshi")); assert.match(page.note, /Kalshi is not turned on/);
     await call("/kalshi/search?q=eagles", "searchKalshi", 503);
     await call("/kalshi/events", "searchKalshiEvents", 503);
     await call("/kalshi/teams?series=KXNFLGAME", "listKalshiTeams", 503);

@@ -10,7 +10,7 @@ import { describeRule } from "@/lib/burnticker/describe";
  *   team coin   Kalshi "…GAME" series + the team's own-leg filter "-PHI"      → burns when the Eagles lose / win
  *   one game    a Kalshi game leg "KXNFLGAME-26OCT11PHIJAC-PHI"                → burns if the Eagles lose / win this game
  *   binary      any other Kalshi / Polymarket binary selector                  → burns when <title> settles YES / NO
- *   scalar      a settled number counted in units                              → burns per <unit> above / below <baseline> · <title>
+ *   scalar      a settled number counted in units                              → burns for every <unit> above / below <baseline> (<title>)
  *   feed        a first-party catalogue feed                                   → burns on the <title> feed
  */
 
@@ -18,14 +18,14 @@ const teamOf = (series: string | null, abbr: string, aliases: readonly TeamAlias
 const sideWord = (b: NonNullable<BurnRule["binary"]>): "win" | "lose" | "both" => (b.onYes && b.onNo ? "both" : b.onYes ? "win" : "lose");
 
 /**
- * NO BURN POOL IS EVER LEFT BEHIND (2026-10-10; rules.ts onEnd): a one-shot at 100 % reads "burns everything the day X happens; if it
- * doesn't, the pool burns down over four weeks after <end date>". `endDate` is the one-shot's settlement / void date when known.
+ * NO BURN POOL IS EVER LEFT BEHIND (2026-10-10; rules.ts onEnd): a one-shot at 100 % reads "burns everything if X. If not, the pool
+ * burns down over four weeks after <end date>". `endDate` is the one-shot's settlement / void date when known.
  */
 export function oneShotAllLiner(rule: BurnRule, event: string, endDate: string | null = null): string | null {
   const m = rule.kind === "binary" && rule.binary ? rule.binary.onYes ?? rule.binary.onNo : null;
   if (!m || (m.fractionOfPool ?? 0) < 1 || !(rule.market !== null || (rule.derby?.selector === "coinvs" && rule.derby.flip))) return null;
   const weeks = rule.onEnd ? (rule.onEnd.windDownDays === 28 ? "four weeks" : `${rule.onEnd.windDownDays} days`) : null;
-  return `burns everything the day ${event} happens${weeks ? `; if it doesn't, the pool burns down over ${weeks} after ${endDate ?? "it settles"}` : ""}`;
+  return `burns everything if ${event}${weeks ? `. If not, the pool burns down over ${weeks} after ${endDate ?? "it settles"}` : ""}`;
 }
 
 export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, aliases: readonly TeamAlias[] = TEAM_ALIASES, endDate: string | null = null): string {
@@ -68,7 +68,7 @@ export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, 
     const s = rule.scalar;
     const dir = s.direction === "up" ? "above" : s.direction === "down" ? "below" : "away from";
     const base = s.baseline === "previousSettlement" ? "the last settlement" : String(s.baseline);
-    return `burns per ${s.unit} ${dir} ${base}${title ? ` · ${title}` : ""}`;
+    return `burns for every ${s.unit} ${dir} ${base}${title ? ` (${title})` : ""}`;
   }
   return "burns on a settled result";
 }
@@ -94,7 +94,7 @@ function plainCore(rule: BurnRule, t: string, what: string): string {
   if (rule.oracle === "catalogue" && rule.scalar) return `Each time ${what} publishes a complete reading, $${t} ${mapWords(rule.scalar.perUnit, t)} once for every unit the source counts (compounding).`;
   if (rule.oracle === "polymarket" && rule.market && rule.kind === "binary" && rule.binary?.onYes && !rule.binary.onNo) {
     const event = what.replace(/\s*\(resolves once\)$/, "");
-    return `If ${event}, $${t} ${mapWords(rule.binary.onYes, t)} — once, when Polymarket's on-chain payout resolves the market YES. Otherwise nothing burns.`;
+    return `If ${event}, $${t} ${mapWords(rule.binary.onYes, t)}. This happens once, when Polymarket's on-chain payout resolves the market YES. Otherwise nothing burns.`;
   }
   if (rule.kind === "binary" && rule.binary) {
     const yes = rule.binary.onYes ? `When ${what} settles YES, $${t} ${mapWords(rule.binary.onYes, t)}.` : "";

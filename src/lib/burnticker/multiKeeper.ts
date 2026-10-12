@@ -154,7 +154,7 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       if (r.awaitingFinal > 0 && anchor === undefined) d.registry.setStatus(anchorKey, { since: sinceKey }, now);
       else if (r.awaitingFinal === 0 && anchor !== undefined) d.registry.setStatus(anchorKey, "", now);
       d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: now, failures: 0, lastError: null, nextFetchAt: now + pollMsFor(d, locked.rule) });
-      if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new reading(s)${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
+      if (written || r.refusals.length) d.log(`  [feed] ${key}: ${written} new ${written === 1 ? "reading" : "readings"}${r.awaitingFinal ? `, ${r.awaitingFinal} awaiting finality` : ""}${r.refusals.length ? ` · refused: ${r.refusals.slice(0, 3).join("; ")}` : ""}`);
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });
     } catch (e) {
       const msg = (e as Error).message.slice(0, 200);
@@ -206,7 +206,7 @@ export function planToken(d: KeeperDeps, t: TokenRow, locked: LockedRule, gate: 
       if (own.units > 0 && own.mapping) role = "won";
       else {
         const m = unitStep(pairMirrorRule(locked.rule), event, prev, carry);
-        if (m.units > 0 && m.mapping) { step = { ...own, units: m.units, mapping: m.mapping, note: `${own.note} · lost to $${wtb.otherTicker}: this coin's fuel for the result (${m.units} unit(s) at its own fraction) moves to $${wtb.otherTicker}'s burn pool — winner takes the burn` }; role = "lost"; }
+        if (m.units > 0 && m.mapping) { step = { ...own, units: m.units, mapping: m.mapping, note: `${/[.!?]$/.test(own.note) ? own.note : `${own.note}.`} This coin lost to $${wtb.otherTicker}, so its fuel for this result moves to $${wtb.otherTicker}'s burn pool. That is ${m.units} ${m.units === 1 ? "unit" : "units"} at this coin's own fraction. The winner takes the burn.` }; role = "lost"; }
       }
     }
     const wrote = d.registry.applyStep(t.mint, event, step, prev, locked.rule.kind === "scalar", d.now(), gatedStatus(step, gate), role);
@@ -422,13 +422,13 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
       try { named = (JSON.parse(res.landed.memo) as { events?: string[] }).events ?? []; } catch { named = []; }
       reg.setSignatureStatus(res.landed.signature, "confirmed", null, res.landed.slot);
       reg.assignReading(mint, named, D, now);
-      d.log(`  [attest] $${t.ticker} ${Ds}: an earlier submit_reading landed (${res.landed.signature.slice(0, 12)}…) — ${named.length} receipt(s) counted into it`);
+      d.log(`  [attest] $${t.ticker} ${Ds}: an earlier submit_reading landed (${res.landed.signature.slice(0, 12)}…) — ${named.length} ${named.length === 1 ? "receipt" : "receipts"} counted into it`);
       cfg = (await port.config()) ?? cfg;
       return true;
     }
     const mine = port.attesterKeys().filter((k) => cfg.attesters.some((a) => a.key === k));
-    if (mine.length < cfg.quorum) return wait(`quorum short: the program needs ${cfg.quorum} attester signature(s); this keeper holds ${mine.length}`);
-    if (d.dryRun) { d.log(`  [dry-run] $${t.ticker} ${Ds}: would attest the unit counter ${value} (${ids.length} receipt(s): ${ids.join(", ") || "baseline"})`); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "dry-run", why: `reading ${Ds} = ${value}` }); return false; }
+    if (mine.length < cfg.quorum) return wait(`Waiting for signatures. The program needs ${cfg.quorum} signer ${cfg.quorum === 1 ? "signature" : "signatures"}, and this keeper holds ${mine.length}.`);
+    if (d.dryRun) { d.log(`  [dry-run] $${t.ticker} ${Ds}: would attest the unit counter ${value} (${ids.length} ${ids.length === 1 ? "receipt" : "receipts"}: ${ids.join(", ") || "baseline"})`); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "dry-run", why: `reading ${Ds} = ${value}` }); return false; }
     // Burn Derby: the counted readings' proof hash (the Pyth update digests behind the window) goes into the signed message's proof=.
     // End-of-rule clock days: proof = sha256("clock|<date>|<rules sha256>") — date-based and deterministic, anyone recomputes it.
     const derbyProof = t.selectorKey.startsWith("derby:") ? derbyProofHash(ids.map((id) => reg.readings(t.selectorKey).find((r) => r.id === id)?.proof ?? null)) : undefined;
@@ -437,7 +437,7 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
     const tx = await port.buildReading({ recordDate: D, prevDate: cfg.hasBaseline ? cfg.lastRecordDate : 0, value, sourceUrl: counterSourceUrl(t.ticker, Ds, ids), feedId: cfg.feedId, valueDecimals: 0, ...(proofHash ? { proofHash } : {}) });
     const sim = await port.simulate(tx.raw);
     if (sim.err) {
-      if (sim.err === "QuorumNotMet") return wait("quorum short: the program did not count enough attester signatures (QuorumNotMet)");
+      if (sim.err === "QuorumNotMet") return wait("Waiting for signatures. The program did not count enough signer signatures.");
       const why = `submit_reading refused: ${sim.err}`;
       for (const b of counted) reg.noteError(mint, b.eventId, why, now + backoffMs(b.attempts), now);
       d.log(`  [attest] $${t.ticker} ${Ds}: ${why}`);
@@ -448,10 +448,10 @@ async function submitCounterReadings(d: KeeperDeps, t: TokenRow, port: ProgramPo
     try { await port.send(tx.raw); } catch (e) { d.log(`  [attest] $${t.ticker} ${Ds}: send raised ${(e as Error).message.slice(0, 120)} — the signature is on the ledger and will be resolved`); }
     const c = await port.confirm(tx);
     if (c.status === "failed") { reg.setSignatureStatus(tx.signature, "failed", c.err, null); for (const b of rows) out.push({ mint, eventId: b.eventId, outcome: "error", why: `submit_reading failed: ${c.err}` }); return false; }
-    if (c.status === "expired") return wait(`submit_reading ${tx.signature.slice(0, 12)}… not confirmed yet`);
+    if (c.status === "expired") return wait(`The reading transaction ${tx.signature.slice(0, 12)}… is not confirmed yet.`);
     reg.setSignatureStatus(tx.signature, "confirmed", null, c.slot);
     reg.assignReading(mint, ids, D, now);
-    d.log(`  [attest] $${t.ticker} ${Ds}: unit counter ${value} attested (${ids.length ? `${ids.length} receipt(s): ${ids.join(", ")}` : "baseline"}) — ${tx.signature}`);
+    d.log(`  [attest] $${t.ticker} ${Ds}: unit counter ${value} attested (${ids.length ? `${ids.length} ${ids.length === 1 ? "receipt" : "receipts"}: ${ids.join(", ")}` : "baseline"}) — ${tx.signature}`);
     cfg = (await port.config()) ?? cfg;
     return true;
   };
@@ -482,12 +482,12 @@ function recordCrank(d: KeeperDeps, t: TokenRow, cfg: ProgramConfigView, D: numb
   const reg = d.registry, mint = t.mint;
   const rows = reg.receiptsForReading(mint, D).filter((b) => b.status === "planned" || b.status === "sending");
   const units = rows.reduce((a, b) => a + b.units, 0);
-  if (rows.length && units !== rd.units) d.log(`  [program] $${t.ticker} ${formatDate(D)}: the program counted ${rd.units} unit(s), the receipts carry ${units} — the chain is the record`);
+  if (rows.length && units !== rd.units) d.log(`  [program] $${t.ticker} ${formatDate(D)}: the program counted ${rd.units} ${rd.units === 1 ? "unit" : "units"}, the receipts carry ${units} — the chain is the record`);
   const skippedReason = rd.outcome === "below-floor" ? `the program's spend was under its floor (${cfg.floorLamports} lamports) — nothing bought, the pool keeps the SOL` : rd.outcome === "no-units" ? "the program counted no units" : null;
   forwardMissingAlert(reg, t, D, rd.outcome, d.now(), d.log);
   reg.markProgramOutcome(mint, D, { signature: tx.signature, slot: tx.slot, outcome: rd.outcome, memo: tx.memo, poolLamports: rd.poolLamports, poolActualLamports: rd.poolActualLamports, spentLamports: rd.spentLamports, ruleSpendLamports: rd.ruleSpendLamports, carriedInLamports: rd.carriedInLamports, carriedOutLamports: rd.carriedOutLamports, gotRaw: rd.got, burnRaw: rd.burned > BigInt(0) ? rd.burned : BigInt(0), shortfallRaw: rd.shortfall, skippedReason }, d.now());
   const partial = [rd.spentLamports > BigInt(0) && rd.carriedOutLamports > BigInt(0) ? `SpendCapBound: ${rd.carriedOutLamports} lamports carried into the next crank` : null, rd.poolActualLamports > rd.poolLamports ? `BurnPoolCapBound: the rule applied to ${rawToTokens(rd.poolLamports, 9)} of ${rawToTokens(rd.poolActualLamports, 9)} SOL` : null].filter(Boolean).join("; ");
-  d.log(`  [crank] $${t.ticker} ${formatDate(D)}: ${adopted ? "already processed on chain — adopted" : "CRANKED"} · ${rd.outcome} · ${rd.units} unit(s) for ${rows.length} receipt(s) · spent ${rd.spentLamports} lamports, burned ${rawToTokens(rd.burned, DECIMALS)}${partial ? ` · PARTIAL — ${partial}` : ""} · ${tx.signature}`);
+  d.log(`  [crank] $${t.ticker} ${formatDate(D)}: ${adopted ? "already processed on chain — adopted" : "CRANKED"} · ${rd.outcome} · ${rd.units} ${rd.units === 1 ? "unit" : "units"} for ${rows.length} ${rows.length === 1 ? "receipt" : "receipts"} · spent ${rd.spentLamports} lamports, burned ${rawToTokens(rd.burned, DECIMALS)}${partial ? ` · PARTIAL — ${partial}` : ""} · ${tx.signature}`);
   rows.forEach((b, k) => {
     if (rd.outcome === "exhausted") out.push({ mint, eventId: b.eventId, outcome: "exhausted", why: "allocation used up" });
     else if (rd.outcome === "burned" || rd.outcome === "short") out.push({ mint, eventId: b.eventId, outcome: "confirmed", signature: tx.signature, burnRaw: k === 0 ? rd.burned : BigInt(0), adopted });
@@ -522,7 +522,7 @@ export async function pairGates(d: KeeperDeps): Promise<Map<string, { gate: Pair
         if (!d.dryRun) {
           d.registry.recordPairOutcome(pr.pairId, "live", now, "both pools registered");
           const n = d.registry.promotePendingPair(pr.mintA, now) + d.registry.promotePendingPair(pr.mintB, now);
-          d.log(`  [pair] ${pr.pairId}: LIVE — both pools registered${n ? `; ${n} pending-pair receipt(s) now planned, in settlement order` : ""}`);
+          d.log(`  [pair] ${pr.pairId}: LIVE — both pools registered${n ? `; ${n} pending-pair ${n === 1 ? "receipt" : "receipts"} now planned, in settlement order` : ""}`);
         }
       } else if (now >= voidAt) {
         gate = { state: "voided", atMs: voidAt };
@@ -530,7 +530,7 @@ export async function pairGates(d: KeeperDeps): Promise<Map<string, { gate: Pair
           const why = `pair voided: ${[!ra ? `$${ta.ticker}` : null, !rb ? `$${tb.ticker}` : null].filter(Boolean).join(" and ")} had no registered pool when ${clause.voidBy} ended (UTC)`;
           d.registry.recordPairOutcome(pr.pairId, "voided", voidAt, why);
           const n = d.registry.voidPendingPair(pr.mintA, why, now) + d.registry.voidPendingPair(pr.mintB, why, now);
-          d.log(`  [pair] ${pr.pairId}: VOIDED — ${why}${n ? `; ${n} pending-pair receipt(s) voided` : ""}; the rule has ended: both coins wind down (onEnd)`);
+          d.log(`  [pair] ${pr.pairId}: VOIDED — ${why}${n ? `; ${n} pending-pair ${n === 1 ? "receipt" : "receipts"} voided` : ""}; the rule has ended: both coins wind down (onEnd)`);
         }
       } else gate = { state: "waiting", waitingOn: [...(ra ? [] : ["A" as const]), ...(rb ? [] : ["B" as const])], voidBy: clause.voidBy };
     }
@@ -610,7 +610,7 @@ export async function planRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule
     const id = `${kind}-${date}`;
     const base = endStep(rule, kind, units);
     const role = loserOf() && base.units > 0 && base.mapping ? "lost" as const : null;
-    const step = role ? { ...base, note: `${base.note} · forwards to $${pairCtx!.other.ticker}'s burn pool — winner takes the burn` } : base;
+    const step = role ? { ...base, note: `${/[.!?]$/.test(base.note) ? base.note : `${base.note}.`} This forwards to $${pairCtx!.other.ticker}'s burn pool. The winner takes the burn.` } : base;
     if (reg.addEndReceipt(t.mint, kind, { id, at: `${date}T00:00:00Z` }, step, d.now(), role)) { out.push({ mint: t.mint, eventId: id, status: "planned" }); d.log(`  [plan] $${t.ticker} ${id}: ${step.note} → receipt planned`); }
   };
   const mine = (kind: EndReceiptKind) => reg.receipts(t.mint).filter((b) => b.kind === kind).map((b) => b.eventId.slice(kind.length + 1)).sort();

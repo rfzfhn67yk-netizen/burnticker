@@ -18,7 +18,7 @@ import { handleFromLink, JUP_SEARCH_URL, tokensFromJupiter } from "@/lib/burntic
  * output goes through the copy lint (assertClean) before it is returned.
  */
 
-export const DERBY_DISCLAIMER = "two memecoins — each rule says what its supply does, not what price does";
+export const DERBY_DISCLAIMER = "Two memecoins. Each rule says what happens to its coin's supply, never its price.";
 
 const shortSig = (s: string | null | undefined) => (s ? `${s.slice(0, 12)}…` : null);
 const pct = (f: number) => `${Math.round(f * 10_000) / 100}%`;
@@ -57,7 +57,7 @@ export function bracketRoundText(t: Pick<DerbyTournamentJson, "id" | "title" | "
   const r = t.rounds[round];
   if (!r) throw new Error(`no round ${round + 1}`);
   const ms = r.matches.filter((m) => m.a && m.b).map((m) => `${m.a!.symbol} ${m.winsA} – ${m.winsB} ${m.b!.symbol}${m.winner !== null ? ` (${m.winner === m.a!.slot ? m.a!.symbol : m.b!.symbol} advances${m.tiebreak === "cumulative" ? " on the tiebreak" : m.tiebreak === "lower-slot" ? " on the seed" : ""})` : ""}`);
-  return assertClean([`${t.title} · ${r.final ? "Final" : `Round ${round + 1}`}`, ...ms, "Losing fan coins retire: no further readings.", DERBY_DISCLAIMER].join("\n"), "the bracket round post", cfg);
+  return assertClean([`${t.title} · ${r.final ? "Final" : `Round ${round + 1}`}`, ...ms, "Losing fan coins retire and read nothing more.", DERBY_DISCLAIMER].join("\n"), "the bracket round post", cfg);
 }
 
 /** The community handles for an underlying: its X link in Jupiter's token list (by mint), when present. */

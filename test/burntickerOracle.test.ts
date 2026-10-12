@@ -129,7 +129,7 @@ describe("kalshi: back-test and implied chance", () => {
     assert.equal(b.totals.events, 2); assert.equal(b.totals.burnEvents, 1);
     assert.ok(Math.abs(b.totals.poolFractionSpent! - 0.02) < 1e-12);
     assert.deepEqual(b.perMonth.map((m) => m.month), ["2026-09", "2026-10"]);
-    assert.match(backtestSentence(b), /settled 2 time\(s\) between .* and would have spent 2\.0% of the fee pool across 1 burn\(s\)/);
+    assert.match(backtestSentence(b), /settled 2 times between .*\. Under this rule, it would have spent 2\.0% of the fee pool across 1 burn\./);
     const s = validateRule(SPX);
     const bs = backtest(s, resolveSelector(s, inx, { nowMs: NOW, sinceIso: null }).events, NOW, 12);
     assert.equal(bs.rows[0].units, 0);
@@ -138,7 +138,7 @@ describe("kalshi: back-test and implied chance", () => {
     const r = impliedChanceFrom(validateRule(DENVER_HIGH), highdenOpen, null);
     assert.equal(r.marketTicker, "KXHIGHDEN-26OCT09");
     assert.ok(r.chance! > 0.9, `chance ${r.chance} (the 10-09 ladder is priced almost entirely above 81°F)`);
-    assert.match(r.basis, /at least one unit \(1\) up 80/);
+    assert.match(r.basis, /at least one unit of 1 above 80/);
     const b = impliedChanceFrom(validateRule(BRONCOS), [{ ...nfl[0], ticker: "KXNFLGAME-26OCT12DENNYJ-DEN", seriesTicker: "KXNFLGAME", status: "active", result: "", closeTime: "2026-10-13T03:00:00Z", yesBid: 0.4, yesAsk: 0.44 }], null);
     assert.ok(Math.abs(b.chance! - 0.42) < 1e-12);
     assert.equal(impliedChanceFrom(validateRule(BRONCOS), [], null).chance, null);

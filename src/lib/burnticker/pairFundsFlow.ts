@@ -17,16 +17,16 @@ export interface FundsFlow { version: PairRuleVersion; versionLabel: string; one
 
 export const pairRuleVersion = (winnerTakesBurn: boolean): PairRuleVersion => (winnerTakesBurn ? "winner-takes-the-burn" : "separate-pools");
 
-const FEES = "Each coin's trades pay a creator fee into that coin's own burn pool; after the coin moves to its trading pool, 80% of the locked liquidity's fees join it (20% to the operator, fixed in code). A burn pool has no withdraw instruction.";
+const FEES = "Each coin's trades pay a creator fee into that coin's own burn pool. After the coin moves to its trading pool, 80% of the locked liquidity's fees join it, and 20% go to the operator, fixed in code. Nothing can be withdrawn from a burn pool.";
 
 export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b: string } = { a: "A", b: "B" }): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
   if (version === "separate-pools") return {
-    version, versionLabel: "Rule version: separate pools (pairs made before 2026-10-11; none on mainnet)",
-    oneLiner: `Each coin burns only from its own burn pool, on its own result; neither pool pays the other.`,
+    version, versionLabel: "Rule version: separate pools, for pairs made before 2026-10-11; none on mainnet",
+    oneLiner: `Each coin burns only from its own burn pool, on its own result, and neither pool pays the other.`,
     steps: [{ title: "Where fees come from", text: FEES }, { title: "Which coin burns", text: `The coin whose rule a result fires spends a share of its own pool buying itself and burns what it bought. ${A} and ${B} never share fuel.` }],
     outcomes: [{ when: "A draw or a voided result", then: "Nothing burns on either side." }],
-    never: "Nothing is paid to holders on any result; holders' balances are never touched.",
+    never: "Nothing is paid to holders on any result, and holders' balances are never touched.",
   };
   return {
     version, versionLabel: "Rule version: winner takes the burn (pairs made since 2026-10-11)",
@@ -34,14 +34,14 @@ export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b:
     steps: [
       { title: "Where fees come from", text: FEES },
       { title: "Where they go on a result", text: `The loser's burn pool sends exactly what its own rule would have spent for that result (for a one-result pair, all of it) to the winner's burn pool, in a public forward transaction with a memo.` },
-      { title: "Which coin burns", text: `Only the coin whose rule the result fired (the rule's winner, not necessarily the team that won): its normal burns spend its pool, now including the forwarded SOL, buying that coin and burning every token bought. The other coin's supply is untouched.` },
+      { title: "Which coin burns", text: `Only the coin whose rule the result fired burns. That coin is the rule's winner, which may not be the team that won. Its normal burns spend its pool, now including the forwarded SOL, buying that coin and burning every token bought. The other coin's supply is untouched.` },
     ],
     outcomes: [
-      { when: "A draw (posted only when it truly was one) or a voided result", then: "Nothing moves between the two burn pools; each coin's own rule decides its own burn for that result." },
+      { when: "A draw (posted only when it truly was one) or a voided result", then: "Nothing moves between the two burn pools. Each coin's own rule decides its own burn for that result." },
       { when: "No result 72 hours after a reading", then: "That coin burns the period as an unpaired coin, from its own pool, and the period can no longer forward." },
-      { when: "A loss is recorded but the forward does not land within 72 hours", then: "The losing coin burns that period as a plain one, and a PairForwardMissing event is published." },
-      { when: "The winner has no live trading pool", then: "Nothing moves; the fuel stays in the loser's pool and its own later burns spend it." },
+      { when: "A loss is recorded but the forward does not land within 72 hours", then: "The losing coin burns that period as a plain one, and a public event (PairForwardMissing) records the missed forward." },
+      { when: "The winner has no live trading pool", then: "Nothing moves. The fuel stays in the loser's pool, and its own later burns spend it." },
     ],
-    never: "Nothing is paid to holders on any outcome: SOL only moves between two program accounts that have no withdraw path, and holders' balances are never touched.",
+    never: "Nothing is paid to holders on any outcome. SOL only moves between two program accounts that nobody can withdraw from, and holders' balances are never touched.",
   };
 }

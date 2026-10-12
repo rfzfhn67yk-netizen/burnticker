@@ -86,7 +86,7 @@ export function gamesFromTitle(league: LeagueId, date: string, title: string): S
   for (const m of title.matchAll(GAME_RE)) {
     const [, aw, as, hm, hs, on, by, url] = m;
     const side = (abbr: string, score: string | undefined) => ({ abbr, name: teamByAbbr(league, abbr)?.name ?? abbr, score: score === undefined ? null : Number(score) });
-    out.push({ date, league, away: side(aw, as), home: side(hm, hs), source: `settled on ${on.trim()} · confirmed by ${by.trim()}`, espnUrl: /^https:\/\/www\.espn\.com\//.test(url) ? url : espnGameUrl(league, date) });
+    out.push({ date, league, away: side(aw, as), home: side(hm, hs), source: `Settled on ${on.trim()} and confirmed by ${by.trim()}.`, espnUrl: /^https:\/\/www\.espn\.com\//.test(url) ? url : espnGameUrl(league, date) });
   }
   return out;
 }
@@ -149,7 +149,7 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
   const rows = settledGames(i.league, i.readings, from, to);
   const n = inSeason.length;
   const title = `${L.label} ${label} — team coins and receipts`;
-  const description = `${L.label} ${label} on Burnticker: ${n} team coin${n === 1 ? "" : "s"} this season, each burning supply on its team's results, with a receipt per game. The scoreboard ranks coins inside the league only. Memecoins: supply, not price.`;
+  const description = `Burnticker has ${n} team coin${n === 1 ? "" : "s"} for the ${L.label} ${label} season. Each one burns supply on its team's results, with a receipt for each game. The scoreboard ranks coins inside this league only. These are memecoins, and each rule is about supply, never price.`;
   const abs = (p: string) => `${i.origin.replace(/\/$/, "")}${p}`;
   const jsonLd: Record<string, unknown>[] = [
     { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
@@ -160,7 +160,7 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
     ...rows.map((g) => ({
       "@context": "https://schema.org", "@type": "SportsEvent", name: `${g.away.name} at ${g.home.name}`, startDate: g.date, sport: SPORTS.find((s) => s.id === L.sport)!.label,
       awayTeam: { "@type": "SportsTeam", name: g.away.name }, homeTeam: { "@type": "SportsTeam", name: g.home.name },
-      ...(g.away.score !== null && g.home.score !== null ? { description: `Final: ${g.away.name} ${g.away.score}, ${g.home.name} ${g.home.score}. ${g.source}.` } : { description: g.source }),
+      ...(g.away.score !== null && g.home.score !== null ? { description: `Final score: ${g.away.name} ${g.away.score}, ${g.home.name} ${g.home.score}. ${g.source}` } : { description: g.source }),
       superEvent: { "@type": "SportsEvent", name: `${L.label} ${label}` },
     })),
   ];
@@ -183,9 +183,9 @@ export function resolveLeagueSeason(league: string, season: string): { league: L
 export function leaguePageStrings(p: LeagueSeasonPage): string[] {
   return [
     p.title, p.description, `${p.leagueLabel} ${p.seasonLabel}`, ...p.boards.flatMap((b) => [b.label, dateRange(b.from, b.to), b.leader ? `${b.leader.title} $${b.leader.ticker}` : ""]),
-    ...p.champions.map((c) => `${c.board} champion: $${c.ticker} (most receipts — a stat, not a prize)`),
-    ...p.teams.slice(0, 60).map((t) => `${t.name} · launch a coin for this team`), `Settled games · ${p.games.range}`,
-    ...p.games.rows.flatMap((g) => [`${g.away.name} ${g.away.score ?? ""} at ${g.home.name} ${g.home.score ?? ""}`, g.source, "see on ESPN →"]),
+    ...p.champions.map((c) => `$${c.ticker} had the most receipts on the ${c.board} board when the season ended. This is a stat, and nobody receives anything for it.`),
+    ...p.teams.slice(0, 60).map((t) => `${t.name}: launch a coin for this team`), `Games settled in the last seven days (${p.games.range})`,
+    ...p.games.rows.flatMap((g) => [`${g.away.name} ${g.away.score ?? ""} at ${g.home.name} ${g.home.score ?? ""}`, g.source, "See it on ESPN"]),
     ...p.jsonLd.flatMap((j) => [String(j.name ?? ""), String(j.description ?? "")]),
   ].filter(Boolean);
 }

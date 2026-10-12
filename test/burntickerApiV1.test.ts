@@ -100,7 +100,7 @@ describe("v1 read endpoints", () => {
     const fees = body.fees as { designed: { devFeeBps: number; creatorCashBps: number }; live: { found: boolean } };
     assert.equal(fees.designed.devFeeBps, 25); assert.equal(fees.designed.creatorCashBps, 0); assert.equal(fees.live.found, false);
     assert.equal(body.rpcConfigured, false);
-    assert.ok((body.cannot as string[]).some((s) => /adopt an existing token/.test(s)));
+    assert.ok((body.cannot as string[]).some((s) => /Adopt an existing token/.test(s)));
   });
   test("GET /tokens/{ticker}: the lp block (since 1.8.0) — locked forever, the Fee Key at the fee-keys PDA, the last claim_lock_fees receipt", async () => {
     const before = await call("getToken", { ticker: "DEFICIT2" });
@@ -116,7 +116,7 @@ describe("v1 read endpoints", () => {
     assert.equal(st.lp.feeKeyOwner, w.program.lockFees.feeKeysPda());
     assert.equal(st.lp.lockProgram, "DRay25Usp3YJAi7beckgpGUC7mGJ2cR1AVPxhYfwVCUX");
     assert.deepEqual([st.lp.lastClaim.sol, st.lp.lastClaim.toBurnPool, st.lp.lastClaim.toOperator], ["0.001234567", "0.000987654", "0.000246913"]);
-    assert.match(st.lp.lastClaim.line, /^LP fees claimed: 0\.001234567 SOL → 80% burn pool/);
+    assert.match(st.lp.lastClaim.line, /^0\.001234567 SOL of pool fees was claimed\. 0\.000987654 SOL \(80%\) went to the burn pool/);
     assert.match(st.lp.urls.feeKey, /^https:\/\/solscan\.io\/account\/.+\?cluster=devnet$/);
     assert.equal(st.lp.totals.claims, 1);
   });
@@ -129,7 +129,7 @@ describe("v1 read endpoints", () => {
     assert.equal(lp.operatorTreasury, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     const d = (body.fees as { designed: { lpBurnedPct: number; lpLockedPct: number } }).designed;
     assert.deepEqual([d.lpBurnedPct, d.lpLockedPct], [0, 100]);
-    assert.ok((body.statements as string[]).some((x) => /The operator earns 20% of post-graduation LP fees/.test(x)));
+    assert.ok((body.statements as string[]).some((x) => /The operator earns 20% of the LP fees after graduation\./.test(x)));
   });
   test("GET /openapi.json: the generated document", async () => {
     const { body, res } = await call("getOpenApi");
@@ -153,7 +153,7 @@ describe("v1 POST endpoints", () => {
     assert.equal(body.sha256, lockRule(BRONCOS).sha256);
     assert.ok((body.matched as number) > 0);
     const cat = await call("backtestKalshi", {}, { body: { rule: DEBT_RULE } });
-    assert.match(cat.body.sentence as string, /frozen fixture/);
+    assert.match(cat.body.sentence as string, /saved sample/);
     await call("backtestKalshi", {}, { body: { rule: { nope: 1 } }, expect: 400 });
   });
   test("POST /launch/bundle: unsigned base64 transactions + the wizard's review; the caller's mint, no secret; creator = the burn program's fee PDA", async () => {

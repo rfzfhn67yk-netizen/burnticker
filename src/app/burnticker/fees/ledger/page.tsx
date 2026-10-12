@@ -35,24 +35,24 @@ export default function FeeLedgerPage() {
         <p className="text-neutral-300">{LEDGER_COPY.intro}</p>
       </header>
       {err && <p className="text-red-400">{err}</p>}
-      {!l && !err && <p className="text-neutral-400">Loading…</p>}
+      {!l && !err && <p className="text-neutral-400">Loading the ledger…</p>}
       {l && <>
         <section className={card}>
-          <p className="text-xs">{LEDGER_COPY.walletLine} {l.wallet ? <a className="underline break-all" href={explorer(l.wallet, "address")}><code>{l.wallet}</code></a> : <span className="text-amber-400">TODO</span>} · {l.cluster} · balance now {sol(l.balanceLamports)} SOL</p>
+          <p className="text-xs">{LEDGER_COPY.walletLine} {l.wallet ? <><a className="underline break-all" href={explorer(l.wallet, "address")}><code>{l.wallet}</code></a>.</> : <span className="text-amber-400">not set yet.</span>} It is on {l.cluster}. {l.balanceLamports === null ? "Its balance could not be read." : `Its balance now is ${sol(l.balanceLamports)} SOL.`}</p>
           {l.cluster === "devnet" && <p className="text-xs text-amber-300 mt-1">{LEDGER_COPY.devnetNote}</p>}
-          <p className="text-xs text-neutral-500 mt-1">{l.note} · generated {l.generatedAt}{l.served ? ` · ${l.served}` : ""}</p>
+          <p className="text-xs text-neutral-500 mt-1">{l.note}{/[.!?]$/.test(l.note) ? "" : "."} This copy was generated at {l.generatedAt}.{l.served ? ` ${l.served}` : ""}</p>
           {l.source === "unavailable" && <p className="text-xs text-amber-400 mt-1">{LEDGER_COPY.unavailable}</p>}
         </section>
         <section className={card}>
           <h2 className="font-medium">{LEDGER_COPY.incomeTitle}</h2>
-          {l.months.length === 0 ? <p className="text-xs text-neutral-500">none</p> : <div className="overflow-x-auto"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Month (UTC)</th><th className="p-2 text-right">Received SOL</th><th className="p-2 text-right">Sent SOL</th><th className="p-2 text-right">Transactions in / out</th></tr></thead>
+          {l.months.length === 0 ? <p className="text-xs text-neutral-500">The wallet has no transactions yet.</p> : <div className="overflow-x-auto"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Month (UTC)</th><th className="p-2 text-right">Received SOL</th><th className="p-2 text-right">Sent SOL</th><th className="p-2 text-right">Transactions in / out</th></tr></thead>
             <tbody>{l.months.map((m) => <tr key={m.month} className="border-t border-neutral-800"><td className="p-2">{m.month}</td><td className="p-2 text-right tabular-nums">{sol(m.inLamports)}</td><td className="p-2 text-right tabular-nums">{sol(m.outLamports)}</td><td className="p-2 text-right">{m.txIn} / {m.txOut}</td></tr>)}
               <tr className="border-t border-neutral-700 font-medium"><td className="p-2">total</td><td className="p-2 text-right tabular-nums">{sol(l.totals.inLamports)}</td><td className="p-2 text-right tabular-nums">{sol(l.totals.outLamports)}</td><td className="p-2 text-right">{l.totals.transactions}{l.totals.complete ? "" : " (partial)"}</td></tr></tbody></table></div>}
         </section>
         {l.lpFees && <section className={card} aria-label="Operator LP-fee line">
           <h2 className="font-medium">{l.lpFees.title}</h2>
           <p className="text-xs text-neutral-300">{l.lpFees.note}</p>
-          <p className="text-xs mt-1">Operator treasury: {l.lpFees.treasury ? <a className="underline break-all" href={explorer(l.lpFees.treasury, "address")}><code>{l.lpFees.treasury}</code></a> : <span className="text-amber-400">not pinned on this cluster</span>} · {l.lpFees.claims} claim(s) · {sol(l.lpFees.solLamports)} SOL of LP fees claimed: {sol(l.lpFees.toOperatorLamports)} SOL to the operator ({l.lpFees.split.operatorBps / 100}%), {sol(l.lpFees.toBurnPoolLamports)} SOL to burn pools ({l.lpFees.split.burnBps / 100}%) · source: {l.lpFees.source}</p>
+          <p className="text-xs mt-1">The operator treasury {l.lpFees.treasury ? <>is <a className="underline break-all" href={explorer(l.lpFees.treasury, "address")}><code>{l.lpFees.treasury}</code></a>.</> : <span className="text-amber-400">is not set on this network yet.</span>} There {l.lpFees.claims === 1 ? "has been 1 claim" : `have been ${l.lpFees.claims} claims`}, for {sol(l.lpFees.solLamports)} SOL of liquidity-pool fees. Of that, {sol(l.lpFees.toOperatorLamports)} SOL ({l.lpFees.split.operatorBps / 100}%) went to the operator and {sol(l.lpFees.toBurnPoolLamports)} SOL ({l.lpFees.split.burnBps / 100}%) went to burn pools. {l.lpFees.source === "keeper records" ? "These figures come from the keeper's records." : "No claim records are available yet."}</p>
         </section>}
         <section className={card}>
           <h2 className="font-medium">{LEDGER_COPY.expensesTitle}</h2>
@@ -64,9 +64,9 @@ export default function FeeLedgerPage() {
         {l.entries.length > 0 && <section className={card}>
           <h2 className="font-medium">{LEDGER_COPY.entriesTitle}</h2>
           <div className="overflow-x-auto"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Time (UTC)</th><th className="p-2">Direction</th><th className="p-2 text-right">SOL</th><th className="p-2">Counterparty</th><th className="p-2">Transaction</th></tr></thead>
-            <tbody>{l.entries.map((e) => <tr key={e.signature} className="border-t border-neutral-800"><td className="p-2">{e.blockTime ?? "—"}</td><td className="p-2">{e.direction}{e.err ? " (failed tx: fee only)" : ""}</td><td className="p-2 text-right tabular-nums">{sol(e.deltaLamports.replace("-", ""))}</td><td className="p-2 break-all"><code>{e.counterparty ?? "—"}</code></td><td className="p-2"><a className="underline" href={explorer(e.signature, "tx")}><code>{e.signature.slice(0, 12)}…</code></a></td></tr>)}</tbody></table></div>
+            <tbody>{l.entries.map((e) => <tr key={e.signature} className="border-t border-neutral-800"><td className="p-2">{e.blockTime ?? "—"}</td><td className="p-2">{e.direction}{e.err ? " (the transaction failed, so only the fee moved)" : ""}</td><td className="p-2 text-right tabular-nums">{sol(e.deltaLamports.replace("-", ""))}</td><td className="p-2 break-all"><code>{e.counterparty ?? "—"}</code></td><td className="p-2"><a className="underline" href={explorer(e.signature, "tx")}><code>{e.signature.slice(0, 12)}…</code></a></td></tr>)}</tbody></table></div>
         </section>}
-        <p className="text-xs text-neutral-500">{LEDGER_COPY.regenerated} JSON: <code>/api/burnticker/v1/fees/ledger</code>.</p>
+        <p className="text-xs text-neutral-500">{LEDGER_COPY.regenerated} The same data is available as JSON at <code>/api/burnticker/v1/fees/ledger</code>.</p>
       </>}
     </main>
   );

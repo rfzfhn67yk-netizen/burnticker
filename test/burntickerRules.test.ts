@@ -94,7 +94,7 @@ describe("units: the engine", () => {
     const r = validateRule(SPX);
     const steps = unitSteps(r, [ev("D1", "2026-10-06T23:01:00Z", null, "7700.10"), ev("D2", "2026-10-07T23:01:00Z", null, "7731.09"), ev("D3", "2026-10-08T23:01:00Z", null, "7765.36"), ev("D4", "2026-10-09T23:01:00Z", null, "7700")]);
     assert.deepEqual(steps.map((x) => x.step.units), [0, 3, 3, 0]);
-    assert.equal(steps[0].step.note, "baseline: the first settlement is recorded; nothing is burned for it");
+    assert.equal(steps[0].step.note, "This first settlement is recorded as the starting point, so nothing is burned for it.");
     assert.equal(steps[1].step.baseline, "7700.10");
     assert.equal(steps[3].step.kind, "down");
     const t = previewTotals(steps);

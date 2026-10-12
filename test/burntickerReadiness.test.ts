@@ -19,11 +19,11 @@ describe("readinessOf: one state per situation", () => {
   });
   test("each of the seven states, in order", () => {
     const cases: [ReadinessInput, string, RegExp][] = [
-      [{ ...base, launched: false }, "not-launched", /No mint is registered/],
+      [{ ...base, launched: false }, "not-launched", /No coin is registered/],
       [base, "on-curve", /12\.35 of 85 SOL raised.*nothing can burn before the curve graduates.*seed gift/],
-      [{ ...base, raisedSol: null, phase: null }, "on-curve", /SOL raised: unavailable on this host/],
+      [{ ...base, raisedSol: null, phase: null }, "on-curve", /could not read the curve, so the SOL raised is not shown/],
       [{ ...base, phase: "graduated" }, "awaiting-registration", /register_pool/],
-      [{ ...base, phase: "graduated", poolVerified: null }, "awaiting-registration", /could not be read on this host/],
+      [{ ...base, phase: "graduated", poolVerified: null }, "awaiting-registration", /could not read the program/],
       [{ ...base, poolVerified: true }, "awaiting-event", /No reading has been published since the pool was verified/],
       [{ ...base, poolVerified: true, latest: { status: "nothing", units: 0, skippedReason: null, waitReason: null, readingDate: "2026-10-20" } }, "awaiting-event", /counted no units/],
       [{ ...base, poolVerified: true, latest: { status: "skipped", units: 2, skippedReason: "the program's spend was under its floor (5000000 lamports) — nothing bought", waitReason: null } }, "below-floor", /spend floor/],
@@ -38,7 +38,7 @@ describe("readinessOf: one state per situation", () => {
       assert.doesNotMatch(r.detail, /^\s*0\s*$/); clean(`${r.label}. ${r.detail}`, state);
     }
     assert.equal(readinessOf(cases[9][0]).ok, true); assert.equal(readinessOf(cases[10][0]).ok, false);
-    assert.equal(readinessOf({ ...base, poolVerified: true, latest: { status: "confirmed", units: 1, skippedReason: null, waitReason: null } }).label, "Burned; not yet recomputed", "never a bare tick");
+    assert.equal(readinessOf({ ...base, poolVerified: true, latest: { status: "confirmed", units: 1, skippedReason: null, waitReason: null } }).label, "Burned, not yet rechecked", "never a bare tick");
     assert.equal(readinessOf({ ...base, poolVerified: null, latest: { status: "confirmed", units: 1, skippedReason: null, waitReason: null, verified: true, checks: [] } }).state, "burned", "a confirmed burn implies a verified pool");
   });
   test("readinessFromStatus reads the app's status.json: a draft is not launched; curve raised/threshold; the program's pool flag; the newest receipt", () => {
@@ -59,7 +59,7 @@ describe("where the state is shown", () => {
     assert.match(fs.readFileSync("src/lib/burnKeeper/statusPage.ts", "utf8"), /readiness: \(\(\) => \{[\s\S]*readinessOf\(/);
     const site = fs.readFileSync("site/deficit/index.html", "utf8");
     assert.match(site, /id="readiness" data-readiness="not-launched"/); assert.match(site, /s\.readiness && s\.readiness\.label/);
-    assert.match(site, new RegExp(`" of ${READINESS_ORDER.length} · where`), "the static step count equals the state list");
+    assert.match(site, new RegExp(`" of ${READINESS_ORDER.length} toward a first burn`), "the static step count equals the state list");
     assert.match(site, /Nothing burns until the curve fills and the debt rises/);
   });
 });

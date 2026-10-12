@@ -71,8 +71,8 @@ export function renderEmbedHtml(b: BadgeJson, nowMs: number): string {
   const n = nextLine(b, nowMs);
   const title = b.kind === "coin" ? `$${b.ticker} receipts · Burnticker` : `$${b.a.ticker} vs $${b.b.ticker} receipts · Burnticker`;
   const next = n.at
-    ? `next settlement <b data-at="${esc(n.at)}">${esc(n.lead)}</b> · <span data-local="${esc(n.at)}">${esc(n.utc!)}</span> <span class="note">(${esc(n.note)})</span>`
-    : `next settlement: <b>${esc(n.lead)}</b>`;
+    ? `The next settlement is <b data-at="${esc(n.at)}">${esc(n.lead)}</b>, at <span data-local="${esc(n.at)}">${esc(n.utc!)}</span>. <span class="note">That time is ${esc(n.note)}.</span>`
+    : `<b>${n.lead === "resolves once" ? "This rule resolves once." : "No result is scheduled."}</b> There is no next settlement time to show.`;
   return [
     "<!doctype html>",
     `<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">`,

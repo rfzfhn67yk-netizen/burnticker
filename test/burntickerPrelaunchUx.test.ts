@@ -21,13 +21,13 @@ test("BT-10: the Derby creation CTA and the app header's Launch follow the launc
 
 test("BT-16: each homepage module carries a readable evidence-state label; 1% and 2% are explained where each appears", () => {
   // site audit #7 (2026-10-11) removed the illustrative modules (ticker tape, sample receipt, sample boards); the three that remain keep theirs
-  for (const [label, n] of [["st ver\">Verified devnet", 1], ["st rep\">Historical replay", 1], ["st pro\">Proposed mainnet rule · not launched", 1]] as const)
+  for (const [label, n] of [["st ver\">Verified devnet", 1], ["st rep\">Historical replay", 1], ["st pro\">Proposed mainnet rule, not launched", 1]] as const)
     assert.ok((home.match(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length >= n, label);
   assert.doesNotMatch(home, /Illustrative example/, "no illustrative module left without its label");
   assert.match(home, /\.st\{display:inline-block;margin:0 0 8px;font:700 \.75rem/, "labels at a readable size (≥ 12 px)");
   assert.match(home, /This rehearsal coin spent 1% of its burn pool for each \$1 billion unit\. The rule proposed for mainnet spends 2%\./);
   assert.match(home, /The devnet rehearsal coin ran the same rule text at 1% per unit/);
-  assert.match(read("src/app/burnticker/_components/BurnMath.tsx"), /that rehearsal coin ran 1% of the burn pool per unit; the proposed mainnet \$DEFICIT rule is 2%/);
+  assert.match(read("src/app/burnticker/_components/BurnMath.tsx"), /That rehearsal coin spent 1% of the burn pool per unit, and the rule proposed for \$DEFICIT on mainnet is 2%/);
 });
 
 test("BT-17: the intro leads with three plain steps", () => {

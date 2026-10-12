@@ -70,7 +70,7 @@ describe("the forward amount (the program's rule)", () => {
     assert.equal(memo, "CHIEFS|forward|from=So1111111111|to=TokenkegQfeZ|period=2026-10-04|lamports=99600000|v1");
     assert.deepEqual(parseForwardMemo(memo), { prefix: "CHIEFS", from: "So1111111111", to: "TokenkegQfeZ", period: "2026-10-04", lamports: B(99_600_000) });
     assert.equal(parseForwardMemo(memo.replace("|v1", "|v2")), null);
-    assert.equal(forwardLine("CHIEFS", "BRONCOS", B(99_600_000)), "forwarded from $CHIEFS: 0.0996 SOL → $BRONCOS burn pool");
+    assert.equal(forwardLine("CHIEFS", "BRONCOS", B(99_600_000)), "$CHIEFS forwarded 0.0996 SOL to the $BRONCOS burn pool.");
     const [lo, hi] = sortPairMints(winner, loser);
     assert.equal(Buffer.compare(new PublicKey(lo).toBuffer(), new PublicKey(hi).toBuffer()), -1);
     assert.equal(Object.keys(PAIR_ERRORS).length, 23);
@@ -155,9 +155,9 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     assert.equal(port.results.size, 2);
     assert.ok([...port.results.values()].every((r) => r.forwarded));
     // the forward for a period lands before the winner's crank for it (losers execute first)
-    const iFwd = logs.findIndex((l) => l.includes("forwarded from $BRONCOS")), iCrank = logs.findIndex((l) => /\$CHIEFS 2026-09-28: CRANKED/.test(l));
+    const iFwd = logs.findIndex((l) => l.includes("$BRONCOS forwarded")), iCrank = logs.findIndex((l) => /\$CHIEFS 2026-09-28: CRANKED/.test(l));
     assert.ok(iFwd >= 0 && iCrank >= 0 && iFwd < iCrank, `forward ${iFwd} before the winner's crank ${iCrank}`);
-    assert.ok(logs.some((l) => /forwarded from \$BRONCOS: [0-9.]+ SOL → \$CHIEFS burn pool/.test(l)));
+    assert.ok(logs.some((l) => /\$BRONCOS forwarded [0-9.]+ SOL to the \$CHIEFS burn pool\./.test(l)));
     // a second cycle changes nothing (idempotent)
     await runCycle(deps);
     assert.equal(reg.pairForwards(pairId).length, 2); assert.equal(port.forwards, 2);
@@ -236,7 +236,7 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     for (const f of fw) assert.equal(program.fake(f.loserMint).feeLamports <= fee0[f.loserMint], true);
     const kinds = reg.alertsSince(0).map((x) => x.kind);
     assert.ok(!kinds.includes("pair-result-draw") && !kinds.includes("pair-forward-missing"));
-    assert.ok(logs.some((l) => /0 SOL → \$\w+ burn pool \(nothing to move/.test(l)));
+    assert.ok(logs.some((l) => /forwarded 0 SOL to the \$\w+ burn pool\. There was nothing to move/.test(l)));
   });
 
   test("r2: a win that cannot be recorded (PairResultNotServable) raises an alert and posts NO draw; without a result the period waits, then cranks unpaired after 72 h", async () => {
@@ -268,7 +268,7 @@ describe("a Broncos pair through the keeper (winner takes the burn)", () => {
     assert.ok(f && f !== "none"); assert.equal(f.lamports, B(0)); assert.match(f.memo!, /\|lamports=0\|v1$/);
     assert.deepEqual([fa.readings.get(D)!.processed, fa.readings.get(D)!.outcome], [true, "forwarded"]);
     assert.equal(fa.feeLamports, fee0, "nothing left the loser's pool");
-    assert.match(forwardLine("BRONCOS", "CHIEFS", B(0)), /0 SOL → \$CHIEFS burn pool \(nothing to move/);
+    assert.match(forwardLine("BRONCOS", "CHIEFS", B(0)), /forwarded 0 SOL to the \$CHIEFS burn pool\. There was nothing to move/);
   });
 
   test("r2: a forward that cannot land alerts pair-forward-pending well inside 72 h; past 72 h the planner plans the paired buyback (PairForwardMissing) and pair-forward-missing fires", async () => {
@@ -530,7 +530,7 @@ describe("the devnet pair-6 run (2026-10-11 evidence): the receipt line, the for
     const memo = /Memo \(len \d+\): "(.*)"$/.exec(logs.find((l) => l.includes("|forward|"))!)![1];
     const f = parseForwardMemo(memo)!;
     assert.deepEqual([f.prefix, f.period, f.lamports], ["PCLB", "2026-10-11", B(79_306_876)]);
-    assert.equal(forwardLine("PCLB", "PCLA", f.lamports), "forwarded from $PCLB: 0.079306876 SOL → $PCLA burn pool");
+    assert.equal(forwardLine("PCLB", "PCLA", f.lamports), "$PCLB forwarded 0.079306876 SOL to the $PCLA burn pool.");
   });
   test("PairResultSubmitted is read from the program's own 'Program data:' log line (not a self-CPI)", () => {
     const r = j("pair6-pair-result-20261011.json");
@@ -593,7 +593,7 @@ describe("the pair page states the attester fact plainly (pair-forward re-check)
     assert.equal(soleAttester(st(["K"]), st(["K"])), true);
     assert.equal(soleAttester(st(["K", "X"], 2), st(["K"])), false);
     assert.equal(soleAttester(st(["K"]), st(["J"])), false);
-    assert.equal(PAIR_SOLE_ATTESTER_LINE, "Whoever holds the common attester quorum decides every result; on Burnticker that is the operator's keeper alone at quorum 1.");
+    assert.equal(PAIR_SOLE_ATTESTER_LINE, "Whoever controls the signing keys the two coins share decides every result. On Burnticker, that is one key, run by the operator's keeper, and no second signature is needed.");
     assert.deepEqual(lintCopy(PAIR_SOLE_ATTESTER_LINE, loadCopyLintConfig()).hits, []);
   });
 });

@@ -31,8 +31,8 @@ export function FieldHelp({ id }: { id: string }) {
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPinned(!pinned || !open); setOpen(!(pinned && open)); }}><span aria-hidden="true" className="select-none before:content-['?']" /></button>
       <span id={tipId} role="tooltip" hidden={!open}
         className="absolute left-0 top-5 z-50 w-64 max-w-[80vw] rounded-md border border-neutral-700 bg-neutral-950 p-2 text-left text-xs font-normal normal-case tracking-normal text-neutral-200 shadow-lg">
-        <span className="block"><b className="text-amber-300">Enter:</b> {h.what}</span>
-        <span className="mt-1 block"><b className="text-amber-300">Does:</b> {h.does}</span>
+        <span className="block"><b className="text-amber-300">What to enter:</b> {h.what}</span>
+        <span className="mt-1 block"><b className="text-amber-300">What it does:</b> {h.does}</span>
       </span>
     </span>
   );

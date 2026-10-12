@@ -17,7 +17,7 @@
     },
     "firstBurnPath": {
       "doc": "docs/burnticker/FIRST-BURN-PATH.md",
-      "line": "Nothing burns until the curve fills and the debt rises: $DEFICIT must graduate at 85 SOL raised and have its pool registered and verified before a Treasury reading with at least one full $1B unit can start a burn."
+      "line": "Nothing burns until the curve fills and the debt rises. $DEFICIT first has to graduate at 85 SOL raised, and its pool has to be registered and verified. Only then can a Treasury reading with at least one full $1B unit start a burn."
     }
   },
   "demo": {
@@ -25,11 +25,11 @@
     "ticker": "DEFICIT",
     "recordDate": "2026-10-06",
     "evidence": "docs/burnkeeper/evidence/devnet-2026-10-10/burns.json",
-    "summary": "Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06: 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool; one crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT and every token bought was burned in the same transaction; the rest carried to the next crank."
+    "summary": "Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06, which is 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool. One crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT. Every token bought was burned in the same transaction, and the rest carried over to the next crank."
   },
   "phase": {
     "label": "pre-launch (mainnet programs deployed)",
-    "line": "Pre-launch: both programs are deployed on mainnet (2026-10-11) with the Squads vault as upgrade authority and the LaunchLab platform configured; no coin is launched on mainnet yet; creator launches are closed."
+    "line": "Burnticker is in pre-launch. Both programs were deployed on mainnet on 2026-10-11, with the Squads vault as upgrade authority, and the LaunchLab platform is set up. No coin is launched on mainnet yet. Creator launches are closed."
   },
   "networks": {
     "devnet": {
@@ -49,7 +49,7 @@
     {
       "name": "burn_receipts",
       "version": "pair-forward round 3 build",
-      "note": "winner-takes-the-burn round 3 (terminal-only unlink evidence, shared attester set) with the mainnet pins compiled; the end-of-rule sink (round 4) is not built",
+      "note": "the winner-takes-the-burn round 3 build, with terminal-only unlink evidence, a shared attester set and the mainnet pins compiled in. The end-of-rule sink (round 4) is not built.",
       "mainnetDeploy": {
         "date": "2026-10-11",
         "slot": 455814493,
@@ -61,7 +61,7 @@
     {
       "name": "pair_curve",
       "version": "pair-forward round 3 build",
-      "note": "pair launches stay off on mainnet (BURNTICKER_PAIR_CURVE_ENABLED)",
+      "note": "pair launches stay switched off on mainnet",
       "mainnetDeploy": {
         "date": "2026-10-11",
         "slot": 455815136,
@@ -75,13 +75,13 @@
     "mainnet": {
       "plannedTimeLockSecs": 172800,
       "plannedFrom": "around 2026-10-23",
-      "why": "Owner decision 2026-10-11 (LAUNCHPAD-PATH §46 addendum): the mainnet vault's time lock stays at 0 during launch week so deploy and config fixes are not delayed; it is to be raised to 48 h afterwards. Until then a 2-of-3 vote can act at once.",
-      "keyControl": "3 keys, 2 controllers: the owner holds members A and B (two of the three keys), so the owner alone meets the 2-of-3 threshold; member C is a third party who is not named yet. The third key adds no independent approval while the owner holds two."
+      "why": "The owner decided on 2026-10-11 to keep the mainnet vault's time lock at 0 during launch week, so that deploy and config fixes are not delayed. It is to be raised to 48 h after that. Until then, a 2-of-3 vote can act at once.",
+      "keyControl": "The vault has three keys but only two controllers. The owner holds members A and B, which are two of the three keys, so the owner alone meets the 2-of-3 threshold. Member C is a third party who is not named yet. While the owner holds two keys, the third key adds no independent approval."
     },
     "devnet": {
       "plannedTimeLockSecs": 60,
       "plannedFrom": null,
-      "why": "Rehearsal vault: 60 s."
+      "why": "This is the rehearsal vault, with a 60 s time lock."
     }
   },
   "attesters": {
@@ -92,52 +92,52 @@
         "independent": false
       }
     ],
-    "line": "One operator attester signs every reading (quorum 1). No independent second attester is live; one operator reading two websites is still one signing authority."
+    "line": "One signer, run by the operator, signs every reading. There is no independent second signer yet. One operator reading two websites is still only one signer."
   },
   "settlement": [
     {
       "category": "Economics: U.S. national debt ($DEFICIT)",
-      "primary": "U.S. Treasury, Debt to the Penny (daily)",
-      "check": "FRED GFDEBTN — a quarterly series: it is compared at quarter ends only, so it cannot confirm each daily change",
+      "primary": "the U.S. Treasury's Debt to the Penny, published daily",
+      "check": "FRED GFDEBTN, a quarterly series. It is compared at quarter ends only, so it cannot confirm each daily change",
       "status": "in use on devnet"
     },
     {
       "category": "Economics: CPI, unemployment",
-      "primary": "BLS",
-      "check": "FRED (same series, a second publisher)",
-      "status": "built; no live coin"
+      "primary": "the Bureau of Labor Statistics (BLS)",
+      "check": "FRED, a second publisher of the same series",
+      "status": "built, with no live coin yet"
     },
     {
       "category": "Weather",
-      "primary": "NWS daily climate report",
-      "check": "Iowa Environmental Mesonet",
-      "status": "built; no live coin"
+      "primary": "the NWS daily climate report",
+      "check": "the Iowa Environmental Mesonet",
+      "status": "built, with no live coin yet"
     },
     {
       "category": "Sports (team coins, matchups)",
-      "primary": "the game's Polymarket on-chain payout where a moneyline market exists, else TheSportsDB's licensed final score",
-      "check": "the league's own free feed (MLB, NHL, NBA) or the other of the two; no ESPN reads",
-      "status": "available: the TheSportsDB licence key is configured on the host (2026-10-11)"
+      "primary": "the game's Polymarket on-chain payout where a moneyline market exists, or else TheSportsDB's licensed final score",
+      "check": "the league's own free feed (MLB, NHL, NBA), or whichever of the two was not the main source. ESPN is never read",
+      "status": "available, since the TheSportsDB licence key was set up on the host on 2026-10-11"
     },
     {
       "category": "Elections, one-shot results",
-      "primary": "Polymarket's on-chain payout (Conditional Tokens on Polygon)",
+      "primary": "Polymarket's on-chain payout, made through Conditional Tokens on Polygon",
       "check": "the state's certified result",
-      "status": "built; no live coin"
+      "status": "built, with no live coin yet"
     }
   ],
   "reviews": [
     {
       "id": "claude-blind-1-3",
       "report": "docs/burnticker/reviews/",
-      "label": "three blind Claude reviews of burn_receipts (2026-10-09/10)",
+      "label": "three blind Claude reviews of the program that records burns, 2026-10-09 and 2026-10-10",
       "findings": [
         {
           "id": "all",
           "severity": "High–Info",
           "title": "every finding",
-          "fix": "fixed or documented (docs/burn-receipts/CHANGELOG.md)",
-          "recheck": "re-checked (blind review 3's re-check)",
+          "fix": "fixed or documented in docs/burn-receipts/CHANGELOG.md",
+          "recheck": "re-checked by blind review 3",
           "deployed": "devnet"
         }
       ]
@@ -145,14 +145,14 @@
     {
       "id": "pair-curve-blind-1-2",
       "report": "docs/burnticker/reviews/2026-10-10-pair-curve-recheck.md",
-      "label": "two blind reviews of pair_curve (2026-10-10)",
+      "label": "two blind reviews of the program that runs pair launches, 2026-10-10",
       "findings": [
         {
           "id": "Highs",
           "severity": "High",
-          "title": "close_pair / pre-funded vault / executable developer wallet",
-          "fix": "fixed (fa8627a4, residuals fcda14eb)",
-          "recheck": "re-checked; residuals spot-checked on devnet",
+          "title": "closing a pair, a pre-funded vault and an executable developer wallet",
+          "fix": "fixed in fa8627a4, with the leftovers fixed in fcda14eb",
+          "recheck": "re-checked, with the leftovers spot-checked on devnet",
           "deployed": "devnet"
         }
       ]
@@ -160,7 +160,7 @@
     {
       "id": "lp-lock-blind",
       "report": "docs/burnticker/reviews/2026-10-11-lp-lock-blind.md",
-      "label": "LP-lock release (2026-10-11)",
+      "label": "the LP-lock release, 2026-10-11",
       "findings": [
         {
           "id": "RL-2",
@@ -183,7 +183,7 @@
     {
       "id": "pair-forward",
       "report": "docs/burnticker/reviews/2026-10-11-pair-forward-recheck.md",
-      "label": "winner-takes-the-burn release and its re-check (2026-10-11)",
+      "label": "the winner-takes-the-burn release and its re-check, 2026-10-11",
       "findings": [
         {
           "id": "H-1",
@@ -222,15 +222,15 @@
     {
       "id": "chatgpt-2",
       "report": "docs/burnticker/reviews/2026-10-11-chatgpt-pr-review-2-response.md",
-      "label": "second ChatGPT/Codex review (2026-10-11)",
+      "label": "the second ChatGPT and Codex review, 2026-10-11",
       "findings": [
         {
           "id": "F1–F4, F6",
           "severity": "P1–P2",
-          "title": "keeper fence, pair scan, launch verification, sent-signature retention, pair sentence",
+          "title": "the keeper fence, the pair scan, launch verification, keeping sent signatures and the pair sentence",
           "fix": "fixed in code",
           "recheck": "not re-checked",
-          "deployed": "web/keeper code; host deployment not verified here"
+          "deployed": "in the web and keeper code; the host deployment is not verified here"
         },
         {
           "id": "F5",
@@ -245,7 +245,7 @@
     {
       "id": "chatgpt-3",
       "report": "docs/burnticker/reviews/2026-10-11-chatgpt-review-3-response.md",
-      "label": "third ChatGPT/Codex review (2026-10-11)",
+      "label": "the third ChatGPT and Codex review, 2026-10-11",
       "findings": [
         {
           "id": "F1",
@@ -253,7 +253,7 @@
           "title": "an unreadable ProgramData account read as 'no upgrade authority'; a failed mainnet lookup as 'not deployed'",
           "fix": "fixed in code (website-4)",
           "recheck": "not re-checked",
-          "deployed": "web code; host deployment not verified here"
+          "deployed": "in the web code; the host deployment is not verified here"
         }
       ]
     }
@@ -261,62 +261,62 @@
   "releaseRequirements": [
     {
       "id": "mainnet-deploy",
-      "text": "Deploy both programs on mainnet with the Squads vault as upgrade authority (done 2026-10-11: docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json)",
+      "text": "Deploy both programs on mainnet with the Squads vault as upgrade authority. This was done on 2026-10-11; the record is docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json.",
       "status": "done",
       "derivedFromChain": "mainnet-deployment"
     },
     {
       "id": "rehearsal-mainnet",
-      "text": "$REHEARSAL on mainnet: the first real burn",
+      "text": "Make the first real burn on mainnet with $REHEARSAL.",
       "status": "open"
     },
     {
       "id": "second-attester",
-      "text": "An independent second attester, before strangers launch",
+      "text": "Add an independent second signer before strangers can launch.",
       "status": "open"
     },
     {
       "id": "end-sink",
-      "text": "End-of-rule sink (program round 4), built and reviewed, before creator launches open",
+      "text": "Build and review the end-of-rule sink (program round 4) before creator launches open.",
       "status": "open"
     },
     {
       "id": "r3-recheck",
-      "text": "Independent re-check of pair-forward round 3, before pairs run on mainnet",
+      "text": "Get an independent re-check of pair-forward round 3 before pairs run on mainnet.",
       "status": "open"
     },
     {
       "id": "time-lock",
-      "text": "Raise the mainnet Squads time lock from 0 to 48 h (planned around 2026-10-23)",
+      "text": "Raise the mainnet Squads time lock from 0 to 48 h. This is planned for around 2026-10-23.",
       "status": "open",
       "derivedFromChain": "mainnet-time-lock"
     },
     {
       "id": "sports-licence",
-      "text": "Link the TheSportsDB licence key (sports settlement) — done 2026-10-11: the key is configured on the mainnet host",
+      "text": "Set up the TheSportsDB licence key for sports settlement. This was done on 2026-10-11, and the key is set on the mainnet host.",
       "status": "done"
     },
     {
       "id": "docker-build",
-      "text": "Reproduce the verified build in solana-verify's Docker image",
+      "text": "Reproduce the verified build in solana-verify's Docker image.",
       "status": "open"
     },
     {
       "id": "signed-statement",
-      "text": "The operator's signed statement from the developer-fee wallet",
+      "text": "Sign the operator's statement with the developer fee wallet.",
       "status": "open"
     },
     {
       "id": "mainnet-pins",
-      "text": "Compile the mainnet pins (operator treasury, LaunchLab platform) into both programs",
+      "text": "Compile the mainnet operator treasury and LaunchLab platform into both programs.",
       "status": "done"
     }
   ],
   "design": [
     "Rules are locked at launch; a different rule is a different coin.",
-    "Pairs: winner takes the burn — fees from both coins burn the winner's supply (devnet; flag off on mainnet).",
-    "Every rule end that resolves forwards the leftover burn pool to a sink (the contest's winner, else $DEFICIT): designed, not built.",
-    "Upgrade authority: the Squads 2-of-3 vault, then set to none as the last step (not done)."
+    "In a pair, the winner takes the burn. Fees from both coins burn the winner's supply. This runs on devnet and is switched off on mainnet.",
+    "When a rule ends and resolves, its leftover burn pool goes to a sink, which is the contest's winner or else $DEFICIT. This is designed but not built.",
+    "The Squads 2-of-3 vault holds the upgrade authority. As the last step it is to be set to none, which is not done yet."
   ],
   "historical": [
     {

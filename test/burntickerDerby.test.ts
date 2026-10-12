@@ -293,7 +293,7 @@ describe("refusals at launch", () => {
     assert.match((await derbyAdmission(coinvsRule({ ...SPEC, b: { ...SHIB, symbol: "DEATH" } }), base(NOW))).map((r) => r.reason).join(";"), /deaths/);
     // A stock is not a coin (coin-vs-coin is crypto only).
     const AAPL = loadPythCatalogue().find((r) => r.symbol === "Equity.US.AAPL/USD")!.id;
-    assert.match((await derbyAdmission(coinvsRule({ ...SPEC, b: { symbol: "AAPL", pyth: AAPL, mint: null, pool: null, cross: "redstone:AAPL" } }), base(NOW))).map((r) => r.reason).join(";"), /not a Crypto\/USD feed/);
+    assert.match((await derbyAdmission(coinvsRule({ ...SPEC, b: { symbol: "AAPL", pyth: AAPL, mint: null, pool: null, cross: "redstone:AAPL" } }), base(NOW))).map((r) => r.reason).join(";"), /not a crypto-to-USD feed/);
     // The season must start after launch.
     assert.match((await derbyAdmission(coinvsRule({ ...SPEC, season: { start: "2026-10-10", days: 30 } }), base(NOW))).map((r) => r.reason).join(";"), /earliest is 2026-10-11/);
     // No Pyth feed and $1,234 of liquidity.

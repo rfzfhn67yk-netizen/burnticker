@@ -38,7 +38,7 @@ export function creatorLaunchRefusal(env: Record<string, string | undefined> = p
 export interface LaunchAvailability { open: boolean; cluster: string | null; closedLine: string }
 /** The line shown where the launch CTAs were, while creator launches are closed. */
 export function closedHostLine(cluster: string | null): string {
-  return `Creator launches are closed.${cluster ? ` This host currently shows ${cluster} information.` : ""}`;
+  return `Creator launches are closed.${cluster ? ` This site is showing ${cluster}.` : ""}`;
 }
 /** Server pages: the same flag the catalogue reports. */
 export function launchAvailability(env: Record<string, string | undefined> = process.env, cluster: string | null = null): LaunchAvailability {

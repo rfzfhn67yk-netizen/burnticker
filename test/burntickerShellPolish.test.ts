@@ -22,7 +22,7 @@ test("#12: the coins index is titled 'Coins · Burnticker' (a server page carryi
 
 test("#14: the check page's instruction table is collapsed by default, below the verifier", () => {
   const c = read("src/app/burnticker/check/page.tsx");
-  assert.match(c, /<details className="mt-2 text-xs" data-money-table><summary[^>]*>Show every instruction of both programs/);
+  assert.match(c, /<details className="mt-2 text-xs" data-money-table><summary[^>]*>Show all \{c\.money\.length\} instructions of both programs/);
   assert.doesNotMatch(c, /data-money-table open/);
   assert.ok(c.indexOf('{verifierAt === "top" && <ReceiptVerifier') < c.indexOf("data-money-table"));
 });

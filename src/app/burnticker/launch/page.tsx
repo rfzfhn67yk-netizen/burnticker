@@ -106,7 +106,7 @@ const denver = (iso: string | null) => (iso ? new Intl.DateTimeFormat("en-US", {
 function endsLine(t: CoinText | null): string | null {
   if (!t) return null;
   const w = t.windowSentence;
-  const season = /covers the (.+?) season only/.exec(w), post = /covers (.+?) postseason only/.exec(w), next = /next (\d+) games? only/.exec(w), once = /^Resolves once(?: on ([A-Z][a-z]{2} \d{1,2}, \d{4}))?/.exec(w);
+  const season = /covers the (.+?) season only/.exec(w), post = /covers (.+?) postseason only/.exec(w), next = /next (\d+) games? only/.exec(w), once = /^(?:This coin r|R)esolves once,?(?: on ([A-Z][a-z]{2} \d{1,2}, \d{4}))?/.exec(w);
   // the deployed end of a rule: the coin's own pool burns down over 28 days, then the coin retires (no end-of-rule sink is deployed)
   const after = "Then its own burn pool burns down over 28 days, and the coin retires.";
   if (season) return `The rule ends after the last game of the ${season[1]} season. ${after}`;
@@ -651,12 +651,12 @@ export default function LaunchWizard() {
   const teamFilter = (t: Team) => { const s = teamQ.trim().toLowerCase(); if (!s) return true; if (`${t.name} ${t.abbr} ${t.city} ${t.nickname ?? ""}`.toLowerCase().includes(s)) return true; return aliasLookup(teamQ).some((a) => a.abbr === t.abbr && a.series === leagueSeries); };
 
   // launch audit 5 L02: per-type availability (the catalogue's model), shown before any form and on every card that leads to a type
-  const typeBlocked = (t: LaunchType | null): string | null => { if (!t || !avail) return null; const a = avail.types[t]; return a.available ? null : `${a.label} launches are not available on this host. ${a.reason ?? ""}`.trim(); };
+  const typeBlocked = (t: LaunchType | null): string | null => { if (!t || !avail) return null; const a = avail.types[t]; return a.available ? null : `${a.label} launches are not available on this site. ${a.reason ?? ""}`.trim(); };
   const cardBlocked = (c: Suggestion): string | null => typeBlocked(c.matchup ? "matchup" : c.picker ? "markets" : launchTypeOf(c.rule));
   const firstActionable = ures ? ures.cards.findIndex((c) => !c.refused.length && (!!c.picker || !!c.rule || !!c.matchup) && !cardBlocked(c)) : -1;
   const preview = gate.kind === "preview";
   /** Why the wallet cannot open for the rule on the review card (preview / closed host, an unavailable type), or null. */
-  const walletBlocked = (t: LaunchType | null): string | null => (preview ? "This is a preview, so the wallet stays closed. Creator launches are closed on this host." : gate.kind !== "open" ? "Creator launches are closed on this host, so the wallet stays closed." : typeBlocked(t));
+  const walletBlocked = (t: LaunchType | null): string | null => (preview ? "This is a preview, so the wallet stays closed. Creator launches are closed on this site." : gate.kind !== "open" ? "Creator launches are closed on this host, so the wallet stays closed." : typeBlocked(t));
   // website brief §1: the gate resolves before any launch control renders (loading → skeleton; closed / unavailable → no controls)
   if (!wizardMayRender(gate)) return <LaunchGate state={gate as Exclude<LaunchGateState, { kind: "open" | "preview" }>} deficitHref={DEFICIT_SITE} noWalletLine={NO_WALLET_LINE} />;
 
@@ -674,7 +674,7 @@ export default function LaunchWizard() {
 
       {step !== "choose" && (
         <div aria-label="Progress">
-          <div className="flex items-center justify-between text-xs text-neutral-400"><span>Step {idx + 1} of {order.length} · <span className="text-neutral-200">{LABELS[flow][step]}</span></span><span data-entry-label>{step === "review" && origin ? (origin.kind === "browse" ? `Browse · ${cats.find((c) => c.id === origin.cat)?.label ?? origin.cat}` : ENTRY_LABEL[origin.kind]) : flow === "team" ? "Team coin" : flow === "pair" ? "Matchup pair" : flow === "single" ? "Exact market" : flow === "browse" ? "Browse" : "Advanced"}</span></div>
+          <div className="flex items-center justify-between text-xs text-neutral-400"><span>Step {idx + 1} of {order.length}: <span className="text-neutral-200">{LABELS[flow][step]}</span></span><span data-entry-label>{step === "review" && origin ? (origin.kind === "browse" ? `Browse · ${cats.find((c) => c.id === origin.cat)?.label ?? origin.cat}` : ENTRY_LABEL[origin.kind]) : flow === "team" ? "Team coin" : flow === "pair" ? "Matchup pair" : flow === "single" ? "Exact market" : flow === "browse" ? "Browse" : "Advanced"}</span></div>
           <div className="mt-1 h-1.5 rounded bg-neutral-800"><div className="h-1.5 rounded bg-amber-400" style={{ width: `${((idx + 1) / order.length) * 100}%` }} /></div>
         </div>
       )}
@@ -733,7 +733,7 @@ export default function LaunchWizard() {
             </ul>
           )}
           {ures && ures.cards.length === 0 && !ubusy && (
-            <div className="rounded-lg border border-dashed border-neutral-700 p-3 text-sm text-neutral-400">No close match — try Browse: {(ures.categories ?? []).map((c) => <button data-decision="what" key={c.id} className="ml-2 underline" onClick={() => { begin("browse"); setCat(c.id); }}>{c.label}</button>)}</div>
+            <div className="rounded-lg border border-dashed border-neutral-700 p-3 text-sm text-neutral-400">There is no close match. Try one of these categories: {(ures.categories ?? []).map((c) => <button data-decision="what" key={c.id} className="ml-2 underline" onClick={() => { begin("browse"); setCat(c.id); }}>{c.label}</button>)}</div>
           )}
         </section>
       )}
@@ -743,15 +743,15 @@ export default function LaunchWizard() {
           <h2 className="text-lg font-medium">…or start from one of these</h2>
           {avail && Object.values(avail.types).some((t) => !t.available) && (
             <div className="rounded border border-neutral-800 p-2 text-xs text-neutral-400" data-availability>
-              <p className="text-neutral-300">Some kinds of coin cannot be launched on this host right now.</p>
+              <p className="text-neutral-300">Some kinds of coin cannot be launched on this site right now.</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">{Object.values(avail.types).filter((t) => !t.available).map((t) => <li key={t.type}>{t.label} launches are not available. {t.reason}</li>)}</ul>
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             {([
-              ["team", "Team coin", "Any team in any league — baseball, basketball, hockey, soccer, football. It burns on every win this season (type “… lose” in the box above for losses).", "e.g. $RAYS26 · $ARSENAL · $OILERS"],
-              ["pair", "Matchup", "Two teams, two coins: the losing team's coin burns.", "e.g. $LAKERS vs $CELTICS"],
-              ["browse", "Any result", "Weather, elections, the economy, space, culture: pick a category, then a source.", "e.g. the national debt, Denver's high, a Senate race"],
+              ["team", "Team coin", "Any team in any league — baseball, basketball, hockey, soccer, football. It burns on every win this season. For losses, type “… lose” in the box above.", "For example, $RAYS26, $ARSENAL or $OILERS"],
+              ["pair", "Matchup", "Two teams, two coins: the losing team's coin burns.", "For example, $LAKERS vs $CELTICS"],
+              ["browse", "Any result", "Weather, elections, the economy, space or culture. Pick a category, then a source.", "For example, the national debt, Denver's high or a Senate race"],
             ] as const).map(([f, title, body, eg]) => { const why = f === "team" ? typeBlocked("team") : f === "pair" ? typeBlocked("matchup") : null; return (
               <button key={f} data-decision="what" disabled={!!why} aria-describedby={why ? `tile-${f}-why` : undefined} onClick={() => begin(f)} className="text-left rounded-xl border border-neutral-800 bg-neutral-900 p-5 hover:border-amber-400 focus:border-amber-400 focus:outline-none disabled:opacity-50 disabled:hover:border-neutral-800">
                 <div className="text-lg font-semibold">{title}</div>
@@ -878,7 +878,7 @@ export default function LaunchWizard() {
                 <p className="text-sm text-neutral-400 flex-1 min-w-0">{cats.find((c) => c.id === cat)?.blurb ?? ""}</p>
                 <FieldHelp id="browse-filter" /><input data-decision="what" data-help="browse-filter" className={input + " w-full sm:w-64"} placeholder="filter this category…" value={bq} onChange={(e) => setBq(e.target.value)} aria-label="Filter sources" />
               </div>
-              {curCat?.adjudicatedOnly && <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">Adjudicated-only (Polymarket): no first-party source qualifies for this category, so only adjudicated markets are listed — each settled on Polymarket&apos;s on-chain payout.</p>}
+              {curCat?.adjudicatedOnly && <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">No first-party source qualifies for this category. So only settled Polymarket markets are listed, and each one settles on Polymarket&apos;s on-chain payout.</p>}
               {curCat?.guided === "elections" && venues.polymarket && (
                 <div className={card + " space-y-3"} aria-label="Elections">
                   <h3 className="font-medium">Pick a race</h3>
@@ -889,7 +889,7 @@ export default function LaunchWizard() {
                   {eraces?.map((r) => (
                     <div key={r.slug} className="rounded border border-neutral-800 p-2 text-sm">
                       <div className="font-medium">{r.title}{r.settlesOn ? <span className="text-xs text-neutral-500"> · settles {r.settlesOn}</span> : null}</div>
-                      <div className="text-xs text-neutral-500">Settled by: {r.settlement} — <a className="underline" href={r.sos.url} rel="noopener" target="_blank">{r.sos.name}</a>{r.hiddenPlaceholders ? ` · ${r.hiddenPlaceholders} unnamed placeholder outcome(s) hidden` : ""}</div>
+                      <div className="text-xs text-neutral-500">Settled by: {r.settlement} — <a className="underline" href={r.sos.url} rel="noopener" target="_blank">{r.sos.name}</a>{r.hiddenPlaceholders ? `. ${r.hiddenPlaceholders === 1 ? "One unnamed placeholder outcome is" : `${r.hiddenPlaceholders} unnamed placeholder outcomes are`} hidden.` : ""}</div>
                       {r.refused.length ? <p className="text-xs text-red-400">{refusedLine(r.refused)}</p> : <ul className="mt-1 space-y-1">{r.outcomes.map((o) => (
                         <li key={o.conditionId} className="flex flex-wrap items-center justify-between gap-2">
                           <span className="font-medium">{o.label}</span>
@@ -902,7 +902,7 @@ export default function LaunchWizard() {
                 </div>
               )}
               {cardsBusy && <p className="text-sm text-neutral-500">Loading sources…</p>}
-              {!cardsBusy && cards && cards.length === 0 && <p className="rounded border border-dashed border-neutral-700 p-4 text-sm text-neutral-400">No source in this category on this host yet{bq ? ` matching “${bq}”` : ""}.</p>}
+              {!cardsBusy && cards && cards.length === 0 && <p className="rounded border border-dashed border-neutral-700 p-4 text-sm text-neutral-400">This site has no source in this category{bq ? ` matching “${bq}”` : ""} yet.</p>}
               <div className={`grid gap-2 lg:grid-cols-2${cardsBusy ? " opacity-50" : ""}`} aria-busy={cardsBusy}>{(cards ?? []).map((c) => (
                 <div key={c.id} className={`rounded-lg border p-3 text-sm ${c.launchable.ok ? "border-neutral-800 bg-neutral-900" : "border-neutral-900 opacity-70"}`}>
                   <div className="flex items-center gap-1.5 flex-wrap text-[11px]">

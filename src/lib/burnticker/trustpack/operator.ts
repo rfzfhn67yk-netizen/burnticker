@@ -106,7 +106,7 @@ export function signedMessageView(cfg: OperatorConfig): SignedMessageView {
   const s = cfg.signedMessage;
   const signer = walletOf(cfg, s.cluster, s.signerRole);
   const message = s.message.replace("{PUBKEY}", signer ?? "{PUBKEY}");
-  if (!s.signature || TODO_RE.test(s.status) || !signer) return { status: "todo", signer, message, signature: null, verified: null, how: s.how, detail: signer ? `${s.cluster} ${s.signerRole} address configured; statement not signed` : `${s.cluster} ${s.signerRole} address not configured; statement not signed` };
+  if (!s.signature || TODO_RE.test(s.status) || !signer) return { status: "todo", signer, message, signature: null, verified: null, how: s.how, detail: signer ? "The wallet is set. The statement is not signed yet." : "The wallet is not set yet, so the statement is not signed." };
   const ok = /\{DATE\}/.test(message) ? false : verifySignedMessage(message, s.signature, signer);
-  return { status: ok ? "signed" : "invalid", signer, message, signature: s.signature, verified: ok, how: s.how, detail: ok ? `ed25519 signature by ${signer} over the exact text above: valid` : "the signature does not verify against the text and the signer (or {DATE} is still unfilled)" };
+  return { status: ok ? "signed" : "invalid", signer, message, signature: s.signature, verified: ok, how: s.how, detail: ok ? `The ed25519 signature by ${signer} over the exact text above is valid.` : "The signature does not match the text and the signer, or the date in the text is still blank." };
 }

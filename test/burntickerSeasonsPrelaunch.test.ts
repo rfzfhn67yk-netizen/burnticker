@@ -12,7 +12,7 @@ test("the leagues index: one banner and the compact list while empty; the cards 
   assert.match(p, /const empty = !err && ix\.sports\.every\(\(sp\) => sp\.leagues\.every\(\(l\) => l\.coinsThisSeason === 0\)\);/);
   assert.equal((p.match(/data-prelaunch-banner/g) ?? []).length, 1, "one banner");
   assert.doesNotMatch(p, /kind="not-launched"/, "no dotted NOT LAUNCHED box");
-  assert.match(p, /data-demo-scoreboard[\s\S]*Example data · illustrative coins and counts, not live/);
+  assert.match(p, /data-demo-scoreboard[\s\S]*Example only\. These coins and counts are not live data\./);
   assert.ok(p.indexOf("data-leagues-compact") < p.indexOf("ix.sports.map((s) => (\n        <section"), "compact list first, cards in the populated branch");
 });
 

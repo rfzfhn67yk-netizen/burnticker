@@ -41,7 +41,7 @@ describe("item 3: zero data → one explanation and one evidence link; populated
     assert.match(p, /\{!empty && <div className="flex flex-col gap-3 md:flex-row md:items-center">\s*<div className="bt-tabs"/, "tabs and search only with records");
     assert.match(p, /\{ix && !empty && tab !== "pairs"/); assert.match(p, /\{ix && !empty && tab === "pairs"/); assert.match(p, /\{ix && !empty && \(\s*<section className="grid grid-cols-2/);
     const box = p.slice(p.indexOf("{empty && ("), p.indexOf("{ix && !empty && tab !== \"pairs\""));
-    assert.match(box, /No coin is registered on this host yet/); assert.match(box, /whether the programs are deployed is separate/);
+    assert.match(box, /No coin is registered on this site yet/); assert.match(box, /Whether the programs are deployed is a separate question/);
     assert.equal([...box.matchAll(/EXPLORE_VERIFIED_BURN\.href/g)].length, 1, "one evidence link");
     assert.match(p, /\{NO_WALLET_LINE\}/, "the no-wallet line stays");
   });
@@ -83,10 +83,10 @@ describe("items 4 and 8: host diagnostics behind a disclosure; missing automatio
     const fetchFail = () => (rejected = Promise.resolve({ ok: false, status: 404 }));
     new Function("window", "document", "fetch", script)(win, doc, fetchFail);
     await rejected; await new Promise((r) => setTimeout(r, 0));
-    assert.match(els.loadnote.textContent, /Current automation data could not be read \(status\.json: HTTP 404\)\. The current-status summary is separate and does not establish whether burns are being processed now\./);
-    for (const g of ["alerts", "ends", "snapshot", "keepers"]) assert.match(els[g].textContent, /^unavailable/, g);
-    for (const g of ["feeds", "programs"]) assert.match(tbody(els[g]).textContent, /^unavailable/, g);
-    assert.doesNotMatch(Object.values(els).map((e) => e.textContent).join(" "), /\bnone\b|all ok|no live coins/);
+    assert.match(els.loadnote.textContent, /The automation data could not be read just now \(status\.json: HTTP 404\)\. The current-status summary is separate\. It does not show whether burns are being processed now\./);
+    for (const g of ["alerts", "ends", "snapshot", "keepers"]) assert.match(els[g].textContent, /^Unavailable/, g);
+    for (const g of ["feeds", "programs"]) assert.match(tbody(els[g]).textContent, /^Unavailable/, g);
+    assert.doesNotMatch(Object.values(els).map((e) => e.textContent).join(" "), /\bnone\b|all ok|all \d+ ok|no live coins|no open alerts|No coins are winding down/);
     assert.equal(doc.documentElement.attrs["data-status-feed"], "unavailable");
     clean(els.loadnote.textContent.replace(/\(status\.json: HTTP 404\)/, ""), "unknown-state copy");
   });
@@ -96,14 +96,14 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
   test("operator.json: no 'created on launch week' prose beside configured mainnet addresses; the statement reads 'address configured; statement not signed'", async () => {
     const op = JSON.parse(read("config/burnticker/operator.json")) as { note: string; clusters: { mainnet: { status: string; wallets: { role: string; pubkey: string }[] } }; signedMessage: { status: string } };
     assert.doesNotMatch(`${op.note} ${op.clusters.mainnet.status}`, /launch week|created by the owner on|does not exist|until the owner creates/i);
-    assert.match(op.clusters.mainnet.status, /^both programs deployed on mainnet 2026-10-11 .*configured \(owner, 2026-10-11\) except the keeper and deployer keys$/);   // audit 4 BT-02
+    assert.match(op.clusters.mainnet.status, /^Both programs were deployed on mainnet on 2026-10-11, .*Every wallet address below is set\.$/);   // audit 4 BT-02; website-9: the keeper and deployer keys are set too
     assert.ok(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(op.clusters.mainnet.wallets.find((w) => w.role === "dev-fee")!.pubkey), "the signer address is configured");
     assert.match(op.signedMessage.status, /^TODO_/, "the statement is NOT signed yet");
     const { OPERATOR_COPY, OPERATOR_LINE } = await import("@/lib/burnticker/trustpack/copy");
-    assert.match(OPERATOR_COPY.signedPending, /^Address configured; statement not signed\./); assert.doesNotMatch(`${OPERATOR_COPY.signedPending} ${OPERATOR_COPY.walletsIntro}`, /does not exist|until they exist/);
+    assert.match(OPERATOR_COPY.signedPending, /^The developer fee wallet listed above is the one that signs it\./); assert.doesNotMatch(`${OPERATOR_COPY.signedPending} ${OPERATOR_COPY.walletsIntro}`, /does not exist|until they exist/);
     assert.equal(OPERATOR_LINE, "Operated by one independent operator (United States) — contact: contact@burnticker.com");
     const { OPERATOR_LINE: fromFees } = await import("@/lib/burnticker/fees"); assert.equal(fromFees, OPERATOR_LINE);
-    assert.match(read("src/lib/burnticker/trustpack/operator.ts"), /address configured; statement not signed/);
+    assert.match(read("src/lib/burnticker/trustpack/operator.ts"), /The wallet is set\. The statement is not signed yet\./);
     assert.match(read("src/app/burnticker/operator/page.tsx"), /data-operator-line>\{OPERATOR_LINE\}/);
   });
   test("bounty: recorded funding (owner statement), the funding transaction (from the read-back evidence file, never typed in) and the live balance are separate lines", async () => {
@@ -127,8 +127,8 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
   });
   test("Trust: the current summary carries control and money once; the long disclosures sit behind one evidence disclosure; no 'nobody is paid'", async () => {
     const { buildCurrentStatus } = await import("@/lib/burnticker/currentStatus");
-    const money = buildCurrentStatus({ env: {}, chain: {}, now: 0 }).lines.find((l) => l.startsWith("Money:"))!;
-    assert.match(money, /25 bps of curve volume and 20% of post-graduation LP SOL fees; the other 80% of those SOL fees and the token side go to each coin's burn pool/);
+    const money = buildCurrentStatus({ env: {}, chain: {}, now: 0 }).lines.find((l) => l.startsWith("The operator earns"))!;
+    assert.match(money, /^The operator earns 0\.25% of curve trading volume and 20% of the SOL fees from the liquidity pool after graduation\. The other 80% of those SOL fees, and all of the token-side fees, go to each coin's burn pool\. Creators take no cash from fees\.$/);
     clean(money, "money line");
     const page = read("src/app/burnticker/trust/page.tsx");
     const at = (m: string) => { const i = page.indexOf(m); assert.ok(i >= 0, m); return i; };
@@ -148,7 +148,7 @@ describe("item 6: one signer vs two publishers; the rule's winner is not the tea
     for (const f of ["src/app/burnticker/leagues/[league]/[season]/page.tsx", "src/app/burnticker/derby/page.tsx", "src/app/burnticker/derby/[tournamentId]/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/lib/burnticker/api/derby.ts", "src/lib/burnticker/coverage/leagues.ts", "src/lib/burnticker/sources/native.ts"]) {
       assert.doesNotMatch(read(f), /(second|an|two) independent operators?\b(?! \(United States\))/i, f);
     }
-    assert.match(read("src/app/burnticker/leagues/[league]/[season]/page.tsx"), /A game counts once a second publisher reports the same final\. That is a second-source check, not a second signer: one operator attester signs every reading \(quorum 1\)\./);
+    assert.match(read("src/app/burnticker/leagues/[league]/[season]/page.tsx"), /A game counts once a second publisher reports the same final score\. That second source is a check on the data\. It is not a second signer: one signer, run by the operator, signs every reading\./);
   });
   test("the pair sentence names the coin whose rule fires, says nothing is paid to holders, and never 'nobody is paid'", async () => {
     const { PAIR_BURN_SENTENCE, pairResultSentence } = await import("@/lib/burnticker/describe");
@@ -166,7 +166,7 @@ describe("item 7: the verifier shows the example's outcome first; controls under
   test("order inside the verifier: verdict and three layers → signer caveat → the controls disclosure (closed for ?demo=1)", () => {
     const v = read("src/app/burnticker/check/ReceiptVerifier.tsx");
     const at = (m: string) => { const i = v.indexOf(m); assert.ok(i >= 0, m); return i; };
-    const order = ['id="verify"', "data-verdict={v.verdict}", "data-layer={l.layer}", "data-signer-caveat", "data-check-another", "RPC endpoint (any devnet RPC you trust)"].map(at);
+    const order = ['id="verify"', "data-verdict={v.verdict}", "data-layer={l.layer}", "data-signer-caveat", "data-check-another", "RPC endpoint (use any devnet RPC you trust)"].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.match(v, /className=\{`\$\{card\} scroll-mt-24`\} id="verify"/); assert.match(v, /open=\{!wantDemo\}/);
     assert.match(v, /data-verdict="checking"><EmptyState compact kind="loading"/, "a loading state, never an empty slot that reads as a result");
@@ -189,7 +189,7 @@ describe("item 8: the external $DEFICIT site collapses its empty sections before
     assert.match(html, /\.prelaunch #live,\.prelaunch #today,\.prelaunch #receipts,\.prelaunch #chart/);
     const box = html.slice(html.indexOf('id="prelaunch"'), html.indexOf('<section class="wrap" id="live">'));
     assert.match(box, /href="https:\/\/burnticker\.com\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</);
-    assert.match(box, /1% of the burn pool per \$1B; the proposed mainnet rule above is 2% per \$1B/); assert.match(box, /No launch date is announced/);
+    assert.match(box, /1% of the burn pool per \$1B\. The proposed mainnet rule above is 2% per \$1B/); assert.match(box, /No launch date is announced/);
     assert.doesNotMatch(box, /buy|trade now/i);
     clean(box.replace(/<[^>]+>/g, " "), "deficit pre-launch summary");
     assert.match(html, /status = s; renderStatus\(s\); document\.documentElement\.classList\.remove\("prelaunch"\);/, "only a readable status.json expands the sections");

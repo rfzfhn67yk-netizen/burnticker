@@ -21,7 +21,7 @@ export interface SeasonCoinInput {
 export interface SeasonRow { rank: number; ticker: string; mint: string; outcome: string; receipts: number; burnedPct: number; lastBurnAt: string | null }
 export interface SeasonBoard {
   key: string; league: LeagueId; leagueLabel: string; sport: Sport;
-  /** "NHL 2026–27", "MLB 2026 postseason", "Premier League · perpetual and next-N coins" */
+  /** "NHL 2026–27", "MLB 2026 postseason", "Premier League coins with no end date, or for a set number of games" */
   label: string; window: "season" | "post" | "other";
   /** The date range the receipts cover ("" when there are none yet). */
   from: string | null; to: string | null;
@@ -53,7 +53,7 @@ export function seasonBoards(coins: readonly SeasonCoinInput[]): SeasonBoard[] {
     }).sort((a, b) => b.receipts - a.receipts || b.burnedPct - a.burnedPct || a.ticker.localeCompare(b.ticker));
     const all = rows.flatMap((r) => [r.first, r.lastBurnAt]).filter((x): x is string => !!x).sort();
     const ended = g.window !== "other" && g.coins.length > 0 && g.coins.every((c) => c.ended);
-    const label = g.window === "season" ? `${L.label} ${seasonLabel(g.league, g.year!)}` : g.window === "post" ? `${L.label} ${seasonLabel(g.league, g.year!)} postseason` : `${L.label} · perpetual and next-N coins`;
+    const label = g.window === "season" ? `${L.label} ${seasonLabel(g.league, g.year!)}` : g.window === "post" ? `${L.label} ${seasonLabel(g.league, g.year!)} postseason` : `${L.label} coins with no end date, or for a set number of games`;
     const top = rows[0];
     boards.push({
       key, league: g.league, leagueLabel: L.label, sport: L.sport, label, window: g.window, from: all[0]?.slice(0, 10) ?? null, to: all[all.length - 1]?.slice(0, 10) ?? null, ended,

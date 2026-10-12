@@ -3,7 +3,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { loadRefuseList, refusalsFor, type RefuseList } from "@/lib/burnticker/oracle/refuse";
 import { loadOwnTokens, ownTokenRefusalFrom, type OwnTokenList } from "@/lib/ownTokens";
-import { DERBY_MIN_LIQUIDITY_USD, INDEX_PROXIES_FLAG, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, nextUtcMidnight, seasonEndMs, underlyingKey, type DerbySpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { DERBY_MIN_LIQUIDITY_USD, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, nextUtcMidnight, seasonEndMs, underlyingKey, type DerbySpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { cryptoBase, loadPythCatalogue, type PythFeedRow } from "@/lib/burnticker/derby/pyth";
 import { crossQuote } from "@/lib/burnticker/derby/cross";
 import { derbyStore } from "@/lib/burnticker/derby/store";
@@ -38,20 +38,20 @@ async function underlyingRefusals(u: DerbyUnderlying, d: DerbyAdmissionDeps, cry
   const out: DerbyRefusal[] = [];
   const reg = d.registry;
   const platform = reg.tokens().find((t) => t.status !== "expired" && ((u.mint && t.mint === u.mint) || t.ticker === u.symbol));
-  if (platform) out.push({ kind: "platform-coin", symbol: u.symbol, reason: `${u.symbol} is a Burnticker platform coin ($${platform.ticker}) — a platform coin is never the input of a derby` });
+  if (platform) out.push({ kind: "platform-coin", symbol: u.symbol, reason: `${u.symbol} is a Burnticker platform coin ($${platform.ticker}). A platform coin can never be the input of a derby.` });
   const own = ownTokenRefusalFrom(d.own ?? loadOwnTokens(), { address: u.mint, symbol: u.symbol });
   if (own && !platform) out.push({ kind: "platform-coin", symbol: u.symbol, reason: `${u.symbol}: ${own}` });
   const cat = d.catalogue ?? loadPythCatalogue();
   const feed = u.pyth ? cat.find((r) => r.id === u.pyth) ?? null : null;
   for (const r of refusalsFor(d.refuse ?? loadRefuseList(), { titles: [u.symbol, ...(feed ? [feed.symbol] : [])] })) out.push({ kind: "refuse-list", symbol: u.symbol, reason: r.reason });
   if (u.pyth) {
-    if (!feed) out.push({ kind: "feed", symbol: u.symbol, reason: `${u.symbol}: Pyth feed ${u.pyth.slice(0, 12)}… is not in the catalogue` });
-    else if (cryptoOnly && (feed.asset_type !== "Crypto" || !cryptoBase(feed.symbol))) out.push({ kind: "feed", symbol: u.symbol, reason: `${u.symbol}: ${feed.symbol} is not a Crypto/USD feed (a coin-vs-coin derby compares coins)` });
-    else if ((INDEX_PROXY_SYMBOLS as readonly string[]).includes(feed.symbol) && !indexProxiesEnabled(d.env)) out.push({ kind: "feed", symbol: u.symbol, reason: `${feed.symbol} is a US index proxy: excluded unless ${INDEX_PROXIES_FLAG}=1 (index-licence caution; fund tickers such as SPY, QQQ and DIA are available)` });
+    if (!feed) out.push({ kind: "feed", symbol: u.symbol, reason: `The Pyth feed given for ${u.symbol} (${u.pyth.slice(0, 12)}…) is not in the catalogue.` });
+    else if (cryptoOnly && (feed.asset_type !== "Crypto" || !cryptoBase(feed.symbol))) out.push({ kind: "feed", symbol: u.symbol, reason: `${feed.symbol} is not a crypto-to-USD feed, so it cannot stand for ${u.symbol}. A coin-vs-coin derby compares coins.` });
+    else if ((INDEX_PROXY_SYMBOLS as readonly string[]).includes(feed.symbol) && !indexProxiesEnabled(d.env)) out.push({ kind: "feed", symbol: u.symbol, reason: `${feed.symbol} is a US index proxy, so it is left out unless the operator turns that option on. This is a caution about index licences. Fund tickers such as SPY, QQQ and DIA are available.` });
   } else {
     const q = await crossQuote(d.fetchImpl, u.cross);
-    if (!q) out.push({ kind: "liquidity", symbol: u.symbol, reason: `${u.symbol}: the cross-read (${u.cross}) does not know this coin` });
-    else if ((q.liquidityUsd ?? 0) < DERBY_MIN_LIQUIDITY_USD) out.push({ kind: "liquidity", symbol: u.symbol, reason: `${u.symbol}: no Pyth feed and $${Math.round(q.liquidityUsd ?? 0).toLocaleString("en-US")} of liquidity (needs $${DERBY_MIN_LIQUIDITY_USD.toLocaleString("en-US")})` });
+    if (!q) out.push({ kind: "liquidity", symbol: u.symbol, reason: `The second source (${u.cross}) has no data for ${u.symbol}.` });
+    else if ((q.liquidityUsd ?? 0) < DERBY_MIN_LIQUIDITY_USD) out.push({ kind: "liquidity", symbol: u.symbol, reason: `${u.symbol} has no Pyth feed and only $${Math.round(q.liquidityUsd ?? 0).toLocaleString("en-US")} of liquidity. It needs $${DERBY_MIN_LIQUIDITY_USD.toLocaleString("en-US")}.` });
   }
   return out;
 }
@@ -61,17 +61,17 @@ export async function derbyAdmission(rule: BurnRule, d: DerbyAdmissionDeps): Pro
   if (!spec) return [{ kind: "feed", symbol: null, reason: "a derby rule needs its derby block" }];
   const out: DerbyRefusal[] = [];
   if (spec.selector === "coinvs") {
-    if (underlyingKey(spec.a) === underlyingKey(spec.b)) out.push({ kind: "feed", symbol: null, reason: "the two coins must be distinct" });
+    if (underlyingKey(spec.a) === underlyingKey(spec.b)) out.push({ kind: "feed", symbol: null, reason: "The two coins must be different." });
     out.push(...await underlyingRefusals(spec.a, d), ...await underlyingRefusals(spec.b, d));
     const earliest = nextUtcMidnight(d.now);
-    if (spec.season.start < earliest) out.push({ kind: "season", symbol: null, reason: `the season starts ${spec.season.start}: the earliest is ${earliest} (the first full window after launch)` });
-    if (seasonEndMs(spec) > d.now + 400 * 86_400_000) out.push({ kind: "season", symbol: null, reason: "the season ends more than 400 days out" });
+    if (spec.season.start < earliest) out.push({ kind: "season", symbol: null, reason: `The season starts on ${spec.season.start}, but the earliest is ${earliest}, the first full window after launch.` });
+    if (seasonEndMs(spec) > d.now + 400 * 86_400_000) out.push({ kind: "season", symbol: null, reason: "The season ends more than 400 days from now." });
     return out;
   }
   if (spec.selector === "price") {
     out.push(...await underlyingRefusals(spec.u, d, false));
     const earliest = nextUtcMidnight(d.now);
-    if (spec.season.start < earliest) out.push({ kind: "season", symbol: null, reason: `the season starts ${spec.season.start}: the earliest is ${earliest} (the first full window after launch)` });
+    if (spec.season.start < earliest) out.push({ kind: "season", symbol: null, reason: `The season starts on ${spec.season.start}, but the earliest is ${earliest}, the first full window after launch.` });
     return out;
   }
   const row = derbyStore(d.registry.db).tournament(spec.tournamentId);
@@ -85,7 +85,7 @@ export async function derbyAdmission(rule: BurnRule, d: DerbyAdmissionDeps): Pro
   if (m !== t.fractionOfPool) out.push({ kind: "bracket", symbol: null, reason: `a fan coin of ${t.id} burns ${t.fractionOfPool * 100}% per unit (the tournament's fraction), not ${m === undefined ? "a token count" : `${m * 100}%`}` });
   const taken = d.registry.tokens().find((x) => x.status !== "expired" && x.selectorKey === `derby:bracket:${t.id}:${spec.slot}`);
   if (taken) out.push({ kind: "bracket", symbol: spec.underlying.symbol, reason: `slot ${spec.slot} of ${t.id} already has its fan coin ($${taken.ticker})` });
-  if (t.start < nextUtcMidnight(d.now)) out.push({ kind: "bracket", symbol: null, reason: `tournament ${t.id} started ${t.start}: fan coins launch before round one` });
+  if (t.start < nextUtcMidnight(d.now)) out.push({ kind: "bracket", symbol: null, reason: `Tournament ${t.id} started on ${t.start}. Fan coins can launch only before round one.` });
   out.push(...await underlyingRefusals(spec.underlying, d));
   return out;
 }

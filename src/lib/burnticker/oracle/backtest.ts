@@ -40,6 +40,8 @@ export function backtest(rule: BurnRule, events: readonly SettledEvent[], nowMs:
 /** One line for the wizard. States what happened; says nothing about price. */
 export function backtestSentence(b: Backtest): string {
   const t = b.totals;
-  const burned = t.poolFractionSpent !== null ? `would have spent ${(t.poolFractionSpent * 100).toFixed(1)}% of the fee pool across ${t.burnEvents} burn(s)` : t.tokens !== null ? `would have burned ${t.tokens.toLocaleString("en-US")} tokens across ${t.burnEvents} burn(s)` : "would have burned nothing";
-  return `This selector settled ${t.events} time(s) between ${b.from} and ${b.to}${t.voids ? ` (${t.voids} void)` : ""} and ${burned} under this rule.`;
+  const burns = `${t.burnEvents} ${t.burnEvents === 1 ? "burn" : "burns"}`;
+  const burned = t.poolFractionSpent !== null ? `spent ${(t.poolFractionSpent * 100).toFixed(1)}% of the fee pool across ${burns}` : t.tokens !== null ? `burned ${t.tokens.toLocaleString("en-US")} tokens across ${burns}` : "burned nothing";
+  const voids = t.voids ? `, and ${t.voids} of those ${t.voids === 1 ? "was" : "were"} void` : "";
+  return `This source settled ${t.events} ${t.events === 1 ? "time" : "times"} between ${b.from} and ${b.to}${voids}. Under this rule, it would have ${burned}.`;
 }

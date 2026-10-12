@@ -10,6 +10,9 @@ import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { parseMarketsBody as parseGammaMarkets, resolvePolymarket, settledMarketUrl } from "@/lib/burnticker/oracle/polymarket";
 import { readConditionResolution, type ConditionResolution, type FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polymarketOnchain";
 
+/** "1 unit", "3 units": a count in words, never "unit(s)". */
+const unitsWord = (n: number | bigint): string => `${n} unit${Number(n) === 1 ? "" : "s"}`;
+
 /**
  * VERIFY ONE RECEIPT (2026-10-09; shared by the public API's /verify route and the SDK's verifyReceipt). A receipt is checked from
  * three independent places, each a separate, named check so a stranger sees exactly what passed:
@@ -69,9 +72,9 @@ export function verifyReceiptCore(i: { ticker: string; rulesText: string; receip
     const bad: string[] = [];
     if (pm.prefix !== i.ticker) bad.push(`prefix ${pm.prefix} ≠ ${i.ticker}`);
     if (r.readingDate && pm.recordDate !== r.readingDate) bad.push(`reading ${pm.recordDate} ≠ ${r.readingDate}`);
-    if (pm.units < r.units) bad.push(`the reading counts ${pm.units} unit(s), fewer than this receipt's ${r.units}`);
-    try { if (BigInt(pm.now) - BigInt(pm.prev) !== BigInt(pm.units)) bad.push(`counter ${pm.prev} → ${pm.now} ≠ ${pm.units} unit(s)`); } catch { bad.push("the counter values are not integers"); }
-    checks.push(bad.length ? { id: "memo", ok: false, detail: bad.join("; ") } : { id: "memo", ok: true, detail: `the program's memo (${pm.version}) for reading ${pm.recordDate}: ${pm.units} unit(s), this receipt's ${r.units} among them` });
+    if (pm.units < r.units) bad.push(`the reading counts ${unitsWord(pm.units)}, fewer than this receipt's ${r.units}`);
+    try { if (BigInt(pm.now) - BigInt(pm.prev) !== BigInt(pm.units)) bad.push(`counter ${pm.prev} → ${pm.now} ≠ ${unitsWord(pm.units)}`); } catch { bad.push("the counter values are not integers"); }
+    checks.push(bad.length ? { id: "memo", ok: false, detail: bad.join("; ") } : { id: "memo", ok: true, detail: `the program's memo (${pm.version}) for reading ${pm.recordDate}: ${unitsWord(pm.units)}, this receipt's ${r.units} among them` });
   } else if (!m) checks.push({ id: "memo", ok: false, detail: "the memo does not parse as a v3 receipt memo or a program memo" });
   else {
     const bad: string[] = [];
@@ -101,7 +104,7 @@ export function verifyReceiptCore(i: { ticker: string; rulesText: string; receip
       const s = unitStep(rule, ev, { value: r.prevValue, carryOut: r.carryIn }, i.carry);
       units = s.units;
       const mapOk = JSON.stringify(s.mapping) === JSON.stringify(r.mapping);
-      checks.push(s.units === r.units && mapOk ? { id: "units", ok: true, detail: `${s.note} → ${s.units} unit(s)` } : { id: "units", ok: false, detail: `recomputed ${s.units} unit(s)${mapOk ? "" : " with a different mapping"}; the receipt says ${r.units}` });
+      checks.push(s.units === r.units && mapOk ? { id: "units", ok: true, detail: `${s.note} → ${unitsWord(s.units)}` } : { id: "units", ok: false, detail: `recomputed ${unitsWord(s.units)}${mapOk ? "" : " with a different mapping"}; the receipt says ${r.units}` });
     } catch (e) { checks.push({ id: "units", ok: false, detail: `recomputation failed: ${(e as Error).message}` }); }
   }
   if (mode === "buyback" && pm && "spent" in pm && r.mapping?.fractionOfPool !== undefined) {

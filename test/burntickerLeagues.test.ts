@@ -61,7 +61,7 @@ describe("one league season", () => {
   test("the boards are seasons.ts's own, filtered to this league and season — no card holds another league", () => {
     assert.deepEqual(nhl.boards.map((b) => b.label), ["NHL 2026–27"]);
     assert.deepEqual(nhl.boards, seasonBoards([COINS[0], COINS[1]]), "imported, not re-implemented: the same boards the Seasons page builds");
-    assert.deepEqual(mlb.boards.map((b) => b.label), ["MLB 2026", "MLB 2026 postseason", "MLB · perpetual and next-N coins"]);
+    assert.deepEqual(mlb.boards.map((b) => b.label), ["MLB 2026", "MLB 2026 postseason", "MLB coins with no end date, or for a set number of games"]);
     for (const p of [nhl, mlb]) for (const b of p.boards) assert.equal(b.league, p.league);
     assert.ok(!JSON.stringify([nhl, mlb]).includes("DEBT"), "a feed coin is not a team coin");
   });
@@ -84,8 +84,8 @@ describe("one league season", () => {
   test("settled games: the last seven days, one row per game, the reading's source line and the ESPN link only", () => {
     assert.equal(nhl.games.from, "2026-10-04"); assert.equal(nhl.games.to, "2026-10-10");
     assert.deepEqual(nhl.games.rows.map((g) => `${g.date} ${g.away.abbr} ${g.away.score} @ ${g.home.abbr} ${g.home.score}`), ["2026-10-10 EDM 3 @ CGY 1", "2026-10-09 EDM 4 @ BOS 2"]);
-    assert.equal(nhl.games.rows[1].source, "settled on the game's on-chain payout · confirmed by NHL's official scores");
-    assert.equal(nhl.games.rows[0].source, "settled on a licensed final score · confirmed by NHL's official scores");
+    assert.equal(nhl.games.rows[1].source, "Settled on the game's on-chain payout and confirmed by NHL's official scores.");
+    assert.equal(nhl.games.rows[0].source, "Settled on a licensed final score and confirmed by NHL's official scores.");
     assert.equal(nhl.games.rows[1].home.name, "Boston Bruins");
     for (const g of nhl.games.rows) assert.match(g.espnUrl, /^https:\/\/www\.espn\.com\/nhl\/scoreboard\/_\/date\/\d{8}$/);
     assert.deepEqual(mlb.games.rows, [], "the MLB game is outside the seven days");
@@ -108,7 +108,7 @@ describe("one league season", () => {
     assert.equal(nhl.path, "/burnticker/leagues/nhl/2026-27"); assert.equal(mlb.path, "/burnticker/leagues/mlb/2026");
     assert.equal(nhl.title, "NHL 2026–27 — team coins and receipts");
     for (const p of [nhl, mlb, page("eng.1", 2026), page("cfb", 2026)]) lintAll(leaguePageStrings(p), p.path);
-    lintAll(["launch a coin for this team", "see on ESPN →", "No games settled for NHL coins in these dates.", "champion", "A stat, not a prize."], "fixed copy");
+    lintAll(["launch a coin for this team", "See it on ESPN", "No games settled for NHL coins in these dates.", "champion", "This is a stat, and nobody receives anything for it."], "fixed copy");
   });
 
   test("a past season shows its own boards only; the perpetual card appears on the current season", () => {

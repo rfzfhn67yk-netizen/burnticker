@@ -49,7 +49,8 @@ describe("the elections index", () => {
     assert.equal(race.settlesOn, "2026-11-04");
     assert.match(race.sos.url, /michigan\.gov\/sos/);
     assert.match(race.description ?? "", /nominee of the party/);
-    assert.equal(outcomeCardTitle(race, race.outcomes[0]), "Abdul El-Sayed (D) wins the Michigan Senate race · settles 2026-11-04 · Polymarket on-chain payout + Michigan SoS certified results");
+    assert.equal(outcomeCardTitle(race, race.outcomes[0]), "Abdul El-Sayed (D) wins the Michigan Senate race, which settles on 2026-11-04.");
+    assert.equal(race.settlement, "Polymarket's on-chain payout, checked against the Michigan Secretary of State's certified results");
   });
 
   test("the paged index finds the race; search ranks the named candidate first", async () => {
@@ -67,7 +68,7 @@ describe("the universal search — the owner's test cases (Kalshi off)", () => {
     const r = await universalSearch("El-Sayed wins Michigan Senate", deps());
     const top = r.cards[0];
     assert.equal(top.venue, "polymarket");
-    assert.equal(top.title, "Abdul El-Sayed (D) wins the Michigan Senate race · settles 2026-11-04 · Polymarket on-chain payout + Michigan SoS certified results");
+    assert.equal(top.title, "Abdul El-Sayed (D) wins the Michigan Senate race, which settles on 2026-11-04.");
     assert.ok(top.rule?.market?.startsWith(DEM)); assert.equal(top.rule?.oracle, "polymarket"); assert.deepEqual(top.rule?.binary, { onYes: { fractionOfPool: 0.1 }, onNo: null }, "a one-shot defaults to 10 % of the pool");
     assert.match(top.howSettles ?? "", /Democratic nominee/); assert.match(top.howSettles ?? "", /Resolution rules \(Polymarket\)/);
     assert.equal(top.suggestedTicker, "ELSAYED");

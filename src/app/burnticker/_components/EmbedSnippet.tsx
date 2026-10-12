@@ -25,7 +25,7 @@ export function EmbedSnippet({ kind, id, label }: { kind: "coin" | "pair"; id: s
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs" aria-label={kind === "coin" ? "Embed this coin" : "Embed this pair"}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-medium text-sm">{kind === "coin" ? "Embed this coin" : "Embed this pair"}</h2>
-        <span className="text-neutral-500">the receipt card · no market data · refreshes every minute</span>
+        <span className="text-neutral-500">The receipt card shows no market data and refreshes every minute.</span>
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={badge} alt={alt} width={480} className="mt-2 max-w-full h-auto" loading="lazy" />
@@ -35,7 +35,7 @@ export function EmbedSnippet({ kind, id, label }: { kind: "coin" | "pair"; id: s
           <pre className="mt-1 overflow-x-auto rounded bg-neutral-950 p-2 whitespace-pre-wrap break-all">{r.text}</pre>
         </div>
       ))}</div>
-      <p className="mt-2 text-neutral-500">Also: <a className="underline" href={badge.replace(/\.svg$/, ".png")}>PNG</a> · <a className="underline" href={badge.replace(/\.svg$/, ".json")}>JSON</a> · <a className="underline" href={embed} target="_blank" rel="noopener">open the embed</a>.</p>
+      <p className="mt-2 text-neutral-500">The badge also comes as a <a className="underline" href={badge.replace(/\.svg$/, ".png")}>PNG</a> or as <a className="underline" href={badge.replace(/\.svg$/, ".json")}>JSON</a>. You can also <a className="underline" href={embed} target="_blank" rel="noopener">open the embed</a> on its own.</p>
     </section>
   );
 }

@@ -85,7 +85,7 @@ describe("sources.json: every configured source", () => {
     assert.equal(p.totals.units, 5);
     assert.deepEqual(feedRuleProblems(feedById("treasury.debt")!, validateRule(DEBT_RULE)), []);
     assert.ok(feedRuleProblems(feedById("treasury.debt")!, rule("treasury.debt", 5e8, "up", "previousSettlement")).some((x) => /unit must be 1000000000/.test(x)));
-    assert.ok(feedRuleProblems(feedById("usgs.quakes6")!, rule("usgs.quakes6", 1, "up", 0)).some((x) => /not launchable/.test(x)));
+    assert.ok(feedRuleProblems(feedById("usgs.quakes6")!, rule("usgs.quakes6", 1, "up", 0)).some((x) => /Coins cannot launch on usgs\.quakes6 yet/.test(x)));
   });
   test("the catalogue adapter reads through an injected fetch, filters by since, never returns a price", async () => {
     const f = feedById("treasury.debt")!;
@@ -94,7 +94,7 @@ describe("sources.json: every configured source", () => {
     const r = await a.settledSince(validateRule(DEBT_RULE), "2026-10-05");
     assert.deepEqual(r.events.map((e) => e.id), ["2026-10-06", "2026-10-07", "2026-10-08"]);
     assert.equal((await a.impliedChance()).chance, null);
-    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "eia.gasoline", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /not launchable: needs a key/);
+    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "eia.gasoline", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /Coins cannot launch on eia\.gasoline yet\. The reason is: needs a key/);
     assert.equal((await a.searchSeries("egg"))[0].ticker, "bls.eggs");
   });
 });

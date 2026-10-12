@@ -161,7 +161,7 @@ export function slotPoints(res: Extract<MatchDayResult, { status: "decided" }>, 
 }
 
 /** The fan coin's bracket rule fraction doubled in words (display): "2 units (≈ 1.99%)". */
-export const finalBurnText = (f: number): string => { const u = finalUnits(f); const share = 1 - (1 - f) ** u; return u === 2 ? `2 units (${(share * 100).toFixed(2)}% of the pool)` : `1 unit (2 × ${(f * 100).toFixed(2)}% would pass the 10% maximum)`; };
+export const finalBurnText = (f: number): string => { const u = finalUnits(f); const share = 1 - (1 - f) ** u; return u === 2 ? `2 units (${(share * 100).toFixed(2)}% of the pool)` : `1 unit, because 2 × ${(f * 100).toFixed(2)}% would pass the 10% maximum`; };
 
 export { mulDec };
 

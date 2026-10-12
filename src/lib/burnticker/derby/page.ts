@@ -43,7 +43,7 @@ export function retiredReasonOf(reg: Pick<Registry, "getStatus">, mint: string):
   if (d) return d;
   const r = reg.getStatus(`rule.retired.${mint}`);
   if (!r) return null;
-  try { const j = JSON.parse(r) as { reason?: string; mode?: string }; return `${j.reason ?? "ended"}; ${j.mode === "drain" ? "the pool drained" : "the pool wound down"}`; } catch { return r; }
+  try { const j = JSON.parse(r) as { reason?: string; mode?: string }; return `${j.reason ?? "ended"}, and then ${j.mode === "drain" ? "the pool drained" : "the pool wound down"}`; } catch { return r; }
 }
 
 const short = (h: string | null | undefined) => (h ? `${h.slice(0, 12)}…` : "—");
@@ -62,7 +62,7 @@ export function proofLinks(row: WindowRow): ProofLink[] {
       else if (p.source === "twap") out.push({ label: `${sym} ${which}: pool TWAP`, url: `https://solscan.io/account/${p.pool}`, detail: `${Array.isArray(p.samples) ? p.samples.length : 0} vault samples, slots ${Array.isArray(p.samples) ? (p.samples as { slot: number | null }[]).map((x) => x.slot).filter(Boolean).slice(0, 3).join(", ") : "—"}…` });
     }
   }
-  if (row.proofSha256) out.push({ label: "proof document", url: null, detail: `sha256 ${row.proofSha256} — the hash in the reading (derby:sha256:…) and in the signed attestation's proof=` });
+  if (row.proofSha256) out.push({ label: "proof document", url: null, detail: `sha256 ${row.proofSha256}. The same hash is in the reading (as derby:sha256:…) and in the signed attestation (as proof=).` });
   return out;
 }
 

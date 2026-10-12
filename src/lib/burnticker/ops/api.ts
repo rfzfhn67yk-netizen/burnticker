@@ -9,12 +9,12 @@ const view = (s: SnapshotRecord, cluster: string) => ({ date: s.date, sha256: s.
 export function v1Snapshots(p: Pick<Platform, "registry" | "cluster">, q: URLSearchParams): ApiResult {
   const raw = q.get("limit");
   const limit = raw === null ? 60 : Number(raw);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 400) return fail(400, "limit must be an integer 1–400");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 400) return fail(400, "The limit must be a whole number from 1 to 400.");
   const rows = listSnapshots(p.registry, limit).map((s) => view(s, p.cluster));
   return ok({
     schema: "burnticker.snapshots/v1", cluster: p.cluster, count: rows.length, latest: rows[0] ?? null, snapshots: rows,
     format: `${SNAPSHOT_SCHEMA}: one header line, then one canonical JSON line per row, tables ${SNAPSHOT_TABLE_NAMES.join(", ")}`,
     verifier: `${VERIFY_CMD} <txid> [--cluster mainnet] [--db <registry copy>]`,
-    note: "Taken once per UTC day by the keeper; a date without a row had no snapshot (the upload payer was not set, or the upload failed and is retried). The chain stays the final word on every burn.",
+    note: "The keeper takes one snapshot each UTC day. A date with no row had no snapshot. Either no one was set up to pay for the upload, or the upload failed and is being tried again. The chain stays the final word on every burn.",
   });
 }

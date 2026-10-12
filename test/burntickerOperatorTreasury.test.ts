@@ -59,7 +59,7 @@ test("R04: the upgrade-authority summary is derived from the time lock read from
   const { loadPowersRegister } = await import("@/lib/burnticker/trust");
   assert.match(upgradeDelaySummary(0), /time lock is 0 today, so an approved upgrade can execute at once, with no notice period/);
   assert.doesNotMatch(upgradeDelaySummary(0), /time-locked/);
-  assert.match(upgradeDelaySummary(172800), /48 h time lock before it can execute/);
+  assert.match(upgradeDelaySummary(172800), /A 48 h time lock then runs before it can execute/);
   assert.match(upgradeDelaySummary(null), /could not be read/);
   const row = (secs: number | null) => loadPowersRegister({}, process.cwd(), 0, secs).powers.find((p) => p.id === "program-upgrade-authority")!;
   assert.deepEqual(row(0).canDo, [upgradeDelaySummary(0)]);
@@ -81,7 +81,7 @@ test("R05: the build table has a Network column; each row's deployed bytes, read
   const md = checklistMarkdown(c);
   assert.match(md, /\| Program \| Network \| Features \| Executable hash \(this repository\) \| Deployed bytes on that network \| Read \| Evidence \|/);
   assert.doesNotMatch(md, /Deployed \(devnet\)/);
-  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*= build \| 2026-10-11 \| docs\/burnkeeper\/evidence\/mainnet-deploy-2026-10-11\/deploy\.json \|/);
+  assert.match(md, /\| burn_receipts \| mainnet \|[^\n]*same as the build \| 2026-10-11 \| docs\/burnkeeper\/evidence\/mainnet-deploy-2026-10-11\/deploy\.json \|/);
   const page = fs.readFileSync("src/app/burnticker/check/page.tsx", "utf8");
   assert.doesNotMatch(page, /Deployed on devnet/);
   assert.match(page, /<th className="p-2">Network<\/th>[\s\S]*<th className="p-2">Read<\/th><th className="p-2">Evidence<\/th>/);

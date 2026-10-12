@@ -34,8 +34,8 @@ test("BT-11: the whitepaper opens with a historical-version notice that links th
 test("BT-12: the summary line names key control and notice (owner holds two of three keys; time lock 0 = no advance notice)", () => {
   const facts: ChainFacts = { cluster: "mainnet", readAt: "2026-10-11T23:00:00Z", error: null, squads: { threshold: 2, timeLockSecs: 0, members: 3 }, programs: {} };
   const s = buildCurrentStatus({ root: ROOT, env: {}, chain: { mainnet: facts }, now: Date.parse("2026-10-11T23:00:00Z") });
-  const up = s.lines.find((l) => l.startsWith("Upgrades:"))!;
-  assert.match(up, /the owner holds members A and B \(two of the three keys\), so the owner alone meets the 2-of-3 threshold/);
+  const up = s.lines.find((l) => l.startsWith("The 2-of-3 Squads vault holds the upgrade authority."))!;
+  assert.match(up, /The owner holds members A and B, which are two of the three keys, so the owner alone meets the 2-of-3 threshold/);
   assert.match(up, /executes at once, with no advance notice/);
   assert.equal(s.releaseRequirements.find((r) => r.id === "mainnet-deploy")?.status, "done", "BT-02: the deployment gate follows the deployment state");
 });

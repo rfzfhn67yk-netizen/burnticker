@@ -27,7 +27,7 @@ export function BurnMath({ defaultPercent = "1" }: { defaultPercent?: string }) 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-sm" id="math" aria-label="Burn arithmetic" data-burn-math>
       <h2 className="font-medium">How a burn is computed</h2>
-      <p className="text-xs text-neutral-400">A share of the spendable burn pool buys the coin and every token bought is burned. It is not a fixed share of the token supply. Hypothetical inputs; the first values are the real 2026-10-06 devnet receipt (that rehearsal coin ran 1% of the burn pool per unit; the proposed mainnet $DEFICIT rule is 2%). Holders&apos; balances are never touched: only tokens the program bought are burned.</p>
+      <p className="text-xs text-neutral-400">A share of the spendable burn pool buys the coin and every token bought is burned. It is not a fixed share of the token supply. Hypothetical inputs go in the fields below. The first values come from the real devnet receipt of 2026-10-06. That rehearsal coin spent 1% of the burn pool per unit, and the rule proposed for $DEFICIT on mainnet is 2%. Holders&apos; balances are never touched. Only tokens the program bought are burned.</p>
       <div className="mt-2 grid gap-2 sm:grid-cols-5 text-xs text-neutral-400">
         {field("riseB", "Debt rise ($B)", riseB, setRiseB)}
         {field("pct", "Per unit (%)", pct, setPct)}
@@ -35,13 +35,13 @@ export function BurnMath({ defaultPercent = "1" }: { defaultPercent?: string }) 
         {field("reserve", "Trading pool SOL reserve", reserve, setReserve)}
         {field("tokRes", "Token reserve (hypothetical, optional)", tokRes, setTokRes, "leave empty")}
       </div>
-      {!r ? <p className="mt-3 text-xs text-amber-300" role="status" data-burn-math-invalid>No result while a field is invalid: fix the field marked in red. The calculator never substitutes a different value for the one you typed.</p> : (() => { const o = r.out; return (
+      {!r ? <p className="mt-3 text-xs text-amber-300" role="status" data-burn-math-invalid>No result is shown while a field is invalid. Fix the field marked in red. The calculator never substitutes a different value for the one you typed.</p> : (() => { const o = r.out; const carries = !o.belowFloor && o.carriedOut > BigInt(0); return (
       <ol className="mt-3 list-decimal pl-5 space-y-1 text-xs text-neutral-200">
-        <li><b>Qualifying units:</b> {o.units.toString()} (each full $1B; the remainder carries only while the debt keeps rising).</li>
+        <li><b>Qualifying units:</b> {o.units.toString()} (each full $1B counts once, and the remainder carries over only while the debt keeps rising).</li>
         <li><b>Available budget:</b> {sol(o.budget)} SOL{o.capBound ? " (the pre-audit cap of 25 SOL applies)" : ""}.</li>
         <li><b>Planned spend:</b> {sol(o.ruleSpend)} SOL = budget × (1 − (1 − {r.bps / 100}%)^{o.units.toString()}). Compounding: {o.units.toString()} units × {r.bps / 100}% would be {sol(o.naiveSpend)} SOL; each unit spends its share of what the previous one left.</li>
-        <li><b>Actual purchase:</b> {o.belowFloor ? "nothing: under the spend floor fixed at launch; the pool keeps the SOL" : `${sol(o.spend)} SOL`}{!o.belowFloor && o.carriedOut > BigInt(0) ? ` — one crank spends at most 2% of the trading pool's SOL reserve (${sol(o.reserveCap)} SOL); ${sol(o.carriedOut)} SOL carries to the next crank` : ""}.</li>
-        <li><b>Actual burn:</b> every token the purchase received. {o.estimatedTokensRaw !== null ? <>Estimate with your hypothetical reserves: about {(Number(o.estimatedTokensRaw) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })} tokens (constant-product, after a 0.25% pool fee; not a quote).</> : <>The number of tokens depends on the trading pool&apos;s reserves at the moment of the crank; enter a hypothetical token reserve to estimate it.</>}</li>
+        <li><b>Actual purchase:</b> {o.belowFloor ? "nothing, because the spend is under the floor fixed at launch, so the pool keeps the SOL" : `${sol(o.spend)} SOL`}{carries ? `. One run spends at most 2% of the trading pool's SOL reserve (${sol(o.reserveCap)} SOL), so ${sol(o.carriedOut)} SOL carries over to the next run` : ""}.</li>
+        <li><b>Actual burn:</b> every token the purchase received. {o.estimatedTokensRaw !== null ? <>With your hypothetical reserves, that is about {(Number(o.estimatedTokensRaw) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })} tokens. This estimate uses the constant-product formula after a 0.25% pool fee, and it is not a quote.</> : <>The number of tokens depends on the trading pool&apos;s reserves at the moment of the run. Enter a hypothetical token reserve to estimate it.</>}</li>
       </ol>); })()}
     </section>
   );

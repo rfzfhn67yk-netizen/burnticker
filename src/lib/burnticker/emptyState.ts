@@ -16,10 +16,10 @@ export type EmptyKind = "not-launched" | "no-activity" | "loading" | "unavailabl
 export interface EmptyCopy { kind: EmptyKind; heading: string; body: string }
 
 export const EMPTY_STATE_COPY: Record<EmptyKind, EmptyCopy> = {
-  "not-launched": { kind: "not-launched", heading: "Not launched", body: "This does not exist on this network yet, so there is nothing to read. It is not an error." },
-  "no-activity": { kind: "no-activity", heading: "No activity yet", body: "Everything was read correctly; there is simply nothing to show yet." },
-  loading: { kind: "loading", heading: "Loading", body: "Reading the data. Nothing is shown until it answers." },
-  unavailable: { kind: "unavailable", heading: "Data unavailable", body: "The data could not be read just now. This says nothing about the coins or the receipts themselves; try again later." },
+  "not-launched": { kind: "not-launched", heading: "Not launched", body: "This does not exist on this network yet, so there is nothing to read. That is not an error." },
+  "no-activity": { kind: "no-activity", heading: "No activity yet", body: "Everything was read correctly. There is just nothing to show yet." },
+  loading: { kind: "loading", heading: "Loading", body: "The data is still loading. Nothing is shown until it arrives." },
+  unavailable: { kind: "unavailable", heading: "Data unavailable", body: "The data could not be read just now. That does not mean anything is wrong with the coins or their receipts. Try again later." },
 };
 
 /** The kind for a fetch outcome: an error is `unavailable`, no answer yet is `loading`, an empty answer is the caller's choice. */

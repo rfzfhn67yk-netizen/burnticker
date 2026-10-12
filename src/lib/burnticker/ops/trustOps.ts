@@ -26,18 +26,20 @@ export interface TrustOps {
 const iso = (ms: number | null | undefined): string | null => (ms === null || ms === undefined ? null : new Date(ms).toISOString());
 const day = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
-/** One coin's attesters line: "2 attesters · KeepAb… data-key since 2026-10-09 (senior from 2026-10-16) · Comm12… independent since …". */
+/** One coin's attesters line: "2 signers are active. KeepAb… is the data key. It was added on 2026-10-09 and becomes senior on 2026-10-16. …". */
 export function attesterLines(reg: Pick<Registry, "tokens" | "attesters">, now: number): AttesterLine[] {
   return reg.tokens().filter((t) => t.status !== "expired" && t.status !== "draft").map((t) => {
     const keys = reg.attesters(t.mint).map((a) => ({ prefix: `${a.pubkey.slice(0, 6)}…`, role: a.role, active: a.active, addedAt: day(a.addedAt), seniorFrom: day(a.addedAt + ATTESTER_SENIORITY_MS), senior: now - a.addedAt >= ATTESTER_SENIORITY_MS }));
     const active = keys.filter((k) => k.active);
-    const line = `${active.length} attester${active.length === 1 ? "" : "s"}${active.length ? ` · ${active.map((k) => `${k.prefix} ${k.role} since ${k.addedAt} (${k.senior ? "senior" : `senior from ${k.seniorFrom}`})`).join(" · ")}` : ""}${keys.length > active.length ? ` · ${keys.length - active.length} retired` : ""}`;
+    const roleText = (r: string): string => (r === "data-key" ? "the data key" : r === "independent" ? "an independent signer" : `a ${r} signer`);
+    const retired = keys.length - active.length;
+    const line = [`${active.length} ${active.length === 1 ? "signer is" : "signers are"} active.`, ...active.map((k) => `${k.prefix} is ${roleText(k.role)}. It was added on ${k.addedAt} and ${k.senior ? "is senior" : `becomes senior on ${k.seniorFrom}`}.`), ...(retired > 0 ? [`${retired} ${retired === 1 ? "signer has" : "signers have"} retired.`] : [])].join(" ");
     return { ticker: t.ticker, status: t.status, count: active.length, keys, line };
   });
 }
 
 function fromStatus(s: OpsStatusJson | null): KeeperView {
-  if (!s) return { source: "this host", url: null, reachable: false, role: null, active: null, reason: "this host has not published status/status.json (no keeper here, or it has not completed a cycle)", hostIdHash: null, lastCycleAt: null, takeoverAt: null, takeoverValid: null, error: null };
+  if (!s) return { source: "this host", url: null, reachable: false, role: null, active: null, reason: "This host has not published its keeper status. Either no keeper runs here, or it has not finished a cycle yet.", hostIdHash: null, lastCycleAt: null, takeoverAt: null, takeoverValid: null, error: null };
   const k = s.keeper;
   return { source: "this host", url: null, reachable: true, role: k.role, active: k.active, reason: k.reason, hostIdHash: k.hostIdHash, lastCycleAt: iso(k.lastCycleAt), takeoverAt: k.takeover?.at ?? null, takeoverValid: k.takeover ? true : null, error: null };
 }
@@ -52,9 +54,9 @@ export async function buildTrustOps(o: { registry: Pick<Registry, "tokens" | "at
   const peerUrl = (env.BURNTICKER_PEER_STATUS_URL ?? "").trim();
   if (/^https?:\/\//.test(peerUrl)) keepers.push(fromPeer(await readPeer(peerUrl, o.fetchImpl ?? (globalThis.fetch as unknown as FetchJson), now, 5000)));
   const actives = keepers.filter((k) => k.active === true);
-  const activeSummary = actives.length === 0 ? (keepers.some((k) => k.reachable) ? "no keeper is active right now (both passive or yielded) — readings wait; nothing is lost" : "no keeper status is published on this host")
-    : actives.length === 1 ? `active: ${actives[0].source} (${actives[0].role}, host ${actives[0].hostIdHash ?? "?"})${keepers.length === 1 ? " — no standby configured" : ""}`
-    : "BOTH keepers report active — the program refuses a duplicate reading and the fence holds a keeper that sees a reading it did not write; the operator resolves it (runbook \"Keeper redundancy\")";
+  const activeSummary = actives.length === 0 ? (keepers.some((k) => k.reachable) ? "No keeper is active right now. Both are passive or have stepped back. Readings wait, and nothing is lost." : "This host publishes no keeper status.")
+    : actives.length === 1 ? `The keeper on ${actives[0].source === "peer" ? "the other host" : "this host"} is active. It is the ${actives[0].role ?? "keeper"}, on host ${actives[0].hostIdHash ?? "unknown"}.${keepers.length === 1 ? " No standby keeper is set up." : ""}`
+    : "Both keepers say they are active. The program refuses a second copy of any reading, and a keeper that sees a reading it did not write holds its sends. The operator sorts it out using the keeper redundancy runbook.";
   let snap: SnapshotRecord | null = null;
   try { snap = latestSnapshot(o.registry); } catch { snap = null; }
   return {

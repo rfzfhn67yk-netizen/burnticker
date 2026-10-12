@@ -16,12 +16,12 @@ const DAY = 86_400_000;
 
 /** POST /v1/search/miss — the page reports a search that showed cards but got no "Use this" click. Anonymous; append-only. */
 export function v1SearchMiss(p: Platform, body: Record<string, unknown> | null, now = Date.now()): ApiResult {
-  if (!body) return fail(400, "invalid JSON body");
+  if (!body) return fail(400, "The request body is not valid JSON.");
   const query = typeof body.query === "string" ? body.query.slice(0, 200) : "";
   const cards = Number(body.cards);
-  if (!query.trim() || !Number.isFinite(cards) || cards < 1) return fail(400, "query (text) and cards (≥ 1) are required: a search with no card is logged by the server itself");
+  if (!query.trim() || !Number.isFinite(cards) || cards < 1) return fail(400, "Send the search text as query and a card count of at least 1. A search with no cards is logged by the server itself.");
   const stored = productStore(p.registry.db).logMiss({ query, cards, reason: "no-click" }, now);
-  return ok({ ok: true, stored, note: "anonymous: the query folded to plain words and the UTC hour; no IP, no id, no cookie" });
+  return ok({ ok: true, stored, note: "This is stored without a name. We keep the search as plain words and the hour in UTC. We keep no IP address, no id and no cookie." });
 }
 
 /** The search route's own hook: a query that answered no card. */
@@ -49,7 +49,7 @@ export function v1OpsSearchMisses(p: Platform, req: Request, q: URLSearchParams,
   if (denied) return denied;
   const days = Math.max(1, Math.min(90, Math.round(Number(q.get("days") ?? 7)) || 7));
   const st = productStore(p.registry.db);
-  return ok({ days, misses: st.missSummary(now - days * DAY), timeToLaunch: st.timingSummary(now - days * DAY), privacy: "no IP, no user id, no session id, no wallet; queries folded to plain words; UTC hour buckets; launch timings kept as durations" });
+  return ok({ days, misses: st.missSummary(now - days * DAY), timeToLaunch: st.timingSummary(now - days * DAY), privacy: "We keep no IP address, no user id, no session id and no wallet. Searches are kept as plain words and grouped by hour in UTC. Launch timings are kept only as lengths of time." });
 }
 
 export type CoinState = "draft" | "curve" | "graduated" | "retired" | "voided" | "expired" | "paused";
@@ -72,7 +72,7 @@ const stateOf = (s: TokenStatusJson): CoinState => {
 /** GET /v1/creators/{wallet} — the coins and pairs whose creator wallet matches (read-only; the creator dashboard). */
 export async function v1Creator(p: Platform, wallet: string, now = Date.now()): Promise<ApiResult> {
   const w = decodeURIComponent(wallet).trim();
-  if (!PUBKEY.test(w)) return fail(400, "wallet must be a Solana public key");
+  if (!PUBKEY.test(w)) return fail(400, "The wallet must be a Solana public key.");
   const mine = p.registry.tokens().filter((t) => t.creator === w && t.status !== "expired").slice(0, 50);
   const day = new Date(now).toISOString().slice(0, 10);
   const coins: CreatorCoin[] = [];
@@ -92,5 +92,5 @@ export async function v1Creator(p: Platform, wallet: string, now = Date.now()): 
     });
   }
   const pairs = [...new Set(coins.map((c) => c.pairId).filter((x): x is string => !!x))].map((id) => { const pr = p.registry.pair(id); return pr ? { pairId: id, page: `/burnticker/p/${id}`, sides: coins.filter((c) => c.pairId === id).map((c) => c.ticker), voided: coins.some((c) => c.pairId === id && c.state === "voided") } : null; }).filter((x): x is NonNullable<typeof x> => !!x);
-  return ok({ wallet: w, coins, pairs, note: "read-only: no signing, no posting; 'today's post' is the lint-checked text to copy" });
+  return ok({ wallet: w, coins, pairs, note: "This is read-only. Nothing is signed or posted. Today's post is checked text that you can copy." });
 }

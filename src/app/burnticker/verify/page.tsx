@@ -34,7 +34,7 @@ export default function VerifyMintPage() {
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-5 text-sm">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Verify a mint</h1>
-        <p className="text-neutral-400">Paste any Solana token address. The answer comes from the burn_receipts program&apos;s on-chain TokenConfig and Burnticker&apos;s registry, compared. A coin that only looks like a Burnticker coin is listed on <Link className="underline" href="/burnticker/not-burnticker">Not Burnticker</Link>.</p>
+        <p className="text-neutral-400">Paste any Solana token address. The answer compares two records: what the burn program has stored on chain for that token, and what Burnticker&apos;s own registry lists. A coin that only looks like a Burnticker coin is listed on <Link className="underline" href="/burnticker/not-burnticker">Not Burnticker</Link>.</p>
       </header>
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void run(mint); }}>
         <label htmlFor="mint" className="sr-only">Mint address</label>
@@ -47,23 +47,23 @@ export default function VerifyMintPage() {
           <h2 className={`text-lg font-semibold ${good ? "text-emerald-400" : unknown ? "text-amber-300" : ""}`}>{v.headline}</h2>
           <p>{v.summary}</p>
           {v.registration && v.catalogue && <dl className="grid gap-2 text-xs sm:grid-cols-2" data-separate-facts>
-            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">On-chain registration (burn_receipts program)</dt>
-              {v.registration.networks.map((n) => <dd key={n.network} className="mt-1"><span className={n.state === "registered" ? "text-emerald-400" : n.state === "unavailable" ? "text-amber-300" : "text-neutral-300"}>{n.network}: {REG[n.state]}</span> <span className="block break-all font-mono text-neutral-500">program {n.programId}</span></dd>)}</div>
-            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">Burnticker catalogue ({v.catalogue.network}, the network this host reads)</dt><dd className="mt-1">{v.catalogue.state === "absent" ? "not listed" : v.catalogue.state}</dd></div>
+            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">Registered with the burn program on chain</dt>
+              {v.registration.networks.map((n) => <dd key={n.network} className="mt-1"><span className={n.state === "registered" ? "text-emerald-400" : n.state === "unavailable" ? "text-amber-300" : "text-neutral-300"}>{n.network}: {REG[n.state]}</span> <span className="block break-all font-mono text-neutral-500">Program {n.programId}</span></dd>)}</div>
+            <div className="rounded border border-neutral-800 p-2"><dt className="text-neutral-500">Listed in the Burnticker catalogue on {v.catalogue.network}, the network this site shows</dt><dd className="mt-1">{v.catalogue.state === "absent" ? "not listed" : v.catalogue.state}</dd></div>
           </dl>}
           {v.coin && <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-            <div><dt className="text-neutral-500">coin</dt><dd className="font-mono">${v.coin.ticker} · {v.coin.status}</dd></div>
+            <div><dt className="text-neutral-500">coin</dt><dd className="font-mono">${v.coin.ticker}, {v.coin.status}</dd></div>
             <div><dt className="text-neutral-500">launched</dt><dd className="font-mono">{v.coin.launchedAt ? v.coin.launchedAt.slice(0, 10) : "—"}</dd></div>
             <div><dt className="text-neutral-500">receipts</dt><dd className="font-mono">{v.coin.receipts}</dd></div>
             <div className="col-span-2 sm:col-span-3"><dt className="text-neutral-500">creator</dt><dd className="font-mono break-all">{v.coin.creator}</dd></div>
             <div className="col-span-2 sm:col-span-3"><dt className="text-neutral-500">rules sha256</dt><dd className="font-mono break-all">{v.coin.rulesSha256}</dd></div>
           </dl>}
           <ul className="space-y-1 text-xs">{v.checks.map((c) => <li key={c.id}><span className={c.ok === true ? "text-emerald-400" : c.ok === false ? "text-red-400" : "text-neutral-500"}>{c.ok === true ? "✓" : c.ok === false ? "✗" : "–"}</span> {c.detail}</li>)}</ul>
-          <p className="text-xs text-neutral-500 break-all">mint {v.mint} · catalogue read on {v.cluster}</p>
+          <p className="text-xs text-neutral-500 break-all">Mint {v.mint}. The catalogue was read on {v.cluster}.</p>
           <p className="text-xs">{v.links.page && <><Link className="underline" href={v.links.page}>coin page →</Link> · </>}<Link className="underline" href={v.links.verifier}>verify a receipt transaction →</Link></p>
         </section>
       )}
-      <p className="text-xs text-neutral-500">The same answer as JSON: <code>/api/burnticker/v1/verify-mint/&lt;mint&gt;</code>. Not affiliated with any team, league, candidate, agency or market.</p>
+      <p className="text-xs text-neutral-500">The same answer is available as JSON at <code>/api/burnticker/v1/verify-mint/&lt;mint&gt;</code>. Burnticker is not affiliated with any team, league, candidate, agency or market.</p>
     </main>
   );
 }

@@ -41,7 +41,7 @@ const BURN_RECEIPTS_PROGRAM_ID = BURN_RECEIPTS_LOCALNET_PROGRAM_ID;
 /** The one-line policy statement every surface uses (copy-lint clean: no price, no promise, no prize). */
 export const LP_POLICY_LINE = "LP locked forever; its fees fund the burn (80% burned, 20% operator, fixed in code)";
 /** The short badge on token and pair pages. */
-export const LP_POLICY_BADGE = "LP locked forever · fees fund the burn";
+export const LP_POLICY_BADGE = "Liquidity locked forever, and its fees fund the burn";
 
 /**
  * THE PROGRAM INTERFACE this adapter is bound to (the program builder's, 2026-10-10: names, seeds and accounts final). The constants
@@ -335,11 +335,11 @@ const rawTokens = (raw: bigint, decimals: number): string => {
   return `${raw / d}${frac ? `.${frac}` : ""}`;
 };
 
-/** The receipt line for one claim (registry, status.json, the daily post): "LP fees claimed: X SOL → 80% burn pool / 20% operator; coin side burned". */
+/** The receipt line for one claim (registry, status.json, the daily post): "X SOL of pool fees was claimed. Y SOL (80%) went to the burn pool …". */
 export function lockFeeClaimLine(f: LockFeeClaimFacts, decimals = 6): string {
-  const coin = f.tokenBurnedRaw > BigInt(0) ? `coin side burned (${rawTokens(f.tokenBurnedRaw, decimals)} tokens)` : "coin side burned";
-  const owed = f.pendingLamports !== undefined && f.pendingLamports > BigInt(0) ? `, ${lamportsToSol(f.pendingLamports)} still owed to the operator` : "";
-  return `LP fees claimed: ${lamportsToSol(f.solLamports)} SOL → 80% burn pool (${lamportsToSol(f.toBurnPoolLamports)}) / 20% operator (${lamportsToSol(f.toOperatorLamports)}${owed}); ${coin}`;
+  const coin = f.tokenBurnedRaw > BigInt(0) ? `The coin side was burned (${rawTokens(f.tokenBurnedRaw, decimals)} tokens).` : "The coin side was burned.";
+  const owed = f.pendingLamports !== undefined && f.pendingLamports > BigInt(0) ? `, with ${lamportsToSol(f.pendingLamports)} SOL still owed to the operator` : "";
+  return `${lamportsToSol(f.solLamports)} SOL of pool fees was claimed. ${lamportsToSol(f.toBurnPoolLamports)} SOL (80%) went to the burn pool and ${lamportsToSol(f.toOperatorLamports)} SOL (20%) went to the operator${owed}. ${coin}`;
 }
 
 export interface LockFeeClaimRow extends LockFeeClaimFacts { signature: string; mint: string; at: number; slot: number | null }
@@ -358,8 +358,8 @@ export function buildLpLockJson(i: { cluster: string; mint?: string; programId?:
   let feeKeyRecord: string | null = null;
   try { feeKeyRecord = i.programId && i.mint ? feeKeyRecordPda(i.programId, i.mint).toBase58() : null; } catch { feeKeyRecord = null; }
   const notes = [
-    !i.state?.graduated ? "not graduated yet: the LP is locked at graduation and the Fee Key address appears then" : null,
-    !i.operatorTreasury ? `the operator treasury is not pinned in this cluster's program build: claim_lock_fees refuses (${TREASURY_NOT_PINNED}) and the fees stay in the lock until it is` : null,
+    !i.state?.graduated ? "This coin has not graduated yet. Its liquidity is locked at graduation, and the Fee Key address shows up then." : null,
+    !i.operatorTreasury ? `The operator treasury is not set in this network's program build. Until it is, the fee claim is refused (${TREASURY_NOT_PINNED}) and the fees stay in the lock.` : null,
   ].filter((x): x is string => !!x);
   return {
     policy: LP_POLICY, lockProgram, feeKey, feeKeyOwner, lockedLiquidity, feeKeyRecord, feeKeyRegistered: !!i.state?.feeKeyRegistered, lockedPct: i.state?.lockedPct ?? LP_LOCKED_PCT,
@@ -369,7 +369,7 @@ export function buildLpLockJson(i: { cluster: string; mint?: string; programId?:
     totals: { claims: sorted.length, sol: lamportsToSol(sum("solLamports")), toBurnPool: lamportsToSol(sum("toBurnPoolLamports")), toOperator: lamportsToSol(sum("toOperatorLamports")), tokenBurnedRaw: sum("tokenBurnedRaw").toString() },
     urls: { lockProgram: url(lockProgram), feeKey: url(feeKey), feeKeyOwner: url(feeKeyOwner), lockedLiquidity: url(lockedLiquidity), operatorTreasury: url(i.operatorTreasury) },
     line: LP_POLICY_LINE,
-    note: notes.length ? notes.join("; ") : null,
+    note: notes.length ? notes.join(" ") : null,
     lastError: i.lastError ? { at: new Date(i.lastError.at).toISOString(), error: i.lastError.error, sentence: lockFeeErrorSentence(i.lastError.error) } : null,
   };
 }

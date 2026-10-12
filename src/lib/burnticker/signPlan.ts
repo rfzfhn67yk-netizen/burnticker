@@ -76,7 +76,7 @@ export function buildStepTx(step: SignStep, creator: string, keys: Record<string
   const instructions = step.instructions.map((ix) => new TransactionInstruction({ programId: new PublicKey(ix.programId), keys: ix.keys.map((k) => ({ pubkey: new PublicKey(k.pubkey), isSigner: k.isSigner, isWritable: k.isWritable })), data: Buffer.from(ix.dataBase64, "base64") }));
   const signers = step.signers.filter((s) => s !== "creator").map((s) => {
     const k = keys[s];
-    if (!k) throw new Error(`${step.label}: needs the ${s} key`);
+    if (!k) throw new Error(`${step.label} needs the ${s} key`);
     return Keypair.fromSecretKey(base58ToBytes(k));
   });
   let tx: VersionedTransaction;
@@ -273,9 +273,9 @@ export function bytesToBase58(b: Uint8Array): string {
   return out;
 }
 
-const sentSentence = (i: number, n: number, sig: string) => `step ${i + 1} of ${n}: Sent; confirmation unavailable — signature ${sig}`;
-const chainRejected = (i: number, n: number, err: unknown) => `step ${i + 1} of ${n} failed: the chain rejected it (${(typeof err === "string" ? err : JSON.stringify(err ?? "error")).slice(0, 120)})`;
-const expiredSentence = (i: number, n: number, sig: string) => `step ${i + 1} of ${n} failed: transaction ${sig} did not land before its blockhash expired, so nothing it would create exists`;
+const sentSentence = (i: number, n: number, sig: string) => `Step ${i + 1} of ${n} was sent, but the confirmation could not be read (signature ${sig})`;
+const chainRejected = (i: number, n: number, err: unknown) => `Step ${i + 1} of ${n} failed because the chain rejected it (${(typeof err === "string" ? err : JSON.stringify(err ?? "error")).slice(0, 120)})`;
+const expiredSentence = (i: number, n: number, sig: string) => `Step ${i + 1} of ${n} failed because transaction ${sig} did not land before its blockhash expired. Nothing it would have created exists`;
 /** A send error that proves the transaction never left the RPC node (preflight / blockhash refused); anything else may have landed. */
 const SEND_REFUSED = /simulation failed|preflight|blockhash not found|insufficient funds/i;
 
@@ -319,7 +319,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   // the network's lookup table, verified once before anything is signed (a mismatch stops the run: nothing was sent)
   let lut: AddressLookupTableAccount | null = null;
   if (signatures.length < n) {
-    try { lut = await d.lookupTable(); } catch (e) { return stop(signatures.length, "not-sent", `step ${signatures.length + 1} of ${n} failed: ${String((e as Error)?.message ?? e).slice(0, 240)}`); }
+    try { lut = await d.lookupTable(); } catch (e) { return stop(signatures.length, "not-sent", `Step ${signatures.length + 1} of ${n} failed. The error was: ${String((e as Error)?.message ?? e).slice(0, 240)}`); }
   }
 
   for (let i = signatures.length; i < n; i++) {
@@ -335,7 +335,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       rec.pending = pending; rec.failed = null; save(); // written BEFORE the send
     } catch (e) {
       const m = (e as Error).message ?? String(e);
-      return stop(i, "not-sent", /reject|denied|cancel/i.test(m) ? `step ${i + 1} of ${n} was not signed in the wallet` : `step ${i + 1} of ${n} failed: ${m.slice(0, 200)}`);
+      return stop(i, "not-sent", /reject|denied|cancel/i.test(m) ? `Step ${i + 1} of ${n} was not signed in the wallet` : `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`);
     }
     let sig: string;
     try {
@@ -343,7 +343,7 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
       if (sig && sig !== pending.signature) { pending.signature = sig; save(); }
     } catch (e) {
       const m = (e as Error).message ?? String(e);
-      if (SEND_REFUSED.test(m)) { rec.pending = null; save(); return stop(i, "not-sent", `step ${i + 1} of ${n} failed: ${m.slice(0, 200)}`); }
+      if (SEND_REFUSED.test(m)) { rec.pending = null; save(); return stop(i, "not-sent", `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`); }
       const r = settledStop(pending, await settle(pending)); // the node may have forwarded it: settle against the original
       if (r) return r;
       continue;
@@ -369,9 +369,9 @@ export function planStepStates(n: number, signatures: string[], failure: { faile
 export function stepStatusText(state: StepState, signature?: string | null): string {
   const short = signature ? `${signature.slice(0, 10)}…` : "";
   if (state === "confirmed") return `confirmed ${short}`.trim();
-  if (state === "sent") return `Sent; confirmation unavailable — signature ${signature ?? "unknown"}`;
-  if (state === "failed") return signature ? `did not take effect — signature ${short}` : "did not take effect";
-  if (state === "abandoned") return "abandoned — the mint key was lost on reload";
+  if (state === "sent") return `sent, but the confirmation could not be read (signature ${signature ?? "unknown"})`;
+  if (state === "failed") return signature ? `did not take effect (signature ${short})` : "did not take effect";
+  if (state === "abandoned") return "abandoned because the mint key was lost on reload";
   return "not sent";
 }
 
@@ -402,7 +402,7 @@ export function abandonedSentence(rec: Pick<PlanRecord, "confirmed" | "paid"> & 
   const n = rec.steps, c = Math.min(rec.confirmed.length, n), names = rec.confirms.map((x) => `$${x.ticker}`).join(" and ") || "this launch";
   const which = n - c === 1 ? `step ${c + 1} of ${n} is` : `steps ${c + 1}–${n} of ${n} are`;
   const creates = rec.confirms.length > 0 && rec.confirms.every((x) => rec.confirmed[x.step]);
-  return `${lead ?? `${names}: ${c} of ${n} step(s) confirmed on chain.`} ${which[0].toUpperCase()}${which.slice(1)} abandoned: the mint key was lost on reload (it is never stored), so this plan cannot be rebuilt here; ${creates ? "its create steps are confirmed, but the launch is not recorded from this plan" : "nothing from this plan is live until the create step confirms"}. Fee already spent: ${solText(feesPaidLamports(rec))} SOL. The only safe action: start the launch again from the review, as a new plan.`;
+  return `${lead ?? `For ${names}, ${c} of the ${n} steps ${c === 1 ? "is" : "are"} confirmed on chain.`} ${which[0].toUpperCase()}${which.slice(1)} abandoned because the mint key was lost on reload. The key is never stored, so this plan cannot be rebuilt here. ${creates ? "Its create steps are confirmed, but the launch is not recorded from this plan." : "Nothing from this plan is live until the create step confirms."} The fee already spent is ${solText(feesPaidLamports(rec))} SOL. The only safe thing to do is to start the launch again from the review, as a new plan.`;
 }
 
 /** The card's sentence on mount when storage holds a sent step whose outcome is not known yet (after a reload). */
@@ -413,10 +413,10 @@ export function sentRecoverySentence(p: Pick<PendingSend, "step" | "signature">,
 /** The card's sentence for a run that stopped. "Nothing was sent." only when no step was confirmed or sent. */
 export function failureSentence(r: SendResult, n: number): string {
   const before = r.signatures.length > 0;
-  if (r.state === "abandoned") return r.error ?? "This plan is abandoned. The only safe action: start the launch again from the review, as a new plan.";
-  if (r.state === "sent") return `${r.error}. Pressing the button again checks that transaction on chain first; a new one is built only once it can no longer land.${before ? " The steps before it are confirmed on chain." : ""}`;
-  if (r.state === "failed") return `${r.error}. ${before ? "The steps before it are confirmed on chain; p" : "P"}ressing the button again builds step ${(r.failedAt ?? 0) + 1} of ${n} afresh.`;
-  return `${r.error}. ${before ? "The steps before it are confirmed on chain; pressing the button again continues from the failed step." : "Nothing was sent."}`;
+  if (r.state === "abandoned") return r.error ?? "This plan is abandoned. The only safe thing to do is to start the launch again from the review, as a new plan.";
+  if (r.state === "sent") return `${r.error}. Pressing the button again checks that transaction on chain first. A new one is built only once the old one can no longer land.${before ? " The steps before it are confirmed on chain." : ""}`;
+  if (r.state === "failed") return `${r.error}. ${before ? "The steps before it are confirmed on chain. " : ""}Pressing the button again builds step ${(r.failedAt ?? 0) + 1} of ${n} afresh.`;
+  return `${r.error}. ${before ? "The steps before it are confirmed on chain. Pressing the button again continues from the failed step." : "Nothing was sent."}`;
 }
 
 /** Which signature confirms which draft. */
@@ -529,10 +529,10 @@ export function listStoredLaunches(storage: PlanStorage | null | undefined): Sto
 /** The line a stored launch shows before anything is checked. */
 export function storedLaunchSentence(s: StoredLaunch): string {
   const r = s.rec, n = r.steps, names = r.confirms.map((c) => `$${c.ticker}`).join(" and ");
-  if (r.pending) return `${names}: step ${r.pending.step + 1} of ${n} — ${stepStatusText("sent", r.pending.signature)}.`;
-  if (r.confirmed.length >= n) return `${names}: all ${n} transaction${n === 1 ? " is" : "s are"} confirmed on chain; the launch is not recorded yet.`;
+  if (r.pending) return `For ${names}, step ${r.pending.step + 1} of ${n} was ${stepStatusText("sent", r.pending.signature)}.`;
+  if (r.confirmed.length >= n) return `For ${names}, ${n === 1 ? "the transaction is" : `all ${n} transactions are`} confirmed on chain. The launch is not recorded yet.`;
   // F4 residual: the mint keys are gone with the reload, so every step not confirmed is abandoned — the sentence says so, with the fees paid
-  if (r.failed && r.confirmed.length <= r.failed.step) return abandonedSentence(r, `${names}: step ${r.failed.step + 1} of ${n} did not take effect — signature ${r.failed.signature}; ${r.confirmed.length} of ${n} step(s) confirmed on chain.`);
+  if (r.failed && r.confirmed.length <= r.failed.step) return abandonedSentence(r, `For ${names}, step ${r.failed.step + 1} of ${n} did not take effect (signature ${r.failed.signature}). ${r.confirmed.length} of the ${n} steps ${r.confirmed.length === 1 ? "is" : "are"} confirmed on chain.`);
   return abandonedSentence(r);
 }
 
@@ -558,5 +558,5 @@ export async function recoverStoredLaunch(storage: PlanStorage, s: StoredLaunch,
   const done = rec.confirms.every((x) => rec.recorded.includes(x.mint));
   if (done) { try { storage.remove(s.key); } catch { /* ignore */ } } else save();
   const names = rec.confirms.map((x) => `$${x.ticker}`).join(" and ");
-  return { text: done ? `${names}: confirmed on chain and recorded — the coin page is live.` : `All ${rec.steps} transaction${rec.steps === 1 ? " is" : "s are"} confirmed on chain. ${c.error ?? ""}`.trim(), done, rec };
+  return { text: done ? `For ${names}, everything is confirmed on chain and recorded. The coin page is live.` : `All ${rec.steps} transaction${rec.steps === 1 ? " is" : "s are"} confirmed on chain. ${c.error ?? ""}`.trim(), done, rec };
 }

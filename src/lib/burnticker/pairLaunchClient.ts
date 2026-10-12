@@ -17,7 +17,7 @@ import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
  */
 
 export type PairVenue = "pair-curve" | "launchlab";
-export const PAIR_CURVE_REVIEW_LINE = "pair curve · both graduate or neither";
+export const PAIR_CURVE_REVIEW_LINE = "Both coins graduate together, or neither does.";
 
 /** Which venue to ask for, from the catalogue's venue flags (absent → LaunchLab, the server corrects a stale read with a 409). */
 export const venueFor = (venues: { pairCurve?: boolean } | null | undefined): PairVenue => (venues?.pairCurve ? "pair-curve" : "launchlab");

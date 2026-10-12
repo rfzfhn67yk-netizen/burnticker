@@ -120,12 +120,12 @@ export function previewFromFixture(feed: Feed, rule: BurnRule, nowMs: number, ro
 /** A tier-2 rule must agree with the source's fixed unit, direction and baseline; the source's carry policy rides along. */
 export function feedRuleProblems(feed: Feed, rule: BurnRule): string[] {
   const p: string[] = [];
-  if (rule.oracle !== "catalogue" || rule.series !== feed.id) p.push(`rule is not for source ${feed.id}`);
-  if (rule.kind !== "scalar" || !rule.scalar) { p.push("catalogue rules are scalar"); return p; }
-  if (rule.scalar.unit !== feed.unit!.size) p.push(`unit must be ${feed.unit!.size} (${feed.unit!.label}) for ${feed.id}`);
-  if (rule.scalar.direction !== feed.direction) p.push(`direction must be "${feed.direction}" for ${feed.id}`);
-  if (rule.scalar.baseline !== feed.baseline) p.push(`baseline must be ${JSON.stringify(feed.baseline)} for ${feed.id}`);
-  if (!feed.launchable.ok) p.push(`${feed.id} is not launchable: ${feed.launchable.why}`);
+  if (rule.oracle !== "catalogue" || rule.series !== feed.id) p.push(`This rule is not for the source ${feed.id}.`);
+  if (rule.kind !== "scalar" || !rule.scalar) { p.push("A catalogue rule must settle on a number."); return p; }
+  if (rule.scalar.unit !== feed.unit!.size) p.push(`The unit must be ${feed.unit!.size} (${feed.unit!.label}) for ${feed.id}.`);
+  if (rule.scalar.direction !== feed.direction) p.push(`The direction must be "${feed.direction}" for ${feed.id}.`);
+  if (rule.scalar.baseline !== feed.baseline) p.push(`The baseline must be ${JSON.stringify(feed.baseline)} for ${feed.id}.`);
+  if (!feed.launchable.ok) p.push(`Coins cannot launch on ${feed.id} yet. The reason is: ${feed.launchable.why}`);
   return p;
 }
 

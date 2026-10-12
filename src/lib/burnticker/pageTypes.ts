@@ -60,7 +60,7 @@ export interface LifecycleJson {
   ended: { reason: string; at: string; mode: "drain" | "winddown" } | null;
   windDown: { days: number; done: number; unitsPerDay: number | null } | null;
   lastSweep: string | null;
-  /** "live", "winding down · day 3 of 28", "draining", "retired · swept 2026-11-20 · pool ≈ 0". */
+  /** "This coin is live.", "This coin is winding down. It is on day 3 of 28.", "This coin is retired. Its pool was last swept on 2026-11-20. …" */
   line: string;
   /** The fee-flow sentence every coin page carries. */
   fees: string;

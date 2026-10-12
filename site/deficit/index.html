@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>$DEFICIT — burns when the debt rises</title>
-<meta name="description" content="$DEFICIT is a Solana memecoin whose supply burns when the U.S. national debt rises: every $1,000,000,000 of new debt on Treasury's Debt to the Penny triggers a buyback and burn paid by the token's own trading fees, with a receipt on chain.">
+<meta name="description" content="$DEFICIT is a Solana memecoin whose supply burns when the U.S. national debt rises. Every $1,000,000,000 of new debt on Treasury's Debt to the Penny starts a buyback and burn. The token's own trading fees pay for it, and each burn leaves a receipt on chain.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#e7e5df" media="(prefers-color-scheme: light)">
 <meta property="og:title" content="$DEFICIT — burns when the debt rises">
-<meta property="og:description" content="Every $1B the U.S. borrows buys back and burns $DEFICIT with its own trading fees. Receipts on chain. A memecoin: the rule says what supply does, not what price does.">
+<meta property="og:description" content="For every $1B the U.S. borrows, $DEFICIT's own trading fees buy back and burn the token. Each burn leaves a receipt on chain. It is a memecoin, and the rule says what supply does, not what price does.">
 <meta property="og:image" content="https://deficit.burnticker.com/og.png">
 <meta property="og:url" content="https://deficit.burnticker.com/">
 <meta name="twitter:image" content="https://deficit.burnticker.com/og.png">
@@ -241,7 +241,7 @@ html:not(.prelaunch) #prelaunch{display:none}
       <a href="#receipts">Receipts</a>
       <a href="#verify">Verify</a>
       <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>
-      <a class="primary off" id="tradeTop" aria-disabled="true" data-trade-unavailable title="Not available until launch">Trade: not available</a>
+      <a class="primary off" id="tradeTop" aria-disabled="true" data-trade-unavailable title="Not available until launch">Trading not available</a>
     </nav>
   </div>
 </header>
@@ -258,27 +258,27 @@ html:not(.prelaunch) #prelaunch{display:none}
         <p class="label">$DEFICIT bought and burned to date</p>
         <div class="seg7 amber figamber" id="heroBurn" role="img" aria-label="not published yet"><span class="fb">—</span></div>
         <h1>Every <em>$1,000,000,000</em> the U.S. borrows burns $DEFICIT.</h1>
-        <span class="stamp">a memecoin · the rule says what supply does, not what price does</span>
+        <span class="stamp">A memecoin. The rule says what supply does, not what price does.</span>
       </div>
     </div>
-    <p class="rule"><strong>The rule in one sentence:</strong> each business day Treasury publishes the national debt; every full $1B it rose since the previous reading is one unit, each unit spends 2% of the token's own burn pool (1 − 0.98<sup>units</sup> — the Fed's 2%, pointed the other way) buying $DEFICIT on its Raydium pool, and the on-chain program burns everything bought in the same instruction — with a receipt on chain.</p>
+    <p class="rule"><strong>The rule.</strong> Each business day, the Treasury publishes the national debt. Every full $1B it rose since the previous reading counts as one unit. Each unit spends 2% of the token's own burn pool, buying $DEFICIT on its Raydium pool. Over a day, the share spent is 1 − 0.98<sup>units</sup>. Think of it as the Fed's 2%, pointed the other way. The on-chain program burns everything bought in the same instruction, and the burn leaves a receipt on chain.</p>
     <div class="ready" id="readiness" data-readiness="not-launched" aria-live="polite">
-      <p class="rk" id="readyStep">Step 1 of 7 · where $DEFICIT stands</p>
+      <p class="rk" id="readyStep">Step 1 of 7 toward a first burn</p>
       <p class="rl" id="readyLabel">Not launched</p>
-      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises: $DEFICIT first trades on its LaunchLab curve, which graduates at 85 SOL raised (a seed gift to the burn pool does not count toward it); its pool must then be registered and verified, and only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
+      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once 85 SOL has been raised, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
     </div>
     <div class="cta">
-      <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
+      <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trading not available until launch</a>
       <a class="btn" id="receiptsCta" href="https://burnticker.com/burnticker/check?demo=1#verify" data-prelaunch-href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>
-      <a class="btn ghost" href="rules.json">rules.json</a>
+      <a class="btn ghost" href="rules.json">Read the rule file</a>
     </div>
-    <p class="replay">Replayed over the real Treasury series, 2025-01 → 2026-10-08: <b>235 burn days</b>, <b>6,490 units</b>, biggest day <b>2025-07-07, +$366.44B → 366 units</b> (the day after the debt ceiling rose). A replay of what the rule would have counted, not a forecast.</p>
+    <p class="replay">We replayed the rule over the real Treasury figures from January 2025 to October 8, 2026. It would have counted <b>235 burn days</b> and <b>6,490 units</b>. The biggest day was <b>2025-07-07</b>, when the debt rose <b>$366.44B</b>, which counts as <b>366 units</b>. That was the day after the debt ceiling was raised. This replay shows what the rule would have counted. It predicts nothing.</p>
   </section>
 
   <section class="wrap" id="prelaunch" data-prelaunch>
     <div class="pl">
-      <p><b>Not launched on this network.</b> There is no live reading, daily report or receipt for $DEFICIT yet, so those sections stay hidden until the first reading after launch. No launch date is announced.</p>
-      <p>The evidence that exists today is the devnet rehearsal: <a href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>. The rehearsal coin ran at 1% of the burn pool per $1B; the proposed mainnet rule above is 2% per $1B. Devnet is a rehearsal network: nothing there has money value.</p>
+      <p><b>$DEFICIT has not launched on this network.</b> There is no live reading, daily report or receipt for it yet. Those sections stay hidden until the first reading after launch. No launch date is announced.</p>
+      <p>The evidence that exists today comes from the devnet rehearsal. <a href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>. The rehearsal coin ran at 1% of the burn pool per $1B. The proposed mainnet rule above is 2% per $1B. Devnet is a practice network, and nothing on it has money value.</p>
       <p class="dim" id="prelaunchNote"></p>
     </div>
   </section>
@@ -290,32 +290,32 @@ html:not(.prelaunch) #prelaunch{display:none}
       <div class="cell">
         <div class="k">U.S. total public debt outstanding</div>
         <div class="v num" id="debtNow">—</div>
-        <div class="s"><span class="mono num" id="debtExact">Not launched: no reading yet</span></div>
+        <div class="s"><span class="mono num" id="debtExact">Not launched, so there is no reading yet</span></div>
       </div>
       <div class="cell">
         <div class="k">Last reading</div>
         <div class="v mono num" id="lastDate">—</div>
-        <div class="s" id="lastDelta">Treasury posts each business day's figure the next afternoon (ET).</div>
+        <div class="s" id="lastDelta">The Treasury posts each business day's figure the next afternoon, Eastern Time.</div>
       </div>
       <div class="cell">
         <div class="k">Next possible burn</div>
         <div class="v mono num" id="next">—</div>
-        <div class="s" id="nextSub">The keeper checks the feed at 16:30 and 20:00 ET; a burn needs a full $1B of new debt.</div>
+        <div class="s" id="nextSub">The keeper checks the feed at 16:30 and 20:00 ET. A burn needs a full $1B of new debt.</div>
       </div>
       <div class="cell">
         <div class="k">Bought and burned</div>
         <div class="v num" id="burned">—</div>
-        <div class="s" id="burnedSub">of 1,000,000,000 supply</div>
+        <div class="s" id="burnedSub">out of a supply of 1,000,000,000</div>
       </div>
       <div class="cell">
         <div class="k">Fee pool</div>
         <div class="v mono num" id="pool">—</div>
-        <div class="s" id="poolSub">SOL available for the next burn, after a 0.02 SOL fee reserve</div>
+        <div class="s" id="poolSub">SOL available for the next burn, after 0.02 SOL is kept back for fees</div>
       </div>
       <div class="cell">
         <div class="k">Keeper</div>
         <div class="v mono num" id="health"><span class="pulse off"></span>—</div>
-        <div class="s" id="healthSub">last feed check —</div>
+        <div class="s" id="healthSub">No feed check yet.</div>
       </div>
     </div>
     <p class="notice" id="notice"></p>
@@ -323,19 +323,19 @@ html:not(.prelaunch) #prelaunch{display:none}
 
   <section class="wrap" id="today">
     <h2><span>§2</span>Today</h2>
-    <pre class="today" id="todayText">Not launched: the daily report starts with the first reading after launch.</pre>
-    <p class="todaysub">The day's report, in the same words as the post on <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>: filled from status.json and burns.json, never retyped (format: docs/launch/daily-post.md). <button type="button" id="copyToday" hidden>copy</button></p>
+    <pre class="today" id="todayText">Not launched. The daily report starts with the first reading after launch.</pre>
+    <p class="todaysub">This is the day's report, in the same words as the post on <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT</a>. It is filled in from status.json and burns.json and is never retyped. <button type="button" id="copyToday" hidden>copy</button></p>
   </section>
 
   <section class="wrap" id="receipts">
     <h2><span>§3</span>Receipts</h2>
-    <p class="dim intro">One row per burn day. The reading is Treasury's number for that date; units are what the rule counted; the swap bought the tokens and the burn destroyed them. <b>Verify</b> opens the exact curl, the arithmetic and the memo the burn carries on chain.</p>
+    <p class="dim intro">Each row is one burn day. The reading is the Treasury's number for that date. Units are what the rule counted. The swap bought the tokens, and the burn destroyed them. <b>Verify</b> opens the exact command that fetches the data, the arithmetic and the memo the burn carries on chain.</p>
     <div class="tablewrap">
       <table id="tbl">
         <thead><tr>
           <th scope="col">Record date</th><th scope="col" class="r">Reading</th><th scope="col" class="r">Debt change</th><th scope="col" class="r">Units</th><th scope="col" class="r">Spent (SOL)</th><th scope="col" class="r">Bought</th><th scope="col" class="r">Burned</th><th scope="col">Swap tx</th><th scope="col">Burn tx</th><th scope="col">Check</th><th scope="col"></th>
         </tr></thead>
-        <tbody id="rows"><tr><td colspan="11" class="empty">Not launched: no receipts yet. The first reading after launch is the baseline; the first burn follows the first full $1B increase after it.</td></tr></tbody>
+        <tbody id="rows"><tr><td colspan="11" class="empty">Not launched, so there are no receipts yet. The first reading after launch is the baseline. The first burn follows the first full $1B increase after it.</td></tr></tbody>
       </table>
       <div class="tfoot"><span id="count"></span><button type="button" id="more" hidden>Show every burn</button></div>
     </div>
@@ -345,7 +345,7 @@ html:not(.prelaunch) #prelaunch{display:none}
     <h2><span>§4</span>The debt curve</h2>
     <div class="chartbox">
       <canvas id="cv" width="1000" height="280" aria-label="U.S. total public debt outstanding over time, with a marker on each burn day" role="img"></canvas>
-      <div class="legend"><span><i></i>burn day (bigger = more units)</span><span class="cap" id="cap">hover or touch the line for a reading</span></div>
+      <div class="legend"><span><i></i>A burn day. A bigger dot means more units.</span><span class="cap" id="cap">Hover over or touch the line to see a reading.</span></div>
     </div>
   </section>
 
@@ -354,24 +354,24 @@ html:not(.prelaunch) #prelaunch{display:none}
     <div class="grid2">
       <div class="card">
         <h3>The rule file and its hash</h3>
-        <p>The rule is fixed at launch and published as <a href="rules.json">rules.json</a>. Its SHA-256 is written into every burn's memo, so a receipt that cites a different hash is not this rule.</p>
+        <p>The rule is fixed at launch and published as <a href="rules.json">rules.json</a>. Its SHA-256 hash is written into every burn's memo. A receipt that cites a different hash is not using this rule.</p>
         <div class="hash" id="sha">sha256: 78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58</div>
-        <p class="muted" id="shaCheck">Check it yourself: <code>curl -s https://deficit.burnticker.com/rules.json | shasum -a 256</code>. This browser re-hashes the served file when the page loads.</p>
+        <p class="muted" id="shaCheck">To check it yourself, run <code>curl -s https://deficit.burnticker.com/rules.json | shasum -a 256</code>. This browser also hashes the served file again when the page loads.</p>
         <p class="muted gap" id="statement"></p>
       </div>
       <div class="card">
-        <h3>Three steps, any machine</h3>
+        <h3>Three steps you can run on any computer</h3>
         <ol class="steps">
-          <li><b>Fetch the two Treasury rows a burn used</b> — public API, no key:
+          <li><b>Fetch the two Treasury rows a burn used.</b> The API is public and needs no key.
             <pre id="curl">curl -s 'https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/debt_to_penny?fields=record_date,tot_pub_debt_out_amt&amp;filter=record_date:in:(PREV_DATE,RECORD_DATE)&amp;sort=record_date'</pre></li>
-          <li><b>Apply the rule</b>:
+          <li><b>Apply the rule.</b>
             <pre>units = floor((now − prev + carry) / 1,000,000,000)
 spend = pool × (1 − 0.98^units)        # pool = the burn pool's SOL − 0.02 reserve
 burn  = every token the swap delivered</pre>
-            <span class="muted">carry = the sub-$1B remainder from a run of consecutive increases; any down or flat day resets it to 0.</span></li>
-          <li><b>Read the memo on the burn transaction</b> — it carries the same numbers, in this order:
+            <span class="muted">Carry is the remainder under $1B from a run of rises in a row. Any flat or down day resets it to 0.</span></li>
+          <li><b>Read the memo on the burn transaction.</b> It carries the same numbers, in this order.
             <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;sig12&gt;|rules=sha256:78f4c327552e|v2</pre>
-            If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings and marks <span class="ok">✓</span> only when they match; anything else shows <span class="bad">!</span> with the reason.</li>
+            If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings. It marks a burn <span class="ok">✓</span> only when they match. Anything else shows <span class="bad">!</span> with the reason.</li>
         </ol>
       </div>
     </div>
@@ -380,18 +380,18 @@ burn  = every token the swap delivered</pre>
   <section class="wrap" id="money">
     <h2><span>§6</span>Who pays for the burn</h2>
     <div class="flow">
-      <div class="f"><div class="t">1 · trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. That fee is the only income the mechanism has.</p></div>
-      <div class="f"><div class="t">2 · the fee pool</div><p>Fees are claimed into the burn pool, an account of the on-chain program that has no withdraw instruction. Any seed deposit is disclosed with its transaction. Nobody can withdraw it; the program never sells.</p><p class="addr" id="feeWallet"></p></div>
-      <div class="f"><div class="t">3 · the swap</div><p>On a day with units the program spends 1 − 0.98<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. Under the floor (about $1) it buys nothing and the pool keeps it.</p></div>
-      <div class="f"><div class="t">4 · the burn</div><p>Every token received is burned in the same instruction, with the memo. Holders' balances are never touched: no delegate, no transfer hook, no mint authority.</p><p class="addr" id="mintAddr"></p></div>
+      <div class="f"><div class="t">1. Trading fees</div><p>Every trade of $DEFICIT pays a creator fee on the launch venue. That fee is the only income the mechanism has.</p></div>
+      <div class="f"><div class="t">2. The fee pool</div><p>Fees are claimed into the burn pool. The pool is an account of the on-chain program, and the program has no instruction that withdraws from it. Any seed deposit is shown with its transaction. Nobody can withdraw the pool, and the program never sells.</p><p class="addr" id="feeWallet"></p></div>
+      <div class="f"><div class="t">3. The swap</div><p>On a day with units, the program spends 1 − 0.98<sup>units</sup> of the pool buying $DEFICIT on the token's Raydium CPMM pool. If that amount is under the floor of about $1, the program buys nothing and the pool keeps the money.</p></div>
+      <div class="f"><div class="t">4. The burn</div><p>Every token received is burned in the same instruction, with the memo. Holders' balances are never touched. There is no delegate, no transfer hook and no mint authority.</p><p class="addr" id="mintAddr"></p></div>
     </div>
   </section>
 
   <section class="wrap" id="disclaimer">
     <div class="disc">
       <h3>A memecoin. The rule says what supply does, not what price does.</h3>
-      <p>$DEFICIT has no product, no revenue share and no team promise beyond running the published rule. Burning supply does not make a price go up; nobody here says it will. Buying fees fund the burns, so days with no trading are days with small burns.</p>
-      <p>Everything on this page is recomputed from public data — Treasury's API and the Solana chain. If a number here and a number on chain disagree, the chain is right and the page is wrong. Not investment advice; nothing here is an offer.</p>
+      <p>$DEFICIT has no product, no revenue share and no team promise beyond running the published rule. Burning supply does not make a price go up, and nobody here claims it does. Trading fees fund the burns, so a day with no trading has small burns.</p>
+      <p>Everything on this page is recomputed from public data: the Treasury's API and the Solana chain. If a number here and a number on chain disagree, the chain is right and the page is wrong. This is not investment advice, and nothing here is an offer.</p>
     </div>
   </section>
 </main>
@@ -410,14 +410,14 @@ burn  = every token the swap delivered</pre>
     <!-- site-nav:footer:end -->
   </nav>
   <div class="links">
-    <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">X · @USA_DEFICIT</a>
-    <a id="tradeFoot" class="off" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
+    <a href="https://x.com/USA_DEFICIT" rel="me noopener" target="_blank">@USA_DEFICIT on X</a>
+    <a id="tradeFoot" class="off" aria-disabled="true" data-trade-unavailable>Trading not available until launch</a>
     <a href="status.json">status.json</a>
     <a href="burns.json">burns.json</a>
     <a href="rules.json">rules.json</a>
   </div>
-  <div id="trade" class="muted">Trading is not available: $DEFICIT is not launched yet, so no trade link exists. Any link that claims to trade $DEFICIT before this page shows one is not ours.</div>
-  <div class="gap">Feed: U.S. Treasury, Fiscal Data, “Debt to the Penny” (tot_pub_debt_out_amt). The Treasury is not affiliated with and does not endorse this token. $DEFICIT has no relation to any other debt-themed token. Generated <span id="gen">—</span>.</div>
+  <div id="trade" class="muted">Trading is not available. $DEFICIT has not launched yet, so there is no trade link. Any link that claims to trade $DEFICIT before this page shows one is not ours.</div>
+  <div class="gap">The data comes from the U.S. Treasury’s Fiscal Data service, from its “Debt to the Penny” table. The page reads the total public debt outstanding field, <code>tot_pub_debt_out_amt</code>. The Treasury is not affiliated with this token and does not endorse it. $DEFICIT has no relation to any other debt-themed token. This page was generated at <span id="gen">—</span>.</div>
 </footer>
 
 <script>
@@ -442,7 +442,7 @@ burn  = every token the swap delivered</pre>
   // Until LINKS.trade is set the three Trade controls are explicit "not available until launch" labels: no href, aria-disabled.
   if (LINKS.trade) {
     ["tradeTop", "tradeHero", "tradeFoot"].forEach(function (id) { var a = $(id); a.href = LINKS.trade; a.target = "_blank"; a.rel = "noopener"; a.classList.remove("off"); a.removeAttribute("aria-disabled"); a.removeAttribute("data-trade-unavailable"); a.removeAttribute("title"); a.textContent = id === "tradeHero" ? "Trade $DEFICIT" : "Trade"; });
-    $("trade").textContent = "Trade link: " + LINKS.trade;
+    $("trade").textContent = "The trade link is " + LINKS.trade;
   }
 
   var status = null, burns = [], readings = [];
@@ -462,8 +462,8 @@ burn  = every token the swap delivered</pre>
     var last = burns.length ? burns[burns.length - 1] : null;
     if (last) {
       seg7($("heroFig"), "$" + (Number(last.delta) / 1e9).toFixed(2) + "b", fmtB(last.delta) + " of new U.S. debt on " + last.recordDate);
-      $("heroLabel").textContent = "New U.S. debt · Debt to the Penny · " + last.recordDate;
-      $("heroCap").innerHTML = "<b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b> → " + (last.status === "skipped" ? "nothing bought (under the $1 floor)" : last.burned ? "<b>" + fmtInt(last.burned) + "</b> $" + esc(status && status.ticker || "DEFICIT") + " bought and burned" : "burn pending") + ' · <a href="#r-' + burns.length + '">receipt #' + burns.length + "</a>";
+      $("heroLabel").textContent = "New U.S. debt on Debt to the Penny for " + last.recordDate;
+      $("heroCap").innerHTML = "That is <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>. " + (last.status === "skipped" ? "Nothing was bought, because the spend was under the $1 floor." : last.burned ? "<b>" + fmtInt(last.burned) + "</b> $" + esc(status && status.ticker || "DEFICIT") + " were bought and burned." : "The burn is pending.") + ' <a href="#r-' + burns.length + '">See receipt #' + burns.length + "</a>.";
     } else seg7($("heroFig"), "$1b", "$1B of new U.S. debt per burn unit");
     if (status && status.burned) seg7($("heroBurn"), fmtInt(status.burned.total), fmtInt(status.burned.total) + " $DEFICIT bought and burned to date");
     else seg7($("heroBurn"), "-------", "not published yet");
@@ -473,11 +473,11 @@ burn  = every token the swap delivered</pre>
   // ------------------------------------------------------------------ live strip
   function renderStatus(s) {
     // ONE readiness state (src/lib/burnticker/readiness.ts), derived by the keeper into status.json; the static default above is "Not launched".
-    if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); $("readyStep").textContent = "Step " + s.readiness.step + " of 7 · where $DEFICIT stands"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
+    if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); $("readyStep").textContent = "Step " + s.readiness.step + " of 7 toward a first burn"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
     var isSample = !!s.sample || s.cluster === "replay";
     if (isSample || (s.cluster && s.cluster !== "mainnet-beta")) {
       var b = $("banner"); b.classList.add("show");
-      b.textContent = isSample ? "SAMPLE DATA — " + (s.sample || "replayed series; no transactions exist.") : "Cluster: " + s.cluster + " — this is not the mainnet token.";
+      b.textContent = isSample ? "Sample data. " + (s.sample || "This is a replayed series, and no transactions exist.") : "This page is showing " + s.cluster + ". This is not the mainnet token.";
     }
     if (s.feed && s.feed.lastAmount) {
       $("debtNow").textContent = fmtT(s.feed.lastAmount);
@@ -485,18 +485,18 @@ burn  = every token the swap delivered</pre>
     }
     $("lastDate").textContent = s.feed && s.feed.lastRecordDate ? s.feed.lastRecordDate : "—";
     $("burned").textContent = fmtInt(s.burned.total);
-    $("burnedSub").innerHTML = "<b>" + Number(s.burned.pctOfSupply).toFixed(2) + "%</b> of " + fmtInt(s.supply.initial) + " · " + s.burned.count + " burns · " + fmtInt(s.burned.thisMonth) + " this month";
+    $("burnedSub").innerHTML = "<b>" + Number(s.burned.pctOfSupply).toFixed(2) + "%</b> of the " + fmtInt(s.supply.initial) + " supply, over " + s.burned.count + (s.burned.count === 1 ? " burn" : " burns") + ". " + fmtInt(s.burned.thisMonth) + " burned this month.";
     if (s.buyback) {
       $("pool").textContent = s.buyback.feePoolSol == null ? "—" : fmtSol(s.buyback.feePoolSol);
-      $("poolSub").innerHTML = "spent <b>" + fmtSol(s.buyback.spentSolMonth) + "</b> this month · " + fmtSol(s.buyback.spentSolTotal) + " in all" + (s.buyback.skippedDays ? " · " + s.buyback.skippedDays + " day(s) under the $" + s.buyback.floorUsd + " floor" : "");
+      $("poolSub").innerHTML = "<b>" + fmtSol(s.buyback.spentSolMonth) + "</b> spent this month and " + fmtSol(s.buyback.spentSolTotal) + " in all." + (s.buyback.skippedDays ? " " + s.buyback.skippedDays + (s.buyback.skippedDays === 1 ? " day was" : " days were") + " under the $" + s.buyback.floorUsd + " floor." : "");
     }
     var ok = s.health && !s.health.lastError && s.health.unverified === 0;
     $("health").innerHTML = '<span class="pulse' + (ok ? "" : " off") + '"></span>' + (ok ? "all receipts ✓" : (s.health.unverified ? s.health.unverified + " unverified" : "error"));
-    $("healthSub").textContent = "last feed check " + (s.feed.lastPollAt ? new Date(s.feed.lastPollAt).toLocaleString() : "—") + (s.feed.lastPollOutcome ? " · " + s.feed.lastPollOutcome : "") + (s.health.lastError ? " · " + s.health.lastError : "");
+    $("healthSub").textContent = (s.feed.lastPollAt ? "Last feed check at " + new Date(s.feed.lastPollAt).toLocaleString() + "." : "No feed check yet.") + (s.feed.lastPollOutcome ? " The result was " + s.feed.lastPollOutcome + "." : "") + (s.health.lastError ? " The last error was " + s.health.lastError + "." : "");
     $("gen").textContent = new Date(s.generatedAt).toLocaleString();
     if (s.rules) { $("sha").textContent = "sha256: " + s.rules.sha256; $("statement").textContent = s.rules.statement; }
-    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "fee pool: " + (s.buyback.funding.feeWalletUrl ? '<a href="' + esc(s.buyback.funding.feeWalletUrl) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? ' · seed ' + esc(s.buyback.funding.seedSol || "?") + ' SOL (<a href="' + esc(s.buyback.funding.seedTxUrl) + '" target="_blank" rel="noopener">tx</a>)' : " · no seed deposit");
-    if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "mint: " + (s.addresses.mintUrl ? '<a href="' + esc(s.addresses.mintUrl) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
+    if (s.buyback && s.buyback.funding && s.buyback.funding.feeWallet) $("feeWallet").innerHTML = "Fee pool address: " + (s.buyback.funding.feeWalletUrl ? '<a href="' + esc(s.buyback.funding.feeWalletUrl) + '" target="_blank" rel="noopener">' + esc(s.buyback.funding.feeWallet) + "</a>" : esc(s.buyback.funding.feeWallet)) + (s.buyback.funding.seedTx ? '. It was seeded with ' + esc(s.buyback.funding.seedSol || "an unknown amount of") + ' SOL in <a href="' + esc(s.buyback.funding.seedTxUrl) + '" target="_blank" rel="noopener">this transaction</a>.' : ". It has no seed deposit.");
+    if (s.addresses && s.addresses.mint) $("mintAddr").innerHTML = "Mint address: " + (s.addresses.mintUrl ? '<a href="' + esc(s.addresses.mintUrl) + '" target="_blank" rel="noopener">' + esc(s.addresses.mint) + "</a>" : esc(s.addresses.mint));
     startClock(s.feed && s.feed.nextPollAt);
     renderHero();
   }
@@ -508,12 +508,12 @@ burn  = every token the swap delivered</pre>
     if (!at) { $("next").textContent = "—"; return; }
     function tick() {
       var d = at - Date.now();
-      if (d <= 0) { $("next").textContent = "checking now"; return; }
+      if (d <= 0) { $("next").textContent = "Checking now"; return; }
       var h = Math.floor(d / 36e5), m = Math.floor(d % 36e5 / 6e4), s = Math.floor(d % 6e4 / 1e3);
       $("next").textContent = (h ? h + "h " : "") + m + "m " + s + "s";
     }
     tick(); clock = setInterval(tick, 1000);
-    $("nextSub").textContent = "next feed check " + new Date(at).toLocaleString() + " · a burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + ".";
+    $("nextSub").textContent = "The next feed check is at " + new Date(at).toLocaleString() + ". A burn needs a full $1B of new debt since " + (status && status.feed.lastRecordDate ? status.feed.lastRecordDate : "the last reading") + ".";
   }
 
   // ------------------------------------------------------------------ receipts
@@ -525,11 +525,11 @@ burn  = every token the swap delivered</pre>
     var shown = showAll ? rows : rows.slice(0, LIMIT);
     tb.innerHTML = shown.map(function (b, i) {
       var skipped = b.status === "skipped", no = rows.length - i;
-      var check = b.verify && b.verify.verified ? '<span class="ok" title="recomputed from the feed and the rule; matches the memo">✓</span>' : b.status === "confirmed" ? '<span class="bad" title="' + esc((b.verify && b.verify.checks || []).join("; ")) + '">!</span>' : '<span class="muted">' + esc(b.status) + "</span>";
+      var check = b.verify && b.verify.verified ? '<span class="ok" title="Recomputed from the feed and the rule. It matches the memo.">✓</span>' : b.status === "confirmed" ? '<span class="bad" title="' + esc((b.verify && b.verify.checks || []).join("; ")) + '">!</span>' : '<span class="muted">' + esc(b.status) + "</span>";
       return '<tr id="r-' + no + '">' +
         "<td class=\"mono\" title=\"receipt #" + no + "\">" + esc(b.recordDate) + "</td>" +
         "<td class=\"r num\" title=\"$" + esc(b.now) + "\">" + fmtT(b.now) + "</td>" +
-        "<td class=\"r num\">" + fmtB(b.delta) + (Number(b.carryIn) > 0 ? ' <span class="muted" title="carried from the run of consecutive increases">(+$' + (Number(b.carryIn) / 1e9).toFixed(2) + "B carried)</span>" : "") + "</td>" +
+        "<td class=\"r num\">" + fmtB(b.delta) + (Number(b.carryIn) > 0 ? ' <span class="muted" title="Carried over from a run of rises in a row">+$' + (Number(b.carryIn) / 1e9).toFixed(2) + "B carried</span>" : "") + "</td>" +
         "<td class=\"r units\">" + b.units + "</td>" +
         "<td class=\"r num\">" + (skipped ? "—" : b.spent == null ? "pending" : esc(Number(b.spent).toFixed(4))) + "</td>" +
         "<td class=\"r num\">" + (b.got == null ? (skipped ? "—" : "pending") : fmtInt(b.got)) + "</td>" +
@@ -548,18 +548,18 @@ burn  = every token the swap delivered</pre>
       if (nxt && nxt.classList.contains("detail")) { nxt.remove(); btn.setAttribute("aria-expanded", "false"); return; }
       var b = shown[Number(btn.getAttribute("data-i"))], d = document.createElement("tr"); d.className = "detail";
       d.innerHTML = '<td colspan="11">' +
-        "<div><b>1.</b> Fetch the two Treasury rows this day used:</div><pre>" + esc(b.verify.curl) + "</pre>" +
-        "<div><b>2.</b> Apply the rule:</div><pre>" + esc(b.verify.formula) + "</pre>" +
+        "<div><b>1.</b> Fetch the two Treasury rows this day used.</div><pre>" + esc(b.verify.curl) + "</pre>" +
+        "<div><b>2.</b> Apply the rule.</div><pre>" + esc(b.verify.formula) + "</pre>" +
         (b.carryRunSince ? '<div class="muted">The carried $' + esc(b.carryIn) + " comes from the run of consecutive increases since " + esc(b.carryRunSince) + ".</div>" : "") +
-        "<div><b>3.</b> Expected: " + esc(b.verify.expected) + "</div>" +
-        "<div style=\"margin-top:8px\"><b>4.</b> The memo on the burn transaction" + (b.txUrl ? ' (<a href="' + esc(b.txUrl) + '" target="_blank" rel="noopener">open</a>)' : "") + ":</div><pre>" + esc(b.memo || (skippedText(b))) + "</pre>" +
-        '<div><a href="' + esc(b.sourceUrl) + '" target="_blank" rel="noopener">Treasury source row for ' + esc(b.recordDate) + "</a>" + (b.verify.checks && b.verify.checks.length ? ' · <span class="bad">checks that did not pass: ' + esc(b.verify.checks.join("; ")) + "</span>" : ' · <span class="ok">recomputation matches</span>') + "</div>" +
+        "<div><b>3.</b> The expected result is " + esc(b.verify.expected) + "</div>" +
+        "<div style=\"margin-top:8px\"><b>4.</b> Read the memo on the burn transaction." + (b.txUrl ? ' <a href="' + esc(b.txUrl) + '" target="_blank" rel="noopener">Open the transaction</a>.' : "") + "</div><pre>" + esc(b.memo || (skippedText(b))) + "</pre>" +
+        '<div><a href="' + esc(b.sourceUrl) + '" target="_blank" rel="noopener">Treasury source row for ' + esc(b.recordDate) + "</a>. " + (b.verify.checks && b.verify.checks.length ? '<span class="bad">Some checks did not pass: ' + esc(b.verify.checks.join("; ")) + ".</span>" : '<span class="ok">The recomputation matches.</span>') + "</div>" +
         "</td>";
       tr.parentNode.insertBefore(d, tr.nextSibling); btn.setAttribute("aria-expanded", "true");
     };
     var last = rows[0];
     if (last) {
-      $("lastDelta").innerHTML = fmtB(last.delta) + " → <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>" + (last.burned ? " → " + fmtInt(last.burned) + " burned" : "") + " · vs " + esc(last.prevDate);
+      $("lastDelta").innerHTML = fmtB(last.delta) + " since " + esc(last.prevDate) + ", which is <b>" + last.units + " unit" + (last.units === 1 ? "" : "s") + "</b>." + (last.burned ? " " + fmtInt(last.burned) + " were burned." : "");
       $("curl").textContent = b2curl(last);
       if (last.memo) $("memo").textContent = last.memo;
     }
@@ -632,7 +632,7 @@ burn  = every token the swap delivered</pre>
     var btn = $("copyToday");
     if (navigator.clipboard) { btn.hidden = false; btn.onclick = function () { navigator.clipboard.writeText(r.text).then(function () { btn.textContent = "copied"; setTimeout(function () { btn.textContent = "copy"; }, 1500); }); }; }
   }
-  function skippedText(b) { return b.status === "skipped" ? "no transaction — " + (b.skippedReason || "skipped") : "not sent yet"; }
+  function skippedText(b) { return b.status === "skipped" ? "No transaction. " + (b.skippedReason || "This day was skipped.") : "Not sent yet."; }
   function b2curl(b) { return b.verify && b.verify.curl ? b.verify.curl : "curl -s '" + TREASURY + "&filter=record_date:in:(" + b.prevDate + "," + b.recordDate + ")&sort=record_date'"; }
   $("more").onclick = function () { showAll = true; renderBurns(); };
 
@@ -691,10 +691,10 @@ burn  = every token the swap delivered</pre>
     var cx = e.touches ? e.touches[0].clientX : e.clientX, i = nearest(cx); if (i == null) return;
     draw(i);
     var p = pts[i], mk = null; marks.forEach(function (m) { if (m.i === i) mk = m; });
-    $("cap").textContent = p.d + " · " + fmtT(p.v) + (mk ? " · " + fmtB(mk.b.delta) + " → " + mk.units + " units → " + fmtInt(mk.b.burned) + " burned" : "");
+    $("cap").textContent = p.d + ": " + fmtT(p.v) + "." + (mk ? " The debt rose " + fmtB(mk.b.delta) + ", which is " + mk.units + (mk.units === 1 ? " unit" : " units") + ", and " + fmtInt(mk.b.burned) + " were burned." : "");
   }
   cv.addEventListener("mousemove", hover); cv.addEventListener("touchstart", hover, { passive: true }); cv.addEventListener("touchmove", hover, { passive: true });
-  cv.addEventListener("mouseleave", function () { draw(); $("cap").textContent = "hover or touch the line for a reading"; });
+  cv.addEventListener("mouseleave", function () { draw(); $("cap").textContent = "Hover over or touch the line to see a reading."; });
   window.addEventListener("resize", function () { draw(); });
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { draw(); });
 
@@ -718,20 +718,20 @@ burn  = every token the swap delivered</pre>
     if (detail) { var d = document.createElement("details"), sm = document.createElement("summary"), p = document.createElement("span"); sm.textContent = "Details"; p.textContent = " " + detail; d.appendChild(sm); d.appendChild(p); n.appendChild(d); }
     n.classList.add("show"); var pn = $("prelaunchNote"); if (pn) pn.textContent = msg; draw();
   }
-  if (!window.fetch) { offline("This browser cannot load the live figures; the receipts are in status.json and burns.json beside this page."); return; }
+  if (!window.fetch) { offline("This browser cannot load the live figures. The receipts are in status.json and burns.json, next to this page."); return; }
   // Audit 4 BT-03: re-hash the served rules.json in this browser and compare it with the hash printed above (and in status.json).
   function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ("0" + x.toString(16)).slice(-2); }).join(""); }
   function checkRules(expected) {
     var out = $("shaCheck"); if (!out || !window.crypto || !window.crypto.subtle) return;
     fetch(base + "rules.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
       .then(function (b) { return window.crypto.subtle.digest("SHA-256", b); })
-      .then(function (d) { var h = hex(d); out.textContent = h === expected ? "✓ This browser hashed the served rules.json just now: " + h + " — the same as above." : "✗ The served rules.json hashes to " + h + ", not the hash above. Treat this page as wrong and check the repository."; out.className = h === expected ? "ok" : "bad"; })
-      .catch(function (e) { out.textContent = "Unable to check: rules.json could not be read just now (" + (e && e.message || e) + "). Try again, or run the curl above."; });
+      .then(function (d) { var h = hex(d); out.textContent = h === expected ? "✓ This browser just hashed the served rules.json and got " + h + ". That matches the hash above." : "✗ The served rules.json hashes to " + h + ". That does not match the hash above. Treat this page as wrong and check the repository."; out.className = h === expected ? "ok" : "bad"; })
+      .catch(function (e) { out.textContent = "Unable to check, because rules.json could not be read just now (" + (e && e.message || e) + "). Try again, or run the command above."; });
   }
   // A pre-launch status.json (schema burnkeeper.status/prelaunch-v1) is an explicit state, not live data: the page stays in its pre-launch layout.
   function prelaunchState(s) {
-    if (s.rules && s.rules.sha256) { $("sha").textContent = "sha256: " + s.rules.sha256; if (s.rules.status) $("statement").textContent = "Status: " + s.rules.status + "."; }
-    if (s.generatedAt) $("gen").textContent = new Date(s.generatedAt).toISOString().slice(0, 10) + " (pre-launch file)";
+    if (s.rules && s.rules.sha256) { $("sha").textContent = "sha256: " + s.rules.sha256; if (s.rules.status) $("statement").textContent = "The rule file's status is " + s.rules.status + "."; }
+    if (s.generatedAt) $("gen").textContent = new Date(s.generatedAt).toISOString().slice(0, 10) + ", from the pre-launch file";
     checkRules(s.rules && s.rules.sha256);
     if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
   }
@@ -752,8 +752,8 @@ burn  = every token the swap delivered</pre>
     var missing = /^404 /.test(String(e && e.message));
     checkRules("78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58");
     if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
-    offline(missing ? "Not launched: $DEFICIT is not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
-      : "Data unavailable: the live figures could not be read just now. This says nothing about the coin or its receipts; try again later.", String(e && e.message || e));
+    offline(missing ? "Not launched. $DEFICIT has not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
+      : "Data unavailable. The live figures could not be read just now. This says nothing about the coin or its receipts. Try again later.", String(e && e.message || e));
     if (missing && $("prelaunchNote")) $("prelaunchNote").textContent = ""; // the summary above already says not launched
   });
 })();

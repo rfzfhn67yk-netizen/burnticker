@@ -133,20 +133,29 @@ export function devnetAuthority(live: ProgramRead | undefined, recorded: string 
  */
 export function mainnetDeployment(recorded: boolean, facts: ChainFacts | undefined, programId: string): { deployed: boolean | null; source: "chain" | "verified-build" | "unavailable"; line: string } {
   const live = facts?.programs[programId];
-  if (recorded || live?.deployed) return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: "deployed on mainnet" };
-  if (live) return { deployed: false, source: "chain", line: "not deployed on mainnet yet" };
-  if (facts) return { deployed: null, source: "unavailable", line: "mainnet deployment unknown (the chain read failed)" };
-  return { deployed: false, source: "verified-build", line: "not deployed on mainnet yet" };
+  if (recorded || live?.deployed) return { deployed: true, source: live?.deployed ? "chain" : "verified-build", line: "It is deployed on mainnet." };
+  if (live) return { deployed: false, source: "chain", line: "It is not deployed on mainnet yet." };
+  if (facts) return { deployed: null, source: "unavailable", line: "Its mainnet deployment is unknown because the chain read failed." };
+  return { deployed: false, source: "verified-build", line: "It is not deployed on mainnet yet." };
 }
 
 const isKey = (s: string): boolean => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
 
 /** The time-lock sentence: the value read from chain, the plan beside it (never the plan stated as the fact). */
 export function timeLockLine(cluster: Cluster, live: number | null, planned: number, plannedFrom: string | null): string {
-  if (live === null) return `${cluster} Squads time lock: could not be read from chain just now (planned: ${fmtSecs(planned)}).`;
-  if (live === planned) return `${cluster} Squads time lock: ${fmtSecs(live)}, read from chain.`;
-  return `${cluster} Squads time lock: ${fmtSecs(live)} now, read from chain; ${fmtSecs(planned)} planned${plannedFrom ? ` (${plannedFrom})` : ""}.`;
+  const Name = cluster === "mainnet" ? "The mainnet" : "The devnet";
+  if (live === null) return `${Name} Squads time lock could not be read from chain just now. The plan is ${fmtSecs(planned)}.`;
+  if (live === planned) return `${Name} Squads time lock is ${fmtSecs(live)}, read from chain.`;
+  return `${Name} Squads time lock is ${fmtSecs(live)} today, read from chain. The plan is ${fmtSecs(planned)}${plannedFrom ? ` from ${plannedFrom}` : ""}.`;
 }
+
+/** A plain name for each program, said before its code name (website-9 copy pass). */
+export const PROGRAM_PLAIN_NAME: Record<string, string> = { burn_receipts: "the program that records burns", pair_curve: "the program that runs pair launches" };
+const plainName = (lib: string): string => PROGRAM_PLAIN_NAME[lib] ?? "the program";
+const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+/** A count at the start of a sentence: "Eight", or digits past twelve. */
+export const countWord = (n: number): string => NUMBER_WORDS[n] ?? String(n);
 
 export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<string, string | undefined>>; chain: Partial<Record<Cluster, ChainFacts>>; now?: number }): CurrentStatus {
   const root = i.root ?? process.cwd(), env = i.env ?? process.env, now = i.now ?? Date.now();
@@ -156,7 +165,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
   const cluster = (env.BURNTICKER_CLUSTER ?? "").trim() === "mainnet" ? "mainnet" : "devnet";
   const wired = isKey((env.BURNTICKER_PROGRAM_ID ?? "").trim());
   const open = /^(1|true|yes|on)$/i.test((env.BURNTICKER_CREATOR_LAUNCHES_ENABLED ?? "").trim());
-  const host = { cluster, programIdWired: wired, creatorLaunchesOpen: open, line: `This host reads ${cluster}; ${wired ? "its program id is wired" : "no program id is wired on this host"}; creator launches are ${open ? "open" : "closed"}.` };
+  const host = { cluster, programIdWired: wired, creatorLaunchesOpen: open, line: `This site is showing ${cluster}.${wired ? "" : " No program is connected on this site."} Creator launches are ${open ? "open" : "closed"}.` };
   const programs = vb.programs.map((p) => {
     const meta = st.programs.find((x) => x.name === p.library) ?? { version: "—", note: "" };
     const dev = p.deployed.devnet, liveDev = i.chain.devnet?.programs[p.programId];
@@ -180,21 +189,23 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     if (r.derivedFromChain === "mainnet-deployment" && (allMain || noneMainKnown)) return { ...r, status: (allMain ? "done" : "open") as "open" | "done" };
     return r;
   });
+  const waiting = st.reviews.reduce((n, r) => n + r.findings.filter((f) => /not done|not re-checked/.test(f.recheck)).length, 0);
+  const openCount = releaseRequirements.filter((r) => r.status === "open").length;
   const lines = [
     st.phase.line,
     st.deficit.firstBurnPath.line,
-    `Programs: ${programs.map((p) => `${p.name} ${p.devnet.deployed ? "deployed on devnet" : "not on devnet"}${p.devnet.matchesBuild ? " (bytes match this repository's build)" : ""}, ${p.mainnet.line}`).join("; ")}.`,
-    `Signing: ${st.attesters.line}`,
+    ...programs.map((p) => `${cap(plainName(p.name))} (${p.name}) is ${p.devnet.deployed ? `deployed on devnet${p.devnet.matchesBuild ? ", and its bytes match this repository's build" : ""}` : "not on devnet"}. ${p.mainnet.line}`),
+    st.attesters.line,
     // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
-    `Upgrades: the 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock an approved upgrade executes at once, with no advance notice." : ""}`,
-    "Money: the operator earns 25 bps of curve volume and 20% of post-graduation LP SOL fees; the other 80% of those SOL fees and the token side go to each coin's burn pool. Creators take no cash from fees.",
-    `Reviews: no security firm audit; ${st.reviews.reduce((n, r) => n + r.findings.filter((f) => /not done|not re-checked/.test(f.recheck)).length, 0)} fixed findings still wait for an independent re-check.`,
-    `Open before release: ${releaseRequirements.filter((r) => r.status === "open").length} requirement(s)${anyMain || mainUnknown ? "" : ", starting with the mainnet deployment"}.`,
+    `The 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock, an approved upgrade executes at once, with no advance notice." : ""}`,
+    "The operator earns 0.25% of curve trading volume and 20% of the SOL fees from the liquidity pool after graduation. The other 80% of those SOL fees, and all of the token-side fees, go to each coin's burn pool. Creators take no cash from fees.",
+    `No security firm has audited the code. ${waiting === 1 ? "One fixed finding still waits" : `${countWord(waiting)} fixed findings still wait`} for an independent re-check.`,
+    `${openCount === 1 ? "One thing is" : `${countWord(openCount)} things are`} still open before release.${anyMain || mainUnknown ? "" : " The first is the mainnet deployment."}`,
   ];
   const readAt = Object.values(i.chain).map((c) => c?.readAt).filter(Boolean).sort().pop() ?? new Date(now).toISOString();
   return {
     schema: "burnticker.current-status/v1", checkedAt: st.checkedAt, readAt, source: CURRENT_STATUS_FILE, phase: st.phase, host,
-    networks: (["devnet", "mainnet"] as Cluster[]).map((c) => ({ cluster: c, role: st.networks[c].role, deployment: c === "mainnet" && anyMain ? "deployed" : c === "mainnet" && mainUnknown ? "unknown (the chain read failed)" : st.networks[c].deployment, since: st.networks[c].since })),
+    networks: (["devnet", "mainnet"] as Cluster[]).map((c) => ({ cluster: c, role: st.networks[c].role, deployment: c === "mainnet" && anyMain ? "deployed" : c === "mainnet" && mainUnknown ? "unknown, because the chain read failed" : st.networks[c].deployment, since: st.networks[c].since })),
     programs, upgradeAuthority, attesters: st.attesters, settlement: st.settlement, reviews: st.reviews, releaseRequirements, design: st.design, historical: st.historical, firstBurnPath: st.deficit.firstBurnPath, lines,
   };
 }

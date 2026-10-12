@@ -214,7 +214,7 @@ export function platformDailyText(i: PlatformDailyInput): string {
     `Coins live: ${live.length} · burns on the tape today: ${burnsToday} (all-time ${ix.totals.burns}) · tokens burned all-time: ${fmtInt(ix.totals.burnedTokens)}`,
     today.length ? `Today:\n${today.join("\n")}` : `Today: no burn on any coin.`,
     `New launches: ${launches.length ? launches.join("; ") : "none"}`,
-    ...(lpClaims.length ? [`LP fees claimed today: ${lpClaims.map((c) => `$${c.ticker} ${c.line.replace(/^LP fees claimed: /, "")}`).join("; ")}`] : []),
+    ...(lpClaims.length ? [`LP fees claimed today: ${lpClaims.map((c) => `$${c.ticker}: ${c.line}`).join("; ")}`] : []),
     `Audit: ${audit}`,
     `${PLATFORM_DISCLAIMER} ${siteOf(i.site)}`,
   ].join("\n");

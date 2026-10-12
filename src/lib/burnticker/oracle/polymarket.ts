@@ -236,7 +236,7 @@ export function gammaSettledEvents(rule: BurnRule, markets: readonly GammaMarket
     const at = settledAtOf(m);
     if (!at || (opts.sinceIso !== null && !(at > opts.sinceIso))) continue;
     const { yes, no } = sideLabels(m);
-    events.push({ id: m.conditionId, at, result: r, value: null, title: m.question, sourceUrl: settledMarketUrl(m.conditionId), method: `gamma-report: outcomePrices [${m.outcomeFigures.join(", ")}] on a closed, resolved market → ${r} (YES = "${yes}", NO = "${no}"; display-grade)` });
+    events.push({ id: m.conditionId, at, result: r, value: null, title: m.question, sourceUrl: settledMarketUrl(m.conditionId), method: `gamma-report: outcomePrices [${m.outcomeFigures.join(", ")}] on a closed, resolved market give ${r} (YES = "${yes}", NO = "${no}"; display-grade)` });
   }
   events.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : 1));
   return { events, refusals, awaitingFinal };
@@ -245,7 +245,7 @@ export function gammaSettledEvents(rule: BurnRule, markets: readonly GammaMarket
 /** Pure: the market-implied chance that the NEXT settlement under the selector burns. DISPLAY ONLY. */
 export function impliedChanceFromMarkets(rule: BurnRule, open: readonly GammaMarket[]): ImpliedChance {
   const next = open.filter((m) => !m.closed && polySelectorMatches(rule, m)).sort((a, b) => (a.endDate ?? "9").localeCompare(b.endDate ?? "9"))[0];
-  if (!next) return { chance: null, marketTicker: null, closeTime: null, basis: "no open Polymarket market under this selector" };
+  if (!next) return { chance: null, marketTicker: null, closeTime: null, basis: "There is no open Polymarket market for this rule." };
   const onYes = !!rule.binary?.onYes, onNo = !!rule.binary?.onNo, p = next.yesPrice;
   const { yes } = sideLabels(next);
   return { chance: p === null ? null : onYes && onNo ? 1 : onYes ? p : 1 - p, marketTicker: next.conditionId, closeTime: next.endDate, basis: onYes && onNo ? "both outcomes burn: a settlement burns unless voided" : onYes ? `the "${yes}" (YES) mid of "${next.question}"` : `1 − the "${yes}" (YES) mid of "${next.question}" (this side burns on NO)` };
@@ -463,8 +463,8 @@ export class PolymarketClient implements OracleAdapter {
     }
     if (toRead.length > 0 && failed === toRead.length) throw new Error(`polymarket: every on-chain read failed (${cands[0].chainError?.slice(0, 160)})`);
     const r = resolvePolymarket(rule, cands, { sinceIso, refuse: this.refuse });
-    if (wanted.length > toRead.length) { r.refusals.push(`${wanted.length - toRead.length} more closed market(s) wait for the next cycle (at most ${this.chainCap} on-chain reads per cycle)`); r.awaitingFinal += wanted.length - toRead.length; }
-    if (!scan.complete) r.refusals.push(`scan stopped at ${scan.pages} page(s) of ${this.pageSize} before reaching ${sinceIso ?? "the start"}: the selector is denser than one cycle reads`);
+    if (wanted.length > toRead.length) { r.refusals.push(`${wanted.length - toRead.length} more closed ${wanted.length - toRead.length === 1 ? "market waits" : "markets wait"} for the next cycle, because each cycle reads at most ${this.chainCap} results on chain.`); r.awaitingFinal += wanted.length - toRead.length; }
+    if (!scan.complete) r.refusals.push(`The scan stopped after ${scan.pages} ${scan.pages === 1 ? "page" : "pages"} of ${this.pageSize}, before reaching ${sinceIso ?? "the start"}. This rule settles more markets than one cycle reads.`);
     return r;
   }
 
@@ -510,11 +510,11 @@ export class PolymarketClient implements OracleAdapter {
     if (!s) return null;
     if (s.kind === "event") { const e = await this.eventBySlug(s.slug); return e ? { oracle: "polymarket", ticker, title: e.title, category: null, frequency: "per market", settlementSource, tags: e.tags.map((t) => t.slug) } : null; }
     const t = await this.tag(s.tag);
-    return t ? { oracle: "polymarket", ticker, title: `${t.label}${s.type ? ` · ${s.type}` : ""}${s.glob ? ` · ${s.glob}` : ""}`, category: null, frequency: "per market", settlementSource, tags: [t.slug] } : null;
+    return t ? { oracle: "polymarket", ticker, title: `${t.label}${s.type ? `, ${s.type}` : ""}${s.glob ? `, matching ${s.glob}` : ""}`, category: null, frequency: "per market", settlementSource, tags: [t.slug] } : null;
   }
 
   async impliedChance(rule: BurnRule): Promise<ImpliedChance> {
-    if (rule.oracle !== "polymarket") return { chance: null, marketTicker: null, closeTime: null, basis: "not a polymarket rule" };
+    if (rule.oracle !== "polymarket") return { chance: null, marketTicker: null, closeTime: null, basis: "This is not a Polymarket rule." };
     const scan = await this.candidates(rule, { closed: false, pages: 1 });
     return impliedChanceFromMarkets(rule, scan.markets);
   }

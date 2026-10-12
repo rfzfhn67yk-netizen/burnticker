@@ -85,7 +85,7 @@ describe("evaluateAlerts on a fake registry", () => {
     reg.setFeedState({ selectorKey: "kalshi:KXNFLGAME:binary", lastFetchAt: NIGHT - 30 * 60_000, lastOkAt: NIGHT - 2 * HOUR, failures: 4, lastError: "HTTP 503", nextFetchAt: NIGHT + HOUR });
     a = evaluateAlerts(snap(NIGHT));
     assert.deepEqual(kinds(a), ["bt-feed-stall"]);
-    assert.match(a[0].text, /30 min .* last error: HTTP 503 · 4 failure\(s\) in a row/);
+    assert.match(a[0].text, /30 min .* The last error was: HTTP 503\. It has failed 4 times in a row\./);
     assert.deepEqual(evaluateAlerts(snap(NIGHT, { paused: true })), [], "PAUSE present: no stall alarm");
     // A token live for less than the limit is not stalled yet (its liveSince anchors the clock).
     const reg2 = openRegistry(":memory:"); reg = reg2;
@@ -139,7 +139,7 @@ describe("evaluateAlerts on a fake registry", () => {
     writeAudit(false, NIGHT - HOUR, [{ ticker: "BRONCO", eventId: EV.id, checks: ["units: row 2 ≠ recomputed 1"] }]);
     a = evaluateAlerts(snap(NIGHT));
     assert.deepEqual(kinds(a), ["bt-audit-mismatch"]);
-    assert.match(a[0].text, /AUDIT MISMATCH .*1 receipt\(s\) do not recompute — \$BRONCO KXNFLGAME-26OCT04DENSF-DEN: units: row 2 ≠ recomputed 1/);
+    assert.match(a[0].text, /AUDIT MISMATCH .*1 receipt does not recompute — \$BRONCO KXNFLGAME-26OCT04DENSF-DEN: units: row 2 ≠ recomputed 1/);
   });
   test("the keeper key under 0.05 SOL, the pre-audit cap binding (from the published status.json), a stale keeper", () => {
     launch(BRONCOS, "BRONCO", MINT_A, NIGHT - DAY);

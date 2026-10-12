@@ -52,7 +52,7 @@ export async function fenceToken(d: Pick<KeeperDeps, "registry" | "program" | "l
   out.checked++;
   let cfg;
   try { cfg = await d.program.port(t.mint).config(); }
-  catch (e) { hold(out, d, t, `the on-chain TokenConfig could not be read (${(e as Error).message.slice(0, 80)}), so this keeper cannot tell whether another keeper already counted its receipts`); return; }
+  catch (e) { hold(out, d, t, `The coin's on-chain TokenConfig could not be read, so this keeper cannot tell whether another keeper already counted its receipts. The error was: ${(e as Error).message.slice(0, 80)}`); return; }
   if (!cfg?.hasBaseline) return;   // no TokenConfig (executePending holds) or no reading yet: nothing another keeper could have counted
   const d0 = receiptDay(unassigned[0].settledAt);
   if (cfg.lastRecordDate < d0) return;
@@ -66,11 +66,11 @@ export async function fenceToken(d: Pick<KeeperDeps, "registry" | "program" | "l
   let D = cfg.lastRecordDate, broken: string | null = null;
   for (let i = 0; D > ownLast && D !== 0 && i < MAX_WALK; i++) {
     const r = await port.reading(D).catch(() => null);
-    if (!r) { broken = `the on-chain reading ${formatDate(D)} could not be read`; break; }
+    if (!r) { broken = `The on-chain reading for ${formatDate(D)} could not be read.`; break; }
     foreign.unshift(r);
     D = r.prevDate;
   }
-  if (!broken && D > ownLast && D !== 0) broken = `more than ${MAX_WALK} on-chain readings this registry did not write`;
+  if (!broken && D > ownLast && D !== 0) broken = `There are more than ${MAX_WALK} on-chain readings that this registry did not write.`;
   if (broken) { hold(out, d, t, broken); return; }
   let pool: ReceiptRow[] = [...unassigned];
   const plan: FenceAdoption[] = [];
@@ -79,15 +79,15 @@ export async function fenceToken(d: Pick<KeeperDeps, "registry" | "program" | "l
     if (r.prevDate === 0) continue;   // a baseline counts no units
     const group = pool.filter((b) => receiptDay(b.settledAt) <= r.recordDate);
     const units = group.reduce((a, b) => a + b.units, 0);
-    if (units !== r.units) { mismatch = `the on-chain reading ${formatDate(r.recordDate)} (not written by this keeper) counted ${r.units} unit(s); this registry's unassigned receipts through that day carry ${units}`; break; }
+    if (units !== r.units) { mismatch = `Another keeper wrote the on-chain reading for ${formatDate(r.recordDate)}, and it counted ${r.units} ${r.units === 1 ? "unit" : "units"}. This registry's unassigned receipts through that day carry ${units}.`; break; }
     if (group.length) plan.push({ mint: t.mint, ticker: t.ticker, recordDate: r.recordDate, eventIds: group.map((b) => b.eventId), units });
     pool = pool.filter((b) => !group.includes(b));
   }
-  if (mismatch) { hold(out, d, t, `${mismatch} — reconcile the two registries before this keeper attests again`); return; }
+  if (mismatch) { hold(out, d, t, `${mismatch} Reconcile the two registries before this keeper signs again.`); return; }
   for (const a of plan) {
     if (!d.dryRun) reg.assignReading(t.mint, a.eventIds, a.recordDate);
     out.adopted.push(a);
-    d.log(`  [fence] $${t.ticker} ${formatDate(a.recordDate)}: a reading another keeper landed counted ${a.units} unit(s) — ${d.dryRun ? "would adopt" : "adopted"} ${a.eventIds.length} receipt(s) into it (${a.eventIds.join(", ")})`);
+    d.log(`  [fence] $${t.ticker} ${formatDate(a.recordDate)}: a reading another keeper landed counted ${a.units} ${a.units === 1 ? "unit" : "units"} — ${d.dryRun ? "would adopt" : "adopted"} ${a.eventIds.length} ${a.eventIds.length === 1 ? "receipt" : "receipts"} into it (${a.eventIds.join(", ")})`);
   }
 }
 

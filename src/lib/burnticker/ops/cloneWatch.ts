@@ -104,12 +104,14 @@ const utc = (iso: string) => `${iso.slice(11, 16)} UTC ${iso.slice(0, 10)}`;
 /** The plain evidence lines for one token (what the list prints). */
 export function evidenceLines(r: Omit<CloneRow, "evidence">): string[] {
   const out: string[] = [];
-  out.push(r.registered === false ? "not registered with the burn_receipts program" : r.registered === true ? "registered with the burn_receipts program, but not a Burnticker coin" : "not in this host's Burnticker coin list; the burn_receipts program check was unavailable here, so registration is unknown");
-  out.push(`$${r.symbol || "?"}: ${r.matched.how} — ${r.matched.term === "BURNTICKER" ? "Burnticker" : `$${r.matched.term}`}`);
-  if (r.bundle) out.push(`${r.bundle.wallets} wallets hold identical ${r.bundle.sharePct.toFixed(2)} %`);
-  if (r.lp.state === "pulled" && r.lp.pulledAt) out.push(`LP pulled ${utc(r.lp.pulledAt)}`);
-  else if (r.lp.state === "thin") out.push(`pool liquidity under $${LP_PRESENT_USD} when seen`);
-  if (r.poolCreatedAt) out.push(`pool created ${utc(r.poolCreatedAt)}`);
+  out.push(r.registered === false ? "It is not registered with the burn program (burn_receipts)." : r.registered === true ? "It is registered with the burn program (burn_receipts), but it is not a Burnticker coin." : "It is not in this site's list of Burnticker coins. The burn program check was not available here, so its registration is unknown.");
+  const sym = `$${r.symbol || "?"}`, target = r.matched.term === "BURNTICKER" ? "Burnticker" : `$${r.matched.term}`;
+  const how = r.matched.how;
+  out.push(how === "ticker reads as the same letters" ? `The ticker ${sym} reads as the same letters as ${target}.` : how === "ticker one letter away" ? `The ticker ${sym} is one letter away from ${target}.` : how === "ticker is a copycat variant" ? `The ticker ${sym} is a copycat version of ${target}.` : how === "name contains it" ? `The name of ${sym} contains ${target}.` : `${sym} looks like ${target}. The match is that the ${how}.`);
+  if (r.bundle) out.push(`${r.bundle.wallets} wallets each hold exactly ${r.bundle.sharePct.toFixed(2)} % of the supply.`);
+  if (r.lp.state === "pulled" && r.lp.pulledAt) out.push(`The liquidity was pulled at ${utc(r.lp.pulledAt)}.`);
+  else if (r.lp.state === "thin") out.push(`The pool held less than $${LP_PRESENT_USD} of liquidity when it was seen.`);
+  if (r.poolCreatedAt) out.push(`The pool was created at ${utc(r.poolCreatedAt)}.`);
   return out;
 }
 

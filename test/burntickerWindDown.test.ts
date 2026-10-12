@@ -30,8 +30,8 @@ describe("the schema", () => {
 
   test("the sentences say it, lint-clean: one-liner, plain sentence, statement, the outcome-set conditional", () => {
     const r = lockRule(KALSHI_ONE_SHOT).rule;
-    assert.equal(oneShotAllLiner(r, "the Eagles win the Super Bowl", "2027-02-14"), "burns everything the day the Eagles win the Super Bowl happens; if it doesn't, the pool burns down over four weeks after 2027-02-14");
-    assert.match(ruleOneLiner(r, "the Eagles win the Super Bowl"), /^burns everything the day the Eagles win the Super Bowl happens; if it doesn't, the pool burns down over four weeks after it settles$/);
+    assert.equal(oneShotAllLiner(r, "the Eagles win the Super Bowl", "2027-02-14"), "burns everything if the Eagles win the Super Bowl. If not, the pool burns down over four weeks after 2027-02-14");
+    assert.match(ruleOneLiner(r, "the Eagles win the Super Bowl"), /^burns everything if the Eagles win the Super Bowl\. If not, the pool burns down over four weeks after it settles$/);
     const texts = [oneShotAllLiner(r, "X happens", "2027-02-14")!, plainSentence(r, "EAGLES", "the Eagles win the Super Bowl"), onEndText({ onEnd: DEFAULT_ON_END, set: { id: "nfl-2026", outcome: "PHI", forwardBps: 2500 } }), plainSentence(coinvsRule({ selector: "coinvs", a: WIF, b: SHIB, window: "daily", measure: "pct", season: { start: "2026-10-05", days: 7 }, flip: false }), "TEAMWIF")];
     for (const t of texts) assert.deepEqual(lint(t), [], t);
     assert.match(ruleStatement(r), /spends the whole fee pool \(100%\).*burns down on a daily clock over four weeks/);
@@ -79,7 +79,7 @@ describe("through the keeper and the program", () => {
     const feeLeft = w.program.fake(w.a.mint).feeLamports;
     assert.ok(spent >= BigInt(4_900_000_000), `spent ${spent}`); assert.ok(feeLeft <= BigInt(100_000_000), `left ${feeLeft}`);
     assert.equal(w.registry.token(w.a.mint)!.status, "retired");
-    assert.match(lifecycleFrom(w.registry, w.registry.token(w.a.mint)!, rule).line, /^retired/);
+    assert.match(lifecycleFrom(w.registry, w.registry.token(w.a.mint)!, rule).line, /^This coin is retired\./);
     // A drain day's attestation commits to sha256("clock|<date>|<rules sha256>").
     const sig = w.registry.signatures(w.a.mint, `reading:${drains[0].eventId.slice(6)}`)[0];
     assert.ok(JSON.parse(sig.memo).message.endsWith(`proof=${clockProofHex(drains[0].eventId.slice(6), w.a.rulesSha)}`));
@@ -103,7 +103,7 @@ describe("through the keeper and the program", () => {
     w.program.deposit(w.a.mint, BigInt(200_000_000));
     await runCycle(w.deps); await runCycle(w.deps);
     assert.equal(sweeps().length, 1); assert.equal(sweeps()[0].units, 459); assert.equal(sweeps()[0].status, "confirmed");
-    assert.match(lifecycleFrom(w.registry, w.registry.token(w.a.mint)!, w.registry.lockedRule(w.a).rule).line, /^retired · swept \d{4}-\d{2}-\d{2}/);
+    assert.match(lifecycleFrom(w.registry, w.registry.token(w.a.mint)!, w.registry.lockedRule(w.a).rule).line, /^This coin is retired\. Its pool was last swept on \d{4}-\d{2}-\d{2}/);
     // Another refill the next day: no second sweep within the week…
     w.clock.now += 86_400_000;
     w.program.deposit(w.a.mint, BigInt(300_000_000));

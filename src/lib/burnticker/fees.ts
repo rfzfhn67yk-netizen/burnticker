@@ -59,9 +59,9 @@ export interface FeeSplit { phase: "curve" | "post-graduation"; legs: FeeLeg[]; 
 export const CURVE_FEES: FeeSplit = {
   phase: "curve",
   legs: [
-    { label: "Raydium protocol", bps: RAYDIUM_CURVE_BPS, recipient: "Raydium (GlobalConfig.protocolFeeOwner)", dial: "GlobalConfig.tradeFeeRate = 2,500 ppm — fixed by Raydium", note: "" },
-    { label: "Burnticker (developer)", bps: BURNTICKER_DEV_FEE_BPS, recipient: "BURNTICKER_FEE_WALLET (PlatformConfig.platformClaimFeeWallet)", dial: "PlatformConfig.feeRate = 2,500 ppm (0..50,000 allowed)", note: "owner's decision 2026-10-09" },
-    { label: "burn pool", bps: BURN_POOL_CURVE_BPS, recipient: "the burn program's fee PDA for the mint (= the LaunchLab creator; claimed by the program's permissionless claim_launchlab_creator_fee into the fee PDA's WSOL ATA), 100%", dial: "PlatformConfig.creatorFeeRate = 5,000 ppm — the program's cap", note: "creators receive none of it; the keeper only pays gas" },
+    { label: "Raydium protocol", bps: RAYDIUM_CURVE_BPS, recipient: "Raydium (GlobalConfig.protocolFeeOwner)", dial: "Fixed by Raydium at 2,500 ppm (GlobalConfig.tradeFeeRate)", note: "" },
+    { label: "Burnticker (developer)", bps: BURNTICKER_DEV_FEE_BPS, recipient: "Burnticker's developer fee wallet (PlatformConfig.platformClaimFeeWallet)", dial: "Set to 2,500 ppm in the platform config (PlatformConfig.feeRate). Anything from 0 to 50,000 is allowed.", note: "owner's decision 2026-10-09" },
+    { label: "burn pool", bps: BURN_POOL_CURVE_BPS, recipient: "This coin's burn pool gets all of it. The burn pool is the burn program's fee account, which is also the coin's creator on LaunchLab. Anyone can run the claim (claim_launchlab_creator_fee) that moves these fees into it.", dial: "Set to 5,000 ppm in the platform config (PlatformConfig.creatorFeeRate), the program's cap", note: "Creators receive none of it. The keeper only pays network fees." },
   ],
   totalBps: RAYDIUM_CURVE_BPS + BURNTICKER_DEV_FEE_BPS + BURN_POOL_CURVE_BPS,
 };
@@ -74,10 +74,10 @@ export const CURVE_FEES: FeeSplit = {
 export const POST_GRADUATION_FEES: FeeSplit = {
   phase: "post-graduation",
   legs: [
-    { label: "Raydium protocol", bps: 4.25, recipient: "Raydium (protocol 3 bps + fund 1 bp of the trade fee; 0.25 bp = 5% of the creator fee at collection)", dial: "AmmConfig.protocolFeeRate 12% + fundFeeRate 4% of the 25 bps trade fee; creatorFeeShareRate 5%", note: "fixed per tier" },
+    { label: "Raydium protocol", bps: 4.25, recipient: "Raydium. It takes 0.03% and 0.01% of each trade, plus 5% of the creator fee when that fee is collected.", dial: "AmmConfig.protocolFeeRate 12% + fundFeeRate 4% of the 25 bps trade fee; creatorFeeShareRate 5%", note: "fixed per tier" },
     { label: "Burnticker (operator, LP fees)", bps: LP_FEES_TO_OPERATOR_BPS, recipient: operatorTreasuryRecord("mainnet").text, dial: "84% of the 25 bps trade fee × LOCK_FEE_OPERATOR_BPS 2,000 — compiled into the program; no admin key, no config field", note: "owner decision 2026-10-10: the operator earns 20% of the post-graduation LP fees" },
-    { label: "burn pool", bps: 4.75, recipient: "the burn program's fee PDA via CPMM collect_creator_fee_permissionless (pool_creator = the fee PDA, copied from the LaunchLab creator at migration)", dial: "AmmConfig.creatorFeeRate = 500 ppm (5 bps) × (1 − 5%) — fixed per tier; no platform dial changes it", note: "" },
-    { label: "burn pool (LP fees)", bps: LP_FEES_TO_BURN_POOL_BPS, recipient: "the burn program's fee PDA: 80% of the locked LP's SOL-side fees via claim_lock_fees (the Fee Key is owned by the program's fee-keys PDA); the coin side is burned outright", dial: "84% of the 25 bps trade fee × LOCK_FEE_BURN_BPS 8,000 — compiled into the program", note: "LP locked forever (owner decision 2026-10-10)" },
+    { label: "burn pool", bps: 4.75, recipient: "This coin's burn pool. The pool lists the burn pool as its creator, copied from LaunchLab at graduation, so anyone can collect this fee into it (collect_creator_fee_permissionless).", dial: "AmmConfig.creatorFeeRate = 500 ppm (5 bps) × (1 − 5%) — fixed per tier; no platform dial changes it", note: "" },
+    { label: "burn pool (LP fees)", bps: LP_FEES_TO_BURN_POOL_BPS, recipient: "This coin's burn pool gets 80% of the SOL fees from the locked liquidity, through the open claim step (claim_lock_fees). The burn program owns the Fee Key. The coin side of those fees is burned outright.", dial: "84% of the 25 bps trade fee × LOCK_FEE_BURN_BPS 8,000 — compiled into the program", note: "LP locked forever (owner decision 2026-10-10)" },
   ],
   totalBps: CPMM_TRADE_BPS + CPMM_CREATOR_BPS,
 };
@@ -102,7 +102,7 @@ export function capPool(spendableLamports: bigint, capLamports: bigint = PRE_AUD
 // the line itself lives in the client-safe copy module so the operator page can render it without this file's chain imports
 export { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 export const OPERATOR_CONTACT_TODO = "TODO_CONTACT_ADDRESS";
-export const USE_OF_FEES = "Burnticker's 25 bps of curve volume and the operator's 20% of post-graduation LP SOL fees (fixed in code; the other 80% and the token side go to each coin's burn pool) fund attesters, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own; the only buybacks are each coin's program-run burn-pool purchases, and everything they buy is burned.";
+export const USE_OF_FEES = "Burnticker takes 0.25% of curve volume. After graduation, the operator also takes 20% of the SOL fees from each locked liquidity pool, a share fixed in code. The other 80%, and the coin side of those fees, go to each coin's burn pool. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.";
 /**
  * The attester line on the trust page (review 2 §2, 2026-10-11): the present fact, not a schedule — Switchboard ended its services and no
  * independent second attester exists. `dueBy` (14 days after the first launch) stays as the owner's internal check-in date only.
@@ -133,7 +133,9 @@ export function devFeeWallet(env: Readonly<Record<string, string | undefined>> =
 /** One sentence for the review step and the token page. States the split; says nothing about price. */
 export function feeSplitSentence(): string {
   const c = CURVE_FEES.legs;
-  return `On every 1 SOL traded on the curve: ${c.map((l) => `${bpsPerSol(l.bps)} SOL to ${l.label}`).join(", ")} (${CURVE_FEES.totalBps} bps in all). After graduation the LP is ${LP_LOCKED_PCT}% locked forever and its fees fund the burn: of the LP's ${bpsPerSol(CPMM_LP_BPS)} SOL per 1 SOL, ${bpsPerSol(LP_FEES_TO_BURN_POOL_BPS)} goes to the burn pool and ${bpsPerSol(LP_FEES_TO_OPERATOR_BPS)} to the operator (80/20, fixed in code), the coin side is burned, and the burn pool also receives Raydium's fixed CPMM creator fee (${bpsPerSol(4.75)} SOL per 1 SOL). The LaunchLab creator is the burn program's fee PDA, so the creator-fee slot can only ever pay the burn pool; the human creator receives no cash from fees and the keeper only pays gas.`;
+  const to = (label: string) => (label === "burn pool" ? "the burn pool" : label === "Raydium protocol" ? "Raydium" : label);
+  const legs = c.map((l) => `${bpsPerSol(l.bps)} SOL to ${to(l.label)}`);
+  return `On every 1 SOL traded on the curve, ${legs.slice(0, -1).join(", ")} and ${legs[legs.length - 1]} (${CURVE_FEES.totalBps / 100}% in all). After graduation, ${LP_LOCKED_PCT}% of the liquidity is locked forever and its fees fund the burn. Of the ${bpsPerSol(CPMM_LP_BPS)} SOL per 1 SOL that the liquidity earns, ${bpsPerSol(LP_FEES_TO_BURN_POOL_BPS)} SOL goes to the burn pool and ${bpsPerSol(LP_FEES_TO_OPERATOR_BPS)} SOL goes to the operator. That 80/20 split is fixed in code, and the coin side of those fees is burned. The burn pool also gets Raydium's fixed CPMM creator fee of ${bpsPerSol(4.75)} SOL per 1 SOL. The coin's creator on LaunchLab is the burn program's fee account, so the creator-fee slot can only pay the burn pool. The human creator receives no cash from fees, and the keeper only pays network fees.`;
 }
 
 /** The platform-config dials these constants translate to (what scripts/burnticker-platform-config.mts builds). */

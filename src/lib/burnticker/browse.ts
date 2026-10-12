@@ -62,7 +62,7 @@ const LEAGUE_LABEL: Record<string, string> = { nfl: "NFL", nba: "NBA", mlb: "MLB
 export function nativeCards(c: CategoryDef): SourceCard[] {
   return (c.native ?? []).map((n): SourceCard | null => {
     const [fam, arg] = n.split(":");
-    if (fam === "espn" && LEAGUE_LABEL[arg]) return { id: `native:${n}`, venue: "feed", venueLabel: SPORTS_CHIP, tier: 4, tierLabel: "keeper-read primary API", title: `${LEAGUE_LABEL[arg]} team results — pick a team`, cadence: "every game day", kind: "scalar", next: null, example: "burns every time your team wins (or loses)", launchable: { ok: true, why: null }, refused: [], flags: [`confirmed by: ${leagueProvenance(arg as LeagueId).confirmation}`, `schedule: ${leagueProvenance(arg as LeagueId).schedule}`], sourceName: SPORTS_SOURCE_NAME, sourceUrl: null, pick: { oracle: "catalogue", series: null, market: null, title: `${LEAGUE_LABEL[arg]} team results` }, configure: { kind: "team", league: arg } };
+    if (fam === "espn" && LEAGUE_LABEL[arg]) return { id: `native:${n}`, venue: "feed", venueLabel: SPORTS_CHIP, tier: 4, tierLabel: "keeper-read primary API", title: `${LEAGUE_LABEL[arg]} team results (pick a team)`, cadence: "every game day", kind: "scalar", next: null, example: "burns every time your team wins (or loses)", launchable: { ok: true, why: null }, refused: [], flags: [`confirmed by: ${leagueProvenance(arg as LeagueId).confirmation}`, `schedule: ${leagueProvenance(arg as LeagueId).schedule}`], sourceName: SPORTS_SOURCE_NAME, sourceUrl: null, pick: { oracle: "catalogue", series: null, market: null, title: `${LEAGUE_LABEL[arg]} team results` }, configure: { kind: "team", league: arg } };
     if (fam === "nws" && ["high", "rain", "snow"].includes(arg)) { const m = arg as "high" | "rain" | "snow"; return { id: `native:${n}`, venue: "feed", venueLabel: "National Weather Service", tier: 4, tierLabel: "keeper-read primary API", title: m === "high" ? "Daily high at a station" : m === "rain" ? "Rain day at a station" : "First snow of the season", cadence: m === "snow" ? "once a season" : "daily (the morning after)", kind: "scalar", next: null, example: m === "high" ? "burns every day the high reaches your threshold" : m === "rain" ? "burns every day the rain reaches your threshold" : "burns once, on the first measurable snow", launchable: { ok: true, why: null }, refused: [], flags: ["official daily climate report (CLI), final reports only"], sourceName: "NWS daily climate · first-party, public domain", sourceUrl: "https://api.weather.gov", pick: { oracle: "catalogue", series: null, market: null, title: "" }, configure: { kind: "weather", metric: m } }; }
     return null;
   }).filter((x): x is SourceCard => x !== null);
@@ -77,7 +77,7 @@ export function feedCard(f: FeedCardInput): SourceCard {
   return {
     id: `feed:${f.id}`, venue: "feed", venueLabel: f.sourceName, tier: f.tier, tierLabel: f.tierLabel, title: f.title, cadence: f.cadence, kind: "scalar",
     next: f.lastReading ? { label: `last reading ${f.lastReading.id}${f.lastReading.value !== null ? `: ${f.lastReading.value}` : ""}`, at: null } : null,
-    example: f.unit ? `burns per ${f.unit.label}` : "burns on each settled reading", launchable: f.launchable, refused: f.refusals ?? [], flags: f.flags,
+    example: f.unit ? `burns for every ${f.unit.label}` : "burns on each settled reading", launchable: f.launchable, refused: f.refusals ?? [], flags: f.flags,
     sourceName: f.sourceName, sourceUrl: f.sourceUrl, pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, configure: null,
   };
 }

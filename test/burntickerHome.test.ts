@@ -21,7 +21,7 @@ test("site audit #7: at most 1,000 words before the status loads, leaving room f
 test("site audit #8: each fact once — the attester and time-lock lines are not printed by the page (they arrive once, from the status API)", () => {
   for (const dup of [/quorum 1/i, /time lock/i, /no independent second attester/i, /Squads/]) assert.doesNotMatch(visible, dup, String(dup));
   // the status box shows only the phase, signing, upgrades and what is open
-  assert.match(home, /var SHORT = \/\^\(Signing\|Upgrades\|Open before release\):\//);
+  assert.match(home, /var SHORT = \/signs every reading\|holds the upgrade authority\|still open before release\/;/);
   // the status box fails in plain words with a Retry, never a raw parser message
   assert.match(home, /We could not read the current status just now\./); assert.match(home, /b\.addEventListener\("click", load\)/);
   const statusScript = home.slice(home.indexOf("THE ONE CURRENT-STATUS SOURCE"), home.indexOf("How launching works\" in the hero"));

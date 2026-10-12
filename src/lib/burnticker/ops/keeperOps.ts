@@ -64,7 +64,7 @@ export class KeeperOps {
     let report: CycleReport | null = null, error: string | null = null;
     try { report = await runCycle({ ...deps, fence: true }); } catch (e) { error = (e as Error).message; }
     // A cycle that threw has no fence result: treat it as held (fail closed) for the sends that follow it (the pair-curve crank).
-    this.fence = report?.fence ?? (g.active ? { held: [{ mint: "", ticker: "*", why: `the cycle failed before the fence finished: ${(error ?? "no report").slice(0, 120)}` }], adopted: [], checked: 0 } : null);
+    this.fence = report?.fence ?? (g.active ? { held: [{ mint: "", ticker: "*", why: `The cycle failed before the fence check finished. The error was: ${(error ?? "no report").slice(0, 120)}` }], adopted: [], checked: 0 } : null);
     const held = !!this.fence && this.fence.held.length > 0;
     return { gate: { active: g.active, sendsAllowed: g.active && !held, role: g.role, fence: this.fence }, report, error };
   }
@@ -88,14 +88,14 @@ export class KeeperOps {
     this.pendingSink = sink;
     const raised = (await raiseFeedAlerts(this.health, sink, now)).map((a) => `${a.kind}: ${a.text}`);
     for (const h of this.fence?.held ?? []) {
-      const text = `Burnticker keeper HOLDS its sends: $${h.ticker} — ${h.why}`;
+      const text = `The Burnticker keeper HOLDS its sends for $${h.ticker}. ${h.why}`;
       try { if (await sink("bt-foreign-reading", `bt-foreign-reading:${h.mint}`, text, { mint: h.mint }, now)) raised.push(`bt-foreign-reading: ${text}`); } catch { /* never stops the keeper */ }
     }
     if (this.role && !this.role.active && this.role.role === "leader") {
-      try { if (await sink("bt-keeper-yielded", `bt-keeper-yielded:${this.hostId}`, `Burnticker leader keeper ${this.hostId} is PASSIVE: ${this.role.reason}`, null, now)) raised.push(`bt-keeper-yielded`); } catch { /* never stops the keeper */ }
+      try { if (await sink("bt-keeper-yielded", `bt-keeper-yielded:${this.hostId}`, `The Burnticker leader keeper ${this.hostId} is PASSIVE. ${this.role.reason}`, null, now)) raised.push(`bt-keeper-yielded`); } catch { /* never stops the keeper */ }
     }
     if (this.role?.takeover && this.role.role === "standby") {
-      try { if (await sink("bt-keeper-takeover", `bt-keeper-takeover:${this.role.takeover.at}`, `Burnticker STANDBY keeper ${this.hostId} TOOK OVER at ${this.role.takeover.at}: ${this.role.takeover.reason}`, null, now)) raised.push(`bt-keeper-takeover`); } catch { /* never stops the keeper */ }
+      try { if (await sink("bt-keeper-takeover", `bt-keeper-takeover:${this.role.takeover.at}`, `The Burnticker STANDBY keeper ${this.hostId} TOOK OVER at ${this.role.takeover.at}. ${this.role.takeover.reason}`, null, now)) raised.push(`bt-keeper-takeover`); } catch { /* never stops the keeper */ }
     }
     return raised;
   }

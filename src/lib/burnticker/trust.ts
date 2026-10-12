@@ -50,7 +50,7 @@ export function loadPowersRegister(env: Readonly<Record<string, string | undefin
       { id: "keeper-data-key", power: "sign feed readings (attester, quorum 1) and crank burns", holder: key("BURNTICKER_KEEPER_PUBKEY"), holderKind: "key", timelock: null, sunset: "quorum 2 with an independent attester (v2)", canDo: ["submit a settled reading it read from the public source", "crank a burn the rule computes from that reading"], cannotDo: ["change a rule", "burn more than the rule says", "withdraw from any fee PDA or vault", "touch a holder's balance"], source: "placeholder: BURNTICKER_KEEPER_PUBKEY" },
       { id: "platform-admin", power: "LaunchLab PlatformConfig admin: may change the platform fee bps, the claim wallet and the LP split for FUTURE launches", holder: key("BURNTICKER_PLATFORM_ADMIN"), holderKind: "key", timelock: "none on chain (LaunchLab has no timelock); changes are visible on this page within one cycle", sunset: "transfer to a multisig before P3", canDo: ["raise or lower the developer fee within 0..500 bps for new trades", "change the developer wallet", "change the LP split for future graduations"], cannotDo: ["change any token's rule or burn", "take from a burn pool", "change the creator fee above 50 bps (program cap)", "redirect a coin's Fee Key or LP fees (initialize_token and every buyback crank refuse a platform whose lock-NFT wallet is not the burn program's fee-keys PDA or whose LP is not 100 % locked; the 80/20 claim split is compiled)"], source: "placeholder: BURNTICKER_PLATFORM_ADMIN" },
       { id: "dev-fee-wallet", power: "receives the developer's platform fee", holder: devFeeWallet(env), holderKind: "key", timelock: null, sunset: null, canDo: ["claim the platform fee vault"], cannotDo: ["anything to a token"], source: "BURNTICKER_FEE_WALLET" },
-      { id: "program-upgrade-authority", power: "upgrade the burn_receipts program", holder: key("BURNTICKER_UPGRADE_AUTHORITY"), holderKind: key("BURNTICKER_UPGRADE_AUTHORITY") ? "multisig" : "none", timelock: "Squads multisig (planned), then renounced after audit", sunset: "renounce after audit (LAUNCHPAD-PATH §2)", canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: ["anything without a new deployment, which is public"], source: "placeholder: BURNTICKER_UPGRADE_AUTHORITY; the program is not deployed yet" },
+      { id: "program-upgrade-authority", power: "upgrade the burn program (burn_receipts)", holder: key("BURNTICKER_UPGRADE_AUTHORITY"), holderKind: key("BURNTICKER_UPGRADE_AUTHORITY") ? "multisig" : "none", timelock: "Squads multisig (planned), then renounced after audit", sunset: "renounce after audit (LAUNCHPAD-PATH §2)", canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: ["anything without a new deployment, which is public"], source: "placeholder: BURNTICKER_UPGRADE_AUTHORITY; the program is not deployed yet" },
     ],
   };
 }
@@ -71,10 +71,10 @@ export function registerPowersFromShipped(j: ShippedRegister, upgradeTimeLockSec
   const kind = (role: string): Power["holderKind"] => (/squads|multisig|vault/i.test(j.roles?.[role] ?? "") ? "multisig" : role === "anyone" ? "none" : "key");
   const rows: Power[] = j.instructions.filter((i) => i.class === "privileged").map((i) => {
     const role = (i.signers ?? []).map((x) => x.role).find((r) => r !== "anyone") ?? "anyone";
-    return { id: i.name, power: i.name.replace(/_/g, " "), holder: role, holderKind: kind(role), timelock: i.timelock ?? null, sunset: i.sunset ?? null, canDo: i.can ? [i.can] : [], cannotDo: i.cannot ? [i.cannot] : [], source: `${src} → instructions.${i.name}` };
+    return { id: i.name, power: i.name.replace(/_/g, " "), holder: role, holderKind: kind(role), timelock: i.timelock ?? null, sunset: i.sunset ?? null, canDo: i.can ? [i.can] : [], cannotDo: i.cannot ? [i.cannot] : [], source: `${src}, instructions.${i.name}` };
   });
-  if (j.upgrade_authority) rows.push({ id: "program-upgrade-authority", power: j.upgrade_authority.power ?? "program upgrade authority", holder: "upgrade_authority", holderKind: "multisig", timelock: j.upgrade_authority.holder_at_launch ?? null, sunset: j.upgrade_authority.sunset ?? null, canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: [], source: `${src} → upgrade_authority` });
-  for (const [k, e] of (j.external_powers ?? []).entries()) rows.push({ id: `external-${k}`, power: e.power ?? "external power", holder: e.holder ?? null, holderKind: "key", timelock: e.timelock ?? null, sunset: null, canDo: e.can ? [e.can] : [], cannotDo: [], source: `${src} → external_powers[${k}]` });
+  if (j.upgrade_authority) rows.push({ id: "program-upgrade-authority", power: j.upgrade_authority.power ?? "program upgrade authority", holder: "upgrade_authority", holderKind: "multisig", timelock: j.upgrade_authority.holder_at_launch ?? null, sunset: j.upgrade_authority.sunset ?? null, canDo: [upgradeDelaySummary(upgradeTimeLockSecs)], cannotDo: [], source: `${src}, upgrade_authority` });
+  for (const [k, e] of (j.external_powers ?? []).entries()) rows.push({ id: `external-${k}`, power: e.power ?? "external power", holder: e.holder ?? null, holderKind: "key", timelock: e.timelock ?? null, sunset: null, canDo: e.can ? [e.can] : [], cannotDo: [], source: `${src}, external_powers[${k}]` });
   return rows.length ? rows : null;
 }
 
@@ -82,8 +82,8 @@ export function registerPowersFromShipped(j: ShippedRegister, upgradeTimeLockSec
 export function operatorPowersSummary(reg: PowersRegister): { can: string[]; cannot: string[]; placeholder: boolean } {
   const can = new Set<string>(), cannot = new Set<string>();
   for (const p of reg.powers) { p.canDo.forEach((x) => can.add(x)); p.cannotDo.forEach((x) => cannot.add(x)); }
-  cannot.add("change a token's rule, readings or receipts after the fact (the registry is append-only, enforced by SQL triggers)");
-  cannot.add("earn from a burn pool (nothing is ever taken from one)");
+  cannot.add("change a token's rule, readings or receipts after the fact, because the registry is append-only and database triggers enforce that");
+  cannot.add("earn from a burn pool, because nothing is ever taken from one");
   return { can: [...can], cannot: [...cannot], placeholder: reg.placeholder };
 }
 
@@ -108,11 +108,11 @@ export function jsonSafe<T>(v: T): unknown {
 
 export async function readLivePlatform(reader: ChainReader | null, platformId: string | null, env: Readonly<Record<string, string | undefined>> = process.env, now = Date.now()): Promise<LivePlatform> {
   const readAt = new Date(now).toISOString();
-  if (!platformId) return { platformId: "", found: false, view: null, comparison: [], readAt, error: "BURNTICKER_PLATFORM_ID is not set: the platform config has not been created yet" };
-  if (!reader) return { platformId, found: false, view: null, comparison: [], readAt, error: "no RPC configured on this host: the live config cannot be read here" };
+  if (!platformId) return { platformId: "", found: false, view: null, comparison: [], readAt, error: "This site does not name a platform settings account, because it has not been created yet." };
+  if (!reader) return { platformId, found: false, view: null, comparison: [], readAt, error: "This site has no connection to a Solana node, so it cannot read the live platform settings." };
   try {
     const data = await reader.accountData(platformId);
-    if (!data) return { platformId, found: false, view: null, comparison: [], readAt, error: "the platform config account does not exist on this cluster" };
+    if (!data) return { platformId, found: false, view: null, comparison: [], readAt, error: "The platform settings account does not exist on this network." };
     const view = decodePlatform(data);
     // The decoded view carries bigint fee rates / scales and PublicKeys; the page is served as JSON (NextResponse.json has no
     // replacer), so it is made JSON-safe here. First seen 2026-10-11 on the mainnet host: the route threw "Do not know how to
@@ -127,8 +127,8 @@ export interface FeeLedgerEntry { signature: string; slot: number; blockTime: st
 export interface FeeLedger { wallet: string | null; entries: FeeLedgerEntry[]; totalIn: string; totalOut: string; source: "chain" | "unavailable"; note: string }
 
 export async function readFeeLedger(reader: ChainReader | null, wallet: string | null, limit = 200): Promise<FeeLedger> {
-  if (!wallet) return { wallet: null, entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "BURNTICKER_FEE_WALLET is not set" };
-  if (!reader) return { wallet, entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "no RPC configured on this host; the ledger is read from chain, never from our records" };
+  if (!wallet) return { wallet: null, entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "No developer fee wallet is set on this site." };
+  if (!reader) return { wallet, entries: [], totalIn: "0", totalOut: "0", source: "unavailable", note: "This site has no connection to a Solana node, so it cannot read the ledger. The ledger is only ever read from the chain, never from our own records." };
   const sigs = await reader.signaturesFor(wallet, limit);
   const entries: FeeLedgerEntry[] = [];
   let tin = BigInt(0), tout = BigInt(0);
@@ -138,7 +138,7 @@ export async function readFeeLedger(reader: ChainReader | null, wallet: string |
     if (d.delta > BigInt(0)) tin += d.delta; else tout -= d.delta;
     entries.push({ signature: s.signature, slot: s.slot, blockTime: s.blockTime ? new Date(s.blockTime * 1000).toISOString() : null, delta: d.delta.toString(), direction: d.delta > BigInt(0) ? "in" : "out", counterparty: d.counterparty, memo: d.memo });
   }
-  return { wallet, entries, totalIn: tin.toString(), totalOut: tout.toString(), source: "chain", note: `the last ${limit} signatures of the wallet, from the RPC` };
+  return { wallet, entries, totalIn: tin.toString(), totalOut: tout.toString(), source: "chain", note: `These are the wallet's last ${limit} transactions, read from a Solana node.` };
 }
 
 // ---- team wallets, own-token refusal ----
@@ -150,7 +150,7 @@ export function teamWallets(env: Readonly<Record<string, string | undefined>> = 
   return {
     wallets: [...pick("developer fee wallet", "BURNTICKER_FEE_WALLET"), ...pick("platform admin", "BURNTICKER_PLATFORM_ADMIN"), ...pick("keeper data key", "BURNTICKER_KEEPER_PUBKEY")],
     ownTokensFile: file, ownTokensPresent: fs.existsSync(path.join(root, file)),
-    refusalRule: "Every trading arm the operator runs refuses to buy any token launched through this platform (the refuse list in config/own-tokens.json, enforced in the bots' entry filters). Holdings of any platform token by a team wallet are shown here when non-zero.",
+    refusalRule: "Every trading bot the operator runs refuses any token launched on this platform. The bots check a refuse list before every trade. If a team wallet holds any platform token, this page shows it.",
   };
 }
 
@@ -220,7 +220,7 @@ export function transparencyProblems(j: Partial<TransparencyConfig> | null): str
   if (!j.whoRunsThis || typeof j.whoRunsThis.refusal !== "string" || typeof j.whoRunsThis.refuseListCode !== "string") out.push("whoRunsThis.refusal / refuseListCode missing");
   if (!j.howBuilt || typeof j.howBuilt.aiAssisted !== "boolean" || typeof j.howBuilt.firmAudit !== "boolean" || !Array.isArray(j.howBuilt.reviews)) out.push("howBuilt.aiAssisted / firmAudit / reviews missing");
   const bw = j.howBuilt?.bounty?.wallet;
-  if (bw !== undefined && bw !== null && !PUBKEY_RE.test(String(bw))) out.push("howBuilt.bounty.wallet must be a base58 public key or null (TODO_BOUNTY_WALLET until the vault exists)");
+  if (bw !== undefined && bw !== null && !PUBKEY_RE.test(String(bw))) out.push("howBuilt.bounty.wallet must be a base58 public key, or null until the vault exists");
   if (!Array.isArray(j.wallets) || j.wallets.length === 0) out.push("wallets must be a non-empty array");
   else {
     const roles = new Set<string>();
@@ -295,12 +295,12 @@ export function programFacts(env: Readonly<Record<string, string | undefined>> =
   const deployed = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(id);
   const out: ProgramFacts = {
     programId: deployed ? id : null, deployed, buildHash: (env.BURNTICKER_PROGRAM_HASH ?? "").trim() || null,
-    hostWiring: deployed ? `this host reads burn_receipts ${id}` : "this host is not wired to a burn_receipts program (BURNTICKER_PROGRAM_ID unset): its pages use the in-memory stand-in and send nothing",
+    hostWiring: deployed ? `This site reads the burn program (burn_receipts) at ${id}.` : "This site is not connected to a burn program. Its pages use a stand-in that runs in memory and sends nothing to the chain.",
     chain: chainFacts(root),
-    compiled: `burn_receipts ${BURN_RECEIPTS_IDL.address} (the id compiled into the program and its IDL)`,
+    compiled: `The burn program's address, compiled into the program and its interface file (IDL), is ${BURN_RECEIPTS_IDL.address}.`,
     verify: deployed
-      ? [`solana program dump ${id} program.so`, "sha256sum program.so   # compare with the build hash above", "anchor verify / solana-verify against the tagged source (repository link in the register when published)", `solana program show ${id}   # the upgrade authority must match the register`]
-      : ["this host is not wired to the program; the chain deployment and its read-back hashes are listed above (config/burnticker/verified-build.json, docs/burnticker/VERIFIED-BUILD.md)"],
+      ? [`solana program dump ${id} program.so`, "sha256sum program.so   # compare with the build hash above", "anchor verify or solana-verify   # against the tagged source; the register links the repository once it is published", `solana program show ${id}   # the upgrade authority must match the register`]
+      : ["# This site is not connected to the program. Where it is deployed, and the hashes read back from the chain, are listed above. They come from config/burnticker/verified-build.json and docs/burnticker/VERIFIED-BUILD.md."],
   };
   // every coin's metadata, whatever the program's state (pin.ts; verify.ts verifyPinnedMetadata does the same three checks)
   out.verify.push("metadata: curl -s <coin>/status.json | jq .pinned   # metadataUri (arweave), metadataSha256, expectedDescription", "curl -s <pinned.metadataUri> | sha256sum   # must equal pinned.metadataSha256", "curl -s <pinned.metadataUri> | jq -r .description   # must equal pinned.expectedDescription byte for byte (the generated text)");
@@ -311,7 +311,7 @@ export function programFacts(env: Readonly<Record<string, string | undefined>> =
 function chainFacts(root: string): ProgramChainFact[] {
   try {
     return loadVerifiedBuild(root).programs.map((p) => ({ library: p.library, programId: p.programId,
-      devnet: p.deployed.devnet ? `deployed (read ${p.deployed.devnet.readAt}${p.deployed.devnet.matchesBuild ? ", bytes match the recorded build" : ", bytes DO NOT match the recorded build"})` : "not deployed",
+      devnet: p.deployed.devnet ? `deployed (read ${p.deployed.devnet.readAt}${p.deployed.devnet.matchesBuild ? ", and the bytes match the recorded build" : ", and the bytes DO NOT match the recorded build"})` : "not deployed",
       mainnet: p.deployed.mainnet ? `deployed (read ${p.deployed.mainnet.readAt})` : "not deployed" }));
   } catch { return []; }
 }
@@ -358,16 +358,16 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     team: teamWallets(env, root), attesters: i.attesters, program: programFacts(env, root), incidents: readIncidents(root), audit: readAudit(i.siteDir),
     transparency,
     statements: [
-      `LP locked forever at graduation: ${LP_LOCKED_PCT}% (platformScale 1,000,000, creatorScale 0, burnScale 0; Raydium's LP lock, never withdrawable) — not creator-configurable. The Fee Key is owned by the burn program's fee-keys PDA and the permissionless claim_lock_fees splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury, fixed in code; the coin side is burned. The program's own LP floor for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `The operator earns 20% of post-graduation LP fees: ${LP_FEES_TO_OPERATOR_BPS} bps of every swap after graduation, paid to ${operatorTreasuryRecord(cluster).who}; ${LP_FEES_TO_BURN_POOL_BPS} bps goes to the coin's burn pool. On the curve the developer slice is ${BURNTICKER_DEV_FEE_BPS} bps. No admin key can change the 80/20 split.`,
-      "Creator cash from fees: 0 bps. The creator-fee slot pays the token's burn pool, 100%.",
-      "Team allocation: 0%. No presale, no private round, no airdrop to insiders; the platform holds no tokens at launch.",
-      "Rules, readings and receipts are append-only: SQL triggers refuse updates and deletes; a rule change is a new token.",
-      "No referral codes, fee discounts or hidden parameters exist in the launch wizard; every parameter is in the canonical rules.json.",
-      "Settled results only: no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence (a Burn Derby rule reads two outside coins' settled moves; derby admission refuses a Burnticker coin as an input). No page shows a market-implied chance for any coin (removed 2026-10-10); a coin page names only its venue and the next market's ticker and close time.",
-      "Settlement sources: first-party primaries with an independent cross-read (Treasury, BLS, FRED, NWS, EDGAR, on-chain data; sports games settle on the game's on-chain payout where a Polymarket moneyline market exists, else on a licensed final score (data: TheSportsDB, commercial licence), confirmed by the league's official feed (MLB's official feed, NHL's official scores, NBA's official feed) or a second licensed provider (API-Sports); see the coverage table below) or an on-chain Polymarket payout (the result read from the Conditional Tokens payout vector on Polygon, counted only once that payout is on chain; Gamma is used for discovery only, with no prices shown). Kalshi is not a settlement input: its Developer Agreement and Data Terms (reviewed 2026-10-10) do not permit settling products on or redistributing its data; the Kalshi adapter is discovery-only, off by default, and the launch preflight refuses any Kalshi rule.",
-      `Pre-audit cap: each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL; fee income above it is queued and released after the audit (enforced by the keeper today, by the program once deployed — that seam is open until then).`,
-      "Anonymous creators are allowed; the creator wallet is always displayed. One-shot markets are allowed; their pages say 'resolves once on <date>'. Elections are allowed; deaths, violence, terror, casualty counts and named private individuals are refused.",
+      `At graduation, ${LP_LOCKED_PCT}% of the LP is locked forever with Raydium's LP lock and can never be withdrawn. A creator cannot change this. The platform settings that do it are platformScale 1,000,000, creatorScale 0 and burnScale 0. The Fee Key belongs to the burn program's fee-keys account. Anyone can call the fee claim (claim_lock_fees), which splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury. That split is fixed in code, and the coin side is burned. The program also sets a minimum share of locked LP for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
+      `The operator earns 20% of the LP fees after graduation. That is ${LP_FEES_TO_OPERATOR_BPS / 100}% of every swap after graduation, paid to ${operatorTreasuryRecord(cluster).who}. Another ${LP_FEES_TO_BURN_POOL_BPS / 100}% goes to the coin's burn pool. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No admin key can change the 80/20 split.`,
+      "Creators get no cash from fees. The creator-fee slot pays 100% to the coin's burn pool.",
+      "There is no team allocation. There is no presale, no private round and no airdrop to insiders. The platform holds no tokens at launch.",
+      "Rules, readings and receipts are append-only. Database triggers refuse any update or delete. Changing a rule means launching a new token.",
+      "The launch wizard has no referral codes, fee discounts or hidden settings. Every setting is in the coin's rules file (rules.json).",
+      "Only settled results are shown. The site shows no price, market cap or odds for any Burnticker coin; another coin's market cap may be a rule input, shown only as the rule sentence. For example, a Burn Derby rule reads the settled moves of two outside coins, and derby admission refuses a Burnticker coin as an input. No page shows a market-implied chance for any coin, since that was removed on 2026-10-10. A coin page names only its venue and the next market's ticker and close time.",
+      "Coins settle on first-party primary sources, each with an independent cross-read. These include Treasury, BLS, FRED, NWS, EDGAR and on-chain data. A sports game settles on the game's on-chain payout when a Polymarket moneyline market exists. Otherwise it settles on a licensed final score from TheSportsDB, under a commercial licence. The league's official feed confirms that score (MLB's official feed, the NHL's official scores or the NBA's official feed), or a second licensed provider, API-Sports, does. The coverage table below has the details. A coin can also settle on an on-chain Polymarket payout. That result is read from the payout vector of the Conditional Tokens contract on Polygon, and it counts only once the payout is on chain. Polymarket's Gamma API is used only to find markets, and no prices are shown. Kalshi is not a settlement input. Its Developer Agreement and Data Terms, reviewed on 2026-10-10, do not allow settling products on its data or sharing that data. The Kalshi adapter is for discovery only and is off by default, and the launch check refuses any Kalshi rule.",
+      `Before the audit, each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL. Fee income above that is queued and released after the audit. Today the keeper enforces this cap. Once the program is deployed, the program enforces it. Until then, that gap is open.`,
+      "Anonymous creators are allowed, and the creator's wallet is always shown. One-shot markets are allowed, and their pages say 'resolves once on <date>'. Elections are allowed. Deaths, violence, terror, casualty counts and named private individuals are refused.",
       USE_OF_FEES,
       ...GATE_POLICY_IDS.map((id) => transparency.policies.find((p) => p.id === id)?.text).filter((t): t is string => !!t),
     ],

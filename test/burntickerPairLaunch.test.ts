@@ -87,7 +87,7 @@ describe("plain messages", () => {
     assert.equal(msgs[3], "Too many launch requests from this connection. Try again in about 30 minutes.");
     assert.equal(msgs[4], "Too many launch requests from this connection. Try again in 20 seconds.");
     assert.match(msgs[5], /cannot confirm launches yet/);
-    assert.equal(PAIR_CURVE_REVIEW_LINE, "pair curve · both graduate or neither");
+    assert.equal(PAIR_CURVE_REVIEW_LINE, "Both coins graduate together, or neither does.");
     for (const m of msgs) { assert.ok(!/BURNTICKER_|RPC_URL|\bcode\b|409|429|503/.test(m), m); assert.ok(lintCopy(m, cfg).ok, m); }
     assert.equal(venueFrom409(new LaunchRequestError(429, "rate-limited", "x")), null);
   });
@@ -143,12 +143,12 @@ describe("signing the pair-curve set", () => {
     };
     const first = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, deps);
     assert.deepEqual([first.signatures, first.failedAt], [["s1"], 1]);
-    assert.equal(first.error, "step 2 of 3 was not signed in the wallet");
+    assert.equal(first.error, "Step 2 of 3 was not signed in the wallet");
     refuse = false;
     const again = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, deps, undefined, first.signatures);
     assert.deepEqual(again.signatures, ["s1", "s2", "s3"]); assert.deepEqual(sent, [1, 2, 3], "tx 1 sent once");
     const chainErr = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, { ...deps, confirm: async () => ({ err: { InstructionError: [0, "Custom"] } }) });
-    assert.match(chainErr.error!, /step 1 of 3 failed: the chain rejected it/);
+    assert.match(chainErr.error!, /Step 1 of 3 failed because the chain rejected it/);
   });
 
   test("confirming the drafts: A with tx 1, then B with tx 2; a not-yet-visible transaction (404) is retried; 422 / 503 stop with a plain sentence; confirmed sides are not re-sent", async () => {

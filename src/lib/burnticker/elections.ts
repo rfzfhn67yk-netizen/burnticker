@@ -23,7 +23,7 @@ export type RaceType = "senate" | "house" | "governor" | "control";
 export const RACE_TYPES: { id: RaceType; label: string }[] = [
   { id: "senate", label: "US Senate" }, { id: "house", label: "US House" }, { id: "governor", label: "Governor" }, { id: "control", label: "Party control" },
 ];
-export const BALLOT_NOTE = "state ballot measures: no ballot-measure market is listed on Polymarket right now";
+export const BALLOT_NOTE = "Polymarket lists no market on a state ballot measure right now.";
 
 export const STATES: [string, string][] = [["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"], ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"], ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"], ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"], ["IN", "Indiana"], ["IA", "Iowa"], ["KS", "Kansas"], ["KY", "Kentucky"], ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"], ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"], ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"], ["NE", "Nebraska"], ["NV", "Nevada"], ["NH", "New Hampshire"], ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"], ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"], ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"], ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"], ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"]];
 const byName = new Map(STATES.map(([a, n]) => [n.toLowerCase(), a]));
@@ -71,21 +71,21 @@ export function raceFromEvent(e: GammaEvent, refuse: (titles: string[]) => strin
   return {
     slug: e.slug, title: e.title, url: `https://polymarket.com/event/${e.slug}`, ...base, settlesOn: e.endDate ? e.endDate.slice(0, 10) : null, description: e.description,
     outcomes, hiddenPlaceholders: live.length - shown.length, sos: ref,
-    settlement: `Polymarket on-chain payout + ${st ? `${st} ` : ""}${c.state && ref !== sosFor(null) ? "SoS certified results" : "certified results (state election office)"}`,
+    settlement: `Polymarket's on-chain payout, checked against ${c.state && ref !== sosFor(null) ? `the ${st} Secretary of State's certified results` : `${st ? `${st}'s ` : ""}certified results from the state election office`}`,
     refused: refuse([e.title, ...shown.map((m) => m.question)]),
   };
 }
 
-/** The card line: "Abdul El-Sayed (D) wins the Michigan Senate race · settles 2026-11-04 · Polymarket on-chain payout + Michigan SoS certified results". */
+/** The card line: "Abdul El-Sayed (D) wins the Michigan Senate race, which settles on 2026-11-04." (the settlement source is its own line on the card). */
 export function outcomeCardTitle(r: Race, o: RaceOutcome): string {
-  return `${o.label} wins the ${raceNoun(r)}${r.settlesOn ? ` · settles ${r.settlesOn}` : ""} · ${r.settlement}`;
+  return `${o.label} wins the ${raceNoun(r)}${r.settlesOn ? `, which settles on ${r.settlesOn}` : ""}.`;
 }
 /** What the coin settles on, in plain words (a party market labelled with its nominee settles on the party). */
 export function outcomeSettlesNote(r: Race, o: RaceOutcome): string {
   const party = /Democrat/i.test(o.question) ? "Democratic" : /Republican/i.test(o.question) ? "Republican" : null;
   return o.partyMarket && party
-    ? `Settles on the ${party} nominee winning the ${raceNoun(r)} ("${o.question}"); ${o.label.replace(/\s*\([A-Z]\)$/, "")} is the name Polymarket shows for that nominee. If the nominee changes, the market follows the party.`
-    : `Settles on "${o.question}" resolving ${o.yes}.`;
+    ? `It settles on the ${party} nominee winning the ${raceNoun(r)} ("${o.question}"). ${o.label.replace(/\s*\([A-Z]\)$/, "")} is the name Polymarket shows for that nominee. If the nominee changes, the market follows the party.`
+    : `It settles on "${o.question}" resolving ${o.yes}.`;
 }
 
 export const electionsIndexUrl = (offset: number): string => `https://gamma-api.polymarket.com/events?tag_slug=midterms&closed=false&active=true&limit=100&offset=${offset}`;

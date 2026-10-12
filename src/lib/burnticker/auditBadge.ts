@@ -10,8 +10,9 @@ export const NO_RECEIPTS_TO_CHECK = "No receipts available to check on this host
 
 export function auditBadgeView(a: AuditSummary | null | undefined): AuditBadgeView {
   if (!a) return { text: "not run yet", tone: "muted", sub: null };
-  const scope = a.chainChecked ? "source + chain" : "source only";
-  if (a.receipts === 0) return { text: NO_RECEIPTS_TO_CHECK, tone: "muted", sub: `0 receipts · ${scope}` };
-  if (!a.ok) return { text: `${a.mismatches} mismatch(es)`, tone: "bad", sub: `${a.receipts} receipt(s) · ${scope}` };
-  return { text: `all ${a.receipts} receipt(s) recompute`, tone: "ok", sub: `${a.receipts} receipt(s) · ${scope}` };
+  const scope = a.chainChecked ? "checked against the source and the chain" : "checked against the source only";
+  const receipts = (n: number): string => `${n} ${n === 1 ? "receipt" : "receipts"}`;
+  if (a.receipts === 0) return { text: NO_RECEIPTS_TO_CHECK, tone: "muted", sub: `0 receipts, ${scope}` };
+  if (!a.ok) return { text: `${a.mismatches} ${a.mismatches === 1 ? "mismatch" : "mismatches"}`, tone: "bad", sub: `${receipts(a.receipts)}, ${scope}` };
+  return { text: a.receipts === 1 ? "The one receipt recomputes" : `All ${a.receipts} receipts recompute`, tone: "ok", sub: `${receipts(a.receipts)}, ${scope}` };
 }

@@ -38,7 +38,7 @@ describe("the preflight and the keeper", () => {
   test("WIF vs SHIB passes the creation preflight with NO Pyth key: WIF from Pyth's Solana account, SHIB from RedStone (cross-read DexScreener on Ethereum)", async () => {
     const r = await preflightSelector(coinvsRule(SPEC), { now: Date.UTC(2026, 9, 10, 22, 20), derby: { pools: fixturePort(), fetchImpl: fixtureFetch(), hermes: null } });
     assert.equal(r.ok, true, JSON.stringify(r.refusal));
-    assert.match(r.agreementBasis, /WIF: pyth:4ca4beeca86f .* · SHIB: redstone:SHIB 0\.00000545 vs dexscreener\.pairs:ethereum:0x95aD/);
+    assert.match(r.agreementBasis, /For WIF, pyth:4ca4beeca86f .* For SHIB, redstone:SHIB says 0\.00000545 and dexscreener\.pairs:ethereum:0x95aD/);
     // RedStone packages two days old are stale: refused, never used.
     const stale = await preflightSelector(coinvsRule(SPEC), { now: Date.UTC(2026, 9, 12, 22, 20), derby: { pools: fixturePort(), fetchImpl: fixtureFetch(), hermes: null } });
     assert.equal(stale.ok, false);

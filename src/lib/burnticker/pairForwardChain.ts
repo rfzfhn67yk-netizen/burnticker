@@ -138,7 +138,7 @@ export class ChainPairForward implements PairForwardClient {
       async buildSubmitResult(i: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array }) {
         const payer = await need();
         const cfg = await fetchTokenConfig(c, o.programId, A);
-        if (!cfg) throw new Error(`no burn_receipts config for mint ${mintAS}`);
+        if (!cfg) throw new Error(`The burn program (burn_receipts) has no config for mint ${mintAS}.`);
         const genesis = cfg.config.cluster_genesis.toBase58();
         // Never a mainnet-bound signature off mainnet; on devnet/mainnet the build's genesis must be the RPC's (as for readings).
         assertSignableGenesis(genesis, o.cluster, rpcGenesis!);

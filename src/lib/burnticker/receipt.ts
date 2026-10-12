@@ -65,7 +65,7 @@ export function formatReceiptMemo(m: ReceiptMemo): string {
   if (!HEX12.test(m.rulesSha12)) bad.push("rulesSha12");
   if (m.version !== RECEIPT_VERSION) bad.push("version");
   if (!bad.length && BigInt(m.spent) > BigInt(m.pool)) bad.push("spent > pool");
-  if (bad.length) throw new Error(`receipt memo: invalid field(s) ${bad.join(", ")}`);
+  if (bad.length) throw new Error(`The receipt memo has ${bad.length === 1 ? "an invalid field" : "invalid fields"}: ${bad.join(", ")}.`);
   const s = `${RECEIPT_PREFIX}|${m.ticker}|${m.id}|oracle=${m.oracle}|market=${m.market}|result=${m.result}|settled=${m.settled}|src=${m.src}|value=${m.value}|units=${m.units}|pool=${m.pool}|spent=${m.spent}|got=${m.got}|burn=${m.burn}|swap=${m.swap}|rules=sha256:${m.rulesSha12}|${m.version}`;
   const bytes = Buffer.byteLength(s, "utf8");
   if (bytes > MEMO_MAX_BYTES) throw new Error(`receipt memo is ${bytes} bytes, over the ${MEMO_MAX_BYTES}-byte ceiling`);

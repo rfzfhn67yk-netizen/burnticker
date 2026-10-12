@@ -15,7 +15,7 @@ import { loadTransparency, transparencyProblems } from "@/lib/burnticker/trust";
 import { ALL_TRUSTPACK_COPY, NEVER_BUYS_STATUS } from "@/lib/burnticker/trustpack/copy";
 import { buildChecklist, checklistMarkdown, OUTFLOW_BY_INSTRUCTION, loadRegister } from "@/lib/burnticker/trustpack/checklist";
 import { loadOperator, operatorProblems, placeholders, signedMessageView, verifySignedMessage, type OperatorConfig } from "@/lib/burnticker/trustpack/operator";
-import { b58encode } from "@/lib/burnticker/trustpack/base58";
+import { b58encode, isPubkey } from "@/lib/burnticker/trustpack/base58";
 import { buildFeeLedgerDoc, expensesProblems, groupByMonth, loadExpenses, readWalletHistory, FEE_LEDGER_FILE } from "@/lib/burnticker/trustpack/ledger";
 import { evidenceSignatures, runNeverBuys, statusOf, walletMintDelta, NEVER_BUYS_FILE } from "@/lib/burnticker/trustpack/neverBuys";
 import { WELL_KNOWN_PATHS, wellKnownText, buildWellKnown } from "@/lib/burnticker/trustpack/wellKnown";
@@ -93,9 +93,14 @@ describe("operator.json", () => {
     for (const m of op.clusters.devnet.platformMints) assert.ok(read(m.source).includes(m.mint), `${m.symbol} in ${m.source}`);
     assert.ok(read(op.clusters.devnet.squads.source).includes(op.clusters.devnet.squads.vault));
     assert.ok(read("docs/burnkeeper/evidence/devnet-2026-10-10/platform.json").includes(`"feeWallet": "${op.clusters.devnet.wallets.find((w) => w.role === "dev-fee")!.pubkey}"`), "the dev-fee wallet is the platform config's claim wallet");
-    assert.ok(op.clusters.mainnet.wallets.filter((w) => !["bounty", "squads-member-1", "squads-member-2", "squads-member-3", "dev-fee", "squads-vault", "platform-admin"].includes(w.role)).every((w) => /^TODO_/.test(w.pubkey)), "no mainnet hot wallet exists yet; each is a TODO (the bounty wallet, Squads members A/B/C, the vault and the dev-fee wallet are set)");
+    // website-9 (2026-10-11): the last two mainnet TODOs are set — the keeper key is the attester recorded in the mainnet rehearsal
+    // evidence, and the deployer is the key that ran the mainnet deploy. No mainnet wallet is a placeholder any more.
+    assert.ok(op.clusters.mainnet.wallets.every((w) => isPubkey(w.pubkey)), "every mainnet wallet is a real public key");
+    const mk = op.clusters.mainnet.wallets.find((w) => w.role === "keeper")!;
+    assert.equal(mk.pubkey, "J5XB9gNiftyMpLPy767KB4LF9R2y2ZefvtNck6xhFTf6"); assert.ok(read(mk.source!).includes(`"attester": "${mk.pubkey}"`), "the mainnet keeper is the rehearsal's attester");
+    assert.equal(op.clusters.mainnet.wallets.find((w) => w.role === "deployer")?.pubkey, "F1b481n5KLLJQ8xQyAtjmZdX8zBv726qwg9TrpDZJv5P", "the mainnet deployer (upgrade authority handed to the Squads vault)");
     assert.equal(op.clusters.mainnet.wallets.find((w) => w.role === "bounty")?.pubkey, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u", "the bounty wallet (set 2026-10-11)");
-    assert.equal(op.operator.entity, "TODO_ENTITY"); assert.match(op.operator.entityPending, /LLC: pending owner decision/);
+    assert.equal(op.operator.entity, "TODO_ENTITY"); assert.match(op.operator.entityPending, /Whether to form an LLC is not decided yet/);
     assert.equal(op.operator.contact, "contact@burnticker.com");
   });
   test("operatorProblems refuses a malformed devnet key, a missing role and a bad signature", () => {
@@ -126,7 +131,7 @@ describe("TODO-OWNER.md: every placeholder, every pointer", () => {
   test("every TODO_ placeholder in the trust-pack files is on the page", () => {
     const files = ["config/burnticker/operator.json", "config/burnticker/expenses.json", "config/burnticker/transparency.json", "config/public-repo/overlay/SECURITY.md"];
     const all = new Set(files.flatMap((f) => placeholders(f.endsWith(".json") ? JSON.parse(read(f)) : read(f)).map((p) => p.value)));
-    assert.ok(all.size >= 11, `${all.size} placeholders`);   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11
+    assert.ok(all.size >= 9, `${all.size} placeholders`);   // 20 at the trust pack; the bounty wallet and Squads member A were set on 2026-10-11, the mainnet keeper and deployer keys later that day (website-9)
     for (const v of all) assert.ok(doc.includes(v), `${v} is missing from docs/burnticker/TODO-OWNER.md`);
   });
   test("every `file:line` (and `:line` after it) points at a line that holds the token named beside it", () => {
@@ -178,7 +183,7 @@ describe("expenses + the fee ledger (from chain, by month)", () => {
     const doc = buildFeeLedgerDoc({ cluster: "devnet", wallet: W, history: h, expenses: loadExpenses(ROOT), now: 0 });
     assert.equal(doc.totals.inLamports, "9000"); assert.equal(doc.source, "chain"); assert.ok(doc.placeholders.includes("TODO_EXPENSE_HOSTING"));
     const none = buildFeeLedgerDoc({ cluster: "mainnet", wallet: null, history: null, expenses: loadExpenses(ROOT) });
-    assert.equal(none.source, "unavailable"); assert.match(none.note, /TODO_MAINNET_DEV_FEE_WALLET/);
+    assert.equal(none.source, "unavailable"); assert.match(none.note, /No developer fee wallet is set for mainnet yet/);
   });
 });
 

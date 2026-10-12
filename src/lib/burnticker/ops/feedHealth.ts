@@ -121,15 +121,16 @@ export function computeFeedHealth(reg: Pick<Registry, "tokens" | "feedState" | "
     const withheld = !disagreeing && newer(ob?.lastWithheldAt, ob?.lastCleanAt);
     const agreement = fs.lastOkAt === null || withheld ? null : disagreeing ? false : ob?.lastCleanAt ? true : null;
     let state: FeedHealthState, why: string;
-    if (fs.failures > 0 && (fs.lastOkAt === null || (fs.lastFetchAt ?? 0) > fs.lastOkAt)) { state = "down"; why = `${fs.failures} failed read(s) in a row${fs.lastError ? `: ${publicText(fs.lastError, 120)}` : ""}`; }
-    else if (fs.lastOkAt === null && fs.lastFetchAt === null) { state = "never-read"; why = "not read yet"; }
-    else if (disagreeing) { state = "disagree"; why = ob?.lastDisagreeText ?? "the cross-read disagreed — the reading is withheld"; }
-    else if (withheld) { state = "withheld"; why = ob?.lastWithheldText ?? "the adapter held the readings (no cross-read result)"; }
-    else if (stale) { state = "stale"; why = last ? `newest reading ${last.id} is ${Math.round((age ?? 0) / DAY)} day(s) old (limit ${Math.round(limit! / DAY)})` : `no reading in ${Math.round((now - e.liveSince) / DAY)} day(s) (limit ${Math.round(limit! / DAY)})`; }
-    else { state = "ok"; why = fs.lastOkAt ? "read cleanly" : "—"; }
+    if (fs.failures > 0 && (fs.lastOkAt === null || (fs.lastFetchAt ?? 0) > fs.lastOkAt)) { state = "down"; why = `The last ${fs.failures === 1 ? "read" : `${fs.failures} reads`} failed.${fs.lastError ? ` The error was: ${publicText(fs.lastError, 120)}` : ""}`; }
+    else if (fs.lastOkAt === null && fs.lastFetchAt === null) { state = "never-read"; why = "It has not been read yet."; }
+    else if (disagreeing) { state = "disagree"; why = ob?.lastDisagreeText ?? "The second source disagreed, so the reading is held back."; }
+    else if (withheld) { state = "withheld"; why = ob?.lastWithheldText ?? "The readings are held because the second source gave no result."; }
+    else if (stale) { state = "stale"; const days = (n: number): string => `${n} ${n === 1 ? "day" : "days"}`;
+      why = last ? `The newest reading, ${last.id}, is ${days(Math.round((age ?? 0) / DAY))} old. The limit is ${days(Math.round(limit! / DAY))}.` : `There has been no reading in ${days(Math.round((now - e.liveSince) / DAY))}. The limit is ${days(Math.round(limit! / DAY))}.`; }
+    else { state = "ok"; why = fs.lastOkAt ? "It was read cleanly." : "No reading yet."; }
     out.push({
       selectorKey: key, tickers: e.tickers.sort(), state, why, lastOkAt: fs.lastOkAt, lastFetchAt: fs.lastFetchAt, failures: fs.failures, lastError: publicText(fs.lastError, 120),
-      crossRead: { agreement, basis: agreement === null ? (fs.lastOkAt === null ? "no successful read yet" : withheld ? "the last read was held without a cross-read result (unreadable or not final) — withheld" : "no cross-read result recorded for this selector") : agreement ? "the last read came back without a disagreement from the adapter's cross-read" : "the adapter's cross-read disagreed on the last read — withheld", lastDisagreeAt: ob?.lastDisagreeAt ?? null },
+      crossRead: { agreement, basis: agreement === null ? (fs.lastOkAt === null ? "No read has worked yet." : withheld ? "The last read was held back because the second source could not be read or was not final." : "No result from a second source is recorded for this feed.") : agreement ? "The second source did not disagree with the last read." : "The second source disagreed with the last read, so it was held back.", lastDisagreeAt: ob?.lastDisagreeAt ?? null },
       staleness: { lastReadingId: last?.id ?? null, lastReadingAt: last?.at ?? null, ageMs: age, limitMs: limit, stale },
     });
   }
@@ -143,9 +144,9 @@ export function feedAlerts(health: readonly FeedHealth[]): FeedAlert[] {
   const out: FeedAlert[] = [];
   for (const h of health) {
     const who = `${h.selectorKey} (${h.tickers.map((t) => `$${t}`).join(", ")})`;
-    if (h.state === "down" && h.failures >= FEED_DOWN_FAILURES) out.push({ kind: "bt-feed-down", key: `bt-feed-down:${h.selectorKey}`, text: `Burnticker source DOWN: ${who} — ${h.why}. Readings are withheld until it answers; nothing burns on a guess.`, meta: { selectorKey: h.selectorKey, failures: h.failures } });
-    if (h.state === "disagree") out.push({ kind: "bt-feed-disagree", key: `bt-feed-disagree:${h.selectorKey}`, text: `Burnticker cross-read DISAGREES: ${who} — ${h.why}. The reading is withheld; nothing burns until the two sources agree.`, meta: { selectorKey: h.selectorKey } });
-    if (h.state === "stale") out.push({ kind: "bt-feed-stale", key: `bt-feed-stale:${h.selectorKey}`, text: `Burnticker source STALE: ${who} — ${h.why}. No new reading means no burn; check the source by hand.`, meta: { selectorKey: h.selectorKey, ageMs: h.staleness.ageMs, limitMs: h.staleness.limitMs } });
+    if (h.state === "down" && h.failures >= FEED_DOWN_FAILURES) out.push({ kind: "bt-feed-down", key: `bt-feed-down:${h.selectorKey}`, text: `Burnticker source ${who} is DOWN. ${h.why} Readings are held back until it answers, and nothing burns on a guess.`, meta: { selectorKey: h.selectorKey, failures: h.failures } });
+    if (h.state === "disagree") out.push({ kind: "bt-feed-disagree", key: `bt-feed-disagree:${h.selectorKey}`, text: `The second source for Burnticker feed ${who} DISAGREES. ${h.why} The reading is held back, and nothing burns until the two sources agree.`, meta: { selectorKey: h.selectorKey } });
+    if (h.state === "stale") out.push({ kind: "bt-feed-stale", key: `bt-feed-stale:${h.selectorKey}`, text: `Burnticker source ${who} is STALE. ${h.why} No new reading means no burn. Check the source by hand.`, meta: { selectorKey: h.selectorKey, ageMs: h.staleness.ageMs, limitMs: h.staleness.limitMs } });
   }
   return out;
 }

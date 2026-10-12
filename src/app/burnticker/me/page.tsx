@@ -32,7 +32,7 @@ export default function CreatorDashboard() {
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-5 text-sm">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Your coins</h1>
-        <p className="text-neutral-400">Connect a wallet to see the coins and pairs it created. Read-only: this page never asks you to sign anything and never posts for you.</p>
+        <p className="text-neutral-400">Connect a wallet to see the coins and pairs it created. This page only reads. It never asks you to sign anything, and it never posts for you.</p>
         <div className="flex flex-wrap items-center gap-2"><WalletMultiButton /><input className="w-80 rounded border border-neutral-700 bg-neutral-950 px-2 py-1" placeholder="or paste a creator wallet address" value={pasted} onChange={(e) => setPasted(e.target.value)} aria-label="creator wallet address" /></div>
       </header>
       {busy && <p className="text-neutral-500">Reading the registry…</p>}
@@ -52,7 +52,7 @@ export default function CreatorDashboard() {
                 <dt className="text-neutral-500">receipts</dt><dd>{c.receipts}</dd>
                 <dt className="text-neutral-500">wind-down</dt><dd>{c.windDown ?? "—"}</dd>
               </dl>
-              <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Today&apos;s post {c.todayPost.lintOk ? "(passes the copy lint)" : <span className="text-red-400">(fails the copy lint: {c.todayPost.hits.join(", ")})</span>}</summary><pre className="mt-1 whitespace-pre-wrap rounded bg-neutral-950 p-2 text-neutral-300">{c.todayPost.text}</pre></details>
+              <details className="text-xs"><summary className="cursor-pointer text-neutral-300">Today&apos;s post {c.todayPost.lintOk ? "passes the wording check." : <span className="text-red-400">fails the wording check because of {c.todayPost.hits.join(", ")}.</span>}</summary><pre className="mt-1 whitespace-pre-wrap rounded bg-neutral-950 p-2 text-neutral-300">{c.todayPost.text}</pre></details>
               <button className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400 disabled:opacity-40" disabled={!c.todayPost.lintOk} onClick={() => void copy(c)}>{copied === c.ticker ? "copied ✓" : "copy today's post"}</button>
             </li>
           ))}

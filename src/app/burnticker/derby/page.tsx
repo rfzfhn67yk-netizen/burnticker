@@ -46,7 +46,7 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
         <Link className="font-mono text-lg underline" href={`/burnticker/p/${encodeURIComponent(r.j.pairId)}`}>${r.a} vs ${r.b}</Link>
         <span className="text-xs text-neutral-400">{r.j.symbols.a} vs {r.j.symbols.b} · {r.j.window}{r.j.flip ? " · one-shot flippening" : ""} · season ends {r.j.season.endsOn}</span>
       </div>
-      <div className="text-sm tabular-nums">burn days {r.j.symbols.a} {r.j.score.a} – {r.j.score.b} {r.j.symbols.b} <span className="text-xs text-neutral-500">· {r.j.score.ties} tie(s) · {r.j.score.withheld} withheld · {r.j.season.windowsDone} of {r.j.season.windows} windows read</span></div>
+      <div className="text-sm tabular-nums">burn days {r.j.symbols.a} {r.j.score.a} – {r.j.score.b} {r.j.symbols.b} <span className="text-xs text-neutral-500">· {r.j.score.ties} {r.j.score.ties === 1 ? "tie" : "ties"} · {r.j.score.withheld} withheld · {r.j.season.windowsDone} of {r.j.season.windows} windows read</span></div>
       <div className="flex flex-wrap gap-1" aria-label="Last days">{r.j.days.slice(-14).map((d) => <span key={d.windowId} title={d.windowId} className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] ${cell(d.winner, d.status)}`}>{d.status === "withheld" ? "–" : d.winner === "tie" ? "=" : d.winner ?? ""}</span>)}</div>
       {(r.statusA === "retired" || r.statusB === "retired") && <p className="text-xs text-neutral-500">{r.j.retired.a ? `$${r.a} retired: ${r.j.retired.a}. ` : ""}{r.j.retired.b ? `$${r.b} retired: ${r.j.retired.b}.` : ""}</p>}
     </li>
@@ -56,15 +56,15 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
       <header className="space-y-2">
         <SeasonsTabs current="/burnticker/derby" />
         <h1 className="text-2xl font-semibold">Burn Derby</h1>
-        <p className="text-neutral-400 text-sm max-w-3xl">Two coins people already hold, compared each UTC day (or week) on Pyth&apos;s feeds or a pool&apos;s time-weighted value, cross-read against a second data publisher (a source check; one operator attester signs every reading). A tie burns neither. The receipts are the scoreboard.</p>
+        <p className="text-neutral-400 text-sm max-w-3xl">Each pair compares two coins people already hold, once every UTC day or once every week. The values come from Pyth&apos;s feeds or from a pool&apos;s time-weighted average. A second data publisher checks each value. That second source is a check on the data. It is not a second signer: one signer, run by the operator, signs every reading. A tie burns neither coin. The receipts are the scoreboard.</p>
         <p className="text-amber-200 text-sm max-w-3xl" aria-label="pair rule">{PAIR_BURN_SENTENCE}</p>
         <p className="text-neutral-500 text-xs">{NO_WALLET_LINE}</p>
         {launchOpen
-          ? <Link className="inline-block rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={`/burnticker/launch?derby=1${want ? `&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}` : ""}`}>Coin vs Coin →</Link>
-          : <p className="text-sm text-neutral-300" data-launch-closed>Creating a Coin vs Coin pair is closed: creator launches are not open. Meanwhile: <Link className="underline" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link>.</p>}
+          ? <Link className="inline-block rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={`/burnticker/launch?derby=1${want ? `&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}` : ""}`}>Set up a Coin vs Coin pair</Link>
+          : <p className="text-sm text-neutral-300" data-launch-closed>You cannot create a Coin vs Coin pair right now, because creator launches are closed. In the meantime, you can still look at a real receipt. <Link className="underline" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link>.</p>}
       </header>
-      {err && <p className="text-red-400 text-sm">Registry unavailable: {err}</p>}
-      {want && !rows.some(matches) && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-3">No {want[0]} vs {want[1]} pair yet. {launchOpen ? <Link className="underline" href={`/burnticker/launch?derby=1&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}`}>Set one up with Coin vs Coin →</Link> : "Creating one is closed while creator launches are not open."}</p>}
+      {err && <p className="text-red-400 text-sm">The coin registry could not be read just now. The error was: {err}</p>}
+      {want && !rows.some(matches) && <p className="text-sm text-neutral-400 border border-neutral-800 rounded p-3">No {want[0]} vs {want[1]} pair yet. {launchOpen ? <Link className="underline" href={`/burnticker/launch?derby=1&a=${encodeURIComponent(want[0])}&b=${encodeURIComponent(want[1])}`}>Set one up with Coin vs Coin</Link> : "You cannot create one while creator launches are closed."}</p>}
       <section className="space-y-2">
         <h2 className="font-medium">Open pairs</h2>
         {open.length ? <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{open.map(pairRow)}</ul> : <p className="text-sm text-neutral-500">No open coin-vs-coin pairs yet.</p>}
@@ -73,20 +73,20 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
         <h2 className="font-medium">Brackets</h2>
         {brackets.filter((b) => b.status !== "complete").length ? (
           <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded">{brackets.filter((b) => b.status !== "complete").map((b) => (
-            <li key={b.id} className="p-3 flex flex-wrap items-baseline gap-x-4 gap-y-1"><Link className="underline font-medium" href={`/burnticker/derby/${b.id}`}>{b.title}</Link><span className="text-xs text-neutral-500">{b.size} coins · rounds of {b.roundDays} days · {b.start} → {b.end} · {b.status}{b.currentRound !== null ? ` · round ${b.currentRound + 1}` : ""}</span></li>
+            <li key={b.id} className="p-3 flex flex-wrap items-baseline gap-x-4 gap-y-1"><Link className="underline font-medium" href={`/burnticker/derby/${b.id}`}>{b.title}</Link><span className="text-xs text-neutral-500">{b.size} coins · rounds of {b.roundDays} days · {b.start} to {b.end} · {b.status}{b.currentRound !== null ? ` · round ${b.currentRound + 1}` : ""}</span></li>
           ))}</ul>
         ) : <p className="text-sm text-neutral-500">No active brackets.</p>}
       </section>
       {(done.length > 0 || brackets.some((b) => b.status === "complete")) && (
         <section className="space-y-2">
-          <h2 className="font-medium text-neutral-400">Ended — retired, voided or season over</h2>
+          <h2 className="font-medium text-neutral-400">Ended pairs and brackets (retired, voided or past the season end)</h2>
           <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded opacity-80">
             {done.map(pairRow)}
             {brackets.filter((b) => b.status === "complete").map((b) => <li key={b.id} className="p-3 text-sm"><Link className="underline" href={`/burnticker/derby/${b.id}`}>{b.title}</Link> <span className="text-xs text-neutral-500">complete{b.champion ? ` · last coin standing ${b.champion.symbol}` : ""}</span></li>)}
           </ul>
         </section>
       )}
-      <p className="text-neutral-500 text-xs">Memecoins. Each rule says what its coin&apos;s supply does, not what any price does. Nobody is promised anything.</p>
+      <p className="text-neutral-500 text-xs">These are memecoins. Each rule says what happens to its coin&apos;s supply, never its price. Nobody is promised anything.</p>
     </main>
   );
 }
