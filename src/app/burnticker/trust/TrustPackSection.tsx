@@ -9,7 +9,7 @@ import { TRUSTPACK_SECTION_COPY } from "@/lib/burnticker/trustpack/copy";
  * /burnticker/operator, the never-buys monitor's status line (GET /api/burnticker/v1/operator), and the bounty wallet with its live
  * balance once it exists (GET /api/burnticker/v1/bounty; TODO_BOUNTY_WALLET until then), with the decided reports.
  */
-interface Bounty { wallet: string | null; walletTodo: string | null; balanceLamports: string | null; error: string | null; recordedFunding?: { sol: number; date: string; transaction: string | null } | null; rangeSol: number[]; status: string; reports: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string } }
+interface Bounty { wallet: string | null; walletTodo: string | null; balanceLamports: string | null; error: string | null; recordedFunding?: { sol: number; date: string; transaction: string | null; source?: string; transactions?: { signature: string; lamports: string; blockTime: string | null; explorerUrl: string }[] } | null; balanceReadAt?: string; reconciliation?: { line: string; differenceLamports: string | null } | null; rangeSol: number[]; status: string; reports: { paid: { date: string; title: string; severity: string; sol: number; tx: string }[]; rejected: { date: string; title: string; reason: string }[]; note: string } }
 interface Op { cluster: string; neverBuys: { line: string; status: string } }
 
 const PAGES = [
@@ -36,8 +36,10 @@ export default function TrustPackSection({ card }: { card: string }) {
       {!b ? <p className="text-xs text-neutral-500">Loading…</p> : b.wallet
         ? <ul className="text-xs space-y-0.5" data-bounty><li><code className="break-all">{b.wallet}</code> (mainnet)</li>
             {/* UX report 3 item 5: the recorded funding and the live read are two separate facts; neither stands in for the other */}
-            <li>recorded funding: {b.recordedFunding ? `${b.recordedFunding.sol} SOL (${b.recordedFunding.date})` : "not recorded"} · funding transaction: {b.recordedFunding?.transaction ? <a className="underline" href={`https://explorer.solana.com/tx/${b.recordedFunding.transaction}`}><code>{b.recordedFunding.transaction.slice(0, 12)}…</code></a> : "not recorded here"}</li>
-            <li>live balance: {b.balanceLamports !== null ? `${(Number(b.balanceLamports) / 1e9).toFixed(4)} SOL (read from mainnet just now)` : `unavailable${b.error ? ` (${b.error})` : ""}`}</li></ul>
+            <li>recorded funding (owner statement): {b.recordedFunding ? `${b.recordedFunding.sol} SOL on ${b.recordedFunding.date}` : "none recorded"}</li>
+            <li>funding transaction: {b.recordedFunding?.transactions?.length ? b.recordedFunding.transactions.map((x) => <a key={x.signature} className="underline mr-2" href={x.explorerUrl} target="_blank" rel="noreferrer"><code>{x.signature.slice(0, 12)}…</code> ({(Number(x.lamports) / 1e9).toFixed(4)} SOL{x.blockTime ? `, ${x.blockTime.slice(0, 16).replace("T", " ")} UTC` : ""})</a>) : "none found"}</li>
+            <li>live balance: {b.balanceLamports !== null ? `${(Number(b.balanceLamports) / 1e9).toFixed(4)} SOL (read from a mainnet RPC${b.balanceReadAt ? ` at ${b.balanceReadAt.slice(11, 16)} UTC` : ""})` : `unavailable${b.error ? ` (${b.error})` : ""}`}</li>
+            {b.reconciliation && <li className={b.reconciliation.differenceLamports !== null && b.reconciliation.differenceLamports !== "0" ? "text-amber-300" : "text-neutral-400"}>{b.reconciliation.line}</li>}</ul>
         : <p className="text-xs text-amber-400">{TRUSTPACK_SECTION_COPY.bountyTodo}</p>}
       {b && (b.reports.paid.length + b.reports.rejected.length === 0
         ? <p className="text-xs text-neutral-500">{TRUSTPACK_SECTION_COPY.bountyReports}</p>

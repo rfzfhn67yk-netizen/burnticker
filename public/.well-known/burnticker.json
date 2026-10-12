@@ -89,7 +89,7 @@
       }
     },
     "mainnet": {
-      "status": "programs not deployed on mainnet yet; the platform config, Squads vault and wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
+      "status": "both programs deployed on mainnet 2026-10-11 (upgrade authority: the Squads vault below); LaunchLab platform config created 2026-10-11; no coin launched; the wallet addresses below are configured (owner, 2026-10-11) except the keeper and deployer keys",
       "programs": {
         "burn_receipts": {
           "programId": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",

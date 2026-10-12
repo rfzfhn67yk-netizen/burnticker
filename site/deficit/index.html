@@ -173,7 +173,7 @@ canvas{display:block;width:100%;height:280px;touch-action:pan-y}
 .legend .cap{color:var(--dim);font-family:var(--mono);font-size:.78rem}
 
 /* verify */
-.grid2{display:grid;grid-template-columns:1fr;gap:18px}
+.grid2{display:grid;grid-template-columns:1fr;gap:18px}.grid2>*{min-width:0}#shaCheck{overflow-wrap:anywhere}
 @media (min-width:860px){.grid2{grid-template-columns:1fr 1fr}}
 .card{background:var(--panel);border:1px solid var(--line);padding:18px}
 .card h3{margin:0 0 10px;font:600 1.15rem/1.3 var(--marquee);letter-spacing:.06em;text-transform:uppercase}
@@ -252,7 +252,7 @@ html:not(.prelaunch) #prelaunch{display:none}
     </div>
     <div class="cta">
       <a class="btn red off" id="tradeHero" aria-disabled="true" data-trade-unavailable>Trade: not available until launch</a>
-      <a class="btn" href="#receipts">Read the receipts</a>
+      <a class="btn" id="receiptsCta" href="https://burnticker.com/burnticker/check?demo=1#verify" data-prelaunch-href="https://burnticker.com/burnticker/check?demo=1#verify">Inspect the devnet receipt</a>
       <a class="btn ghost" href="rules.json">rules.json</a>
     </div>
     <p class="replay">Replayed over the real Treasury series, 2025-01 → 2026-10-08: <b>235 burn days</b>, <b>6,490 units</b>, biggest day <b>2025-07-07, +$366.44B → 366 units</b> (the day after the debt ceiling rose). A replay of what the rule would have counted, not a forecast.</p>
@@ -338,7 +338,8 @@ html:not(.prelaunch) #prelaunch{display:none}
       <div class="card">
         <h3>The rule file and its hash</h3>
         <p>The rule is fixed at launch and published as <a href="rules.json">rules.json</a>. Its SHA-256 is written into every burn's memo, so a receipt that cites a different hash is not this rule.</p>
-        <div class="hash" id="sha">sha256: — (loaded from status.json)</div>
+        <div class="hash" id="sha">sha256: 78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58</div>
+        <p class="muted" id="shaCheck">Check it yourself: <code>curl -s https://deficit.burnticker.com/rules.json | shasum -a 256</code>. This browser re-hashes the served file when the page loads.</p>
         <p class="muted gap" id="statement"></p>
       </div>
       <div class="card">
@@ -352,7 +353,7 @@ spend = pool × (1 − 0.98^units)        # pool = the burn pool's SOL − 0.02 
 burn  = every token the swap delivered</pre>
             <span class="muted">carry = the sub-$1B remainder from a run of consecutive increases; any down or flat day resets it to 0.</span></li>
           <li><b>Read the memo on the burn transaction</b> — it carries the same numbers, in this order:
-            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;sig12&gt;|rules=sha256:dae4d8042ac1|v2</pre>
+            <pre id="memo">DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=…|spent=…|got=…|burn=…|swap=&lt;sig12&gt;|rules=sha256:78f4c327552e|v2</pre>
             If the memo, the chain and the Treasury rows agree, the receipt is good. The keeper recomputes every burn from its recorded readings and marks <span class="ok">✓</span> only when they match; anything else shows <span class="bad">!</span> with the reason.</li>
         </ol>
       </div>
@@ -690,17 +691,39 @@ burn  = every token the swap delivered</pre>
     n.classList.add("show"); var pn = $("prelaunchNote"); if (pn) pn.textContent = msg; draw();
   }
   if (!window.fetch) { offline("This browser cannot load the live figures; the receipts are in status.json and burns.json beside this page."); return; }
+  // Audit 4 BT-03: re-hash the served rules.json in this browser and compare it with the hash printed above (and in status.json).
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ("0" + x.toString(16)).slice(-2); }).join(""); }
+  function checkRules(expected) {
+    var out = $("shaCheck"); if (!out || !window.crypto || !window.crypto.subtle) return;
+    fetch(base + "rules.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
+      .then(function (b) { return window.crypto.subtle.digest("SHA-256", b); })
+      .then(function (d) { var h = hex(d); out.textContent = h === expected ? "✓ This browser hashed the served rules.json just now: " + h + " — the same as above." : "✗ The served rules.json hashes to " + h + ", not the hash above. Treat this page as wrong and check the repository."; out.className = h === expected ? "ok" : "bad"; })
+      .catch(function (e) { out.textContent = "Unable to check: rules.json could not be read just now (" + (e && e.message || e) + "). Try again, or run the curl above."; });
+  }
+  // A pre-launch status.json (schema burnkeeper.status/prelaunch-v1) is an explicit state, not live data: the page stays in its pre-launch layout.
+  function prelaunchState(s) {
+    if (s.rules && s.rules.sha256) { $("sha").textContent = "sha256: " + s.rules.sha256; if (s.rules.status) $("statement").textContent = "Status: " + s.rules.status + "."; }
+    if (s.generatedAt) $("gen").textContent = new Date(s.generatedAt).toISOString().slice(0, 10) + " (pre-launch file)";
+    checkRules(s.rules && s.rules.sha256);
+    if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
+  }
   getJson("status.json").then(function (s) {
+    if (s && (s.state === "not-launched" || /prelaunch/.test(String(s.schema)))) { status = null; prelaunchState(s); return "prelaunch"; }
     status = s; renderStatus(s); document.documentElement.classList.remove("prelaunch");
+    var cta = $("receiptsCta"); if (cta) { cta.href = "#receipts"; cta.textContent = "Read the receipts"; }
+    if (s.rules && s.rules.sha256) checkRules(s.rules.sha256);
     return getJson("burns.json").catch(function () { return []; });
   }).then(function (b) {
-    burns = Array.isArray(b) ? b : [];
+    if (b === "prelaunch") return;
+    burns = Array.isArray(b) ? b : (b && Array.isArray(b.burns) ? b.burns : []);
     var deep = /^#r-(\d+)$/.exec(location.hash); if (deep && Number(deep[1]) <= burns.length - LIMIT) showAll = true;
     renderBurns(); renderHero(); renderToday(); buildSeries(); draw();
     if (deep && $("r-" + deep[1])) $("r-" + deep[1]).scrollIntoView();
     fetchTreasury(burns.length ? burns[0].prevDate : (status.feed && status.feed.lastRecordDate));
   }).catch(function (e) {
     var missing = /^404 /.test(String(e && e.message));
+    checkRules("78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58");
+    if (location.hash === "#receipts" && $("prelaunch")) $("prelaunch").scrollIntoView();
     offline(missing ? "Not launched: $DEFICIT is not launched yet, so there are no readings or receipts to show. Everything above fills in from the first reading after launch."
       : "Data unavailable: the live figures could not be read just now. This says nothing about the coin or its receipts; try again later.", String(e && e.message || e));
     if (missing && $("prelaunchNote")) $("prelaunchNote").textContent = ""; // the summary above already says not launched

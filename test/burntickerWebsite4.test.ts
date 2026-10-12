@@ -17,7 +17,7 @@ describe("item 2: a short homepage — status, then the real receipt, then the r
     assert.doesNotMatch(home, /door [0-9] ·/i);
     assert.equal(EXPLORE_VERIFIED_BURN.label, "Inspect the devnet receipt");
     assert.doesNotMatch(home, /Explore a verified burn/);
-    assert.equal([...home.matchAll(/href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</g)].length, 2, "hero and 'what you can do now'");
+    assert.equal([...home.matchAll(/href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</g)].length, 3, "hero, the phone menu (audit 4 BT-09) and 'what you can do now'");
   });
   test("in the hero: the closed-launch status line, then the receipt action, then the guardrails behind a disclosure, then the doors", () => {
     const at = (m: string) => { const i = hero.indexOf(m); assert.ok(i >= 0, m); return i; };
@@ -95,7 +95,7 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
   test("operator.json: no 'created on launch week' prose beside configured mainnet addresses; the statement reads 'address configured; statement not signed'", async () => {
     const op = JSON.parse(read("config/burnticker/operator.json")) as { note: string; clusters: { mainnet: { status: string; wallets: { role: string; pubkey: string }[] } }; signedMessage: { status: string } };
     assert.doesNotMatch(`${op.note} ${op.clusters.mainnet.status}`, /launch week|created by the owner on|does not exist|until the owner creates/i);
-    assert.match(op.clusters.mainnet.status, /^programs not deployed on mainnet yet; .*configured \(owner, 2026-10-11\) except the keeper and deployer keys$/);
+    assert.match(op.clusters.mainnet.status, /^both programs deployed on mainnet 2026-10-11 .*configured \(owner, 2026-10-11\) except the keeper and deployer keys$/);   // audit 4 BT-02
     assert.ok(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(op.clusters.mainnet.wallets.find((w) => w.role === "dev-fee")!.pubkey), "the signer address is configured");
     assert.match(op.signedMessage.status, /^TODO_/, "the statement is NOT signed yet");
     const { OPERATOR_COPY, OPERATOR_LINE } = await import("@/lib/burnticker/trustpack/copy");
@@ -105,16 +105,23 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
     assert.match(read("src/lib/burnticker/trustpack/operator.ts"), /address configured; statement not signed/);
     assert.match(read("src/app/burnticker/operator/page.tsx"), /data-operator-line>\{OPERATOR_LINE\}/);
   });
-  test("bounty: recorded funding (5 SOL, 2026-10-11, transaction not recorded here) and the live balance are separate lines", async () => {
-    const t = JSON.parse(read("config/burnticker/transparency.json")) as { howBuilt: { bounty: { recordedFunding: { sol: number; date: string; transaction: string | null } } } };
-    assert.deepEqual({ ...t.howBuilt.bounty.recordedFunding, source: undefined }, { sol: 5, date: "2026-10-11", transaction: null, source: undefined });
+  test("bounty: recorded funding (owner statement), the funding transaction (from the read-back evidence file, never typed in) and the live balance are separate lines", async () => {
+    const t = JSON.parse(read("config/burnticker/transparency.json")) as { howBuilt: { bounty: { recordedFunding: { sol: number; date: string; transaction: string | null; evidence: string } } } };
+    const rf = t.howBuilt.bounty.recordedFunding;
+    assert.deepEqual([rf.sol, rf.date, rf.transaction], [5, "2026-10-11", null], "no signature typed into transparency.json (the leak scan keeps them in evidence files)");
+    assert.match(rf.evidence, /^docs\/burnkeeper\/evidence\//);
+    const ev = JSON.parse(read(rf.evidence)) as { wallet: string; transactions: { kind: string; signature: string; lamports: string }[] };
+    assert.equal(ev.wallet, "HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u");
     const { v1Bounty } = await import("@/lib/burnticker/trustpack/api");
-    for (const rpc of [{ call: async () => { throw new Error("503"); } }, { call: async <T,>() => ({ value: 0 }) as unknown as T }]) {
-      const r = await v1Bounty({ rpc }); const b = r.body as { recordedFunding: { sol: number; transaction: string | null }; balanceLamports: string | null };
-      assert.equal(b.recordedFunding.sol, 5); assert.equal(b.recordedFunding.transaction, null, "no invented signature");
+    for (const [rpc, live] of [[{ call: async () => { throw new Error("503"); } }, null], [{ call: async <T,>() => ({ value: 0 }) as unknown as T }, "0"]] as const) {
+      const r = await v1Bounty({ rpc }); const b = r.body as { recordedFunding: { sol: number; transaction: string | null }; balanceLamports: string | null; reconciliation: { line: string; differenceLamports: string | null } };
+      assert.equal(b.recordedFunding.sol, 5); assert.equal(b.recordedFunding.transaction, ev.transactions[0].signature, "the signature comes from the evidence file");
+      assert.equal(b.balanceLamports, live);
+      // funded never stands in for available: an empty wallet or an unread one is flagged
+      assert.match(b.reconciliation.line, live === null ? /could not be read just now/ : /unexplained difference of −5\.0000 SOL/);
     }
     const ui = read("src/app/burnticker/trust/TrustPackSection.tsx");
-    assert.match(ui, /recorded funding: \{b\.recordedFunding/); assert.match(ui, /funding transaction: \{b\.recordedFunding\?\.transaction \?[\s\S]*?: "not recorded here"\}/); assert.match(ui, /live balance: \{b\.balanceLamports !== null/);
+    assert.match(ui, /recorded funding \(owner statement\): \{b\.recordedFunding/); assert.match(ui, /funding transaction: \{b\.recordedFunding\?\.transactions\?\.length \?[\s\S]*?: "none found"\}/); assert.match(ui, /live balance: \{b\.balanceLamports !== null/);
     assert.doesNotMatch(ui, /\(live, mainnet\)\` : `unavailable[^`]*`\} · \{b\.status\}/, "the old one-line 'balance … · funded' is gone");
   });
   test("Trust: the current summary carries control and money once; the long disclosures sit behind one evidence disclosure; no 'nobody is paid'", async () => {

@@ -22,7 +22,7 @@ export default async function BracketPage({ params }: { params: Promise<{ tourna
     if (row) t = derbyTournamentJson(p.registry, JSON.parse(row.json) as Tournament, row.sha256);
   } catch (e) { err = e instanceof Error ? e.message : String(e); }
   if (err) return <main className="p-6 text-red-400 text-sm">Registry unavailable: {err}</main>;
-  if (!t) return <main className="p-6 text-neutral-400 text-sm">No Burn Derby bracket {tournamentId}. <Link className="underline" href="/burnticker/rivalries">Rivalries →</Link></main>;
+  if (!t) return <main className="p-6 text-neutral-400 text-sm">No Burn Derby bracket {tournamentId}. <Link className="underline" href="/burnticker/rivalries">Scoreboards →</Link></main>;
   const cell = (r: string) => (r === "A" ? "bg-amber-500 text-neutral-950" : r === "B" ? "bg-sky-500 text-neutral-950" : r === "tie" ? "bg-neutral-700" : r === "withheld" ? "bg-neutral-800 text-neutral-400" : "border border-dashed border-neutral-700 text-neutral-600");
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 space-y-6 text-sm">

@@ -106,6 +106,13 @@ while (i < lines.length) {
     continue;
   }
   if (line.trim() === "") { i++; continue; }
+  // "> " lines: a boxed notice (audit 4: the historical-version notice at the top of the paper)
+  if (/^> /.test(line)) {
+    const q = [];
+    while (i < lines.length && /^>( |$)/.test(lines[i])) q.push(lines[i++].replace(/^> ?/, "").trim());
+    body.push(`<aside class="notice" role="note"><p>${inline(q.join(" "))}</p></aside>`);
+    continue;
+  }
   const buf = [];
   while (i < lines.length && lines[i].trim() !== "" && !/^(#{1,3} |```|\||- |\d+\. )/.test(lines[i])) buf.push(lines[i++].trim());
   body.push(`<p>${inline(buf.join(" "))}</p>`);
@@ -162,6 +169,7 @@ a{color:var(--amber)}
   mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/14px 51% repeat-x,conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/14px 51% repeat-x}
 @media (min-width:700px){.slip{padding:44px 48px 52px}}
 .slip a{color:var(--link)}
+.notice{border:2px solid var(--rule);border-left-width:6px;padding:10px 14px;margin:14px 0 18px;background:rgba(0,0,0,.04)}.notice p{margin:0}
 .kicker{font:700 .74rem/1.4 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faded);margin:0 0 6px}
 h1{font:700 clamp(1.6rem,4.6vw,2.4rem)/1.15 var(--mono);margin:0 0 14px;letter-spacing:-.01em}
 h2{font:700 1.15rem/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 12px;padding-top:14px;border-top:2px dashed var(--rule)}

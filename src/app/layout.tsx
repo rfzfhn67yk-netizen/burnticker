@@ -4,7 +4,7 @@ import { SiteHeader } from "@/app/burnticker/_components/SiteHeader";
 import { SiteFooter } from "@/app/burnticker/_components/SiteFooter";
 import { TabBar } from "@/app/burnticker/_components/TabBar";
 
-const DESCRIPTION = "Coins that burn on real-world results — with receipts. Launch one. Follow the season. Memecoins: the rule says what supply does, not what price does. Not advice.";
+const DESCRIPTION = "Coins that burn on real-world results — with receipts. Pre-launch: creator launches are closed; inspect a real devnet burn receipt. Memecoins: the rule says what supply does, not what price does. Not advice.";
 const TITLE = "Burnticker — coins that burn on real-world results, with receipts";
 
 export const metadata: Metadata = {

@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { b58encode, base64ToBytes } from "@/lib/burnticker/trustpack/base58";
-import { jsonRpc, PUBLIC_RPC, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
+import { jsonRpc, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
+import { rpcUrlFor } from "@/lib/burnticker/networks";
 import { CURRENT_STATUS_FILE, readStatusFile } from "@/lib/burnticker/deficitPrelaunch";
 import type { AuthoritySource } from "@/lib/burnticker/currentStatusText";
 export { upgradeAuthorityText, type AuthoritySource } from "@/lib/burnticker/currentStatusText";
@@ -91,7 +92,7 @@ interface StatusFileFull {
   checkedAt: string; phase: { label: string; line: string };
   networks: Record<Cluster, { role: string; deployment: string; since: string | null; evidence: string | null }>;
   programs: { name: string; version: string; note: string }[];
-  squads: Record<Cluster, { plannedTimeLockSecs: number; plannedFrom: string | null; why: string }>;
+  squads: Record<Cluster, { plannedTimeLockSecs: number; plannedFrom: string | null; why: string; keyControl?: string }>;
   attesters: { quorum: number; active: { label: string; independent: boolean }[]; line: string };
   settlement: { category: string; primary: string; check: string; status: string }[];
   reviews: { id: string; report: string; label: string; findings: Finding[] }[];
@@ -170,14 +171,21 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     return { cluster: c, vault: sq.vault, multisig: sq.multisig, threshold: live ? `${live.threshold} of ${live.members}` : sq.threshold, members: live?.members ?? null, timeLockSecs: live?.timeLockSecs ?? null, timeLockSource: (live ? "chain" : "unavailable") as "chain" | "unavailable", plannedTimeLockSecs: plan.plannedTimeLockSecs, plannedFrom: plan.plannedFrom, why: plan.why, line: timeLockLine(c, live?.timeLockSecs ?? null, plan.plannedTimeLockSecs, plan.plannedFrom) };
   });
   const mainTL = upgradeAuthority.find((u) => u.cluster === "mainnet")!;
-  const releaseRequirements = st.releaseRequirements.map((r) => (r.derivedFromChain === "mainnet-time-lock" && mainTL.timeLockSecs !== null ? { ...r, status: (mainTL.timeLockSecs >= mainTL.plannedTimeLockSecs ? "done" : "open") as "open" | "done" } : r));
   const anyMain = programs.some((p) => p.mainnet.deployed === true), mainUnknown = !anyMain && programs.some((p) => p.mainnet.deployed === null);
+  const allMain = programs.every((p) => p.mainnet.deployed === true), noneMainKnown = programs.every((p) => p.mainnet.deployed === false);
+  // audit 4 BT-02: the deployment gate is derived from the same typed deployment state as the prose (deployed / absent; unknown keeps the file's value)
+  const releaseRequirements = st.releaseRequirements.map((r) => {
+    if (r.derivedFromChain === "mainnet-time-lock" && mainTL.timeLockSecs !== null) return { ...r, status: (mainTL.timeLockSecs >= mainTL.plannedTimeLockSecs ? "done" : "open") as "open" | "done" };
+    if (r.derivedFromChain === "mainnet-deployment" && (allMain || noneMainKnown)) return { ...r, status: (allMain ? "done" : "open") as "open" | "done" };
+    return r;
+  });
   const lines = [
     st.phase.line,
     st.deficit.firstBurnPath.line,
     `Programs: ${programs.map((p) => `${p.name} ${p.devnet.deployed ? "deployed on devnet" : "not on devnet"}${p.devnet.matchesBuild ? " (bytes match this repository's build)" : ""}, ${p.mainnet.line}`).join("; ")}.`,
     `Signing: ${st.attesters.line}`,
-    `Upgrades: the 2-of-3 Squads vault holds the upgrade authority. ${mainTL.line}`,
+    // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
+    `Upgrades: the 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock an approved upgrade executes at once, with no advance notice." : ""}`,
     "Money: the operator earns 25 bps of curve volume and 20% of post-graduation LP SOL fees; the other 80% of those SOL fees and the token side go to each coin's burn pool. Creators take no cash from fees.",
     `Reviews: no security firm audit; ${st.reviews.reduce((n, r) => n + r.findings.filter((f) => /not done|not re-checked/.test(f.recheck)).length, 0)} fixed findings still wait for an independent re-check.`,
     `Open before release: ${releaseRequirements.filter((r) => r.status === "open").length} requirement(s)${anyMain || mainUnknown ? "" : ", starting with the mainnet deployment"}.`,
@@ -197,8 +205,7 @@ export async function currentStatusLive(env: Readonly<Record<string, string | un
   if (!cache || now - cache.at > 300_000) {
     const op = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "operator.json"), "utf8")) as OperatorFile;
     const vb = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "verified-build.json"), "utf8")) as VerifiedBuild;
-    const host = (env.BURNTICKER_CLUSTER ?? "").trim() === "mainnet" ? "mainnet" : "devnet";
-    const rpcUrl = (c: Cluster) => (c === host && (env.BURNTICKER_RPC_URL ?? "").trim()) || PUBLIC_RPC[c];
+    const rpcUrl = (c: Cluster) => rpcUrlFor(c, env);
     const ids = vb.programs.map((p) => p.programId);
     const [devnet, mainnet] = await Promise.all((["devnet", "mainnet"] as Cluster[]).map((c) => { const ms = op.clusters[c].squads.multisig; return readChainFacts(c, jsonRpc(rpcUrl(c), fetch, { attempts: 2 }), isKey(ms) ? ms : null, ids, now); }));
     cache = { at: now, facts: { devnet, mainnet } };

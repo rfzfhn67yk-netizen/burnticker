@@ -97,7 +97,7 @@ export function capPool(spendableLamports: bigint, capLamports: bigint = PRE_AUD
 // the line itself lives in the client-safe copy module so the operator page can render it without this file's chain imports
 export { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 export const OPERATOR_CONTACT_TODO = "TODO_CONTACT_ADDRESS";
-export const USE_OF_FEES = "Burnticker's 25 bps of curve volume and the operator's 20% of post-graduation LP SOL fees (fixed in code; the other 80% and the token side go to each coin's burn pool) fund attesters, hosting, the security reviews and bounty, and the operator. The platform never buys back any coin, including its own.";
+export const USE_OF_FEES = "Burnticker's 25 bps of curve volume and the operator's 20% of post-graduation LP SOL fees (fixed in code; the other 80% and the token side go to each coin's burn pool) fund attesters, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own; the only buybacks are each coin's program-run burn-pool purchases, and everything they buy is burned.";
 /**
  * The attester line on the trust page (review 2 §2, 2026-10-11): the present fact, not a schedule — Switchboard ended its services and no
  * independent second attester exists. `dueBy` (14 days after the first launch) stays as the owner's internal check-in date only.

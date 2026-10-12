@@ -9,7 +9,8 @@ import fs from "node:fs";
 import { API, POST_HEADERS, CREATOR, callRoute, makeWorld, validateSchema, type World } from "./burntickerApiHelpers.ts";
 import { buildOpenApi } from "@/lib/burnticker/api/spec";
 import { verifyMint, isSolanaAddress, type MintFacts } from "@/lib/burnticker/verifyMint";
-import { clearVerifyMintMemo, verifyMintOn } from "@/lib/burnticker/verifyMintServe";
+import { clearVerifyMintMemo, setRegistrationReaderForTests, verifyMintOn } from "@/lib/burnticker/verifyMintServe";
+import type { RegistrationReader } from "@/lib/burnticker/mintRegistration";
 import { editDistance, lookalikeHits, lookalikeRefusal, mintAdoptionRefusal, skeleton } from "@/lib/burnticker/lookalike";
 import { bundleSignal, cloneRows, cloneStore, cloneTerms, evidenceLines, lpState, matchTerm, poolsFromDexScreener, runCloneWatch, scanClones, type CloneObservation } from "@/lib/burnticker/ops/cloneWatch";
 import { nativeRule } from "@/lib/burnticker/sources/native";
@@ -45,7 +46,10 @@ describe("verify a mint (pure)", () => {
     assert.equal(mm.verdict, "not-registered"); assert.equal(mm.headline, "Rules do not match the program"); assert.equal(mm.coin!.rulesMatch, false);
     assert.equal(verifyMint(facts({ coin: { ...COIN, status: "draft", launchedAt: null } }), NOW).verdict, "not-launched");
     const unread = verifyMint(facts({ program: "unread", coin: COIN }), NOW);
-    assert.equal(unread.verdict, "burnticker"); assert.match(unread.summary, /not read on this host/); assert.equal(unread.checks.find((c) => c.id === "program")!.ok, null);
+    assert.equal(unread.verdict, "burnticker"); assert.match(unread.summary, /could not be read just now/); assert.equal(unread.checks.find((c) => c.id === "program:devnet")!.ok, null);
+    // audit 4 BT-01: an unread program and no catalogue entry is "Unable to verify", never "NOT registered"
+    const unknown = verifyMint(facts({ program: "unread" }), NOW);
+    assert.equal(unknown.verdict, "unavailable"); assert.equal(unknown.headline, "Unable to verify"); assert.equal(unknown.registration.state, "unknown");
     assert.equal(verifyMint(facts({ mint: "not a mint" }), NOW).verdict, "invalid");
     assert.ok(isSolanaAddress(MINT)); assert.ok(!isSolanaAddress("0OIl"));
   });
@@ -57,26 +61,29 @@ describe("verify a mint (pure)", () => {
 
 describe("verify a mint (route + platform)", () => {
   let w: World;
-  before(async () => { w = await makeWorld(); clearVerifyMintMemo(); });
-  test("GET /verify-mint/<BRONCO mint>: a Burnticker coin; the fake program never counts as a program read", async () => {
+  // the chain reader is injected: no RPC in tests. "unavailable" for every network = a host whose RPC is down.
+  const none: RegistrationReader = async (network, programId) => ({ network, programId, state: "not-registered", config: null, rulesSha256: null, readings: null, burns: null, reason: null });
+  const down: RegistrationReader = async (network, programId) => ({ network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: "RPC down (test)" });
+  before(async () => { w = await makeWorld(); clearVerifyMintMemo(); setRegistrationReaderForTests(down); });
+  test("GET /verify-mint/<BRONCO mint>: a Burnticker coin in the catalogue; an unavailable chain read is said, not counted", async () => {
     const res = await callRoute(`${API}/verify-mint/${w.bronco.mint}`);
     assert.equal(res.status, 200);
-    const v = await res.json() as Record<string, unknown> & { verdict: string; program: { read: boolean } };
+    const v = await res.json() as Record<string, unknown> & { verdict: string; program: { read: boolean }; registration: { state: string } };
     const schema = DOC.paths["/verify-mint/{mint}"].get.responses["200"].content["application/json"].schema;
     assert.deepEqual(validateSchema(schema, v, DOC), []);
-    assert.equal(v.verdict, "burnticker"); assert.equal(v.program.read, false);
+    assert.equal(v.verdict, "burnticker"); assert.equal(v.program.read, false); assert.equal(v.registration.state, "unknown");
     assert.match(res.headers.get("cache-control")!, /max-age=60/);
   });
-  test("with the program read (as on a host with the deployed program): its TokenConfig is compared", async () => {
-    const v = await verifyMintOn(w.p, w.bronco.mint, NOW, { programRead: true });
+  test("with the program read on every network: a TokenConfig-less catalogue coin is not registered; an unknown mint is a definitive no", async () => {
+    const v = await verifyMintOn(w.p, w.bronco.mint, NOW, { reader: none });
     assert.equal(v.program.read, true);
-    assert.equal(v.verdict, v.program.config ? "burnticker" : "not-registered");
-    const other = await verifyMintOn(w.p, MINT, NOW, { programRead: true });
-    assert.equal(other.verdict, "not-registered");
+    assert.equal(v.verdict, "not-registered");
+    const other = await verifyMintOn(w.p, MINT, NOW, { reader: none });
+    assert.equal(other.verdict, "not-registered"); assert.equal(other.registration.state, "not-registered");
   });
-  test("an unknown mint and garbage: 200 with the verdict (never a 404 that reads as an error)", async () => {
-    const a = await (await callRoute(`${API}/verify-mint/${MINT}`)).json() as { verdict: string };
-    assert.equal(a.verdict, "not-registered");
+  test("an unknown mint and garbage: 200 with the verdict (never a 404 that reads as an error); RPC down = Unable to verify", async () => {
+    const a = await (await callRoute(`${API}/verify-mint/${MINT}`)).json() as { verdict: string; headline: string };
+    assert.equal(a.verdict, "unavailable"); assert.equal(a.headline, "Unable to verify");
     const b = await (await callRoute(`${API}/verify-mint/hello`)).json() as { verdict: string };
     assert.equal(b.verdict, "invalid");
   });

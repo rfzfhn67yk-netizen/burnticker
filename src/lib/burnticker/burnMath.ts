@@ -56,3 +56,46 @@ export function simulateCrank(i: CrankInput): CrankSteps {
 }
 
 export const sol = (l: bigint, d = 4): string => (Number(l) / 1e9).toFixed(d);
+
+// ---- the calculator's inputs (website audit 4, BT-06): validated, never clamped or substituted ----
+
+export type CalcField = "riseB" | "pct" | "pool" | "reserve" | "tokRes";
+export interface CalcRaw { riseB: string; pct: string; pool: string; reserve: string; tokRes: string }
+export interface CalcValues { riseCents: bigint; bps: number; poolLamports: bigint; reserveLamports: bigint; tokenReserveRaw: bigint | null }
+export type CalcParse = { ok: true; values: CalcValues; errors: Partial<Record<CalcField, string>> } | { ok: false; values: null; errors: Partial<Record<CalcField, string>> };
+
+/** A non-negative decimal string → an exact integer at `decimals` places, or a reason. No exponent notation, no rounding. */
+export function parseDecimal(raw: string, decimals: number, max: bigint): { value: bigint } | { error: string } {
+  const s = raw.trim();
+  if (s === "") return { error: "required" };
+  if (s.startsWith("-")) return { error: "must be 0 or more" };
+  const m = /^(\d*)(?:\.(\d*))?$/.exec(s);
+  if (!m || (m[1] === "" && (m[2] ?? "") === "")) return { error: "not a number (digits and one decimal point)" };
+  const frac = m[2] ?? "";
+  if (frac.length > decimals) return { error: `at most ${decimals} decimal place${decimals === 1 ? "" : "s"}` };
+  const v = BigInt((m[1] || "0") + frac.padEnd(decimals, "0"));
+  if (v > max) return { error: "too large for this calculator" };
+  return { value: v };
+}
+
+const pow10 = (n: number): bigint => BigInt(10) ** BigInt(n);
+
+export function parseCalcInputs(r: CalcRaw): CalcParse {
+  const errors: Partial<Record<CalcField, string>> = {};
+  // debt rise in $B with up to 11 decimals = cents; at most $1,000,000B
+  const rise = parseDecimal(r.riseB, 11, BigInt(1_000_000) * pow10(11));
+  // per unit: 0.01 % … 100 %, two decimals = basis points
+  const pct = parseDecimal(r.pct, 2, BigInt(10_000));
+  const pool = parseDecimal(r.pool, 9, BigInt(1_000_000) * LAMPORTS);
+  const reserve = parseDecimal(r.reserve, 9, BigInt(1_000_000_000) * LAMPORTS);
+  const tok = r.tokRes.trim() === "" ? null : parseDecimal(r.tokRes, 6, pow10(15) * pow10(6));
+  if ("error" in rise) errors.riseB = rise.error;
+  if ("error" in pct) errors.pct = pct.error === "too large for this calculator" ? "between 0.01 and 100" : pct.error;
+  else if (pct.value < BigInt(1)) errors.pct = "between 0.01 and 100";
+  if ("error" in pool) errors.pool = pool.error;
+  if ("error" in reserve) errors.reserve = reserve.error;
+  if (tok && "error" in tok) errors.tokRes = tok.error;
+  else if (tok && tok.value === BigInt(0)) errors.tokRes = "leave empty, or enter more than 0";
+  if (Object.keys(errors).length) return { ok: false, values: null, errors };
+  return { ok: true, errors, values: { riseCents: (rise as { value: bigint }).value, bps: Number((pct as { value: bigint }).value), poolLamports: (pool as { value: bigint }).value, reserveLamports: (reserve as { value: bigint }).value, tokenReserveRaw: tok ? (tok as { value: bigint }).value : null } };
+}

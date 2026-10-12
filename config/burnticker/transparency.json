@@ -110,7 +110,7 @@
     "reviewsRule": "Every report is published in full in docs/burnticker/reviews/ as delivered, with every finding; fixes and their closing tests are in docs/burn-receipts/CHANGELOG.md; nothing is edited out.",
     "bounty": {
       "status": "funded 2026-10-11",
-      "recordedFunding": { "sol": 5, "date": "2026-10-11", "transaction": null, "source": "owner, 2026-10-11 (the funding transaction signature is not recorded in this repository)" },
+      "recordedFunding": { "sol": 5, "date": "2026-10-11", "transaction": null, "evidence": "docs/burnkeeper/evidence/bounty-2026-10-11/funding.json", "source": "owner statement 2026-10-11; the funding transaction (5 SOL, 2026-10-11 20:00 UTC) was read back from mainnet into the evidence file, which the API serves" },
       "rangeSol": [
         5,
         10
@@ -240,7 +240,7 @@
     {
       "id": "cap-25",
       "status": "live design",
-      "text": "Pre-audit cap: each burn pool spends from at most 25 SOL per burn day; SOL above the cap stays in the fee PDA until the next day. In the program it is PlatformConfig's cap with a sunset of at most 365 days, raisable only through a 48 h public timelock; the keeper models the same cap. Until the program is deployed only the keeper enforces it."
+      "text": "Pre-audit cap: each burn pool spends from at most 25 SOL per burn day; SOL above the cap stays in the fee PDA until the next day. In the program it is PlatformConfig's cap with a sunset of at most 365 days, raisable only through a 48 h public timelock; the keeper models the same cap. On a network where the program's PlatformConfig account does not exist yet, only the keeper enforces it."
     },
     {
       "id": "devnet-rehearsal",
@@ -249,8 +249,8 @@
     },
     {
       "id": "program-not-deployed",
-      "status": "devnet only",
-      "text": "burn_receipts (AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM) and pair_curve (2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN) are deployed on devnet, upgrade authority held by a 2-of-3 Squads vault; their bytes match a build of this repository (docs/burnticker/VERIFIED-BUILD.md). Neither is deployed on mainnet. Pages read the devnet programs where an RPC is configured; the launch wizard refuses mainnet and answers ready: false."
+      "status": "deployed on devnet and mainnet",
+      "text": "burn_receipts (AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM) and pair_curve (2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN) are deployed on devnet (2026-10-10) and on mainnet (2026-10-11), at the same addresses; on both networks the upgrade authority is a 2-of-3 Squads vault (mainnet 8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV: time lock 0 now, 48 h planned around 2026-10-23) and the on-chain bytes match a build of this repository (docs/burnticker/VERIFIED-BUILD.md; docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json). Deployed is not launched: no coin is launched on mainnet and creator launches are closed. The public site reads the devnet programs until its host is switched to mainnet (the current-status host line says which); the launch wizard refuses mainnet and answers ready: false."
     },
     {
       "id": "launchlab-admin-timelock",
@@ -285,7 +285,7 @@
     {
       "id": "bounty-wallet",
       "status": "funded 2026-10-11",
-      "text": "The bounty wallet is HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator (not the Squads vault — payouts are plain transfers by the operator, each posted in the report thread). The owner funded it with 5 SOL on 2026-10-11; top-ups come from the developer fee; the trust page reads its balance live from chain."
+      "text": "The bounty wallet is HATDNP3MsmsxGcbKKjnoXXPBb46aLaMTdzLG3TfHJv2u, a mainnet wallet held by the operator (not the Squads vault — payouts are plain transfers by the operator, each posted in the report thread). Funded with 5 SOL on 2026-10-11 (owner statement, matched on chain: docs/burnkeeper/evidence/bounty-2026-10-11/funding.json); no payouts yet; top-ups come from the developer fee; the trust page reads the live balance from a mainnet RPC and shows funding, payouts and balance side by side."
     },
     {
       "id": "entity",
@@ -295,12 +295,12 @@
     {
       "id": "third-signer",
       "status": "not done",
-      "text": "The third Squads signer (a trusted third party, named with consent) is not chosen yet; until then the mainnet vault cannot be created as designed."
+      "text": "The mainnet Squads vault exists (2-of-3). Member C's key is configured but the person is not named yet (named only with consent). The owner holds members A and B — two of the three keys — so today the owner alone meets the threshold, and with a time lock of 0 an upgrade can execute at once; the third key adds no independent approval until that changes."
     },
     {
       "id": "signed-operator-message",
       "status": "not done",
-      "text": "The operator's signed statement (a message signed by the developer fee wallet, verifiable on /burnticker/operator) is not signed yet: the mainnet wallet does not exist."
+      "text": "The operator's statement is not signed yet: the mainnet developer fee wallet's address is configured (8cwwy895BENMJTueXfQovWD4mvuoJ4kgyR52UMrqSbo5) and the text to sign is on /burnticker/operator, but no signature exists, so nothing is verified."
     },
     {
       "id": "paircurve-findings-open",

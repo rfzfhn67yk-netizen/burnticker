@@ -1,0 +1,89 @@
+import fs from "node:fs";
+import path from "node:path";
+import { PublicKey } from "@solana/web3.js";
+import { configPda } from "@/lib/burnReceipts/pda";
+import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
+import { isAccount, readAccount } from "@/lib/burnticker/trustpack/idlReader";
+import { base64ToBytes, isPubkey, toHex } from "@/lib/burnticker/trustpack/base58";
+import { jsonRpc, type Rpc } from "@/lib/burnticker/trustpack/receiptCheck";
+import { NETWORKS, PROGRAM_IDS, rpcUrlFor, type Network } from "@/lib/burnticker/networks";
+
+/**
+ * ON-CHAIN REGISTRATION OF A MINT, PER NETWORK (website audit 4, BT-01). Reads the burn_receipts TokenConfig PDA ["config", mint] with a
+ * plain read-only getAccountInfo on each network's canonical program id (networks.ts) — the same configuration the receipt verifier uses
+ * — and decodes it with the IDL. Three states, never collapsed:
+ *
+ *   registered      the account exists, is owned by the program and decodes as a TokenConfig
+ *   not-registered  the RPC answered and the account does not exist
+ *   unavailable     the RPC failed, or the account exists but is not a decodable TokenConfig — whether the mint is registered is UNKNOWN
+ *
+ * Catalogue membership (Burnticker's registry) is a separate fact, decided in verifyMint.ts.
+ */
+
+export type RegistrationState = "registered" | "not-registered" | "unavailable";
+export interface NetworkRegistration {
+  network: Network; programId: string; state: RegistrationState;
+  config: string | null; rulesSha256: string | null; readings: number | null; burns: number | null;
+  /** why the read is unavailable (never shown as a negative) */
+  reason: string | null;
+}
+export type RegistrationReader = (network: Network, programId: string, mint: string) => Promise<NetworkRegistration>;
+
+type TokenConfigLite = { mint: string; rules_sha256: Uint8Array; readings: number; burns: number };
+
+export function decodeRegistration(network: Network, programId: string, config: string, acct: { owner: string; data: [string, string] } | null): NetworkRegistration {
+  const base = { network, programId, config: null, rulesSha256: null, readings: null, burns: null, reason: null };
+  if (acct === null) return { ...base, config, state: "not-registered" };   // config = the address that was read (no account there)
+  if (acct.owner !== programId) return { ...base, state: "unavailable", reason: `the account at the TokenConfig address is owned by ${acct.owner}, not the program` };
+  const bytes = base64ToBytes(acct.data[0]);
+  if (!isAccount(BURN_RECEIPTS_IDL, "TokenConfig", bytes)) return { ...base, state: "unavailable", reason: "the account is not a TokenConfig (discriminator mismatch)" };
+  try {
+    const c = readAccount<TokenConfigLite>(BURN_RECEIPTS_IDL, "TokenConfig", bytes);
+    return { ...base, state: "registered", config, rulesSha256: toHex(c.rules_sha256), readings: Number(c.readings), burns: Number(c.burns) };
+  } catch (e) {
+    return { ...base, state: "unavailable", reason: `the TokenConfig did not decode (${(e as Error).message.slice(0, 80)})` };
+  }
+}
+
+export async function readRegistration(rpc: Rpc, network: Network, programId: string, mint: string): Promise<NetworkRegistration> {
+  if (!isPubkey(mint) || !isPubkey(programId)) return { network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: "not a public key" };
+  const config = configPda(new PublicKey(programId), new PublicKey(mint)).toBase58();
+  try {
+    const r = await rpc.call<{ value: { owner: string; data: [string, string] } | null }>("getAccountInfo", [config, { encoding: "base64", commitment: "confirmed" }]);
+    return decodeRegistration(network, programId, config, r?.value ?? null);
+  } catch (e) {
+    return { network, programId, state: "unavailable", config: null, rulesSha256: null, readings: null, burns: null, reason: `the ${network} RPC could not be read just now (${(e as Error).message.slice(0, 100)})` };
+  }
+}
+
+/** The default reader: each network's RPC (rpcUrlFor: the host's own RPC only for the host's network), two attempts. */
+export const chainRegistrationReader = (env: Readonly<Record<string, string | undefined>> = process.env): RegistrationReader =>
+  (network, programId, mint) => readRegistration(jsonRpc(rpcUrlFor(network, env), fetch, { attempts: 2 }), network, programId, mint);
+
+export async function readAllRegistrations(mint: string, reader: RegistrationReader): Promise<NetworkRegistration[]> {
+  return Promise.all(NETWORKS.map((n) => reader(n, PROGRAM_IDS[n].burn_receipts, mint)));
+}
+
+// ---- coins the platform itself disclosed (rehearsals): named, so a registered-but-unlisted rehearsal mint is not called "another launchpad's"
+
+export interface DisclosedCoin { mint: string; network: Network; ticker: string; label: string; rulesPath: string }
+export const DISCLOSED_RULES: { rulesPath: string; network: Network; label: string }[] = [
+  { rulesPath: "config/burnkeeper/deficit.devnet.rules.json", network: "devnet", label: "Burnticker's devnet rehearsal of $DEFICIT (2026-10-10; 1% of the burn pool per $1B unit, the proposed mainnet rule is 2%)" },
+  { rulesPath: "config/burnkeeper/paircurve-devnet-1a.rules.json", network: "devnet", label: "Burnticker's devnet pair rehearsal coin A (2026-10-10)" },
+  { rulesPath: "config/burnkeeper/paircurve-devnet-1b.rules.json", network: "devnet", label: "Burnticker's devnet pair rehearsal coin B (2026-10-10)" },
+  { rulesPath: "config/burnkeeper/rehearsal.rules.json", network: "mainnet", label: "Burnticker's disclosed mainnet rehearsal coin $REHEARSAL (a throwaway under the real platform config; not for trading)" },
+];
+
+let disclosedCache: { root: string; coins: DisclosedCoin[] } | null = null;
+export function disclosedCoins(root = process.cwd()): DisclosedCoin[] {
+  if (disclosedCache && disclosedCache.root === root) return disclosedCache.coins;
+  const coins: DisclosedCoin[] = [];
+  for (const d of DISCLOSED_RULES) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(root, d.rulesPath), "utf8")) as { mint?: string | null; ticker?: string };
+      if (j.mint && isPubkey(j.mint)) coins.push({ mint: j.mint, network: d.network, ticker: j.ticker ?? "", label: d.label, rulesPath: d.rulesPath });
+    } catch { /* a missing rules file just means that coin is not named */ }
+  }
+  disclosedCache = { root, coins };
+  return coins;
+}

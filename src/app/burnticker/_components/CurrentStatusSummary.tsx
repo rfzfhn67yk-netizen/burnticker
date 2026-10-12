@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import type { CurrentStatus } from "@/lib/burnticker/currentStatus";
 import { upgradeAuthorityText } from "@/lib/burnticker/currentStatusText";
 import { EmptyState } from "./EmptyState";
+import { RepoText } from "./RepoText";
+import { PUBLIC_REPO_COMMIT } from "@/lib/burnticker/currentStatusLinks";
 
 /**
  * THE CURRENT-STATUS SUMMARY (website brief 2026-10-11 §4), at the top of the trust and operator pages: one object from
@@ -31,13 +33,13 @@ export function CurrentStatusSummary({ card }: { card: string }) {
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">Review findings: fix · re-check · deployed</summary>
         <div className="overflow-x-auto"><table className="mt-1 w-full"><thead className="text-left text-neutral-400"><tr><th className="p-1">Review</th><th className="p-1">Finding</th><th className="p-1">Fix</th><th className="p-1">Re-check</th><th className="p-1">Deployed</th></tr></thead>
-          <tbody>{s.reviews.flatMap((r) => r.findings.map((f) => <tr key={r.id + f.id} className="border-t border-neutral-800 align-top"><td className="p-1">{r.label}</td><td className="p-1">{f.id} ({f.severity}) {f.title}</td><td className="p-1">{f.fix}</td><td className={`p-1 ${/not/.test(f.recheck) ? "text-amber-300" : ""}`}>{f.recheck}</td><td className="p-1">{f.deployed}</td></tr>))}</tbody></table></div>
+          <tbody>{s.reviews.flatMap((r) => r.findings.map((f) => <tr key={r.id + f.id} className="border-t border-neutral-800 align-top"><td className="p-1">{r.label} <RepoText className="block text-neutral-500" text={r.report} /></td><td className="p-1">{f.id} ({f.severity}) {f.title}</td><td className="p-1">{f.fix}</td><td className={`p-1 ${/not/.test(f.recheck) ? "text-amber-300" : ""}`}>{f.recheck}</td><td className="p-1">{f.deployed}</td></tr>))}</tbody></table></div>
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">Open before release ({s.releaseRequirements.filter((r) => r.status === "open").length})</summary>
         <ul className="mt-1 space-y-0.5">{s.releaseRequirements.map((r) => <li key={r.id}><span className={`mr-1 rounded px-1 ${r.status === "open" ? "bg-amber-900 text-amber-200" : "bg-neutral-800 text-neutral-300"}`}>{r.status}</span>{r.text}</li>)}</ul>
       </details>
       <details className="mt-1 text-xs"><summary className="cursor-pointer text-neutral-300">Intended design (not all deployed)</summary><ul className="mt-1 list-disc pl-5">{s.design.map((d) => <li key={d}>{d}</li>)}</ul></details>
-      <p className="mt-2 text-[11px] text-neutral-500">History, append-only: {s.historical.map((h, k) => <span key={h.path}>{k ? " · " : ""}{h.label} (<code>{h.path}</code>)</span>)}. Source: <code>{s.source}</code>.</p>
+      <p className="mt-2 text-[11px] text-neutral-500">History, append-only: {s.historical.map((h, k) => <span key={h.path}>{k ? " · " : ""}{h.label} (<RepoText text={h.path} />)</span>)}. Source: <RepoText text={s.source} />. Links open the public repository at commit <code>{PUBLIC_REPO_COMMIT.slice(0, 8)}</code>.</p>
     </section>
   );
 }

@@ -1,0 +1,23 @@
+{
+  "schema": "burnkeeper.status/prelaunch-v1",
+  "state": "not-launched",
+  "ticker": "DEFICIT",
+  "cluster": "mainnet-beta",
+  "generatedAt": "2026-10-11T00:00:00Z",
+  "note": "$DEFICIT is not launched, so there is no live status yet: no mint, no readings, no burns. This file is the explicit pre-launch state. From the keeper's first cycle after launch it is replaced by the keeper's live status.json (schema burnkeeper.status/v1). No launch date is announced.",
+  "rules": {
+    "file": "rules.json",
+    "sha256": "78f4c327552e42080ffe18830785fada399a882d0347793f881c7a8d35d2be58",
+    "sha12": "78f4c327552e",
+    "status": "proposed mainnet rule (2% of the burn pool per $1B unit); fixed at launch, and any different file is a different coin",
+    "check": "shasum -a 256 rules.json"
+  },
+  "readings": { "state": "unavailable before launch", "detail": "the first Treasury reading after launch is the baseline" },
+  "burns": { "state": "unavailable before launch", "file": "burns.json", "detail": "burns.json holds an empty list until the first burn" },
+  "evidence": {
+    "devnetRehearsal": "https://burnticker.com/burnticker/check?demo=1#verify",
+    "devnetRehearsalNote": "The devnet rehearsal coin ran the same rule text at 1% of the burn pool per $1B unit; this proposed mainnet rule is 2%. Devnet has no money value.",
+    "firstBurnPath": "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md",
+    "currentStatus": "https://burnticker.com/api/burnticker/v1/current-status"
+  }
+}

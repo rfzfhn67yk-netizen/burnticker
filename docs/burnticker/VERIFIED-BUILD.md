@@ -32,11 +32,11 @@ partner co-signing attester changes, link_pair after readings, the forward windo
 LAUNCHPAD-PATH §40, winner takes the burn. pair_curve's source is unchanged; it links the burn_receipts crate, so its bytes change with
 it. Both programs are built at opt-level "z".
 
-| Program | Program id | Build | Features | Bytes | Executable hash | Deployed on devnet |
+| Program | Program id | Build | Features | Bytes | Executable hash | Deployed (read back from chain) |
 |---|---|---|---|---|---|---|
-| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 763,536 | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | — (not deployed yet; file sha256 `7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a`) |
+| burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | mainnet | default | 763,536 | `e64a27598808e5c9564833341f892bb8be9f6d0b7254108dde68d09f7141dc19` | mainnet 2026-10-11, slot 455814493: on-chain sha256 `7f26a83adf1f6bc6ea9a495fe6cc47fa78b3e45e78ab9919025fc5f1f4f25a9a` = this build (upgrade authority the Squads vault 8zsHrHjS…WrDV; docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json) |
 | burn_receipts | `AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM` | devnet | `devnet` | 763,536 | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` | `90bd47e6b48a1e2f0580f33c6dba49c140b8a8ec2c751899b8652f8c034a4b35` = build (upgraded through the Squads vault 2026-10-11, vault transaction 17; docs/burnkeeper/devnet-pair-forward-r3-run-log.md) |
-| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 411,296 | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | — (not deployed yet; file sha256 `f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767`) |
+| pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | mainnet | default | 411,296 | `50bf57327c5234c22841d325214c293136f35a20b8c599ff7e5c89d84248b3ef` | mainnet 2026-10-11, slot 455815136: on-chain sha256 `f19f4bc11b53ba509a1a1f643927d88900954ad9afb6e60f1f815aa967018767` = this build (same vault, same evidence file) |
 | pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 411,296 | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` = build (vault transaction 18, same run) |
 
 **Bytecode version: sBPFv3 (SIMD-0500 checked 2026-10-11).** cargo-build-sbf 4.4.0 (Solana CLI 4.3.0, platform-tools v1.57, Anchor

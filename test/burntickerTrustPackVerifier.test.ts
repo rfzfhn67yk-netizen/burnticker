@@ -82,9 +82,9 @@ describe("the receipt verifier on frozen devnet bytes", () => {
     assert.equal(byId(r).units.ok, true); assert.match(byId(r).units.detail, /on-chain values/);
     assert.equal(r.verified, true, "the core checks (tx, program, memo, reading, units) passed");
   });
-  test("a malformed signature or a missing transaction fails the first line and stops", async () => {
+  test("a malformed signature is an input error (audit 4 BT-07: no checks, no failed verdict, no explorer link); a missing transaction fails the first line and stops", async () => {
     const bad = await checkReceiptTx({ signature: "not-a-signature", cluster: "devnet", programId: DEVNET_PROGRAM_ID, rpc: fakeRpc(burned), rulesText: null, fetchSource: null });
-    assert.equal(bad.checks.length, 1); assert.equal(bad.checks[0].ok, false);
+    assert.equal(bad.checks.length, 0); assert.equal(bad.inputError?.state, "malformed"); assert.equal(bad.facts.explorerUrl, null);
     const none = await checkReceiptTx({ signature: sigOf(burned), cluster: "devnet", programId: DEVNET_PROGRAM_ID, rpc: { call: async <T,>() => null as T }, rulesText: null, fetchSource: null });
     assert.equal(none.checks[0].ok, false); assert.equal(none.verified, false);
   });

@@ -9,6 +9,10 @@ import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, readPublishedLedger, readWa
 import { loadOperator, pinnedDevFeeWallet, placeholders, signedMessageView, type Cluster } from "@/lib/burnticker/trustpack/operator";
 import { readNeverBuys } from "@/lib/burnticker/trustpack/neverBuys";
 import { NEVER_BUYS_STATUS } from "@/lib/burnticker/trustpack/copy";
+import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
+import { explorerUrl, rpcUrlFor } from "@/lib/burnticker/networks";
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * THE TRUST PACK'S API HANDLERS (1.5.0, 2026-10-10): GET /v1/check, /v1/check/receipts, /v1/check/receipts/{signature}, /v1/fees/ledger,
@@ -18,8 +22,12 @@ import { NEVER_BUYS_STATUS } from "@/lib/burnticker/trustpack/copy";
 
 /** The cluster whose wallets the pages show: the platform's (localnet reads devnet, the nearest public cluster). */
 export const pageCluster = (p: Pick<Platform, "cluster">): Cluster => (p.cluster === "mainnet" ? "mainnet" : "devnet");
-/** The RPC the server reads: BURNTICKER_RPC_URL on the host when set, else the cluster's public endpoint (read-only calls only). */
-export const serverRpcUrl = (cluster: Cluster, env: Readonly<Record<string, string | undefined>> = process.env): string => (env.BURNTICKER_RPC_URL ?? "").trim() || PUBLIC_RPC[cluster];
+/**
+ * The RPC the server reads for `cluster`: BURNTICKER_RPC_URL only when it serves the cluster the host reads (BURNTICKER_CLUSTER), else the
+ * cluster's public endpoint (read-only calls only). Audit 4 (2026-10-11): the host's devnet RPC used to answer the bounty wallet's MAINNET
+ * balance read, so a funded wallet read as 0. One rule for every server read: networks.ts rpcUrlFor.
+ */
+export const serverRpcUrl = (cluster: Cluster, env: Readonly<Record<string, string | undefined>> = process.env): string => rpcUrlFor(cluster, env);
 
 export const v1Check = (root = process.cwd()): ApiResult => ok(buildChecklist(root));
 export const v1CheckReceipts = (root = process.cwd()): ApiResult => ok(sampleReceipts(root));
@@ -68,6 +76,13 @@ async function feeLedgerInner(p: Pick<Platform, "cluster" | "publishDir">, o: { 
   }
 }
 
+/** Per network, per program: the deployed bytes recorded in verified-build.json (the operator page's program rows; audit 4 BT-02). */
+export function deploymentsOf(root = process.cwd()): Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean } | null>> {
+  const vb = loadVerifiedBuild(root), out: Record<Cluster, Record<string, { readAt: string; matchesBuild: boolean } | null>> = { devnet: {}, mainnet: {} };
+  for (const p of vb.programs) for (const c of ["devnet", "mainnet"] as Cluster[]) { const d = p.deployed?.[c]; out[c][p.library] = d ? { readAt: d.readAt, matchesBuild: d.matchesBuild } : null; }
+  return out;
+}
+
 export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = process.cwd()): ApiResult {
   const op = loadOperator(root), cluster = pageCluster(p);
   const nb = readNeverBuys(p.publishDir);
@@ -79,17 +94,46 @@ export function v1Operator(p: Pick<Platform, "cluster" | "publishDir">, root = p
     neverBuys: { rule: op.neverBuys.rule, rehearsalNote: op.neverBuys.rehearsalNote, report: nb, line: nb ? nb.line : NEVER_BUYS_STATUS.notRun, status: nb ? nb.status : "not-run" },
     placeholders: placeholders(op),
     wellKnown: "/.well-known/burnticker.json",
+    deployments: deploymentsOf(root),
   });
 }
 
-export async function v1Bounty(o: { rpc?: Rpc; root?: string; env?: Readonly<Record<string, string | undefined>> } = {}): Promise<ApiResult> {
+export interface BountyReconciliation { fundedLamports: string; paidLamports: string; expectedLamports: string; liveLamports: string | null; differenceLamports: string | null; line: string }
+/** Funding in, payouts out, the live balance: a reader can reconcile them; "funded" never stands in for "available" (audit 4 BT-04). */
+export function bountyReconciliation(funded: bigint, paid: bigint, live: bigint | null): BountyReconciliation {
+  const expected = funded - paid, sol = (l: bigint) => (Number(l) / 1e9).toFixed(4);
+  const diff = live === null ? null : live - expected;
+  const line = live === null ? `Recorded: ${sol(funded)} SOL funded − ${sol(paid)} SOL paid = ${sol(expected)} SOL expected; the live balance could not be read just now, so what is available now is unknown.`
+    : diff === BigInt(0) ? `Recorded: ${sol(funded)} SOL funded − ${sol(paid)} SOL paid = ${sol(expected)} SOL; live balance ${sol(live)} SOL — they agree.`
+    : `Recorded: ${sol(funded)} SOL funded − ${sol(paid)} SOL paid = ${sol(expected)} SOL; live balance ${sol(live)} SOL — an unexplained difference of ${diff! > BigInt(0) ? "+" : "−"}${sol(diff! < BigInt(0) ? -diff! : diff!)} SOL.`;
+  return { fundedLamports: String(funded), paidLamports: String(paid), expectedLamports: String(expected), liveLamports: live === null ? null : String(live), differenceLamports: diff === null ? null : String(diff), line };
+}
+
+interface FundingEvidence { transactions?: { kind: string; signature: string; lamports: string; blockTime?: string }[] }
+function readFundingEvidence(root: string, rel: string | undefined): FundingEvidence | null {
+  if (!rel || !/^docs\/burnkeeper\/evidence\//.test(rel)) return null;
+  try { return JSON.parse(fs.readFileSync(path.join(root, rel), "utf8")) as FundingEvidence; } catch { return null; }
+}
+
+export async function v1Bounty(o: { rpc?: Rpc; root?: string; env?: Readonly<Record<string, string | undefined>>; now?: number } = {}): Promise<ApiResult> {
+  const root = o.root ?? process.cwd();
   const t = loadTransparency(o.root);
   const b = t.howBuilt.bounty;
   const wallet = b.wallet && isPubkey(b.wallet) ? b.wallet : null;
   let balanceLamports: string | null = null, error: string | null = null;
+  const rpcUrl = serverRpcUrl("mainnet", o.env);
   if (wallet) {
-    try { balanceLamports = String((await (o.rpc ?? jsonRpc(serverRpcUrl("mainnet", o.env))).call<{ value: number }>("getBalance", [wallet, { commitment: "confirmed" }])).value); }
+    try { balanceLamports = String((await (o.rpc ?? jsonRpc(rpcUrl, fetch, { attempts: 2 })).call<{ value: number }>("getBalance", [wallet, { commitment: "confirmed" }])).value); }
     catch (e) { error = (e as Error).message.slice(0, 160); }
   }
-  return ok({ wallet, walletTodo: wallet ? null : (b.walletTodo ?? "TODO_BOUNTY_WALLET"), balanceLamports, error, rangeSol: b.rangeSol, fundedFrom: b.fundedFrom, recordedFunding: b.recordedFunding ?? null, status: b.status, contact: b.contact, terms: b.termsPath, howReportsArePaid: b.howReportsArePaid ?? null, reports: b.reports ?? { paid: [], rejected: [], note: "none yet" } });
+  // the recorded funding (owner statement) and its transaction(s), read from the evidence file (signatures live under docs/burnkeeper/evidence)
+  const rf = b.recordedFunding ?? null;
+  const ev = readFundingEvidence(root, (rf as { evidence?: string } | null)?.evidence);
+  const fundingTxs = (ev?.transactions ?? []).filter((x) => x.kind === "funding" && isSignature(x.signature));
+  const recordedFunding = rf ? { ...rf, transaction: rf.transaction ?? fundingTxs[0]?.signature ?? null, transactions: fundingTxs.map((x) => ({ signature: x.signature, lamports: x.lamports, blockTime: x.blockTime ?? null, explorerUrl: explorerUrl("tx", x.signature, "mainnet") })) } : null;
+  const reports = b.reports ?? { paid: [], rejected: [], note: "none yet" };
+  const fundedLamports = fundingTxs.length ? fundingTxs.reduce((n, x) => n + BigInt(x.lamports), BigInt(0)) : BigInt(Math.round((rf?.sol ?? 0) * 1e9));
+  const paidLamports = reports.paid.reduce((n, r) => n + BigInt(Math.round(r.sol * 1e9)), BigInt(0));
+  const reconciliation = wallet ? bountyReconciliation(fundedLamports, paidLamports, balanceLamports === null ? null : BigInt(balanceLamports)) : null;
+  return ok({ wallet, walletTodo: wallet ? null : (b.walletTodo ?? "TODO_BOUNTY_WALLET"), balanceLamports, balanceReadAt: new Date(o.now ?? Date.now()).toISOString(), balanceNetwork: "mainnet", error, rangeSol: b.rangeSol, fundedFrom: b.fundedFrom, recordedFunding, reconciliation, status: b.status, contact: b.contact, terms: b.termsPath, howReportsArePaid: b.howReportsArePaid ?? null, reports });
 }

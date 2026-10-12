@@ -14,3 +14,32 @@ export const SEASONS_HREF = "/burnticker/leagues";
 
 /** The prerequisite chain from mint to first receipt (docs/burnticker/FIRST-BURN-PATH.md), in the public repository. */
 export const FIRST_BURN_PATH_URL = "https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md";
+
+/**
+ * EVIDENCE LINKS PINNED TO A PUBLIC COMMIT (website audit 4, BT-14). Every repository path a trust surface cites (decision log, incident
+ * log, reviews, rehearsal records, evidence files, configs) links to the public repository AT THIS COMMIT, so the evidence a page points at
+ * cannot change under the link. Bump it after each publish (scripts/ops/publish-public-repo.sh; the commit is the public repo's main
+ * after the push): a file added since the pinned commit 404s until then. test/burntickerTrustLinks.test.ts checks the shape.
+ */
+export const PUBLIC_REPO_URL = "https://github.com/rfzfhn67yk-netizen/burnticker";
+export const PUBLIC_REPO_COMMIT = "e88480e61b51f83945fa6279d342a3a07ceecc70";
+/** Repository paths a page may cite (top-level folders of the public tree). */
+export const REPO_PATH_RE = /\b(?:docs|config|src|programs|scripts|site|test|deploy)\/[A-Za-z0-9_./\[\]-]*[A-Za-z0-9_\]/-]/g;
+/** The pinned GitHub URL of a repository path: a trailing "/" (a folder) opens the tree view, anything else the file. */
+export function repoUrl(p: string, commit: string = PUBLIC_REPO_COMMIT): string {
+  const clean = p.replace(/^\.?\//, "").replace(/[.,;:)]+$/, "");
+  return `${PUBLIC_REPO_URL}/${clean.endsWith("/") ? "tree" : "blob"}/${commit}/${clean.replace(/\/$/, "")}`;
+}
+/** Split a sentence into text and repository-path pieces (for rendering the paths as pinned links). */
+export function splitRepoPaths(text: string): { text: string; path: string | null }[] {
+  const out: { text: string; path: string | null }[] = [];
+  let last = 0;
+  for (const m of text.matchAll(REPO_PATH_RE)) {
+    const p = m[0].replace(/[.,;:]+$/, "");
+    if (m.index! > last) out.push({ text: text.slice(last, m.index), path: null });
+    out.push({ text: p, path: p });
+    last = m.index! + p.length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), path: null });
+  return out;
+}

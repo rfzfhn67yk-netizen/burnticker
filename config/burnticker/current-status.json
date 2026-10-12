@@ -75,7 +75,8 @@
     "mainnet": {
       "plannedTimeLockSecs": 172800,
       "plannedFrom": "around 2026-10-23",
-      "why": "Owner decision 2026-10-11 (LAUNCHPAD-PATH §46 addendum): the mainnet vault's time lock stays at 0 during launch week so deploy and config fixes are not delayed; it is to be raised to 48 h afterwards. Until then a 2-of-3 vote can act at once."
+      "why": "Owner decision 2026-10-11 (LAUNCHPAD-PATH §46 addendum): the mainnet vault's time lock stays at 0 during launch week so deploy and config fixes are not delayed; it is to be raised to 48 h afterwards. Until then a 2-of-3 vote can act at once.",
+      "keyControl": "3 keys, 2 controllers: the owner holds members A and B (two of the three keys), so the owner alone meets the 2-of-3 threshold; member C is a third party who is not named yet. The third key adds no independent approval while the owner holds two."
     },
     "devnet": {
       "plannedTimeLockSecs": 60,
@@ -260,8 +261,9 @@
   "releaseRequirements": [
     {
       "id": "mainnet-deploy",
-      "text": "Deploy both programs on mainnet through the Squads vault",
-      "status": "open"
+      "text": "Deploy both programs on mainnet with the Squads vault as upgrade authority (done 2026-10-11: docs/burnkeeper/evidence/mainnet-deploy-2026-10-11/deploy.json)",
+      "status": "done",
+      "derivedFromChain": "mainnet-deployment"
     },
     {
       "id": "rehearsal-mainnet",
