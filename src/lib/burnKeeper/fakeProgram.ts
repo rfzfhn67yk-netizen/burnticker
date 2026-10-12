@@ -1,7 +1,9 @@
 import { ATTESTATION_DOMAIN, CARRY_CONSECUTIVE, GENESIS_HASH, KIND_BASELINE, KIND_RESET, MAX_QUORUM, MAX_SPEND_RESERVE_BPS, PACKET_DATA_SIZE, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
 import { formatBuybackMemo, formatDebtMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend, deltaPlausible, formatDate, formatFixed, formatSignedFixed, rawToTokens, reserveSpendCap, settleVault, spendablePool, step } from "@/lib/burnReceipts/math";
-import type { ConfirmOutcome, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, SignedTx } from "@/lib/burnKeeper/programPort";
+import type { ConfirmOutcome, Cosignature, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
+import { PublicKey } from "@solana/web3.js";
+import { sourceUrlHash, verifyAttestation } from "@/lib/burnReceipts/attestation";
 
 /**
  * THE burn_receipts PROGRAM IN MEMORY (2026-10-10) — a ProgramPort that behaves like the deployed program for the keeper's purposes,
@@ -138,14 +140,28 @@ export class FakeProgram implements ProgramPort {
     this.signed.push({ sig, payload, lvbh: this.height + 150 });
     return { signature: sig, raw: new TextEncoder().encode(sig), blockhash: `bh${this.n}`, lastValidBlockHeight: this.height + 150 };
   }
-  async buildReading(o: { recordDate: number; prevDate: number; value: bigint; sourceUrl: string; feedId: string; valueDecimals: number; proofHash?: Uint8Array }) {
+  /** The v3 message as the client builds it (signer-2: the real sha256 of the source URL, so a co-signer's bytes can be compared). */
+  async readingMessage(o: ReadingInput): Promise<string> {
+    const proof = o.proofHash ? Buffer.from(o.proofHash).toString("hex") : "0".repeat(64);
+    return `${ATTESTATION_DOMAIN}|${this.cfg.clusterGenesis}|${this.programId}|${this.mint}|${o.feedId}|prev=${o.prevDate ? formatDate(o.prevDate) : "none"}|${formatDate(o.recordDate)}|${formatFixed(o.value, o.valueDecimals)}|src=${sourceUrlHash(o.sourceUrl).toString("hex")}|proof=${proof}`;
+  }
+  /** Readings that carried another host's signature, with the keys it counted (signer-2 tests). */
+  cosigned: { recordDate: number; keys: string[] }[] = [];
+  async buildReading(o: ReadingInput & { cosignatures?: readonly Cosignature[] }) {
     if (this.heldKeys.length > MAX_QUORUM) throw new Error(`at most ${MAX_QUORUM} attester keys sign one reading`);
-    const hex = "0".repeat(64);
-    const proof = o.proofHash ? Buffer.from(o.proofHash).toString("hex") : hex;
-    const message = `${ATTESTATION_DOMAIN}|${this.cfg.clusterGenesis}|${this.programId}|${this.mint}|${o.feedId}|prev=${o.prevDate ? formatDate(o.prevDate) : "none"}|${formatDate(o.recordDate)}|${formatFixed(o.value, o.valueDecimals)}|src=${hex}|proof=${proof}`;
-    this.lastReadingBytes = readingTxBytes(this.heldKeys.length, new TextEncoder().encode(message).length);
+    const message = await this.readingMessage(o);
+    // signer-2: like the adapter — each co-signature must verify over these exact bytes; keys the config does not list are dropped.
+    const extra: string[] = [];
+    for (const cs of o.cosignatures ?? []) {
+      if (!verifyAttestation(new PublicKey(cs.key), Buffer.from(message, "utf8"), cs.signature)) throw new Error(`the signature from ${cs.key.slice(0, 8)}… does not verify over this message`);
+      if (this.cfg.attesters.some((a) => a.key === cs.key) && !this.heldKeys.includes(cs.key) && !extra.includes(cs.key)) extra.push(cs.key);
+    }
+    const keys = [...this.heldKeys, ...extra];
+    if (keys.length > MAX_QUORUM) throw new Error(`a reading carries at most ${MAX_QUORUM} signatures`);
+    if (extra.length) this.cosigned.push({ recordDate: o.recordDate, keys: [...keys] });
+    this.lastReadingBytes = readingTxBytes(keys.length, new TextEncoder().encode(message).length);
     if (this.lastReadingBytes > PACKET_DATA_SIZE && !this.lookupTable) throw new Error(`burnReceipts: the transaction is ${this.lastReadingBytes} bytes (limit ${PACKET_DATA_SIZE}); pass a lookup table (createReadingLookupTable)`);
-    return { ...this.mk({ kind: "reading", recordDate: o.recordDate, prevDate: o.prevDate, value: o.value, keys: [...this.heldKeys] }), message };
+    return { ...this.mk({ kind: "reading", recordDate: o.recordDate, prevDate: o.prevDate, value: o.value, keys }), message };
   }
   private nextInLine(): ProgramReadingView | null {
     return [...this.readings.values()].filter((r) => !r.processed && r.prevDate === this.cfg.crankCursor).sort((a, b) => a.recordDate - b.recordDate)[0] ?? null;

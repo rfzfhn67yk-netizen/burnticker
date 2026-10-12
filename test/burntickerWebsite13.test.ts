@@ -80,7 +80,7 @@ describe("the site-wide wallet (owner decision, Claude site audit 2 item 6; 'mak
     const inner = layout.slice(layout.indexOf("<ShellWalletProviders "), layout.indexOf("</ShellWalletProviders>"));
     for (const c of ["<SiteHeader />", "{children}", "<FooterSwitch ", "<TabBar />"]) assert.ok(inner.includes(c), c);
     const prov = read("src/app/burnticker/_components/ShellWalletProviders.tsx");
-    assert.match(prov, /<WalletProvider wallets=\{wallets\} autoConnect=\{false\}>/);
+    assert.match(prov, /<WalletProvider wallets=\{wallets\} autoConnect=\{true\}>/, "auto-reconnect on (owner, 2026-10-12)");
     assert.match(prov, /new PhantomWalletAdapter\(\), new SolflareWalletAdapter\(\)/, "Phantom and Solflare by name; Backpack and every other Wallet Standard wallet are detected");
     // no second provider anywhere in the app outside the launch wizard's own layout (website-12's file; see the todo below)
     const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : []);
@@ -213,7 +213,8 @@ describe("website-12's site launch record, consumed (coordinator, 2026-10-12)", 
   test("the static deploy copies the whole site/burnticker folder, so the archived whitepaper ships", () => {
     const d = read("scripts/ops/deploy-sites.sh");
     assert.match(d, /site burnticker site\/burnticker "\$BT_PUB" "\$BURNTICKER_WWW" tokens\.html/);
-    assert.match(d, /add "\$\(\$RS --exclude='sample\/' --exclude='README\.md' --exclude='\*\.mjs' \$KEEP "\$brand\/" "\$www\/"/);
+    // ops-2 (2026-10-12) wrapped every rsync in copy_dir so a failed copy fails the script; the brand copy still ships the whole folder minus sample/, README.md and *.mjs
+    assert.match(d, /copy_dir "\$label brand" --exclude='sample\/' --exclude='README\.md' --exclude='\*\.mjs' \$KEEP "\$brand\/" "\$www\/"/);
     assert.ok(fs.existsSync("site/burnticker/whitepaper-2026-10-10.html"));
   });
 });

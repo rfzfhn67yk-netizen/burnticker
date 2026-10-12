@@ -24,12 +24,41 @@
 # hosts not listed; (b) the host's NEXT_PUBLIC_BURNTICKER_RPC_URL (the wallet adapter's RPC on /launch and /me) must be added as
 # {$BURNTICKER_PUBLIC_RPC_ORIGIN} (https + wss); (c) 'unsafe-inline' scripts stay until the app moves to per-request nonces (a Next
 # proxy that sets the nonce; every page then renders dynamically) and the static pages to sha256 hashes of their inline scripts.
+# REVIEW 2026-10-12 (ops-2) against the rebuilt site (public tree after website-12/13 and the shared static shell). Changes:
+#   app frames     the coin page (/burnticker/t/<TICKER>) and the pair page (/burnticker/p/<id>) embed the GeckoTerminal chart in an
+#                  iframe (src/lib/burnticker/market.ts, https://www.geckoterminal.com/solana/pools/<pool>?embed=1). default-src 'self'
+#                  would block it, so frame-src https://www.geckoterminal.com is added. frame-ancestors stays 'none' (who may frame US).
+#   app connect    the wallet adapter on /launch and /me also offers Solana Mobile Wallet Adapter on Android
+#                  (@solana-mobile/wallet-adapter-mobile, bundled by @solana/wallet-adapter-react), which talks to the wallet app over
+#                  ws://localhost:<port>/solana-wallet. ws://localhost:* is added; without it, Android wallet connections fail when
+#                  enforced. Browser-extension wallets (Wallet Standard) run in the extension and are not limited by the page's policy.
+#   app images     a creator image can be any https URL (CoinThumb, src/app/burnticker/_components/CoinCard.tsx), and it is shown with
+#                  no referrer. img-src is now 'self' data: blob: https: (an image cannot run code; listing hosts would only break
+#                  coin cards).
+#   app RPC        the host's NEXT_PUBLIC_BURNTICKER_RPC_URL is the public mainnet endpoint since the 2026-10-11 cutover (no Helius
+#                  key ships to visitors), so the placeholder's default is now https://api.mainnet-beta.solana.com. Set
+#                  BURNTICKER_PUBLIC_RPC_ORIGIN only if that changes.
+#   app fonts      next/font self-hosts Courier Prime and Space Grotesk under /_next/static/media ('self'). The wallet modal's own
+#                  stylesheet (@solana/wallet-adapter-react-ui/styles.css) starts with an @import of Google Fonts (DM Sans). It is NOT
+#                  allowed on purpose: the site self-hosts its fonts (site audit #19), and the modal falls back to Roboto, Helvetica or
+#                  Arial. Expect one style-src report for fonts.googleapis.com on /launch and /me; it is not a fault.
+#   app scripts    still 'unsafe-inline': Next's flight payload and the theme boot script in the root layout are inline. The JSON-LD
+#                  blocks on league pages are data, not scripts, and CSP does not apply to them.
+#   static images  the status page (status.burnticker.com) and the $DEFICIT page (deficit.burnticker.com) load the mark from
+#                  https://burnticker.com/brand/favicon.png, another origin for them, so https://burnticker.com is added to img-src.
+#   static frames  frame-src 'none' (no static page embeds anything).
+#   Cloudflare     with the proxy on, keep Rocket Loader, Email Address Obfuscation and Web Analytics OFF in the dashboard: each one
+#                  injects a script (Rocket Loader rewrites every inline script) and would show as a violation, or break pages once
+#                  enforced (docs/burnticker/OPS-EDGE.md "Cloudflare cut-over").
+# Journeys to watch in the browser console during the report-only week: home → /burnticker/check?demo=1 → a coin page with a chart →
+# /burnticker/launch (open the wallet list) → /burnticker/me → status.burnticker.com → deficit.burnticker.com. Report-only sends no
+# reports anywhere (no report-uri is set): the console is where they show.
 # Enforce only after (b) is set and a week of report-only shows no violations on the main journeys (home → check?demo=1 → 10 checks).
 (csp_report_only_static) {
-	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://arweave.net https://*.arweave.net; connect-src 'self' https://burnticker.com https://api.fiscaldata.treasury.gov https://api.devnet.solana.com https://api.mainnet-beta.solana.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://burnticker.com https://arweave.net https://*.arweave.net; connect-src 'self' https://burnticker.com https://api.fiscaldata.treasury.gov https://api.devnet.solana.com https://api.mainnet-beta.solana.com; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
 }
 (csp_report_only_app) {
-	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://arweave.net https://*.arweave.net https://gateway.irys.xyz https://devnet.irys.xyz; connect-src 'self' https://api.fiscaldata.treasury.gov https://api.devnet.solana.com wss://api.devnet.solana.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com https://arweave.net https://*.arweave.net https://gateway.irys.xyz https://devnet.irys.xyz {$BURNTICKER_PUBLIC_RPC_ORIGIN:https://api.devnet.solana.com}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+	header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.fiscaldata.treasury.gov https://api.devnet.solana.com wss://api.devnet.solana.com https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com https://arweave.net https://*.arweave.net https://gateway.irys.xyz https://devnet.irys.xyz ws://localhost:* {$BURNTICKER_PUBLIC_RPC_ORIGIN:https://api.mainnet-beta.solana.com}; frame-src https://www.geckoterminal.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
 }
 #
 # ---- BT-23: caching that never serves a stale status ----

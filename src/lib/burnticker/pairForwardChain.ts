@@ -3,12 +3,13 @@ import { fetchReading, fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { assertSignableGenesis, NATIVE_MINT, type Cluster } from "@/lib/burnReceipts/constants";
 import { anchorErrorName, assertClusterAllowed, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
 import { createAtaIdempotentIx } from "@/lib/burnReceipts/instructions";
-import { attestPairResult, fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_STATE_PAIRED, submitPairResultIx, unlinkPairIx, UNLINK_PAIR_VOIDED, UNLINK_SIDE_REFUNDING, UNLINK_VOID_BY_PASSED, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
+import { attestPairResult, pairResultMessage, fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_STATE_PAIRED, submitPairResultIx, unlinkPairIx, UNLINK_PAIR_VOIDED, UNLINK_SIDE_REFUNDING, UNLINK_VOID_BY_PASSED, type PairLinkAccount } from "@/lib/burnReceipts/pairs";
 import { POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
 import { fetchPair, pairPda, STATUS_VOIDED } from "@/lib/pairCurve/accounts";
-import { sourceUrlHash } from "@/lib/burnReceipts/attestation";
+import { ed25519SharedMessageInstruction, signAttestation, sourceUrlHash } from "@/lib/burnReceipts/attestation";
+import { cosignatureEntries } from "@/lib/burnKeeper/programAdapter";
 import { configPda, feePda, feeWsolAddress } from "@/lib/burnReceipts/pda";
-import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
+import type { ConfirmOutcome, Cosignature, SignedTx } from "@/lib/burnKeeper/programPort";
 import { parseForwardMemo, type ForwardFacts, type PairForwardClient, type PairForwardPort, type PairLinkView, type PairResultView, type PairState, type UnlinkReason } from "@/lib/burnticker/pairForward";
 
 /**
@@ -135,7 +136,14 @@ export class ChainPairForward implements PairForwardClient {
         if (!r) return null;
         return { recordDate: r.record_date, winner: r.winner.equals(PublicKey.default) ? null : r.winner.toBase58(), submittedAt: Number(r.submitted_at), forwarded: r.forwarded, forwardedLamports: r.forwarded_lamports, forwardedAt: r.forwarded ? Number(r.forwarded_at) : null };
       },
-      async buildSubmitResult(i: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array }) {
+      async resultMessage(i: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array }) {
+        const cfg = await fetchTokenConfig(c, o.programId, A);
+        if (!cfg) throw new Error(`The burn program (burn_receipts) has no config for mint ${mintAS}.`);
+        const genesis = cfg.config.cluster_genesis.toBase58();
+        const message = pairResultMessage(genesis, o.programId, A, B, i.recordDate, i.winner === null ? null : mintOf(i.winner), sourceUrlHash(i.sourceUrl), i.proofHash ?? new Uint8Array(32));
+        return { message: message.toString("utf8"), programId: o.programId.toBase58(), genesis };
+      },
+      async buildSubmitResult(i: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array; cosignatures?: readonly Cosignature[] }) {
         const payer = await need();
         const cfg = await fetchTokenConfig(c, o.programId, A);
         if (!cfg) throw new Error(`The burn program (burn_receipts) has no config for mint ${mintAS}.`);
@@ -146,7 +154,16 @@ export class ChainPairForward implements PairForwardClient {
         const src = sourceUrlHash(i.sourceUrl);
         const attesters = o.attesters ?? [payer];
         const att = attestPairResult({ genesisHash: genesis, programId: o.programId, mintA: A, mintB: B, recordDate: i.recordDate, winner, sourceUrlHash: src, ...(i.proofHash ? { proofHash: i.proofHash } : {}), signers: attesters.map((k) => ({ publicKey: k.publicKey, secretKey: k.secretKey })) });
-        return sign([att.instruction, submitPairResultIx({ programId: o.programId, payer: payer.publicKey, mintA: A, mintB: B, recordDate: i.recordDate, winner, sourceUrlHash: src, ...(i.proofHash ? { proofHash: i.proofHash } : {}) })]);
+        // signer-2: another host's signatures over the same message join the one instruction — checked here; a key neither coin lists is dropped.
+        let verifyIx = att.instruction;
+        if (i.cosignatures?.length) {
+          const cfgB = await fetchTokenConfig(c, o.programId, B);
+          const listed = [...cfg.config.activeAttesters, ...(cfgB?.config.activeAttesters ?? [])].map((a) => a.key.toBase58());
+          const local = attesters.map((k) => ({ publicKey: k.publicKey, signature: signAttestation(k.secretKey, att.message) }));
+          const extra = cosignatureEntries(att.message, i.cosignatures, listed, local.map((l) => l.publicKey.toBase58()));
+          if (extra.length) verifyIx = ed25519SharedMessageInstruction(att.message, [...local, ...extra]);
+        }
+        return sign([verifyIx, submitPairResultIx({ programId: o.programId, payer: payer.publicKey, mintA: A, mintB: B, recordDate: i.recordDate, winner, sourceUrlHash: src, ...(i.proofHash ? { proofHash: i.proofHash } : {}) })]);
       },
       async buildForward(i: { loserMint: string; recordDate: number }) {
         const payer = await need();

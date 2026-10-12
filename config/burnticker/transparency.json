@@ -225,7 +225,7 @@
     {
       "id": "switchboard-down",
       "status": "not available",
-      "text": "Switchboard Technology Labs ended all its oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. Two replacements are planned, and neither is live. One is a Reclaim zkTLS proof of the source's response, posted by a relayer key. The other is a second person running the reader on another machine. Either one, or both, may be used. One operator attester is configured, and no independent second attester is live. Who runs one, and when, is an open decision for the owner."
+      "text": "Switchboard Technology Labs ended all its oracle services on 2026-09-25. The Switchboard attester in this code is built against the pinned SDK and cannot run live. Two replacements are planned, and neither is live. One is a Reclaim zkTLS proof of the source's response, posted by a relayer key. The other is a second person running the reader on another machine. Either one, or both, may be used. One operator attester is configured, and no independent second attester is live. The second-person route is now built in the repository as a signer service that checks each reading on its own host and signs only when it agrees (docs/burnticker/SIGNER-TWO.md). No host, key or proposal for it exists yet. The Reclaim route was read and set aside, because Reclaim's keys cannot sign what the program checks. Who runs the second signer, and when, is an open decision for the owner."
     },
     {
       "id": "kalshi-terms",

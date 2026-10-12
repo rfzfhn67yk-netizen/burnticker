@@ -43,3 +43,35 @@ test("report-only, not imported by the live Caddyfile; the cache proposal keeps 
   assert.doesNotMatch(revalidate, /\.json|\/t\/|status|burns|receipts/, "status and receipts are never cached");
   assert.equal(/@fresh not path ([^\n]+)/.exec(proposal)![1], revalidate, "everything not revalidated stays no-store");
 });
+
+// OPS-2 (2026-10-12): the proposal reviewed against the rebuilt site — the GeckoTerminal chart iframe, Solana Mobile Wallet Adapter's
+// localhost websocket, arbitrary https creator images, and the static subdomains' cross-origin mark image.
+test("the app policy frames the GeckoTerminal chart (and nothing frames the site), allows the Android wallet's localhost socket and https images", () => {
+  const p = policy("csp_report_only_app");
+  const embed = /embedUrl: `(https:\/\/[^/]+)\//.exec(read("src/lib/burnticker/market.ts"));
+  assert.ok(embed, "market.ts still builds a GeckoTerminal embed URL");
+  assert.deepEqual(directive(p, "frame-src"), [embed![1]]);
+  for (const page of ["src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/p/[pairId]/page.tsx"]) assert.match(read(page), /<iframe [^>]*src=\{m\??\.chart\.embedUrl\}/, page);
+  assert.ok(directive(p, "connect-src").includes("ws://localhost:*"), "Solana Mobile Wallet Adapter (local association)");
+  assert.ok(fs.readFileSync(path.join(ROOT, "node_modules/@solana/wallet-adapter-react/lib/esm/WalletProvider.js"), "utf8").includes("SolanaMobileWalletAdapter"), "the adapter still bundles the mobile wallet");
+  assert.ok(directive(p, "img-src").includes("https:"), "creator images are arbitrary https URLs (CoinThumb)");
+  assert.deepEqual(directive(p, "frame-ancestors"), ["'none'"]);
+  assert.ok(!directive(p, "style-src").includes("https://fonts.googleapis.com"), "the wallet modal's Google Fonts import stays blocked: the site self-hosts its fonts");
+});
+
+test("the static policy allows every absolute image the static pages load (the mark from the apex on the status and $DEFICIT hosts)", () => {
+  const img = directive(policy("csp_report_only_static"), "img-src");
+  for (const f of ["site/deficit/index.html", "site/burnticker/index.html", "site/burnticker/status/index.html", "site/burnticker/fallback/index.html", "site/burnticker/whitepaper.html"]) {
+    for (const m of read(f).matchAll(/<img[^>]*\ssrc="(https:\/\/[^"/]+)/g)) assert.ok(img.includes(m[1]), `${f}: ${m[1]}`);
+  }
+  assert.deepEqual(directive(policy("csp_report_only_static"), "frame-src"), ["'none'"]);
+});
+
+test("the Cloudflare proposal trusts exactly the ranges the limiter trusts, and is not imported by the live Caddyfile", async () => {
+  const { CLOUDFLARE_RANGES } = await import("@/lib/burnticker/api/clientIp");
+  const cf = read("deploy/caddy/cloudflare.proposed.caddy");
+  const listed = /trusted_proxies static ([^\n]+)/.exec(cf)![1].trim().split(/\s+/);
+  assert.deepEqual([...listed].sort(), [...CLOUDFLARE_RANGES].sort());
+  assert.match(cf, /client_ip_headers CF-Connecting-IP/);
+  assert.doesNotMatch(read("deploy/caddy/Caddyfile"), /trusted_proxies|client_ip_headers/, "the owner applies it on the host");
+});

@@ -16,6 +16,8 @@ import { openLedger } from "../src/lib/burnKeeper/ledger.ts";
 import { ingest, type KeeperCtx } from "../src/lib/burnKeeper/cycle.ts";
 import { executeProgramPending, WAIT_RETRY_MS } from "../src/lib/burnKeeper/programChain.ts";
 import { solanaProgramPort } from "../src/lib/burnKeeper/programAdapter.ts";
+import { decideCosign, memoryJournal, type SignerDeps } from "../src/lib/burnticker/attesters/cosignSigner.ts";
+import type { CosignRequest } from "../src/lib/burnticker/attesters/cosign.ts";
 import { buildBurnsJson, buildStatus } from "../src/lib/burnKeeper/statusPage.ts";
 import { rulesFromText, usdToCents, type LoadedRules } from "../src/lib/burnKeeper/rules.ts";
 import type { DebtReading } from "../src/lib/burnKeeper/feeds/treasury.ts";
@@ -420,6 +422,40 @@ describe("burn_receipts on a local validator (TypeScript client end to end)", { 
     const rd = (await fetchReading(connection, PID, configPda(PID, mint.publicKey), 20260902))!;
     assert.equal(rd.signers_mask, 0b11, "both local keys counted");
     assert.equal(rd.burned, B(2_100_000) * TOKEN);
+  });
+
+  // signer-2 (2026-10-12): the keeper holds ONE key; the second key lives with the second signer, which recomputes each reading (here
+  // from the same two Treasury rows) and co-signs only on agreement — the keeper carries its signature in the one Ed25519 instruction.
+  test("KEEPER + SECOND SIGNER, quorum 2: the co-signed readings land with both bits set; a disagreement holds the day and sends nothing", async () => {
+    const loaded = rulesFromText(RULES_TEXT.replace('"mode": "buyback"', '"mode": "vault"').replace('"source": "fee-pool-buyback"', '"source": "vault-only"').replace('"version": "v2"', '"version": "v1"'));
+    const mint = Keypair.generate(), k1 = Keypair.generate(), k2 = Keypair.generate();
+    await airdrop(k1.publicKey, 5);
+    await initToken(mint, [k1, k2], rule({ mode: 1, fraction_per_unit_bps: 0, slippage_bps: 0, max_twap_deviation_bps: 0, twap_window_secs: 0, floor_lamports: B(0), reserve_lamports: B(0), tokens_per_unit: B(100_000) * TOKEN, vault_allocation: B(0) }), Buffer.from(loaded.sha256, "hex"), 2);
+    await createMint(mint, payer.publicKey);
+    const vault = await ata(configPda(PID, mint.publicKey), mint.publicKey);
+    await send([ixMintTo(mint.publicKey, vault, payer.publicKey, B(5_000_000) * TOKEN), ixRevokeMint(mint.publicKey, payer.publicKey)], [payer]);
+    const rows = [R("2026-09-01", "40273000000000.00"), R("2026-09-02", "40294000000000.00"), R("2026-09-03", "40300000000000.00")];
+    let signerRows = rows;
+    const signer: SignerDeps = {
+      programId: PID.toBase58(), genesis: LOCALNET_GENESIS_TAG, secretKey: k2.secretKey,
+      coin: async (m) => (m === mint.publicKey.toBase58() ? { mint: m, ticker: loaded.rules.ticker, kind: "debt", rulesText: loaded.text, baselineAt: "2026-09-02T20:00:00Z" } : null),
+      readings: async () => [], debtRows: async (from) => signerRows.filter((r) => r.recordDate >= from), journal: memoryJournal(), now: () => Date.now(), log: () => {},
+      chain: async (m) => { const r = await fetchTokenConfig(connection, PID, new PublicKey(m)); if (!r) return null; const c = r.config; return { genesis: c.cluster_genesis.toBase58(), programId: PID.toBase58(), rulesSha256: Buffer.from(c.rules_sha256).toString("hex"), feedId: c.feedId, valueDecimals: c.rule.value_decimals, hasBaseline: c.has_baseline, lastRecordDate: c.last_record_date, attesters: c.activeAttesters.map((a) => a.key.toBase58()) }; },
+    };
+    const ctx = { ...keeperCtx(loaded), cosigner: { cosign: (req: CosignRequest) => decideCosign(signer, JSON.parse(JSON.stringify(req))) } };
+    ingest(ctx, { readings: rows.slice(0, 2), refusals: [] });
+    const port = solanaProgramPort({ connection, programId: PID, mint: mint.publicKey, cluster: "localnet", payer: k1, attesters: [k1] });
+    const rep = await executeProgramPending(ctx, port);
+    assert.deepEqual(rep.readings.map((r) => [r.recordDate, r.outcome, r.units]), [["2026-09-01", "submitted", 0], ["2026-09-02", "submitted", 21]], JSON.stringify(rep.readings));
+    const rd = (await fetchReading(connection, PID, configPda(PID, mint.publicKey), 20260902))!;
+    assert.equal(rd.signers_mask, 0b11, "the keeper's key and the second signer's key both counted");
+    // The signer sees another amount for 09-03: held, nothing sent, the chain still ends at 09-02.
+    signerRows = [...rows.slice(0, 2), R("2026-09-03", "40300000000000.01")];
+    ingest(ctx, { readings: rows.slice(2), refusals: [] });
+    const rep2 = await executeProgramPending(ctx, port);
+    assert.ok(rep2.readings.some((r) => r.recordDate === "2026-09-03" && r.outcome === "held"), JSON.stringify(rep2.readings));
+    assert.equal((await fetchTokenConfig(connection, PID, mint.publicKey))!.config.last_record_date, 20260902);
+    assert.equal(await fetchReading(connection, PID, configPda(PID, mint.publicKey), 20260903), null);
   });
 
   test("ADMIN CLI (scripts/burnreceipts-admin.mts): initialize-token dry run decodes the instruction, prints the pinned rules sha and the resulting TokenConfig; --send with test key files creates it; verify-platform-pins passes and redacts the RPC", async () => {

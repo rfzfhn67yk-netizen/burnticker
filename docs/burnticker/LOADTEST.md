@@ -60,6 +60,10 @@ Not cached anywhere: POSTs (Cloudflare never caches them), `/api/burnticker/*` o
 
 ### Finding: the API's per-client limiter sees Cloudflare, not the client
 
+**Fixed in code 2026-10-12 (ops-2):** `src/lib/burnticker/api/clientIp.ts` keys on `CF-Connecting-IP` when the right-most hop is a
+Cloudflare edge (published ranges), else on the socket address; tests in `test/burntickerClientIp.test.ts`; cut-over steps in
+`docs/burnticker/OPS-EDGE.md`. The text below is the original finding.
+
 `src/lib/burnticker/api/http.ts` keys the rate limit on the right-most `X-Forwarded-For` hop — the address Caddy itself appends. Behind
 Cloudflare that is the **Cloudflare edge's** address, so every visitor routed through the same edge shares one bucket: on launch day a
 popular edge would exhaust the heavy bucket (20 per minute: search, back-tests, the verifier) for everyone behind it. Fix (not made

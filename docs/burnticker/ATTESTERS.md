@@ -128,12 +128,18 @@ The trust page shows, per coin, the number of attesters, the first characters of
 
 ## What is not built (read before proposing)
 
-- **The keeper does not collect an external attester's signature yet.** It signs `submit_reading` with the keys it holds; there is
-  no intake for your signature. Because adding your key raises the quorum to 2 (and it never comes down), a coin with your key would
-  wait for a reading only you and the keeper together can sign — its readings (and burns) would stop until that intake exists. Late,
-  never lost: settlements wait and are counted when a reading lands. **The operator will not put a proposal that adds a key to the
-  vault until the intake ships and is tested on devnet.** Until then, use `read --rpc` as an independent watchdog: it needs no key on
-  the coin and catches a wrong reading the day it lands.
+- **The keeper now collects a second signer's signature, and no second signer is running yet.** Built 2026-10-12: with
+  `BURNTICKER_COSIGNER_URL` set, both keepers send each reading to a signer service (`scripts/burnticker-signer.mts`,
+  [SIGNER-TWO.md](SIGNER-TWO.md)) that re-reads the source on its own host and signs only when its bytes match. The keeper puts that
+  signature in the same Ed25519SigVerify instruction, and a disagreement holds the reading with an alert. It is tested on the in-memory
+  program and on a local validator, and not yet on devnet. It is wired for the operator's own second host. A community key would run the
+  same service, and the keeper takes one second signer today. Adding a key still raises the quorum to 2 for good, so a coin with your key
+  waits for every reading you do not co-sign. Late, never lost. **The operator will not put a proposal that adds a key to the vault until
+  that key's signer has co-signed in shadow and the change is tested on devnet.** Until then, use `read --rpc` as an independent watchdog:
+  it needs no key on the coin and catches a wrong reading the day it lands. The rollout for the operator's own second signer is in
+  [SIGNER-TWO-ROLLOUT.md](SIGNER-TWO-ROLLOUT.md).
+- The signer does not check rivalry-pair coins, pair results, Burn Derby coins or the end-of-rule clock days yet. For those it answers
+  that it cannot check, and a coin that needs its signature waits.
 - The keeper's own key and the standby keeper's key (runbook "Keeper redundancy") are added the same way, under the same rules.
 
 ## If your reading and the chain disagree

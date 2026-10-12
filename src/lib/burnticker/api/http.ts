@@ -1,11 +1,13 @@
 import { isSameOrigin } from "@/lib/sameOrigin";
 import { endpoint, RATE_LIMITS, API_VERSION, type Bucket } from "@/lib/burnticker/api/spec";
+import { clientKeyFromHeaders } from "@/lib/burnticker/api/clientIp";
 
 /**
  * THE PUBLIC API'S HTTP DISCIPLINE (2026-10-09). One wrapper every v1 route goes through:
  *
  *   rate limit   a per-client token bucket per class (read / heavy / write, sizes in spec.ts), keyed by the right-most X-Forwarded-For
- *                hop (the one Caddy itself appends; a client cannot forge it), else X-Real-IP, else one shared "direct" bucket. 429 with
+ *                hop (the one Caddy itself appends; a client cannot forge it), else X-Real-IP, else one shared "direct" bucket; when that
+ *                hop is a Cloudflare edge, by the visitor's CF-Connecting-IP (clientIp.ts; ops-2 2026-10-12). 429 with
  *                Retry-After and RateLimit-* headers. In memory: one Next process on one VPS (docs/burnticker/deploy.md).
  *   POST         the repo's cross-site refusal (isSameOrigin, checked before the body is read) + Content-Type application/json (a
  *                browser cannot send that cross-site without a preflight, and no route answers one). No auth, no accounts: POST
@@ -48,12 +50,12 @@ export class RateLimiter {
 
 export const limiter = new RateLimiter();
 
-/** The client a request is charged to: the right-most X-Forwarded-For hop (appended by our own Caddy), else X-Real-IP. */
+/**
+ * The client a request is charged to: the right-most X-Forwarded-For hop (appended by our own Caddy), else X-Real-IP; when that hop is
+ * a Cloudflare edge (its published ranges), the visitor's CF-Connecting-IP instead; IPv6 per /64. Rules and reasons: ./clientIp.ts.
+ */
 export function clientKey(req: Request): string {
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) { const hops = fwd.split(",").map((s) => s.trim()).filter(Boolean); if (hops.length) return hops[hops.length - 1]; }
-  const real = req.headers.get("x-real-ip");
-  return real ? real.trim() : "direct";
+  return clientKeyFromHeaders(req.headers);
 }
 
 const json = (r: ApiResult, extra: Record<string, string>): Response =>

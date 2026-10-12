@@ -34,6 +34,8 @@ src/app/burnticker
 src/app/api/burnticker
 config/burnticker
 scripts/burnticker-*.mts
+# the operator statement's self-contained verifier (ops-2, 2026-10-12): no repository code, anyone can run it
+scripts/burnticker-verify-statement.mjs
 scripts/whitepaper-html.mjs
 
 # --- the public SDK for bots (@burnticker/sdk) and the manifest of the repo files it imports (kept current by test/burntickerSdkLeak.test.ts;
@@ -86,6 +88,8 @@ scripts/service/run-burnticker-keeper.sh
 scripts/service/run-burnticker-audit.sh
 scripts/service/run-burnticker-clonewatch.sh
 scripts/ops/deploy-sites.sh
+scripts/ops/keeper-status-check.sh
+scripts/ops/probe-burnticker.sh
 scripts/ops/install-burnticker-units.sh
 scripts/ops/loadtest.sh
 scripts/ops/loadtest.mjs
@@ -108,6 +112,7 @@ scripts/ops/publish-public-repo.sh
 scripts/ops/public-repo-lib.mjs
 scripts/ops/verify-evidence-signatures.mjs
 scripts/ops/verified-build.sh
+scripts/ops/reproducible-build-host.sh
 public/.well-known/burnticker.json
 test/fixtures/burnticker-trustpack/**
 test/fixtures/burnticker-season/**

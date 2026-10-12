@@ -315,6 +315,8 @@ wind-downs and retired coins with their last sweep, the latest snapshot, program
 page that renders it is `site/burnticker/status/index.html` (shipped by `sh scripts/ops/deploy-sites.sh --pages-only`, and by every
 `--publish-only` run of the timer). Served at `https://status.burnticker.com/` (Caddy site block; **owner: add the DNS record `A status
 → the Burnticker VPS`, grey cloud until the certificate is issued**) and at `https://burnticker.com/status/`.
+When it shows "status.json: HTTP 404", the keeper has not written the file or the copy failed: `docs/burnticker/OPS-EDGE.md`
+section 1 walks the chain (`sh scripts/ops/probe-burnticker.sh --box` on the host), and section 2 sets up the uptime monitors.
 
 ### Keeper redundancy (leader / standby)
 
@@ -381,8 +383,25 @@ public status.json>`. Tunables: `BURNTICKER_TAKEOVER_MISSED` (default 5), `BURNT
 ## Signing the operator statement
 
 (Moved here from the public operator page on 2026-10-11, review 2 §2: visitors see the "not signed yet" fact and the text; the steps are
-for the operator.) Sign the exact text in `config/burnticker/operator.json` → `signedMessage.message`, with `{PUBKEY}` and `{DATE}` filled
-in, as a raw message from the mainnet developer fee wallet: Phantom does not expose message signing in its settings, so use any dapp's
-`signMessage`, or `solana sign-offchain-message` with the CLI. Paste the base58 signature into `signedMessage.signature`, set
-`signedMessage.status` to the date, regenerate the well-known copies (`scripts/burnticker-trustpack.mts well-known --write`) and run the
-trust-pack tests. GET /api/burnticker/v1/operator then verifies it with ed25519 and the operator page shows ✓ (or ✗ with the reason).
+for the operator. Rewritten 2026-10-12, ops-2.) The text is `config/burnticker/operator.json` → `signedMessage.message` (line 87): it
+names the two program ids, the Squads vault and who holds its keys, the keeper key, the contact address and the never-acquire rule, and
+no name. The signer is the mainnet developer fee wallet `8cwwy895…bo5` (`signerRole: dev-fee`). The script fills `{PUBKEY}` and `{DATE}`,
+checks the signature exactly as the site does, and writes the three single-line edits (status, text, signature). Run it on the Mac from
+the repository; it sends nothing anywhere.
+
+```sh
+R="node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/alias-hook.mjs"
+# The developer fee wallet is a hardware wallet: it can sign only Solana off-chain messages, which the site accepts.
+MSG="$($R scripts/burnticker-sign-statement.mts --date 2026-10-14 --print-text)"
+solana sign-offchain-message -k 'usb://ledger?key=0' "$MSG"      # pick the ?key= index whose address is 8cwwy895…; prints the signature
+$R scripts/burnticker-sign-statement.mts --date 2026-10-14 --signature <the printed signature> --write
+# Or, with a key in a Solana CLI keypair file (it must be the signer wallet, or name another role with --role):
+$R scripts/burnticker-sign-statement.mts --date 2026-10-14 --keypair <path to keypair.json> --write
+# Then:
+$R scripts/burnticker-trustpack.mts well-known --write && npm test
+```
+
+`solana-keygen pubkey 'usb://ledger?key=0'` shows which index is the fee wallet. A wrong key or a signature over other text is refused
+and nothing is written. After the ship, GET /api/burnticker/v1/operator verifies it with ed25519 and the operator page shows ✓ (or ✗ with
+the reason). Anyone can check it without trusting this site's code: `node scripts/burnticker-verify-statement.mjs https://burnticker.com`
+(the trust page lists the command). Then item 5 in `docs/burnticker/TODO-OWNER.md` moves to "Already resolved".

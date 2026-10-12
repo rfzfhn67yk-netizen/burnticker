@@ -45,6 +45,7 @@ import { loadRules, solToLamports, tokensToRaw, rawToTokens, type LoadedRules } 
 import { fetchDebtHistoryRows, fetchDebtToPenny, validateDebtResponse, type FeedValidation } from "../src/lib/burnKeeper/feeds/treasury.ts";
 import { openLedger, type Ledger } from "../src/lib/burnKeeper/ledger.ts";
 import { executePending, feedKey, ingest, tokenKey, type BuybackPort, type ChainPort, type KeeperCtx } from "../src/lib/burnKeeper/cycle.ts";
+import { cosignerFromEnv } from "../src/lib/burnticker/attesters/cosign.ts";
 import { associatedTokenAddress, clusterOfGenesis, clusterRefusal, explorerUrl, type Cluster } from "../src/lib/burnKeeper/solana.ts";
 import { solanaBuyback, solanaChain, type SolanaChain } from "../src/lib/burnKeeper/solanaChain.ts";
 import { cpmmProgramFor, launchLabProgramFor } from "../src/lib/burnKeeper/launchlab.ts";
@@ -336,7 +337,9 @@ async function publish(rt: Runtime, now: number): Promise<void> {
   publishSite(PUBLISH_DIR, { "status.json": toJson(status), "burns.json": toJson(burns), "rules.json": loaded.text, "index.html": renderIndexHtml(status, burns, input.readings.map((r) => ({ recordDate: r.recordDate, amount: r.amount }))) });
 }
 
-const ctx: KeeperCtx = { ledger, loaded, log, now: () => Date.now(), dryRun: DRY, attester: null };
+const ctx: KeeperCtx = { ledger, loaded, log, now: () => Date.now(), dryRun: DRY, attester: null, cosigner: cosignerFromEnv(process.env) };
+// signer-2 (2026-10-12): unset BURNTICKER_COSIGNER_URL = no cosigner, nothing changes.
+if (ctx.cosigner) log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim()} (each reading is co-signed there or held)`);
 
 async function cycle(rt: Runtime, pollNow: boolean): Promise<void> {
   const now = Date.now();

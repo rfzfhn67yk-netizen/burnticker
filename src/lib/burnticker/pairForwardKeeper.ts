@@ -1,4 +1,6 @@
 import { formatDate } from "@/lib/burnReceipts/math";
+import { checkCosignature, type Cosigner } from "@/lib/burnticker/attesters/cosign";
+import type { Cosignature } from "@/lib/burnKeeper/programPort";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import type { BurnProgramClient } from "@/lib/burnticker/program";
 import type { PairRow, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
@@ -82,7 +84,7 @@ export function attestedAt(reg: Registry, mint: string, D: number): number | nul
 }
 
 /** Ensures the PairResult for D exists (submits it when missing). Returns it, or the reason it is not there yet. */
-export async function ensurePairResult(ctx: PairCtx, reg: Registry, D: number, o: { now: number; dryRun: boolean; log: (s: string) => void; winnerReading?: () => Promise<"exists" | "submitted" | "cannot" | { waiting: string }> }): Promise<{ result: PairResultView; fresh?: true } | { waiting: string }> {
+export async function ensurePairResult(ctx: PairCtx, reg: Registry, D: number, o: { now: number; dryRun: boolean; log: (s: string) => void; winnerReading?: () => Promise<"exists" | "submitted" | "cannot" | { waiting: string }>; /** signer-2: the second signer (multiKeeper's deps.cosigner). */ cosigner?: Cosigner }): Promise<{ result: PairResultView; fresh?: true } | { waiting: string }> {
   const have = await ctx.port.result(D);
   const rows = reg.receiptsForReading(ctx.me.mint, D);
   const winner = periodWinner(rows, ctx.me.mint, ctx.other.mint, reg.receiptsForReading(ctx.other.mint, D));
@@ -106,7 +108,22 @@ export async function ensurePairResult(ctx: PairCtx, reg: Registry, D: number, o
     }
   }
   if (o.dryRun) { o.log(`  [dry-run] pair ${ctx.pair.pairId} ${formatDate(D)}: would submit_pair_result winner=${name(winner)}`); return { waiting: "dry run" }; }
-  const tx = await ctx.port.buildSubmitResult({ recordDate: D, winner, sourceUrl: `burnticker://pair/${ctx.pair.pairId}/${formatDate(D)}?winner=${winner ?? "draw"}` });
+  const sourceUrl = `burnticker://pair/${ctx.pair.pairId}/${formatDate(D)}?winner=${winner ?? "draw"}`;
+  // signer-2: the second signer is asked first; a disagreement is an alert and no result. Without its signature the program decides
+  // (QuorumNotMet at quorum 2 is a wait below, as before).
+  let cosignatures: Cosignature[] = [];
+  if (o.cosigner && ctx.port.resultMessage) {
+    const m = await ctx.port.resultMessage({ recordDate: D, winner, sourceUrl });
+    const answer = await o.cosigner.cosign({ v: 1, kind: "pair", mintA: ctx.port.mintA, mintB: ctx.port.mintB, programId: m.programId, genesis: m.genesis, recordDate: formatDate(D), winner, sourceUrl, proofHash: "0".repeat(64), message: m.message });
+    const r = checkCosignature(answer, m.message, []);
+    if (r.kind === "disagree") {
+      alert(reg, o.now, o.log, "cosigner-disagree", alertKey("cosigner-disagree", ctx.pair.pairId, D), `pair ${ctx.pair.pairId} ${formatDate(D)}: the second signer did not agree with the keeper's result (${name(winner)}), so no result was sent. ${r.why}`, { pairId: ctx.pair.pairId, recordDate: D });
+      return { waiting: "Held. The second signer did not agree with this result, so none is sent until the two agree." };
+    }
+    if (r.kind === "signed") cosignatures = [r.cosignature];
+    else o.log(`  [cosign] pair ${ctx.pair.pairId} ${formatDate(D)}: no second signature (${r.why})`);
+  }
+  const tx = await ctx.port.buildSubmitResult({ recordDate: D, winner, sourceUrl, ...(cosignatures.length ? { cosignatures } : {}) });
   const sim = await ctx.port.simulate(tx.raw);
   // PairResultNotServable (6090) now means only "a reading for D is missing, or the loser's reading for D is already processed": alert
   // and wait (no pool condition; a dead side makes the forward 0 lamports). Never post a draw that was not the result.

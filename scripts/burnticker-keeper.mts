@@ -39,6 +39,7 @@ import { ProgramBurnClient } from "../src/lib/burnticker/programClient.ts";
 import { clusterOfGenesis } from "../src/lib/burnKeeper/solana.ts";
 import { SOL_MINT, usdPrice } from "../src/lib/burnKeeper/jupiterSwap.ts";
 import type { KeeperDeps } from "../src/lib/burnticker/multiKeeper.ts";
+import { cosignerFromEnv } from "../src/lib/burnticker/attesters/cosign.ts";
 import { lpLockBlock } from "../src/lib/burnticker/lpLockPage.ts";
 import { buildReceiptsJson, buildTokenStatus, lifecycleFrom, pairCounterpartFrom, publishPlatformIndex, publishTokenSite, type TokenStatusJson } from "../src/lib/burnticker/tokenPage.ts";
 import { loadPowersRegister, operatorPowersSummary, readAudit } from "../src/lib/burnticker/trust.ts";
@@ -110,6 +111,9 @@ const derbyPools = connectionPoolPort(new Connection(process.env.BURNTICKER_DERB
 const derby = new DerbyAdapter({ registry, hermes: process.env.BURNTICKER_PYTH_API_KEY?.trim() ? HermesClient.fromEnv(process.env) : null, pools: derbyPools, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), log,
   alert: (key, text) => { registry.recordAlert({ kind: "derby-withheld", key, text, meta: null }); } });
 const deps: KeeperDeps = { registry, program, oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, derby: { sample: (t) => derby.sample(t), plan: () => derby.plan(), ended: (t) => derby.ended(t) }, attester, log, now: () => Date.now(), dryRun: DRY || fs.existsSync(PAUSE), kalshiEnabled: kalshiEnabled(process.env) };
+// signer-2 (2026-10-12): the second reading signer on its own host — unset BURNTICKER_COSIGNER_URL = no cosigner, nothing changes.
+const cosigner = cosignerFromEnv(process.env);
+if (cosigner) { deps.cosigner = cosigner; log(`second signer: ${process.env.BURNTICKER_COSIGNER_URL?.trim().replace(/\/\/[^/@]*@/, "//")} (each reading is co-signed there or held)`); }
 const operator = operatorPowersSummary(loadPowersRegister());
 const KALSHI_ON = kalshiEnabled(process.env), POLY_DISCOVERY = polymarketDiscoveryEnabled(process.env);
 /** Read-only account reads for the coin cards (curve progress, top holders); the same RPC, no key. */

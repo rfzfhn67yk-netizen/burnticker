@@ -303,7 +303,8 @@ export function programFacts(env: Readonly<Record<string, string | undefined>> =
       : ["# This site is not connected to the program. Where it is deployed, and the hashes read back from the chain, are listed above. They come from config/burnticker/verified-build.json and docs/burnticker/VERIFIED-BUILD.md."],
   };
   // every coin's metadata, whatever the program's state (pin.ts; verify.ts verifyPinnedMetadata does the same three checks)
-  out.verify.push("metadata: curl -s <coin>/status.json | jq .pinned   # metadataUri (arweave), metadataSha256, expectedDescription", "curl -s <pinned.metadataUri> | sha256sum   # must equal pinned.metadataSha256", "curl -s <pinned.metadataUri> | jq -r .description   # must equal pinned.expectedDescription byte for byte (the generated text)");
+  out.verify.push("metadata: curl -s <coin>/status.json | jq .pinned   # metadataUri (arweave), metadataSha256, expectedDescription", "curl -s <pinned.metadataUri> | sha256sum   # must equal pinned.metadataSha256", "curl -s <pinned.metadataUri> | jq -r .description   # must equal pinned.expectedDescription byte for byte (the generated text)",
+    "operator statement: node scripts/burnticker-verify-statement.mjs https://burnticker.com   # checks the signed statement on /burnticker/operator with ed25519, using no code from this site");
   return out;
 }
 

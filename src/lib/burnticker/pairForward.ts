@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
+import type { ConfirmOutcome, Cosignature, SignedTx } from "@/lib/burnKeeper/programPort";
 import type { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
 import { buybackSpend, formatDate, spendablePool } from "@/lib/burnReceipts/math";
 import { OUTCOME_FORWARDED as PROGRAM_OUTCOME_FORWARDED, PAIR_ATTESTATION_DOMAIN, PAIRING_WINDOW_SECS as PROGRAM_PAIRING_WINDOW_SECS, PAIR_RESULT_GRACE_SECS as PROGRAM_PAIR_RESULT_GRACE_SECS, parseForwardMemo as programParseForwardMemo } from "@/lib/burnReceipts/pairs";
@@ -155,7 +155,9 @@ export interface PairForwardPort {
   links(): Promise<PairLinks>;
   result(recordDate: number): Promise<PairResultView | null>;
   /** submit_pair_result: both coins' quorums sign the same message (on devnet the keeper is both sides' attester). Signed, not sent. */
-  buildSubmitResult(o: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array }): Promise<SignedTx>;
+  buildSubmitResult(o: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array; /** signer-2: signatures made on another host over the same message (checked; unlisted keys dropped). */ cosignatures?: readonly Cosignature[] }): Promise<SignedTx>;
+  /** signer-2: the exact pair-result message (UTF-8) and what it binds, so a second signer can be asked to sign it. Optional. */
+  resultMessage?(o: { recordDate: number; winner: string | null; sourceUrl: string; proofHash?: Uint8Array }): Promise<{ message: string; programId: string; genesis: string }>;
   /** forward_to_winner(record_date) for the loser (creates the winner fee PDA's WSOL ATA idempotently first). Signed, not sent. */
   buildForward(o: { loserMint: string; recordDate: number }): Promise<SignedTx>;
   simulate(raw: Uint8Array): Promise<{ err: string | null; logs: string[] }>;
@@ -243,7 +245,9 @@ export class FakePairForwardPort implements PairForwardPort {
   async buildUnlink(o: { pair: string | null }) { const tx = this.sig("unlink"); this.built.set(tx.signature, { kind: "unlink", pair: o.pair }); return tx; }
   async result(D: number) { return this.results.get(D) ?? null; }
   private sig(kind: string): SignedTx { const signature = fakeSig(`pair|${this.mintA}|${this.mintB}|${kind}|${++this.n}`); return { signature, raw: new TextEncoder().encode(signature), blockhash: `pbh${this.n}`, lastValidBlockHeight: 2_000 + this.n }; }
-  async buildSubmitResult(o: { recordDate: number; winner: string | null; sourceUrl?: string; proofHash?: Uint8Array }) { const tx = this.sig("result"); this.built.set(tx.signature, { kind: "result", recordDate: o.recordDate, winner: o.winner }); return tx; }
+  /** signer-2: the co-signatures each built pair result carried (tests). */
+  resultCosignatures = new Map<number, string[]>();
+  async buildSubmitResult(o: { recordDate: number; winner: string | null; sourceUrl?: string; proofHash?: Uint8Array; cosignatures?: readonly Cosignature[] }) { const tx = this.sig("result"); this.built.set(tx.signature, { kind: "result", recordDate: o.recordDate, winner: o.winner }); if (o.cosignatures?.length) this.resultCosignatures.set(o.recordDate, o.cosignatures.map((c) => c.key)); return tx; }
   async buildForward(o: { loserMint: string; recordDate: number }) { const tx = this.sig("forward"); this.built.set(tx.signature, { kind: "forward", loser: o.loserMint, recordDate: o.recordDate }); return tx; }
   private refusal(sig: string): string | null {
     const b = this.built.get(sig);

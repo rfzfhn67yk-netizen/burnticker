@@ -5,6 +5,8 @@ import { attesterHold, feedKey, resolveSent, tokenKey } from "@/lib/burnKeeper/c
 import { rowUrl } from "@/lib/burnKeeper/feeds/treasury";
 import { rawToTokens, type LoadedRules } from "@/lib/burnKeeper/rules";
 import { backoffMs } from "@/lib/burnKeeper/schedule";
+import { askCosigner } from "@/lib/burnticker/attesters/cosign";
+import type { ReadingInput } from "@/lib/burnKeeper/programPort";
 
 /**
  * THE KEEPER ON THE PROGRAM PATH (2026-10-10; docs/burnkeeper/README-execution.md). With BURNKEEPER_EXECUTION=program the keeper no
@@ -43,7 +45,7 @@ import { backoffMs } from "@/lib/burnKeeper/schedule";
 // The port
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-export type { AttesterView, ConfirmOutcome, CrankKind, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, SignedTx } from "@/lib/burnKeeper/programPort";
+export type { AttesterView, ConfirmOutcome, Cosignature, CrankKind, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
 
 /** Program refusals that mean "not now": the day waits (retried every WAIT_RETRY_MS), it is not an error and never counts as an attempt. */
 export const WAIT_REASONS: Record<string, string> = {
@@ -248,7 +250,8 @@ async function submitReadings(ctx: KeeperCtx, port: ProgramPort, cfg0: ProgramCo
       continue;
     }
     const mine = port.attesterKeys().filter((k) => cfg.attesters.some((a) => a.key === k));
-    if (mine.length < cfg.quorum) {
+    // signer-2: with a second signer configured, its listed key may make up the quorum (asked below, never in a dry run).
+    if (mine.length + (ctx.cosigner ? 1 : 0) < cfg.quorum) {
       const why = `quorum short: the program needs ${cfg.quorum} attester signature(s); this keeper holds ${mine.length} of the listed keys (${cfg.attesters.map((a) => a.key.slice(0, 8)).join(", ")}) — the reading waits for the other attester(s)`;
       ledger.setProgramReading({ token: T, feed: F, recordDate: r.recordDate, value: r.cents.toString(), signature: null, slot: null, status: "quorum-short", kind: null, units: null, error: why }, now);
       ctx.log(`  [attest] ${r.recordDate}: ${why}`);
@@ -265,7 +268,23 @@ async function submitReadings(ctx: KeeperCtx, port: ProgramPort, cfg0: ProgramCo
       }
     }
     if (ctx.dryRun) { ctx.log(`  [dry-run] ${r.recordDate}: would attest $${r.amount} (prev ${cfg.hasBaseline ? formatDate(cfg.lastRecordDate) : "none"}) and submit_reading`); rep.readings.push({ recordDate: r.recordDate, outcome: "dry-run" }); return cfg; }
-    const tx = await port.buildReading({ recordDate: D, prevDate: cfg.hasBaseline ? cfg.lastRecordDate : 0, value: r.cents, sourceUrl: rowUrl(r.recordDate), feedId: cfg.feedId, valueDecimals: cfg.valueDecimals });
+    const input: ReadingInput = { recordDate: D, prevDate: cfg.hasBaseline ? cfg.lastRecordDate : 0, value: r.cents, sourceUrl: rowUrl(r.recordDate), feedId: cfg.feedId, valueDecimals: cfg.valueDecimals };
+    const co = await askCosigner(ctx.cosigner, port, cfg, input, { ticker: loaded.rules.ticker, eventIds: [] }, ctx.log);
+    if (co.disagree) {
+      const why = `second signer: it worked out a different reading, so no reading is sent until the two agree. ${co.disagree}`;
+      ledger.setProgramReading({ token: T, feed: F, recordDate: r.recordDate, value: r.cents.toString(), signature: null, slot: null, status: "held", kind: null, units: null, error: why }, now);
+      ctx.log(`  [alert] cosigner-disagree ${r.recordDate}: ${why}`);
+      rep.readings.push({ recordDate: r.recordDate, outcome: "held", why });
+      return cfg;
+    }
+    if (mine.length + co.cosignatures.length < cfg.quorum) {
+      const why = `quorum short: the program needs ${cfg.quorum} attester signature(s); this keeper holds ${mine.length} and the second signer gave none${co.note ? ` (${co.note})` : ""} — the reading waits`;
+      ledger.setProgramReading({ token: T, feed: F, recordDate: r.recordDate, value: r.cents.toString(), signature: null, slot: null, status: "quorum-short", kind: null, units: null, error: why }, now);
+      ctx.log(`  [attest] ${r.recordDate}: ${why}`);
+      rep.readings.push({ recordDate: r.recordDate, outcome: "quorum-short", why });
+      return cfg;
+    }
+    const tx = await port.buildReading({ ...input, ...(co.cosignatures.length ? { cosignatures: co.cosignatures } : {}) });
     const sim = await port.simulate(tx.raw);
     if (sim.err) {
       const quorum = sim.err === "QuorumNotMet";
