@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { CARD_LABELS, CARD_MEANINGS, CARD_ROWS, NOT_READ, ageText, cardViewFromIndex, groupDigits, initialsOf, longDay, pctOfSupply, shortDay, type CardView } from "@/lib/burnticker/cardView";
-import { activityEvents, configuredRaiseSol, featuredCoins, homeData, homeStats, homeStatusLine, memoBurn, NO_EVENTS_LINE, UNAVAILABLE, type HomeCoin } from "@/lib/burnticker/home";
+import { activityEvents, featuredCoins, homeData, homeStats, homeStatusLine, memoBurn, NO_EVENTS_LINE, UNAVAILABLE, type HomeCoin } from "@/lib/burnticker/home";
 import { checkReceiptHref } from "@/lib/burnticker/coinPage";
 import os from "node:os";
 import path from "node:path";
@@ -34,7 +34,7 @@ const rowOrder = (src: string) => [...new Set([...src.matchAll(/data-row(?:=|", 
 
 describe("one card order (review item 5, brief rule 10; website-13: Claude site audit 2 item 7, ChatGPT audit 6 A10)", () => {
   test("the app's card and the static home's renderer print every row, in CARD_ROWS order, including market cap, holders and age", () => {
-    assert.deepEqual([...CARD_ROWS], ["image", "name", "ticker", "badge", "rule", "nextSettle", "curve", "mcap", "holders", "age", "burned", "receipt"]);
+    assert.deepEqual([...CARD_ROWS], ["image", "name", "ticker", "badge", "progress", "rule", "nextSettle", "curve", "mcap", "holders", "age", "burned", "receipt"]);
     const card = read("src/app/burnticker/_components/CoinCard.tsx");
     const view = card.slice(card.indexOf("export function ViewCard"), card.indexOf("export function SkeletonCard"));
     assert.deepEqual(rowOrder(view), [...CARD_ROWS]);
@@ -84,7 +84,8 @@ describe("the featured cards (review items 12 and 13; Codex review 5 F4)", () =>
     assert.match(f[0].note!, /rules are locked, and the coin is not created yet/);
     assert.deepEqual(f[0].mint, { address: "AJJ4XxCUYr8zzMWm8FYg3xh638LYAAApdNqWBqCK4oqj", label: "Reserved mint address (coin not created yet)" });
     assert.equal(f[0].receipt, null); assert.equal(f[0].burned.text, null, "before the create: a dash with a reason, not a claim"); assert.equal(f[0].href, DEFICIT_SITE);
-    assert.deepEqual([f[0].curve.raised, f[0].curve.of], [null, "85 SOL"]); assert.equal(configuredRaiseSol(), "85", "the configured raise (STANDARD_RAISE_LAMPORTS)");
+    // website-14 (§75): no curve before the create, so no raise either: never a typed 85
+    assert.deepEqual([f[0].curve.raised, f[0].curve.of], [null, null]); assert.doesNotMatch(JSON.stringify(f[0].curve), /85/);
     assert.doesNotMatch(JSON.stringify(f[0]), /solscan|explorer|raydium/i, "no mint link before the coin exists");
   });
   test("F4: after the create, the card merges the registry's state: burns, share of supply, curve, and its newest receipt's own check", () => {
@@ -105,7 +106,7 @@ describe("the featured cards (review items 12 and 13; Codex review 5 F4)", () =>
     }
   });
   test("$REHEARSAL: who would fill its curve and that nobody is asked to; the devnet coin's total and receipt from its confirmed evidence", () => {
-    assert.match(f[1].note!, /The operator does not trade it and asks nobody to\. It can only burn if outside buyers fill its curve to 85 SOL\./);
+    assert.match(f[1].note!, /The operator does not trade it and asks nobody to\. It can only burn if outside buyers fill its curve\./);
     assert.doesNotMatch(f[1].note!, /not for trading/); assert.equal(f[1].receipt, null); assert.equal(f[1].href, "/burnticker/trust#rehearsals");
     assert.equal(f[1].burned.text, null, "not read here: a dash with the operator's dated record as the reason");
     assert.match(read("src/app/burnticker/trust/page.tsx"), /id="rehearsals">Rehearsal coins</);
@@ -148,7 +149,7 @@ describe("the activity line (review item 4, brief rule 3; Codex review 5 F3): re
       assert.match(src, /noEvents/, `${f} prints the API's one line`); assert.doesNotMatch(code, /sample|mock|placeholder row/i, f);
     }
     const route = read("src/app/api/burnticker/home/route.ts");
-    assert.match(route, /homeData\(coins, process\.cwd\(\), now, index, status, siteLaunchState\(process[.]env, now\)\)/);
+    assert.match(route, /homeData\(coins, process\.cwd\(\), now, index, status, siteLaunchState\(process[.]env, now\), keeper, upcoming\)/);
     assert.match(route, /readOk: false/, "a coin whose page fails is marked unreadable, not dropped");
     assert.match(route, /catch \{ coins = null; \}/, "an unreadable registry is null, never an empty list");
   });

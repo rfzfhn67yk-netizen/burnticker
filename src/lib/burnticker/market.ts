@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { rawToTokens } from "@/lib/burnKeeper/rules";
-import { launchLabProgramFor, launchLabVault } from "@/lib/burnKeeper/launchlab";
+import { launchLabPoolId, launchLabProgramFor, launchLabVault } from "@/lib/burnKeeper/launchlab";
 import type { ChartJson, CurveJson, CurvePhase, HolderRow, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
 
 export type { ChartJson, CurveJson, CurvePhase, HolderRow, MarketJson, TradeLinks } from "@/lib/burnticker/pageTypes";
@@ -189,4 +189,24 @@ export async function readMarket(conn: MarketReader, i: { cluster: string; mint:
   const v: MarketInput = { pool, top, readAt: now, error: errors.length ? errors.join("; ") : null, poolError };
   cache.set(ck, { at: now, v });
   return v;
+}
+
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
+/**
+ * THE $DEFICIT KEEPER'S CURVE READ (website-14, LAUNCHPAD-PATH §75: every "85 SOL" reads the coin's own raise from its pool). One
+ * getAccountInfo of the coin's LaunchLab pool (the SOL-quoted PDA unless `poolId` names it), decoded with the same layout as the coin
+ * cards. Null when the cluster has no LaunchLab program, the account is missing or is not this mint's pool. Never throws.
+ */
+export async function readKeeperCurve(conn: Pick<MarketReader, "getAccountInfo">, i: { cluster: string; mint: string; poolId?: string | null }, now = Date.now()): Promise<{ phase: CurvePhase; raised: string; threshold: string; quote: string; progressPct: number; poolId: string; readAt: string } | null> {
+  try {
+    const program = launchLabProgramFor(i.cluster as "mainnet" | "devnet");
+    if (!program) return null;
+    const pool = i.poolId ? new PublicKey(i.poolId) : launchLabPoolId(program, new PublicKey(i.mint), new PublicKey(WSOL_MINT));
+    const acc = await conn.getAccountInfo(pool);
+    if (!acc || !acc.owner.equals(program)) return null;
+    const v = decodeLaunchLabPool(new Uint8Array(acc.data));
+    if (!v || v.mintA !== i.mint) return null;
+    const c = curveProgress(v, pool.toBase58());
+    return { phase: c.phase, raised: c.raised, threshold: c.threshold, quote: c.quote, progressPct: c.progressPct, poolId: c.poolId, readAt: new Date(now).toISOString() };
+  } catch { return null; }
 }

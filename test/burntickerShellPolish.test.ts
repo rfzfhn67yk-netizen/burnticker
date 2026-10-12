@@ -21,14 +21,14 @@ test("#12: the coins index is titled 'Coins · Burnticker' (a server page carryi
 });
 
 test("#14: the check page's instruction table is collapsed by default, below the verifier", () => {
-  const c = read("src/app/burnticker/check/page.tsx");
+  const c = read("src/app/burnticker/check/CheckClient.tsx");
   assert.match(c, /<details className="mt-2 text-xs" data-money-table><summary[^>]*>Show all \{c\.money\.length\} instructions of both programs/);
   assert.doesNotMatch(c, /data-money-table open/);
   assert.ok(c.indexOf('{verifierAt === "top" && <ReceiptVerifier') < c.indexOf("data-money-table"));
 });
 
 test("BT-14: no path-only repository reference left on the trust, check and operator pages' prose", () => {
-  for (const [f, path] of [["src/app/burnticker/trust/CoverageSection.tsx", "docs/burnticker/SETTLEMENT-COVERAGE.md"], ["src/app/burnticker/trust/page.tsx", "scripts/burnticker-audit.mts"], ["src/app/burnticker/operator/page.tsx", "docs/burnticker/TODO-OWNER.md"], ["src/app/burnticker/check/page.tsx", "docs/burnticker/CHECK-THIS-YOURSELF.md"], ["src/app/burnticker/check/page.tsx", "docs/burnticker/VERIFIED-BUILD.md"]]) {
+  for (const [f, path] of [["src/app/burnticker/trust/CoverageSection.tsx", "docs/burnticker/SETTLEMENT-COVERAGE.md"], ["src/app/burnticker/trust/page.tsx", "scripts/burnticker-audit.mts"], ["src/app/burnticker/operator/page.tsx", "docs/burnticker/TODO-OWNER.md"], ["src/app/burnticker/check/CheckClient.tsx", "docs/burnticker/CHECK-THIS-YOURSELF.md"], ["src/app/burnticker/check/CheckClient.tsx", "docs/burnticker/VERIFIED-BUILD.md"]]) {
     assert.ok(read(f).includes(`<RepoText text="${path}" />`), `${f}: ${path}`);
   }
   for (const f of ["src/app/burnticker/trust/page.tsx", "src/app/burnticker/trust/OpsSection.tsx"]) assert.doesNotMatch(read(f), /\/blob\/main\//, `${f} links a moving branch`);

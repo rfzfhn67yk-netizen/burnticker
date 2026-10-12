@@ -181,7 +181,8 @@ describe("Codex F1: the pre-wallet review comes from the venue the bundle route 
     assert.equal(main.review.signable, false); assert.equal(main.review.signing, main.review.typeReason);
     const one = buildLaunchReview({ rule: RULE, ticker: "BRONCOS", name: "Broncos" }, { env: { BURNTICKER_CLUSTER: "mainnet", BURNTICKER_THESPORTSDB_KEY: "k", [CREATOR_LAUNCHES_FLAG]: "1" } });
     assert.ok("review" in one); assert.equal(one.review.transactions.count, 1); assert.equal(one.review.recovery.length, 2);
-    assert.equal(one.review.prerequisiteLine, prerequisiteLineFor("launchlab")); assert.match(one.review.prerequisiteLine, new RegExp(`raise ${Number(LAUNCHLAB_RAISE_LAMPORTS) / 1e9} SOL`));
+    // website-14 (§75): no raise named = the default preset, LaunchLab's standard 85 SOL; the line names the coin's own raise
+    assert.equal(one.review.prerequisiteLine, prerequisiteLineFor("launchlab", "85")); assert.match(one.review.prerequisiteLine, new RegExp(`raise ${Number(LAUNCHLAB_RAISE_LAMPORTS) / 1e9} SOL`));
     assert.equal(one.review.signing, SIGNING_UNAVAILABLE, "today no launch can be signed here, and the review says so");
     assert.equal(one.review.budget, budgetLine("2%")); assert.match(one.review.budget, /burn budget/); assert.match(one.review.budget, /number of tokens burned varies/);
   });

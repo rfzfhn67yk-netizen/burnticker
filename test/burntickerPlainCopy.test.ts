@@ -125,7 +125,11 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   "templates.ts", "fieldHelp.ts", "glossary.ts", "safeguards.ts", "verificationStatus.ts", "landingDoors.ts", "fees.ts", "pairFundsFlow.ts", "deficitPrelaunch.ts",
   "creatorLaunches.ts", "launchAvailability.ts", "launchGateState.ts", "trust.ts", "tokenPage.ts", "verifyMint.ts", "leagues.ts", "seasons.ts", "lockFees.ts", "wizard.ts",
   // website-11 (2026-10-12): the coin page's order and rule facts; website-10: the shared shell's words, the home's featured cards and activity line, the card rows
-  "coinPage.ts", "siteNav.mjs", "home.ts", "cardView.ts"]
+  "coinPage.ts", "siteNav.mjs", "home.ts", "cardView.ts",
+  // website-14 (2026-10-12): the queued-units counter, the activity rows, next results, the progress strip, the walkthrough, the watchlist,
+  // the retirement facts, creator copy, share previews, the duplicate-rule notice and the graduation preset
+  "deficitQueueCore.mjs", "activity.ts", "upcoming.ts", "progress.ts", "burnWalkthrough.ts", "watchlist.ts", "retirementCopy.ts", "creatorCopy.ts",
+  "sharePreview.ts", "duplicateRule.ts", "raisePresets.ts"]
   .map((f) => `src/lib/burnticker/${f}`);
 
 describe("plain-English copy: no shorthand on any page (website-9)", () => {

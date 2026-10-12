@@ -2,16 +2,21 @@ import { NextResponse } from "next/server";
 import { platform, tokenPageData } from "@/lib/burnticker/server";
 import { buildPlatformIndex } from "@/lib/burnticker/tokenPage";
 import { readAudit } from "@/lib/burnticker/trust";
+import { readinessFromStatus, type Readiness } from "@/lib/burnticker/readiness";
 
 export const dynamic = "force-dynamic";
 
-/** The platform index: every token's status (from the registry + the program client), totals, the audit badge, and which pieces are stubs. */
+/**
+ * The platform index: every token's status (from the registry + the program client), totals, the audit badge, and which pieces are stubs.
+ * Since website-14 each token also carries `readiness` (readiness.ts, from its status and receipts), which the cards' progress strip reads.
+ */
 export async function GET() {
   const p = platform();
   const now = Date.now();
   const statuses = [];
-  for (const t of p.registry.tokens()) { try { statuses.push((await tokenPageData(p, t, now)).status); } catch { /* a token whose page fails is left out, not invented */ } }
+  const ready = new Map<string, Readiness>();
+  for (const t of p.registry.tokens()) { try { const d = await tokenPageData(p, t, now); statuses.push(d.status); ready.set(d.status.ticker, readinessFromStatus(d.status, d.receipts)); } catch { /* a token whose page fails is left out, not invented */ } }
   const audit = readAudit(p.publishDir);
   const index = buildPlatformIndex(statuses, now, audit ? { ok: audit.ok, ranAt: audit.ranAt, receipts: audit.receipts, mismatches: audit.mismatches.length, chainChecked: audit.chainChecked } : null);
-  return NextResponse.json({ ...index, cluster: p.cluster, stubs: p.stubs });
+  return NextResponse.json({ ...index, tokens: index.tokens.map((t) => ({ ...t, readiness: ready.get(t.ticker) ?? null })), cluster: p.cluster, stubs: p.stubs });
 }

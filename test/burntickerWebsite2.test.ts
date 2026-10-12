@@ -41,7 +41,7 @@ describe("launch gate (website brief §1: no wizard flash before the gate resolv
   test("the pre-launch action and the Seasons destination", () => {
     assert.equal(EXPLORE_VERIFIED_BURN.label, "Inspect the devnet receipt");
     assert.match(EXPLORE_VERIFIED_BURN.href, /^\/burnticker\/check\?demo=1#verify$/);
-    assert.ok(fs.existsSync("src/app/burnticker/check/page.tsx"));
+    assert.ok(fs.existsSync("src/app/burnticker/check/CheckClient.tsx"));
     assert.equal(SEASONS_HREF, "/burnticker/leagues");
     clean(`${EXPLORE_VERIFIED_BURN.label}. ${EXPLORE_VERIFIED_BURN.blurb}`, "explore action");
   });
@@ -108,7 +108,7 @@ describe("$DEFICIT before launch (website brief §1)", () => {
     assert.match(html, new RegExp(`"${EMPTY_STATE_COPY.unavailable.heading}\\. The live figures could not be read`));
   });
   test("the shared EmptyState replaces the ad-hoc loading / error lines on the coins, pair, coin, trust, operator, check and leagues pages", () => {
-    for (const f of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/check/page.tsx", "src/app/burnticker/leagues/page.tsx"]) {
+    for (const f of ["src/app/burnticker/CoinsIndex.tsx", "src/app/burnticker/p/[pairId]/page.tsx", "src/app/burnticker/t/[ticker]/page.tsx", "src/app/burnticker/trust/page.tsx", "src/app/burnticker/operator/page.tsx", "src/app/burnticker/check/CheckClient.tsx", "src/app/burnticker/leagues/page.tsx"]) {
       const s = fs.readFileSync(f, "utf8");
       assert.match(s, /<EmptyState kind=/, f);
       assert.doesNotMatch(s, />Loading…</, `${f}: no bare "Loading…"`);
@@ -292,7 +292,7 @@ describe("burn arithmetic (website brief §6)", () => {
     const c = fs.readFileSync("src/app/burnticker/_components/BurnMath.tsx", "utf8");
     assert.match(c, /simulateCrank\(/); assert.match(c, /Hypothetical inputs/); assert.match(c, /not a quote/); assert.match(c, /Holders&apos; balances are never touched/);
     clean(c.slice(c.lastIndexOf("return (") + 8).replace(/e\.target\.value/g, "").replace(/\{[^{}]*\}/g, " ").replace(/<[^>]+>/g, " "), "calculator words");
-    assert.match(fs.readFileSync("src/app/burnticker/check/page.tsx", "utf8"), /<BurnMath \/>/);
+    assert.match(fs.readFileSync("src/app/burnticker/check/CheckClient.tsx", "utf8"), /<BurnMath \/>/);
     assert.match(fs.readFileSync("src/app/burnticker/t/[ticker]/DeficitPrelaunch.tsx", "utf8"), /<BurnMath \/>/);
   });
 });

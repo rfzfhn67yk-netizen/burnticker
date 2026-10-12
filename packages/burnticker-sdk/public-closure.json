@@ -38,6 +38,7 @@
     "src/lib/burnticker/pageTypes.ts",
     "src/lib/burnticker/pairForward.ts",
     "src/lib/burnticker/program.ts",
+    "src/lib/burnticker/raisePresets.ts",
     "src/lib/burnticker/receipt.ts",
     "src/lib/burnticker/rules.ts",
     "src/lib/burnticker/sources/attestedHttp.ts",

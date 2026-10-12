@@ -41,6 +41,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Connection, PublicKey, type Keypair } from "@solana/web3.js";
+import { readKeeperCurve } from "../src/lib/burnticker/market.ts";
 import { loadRules, solToLamports, tokensToRaw, rawToTokens, type LoadedRules } from "../src/lib/burnKeeper/rules.ts";
 import { fetchDebtHistoryRows, fetchDebtToPenny, validateDebtResponse, type FeedValidation } from "../src/lib/burnKeeper/feeds/treasury.ts";
 import { openLedger, type Ledger } from "../src/lib/burnKeeper/ledger.ts";
@@ -330,7 +331,10 @@ async function publish(rt: Runtime, now: number): Promise<void> {
   }
   // "Where the money came from" (buyback): public facts the owner sets once — the creator-fee source and the seed deposit.
   const funding = BUYBACK ? { creatorFeeSource: process.env.BURNKEEPER_CREATOR_FEE_SOURCE?.trim() || null, seedTx: process.env.BURNKEEPER_SEED_TX?.trim() || null, seedSol: process.env.BURNKEEPER_SEED_SOL?.trim() || null } : null;
-  const input = { loaded, readings: ledger.readings(T, F), burns: ledger.burns(T, F), now, nextPollAt: nextPollAt(now, loaded.rules.schedule.polls, loaded.rules.schedule.timeZone), lastPoll: state.lastPoll, lastError: state.lastError,
+  // website-14 (LAUNCHPAD-PATH §75): the coin's own raise and progress, read from its LaunchLab pool, so no page prints a typed 85
+  let curve: Awaited<ReturnType<typeof readKeeperCurve>> = null;
+  if (rt.connection && mintS && (rt.cluster === "mainnet" || rt.cluster === "devnet")) curve = await readKeeperCurve(rt.connection, { cluster: rt.cluster, mint: mintS, poolId: process.env.BURNKEEPER_LAUNCHLAB_POOL?.trim() || null }, now);
+  const input = { loaded, readings: ledger.readings(T, F), burns: ledger.burns(T, F), now, curve, nextPollAt: nextPollAt(now, loaded.rules.schedule.polls, loaded.rules.schedule.timeZone), lastPoll: state.lastPoll, lastError: state.lastError,
     funding, program, chain: { cluster: rt.cluster, mint: mintS ?? null, vault: rt.vault ?? vaultS ?? null, keeper: rt.keeper, supplyRaw, vaultRaw, feeLamports } };
   const burns = buildBurnsJson(input);
   const status = buildStatus(input, burns);

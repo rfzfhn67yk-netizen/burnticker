@@ -7,6 +7,8 @@ import { EmptyState } from "./_components/EmptyState";
 import { ViewCard, SkeletonGrid, ago } from "./_components/CoinCard";
 import { useLaunchAvailability } from "./_components/useLaunchAvailability";
 import { useHome } from "./_components/useHome";
+import { useWatchlist } from "./_components/useWatchlist";
+import { WATCH_NOTE } from "@/lib/burnticker/watchlist";
 import { SEASONS_LINKS } from "./_components/nav";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
@@ -37,6 +39,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const [q, setQ] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const home = useHome();
+  const watch = useWatchlist();
   const searchBox = useRef<HTMLInputElement>(null);
   useEffect(() => { fetch("/api/burnticker/tokens").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setIx(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
@@ -53,14 +56,13 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const pick = (t: GridTab) => { setTab(t); try { sessionStorage.setItem("bt-coins-tab", t); } catch { /* ignore */ } };
 
   const s = q.trim().toLowerCase();
-  const raise = home.data?.raiseSol ?? null;
   const featured: CardView[] = useMemo(() => (home.data?.featured ?? []).filter((v) => !s || `${v.ticker} ${v.name} ${v.rule} ${v.mint?.address ?? ""}`.toLowerCase().includes(s)), [home.data, s]);
   const listable = useMemo(() => (ix?.tokens ?? []).filter((t) => t.status !== "expired"), [ix]);
-  const coins = useMemo(() => tabCoins(tab, listable.filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s))), [listable, tab, s]);
+  const coins = useMemo(() => tabCoins(tab, listable.filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), watch.list.coins), [listable, tab, s, watch.list.coins]);
   const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s)), [ix, s]);
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
-  const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, raise, ix?.cluster ?? "mainnet"));
+  const cards: CardView[] = coins.map((t) => cardViewFromIndex(t, null, ix?.cluster ?? "mainnet"));
   const state = gridState({ tab, loading: !ix, error: err, all: tab === "pairs" ? (ix?.pairs ?? []).map((p) => ({ ticker: p.a.ticker, phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" })) : listable, shown: tab === "pairs" ? pairs.length : cards.length, query: q, generatedAt: ix?.generatedAt ?? null, now });
   const rule = GRID_TABS.find((t) => t.id === tab)!.rule;
 
@@ -75,7 +77,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
           {/* one search per screen: the header carries it from 640 px up; on phones this box is the search (the tab bar's Search focuses it) */}
           <input id="search" ref={searchBox} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`${SEARCH.placeholder}: name, $TICKER, team or mint`} aria-label={SEARCH.label} className="bt-grid-search md:ml-auto w-full md:w-72 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm" />
         </div>
-        <p className="text-xs text-neutral-500" id="bt-tab-rule">{rule}{tab !== "pairs" && raise ? ` A coin's curve completes at ${raise} SOL raised.` : ""}</p>
+        <p className="text-xs text-neutral-500" id="bt-tab-rule">{rule}{tab === "following" ? ` ${WATCH_NOTE}` : ""}{tab !== "pairs" ? " Each coin's curve completes at the raise its creator chose, and the card reads it from the coin's own pool." : ""}</p>
 
         <div id="bt-coins-panel" role="tabpanel" aria-describedby="bt-tab-rule" data-grid-state={state.kind}>
           {state.kind === "loading" && <SkeletonGrid n={3} label={tab === "pairs" ? "Loading the pairs." : "Loading the coins."} />}

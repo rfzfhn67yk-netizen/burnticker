@@ -15,9 +15,15 @@ import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
 import { COIN_TAB_LABEL, burnsAfterGraduation, checkReceiptHref, coinTabs, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
 import { useHome } from "../../_components/useHome";
+import { QueuePanel } from "../../_components/QueuePanel";
+import { ProgressStrip } from "../../_components/ProgressStrip";
+import { RetirementFacts } from "../../_components/RetirementFacts";
+import { progressOf } from "@/lib/burnticker/progress";
+import { EVENT_LABEL, eventsFromStatus } from "@/lib/burnticker/activity";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
+import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
 
 /**
  * THE COIN PAGE (LAUNCHPAD-PATH §6; re-ordered by website-11 on 2026-10-12 for the owner's review items 6 and 8, as the website brief
@@ -86,8 +92,7 @@ export default function TokenPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const [d, setD] = useState<Data | null>(null);
   const launch = useLaunchAvailability();
-  // the configured raise (GET /api/burnticker/home, the header's one read) for the "burns begin after graduation" line when the curve was not read
-  const raiseSol = useHome().data?.raiseSol ?? null;
+  const home = useHome();
   const [err, setErr] = useState<string | null>(null);
   // the time the page was read; "launched 3d ago" and "last burn 2h ago" are past records, and nothing on this page counts down
   const [now] = useState(() => Date.now());
@@ -108,7 +113,7 @@ export default function TokenPage() {
   const ready = readinessFromStatus(s as unknown as Parameters<typeof readinessFromStatus>[0], d.receipts as unknown as Parameters<typeof readinessFromStatus>[1]);
   // readiness.ts decides: a coin on its curve, or graduated with its pool not yet registered, cannot burn yet
   const preBurn = ready.state === "on-curve" || ready.state === "awaiting-registration";
-  const afterGraduation = burnsAfterGraduation(m?.curve?.threshold ?? raiseSol, m?.curve?.quote ?? "SOL");
+  const afterGraduation = burnsAfterGraduation(m?.curve?.threshold ?? null, m?.curve?.quote ?? "SOL");
   // ChatGPT audit 6 A10: the market facts this site read, and Burnticker's own facts, equally legible; a dash with a reason for the rest
   const market = marketFacts({ cluster: s.cluster, status: s.status, mint: s.mint, mintUrl: s.addresses.mintUrl, creator: s.addresses.creator, creatorUrl: s.addresses.creatorUrl, launchedAt: s.launchedAt, phase: m?.phase ?? null, curve: m?.curve ?? null, curveNote: m?.curveNote ?? null, graduatedPool: m?.graduatedPool ?? null, holdersCount: m?.holders.count ?? null, holdersNote: m?.holders.countNote ?? "This site has not read the holders.", feesCurveBps: s.fees.curve.totalBps, feesPoolBps: s.fees.postGraduation.totalBps, readAt: m?.readAt ?? null });
   const latest = [...d.receipts].filter((r) => r.status === "confirmed" && r.signature).sort((a, b) => b.settledAt.localeCompare(a.settledAt))[0] ?? null;
@@ -182,7 +187,9 @@ export default function TokenPage() {
             <p className="mt-2 text-[11px] text-neutral-500">{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {(100 - s.burned.pctOfSupply).toFixed(2)}% of the supply is left.</p>
           </section>
 
+          <section className={card} aria-label="Progress"><h2 className="mb-2 text-xs font-mono uppercase tracking-widest text-neutral-500">Where this coin stands</h2><ProgressStrip p={progressOf(ready, { raiseSol: m?.curve ? Number(m.curve.threshold) : null, raisedSol: m?.curve ? Number(m.curve.raised) : null, queuedUnits: s.ticker === "DEFICIT" && home.data?.deficitQueue.state === "queued" ? home.data.deficitQueue.units : null })} /></section>
           <ReadinessPanel r={ready} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
+          {s.ticker === "DEFICIT" && home.data && <QueuePanel q={home.data.deficitQueue} />}
         </aside>
       </div>
 
@@ -200,6 +207,11 @@ export default function TokenPage() {
       {/* website-10's coin cards link "Check receipt" to #receipts; the anchor sits on the burn log so the link lands here */}
       <span id="receipts" />
       <div id="panel-burns" role="tabpanel" aria-labelledby="tab-burns" hidden={tab !== "burns"} className="space-y-5">
+        {(() => {
+          // website-14 (platform item 6): signed readings, the graduation and the pool registration as their own rows, beside the receipts
+          const other = eventsFromStatus(s as unknown as Parameters<typeof eventsFromStatus>[0], d.receipts).filter((e) => e.kind !== "burn");
+          return other.length ? <section aria-label="Readings and milestones"><ol className="bt-tape">{other.map((e) => <li key={`${e.kind}-${e.at}`} className="bt-tape-row text-xs" data-kind={e.kind}><span className="bt-ticker-kind">{EVENT_LABEL[e.kind]}</span><a className="underline" href={e.href}>{e.text}</a></li>)}</ol></section> : null;
+        })()}
         <section aria-label="Burn log">
           <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {s.burned.pctOfSupply.toFixed(2)}% of the supply. Each receipt below can be checked in your browser.</p>
           {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? afterGraduation : "The next result that counts prints the first one."}</p> : (
@@ -242,7 +254,7 @@ export default function TokenPage() {
           <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
             <div><dt className="text-neutral-500">The dial</dt><dd>{facts.dial ?? "The rule file does not name a share of the burn pool."}</dd></div>
             <div><dt className="text-neutral-500">The window</dt><dd>{facts.window}{prof?.badge ? ` The rule's window reads ${prof.badge}.` : ""}</dd></div>
-            <div><dt className="text-neutral-500">The end</dt><dd>{s.lifecycle ? `${s.lifecycle.line} ` : ""}{facts.end}</dd></div>
+            <div><dt className="text-neutral-500">The end</dt><dd>{s.lifecycle ? `${s.lifecycle.line} ` : ""}{facts.end}{facts.window !== PERPETUAL_SENTENCE && <RetirementFacts className="mt-1" />}</dd></div>
           </dl>
           <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div><dt className="text-neutral-500">results read</dt><dd className="font-mono">{s.feed.readings}</dd></div>

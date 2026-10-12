@@ -255,3 +255,23 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 }
 
 @media (prefers-reduced-motion: reduce) { .bt-nav-link.is-launch, .bt-slip { transform: none; } }
+
+/* website-14: the six-step progress strip (progress.ts), the activity line's kind labels and phone scroll hint, the watch toggle */
+.bt-progress-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.bt-progress-step { min-width: 0; display: flex; flex-direction: column; gap: 4px; font: 700 .62rem/1.25 var(--font-mono); letter-spacing: .02em; text-transform: uppercase; color: var(--bt-muted); }
+@media (max-width: 559px) { .bt-progress:not(.is-compact) .bt-progress-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 8px; } }
+.bt-progress-dot { display: block; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--bt-line) 85%, transparent); }
+.bt-progress-step.is-done .bt-progress-dot { background: var(--bt-stamp-solid); }
+.bt-progress-step.is-current .bt-progress-dot { background: var(--bt-scorch); }
+.bt-progress-step.is-current { color: var(--bt-ink); }
+.bt-progress.is-compact .bt-progress-steps { max-width: 9rem; gap: 3px; }
+.bt-progress-now { display: block; margin-top: 4px; font-size: .78rem; color: var(--bt-ink); }
+.bt-progress-next { margin: 4px 0 0; font-size: .74rem; color: var(--bt-dim); }
+.bt-progress-label { overflow-wrap: normal; hyphens: auto; }
+.bt-ticker-kind { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid var(--bt-line); border-radius: 3px; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--bt-dim); }
+.bt-watch { font: 700 .7rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 4px; padding: 6px 8px; cursor: pointer; }
+.bt-watch[aria-pressed="true"] { color: var(--bt-ink); border-color: var(--bt-stamp); }
+@media (max-width: 899px) {
+  .bt-ticker { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .bt-ticker.is-end { -webkit-mask-image: none; mask-image: none; }
+}

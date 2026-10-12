@@ -97,8 +97,9 @@ describe("the coin page (t/[ticker])", () => {
   });
   test("pre-graduation: the curve, and the plain line that burns wait for graduation and pool registration; nothing counts down", () => {
     assert.match(src, /<CurveBar /); assert.match(src, /\{preBurn && <p [^>]*data-burns-after-graduation>\{afterGraduation\}<\/p>\}/);
-    // website-13: the line names the raise read from the curve, else the configured one, never a typed 85
-    assert.match(src, /const afterGraduation = burnsAfterGraduation\(m\?\.curve\?\.threshold \?\? raiseSol, m\?\.curve\?\.quote \?\? "SOL"\);/);
+    // website-14 (§75): the line names the raise read from the coin's own curve, else no number at all (never a configured constant)
+    assert.match(src, /const afterGraduation = burnsAfterGraduation\(m\?\.curve\?\.threshold \?\? null, m\?\.curve\?\.quote \?\? "SOL"\);/);
+    assert.doesNotMatch(src, /data\?\.raiseSol|\braiseSol \?\?/, "no configured raise is read for the line");
     assert.equal(burnsAfterGraduation("85"), "Burns begin only after the bonding curve fills at 85 SOL raised, the coin moves to its Raydium pool, and that pool is registered with the burn program.");
     assert.equal(burnsAfterGraduation(null), BURNS_AFTER_GRADUATION);
     assert.match(src, /<ReadinessPanel r=\{ready\} /); assert.match(src, /const preBurn = ready\.state === "on-curve" \|\| ready\.state === "awaiting-registration"/);

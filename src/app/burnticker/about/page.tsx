@@ -10,6 +10,8 @@ import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { HOW_IT_WORKS } from "@/lib/burnticker/siteNav.mjs";
 import { SEASONS_LINKS } from "../_components/nav";
+import { WHY_CREATE } from "@/lib/burnticker/creatorCopy";
+import { RAISE_PRESETS_SOL } from "@/lib/burnticker/launchPresets";
 
 const DESCRIPTION = "How Burnticker works: one locked rule per coin, a public result that settles it, a program that burns what the coin's own fees bought back, and a receipt anyone can check.";
 export const metadata: Metadata = {
@@ -60,6 +62,7 @@ export default function AboutPage() {
         </> : <p className="text-neutral-400">The rehearsal&apos;s summary could not be read just now. The receipt itself can still be checked.</p>}
         <p><Link className="bt-launch-btn" href={EXPLORE_VERIFIED_BURN.href}>{EXPLORE_VERIFIED_BURN.label}</Link></p>
         <p className="text-xs text-neutral-500">The check runs in your browser. It reads the devnet chain and the Treasury&apos;s own data.</p>
+        <p><Link className="underline" href="/burnticker/how-a-burn-works">Watch how a burn works</Link>, step by step, with this same receipt.</p>
       </section>
 
       <section className={card} aria-labelledby="about-launch">
@@ -67,9 +70,12 @@ export default function AboutPage() {
         <ol className="list-decimal pl-5 space-y-2 text-neutral-200">
           <li>Describe the result, or browse by category. Each suggestion says where the result comes from, who checks it and when it settles.</li>
           <li>Choose what triggers a burn. It can be a yes-or-no result, or every full unit of a settled number. Then choose the burn budget per result: {SHARE_PRESETS.recurring.map(pctLabel).join(", ").replace(/, ([^,]+)$/, " or $1")} of the coin&apos;s burn budget each time for a rule that repeats, or {SHARE_PRESETS.oneShot.map(pctLabel).join(", ").replace(/, ([^,]+)$/, " or $1")} for a rule that resolves once. The tokens bought are burned, so the number burned varies. The API accepts other shares.</li>
+          <li>Choose how much SOL the curve raises before the coin graduates to its own pool: {RAISE_PRESETS_SOL.slice(0, -1).join(", ")} or {RAISE_PRESETS_SOL[RAISE_PRESETS_SOL.length - 1]} SOL. A smaller raise means less trading before the first burn and a shallower pool afterwards. One burn run spends at most 2% of the pool&apos;s SOL either way.</li>
           <li>Connect a wallet, then approve the launch in it. A single coin is one transaction. The review lists every transaction before your wallet opens. That creates the coin on Raydium LaunchLab and records the rule. You pay the venue&apos;s creation cost and the network fee. Creators receive no trading-fee revenue, because the creator&apos;s share of the fees goes to the coin&apos;s burn pool.</li>
         </ol>
         <p className="text-neutral-400">The rule is locked at launch. A different rule means a different coin.</p>
+        <h3 className="pt-1 font-medium" id="why-create">Why create a coin</h3>
+        <p className="text-neutral-200" data-why-create>{WHY_CREATE}</p>
         <p className="text-neutral-200" data-launch-state>{launch.sentence}</p>
       </section>
 

@@ -52,6 +52,6 @@ export function composeRule(pick: DraftPick | null, d: DraftFields): BurnRule | 
 }
 
 /** The single-coin request body POST /api/burnticker/launch receives (pressing Launch is the acknowledgement). */
-export function launchBody(o: { creator: string; ticker: string; name: string; description: string; descCtx: unknown; note: string; rule: BurnRule; timings?: Record<string, number> }): Record<string, unknown> {
-  return { creator: o.creator, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, ...(o.timings ? { timings: o.timings } : {}), ticker: o.ticker.toUpperCase(), name: o.name, description: o.description, descCtx: o.descCtx, note: o.note, imageUrl: null, links: [], rule: o.rule };
+export function launchBody(o: { creator: string; ticker: string; name: string; description: string; descCtx: unknown; note: string; rule: BurnRule; timings?: Record<string, number>; raiseSol?: string }): Record<string, unknown> {
+  return { creator: o.creator, firstBuySol: "0", ...(o.raiseSol ? { raiseSol: o.raiseSol } : {}), acknowledgements: { ruleLocked: true, noReturns: true }, ...(o.timings ? { timings: o.timings } : {}), ticker: o.ticker.toUpperCase(), name: o.name, description: o.description, descCtx: o.descCtx, note: o.note, imageUrl: null, links: [], rule: o.rule };
 }
