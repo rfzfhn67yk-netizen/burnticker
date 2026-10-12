@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Burnticker — coins that burn on real-world results, with receipts</title>
-<meta name="description" content="Coins that burn on real-world results, with receipts. Burnticker is in pre-launch, and creator launches are closed. You can inspect a real devnet burn and check its receipt in your browser. Burnticker is a memecoin launchpad with locked rules. A primary source settles the result, a program runs the burn, and anyone can recompute the receipt. Nothing is ever won. Things are only burned.">
-<meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#0a0a0c">
-<meta property="og:title" content="Burnticker — coins that burn on real-world results, with receipts">
+<title>Burnticker — memecoins that burn on real-world results, with receipts</title>
+<meta name="description" content="Memecoins that burn on real-world results. Every burn is a receipt. Burnticker is in pre-launch, and creator launches are closed. You can inspect a real devnet burn and check its receipt in your browser. A primary source settles the result, a program runs the burn, and anyone can recompute the receipt. Nothing is ever won. Things are only burned.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12100e">
+<meta property="og:title" content="Burnticker — memecoins that burn on real-world results, with receipts">
 <meta property="og:description" content="Burnticker is in pre-launch, and creator launches are closed. You can inspect a real devnet burn. A primary source settled it, a program burned it, and anyone can recompute its receipt in the browser.">
 <meta property="og:image" content="https://burnticker.com/brand/og.png">
 <meta property="og:image:width" content="1200">
@@ -26,14 +26,12 @@
 <style>
 /* shared tokens: site/burnticker/status and fallback copy this block verbatim (test/burntickerTrustOps.test.ts) */
 :root{
-  --bg:#0a0a0c;--panel:#131317;--panel2:#1a1a20;--line:#26262d;--ink:#f6f4ee;--dim:#b8b6ae;--muted:#7f7e78;
-  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#0a0a0c;--ok:#5ad38f;--tape:#141418;--violet:#8f73e0;
-  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --bg:#12100e;--panel:#1b1815;--panel2:#24201c;--line:#2d2925;--ink:#f2eee4;--dim:#aba395;--muted:#8b8478;
+  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#12100e;--ok:#5ad38f;--tape:#141418;--violet:#9b84e6;
+  --mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
 }
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
-}
-:root[data-theme="light"]{--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
+/* dark is the default whatever the OS prefers (review item 17, 2026-10-12); the header switch turns on the paper theme */
+:root[data-theme="light"]{--bg:#f2eee4;--panel:#e9e4d7;--panel2:#e2dccf;--line:#d3ccbc;--ink:#1b1916;--dim:#4d473f;--muted:#6b645a;--amber:#8f5400;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);overflow-x:hidden}
@@ -49,219 +47,291 @@ section.lead{border-top:0}
 .small{font-size:.86rem}
 .lede{font-size:1.1rem;color:var(--dim);max-width:62ch;margin:0 0 22px}
 
-/* the home page's own rules */
-section{padding:36px 0}
-
-/* top */
-.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0}
-.brand{display:flex;align-items:center;gap:10px;color:var(--ink);flex:0 0 auto}
-.brand svg{width:30px;height:30px}
-.brand b{font:700 1.05rem/1 var(--mono);letter-spacing:.12em}
-.nav{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
-.nav a,.mlinks a{font-size:.84rem;color:var(--dim);padding:7px 10px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
-.nav a:hover,.mlinks a:hover{text-decoration:none;border-color:var(--amber);color:var(--ink)}
-.launches-open .nav a[data-launch-link]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);font-weight:700}
-/* buttons, one primary per section (site audit #20): .btn.amber is the section's one primary, .btn the secondary */
-.btn{display:inline-block;padding:11px 16px;border-radius:8px;border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:.95rem}
-.btn:hover{text-decoration:none;border-color:var(--amber)}
-.btn.amber{background:var(--amber);border-color:var(--amber);color:var(--amber-ink)}
-/* audit 4 BT-09/BT-20, site audit #16: a skip link; under 900 px one Menu with the same link set (keyboard: Enter opens, Tab stays inside, Escape closes) */
-.skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--amber);color:var(--amber-ink);padding:8px 12px;border-radius:6px;font-weight:700}
-.skip:focus{left:12px}
-.tools{display:flex;align-items:center;gap:6px}
-.themebtn{font:1rem/1 var(--sans);color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:999px;width:34px;height:34px;cursor:pointer}
-.themebtn:hover{border-color:var(--amber);color:var(--ink)}
-.menu{display:none;position:relative}
-@media (max-width:899px){.nav{display:none}.menu{display:block}}
-.menu>summary{list-style:none;cursor:pointer;font-size:.84rem;color:var(--ink);padding:7px 12px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
-.menu>summary::-webkit-details-marker{display:none}
-.menu[open]>summary{border-color:var(--amber)}
-.menu .mlinks{position:absolute;right:0;top:calc(100% + 6px);z-index:50;display:grid;gap:2px;min-width:200px;max-width:calc(100vw - 32px);padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
-.menu .mlinks a{border:0;border-radius:8px;padding:10px 10px;font-size:.92rem}
-a:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
-
-/* hero (site audit #7, R07): the sentence, the state, three steps, the definition, then two next steps */
-.hero{padding:26px 16px 30px}
-.hero h1{font:700 clamp(1.85rem,6vw,3.6rem)/1.04 var(--mono);letter-spacing:-.02em;margin:0 0 12px;text-transform:uppercase;max-width:20ch;overflow-wrap:anywhere}
-.hero h1 em{font-style:normal;color:var(--amber)}
-.hero .sub{font:700 clamp(1.05rem,3.2vw,1.35rem)/1.3 var(--mono);color:var(--dim);margin:0 0 10px;letter-spacing:.02em}
-.state{color:var(--dim);font-size:.95rem;margin:.25rem 0 0}
-.launches-open [data-launches-closed]{display:none}
-html:not(.launches-open) [data-launch-cta]{display:none!important}
-.three{margin:14px 0;padding-left:1.3em;max-width:62ch;color:var(--ink)}.three li{margin:3px 0}
-.def{margin:0 0 20px;max-width:68ch;color:var(--dim);font-size:.98rem}
-abbr.term{text-decoration:underline dotted;text-underline-offset:3px;cursor:help}
-.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-
-/* the verified receipt */
-.st{display:inline-block;margin:0 0 8px;font:700 .75rem/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;border-radius:4px;padding:4px 8px;border:1.5px solid}
-.st.ver{color:var(--violet);border-color:var(--violet)}.st.rep{color:var(--dim);border-color:var(--line)}.st.pro{color:var(--amber);border-color:var(--amber)}
-.verified{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 12px 12px 0;padding:16px}
-.verified .vk{margin:0 0 6px;font:700 .72rem/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--violet)}
-.verified .vrate{margin:0 0 8px;color:var(--dim);font-size:.92rem}
-.verified .vsum{margin:0 0 12px;max-width:72ch}
-
-/* the three products: Launch / Seasons / $DEFICIT (H3 under the section's H2, site audit #15) */
-.cards{display:grid;grid-template-columns:1fr;gap:12px}
-@media (min-width:820px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.card{display:flex;flex-direction:column;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}
-.card h3{margin:0;font:700 1.5rem/1.1 var(--mono);text-transform:uppercase;letter-spacing:.02em}
-.card p{margin:0;color:var(--dim);font-size:.95rem}
-.card .ex{font:600 .82rem/1.45 var(--mono);color:var(--ink);overflow-wrap:anywhere}
-.card .links{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:auto;padding-top:6px}
-.card .go{font-weight:700}
-.card details{color:var(--dim);font-size:.9rem}.card summary{cursor:pointer;color:var(--ink);font-weight:600}
-.card ol{margin:8px 0 0;padding-left:1.2em}.card li{margin:0 0 4px}
-.launches-open .card.launch .go{background:var(--amber);color:var(--amber-ink);padding:8px 12px;border-radius:8px}
-.never{margin:16px 0 0;padding:12px 14px;border-left:3px solid var(--violet);background:var(--panel);border-radius:0 10px 10px 0;color:var(--dim)}
-
-/* the short current status */
+/* the home page's own rules (website-10, 2026-10-12): the app's home, rendered statically — one-line hero, How it works, the coin
+   grid from GET /api/burnticker/home in the one card order (src/lib/burnticker/cardView.ts), Follow the season, a short status */
+section{padding:22px 0;border-top:0}
+a{color:var(--violet)}
+.hero{padding-top:22px}
+.hero h1{font:700 clamp(1.6rem,5vw,2.8rem)/1.08 var(--mono);letter-spacing:-.01em;margin:0;text-transform:uppercase;overflow-wrap:anywhere}
+.hero .sub{font:700 clamp(1rem,2.6vw,1.25rem)/1.3 var(--mono);color:var(--violet);margin:8px 0 0}
+.how{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+@media (min-width:760px){.how{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.how li{display:flex;gap:10px;border:1px dashed var(--line);border-radius:10px;padding:12px}
+.how-n{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#f2eee4;color:#1b1916;font:700 .85rem/1 var(--mono)}
+.how-t{font:700 .82rem/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px}
+.how-x{margin:0;font-size:.88rem;color:var(--dim)}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 12px}
+.head h2{margin:0}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:640px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1000px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.card{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:12px;min-width:0}
+.card.featured{border-color:color-mix(in srgb,var(--violet) 60%,var(--line))}
+.card .top{display:flex;gap:12px}
+.card .img{width:64px;height:64px;border-radius:6px;object-fit:cover;flex:0 0 auto;background:#f2eee4}
+.card .noimg{width:64px;height:64px;flex:0 0 auto;border-radius:4px;background:#f2eee4;color:#1b1916;display:flex;align-items:center;justify-content:center;font:700 .66rem/1 var(--mono);overflow:hidden}
+.card h3{margin:4px 0 0;font:600 1rem/1.25 var(--sans)}
+.card h3 a{color:var(--ink)}
+.card .tk{font:400 .9rem var(--mono);color:var(--dim)}
+.card .note{margin:4px 0 0;font-size:.78rem;color:var(--dim)}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{display:inline-block;font:700 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 6px;border-radius:3px;border:1px solid var(--line);color:var(--dim)}
+.tag.featured{color:#fff;background:#5b3fa3;border-color:#5b3fa3}.tag.rehearsal{color:#c8873a;border-color:#c8873a}.tag.devnet{border-style:dashed}.tag.grad{color:#fff;background:#5b3fa3;border-color:#5b3fa3}
+.rows{margin:12px 0 0;display:grid;gap:7px;font-size:.84rem}
+.rows>div{display:grid;grid-template-columns:6.2rem 1fr;gap:8px}
+.rows dt{font:700 .68rem/1.6 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.rows dd{margin:0;min-width:0}
+.bar{display:block;height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:4px}
+.bar span{display:block;height:100%;background:#c8873a}.bar span.done{background:#5b3fa3}
+.foot{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
+.btn{display:inline-block;font:700 .78rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:9px 12px}
+.btn:hover{text-decoration:none;border-color:var(--violet)}
+.btn.off{opacity:.5;cursor:not-allowed}
+.mint{margin:8px 0 0;font-size:.7rem;color:var(--muted);overflow-wrap:anywhere}
+.skel{border:1px solid var(--line);border-radius:10px;height:230px;background:var(--panel)}
+@media (prefers-reduced-motion:no-preference){.skel{animation:pulse 1.4s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.5}}
+.seasons p{color:var(--dim);margin:0 0 10px;max-width:72ch}
+.seasons .links{display:flex;flex-wrap:wrap;gap:6px 14px}
 .cs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:.92rem;color:var(--dim)}.cs ul{margin:0;padding-left:18px}.cs li{margin:0 0 4px}.cs .cs-head{font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}.cs .cs-meta{margin:8px 0 0;font:.74rem/1.4 var(--mono);color:var(--muted);overflow-wrap:anywhere}.cs button{margin-top:8px;font:600 .85rem var(--sans);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
-
-.disc{border:2px solid var(--ember);border-radius:12px;padding:16px 18px}
-.disc h2{color:var(--ink);font-size:.9rem;letter-spacing:.06em}.disc h2::before{content:""}
-.disc p{margin:0 0 8px}.disc p:last-child{margin:0}
-footer{padding:24px 0 44px;color:var(--muted);font-size:.84rem}
-footer .links{display:flex;gap:6px 14px;flex-wrap:wrap;margin-bottom:12px}
-footer .links a{color:var(--dim)}
-@media (max-width:519px){.hero{padding-top:14px}.def{font-size:.92rem}.card{padding:14px}.card h3{font-size:1.3rem}}
+.cs .bars span{display:block;height:10px;border-radius:4px;background:var(--line);margin:0 0 8px}
 </style>
+<!-- site-shell:css:begin -->
+<style>
+:root{--sh-bg:#12100e;--sh-counter:#1b1815;--sh-line:#2d2925;--sh-ink:#f2eee4;--sh-dim:#aba395;--sh-paper:#f2eee4;--sh-paper-ink:#1b1916;--sh-paper-dim:#5a5248;--sh-stamp:#9b84e6;--sh-stamp-solid:#5b3fa3;--sh-scorch:#c8873a;
+  --sh-mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sh-sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+:root[data-theme="light"]{--sh-bg:#f2eee4;--sh-counter:#e9e4d7;--sh-line:#d3ccbc;--sh-ink:#1b1916;--sh-dim:#4d473f;--sh-paper:#fbf9f4;--sh-stamp:#5b3fa3;--sh-scorch:#8a5a24}
+.sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
+.sh-header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--sh-bg) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
+.sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
+.sh-mark{width:34px;height:34px;border-radius:50%;display:block}
+.sh-word{font:700 1.02rem/1 var(--sh-mono);letter-spacing:.16em}
+.sh-nav{display:none;align-items:center;gap:2px}
+.sh-nav a,.sh-learn>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
+.sh-learn>summary::-webkit-details-marker{display:none}
+.sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
+.sh-nav a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 -2px 0 var(--sh-stamp);border-radius:0}
+.sh-learn{position:relative}
+.sh-learn-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:50;display:grid;min-width:200px;padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-learn-menu a{text-transform:none;letter-spacing:.02em;font:600 .9rem/1.2 var(--sh-sans);padding:10px}
+.sh-search{flex:1 1 auto;min-width:0;display:none}
+.sh-search input{width:100%;max-width:26rem;font:.9rem var(--sh-sans);color:var(--sh-ink);background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:6px;padding:9px 12px}
+.sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
+.sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
+.sh-wallet{display:none;cursor:not-allowed;opacity:.6}.sh-ghost{cursor:pointer}
+.sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
+.sh-menu>summary::-webkit-details-marker{display:none}
+.sh-menu{position:relative}
+.sh-menu-links{position:absolute;right:0;top:calc(100% + 6px);z-index:50;display:grid;gap:2px;min-width:210px;max-width:calc(100vw - 32px);padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-menu-links a{color:var(--sh-ink);text-decoration:none;padding:11px 10px;border-radius:6px;font:600 .92rem var(--sh-sans)}
+.sh-ticker{border-top:1px dashed var(--sh-line);font:.78rem/1.3 var(--sh-mono);color:var(--sh-dim);overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding:7px 16px;min-height:31px}
+.sh-ticker::-webkit-scrollbar{display:none}
+.sh-ticker a{color:var(--sh-ink);text-decoration:none;margin-right:22px}.sh-ticker a:hover{text-decoration:underline}
+.sh-ticker .sh-net{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-scorch)}
+.sh-ticker-skel{display:inline-block;width:min(420px,70%);height:10px;border-radius:4px;background:var(--sh-line)}
+.sh-modal{max-width:min(28rem,calc(100vw - 32px));background:var(--sh-counter);color:var(--sh-ink);border:1px solid var(--sh-line);border-radius:10px;padding:20px;font-family:var(--sh-sans)}
+.sh-modal::backdrop{background:rgba(0,0,0,.6)}
+.sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+.sh-modal-row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.sh-footer{margin-top:48px;padding:0 16px 40px;font-family:var(--sh-mono)}
+.sh-slip{max-width:34rem;margin:0 auto;background:var(--sh-paper);color:var(--sh-paper-ink);font-size:.84rem;line-height:1.5;padding:24px 20px 20px;background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.sh-slip p{margin:0 0 8px}
+.sh-slip-title{text-align:center;font-weight:700;font-size:1.3rem;letter-spacing:.22em}
+.sh-slip-never{text-align:center;font-weight:700}
+.sh-slip-dim{color:var(--sh-paper-dim);font-size:.78rem}
+.sh-rule{border-top:2px dashed color-mix(in srgb,var(--sh-paper-ink) 70%,transparent);margin:12px 0}
+.sh-slip a{color:var(--sh-paper-ink);text-decoration:underline;text-underline-offset:2px}
+.sh-slip-links{display:flex;flex-wrap:wrap;gap:6px 14px}
+.sh-slip-end{margin:14px 0 0!important;text-align:center;font-size:.72rem;letter-spacing:.18em;color:var(--sh-paper-dim)}
+.sh-tabbar{display:none}
+a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--sh-stamp);outline-offset:2px}
+@media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
+@media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}}
+@media (max-width:899px){
+  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:color-mix(in srgb,var(--sh-bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;font:700 10px/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
+  .sh-tabbar a span:first-child{font-size:18px;line-height:1}
+  .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
+}
+@media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
+@media (max-width:400px){.sh-word{display:none}}
+</style>
+<!-- site-shell:css:end -->
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
-<header class="wrap">
-  <div class="top">
-    <a class="brand" href="./" aria-label="Burnticker">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><radialGradient id="bt-scorch" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1f1c19"/><stop offset=".46" stop-color="#1f1c19"/><stop offset=".56" stop-color="#0e0b08"/><stop offset=".66" stop-color="#3a2411"/><stop offset=".78" stop-color="#8a5a24"/><stop offset=".9" stop-color="#cfa65c" stop-opacity=".6"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/></radialGradient></defs><rect width="64" height="64" rx="12" fill="#1f1c19"/><g transform="rotate(-5 32 32)"><path d="M14 11 L17.5 7.5 L21 11 L24.5 7.5 L28 11 L31.5 7.5 L35 11 L38.5 7.5 L42 11 L45.5 7.5 L49 11 L49 55 L45.5 58.5 L42 55 L38.5 58.5 L35 55 L31.5 58.5 L28 55 L24.5 58.5 L21 55 L17.5 58.5 L14 55 Z" fill="#f2eee4"/><rect x="18" y="15" width="25" height="4" fill="#1b1916"/><rect x="18" y="22" width="14" height="1.6" fill="#4a443c"/><path d="M18 27 H45" stroke="#2a2622" stroke-width="1.2" stroke-dasharray="2 1.5"/><rect x="18" y="31" width="9" height="1.6" fill="#1b1916"/><rect x="34" y="31" width="11" height="1.6" fill="#1b1916"/><rect x="18" y="36" width="8" height="1.6" fill="#1b1916"/><path d="M28.5 45.5 C28 40.5 32 37.5 36.5 38 C41.5 37.5 45.5 41 44.5 45.5 C44 50 40 52.5 36 52 C31.5 52.5 29 49.5 28.5 45.5 Z" fill="url(#bt-scorch)" transform="translate(36.5 45) scale(1.45) translate(-36.5 -45)"/><path d="M33 44.5 C33 42 35 40.8 37 41.2 C39.5 41 40.6 43 40.2 45 C40 47.2 38.2 48.6 36.2 48.3 C34.2 48.4 33 46.8 33 44.5 Z" fill="#1f1c19"/></g></svg>
-      <b>BURNTICKER</b>
-    </a>
-    <nav class="nav" aria-label="Burnticker" data-site-nav="header">
-      <!-- site-nav:header:begin -->
-      <a href="/burnticker/launch" data-launch-link>Launch · closed</a>
+<!-- site-shell:header:begin -->
+<a class="sh-skip" href="#main">Skip to content</a>
+<header class="sh-header">
+  <div class="sh-row">
+    <a class="sh-brand" href="/" aria-label="Burnticker home"><img src="/brand/favicon.png" width="34" height="34" alt="" class="sh-mark"><span class="sh-word">BURNTICKER</span></a>
+    <nav class="sh-nav" aria-label="Burnticker" data-site-nav="header">
       <a href="/burnticker">Coins</a>
       <a href="/burnticker/leagues">Seasons</a>
-      <a href="/burnticker/trust">Trust</a>
-      <a href="/whitepaper.html">Whitepaper</a>
-      <a href="/burnticker/docs">Docs/API</a>
-      <a href="https://deficit.burnticker.com/" target="_blank" rel="noopener">$DEFICIT<span aria-hidden="true"> ↗</span></a>
-      <!-- site-nav:header:end -->
+      <a href="/burnticker/launch" data-launch-link>Launch</a>
+      <details class="sh-learn"><summary>Learn</summary>
+        <div class="sh-learn-menu" data-site-nav="learn">
+          <a href="/burnticker/about">How it works</a>
+          <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/operator">Operator</a>
+          <a href="/whitepaper.html">Whitepaper</a>
+          <a href="/burnticker/docs">Docs and API</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+        </div>
+      </details>
     </nav>
-    <div class="tools">
-      <button type="button" class="themebtn" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
-      <details class="menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
-        <nav class="mlinks" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
-          <!-- site-nav:menu:begin -->
-          <a href="/burnticker/launch" data-launch-link>Launch · closed</a>
+    <form class="sh-search" role="search" action="/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
+    <div class="sh-actions">
+      <a class="sh-launch" href="/burnticker/launch" data-launch-button>Launch a coin</a>
+      <button type="button" class="sh-wallet" disabled title="No page here needs a wallet while creator launches are closed.">Connect wallet</button>
+      <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
+      <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
+        <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
           <a href="/burnticker">Coins</a>
           <a href="/burnticker/leagues">Seasons</a>
+          <a href="/burnticker/launch" data-launch-link>Launch</a>
+          <a href="/burnticker/about">How it works</a>
           <a href="/burnticker/trust">Trust</a>
+          <a href="/burnticker/operator">Operator</a>
           <a href="/whitepaper.html">Whitepaper</a>
-          <a href="/burnticker/docs">Docs/API</a>
-          <a href="https://deficit.burnticker.com/" target="_blank" rel="noopener">$DEFICIT<span aria-hidden="true"> ↗</span></a>
-          <!-- site-nav:menu:end -->
+          <a href="/burnticker/docs">Docs and API</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
         </nav>
       </details>
     </div>
   </div>
+  <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
 </header>
+<dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
+  <h2 id="sh-launch-closed-h">Creator launches are closed</h2>
+  <p>Creator launches are closed until the first coin has receipts. You can still look through the coins and check a real receipt.</p>
+  <p class="sh-modal-row"><a class="sh-launch" href="/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
+</dialog>
+<!-- site-shell:header:end -->
 
 <main id="main" tabindex="-1">
-  <section class="hero wrap lead">
-    <h1>Coins that burn on real-world results — <em>with receipts.</em></h1>
-    <p class="sub"><span data-launch-cta>Launch one. </span>Follow the season.</p>
-    <p class="state" data-launches-closed>Creator launches are closed.<span data-cluster-line></span></p>
-    <ol class="three" aria-label="How it works in three steps">
-      <li>A public result settles, such as a game score, a weather reading or the national debt figure. A <abbr class="term" title="A key that signs a reported source value; the signature proves who signed it, not that the value is true.">reading signer</abbr> then signs it on chain.</li>
-      <li>The coin's own trading fees make up its <abbr class="term" title="One coin&#x27;s burn budget in SOL; nobody can withdraw it, and in a registered pair the other coin&#x27;s share joins it when this coin&#x27;s rule fires.">burn budget</abbr>. That money buys the coin back on its own pool.</li>
-      <li>A program burns everything it bought. Our <abbr class="term" title="The keeper: software that submits the program instructions that are due; the program can still refuse or defer each one.">automation</abbr> submits the transaction, and that transaction is the receipt you can check.</li>
-    </ol>
-    <p class="def">Burnticker is a Solana memecoin launchpad. Each coin has one locked rule. When its result settles, the coin's own trading fees buy it back on its own pool, and a program <abbr class="term" title="A burn destroys tokens held by the program and lowers the coin&#x27;s total supply; it never touches the tokens in your wallet.">burns</abbr> what they bought. The transaction is the <abbr class="term" title="A receipt records the source result, the rule&#x27;s calculation and the transaction; checking one can be complete, partial or unavailable.">receipt</abbr>.</p>
-    <p class="row"><a class="btn amber" href="#verified-burn">See a verified example</a> <a class="btn" href="#how" data-open-how>How launching works</a></p>
-  </section>
+<!-- site-shell:hero:begin -->
+<section class="hero wrap" aria-labelledby="hero-h">
+  <h1 id="hero-h">Memecoins that burn on real-world results.</h1>
+  <p class="sub">Every burn is a receipt.</p>
+</section>
+<section class="wrap" aria-label="How it works">
+  <ol class="how">
+    <li><span class="how-n" aria-hidden="true">1</span><div><p class="how-t">One locked rule</p><p class="how-x">Each coin names one public result, such as a game score or the national debt figure. The rule is locked when the coin launches.</p></div></li>
+    <li><span class="how-n" aria-hidden="true">2</span><div><p class="how-t">The result settles</p><p class="how-x">When the result is published, the coin's own trading fees buy back some of the coin from its pool.</p></div></li>
+    <li><span class="how-n" aria-hidden="true">3</span><div><p class="how-t">Burned, with a receipt</p><p class="how-x">Everything bought is burned in the same transaction. That transaction is the receipt, and anyone can check it.</p></div></li>
+  </ol>
+  <p class="small"><a href="/burnticker/about">Read how it works in full</a></p>
+</section>
+<!-- site-shell:hero:end -->
 
-  <section class="wrap" id="verified-burn" aria-labelledby="receipt-h">
-    <h2 id="receipt-h">A real receipt</h2>
-    <div class="verified" data-demo-receipt>
-      <span class="st ver">Verified devnet</span>
-      <p class="vk">A real burn from the devnet rehearsal on October 6, 2026.</p>
-      <p class="vrate">This rehearsal coin spent 1% of its burn pool for each $1 billion unit. The rule proposed for mainnet spends 2%.</p>
-      <p class="vsum" data-demo-summary>Treasury's Debt to the Penny rose $23.92B from 2026-10-05 to 2026-10-06, which is 23 units. The rule asked for 0.104 SOL of the 0.506 SOL burn pool. One crank may spend at most 2% of the trading pool's SOL reserve, so 0.0201 SOL bought 4,010,874.87 $DEFICIT. Every token bought was burned in the same transaction, and the rest carried over to the next crank.</p>
-      <p class="row"><a class="btn amber" href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> <span class="muted small">The check runs in your browser. It reads the devnet chain and the Treasury's own data. This site currently shows devnet rehearsal evidence. Devnet is a practice network, and nothing on it has money value.</span></p>
+  <section class="wrap" id="coins" aria-labelledby="coins-h">
+    <div class="head"><h2 id="coins-h">Coins</h2><a href="/burnticker">Open the full coin list, with filters and search</a></div>
+    <div class="grid" data-featured aria-live="polite">
+      <div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div><div class="skel" aria-hidden="true"></div>
     </div>
+    <p class="small muted">No wallet is needed to read results or receipts. <a href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> or read the <a href="whitepaper.html">whitepaper</a>.</p>
   </section>
 
-  <section class="wrap" id="products" aria-labelledby="products-h">
-    <h2 id="products-h">Launch, follow, check</h2>
-    <div class="cards">
-      <article class="card launch" id="how">
-        <h3>Launch</h3>
-        <p>You describe a result in one sentence. Then you choose how much of the coin's fee pool each burn spends, between 1% and 10%. The rule is locked at launch. A different rule means a different coin.</p>
-        <p class="state" data-launches-closed>Creator launches are closed on this site.</p>
-        <details><summary>How launching works</summary>
-          <ol>
-            <li>Describe the result, or browse by category. Each suggestion says where the result comes from, who checks it and when it settles.</li>
-            <li>Choose what triggers a burn. It can be a yes-or-no result, or every full unit of a settled number. Then choose the share of the fee pool each burn spends.</li>
-            <li>Approve once in your wallet. That creates the coin on Raydium LaunchLab and records the rule. You pay the venue's creation cost and the network fee. Creators earn nothing from trading fees.</li>
-          </ol>
-        </details>
-        <p class="links"><a class="go" href="/burnticker/launch" data-launch-cta>Launch a coin</a></p>
-      </article>
+  <section class="wrap seasons" id="seasons" aria-labelledby="seasons-h">
       <!-- door2:begin -->
-      <article class="card" id="seasons">
-        <h3>Seasons</h3>
-        <p>Each league gets one scoreboard per season, from the Argentine Primera to the WNBA. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>
-        <p class="ex">The 25 leagues cover baseball, basketball, football, hockey and soccer.</p>
-        <p class="links"><a class="go" href="/burnticker/leagues">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>
-      </article>
+      <div class="head"><h2 id="seasons-h">Follow the season</h2></div>
+      <p>Each league gets one scoreboard per season, from the Argentine Primera to the WNBA. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>
+      <p class="ex">The 25 leagues cover baseball, basketball, football, hockey and soccer. When a league's season ends, the coin with the most receipts is named its champion. That is a line on a scoreboard, and nobody receives anything for it.</p>
+      <p class="links"><a class="go" href="/burnticker/leagues">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>
       <!-- door2:end -->
-      <article class="card" id="deficit">
-        <h3>$DEFICIT</h3>
-        <span class="st pro">Proposed mainnet rule, not launched</span>
-        <p>This coin burns when the U.S. national debt rises. Each full $1 billion added to the Treasury's Debt to the Penny counts as one unit. Each unit spends 2% of the burn pool to buy $DEFICIT at market, and everything bought is burned. The devnet rehearsal coin ran the same rule text at 1% per unit.</p>
-        <p class="small"><span class="st rep">Historical replay</span><br>We replayed the rule over the real Treasury figures from January 2025 to October 8, 2026. It would have counted 235 burn days and 6,490 units. This is a look back, and it predicts nothing. The second publisher, FRED, reports this debt only once a quarter. It can confirm the quarter ends but not each daily reading.</p>
-        <p class="links"><a class="go" href="https://deficit.burnticker.com/" target="_blank" rel="noopener">Open the $DEFICIT page<span aria-hidden="true"> ↗</span></a></p>
-      </article>
-    </div>
-    <p class="never"><b>Nothing is ever won here. Things are only burned.</b> A coin pays nothing on any result. When a league's season ends, the coin with the most receipts is named its champion. That is a line on a scoreboard, and nobody receives anything for it.</p>
   </section>
 
   <section class="wrap" id="status" aria-labelledby="status-h">
     <h2 id="status-h">Current status</h2>
-    <div class="cs" data-current-status aria-live="polite"><p class="cs-head">Loading</p><p>Reading the current status.</p></div>
+    <div class="cs" data-current-status aria-live="polite"><div class="bars" aria-hidden="true"><span style="width:40%"></span><span style="width:80%"></span><span style="width:65%"></span></div></div>
     <p class="small muted">The <a href="/burnticker/trust">Trust page</a> has the full status, the safeguards and limits, the reviews and every wallet.</p>
-  </section>
-
-  <section class="wrap" id="next" aria-labelledby="next-h">
-    <h2 id="next-h">What you can do now</h2>
-    <p class="row"><a class="btn amber" href="/burnticker/check?demo=1#verify">Inspect the devnet receipt</a> <a class="btn" href="/burnticker/leagues">Follow the season</a> <a class="btn" href="whitepaper.html">Read the whitepaper</a> <a class="btn" href="/burnticker/launch" data-launch-cta>Launch a coin</a></p>
-    <p class="small muted">No wallet is needed to read results or receipts. Creator launches open only when this site says they are open.</p>
-  </section>
-
-  <section class="wrap" aria-labelledby="disc-h">
-    <div class="disc">
-      <h2 id="disc-h">Memecoins. The rule says what supply does, not what price does.</h2>
-      <p>Coins launched on Burnticker have no product, no revenue share and no promise beyond the published rule. Nothing is won on any result. Burning supply does not make a price go up, and nobody here claims it does. We refuse markets about deaths, violence, terror, casualty counts, disasters or named private individuals. A source is never the token's price. We also refuse names that impersonate people or institutions.</p>
-      <p>If a page and the chain disagree, the chain is right. The program is open source. No security firm has audited it. This is not investment advice, and nothing here is an offer.</p>
-    </div>
   </section>
 </main>
 
-<footer class="wrap">
-  <nav class="links" aria-label="Footer" data-site-nav="footer">
-    <!-- site-nav:footer:begin -->
-    <a href="/burnticker/launch" data-launch-link>Launch · closed</a>
-    <a href="/burnticker">Coins</a>
-    <a href="/burnticker/leagues">Seasons</a>
-    <a href="/burnticker/trust">Trust</a>
-    <a href="/whitepaper.html">Whitepaper</a>
-    <a href="/burnticker/docs">Docs/API</a>
-    <a href="https://deficit.burnticker.com/" target="_blank" rel="noopener">$DEFICIT<span aria-hidden="true"> ↗</span></a>
-    <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X · @BurnTicker<span aria-hidden="true"> ↗</span></a>
-    <!-- site-nav:footer:end -->
-  </nav>
-  <div>Burnticker runs the automation, the list of sources and these pages. The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, Polymarket, JPL and Wikimedia. None of them is affiliated with any coin or endorses one.</div>
+<!-- site-shell:footer:begin -->
+<footer class="sh-footer" id="disclosure">
+  <div class="sh-slip">
+    <p class="sh-slip-title">BURNTICKER</p>
+    <p class="sh-slip-never">Nothing is ever won. Things are only burned.</p>
+    <div class="sh-rule"></div>
+    <p><b>NOT ADVICE.</b> Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing. A coin's rule says what its supply does when a public result settles, never what its price does. Nothing on this site is investment advice.</p>
+    <p>Burnticker and its coins are not affiliated with any team, league, candidate, agency or market. If a page and the chain disagree, the chain is right.</p>
+    <p class="sh-slip-dim">The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia and Polymarket. None of them is affiliated with any coin or endorses one.</p>
+    <div class="sh-rule"></div>
+    <p data-operator-line>Operated by one independent operator (United States) — contact: contact@burnticker.com</p>
+    <div class="sh-rule"></div>
+    <nav class="sh-slip-links" aria-label="Footer" data-site-nav="footer">
+      <a href="/burnticker">Coins</a>
+      <a href="/burnticker/leagues">Seasons</a>
+      <a href="/burnticker/launch" data-launch-link>Launch</a>
+      <a href="/burnticker/about">How it works</a>
+      <a href="/burnticker/trust">Trust</a>
+      <a href="/burnticker/operator">Operator</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="/burnticker/docs">Docs and API</a>
+      <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+    </nav>
+    <p class="sh-slip-end">KEEP THIS RECEIPT</p>
+  </div>
 </footer>
+<nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">
+  <a href="/burnticker"><span aria-hidden="true">▦</span><span>Coins</span></a>
+  <a href="/burnticker#search"><span aria-hidden="true">⌕</span><span>Search</span></a>
+  <a href="/burnticker/launch"><span aria-hidden="true">+</span><span>Launch</span></a>
+  <a href="/burnticker/leagues"><span aria-hidden="true">⇄</span><span>Seasons</span></a>
+  <a href="/burnticker/about"><span aria-hidden="true">?</span><span>Learn</span></a>
+</nav>
+<!-- site-shell:footer:end -->
 <script>
+(function () {
+  // THE COIN GRID (website-10, 2026-10-12): the featured cards from GET /api/burnticker/home, in the one card order the app prints
+  // (src/lib/burnticker/cardView.ts CARD_ROWS: image, name, ticker, rule, next result, burned, curve, receipt). Skeleton cards until the
+  // answer arrives; a failed read says so in plain words. Nothing is typed here.
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
+  var grid = document.querySelector("[data-featured]");
+  if (!grid || !window.fetch) return;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function row(dl, key, label, value) { var d = el("div"); d.setAttribute("data-row", key); d.appendChild(el("dt", "", label)); var dd = el("dd"); if (typeof value === "string") dd.textContent = value; else dd.appendChild(value); d.appendChild(dd); dl.appendChild(d); }
+  function card(v) {
+    var a = el("article", "card" + (v.tags.some(function (t) { return t.tone === "featured"; }) ? " featured" : ""));
+    var top = el("div", "top");
+    var img;
+    if (v.imageUrl) { img = el("img", "img"); img.src = v.imageUrl; img.alt = ""; img.width = 64; img.height = 64; img.loading = "lazy"; img.onerror = function () { var n = el("div", "noimg", "$" + v.ticker); img.replaceWith(n); }; }
+    else img = el("div", "noimg", "$" + v.ticker);
+    img.setAttribute("data-row", "image"); top.appendChild(img);
+    var who = el("div");
+    if (v.tags.length) { var tg = el("div", "tags"); v.tags.forEach(function (t) { tg.appendChild(el("span", "tag " + t.tone, t.label)); }); who.appendChild(tg); }
+    var h = el("h3"), name = el("span", "", v.name), tk = el("span", "tk", " $" + v.ticker);
+    name.setAttribute("data-row", "name"); tk.setAttribute("data-row", "ticker");
+    if (v.href) { var l = el("a"); l.href = v.href; l.appendChild(name); l.appendChild(tk); h.appendChild(l); } else { h.appendChild(name); h.appendChild(tk); }
+    who.appendChild(h);
+    if (v.note) who.appendChild(el("p", "note", v.note));
+    top.appendChild(who); a.appendChild(top);
+    var dl = el("dl", "rows");
+    row(dl, "rule", "Rule", v.rule);
+    if (v.nextSettle) row(dl, "nextSettle", "Next result", v.nextSettle);
+    row(dl, "burned", "Burned", v.burned);
+    var c = el("span"); c.appendChild(document.createTextNode(v.curve.label)); var bar = el("span", "bar"), fill = el("span", v.curve.done ? "done" : ""); fill.style.width = (v.curve.pct === null ? 0 : Math.max(0, Math.min(100, v.curve.pct))) + "%"; bar.appendChild(fill); c.appendChild(bar);
+    row(dl, "curve", v.curve.done ? "Pool" : "Curve", c);
+    a.appendChild(dl);
+    var foot = el("div", "foot"); foot.setAttribute("data-row", "receipt");
+    if (v.receipt) { var r = el("a", "btn", "Check receipt"); r.href = v.receipt.href; foot.appendChild(r); }
+    else { var off = el("span", "btn off", "Check receipt"); off.setAttribute("aria-disabled", "true"); foot.appendChild(off); foot.appendChild(el("span", "", "No receipt yet.")); }
+    a.appendChild(foot);
+    if (v.mint) a.appendChild(el("p", "mint", v.mint.label + ": " + v.mint.address));
+    return a;
+  }
+  function failed() { grid.textContent = ""; grid.appendChild(el("p", "dim", "The coins could not be read just now. The full list is on the coins page.")); }
+  fetch("/api/burnticker/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    if (!j || !Array.isArray(j.featured)) return failed();
+    grid.textContent = "";
+    j.featured.forEach(function (v) { grid.appendChild(card(v)); });
+  }).catch(failed);
+})();
 (function () {
   // THE ONE CURRENT-STATUS SOURCE (website brief §4): the summary lines come from GET /api/burnticker/v1/current-status
   // (src/lib/burnticker/currentStatus.ts); this page only renders them. Site audit #7/#8: the homepage shows a SHORT status — the phase,
@@ -272,6 +342,7 @@ footer .links a{color:var(--dim)}
   var api = (/(^|\.)burnticker\.com$/.test(location.hostname) && location.hostname !== "burnticker.com" ? "https://burnticker.com" : "") + "/api/burnticker/v1/current-status";
   var SHORT = /signs every reading|holds the upgrade authority|still open before release/;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function skeleton() { box.textContent = ""; var b = el("div", "bars"); b.setAttribute("aria-hidden", "true"); [40, 80, 65].forEach(function (w) { var s = el("span"); s.style.width = w + "%"; b.appendChild(s); }); box.appendChild(b); }
   function failed(why) {
     box.textContent = "";
     box.appendChild(el("p", "cs-head", "Data unavailable"));
@@ -280,7 +351,7 @@ footer .links a{color:var(--dim)}
     box.appendChild(el("p", "cs-meta", "Last tried at " + new Date().toISOString().slice(11, 19) + " UTC."));
   }
   function load() {
-    box.textContent = ""; box.appendChild(el("p", "cs-head", "Loading")); box.appendChild(el("p", "", "Reading the current status."));
+    skeleton();
     var done = false, t = setTimeout(function () { if (!done) { done = true; failed("The server did not answer in time."); } }, 15000);
     fetch(api, { cache: "no-store" }).then(function (r) { return r.text().then(function (x) { return { r: r, x: x }; }); }).then(function (o) {
       if (done) return; done = true; clearTimeout(t);
@@ -301,30 +372,22 @@ footer .links a{color:var(--dim)}
   }
   load();
 })();
+</script>
+<!-- site-shell:script:begin -->
+<script>
 (function () {
-  // "How launching works" in the hero opens the Launch card's explanation
-  var a = document.querySelector("[data-open-how]"), d = document.querySelector("#how details");
-  if (a && d) a.addEventListener("click", function () { d.open = true; });
+  // ONE THEME PREFERENCE: the same "bt-theme" key and switch as the app header; dark unless the visitor picked light
+  var root = document.documentElement, b = document.querySelector("[data-theme-toggle]");
+  function cur() { return root.dataset.theme === "light" ? "light" : "dark"; }
+  function label() { if (!b) return; var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); b.title = d ? "Light theme" : "Dark theme"; }
+  if (b) b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
+  label();
 })();
 (function () {
-  // ONE AVAILABILITY STATE (review 2): launch CTAs are hidden until the host's catalogue says creator launches are open; unreadable = closed.
-  var root = document.documentElement;
-  fetch("/api/burnticker/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
-    if (j && j.launches && j.launches.creators === true) {
-      root.classList.add("launches-open");
-      // R06: the shared link set lists Launch always — "Launch · closed" until the host says open (src/lib/burnticker/siteNav.mjs LAUNCH_LABELS)
-      Array.prototype.forEach.call(document.querySelectorAll("[data-launch-link]"), function (a) { a.textContent = a.closest("#menu") ? "Launch a token" : "Launch"; });
-    }
-    var line = document.querySelector("[data-cluster-line]");
-    if (line && j && typeof j.cluster === "string") line.textContent = " This site is showing " + j.cluster + ".";
-  }).catch(function () { /* closed */ });
-})();
-(function () {
-  // audit 4 BT-20 / site audit #16: the phone menu opens from the keyboard (Enter/Space on Menu), focus moves to its first link, Tab and
-  // Shift+Tab stay inside the menu and its summary while it is open, Escape closes it (focus back on Menu), a click outside closes it.
+  // the phone menu: Enter or Space opens it, focus moves to its first link, Tab and Shift+Tab stay inside, Escape closes it
   var m = document.getElementById("menu"); if (!m) return;
   var sum = m.querySelector("summary");
-  function links() { return Array.prototype.slice.call(m.querySelectorAll(".mlinks a[href]")); }
+  function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
   m.addEventListener("toggle", function () { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
   sum.setAttribute("aria-expanded", "false");
   document.addEventListener("keydown", function (e) {
@@ -335,16 +398,31 @@ footer .links a{color:var(--dim)}
     e.preventDefault();
     ring[i === -1 ? 0 : (e.shiftKey ? (i - 1 + ring.length) % ring.length : (i + 1) % ring.length)].focus();
   });
-  document.addEventListener("click", function (e) { if (m.open && !m.contains(e.target)) m.open = false; });
+  document.addEventListener("click", function (e) {
+    if (m.open && !m.contains(e.target)) m.open = false;
+    var l = document.querySelector(".sh-learn"); if (l && l.open && !l.contains(e.target)) l.open = false;
+  });
 })();
 (function () {
-  // ONE THEME PREFERENCE (site audit #6): the same "bt-theme" key and switch as the app header; no stored choice = the OS preference
-  var b = document.querySelector("[data-theme-toggle]"), root = document.documentElement; if (!b) return;
-  function cur() { var t = root.dataset.theme; return t === "light" || t === "dark" ? t : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"); }
-  function label() { var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); b.title = d ? "Light theme" : "Dark theme"; }
-  b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
-  label();
+  // "Launch a coin": the closed-launches dialog unless the host's catalogue says creator launches are open (unreadable = closed)
+  var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
+  fetch("/api/burnticker" + "/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { open = !!(j && j.launches && j.launches.creators === true); }).catch(function () { open = false; });
+  if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
+  if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
+  if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
+})();
+(function () {
+  // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
+  var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  fetch("/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    box.textContent = "";
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
+    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }
+    j.events.forEach(function (ev) { var a = el("a", ""); a.href = "" + ev.href; if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest burns could not be read just now.")); });
 })();
 </script>
+<!-- site-shell:script:end -->
 </body>
 </html>

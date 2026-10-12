@@ -38,8 +38,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  colorScheme: "dark light",
-  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f2eee4" }, { media: "(prefers-color-scheme: dark)", color: "#12100e" }],
+  // dark is the default whatever the OS prefers (review item 17, 2026-10-12); the header switch turns on the paper theme
+  colorScheme: "dark",
+  themeColor: "#12100e",
 };
 
 

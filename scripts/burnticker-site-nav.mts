@@ -1,6 +1,8 @@
-// THE SHARED LINK SET INTO THE STATIC PAGES (site audit #6/#13, R06, BT-22, 2026-10-11). The hand-written static pages carry marked
-// regions — <!-- site-nav:NAME:begin --> … <!-- site-nav:NAME:end --> — and this script fills each one from src/lib/burnticker/siteNav.mjs,
-// so the home, the status page and the $DEFICIT site print the same links in the same order as the app header and the whitepaper.
+// THE ONE SHELL INTO THE STATIC PAGES (site audit #6/#13, R06, BT-22, 2026-10-11; the whole shell since website-10, 2026-10-12). The
+// hand-written static pages carry marked regions — <!-- site-shell:NAME:begin --> … <!-- site-shell:NAME:end --> — and this script fills
+// each one from src/lib/burnticker/siteNav.mjs, so the home, the status page, the fallback page and the $DEFICIT site print the same
+// header (search, "Launch a coin", the disabled wallet button, the activity line), the same footer receipt, the same phone tab bar,
+// styles and script as the app and the whitepaper.
 //
 //   node --import ./test/alias-hook.mjs scripts/burnticker-site-nav.mts [--write|--check]
 //
@@ -8,27 +10,52 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { siteNavHtml, SITE_ORIGIN } from "../src/lib/burnticker/siteNav.mjs";
+import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS } from "../src/lib/burnticker/siteNav.mjs";
+import { OPERATOR_LINE } from "../src/lib/burnticker/trustpack/copy.ts";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** Every marked region: file, region name, render options. */
-export const REGIONS: { file: string; name: string; opts: Parameters<typeof siteNavHtml>[0] }[] = [
-  { file: "site/burnticker/index.html", name: "header", opts: { indent: "      " } },
-  { file: "site/burnticker/index.html", name: "menu", opts: { indent: "          " } },
-  { file: "site/burnticker/index.html", name: "footer", opts: { footer: true, indent: "    " } },
-  { file: "site/burnticker/status/index.html", name: "footer", opts: { origin: SITE_ORIGIN, footer: true, indent: "    " } },
-  { file: "site/deficit/index.html", name: "sitebar", opts: { origin: SITE_ORIGIN, self: "https://deficit.burnticker.com/", indent: "    " } },
-  { file: "site/deficit/index.html", name: "footer", opts: { origin: SITE_ORIGIN, self: "https://deficit.burnticker.com/", footer: true, indent: "    " } },
+/** The home's hero and "How it works" strip, from the same words the app's home prints. */
+export function heroHtml(): string {
+  return [
+    `<section class="hero wrap" aria-labelledby="hero-h">`,
+    `  <h1 id="hero-h">${esc(HERO.title)}</h1>`,
+    `  <p class="sub">${esc(HERO.sub)}</p>`,
+    `</section>`,
+    `<section class="wrap" aria-label="How it works">`,
+    `  <ol class="how">`,
+    ...HOW_IT_WORKS.map((h: { title: string; text: string }, i: number) => `    <li><span class="how-n" aria-hidden="true">${i + 1}</span><div><p class="how-t">${esc(h.title)}</p><p class="how-x">${esc(h.text)}</p></div></li>`),
+    `  </ol>`,
+    `  <p class="small"><a href="/burnticker/about">Read how it works in full</a></p>`,
+    `</section>`,
+  ].join("\n");
+}
+
+type Region = { file: string; name: string; render: () => string };
+const shell = (file: string, origin: string): Region[] => [
+  { file, name: "css", render: () => `<style>${SHELL_CSS}</style>` },
+  { file, name: "header", render: () => shellHeaderHtml({ origin }) },
+  { file, name: "footer", render: () => shellFooterHtml({ origin, operatorLine: OPERATOR_LINE }) },
+  { file, name: "script", render: () => `<script>\n${shellScript({ origin })}\n</script>` },
+];
+
+/** Every marked region: file, region name, renderer. */
+export const REGIONS: Region[] = [
+  ...shell("site/burnticker/index.html", ""),
+  { file: "site/burnticker/index.html", name: "hero", render: heroHtml },
+  ...shell("site/burnticker/status/index.html", SITE_ORIGIN),
+  ...shell("site/burnticker/fallback/index.html", ""),
+  ...shell("site/deficit/index.html", SITE_ORIGIN),
 ];
 
 export function renderRegions(read: (f: string) => string = (f) => fs.readFileSync(path.join(ROOT, f), "utf8")): Map<string, string> {
   const out = new Map<string, string>();
   for (const r of REGIONS) {
     const src = out.get(r.file) ?? read(r.file);
-    const re = new RegExp(`(<!-- site-nav:${r.name}:begin -->)[\\s\\S]*?(\\n[ \\t]*<!-- site-nav:${r.name}:end -->)`);
-    if (!re.test(src)) throw new Error(`${r.file}: no <!-- site-nav:${r.name}:begin/end --> region`);
-    out.set(r.file, src.replace(re, (_m, a: string, b: string) => `${a}\n${siteNavHtml(r.opts)}${b}`));
+    const re = new RegExp(`(<!-- site-shell:${r.name}:begin -->)[\\s\\S]*?(<!-- site-shell:${r.name}:end -->)`);
+    if (!re.test(src)) throw new Error(`${r.file}: no <!-- site-shell:${r.name}:begin/end --> region`);
+    out.set(r.file, src.replace(re, (_m, a: string, b: string) => `${a}\n${r.render()}\n${b}`));
   }
   return out;
 }

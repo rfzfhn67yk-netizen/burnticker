@@ -39,13 +39,13 @@ describe("the landing page (site/burnticker/index.html)", () => {
   const html = fs.readFileSync("site/burnticker/index.html", "utf8");
   const text = visibleText(html);
   test("every visible word passes the copy lint, including no-prizes", () => clean(text, "landing"));
-  test("the hero is the one sentence and the sub-line; the title and descriptions carry it", () => {
-    const h1 = /<h1>([\s\S]*?)<\/h1>/.exec(html)![1].replace(/<[^>]+>/g, "");
-    assert.equal(h1, SENTENCE);
-    // review 2 §2: "Launch one." is a launch CTA — hidden until the catalogue says creator launches are open (data-launch-cta)
-    assert.match(html, /<p class="sub"><span data-launch-cta>Launch one\. <\/span>Follow the season\.<\/p>/);
+  test("the hero is one line and one subline (the owner's review item 7, 2026-10-12); the title and descriptions carry it", async () => {
+    const { HERO } = await import("@/lib/burnticker/siteNav.mjs");
+    const h1 = /<h1 id="hero-h">([\s\S]*?)<\/h1>/.exec(html)![1].replace(/<[^>]+>/g, "");
+    assert.equal(h1, HERO.title); assert.equal(HERO.title, "Memecoins that burn on real-world results.");
+    assert.match(html, new RegExp(`<p class="sub">${HERO.sub.replace(/\./g, "\\.")}</p>`)); assert.equal(HERO.sub, "Every burn is a receipt.");
     // audit 4 BT-21: search and social previews describe the pre-launch state; they never invite launching while launches are closed
-    assert.match(html, /<meta name="description" content="Coins that burn on real-world results, with receipts\. Burnticker is in pre-launch, and creator launches are closed\. You can inspect a real devnet burn/);
+    assert.match(html, /<meta name="description" content="Memecoins that burn on real-world results\. Every burn is a receipt\. Burnticker is in pre-launch, and creator launches are closed\. You can inspect a real devnet burn/);
     assert.doesNotMatch(/<meta (?:name|property)="(?:description|og:description|twitter:description)" content="([^"]*)"/g.exec(html)?.[0] ?? "", /Launch one/);
   });
   test("door 2 is generated from the leagues index: every league, never NFL-first, soccer included, no drift", () => {
@@ -56,31 +56,30 @@ describe("the landing page (site/burnticker/index.html)", () => {
     assert.ok(!/^[^.]*\bNFL\b/.test(block.split('<p class="ex">')[1] ?? ""), "the sports line does not open on the NFL");
   });
 
-  // site audit #7 (2026-10-11): hero, verified receipt, three product cards (Launch / Seasons / $DEFICIT), short status, actions
-  test("three product cards under one H2 — Launch (its CTA gated), Seasons, $DEFICIT — each linking a page that exists", () => {
-    const sec = html.slice(html.indexOf('<section class="wrap" id="products"'), html.indexOf('<section class="wrap" id="status"'));
-    assert.match(sec, /<h2 id="products-h">/);
-    assert.deepEqual([...sec.matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]), ["Launch", "Seasons", "$DEFICIT"]);
-    assert.match(sec, /<a class="go" href="\/burnticker\/launch" data-launch-cta>/, "the Launch card's action is a gated CTA");
-    assert.match(sec, /<a class="go" href="\/burnticker\/leagues">Leagues<\/a>/);
-    assert.match(sec, /href="https:\/\/deficit\.burnticker\.com\/" target="_blank" rel="noopener"/);
-    assert.ok(fs.existsSync("src/app/burnticker/launch/page.tsx") && fs.existsSync("src/app/burnticker/leagues/page.tsx"));
-    assert.equal(NAV.find((n) => n.label === "Seasons")?.href, "/burnticker/leagues", "the Seasons card and the nav land on the same page");
-    assert.match(html, /\.cards\{display:grid;grid-template-columns:1fr;/, "one column on a phone");
+  // website-10 (2026-10-12, the owner's review items 1, 8, 12, 15): hero, How it works, the coin grid (featured cards from the API), Follow
+  // the season, a short current status. The Launch / Seasons / $DEFICIT product cards are gone: $DEFICIT is the first featured card, the
+  // launch explanation moved to /burnticker/about, Seasons is the preview strip.
+  test("list first: hero, How it works, the coin grid read from the home API, Follow the season, the short status; each link goes to a page that exists", () => {
+    const at = (m: string) => { const i = html.indexOf(m); assert.ok(i >= 0, m); return i; };
+    const order = ['<h1 id="hero-h">', '<ol class="how">', 'id="coins"', 'data-featured', 'id="seasons"', 'id="status"'].map(at);
+    assert.deepEqual([...order].sort((x, y) => x - y), order);
+    assert.match(html, /fetch\("\/api\/burnticker\/home", \{ cache: "no-store" \}\)/, "the cards come from the API, never typed into the page");
+    assert.doesNotMatch(html, /<article class="card/, "no card is hand-written");
+    assert.match(html, /<a class="go" href="\/burnticker\/leagues">Leagues<\/a>/);
+    for (const f of ["src/app/burnticker/launch/page.tsx", "src/app/burnticker/leagues/page.tsx", "src/app/burnticker/about/page.tsx"]) assert.ok(fs.existsSync(f), f);
+    assert.equal(NAV.find((n) => n.label === "Seasons")?.href, "/burnticker/leagues", "the Seasons strip and the nav land on the same page");
+    assert.match(html, /\.grid\{display:grid;grid-template-columns:1fr;/, "one column on a phone");
   });
-  test("review 2 §2: every launch CTA is hidden until the host's catalogue says creator launches are open; the closed line says so (fail closed)", () => {
-    // R06 (2026-10-11): the shared nav lists Launch always, labelled "Launch · closed" (data-launch-link); every other launch link is a CTA
-    const all = [...html.matchAll(/<a [^>]*href="\/burnticker\/launch"[^>]*>[^<]*/g)].map((m) => m[0]);
-    const navLinks = all.filter((a) => a.includes("data-launch-link")), ctas = all.filter((a) => !a.includes("data-launch-link"));
-    assert.ok(navLinks.length >= 3 && navLinks.every((a) => a.endsWith(">Launch · closed")), navLinks.join("\n"));
-    assert.ok(ctas.length >= 1 && ctas.every((a) => a.includes("data-launch-cta")), ctas.join("\n"));
-    assert.match(html, /html:not\(\.launches-open\) \[data-launch-cta\]\{display:none!important\}/);
-    assert.match(html, /fetch\("\/api\/burnticker\/catalogue"\)[\s\S]*launches\.creators === true\) \{\s*root\.classList\.add\("launches-open"\)/);
-    assert.match(html, /<p class="state" data-launches-closed>Creator launches are closed\.<span data-cluster-line><\/span><\/p>/);
-    // one served $DEFICIT destination
-    const deficitLinks = [...html.matchAll(/<a [^>]*>\$DEFICIT(?:<span aria-hidden="true"> ↗<\/span>)?<\/a>/g)];
-    assert.ok(deficitLinks.length >= 3);
-    for (const m of deficitLinks) assert.match(m[0], /href="https:\/\/deficit\.burnticker\.com\/"/, m[0]);
+  test("review 2 §2 and brief rule 1: the launch button opens the closed-launches dialog unless the host's catalogue says open (fail closed); no date, no waitlist", async () => {
+    const { LAUNCH_CLOSED, LAUNCH_LABELS } = await import("@/lib/burnticker/siteNav.mjs");
+    assert.match(html, /<a class="sh-launch" href="\/burnticker\/launch" data-launch-button>Launch a coin<\/a>/);
+    assert.equal(LAUNCH_LABELS.button, "Launch a coin");
+    assert.match(html, /fetch\("\/api\/burnticker" \+ "\/catalogue"\)[\s\S]*open = !!\(j && j\.launches && j\.launches\.creators === true\)/);
+    assert.match(html, /if \(open\) return; e\.preventDefault\(\); dlg\.showModal\(\);/);
+    assert.ok(html.includes(`<p>${LAUNCH_CLOSED.body}</p>`)); assert.match(LAUNCH_CLOSED.body, /closed until the first coin has receipts/);
+    assert.doesNotMatch(html, /type="email"|waitlist|countdown/i);
+    // the nav says "Launch" in every state; the old "Launch · closed" label is gone
+    assert.doesNotMatch(html, /Launch · closed/);
   });
   test("the eleven guardrails, in order, moved to the trust page (site audit #7); the homepage carries none of them", async () => {
     const { GUARDRAILS: G } = await import("@/lib/burnticker/safeguards");
@@ -108,7 +107,7 @@ describe("the landing page (site/burnticker/index.html)", () => {
     else assert.match(html, /href="\/burnticker\/derby"/, "the Derby index exists on main: Seasons links it");
     assert.doesNotMatch(text, /coming soon/i);
     assert.match(text, /When a league's season ends, the coin with the most receipts is named its champion\. That is a line on a scoreboard, and nobody receives anything for it\./);
-    assert.match(text, /Nothing is ever won here\. Things are only burned\./);
+    assert.match(text, /Nothing is ever won\. Things are only burned\./, "the footer receipt carries it (brief rule 5)");
   });
   test("Seasons: no illustrative scoreboards on the homepage any more (site audit #7); the leagues page keeps its labelled example", () => {
     assert.doesNotMatch(html, /<div class="board">|class="tape"|Illustrative example/);
@@ -116,9 +115,9 @@ describe("the landing page (site/burnticker/index.html)", () => {
     assert.match(l, /Example only\. These coins and counts are not live data\./);
   });
   test("the cold read's edits (docs/launch/gtm/COLD-READ.md): the one-line definition stays; the safeguards it asked for moved to the trust page", async () => {
-    // UX report 3 item 10: the definition's words are unchanged; "burns" and "receipt" carry their glossary sentence as context help (<abbr>)
-    const def = /<p class="def">([\s\S]*?)<\/p>/.exec(html)![1];
-    assert.equal(def.replace(/<[^>]+>/g, ""), "Burnticker is a Solana memecoin launchpad. Each coin has one locked rule. When its result settles, the coin's own trading fees buy it back on its own pool, and a program burns what they bought. The transaction is the receipt.");
+    // UX report 3 item 10: the definition's words are unchanged; since 2026-10-12 they open the about page (the explainer moved there)
+    const about = fs.readFileSync("src/app/burnticker/about/page.tsx", "utf8");
+    assert.ok(about.includes("Burnticker is a launchpad for Solana memecoins. Each coin has one locked rule. When the rule&apos;s result settles, the coin&apos;s own trading fees buy it back on its own pool, and a program burns what they bought. The transaction is the receipt."));
     const { SAFEGUARDS, WHO_GETS_WHAT } = await import("@/lib/burnticker/safeguards");
     const sg = SAFEGUARDS.map((x) => x.text).join(" "), wg = WHO_GETS_WHAT.map((x) => x.text).join(" ");
     assert.match(sg, /a short list of up to three approved accounts can be required instead, for at most 90 days/);

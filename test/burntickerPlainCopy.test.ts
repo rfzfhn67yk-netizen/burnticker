@@ -123,7 +123,9 @@ const PAGE_FILES = [...walk("src/app/burnticker", /\.tsx$/)];
  */
 const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatus.ts", "describe.ts", "coinText.ts", "coinCard.ts", "emptyState.ts", "readiness.ts",
   "templates.ts", "fieldHelp.ts", "glossary.ts", "safeguards.ts", "verificationStatus.ts", "landingDoors.ts", "fees.ts", "pairFundsFlow.ts", "deficitPrelaunch.ts",
-  "creatorLaunches.ts", "launchAvailability.ts", "launchGateState.ts", "trust.ts", "tokenPage.ts", "verifyMint.ts", "leagues.ts", "seasons.ts", "lockFees.ts", "wizard.ts"]
+  "creatorLaunches.ts", "launchAvailability.ts", "launchGateState.ts", "trust.ts", "tokenPage.ts", "verifyMint.ts", "leagues.ts", "seasons.ts", "lockFees.ts", "wizard.ts",
+  // website-11 (2026-10-12): the coin page's order and rule facts; website-10: the shared shell's words, the home's featured cards and activity line, the card rows
+  "coinPage.ts", "siteNav.mjs", "home.ts", "cardView.ts"]
   .map((f) => `src/lib/burnticker/${f}`);
 
 describe("plain-English copy: no shorthand on any page (website-9)", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "../_components/EmptyState";
 import { useJsonRead, ReadFailurePanel } from "../_components/useJsonRead";
 import { RepoText } from "../_components/RepoText";
 
@@ -16,7 +17,7 @@ export default function OpsSection({ card, repo }: { card: string; repo?: string
   void repo;
   const link = (rel: string) => <RepoText text={rel} />;
   if (failure) return <section className={card}><h2 className="font-medium">Keepers, attesters and snapshots</h2><ReadFailurePanel what="The operations summary" failure={failure} triedAt={triedAt} loading={loading} retry={retry} /></section>;
-  if (!t) return <section className={card}><h2 className="font-medium">Keepers, attesters and snapshots</h2><p className="text-xs text-neutral-500">Loading…</p></section>;
+  if (!t) return <section className={card}><h2 className="font-medium">Keepers, attesters and snapshots</h2><EmptyState compact kind="loading" /></section>;
   return (<>
     <section className={card}><h2 className="font-medium">Which keeper is active</h2>
       <p className="text-xs">{t.activeSummary} The <a className="underline" href={t.statusPage}>status page</a> has more detail.</p>

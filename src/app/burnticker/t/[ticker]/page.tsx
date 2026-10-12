@@ -12,18 +12,22 @@ import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
 import { useParams } from "next/navigation";
-import { CoinThumb, CurveBar, VenueChip, ago, until } from "../../_components/CoinCard";
+import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
+import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
 import { PinnedCheck, type PinnedView } from "../../_components/PinnedCheck";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
 
 /**
- * THE COIN PAGE (LAUNCHPAD-PATH §6; laid out like a launchpad coin page on 2026-10-10 — docs/burnticker/ui-conventions.md): the header
- * with image, name, $TICKER, the mint with a copy button and the creator's links; LEFT the chart (GeckoTerminal's embed of the pool
- * that trades now when one is indexed — mainnet — else Burnticker's own readings chart with burn markers) and the receipts tape under it;
- * RIGHT a sticky panel — Trade (deep links to Raydium / Jupiter for the mint: Burnticker hosts no swap, no amount presets), the bonding
- * curve (SOL raised of the graduation threshold), holders ("—" with the reason when not read), and the RULE CARD (the locked rule in one
- * sentence, the next burn, the pool, what the operator can and cannot do). Then verify-it-yourself, fees, attesters and addresses.
+ * THE COIN PAGE (LAUNCHPAD-PATH §6; re-ordered by website-11 on 2026-10-12 for the owner's review items 6 and 8, as the website brief
+ * rewrites them; src/lib/burnticker/coinPage.ts holds the order). The header: image, name, $TICKER, the mint with a copy button and the
+ * creator's links. ON TOP: the chart (GeckoTerminal's embed of the pool that trades now when one is indexed, else Burnticker's own
+ * readings chart with burn markers) and beside it ONE outbound link, "Trade on Raydium", to this coin on Raydium. Burnticker never
+ * takes an order, so there is no buy or sell panel. Beside the link: a static read of the pool (the curve as SOL raised of the
+ * graduation threshold) and the readiness state, which says in plain words that burns begin after graduation and pool registration.
+ * THEN THE TABS, in this order: "Burn log" (the receipts, each with "Check receipt" to the in-browser verifier, and verify-it-yourself),
+ * "Rule" (the locked rule text, its hash, the dial, the window and the end, the fees, signers and addresses), and "Holders" only when
+ * holder data was read. There is no thread, and nothing counts down. The site's disclaimers live once, in the footer.
  */
 type Link_ = { label: string; url: string };
 interface Market { phase: "curve" | "migrating" | "graduated" | null; curve: { raised: string; threshold: string; remaining: string; quote: string; progressPct: number; poolId: string } | null; curveNote: string; graduatedPool: string | null; holders: { count: number | null; countNote: string; top: { account: string; owner: string | null; amount: string; pct: number; label: string | null }[] | null; topNote: string }; trade: { links: { id: string; label: string; url: string }[]; note: string | null }; chart: { provider: string | null; embedUrl: string | null; pageUrl: string | null; note: string }; readAt: string | null; error: string | null }
@@ -38,7 +42,6 @@ const fmt = (s: string) => { const [w, f] = s.split("."); return w.replace(/\B(?
 const short = (a: string) => (a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
 /** "1 burn" / "3 burns": a count with the right noun. */
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const denver = (iso: string | null) => (iso ? new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso)) : "—");
 
 function Chart({ readings, receipts }: { readings: Reading[]; receipts: Receipt[] }) {
   const pts = readings.filter((r) => r.value !== null);
@@ -68,17 +71,25 @@ export default function TokenPage() {
   const [d, setD] = useState<Data | null>(null);
   const launch = useLaunchAvailability();
   const [err, setErr] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  // the time the page was read; "launched 3d ago" and "last burn 2h ago" are past records, and nothing on this page counts down
+  const [now] = useState(() => Date.now());
+  const [tab, setTab] = useState<CoinTab>("burns");
   useEffect(() => { fetch(`/api/burnticker/tokens/${encodeURIComponent(ticker)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setD(j); }).catch((e) => setErr(String(e.message ?? e))); }, [ticker]);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const hasHolders = !!d?.status.market?.holders.top?.length;
+  useEffect(() => { if (d) setTab(initialTab(window.location.hash, coinTabs(hasHolders))); }, [d, hasHolders]);
   // review 2 §2: a ticker this host has no record of explains itself (and $DEFICIT links its served page) instead of a bare error line
   if (err) return /no token/i.test(err) ? <NotRegistered ticker={ticker} /> : <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="unavailable" body={`The page for $${ticker.toUpperCase()} could not be read just now.`} details={err} /></main>;
   if (!d) return <main className="mx-auto max-w-3xl px-4 py-6"><EmptyState kind="loading" /></main>;
   const s = d.status, m = s.market, prof = s.profile;
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const rows = [...d.receipts].reverse();
-  const nextAt = s.next.nextCloseTime ?? s.next.nextCheckAt;
-  const venue = s.oracle === "kalshi" ? "Kalshi" : s.oracle === "polymarket" ? "Polymarket, with each result read on Polygon" : "the source's own published data";
+  const venue = s.oracle === "kalshi" ? "the prediction market that settles it" : s.oracle === "polymarket" ? "Polymarket, with each result read on Polygon" : "the source's own published data";
+  const trade = raydiumLink(m?.trade);
+  const facts = ruleFacts(d.rulesText, s.rules.oneShot);
+  const tabs = coinTabs(hasHolders);
+  const ready = readinessFromStatus(s as unknown as Parameters<typeof readinessFromStatus>[0], d.receipts as unknown as Parameters<typeof readinessFromStatus>[1]);
+  // readiness.ts decides: a coin on its curve, or graduated with its pool not yet registered, cannot burn yet
+  const preBurn = ready.state === "on-curve" || ready.state === "awaiting-registration";
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-5 space-y-5 text-sm">
@@ -88,7 +99,7 @@ export default function TokenPage() {
       <header className="flex gap-4">
         <CoinThumb src={prof?.imageUrl ?? null} ticker={s.ticker} size={72} generated />
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-1.5"><VenueChip oracle={s.oracle} />{m?.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}{s.status !== "live" && <span className="bt-chip bt-chip-draft">{s.status}</span>}{prof?.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{prof.badge}</span>}<span className="text-xs text-neutral-500">{s.cluster} · {s.launchedAt ? `launched ${ago(s.launchedAt, now)}` : "not launched"}</span></div>
+          <div className="flex flex-wrap items-center gap-1.5"><VenueChip oracle={s.oracle} />{m?.phase === "graduated" && <span className="bt-chip bt-chip-grad">graduated</span>}{s.status !== "live" && <span className="bt-chip bt-chip-draft">{s.status}</span>}{prof?.badge && <span className="bt-chip bt-chip-window" title="the coin's window, fixed in its rule">{prof.badge}</span>}<span className="text-xs text-neutral-500">{s.cluster}, {s.launchedAt ? `launched ${ago(s.launchedAt, now)}` : "not launched"}</span></div>
           <h1 className="text-2xl font-semibold leading-tight">{s.name} <span className="font-mono text-lg text-neutral-400">${s.ticker}</span></h1>
           <p className="text-neutral-300">{prof?.oneLiner ?? s.seriesTitle ?? s.selectorKey}</p>
           <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
@@ -102,122 +113,136 @@ export default function TokenPage() {
           <p className="text-xs text-neutral-500">{prof?.affiliation ?? "This coin is not affiliated with any team, league, candidate, agency or market."}</p>
           {launch.open && <p><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(s.ticker)}>Launch one like this →</Link> <Link className="text-xs underline text-neutral-400" href="/burnticker/templates">all templates</Link></p>}
           <PinnedCheck pinned={s.pinned} />
-          <ReadinessPanel r={readinessFromStatus(s as unknown as Parameters<typeof readinessFromStatus>[0], d.receipts as unknown as Parameters<typeof readinessFromStatus>[1])} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
         </div>
       </header>
 
-      {s.pair && <Link href={s.pair.pageUrl} className={card + " block"}><span className="text-xs text-neutral-400">Rivalry pair, burns so far:</span> <span className="font-mono">${s.ticker} {s.pair.tally.burnsThis} : {s.pair.tally.burnsOther} ${s.pair.counterpart.ticker}</span> <span className="text-xs underline">Open the pair page</span></Link>}
+      {s.pair && <Link href={s.pair.pageUrl} className={card + " block"}><span className="text-xs text-neutral-400">This coin is one side of a rivalry pair. Burns so far:</span> <span className="font-mono">${s.ticker} {s.pair.tally.burnsThis} : {s.pair.tally.burnsOther} ${s.pair.counterpart.ticker}</span> <span className="text-xs underline">Open the pair page</span></Link>}
 
+      {/* ---- TOP (review item 6 as the website brief rewrites it): the chart, and one outbound link to the coin's own pool. No order panel. ---- */}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-        {/* ---- LEFT: chart + receipts tape ---- */}
-        <div className="min-w-0 space-y-5">
-          <section aria-label="Chart">
-            {m?.chart.embedUrl ? (
-              <>
-                <iframe title={`${s.ticker} chart on GeckoTerminal`} src={m.chart.embedUrl} className="h-[420px] w-full rounded-lg border border-neutral-800 bg-neutral-900" loading="lazy" referrerPolicy="no-referrer" allow="clipboard-write" />
-                <p className="mt-1 text-xs text-neutral-500">{m.chart.note}{m.chart.pageUrl && <> <a className="underline" href={m.chart.pageUrl} rel="noopener" target="_blank">Open this chart on GeckoTerminal.</a></>}</p>
-              </>
-            ) : (
-              <>
-                <div className="mb-1 flex items-baseline justify-between gap-2"><h2 className="font-medium">{s.seriesTitle ?? s.selectorKey}</h2><span className="text-xs text-neutral-500">Dots mark burns.</span></div>
-                <Chart readings={d.readings} receipts={d.receipts} />
-                <p className="mt-1 text-xs text-neutral-500">These are settled readings from {venue}.{s.feed.lastEventId ? ` The latest is ${s.feed.lastValue ? `${s.feed.lastValue} for ` : ""}${s.feed.lastEventId}.` : ""}{m?.chart.note ? ` ${m.chart.note}${/[.!?]$/.test(m.chart.note) ? "" : "."}` : ""}</p>
-              </>
-            )}
-          </section>
+        <section aria-label="Chart" className="min-w-0">
+          {m?.chart.embedUrl ? (
+            <>
+              <iframe title={`${s.ticker} chart on GeckoTerminal`} src={m.chart.embedUrl} className="h-[420px] w-full rounded-lg border border-neutral-800 bg-neutral-900" loading="lazy" referrerPolicy="no-referrer" allow="clipboard-write" />
+              <p className="mt-1 text-xs text-neutral-500">{m.chart.note}{m.chart.pageUrl && <> <a className="underline" href={m.chart.pageUrl} rel="noopener" target="_blank">Open this chart on GeckoTerminal.</a></>}</p>
+            </>
+          ) : (
+            <>
+              <div className="mb-1 flex items-baseline justify-between gap-2"><h2 className="font-medium">{s.seriesTitle ?? s.selectorKey}</h2><span className="text-xs text-neutral-500">Dots mark burns.</span></div>
+              <Chart readings={d.readings} receipts={d.receipts} />
+              <p className="mt-1 text-xs text-neutral-500">These are settled readings from {venue}.{s.feed.lastEventId ? ` The latest is ${s.feed.lastValue ? `${s.feed.lastValue} for ` : ""}${s.feed.lastEventId}.` : ""}{m?.chart.note ? ` ${m.chart.note}${/[.!?]$/.test(m.chart.note) ? "" : "."}` : ""}</p>
+            </>
+          )}
+        </section>
 
-          <section aria-label="Receipts">
-            <div className="mb-2 flex items-baseline justify-between"><h2 className="font-medium">Receipts</h2><span className="text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, {fmt(s.burned.total)} tokens burned ({s.burned.pctOfSupply.toFixed(2)}% of supply)</span></div>
-            {rows.length === 0 ? <p className="text-neutral-500">No receipts yet. The first result after launch prints the first one.</p> : (
-              <ol className="bt-tape">
-                {rows.map((b) => (
-                  <li key={b.eventId} className="bt-tape-row">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                      <span className="font-mono text-xs">{b.settledAt.slice(0, 16).replace("T", " ")}Z</span>
-                      <span className="font-mono text-xs truncate" title={b.title ?? ""}>{b.market}</span>
-                      <span className="font-mono text-xs uppercase">{b.result ?? b.value ?? "—"}</span>
-                    </div>
-                    {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{[...new Set((b.title.match(/settled on [^·]+· confirmed by [^·]+/g) ?? []).map((x) => x.trim()))].join(" · ")}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN →</a>)}</div>}
-                    <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
-                      <span>{b.status === "confirmed" ? <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{b.status}{b.skippedReason ? ` — ${b.skippedReason}` : ""}</span>}</span>
-                      <span className="flex gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>tx</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{(() => { const v = receiptRowStatus(b); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title} data-receipt-status={v.status}>{v.status === "passed" ? "✓ " : v.status === "failed" ? "✗ " : ""}{v.label}</span>; })()}</span>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
-        </div>
-
-        {/* ---- RIGHT: trade links, curve, holders, rule card ---- */}
-        <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start">
+        <aside className="space-y-3 lg:self-start" aria-label="Trade and pool">
           <section className={card} aria-label="Trade">
-            <h2 className="font-medium">Trade</h2>
-            <p className="mt-1 text-xs text-neutral-500">Burnticker has no swap of its own. These links open other sites where ${s.ticker} trades, set to this exact coin.</p>
-            {m && m.trade.links.length > 0 ? (
-              <div className="mt-2 grid gap-2">{m.trade.links.map((l, i) => <a key={l.id} href={l.url} rel="noopener" target="_blank" className={i === 0 ? "bt-launch-btn text-center" : "bt-ghost-btn text-center"}>{l.label} ↗</a>)}</div>
-            ) : <p className="mt-2 rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "Trade links appear once the coin is launched."}</p>}
-            <div className="mt-2 flex items-center gap-2 text-xs"><span className="font-mono truncate text-neutral-400" title={s.mint}>{s.mint}</span><CopyButton text={s.mint} /></div>
+            {trade ? <a href={trade.url} rel="noopener" target="_blank" className="bt-launch-btn block text-center" data-trade-link>{trade.label} ↗</a>
+              : <p className="rounded border border-dashed border-neutral-700 p-2 text-xs text-neutral-400">{m?.trade.note ?? "The trade link appears once the coin is launched."}</p>}
+            <p className="mt-2 text-xs text-neutral-500">Burnticker never takes an order and has no swap of its own. {trade ? `This link opens Raydium, set to $${s.ticker}.` : ""}</p>
           </section>
 
-          <section className={card} aria-label="Bonding curve">
+          {/* a static read of the pool, from the API: the curve as SOL raised of the graduation threshold, or the pool it trades in now */}
+          <section className={card} aria-label="Pool">
             <CurveBar c={{ phase: m?.phase ?? null, progressPct: m?.curve?.progressPct ?? (m?.phase === "graduated" ? 100 : null), raised: m?.curve?.raised ?? null, threshold: m?.curve?.threshold ?? null, quote: m?.curve?.quote ?? null, curveNote: m?.curveNote }} />
-            <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. ${s.ticker} now trades in a Raydium CPMM pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${Number(m.curve.remaining).toFixed(2)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
-            <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div title={m?.holders.countNote}><dt className="text-neutral-500">holders</dt><dd className="font-mono">{m?.holders.count ?? "—"}</dd></div>
-              <div><dt className="text-neutral-500">supply left</dt><dd className="font-mono tabular-nums">{(100 - s.burned.pctOfSupply).toFixed(2)}%</dd></div>
-            </dl>
-            {m?.holders.top && m.holders.top.length > 0 && (
-              <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">Top holders</summary>
-                <ol className="mt-1 space-y-0.5">{m.holders.top.slice(0, 20).map((h, i) => <li key={h.account} className="flex justify-between gap-2 font-mono"><span>{i + 1}. {short(h.owner ?? h.account)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct.toFixed(2)}%</span></li>)}</ol>
-                <p className="mt-1 text-neutral-500">{m.holders.topNote}</p>
-              </details>
-            )}
+            <p className="mt-2 text-xs text-neutral-400">{m?.phase === "graduated" ? `The bonding curve is complete. At graduation, all of the liquidity was locked forever. $${s.ticker} now trades in a Raydium pool${m.graduatedPool ? ` (${short(m.graduatedPool)})` : ""}.` : m?.curve ? `${Number(m.curve.remaining).toFixed(2)} ${m.curve.quote} to go before graduation. When the curve fills, the coin moves to a Raydium pool and its liquidity is locked forever. The pool's fees fund the burn.` : <span title={m?.curveNote}>{m?.curveNote ?? "The curve has not been read."}</span>}</p>
+            {preBurn && <p className="mt-2 text-xs text-neutral-300" data-burns-after-graduation>{BURNS_AFTER_GRADUATION}</p>}
+            <p className="mt-2 text-[11px] text-neutral-500">{m?.readAt ? `This site read the pool at ${m.readAt.slice(11, 16)} UTC.` : "This site has not read the pool."} {(100 - s.burned.pctOfSupply).toFixed(2)}% of the supply is left.</p>
           </section>
 
-          <section className={card + " bt-rule-card"} aria-label="The rule">
-            <div className="flex items-baseline justify-between"><h2 className="font-mono text-xs uppercase tracking-widest">The rule (locked)</h2><a className="text-[11px] underline" href={`/api/burnticker/tokens/${s.ticker}?format=rules`}>rules.json</a></div>
-            <p className="mt-2">{s.rules.statement}</p>
-            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <div><dt className="text-neutral-500">next result</dt><dd className="font-mono" title={denver(nextAt)}>{s.rules.oneShot && !nextAt ? "resolves once" : until(nextAt, now)}</dd></div>
-              <div><dt className="text-neutral-500">last burn</dt><dd className="font-mono">{ago(s.burned.lastAt ?? null, now)}</dd></div>
-              <div><dt className="text-neutral-500">{s.mode === "buyback" ? "burn pool" : "vault"}</dt><dd className="font-mono">{s.mode === "buyback" ? (s.pool.feePdaSol === null ? "—" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance))}</dd></div>
-              <div><dt className="text-neutral-500">burned</dt><dd className="font-mono tabular-nums">{s.burned.pctOfSupply.toFixed(2)}%</dd></div>
-            </dl>
-            <p className="mt-2 text-[11px] text-neutral-500 break-all">Rule hash (sha256): {s.rules.sha256}</p>
-            <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
-              <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>
-              <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>.{s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} {s.trust.lpLockedPct ?? 100}% of the liquidity is locked, and its fees go 80% to the burn pool and 20% to the operator. The team allocation is {s.trust.teamAllocationPct}%.</p>
-            </details>
-          </section>
-
-          {s.lp && <LpLockCard lp={s.lp} card={card} />}
+          <ReadinessPanel r={ready} firstBurnPathUrl={FIRST_BURN_PATH_URL} />
         </aside>
       </div>
 
-      <section id="verify" className="scroll-mt-20">
-        <h2 className="font-medium mb-2">Verify it yourself</h2>
-        {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt shows up here with the command, the formula and the on-chain memo you can use to check it.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{b.settledAt.slice(0, 10)}, {b.market}: {b.result ?? b.value}, {count(b.units, "unit")}, {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : b.status} ({receiptRowStatus(b).label})</summary>
-          <p className="mt-2">1. Read the settled result from the source:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.curl}</pre>{b.method && <p className="text-xs text-neutral-500">The value was read by {b.method}.</p>}
-          <p>2. Apply the rule:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.formula}</pre>
-          <p>3. Check that you get this: <strong>{b.verify.expected}</strong></p>
-          <p>4. The receipt memo on chain{b.txUrl && <> (<a className="underline" href={b.txUrl}>transaction</a>)</>}:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.memo ?? `No transaction. The status is ${b.status}.`}</pre>
-          {b.verify.checks.length > 0 && <p className="text-red-400">Checks that did not pass: {b.verify.checks.join("; ")}</p>}
-        </details>)}
-      </section>
+      {/* ---- TABS: Burn log first, then Rule, then Holders when holder data was read. No thread. ---- */}
+      <div className="bt-tabs" role="tablist" aria-label="About this coin">
+        {tabs.map((t) => <button key={t} id={`tab-${t}`} type="button" role="tab" aria-selected={tab === t} aria-controls={`panel-${t}`} className={`bt-tab${tab === t ? " is-active" : ""}`} onClick={() => setTab(t)}>{COIN_TAB_LABEL[t]}</button>)}
+      </div>
+
+      {/* website-10's coin cards link "Check receipt" to #receipts; the anchor sits on the burn log so the link lands here */}
+      <span id="receipts" />
+      <div id="panel-burns" role="tabpanel" aria-labelledby="tab-burns" hidden={tab !== "burns"} className="space-y-5">
+        <section aria-label="Burn log">
+          <p className="mb-2 text-xs text-neutral-500">{count(s.burned.count, "burn")} so far, and {fmt(s.burned.total)} tokens burned. That is {s.burned.pctOfSupply.toFixed(2)}% of the supply. Each receipt below can be checked in your browser.</p>
+          {rows.length === 0 ? <p className="text-neutral-500">There are no receipts yet. {preBurn ? BURNS_AFTER_GRADUATION : "The next result that counts prints the first one."}</p> : (
+            <ol className="bt-tape">
+              {rows.map((b) => (
+                <li key={b.eventId} className="bt-tape-row">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span className="font-mono text-xs">{b.settledAt.slice(0, 16).replace("T", " ")}Z</span>
+                    <span className="font-mono text-xs truncate" title={b.title ?? ""}>{b.market}</span>
+                    <span className="font-mono text-xs uppercase">{b.result ?? b.value ?? "—"}</span>
+                  </div>
+                  {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{[...new Set((b.title.match(/settled on [^·]+· confirmed by [^·]+/g) ?? []).map((x) => x.trim()))].join(" · ")}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN →</a>)}</div>}
+                  <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
+                    <span>{b.status === "confirmed" ? <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{b.status}{b.skippedReason ? `. ${b.skippedReason}` : ""}</span>}</span>
+                    <span className="flex flex-wrap gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>transaction</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{(() => { const v = receiptRowStatus(b); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title} data-receipt-status={v.status}>{v.status === "passed" ? "✓ " : v.status === "failed" ? "✗ " : ""}{v.label}</span>; })()}{(() => { const href = checkReceiptHref(b.signature, s.cluster); return href ? <a className="underline font-medium" href={href} data-check-receipt>Check receipt</a> : null; })()}</span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        <section id="verify" className="scroll-mt-20">
+          <h2 className="font-medium mb-2">Verify it yourself</h2>
+          {rows.length === 0 ? <p className="text-neutral-500 text-xs">Each receipt shows up here with the command, the formula and the on-chain memo you can use to check it.</p> : rows.slice(0, 40).map((b) => <details key={b.eventId} className={card + " mb-2"}><summary className="cursor-pointer">{b.settledAt.slice(0, 10)}, {b.market}: {b.result ?? b.value}, {count(b.units, "unit")}, {b.status === "confirmed" ? `${fmt(b.burned ?? "0")} burned` : b.status} ({receiptRowStatus(b).label})</summary>
+            <p className="mt-2">1. Read the settled result from the source:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.curl}</pre>{b.method && <p className="text-xs text-neutral-500">The value was read by {b.method}.</p>}
+            <p>2. Apply the rule:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.verify.formula}</pre>
+            <p>3. Check that you get this: <strong>{b.verify.expected}</strong></p>
+            <p>4. The receipt memo on chain{b.txUrl && <> (<a className="underline" href={b.txUrl}>transaction</a>)</>}:</p><pre className="text-xs bg-neutral-950 rounded p-2 overflow-x-auto">{b.memo ?? `No transaction. The status is ${b.status}.`}</pre>
+            {b.verify.checks.length > 0 && <p className="text-red-400">Checks that did not pass: {b.verify.checks.join("; ")}</p>}
+          </details>)}
+        </section>
+        <p className="text-xs text-neutral-500">{s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
+      </div>
+
+      <div id="panel-rule" role="tabpanel" aria-labelledby="tab-rule" hidden={tab !== "rule"} className="space-y-5">
+        <section className={card + " bt-rule-card"} aria-label="The rule">
+          <div className="flex items-baseline justify-between"><h2 className="font-mono text-xs uppercase tracking-widest">The rule, locked at launch</h2><a className="text-[11px] underline" href={`/api/burnticker/tokens/${s.ticker}?format=rules`}>rules.json</a></div>
+          <p className="mt-2">{s.rules.statement}</p>
+          <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+            <div><dt className="text-neutral-500">The dial</dt><dd>{facts.dial ?? "The rule file does not name a share of the burn pool."}</dd></div>
+            <div><dt className="text-neutral-500">The window</dt><dd>{facts.window}{prof?.badge ? ` The rule's window reads ${prof.badge}.` : ""}</dd></div>
+            <div><dt className="text-neutral-500">The end</dt><dd>{s.lifecycle ? `${s.lifecycle.line} ` : ""}{facts.end}</dd></div>
+          </dl>
+          <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <div><dt className="text-neutral-500">results read</dt><dd className="font-mono">{s.feed.readings}</dd></div>
+            <div><dt className="text-neutral-500">last burn</dt><dd className="font-mono">{ago(s.burned.lastAt ?? null, now)}</dd></div>
+            <div><dt className="text-neutral-500">{s.mode === "buyback" ? "burn pool" : "vault"}</dt><dd className="font-mono">{s.mode === "buyback" ? (s.pool.feePdaSol === null ? "—" : `${s.pool.feePdaSol} SOL`) : (s.pool.vaultBalance === null ? "—" : fmt(s.pool.vaultBalance))}</dd></div>
+            <div><dt className="text-neutral-500">burned</dt><dd className="font-mono tabular-nums">{s.burned.pctOfSupply.toFixed(2)}%</dd></div>
+          </dl>
+          <p className="mt-2 text-[11px] text-neutral-500 break-all">Rule hash (sha256): {s.rules.sha256}</p>
+          <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
+            <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>
+            <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>.{s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} {s.trust.lpLockedPct ?? 100}% of the liquidity is locked, and its fees go 80% to the burn pool and 20% to the operator. The team allocation is {s.trust.teamAllocationPct}%.</p>
+          </details>
+        </section>
+        {s.disclosure.eventContract && <p className={card + " border-l-4 border-l-orange-500 text-xs"}>{s.disclosure.eventContract}</p>}
+        {/* No burn pool is ever left behind (2026-10-10): the fee flow. The coin's lifecycle line is in "The end" above. */}
+        <p className="text-xs text-neutral-400">Creator fees go to the burn pool and are burned. The liquidity is locked forever, and its fees go 80% to the burn pool and 20% to the operator, fixed in code.</p>
+        {s.lp && <LpLockCard lp={s.lp} card={card} />}
+        <section className="space-y-2">
+          <h2 className="font-medium">Fees</h2><p>{s.fees.sentence}</p>
+          {[s.fees.curve, s.fees.postGraduation].map((f, k) => <div key={k} className="overflow-x-auto rounded-lg border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "On the curve" : "After graduation"}</th><th className="p-2 text-right">Basis points</th><th className="p-2 text-right">SOL per 1 SOL</th><th className="p-2">Paid to</th><th className="p-2">Setting</th></tr></thead><tbody>{f.legs.map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2 text-right">{(l.bps / 10000).toFixed(6).replace(/0+$/, "")}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}<tr className="border-t border-neutral-800"><td className="p-2">total</td><td className="p-2 text-right">{f.totalBps}</td><td></td><td></td><td></td></tr></tbody></table></div>)}
+        </section>
+        <section className={card}><h2 className="font-medium">Reading signers</h2><p>{s.attesters.length ? <>Each reading needs {s.quorum} of {count(s.attesters.length, "signature")} from these keys: {s.attesters.map((a) => `${a.pubkey} (${a.role}${a.active ? "" : ", inactive"})`).join(", ")}.</> : "No signers are recorded."} At level 1, our data key signs each reading. Level 2 adds an independent signer for each source. Level 3 adds a proof of the source&apos;s response (zkTLS), or an on-chain result where the market publishes one.</p></section>
+        <section className={card + " text-xs"}><h2 className="font-medium text-sm">Addresses</h2><ul className="space-y-1 break-all"><li>Mint <a className="underline" href={s.addresses.mintUrl}><code>{s.addresses.mint}</code></a> <CopyButton text={s.mint} /></li><li>Burn pool. This is the burn program&apos;s fee account, and it is also the coin&apos;s creator on LaunchLab. Anyone can deposit and nobody can withdraw. The keeper only pays network fees. <a className="underline" href={s.addresses.feePdaUrl}><code>{s.addresses.feePda}</code></a></li>{s.addresses.feeWsol && <li>The burn pool&apos;s wrapped SOL account, where claimed curve fees land <a className="underline" href={s.addresses.feeWsolUrl!}><code>{s.addresses.feeWsol}</code></a></li>}{s.addresses.vault && <li>Vault <a className="underline" href={s.addresses.vaultUrl!}><code>{s.addresses.vault}</code></a></li>}{s.addresses.poolId && <li>LaunchLab pool <code>{s.addresses.poolId}</code></li>}<li>Creator <a className="underline" href={s.addresses.creatorUrl}><code>{s.addresses.creator}</code></a></li><li>Burn program <code>{s.addresses.programId}</code></li>{s.addresses.launchTx && <li>Launch <a className="underline" href={s.addresses.launchTxUrl!}><code>{s.addresses.launchTx}</code></a></li>}</ul></section>
+        {/* the rule's own footer line (rules.ts DISCLAIMER_FOOTER); the site's disclaimers live once, in the footer */}
+        <p className="text-xs text-neutral-500" data-rule-footer>{s.disclosure.disclaimer}</p>
+      </div>
+
+      {hasHolders && m?.holders.top && (
+        <div id="panel-holders" role="tabpanel" aria-labelledby="tab-holders" hidden={tab !== "holders"}>
+          <section className={card} aria-label="Holders">
+            <h2 className="font-medium">The largest holders</h2>
+            <ol className="mt-2 space-y-0.5 text-xs">{m.holders.top.slice(0, 20).map((h, i) => <li key={h.account} className="flex justify-between gap-2 font-mono"><span className="min-w-0 truncate">{i + 1}. {short(h.owner ?? h.account)}{h.label ? <span className="ml-1 text-neutral-500">({h.label})</span> : null}</span><span className="tabular-nums">{h.pct.toFixed(2)}%</span></li>)}</ol>
+            <p className="mt-2 text-xs text-neutral-500">{m.holders.topNote} {m.holders.count === null ? m.holders.countNote : `There are ${m.holders.count} holders.`}</p>
+          </section>
+        </div>
+      )}
 
       {s.status !== "draft" && s.status !== "expired" && <EmbedSnippet kind="coin" id={s.ticker} label={`$${s.ticker}`} />}
-
-      <section className="space-y-2">
-        <h2 className="font-medium">Fees</h2><p>{s.fees.sentence}</p>
-        {[s.fees.curve, s.fees.postGraduation].map((f, k) => <div key={k} className="overflow-x-auto rounded-lg border border-neutral-800"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">{k === 0 ? "On the curve" : "After graduation"}</th><th className="p-2 text-right">Basis points</th><th className="p-2 text-right">SOL per 1 SOL</th><th className="p-2">Paid to</th><th className="p-2">Setting</th></tr></thead><tbody>{f.legs.map((l) => <tr key={l.label} className="border-t border-neutral-800"><td className="p-2">{l.label}</td><td className="p-2 text-right">{l.bps}</td><td className="p-2 text-right">{(l.bps / 10000).toFixed(6).replace(/0+$/, "")}</td><td className="p-2">{l.recipient}</td><td className="p-2 text-neutral-500">{l.dial}</td></tr>)}<tr className="border-t border-neutral-800"><td className="p-2">total</td><td className="p-2 text-right">{f.totalBps}</td><td></td><td></td><td></td></tr></tbody></table></div>)}
-      </section>
-      <section className={card}><h2 className="font-medium">Reading signers</h2><p>{s.attesters.length ? <>Each reading needs {s.quorum} of {count(s.attesters.length, "signature")} from these keys: {s.attesters.map((a) => `${a.pubkey} (${a.role}${a.active ? "" : ", inactive"})`).join(", ")}.</> : "No signers are recorded."} At level 1, our data key signs each reading. Level 2 adds an independent signer for each source. Level 3 adds a proof of the source&apos;s response (zkTLS), or an on-chain result where the market publishes one.</p></section>
-      <section className={card + " text-xs"}><h2 className="font-medium text-sm">Addresses</h2><ul className="space-y-1 break-all"><li>Mint <a className="underline" href={s.addresses.mintUrl}><code>{s.addresses.mint}</code></a></li><li>Burn pool. This is the burn program&apos;s fee account, and it is also the coin&apos;s creator on LaunchLab. Anyone can deposit and nobody can withdraw. The keeper only pays network fees. <a className="underline" href={s.addresses.feePdaUrl}><code>{s.addresses.feePda}</code></a></li>{s.addresses.feeWsol && <li>The burn pool&apos;s wrapped SOL account, where claimed curve fees land <a className="underline" href={s.addresses.feeWsolUrl!}><code>{s.addresses.feeWsol}</code></a></li>}{s.addresses.vault && <li>Vault <a className="underline" href={s.addresses.vaultUrl!}><code>{s.addresses.vault}</code></a></li>}{s.addresses.poolId && <li>LaunchLab pool <code>{s.addresses.poolId}</code></li>}<li>Creator <a className="underline" href={s.addresses.creatorUrl}><code>{s.addresses.creator}</code></a></li><li>Burn program <code>{s.addresses.programId}</code></li>{s.addresses.launchTx && <li>Launch <a className="underline" href={s.addresses.launchTxUrl!}><code>{s.addresses.launchTx}</code></a></li>}</ul></section>
-      {s.disclosure.eventContract && <p className={card + " border-l-4 border-l-orange-500 text-xs"}>{s.disclosure.eventContract}</p>}
-      {/* No burn pool is ever left behind (2026-10-10): the coin's lifecycle line and the fee flow. */}
-      <p className="text-xs text-neutral-400">{s.lifecycle ? `${s.lifecycle.line} ` : ""}Creator fees go to the burn pool and are burned. The liquidity is locked forever, and its fees go 80% to the burn pool and 20% to the operator, fixed in code.</p>
-      <footer className="text-xs text-neutral-500">{s.disclosure.disclaimer} {s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}{m?.readAt ? ` The curve was last read at ${m.readAt}.` : ""}</footer>
       <HostDiagnostics stubs={d.stubs} />
     </main>
   );
@@ -247,10 +272,24 @@ function NotRegistered({ ticker }: { ticker: string }) {
   const t = ticker.toUpperCase();
   // website brief §1: $DEFICIT gets a real pre-launch page (canonical: DEFICIT_SITE) instead of the one-line notice
   if (t === "DEFICIT") return <DeficitPrelaunch fallbackSite={DEFICIT_SITE} />;
+  return <NotRegisteredNotice t={t} />;
+}
+
+/** The one-line notice; a disclosed rehearsal coin (transparency.json `rehearsals`, served by the trust API) says what it is instead. */
+function NotRegisteredNotice({ t }: { t: string }) {
+  const [rehearsal, setRehearsal] = useState<{ symbol: string; mint: string | null; status: string } | null>(null);
+  useEffect(() => { fetch("/api/burnticker/trust").then((r) => (r.ok ? r.json() : null)).then((j: { transparency?: { rehearsals?: { symbol: string; mint: string | null; status: string }[] } } | null) => setRehearsal(j?.transparency?.rehearsals?.find((x) => x.symbol.toUpperCase() === t) ?? null)).catch(() => setRehearsal(null)); }, [t]);
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-2 text-sm" data-not-registered>
       <h1 className="text-xl font-semibold">${t}</h1>
-      <EmptyState kind="not-launched" compact body={`No coin with the ticker $${t} is registered on this site, so there is no rule, receipt or reading to show here.`} />
+      {rehearsal ? (
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 space-y-2" data-rehearsal-coin>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">Disclosed rehearsal coin</p>
+          <p>${t} is the operator&apos;s rehearsal coin on mainnet. It exists to test the burn machinery with real settings, and it is not for trading. That is why this site shows no chart and no trade link for it, and does not list it with the coins.</p>
+          {rehearsal.mint && <p className="text-xs text-neutral-400 break-all">Its mint address is <code>{rehearsal.mint}</code>. <Link className="underline" href={`/burnticker/verify?mint=${rehearsal.mint}`}>Check this coin with the burn program</Link>.</p>}
+          <p className="text-xs text-neutral-400">The full record, including what it has and has not proved so far, is on the <Link className="underline" href="/burnticker/trust">Trust page</Link>.</p>
+        </section>
+      ) : <EmptyState kind="not-launched" compact body={`No coin with the ticker $${t} is registered on this site, so there is no rule, receipt or reading to show here.`} />}
       <p><Link className="underline" href="/burnticker">See all coins on this site</Link> or <Link className="underline" href="/burnticker/verify">check a token address</Link>.</p>
     </main>
   );

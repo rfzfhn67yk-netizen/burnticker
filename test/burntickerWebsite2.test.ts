@@ -210,14 +210,19 @@ describe("verification words and the featured receipt (website brief §3/§5)", 
     assert.match(v, /verdictOf\(res\.checks\)/); assert.doesNotMatch(v, /res\.verified \?/, "the old single tick is gone");
     assert.match(v, /<details className="mt-2"><summary[^>]*>Every check, the memo and the accounts<\/summary>/, "details behind a disclosure");
   });
-  test("the homepage features that real receipt next to the hero, in the status file's own words, with the verify action", () => {
+  test("the real receipt: the about page tells it in the status file's own words (read, never typed); the home and its devnet card link the verify action", async () => {
     const html = fs.readFileSync("site/burnticker/index.html", "utf8");
-    const demo = (JSON.parse(fs.readFileSync("config/burnticker/current-status.json", "utf8")) as { demo: { summary: string; recordDate: string } }).demo;
-    const block = html.slice(html.indexOf("data-demo-receipt"), html.indexOf('<section class="wrap" id="products"'));
-    assert.ok(html.indexOf("data-demo-receipt") < html.indexOf('id="products"'), "right after the hero, before the products (site audit #7)");
-    assert.ok(block.includes(demo.summary.replace(/&/g, "&amp;")), "the summary is current-status.json demo.summary verbatim");
-    assert.match(block, /A real burn from the devnet rehearsal on October 6, 2026\./); assert.match(block, /href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</);
-    clean(block.replace(/<[^>]+>/g, " "), "featured receipt");
+    const about = fs.readFileSync("src/app/burnticker/about/page.tsx", "utf8");
+    // website-10 (2026-10-12): the explainer, the receipt story included, moved to /burnticker/about; the summary is read from
+    // current-status.json through deficitPrelaunch() at request time, so it cannot drift from the file
+    assert.match(about, /<p className="text-neutral-200">\{d\.rehearsal\.demo\.summary\}<\/p>/);
+    assert.match(about, /This is a real burn from the devnet rehearsal on \{longDay\(d\.rehearsal\.demo\.recordDate\)\}\./);
+    assert.match(about, /href=\{EXPLORE_VERIFIED_BURN\.href\}>\{EXPLORE_VERIFIED_BURN\.label\}/);
+    assert.match(html, /href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</);
+    const { featuredCoins } = await import("@/lib/burnticker/home");
+    assert.equal(featuredCoins().find((c) => c.id === "deficit-devnet")?.receipt?.href, "/burnticker/check?demo=1#verify");
+    const demo = (JSON.parse(fs.readFileSync("config/burnticker/current-status.json", "utf8")) as { demo: { summary: string } }).demo;
+    clean(demo.summary, "featured receipt");
   });
 });
 
@@ -227,10 +232,13 @@ describe("layout, navigation and sharing metadata (website brief §8)", () => {
     assert.doesNotMatch(home, /class="tape"|class="reel"|<ul class="guard"/);
     assert.match(home, /\.hero h1\{[^}]*overflow-wrap:anywhere/);
     assert.match(home, /\.card\{[^}]*min-width:0/);
+    // the activity line under the header scrolls inside itself and never widens the page
+    assert.match(home, /\.sh-ticker\{[^}]*overflow-x:auto;white-space:nowrap/);
   });
-  test("Seasons goes to /burnticker/leagues on every surface", () => {
+  test("Seasons goes to /burnticker/leagues on every surface", async () => {
     for (const m of home.matchAll(/<a [^>]*href="([^"]+)"[^>]*>Seasons<\/a>/g)) assert.equal(m[1], SEASONS_HREF);
-    assert.match(fs.readFileSync("src/app/burnticker/_components/nav.ts", "utf8"), /label: "Seasons", href: SEASONS_HREF/);
+    const { SITE_NAV, SITE_TABS } = await import("@/lib/burnticker/siteNav.mjs");
+    assert.equal(SITE_NAV.find((l) => l.label === "Seasons")?.href, SEASONS_HREF); assert.equal(SITE_TABS.find((t) => t.label === "Seasons")?.href, SEASONS_HREF);
     assert.doesNotMatch(fs.readFileSync("src/app/burnticker/leagues/page.tsx", "utf8"), />Seasons<\/Link>/);
   });
   test("absolute sharing images, canonical URLs and titles on the static home, the whitepaper and the $DEFICIT site", () => {
@@ -306,17 +314,16 @@ describe("pair funds flow, by rule version (website brief §2)", () => {
 
 describe("the homepage around five questions, and an honest leagues directory (website brief §7)", () => {
   const home = fs.readFileSync("site/burnticker/index.html", "utf8");
-  test("order (site audit #7): hero → verified devnet receipt → three product cards → a short current status → actions; safeguards and implementation details moved to Trust", () => {
+  test("order (list first since 2026-10-12): hero → How it works → the coin grid → Follow the season → a short current status → the footer receipt; safeguards and implementation details stay on Trust", () => {
     const at = (m: string) => { const i = home.indexOf(m); assert.ok(i >= 0, m); return i; };
-    const order = ['<section class="hero', 'id="verified-burn"', "data-demo-receipt", 'id="products"', 'id="status"', 'id="next"', "<footer"].map(at);
+    const order = ['<section class="hero', '<ol class="how">', 'id="coins"', "data-featured", 'id="seasons"', 'id="status"', '<footer class="sh-footer"'].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order);
-    for (const gone of ["Safeguards and limitations", "data-current-limits", 'class="wrap impl"', 'id="layers"', 'id="feeds"', 'id="economics"']) assert.ok(!home.includes(gone), gone);
-    const status = home.slice(at('id="status"'), at('id="next"'));
+    for (const gone of ["Safeguards and limitations", "data-current-limits", 'class="wrap impl"', 'id="layers"', 'id="feeds"', 'id="economics"', 'id="products"']) assert.ok(!home.includes(gone), gone);
+    const status = home.slice(at('id="status"'), at("</main>"));
     assert.match(status, /data-current-status/); assert.match(status, /href="\/burnticker\/trust"/);
-    const next = home.slice(at('id="next"'));
-    assert.match(next, /<a class="btn amber" href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt<\/a>/);
-    assert.match(next, /href="\/burnticker\/launch" data-launch-cta>/, "the launch action is gated like every launch CTA");
-    assert.equal((next.slice(0, next.indexOf("</section>")).match(/class="btn amber"/g) ?? []).length, 1, "one primary action in the row (site audit #20)");
+    // review item 18: the status box shows grey bars while it loads, not "Loading" or "Reading the current status"
+    assert.doesNotMatch(home, /Reading the current status/);
+    assert.match(home, /<div class="cs" data-current-status aria-live="polite"><div class="bars" aria-hidden="true">/);
   });
   test("the leagues directory: honest availability and a clearly labelled example, no launch invitation", () => {
     const p = fs.readFileSync("src/app/burnticker/leagues/page.tsx", "utf8");

@@ -86,7 +86,6 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
           </ul>
         </section>
       )}
-      <p className="text-neutral-500 text-xs">These are memecoins. Each rule says what happens to its coin&apos;s supply, never its price. Nobody is promised anything.</p>
     </main>
   );
 }

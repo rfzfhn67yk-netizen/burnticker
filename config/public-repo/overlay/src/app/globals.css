@@ -40,17 +40,7 @@
   color-scheme: dark;
 }
 
-/* light = paper. Applied by the OS preference unless the visitor chose dark, or by the header switch. */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bt-bg: #f2eee4; --bt-counter: #e9e4d7; --bt-line: #d3ccbc; --bt-ink: #1b1916; --bt-dim: #4d473f; --bt-muted: #6b645a;
-    --bt-paper: #fbf9f4; --bt-paper-ink: #1b1916; --bt-paper-dim: #5a5248; --bt-stamp: #5b3fa3; --bt-stamp-solid: #5b3fa3; --bt-scorch: #8a5a24;
-    color-scheme: light;
-    --color-neutral-50: #0f0e0c; --color-neutral-100: #1b1916; --color-neutral-200: #2a2622; --color-neutral-300: #38332d; --color-neutral-400: #4d473f;
-    --color-neutral-500: #6b645a; --color-neutral-600: #948c7e; --color-neutral-700: #bdb5a4; --color-neutral-800: #d3ccbc; --color-neutral-900: #e9e4d7; --color-neutral-950: #f2eee4;
-    --color-red-400: #b42318; --color-amber-400: #8f5400; --color-amber-200: #6f4200; --color-amber-900: #f3e2b8; --color-emerald-400: #1d7346;
-  }
-}
+/* light = paper, only when the visitor picks it with the header switch: dark is the default (the owner's review item 17, 2026-10-12). */
 :root[data-theme="light"] {
   --bt-bg: #f2eee4; --bt-counter: #e9e4d7; --bt-line: #d3ccbc; --bt-ink: #1b1916; --bt-dim: #4d473f; --bt-muted: #6b645a;
   --bt-paper: #fbf9f4; --bt-paper-ink: #1b1916; --bt-paper-dim: #5a5248; --bt-stamp: #5b3fa3; --bt-stamp-solid: #5b3fa3; --bt-scorch: #8a5a24;
@@ -77,11 +67,11 @@ body.bt-body {
 
 /* ---- header: the counter the receipts land on ---- */
 .bt-header { position: sticky; top: 0; z-index: 40; background: color-mix(in srgb, var(--bt-bg) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 2px dashed var(--bt-line); }
-.bt-header-row { max-width: 64rem; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
+.bt-header-row { max-width: 72rem; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
 .bt-brand { display: flex; align-items: center; gap: 10px; color: var(--bt-ink); text-decoration: none; flex: 0 0 auto; }
 .bt-mark { width: 34px; height: 34px; border-radius: 50%; display: block; box-shadow: 0 0 0 1px var(--bt-line); }
 .bt-wordmark { font: 700 1.08rem/1 var(--font-mono); letter-spacing: .16em; }
-.bt-nav-desktop { display: none; margin-left: auto; align-items: center; gap: 2px; }
+.bt-nav-desktop { display: none; align-items: center; gap: 2px; }
 .bt-nav-link { font: 700 .8rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; padding: 9px 10px; border-radius: 4px; white-space: nowrap; }
 .bt-nav-link:hover { color: var(--bt-ink); background: var(--bt-counter); }
 .bt-nav-link.is-active { color: var(--bt-ink); box-shadow: inset 0 -2px 0 var(--bt-stamp); border-radius: 0; }
@@ -98,6 +88,32 @@ body.bt-body {
 .bt-nav-mobile .bt-nav-link { padding: 12px 8px; font-size: .9rem; border-bottom: 1px dashed var(--bt-line); border-radius: 0; }
 .bt-nav-mobile .bt-nav-link.is-launch { transform: none; margin: 4px 0 6px; text-align: center; border-radius: 3px; }
 .bt-nav-mobile .bt-nav-link.is-active:not(.is-launch) { box-shadow: inset 3px 0 0 var(--bt-stamp); padding-left: 12px; }
+/* ---- the launchpad header (2026-10-12, review items 3, 4, 11): Learn menu, search, Launch a coin, the disabled wallet, the activity line ---- */
+.bt-learn { position: relative; }
+.bt-learn > button { background: transparent; border: 0; cursor: pointer; }
+.bt-learn-menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 50; display: grid; min-width: 210px; padding: 6px; background: var(--bt-counter); border: 1px solid var(--bt-line); border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.35); }
+.bt-learn-menu[hidden] { display: none; }
+.bt-learn-menu .bt-nav-link { text-transform: none; letter-spacing: .02em; font: 600 .9rem/1.2 var(--font-sans); padding: 10px; }
+.bt-search { display: none; flex: 1 1 auto; min-width: 0; }
+.bt-search input { width: 100%; max-width: 26rem; font: .9rem var(--font-sans); color: var(--bt-ink); background: var(--bt-counter); border: 1px solid var(--bt-line); border-radius: 6px; padding: 9px 12px; }
+.bt-search input:focus { outline: 2px solid var(--bt-stamp); outline-offset: 1px; }
+.bt-launch-head { padding: 9px 12px; font-size: .78rem; white-space: nowrap; cursor: pointer; }
+.bt-wallet { display: none; font: 700 .76rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 4px; padding: 9px 12px; white-space: nowrap; cursor: not-allowed; opacity: .6; }
+.bt-ticker { border-top: 1px dashed var(--bt-line); font: .78rem/1.3 var(--font-mono); color: var(--bt-dim); overflow-x: auto; white-space: nowrap; scrollbar-width: none; padding: 7px 16px; min-height: 31px; }
+.bt-ticker::-webkit-scrollbar { display: none; }
+.bt-ticker-item { color: var(--bt-ink); text-decoration: none; margin-right: 22px; }
+.bt-ticker-item:hover { text-decoration: underline; }
+.bt-ticker-net { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid var(--bt-line); border-radius: 3px; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--bt-scorch); }
+.bt-ticker-skel { display: inline-block; width: min(420px, 70%); height: 10px; border-radius: 4px; background: var(--bt-line); }
+.bt-modal { max-width: min(30rem, calc(100vw - 32px)); background: var(--bt-counter); color: var(--bt-ink); border: 1px solid var(--bt-line); border-radius: 10px; padding: 20px; }
+.bt-modal::backdrop { background: rgba(0,0,0,.6); }
+.bt-modal h2 { font: 700 1rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 10px; }
+.bt-modal p { margin: 0 0 8px; }
+.bt-modal-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px !important; }
+@media (min-width: 640px) { .bt-search { display: block; } .bt-wallet { display: inline-block; } }
+@media (max-width: 420px) { .bt-launch-head { padding: 9px 9px; font-size: .7rem; } .bt-header-row { gap: 8px; } .bt-header-tools { gap: 4px; } }
+/* under 400 px the mark carries the brand alone, so the header row (mark, Launch a coin, theme, MENU) fits a 320 px phone */
+@media (max-width: 400px) { .bt-wordmark { display: none; } }
 @media (min-width: 900px) {
   .bt-nav-desktop { display: flex; }
   .bt-header-tools { margin-left: 8px; }
@@ -177,10 +193,38 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-tape .text-neutral-500 { color: var(--bt-paper-dim); }
 .bt-rule-card { border-left: 4px solid var(--bt-stamp-solid) !important; }
 .bt-preview-frame { border: 2px dashed var(--bt-line); border-radius: 12px; padding: 10px; }
+/* ---- the home (2026-10-12, review items 7, 8, 5, 18): one-line hero, the How it works strip, the card rows, skeletons, tags ---- */
+.bt-hero { padding: 8px 0 0; }
+.bt-hero-title { font: 700 clamp(1.6rem, 5vw, 2.8rem)/1.08 var(--font-mono); letter-spacing: -.01em; margin: 0; text-transform: uppercase; overflow-wrap: anywhere; }
+.bt-hero-sub { font: 700 clamp(1rem, 2.6vw, 1.25rem)/1.3 var(--font-mono); color: var(--bt-stamp); margin: 8px 0 0; }
+.bt-how { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+@media (min-width: 760px) { .bt-how { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.bt-how li { display: flex; gap: 10px; border: 1px dashed var(--bt-line); border-radius: 10px; padding: 12px; }
+.bt-how-n { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--bt-paper); color: var(--bt-paper-ink); font: 700 .85rem/1 var(--font-mono); }
+.bt-how-t { font: 700 .82rem/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; }
+.bt-how-x { margin: 0; font-size: .88rem; color: var(--bt-dim); }
+.bt-coin-card.is-featured { border-color: color-mix(in srgb, var(--bt-stamp) 60%, var(--bt-line)); }
+.bt-card-link { color: inherit; text-decoration: none; }
+.bt-card-link:hover .bt-card-name { text-decoration: underline; }
+.bt-card-ticker { font-family: var(--font-mono); font-size: .9rem; color: var(--bt-dim); }
+.bt-card-rows { margin: 12px 0 0; display: grid; gap: 7px; font-size: .84rem; }
+.bt-card-rows > div { display: grid; grid-template-columns: 6.2rem 1fr; gap: 8px; }
+.bt-card-rows dt { font: 700 .68rem/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--bt-muted); }
+.bt-card-rows dd { margin: 0; min-width: 0; color: var(--bt-ink); }
+.bt-card-foot { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bt-ghost-btn.is-disabled { opacity: .5; cursor: not-allowed; }
+.bt-tag-featured { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-tag-rehearsal { color: var(--bt-scorch); border-color: color-mix(in srgb, var(--bt-scorch) 60%, transparent); }
+.bt-tag-devnet { color: var(--bt-dim); border-style: dashed; }
+.bt-tag-grad { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
+.bt-skel { border-radius: 4px; background: color-mix(in srgb, var(--bt-line) 85%, transparent); }
+@media (prefers-reduced-motion: no-preference) { .bt-skel, .bt-ticker-skel { animation: bt-pulse 1.4s ease-in-out infinite; } }
+@keyframes bt-pulse { 50% { opacity: .45; } }
+.bt-seasons { border-top: 2px dashed var(--bt-line); padding-top: 18px; }
 .bt-tabbar { display: none; }
 @media (max-width: 899px) {
   body.bt-body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
-  .bt-tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: color-mix(in srgb, var(--bt-bg) 94%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
+  .bt-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: color-mix(in srgb, var(--bt-bg) 94%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
   .bt-tabbar-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 60px; font: 700 10px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; }
   .bt-tabbar-glyph { font-size: 18px; line-height: 1; }
   .bt-tabbar-item.is-active { color: var(--bt-ink); box-shadow: inset 0 2px 0 var(--bt-stamp); }

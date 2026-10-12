@@ -10,40 +10,36 @@ const cfg = loadCopyLintConfig();
 const clean = (t: string, what: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${what}:\n${formatHits(r)}`); };
 const read = (f: string) => fs.readFileSync(f, "utf8");
 
-describe("item 2: a short homepage — status, then the real receipt, then the rest", () => {
+describe("item 2: a short homepage — list first since 2026-10-12, the real receipt one click away", () => {
   const home = read("site/burnticker/index.html");
-  const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('<section class="wrap" id="verified-burn"'));
-  test("no orphan door number; the primary action is 'Inspect the devnet receipt' on every surface", () => {
+  test("no orphan door number; the pre-launch action is 'Inspect the devnet receipt', beside the coin grid and on the devnet card", async () => {
     assert.doesNotMatch(home, /door [0-9] ·/i);
     assert.equal(EXPLORE_VERIFIED_BURN.label, "Inspect the devnet receipt");
     assert.doesNotMatch(home, /Explore a verified burn/);
-    // the phone menu is the shared link set since 2026-10-11 (R06), so the action appears in the hero and the action row
-    assert.equal([...home.matchAll(/href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</g)].length, 2, "hero and 'what you can do now'");
+    assert.equal([...home.matchAll(/href="\/burnticker\/check\?demo=1#verify">Inspect the devnet receipt</g)].length, 1, "under the coin grid");
+    const { featuredCoins } = await import("@/lib/burnticker/home");
+    assert.equal(featuredCoins().find((c) => c.id === "deficit-devnet")?.receipt?.href, EXPLORE_VERIFIED_BURN.href, "the devnet card's Check receipt");
   });
-  test("R07: the hero is three plain steps, then two next steps — a verified example and how launching works; the guardrails moved to Trust", () => {
+  test("R07 as rewritten by the owner's review item 7: one hero line, one subline, then three plain steps; the guardrails stay on Trust", () => {
+    const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('id="coins"'));
     const at = (m: string) => { const i = hero.indexOf(m); assert.ok(i >= 0, m); return i; };
-    const order = ["data-launches-closed", '<ol class="three"', '<p class="def">', 'href="#verified-burn">See a verified example', 'href="#how" data-open-how>How launching works'].map(at);
+    const order = ['<h1 id="hero-h">', '<p class="sub">', '<ol class="how">', 'href="/burnticker/about">Read how it works in full'].map(at);
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.doesNotMatch(hero, /guardsum|<details class="guards">|<ul class="guard"/);
-    assert.match(hero, /<a class="btn amber" href="#verified-burn">/, "one primary action in the hero");
-    assert.equal((hero.match(/class="btn amber"/g) ?? []).length, 1);
-    const card = home.slice(home.indexOf("data-demo-receipt"), home.indexOf('<section class="wrap" id="products"'));
-    assert.match(card, /This site currently shows devnet rehearsal evidence/);
     assert.match(home, /No wallet is needed to read results or receipts/);
-    clean(card.replace(/<[^>]+>/g, " "), "receipt card");
+    clean(hero.replace(/<[^>]+>/g, " "), "hero");
   });
 });
 
 describe("item 3: zero data → one explanation and one evidence link; populated states keep their navigation", () => {
-  test("the coins page hides the tabs, search and zero totals when the host has no coin and no pair", () => {
+  test("the coins page: the featured cards fill the grid before any coin is registered; the tabs and search stay above it; zero totals stay hidden", () => {
+    // the owner's review item 5 (2026-10-12): the filter tabs sit above a grid, and pre-launch the grid is the featured cards
     const p = read("src/app/burnticker/CoinsIndex.tsx");
-    assert.match(p, /const empty = !!ix && ix\.tokens\.length === 0 && ix\.pairs\.length === 0;/);
-    assert.match(p, /\{!empty && <div className="flex flex-col gap-3 md:flex-row md:items-center">\s*<div className="bt-tabs"/, "tabs and search only with records");
-    assert.match(p, /\{ix && !empty && tab !== "pairs"/); assert.match(p, /\{ix && !empty && tab === "pairs"/); assert.match(p, /\{ix && !empty && \(\s*<section className="grid grid-cols-2/);
-    const box = p.slice(p.indexOf("{empty && ("), p.indexOf("{ix && !empty && tab !== \"pairs\""));
-    assert.match(box, /No coin is registered on this site yet/); assert.match(box, /Whether the programs are deployed is a separate question/);
-    assert.equal([...box.matchAll(/EXPLORE_VERIFIED_BURN\.href/g)].length, 1, "one evidence link");
+    assert.match(p, /const cards: CardView\[\] = \[\.\.\.\(tab === "new" \? featured : \[\]\), \.\.\.coins\.map\(\(t\) => cardViewFromIndex\(t\)\)\];/);
+    assert.ok(p.indexOf('className="bt-tabs" role="tablist"') < p.indexOf("cards.map((v) => <ViewCard"), "tabs above the grid");
+    assert.match(p, /\{ix && ix\.tokens\.length > 0 && \(\s*<section className="grid grid-cols-2/, "no zero totals before a coin is registered");
     assert.match(p, /\{NO_WALLET_LINE\}/, "the no-wallet line stays");
+    assert.match(p, /loading \? <SkeletonGrid n=\{3\} \/>/, "skeleton cards while loading (review item 18)");
   });
   test("Seasons collapses three empty sections into one; the leagues directory keeps its labelled example before the league links", () => {
     const r = read("src/app/burnticker/rivalries/page.tsx");
@@ -206,12 +202,11 @@ describe("report body: an unavailable program check never classifies a token def
 });
 
 describe("item 10: context help at first use instead of a front-loaded glossary", () => {
-  test("the landing hero has no six-term list; burn, receipt, reading signer, burn budget and automation are explained where they first appear", async () => {
+  test("the home has no term list and no tooltip terms (the owner's review items 7 and 10); the terms are defined once on the about page", async () => {
     const home = read("site/burnticker/index.html");
-    assert.doesNotMatch(home, /data-glossary|<dl class="terms"/);
+    assert.doesNotMatch(home, /data-glossary|<dl class="terms"|<abbr class="term"/);
     const { GLOSSARY } = await import("@/lib/burnticker/glossary");
-    const abbr = (text: string) => new RegExp(`<abbr class="term" title="[^"]+">${text}</abbr>`);
-    for (const t of ["burns", "receipt", "reading signer", "burn budget", "automation"]) assert.match(home, abbr(t), t);
+    assert.match(read("src/app/burnticker/about/page.tsx"), /Object\.values\(GLOSSARY\)\.map/);
     assert.equal(GLOSSARY.attester.term, "reading signer (attester)");
     assert.match(GLOSSARY.burnPool.short, /^One coin's burn budget in SOL/); assert.doesNotMatch(GLOSSARY.burnPool.short, /winner|losing/);
     clean(GLOSSARY.burnPool.short, "burn pool");

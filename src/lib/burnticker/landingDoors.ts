@@ -1,7 +1,7 @@
 import { leagueIndex, LEAGUES_PATH, type LeagueIndex } from "@/lib/burnticker/leagues";
 
 /**
- * THE LANDING PAGE'S SEASONS DOOR, FROM THE LEAGUES INDEX (2026-10-10, the owner: all leagues inclusive, never NFL-first, soccer
+ * THE LANDING PAGE'S SEASONS PREVIEW, FROM THE LEAGUES INDEX (2026-10-10, the owner: all leagues inclusive, never NFL-first, soccer
  * included). site/burnticker/index.html is static; this block is written between `<!-- door2:begin -->` and `<!-- door2:end -->` by
  * scripts/burnticker-door2.mts from the same index /burnticker/leagues serves, and test/burntickerCopy.test.ts fails when the two drift.
  * The sentence names the alphabetical first and last league; the chips are the sports, alphabetical, each with its league count.
@@ -14,16 +14,14 @@ export function door2Html(ix: LeagueIndex = leagueIndex([], Date.UTC(2026, 9, 10
   const all = ix.sports.flatMap((s) => s.leagues).map((l) => l.label).sort((a, b) => a.localeCompare(b));
   const sports = [...ix.sports].sort((a, b) => a.label.localeCompare(b.label)).map((s) => s.label.toLowerCase());
   const list = sports.length > 1 ? `${sports.slice(0, -1).join(", ")} and ${sports[sports.length - 1]}` : sports.join("");
-  // site audit #7/#15 (2026-10-11): the Seasons product card, an <article> with an H3 under the products section's H2; the links name the
-  // three Seasons pages the way every surface does (siteNav.mjs SEASONS_NAV). Plain sentences (owner copy rule, 2026-10-11).
+  // website-10 (2026-10-12, the owner's review item 15): the "Follow the season" preview on the home, under the coin grid; the links
+  // name the three Seasons pages the way every surface does (siteNav.mjs SEASONS_NAV). Plain sentences (owner copy rule, 2026-10-11).
   return [
-    `      <article class="card" id="seasons">`,
-    `        <h3>Seasons</h3>`,
-    `        <p>Each league gets one scoreboard per season, from the ${esc(all[0])} to the ${esc(all[all.length - 1])}. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>`,
-    `        <p class="ex">The ${ix.totals.leagues} leagues cover ${esc(list)}.</p>`,
-    `        <p class="links"><a class="go" href="${LEAGUES_PATH}">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>`,
-    `      </article>`,
-  ].join("\n");
+    `      <div class="head"><h2 id="seasons-h">Follow the season</h2></div>`,
+    `      <p>Each league gets one scoreboard per season, from the ${esc(all[0])} to the ${esc(all[all.length - 1])}. A board ranks that league's team coins by their receipts. Rivalries and the Burn Derby keep a running count of burns.</p>`,
+    `      <p class="ex">The ${ix.totals.leagues} leagues cover ${esc(list)}. When a league's season ends, the coin with the most receipts is named its champion. That is a line on a scoreboard, and nobody receives anything for it.</p>`,
+    `      <p class="links"><a class="go" href="${LEAGUES_PATH}">Leagues</a> <a href="/burnticker/rivalries">Scoreboards</a> <a href="/burnticker/derby">Burn Derby</a></p>`,
+].join("\n");
 }
 
 /** The landing HTML with door 2 rewritten (throws when the markers are missing). */

@@ -86,7 +86,10 @@ describe("three decisions to a coin", () => {
     const tile = read(TILE), card = read("src/app/burnticker/_components/CoinCard.tsx");
     assert.ok(!/Season \(days\)/.test(tile)); assert.match(tile, /seasonDays = 30/);
     assert.match(tile, /preview\.svg\?r=/, "the generated receipt art, never NO IMAGE");
-    assert.match(card, /prelaunch/); assert.match(card, /\{!prelaunch && <><div className="mt-3"><CurveBar/);
+    // since 2026-10-12 the prelaunch card returns early with only the art, name, $TICKER, badge and rule row: no curve, burns or receipt rows
+    assert.match(card, /if \(prelaunch\) \{\s*return \(/);
+    const pre = card.slice(card.indexOf("if (prelaunch) {"), card.indexOf("return <ViewCard"));
+    assert.doesNotMatch(pre, /CurveBar|data-row="burned"|data-row="curve"|Check receipt/);
     assert.ok(!/>\?<\/button>/.test(read("src/app/burnticker/_components/FieldHelp.tsx")), "the help glyph is CSS, so a copied label never ends in '?'");
   });
 });

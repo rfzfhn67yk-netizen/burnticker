@@ -12,14 +12,12 @@
 <style>
 /* BEGIN shared tokens (copied verbatim from site/burnticker/index.html; test/burntickerTrustOps.test.ts keeps them equal) */
 :root{
-  --bg:#0a0a0c;--panel:#131317;--panel2:#1a1a20;--line:#26262d;--ink:#f6f4ee;--dim:#b8b6ae;--muted:#7f7e78;
-  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#0a0a0c;--ok:#5ad38f;--tape:#141418;--violet:#8f73e0;
-  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --bg:#12100e;--panel:#1b1815;--panel2:#24201c;--line:#2d2925;--ink:#f2eee4;--dim:#aba395;--muted:#8b8478;
+  --amber:#ffb000;--ember:#ff4d1f;--amber-ink:#12100e;--ok:#5ad38f;--tape:#141418;--violet:#9b84e6;
+  --mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
 }
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
-}
-:root[data-theme="light"]{--bg:#ffffff;--panel:#f6f6f4;--panel2:#ededea;--line:#dcdcd6;--ink:#0f0f12;--dim:#44443f;--muted:#71716b;--amber:#d98900;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
+/* dark is the default whatever the OS prefers (review item 17, 2026-10-12); the header switch turns on the paper theme */
+:root[data-theme="light"]{--bg:#f2eee4;--panel:#e9e4d7;--panel2:#e2dccf;--line:#d3ccbc;--ink:#1b1916;--dim:#4d473f;--muted:#6b645a;--amber:#8f5400;--ember:#d6401a;--amber-ink:#ffffff;--ok:#1f7a4a;--tape:#111114;--violet:#5b3fa3}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--sans);overflow-x:hidden}
@@ -89,21 +87,121 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
 .err{color:var(--ember)}
 .cs{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:.92rem;color:var(--dim)}.cs ul{margin:0;padding-left:18px}.cs li{margin:0 0 4px}.cs .cs-head{font:700 .72rem/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}.cs .cs-meta{margin:8px 0 0;font:.74rem/1.4 var(--mono);color:var(--muted);overflow-wrap:anywhere}
 </style>
+<!-- site-shell:css:begin -->
+<style>
+:root{--sh-bg:#12100e;--sh-counter:#1b1815;--sh-line:#2d2925;--sh-ink:#f2eee4;--sh-dim:#aba395;--sh-paper:#f2eee4;--sh-paper-ink:#1b1916;--sh-paper-dim:#5a5248;--sh-stamp:#9b84e6;--sh-stamp-solid:#5b3fa3;--sh-scorch:#c8873a;
+  --sh-mono:"Courier Prime",ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--sh-sans:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+:root[data-theme="light"]{--sh-bg:#f2eee4;--sh-counter:#e9e4d7;--sh-line:#d3ccbc;--sh-ink:#1b1916;--sh-dim:#4d473f;--sh-paper:#fbf9f4;--sh-stamp:#5b3fa3;--sh-scorch:#8a5a24}
+.sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
+.sh-header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--sh-bg) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
+.sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
+.sh-mark{width:34px;height:34px;border-radius:50%;display:block}
+.sh-word{font:700 1.02rem/1 var(--sh-mono);letter-spacing:.16em}
+.sh-nav{display:none;align-items:center;gap:2px}
+.sh-nav a,.sh-learn>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
+.sh-learn>summary::-webkit-details-marker{display:none}
+.sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
+.sh-nav a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 -2px 0 var(--sh-stamp);border-radius:0}
+.sh-learn{position:relative}
+.sh-learn-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:50;display:grid;min-width:200px;padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-learn-menu a{text-transform:none;letter-spacing:.02em;font:600 .9rem/1.2 var(--sh-sans);padding:10px}
+.sh-search{flex:1 1 auto;min-width:0;display:none}
+.sh-search input{width:100%;max-width:26rem;font:.9rem var(--sh-sans);color:var(--sh-ink);background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:6px;padding:9px 12px}
+.sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
+.sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
+.sh-wallet{display:none;cursor:not-allowed;opacity:.6}.sh-ghost{cursor:pointer}
+.sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
+.sh-menu>summary::-webkit-details-marker{display:none}
+.sh-menu{position:relative}
+.sh-menu-links{position:absolute;right:0;top:calc(100% + 6px);z-index:50;display:grid;gap:2px;min-width:210px;max-width:calc(100vw - 32px);padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-menu-links a{color:var(--sh-ink);text-decoration:none;padding:11px 10px;border-radius:6px;font:600 .92rem var(--sh-sans)}
+.sh-ticker{border-top:1px dashed var(--sh-line);font:.78rem/1.3 var(--sh-mono);color:var(--sh-dim);overflow-x:auto;white-space:nowrap;scrollbar-width:none;padding:7px 16px;min-height:31px}
+.sh-ticker::-webkit-scrollbar{display:none}
+.sh-ticker a{color:var(--sh-ink);text-decoration:none;margin-right:22px}.sh-ticker a:hover{text-decoration:underline}
+.sh-ticker .sh-net{display:inline-block;margin-right:6px;padding:1px 5px;border:1px solid var(--sh-line);border-radius:3px;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sh-scorch)}
+.sh-ticker-skel{display:inline-block;width:min(420px,70%);height:10px;border-radius:4px;background:var(--sh-line)}
+.sh-modal{max-width:min(28rem,calc(100vw - 32px));background:var(--sh-counter);color:var(--sh-ink);border:1px solid var(--sh-line);border-radius:10px;padding:20px;font-family:var(--sh-sans)}
+.sh-modal::backdrop{background:rgba(0,0,0,.6)}
+.sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
+.sh-modal-row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.sh-footer{margin-top:48px;padding:0 16px 40px;font-family:var(--sh-mono)}
+.sh-slip{max-width:34rem;margin:0 auto;background:var(--sh-paper);color:var(--sh-paper-ink);font-size:.84rem;line-height:1.5;padding:24px 20px 20px;background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.sh-slip p{margin:0 0 8px}
+.sh-slip-title{text-align:center;font-weight:700;font-size:1.3rem;letter-spacing:.22em}
+.sh-slip-never{text-align:center;font-weight:700}
+.sh-slip-dim{color:var(--sh-paper-dim);font-size:.78rem}
+.sh-rule{border-top:2px dashed color-mix(in srgb,var(--sh-paper-ink) 70%,transparent);margin:12px 0}
+.sh-slip a{color:var(--sh-paper-ink);text-decoration:underline;text-underline-offset:2px}
+.sh-slip-links{display:flex;flex-wrap:wrap;gap:6px 14px}
+.sh-slip-end{margin:14px 0 0!important;text-align:center;font-size:.72rem;letter-spacing:.18em;color:var(--sh-paper-dim)}
+.sh-tabbar{display:none}
+a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--sh-stamp);outline-offset:2px}
+@media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
+@media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}}
+@media (max-width:899px){
+  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:color-mix(in srgb,var(--sh-bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;font:700 10px/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
+  .sh-tabbar a span:first-child{font-size:18px;line-height:1}
+  .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
+}
+@media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
+@media (max-width:400px){.sh-word{display:none}}
+</style>
+<!-- site-shell:css:end -->
 </head>
 <body>
-<header class="wrap">
-  <div class="top">
-    <a class="brand" href="https://burnticker.com/" aria-label="Burnticker">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><defs><radialGradient id="bt-scorch" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1f1c19"/><stop offset=".46" stop-color="#1f1c19"/><stop offset=".56" stop-color="#0e0b08"/><stop offset=".66" stop-color="#3a2411"/><stop offset=".78" stop-color="#8a5a24"/><stop offset=".9" stop-color="#cfa65c" stop-opacity=".6"/><stop offset="1" stop-color="#f2eee4" stop-opacity="0"/></radialGradient></defs><rect width="64" height="64" rx="12" fill="#1f1c19"/><g transform="rotate(-5 32 32)"><path d="M14 11 L17.5 7.5 L21 11 L24.5 7.5 L28 11 L31.5 7.5 L35 11 L38.5 7.5 L42 11 L45.5 7.5 L49 11 L49 55 L45.5 58.5 L42 55 L38.5 58.5 L35 55 L31.5 58.5 L28 55 L24.5 58.5 L21 55 L17.5 58.5 L14 55 Z" fill="#f2eee4"/><rect x="18" y="15" width="25" height="4" fill="#1b1916"/><rect x="18" y="22" width="14" height="1.6" fill="#4a443c"/><path d="M18 27 H45" stroke="#2a2622" stroke-width="1.2" stroke-dasharray="2 1.5"/><rect x="18" y="31" width="9" height="1.6" fill="#1b1916"/><rect x="34" y="31" width="11" height="1.6" fill="#1b1916"/><rect x="18" y="36" width="8" height="1.6" fill="#1b1916"/><path d="M28.5 45.5 C28 40.5 32 37.5 36.5 38 C41.5 37.5 45.5 41 44.5 45.5 C44 50 40 52.5 36 52 C31.5 52.5 29 49.5 28.5 45.5 Z" fill="url(#bt-scorch)" transform="translate(36.5 45) scale(1.45) translate(-36.5 -45)"/><path d="M33 44.5 C33 42 35 40.8 37 41.2 C39.5 41 40.6 43 40.2 45 C40 47.2 38.2 48.6 36.2 48.3 C34.2 48.4 33 46.8 33 44.5 Z" fill="#1f1c19"/></g></svg>
-      <b>BURNTICKER</b>
-    </a>
-    <nav class="nav" aria-label="Links">
+<!-- site-shell:header:begin -->
+<a class="sh-skip" href="#main">Skip to content</a>
+<header class="sh-header">
+  <div class="sh-row">
+    <a class="sh-brand" href="https://burnticker.com/" aria-label="Burnticker home"><img src="https://burnticker.com/brand/favicon.png" width="34" height="34" alt="" class="sh-mark"><span class="sh-word">BURNTICKER</span></a>
+    <nav class="sh-nav" aria-label="Burnticker" data-site-nav="header">
       <a href="https://burnticker.com/burnticker">Coins</a>
-      <a href="https://burnticker.com/burnticker/trust">Trust</a>
-      <a class="sec" href="status.json">status.json</a>
+      <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+      <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
+      <details class="sh-learn"><summary>Learn</summary>
+        <div class="sh-learn-menu" data-site-nav="learn">
+          <a href="https://burnticker.com/burnticker/about">How it works</a>
+          <a href="https://burnticker.com/burnticker/trust">Trust</a>
+          <a href="https://burnticker.com/burnticker/operator">Operator</a>
+          <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+          <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+        </div>
+      </details>
     </nav>
+    <form class="sh-search" role="search" action="https://burnticker.com/burnticker" method="get"><label class="sh-sr" for="sh-q">Search coins</label><input id="sh-q" name="q" type="search" placeholder="Search coins" autocomplete="off"></form>
+    <div class="sh-actions">
+      <a class="sh-launch" href="https://burnticker.com/burnticker/launch" data-launch-button>Launch a coin</a>
+      <button type="button" class="sh-wallet" disabled title="No page here needs a wallet while creator launches are closed.">Connect wallet</button>
+      <button type="button" class="sh-icon" data-theme-toggle aria-label="Switch to light theme" title="Light theme">☀</button>
+      <details class="sh-menu" id="menu"><summary aria-label="Menu: every page" aria-controls="menu-links">Menu</summary>
+        <nav class="sh-menu-links" id="menu-links" aria-label="Burnticker (menu)" data-site-nav="menu">
+          <a href="https://burnticker.com/burnticker">Coins</a>
+          <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+          <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
+          <a href="https://burnticker.com/burnticker/about">How it works</a>
+          <a href="https://burnticker.com/burnticker/trust">Trust</a>
+          <a href="https://burnticker.com/burnticker/operator">Operator</a>
+          <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+          <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
+          <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+        </nav>
+      </details>
+    </div>
   </div>
+  <div class="sh-ticker" data-activity aria-label="Latest burns"><span class="sh-ticker-skel" aria-hidden="true"></span><span class="sh-sr">Loading the latest burns.</span></div>
 </header>
+<dialog class="sh-modal" id="sh-launch-closed" aria-labelledby="sh-launch-closed-h">
+  <h2 id="sh-launch-closed-h">Creator launches are closed</h2>
+  <p>Creator launches are closed until the first coin has receipts. You can still look through the coins and check a real receipt.</p>
+  <p class="sh-modal-row"><a class="sh-launch" href="https://burnticker.com/burnticker">See the coins</a> <button type="button" class="sh-ghost" data-modal-close>Close</button></p>
+</dialog>
+<!-- site-shell:header:end -->
 <main class="wrap">
   <section class="lead">
     <h1>Status</h1>
@@ -132,24 +230,97 @@ table.t td{padding:6px;border-bottom:1px dashed var(--line);color:var(--dim);ver
   </div>
 </main>
 <footer class="wrap">
-  <nav class="links" aria-label="Burnticker" data-site-nav="footer">
-    <!-- site-nav:footer:begin -->
-    <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch · closed</a>
-    <a href="https://burnticker.com/burnticker">Coins</a>
-    <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
-    <a href="https://burnticker.com/burnticker/trust">Trust</a>
-    <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
-    <a href="https://burnticker.com/burnticker/docs">Docs/API</a>
-    <a href="https://deficit.burnticker.com/" target="_blank" rel="noopener">$DEFICIT<span aria-hidden="true"> ↗</span></a>
-    <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X · @BurnTicker<span aria-hidden="true"> ↗</span></a>
-    <!-- site-nav:footer:end -->
-  </nav>
   <div class="links">
     <a href="https://burnticker.com/api/burnticker/v1/snapshots">Snapshots API</a>
     <a href="status.json">status.json</a>
   </div>
   <div>This page shows the keeper and its sources. It does not show any coin's market. Burnticker coins burn on real-world results, and every burn has a receipt.</div>
 </footer>
+<!-- site-shell:footer:begin -->
+<footer class="sh-footer" id="disclosure">
+  <div class="sh-slip">
+    <p class="sh-slip-title">BURNTICKER</p>
+    <p class="sh-slip-never">Nothing is ever won. Things are only burned.</p>
+    <div class="sh-rule"></div>
+    <p><b>NOT ADVICE.</b> Memecoins are speculative and can go to zero. Burnticker coins pay nothing and promise nothing. A coin's rule says what its supply does when a public result settles, never what its price does. Nothing on this site is investment advice.</p>
+    <p>Burnticker and its coins are not affiliated with any team, league, candidate, agency or market. If a page and the chain disagree, the chain is right.</p>
+    <p class="sh-slip-dim">The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia and Polymarket. None of them is affiliated with any coin or endorses one.</p>
+    <div class="sh-rule"></div>
+    <p data-operator-line>Operated by one independent operator (United States) — contact: contact@burnticker.com</p>
+    <div class="sh-rule"></div>
+    <nav class="sh-slip-links" aria-label="Footer" data-site-nav="footer">
+      <a href="https://burnticker.com/burnticker">Coins</a>
+      <a href="https://burnticker.com/burnticker/leagues">Seasons</a>
+      <a href="https://burnticker.com/burnticker/launch" data-launch-link>Launch</a>
+      <a href="https://burnticker.com/burnticker/about">How it works</a>
+      <a href="https://burnticker.com/burnticker/trust">Trust</a>
+      <a href="https://burnticker.com/burnticker/operator">Operator</a>
+      <a href="https://burnticker.com/whitepaper.html">Whitepaper</a>
+      <a href="https://burnticker.com/burnticker/docs">Docs and API</a>
+      <a href="https://x.com/BurnTicker" target="_blank" rel="noopener">X<span aria-hidden="true"> ↗</span></a>
+    </nav>
+    <p class="sh-slip-end">KEEP THIS RECEIPT</p>
+  </div>
+</footer>
+<nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">
+  <a href="https://burnticker.com/burnticker"><span aria-hidden="true">▦</span><span>Coins</span></a>
+  <a href="https://burnticker.com/burnticker#search"><span aria-hidden="true">⌕</span><span>Search</span></a>
+  <a href="https://burnticker.com/burnticker/launch"><span aria-hidden="true">+</span><span>Launch</span></a>
+  <a href="https://burnticker.com/burnticker/leagues"><span aria-hidden="true">⇄</span><span>Seasons</span></a>
+  <a href="https://burnticker.com/burnticker/about"><span aria-hidden="true">?</span><span>Learn</span></a>
+</nav>
+<!-- site-shell:footer:end -->
+<!-- site-shell:script:begin -->
+<script>
+(function () {
+  // ONE THEME PREFERENCE: the same "bt-theme" key and switch as the app header; dark unless the visitor picked light
+  var root = document.documentElement, b = document.querySelector("[data-theme-toggle]");
+  function cur() { return root.dataset.theme === "light" ? "light" : "dark"; }
+  function label() { if (!b) return; var d = cur() === "dark"; b.textContent = d ? "\u2600" : "\u263E"; b.setAttribute("aria-label", d ? "Switch to light theme" : "Switch to dark theme"); b.title = d ? "Light theme" : "Dark theme"; }
+  if (b) b.addEventListener("click", function () { var n = cur() === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem("bt-theme", n); } catch (e) { /* private window */ } label(); });
+  label();
+})();
+(function () {
+  // the phone menu: Enter or Space opens it, focus moves to its first link, Tab and Shift+Tab stay inside, Escape closes it
+  var m = document.getElementById("menu"); if (!m) return;
+  var sum = m.querySelector("summary");
+  function links() { return Array.prototype.slice.call(m.querySelectorAll(".sh-menu-links a[href]")); }
+  m.addEventListener("toggle", function () { sum.setAttribute("aria-expanded", m.open ? "true" : "false"); if (m.open) { var l = links()[0]; if (l) l.focus(); } });
+  sum.setAttribute("aria-expanded", "false");
+  document.addEventListener("keydown", function (e) {
+    if (!m.open) return;
+    if (e.key === "Escape") { e.preventDefault(); m.open = false; sum.focus(); return; }
+    if (e.key !== "Tab") return;
+    var ring = [sum].concat(links()), i = ring.indexOf(document.activeElement);
+    e.preventDefault();
+    ring[i === -1 ? 0 : (e.shiftKey ? (i - 1 + ring.length) % ring.length : (i + 1) % ring.length)].focus();
+  });
+  document.addEventListener("click", function (e) {
+    if (m.open && !m.contains(e.target)) m.open = false;
+    var l = document.querySelector(".sh-learn"); if (l && l.open && !l.contains(e.target)) l.open = false;
+  });
+})();
+(function () {
+  // "Launch a coin": the closed-launches dialog unless the host's catalogue says creator launches are open (unreadable = closed)
+  var btn = document.querySelector("[data-launch-button]"), dlg = document.getElementById("sh-launch-closed"), open = false;
+  fetch("https://burnticker.com/api/burnticker" + "/catalogue").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { open = !!(j && j.launches && j.launches.creators === true); }).catch(function () { open = false; });
+  if (btn && dlg && typeof dlg.showModal === "function") btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); });
+  if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
+  if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();
+})();
+(function () {
+  // THE ACTIVITY LINE: confirmed burns only, from GET /api/burnticker/home; never a placeholder row. No events: one line saying so.
+  var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  fetch("https://burnticker.com/api/burnticker" + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    box.textContent = "";
+    if (!j || !Array.isArray(j.events)) { box.appendChild(el("span", "", "The latest burns could not be read just now.")); return; }
+    if (!j.events.length) { box.appendChild(el("span", "", j.noEvents)); return; }
+    j.events.forEach(function (ev) { var a = el("a", ""); a.href = "https://burnticker.com" + ev.href; if (ev.network !== "mainnet") a.appendChild(el("span", "sh-net", ev.network)); a.appendChild(document.createTextNode(ev.text)); box.appendChild(a); });
+  }).catch(function () { box.textContent = ""; box.appendChild(el("span", "", "The latest burns could not be read just now.")); });
+})();
+</script>
+<!-- site-shell:script:end -->
 <script>
 (function () {
   // THE ONE CURRENT-STATUS SOURCE (website brief §4): the summary lines come from GET /api/burnticker/v1/current-status

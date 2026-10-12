@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "../../_components/EmptyState";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LEDGER_COPY } from "@/lib/burnticker/trustpack/copy";
@@ -35,7 +36,7 @@ export default function FeeLedgerPage() {
         <p className="text-neutral-300">{LEDGER_COPY.intro}</p>
       </header>
       {err && <p className="text-red-400">{err}</p>}
-      {!l && !err && <p className="text-neutral-400">Loading the ledger…</p>}
+      {!l && !err && <EmptyState kind="loading" body="Loading the fee ledger." />}
       {l && <>
         <section className={card}>
           <p className="text-xs">{LEDGER_COPY.walletLine} {l.wallet ? <><a className="underline break-all" href={explorer(l.wallet, "address")}><code>{l.wallet}</code></a>.</> : <span className="text-amber-400">not set yet.</span>} It is on {l.cluster}. {l.balanceLamports === null ? "Its balance could not be read." : `Its balance now is ${sol(l.balanceLamports)} SOL.`}</p>

@@ -37,7 +37,9 @@ describe("review 2 — one launch-availability state", () => {
 
   test("every launch CTA on the app's pages renders only while launches are open", () => {
     const cases: [string, RegExp[]][] = [
-      ["src/app/burnticker/CoinsIndex.tsx", [/\{launch\.open && <Link href="\/burnticker\/launch" className="bt-launch-btn">Launch a coin<\/Link>\}/, /\{launch\.open && <div className="mt-3"><Link href="\/burnticker\/launch" className="underline">Launch the first one →<\/Link><\/div>\}/, /\{launch\.open && <p className="mt-2"><Link className="underline" href="\/burnticker\/launch\?pair=1">/]],
+      // since 2026-10-12 the page's own "Launch a coin" moved into the header (SiteHeader.tsx: a link while open, the closed dialog otherwise)
+      ["src/app/burnticker/CoinsIndex.tsx", [/\{launch\.open && <div className="mt-3"><Link href="\/burnticker\/launch" className="underline">Launch the first one<\/Link><\/div>\}/, /\{launch\.open && <p className="mt-2"><Link className="underline" href="\/burnticker\/launch\?pair=1">/]],
+      ["src/app/burnticker/_components/SiteHeader.tsx", [/\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch"/]],
       ["src/app/burnticker/leagues/[league]/[season]/page.tsx", [/\{launch\.open && <Link className="text-xs underline" href=\{t\.launchHref\}>/, /\{launch\.open && <Link className="underline" href=\{t\.launchHref\}>/, /No team-coin receipts for this season yet\. This page tracks processed coin receipts, not every game\.\{launch\.open \? " Pick a team below to launch one\." : ""\}/]],
       ["src/app/burnticker/templates/page.tsx", [/\{launch\.open && <Link className="mt-auto pt-3 text-sm font-medium text-amber-300 underline" href=\{t\.href\}>Start from this →<\/Link>\}/]],
       ["src/app/burnticker/t/[ticker]/page.tsx", [/\{launch\.open && <p><Link [^>]*href=\{likeHref\(s\.ticker\)\}>Launch one like this →/]],
@@ -51,10 +53,14 @@ describe("review 2 — one launch-availability state", () => {
 });
 
 describe("review 2 — one served $DEFICIT destination", () => {
-  test("the nav, the launch page's closed state and the coin page's not-registered state all use DEFICIT_SITE; no app link goes to /burnticker/t/DEFICIT", () => {
+  test("the featured card, the launch page's closed state and the coin page's not-registered state all use DEFICIT_SITE; no app link goes to /burnticker/t/DEFICIT", async () => {
     assert.equal(DEFICIT_SITE, "https://deficit.burnticker.com/");
     assert.equal(deficitHref(false), DEFICIT_SITE); assert.equal(deficitHref(true), "/burnticker/t/DEFICIT");
-    assert.equal(NAV.find((n) => n.label === "$DEFICIT")?.href, DEFICIT_SITE);
+    // since 2026-10-12 (the owner's review item 12) $DEFICIT is the first featured card, not a nav entry; the card links the served site
+    assert.equal(NAV.find((n) => n.label === "$DEFICIT"), undefined);
+    const { featuredCoins } = await import("@/lib/burnticker/home");
+    assert.equal(featuredCoins(ROOT)[0].href, DEFICIT_SITE, "not created yet: the card links the $DEFICIT site");
+    assert.doesNotMatch(read("src/app/burnticker/about/page.tsx"), /href="\/burnticker\/t\/DEFICIT"/);
     // website brief §1: the closed state is LaunchGate.tsx, handed DEFICIT_SITE by the launch page
     assert.match(read("src/app/burnticker/launch/page.tsx"), /<LaunchGate .*deficitHref=\{DEFICIT_SITE\}/);
     assert.match(read("src/app/burnticker/launch/LaunchGate.tsx"), /<a className="underline" href=\{deficitHref\}>\$DEFICIT<\/a>/);
@@ -158,16 +164,17 @@ describe("review 2 — the glossary at first use", () => {
     assert.equal(GLOSSARY.graduation.term, "moved to trading pool"); assert.equal(GLOSSARY.keeper.term, "automation");
     assert.deepEqual(lint(NO_WALLET_LINE), []);
   });
-  test("placed where the terms first appear: the landing hero, the coins page, the trust page header, both pair pages; the no-wallet line beside every scoreboard", () => {
+  test("placed where the terms are used: the about page, the coins page's tabs, the trust page header, both pair pages; no jargon in the home's headlines; the no-wallet line beside every scoreboard", () => {
     const home = read("site/burnticker/index.html");
-    // UX report 3 item 10 replaced the hero's front-loaded six-term list with context help at each term's first use (<abbr title>)
-    assert.doesNotMatch(home, /data-glossary/, "no front-loaded glossary on the landing page");
-    const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
-    for (const id of ["burn", "receipt", "burnPool", "attester", "keeper"] as TermId[]) assert.ok(home.includes(`<abbr class="term" title="${esc(GLOSSARY[id].short)}">`), id);
-    assert.ok(home.indexOf('<abbr class="term" title="' + esc(GLOSSARY.burn.short)) < home.indexOf('id="verified-burn"'), "burn is explained at its first use, in the hero");
+    // the owner's review items 7 and 10 (2026-10-12): the hero is one plain line and one subline, with no defined terms in it; the
+    // precise words live on the about page (every glossary term, defined once) and on the coin pages
+    assert.doesNotMatch(home, /data-glossary|<abbr class="term"/, "no glossary or tooltip terms on the home");
+    const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('id="coins"'));
+    for (const w of ["reading signer", "burn budget", "keeper", "crank", "attester"]) assert.ok(!hero.toLowerCase().includes(w), `no "${w}" in the hero`);
     assert.ok(home.includes(NO_WALLET_LINE));
+    const about = read("src/app/burnticker/about/page.tsx");
+    assert.match(about, /Object\.values\(GLOSSARY\)\.map\(\(g\) =>/, "the about page defines every term once");
     const coins = read("src/app/burnticker/CoinsIndex.tsx");
-    assert.match(coins, /<Term id="burn">burns<\/Term>/); assert.match(coins, /<Term id="receipt" \/>/);
     assert.match(coins, /label: "Moved to trading pool", hint: GLOSSARY\.graduation\.short/);
     assert.match(read("src/app/burnticker/trust/page.tsx"), /data-trust-evidence[\s\S]*<TermNote ids=\{\["burnPool", "attester", "lockedLp", "feeKey", "keeper", "windDown"\]\} \/>/, "beside the evidence that uses the words");
     const pair = read("src/app/burnticker/p/[pairId]/page.tsx");
