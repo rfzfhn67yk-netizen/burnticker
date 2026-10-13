@@ -107,7 +107,7 @@ describe("the rule text and the locked description sentence", () => {
 describe("a Broncos pair through the keeper (winner takes the burn)", () => {
   let reg: Registry, program: FakeBurnProgram, deps: KeeperDeps, clock: number, logs: string[];
   const table = { [settledMarketsUrl("KXNFLGAME")]: fx("kalshi/KXNFLGAME.settled.json"), [seriesApiUrl("KXNFLGAME")]: fx("kalshi/series.KXNFLGAME.json"), [openMarketsUrl("KXNFLGAME")]: { cursor: "", markets: [] } };
-  beforeEach(() => { reg = openRegistry(":memory:"); program = new FakeBurnProgram("devnet"); clock = NOW; logs = []; deps = { registry: reg, program, oracles: { kalshi: new KalshiClient({ fetchImpl: fixtureFetch(table), now: () => clock, minIntervalMs: 0 }), catalogue: new CatalogueAdapter() }, attester: ATTESTER, log: (s) => logs.push(s), now: () => clock, dryRun: false }; });
+  beforeEach(() => { reg = openRegistry(":memory:"); program = new FakeBurnProgram("devnet"); clock = NOW; program.now = () => clock; /* 2026-10-12: the fake's clock followed the wall clock, so the 72 h result grace expired in real time three days after NOW and "pending" read "missing" */ logs = []; deps = { registry: reg, program, oracles: { kalshi: new KalshiClient({ fetchImpl: fixtureFetch(table), now: () => clock, minIntervalMs: 0 }), catalogue: new CatalogueAdapter() }, attester: ATTESTER, log: (s) => logs.push(s), now: () => clock, dryRun: false }; });
   async function launchPairNamed(ta: string, tb: string) { return launchPair({ tickers: [ta, tb] }); }
   async function launchPair(o: { legacy?: boolean; tickers?: [string, string] } = {}) {
     const [TA, TB] = o.tickers ?? ["BRONCOS", "CHIEFS"];

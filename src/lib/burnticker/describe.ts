@@ -84,7 +84,8 @@ export const PAIR_DESCRIPTION_SENTENCE = "This coin is paired with a rival coin,
  * named fixture can check the sentence against the engine.
  */
 // UX report 3 item 6: "winner" is the coin whose RULE fires, not the team that won (a team coin often burns when its team loses)
-export const PAIR_BURN_SENTENCE = "Winner takes the burn (the coin whose rule fires, not the team that won): when a result fires one coin's rule, eligible fees from both coins fund that coin's burn, and the other coin's share for that result moves to its burn pool. Nothing is paid to holders.";
+// owner, 2026-10-12 ("doesn't the burn of the winning coin burn that coin? add that to the description"): say which coin gets bought and burned
+export const PAIR_BURN_SENTENCE = "Winner takes the burn (the coin whose rule fires, not the team that won): when a result fires one coin's rule, that coin's own burn pool and the other coin's share for that result are both spent burning the winning coin, so the winner's supply shrinks and the loser's does not. Nothing is paid to holders.";
 /** The review card's line for a registered rivalry pair (Coin vs Coin, a shared-selector matchup, an election pair). */
 export const PAIR_REVIEW_LINE = `${PAIR_BURN_SENTENCE} A draw or a void moves nothing.`;
 /**
