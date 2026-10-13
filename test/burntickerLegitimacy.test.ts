@@ -192,7 +192,7 @@ describe("website-17's wiring, applied by website-16 (WIRING-17.md items 1 to 5)
     assert.match(page, /<ShareBlock ticker=\{s\.ticker\} id=\{key\} \/>/);
   });
   test("cards print the rank under Burned (no new row); the tokens and home routes fill it with rankLines", () => {
-    assert.match(read("src/app/burnticker/_components/CoinCard.tsx"), /<Cell c=\{v\.burned\} \/>\{v\.rank && <span [^>]*data-rank title=\{RANK_MEANING\}>\{v\.rank\}<\/span>\}/);
+    assert.match(read("src/app/burnticker/_components/CoinCard.tsx"), /<Cell v=\{v\} c=\{v\.burned\} \/>\{v\.rank && <span [^>]*data-rank title=\{RANK_MEANING\}>\{v\.rank\}<\/span>\}/);
     for (const f of ["src/app/api/burnticker/tokens/route.ts", "src/app/api/burnticker/home/route.ts"]) assert.match(read(f), /rankLines\(leagueData\(p, now\)\.coins\)/, f);
   });
   test("home grid: the earned slots lead the public cards with their labels; the rules line once above the grid", () => {

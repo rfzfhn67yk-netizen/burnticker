@@ -90,8 +90,8 @@ describe("the generated description", () => {
   test("website-18 the champion path: the Dodgers' coin word for word; only MLB, NBA and NHL wins coins with the $DEFICIT sink take it", () => {
     const r = { ...team("mlb", "LAD", "win", S(2026)), onEnd: { ...DEFAULT_ON_END } } as BurnRule;
     const t = describeRule(r, { ticker: "" });
-    assert.equal(t.ticker, "DODGERS26");
-    assert.equal(t.paragraph, "$DODGERS26 burns when the Dodgers win. This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason. Each burn buys $DODGERS26 on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
+    assert.equal(t.ticker, "LAD");
+    assert.equal(t.paragraph, "$LAD burns when the Dodgers win. This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason. Each burn buys $LAD on Raydium, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 season only. If the Dodgers win the championship, the rest of the pool burns here. If they do not, the rest goes to $DEFICIT's burn. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
     assert.equal(t.ruleBlock.split(/(?<=\.)\s/)[0], "This coin burns 2% of its pool every game the Dodgers win, through the last game of the postseason.", "the review card's sentence");
     assert.deepEqual(championEndSentences("the Dodgers"), ["If the Dodgers win the championship, the rest of the pool burns here.", "If they do not, the rest goes to $DEFICIT's burn."]);
     assert.equal(championPathRule(r), true);
@@ -103,16 +103,16 @@ describe("the generated description", () => {
 
   test("the Rays' season coin, word for word (the owner's target, with the window sentence and the year in the ticker)", () => {
     const t = describeRule(team("mlb", "TB", "win", S(2026)), { ticker: "" });
-    assert.equal(t.ticker, "RAYS26"); assert.equal(t.badge, "2026 SEASON");
-    assert.equal(t.paragraph, "$RAYS26 burns when the Rays win. For every Rays win in the 2026 season, the burn pool spends 2% buying $RAYS26 on Raydium and burns it, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only, including the playoffs. After the Rays' last game, it burns down whatever is left over four weeks and then retires. It does not continue into 2027. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
+    assert.equal(t.ticker, "TBMLB"); assert.equal(t.badge, "2026 SEASON");
+    assert.equal(t.paragraph, "$TBMLB burns when the Rays win. For every Rays win in the 2026 season, the burn pool spends 2% buying $TBMLB on Raydium and burns it, with a receipt on chain. Each game's result comes from its market's on-chain payout if it has one, or else from a licensed final score. MLB's official feed confirms it. Nothing happens on a loss or a tie. This coin covers the 2026 Rays season only, including the playoffs. After the Rays' last game, it burns down whatever is left over four weeks and then retires. It does not continue into 2027. The creator earns nothing. The liquidity pool is locked forever, and its fees fund the burn.");
     const e = describeRule(team("nfl", "PHI", "win", S(2026)), { ticker: "" });
-    assert.equal(e.ticker, "EAGLES26");
+    assert.equal(e.ticker, "PHINFL");
     assert.match(e.windowSentence, /^This coin covers the 2026 Eagles season only, including the playoffs\. After the Eagles' last game, it burns down whatever is left over four weeks and then retires\. It does not continue into 2027\.$/);
   });
 
   test("perpetual: no end, the sentence says it, the ticker drops the year; soccer draws read as draws", () => {
     const p = describeRule(team("mlb", "TB", "win", { kind: "perpetual" }), { ticker: "" });
-    assert.equal(p.ticker, "RAYS"); assert.equal(p.badge, "PERPETUAL"); assert.equal(p.windowSentence, PERPETUAL_SENTENCE);
+    assert.equal(p.ticker, "TBMLBALL"); assert.equal(p.badge, "PERPETUAL"); assert.equal(p.windowSentence, PERPETUAL_SENTENCE);
     assert.doesNotMatch(p.paragraph, /retires\b(?!\.)|Ends /);
     const d = describeRule(team("eng.1", "ARS", "draw", S(2026)), { ticker: "" });
     assert.match(d.paragraph, /burns when Arsenal draw/); assert.match(d.paragraph, /Nothing happens on a win or a loss/); assert.equal(d.badge, "2026–27 SEASON");
@@ -189,8 +189,8 @@ describe("the rule dials", () => {
 
 describe("ticker suggestions", () => {
   test("unique against the registry and the refuse list, ≤ 10 characters", () => {
-    assert.equal(uniqueTicker("RAYS26", () => false), "RAYS26");
-    assert.equal(uniqueTicker("RAYS26", (t) => t === "RAYS26"), "RAYS262");
+    assert.equal(uniqueTicker("TBMLB", () => false), "TBMLB");
+    assert.equal(uniqueTicker("TBMLB", (t) => t === "TBMLB"), "TBMLB2");
     assert.equal(uniqueTicker("ARSENAL26", (t) => t === "ARSENAL26"), "ARSENAL262");
     assert.equal(uniqueTicker("INTERMIA26", (t) => t === "INTERMIA26"), "INTERMIA22", "the suffix replaces the tail so it stays 10 characters");
     assert.ok(uniqueTicker("ABCDEFGHIJ", (t) => t === "ABCDEFGHIJ").length <= 10);
@@ -198,9 +198,9 @@ describe("ticker suggestions", () => {
   });
   test("cards: a taken ticker gets the next free number and the text names it", () => {
     const text = describeRule(team("mlb", "TB", "win", S(2026)), { ticker: "" });
-    const card = { id: "x", suggestedTicker: "RAYS26", text, windows: null, matchup: null } as unknown as Suggestion;
-    const [c] = dedupeTickers([card], (t) => t === "RAYS26");
-    assert.equal(c.suggestedTicker, "RAYS262");
-    assert.ok(c.text!.paragraph.includes("$RAYS262") && !c.text!.paragraph.includes("$RAYS26 "));
+    const card = { id: "x", suggestedTicker: "TBMLB", text, windows: null, matchup: null } as unknown as Suggestion;
+    const [c] = dedupeTickers([card], (t) => t === "TBMLB");
+    assert.equal(c.suggestedTicker, "TBMLB2");
+    assert.ok(c.text!.paragraph.includes("$TBMLB2") && !c.text!.paragraph.includes("$TBMLB "));
   });
 });

@@ -6,13 +6,14 @@ import { loadTransparency } from "@/lib/burnticker/trust";
 import { deficitHref } from "@/lib/burnticker/creatorLaunches";
 import { checkReceiptHref } from "@/lib/burnticker/coinPage";
 import type { SiteLaunchState } from "@/lib/burnticker/launchAvailability";
-import { CARD_MEANINGS, NOT_READ, curveCell, groupDigits, longDay, pctOfSupply, shortDay, type CardCell, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
+import { CARD_MEANINGS, NOT_READ, curveCell, emptyLabels, featuredLine, groupDigits, longDay, mcapText, pctOfSupply, shortDay, type CardCell, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
 import { sortEvents, eventsFromKeeper, type ActivityEvent } from "@/lib/burnticker/activity";
 import { deficitQueue, type DeficitQueue, type KeeperFiles } from "@/lib/burnticker/deficitQueue";
 import { readinessOf, type Readiness } from "@/lib/burnticker/readiness";
 import { progressOf } from "@/lib/burnticker/progress";
 import { RAISE_PRESETS_SOL } from "@/lib/burnticker/launchPresets";
-import { upcomingSet, type UpcomingSet } from "@/lib/burnticker/upcoming";
+import { upcomingNotice, upcomingSet, type UpcomingSet } from "@/lib/burnticker/upcoming";
+import { coinWatchKey } from "@/lib/burnticker/watchlist";
 import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 import { historyCounts } from "@/lib/burnticker/history";
 import { historyCountsLine } from "@/lib/burnticker/historyCopy";
@@ -60,6 +61,10 @@ export interface HomeData {
   launch: SiteLaunchState | null;
   /** website-17 item 3: the earned featured slots in rule order (featuredSlots.ts), set by the home route; null when the registry was not read */
   featuredSlots?: FeaturedSlot[] | null;
+  /** ChatGPT audit 6 item 22: the sentence above the featured cards, counted from the cards served (cardView.ts featuredLine) */
+  featuredLine?: string | null;
+  /** ChatGPT audit 6 item 22: the next-results sentence, knowing how many coins the page lists (upcoming.ts upcomingNotice); null when the rows say it all */
+  nextNotice?: string | null;
 }
 
 /** One registered coin as the home route read it: the index card fields plus its newest confirmed receipt. `readOk` false = its page failed. */
@@ -146,7 +151,7 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
   const raiseNum = readable ? Number(live!.threshold) : kc ? Number(kc.threshold) : NaN;
   const raisedNum = readable ? Number(live!.raised) : kc ? Number(kc.raised) : NaN;
   out.push({
-    id: "deficit", ticker: "DEFICIT", name: "Deficit", imageUrl: "/burnticker/brand/deficit.png", group: "test",
+    id: "deficit", watchKey: coinWatchKey("mainnet", deficit?.address ?? null), ticker: "DEFICIT", name: "Deficit", imageUrl: "/burnticker/brand/deficit.png", group: "test",
     tags: [{ label: "Featured", tone: "featured" }, ...(created ? [] : [{ label: "Not created yet", tone: "neutral" as const }])],
     note: created ? "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules were locked before it was created." : "The operator's first coin. Say it like DeFi-cit. Trading fees buy back and burn $DEFICIT when the Treasury reports a qualifying rise in debt. Its rules are locked, and the coin is not created yet.",
     rule: debtRule(d.dial.percent, d.dial.unitLabel), nextSettle: DEBT_NEXT,
@@ -156,7 +161,7 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       : readable ? curveCell({ phase: live!.phase ?? null, progressPct: live!.progressPct ?? null, raised: live!.raised, threshold: live!.threshold, quote: live!.quote }, null)
       : kc ? curveCell({ phase: kc.phase, progressPct: kc.progressPct, raised: kc.raised, threshold: kc.threshold, quote: kc.quote }, null)
       : noCurve(ks ? "The keeper's files do not carry a curve reading yet." : unreadWhy),
-    mcap: !created ? cell(null, "The coin is not created yet.") : readable && live!.marketCap ? cell(`${groupDigits(live!.marketCap)} ${live!.quote ?? "SOL"}`, CARD_MEANINGS.mcap) : cell(null, readable ? (live!.phase === "graduated" ? NOT_READ.mcapPool : NOT_READ.mcapNotRead) : ks ? NOT_READ.mcapNotRead : unreadWhy),
+    mcap: !created ? cell(null, "The coin is not created yet.") : readable && live!.marketCap ? cell(mcapText(live!.marketCap, live!.quote, live!.phase ?? null), CARD_MEANINGS.mcap) : cell(null, readable ? (live!.phase === "graduated" ? NOT_READ.mcapPool : NOT_READ.mcapNotRead) : ks ? NOT_READ.mcapNotRead : unreadWhy),
     holders: !created ? cell(null, "The coin is not created yet.") : readable && typeof live!.holders === "number" ? cell(groupDigits(live!.holders), null) : cell(null, NOT_READ.holders),
     createdAt: readable ? live!.launchedAt ?? null : null, createdWhy: created ? (readable ? null : ks ? "The keeper's files do not give a creation time." : unreadWhy) : "The coin is not created yet.",
     burned,
@@ -180,8 +185,9 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       progress: rc ? progressOf(readinessOf({ launched: true, phase: rc.phase, raisedSol: Number(rc.raised), graduationSol: Number(rc.threshold), poolVerified: null, latest: null }), { raiseSol: Number(rc.threshold), raisedSol: Number(rc.raised) }) : null,
       progressWhy: rc ? null : REHEARSAL_UNREAD,
       curve: rc ? curveCell(rc, null) : noCurve(REHEARSAL_UNREAD),
-      mcap: rc?.marketCap ? cell(`${groupDigits(rc.marketCap)} ${rc.quote}`, CARD_MEANINGS.mcap) : cell(null, rc ? (rc.phase === "graduated" ? NOT_READ.mcapPool : REHEARSAL_UNREAD) : REHEARSAL_UNREAD), holders: cell(null, NOT_READ.holders),
-      createdAt: rehearsal.date ?? null, createdWhy: rehearsal.date ? null : "The record does not give a creation date.",
+      mcap: rc?.marketCap ? cell(mcapText(rc.marketCap, rc.quote, rc.phase), CARD_MEANINGS.mcap) : cell(null, rc ? (rc.phase === "graduated" ? NOT_READ.mcapPool : REHEARSAL_UNREAD) : REHEARSAL_UNREAD), holders: cell(null, NOT_READ.holders),
+      // audit 7 item 23: the exact block time of its create transaction when recorded (slot 455825866), else the day
+      createdAt: rehearsal.createdAt ?? rehearsal.date ?? null, createdWhy: rehearsal.createdAt || rehearsal.date ? null : "The record does not give a creation date.",
       burned: cell(null, `This site does not read $REHEARSAL's burns. The operator's record says: ${rehearsal.status}.`),
       mint: rehearsal.mint ? { address: rehearsal.mint, label: "Mint address" } : null,
       href: "/burnticker/trust#rehearsals", receipt: null, receiptWhy: "$REHEARSAL has no burn receipt.",
@@ -314,10 +320,13 @@ export function homeData(tokens: readonly HomeCoin[] | null, root = process.cwd(
   if (statusRecord !== undefined) rec = statusRecord as StatusRecord | null;
   else { try { rec = JSON.parse(fs.readFileSync(path.join(root, STATUS_FILE), "utf8")) as StatusRecord; } catch { rec = null; } }
   // owner decision 2026-10-12: a mainnet host serves no devnet item (devnetHide.ts); a devnet host keeps them
-  return publicHomeData({
+  const out = publicHomeData({
     schema: "burnticker.home/v1", generatedAt: new Date(now).toISOString(), featured, events: sortEvents([...activityEvents(tokens ?? [], samples, 40, keeper), ...mainnetRecordEvents(root)], 12), noEvents: NO_EVENTS_LINE,
     raisePresetsSol: RAISE_PRESETS_SOL, deficitQueue: deficitQueue(keeper, now), upcoming: upcoming ?? upcomingSet([], [], tokens === null ? null : tokens.length), stats: withDevnet(homeStats(index?.totals ?? null, index?.audit ?? null), samples),
     // legitimacy pass: the one surface hint of the history pages, the dated counts (reviews published, releases since Oct 10)
     statusLine: [homeStatusLine(rec), historyCountsLine(historyCounts(root)), launch?.sentence ?? null].filter(Boolean).join(" ") || null, launch,
   }, host);
+  // after the devnet filter, so the count and the empty labels describe the cards this host serves
+  const shown = out.featured.map((v) => ({ ...v, empty: emptyLabels(v) }));
+  return { ...out, featured: shown, featuredLine: featuredLine(shown), nextNotice: upcomingNotice(out.upcoming, shown.length) };
 }

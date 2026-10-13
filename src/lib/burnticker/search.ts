@@ -1,3 +1,5 @@
+import { isSingleSourceSeries } from "@/lib/burnticker/singleSource";
+import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
@@ -12,6 +14,7 @@ import { eventPageUrl, parseEventsBody, searchUrl, type GammaEvent, type TitleRe
 import { scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { looksLikePerson, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
 import { matchPolymarket, plainQuestion, outcomeLabel, outcomeTicker, searchQueries, splitQuery, type PickerOutcome } from "@/lib/burnticker/polySearch";
+import { teamTicker } from "@/lib/burnticker/tickers";
 import { championshipCode, describeRule, tickerFrom, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets";
@@ -95,7 +98,11 @@ export interface FeedLike { id: string; title: string; sourceName: string; caden
 export interface SearchDeps {
   venues: VenueFlags; feeds: readonly FeedLike[]; espn: EspnClient | null; polyGet: ((url: string) => Promise<unknown>) | null; refuse: TitleRefuser;
   kalshiSearch: ((q: string) => Promise<SeriesSummary[]>) | null; derbyHref: string | null; nowMs: number;
+  /** ChatGPT audit 7 item 11: show markets that close within CLOSING_SOON_HOURS (hidden by default; the page's "Show closing soon") */
+  closingSoon?: boolean;
 }
+/** Markets closing within this many hours are hidden from search by default (a coin made now would not graduate before the result). */
+export const CLOSING_SOON_HOURS = 48;
 
 const FEED_WORDS: Record<string, string[]> = {
   "treasury.debt": ["debt", "national debt", "deficit", "treasury", "debt to the penny"], "fred.GFDEBTN": ["federal debt"], "fred.UNRATE": ["unemployment", "jobless", "jobs report"],
@@ -103,6 +110,9 @@ const FEED_WORDS: Record<string, string[]> = {
   "noaa.flares": ["flare", "flares", "solar", "sun"], "jpl.neo": ["asteroid", "asteroids", "near miss", "near earth"], "wiki.views": ["wikipedia", "page views"],
   "ethereum.baseFeeBurn": ["eth burn", "ethereum burn", "base fee"], "bitcoin.blockHeight": ["bitcoin blocks", "btc blocks"], "solana.blockHeight": ["solana blocks"],
   "fedreg.finalRules": ["federal register", "final rules", "regulations"], "openfda.approvals": ["fda", "drug approval", "approvals"], "github.stars": ["github", "stars"], "steam.players": ["steam", "players"],
+  // sources-3 (2026-10-12): natural disasters, the per-event forms (the one-shots are offered from Browse and the guided steps)
+  "usgs.quakes": ["earthquake", "earthquakes", "quake", "quakes"], "nhc.storms": ["named storm", "named storms", "tropical storm"], "nhc.hurricanes": ["hurricane", "hurricanes"],
+  "spc.tornadoes": ["tornado", "tornadoes"], "nifc.acres": ["wildfire", "wildfires", "acres burned"], "usgs.volcanoraise": ["volcano", "volcanoes", "volcanic"],
 };
 const norm = (s: string) => ` ${s.toLowerCase().replace(/[^a-z0-9$.]+/g, " ").replace(/\s+/g, " ").trim()} `;
 const overlap = (q: string, words: string): number => { const qt = tokens(q); if (!qt.length) return 0; const h = new Set(tokens(words)); return qt.filter((w) => h.has(w)).length / qt.length; };
@@ -149,8 +159,9 @@ function windowTitle(t: EspnTeam, outcome: "win" | "loss" | "draw", kind: Window
 }
 function windowEndText(t: EspnTeam, kind: WindowKind, phrase: string): string {
   if (kind === "perpetual") return "no end date — this coin does not retire";
-  if (kind === "next") return `ends after the last of ${phrase.replace(/^the /, "the ")}, then burns down over four weeks and retires`;
-  return `ends with ${poss(teamRef(t))} last ${kind === "post" ? "playoff " : ""}game of ${phrase.replace(/, playoffs included$/, "")}, then burns down over four weeks and retires`;
+  // audit 6 item 3: the end the rule pins (describe.ts endText): the rest goes to $DEFICIT's burn; a void end burns down on the coin
+  if (kind === "next") return `ends after the last of ${phrase.replace(/^the /, "the ")}, then the rest goes to $DEFICIT's burn and the coin retires`;
+  return `ends with ${poss(teamRef(t))} last ${kind === "post" ? "playoff " : ""}game of ${phrase.replace(/, playoffs included$/, "")}, then the rest goes to $DEFICIT's burn and the coin retires`;
 }
 
 function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "loss" | "draw", nowMs: number): Suggestion {
@@ -215,7 +226,7 @@ async function championshipCard(t: EspnTeam, d: SearchDeps, ti: TeamIntent = { y
   const rule = ti.negated ? polyRuleNo(m.conditionId, DEFAULT_SHARE.oneShot) : polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
   const phrase = `${teamRef(t)} win ${champ}`;
   const code = championshipCode(t.league);
-  const suggest = ti.negated ? { name: `${t.nickname} Fall Short`.slice(0, 32), ticker: tickerFrom(t.nickname, "SHORT") } : { name: `${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`.slice(0, 32), ticker: tickerFrom(t.nickname, code) };
+  const suggest = ti.negated ? { name: `${t.nickname} Fall Short`.slice(0, 32), ticker: `NO${teamTicker(t.abbr, { league: t.league, window: "title" })}`.slice(0, 10) } : { name: `${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`.slice(0, 32), ticker: teamTicker(t.abbr, { league: t.league, window: "title" }) };   // audit 6 item 6: the one generator
   const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest };
   const text = describeRule(rule, { ticker: "", ...descCtx });
   const side = ti.negated ? `the NO side: it burns only if the market settles NO, meaning the ${t.nickname} did not win ${champ}. A voided or cancelled market never counts as a NO` : `the YES side: it burns if Polymarket's payout says the ${t.nickname} won ${champ}`;
@@ -232,7 +243,7 @@ async function championshipCard(t: EspnTeam, d: SearchDeps, ti: TeamIntent = { y
 function matchupCard(t: EspnTeam, games: readonly Game[], nowMs: number): Suggestion | null {
   const g = games.find((x) => !x.completed && Date.parse(x.startsAt) > nowMs && x.home.abbr !== "TBD" && x.away.abbr !== "TBD" && x.home.abbr && x.away.abbr);
   if (!g) return null;
-  const side = (s: Game["home"]): MatchupSide => ({ abbr: s.abbr, name: s.name, nickname: s.nickname || s.abbr, ticker: tickerFrom(s.nickname || s.abbr, "LOSE"), series: gameSeries(t.league, g.eventId, s.abbr, "loss") });
+  const side = (s: Game["home"]): MatchupSide => ({ abbr: s.abbr, name: s.name, nickname: s.nickname || s.abbr, ticker: teamTicker(s.abbr, { league: t.league, window: "game", outcome: "loss" }), series: gameSeries(t.league, g.eventId, s.abbr, "loss") });
   const a = side(g.away), b = side(g.home);
   return {
     ...base, id: `pair:${t.league}:${g.eventId}`, venue: "espn", venueLabel: SPORTS_CHIP, shape: "pair",
@@ -407,6 +418,8 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
   const out: Suggestion[] = [];
   for (const f of feeds) {
     if (!f.launchable.ok || !f.unit || f.baseline === null || !f.direction) continue;
+    // a card here is always a recurring rule at the recurring default; a next-event one-shot (sources-3) is not one
+    if (NEXT_EVENT_ONE_SHOT_RE.test(f.id)) continue;
     const kw = (FEED_WORDS[f.id.split(":")[0]] ?? []).filter((w) => nq.includes(` ${w} `)).length;
     const score = kw ? 1.4 + kw * 0.1 : overlap(q, `${f.title} ${f.sourceName}`) >= 0.5 ? 1 : 0;
     if (!score) continue;
@@ -415,7 +428,7 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
     const text = describeRule(rule, { ticker: "", ...descCtx });
     out.push({
       ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName}, a first-party source`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} per ${f.unit.label} — ${f.title}`, subtitle: f.cadence,
-      settlement: f.sourceName, crossRead: "an independent publisher of the same figure", endText: "no end date", howSettles: f.unit.definition, rule,
+      settlement: f.sourceName, crossRead: isSingleSourceSeries(f.id) ? null : "an independent publisher of the same figure", endText: "no end date", howSettles: f.unit.definition, rule,
       pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, source: { unit: f.unit, baseline: typeof f.baseline === "number" ? f.baseline : 0, direction: "up" }, text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score,
     });
   }
@@ -450,7 +463,21 @@ const groupOf = (c: Suggestion): SuggestionGroup => (c.venue === "espn" ? "teams
 /** At most this many cards, each above MIN_SCORE; nothing above it → "no close match — try Browse". */
 export const MAX_CARDS = 6, MIN_SCORE = 1;
 
-export async function universalSearch(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[] }> {
+/**
+ * ChatGPT audit 7 item 11: a one-time market card whose market closes within CLOSING_SOON_HOURS is hidden unless the caller asks for it
+ * (closingSoon); `hiddenClosingSoon` counts what was hidden so the page can offer "Show closing soon".
+ */
+export const closingSoonCard = (c: Pick<Suggestion, "venue" | "shape" | "endAt" | "settleAt">, nowMs: number): boolean => {
+  const at = c.endAt ?? c.settleAt;
+  return c.venue === "polymarket" && c.shape === "one-shot" && !!at && Number.isFinite(Date.parse(at)) && Date.parse(at) - nowMs < CLOSING_SOON_HOURS * 3_600_000;
+};
+export async function universalSearch(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[]; hiddenClosingSoon: number }> {
+  const r = await searchAll(q, d);
+  if (d.closingSoon) return { ...r, hiddenClosingSoon: 0 };
+  const cards = r.cards.filter((c) => !closingSoonCard(c, d.nowMs));
+  return { ...r, cards, empty: r.empty || cards.length === 0, hiddenClosingSoon: r.cards.length - cards.length };
+}
+async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; cards: Suggestion[]; empty: boolean; errors: string[] }> {
   const query = q.trim().slice(0, 160);
   // no meaningful token (every token one or two letters: "e", "el", "el s") → nothing, never a partial match
   if (query.length < 3 || !meaningful(queryTokens(query)).length) return { query, cards: [], empty: true, errors: [] };

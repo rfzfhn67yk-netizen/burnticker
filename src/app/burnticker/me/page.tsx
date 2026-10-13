@@ -1,5 +1,6 @@
 "use client";
 
+import { DRAFT_ROUTE_LINE, LOOKUP_LABEL, walletAddressProblem } from "@/lib/burnticker/guidedLaunch";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -29,6 +30,10 @@ export default function CreatorDashboard() {
   const wallet = useWallet();
   const openList = useOpenWalletList();
   const [pasted, setPasted] = useState("");
+  // audit 3 item 103: the lookup is a form: the address is checked on blur and on submit, a wrong one says what is expected, and the
+  // lookup's state is said beside the button (the registry is read only for a well-formed address)
+  const [addr, setAddr] = useState(""), [addrErr, setAddrErr] = useState<string | null>(null);
+  const lookUp = () => { const v = addr.trim(); const why = walletAddressProblem(v); setAddrErr(why); if (!why) setPasted(v); };
   // the static pages' "Connect wallet" deep link: open the wallet list on arrival (once), unless a wallet is already connected
   useEffect(() => { if (wantsConnect(window.location.search) && !wallet.connected) openList(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const connectedKey = wallet.connected ? wallet.publicKey?.toBase58() ?? null : null;
@@ -59,7 +64,16 @@ export default function CreatorDashboard() {
         {st.kind === "prompt" || st.kind === "connecting"
           ? <div className={card + " space-y-2"} data-me-state={st.kind}><p className="text-neutral-300">{WALLET_COPY.prompt}</p><WalletButton variant="menu" /></div>
           : <p className="text-neutral-400" data-me-state={st.kind}>{st.source === "connected" ? <>Showing the coins created by your connected wallet, <span className="font-mono">{shortAddress(st.wallet)}</span>. <Link className="underline" href={`/burnticker/creator/${st.wallet}`} data-creator-page>{ANALYTICS_COPY.creatorPage}</Link>.</> : <>Showing the coins created by <span className="font-mono">{shortAddress(st.wallet)}</span>. No wallet is connected.</>}</p>}
-        <details className="text-xs"><summary className="cursor-pointer text-neutral-400">{WALLET_COPY.lookup}</summary><input className="mt-2 w-full max-w-md rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" placeholder="A creator's wallet address" value={pasted} onChange={(e) => setPasted(e.target.value)} aria-label="Creator wallet address" /></details>
+        <details className="text-xs" open={!!addr || !!pasted}><summary className="cursor-pointer text-neutral-400">{WALLET_COPY.lookup}</summary>
+          <form className="mt-2 flex max-w-md flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); lookUp(); }} noValidate data-lookup-form>
+            <label htmlFor="me-wallet" className="w-full text-neutral-400">{LOOKUP_LABEL}</label>
+            <input id="me-wallet" className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" placeholder="A creator's wallet address" value={addr} autoComplete="off" spellCheck={false} aria-invalid={!!addrErr} aria-describedby="me-wallet-status" onChange={(e) => { setAddr(e.target.value); if (addrErr) setAddrErr(null); }} onBlur={() => { if (addr.trim()) setAddrErr(walletAddressProblem(addr.trim())); }} />
+            <button type="submit" className="rounded border border-neutral-700 px-3 py-1 hover:border-amber-400">Look up</button>
+            <p id="me-wallet-status" className={`w-full ${addrErr ? "text-red-400" : "text-neutral-500"}`} role={addrErr ? "alert" : "status"}>{addrErr ?? (busy ? "Looking up this wallet's coins." : pasted && d ? `Showing ${shortAddress(pasted)}.` : "")}</p>
+          </form>
+        </details>
+        {/* audit 3 item 137: without a wallet, the way back to a draft or a new preview */}
+        {(st.kind === "prompt" || st.kind === "connecting") && <p className="text-xs text-neutral-400" data-me-draft-route><Link className="underline" href="/burnticker/launch">{DRAFT_ROUTE_LINE}</Link></p>}
       </header>
       {st.kind === "loading" && <p className="text-neutral-500" role="status">Reading the coin registry.</p>}
       {st.kind === "error" && <p className="text-red-400" role="alert">The coins for this wallet could not be read just now. {st.message}</p>}

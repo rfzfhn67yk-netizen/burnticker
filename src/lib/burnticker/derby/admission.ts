@@ -3,7 +3,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { loadRefuseList, refusalsFor, type RefuseList } from "@/lib/burnticker/oracle/refuse";
 import { loadOwnTokens, ownTokenRefusalFrom, type OwnTokenList } from "@/lib/ownTokens";
-import { DERBY_MIN_LIQUIDITY_USD, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, nextUtcMidnight, seasonEndMs, underlyingKey, type DerbySpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { DERBY_MIN_LIQUIDITY_USD, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, isoDate as isoDateOf, nextUtcMidnight, sameUnderlying, seasonEndMs, underlyingKey, type DerbySpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { cryptoBase, loadPythCatalogue, type PythFeedRow } from "@/lib/burnticker/derby/pyth";
 import { crossQuote } from "@/lib/burnticker/derby/cross";
 import { derbyStore } from "@/lib/burnticker/derby/store";
@@ -61,7 +61,7 @@ export async function derbyAdmission(rule: BurnRule, d: DerbyAdmissionDeps): Pro
   if (!spec) return [{ kind: "feed", symbol: null, reason: "a derby rule needs its derby block" }];
   const out: DerbyRefusal[] = [];
   if (spec.selector === "coinvs") {
-    if (underlyingKey(spec.a) === underlyingKey(spec.b)) out.push({ kind: "feed", symbol: null, reason: "The two coins must be different." });
+    if (underlyingKey(spec.a) === underlyingKey(spec.b) || sameUnderlying(spec.a, spec.b)) out.push({ kind: "feed", symbol: null, reason: "The two coins must be different." });
     out.push(...await underlyingRefusals(spec.a, d), ...await underlyingRefusals(spec.b, d));
     const earliest = nextUtcMidnight(d.now);
     if (spec.season.start < earliest) out.push({ kind: "season", symbol: null, reason: `The season starts on ${spec.season.start}, but the earliest is ${earliest}, the first full window after launch.` });
@@ -72,6 +72,14 @@ export async function derbyAdmission(rule: BurnRule, d: DerbyAdmissionDeps): Pro
     out.push(...await underlyingRefusals(spec.u, d, false));
     const earliest = nextUtcMidnight(d.now);
     if (spec.season.start < earliest) out.push({ kind: "season", symbol: null, reason: `The season starts on ${spec.season.start}, but the earliest is ${earliest}, the first full window after launch.` });
+    return out;
+  }
+  if (spec.selector === "high") {
+    // sources-4: a crypto reference only; the first counted day is the launch day (its close is read at 00:00 UTC the next day, after
+    // the coin exists) and the baseline ends the day before, so a review left open past midnight is refused and re-read.
+    out.push(...await underlyingRefusals(spec.u, d));
+    const today = isoDateOf(d.now);
+    if (spec.season.start !== today) out.push({ kind: "season", symbol: null, reason: `The record's starting point was read for a launch on ${spec.season.start}, but today is ${today} (UTC). Read the closes again so the record ends on the day before launch.` });
     return out;
   }
   const row = derbyStore(d.registry.db).tournament(spec.tournamentId);

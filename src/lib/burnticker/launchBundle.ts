@@ -8,7 +8,7 @@ import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
 import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
 import { nameProblem } from "@/lib/burnticker/launchFields";
-import { isWebLink } from "@/lib/burnticker/creatorProfile";
+import { isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
 
 /**
@@ -144,6 +144,13 @@ export interface LaunchBundle {
   notes: string[];
 }
 
+/**
+ * The coin description's ceiling: the generated rule paragraph (describe.ts; a fade-side team coin's runs to about 850 characters) plus
+ * the separator and the creator's own 280 (creatorProfile.ts DESCRIPTION_MAX). It was 800 until ChatGPT audit 6 (2026-10-12): every
+ * fade-side team coin, and any team coin with a creator description, was refused by the bundle after a clean review. The description
+ * lives in the pinned metadata JSON, not on chain, so nothing upstream limits it.
+ */
+export const DESCRIPTION_LIMIT = 1_500;
 const TICKER_RE = /^[A-Z0-9]{2,10}$/;
 const PUBKEY_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -154,10 +161,12 @@ export function launchProblems(i: LaunchInput): string[] {
   if (!TICKER_RE.test(i.ticker)) p.push("ticker must be 2–10 capitals/digits");
   // intent audit items 1 and 2: at least 2 visible characters and at most 32 bytes of UTF-8 (the metadata's limit), never truncated
   { const np = typeof i.name === "string" ? nameProblem(i.name) : "Enter a name for the coin."; if (np) p.push(np); }
-  if (typeof i.description !== "string" || i.description.length > 800) p.push("description must be ≤ 800 characters");
+  if (typeof i.description !== "string" || i.description.length > DESCRIPTION_LIMIT) p.push(`description must be ≤ ${DESCRIPTION_LIMIT.toLocaleString("en-US")} characters`);
   // intent audit item 13: a parsed https address with a real host name ("https://?" and "https://x" are not web addresses)
   if (i.imageUrl !== null && !isWebLink(i.imageUrl)) p.push("imageUrl must be an https URL or null");
-  if (!Array.isArray(i.links) || i.links.length > 4 || i.links.some((l) => typeof l?.url !== "string" || !isWebLink(l.url) || typeof l.label !== "string" || l.label.length > 24)) p.push("links: up to 4 https URLs with short labels");
+  // audit 7 item 3: at most 4 links, each passing its field's own check (creatorProfile.ts linksProblems: https only, X = x.com /
+  // twitter.com, Telegram = t.me, no burnticker.com or look-alike addresses); the review runs the same function
+  p.push(...linksProblems(i.links));
   if (!/^\d+(\.\d{1,9})?$/.test(i.firstBuySol) || Number(i.firstBuySol) > 50) p.push("firstBuySol must be a SOL amount ≤ 50");
   if (!i.acknowledgements?.ruleLocked) p.push("you must acknowledge that the rule cannot be changed");
   if (!i.acknowledgements?.noReturns) p.push("you must acknowledge that you are not promising anyone anything");

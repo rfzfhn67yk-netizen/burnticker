@@ -333,9 +333,21 @@ export function buybackSpend(poolLamports: bigint, units: number, fractionPerUni
   return poolLamports - keep;
 }
 
-/** Below the floor (USD, at the SOL price read at execution) nothing is bought that day. */
+/**
+ * THE SOL PRICE A USD FLOOR IS CONVERTED WITH (website-20 item 165, 2026-10-12). The floor is a USD figure turned into lamports with a
+ * SOL price, so a missing, zero, non-finite or absurd price would silently disable the floor (a huge price makes it ~0 lamports) or
+ * refuse every day. Such a price is REFUSED: the caller backs off and retries, and nothing is skipped or bought on it. The bounds are a
+ * sanity band, far outside any traded SOL price, not a market view.
+ */
+export const SOL_USD_SANE = { min: 1, max: 100_000 } as const;
+export function assertSolUsd(solUsd: number): number {
+  if (typeof solUsd !== "number" || !Number.isFinite(solUsd) || solUsd < SOL_USD_SANE.min || solUsd > SOL_USD_SANE.max) throw new Error(`the SOL price ${String(solUsd)} is missing or outside $${SOL_USD_SANE.min}–$${SOL_USD_SANE.max.toLocaleString("en-US")}, so the USD floor cannot be converted; nothing is decided on it`);
+  return solUsd;
+}
+
+/** Below the floor (USD, at the SOL price read at execution) nothing is bought that day. A bad SOL price throws (assertSolUsd). */
 export function belowFloor(spendLamports: bigint, solUsd: number, floorUsd: string): boolean {
-  return (Number(spendLamports) / 1e9) * solUsd < Number(floorUsd);
+  return (Number(spendLamports) / 1e9) * assertSolUsd(solUsd) < Number(floorUsd);
 }
 
 /**

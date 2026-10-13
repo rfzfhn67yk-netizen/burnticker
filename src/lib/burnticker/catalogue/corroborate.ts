@@ -3,6 +3,7 @@ import type { SettledEvent } from "@/lib/burnticker/units";
 import type { Feed, SourceEntry } from "@/lib/burnticker/catalogue";
 import { compareFact, crossReadsOf, describeEntry } from "@/lib/burnticker/coverage/sources";
 import { fetchBody, parseBody } from "@/lib/burnticker/sources/attestedHttp";
+import { isSingleOfficialSource, singleSourceMethod } from "@/lib/burnticker/singleSource";
 
 /**
  * THE RUNTIME CROSS-READ (ChatGPT/Codex PR review N2, 2026-10-10). A generic catalogue feed's readings reach the registry — and so the
@@ -31,6 +32,9 @@ export async function corroborate(feed: Feed, all: readonly SettledEvent[], even
   if (!events.length) return { ...base, events: [] };
   const sorted = [...events].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : 1));
   const hold = (why: string, kept: SettledEvent[] = []): ResolvedSelector => ({ ...base, events: kept, awaitingFinal: base.awaitingFinal + (sorted.length - kept.length), refusals: [...base.refusals, why] });
+  // the owner's exception (2026-10-12, singleSource.ts): the natural-disaster feeds settle on their own publisher. Only complete readings
+  // of a read that succeeded reach here; a failed read threw before this, so an unavailable day is held, never counted.
+  if (isSingleOfficialSource(feed.config)) return { ...base, events: sorted.map((e) => ({ ...e, method: `${e.method ? `${e.method} · ` : ""}${singleSourceMethod(feed.config.id)}` })) };
   const pf = feed.config.fact;
   if (!pf) return hold(`${feed.id} declares no fact, so no second source can confirm it. ${sorted.length} ${sorted.length === 1 ? "reading is" : "readings are"} held.`);
   const descs = deps.entries.map(describeEntry);

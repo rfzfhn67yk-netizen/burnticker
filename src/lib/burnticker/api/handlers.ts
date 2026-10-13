@@ -1,13 +1,11 @@
 import type { Platform } from "@/lib/burnticker/server";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule } from "@/lib/burnticker/guidedLaunch";
-import { reservedProblem } from "@/lib/burnticker/reservedNames";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
-import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
 
-/** intent audit 2 item 2: a one-time series judged on its saved sample, only when the sample is of this very series (oneShotEligibility.ts). */
-export function sampleEligibility(f: Feed, now: number): Eligibility {
-  try { return oneShotEligibility(f.id, f.config, loadFixture(f).body, now); } catch { return { decided: false, reason: null, subject: null }; }
-}
+import { identityRefusals, ruleRefusals, sampleEligibility } from "@/lib/burnticker/launchPreflight";
+import { teamTicker } from "@/lib/burnticker/tickers";
+import { knownLookalike } from "@/lib/burnticker/ops/cloneServe";
+export { sampleEligibility };
 import { ONCHAIN_FACTS, onchainSource } from "@/lib/burnticker/sources/onchain";
 import { driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
 import { TIER_LABEL, sourceTypeLabel } from "@/lib/burnticker/sources/types";
@@ -23,7 +21,7 @@ import { electionPairTemplate } from "@/lib/burnticker/electionPair";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
 import { CROSS_LABEL, officialOf } from "@/lib/burnticker/sources/gameSettle";
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
-import { badgeCreatorImage } from "@/lib/burnticker/creatorBadge";
+import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBadge";
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
@@ -53,6 +51,7 @@ export function derbyTitle(rule: LockedRule["rule"]): string {
   if (!d) return rule.series ?? "derby";
   if (d.selector === "bracket") return `Burn Derby bracket ${d.tournamentId}, slot ${d.slot}, for ${d.underlying.symbol}`;
   if (d.selector === "price") return `Burn Derby on the ${d.window} % change of ${d.u.symbol}`;
+  if (d.selector === "high") return `${d.u.symbol}'s record daily close${d.span === "all" ? "" : ` over ${d.span} days`}${d.once ? ", once" : ""}`;
   return `Burn Derby, ${d.a.symbol} vs ${d.b.symbol}, on the ${d.window} ${d.flip ? "flippening" : d.measure === "mcap" ? "market-cap change" : "% change"}`;
 }
 
@@ -72,6 +71,7 @@ export async function oneShotVoidBy(p: Platform, locked: LockedRule): Promise<st
 import { preflightSelector, preflightStrict, type PreflightDeps } from "@/lib/burnticker/coverage/preflight";
 import { launchGuardRefusal } from "@/lib/burnticker/launchGuards";
 import type { PreflightResult } from "@/lib/burnticker/coverage/types";
+import { isSingleOfficialSource, singleSourceSentence } from "@/lib/burnticker/singleSource";
 
 /**
  * THE BURNTICKER ROUTES' SHARED LOGIC (2026-10-09). The wizard's routes (/api/burnticker/{catalogue,oracle/*,launch}) and the public
@@ -80,7 +80,7 @@ import type { PreflightResult } from "@/lib/burnticker/coverage/types";
  */
 
 export const ADMISSION = {
-  all: ["official or primary source", "machine-readable", "timestamped", "unambiguous units", "not controlled by anyone who can hold the token", "not a disaster", "not an election or vote, except Kalshi election series, which the operator allows", "never the token's own price"],
+  all: ["official or primary source", "machine-readable", "timestamped", "unambiguous units", "not controlled by anyone who can hold the token", "not a disaster", "elections only as one candidate's outcome of a Polymarket market, settled on its on-chain payout (Kalshi election series only on a host that turns Kalshi on); never a first-party election or vote feed", "never the token's own price"],
   byTier: { 1: "An adjudicated market. Only settled results count, and the venue's window for making a result final is respected.", 2: "An optimistic assertion. It counts only once it is settled and nobody disputes it.", 3: "A primary API whose reading is attested by a secure enclave or a zero-knowledge proof, using the same address and selection as tier 4. Prices of outside assets are allowed from this tier up.", 4: "A primary API read by our keeper. No asset prices are allowed. Each source has one real saved sample and limits on what a believable reading looks like.", 5: "A value read from a web page. The operator approves each source, the pattern is fixed to the page's markup, and it is never a price." },
 };
 
@@ -104,7 +104,7 @@ export function catalogueSources(now: number, o: { includeConfig?: boolean } = {
     // provider, time, status, page and id (never a bare id)
     const elig = sampleEligibility(f, now);
     const title = elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : f.title;
-    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: sourceTypeLabel(f), title, sourceName: f.sourceName, sourceUrl: elig.subject?.url ?? verifyUrl(f, now), cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: elig.decided ? { ok: false, why: elig.reason } : f.launchable, eligibility: { decided: elig.decided, reason: elig.reason }, subject: elig.subject, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
+    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: sourceTypeLabel(f), title, sourceName: f.sourceName, settlement: isSingleOfficialSource(f.config) ? singleSourceSentence(f.id) : null, sourceUrl: elig.subject?.url ?? verifyUrl(f, now), cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: elig.decided ? { ok: false, why: elig.reason } : f.launchable, eligibility: { decided: elig.decided, reason: elig.reason }, subject: elig.subject, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
   });
   const onchain = (Object.keys(ONCHAIN_FACTS) as (keyof typeof ONCHAIN_FACTS)[]).map((id) => { const s = onchainSource(id, null); return { id, kind: s.kind, tier: s.tier, tierLabel: sourceTypeLabel(s), title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: s.unit, direction: s.direction, baseline: s.baseline, carry: s.carry, valueLabel: s.valueLabel, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }; });
   const stubs = [polymarketCard(), umaStub(), driftBetStub(), hedgehogStub()].map((s) => ({ id: s.id, kind: s.kind, tier: s.tier, tierLabel: sourceTypeLabel(s), title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: null, direction: null, baseline: null, carry: s.carry, valueLabel: null, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }));
@@ -194,9 +194,9 @@ const refuseTitlesList = (titles: string[]): string[] => [...new Set(refusalsFor
 const catalogueFeeds = (now: number): FeedLike[] => (catalogueSources(now).sources as unknown as (FeedLike & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
 
 /** GET /v1/search?q= — the universal search (src/lib/burnticker/search.ts): ready-made rules from every enabled venue and feed; the category list when nothing matches. */
-export async function search(p: Platform, q: { q?: string | null }, now = Date.now()): Promise<ApiResult> {
+export async function search(p: Platform, q: { q?: string | null; closingSoon?: string | null }, now = Date.now()): Promise<ApiResult> {
   const venues = venueFlags(p);
-  const r = await universalSearch(q.q ?? "", { venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
+  const r = await universalSearch(q.q ?? "", { closingSoon: /^(1|true|yes)$/i.test(q.closingSoon ?? ""), venues, feeds: catalogueFeeds(now), espn: espnClient(), polyGet: venues.polymarket ? (u) => p.polymarket.get(u) : null, refuse: refuseTitlesList, kalshiSearch: venues.kalshi ? (x) => p.kalshi.searchSeries(x, { limit: 5 }) : null, derbyHref: derbyHrefFrom(), nowMs: now });
   let categories: { id: string; label: string; blurb: string }[] = [];
   if (r.empty) { try { categories = loadCategories().map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })); } catch { categories = []; } }
   // suggested tickers: unique against the registry and clear of the refuse list's name patterns (RAYS26 → RAYS262 when taken)
@@ -206,7 +206,9 @@ export async function search(p: Platform, q: { q?: string | null }, now = Date.n
   let tokens: Parameters<typeof existingCoinsFor>[1] = [];
   try { tokens = p.registry.tokens(); } catch { tokens = []; }
   const withExisting = cards.map((c) => { const rule = (c as { rule?: unknown }).rule; const existing = rule ? existingCoinsFor(rule, tokens) : []; return existing.length ? { ...c, existing } : c; });
-  return ok({ ...r, cards: withExisting, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
+  // ChatGPT audit 7 item 2: a pasted mint that is on the Not Burnticker list answers "known lookalike", never "no coin matches"
+  const lookalike = knownLookalike(p, q.q ?? "");
+  return ok({ ...r, ...(lookalike ? { empty: false, lookalike } : {}), cards: withExisting, venues, categories, note: "These are ready-made rules. No prices, odds, volume or liquidity are returned." });
 }
 
 /** GET /v1/elections?type=&state= — the guided Elections & Politics flow (src/lib/burnticker/elections.ts), from Polymarket's open midterm races. */
@@ -263,13 +265,36 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
   const year = seasonYearAt(league, Date.now());
   const needle = (q.q ?? "").trim();
   const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
+  // ChatGPT audit 6 item 2: whether the team has games left this season, from the same schedule read (seasonStatus)
+  const readable = scheduleNote === null;
   const teams = teamsOf(league).filter((t) => !named || named.has(t.abbr) || t.name.toLowerCase().includes(needle.toLowerCase())).slice(0, needle ? 200 : 400).map((t) => {
     const g = games.filter((x) => x.home.abbr === t.abbr || x.away.abbr === t.abbr).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
     const opp = g ? (g.home.abbr === t.abbr ? g.away : g.home) : null;
     const me = g ? (g.home.abbr === t.abbr ? g.home : g.away) : null;
-    return { abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league, series: { win: teamSeries(league, t.abbr, "win", { kind: "season", year }), loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, record: me?.record ?? null, next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr } : null };
+    const win = teamSeries(league, t.abbr, "win", { kind: "season", year });
+    // audit 6 item 10: a record only when the schedule carries one; the field is left out otherwise (never null, never a bare dash)
+    const record = me?.record ?? null;
+    return { abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "win" }), league, series: { win, loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, ...(record ? { record } : {}), next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr } : null, season: seasonStatus(t.abbr, games, readable) };
   });
+  // teams with a listed game first (soonest first), then no game listed soon, then an unreadable schedule, then season over
+  const rank = { upcoming: 0, "none-listed": 1, unknown: 2, over: 3 } as const;
+  teams.sort((a, b) => rank[a.season.status] - rank[b.season.status] || (a.next?.startsAt ?? "").localeCompare(b.next?.startsAt ?? ""));
   return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's official feed." : "The schedule comes from TheSportsDB, with a licensed key.", scheduleNote, scheduleDetail, teams });
+}
+
+/**
+ * ChatGPT audit 6 item 2 (26 of 30 MLB teams had next: null while the season rule was offered): a team's season state from the league's
+ * schedule for the next days. `over` = the league is in its postseason (every listed game is a postseason game) and the team has no
+ * game in it: a season coin would end at once and its pool would go to $DEFICIT. `none-listed` = no game for the team in the window
+ * (a bye, the off-season or a schedule that lists only part of the league). `unknown` = the schedule could not be read.
+ */
+export const SEASON_OVER_LINE = "Season over for this team: this coin would end right away and its pool would go to $DEFICIT.";
+export function seasonStatus(abbr: string, games: readonly Game[], readable: boolean): { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null } {
+  if (!readable) return { status: "unknown", warning: "This league's schedule could not be read, so whether this team has games left is not known." };
+  const open = games.filter((g) => !g.completed);
+  if (open.some((g) => g.home.abbr === abbr || g.away.abbr === abbr)) return { status: "upcoming", warning: null };
+  if (open.length && open.every((g) => g.seasonType === 3)) return { status: "over", warning: SEASON_OVER_LINE };
+  return { status: "none-listed", warning: "No game is listed for this team in the next 8 days. A season coin only burns on games still to come." };
 }
 
 /** GET /v1/sports/games?league=&q= — upcoming games for matchups (the league's own schedule or TheSportsDB, the next 8 days; no ESPN reads): both sides and each side's one-game loss selector. */
@@ -303,7 +328,9 @@ export async function browse(p: Platform, q: { category?: string | null; q?: str
   let cats;
   try { cats = loadCategories(); } catch (e) { return fail(500, (e as Error).message); }
   const feeds = (catalogueSources(now).sources as unknown as (FeedCardInput & { kind: string })[]).filter((f) => f.kind !== "market" && f.kind !== "assertion");
-  const id = q.category?.trim() || null;
+  // sources-3 (2026-10-12): the weather tile folded into Science, Space & Weather; an old link or a saved draft asking for it lands there
+  const asked = q.category?.trim() || null;
+  const id = asked === "weather" ? "science" : asked;
   if (!id) return ok({ categories: categoryList(cats, feeds, venues), venues, note: "These are Burnticker's categories. Each one lists our own feeds and Polymarket events. It also lists Kalshi series when this site has Kalshi turned on." });
   const c = cats.find((x) => x.id === id);
   if (!c) return fail(404, `There is no category called "${id}". The categories are ${cats.map((x) => x.id).join(", ")}.`);
@@ -478,15 +505,20 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (input.rule && typeof input.rule === "object" && eventLevelRule(input.rule as Parameters<typeof eventLevelRule>[0])) return { error: fail(400, EVENT_LEVEL_REFUSAL, { code: "pick-one-outcome" }) };
   let locked: LockedRule;
   try { locked = lockRule(input.rule); } catch (e) { return { error: fail(400, (e as Error).message) }; }
-  if (locked.mode === "vault") return { error: fail(400, VAULT_HIDDEN_SENTENCE, { code: "vault-off" }) };
-  if (locked.rule.oracle === "kalshi" && p.kalshiEnabled === false) return { error: fail(503, KALSHI_UNAVAILABLE) };
+  // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): the same rule refusals the read-only review lists, in order:
+  // vault mode, a venue this host has off, an oracle no coin launches on yet, a source's fixed unit / launchability / decided result, the
+  // reserve bounds and an unsafe title regex. The first one answers; every one is in `problems`.
+  { const rr = ruleRefusals(locked, { kalshiEnabled: p.kalshiEnabled !== false, now: Date.now() }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
-  // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name
-  { const rp = reservedProblem(input); if (rp) return { error: fail(403, rp, { code: "reserved" }) }; }
+  // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name;
+  // audit 6 item 9: major coins' tickers and control characters in the creator's texts (the review runs the same identityRefusals)
+  { const ir = identityRefusals({ ticker: input.ticker, name: input.name, description: typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription) : "", note: typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note) : "" }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, ir[0].message, { code: ir[0].code, problems: ir.map((x) => x.message) }) }; }
   let seriesTitle: string | null = null;
   let feedText: { title: string; sourceName: string; unitLabel: string } | null = null;
   let statedText: ReturnType<typeof statedCtx> = null;
+  // audit 6 item 26: a named launch's own name from the saved sample, so the description never falls back to the raw id
+  let subjectName: string | null = null;
   // THE CREATOR'S TEXT (owner decision 2026-10-10): the name, the ticker and the optional note pass the copy lint with the creator scope
   // (every platform rule + no-affiliation: official, endorsed, partner…, links, handles) — a hit refuses with the category named.
   const note = typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note).trim() : "";
@@ -503,7 +535,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const d = decodeCreatorImage(src.image);
     if ("error" in d) return { error: fail(400, `${who}${d.error}`, { code: "image-refused" }) };
     // owner, 2026-10-12: the receipt mark is optional and on by default; when on it is composited before anything is pinned
-    if (src.imageBadge === false) return { up: { bytes: d.ok.bytes, contentType: d.ok.contentType, badge: false } };
+    // WIRING-MEDIA-RECOVERY item 221: a plain image (mark off) passes the same decode and 16-pixel checks as the badge path
+    if (src.imageBadge === false) { const c = await checkCreatorImage(d.ok.bytes); if ("error" in c) return { error: fail(400, `${who}${c.error}`, { code: "image-refused" }) }; return { up: { bytes: d.ok.bytes, contentType: d.ok.contentType, badge: false } }; }
     const badged = await badgeCreatorImage(d.ok.bytes, d.ok.contentType);
     if ("error" in badged) return { error: fail(400, `${who}${badged.error}`, { code: "image-refused" }) };
     return { up: { bytes: badged.ok.bytes, contentType: badged.ok.contentType, badge: true } };
@@ -518,19 +551,15 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if (input.imageUrl && (body as { imageRights?: unknown }).imageRights !== true) return { error: fail(400, `Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };
   const native = locked.rule.oracle === "catalogue" ? nativeSourceById(locked.rule.series!) : null;
   if (native) {
-    const np = nativeRuleProblems(native, locked.rule);
-    if (np.length) return { error: fail(400, np.join("; "), { problems: np }) };
+    // the source's fixed-unit check ran in ruleRefusals above
     seriesTitle = native.title;
   } else if (locked.rule.oracle === "catalogue") {
-    const feed = feedById(locked.rule.series!);
-    if (!feed) return { error: fail(400, `unknown feed ${locked.rule.series}`) };
+    // an unknown feed, the feed's fixed unit / launchability and an already-decided one-time result were refused by ruleRefusals above
+    const feed = feedById(locked.rule.series!)!;
     feedText = feed.unit ? { title: feed.title, sourceName: feed.sourceName, unitLabel: feed.unit.label } : null;
-    const fp = feedRuleProblems(feed, locked.rule);
-    if (fp.length) return { error: fail(400, fp.join("; "), { problems: fp }) };
-    // intent audit 2 item 2: eligibility does not wait for the launch gate or the strict preflight; the live preflight checks it again
     const elig = sampleEligibility(feed, Date.now());
-    if (elig.decided) return { error: fail(400, elig.reason!, { code: "already-decided", problems: [elig.reason!] }) };
     seriesTitle = elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : feed.title;
+    subjectName = elig.subject?.name ?? null;
   } else if (locked.rule.oracle === "kalshi") {
     const info = await p.kalshi.seriesInfo(locked.rule.series ?? locked.rule.market!.split("-")[0]).catch(() => null);
     if (!info) return { error: fail(502, "The Kalshi series could not be read. Please try again.") };
@@ -561,7 +590,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     catch (e) { return { error: fail(502, `A second source for the Burn Derby could not be read, so liquidity could not be checked. The reason given was: ${(e as Error).message.slice(0, 120)}`) }; }
     if (dr.length) return { error: fail(403, `This launch is refused: ${dr.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: dr }) };
     seriesTitle = derbyTitle(locked.rule);
-  } else return { error: fail(400, `Coins cannot launch on the ${locked.rule.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.`) };
+  } else return { error: fail(400, `Coins cannot launch on the ${locked.rule.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.`, { code: "oracle-off" }) };   // ruleRefusals refused it already
   if (refusals.length) return { error: fail(403, `This launch is refused: ${refusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals }) };
   if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `The mint ${o.mint} is already registered.`, { code: "mint-taken" }) };
   { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
@@ -575,7 +604,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   }
   // THE DESCRIPTION IS GENERATED (coinText.ts): whatever `description` the request carried, the coin's is describe.ts's paragraph for
   // the locked rule (+ the rule footer the bundle appends); the request's descCtx is checked word by word before it reaches a template.
-  const ctxA = serverDescribeCtx(locked.rule, (body as { descCtx?: unknown }).descCtx, { seriesTitle, feed: feedText, stated: statedText });
+  const ctxA = { ...serverDescribeCtx(locked.rule, (body as { descCtx?: unknown }).descCtx, { seriesTitle, feed: feedText, stated: statedText }), ...(subjectName ? { subjectName } : {}) };
   // website-15 item 13: the generated paragraph (its first sentence is the rule) always comes first; the creator's text follows it
   input.description = withCreatorText(generatedParagraph(locked.rule, input.ticker, ctxA), creatorText);
   // NOTHING ABOUT A COIN CAN CHANGE AFTER LAUNCH (pin.ts): the metadata JSON and the receipt art are pinned on Arweave before the
@@ -617,6 +646,9 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   };
   if (b.pair) {
     if (o.mint) return { error: fail(400, "A rivalry pair is launched through the pair steps on the launch page, with two new mints. The public API takes one coin at a time.") };
+    // WIRING-MEDIA-RECOVERY item 235: a restart after side A's create landed on chain must not make a second A. A draft this creator
+    // registered for the same side-A ticker and name whose mint exists on chain is that A: the new plan is refused, naming the mint.
+    { const prior = await createdSideA(p, input); if (prior) return { error: fail(409, `Side A, $${input.ticker}, was already created on chain from an earlier plan as mint ${prior}. A new plan would create a second $${input.ticker}. Finish that pair from the launch history, or pick a different ticker and name.`, { code: "pair-side-a-created", mint: prior }) }; }
     const side = { ticker: String(b.pair.ticker ?? "").toUpperCase(), name: String(b.pair.name ?? ""), description: String(b.pair.description ?? ""), imageUrl: b.pair.imageUrl ? String(b.pair.imageUrl) : null, links: Array.isArray(b.pair.links) ? b.pair.links as { label: string; url: string }[] : [] };
     // website-18 (the owner: "I also don't see the ability to change the thumbnail pic"): side B carries its own creator description,
     // links and uploaded image, checked like side A's and pinned in its own metadata file
@@ -631,7 +663,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     const bProblems = launchProblems({ ...input, ...side });
     if (bProblems.length) return { error: fail(400, `Side B has a problem: ${bProblems.join("; ")}`, { problems: bProblems }) };
     const bRefusals = nameRefusals(list, side.name, side.ticker);
-    { const rp = reservedProblem(side); if (rp) return { error: fail(403, `Side B: ${rp}`, { code: "reserved" }) }; }
+    { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
     { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
     try {
@@ -697,4 +729,17 @@ export async function markLaunched(p: Platform, mint: string, launchTx: string):
   const baselineAt = new Date(v.blockTimeMs).toISOString();
   try { p.registry.markLaunched(mint, launchTx, t.poolId, baselineAt); } catch (e) { return fail(409, (e as Error).message); }
   return ok({ ok: true, token: p.registry.token(mint), note: `The launch transaction was read from the chain. The start time is its block time, ${baselineAt}. Results settled after this moment count.` });
+}
+
+/**
+ * WIRING-MEDIA-RECOVERY item 235: the mint of a side A this creator already created on chain from an earlier pair plan (a draft with the
+ * same ticker and name, whose mint account exists), or null. A host without a chain reader (p.market) cannot tell and answers null.
+ */
+export async function createdSideA(p: Pick<Platform, "registry" | "market">, a: { creator: string; ticker: string; name: string }): Promise<string | null> {
+  if (!p.market) return null;
+  let drafts: { mint: string }[] = [];
+  try { drafts = p.registry.tokens().filter((t) => t.creator === a.creator && t.status === "draft" && t.ticker.toUpperCase() === a.ticker.toUpperCase() && t.name === a.name); } catch { return null; }
+  const { PublicKey } = await import("@solana/web3.js");
+  for (const t of drafts) { try { if ((await p.market.getAccountInfo(new PublicKey(t.mint))) !== null) return t.mint; } catch { /* unreadable: not proof */ } }
+  return null;
 }

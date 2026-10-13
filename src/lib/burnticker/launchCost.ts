@@ -10,11 +10,30 @@ export const TOKEN_CONFIG_BYTES = 863;
 /** LaunchLab create's account rent (pool state, two vaults, metadata), measured on the 2026-10-10 rehearsal (REHEARSAL-RUNSHEET §0.1). */
 export const LAUNCHLAB_CREATE_RENT_SOL = 0.03;
 export const LAMPORTS_PER_SIGNATURE = 5000;
-/** "0.0581" from lamports (six places under 0.001 SOL). */
-export const solText = (lamports: number): string => (lamports / 1e9).toFixed(lamports < 1_000_000 ? 6 : 4).replace(/0+$/, "").replace(/\.$/, "");
+/**
+ * EXACT LAMPORT TEXT (website-20 item 167, 2026-10-12): integer lamports to SOL with `places` decimals, rounded half up in integer
+ * arithmetic. The old float path ((l / 1e9).toFixed) could round a .5 boundary down (1,234,550,000 lamports showed 1.2345), so a shown
+ * figure could disagree with the amount prepared.
+ */
+export function lamportsText(lamports: number | bigint, places: number): string {
+  const l = BigInt(lamports), neg = l < BigInt(0), a = neg ? -l : l;
+  const scale = BigInt(10) ** BigInt(9 - places);
+  const r = (a + scale / BigInt(2)) / scale;   // half up, in units of 10^-places SOL
+  const s = r.toString().padStart(places + 1, "0");
+  const out = `${s.slice(0, s.length - places)}.${s.slice(s.length - places)}`.replace(/0+$/, "").replace(/\.$/, "");
+  return neg && out !== "0" ? `-${out}` : out;
+}
+/** "0.0581" from lamports (six places under 0.001 SOL), exact. */
+export const solText = (lamports: number): string => lamportsText(lamports, Math.abs(lamports) < 1_000_000 ? 6 : 4);
+/** A rule's SOL string ("0.02", up to 9 decimals) as lamports, exactly (the same value program.ts counterRule prepares). */
+export function decimalSolToLamports(sol: string): number {
+  const m = /^(\d+)(?:\.(\d{1,9}))?$/.exec(sol.trim());
+  if (!m) throw new Error(`not a SOL amount: ${sol}`);
+  return Number(BigInt(m[1]) * BigInt(1_000_000_000) + BigInt((m[2] ?? "").padEnd(9, "0") || "0"));
+}
 /** One LaunchLab coin's estimate: the rule account's rent, the reserve moved into its burn pool, LaunchLab's create rent, two signatures. */
 export function launchLabCostLamports(reserveSol: string, coins = 1): number {
-  return (rentLamports(TOKEN_CONFIG_BYTES) + Math.round(Number(reserveSol) * 1e9) + Math.round(LAUNCHLAB_CREATE_RENT_SOL * 1e9) + 2 * LAMPORTS_PER_SIGNATURE) * coins;
+  return (rentLamports(TOKEN_CONFIG_BYTES) + decimalSolToLamports(reserveSol) + Math.round(LAUNCHLAB_CREATE_RENT_SOL * 1e9) + 2 * LAMPORTS_PER_SIGNATURE) * coins;
 }
 /** The same in SOL; the default reserve is the web launcher's 0.02 SOL (launchDraft.ts). */
 export const launchLabCostSol = (reserveSol = "0.02"): string => solText(launchLabCostLamports(reserveSol));

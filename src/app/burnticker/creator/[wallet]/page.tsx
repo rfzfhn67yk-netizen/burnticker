@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { safeCreatorLink } from "@/lib/burnticker/creatorProfile";
 import Link from "next/link";
 import { creatorData } from "@/lib/burnticker/creatorServe";
 import { CREATOR_PAGE } from "@/lib/burnticker/creatorBenefits";
@@ -52,7 +53,7 @@ export default async function CreatorPage({ params }: Params) {
                 <div className="rounded border border-neutral-800 p-2 text-xs" data-creator-text>
                   <div className="text-[10px] uppercase tracking-wider text-neutral-500">{CREATOR_PAGE.creatorText}</div>
                   {c.creatorText && <p className="mt-1 text-neutral-300">{c.creatorText}</p>}
-                  {c.links.length > 0 && <p className="mt-1 flex flex-wrap gap-2">{c.links.map((l) => <a key={l.url} className="underline" href={l.url} rel="nofollow noopener ugc" target="_blank">{l.label}</a>)}</p>}
+                  {c.links.length > 0 && <p className="mt-1 flex flex-wrap gap-2">{c.links.filter(safeCreatorLink).map((l) => <a key={l.url} className="underline" href={l.url} rel="noopener noreferrer nofollow ugc" target="_blank">{l.label}</a>)}</p>}
                 </div>
               )}
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">

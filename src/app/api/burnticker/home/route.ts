@@ -52,7 +52,7 @@ export async function GET() {
         const readiness = readinessFromStatus(d.status, d.receipts);
         coins.push({ ...homeCoinOf(d.status), cluster: d.status.cluster, latestSignature: latest?.signature ?? null, readOk: true, readiness, events: eventsFromStatus(d.status, d.receipts, key) });
         slotInputs.push({ ticker: d.status.ticker, group: d.status.cluster === "mainnet" && d.status.status !== "draft" ? "public" : "test", burns: d.receipts.filter((r) => r.status === "confirmed").map((r) => ({ settledAt: r.settledAt })), createdAt: d.status.launchedAt ?? null, poolRegistered: ["awaiting-event", "below-floor", "deferred", "burned"].includes(readiness.state) });
-        const row = upcomingFromStatus(d.status, d.receipts, key);
+        const row = upcomingFromStatus(d.status, d.receipts, key, t.mint);
         if (row) upcoming.push(row);
       } catch (e) {
         console.error(`[burnticker/home] ${t.ticker}: the coin's page could not be read:`, e);

@@ -1,3 +1,4 @@
+import { safeRegexTest } from "@/lib/burnticker/safeRegex";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { canonicalDecimal, numToDec, type SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OpenMarketSummary, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
@@ -119,7 +120,7 @@ export function selectorMatches(rule: BurnRule, m: KalshiMarket): boolean {
   if (rule.market) return m.ticker === rule.market;
   if (m.seriesTicker !== rule.series) return false;
   if (rule.filter.tickerIncludes && !m.ticker.includes(rule.filter.tickerIncludes)) return false;
-  if (rule.filter.titleRegex && !new RegExp(rule.filter.titleRegex).test(m.title)) return false;
+  if (rule.filter.titleRegex && !safeRegexTest(rule.filter.titleRegex, m.title)) return false;   // audit 6 item 8: a refused pattern never runs
   return true;
 }
 

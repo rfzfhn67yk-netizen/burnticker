@@ -163,13 +163,13 @@ describe("item 2: readings, graduations and pool registrations as their own labe
     assert.deepEqual(dated.map((e) => [e.kind, e.at, e.signature]), [["graduation", "2026-10-12T00:00:00Z", "SigG"], ["pool", "2026-10-13T00:00:00Z", "SigP"]]);
     for (const e of dated) { assert.doesNotMatch(e.text, /does not read the date/); clean(e.text, e.kind); }
   });
-  test("the activity line labels each kind and fades its right edge on phones until the end is reached (app and static shell)", () => {
+  test("the activity line labels each kind and fades whichever edge still has more (app and static shell; audit 6 item 24)", () => {
     const t = read("src/app/burnticker/_components/ActivityTicker.tsx"), nav = read("src/lib/burnticker/siteNav.mjs"), css = read("config/public-repo/overlay/src/app/globals.css");
     assert.match(t, /EVENT_LABEL\[ev\.kind\]/);
     // found on the phone shots: an absolutely positioned hint inside the strip made the page as wide as the strip (scrollWidth 4360 at 390)
-    assert.doesNotMatch(t.slice(t.indexOf("{data && data.events.map")), /className="sr-only"/, "no absolutely positioned text after the rows"); assert.match(t, /className=\{`bt-ticker\$\{atEnd \? " is-end" : ""\}`\}/);
-    assert.match(css, /@media \(max-width: 899px\) \{\n  \.bt-ticker \{ -webkit-mask-image: linear-gradient\(90deg, #000 85%, transparent\)/);
-    assert.match(nav, /@media \(max-width:899px\)\{\.sh-ticker\{-webkit-mask-image:linear-gradient\(90deg,#000 85%,transparent\)/); assert.match(nav, /box\.classList\.toggle\("is-end"/);
+    assert.doesNotMatch(t.slice(t.indexOf("{data && data.events.map")), /className="sr-only"/, "no absolutely positioned text after the rows"); assert.match(t, /className=\{`bt-ticker \$\{hint\.className\}`\}/);
+    assert.match(css, /\.bt-scroll-hint\.more-end \{ -webkit-mask-image: linear-gradient\(90deg, #000 calc\(100% - 40px\), transparent\)/);
+    assert.match(nav, /\.sh-ticker\.more-end\{-webkit-mask-image:linear-gradient\(90deg,#000 calc\(100% - 40px\),transparent\)/); assert.match(nav, /box\.classList\.toggle\("more-end"/);
   });
 });
 
@@ -293,16 +293,19 @@ describe("item 7: the duplicate-rule check at the choice step", () => {
 
 describe("item 8: the local watchlist (browser only, nothing sent)", () => {
   test("parse and toggle are pure; malformed storage is an empty list; one key shared with the static home", () => {
-    assert.deepEqual(parseWatchlist(null), { coins: [], results: [] }); assert.deepEqual(parseWatchlist("{bad"), { coins: [], results: [] });
-    assert.deepEqual(parseWatchlist(JSON.stringify({ coins: ["RAYS", "RAYS", "<script>", 3], results: ["DEFICIT"] })), { coins: ["RAYS"], results: ["DEFICIT"] });
-    const w = toggleWatch(toggleWatch({ coins: [], results: [] }, "coins", "rays"), "results", "DEFICIT");
-    assert.deepEqual(w, { coins: ["RAYS"], results: ["DEFICIT"] }); assert.deepEqual(toggleWatch(w, "coins", "RAYS").coins, []);
-    assert.ok(read("site/burnticker/index.html").includes(`var KEY = "${WATCH_KEY}";`));
+    // since private review 8 F1 a follow is a network-and-mint key; old ticker entries parse into `legacy` (test/burntickerSitePolish.test.ts)
+    const none = { coins: [], results: [], legacy: { coins: [], results: [] } };
+    assert.deepEqual(parseWatchlist(null), none); assert.deepEqual(parseWatchlist("{bad"), none);
+    assert.deepEqual(parseWatchlist(JSON.stringify({ coins: ["RAYS", "RAYS", "<script>", 3], results: ["DEFICIT"] })), { coins: [], results: [], legacy: { coins: ["RAYS"], results: ["DEFICIT"] } });
+    const K = "mainnet:FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp";
+    const w = toggleWatch(toggleWatch(none, "coins", K), "results", K);
+    assert.deepEqual([w.coins, w.results], [[K], [K]]); assert.deepEqual(toggleWatch(w, "coins", K).coins, []);
+    assert.ok(read("site/burnticker/index.html").includes(`var KEY = "${WATCH_KEY}",`));
     for (const f of ["src/lib/burnticker/watchlist.ts", "src/app/burnticker/_components/useWatchlist.ts", "src/app/burnticker/_components/FollowButton.tsx"]) assert.doesNotMatch(read(f), /fetch\(|sendBeacon|XMLHttpRequest/, f);
     assert.match(read("src/lib/burnticker/watchlist.ts"), /try \{ return parseWatchlist\(window\.localStorage\.getItem\(WATCH_KEY\)\); \} catch/);
     assert.deepEqual(GRID_TABS.find((t) => t.id === "following")!.label, "Following");
     const list = [{ ticker: "RAYS", phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" }, { ticker: "OILERS", phase: null, progressPct: null, nextCheckAt: null, nextCloseTime: null, launchedAt: null, status: "live" }];
-    assert.deepEqual(tabCoins("following", list, ["OILERS"]).map((t) => t.ticker), ["OILERS"]);
+    assert.deepEqual(tabCoins("following", list, (t) => t.ticker === "OILERS").map((t) => t.ticker), ["OILERS"]);
     const st = gridState({ tab: "following", loading: false, error: null, all: list, shown: 0, query: "", generatedAt: null, now: 0 });
     assert.equal(st.kind, "empty"); clean((st as { body: string }).body, "following empty");
     for (const t of [WATCH_NOTE, WATCH_EMPTY, ...GRID_TABS.map((t) => t.rule)]) clean(t, t);

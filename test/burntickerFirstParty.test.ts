@@ -118,7 +118,7 @@ describe("native sources in the catalogue", () => {
     assert.match(info!.settlementSource!.name, /on-chain payout .* confirmed by MLB's official feed/); assert.doesNotMatch(info!.settlementSource!.name, /ESPN/);
     setNativeClients({ games: null });
     const src = nativeSourceById(nwsSeries("high", "DEN", 85))!;
-    assert.deepEqual(nativeRuleProblems(src, { ...nativeRule(src.id), scalar: { unit: 2, perUnit: { fractionOfPool: 0.01 }, baseline: 0, direction: "up" } } as never), ["unit must be 1 (1 qualifying day) for nws.high:DEN-85"]);
+    assert.deepEqual(nativeRuleProblems(src, { ...nativeRule(src.id), scalar: { unit: 2, perUnit: { fractionOfPool: 0.01 }, baseline: 0, direction: "up" } } as never), [`the unit must be 1 (1 qualifying day) for "${src.title}"`]);
     await assert.rejects(cat.settledSince({ ...nativeRule(src.id), scalar: { unit: 1, perUnit: { fractionOfPool: 0.01 }, baseline: 5, direction: "up" } } as never, null), /baseline must be 0/);
     const cfg = loadCopyLintConfig();
     for (const id of [teamSeries("nfl", "PHI", "win"), gameSeries("nhl", "123456", "BOS", "loss"), nwsSeries("rain", "SEA", 1), nwsSeries("snow", "DEN")]) { const s = nativeSourceById(id)!; assert.ok(lintCopy(`${s.title}. ${s.unit.definition}`, cfg).ok, id); }

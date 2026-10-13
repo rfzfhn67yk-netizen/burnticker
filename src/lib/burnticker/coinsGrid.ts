@@ -33,14 +33,15 @@ export type GridState =
 type Coin = Pick<IndexCoin, "ticker" | "phase" | "progressPct" | "nextCheckAt" | "nextCloseTime" | "launchedAt" | "status">;
 
 /** The coins a tab lists, in its order. "graduating" uses only curves that were read; nothing is ranked on an invented zero. */
-export function tabCoins<T extends Coin>(tab: GridTab, list: readonly T[], followed: readonly string[] = []): T[] {
+/** `isFollowed`: whether this browser follows the coin, by its network and mint (watchlist.ts; never by ticker, private review 8 F1). */
+export function tabCoins<T extends Coin>(tab: GridTab, list: readonly T[], isFollowed: (t: T) => boolean = () => false): T[] {
   const next = (t: T) => t.nextCloseTime ?? t.nextCheckAt;
   const launched = (t: T) => (t.launchedAt ? Date.parse(t.launchedAt) : -1);
   if (tab === "new") return [...list].sort((a, b) => launched(b) - launched(a) || a.ticker.localeCompare(b.ticker));
   if (tab === "next") return list.filter((t) => next(t)).sort((a, b) => Date.parse(next(a)!) - Date.parse(next(b)!));
   if (tab === "graduating") return list.filter((t) => t.phase !== "graduated" && t.progressPct !== null && t.progressPct >= 50).sort((a, b) => b.progressPct! - a.progressPct!);
   if (tab === "graduated") return list.filter((t) => t.phase === "graduated");
-  if (tab === "following") return list.filter((t) => followed.includes(t.ticker.toUpperCase()));
+  if (tab === "following") return list.filter(isFollowed);
   return [];
 }
 
@@ -56,7 +57,9 @@ export function curveCoverage(list: readonly Coin[]): { read: number; unread: nu
  * search), `shown` what the tab and the search leave. `generatedAt` is the index's own read time.
  */
 /** A search with no tradeable match: says how many featured coins match instead, or that nothing does. */
-export function searchMissSentence(query: string, featuredMatches: number): string {
+export function searchMissSentence(query: string, featuredMatches: number, lookalike: { line: string } | null = null): string {
+  // ChatGPT audit 7 item 2: a pasted mint on the Not Burnticker list (GET /v1/search?q=<mint> answers `lookalike`) says so
+  if (lookalike) return lookalike.line;
   if (featuredMatches > 0) return `No tradeable coin matches. ${featuredMatches === 1 ? "1 featured coin does" : `${featuredMatches} featured coins do`}.`;
   return `No coin matches "${query.trim()}".`;
 }

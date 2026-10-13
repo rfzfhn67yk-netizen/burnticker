@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { PublicKey } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
+import { decodePlatformConfig } from "@/lib/burnReceipts/accounts";
+import { platformPda } from "@/lib/burnReceipts/pda";
+import { capSentence, effectiveCap, type EffectiveCap } from "@/lib/burnticker/capInForce";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
 import { upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
@@ -174,7 +177,8 @@ export function readIncidents(root = process.cwd()): { markdown: string; entries
 export const TRANSPARENCY_FILE = path.join("config", "burnticker", "transparency.json");
 export interface TransparencyWallet { role: string; label: string; pubkey: string | null; envVar: string | null; description: string }
 export interface TransparencyReview { id: string; reviewer: string; status: string; reportPath: string | null }
-export interface TransparencyRehearsal { symbol: string; date: string | null; mint: string | null; status: string; text: string }
+/** `createdAt`: the exact time of the coin's create transaction (its block time), when recorded; cards count the age from it (audit 7 item 23) */
+export interface TransparencyRehearsal { symbol: string; date: string | null; createdAt?: string | null; mint: string | null; status: string; text: string }
 /** The two sentences the launch runbook's go/no-go gates look for on the page (policies by id; rendered among the standing facts too). */
 export const GATE_POLICY_IDS = ["no-telegram-discord", "failure-definition"] as const;
 export interface TransparencyConfig {
@@ -341,6 +345,17 @@ export interface TrustPage {
   transparency: TransparencySection;
   statements: string[];
   operatorLine: string; contactIsTodo: boolean; useOfFees: string; attesterStatus: { line: string; dueBy: string | null }; preAuditCapSol: number;
+  /** website-20 item 162: the burn-pool cap the program applies, read from chain (null: not read on this host). */
+  effectiveCap: EffectiveCap | null;
+}
+
+/** The PlatformConfig PDA read through the trust page's chain reader: the cap in force, or null when there is no reader or program id. */
+export async function readEffectiveCap(reader: ChainReader | null, programId: string | null, nowMs: number): Promise<EffectiveCap | null> {
+  if (!reader || !programId) return null;
+  try {
+    const data = await reader.accountData(platformPda(new PublicKey(programId)).toBase58());
+    return effectiveCap(data ? decodePlatformConfig(data) : null, Math.floor(nowMs / 1000));
+  } catch { return null; }
 }
 
 export async function buildTrustPage(i: { reader: ChainReader | null; env?: Readonly<Record<string, string | undefined>>; root?: string; siteDir: string; attesters: TrustPage["attesters"]; firstLaunchAt?: number | null; now?: number; cluster?: string; upgradeTimeLockSecs?: number | null }): Promise<TrustPage> {
@@ -349,9 +364,10 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
   const transparency = buildTransparency(root, env);
   const platformId = (env.BURNTICKER_PLATFORM_ID ?? "").trim() || null;
   const cluster = i.cluster ?? ((env.BURNTICKER_CLUSTER ?? "").trim() || "devnet");
+  const effective = await readEffectiveCap(i.reader, (env.BURNTICKER_PROGRAM_ID ?? "").trim() || null, now);
   return {
     generatedAt: new Date(now).toISOString(),
-    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL,
+    operatorLine: OPERATOR_LINE, contactIsTodo: OPERATOR_LINE.includes(OPERATOR_CONTACT_TODO), useOfFees: USE_OF_FEES, attesterStatus: attesterStatusLine(i.firstLaunchAt ?? null), preAuditCapSol: PRE_AUDIT_POOL_CAP_SOL, effectiveCap: effective,
     powers, operator: operatorPowersSummary(powers),
     livePlatform: await readLivePlatform(i.reader, platformId, env, now, cluster),
     designedFees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(cluster), devFeeBps: BURNTICKER_DEV_FEE_BPS, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, lpFeeSplit: { burnPoolBps: LP_FEES_TO_BURN_POOL_BPS, operatorBps: LP_FEES_TO_OPERATOR_BPS, ofLpBps: { burnPool: 8000, operator: 2000 } }, creatorCashBps: 0, teamAllocationPct: 0 },
@@ -368,7 +384,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
       "The launch wizard has no referral codes, fee discounts or hidden settings. Every setting is in the coin's rules file (rules.json).",
       "Only settled results are shown. The site shows no price or odds for any Burnticker coin and no commentary on any number; a coin's card and page may show its market cap as a bare number read from its curve or pool (owner decision 2026-10-12); another coin's market cap may be a rule input, shown only as the rule sentence. For example, a Burn Derby rule reads the settled moves of two outside coins, and derby admission refuses a Burnticker coin as an input. No page shows a market-implied chance for any coin, since that was removed on 2026-10-10. A coin page names only its venue and the next market's ticker and close time.",
       "Coins settle on first-party primary sources, each with an independent cross-read. These include Treasury, BLS, FRED, NWS, EDGAR and on-chain data. A sports game settles on the game's on-chain payout when a Polymarket moneyline market exists. Otherwise it settles on a licensed final score from TheSportsDB, under a commercial license. The league's official feed confirms that score (MLB's official feed, the NHL's official scores or the NBA's official feed), or a second licensed provider, API-Sports, does. The coverage table below has the details. A coin can also settle on an on-chain Polymarket payout. That result is read from the payout vector of the Conditional Tokens contract on Polygon, and it counts only once the payout is on chain. Polymarket's Gamma API is used only to find markets, and no prices are shown. Kalshi is not a settlement input. Its Developer Agreement and Data Terms, reviewed on 2026-10-10, do not allow settling products on its data or sharing that data. The Kalshi adapter is for discovery only and is off by default, and the launch check refuses any Kalshi rule.",
-      `Before the audit, each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL. Fee income above that is queued and released after the audit. Today the keeper enforces this cap. Once the program is deployed, the program enforces it. Until then, that gap is open.`,
+      `${capSentence(effective)} Today the keeper enforces this cap. Once the program is deployed, the program enforces it. Until then, that gap is open.`,
       "Anonymous creators are allowed, and the creator's wallet is always shown. One-shot markets are allowed, and their pages say 'resolves once on <date>'. Elections are allowed. Deaths, violence, terror, casualty counts and named private individuals are refused.",
       USE_OF_FEES,
       ...GATE_POLICY_IDS.map((id) => transparency.policies.find((p) => p.id === id)?.text).filter((t): t is string => !!t),

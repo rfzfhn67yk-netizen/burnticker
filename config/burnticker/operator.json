@@ -63,7 +63,7 @@
         "vault": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "multisig": "7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc",
         "threshold": "2 of 3",
-        "timeLock": "0 now for launch week; 48 h planned from around 2026-10-23",
+        "timeLock": "0 now for launch week; 48 h planned from a week or more after the soft launch",
         "source": "docs/burn-receipts/powers-register.md"
       },
       "wallets": [

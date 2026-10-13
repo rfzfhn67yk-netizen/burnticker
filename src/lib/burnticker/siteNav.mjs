@@ -264,6 +264,8 @@ export function shellFooterHtml(o) {
 /**
  * The shell's styles for the static pages: the app's B1 "thermal receipt" tokens, dark by default (review item 17); the visitor's switch
  * (`bt-theme`, shared with the app) turns on the paper theme. Every class is prefixed `sh-` so a page's own styles never collide.
+ * ChatGPT audit 6 item 21: the header and the phone tab bar are opaque, and the page's bottom padding is the bar's height (60 px plus its
+ * 2 px border) plus the safe area plus a gap, so no footer link or button sits under the bar. Audit 7 item 21: 12 px tab labels.
  */
 export const SHELL_CSS = `
 :root{--sh-bg:#12100e;--sh-counter:#1b1815;--sh-line:#2d2925;--sh-ink:#f2eee4;--sh-dim:#aba395;--sh-paper:#f2eee4;--sh-paper-ink:#1b1916;--sh-paper-dim:#5a5248;--sh-stamp:#9b84e6;--sh-stamp-solid:#5b3fa3;--sh-scorch:#c8873a;
@@ -271,12 +273,12 @@ export const SHELL_CSS = `
 :root[data-theme="light"]{--sh-bg:#f2eee4;--sh-counter:#e9e4d7;--sh-line:#d3ccbc;--sh-ink:#1b1916;--sh-dim:#4d473f;--sh-paper:#fbf9f4;--sh-stamp:#5b3fa3;--sh-scorch:#8a5a24}
 .sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
-.sh-header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--sh-bg) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
+.sh-header{position:sticky;top:0;z-index:40;background:var(--sh-bg);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
 .sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
 .sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
 .sh-mark{width:34px;height:34px;border-radius:50%;display:block}
 .sh-word{font:700 1.02rem/1 var(--sh-mono);letter-spacing:.16em}
-.sh-nav{display:none;align-items:center;gap:2px}
+.sh-nav{display:none;align-items:center;gap:6px;margin-left:12px} /* private review 8: room between the wordmark, the links and Learn at 1440 */
 .sh-nav a,.sh-learn>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
 .sh-learn>summary::-webkit-details-marker{display:none}
 .sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
@@ -321,16 +323,18 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 @media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
 @media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}}
 @media (max-width:899px){
-  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
-  .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:color-mix(in srgb,var(--sh-bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
-  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;font:700 10px/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
+  body{padding-bottom:calc(62px + env(safe-area-inset-bottom) + 12px)}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;min-width:44px;font:700 12px/1 var(--sh-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
   .sh-tabbar a span:first-child{display:block;line-height:0}
   .sh-icon{width:20px;height:20px;display:block}
   .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
 }
-@media (max-width:899px){.sh-ticker{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}.sh-ticker.is-end{-webkit-mask-image:none;mask-image:none}}
+.sh-ticker.more-end{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}
+.sh-ticker.more-start{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px);mask-image:linear-gradient(90deg,transparent,#000 40px)}
+.sh-ticker.more-start.more-end{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
 @media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
-@media (max-width:400px){.sh-word{display:none}}
+@media (max-width:479px){.sh-word{display:none}} /* audit 7 item 18: the wordmark returns only where the header tools fit beside it (no overflow at 401 to 479 px) */
 `;
 
 /**
@@ -382,12 +386,12 @@ export function shellScript(o = {}) {
 })();
 (function () {
   // THE ACTIVITY LINE (website-14): burns, signed readings, graduations and pool registrations from GET /api/burnticker/home, each
-  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. On phones the strip
-  // scrolls sideways, so its right edge fades until the end is reached.
+  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. When the strip is wider
+  // than the screen it scrolls sideways, and the edge that still has more fades (ChatGPT audit 6 item 24, the app's useScrollEdges).
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
   var KIND = ${JSON.stringify(EVENT_LABELS)};
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  function edge() { box.classList.toggle("is-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 4); }
+  function edge() { box.classList.toggle("more-start", box.scrollLeft > 4); box.classList.toggle("more-end", box.scrollLeft + box.clientWidth < box.scrollWidth - 4); }
   box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
   window.btHome.then(function (j) {
     box.textContent = "";

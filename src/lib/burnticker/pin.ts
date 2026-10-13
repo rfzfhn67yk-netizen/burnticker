@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import crypto from "node:crypto"; import { safeCreatorLink } from "@/lib/burnticker/creatorProfile";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { renderCoinSvg } from "@/lib/burnticker/coinArt";
 
@@ -83,7 +83,8 @@ export interface PinInput {
 /** The metadata JSON (Metaplex token standard + `extensions`), byte-stable for the same inputs. */
 export function metadataJson(i: PinInput, imageUri: string, imageType = "image/png"): string {
   const ext: Record<string, string> = {};
-  for (const l of i.links) { const k = /^x$/i.test(l.label) ? "twitter" : l.label.toLowerCase(); if (["website", "twitter", "telegram"].includes(k)) ext[k] = l.url; }
+  // audit 7 item 3: only a link that passes its field's check reaches the metadata JSON
+  for (const l of i.links.filter(safeCreatorLink)) { const k = /^x$/i.test(l.label) ? "twitter" : l.label.toLowerCase(); if (["website", "twitter", "telegram"].includes(k)) ext[k] = l.url; }
   return JSON.stringify({
     name: i.name, symbol: i.ticker, description: i.description, image: imageUri, external_url: `${i.origin.replace(/\/$/, "")}/burnticker/t/${encodeURIComponent(i.mint ?? i.ticker)}`,
     attributes: [{ trait_type: "rules sha256", value: i.rulesSha256 }, ...(i.image && typeof i.image.badge === "boolean" ? [{ trait_type: "Burnticker receipt mark", value: i.image.badge ? "on" : "off" }] : [])],

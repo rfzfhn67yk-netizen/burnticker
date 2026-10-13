@@ -1,5 +1,5 @@
 import { Buffer } from "buffer";
-import { AddressLookupTableAccount, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
+import { AddressLookupTableAccount, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedMessage, VersionedTransaction } from "@solana/web3.js";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import type { SerializedIx } from "@/lib/burnticker/program";
 
@@ -93,6 +93,40 @@ export function buildStepTx(step: SignStep, creator: string, keys: Record<string
 export function wireSize(tx: VersionedTransaction): number { return tx.serialize().length; }
 /** True once the signature slot of the first signer (the fee payer) holds a signature. */
 const hasSignature = (s: Uint8Array | undefined): s is Uint8Array => !!s && s.some((b) => b !== 0);
+const sameBytes = (a: Uint8Array | undefined, b: Uint8Array | undefined) => !!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * LAUNCH INTEGRITY 253: what is wrong with the transaction a wallet hands back, or null when it is the one built here plus the wallet's
+ * signature. The rule is exact, by design: the wallet may only fill its own signature slot. Its message bytes (fee payer, blockhash,
+ * signers, accounts, instructions, lookup tables) must equal what it was handed, and every key signature this page added (the mint keys)
+ * must still be there, byte for byte. A changed message would void those signatures anyway, so no supported wallet can change it and
+ * still produce a transaction that lands; a wallet that tries (an added instruction, a different fee payer) is refused before the send.
+ * Equal message bytes plus the page's own signature bytes means the mint signatures still verify (they were made over those bytes here).
+ * The wallet's own signature is checked only for presence; a bad one is refused by the network, which charges nothing for it.
+ */
+export function walletReturnProblem(handed: { message: Uint8Array; signatures: Uint8Array[] }, returned: VersionedTransaction, step: SignStep, plan: Pick<SignPlan, "expect" | "labels">): string | null {
+  let got: Uint8Array;
+  try { got = returned.message.serialize(); } catch { return "the wallet returned something that is not a transaction"; }
+  if (!sameBytes(got, handed.message)) {
+    let before: VersionedTransaction["message"];
+    try { before = VersionedMessage.deserialize(handed.message); } catch { return "the wallet changed the transaction"; }
+    const after = returned.message;
+    const keys = (m: VersionedTransaction["message"]) => m.staticAccountKeys.slice(0, m.header.numRequiredSignatures).map((k) => k.toBase58());
+    if (before.staticAccountKeys[0]?.toBase58() !== after.staticAccountKeys[0]?.toBase58()) return "the wallet changed who pays the fee";
+    if (before.recentBlockhash !== after.recentBlockhash) return "the wallet changed the transaction's blockhash";
+    if (keys(before).join(",") !== keys(after).join(",")) return "the wallet changed who signs the transaction";
+    return "the wallet changed the transaction's instructions or accounts";
+  }
+  const n = returned.message.header.numRequiredSignatures;
+  if (returned.signatures.length !== n) return "the wallet changed who signs the transaction";
+  const index = returned.message.staticAccountKeys.slice(0, n).map((k) => k.toBase58());
+  for (const s of step.signers) {
+    if (s === "creator") continue;
+    const at = index.indexOf(plan.expect[s] ?? "");
+    if (at < 0 || !hasSignature(handed.signatures[at]) || !sameBytes(returned.signatures[at], handed.signatures[at])) return `the wallet removed or changed ${plan.labels[s] ?? s}'s signature`;
+  }
+  return null;
+}
 
 // ---- sending, with every signed transaction persisted before it is sent (review-2 F4) -----------------------------------------
 //
@@ -214,7 +248,11 @@ export function markRecorded(storage: PlanStorage | null | undefined, plan: Sign
 
 /** What getSignatureStatuses reports for one signature (null = the chain does not know it). */
 export interface ChainStatus { err: unknown; confirmationStatus?: string | null }
-export type Reconciled = "confirmed" | "failed" | "expired" | "unknown";
+/**
+ * "expired" from reconcilePending means only "its blockhash has expired and this one read found no status": it can no longer land, but it
+ * may already have (launch recovery 255). checkPending turns that into "never-landed" (proven: rebuildable) or "uncertain" (kept as sent).
+ */
+export type Reconciled = "confirmed" | "failed" | "expired" | "never-landed" | "uncertain" | "accounts-exist" | "unknown";
 /**
  * Settles a sent transaction, purely: a confirmed/finalized status → "confirmed" (or "failed" if it carries an error); a status the chain
  * holds only as "processed" → "unknown"; no status (null) AND a block height past lastValidBlockHeight → "expired" (it can no longer
@@ -247,16 +285,46 @@ export interface SendDeps {
   getBlockHeight?(): Promise<number>;
   /** where each signed transaction is written before it is sent (browserPlanStorage in the card) */
   storage?: PlanStorage | null;
+  /**
+   * launch recovery 255: the transaction history for one signature (Connection.getTransaction(sig, { maxSupportedTransactionVersion: 0,
+   * commitment: "confirmed" }) → null, or its meta.err). Absent → an expired step is never proven unlanded, so it is never rebuilt.
+   */
+  getTransaction?(sig: string): Promise<{ err: unknown } | null>;
+  /**
+   * launch recovery 255: whether the accounts a step creates (its mints) exist: "absent" (none does), "present" (one does: the step may
+   * have landed; existence alone is not success, so the step is not adopted either) or "unknown" (the read failed). Absent → never proven.
+   */
+  expectedAccounts?(mints: string[]): Promise<"absent" | "present" | "unknown">;
 }
 /** `state` / `signature` describe the step at `failedAt` and are present only when a run stops. */
 export interface SendResult { signatures: string[]; failedAt: number | null; error: string | null; state?: Exclude<StepState, "confirmed">; signature?: string }
 
-/** Reads the block height, THEN the status (the order makes an absence past lastValidBlockHeight a proof), then reconciles. */
-export async function checkPending(p: PendingSend, d: Pick<SendDeps, "getSignatureStatus" | "getBlockHeight">): Promise<Reconciled> {
+export type ChainReadDeps = Pick<SendDeps, "getSignatureStatus" | "getBlockHeight" | "getTransaction" | "expectedAccounts">;
+/**
+ * Reads the block height, THEN the status, then reconciles. Launch recovery 255: an "expired" reading is not taken as proof that nothing
+ * landed (a load-balanced RPC can answer the height from a current backend and the status from a lagging one; history can be briefly
+ * incomplete). Before a step is called "never-landed" (rebuildable), the original signature is read again (status, then the transaction
+ * history) and the accounts the step creates (`mints`) must be absent. A landed result found on the second look is adopted or failed as
+ * usual; an account that exists, a read that fails, or a missing check leaves the step "uncertain": kept as sent, nothing rebuilt.
+ */
+export async function checkPending(p: PendingSend, d: ChainReadDeps, mints: string[] = []): Promise<Reconciled> {
   let height: number | null = null, status: ChainStatus | null | undefined = undefined;
   if (d.getBlockHeight) { try { height = await d.getBlockHeight(); } catch { height = null; } }
   if (d.getSignatureStatus) { try { status = await d.getSignatureStatus(p.signature); } catch { status = undefined; } }
-  return reconcilePending(p, status, height);
+  const first = reconcilePending(p, status, height);
+  if (first !== "expired") return first;
+  let again: ChainStatus | null | undefined = undefined;
+  if (d.getSignatureStatus) { try { again = await d.getSignatureStatus(p.signature); } catch { again = undefined; } }
+  if (again) { const r = reconcilePending(p, again, null); if (r !== "unknown") return r; }
+  if (!d.getTransaction || !d.expectedAccounts) return "uncertain";
+  let tx: { err: unknown } | null | undefined;
+  try { tx = await d.getTransaction(p.signature); } catch { tx = undefined; }
+  if (tx) return tx.err ? "failed" : "confirmed";
+  if (tx === undefined || again === undefined) return "uncertain";
+  if (!mints.length) return "never-landed";
+  let acc: "absent" | "present" | "unknown";
+  try { acc = await d.expectedAccounts(mints); } catch { acc = "unknown"; }
+  return acc === "absent" ? "never-landed" : acc === "present" ? "accounts-exist" : "uncertain";
 }
 
 /** bytes → base58 (a transaction signature). */
@@ -276,6 +344,13 @@ export function bytesToBase58(b: Uint8Array): string {
 const sentSentence = (i: number, n: number, sig: string) => `Step ${i + 1} of ${n} was sent, but the confirmation could not be read (signature ${sig})`;
 const chainRejected = (i: number, n: number, err: unknown) => `Step ${i + 1} of ${n} failed because the chain rejected it (${(typeof err === "string" ? err : JSON.stringify(err ?? "error")).slice(0, 120)})`;
 const expiredSentence = (i: number, n: number, sig: string) => `Step ${i + 1} of ${n} failed because transaction ${sig} did not land before its blockhash expired. Nothing it would have created exists`;
+/** launch recovery 255: expired now, but not proven unlanded; the signature and its bytes stay saved and nothing new is built */
+const uncertainSentence = (i: number, n: number, sig: string) => `Step ${i + 1} of ${n} can no longer land, but the network has not shown whether it landed (signature ${sig}). Its signature and bytes stay saved, and nothing new is built until that is clear`;
+const accountsExistSentence = (i: number, n: number, sig: string) => `Step ${i + 1} of ${n} can no longer land. The network has not shown whether it landed, but an account this step creates already exists on chain (signature ${sig}). It may have landed, so nothing new is built from this page`;
+/** The sentence for a pending step that stays sent, by what the chain showed. */
+export const staysSentSentence = (r: Reconciled, i: number, n: number, sig: string): string => (r === "accounts-exist" ? accountsExistSentence(i, n, sig) : r === "uncertain" ? uncertainSentence(i, n, sig) : sentSentence(i, n, sig));
+/** Whether a reconciled pending send stays as sent (nothing rebuilt). */
+export const staysSent = (r: Reconciled): boolean => r !== "confirmed" && r !== "failed" && r !== "never-landed";
 /** A send error that proves the transaction never left the RPC node (preflight / blockhash refused); anything else may have landed. */
 const SEND_REFUSED = /simulation failed|preflight|blockhash not found|insufficient funds/i;
 
@@ -294,21 +369,23 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
   const signersAt = (i: number) => plan.steps[i]?.signers.length ?? 1;
   const adopt = (i: number, sig: string) => { signatures.push(sig); notePaid(rec, i, sig, signersAt(i)); rec.pending = null; rec.failed = null; save(); onStep?.(i, sig); };
   /** settles a pending send against the chain: adopted when confirmed; cleared (rebuildable) when it failed or expired unlanded */
+  const mintsAt = (i: number) => plan.confirms.filter((c) => c.step === i).map((c) => c.mint);
   const settle = async (p: PendingSend): Promise<Reconciled> => {
-    const r = await checkPending(p, d);
+    const r = await checkPending(p, d, mintsAt(p.step));
     if (r === "confirmed") adopt(p.step, p.signature);
-    else if (r !== "unknown") { if (r === "failed") notePaid(rec, p.step, p.signature, signersAt(p.step)); rec.pending = null; rec.failed = { step: p.step, signature: p.signature }; save(); }
+    else if (!staysSent(r)) { if (r === "failed") notePaid(rec, p.step, p.signature, signersAt(p.step)); rec.pending = null; rec.failed = { step: p.step, signature: p.signature }; save(); }
     return r;
   };
   /** the run stops on an unsettled step ("sent") or one that did not take effect ("failed"); null = adopted, carry on */
   const settledStop = (p: PendingSend, r: Reconciled): SendResult | null =>
-    r === "confirmed" ? null : r === "unknown" ? stop(p.step, "sent", sentSentence(p.step, n, p.signature), p.signature) : stop(p.step, "failed", r === "failed" ? chainRejected(p.step, n, `transaction ${p.signature}`) : expiredSentence(p.step, n, p.signature), p.signature);
+    r === "confirmed" ? null : staysSent(r) ? stop(p.step, "sent", staysSentSentence(r, p.step, n, p.signature), p.signature) : stop(p.step, "failed", r === "failed" ? chainRejected(p.step, n, `transaction ${p.signature}`) : expiredSentence(p.step, n, p.signature), p.signature);
 
   // a resumed run settles the stored pending send before anything is built: adopted → next step; failed / expired → rebuilt below
   if (rec.pending && rec.pending.step !== signatures.length) { rec.pending = null; save(); }
   if (rec.pending) {
     const p = rec.pending;
-    if ((await settle(p)) === "unknown") return settledStop(p, "unknown")!;
+    const r0 = await settle(p);
+    if (staysSent(r0)) return settledStop(p, r0)!;
   } else save();
 
   // F4 residual: a plan that has already put something on chain (a confirmed step, or a step that landed and failed) but no longer holds
@@ -326,7 +403,12 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
     let bh: { blockhash: string; lastValidBlockHeight: number }, raw: Uint8Array, pending: PendingSend;
     try {
       bh = await d.latestBlockhash();
-      const signed = await d.signTransaction(buildStepTx(plan.steps[i], creator, plan.keys, bh.blockhash, lut));
+      const built = buildStepTx(plan.steps[i], creator, plan.keys, bh.blockhash, lut);
+      // launch integrity 253: a copy of what the wallet is handed (a wallet may sign the object in place), checked against what comes back
+      const handed = { message: built.message.serialize(), signatures: built.signatures.map((s) => Uint8Array.from(s)) };
+      const signed = await d.signTransaction(built);
+      const changed = walletReturnProblem(handed, signed, plan.steps[i], plan);
+      if (changed) return stop(i, "not-sent", `Step ${i + 1} of ${n} was not sent because ${changed}`);
       raw = signed.serialize();
       if (raw.length > PACKET_LIMIT) throw new Error(`the signed transaction is ${raw.length} bytes, over the ${PACKET_LIMIT.toLocaleString("en-US")}-byte limit`);
       const first = signed.signatures[0];
@@ -339,8 +421,10 @@ export async function signAndSendPlan(plan: SignPlan, creator: string, d: SendDe
     }
     let sig: string;
     try {
-      sig = await d.sendRaw(raw);
-      if (sig && sig !== pending.signature) { pending.signature = sig; save(); }
+      // launch recovery 254: the submitted transaction's own signature is its identity. Whatever the RPC answers (another signature, an
+      // empty or malformed string) is a provider inconsistency: the stored signature and bytes stay, and that transaction is confirmed
+      await d.sendRaw(raw);
+      sig = pending.signature;
     } catch (e) {
       const m = (e as Error).message ?? String(e);
       if (SEND_REFUSED.test(m)) { rec.pending = null; save(); return stop(i, "not-sent", `Step ${i + 1} of ${n} failed. The error was: ${m.slice(0, 200)}`); }
@@ -397,12 +481,51 @@ export function storedStepStates(rec: Pick<PlanRecord, "confirmed" | "pending"> 
   return Array.from({ length: rec.steps }, (_, i) => (rec.confirmed[i] ? "confirmed" : rec.pending && rec.pending.step === i ? "sent" : "abandoned"));
 }
 
-/** The abandoned plan's sentence: what is confirmed, what is abandoned and why, whether anything is live, the fees already paid, the one safe action. */
+/** "$AYE", "$AYE and $BEE", "$AYE, $BEE and $SEA". */
+const tickerList = (xs: { ticker: string }[]): string => { const t = xs.map((x) => `$${x.ticker}`); return t.length <= 2 ? t.join(" and ") : `${t.slice(0, -1).join(", ")} and ${t[t.length - 1]}`; };
+/** The fee line (launch audit 236): the network transaction fees the landed steps paid; the rent created accounts hold is named as separate. */
+export const feesPaidSentence = (lamports: number): string => `The network transaction fees already paid come to ${solText(lamports)} SOL. Rent held by any account the plan created is separate and is not counted here.`;
+/**
+ * What each coin of an abandoned plan is on chain (launch audit 232): a coin whose create step confirmed exists on chain but is not
+ * recorded; a coin whose create step did not confirm was not created. Said per coin, so "A created, B not" never reads as "nothing is live".
+ */
+export function abandonedCoinsSentence(rec: Pick<PlanRecord, "confirmed"> & { confirms: { mint: string; ticker: string; step: number }[] }): string {
+  const made = rec.confirms.filter((x) => !!rec.confirmed[x.step]), notMade = rec.confirms.filter((x) => !rec.confirmed[x.step]);
+  if (!made.length) return "Nothing from this plan is live until the create step confirms.";
+  if (!notMade.length) return "Its create steps are confirmed, but the launch is not recorded from this plan.";
+  return `${tickerList(made)} ${made.length === 1 ? "was" : "were"} created on chain, but ${made.length === 1 ? "it is" : "they are"} not recorded from this plan. ${tickerList(notMade)} ${notMade.length === 1 ? "was" : "were"} not created.`;
+}
+
+/** The abandoned plan's sentence: what is confirmed, what is abandoned and why, what each coin is on chain, the fees already paid, the one safe action. */
 export function abandonedSentence(rec: Pick<PlanRecord, "confirmed" | "paid"> & { confirms: { mint: string; ticker: string; step: number }[]; steps: number }, lead?: string): string {
   const n = rec.steps, c = Math.min(rec.confirmed.length, n), names = rec.confirms.map((x) => `$${x.ticker}`).join(" and ") || "this launch";
   const which = n - c === 1 ? `step ${c + 1} of ${n} is` : `steps ${c + 1}–${n} of ${n} are`;
-  const creates = rec.confirms.length > 0 && rec.confirms.every((x) => rec.confirmed[x.step]);
-  return `${lead ?? `For ${names}, ${c} of the ${n} steps ${c === 1 ? "is" : "are"} confirmed on chain.`} ${which[0].toUpperCase()}${which.slice(1)} abandoned because the mint key was lost on reload. The key is never stored, so this plan cannot be rebuilt here. ${creates ? "Its create steps are confirmed, but the launch is not recorded from this plan." : "Nothing from this plan is live until the create step confirms."} The fee already spent is ${solText(feesPaidLamports(rec))} SOL. The only safe thing to do is to start the launch again from the review, as a new plan.`;
+  return `${lead ?? `For ${names}, ${c} of the ${n} steps ${c === 1 ? "is" : "are"} confirmed on chain.`} ${which[0].toUpperCase()}${which.slice(1)} abandoned because the mint key was lost on reload. The key is never stored, so this plan cannot be rebuilt here. ${abandonedCoinsSentence(rec)} ${feesPaidSentence(feesPaidLamports(rec))} The only safe thing to do is to start the launch again from the review, as a new plan.`;
+}
+
+// ---- one run per plan at a time (launch audit 250) -----------------------------------------------------------------------------
+// The card's `busy` is React state: two presses in the same render both read it as false, and a card that unmounts mid-run (a closed
+// panel, Back) and mounts again starts with it false. The lock lives in this module, so it outlives the card, and is keyed by the plan's
+// storage key, which the reload recovery notice uses too: one plan is never signed, sent or recorded by two runs at once in this tab.
+const RUNNING = new Set<string>();
+/** Runs `fn` unless a run for `key` is in progress; `ran: false` means it was refused and nothing was started. Released even on a throw. */
+export async function withPlanLock<T>(key: string, fn: () => Promise<T>): Promise<{ ran: true; value: T } | { ran: false }> {
+  if (RUNNING.has(key)) return { ran: false };
+  RUNNING.add(key);
+  try { return { ran: true, value: await fn() }; } finally { RUNNING.delete(key); }
+}
+export const PLAN_LOCKED_SENTENCE = "This launch is already being signed in this tab. Wait for that run to finish; its progress is saved as each step lands.";
+/** Launch audit 240: said beside the sign button, before anything is signed. */
+export const SESSION_SCOPE_LINE = "Progress is saved in this browser tab only, so keep the tab open until every step is confirmed. The mint keys are never saved, so a reload cannot finish a step that still needs one.";
+
+/**
+ * Why the lookup-table setting blocks signing (launch audit 231): still reading, or the read failed. A failed read is retried IN PLACE by
+ * the card's button: reloading the page would drop the mint keys this plan holds in memory.
+ */
+export function pinReadProblems(pins: unknown): string[] {
+  if (pins === undefined) return ["this page is still reading which lookup table this site uses"];
+  if (pins === null) return ["this site's lookup table setting could not be read, so nothing can be signed yet. Use Read the setting again below. Keep this page open: the launch's mint keys are held only here"];
+  return [];
 }
 
 /** The card's sentence on mount when storage holds a sent step whose outcome is not known yet (after a reload). */
@@ -414,7 +537,7 @@ export function sentRecoverySentence(p: Pick<PendingSend, "step" | "signature">,
 export function failureSentence(r: SendResult, n: number): string {
   const before = r.signatures.length > 0;
   if (r.state === "abandoned") return r.error ?? "This plan is abandoned. The only safe thing to do is to start the launch again from the review, as a new plan.";
-  if (r.state === "sent") return `${r.error}. Pressing the button again checks that transaction on chain first. A new one is built only once the old one can no longer land.${before ? " The steps before it are confirmed on chain." : ""}`;
+  if (r.state === "sent") return `${r.error}. Pressing the button again checks that transaction on chain first. A new one is built only once the chain shows the old one did not land.${before ? " The steps before it are confirmed on chain." : ""}`;
   if (r.state === "failed") return `${r.error}. ${before ? "The steps before it are confirmed on chain. " : ""}Pressing the button again builds step ${(r.failedAt ?? 0) + 1} of ${n} afresh.`;
   return `${r.error}. ${before ? "The steps before it are confirmed on chain. Pressing the button again continues from the failed step." : "Nothing was sent."}`;
 }
@@ -516,14 +639,30 @@ export function listStoredLaunches(storage: PlanStorage | null | undefined): Sto
   const out: StoredLaunch[] = [];
   for (const key of storage.keys()) {
     if (!key.startsWith(PLAN_STORAGE_PREFIX)) continue;
-    let j: Partial<PlanRecord> | null = null;
-    try { j = JSON.parse(storage.get(key) ?? "null") as Partial<PlanRecord> | null; } catch { continue; }
-    if (!j || j.v !== 1 || !Array.isArray(j.confirmed) || !Array.isArray(j.confirms) || !Number.isInteger(j.steps)) continue;
-    const confirms = j.confirms.filter((c) => c && typeof c.mint === "string" && typeof c.ticker === "string" && Number.isInteger(c.step));
-    const rec = { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: j.confirmed.filter((x) => typeof x === "string"), recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: isPending(j.pending) ? j.pending : null, failed: j.failed && Number.isInteger(j.failed.step) && typeof j.failed.signature === "string" ? j.failed : null, updatedAt: Number(j.updatedAt) || 0, confirms, steps: j.steps as number, paid: paidOf(j.paid), ...(Array.isArray(j.stepSigners) ? { stepSigners: j.stepSigners.filter((x) => Number.isInteger(x)) } : {}) };
-    if (rec.pending || confirms.some((c) => !rec.recorded.includes(c.mint))) out.push({ key, rec });
+    const rec = parseStoredRecord(storage.get(key));
+    if (rec && (rec.pending || rec.confirms.some((c) => !rec.recorded.includes(c.mint)))) out.push({ key, rec });
   }
   return out.sort((a, b) => b.rec.updatedAt - a.rec.updatedAt);
+}
+
+/**
+ * One stored record, or null when it is not a well-formed v1 record (launch audit 239). Every index keeps its meaning: an array whose
+ * position is a step (`confirmed`, `stepSigners`) is refused whole when one entry is bad, never compacted (dropping a bad entry would move
+ * the next signature onto the wrong step), and every step number must fall inside the plan. `recorded` is a set of mints, so a stray
+ * non-string is dropped from it without moving anything.
+ */
+function parseStoredRecord(raw: string | null): StoredLaunch["rec"] | null {
+  let j: Partial<PlanRecord> | null = null;
+  try { j = JSON.parse(raw ?? "null") as Partial<PlanRecord> | null; } catch { return null; }
+  if (!j || j.v !== 1 || !Array.isArray(j.confirmed) || !Array.isArray(j.confirms) || !Number.isInteger(j.steps) || (j.steps as number) < 1) return null;
+  const steps = j.steps as number, inPlan = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 0 && (x as number) < steps;
+  if (j.confirmed.length > steps || !j.confirmed.every((x) => typeof x === "string" && x.length > 0)) return null;
+  if (!j.confirms.every((c) => c && typeof c.mint === "string" && typeof c.ticker === "string" && inPlan(c.step))) return null;
+  if (j.stepSigners !== undefined && (!Array.isArray(j.stepSigners) || j.stepSigners.length !== steps || !j.stepSigners.every((x) => Number.isInteger(x) && x >= 1))) return null;
+  if (j.pending != null && !(isPending(j.pending) && inPlan(j.pending.step))) return null;
+  if (j.failed != null && !(Number.isInteger(j.failed.step) && inPlan(j.failed.step) && typeof j.failed.signature === "string")) return null;
+  const confirms = j.confirms;
+  return { v: 1 as const, mints: confirms.map((c) => c.mint), confirmed: [...j.confirmed], recorded: Array.isArray(j.recorded) ? j.recorded.filter((m) => typeof m === "string") : [], pending: j.pending ?? null, failed: j.failed ?? null, updatedAt: Number(j.updatedAt) || 0, confirms, steps, paid: paidOf(j.paid), ...(Array.isArray(j.stepSigners) ? { stepSigners: [...j.stepSigners] } : {}) };
 }
 
 /** The line a stored launch shows before anything is checked. */
@@ -541,16 +680,24 @@ export function storedLaunchSentence(s: StoredLaunch): string {
  * left as sent otherwise), the record is saved, and once every step is confirmed the drafts are recorded as launched (confirmPlan). A
  * finished record is removed.
  */
-export async function recoverStoredLaunch(storage: PlanStorage, s: StoredLaunch, deps: Pick<SendDeps, "getSignatureStatus" | "getBlockHeight">, fetchFn: FetchLike, message: (status: number, body: LaunchErrorBody | null, retryAfter: string | null) => string): Promise<{ text: string; done: boolean; rec: StoredLaunch["rec"] }> {
-  const rec = { ...s.rec, confirmed: [...s.rec.confirmed], recorded: [...s.rec.recorded], paid: [...(s.rec.paid ?? [])] };
+export async function recoverStoredLaunch(storage: PlanStorage, s: StoredLaunch, deps: ChainReadDeps, fetchFn: FetchLike, message: (status: number, body: LaunchErrorBody | null, retryAfter: string | null) => string): Promise<{ text: string; done: boolean; rec: StoredLaunch["rec"] }> {
+  // launch audit 238: the stored record, not the caller's copy, is the truth. A finished launch's record is removed, so a replay with a
+  // stale copy (a second press, a second notice) finds nothing: it posts nothing and never writes the finished record back.
+  const raw = storage.get(s.key);
+  if (raw === null) {
+    const names = s.rec.confirms.map((x) => `$${x.ticker}`).join(" and ");
+    return { text: `For ${names}, there is nothing left to check in this tab.`, done: true, rec: s.rec };
+  }
+  const cur = parseStoredRecord(raw) ?? s.rec;
+  const rec = { ...cur, confirmed: [...cur.confirmed], recorded: [...cur.recorded], paid: [...(cur.paid ?? [])] };
   const save = () => { try { storage.set(s.key, JSON.stringify({ ...rec, updatedAt: Date.now() })); } catch { /* keep going */ } };
   if (rec.pending) {
-    const p = rec.pending, r = await checkPending(p, deps);
+    const p = rec.pending, r = await checkPending(p, deps, rec.confirms.filter((c) => c.step === p.step).map((c) => c.mint));
     const signers = rec.stepSigners?.[p.step] ?? 1;
     if (r === "confirmed" && p.step === rec.confirmed.length) { rec.confirmed.push(p.signature); notePaid(rec, p.step, p.signature, signers); rec.pending = null; }
-    else if (r === "failed" || r === "expired") { if (r === "failed") notePaid(rec, p.step, p.signature, signers); rec.failed = { step: p.step, signature: p.signature }; rec.pending = null; }
+    else if (r === "failed" || r === "never-landed") { if (r === "failed") notePaid(rec, p.step, p.signature, signers); rec.failed = { step: p.step, signature: p.signature }; rec.pending = null; }
     save();
-    if (rec.pending) return { text: storedLaunchSentence({ key: s.key, rec }), done: false, rec };
+    if (rec.pending) return { text: r === "uncertain" || r === "accounts-exist" ? `${staysSentSentence(r, p.step, rec.steps, p.signature)}.` : storedLaunchSentence({ key: s.key, rec }), done: false, rec };
   }
   if (rec.confirmed.length < rec.steps) return { text: storedLaunchSentence({ key: s.key, rec }), done: false, rec };
   const c = await confirmPlan(fetchFn, { confirms: rec.confirms } as unknown as SignPlan, rec.confirmed, message, { already: rec.recorded });

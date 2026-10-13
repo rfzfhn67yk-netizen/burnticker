@@ -54,6 +54,9 @@ function kindRow(kind: SelectorKind, primaries: SourceDescriptor[], pairs: Cross
   switch (kind.id) {
     case "scalar": {
       if (pairs.length) { const seen = new Set<string>(); const shown = pairs.filter((x) => { const k = [x.primary, x.crossRead].sort().join("|"); return seen.has(k) ? false : (seen.add(k), true); }); return row("settleable", `A primary source is checked by an independent second source. The pairs are ${shown.map((x) => `${x.primary} with ${x.crossRead}`).join(", ")}.`, true); }
+      // the owner's single-publisher exception (singleSource.ts, 2026-10-12): the natural-disaster feeds settle on their own publisher
+      const single = primaries.filter((p) => p.singleSource);
+      if (single.length) return { ...row("settleable", `By the owner's decision of 2026-10-12, these settle on their publisher's own published data, a single official source, with no second source: ${single.map((p) => p.id).join(", ")}. A day the feed is unavailable is held, not counted.`), primaries: single.map((p) => p.id) };
       if (primaries.length) return { ...row("uncovered", `${prim.length === 1 ? "This primary source has" : "These primary sources have"} no independent second source for the same fact: ${prim.join(", ")}. Polymarket has only yes-or-no markets, so it cannot settle a number either.`), primaries: prim };
       return row("uncovered", "No primary source fits this category. Polymarket has only yes-or-no markets, so it cannot settle a number either.");
     }

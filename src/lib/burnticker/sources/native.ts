@@ -148,11 +148,11 @@ export const isNativeId = (id: string): boolean => nativeSourceById(id) !== null
 /** A native rule must use the source's fixed unit (1), baseline (0) and direction (up). */
 export function nativeRuleProblems(src: NativeSource, rule: BurnRule): string[] {
   const p: string[] = [];
-  if (rule.oracle !== "catalogue" || rule.series !== src.id) p.push(`rule is not for source ${src.id}`);
+  if (rule.oracle !== "catalogue" || rule.series !== src.id) p.push(`this rule is not for the source "${src.title}"`);
   if (rule.kind !== "scalar" || !rule.scalar) return [...p, "first-party rules are scalar"];
-  if (rule.scalar.unit !== 1) p.push(`unit must be 1 (${src.unit.label}) for ${src.id}`);
-  if (rule.scalar.direction !== "up") p.push(`direction must be "up" for ${src.id}`);
-  if (rule.scalar.baseline !== 0) p.push(`baseline must be 0 for ${src.id}`);
+  if (rule.scalar.unit !== 1) p.push(`the unit must be 1 (${src.unit.label}) for "${src.title}"`);
+  if (rule.scalar.direction !== "up") p.push(`the direction must be "up" for "${src.title}"`);
+  if (rule.scalar.baseline !== 0) p.push(`the baseline must be 0 for "${src.title}"`);
   return p;
 }
 

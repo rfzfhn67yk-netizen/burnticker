@@ -1,14 +1,22 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
+import { teamTicker, type TeamWindow } from "@/lib/burnticker/tickers";
 import { championSeries, LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { fedregEoText, isFedregEo } from "@/lib/burnticker/sources/fedreg";
 import { ll2Text, parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
-import { parseUsgsSeries, usgsText } from "@/lib/burnticker/sources/usgs";
+import { parseUsgsNextSeries, parseUsgsSeries, usgsNextText, usgsText } from "@/lib/burnticker/sources/usgs";
+import { nhcText, parseNhcSeries } from "@/lib/burnticker/sources/nhc";
+import { parseSpcSeries, spcText } from "@/lib/burnticker/sources/spc";
+import { nifcText, parseNifcSeries } from "@/lib/burnticker/sources/nifc";
+import { parseVolcanoSeries, volcanoText } from "@/lib/burnticker/sources/volcano";
+import { isSingleSourceSeries, singleSourceSentence } from "@/lib/burnticker/singleSource";
 import { githubText, parseGithubSeries } from "@/lib/burnticker/sources/github";
 import { parseYoutubeSeries, youtubeText } from "@/lib/burnticker/sources/youtube";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { CATALOGUE_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { highLastDay, highText } from "@/lib/burnticker/derby/high";
+import { paramName } from "@/lib/burnticker/paramNames";
 
 /**
  * THE AUTO-GENERATED COIN TEXT (2026-10-10, the owner thinks in sentences): from the LOCKED RULE, by deterministic templates — no model —
@@ -160,6 +168,43 @@ export const championPathRule = (r: BurnRule): boolean => r.oracle === "catalogu
 /** The champion path's two end sentences, one per outcome (the review card and the locked description say both). */
 export const championEndSentences = (ref: string): [string, string] => [`If ${ref} win the championship, the rest of the pool burns here.`, "If they do not, the rest goes to $DEFICIT's burn."];
 export const PERPETUAL_SENTENCE = "This coin has no end date and does not retire.";
+
+/**
+ * THE ONE END-OF-RULE TEXT (ChatGPT audit 6 item 3, 2026-10-12: in 280 of 725 accepted setups the review's end line said "burns $DEFICIT"
+ * and "burns down on this coin over 28 days … sends nothing to another coin" in one paragraph). Two ends, stated apart, from the rule's
+ * own onEnd clause, with the same test the keeper uses (describeEndSink = rules.ts endSinkOf; championPathRule = endSinkKeeper):
+ *
+ *   result   the rule ended on a result: the rest goes to the sink pinned at creation ($DEFICIT, or the rival for a winner-takes-the-burn
+ *            pair, or for a champion-path coin it burns here when the team wins the title); a rule with no sink winds down on itself
+ *   void     the rule was voided or the season cancelled: the rest burns down on THIS coin over the onEnd wind-down (null when the void
+ *            end is the same as the result end, i.e. no sink)
+ *
+ * The review API's endsLine, the coin description's window sentence, step 4 on the launch page (guidedLaunch.ts endSentences), the
+ * templates page and /about all read this, so no surface can say both.
+ */
+/**
+ * The end of a rule in general, for /about and the templates page: endText's own sentences for a one-shot with the $DEFICIT sink, a
+ * winner-takes-the-burn pair and a rule with no end date (the same function the review and the coin text call).
+ */
+export function endExplainer(): string[] {
+  const base = { schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: "0x" + "0".repeat(64), filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: 1 }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, pair: null, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } } as unknown as BurnRule;
+  const one = endText(base), pair = endText({ ...base, pair: { pairId: "x", side: "A", counterpartMint: null, winnerTakesBurn: true } } as unknown as BurnRule);
+  return [one.result, `In a winner-takes-the-burn pair: ${pair.result.replace(/^When/, "when")}`, one.void!, PERPETUAL_SENTENCE.replace("This coin has", "A coin with no end date has").replace(" and does not retire", " and never retires")];
+}
+export interface EndText { kind: "perpetual" | "self" | "flagship" | "pair-winner" | "champion"; result: string; void: string | null; line: string }
+export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText {
+  const days = r.onEnd?.windDownDays ?? 28;
+  const over = days === 28 ? "over four weeks" : `over ${days} days`;
+  const mk = (kind: EndText["kind"], result: string, voidEnd: string | null): EndText => ({ kind, result, void: voidEnd, line: [result, voidEnd].filter(Boolean).join(" ") });
+  if (windowKindOf(r) === "perpetual" && !r.market && r.oracle !== "derby") return mk("perpetual", PERPETUAL_SENTENCE, null);
+  const sink = describeEndSink(r);
+  // the coin description says the same void sentence (END_SINK_VOID_SENTENCE is this text at the default 28 days)
+  const VOID = days === 28 ? END_SINK_VOID_SENTENCE : END_SINK_VOID_SENTENCE.replace("over four weeks", over);
+  if (!sink) return mk("self", `When the rule ends, the coin's own burn pool burns down what is left ${over}, then the coin retires. A retired coin's pool keeps burning any fees it still receives. This end only burns this coin and sends nothing to another coin.`, null);
+  if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
+  if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team"); return mk("champion", `${won} ${lost}`, VOID); }
+  return mk("flagship", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to $DEFICIT's burn. Then the coin retires.", VOID);
+}
 /**
  * The first-snow season in the coin's own text (intent audit item 11; weatherIntent.ts FIRST_SNOW_SEASON has the long form): the report's
  * season-to-date total starts each July 1, and only readings after the launch are planned (multiKeeper.ts planToken).
@@ -191,18 +236,42 @@ export function capName(name: string, max = 32): string {
  * on the page and on the server). The window words follow each adapter (config/burnticker/sources.json): a per-day total, or a once-a-day
  * snapshot measured against the previous reading.
  */
-export function paramSubject(series: string): { name: string; ticker: string; what: string; window: string } | null {
+export function paramSubject(series: string): { name: string; ticker: string; what: string; window: string; noun: string } | null {
   const i = series.indexOf(":");
   if (i < 0) return null;
-  const fam = series.slice(0, i), p = series.slice(i + 1);
-  const snap = "a snapshot of the count taken once a day and measured against the previous reading";
-  if (fam === "wiki.views") { const a = decodeURIComponent(p).replace(/_/g, " "); return { name: `${a} Wiki Views`, ticker: a, what: `on the English Wikipedia article “${a}”`, window: "the total views of one UTC day, read once the day is over" }; }
-  if (fam === "steam.players") return { name: `Steam App ${p} Players`, ticker: `STEAM${p}`, what: `in the concurrent player count of Steam app ${p}`, window: snap };
-  if (fam === "github.stars") { const repo = p.split("/")[1] ?? p; return { name: `${repo} Stars`, ticker: `${repo}STAR`, what: `on the ${p} GitHub repository`, window: snap }; }
-  if (fam === "defillama.tvl") return { name: `${p} TVL`, ticker: `${p}TVL`, what: `of total value locked in ${p}, as DefiLlama reports it`, window: snap };
-  if (fam === "edgar.8k") return { name: `CIK ${p} 8-K Filings`, ticker: `EDGAR${p.replace(/^0+/, "")}`, what: `on Form 8-K by SEC filer CIK ${p}`, window: "the number of filings on one UTC day" };
+  const fam = series.slice(0, i), p = series.slice(i + 1), named = paramName(series);
+  // audit 204/209: a snapshot is the figure at the moment it is read, never a daily peak, measured against the previous reading
+  const snap = "a snapshot of the figure at the moment the keeper reads it, measured against the previous reading";
+  if (fam === "wiki.views") { const a = decodeURIComponent(p).replace(/_/g, " "); return { name: `${a} Wiki Views`, ticker: a, what: `on the English Wikipedia article “${a}”`, noun: `daily views of the English Wikipedia article “${a}”`, window: "the total views of one UTC day, read once the day is over, counting every platform and every kind of visitor, automated ones included, as Wikimedia's all-access, all-agents figure does" }; }
+  // audit 206: a name only when it was read from the publisher (paramNames.ts), never guessed
+  if (fam === "steam.players") { const app = named ? `${named} (Steam app ${p})` : `Steam app ${p}`; return { name: named ? `${named} Players` : `Steam App ${p} Players`, ticker: named ?? `STEAM${p}`, what: `in the concurrent player count of ${app}`, noun: `the concurrent player count of ${app}`, window: "a snapshot of the concurrent player count at the moment the keeper reads it, not the day's peak, measured against the previous reading" }; }
+  if (fam === "github.stars") { const repo = p.split("/")[1] ?? p; return { name: `${repo} Stars`, ticker: `${repo}STAR`, what: `on the ${p} GitHub repository`, noun: `the star count of the ${p} GitHub repository`, window: snap }; }
+  if (fam === "defillama.tvl") return { name: `${p} TVL`, ticker: `${p}TVL`, what: `of total value locked in ${p}, as DefiLlama reports it`, noun: `the total value locked in ${p} as DefiLlama reports it`, window: `${snap}. DefiLlama states it as a dollar value of the deposits, so it also moves when the deposits' value moves, not only when deposits come in or go out` };
+  if (fam === "edgar.8k") { const who = named ? `${named} (SEC filer CIK ${p})` : `SEC filer CIK ${p}`; return { name: named ? `${named} 8-K Filings` : `CIK ${p} 8-K Filings`, ticker: `EDGAR${p.replace(/^0+/, "")}`, what: `on Form 8-K by ${who}`, noun: `Form 8-K filings by ${who}`, window: "the number of filings on one UTC day" }; }
   return null;
 }
+
+/**
+ * A RISE OVER THE PREVIOUS READING, NEVER A TOTAL (audit item 201, 2026-10-12: "burns for every 100k players" read as if the coin burned
+ * for every 100,000 players there are). A rule measured against the previous reading names its unit as a change: "each full increase of
+ * 100k players in <subject> over the previous snapshot", "each full change of $0.01 in <subject>, up or down, since the previous
+ * reading". Null for a rule with a fixed baseline (a per-period count or total), whose old wording is right.
+ */
+export function changePhrase(r: Pick<BurnRule, "scalar">, unitLabel: string, subject: string, snapshot: boolean): string | null {
+  const s = r.scalar;
+  if (!s || s.baseline !== "previousSettlement") return null;
+  const unit = unitLabel.replace(/\s*\([^)]*\)\s*$/, "").replace(/\s+(added|moved|move)$/, "").replace(/-point\b/, " point");
+  if (!/^(the|daily|form)\s/i.test(subject) && !/^[a-z]/.test(subject)) subject = `the ${subject}`;
+  const prev = `the previous ${snapshot ? "snapshot" : "reading"}`;
+  if (s.direction === "abs") return `each full change of ${unit} in ${subject}, up or down, since ${prev}`;
+  return `each full ${s.direction === "down" ? "decrease" : "increase"} of ${unit} in ${subject} over ${prev}`;
+}
+
+/** Facts a counted source needs beside its unit (audit items 210, 211, 217): what a block count is and how final it is when read. */
+export const SERIES_NOTES: Readonly<Record<string, string>> = {
+  "bitcoin.blockHeight": "The block count is exact; 144 blocks take about a day, not exactly a day. The count is the chain's tip when it is read, so a block replaced in a reorganisation can move one reading by a block, and the next reading is measured from the recorded one.",
+  "solana.blockHeight.rpc": "Solana's block height counts blocks, not slots: a slot in which no block was produced adds nothing. It is read at the finalized level, so a block that could still be rolled back is never counted. This is the same figure as the on-chain Solana block height source, read over the public HTTP endpoint.",
+};
 
 /** "the Lakers win the 2027 NBA championship" → "the Lakers did NOT win the 2027 NBA championship"; anything else → "NO on “…”". */
 export function negatePhrase(phrase: string): string {
@@ -216,6 +285,8 @@ export function leadSentence(text: string): string {
   for (const m of t.matchAll(/[.!?](?=\s+[A-Z$0-9“"(])/g)) {
     const head = t.slice(0, m.index + 1);
     if (m[0] === "." && ABBREV.test(head)) continue;
+    // audit 6 (test A): a German club number ("1. FC Union Berlin", "1. FSV Mainz 05") is an ordinal, not a sentence end
+    if (m[0] === "." && /(?:^|\s)\d{1,2}\.$/.test(head)) continue;
     return head;
   }
   return t;
@@ -260,6 +331,7 @@ export function windowKindOf(r: BurnRule): WindowKind {
   const e = series ? parseEspnSeries(series) : null;
   if (e) return e.kind === "game" ? "one-shot" : e.window.kind === "legacy" ? (e.window.scope === "post" ? "post" : "season") : e.window.kind;
   if (CATALOGUE_ONE_SHOT_RE.test(series)) return "one-shot";
+  if (r.oracle === "derby" && r.derby?.selector === "high") return r.derby.once ? "one-shot" : "perpetual";
   if (r.oracle === "polymarket" || r.market) return "one-shot";
   return "perpetual";
 }
@@ -299,46 +371,65 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
     const ruleBlock = `${rules} ${windowSentence}${voidSentence(r)}${leagueSentence(r)}${pairSentence(r)} ${CLOSER}`;
     return { name: capName(name), ticker, oneLiner, flavour: `$${t} ${oneLiner}.`, ruleBlock, lead: leadSentence(ruleBlock), windowSentence, windowKind, badge, paragraph: `$${t} ${oneLiner}. ${ruleBlock}`, shape };
   };
+  // ChatGPT audit 6 item 6: the one team ticker (tickers.ts), the same the wizard and the teams API give
+  const tk = (window: TeamWindow, games: number | null = null): string => teamTicker(s.abbr, { league: s.league, window, games, outcome: o, inverse: inv });
+  // owner decision 2026-10-12 (website-20 item 78): a level cup tie decided on penalties follows the declared winner (gameSettle.ts settleGame)
+  const pens = L0.draws ? ` ${PENALTIES_SENTENCE}` : "";
   if (s.kind === "team") {
     const w: Window = s.window;
-    const settle = inv ? `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it. A day with two games counts once, and a game day with a ${noun} burns nothing.` : `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it. Nothing happens on ${other}.`;
+    const settle = inv ? `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} A day with two games counts once, and a game day with a ${noun} burns nothing.` : `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} Nothing happens on ${other}.`;
     const oneLiner = inv ? `burns on every game day ${ref} do not ${verb}` : `burns when ${ref} ${verb}`;
     const every = (scope: string) => inv ? `For every ${nick} game day without a ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}` : `For every ${nick} ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}`;
     if (w.kind === "season" && championPathRule(r)) {
       // the champion path: every win through the postseason, then the rest burns here (champion) or goes to $DEFICIT's burn
       const L = seasonLabel(s.league, w.year);
-      return mk(`${nick} ${L} ${Noun}`, tickerFrom(nick, `${sfx}${yy(s.league, w.year)}`), oneLiner,
+      return mk(`${nick} ${L} ${Noun}`, tk("season"), oneLiner,
         `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the postseason. ${sliced(r) ? `Each burn buys $${t} on Raydium in slices sized to the pool's liquidity.` : `Each burn buys $${t} on Raydium, with a receipt on chain.`} ${settle}`,
         `This coin covers the ${L} season only. ${championEndSentences(ref).join(" ")}`, "season", "recurring");
     }
     if (w.kind === "season") {
       const L = seasonLabel(s.league, w.year);
-      return mk(`${nick} ${L} ${Noun}`, tickerFrom(nick, `${sfx}${yy(s.league, w.year)}`), oneLiner, every(`in the ${L} season`),
+      return mk(`${nick} ${L} ${Noun}`, tk("season"), oneLiner, every(`in the ${L} season`),
         `This coin covers the ${L} ${nick} season only, including ${noPlayoffs(s.league) ? "every match of the competition" : "the playoffs"}. After ${poss} last game, ${burnDown(r)}. It does not continue into ${nextSeason(s.league, w.year)}.`, "season", "recurring");
     }
     if (w.kind === "post") {
       const L = seasonLabel(s.league, w.year);
-      return mk(`${nick} ${L} Playoffs`, tickerFrom(nick, `${sfx}P${yy(s.league, w.year)}`), `${oneLiner} in the postseason`, every(`in the ${L} postseason`),
+      return mk(`${nick} ${L} Playoffs`, tk("post"), `${oneLiner} in the postseason`, every(`in the ${L} postseason`),
         `This coin covers ${poss} ${L} postseason only. After ${poss} last playoff game, ${burnDown(r)}. It does not continue into ${nextSeason(s.league, w.year)}.`, "post", "recurring");
     }
     if (w.kind === "next") {
       const from = `${w.from.slice(0, 4)}-${w.from.slice(4, 6)}-${w.from.slice(6)}`;
-      return mk(`${nick} Next ${w.n}`, tickerFrom(nick, `${sfx}${w.n}G`), `${oneLiner} in their next ${w.n === 1 ? "game" : `${w.n} games`}`, every(`in their next ${w.n === 1 ? "game" : `${w.n} games`}`),
+      return mk(`${nick} Next ${w.n}`, tk("next", w.n), `${oneLiner} in their next ${w.n === 1 ? "game" : `${w.n} games`}`, every(`in their next ${w.n === 1 ? "game" : `${w.n} games`}`),
         `This coin covers ${poss} next ${w.n} game${w.n === 1 ? "" : "s"} only, from ${day(from)}. After game ${w.n}, ${burnDown(r)}.`, "next", "recurring");
     }
     if (w.kind === "perpetual") {
-      return mk(`${nick} ${Noun}`, o === "win" ? tickerFrom(nick) : tickerFrom(nick, o === "draw" ? "DRAW" : "LOSE"), oneLiner, `${every("in any game, every season")} Nothing is read in the off-season. The pool keeps filling, and readings start again with the next season's first game.`,
+      return mk(`${nick} ${Noun}`, tk("perpetual"), oneLiner, `${every("in any game, every season")} Nothing is read in the off-season. The pool keeps filling, and readings start again with the next season's first game.`,
         PERPETUAL_SENTENCE, "perpetual", "recurring");
     }
     const scope = w.scope === "post" ? "this postseason" : w.scope === "reg" ? "for the rest of the regular season" : "this season";
-    return mk(`${nick} ${Noun}`, tickerFrom(nick, o === "win" ? "WIN" : o === "draw" ? "DRAW" : "LOSE"), oneLiner, every(scope),
+    return mk(`${nick} ${Noun}`, tk(w.scope === "post" ? "post" : "season"), oneLiner, every(scope),
       w.scope === "post" ? `This coin covers ${poss} current postseason only. After ${poss} last playoff game, ${burnDown(r)}.` : `This coin covers the current ${nick} season only, including the playoffs. After ${poss} last game, ${burnDown(r)}.`, w.scope === "post" ? "post" : "season", "recurring");
   }
   const opp = c.game ? (L0.sport === "soccer" || s.league === "cfb" || s.league === "mcbb" || s.league === "wcbb" ? c.game.opponent : `the ${c.game.opponent}`) : null;
-  const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : ` in game ${s.eventId}`;
+  const vs = c.game ? ` ${c.game.home ? "against" : "at"} ${opp}${c.game.startsAt ? ` on ${day(c.game.startsAt)}` : ""}` : " in the one game this coin follows";
   const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " that game"}`;
-  return mk(`${nick} ${o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tickerFrom(nick, o === "win" ? "WIN" : o === "draw" ? "DRAW" : "LOSE"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it. Nothing happens otherwise${o === "draw" ? "" : `, and a ${tie} burns nothing`}.`,
+  return mk(`${nick} ${o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} Nothing happens otherwise${o === "draw" ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
+}
+
+/** A level cup tie decided on penalties (website-20 item 78, owner decision 2026-10-12). */
+export const PENALTIES_SENTENCE = "A cup tie decided on penalties counts as a win for the winner and a loss for the other side, not as a draw.";
+
+/**
+ * THE FADE SIDE'S SUGGESTED NAME (website-20 item 104, 2026-10-12: "No Move Solar flares" for a coin that burns on the days with no
+ * flare). A count read against zero (baseline 0) names the quiet day: "Quiet Sun" for solar flares, otherwise "Days Without <subject>";
+ * a level read against its last value keeps "No Move <subject>". Only the suggestion: a name the creator typed is never replaced.
+ */
+const QUIET_NAMES: Record<string, string> = { "noaa.flares": "Quiet Sun" };
+export function fadeName(series: string | null, subject: string, zeroCount: boolean): string {
+  if (!zeroCount) return `No Move ${subject}`.slice(0, 32);
+  const known = series ? QUIET_NAMES[series.split(":")[0]] : undefined;
+  return (known ?? `Days Without ${subject}`).slice(0, 32).trimEnd();
 }
 
 /** The coin's name, ticker, one-liner and paragraph from its rule. `ctx.ticker` is the ticker the text names (the suggestion when empty). */
@@ -372,6 +463,11 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
       (t) => `${what[0].toUpperCase()}${what.slice(1)}, ${spends(r, t)}${n.metric === "snow" ? " once" : ""}, with a receipt on chain. The result comes from the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet. Nothing happens on ${other}.${n.metric === "snow" ? ` ${SNOW_SEASON_SENTENCE}` : ""}`,
       n.metric === "snow" ? oneShotSentence(r, null, `the first snow`) : PERPETUAL_SENTENCE, n.metric === "snow" ? "one-shot" : "recurring");
   }
+  // sources-4 (2026-10-12): a reference coin's record daily close (derby/high.ts), recurring or once
+  if (r.oracle === "derby" && r.derby?.selector === "high") {
+    const hs = r.derby, probe = highText(hs, "SPENDS"), by = highLastDay(hs);
+    return build(probe.name, probe.ticker, probe.oneLiner, (t) => highText(hs, spends(r, t)).block, hs.once ? oneShotSentence(r, null, by ? `the first record day, by ${day(by)} at the latest` : null) : PERPETUAL_SENTENCE, hs.once ? "one-shot" : "recurring");
+  }
   // sources-2 (2026-10-12): the publishers with their own text — executive orders, launches, earthquake counts, GitHub, YouTube
   const own = r.oracle === "catalogue" ? sourceText(r, series, ctx) : null;
   if (own) return build(own.name, own.ticker, own.oneLiner, own.block, own.oneShot ? oneShotSentence(r, null) : PERPETUAL_SENTENCE, own.oneShot ? "one-shot" : "recurring");
@@ -383,16 +479,21 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const not = r.scalar?.baseline === 0 ? "reads zero" : dir === "up" ? "does not rise" : dir === "down" ? "does not fall" : "does not move";
     const did = r.scalar?.baseline === 0 ? "is above zero" : dir === "up" ? "rises" : dir === "down" ? "falls" : "moves";
     const sub = paramSubject(series), what = sub ? sub.name : title;
-    return build(sub ? `No Move ${sub.name}` : `No Move ${title}`, tickerFrom(`NO${sub ? sub.ticker : title.replace(/^U\.?S\.?\s+/i, "")}`), `burns on every reading of ${what} that ${not}`,
+    return build(fadeName(series, sub ? sub.name : title, r.scalar?.baseline === 0), tickerFrom(`NO${sub ? sub.ticker : title.replace(/^U\.?S\.?\s+/i, "")}`), `burns on every reading of ${what} that ${not}`,
       (t) => `For every reading of ${what} that ${not}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}.${sub ? ` Each reading is ${sub.window}.` : ""} A reading that ${did}, by any amount, burns nothing.`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "catalogue" && ctx.feed) {
     const f = ctx.feed, sub = paramSubject(series);
     // intent audit 4 item 19: a parameterized source names its subject, its source and what each reading measures, never "an article"
-    if (sub) return build(sub.name, tickerFrom(sub.ticker), `burns for every ${f.unitLabel} ${sub.what}`,
-      (t) => `For every ${f.unitLabel} ${sub.what}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Each reading is ${sub.window}. Nothing happens on a move smaller than one unit.`, PERPETUAL_SENTENCE, "recurring");
-    return build(f.title.split(/[(—,]/)[0].trim(), tickerFrom(f.title.replace(/^U\.?S\.?\s+/i, "").split(/[\s(,—-]/)[0]), `burns for every ${f.unitLabel} (${f.title.split(/[(—,]/)[0].trim()})`,
-      (t) => `For every ${f.unitLabel}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Nothing happens on a move smaller than one unit.`, PERPETUAL_SENTENCE, "recurring");
+    const note = SERIES_NOTES[series] ? ` ${SERIES_NOTES[series]}` : "";
+    if (sub) {
+      const ch = changePhrase(r, f.unitLabel, sub.noun, /snapshot/.test(sub.window));
+      return build(sub.name, tickerFrom(sub.ticker), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} ${sub.what}`,
+        (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel} ${sub.what}`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Each reading is ${sub.window}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
+    }
+    const title0 = f.title.split(/[(—,]/)[0].trim(), ch = changePhrase(r, f.unitLabel, title0, false);
+    return build(title0, tickerFrom(f.title.replace(/^U\.?S\.?\s+/i, "").split(/[\s(,—-]/)[0]), ch ? `burns for ${ch}` : `burns for every ${f.unitLabel} (${title0})`,
+      (t) => `${ch ? `For ${ch}` : `For every ${f.unitLabel}`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${f.sourceName}, cross-checked against ${f.crossRead ?? "a second publisher"}. Nothing happens on a move smaller than one unit.${note}`, PERPETUAL_SENTENCE, "recurring");
   }
   if (r.oracle === "polymarket" && r.market && r.binary && !r.binary.onYes && r.binary.onNo) {
     // intent audit 3 item 4: the NO side ("the Lakers do not win the 2027 NBA championship") burns on a NO payout only. The keeper reads
@@ -410,12 +511,26 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     return build(id.verb && id.confident ? id.name : "Event Coin", id.verb && id.confident ? id.ticker : tickerFrom(id.ticker), `burns if ${phrase}`,
       (t) => ctx.stated ? `If it happens, ${spends(r, t)} once, with a receipt on chain. ${statedSentences(ctx.stated, ctx.stated.finalAfter)} Nothing happens otherwise.` : `If it happens, ${spends(r, t)} once, with a receipt on chain. The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}. Nothing happens otherwise.`, oneShotSentence(r, ctx.endsAt), "one-shot");
   }
-  const what = ctx.eventPhrase ?? r.series ?? r.market ?? "the source";
+  // audit 6 item 26: a catalogue source with no template is "this coin's source", never its raw id (the canonical rule carries the id)
+  const what = ctx.eventPhrase ?? (r.oracle === "catalogue" ? "this coin's source" : r.series ?? r.market ?? "the source");
   const yes = r.kind !== "binary" || !!r.binary?.onYes;
   const once = windowKindOf(r) === "one-shot";
-  return build("Event Coin", tickerFrom(what), r.kind === "binary" ? `burns when ${what} settles ${yes ? "YES" : "NO"}` : `burns on each settled reading of ${what}`,
+  return build("Event Coin", tickerFrom(r.oracle === "catalogue" && !ctx.eventPhrase ? r.series ?? "EVENT" : what), r.kind === "binary" ? `burns when ${what} settles ${yes ? "YES" : "NO"}` : `burns on each settled reading of ${what}`,
     (t) => `${r.kind === "binary" ? `Each time ${what} settles ${yes ? "YES" : "NO"}` : `Each time ${what} settles`}, ${spends(r, t)}, with a receipt on chain. The result comes from ${r.oracle === "polymarket" ? "Polymarket's on-chain payout" : "its published source"}${ctx.crossRead ? `, cross-checked against ${ctx.crossRead}` : ""}. Nothing happens otherwise.`,
     once ? oneShotSentence(r, ctx.endsAt) : PERPETUAL_SENTENCE, once ? "one-shot" : "recurring");
+}
+
+/** A protocol's record TVL day as coin text (lint-clean: "value" and "record", never the words the lint refuses). */
+export function llamaRecordText(p: string, once: boolean, spends: string, inverse: boolean): { name: string; ticker: string; oneLiner: string; block: string; oneShot: boolean } {
+  const src = `The reading is the total value locked in ${p} as DefiLlama reports it, one value per UTC day, read once the day is over.`;
+  const base = `The record starts as the highest day since DefiLlama's history of ${p} began, and each new record raises it.`;
+  const tk = tickerFrom(p, once ? "NREC" : inverse ? "NOREC" : "REC");
+  if (once) return { name: capName(`${p} Next Record TVL`), ticker: tk, oneLiner: `burns once on the first day ${p}'s TVL sets a record`, oneShot: true,
+    block: `On the first UTC day after launch whose value is above every earlier day, ${spends} once, with a receipt on chain. ${src} ${base}` };
+  if (inverse) return { name: capName(`${p} No Record Days`), ticker: tk, oneLiner: `burns on every day ${p}'s TVL does not set a record`, oneShot: false,
+    block: `For every UTC day whose value is at or under the record, ${spends}, with a receipt on chain. ${src} ${base} A record day burns nothing.` };
+  return { name: capName(`${p} Record TVL`), ticker: tk, oneLiner: `burns on every day ${p}'s TVL sets a record`, oneShot: false,
+    block: `For every UTC day whose value is above every earlier day, ${spends}, with a receipt on chain. ${src} ${base} A day at or under the record burns nothing.` };
 }
 
 /** The text pieces of a sources-2 publisher's series (null: not one of theirs). */
@@ -423,11 +538,20 @@ function sourceText(r: BurnRule, series: string, ctx: DescribeCtx): { name: stri
   const inv = !!r.inverse;
   const wrap = (f: (sp: string) => { name: string; ticker: string; oneLiner: string; block: string; oneShot?: boolean }) => {
     const probe = f("SPENDS");
-    return { name: probe.name, ticker: probe.ticker, oneLiner: probe.oneLiner, oneShot: !!probe.oneShot, block: (t: string) => f(spends(r, t)).block };
+    return { name: probe.name, ticker: probe.ticker, oneLiner: probe.oneLiner, oneShot: !!probe.oneShot, block: (t: string) => { const b = f(spends(r, t)).block; return isSingleSourceSeries(series) ? `${b} ${singleSourceSentence(series)}` : b; } };
   };
   if (isFedregEo(series)) return wrap((sp) => fedregEoText(sp, inv));
+  // sources-4 (2026-10-12): a protocol's record TVL day (DefiLlama; built and switched off until DefiLlama consents)
+  const lr = /^defillama\.(tvlrecord|tvlnext):([a-z0-9-]{1,48})$/.exec(series);
+  if (lr) return wrap((sp) => llamaRecordText(lr[2], lr[1] === "tvlnext", sp, inv));
   const l = parseLl2Series(series); if (l) return wrap((sp) => ll2Text(l, sp, inv, ctx.subjectName ?? null));
   const u = parseUsgsSeries(series); if (u) return wrap((sp) => usgsText(u, sp, inv));
+  // sources-3 (2026-10-12): natural disasters, clinical (a magnitude, a category, a count, acres, an alert level; never harm)
+  const un = parseUsgsNextSeries(series); if (un) return wrap((sp) => usgsNextText(un, sp));
+  const h = parseNhcSeries(series); if (h) return wrap((sp) => nhcText(h, sp, inv));
+  const sp3 = parseSpcSeries(series); if (sp3) return wrap((sp) => spcText(sp3, sp, inv));
+  const f = parseNifcSeries(series); if (f) return wrap((sp) => nifcText(f, sp, inv));
+  const v = parseVolcanoSeries(series); if (v) return wrap((sp) => volcanoText(v, sp, inv));
   const g = parseGithubSeries(series); if (g) return wrap((sp) => githubText(g, sp, inv));
   const y = parseYoutubeSeries(series); if (y) return wrap((sp) => youtubeText(y, sp, ctx.subjectName ?? null));
   return null;

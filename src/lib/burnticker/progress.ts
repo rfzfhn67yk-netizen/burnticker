@@ -31,8 +31,15 @@ export interface ProgressView {
 // website-15 item 6: a coin on its curve has done "Created" and "Trading on curve"; its next unmet milestone is graduation
 export const PROGRESS_DONE: Record<ReadinessState, number> = { "not-launched": 0, "on-curve": 2, "awaiting-registration": 3, "awaiting-event": 4, "below-floor": 4, deferred: 5, burned: 6 };
 
+/**
+ * Each step as the thing that happens next, a noun (ChatGPT audit 6 item 23: "Next: graduated" read as a state, so it says "Next:
+ * graduation").
+ */
+export const PROGRESS_NEXT: Record<(typeof PROGRESS_STEPS)[number], string> = {
+  Created: "creation", "Trading on curve": "trading on the curve", Graduated: "graduation", "Pool registered": "pool registration", "Ready to burn": "ready to burn", Burned: "first burn",
+};
 /** The heading for a number of done steps: "Not created", "Next: <step>" or "Burned". */
-export const progressNow = (done: number): string => (done <= 0 ? "Not created" : done >= PROGRESS_STEPS.length ? "Burned" : `Next: ${PROGRESS_STEPS[done].toLowerCase()}`);
+export const progressNow = (done: number): string => (done <= 0 ? "Not created" : done >= PROGRESS_STEPS.length ? "Burned" : `Next: ${PROGRESS_NEXT[PROGRESS_STEPS[done]]}`);
 
 const n2 = (x: number) => (Math.round(x * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 

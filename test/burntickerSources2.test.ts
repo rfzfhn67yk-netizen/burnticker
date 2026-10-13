@@ -72,11 +72,12 @@ describe("A. five publishers: terms read, real fixtures, the coin text", () => {
     assert.equal(isOneShot(firstPartyRule("ll2.launch:7d1afb26-6f9c-429b-9ccf-29012fd1e519")), true);
   });
 
-  test("USGS: reviewed earthquakes per day at a magnitude, worldwide or a named box; not launchable; clinical fixture", () => {
+  test("USGS: reviewed earthquakes per day at a magnitude, worldwide or a named box; launchable since the owner admitted it; clinical fixture", () => {
     assert.deepEqual(parseUsgsSeries("usgs.quakes:6.5/japan"), { magnitude: "6.5", region: "japan" }); assert.equal(parseUsgsSeries("usgs.quakes:6.3"), null); assert.equal(parseUsgsSeries("usgs.quakes:6/mars"), null);
     const jp = feedById("usgs.quakes:6/japan")!;
     assert.match(jp.config.request.url, /minmagnitude=6&starttime=\{from:45\}&endtime=\{today\}&minlatitude=24&maxlatitude=46&minlongitude=122&maxlongitude=146/);
-    assert.equal(jp.launchable.ok, false); assert.match(jp.flags.join(" "), /OWNER TO CONFIRM/);
+    // sources-3 (2026-10-12): the owner admitted natural-disaster sources; a reading is a magnitude, never harm
+    assert.equal(jp.launchable.ok, true); assert.match(jp.flags.join(" "), /admitted by the owner 2026-10-12/); assert.doesNotMatch(jp.flags.join(" "), /OWNER TO CONFIRM/);
     const v = byId("usgs.quakes:5.5");
     assert.equal(v["2026-10-09"], "5"); assert.equal(v["2026-10-07"], "0"); assert.ok(!("2026-10-11" in v), "a day is read two days after it ends");
     const body = JSON.stringify((fx("http/usgs.m55.json") as { body: unknown }).body);
@@ -292,7 +293,7 @@ describe("C. Polymarket: the stated source, the dispute window, and proposed is 
     assert.equal(statedCtx(null), null); assert.equal(statedCtx({}), null);
     const src = (f: string) => fs.readFileSync(f, "utf8");
     assert.match(src("src/lib/burnticker/api/handlers.ts"), /statedText = statedCtx\(info\);[\s\S]*serverDescribeCtx\(locked\.rule, \(body as \{ descCtx\?: unknown \}\)\.descCtx, \{ seriesTitle, feed: feedText, stated: statedText \}\)/);
-    assert.match(src("src/app/api/burnticker/v1/launch/review/route.ts"), /platform\(\)\.polymarket\.seriesInfo\(rule\.market\)[\s\S]*buildLaunchReview\(body, \{ timeLockSecs: cachedTimeLockSecs\(cluster\), stated \}\)/);
+    assert.match(src("src/app/api/burnticker/v1/launch/review/route.ts"), /platform\(\)\.polymarket\.seriesInfo\(rule\.market\)[\s\S]*buildLaunchReview\(body, \{ timeLockSecs: cachedTimeLockSecs\(cluster\), stated[,} ]/);
   });
 
   test("a proposed-but-not-final payout is never read as settled (real market inside its dispute window, chain payout 0)", async () => {

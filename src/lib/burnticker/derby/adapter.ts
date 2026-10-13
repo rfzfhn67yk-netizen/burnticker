@@ -13,6 +13,7 @@ import { redstonePrimary } from "@/lib/burnticker/derby/redstone";
 import { REDSTONE_LATEST_URL } from "@/lib/burnticker/derby/cross";
 import { bracketState, matchKey, roundCount, slotMatchOn, slotPoints, tournamentEnd, type BracketState, type MatchDayResult, type Tournament } from "@/lib/burnticker/derby/bracket";
 import { derbyStore, type DerbyStore, type WindowRow } from "@/lib/burnticker/derby/store";
+import { addDay as highAddDay, buildHighBaseline, decideHigh, HIGH_HISTORY_MAX_DAYS, highDays, highLastDay, recordBefore, type DayClose, type HighSpec } from "@/lib/burnticker/derby/high";
 
 /**
  * THE DERBY ORACLE ADAPTER + THE KEEPER'S DERBY PASS (2026-10-10). The multi-token keeper treats `derby:` selector keys like any other:
@@ -66,6 +67,14 @@ export function marketHours(feed: string): boolean {
 }
 const STALE_MARKET_SEC = 4 * 86_400;
 export const DERBY_PROOF_PREFIX = "derby:sha256:";
+/**
+ * THE FLIPPENING'S LAST WINDOW (owner decision 2026-10-12, website-20 item 70): when the season's last window cannot be read (no value,
+ * no supply, no cross-read), the keeper keeps retrying it for this many days after it ends (the same span as the keeper's 7-day re-read
+ * of a source, multiKeeper fetchDue overlapMs), recording nothing meanwhile. After that the window is recorded as withheld and the pair
+ * ends VOID: neither coin burns for the flippening and each coin's own pool winds down. It never settles NO on a missing reading.
+ */
+export const FLIP_FINAL_RETRY_DAYS = 7;
+export const FLIP_VOID_PREFIX = "void: the last window";
 
 /** The proof hash (32 bytes) a counter reading commits to for the derby receipts it counts (undefined: none of them is a derby reading). */
 export function derbyProofHash(proofs: readonly (string | null | undefined)[]): Uint8Array | undefined {
@@ -88,7 +97,7 @@ export class DerbyAdapter implements OracleAdapter {
   }
   async impliedChance(rule: BurnRule): Promise<ImpliedChance> {
     const now = this.d.now();
-    const next = rule.derby && rule.derby.selector !== "bracket" && rule.derby.window === "weekly" ? (() => { let m = dayMs(isoDate(now)) + DAY_MS; while (new Date(m).getUTCDay() !== 1) m += DAY_MS; return m; })() : dayMs(isoDate(now)) + DAY_MS;
+    const next = rule.derby && rule.derby.selector !== "bracket" && rule.derby.selector !== "high" && rule.derby.window === "weekly" ? (() => { let m = dayMs(isoDate(now)) + DAY_MS; while (new Date(m).getUTCDay() !== 1) m += DAY_MS; return m; })() : dayMs(isoDate(now)) + DAY_MS;
     return { chance: null, marketTicker: null, closeTime: new Date(next).toISOString(), basis: "A Burn Derby has no market and no odds. The next window closes at this time." };
   }
 
@@ -228,25 +237,77 @@ export class DerbyAdapter implements OracleAdapter {
   }
 
   /** One flippening window: sizes at the end boundary. */
-  async decideFlipWindow(key: string, spec: CoinVsSpec, w: DerbyWindowSpan, last: boolean): Promise<WindowRow> {
+  async decideFlipWindow(key: string, spec: CoinVsSpec, w: DerbyWindowSpan, last: boolean): Promise<WindowRow>;
+  async decideFlipWindow(key: string, spec: CoinVsSpec, w: DerbyWindowSpan, last: boolean, holdWithheld: true): Promise<WindowRow | { held: string }>;
+  async decideFlipWindow(key: string, spec: CoinVsSpec, w: DerbyWindowSpan, last: boolean, holdWithheld = false): Promise<WindowRow | { held: string }> {
     const end = { startMs: w.endMs, endMs: w.endMs, id: w.id };
     const [va, vb] = [await this.valueAt(spec.a, w.endMs), await this.valueAt(spec.b, w.endMs)];
     const sa = this.supplyAt(spec.a, w.endMs), sb = this.supplyAt(spec.b, w.endMs);
     if (!va.ok || !vb.ok || sa === null || sb === null) {
       const d: Decision = { status: "withheld", reason: !va.ok ? va.reason : !vb.ok ? vb.reason : "no circulating-supply reading at the boundary", margin: null, crossMargin: null, disagreement: null };
+      if (holdWithheld) return { held: d.reason };
       return this.record(key, w, d, proofDocument(key, w, { a: null, b: null }, { a: null, b: null }, d), "flip-");
     }
     const ca = this.store.nearest(crossKey(spec.a), "cross", end.endMs, TOL_MS), cb = this.store.nearest(crossKey(spec.b), "cross", end.endMs, TOL_MS);
     const sizeA = mulDec(va.value, sa), sizeB = mulDec(vb.value, sb);
     const d = decideFlip(sizeA, sizeB, ca && cb ? { a: mulDec(ca.value, sa), b: mulDec(cb.value, sb) } : null, last);
+    if (holdWithheld && d.status === "withheld") return { held: d.reason };
     const sides = { a: { symbol: spec.a.symbol, key: underlyingKey(spec.a), source: (spec.a.pyth ? "pyth" : "twap") as SideReading["source"], start: va.value, end: va.value, supplyStart: sa, supplyEnd: sa, changePct: "0", proof: { end: va.proof } }, b: { symbol: spec.b.symbol, key: underlyingKey(spec.b), source: (spec.b.pyth ? "pyth" : "twap") as SideReading["source"], start: vb.value, end: vb.value, supplyStart: sb, supplyEnd: sb, changePct: "0", proof: { end: vb.proof } } };
     return this.record(key, w, d, proofDocument(key, w, sides, { a: ca ? { source: String(ca.detail.source), start: ca.value, end: ca.value, changePct: "0", refs: { ts: ca.ts } } : null, b: cb ? { source: String(cb.detail.source), start: cb.value, end: cb.value, changePct: "0", refs: { ts: cb.ts } } : null }, d, { sizeA, sizeB }), "flip-");
+  }
+
+  /**
+   * One record-close day (sources-4): the close at the boundary that ends it (valueAt: Pyth's stored update, its Solana snapshot, or
+   * Hermes), the cross-read's quote at the same boundary, and the record from the locked baseline plus every close decided before it.
+   * Recorded ONCE: decided (reading 1 or 0; a one-shot's non-record day carries no event) or withheld (no reading; its close never
+   * joins the record).
+   */
+  async decideHighDay(key: string, spec: HighSpec, w: DerbyWindowSpan): Promise<WindowRow> {
+    const v = await this.valueAt(spec.u, w.endMs);
+    const x = this.store.nearest(crossKey(spec.u), "cross", w.endMs, TOL_MS);
+    const decided = this.store.windows(key).filter((r) => r.status === "decided" && r.windowId < w.id && typeof (r.proof as { close?: unknown } | null)?.close === "string").map((r) => ({ day: r.windowId, close: (r.proof as { close: string }).close }));
+    const d = v.ok ? decideHigh(spec.u.symbol, v.value, x?.value ?? null, recordBefore(spec, w.id, decided)) : { status: "withheld" as const, reason: v.reason, close: null, crossClose: x?.value ?? null };
+    const doc = JSON.parse(canonical({ schema: "burnticker.derby-high-proof/v1", selectorKey: key, day: w.id, boundary: new Date(w.endMs).toISOString(), close: d.status === "decided" ? d.close : null, closeProof: v.ok ? v.proof : null, cross: x ? { value: x.value, ts: x.ts, detail: x.detail } : null, decision: d, bound: DERBY_DISAGREEMENT_PP })) as Record<string, unknown>;
+    const sha = sha256Hex(canonical(doc));
+    if (d.status === "withheld") {
+      this.log(`${key} ${w.id}: WITHHELD — ${d.reason}`);
+      this.d.alert?.(`derby-withheld:${key}:${w.id}`, `Record close ${key} day ${w.id} withheld: ${d.reason}`);
+      return this.store.decide({ selectorKey: key, windowId: w.id, status: "withheld", eventId: null, at: windowAt(w), result: null, value: null, reason: d.reason, proofSha256: sha, proof: doc }, this.d.now());
+    }
+    this.log(`${key} ${w.id}: ${d.record ? "RECORD" : "no record"} — ${d.note}`);
+    return this.store.decide({ selectorKey: key, windowId: w.id, status: "decided", eventId: spec.once && !d.record ? null : `high-${w.id}:${proof16(sha)}`, at: windowAt(w), result: null, value: d.record ? "1" : "0", reason: d.note, proofSha256: sha, proof: doc }, this.d.now());
+  }
+
+  /**
+   * The review's history read (sources-4): the daily closes ending on `through`, newest first back to `maxDays`, each the reference's value
+   * at its 00:00 UTC boundary through valueAt (a stored Hermes update, the Solana snapshot near the boundary, else Hermes with a key).
+   * Seven missing days in a row after at least one close end the walk: the feed began there (`feedBegan`). Reaching `maxDays` leaves
+   * feedBegan false, and the sentence says "since <date>, the first day read".
+   */
+  async historyCloses(u: DerbyUnderlying, through: string, maxDays: number): Promise<{ closes: DayClose[]; feedBegan: boolean; misses: number }> {
+    const closes: DayClose[] = [];
+    let run = 0, misses = 0;
+    for (let i = 0; i < maxDays; i++) {
+      const day = highAddDay(through, -i);
+      const v = await this.valueAt(u, dayMs(day) + DAY_MS);
+      if (v.ok) { closes.push({ day, close: v.value }); run = 0; continue; }
+      misses++; run++;
+      if (closes.length && run >= 7) return { closes: closes.reverse(), feedBegan: true, misses };
+    }
+    return { closes: closes.reverse(), feedBegan: false, misses };
+  }
+
+  /** The review's baseline for a record-close coin launched at `nowMs` (the history read, then derby/high.ts buildHighBaseline). */
+  async highBaseline(u: DerbyUnderlying, span: HighSpec["span"], nowMs: number): Promise<ReturnType<typeof buildHighBaseline>> {
+    const through = highAddDay(isoDate(nowMs), -1);
+    const h = await this.historyCloses(u, through, span === "all" ? HIGH_HISTORY_MAX_DAYS : span);
+    return buildHighBaseline(span, h.closes, through, { feedBegan: h.feedBegan });
   }
 
   /** The seasons of the tokens currently on a key (shared readings: the union of their windows). */
   private windowsFor(key: string, rule: BurnRule): DerbyWindowSpan[] {
     const specs = this.d.registry.tokens().filter((t) => t.selectorKey === key && (t.status === "live" || t.status === "paused" || t.status === "draft")).map((t) => this.d.registry.lockedRule(t).rule.derby).filter((x): x is CoinVsSpec | PriceSpec => x?.selector === "coinvs" || x?.selector === "price");
-    if (rule.derby && rule.derby.selector !== "bracket") specs.push(rule.derby);
+    if (rule.derby && (rule.derby.selector === "coinvs" || rule.derby.selector === "price")) specs.push(rule.derby);
     const byId = new Map<string, DerbyWindowSpan>();
     for (const s of specs) for (const w of seasonWindows(s)) byId.set(w.id, w);
     return [...byId.values()].sort((a, b) => a.startMs - b.startMs);
@@ -266,7 +327,15 @@ export class DerbyAdapter implements OracleAdapter {
           if (settled || this.store.window(key, w.id)) continue;
           if (w.endMs > now) break;
           if (w.endMs + this.grace > now) { awaitingFinal++; break; }
-          const row = await this.decideFlipWindow(key, spec, w, i === windows.length - 1);
+          const last = i === windows.length - 1;
+          // item 70: the last window is retried, unrecorded, for FLIP_FINAL_RETRY_DAYS; then a withheld last window is recorded (the pair voids)
+          if (last && now < w.endMs + FLIP_FINAL_RETRY_DAYS * DAY_MS) {
+            const r = await this.decideFlipWindow(key, spec, w, true, true);
+            if ("held" in r) { awaitingFinal++; refusals.push(`${w.id}: ${r.held} The last window is read again until ${new Date(w.endMs + FLIP_FINAL_RETRY_DAYS * DAY_MS).toISOString()}; after that the flippening ends void.`); break; }
+            if (r.status === "decided") break;
+            continue;
+          }
+          const row = await this.decideFlipWindow(key, spec, w, last);
           if (row.status === "withheld" && !row.reason?.startsWith("noflip")) refusals.push(`${w.id}: ${row.reason}`);
           if (row.status === "decided") break;
         }
@@ -290,6 +359,36 @@ export class DerbyAdapter implements OracleAdapter {
         if (row.status === "withheld") refusals.push(`${w.id}: ${row.reason}`);
       }
       const events = this.store.windows(key).filter((r) => r.status === "decided" && r.eventId && (!sinceIso || r.at > sinceIso)).map((r) => ({ id: r.eventId!, at: r.at, result: null, value: r.value, title: `${spec.u.symbol} ${r.value}% (${r.windowId})`, sourceUrl: this.sourceUrlFor(spec.u, null, windowSpan(spec.window, r.windowId).endMs), method: `derby single-asset % change (cross ${(r.proof as { decision?: { crossMargin?: string } } | null)?.decision?.crossMargin ?? "—"}%)`, proof: r.proofSha256 ? `${DERBY_PROOF_PREFIX}${r.proofSha256}` : null }));
+      return { events, awaitingFinal, refusals, settlementSourceUrl: HERMES_URL };
+    }
+    if (spec.selector === "high") {
+      // RECORD DAILY CLOSES (sources-4; derby/high.ts): the days in order (each record depends on the closes before it), one decision each.
+      const recordSettled = () => this.store.windows(key).some((r) => r.status === "decided" && r.eventId !== null && (r.value === "1" || r.windowId.startsWith("ended-")));
+      for (const day of highDays(spec, now)) {
+        if (spec.once && recordSettled()) break;
+        if (this.store.window(key, day)) continue;
+        const w = windowSpan("daily", day);
+        if (w.endMs > now) break;
+        if (w.endMs + this.grace > now) { awaitingFinal++; break; }
+        const row = await this.decideHighDay(key, spec, w);
+        if (row.status === "withheld") refusals.push(`${w.id}: ${row.reason}`);
+      }
+      // A one-shot whose run ended without a record: one closing reading of 0 (the coin ends with nothing burned).
+      if (spec.once && spec.season.days !== null && !recordSettled()) {
+        const lastDay = highAddDay(spec.season.start, spec.season.days - 1), w = windowSpan("daily", lastDay);
+        const id = `ended-${lastDay}`;
+        if (w.endMs + this.grace <= now && !this.store.window(key, id) && highDays(spec, now).every((d) => this.store.window(key, d))) {
+          const doc = JSON.parse(canonical({ schema: "burnticker.derby-high-proof/v1", selectorKey: key, ended: lastDay, note: "the run ended without a record daily close" })) as Record<string, unknown>;
+          const sha = sha256Hex(canonical(doc));
+          this.store.decide({ selectorKey: key, windowId: id, status: "decided", eventId: `${id}:${proof16(sha)}`, at: windowAt(w), result: null, value: "0", reason: "the run ended without a record daily close", proofSha256: sha, proof: doc }, this.d.now());
+          this.log(`${key}: the run ended on ${lastDay} without a record daily close`);
+        }
+      }
+      const events = this.store.windows(key).filter((r) => r.status === "decided" && r.eventId && (!sinceIso || r.at > sinceIso)).map((r) => {
+        const doc = r.proof as { close?: string; decision?: { previous?: string; crossClose?: string } } | null;
+        const title = r.windowId.startsWith("ended-") ? `${spec.u.symbol}: the run ended on ${r.windowId.slice(6)} without a record daily close` : `${spec.u.symbol} daily close ${doc?.close ?? "?"} on ${r.windowId}: ${r.value === "1" ? "a record" : "not a record"} (record before it ${doc?.decision?.previous ?? "?"})`;
+        return { id: r.eventId!, at: r.at, result: null, value: r.value, title, sourceUrl: this.sourceUrlFor(spec.u, null, windowSpan("daily", r.windowId.replace(/^ended-/, "")).endMs), method: `derby record daily close (cross ${doc?.decision?.crossClose ?? "—"})`, proof: r.proofSha256 ? `${DERBY_PROOF_PREFIX}${r.proofSha256}` : null };
+      });
       return { events, awaitingFinal, refusals, settlementSourceUrl: HERMES_URL };
     }
     // bracket fan coin
@@ -390,7 +489,7 @@ export class DerbyAdapter implements OracleAdapter {
       try { d = this.d.registry.lockedRule(t).rule.derby; } catch { continue; }
       if (!d) continue;
       if (d.selector === "coinvs") { add(d.a, d.measure === "mcap"); add(d.b, d.measure === "mcap"); }
-      else if (d.selector === "price") add(d.u, false);
+      else if (d.selector === "price" || d.selector === "high") add(d.u, false);
       else { try { for (const u of this.tournament(d.tournamentId).underlyings) add(u, false); } catch { /* no tournament row: the fetch reports it */ } }
     }
     return [...out.values()];
@@ -469,12 +568,25 @@ export class DerbyAdapter implements OracleAdapter {
     // Both or neither: a voided pair is a no-contest — both coins' derby ends (their pools wind down under onEnd).
     const pr = this.d.registry.pairOf(t.mint);
     if (pr && this.d.registry.pairOutcome(pr.pairId)?.state === "voided") return `pair ${pr.pairId} voided (both or neither): no contest`;
+    if (d.selector === "high") {
+      const rows = this.store.windows(t.selectorKey);
+      if (d.once) { const w = rows.find((r) => r.status === "decided" && r.eventId !== null && (r.value === "1" || r.windowId.startsWith("ended-"))); return w ? (w.value === "1" ? `the first record daily close came on ${w.windowId}` : `the run ended on ${w.windowId.slice(6)} without a record daily close`) : null; }
+      const last = highLastDay(d);
+      if (last === null || now < dayMs(last) + DAY_MS + this.grace) return null;
+      return highDays(d, now).some((day) => !this.store.window(t.selectorKey, day)) ? null : `the run is over (${d.season.days} days from ${d.season.start})`;
+    }
     if (d.selector === "price") {
       if (now < seasonEndMs(d) + this.grace) return null;
       return seasonWindows(d).some((w) => !this.store.window(t.selectorKey, w.id)) ? null : `season over (${d.season.days} days from ${d.season.start})`;
     }
     if (d.selector === "coinvs") {
-      if (d.flip) { const w = this.store.windows(t.selectorKey).find((r) => r.status === "decided"); return w ? `the flippening settled ${w.result === "yes" ? "YES" : "NO"} (${w.windowId}): the pair retires` : null; }
+      if (d.flip) {
+        const w = this.store.windows(t.selectorKey).find((r) => r.status === "decided");
+        if (w) return `the flippening settled ${w.result === "yes" ? "YES" : "NO"} (${w.windowId}): the pair retires`;
+        const lastW = seasonWindows(d).pop();
+        const row = lastW ? this.store.window(t.selectorKey, lastW.id) : null;
+        return row && row.status === "withheld" && !row.reason?.startsWith("noflip") ? `${FLIP_VOID_PREFIX} (${row.windowId}) could not be read for ${FLIP_FINAL_RETRY_DAYS} days after it ended, so the flippening ends void: neither coin burns for it` : null;
+      }
       if (now < seasonEndMs(d) + this.grace) return null;
       const missing = seasonWindows(d).filter((w) => !this.store.window(t.selectorKey, w.id));
       return missing.length ? null : `season over (${d.season.days} days from ${d.season.start})`;
@@ -498,7 +610,13 @@ export class DerbyAdapter implements OracleAdapter {
     try { d = this.d.registry.lockedRule(t).rule.derby; } catch { return null; }
     const pr = this.d.registry.pairOf(t.mint), o = pr ? this.d.registry.pairOutcome(pr.pairId) : null;
     if (o?.state === "voided") return { reason: why, atMs: o.at };
-    if (d?.selector === "coinvs" && d.flip) { const w = this.store.windows(t.selectorKey).find((r) => r.status === "decided"); return { reason: why, atMs: w ? Date.parse(w.at) + 1000 : this.d.now() }; }
+    if (d?.selector === "coinvs" && d.flip) {
+      const w = this.store.windows(t.selectorKey).find((r) => r.status === "decided");
+      if (w) return { reason: why, atMs: Date.parse(w.at) + 1000 };
+      const lastW = seasonWindows(d).pop();
+      return { reason: why, atMs: lastW ? lastW.endMs + FLIP_FINAL_RETRY_DAYS * DAY_MS : this.d.now() };
+    }
+    if (d?.selector === "high") { const w = this.store.windows(t.selectorKey).filter((r) => r.status === "decided" && r.eventId !== null).pop(); const last = highLastDay(d); return { reason: why, atMs: d.once && w ? Date.parse(w.at) + 1000 : last ? dayMs(last) + DAY_MS : this.d.now() }; }
     if (d && d.selector !== "bracket") return { reason: why, atMs: seasonEndMs(d) };
     if (d?.selector === "bracket") {
       const tt = this.tournament(d.tournamentId), st = this.bracket(tt), r = st.eliminatedIn.get(d.slot);

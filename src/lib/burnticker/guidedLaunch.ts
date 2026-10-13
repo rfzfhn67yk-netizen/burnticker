@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { championPathRule, describeEndSink, windowKindOf } from "@/lib/burnticker/describe";
+import { championPathRule, describeEndSink, endText, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
 import { parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
@@ -22,27 +22,48 @@ import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchP
  * and passes the copy lint (test/burntickerGuidedLaunch.test.ts). Client-safe.
  */
 
-export type GuidedStepId = "follow" | "which" | "burn" | "end";
+/**
+ * website-20 (ChatGPT audit 6 item 12, the owner's mobile rule of 2026-10-12: one decision per screen): FIVE honest steps. The end has one
+ * real choice per rule, so it is a stated section on the review ("What happens when this ends"), not a question; the name and the look get
+ * their own step, so the review only reviews.
+ */
+export type GuidedStepId = "follow" | "which" | "burn" | "name" | "review";
 export const GUIDED_STEPS: readonly { id: GuidedStepId; question: string; short: string }[] = [
   { id: "follow", question: "What does this coin follow?", short: "Follows" },
   { id: "which", question: "Which one?", short: "Which" },
   { id: "burn", question: "How does it burn?", short: "Burns" },
-  { id: "end", question: "What happens at the end?", short: "Ends" },
+  { id: "name", question: "Name and look", short: "Name" },
+  { id: "review", question: "Review and launch", short: "Review" },
 ];
+/** Step 2's heading, named for what is being chosen (pass A item 6). */
+export function whichHeading(follow: FollowId | null, pairKind: "teams" | "candidates" | null = null): string {
+  if (follow === "team") return "Choose a team";
+  if (follow === "market") return "Choose a market outcome";
+  if (follow === "number") return "Choose a published number";
+  if (follow === "disaster") return "Choose a kind of natural disaster";
+  if (follow === "coins") return "Choose two coins";
+  if (follow === "rivalry") return pairKind === "teams" ? "Choose two teams" : pairKind === "candidates" ? "Choose a race and two candidates" : "Two teams or two candidates?";
+  return "Which one?";
+}
+/** The end, said as a section on the review (pass B item 18), not as a menu. */
+export const END_LABEL = "What happens when this ends";
+/** The greyed patterns, one tap away (the owner's mobile rule: everything else behind a tap). */
+export const OTHER_PATTERNS_LABEL = "Other patterns, not offered here";
 /** "1 of 4". */
 export const progressLabel = (i: number): string => `${i + 1} of ${GUIDED_STEPS.length}`;
 
-export type FollowId = "team" | "market" | "number" | "coins" | "rivalry";
+/** "disaster" (WIRING-SOURCES3, the owner 2026-10-12): a natural disaster, its card and its step-3 patterns from hazards.ts. */
+export type FollowId = "team" | "market" | "number" | "coins" | "rivalry" | "disaster";
 /**
  * `line` is the one line a choice card shows (owner, 2026-10-12: "make the step workflow easier to follow": title and one line, so all
  * five fit on one phone screen); `sentence` and `example` sit in the Examples disclosure below the cards.
  */
-export const FOLLOW_CHOICES: readonly { id: FollowId; label: string; line: string; sentence: string; example: string }[] = [
-  { id: "team", label: "A team", line: "One team in any league.", sentence: "One team in any league. It can burn on every win this season, or once if they win the title.", example: "For example, $LAD for the Dodgers' season." },
-  { id: "market", label: "A market", line: "One outcome of a Polymarket market.", sentence: "One outcome of a Polymarket market, such as a candidate, a film or a team. It burns once when the market pays out.", example: "For example, a candidate winning a Senate race." },
-  { id: "number", label: "A number someone publishes", line: "A public figure or record, like the debt.", sentence: "A public figure or record, such as the national debt, a city's daily high or rocket launches.", example: "For example, every $1B the debt rises." },
-  { id: "coins", label: "A coin against another coin", line: "Two coins, compared once a day.", sentence: "Two coins people already hold, compared each day on their published feeds. You launch two new coins, one for each side.", example: "For example, WIF against BONK." },
-  { id: "rivalry", label: "A rivalry pair", line: "Two teams or two candidates, one coin each.", sentence: "Two teams in one game or one season, or two candidates in one race. You launch one coin for each side.", example: "For example, the Dodgers against the Brewers." },
+export const FOLLOW_CHOICES: readonly { id: FollowId; label: string; line: string; sentence: string; example: string; coins: 1 | 2 }[] = [
+  { id: "team", label: "Team", coins: 1, line: "One team in any league.", sentence: "One team in any league. It can burn on every win this season, or once if they win the title.", example: "For example, $LAD for the Dodgers' season." },
+  { id: "market", label: "Event outcome", coins: 1, line: "One outcome of a Polymarket market.", sentence: "One outcome of a Polymarket market, such as a candidate, a film or a team. It burns once when the market pays out.", example: "For example, a candidate winning a Senate race." },
+  { id: "number", label: "Published data", coins: 1, line: "A public figure or record, like the debt.", sentence: "A public figure or record, such as the national debt, a city's daily high or rocket launches.", example: "For example, every $1B the debt rises." },
+  { id: "coins", label: "Coin comparison", coins: 2, line: "Two coins, compared once a day.", sentence: "Two coins people already hold, compared each day on their published feeds. You launch two new coins, one for each side.", example: "For example, WIF against BONK." },
+  { id: "rivalry", label: "Rivalry", coins: 2, line: "Two teams or two candidates, one coin each.", sentence: "Two teams in one game or one season, or two candidates in one race. You launch one coin for each side.", example: "For example, the Dodgers against the Brewers." },
 ];
 
 export type PatternId = "every" | "fade" | "once" | "winner";
@@ -97,7 +118,7 @@ export const PATTERN_REASON = {
   candidatesSeparate: "Two candidates settle on two separate markets, so each coin burns from its own pool.",
   candidatesEvery: "A race is decided once, so it cannot burn every time.",
   derbyEvery: "In a coin against another coin, each day's result fires one side's rule, and that side takes the burn.",
-  derbyFade: "Each day's result already fires one of the two sides, so there is no day where nothing happens.",
+  derbyFade: "On a valid, non-tied result, one of the two sides fires, so there is no separate side for when it does not happen. A tie or a withheld reading burns neither coin.",
 } as const;
 
 export interface PatternOption { id: PatternId; label: string; sentence: string; available: boolean; reason: string | null }
@@ -172,15 +193,91 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
  * what the one before left, so 3 units at 2 % spend about 5.9 %; one burn run buys with at most 2 % of the trading pool's SOL, and the
  * rest waits for the next run. A fade-side reading counts one unit at most. A one-shot spends its share once.
  */
-export function budgetCopy(rule: BurnRule, share: number, unit: string | null): { label: string; line: string } {
+export function budgetCopy(rule: BurnRule, share: number, unit: string | null): { label: string; line: string; math: string | null } {
   const p = pctLabel(share);
-  if (isOneShotRule(rule)) return { label: "Share of the pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity.` };
-  if (rule.kind === "scalar" && rule.inverse) return { label: "Burn budget per reading", line: `Each reading where the number does not move the rule's way spends ${p} of the burn pool. A reading counts once at most, however flat it was.` };
+  if (isOneShotRule(rule)) return { label: "Share of the burn pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity.`, math: null };
+  if (rule.kind === "scalar" && rule.inverse) return { label: "Share of the burn pool per reading", line: `Each reading where the number does not move the rule's way spends ${p} of the burn pool buying and burning this coin. A reading counts once at most, however flat it was.`, math: null };
   if (rule.kind === "scalar" && unit) {
     const three = Math.round((1 - (1 - share) ** 3) * 10000) / 100;
-    return { label: `Burn budget per ${unit}`, line: `Each ${unit} spends ${p} of what is left in the burn pool. A reading with several units compounds, so 3 units spend about ${three}%, not ${Math.round(share * 300 * 10) / 10}%. One burn run buys with at most 2% of the trading pool's SOL, and the rest waits for the next run.` };
+    return { label: `Share of the burn pool per ${unit}`, line: `Each ${unit} spends ${p} of what is left in the burn pool buying and burning this coin.`, math: `A reading with several units compounds, so 3 units spend about ${three}%, not ${Math.round(share * 300 * 10) / 10}%. One burn run buys with at most 2% of the SOL in the coin's Raydium pool, and the rest waits for the next run.` };
   }
-  return { label: "Burn budget per result", line: `Each result that fires the rule spends ${p} of the available burn budget. The tokens bought are burned, and the token amount varies.` };
+  return { label: "Share of the burn pool per result", line: `Each result that fires the rule spends ${p} of the burn pool buying and burning this coin. The token amount bought varies.`, math: null };
+}
+/** Pass B item 15: what a share means in SOL, with a round number and no price or return in it. */
+export function shareExample(share: number): string {
+  const sol = Math.round(share * 1000) / 1000;
+  return `For example, with 1 SOL in the burn pool, this spends ${sol} SOL on that burn.`;
+}
+/** The label of the "how the amount is worked out" disclosure (pass B item 16). */
+export const AMOUNT_MATH_LABEL = "How the amount is calculated";
+/** Item 55: Coin vs Coin keeps a share for each mode, and says both. */
+export const derbyShareLine = (daily: number, flip: number): string => `Each mode keeps its own share: the daily race at ${pctLabel(daily)}, the flippening at ${pctLabel(flip)}.`;
+
+/**
+ * THE PATTERN WORDS FOR THE THING PICKED (pass B item 12, audit 6 item 16): "After each Dodgers win", never "each day or reading" on a team
+ * coin. Generic words stay for the paths with no subject to name.
+ */
+export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: "win" | "loss" | "draw" | null; pairKind?: "teams" | "candidates" | null }): { label: string; sentence: string } {
+  const s = o.subject;
+  if (o.follow === "team" && s) {
+    const won = o.outcome === "loss" ? "loss" : o.outcome === "draw" ? "draw" : "win";
+    if (id === "every") return { label: `After each ${s} ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
+    if (id === "fade") return { label: `After each ${s} game without a ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} play and do not ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
+    if (id === "once") return { label: `If the ${s} win the title`, sentence: `The coin spends its burn pool once, if the market on the ${s} winning the title pays out YES.` };
+  }
+  if (o.follow === "rivalry" && o.pairKind === "teams") {
+    if (id === "every") return { label: "Each time its own team loses", sentence: "Each coin spends a share of its own burn pool after each game its team loses, this season." };
+    if (id === "fade") return { label: "Each game its own team does not lose", sentence: "Each coin spends a share of its own burn pool after each game its team wins or ties, this season." };
+    if (id === "once") return { label: "Their next game only", sentence: "When their next listed game is final, the coin of the team that lost burns once." };
+  }
+  if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "once") return { label: "If this candidate wins", sentence: "Each coin burns once, if its own candidate's market pays out YES." };
+  return { label: PATTERNS[id].label, sentence: PATTERNS[id].sentence };
+}
+
+/** The five things the review always shows (the owner's mobile rule, 2026-10-12), in this order. */
+export const FACT_LABELS = { trigger: "What triggers the burn", coin: "Which coin burns", amount: "How much", ends: "When it ends", cost: "What costs SOL" } as const;
+/** "Which coin burns": the coin's own token, bought back from its pool and burned; a pair names both. */
+export function whichCoinLine(a: string, b: string | null, linked = false): string {
+  if (!b) return `$${a}. Its burn pool buys $${a} back and burns it.`;
+  return linked ? `$${a} or $${b}, whichever coin's rule fires. That coin's burn is funded from both pools.` : `$${a} when its rule fires, and $${b} when its rule fires. Each coin burns from its own pool.`;
+}
+/** "What costs SOL": the creator pays to create; burns are paid from the coin's own fees. */
+export function costLine(totalSol: string | null, coins: 1 | 2): string {
+  const make = totalSol ? `About ${totalSol} SOL from your wallet to create ${coins === 2 ? "both coins" : "the coin"}.` : `Creating ${coins === 2 ? "the two coins" : "the coin"} costs a small amount of SOL from your wallet, shown once the estimate is read.`;
+  return `${make} Burns are paid from the coin's own trading fees, never from you.`;
+}
+/** "Creates 1 coin" / "Creates 2 coins" (pass A item 3). */
+export const createsLine = (n: 1 | 2): string => (n === 2 ? "Creates 2 coins" : "Creates 1 coin");
+
+/** The burn-pool cap in force by default (capInForce.ts; the test pins it to the program's constant and its 48-hour wait). */
+export const PRE_AUDIT_CAP_SOL_TEXT = "25";
+/**
+ * WHAT TO KNOW BEFORE YOU START (audit 6 item 14, pass B item 20): said at step 1 and again on the review, in plain words.
+ */
+export function upfrontLines(raises: readonly string[]): string[] {
+  const list = `${raises.slice(0, -1).join(", ")} or ${raises[raises.length - 1]} SOL`;
+  return [
+    "Creators earn no fee revenue. The creator's share of the fees goes to the coin's own burn pool.",
+    `Nothing burns until the coin graduates: buyers on its curve have to put in the raise you pick, ${list}, and then its pool is registered. A result that comes first is recorded and waits.`,
+    `For now a burn pool spends from at most ${PRE_AUDIT_CAP_SOL_TEXT} SOL. Only the platform's multisig can raise that cap, after a public 48-hour wait, and SOL above it stays in the coin's pool.`,
+    "When the rule ends, whatever is left goes to $DEFICIT's burn, or to the rival coin for a linked pair.",
+    "Creating a coin costs a small amount of SOL from your wallet. The review shows the estimate before you sign.",
+  ];
+}
+export const UPFRONT_LABEL = "What to know before you start";
+
+/**
+ * WHO DECIDES AN ELECTION COIN (item 53): the race card names the state's certified result, and the review names the sources Polymarket's
+ * rules use (for example the AP, Fox News and NBC). Each one's job, said once: Polymarket's rules decide its payout, the payout fires the
+ * burn, the certified result is the published cross-check, and the dispute window is when the payout becomes final.
+ */
+export const ELECTION_AUTHORITY_LABEL = "Who decides the result";
+export function electionAuthorityLines(certified: string): string[] {
+  return [
+    "Polymarket's own rules name who calls the race, and its on-chain payout follows those rules. The burn fires when that on-chain payout is final.",
+    `${certified[0].toUpperCase()}${certified.slice(1)} is the official count, named so you can check the on-chain payout against it. The burn does not wait for it.`,
+    "The on-chain payout becomes final after Polymarket's dispute window, about 2 hours unless the market sets its own. A dispute starts a new window, and a second dispute goes to UMA's vote, which takes about 48 to 72 hours.",
+  ];
 }
 
 export type EndKind = "flagship" | "named-coin" | "pair-winner" | "self";
@@ -190,17 +287,16 @@ export interface EndOption { kind: EndKind; label: string; available: boolean; r
  * the rule carries (describe.ts describeEndSink, the same test the keeper uses). A coin with no end sink (a Coin vs Coin pair today) burns
  * the rest down on itself. `options` lists the pinnable ends with the ones the launch page does not build greyed.
  */
+/** Item 58: what a coin with no end date really does (the end sink it carries is never reached). */
+export const PERPETUAL_END_LINE = "This coin has no end. It keeps burning on every result that qualifies, for as long as its pool holds SOL, so nothing is ever left over to send anywhere.";
 export function endSentences(rule: BurnRule, o: { team?: string | null } = {}): { kind: EndKind; sentences: string[]; options: EndOption[] } {
   const sink = describeEndSink(rule);
   const kind: EndKind = sink === "pair-winner" ? "pair-winner" : sink === "flagship" ? "flagship" : "self";
-  const VOID = "If the result is voided or the season is cancelled, the rest burns down on this coin over four weeks instead.";
-  let sentences: string[];
-  if (kind === "self") sentences = ["When the rule ends, each coin's own pool burns down whatever is left over four weeks, and the coin retires."];
-  else if (kind === "pair-winner") sentences = ["When the rule ends, the rest of the pool goes to the rival coin if it won the last result, or to $DEFICIT's burn if it did not.", VOID];
-  else if (championPathRule(rule)) { const ref = o.team ?? "the team"; sentences = [`If ${ref} win the championship, the rest of the pool burns here.`, "If they do not, the rest goes to $DEFICIT's burn.", VOID]; }
-  else if (windowKindOf(rule) === "perpetual") sentences = ["This coin has no end date, so it never reaches an end."];
-  else if (isOneShotRule(rule)) sentences = ["When the result is in, the rest of the pool goes to $DEFICIT's burn.", VOID];
-  else sentences = ["After the last game or reading the rule covers, the rest of the pool goes to $DEFICIT's burn.", VOID];
+  // ChatGPT audit 6 item 3: the sentences are describe.ts endText's, the same the review API's endsLine and the coin description say
+  const e = endText(rule, { team: o.team ?? null });
+  const sentences = [...e.result.split(/(?<=\.)\s+(?=[A-Z$])/), ...(e.void ? [e.void] : [])];
+  // website-20 item 58: a coin with no end never reaches its end sink, so no end is offered as "this coin's end"
+  if (windowKindOf(rule) === "perpetual" && kind !== "pair-winner") return { kind: "self", sentences, options: [] };
   const options: EndOption[] = [
     { kind: "flagship", label: kind === "flagship" && championPathRule(rule) ? sentences.join(" ") : "The rest goes to $DEFICIT", available: kind === "flagship", reason: kind === "flagship" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival first." : "This kind of coin has no end sink today." },
     { kind: "pair-winner", label: "The rest goes to the rival", available: kind === "pair-winner", reason: kind === "pair-winner" ? null : "Only two linked coins can name each other." },
@@ -294,25 +390,26 @@ export function pairTickers(a: string, b: string): { a: string; b: string } {
 }
 /** The on-chain name carries the matchup: "WIF vs BONK, WIF side" (at most 32 characters). */
 export function pairNames(a: string, b: string): { a: string; b: string } {
-  const fit = (x: string) => (x.length <= 32 ? x : x.slice(0, 32).trimEnd());
-  return { a: fit(`${a} vs ${b}, ${a} side`), b: fit(`${b} vs ${a}, ${b} side`) };
+  // audit 7 item 8: never cut mid-word ("Guardians vs Rays, Guardians sid"): the full form, then the shorter "Guardians vs Rays", then
+  // whole words up to 32 bytes (the program counts a name in bytes)
+  const bytes = (x: string) => new TextEncoder().encode(x).length;
+  const words = (x: string) => { let out = ""; for (const w of x.split(" ")) { const next = out ? `${out} ${w}` : w; if (bytes(next) > 32) break; out = next; } return out.replace(/[,\s]+$/, ""); };
+  const full = { a: `${a} vs ${b}, ${a} side`, b: `${b} vs ${a}, ${b} side` };
+  if (bytes(full.a) <= 32 && bytes(full.b) <= 32) return full;   // both sides take the same form
+  return { a: words(`${a} vs ${b}`), b: words(`${b} vs ${a}`) };
 }
-const CHAMP: Record<string, string> = { mlb: "WS", nfl: "SB", nba: "TITLE", nhl: "CUP" };
 /**
- * A team coin's ticker: the team code plus the window when it is not the plain season. $LAD (the season's wins), $LADL (its losses),
- * $LADPO (the postseason), $LADNEXT5 (the next five games), $LADALL (every season), $LADNOWIN (the fade side), $LADWS (the title, once).
+ * A team coin's ticker: ONE generator for the wizard, /v1/search and /v1/sports/teams (tickers.ts; ChatGPT audit 6 item 6). $LAD (the
+ * season's wins), $LADL (its losses), $LADPO (the postseason), $LADNEXT5 (the next five games), $LADALL (every season), $LADNOWIN (the
+ * fade side), $LADWS (the title, once); a code several leagues use carries the league's tag ($ATLMLB, $ATLNBA).
  */
-export function teamTicker(abbr: string, o: { league?: string | null; window?: "season" | "post" | "next" | "perpetual" | "title" | null; games?: number | null; outcome?: "win" | "loss" | "draw" | null; inverse?: boolean }): string {
-  const A = code(abbr, 4);
-  if (o.window === "title") return `${A}${CHAMP[o.league ?? ""] ?? "CHAMP"}`.slice(0, 10);
-  const side = o.inverse ? `NO${o.outcome === "loss" ? "LOSS" : o.outcome === "draw" ? "DRAW" : "WIN"}` : o.outcome === "loss" ? "L" : o.outcome === "draw" ? "D" : "";
-  const win = o.window === "post" ? "PO" : o.window === "next" ? `NEXT${o.games ?? 5}` : o.window === "perpetual" ? "ALL" : "";
-  return `${A}${side}${win}`.slice(0, 10);
-}
-/** The team ticker for a rule built from an ESPN team series (null for any other rule). */
+export { teamTicker } from "@/lib/burnticker/tickers";
+import { teamTicker } from "@/lib/burnticker/tickers";
+/** The team ticker for a rule built from an ESPN team or game series (null for any other rule). */
 export function teamTickerForRule(r: BurnRule, abbr?: string | null): string | null {
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
-  if (!e || e.kind !== "team") return null;
+  if (!e) return null;
+  if (e.kind !== "team") return teamTicker(abbr ?? e.abbr, { league: e.league, window: "game", outcome: e.outcome, inverse: !!r.inverse });
   const w = e.window, window = w.kind === "legacy" ? (w.scope === "post" ? "post" : "season") : w.kind;
   return teamTicker(abbr ?? e.abbr, { league: e.league, window, games: w.kind === "next" ? w.n : null, outcome: e.outcome, inverse: !!r.inverse });
 }
@@ -325,3 +422,44 @@ export function pairIdentityProblems(a: { ticker: string; name: string }, b: { t
   if (n(a.name) && n(a.name) === n(b.name)) out.push("The two coins need different names.");
   return out;
 }
+
+/** Audit 3 item 102: the note's label and its help text, tied to the field (ReviewCard.tsx). */
+export const NOTE_LABEL = "A note from you";
+export const NOTE_HELP = "Optional. It shows in its own box on the coin's page, up to 140 characters, with no links and no claims of endorsement.";
+/** Audit 3 item 105: the description and the note, told apart where both are chosen. */
+export const NOTE_VS_DESCRIPTION = "The description follows the rule sentence on the coin's page and is pinned with the coin, up to 280 characters. The note is one short line in its own box, up to 140 characters, with no links.";
+
+// ---- the rivalry panel (website-20 items 151 to 160, audit 7 items 7 to 9) ----
+
+/** Every listed game between the two teams, soonest first (item 156: the creator picks the exact meeting). */
+export function meetingsOf<G extends { expectedAt?: string | null; pair: { a: { abbr: string }; b: { abbr: string } } | null }>(games: readonly G[], a: string, b: string): G[] {
+  return games.filter((g) => g.pair && ((g.pair.a.abbr === a && g.pair.b.abbr === b) || (g.pair.a.abbr === b && g.pair.b.abbr === a))).sort((x, y) => Date.parse(x.expectedAt ?? "") - Date.parse(y.expectedAt ?? ""));
+}
+/** Item 158 and audit 7 item 9: the two choices say before the tap what each coin follows. */
+export const RIVALRY_GAME_LABEL = "One game between them";
+export const RIVALRY_GAME_LINE = "Pick the game. When it is final, the coin of the team that lost burns once.";
+export const RIVALRY_SEASON_LABEL = "Every loss this season";
+export const RIVALRY_SEASON_LINE = "Each coin burns every time its own team loses any game this season, through the postseason, not only the games between these two.";
+export const RIVALRY_SCOPE_LINE = "Two separate coins, one for each team. Each burns from its own pool, and no SOL moves between them.";
+/** Item 154: a failed schedule read is never "no listed game". */
+export const SCHEDULE_UNAVAILABLE_LINE = "The schedule could not be read just now, so their games are not shown.";
+export const NO_LISTED_MEETING_LINE = "The schedule lists no game between them right now.";
+/** Item 157: what the list covers. */
+export const scheduleCoverageLine = (n: number): string => (n > 1 ? `The league's schedule lists ${n} games between them from today on. Pick the one the coins follow.` : n === 1 ? "The league's schedule lists one game between them from today on." : "Only games the league's schedule lists from today on can be picked.");
+/** Item 155: a cleared second team is said once. */
+export const RIVAL_SAME_TEAM = "The second team was cleared, because it is now the first team. Pick another second team.";
+/** Audit 7 item 9: season coins are named for what they count ("Guardians 2026 Losses", $CLEL). */
+export function seasonPairNames(a: { abbr: string; nickname: string | null; name: string }, b: { abbr: string; nickname: string | null; name: string }, year: number, league: string | null): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
+  const one = (t: typeof a) => { const n = `${t.nickname ?? t.name} ${year} Losses`; return { name: new TextEncoder().encode(n).length <= 32 ? n : `${t.abbr} ${year} Losses`, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "loss" }) }; };
+  return { a: one(a), b: one(b) };
+}
+
+// ---- Your coins (audit 3 items 103 and 137) ----
+export const LOOKUP_LABEL = "A creator's Solana wallet address";
+/** Why an entered address is not a creator wallet address, or null when it reads as one (base58, 32 to 44 characters). */
+export function walletAddressProblem(v: string): string | null {
+  if (!v) return "Enter a creator's wallet address to look it up.";
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)) return null;
+  return "That is not a wallet address. Enter a creator's Solana wallet address: 32 to 44 letters and digits, without 0, O, I or a lower-case l.";
+}
+export const DRAFT_ROUTE_LINE = "Continue a draft, or start a new coin on the launch page";

@@ -17,7 +17,12 @@ import { LEAGUES, SETTLE_AFTER_START_MS, gamesFor, tsdbNamePairs, windowStatus, 
  * link to ESPN's scoreboard for that day ("see this game on ESPN →", never fetched).
  */
 
-export interface Final { home: number; away: number; done: boolean; detail: string; url: string }
+/**
+ * `pens`: the feed marks the game decided on penalties (a cup tie level after extra time). `declared`: the side the feed names as the
+ * winner (API-Sports' teams.home.winner / teams.away.winner). Owner decision 2026-10-12 (website-20 item 78): a level game decided on
+ * penalties counts as a WIN for the declared winner and a LOSS for the other side, never a draw; espn.ts outcomeOf reads it the same way.
+ */
+export interface Final { home: number; away: number; done: boolean; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null }
 export interface GameMarket { conditionId: string; question: string; outcomes: [string, string]; url: string }
 export interface GamePayout { resolved: boolean; outcome: number | null }
 export interface GameDeps {
@@ -49,6 +54,24 @@ const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,
 /** A provider's team name matches a side when it contains the side's nickname, short name, location or full name (or the reverse). */
 export const sideMatches = (name: string, s: GameSide): boolean => { const a = norm(name); return [s.name, s.nickname, s.short ?? "", s.location ?? "", s.abbr].filter((k) => k && k.length >= 3).some((k) => { const b = norm(k); return a === b || a.includes(b) || b.includes(a); }); };
 
+/**
+ * DOUBLEHEADERS (semantics-verify item 80, 2026-10-12): two games between the same teams on one day are two fixtures. Each reader picks
+ * the listed game whose start is NEAREST the schedule's start time, never simply the first one in the body, so the cross-read of the
+ * second game is never the first game's score. A body without start times keeps its first match (the score comparison then holds a mix-up).
+ */
+export function nearestStart<T>(hits: readonly T[], startsAt: string, at: (h: T) => unknown): T | undefined {
+  const target = Date.parse(startsAt);
+  let best: T | undefined, gap = Infinity;
+  for (const h of hits) {
+    const t = Date.parse(String(at(h) ?? ""));
+    const d = Number.isFinite(t) && Number.isFinite(target) ? Math.abs(t - target) : Infinity;
+    if (best === undefined || d < gap) { best = h; gap = d; }
+  }
+  return best;
+}
+const utcIso = (s: string): string => s.replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
+const tsdbStart = (e: Record<string, unknown>): string | null => (e.strTimestamp ? utcIso(String(e.strTimestamp)) : e.dateEvent && e.strTime ? utcIso(`${e.dateEvent}T${e.strTime}`) : null);
+
 /** v1's event search (a key v2 refuses; espn.ts tsdbRead): "Arsenal_vs_Coventry_City". */
 export const tsdbV1SearchUrl = (key: string, names: [string, string]): string => `https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/searchevents.php?e=${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_"))}`;
 export const tsdbV2Url = (names: [string, string]): string => `https://www.thesportsdb.com/api/v2/json/search/event/${encodeURIComponent(`${names[0]} vs ${names[1]}`.replace(/ /g, "_").toLowerCase())}`;
@@ -57,23 +80,25 @@ export function finalFromTsdb(g: Game, body: unknown, url: string): Final | null
   const lists = body && typeof body === "object" ? Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][] : [];
   const evs = lists.flat().filter((e) => typeof e === "object" && e && "dateEvent" in e);
   const prev = new Date(Date.parse(`${g.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-  const e = evs.find((x) => x.dateEvent === g.date) ?? evs.find((x) => x.dateEvent === prev);
+  const sameDay = evs.filter((x) => x.dateEvent === g.date), dayBefore = evs.filter((x) => x.dateEvent === prev);
+  const e = nearestStart(sameDay.length ? sameDay : dayBefore, g.startsAt, tsdbStart);
   if (!e) return null;
   const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? ""));
   const h = n(e.intHomeScore), a = n(e.intAwayScore);
-  return { home: h ?? 0, away: a ?? 0, done: done && h !== null && a !== null, detail: `TheSportsDB ${e.strEvent ?? ""} ${h ?? "?"}–${a ?? "?"} (${e.strStatus ?? "?"})`, url };
+  return { home: h ?? 0, away: a ?? 0, done: done && h !== null && a !== null, detail: `TheSportsDB ${e.strEvent ?? ""} ${h ?? "?"}–${a ?? "?"} (${e.strStatus ?? "?"})`, url, pens: /^(AP|PEN)\b/i.test(String(e.strStatus ?? "")), declared: null };
 }
 export function finalFromMlb(g: Game, body: unknown, url: string): Final | null {
   const games = (((body as { dates?: { games?: unknown[] }[] } | null)?.dates ?? []).flatMap((d) => d.games ?? [])) as { gameDate?: string; status?: { abstractGameState?: string }; teams?: { home?: { team?: { name?: string }; score?: number }; away?: { team?: { name?: string }; score?: number } } }[];
   const hits = games.filter((x) => sideMatches(String(x.teams?.home?.team?.name ?? ""), g.home) && sideMatches(String(x.teams?.away?.team?.name ?? ""), g.away));
-  const hit = hits.find((x) => Math.abs(Date.parse(String(x.gameDate)) - Date.parse(g.startsAt)) < 6 * 3_600_000) ?? hits[0];
+  const near = hits.filter((x) => Math.abs(Date.parse(String(x.gameDate)) - Date.parse(g.startsAt)) < 6 * 3_600_000);
+  const hit = nearestStart(near.length ? near : hits, g.startsAt, (x) => x.gameDate);
   if (!hit) return null;
   const h = n(hit.teams?.home?.score), a = n(hit.teams?.away?.score);
   return { home: h ?? 0, away: a ?? 0, done: hit.status?.abstractGameState === "Final" && h !== null && a !== null, detail: `MLB StatsAPI ${a ?? "?"}–${h ?? "?"} (${hit.status?.abstractGameState ?? "?"})`, url };
 }
 export function finalFromNhl(g: Game, body: unknown, url: string): Final | null {
-  const games = ((body as { games?: unknown[] } | null)?.games ?? []) as { gameState?: string; homeTeam?: { name?: { default?: string }; score?: number }; awayTeam?: { name?: { default?: string }; score?: number } }[];
-  const hit = games.find((x) => sideMatches(String(x.homeTeam?.name?.default ?? ""), g.home) && sideMatches(String(x.awayTeam?.name?.default ?? ""), g.away));
+  const games = ((body as { games?: unknown[] } | null)?.games ?? []) as { startTimeUTC?: string; gameState?: string; homeTeam?: { name?: { default?: string }; score?: number }; awayTeam?: { name?: { default?: string }; score?: number } }[];
+  const hit = nearestStart(games.filter((x) => sideMatches(String(x.homeTeam?.name?.default ?? ""), g.home) && sideMatches(String(x.awayTeam?.name?.default ?? ""), g.away)), g.startsAt, (x) => x.startTimeUTC);
   if (!hit) return null;
   const h = n(hit.homeTeam?.score), a = n(hit.awayTeam?.score);
   return { home: h ?? 0, away: a ?? 0, done: /^(OFF|FINAL)$/.test(String(hit.gameState)) && h !== null && a !== null, detail: `NHL ${a ?? "?"}–${h ?? "?"} (${hit.gameState ?? "?"})`, url };
@@ -83,7 +108,7 @@ export function finalFromNba(g: Game, body: unknown, url: string): Final | null 
   const dates = ((body as { leagueSchedule?: { gameDates?: { games?: unknown[] }[] } } | null)?.leagueSchedule?.gameDates ?? []);
   const games = dates.flatMap((d) => d.games ?? []) as { gameDateTimeUTC?: string; gameStatus?: number; homeTeam?: { teamName?: string; teamCity?: string; teamTricode?: string; score?: number }; awayTeam?: { teamName?: string; teamCity?: string; teamTricode?: string; score?: number } }[];
   const nm = (t: { teamName?: string; teamCity?: string } | undefined) => `${t?.teamCity ?? ""} ${t?.teamName ?? ""}`.trim();
-  const hit = games.find((x) => sideMatches(nm(x.homeTeam), g.home) && sideMatches(nm(x.awayTeam), g.away) && Math.abs(Date.parse(String(x.gameDateTimeUTC)) - Date.parse(g.startsAt)) < 12 * 3_600_000);
+  const hit = nearestStart(games.filter((x) => sideMatches(nm(x.homeTeam), g.home) && sideMatches(nm(x.awayTeam), g.away) && Math.abs(Date.parse(String(x.gameDateTimeUTC)) - Date.parse(g.startsAt)) < 12 * 3_600_000), g.startsAt, (x) => x.gameDateTimeUTC);
   if (!hit) return null;
   const h = n(hit.homeTeam?.score), a = n(hit.awayTeam?.score);
   return { home: h ?? 0, away: a ?? 0, done: hit.gameStatus === 3 && h !== null && a !== null, detail: `NBA ${a ?? "?"}–${h ?? "?"} (status ${hit.gameStatus ?? "?"})`, url };
@@ -94,13 +119,14 @@ export function apiSportsUrl(league: LeagueId, date: string): string {
   return sport === "soccer" ? `https://v3.football.api-sports.io/fixtures?date=${date}` : sport === "basketball" ? `https://v1.basketball.api-sports.io/games?date=${date}` : `https://v1.american-football.api-sports.io/games?date=${date}`;
 }
 export function finalFromApiSports(g: Game, body: unknown, url: string): Final | null {
-  const rows = ((body as { response?: unknown[] } | null)?.response ?? []) as { teams?: { home?: { name?: string }; away?: { name?: string } }; goals?: { home?: number; away?: number }; scores?: { home?: { total?: number } | number; away?: { total?: number } | number }; fixture?: { status?: { short?: string } }; status?: { short?: string } }[];
-  const hit = rows.find((r) => sideMatches(String(r.teams?.home?.name ?? ""), g.home) && sideMatches(String(r.teams?.away?.name ?? ""), g.away));
+  const rows = ((body as { response?: unknown[] } | null)?.response ?? []) as { teams?: { home?: { name?: string; winner?: boolean | null }; away?: { name?: string; winner?: boolean | null } }; goals?: { home?: number; away?: number }; scores?: { home?: { total?: number } | number; away?: { total?: number } | number }; fixture?: { date?: string; status?: { short?: string } }; date?: string; status?: { short?: string } }[];
+  const hit = nearestStart(rows.filter((r) => sideMatches(String(r.teams?.home?.name ?? ""), g.home) && sideMatches(String(r.teams?.away?.name ?? ""), g.away)), g.startsAt, (r) => r.fixture?.date ?? r.date);
   if (!hit) return null;
   const tot = (v: { total?: number } | number | undefined) => (typeof v === "number" ? v : v?.total);
   const h = n(hit.goals?.home ?? tot(hit.scores?.home)), a = n(hit.goals?.away ?? tot(hit.scores?.away));
   const st = String(hit.fixture?.status?.short ?? hit.status?.short ?? "");
-  return { home: h ?? 0, away: a ?? 0, done: /^(FT|AET|PEN|AOT)$/.test(st) && h !== null && a !== null, detail: `API-Sports ${a ?? "?"}–${h ?? "?"} (${st || "?"})`, url };
+  const declared = hit.teams?.home?.winner === true ? "home" : hit.teams?.away?.winner === true ? "away" : null;
+  return { home: h ?? 0, away: a ?? 0, done: /^(FT|AET|PEN|AOT)$/.test(st) && h !== null && a !== null, detail: `API-Sports ${a ?? "?"}–${h ?? "?"} (${st || "?"})`, url, pens: st === "PEN", declared };
 }
 
 // ---- one game, settled ----------------------------------------------------------------------------------------------------------
@@ -149,7 +175,7 @@ export function operatorsFor(league: LeagueId, d: GameDeps, hasMarket: boolean):
  * every read must agree (scores where both carry scores, else the winner); one operator alone is held.
  */
 export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Promise<GameVerdict> {
-  type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string };
+  type Read = { op: string; label: string; winner: "home" | "away" | "tie"; final: { home: number; away: number } | null; detail: string; url: string; pens?: boolean; declared?: "home" | "away" | null };
   const reads: Read[] = []; const pending: string[] = []; const errors: string[] = [];
   // the on-chain payout
   const market = d.market ? await d.market(g).catch(() => null) : null;
@@ -175,7 +201,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
         if (f) break;
       }
       if (!any && err) throw err;
-      if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url });
+      if (f && f.done) reads.push({ op: "TheSportsDB", label: "a licensed final score", winner: winnerOf(f), final: { home: f.home, away: f.away }, detail: f.detail, url: f.url, pens: f.pens, declared: f.declared });
       else pending.push(f ? `TheSportsDB has the game but not final: ${f.detail}` : "TheSportsDB has no final for the game yet");
     } catch (e) { errors.push(`TheSportsDB: ${(e as Error).message.slice(0, 80)}`); }
   }
@@ -186,7 +212,7 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
     if (!id) continue;
     try {
       const c = await crossFinal(client, g, d, id);
-      if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url });
+      if (c.final && c.final.done) reads.push({ op: id, label: CROSS_LABEL[id], winner: winnerOf(c.final), final: { home: c.final.home, away: c.final.away }, detail: c.final.detail, url: c.final.url, pens: c.final.pens, declared: c.final.declared });
       else pending.push(`${CROSS_LABEL[id]} has no final for the game yet`);
     } catch (e) { errors.push(`${CROSS_LABEL[id]}: ${(e as Error).message.slice(0, 80)}`); }
   }
@@ -201,9 +227,22 @@ export async function settleGame(client: EspnClient, g: Game, d: GameDeps): Prom
     const agree = primary.final && r.final ? primary.final.home === r.final.home && primary.final.away === r.final.away : primary.winner === r.winner;
     if (!agree) return { kind: "held", why: `${primary.detail} ≠ ${r.detail} — held` };
   }
+  // item 78: a level score decided on penalties follows the declared winner (any read, or the schedule's own winner flag), never a draw
+  let winner = primary.winner;
+  const finalScore = primary.final ?? others.find((r) => r.final)?.final ?? null;
+  if (winner === "tie" && finalScore && finalScore.home === finalScore.away) {
+    const flag = g.home.winner === true ? "home" : g.away.winner === true ? "away" : null;
+    const named = new Set([...reads.map((r) => r.declared ?? null), flag].filter((x): x is "home" | "away" => !!x));
+    if (named.size > 1) return { kind: "held", why: "the sources name different winners of the penalty shoot-out — held" };
+    if (named.size === 1) winner = [...named][0];
+    else if (reads.some((r) => r.pens)) return { kind: "held", why: "the game was decided on penalties, but no source names the winner — held" };
+  }
   const confirmed = others.map((r) => r.label);
-  return { kind: "settled", winner: primary.winner, final: primary.final ?? others.find((r) => r.final)?.final ?? null, settledOn: primary.op === "on-chain payout" ? "on-chain payout" : "TheSportsDB", confirmedBy: confirmed.join(" and "), ops: reads.map((r) => r.op), detail: reads.map((r) => r.detail).join("; "), url: primary.url };
+  return { kind: "settled", winner, final: primary.final ?? others.find((r) => r.final)?.final ?? null, settledOn: primary.op === "on-chain payout" ? "on-chain payout" : "TheSportsDB", confirmedBy: confirmed.join(" and "), ops: reads.map((r) => r.op), detail: reads.map((r) => r.detail).join("; "), url: primary.url };
 }
+
+/** A schedule status that means the game was not played on its listed date (MLB marks these "post" without a result). */
+export const POSTPONED_RE = /postpon|cancel|suspend/i;
 
 const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, teamId: string | null): Outcome | "tie" | null => {
   const isUs = (x: GameSide) => (teamId && x.id ? x.id === teamId : x.abbr === abbr);
@@ -220,11 +259,17 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
   const tid = s.kind === "team" ? s.teamId : null;
   const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
   let awaiting = 0; const refusals: string[] = [];
+  // semantics-verify items 79 and 80: a day's reading is one id (its UTC date) and the registry refuses a changed value for an id it
+  // holds, so a day is read only once every game of it has a result. A game still awaiting holds its whole day (a doubleheader's first
+  // game is never written alone and then contradicted by the second). A postponed, cancelled or suspended game that is not final counts
+  // for neither side and does not hold its day; a made-up game is read on the date it is played.
+  const waitingDays = new Set<string>();
   for (const g of games) {
     if (!g.completed && g.state !== "post") continue;
-    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; continue; }
+    if (!g.completed && POSTPONED_RE.test(g.detail)) continue;
+    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; waitingDays.add(g.date); continue; }
     const v = await settleGame(client, g, d);
-    if (v.kind === "awaiting") { awaiting++; continue; }
+    if (v.kind === "awaiting") { awaiting++; waitingDays.add(g.date); continue; }
     if (v.kind === "held") { const r = /^no primary|^cross-read missing/.test(v.why) ? v.why : `${g.eventId} ${g.name}: ${v.why}`; if (!refusals.includes(r)) refusals.push(r); continue; }
     const out = outcomeFor(v.winner, g, s.abbr, tid);
     if (out === null) continue;
@@ -235,6 +280,7 @@ export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso:
     cur.method = v.ops.map((o) => (o === "on-chain payout" ? "onchain-payout" : o === "TheSportsDB" ? "thesportsdb" : o)).join("+");
     byDay.set(g.date, cur);
   }
+  for (const day of waitingDays) byDay.delete(day);
   const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method } as SettledEvent));
   const window = windowStatus(s, s.kind === "team" && s.window.kind === "post" ? await client.season(s.league, s.teamId ?? s.abbr, s.window.year).catch(() => all) : all, now);
   return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window };

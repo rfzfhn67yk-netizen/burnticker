@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CARD_LABELS, CARD_MEANINGS, RANK_MEANING, ageText, cardViewFromIndex, curveLine, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
+import { CARD_LABELS, CARD_MEANINGS, RANK_MEANING, ageText, cardViewFromIndex, curveLine, emptyLabel, initialsOf, type CardCell, type CardView } from "@/lib/burnticker/cardView";
 import { ProgressStrip } from "./ProgressStrip";
 import { FollowButton } from "./FollowButton";
 import { Why } from "./Why";
@@ -68,7 +68,9 @@ export function ReceiptThumb({ ticker, size = 88 }: { ticker: string; size?: num
 export function CoinThumb({ src, ticker, size = 88, generated = false }: { src: string | null; ticker: string; size?: number; generated?: boolean }) {
   const [broken, setBroken] = useState(false);
   // no image of its own: the coin's generated image (coinArt.ts, GET /burnticker/img/<TICKER>.png) when it is registered; else the receipt
-  const url = src && /^https:\/\//.test(src) ? src : generated && /^[A-Z0-9]{2,10}$/.test(ticker) ? `/burnticker/img/${ticker}.svg` : src && /^\/burnticker\/img\//.test(src) ? src : null;
+  // ChatGPT audit 6 item 23: a same-origin image (/burnticker/img/…, /burnticker/brand/…, $DEFICIT's art) is shown as is, so the app and
+  // the static home print the one image a card names, never the generated initials instead
+  const url = src && /^https:\/\//.test(src) ? src : src && /^\/burnticker\/(img|brand)\/[\w.-]+$/.test(src) ? src : generated && /^[A-Z0-9]{2,10}$/.test(ticker) ? `/burnticker/img/${ticker}.svg` : null;
   if (!url || broken) return <ReceiptThumb ticker={ticker} size={size} />;
   src = url;
   // eslint-disable-next-line @next/next/no-img-element -- creator images are arbitrary https URLs; no optimiser, no referrer
@@ -100,10 +102,13 @@ export function CurveBar({ c, compact = false }: { c: Pick<CoinCardData, "phase"
 /** The rule's one-liner as a sentence ("burns when the Eagles lose" → "Burns when the Eagles lose."). */
 const asSentence = (s: string) => { const t = s.trim().replace(/^./, (c) => c.toUpperCase()); return /[.!?]$/.test(t) ? t : `${t}.`; };
 
-/** One field: its text, or "—" with its reason behind a tap or focus (website-15 item 7: Why.tsx; never inline, never on hover only). */
-function Cell({ c }: { c: CardCell }) {
+/**
+ * One field: its text, or, when it was not read, what that means in words ("Not created yet", "No data yet"; cardView.ts emptyLabel,
+ * ChatGPT audit 6 item 23) with its reason behind a tap or focus (website-15 item 7: Why.tsx; never inline, never on hover only).
+ */
+function Cell({ c, v }: { c: CardCell; v: Pick<CardView, "tags"> }) {
   if (c.text !== null) return <span title={c.why ?? undefined}>{c.text}</span>;
-  return <Why why={c.why ?? "This site has no reading for this field."} />;
+  return <Why label={emptyLabel(v, c.why)} why={c.why ?? "This site has no reading for this field."} />;
 }
 
 /**
@@ -133,22 +138,22 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
         </div>
       </div>
       <dl className="bt-card-rows">
-        <div data-row="progress"><dt title={CARD_MEANINGS.progress}>{CARD_LABELS.progress}</dt><dd>{v.progress ? <ProgressStrip p={v.progress} compact /> : <Cell c={{ text: null, why: v.progressWhy }} />}</dd></div>
+        <div data-row="progress"><dt title={CARD_MEANINGS.progress}>{CARD_LABELS.progress}</dt><dd>{v.progress ? <ProgressStrip p={v.progress} compact /> : <Cell v={v} c={{ text: null, why: v.progressWhy }} />}</dd></div>
         <div data-row="rule"><dt>{CARD_LABELS.rule}</dt><dd>{v.rule}{v.stated && <span className="mt-1 block text-xs text-neutral-400" data-stated>{v.stated}</span>}{v.creatorText && <span className="mt-1 block text-xs text-neutral-300" data-creator-text>{v.creatorText}</span>}{v.links && v.links.length > 0 && <span className="mt-1 flex flex-wrap gap-2 text-xs" data-creator-links>{v.links.map((l) => <a key={l.url} className="underline" href={l.url} rel="nofollow noopener ugc" target="_blank">{l.label}</a>)}</span>}</dd></div>
-        <div data-row="nextSettle"><dt>{CARD_LABELS.nextSettle}</dt><dd><Cell c={v.nextSettle} /></dd></div>
+        <div data-row="nextSettle"><dt>{CARD_LABELS.nextSettle}</dt><dd><Cell v={v} c={v.nextSettle} /></dd></div>
         <div data-row="curve"><dt title={CARD_MEANINGS.curve}>{CARD_LABELS.curve}</dt><dd>
           {/* website-15 item 7: a curve not read is "— raised" with the dash as the reason's button; "not applicable" carries its reason the same way */}
-          <span>{v.curve.na ? <Why label="Not applicable" why={v.curve.why} /> : v.curve.raised === null && v.curve.why ? <><Why why={v.curve.why} name="Not read" />{curveLine(v.curve).replace(/^—/, "")}</> : v.curve.of === null && v.curve.why ? <>{curveLine(v.curve)} <Why why={v.curve.why} label="" name="Why the raise is not shown" /></> : curveLine(v.curve)}</span>
+          <span>{v.curve.na ? <Why label="Not applicable" why={v.curve.why} /> : v.curve.raised === null && v.curve.why ? <Why label={emptyLabel(v, v.curve.why)} why={v.curve.why} /> : v.curve.of === null && v.curve.why ? <>{curveLine(v.curve)} <Why why={v.curve.why} label="" name="Why the raise is not shown" /></> : curveLine(v.curve)}</span>
           <span className="bt-curve mt-1 block" role="progressbar" aria-label="Curve progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined} aria-valuetext={pct === null ? "Not read" : `${pct.toFixed(0)}%`}><span className={`bt-curve-fill block${v.curve.done ? " is-done" : ""}`} style={{ width: `${pct ?? 0}%` }} /></span>
         </dd></div>
-        <div data-row="mcap"><dt title={CARD_MEANINGS.mcap}>{CARD_LABELS.mcap}</dt><dd><Cell c={v.mcap} /></dd></div>
-        <div data-row="holders"><dt title={CARD_MEANINGS.holders}>{CARD_LABELS.holders}</dt><dd><Cell c={v.holders} /></dd></div>
-        <div data-row="age"><dt>{CARD_LABELS.age}</dt><dd><Cell c={{ text: age, why: age ? null : v.createdWhy }} /></dd></div>
-        <div data-row="burned"><dt title={CARD_MEANINGS.burned}>{CARD_LABELS.burned}</dt><dd><Cell c={v.burned} />{v.rank && <span className="mt-0.5 block text-xs text-neutral-400" data-rank title={RANK_MEANING}>{v.rank}</span>}</dd></div>
+        <div data-row="mcap"><dt title={CARD_MEANINGS.mcap}>{CARD_LABELS.mcap}</dt><dd><Cell v={v} c={v.mcap} /></dd></div>
+        <div data-row="holders"><dt title={CARD_MEANINGS.holders}>{CARD_LABELS.holders}</dt><dd><Cell v={v} c={v.holders} /></dd></div>
+        <div data-row="age"><dt>{CARD_LABELS.age}</dt><dd><Cell v={v} c={{ text: age, why: age ? null : v.createdWhy }} /></dd></div>
+        <div data-row="burned"><dt title={CARD_MEANINGS.burned}>{CARD_LABELS.burned}</dt><dd><Cell v={v} c={v.burned} />{v.rank && <span className="mt-0.5 block text-xs text-neutral-400" data-rank title={RANK_MEANING}>{v.rank}</span>}</dd></div>
       </dl>
       <div className="bt-card-foot" data-row="receipt">
         {v.receipt ? <a className="bt-ghost-btn" href={v.receipt.href} title={CARD_MEANINGS.receipt}>Check receipt</a> : <><span className="bt-ghost-btn is-disabled" aria-disabled="true" title={v.receiptWhy ?? undefined}>Check receipt</span><span className="text-xs text-neutral-500">{v.receiptWhy}</span></>}
-        {v.group === "public" || v.id === "deficit" ? <span className="ml-auto"><FollowButton ticker={v.ticker} /></span> : null}
+        {(v.group === "public" || v.id === "deficit") && v.watchKey ? <span className="ml-auto"><FollowButton watchKey={v.watchKey} ticker={v.ticker} /></span> : null}
       </div>
       {v.mint && <p className="mt-2 text-[11px] text-neutral-500">{v.mint.label}: <code className="break-all">{v.mint.address}</code></p>}
     </article>

@@ -283,6 +283,18 @@ export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[]
     return mk(league, String(e.idEvent), startsAt, /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer" ? 3 : 2, year, done ? "post" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
   });
 }
+/**
+ * ONE LISTING PER GAME (semantics-verify item 79, 2026-10-12). MLB's schedule lists a postponed game twice under one game id: on its
+ * original date as "Postponed" and on its make-up date. Keeping the first listing in the body kept the postponed one and dropped the game
+ * that was actually played. The listing kept is the final one, else one that is not postponed, else the first.
+ */
+export function dedupeListings(games: readonly Game[]): Game[] {
+  const rank = (g: Game) => (g.completed ? 2 : /postpon|cancel|suspend/i.test(g.detail) ? 0 : 1);
+  const byId = new Map<string, Game>();
+  for (const g of games) { const have = byId.get(g.eventId); if (!have || rank(g) > rank(have)) byId.set(g.eventId, g); }
+  return [...byId.values()];
+}
+
 /** A team's outcome in a completed game, or null (not completed, not its game, or no scores). Ties are neither win nor loss. */
 export function outcomeOf(g: Game, abbr: string, teamId: string | null = null): Outcome | "tie" | null {
   const is = (x: GameSide) => (teamId && x.id ? x.id === teamId : x.abbr === abbr);
@@ -370,8 +382,7 @@ export class EspnClient {
     else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y)));
     else if (league === "nba") games = nbaGames(await this.get(NBA_LEAGUE_SCHEDULE)).filter((g) => g.seasonYear === y);
     else games = await this.tsdb(league, y);
-    const seen = new Set<string>();
-    return games.filter((g) => mine(g) && (seen.has(g.eventId) ? false : (seen.add(g.eventId), true))).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    return dedupeListings(games.filter(mine)).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
   /** A league's games in the next `days` days (the matchup picker and the team picker's next game). */
   async upcoming(league: LeagueId, days = 7): Promise<Game[]> {
@@ -403,8 +414,7 @@ export async function gamesFor(client: EspnClient, s: EspnSeries, sinceIso: stri
     const y = cur[0]?.seasonYear ?? null;
     if (y) all = [...(await client.season(s.league, key, y - 1).catch(() => [] as Game[])), ...cur];
   }
-  const seen = new Set<string>();
-  all = all.filter((g) => (seen.has(g.eventId) ? false : (seen.add(g.eventId), true))).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  all = dedupeListings(all).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   if (w.kind === "next") return all.filter((g) => g.date >= from!).slice(0, w.n);
   return all;
 }
@@ -460,9 +470,15 @@ export function championOf(s: Extract<EspnSeries, { kind: "team" }>, last: Game 
  * or — for a postseason — never qualified). A perpetual window never ends. `games` = gamesFor(…) for team windows; for a postseason
  * window pass the whole season (both types) so a team that missed the playoffs reads as ended.
  */
+export const CANCELLED_RE = /cancel|^CNCL$/i;
+export const GAME_CANCELLED_REASON = "void: the game was cancelled and not rescheduled, so the coin ends without a burn";
 export function windowStatus(s: EspnSeries, games: readonly Game[], nowMs: number): WindowStatus {
   const sorted = [...games].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const last = sorted[sorted.length - 1] ?? null;
+  // owner decision 2026-10-12 (website-20 item 79): a one-game coin whose game the schedule lists as CANCELLED (not postponed, and with no
+  // make-up listing under its id, which dedupeListings would have kept instead) ends VOID: its window ends with no result, nothing burns
+  // for the game, and its own pool winds down. A postponed game keeps the coin open until it is played.
+  if (s.kind === "game") { const c = sorted.find((x) => x.eventId === s.eventId && !x.completed && CANCELLED_RE.test(x.detail)); if (c) return { perpetual: false, ended: true, endsAt: c.startsAt, lastGame: c, reason: GAME_CANCELLED_REASON }; }
   if (s.kind === "game") { const g = sorted.find((x) => x.eventId === s.eventId) ?? null; return { perpetual: false, ended: !!g?.completed, endsAt: g?.startsAt ?? null, lastGame: g, reason: g ? (g.completed ? "the game is final" : "ends after the game") : "ESPN does not list the game" }; }
   const w = s.window;
   if (w.kind === "perpetual") return { perpetual: true, ended: false, endsAt: null, lastGame: last, reason: "no end date — this coin does not retire" };

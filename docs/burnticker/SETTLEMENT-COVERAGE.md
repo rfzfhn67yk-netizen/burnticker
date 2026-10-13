@@ -4,27 +4,51 @@
 
 **The rule.** A coin settles on a primary source, checked by an independent second source for the same fact. The second source must be run by another operator on another domain. A coin can also settle on an adjudicated Polymarket market, read from its on-chain payout on Polygon. Prediction markets help people find events, and they can serve as an extra check where their terms allow it. Kalshi's terms allow neither use, so Kalshi is never an input.
 
-Mode: offline (frozen fixtures, data as of 2026-10-12). Taxonomy: `config/burnticker/categories.json` (11 categories). The same matrix is served as JSON at `GET /api/burnticker/v1/coverage` and drawn on the trust page.
+Mode: offline (frozen fixtures, data as of 2026-10-13). Taxonomy: `config/burnticker/categories.json` (11 categories). The same matrix is served as JSON at `GET /api/burnticker/v1/coverage` and drawn on the trust page.
 
 A **primary** is a first-party source adapter: kind attested-http or on-chain, tier 4 or better, launchable, not an aggregator, not declared cross-read-only, never Kalshi. An **independent cross-read** reads the same fact (`fact` in `config/burnticker/sources.json`) from another operator on another registrable domain. **Hit rate** = readings the source's schedule expected in the 90-day window that one read produced; **latency** = first sighting by the keeper minus the end of the period; **disagreement** = shared periods where the primary and its cross-read differ beyond the fact's tolerance.
 
 ## Summary
 
-5 settleable · 6 adjudicated-only · 0 uncovered. Without any primary source: world.
+6 settleable · 5 adjudicated-only · 0 uncovered. Without any primary source: world.
 
 | Category | Verdict | Primaries | Independent cross-reads | Polymarket tags |
 |---|---|---|---|---|
+| Natural disasters | **settleable** | `usgs.quakes`, `usgs.quakenext`, `nhc.storms`, `nhc.hurricanes`, `nhc.next`, `spc.tornadoes`, `spc.tornadoday`, `nifc.acres`, `nifc.firesize`, `usgs.volcanoraise`, `usgs.volcanowarning` | none | weather, climate-science |
 | Sports | **settleable** | `polymarket.gamepayout`, `thesportsdb.v2` | `thesportsdb.v2` (of `polymarket.gamepayout`), `nhl.score` (of `polymarket.gamepayout`), `mlb.statsapi` (of `polymarket.gamepayout`), `nba.cdn` (of `polymarket.gamepayout`), `apisports.games` (of `polymarket.gamepayout`), `polymarket.gamepayout` (of `thesportsdb.v2`), `nhl.score` (of `thesportsdb.v2`), `mlb.statsapi` (of `thesportsdb.v2`), `nba.cdn` (of `thesportsdb.v2`), `apisports.games` (of `thesportsdb.v2`) | sports |
 | Elections & Politics | adjudicated-only (Polymarket) | `fedreg.finalRules`, `fedreg.eo`, `fec.reports` | none | elections, politics |
 | Economics | **settleable** | `treasury.debt`, `fred.UNRATE`, `fred.CPIAUCSL`, `fred.GFDEBTN`, `bls.eggs` | `fred.GFDEBTN` (of `treasury.debt`), `bls.LNS14000000` (of `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `treasury.debt` (of `fred.GFDEBTN`), `fred.APU0000708111` (of `bls.eggs`) | economy |
 | Financial markets | **settleable** | `pyth.equity`, `pyth.fx`, `pyth.metal`, `pyth.commodity`, `pyth.rates` | `redstone.equity` (of `pyth.equity`), `redstone.fx` (of `pyth.fx`), `redstone.metal` (of `pyth.metal`), `redstone.commodity` (of `pyth.commodity`) | finance |
-| Weather & Climate | **settleable** | `nws.cli` | `iem.asos` (of `nws.cli`) | weather, climate-science |
-| Science & Space | adjudicated-only (Polymarket) | `ll2.launches`, `ll2.provider`, `ll2.launch`, `noaa.flares`, `jpl.neo` | none | space, tech |
+| Science, Space & Weather | **settleable** | `ll2.launches`, `ll2.provider`, `ll2.launch`, `noaa.flares`, `jpl.neo`, `nws.cli` | `iem.asos` (of `nws.cli`) | space, tech |
 | Entertainment & Culture | adjudicated-only (Polymarket) | `wiki.views`, `steam.players` | none | pop-culture |
 | Crypto & On-chain | **settleable** | `bitcoin.blockHeight`, `solana.blockHeight.rpc`, `pyth.crypto`, `raydium.twap`, `redstone.crypto` | `bitcoin.blockHeight.blockstream` (of `bitcoin.blockHeight`), `raydium.twap` (of `pyth.crypto`), `jupiter.quote` (of `pyth.crypto`), `dexscreener.pairs` (of `pyth.crypto`), `redstone.crypto` (of `pyth.crypto`), `pyth.crypto` (of `raydium.twap`), `jupiter.quote` (of `raydium.twap`), `dexscreener.pairs` (of `raydium.twap`), `redstone.crypto` (of `raydium.twap`), `pyth.crypto` (of `redstone.crypto`), `raydium.twap` (of `redstone.crypto`), `jupiter.quote` (of `redstone.crypto`), `dexscreener.pairs` (of `redstone.crypto`) | crypto |
 | Companies | adjudicated-only (Polymarket) | `edgar.8k`, `github.stars`, `github.releases`, `github.milestone` | none | business |
 | Health | adjudicated-only (Polymarket) | `openfda.approvals` | none | health |
 | World | adjudicated-only (Polymarket) | none | none | world, geopolitics |
+
+## Natural disasters — settleable
+
+By the owner's decision of 2026-10-12, these settle on their publisher's own published data, a single official source, with no second source: usgs.quakes, usgs.quakenext, nhc.storms, nhc.hurricanes, nhc.next, spc.tornadoes, spc.tornadoday, nifc.acres, nifc.firesize, usgs.volcanoraise, usgs.volcanowarning. A day the feed is unavailable is held, not counted.
+
+| Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
+|---|---|---|---|---|---|---|---|---|
+| `usgs.quakes` | primary | U.S. Geological Survey | usgs.gov | 4 | — | 100% (41/41) | n/a | n/a |
+| `usgs.quakenext` | primary | U.S. Geological Survey | usgs.gov | 4 | — | n/a (no schedule) | n/a | n/a |
+| `nhc.storms` | primary | NOAA National Hurricane Center | noaa.gov | 4 | — | 100% (90/90) | n/a | n/a |
+| `nhc.hurricanes` | primary | NOAA National Hurricane Center | noaa.gov | 4 | — | 100% (79/79) | n/a | n/a |
+| `nhc.next` | primary | NOAA National Hurricane Center | noaa.gov | 4 | — | n/a (no schedule) | n/a | n/a |
+| `spc.tornadoes` | primary | NOAA NWS Storm Prediction Center | noaa.gov | 4 | — | 100% (7/7) | n/a | n/a |
+| `spc.tornadoday` | primary | NOAA NWS Storm Prediction Center | noaa.gov | 4 | — | n/a (no schedule) | n/a | n/a |
+| `nifc.acres` | primary | National Interagency Fire Center (WFIGS) | arcgis.com | 4 | — | n/a (no schedule) | n/a | n/a |
+| `nifc.firesize` | primary | National Interagency Fire Center (WFIGS) | arcgis.com | 4 | — | n/a (no schedule) | n/a | n/a |
+| `usgs.volcanoraise` | primary | U.S. Geological Survey, Volcano Hazards Program | usgs.gov | 4 | — | 100% (29/29) | n/a | n/a |
+| `usgs.volcanowarning` | primary | U.S. Geological Survey, Volcano Hazards Program | usgs.gov | 4 | — | n/a (no schedule) | n/a | n/a |
+
+| Selector kind | Verdict | Why |
+|---|---|---|
+| Advanced, with our own feed (`scalar`) | **settleable** | By the owner's decision of 2026-10-12, these settle on their publisher's own published data, a single official source, with no second source: usgs.quakes, usgs.quakenext, nhc.storms, nhc.hurricanes, nhc.next, spc.tornadoes, spc.tornadoday, nifc.acres, nifc.firesize, usgs.volcanoraise, usgs.volcanowarning. A day the feed is unavailable is held, not counted. |
+| Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags weather, climate-science. No primary source here gives a yes-or-no result. |
+| Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags weather, climate-science. No primary source here gives a yes-or-no result. |
 
 ## Sports — settleable
 
@@ -121,26 +145,9 @@ Mapped here but not a primary: `redstone.equity` (declared cross-read only); `re
 
 Kalshi categories mapped here (Financials, Commodities) are discovery only: never a settlement input.
 
-## Weather & Climate — settleable
+## Science, Space & Weather — settleable
 
 A primary source is checked by an independent second source. The pairs are nws.cli with iem.asos.
-
-| Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
-|---|---|---|---|---|---|---|---|---|
-| `nws.cli` | primary | NOAA / National Weather Service | weather.gov | 4 | `weather.station.daily-climate` | n/a | n/a | n/a |
-| `iem.asos` | cross-read of `nws.cli` | Iowa Environmental Mesonet (Iowa State University) | iastate.edu | 4 | `weather.station.daily-climate` | n/a | n/a | n/a |
-
-| Selector kind | Verdict | Why |
-|---|---|---|
-| Advanced, with our own feed (`scalar`) | **settleable** | A primary source is checked by an independent second source. The pairs are nws.cli with iem.asos. |
-| Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags weather, climate-science. No primary source here gives a yes-or-no result. |
-| Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags weather, climate-science. No primary source here gives a yes-or-no result. |
-
-Kalshi categories mapped here (Climate and Weather) are discovery only: never a settlement input.
-
-## Science & Space — adjudicated-only
-
-The primary sources ll2.launches, ll2.provider, ll2.launch, noaa.flares, jpl.neo have no independent second source. Polymarket covers yes-or-no markets under space, tech.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
@@ -149,14 +156,16 @@ The primary sources ll2.launches, ll2.provider, ll2.launch, noaa.flares, jpl.neo
 | `ll2.launch` | primary | The Space Devs | thespacedevs.com | 4 | — | n/a (no schedule) | n/a | n/a |
 | `noaa.flares` | primary | NOAA Space Weather Prediction Center | noaa.gov | 4 | — | 100% (6/6) | n/a | n/a |
 | `jpl.neo` | primary | NASA Jet Propulsion Laboratory | nasa.gov | 4 | — | 100% (60/60) | n/a | n/a |
+| `nws.cli` | primary | NOAA / National Weather Service | weather.gov | 4 | `weather.station.daily-climate` | n/a | n/a | n/a |
+| `iem.asos` | cross-read of `nws.cli` | Iowa Environmental Mesonet (Iowa State University) | iastate.edu | 4 | `weather.station.daily-climate` | n/a | n/a | n/a |
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced, with our own feed (`scalar`) | **uncovered** | These primary sources have no independent second source for the same fact: ll2.launches, ll2.provider, ll2.launch, noaa.flares, jpl.neo. Polymarket has only yes-or-no markets, so it cannot settle a number either. |
+| Advanced, with our own feed (`scalar`) | **settleable** | A primary source is checked by an independent second source. The pairs are nws.cli with iem.asos. |
 | Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags space, tech. No primary source here gives a yes-or-no result. |
 | Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tags space, tech. No primary source here gives a yes-or-no result. |
 
-Kalshi categories mapped here (Science and Technology) are discovery only: never a settlement input.
+Kalshi categories mapped here (Science and Technology, Climate and Weather) are discovery only: never a settlement input.
 
 ## Entertainment & Culture — adjudicated-only
 
@@ -250,8 +259,9 @@ No primary source maps to this category.
 ## What we cannot settle today
 
 - **No first-party source at all:** World. Nothing in these categories settles on a primary reading; only Polymarket's yes/no markets can, where a tag maps.
-- **Primary source without an independent cross-read:** Elections & Politics (`fedreg.finalRules`, `fedreg.eo`, `fec.reports`); Science & Space (`ll2.launches`, `ll2.provider`, `ll2.launch`, `noaa.flares`, `jpl.neo`); Entertainment & Culture (`wiki.views`, `steam.players`); Companies (`edgar.8k`, `github.stars`, `github.releases`, `github.milestone`); Health (`openfda.approvals`). One operator's number cannot settle a coin on its own, so these feeds are refused at creation until a second operator's read of the same fact is configured.
-- **Settled numbers (scalar rules) in:** Elections & Politics, Science & Space, Entertainment & Culture, Companies, Health, World. Polymarket is binary-only, so where no primary pair exists there is no settled number at all: index closes, rates and commodity settlements (Financial markets), daily temperatures and rainfall (Weather & Climate) and every other Kalshi strike ladder have no replacement today.
+- **Settled on a single official source (owner decision 2026-10-12):** Natural disasters (`usgs.quakes`, `usgs.quakenext`, `nhc.storms`, `nhc.hurricanes`, `nhc.next`, `spc.tornadoes`, `spc.tornadoday`, `nifc.acres`, `nifc.firesize`, `usgs.volcanoraise`, `usgs.volcanowarning`). Each settles on its publisher's own published data. A day the feed is unavailable is held, not counted.
+- **Primary source without an independent cross-read:** Elections & Politics (`fedreg.finalRules`, `fedreg.eo`, `fec.reports`); Entertainment & Culture (`wiki.views`, `steam.players`); Companies (`edgar.8k`, `github.stars`, `github.releases`, `github.milestone`); Health (`openfda.approvals`). One operator's number cannot settle a coin on its own, so these feeds are refused at creation until a second operator's read of the same fact is configured.
+- **Settled numbers (scalar rules) in:** Elections & Politics, Entertainment & Culture, Companies, Health, World. Polymarket is binary-only, so where no primary pair exists there is no settled number at all: index closes, rates and commodity settlements (Financial markets), daily temperatures and rainfall (Science, Space & Weather) and every other Kalshi strike ladder have no replacement today.
 - **Elections and votes:** adjudicated-only. They settle on Polymarket's payout vector or not at all; no official results feed is configured.
 - **One-shot markets** (one question that resolves once): Polymarket only. No primary source answers an arbitrary question.
 

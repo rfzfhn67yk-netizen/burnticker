@@ -71,7 +71,7 @@ commercial use; Better Stack's free tier is the like-for-like alternative.
    younger than 5 minutes, and stops when it is not, so the check goes down. It needs the shipped `deploy-sites.sh` from this branch;
    no restart (the timer reads that file on every run).
 
-## 3. The 48-hour time lock (owner, around 2026-10-23)
+## 3. The 48-hour time lock (owner: a week or more after the soft launch)
 
 Mainnet multisig `7gYAZ6meH3W4VwEHcqq3cWgmSAL2w7voM91oaQezvDYc`, vault `8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV`, 2 of 3, time
 lock 0 today. The time lock is a multisig setting, so it changes through a config proposal that two members approve.

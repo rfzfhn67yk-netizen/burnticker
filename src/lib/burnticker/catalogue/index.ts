@@ -10,7 +10,11 @@ import type { PriceFeedSourceConfig, ResolutionSource } from "@/lib/burnticker/s
 import { copycatSource, type CopycatSourceConfig, type CopycatSourceOptions } from "@/lib/burnticker/sources/copycats";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { applyLl2Launch, applyLl2Provider } from "@/lib/burnticker/sources/launchLibrary";
-import { applyUsgsQuakes } from "@/lib/burnticker/sources/usgs";
+import { applyUsgsQuakeNext, applyUsgsQuakes } from "@/lib/burnticker/sources/usgs";
+import { applyNhc } from "@/lib/burnticker/sources/nhc";
+import { applySpc } from "@/lib/burnticker/sources/spc";
+import { applyNifcFireSize } from "@/lib/burnticker/sources/nifc";
+import { applyVolcanoWarning } from "@/lib/burnticker/sources/volcano";
 import { applyGithubMilestone, applyGithubReleases } from "@/lib/burnticker/sources/github";
 import { applyYoutubeMilestone } from "@/lib/burnticker/sources/youtube";
 
@@ -63,12 +67,26 @@ const PARAMS: Record<string, { placeholders: string[]; split?: string; re: RegEx
   "steam.players": { placeholders: ["{appid}"], re: /^\d{1,10}$/ },
   "defillama.tvl": { placeholders: ["{protocol}"], re: /^[a-z0-9-]{1,48}$/ },
   "edgar.8k": { placeholders: ["{cik}"], re: /^\d{1,10}$/ },
+  // sources-4 (2026-10-12): record TVL days (built, off until DefiLlama consents) and the refused CoinGecko milestones
+  "defillama.tvlrecord": { placeholders: ["{protocol}"], re: /^[a-z0-9-]{1,48}$/ },
+  "defillama.tvlnext": { placeholders: ["{protocol}"], re: /^[a-z0-9-]{1,48}$/ },
+  "coingecko.mcap": { placeholders: ["{coin}"], re: /^[a-z0-9-]{1,64}$/ },
+  "coingecko.rank": { placeholders: ["{coin}"], re: /^[a-z0-9-]{1,64}$/ },
   "ll2.provider": { placeholders: ["{provider}"], re: /^\d{1,5}$/, apply: applyLl2Provider },
   "ll2.launch": { placeholders: ["{launch}"], re: /^[0-9a-f-]{36}$/, apply: applyLl2Launch },
   "usgs.quakes": { placeholders: ["{magnitude}", "{bbox}"], re: /^\d(\.5)?(\/[a-z]+)?$/, apply: applyUsgsQuakes },
   "github.releases": { placeholders: ["{owner}", "{repo}"], re: /^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/, apply: applyGithubReleases },
   "github.milestone": { placeholders: ["{owner}", "{repo}", "N"], re: /^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}\.\d{3,8}$/, apply: applyGithubMilestone },
   "youtube.milestone": { placeholders: ["{channel}", "subscribers|views", "N"], re: /^UC[A-Za-z0-9_-]{22}\/(subscribers|views)\.\d{4,12}$/, apply: applyYoutubeMilestone },
+  // sources-3 (2026-10-12): natural disasters, each with a recurring and a one-shot form
+  "usgs.quakenext": { placeholders: ["{magnitude}", "{bbox}"], re: /^\d(\.5)?(\/[a-z]+)?$/, apply: applyUsgsQuakeNext },
+  "nhc.storms": { placeholders: ["basin"], re: /^(al|ep|cp)$/, apply: applyNhc },
+  "nhc.hurricanes": { placeholders: ["basin", "category"], re: /^(al|ep|cp)\.[1-5]$/, apply: applyNhc },
+  "nhc.next": { placeholders: ["basin", "category", "year"], re: /^(al|ep|cp)\.[1-5]\.20\d\d$/, apply: applyNhc },
+  "spc.tornadoes": { placeholders: ["US|state"], re: /^(US|[A-Z]{2})$/, apply: applySpc },
+  "spc.tornadoday": { placeholders: ["N", "US|state"], re: /^\d{1,3}\/(US|[A-Z]{2})$/, apply: applySpc },
+  "nifc.firesize": { placeholders: ["{acres}"], re: /^\d{5,6}$/, apply: applyNifcFireSize },
+  "usgs.volcanowarning": { placeholders: ["vnum"], re: /^\d{6}$/, apply: applyVolcanoWarning },
 };
 
 function withParam(cfg: HttpSourceConfig, param: string | null): HttpSourceConfig {
@@ -94,7 +112,9 @@ export function catalogue(root = process.cwd()): Feed[] {
 }
 /** The parameter each parameterised source's catalogue card shows (sources-2: real ids from the 2026-10-12 fixtures; NASA's channel). */
 export const DEFAULT_PARAMS: Record<string, string> = { "wiki.views": "Bitcoin", "github.stars": "anza-xyz/agave", "steam.players": "730", "defillama.tvl": "raydium", "edgar.8k": "0000320193",
-  "ll2.provider": "121", "ll2.launch": "7d1afb26-6f9c-429b-9ccf-29012fd1e519", "usgs.quakes": "6", "github.releases": "anza-xyz/agave", "github.milestone": "anza-xyz/agave.2000", "youtube.milestone": "UCLA_DiR1FfKNvjuUpBHmylQ/subscribers.15000000" };
+  "ll2.provider": "121", "ll2.launch": "7d1afb26-6f9c-429b-9ccf-29012fd1e519", "usgs.quakes": "6", "github.releases": "anza-xyz/agave", "github.milestone": "anza-xyz/agave.2000", "youtube.milestone": "UCLA_DiR1FfKNvjuUpBHmylQ/subscribers.15000000",
+  "usgs.quakenext": "6.5", "nhc.storms": "al", "nhc.hurricanes": "ep.3", "nhc.next": "ep.3.2026", "spc.tornadoes": "US", "spc.tornadoday": "10/US", "nifc.firesize": "50000", "usgs.volcanowarning": "332010",
+  "defillama.tvlrecord": "raydium-amm", "defillama.tvlnext": "raydium-amm", "coingecko.mcap": "solana", "coingecko.rank": "solana" };
 
 /** The six original feeds plus everything else launchable, in config order (the wizard's tier-2 cards). */
 export const CATALOGUE: readonly Feed[] = (() => { try { return catalogue(); } catch { return []; } })();
@@ -155,12 +175,12 @@ export function previewFromFixture(feed: Feed, rule: BurnRule, nowMs: number, ro
 /** A tier-2 rule must agree with the source's fixed unit, direction and baseline; the source's carry policy rides along. */
 export function feedRuleProblems(feed: Feed, rule: BurnRule): string[] {
   const p: string[] = [];
-  if (rule.oracle !== "catalogue" || rule.series !== feed.id) p.push(`This rule is not for the source ${feed.id}.`);
+  if (rule.oracle !== "catalogue" || rule.series !== feed.id) p.push(`This rule is not for the source "${feed.title}".`);
   if (rule.kind !== "scalar" || !rule.scalar) { p.push("A catalogue rule must settle on a number."); return p; }
-  if (rule.scalar.unit !== feed.unit!.size) p.push(`The unit must be ${feed.unit!.size} (${feed.unit!.label}) for ${feed.id}.`);
-  if (rule.scalar.direction !== feed.direction) p.push(`The direction must be "${feed.direction}" for ${feed.id}.`);
-  if (rule.scalar.baseline !== feed.baseline) p.push(`The baseline must be ${JSON.stringify(feed.baseline)} for ${feed.id}.`);
-  if (!feed.launchable.ok) p.push(`Coins cannot launch on ${feed.id} yet. The reason is: ${feed.launchable.why}`);
+  if (rule.scalar.unit !== feed.unit!.size) p.push(`The unit must be ${feed.unit!.size} (${feed.unit!.label}) for "${feed.title}".`);
+  if (rule.scalar.direction !== feed.direction) p.push(`The direction must be "${feed.direction}" for "${feed.title}".`);
+  if (rule.scalar.baseline !== feed.baseline) p.push(`The baseline must be ${JSON.stringify(feed.baseline)} for "${feed.title}".`);
+  if (!feed.launchable.ok) p.push(`Coins cannot launch on "${feed.title}" yet. The reason is: ${feed.launchable.why}`);
   return p;
 }
 

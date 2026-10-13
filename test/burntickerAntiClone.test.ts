@@ -207,7 +207,7 @@ describe("clone watch", () => {
     const rows = cloneRows(store.observations(), new Set(["OURMINT"]));
     const c1 = rows.find((r) => r.mint === "Clone1")!;
     assert.equal(c1.lp.state, "pulled"); assert.equal(c1.lp.pulledAt, "2026-10-10T11:02:00.000Z");
-    assert.deepEqual(c1.evidence.slice(0, 4), ["It is not registered with the burn program (burn_receipts).", "The ticker $DEFICIT reads as the same letters as $DEFICIT.", "7 wallets each hold exactly 0.97 % of the supply.", "The liquidity was pulled at 11:02 UTC 2026-10-10."]);
+    assert.deepEqual(c1.evidence.slice(0, 4), ["It is not registered with the burn program (burn_receipts).", "It uses the ticker $DEFICIT exactly, on a different mint from the Burnticker coin.", "7 wallets each hold exactly 0.97 % of the supply.", "The liquidity was pulled at 11:02 UTC 2026-10-10."]);
     assert.equal(c1.firstSeenAt, "2026-10-10T10:00:00.000Z");
     assert.equal(store.lastScan()!.hits, 2);
     assert.throws(() => reg.db.exec("DELETE FROM clone_observations"), /append-only/);

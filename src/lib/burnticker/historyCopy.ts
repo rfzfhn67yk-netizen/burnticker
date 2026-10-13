@@ -24,7 +24,7 @@ export const RELEASE_LINES = {
 export const CHANGELOG_COPY = {
   title: "Changelog",
   description: "Every public release of Burnticker's source code, newest first, each linked to the public repository at that commit.",
-  intro: "Every time the source code is published to the public repository, the publish script adds an entry to the changelog file. This page is built from that file each time it loads, so the two cannot disagree.",
+  intro: "Every time the source code is published to the public repository, the publish script adds an entry to the changelog file. This page reads the published changelog file.",
   sinceLine: (n: number, since: string): string => `There ${n === 1 ? "has been 1 release" : `have been ${n.toLocaleString("en-US")} releases`} since ${since}.`,
   publicLink: "Open the public repository at this commit",
   noPublic: "The public commit for this release was not recorded in the changelog.",

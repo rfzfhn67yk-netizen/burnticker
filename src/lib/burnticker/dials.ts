@@ -10,7 +10,7 @@ import { INVERSE_CHOICE, KEEPER_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnti
  * pure rewrite of the rule (`applyDial`), so a team rule reached from the search box and the same rule reached through Team coin expose
  * the same dials (test/burntickerDescribe.test.ts). After launch nothing is editable: a different rule is a different coin.
  *
- *   fraction   the share of the burn pool each burn spends: 1–10 % (the schema's fractionOfPool bounds), step 0.5 %
+ *   fraction   the share of the burn pool each burn spends: 1–25 % (the schema's fractionOfPool bounds), step 0.5 %
  *   side       win / loss (ESPN), YES / NO (markets)
  *   window     this season (playoffs included; the default) / this postseason only / the next N games / perpetual (ESPN team coins)
  *   games      N for a next-N window, 1–20
@@ -36,7 +36,7 @@ export interface DialSet {
   threshold: { value: number; label: string; step: number; min: number; max: number } | null;
   /** The unit the source fixes, shown read-only when it is not a dial. */
   fixedUnit: string | null;
-  /** The fraction dial's bounds: 1–10 % recurring, 1–100 % one-shot. */
+  /** The fraction dial's bounds: 1–25 % recurring, 1–100 % one-shot. */
   bounds: { min: number; max: number; step: number };
   /** League mode (rules.ts `set`, opt-in, off by default): a team coin of a league season, or an outcome of a market with a set. */
   league: { on: boolean; id: string; outcome: string; forwardBps: number } | null;
@@ -52,9 +52,9 @@ const fractionOf = (r: BurnRule): number => {
 const yearOf = (e: Extract<EspnSeries, { kind: "team" }>, c: DialCtx) => (e.window.kind === "season" || e.window.kind === "post" ? e.window.year : c.seasonYear ?? seasonYearAt(e.league, c.nowMs ?? Date.now()));
 
 // website-19: the one-shot presets (100 or 50 %) wherever the keeper drains a 100 % one-shot (rules.ts isOneShot: a market, a named launch,
-// a milestone, the flippening). A single game and the first snow keep the 1–10 % bounds: the keeper does not drain them, so a 100 % share
+// a milestone, the flippening). A single game and the first snow keep the 1–25 % bounds: the keeper does not drain them, so a 100 % share
 // would leave most of the pool to the end sink after one capped burn run.
-const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? false : (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? "")) || (r.oracle === "derby" && (r as { derby?: { flip?: boolean } }).derby?.flip === true) || (r.kind === "binary" && !!r.market); };
+const isOneShotRule = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e ? false : (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? "")) || (r.oracle === "derby" && (r as { derby?: { flip?: boolean } }).derby?.flip === true) || (r.oracle === "derby" && (r as { derby?: { selector?: string; once?: boolean } }).derby?.selector === "high" && (r as { derby?: { once?: boolean } }).derby?.once === true) || (r.kind === "binary" && !!r.market); };
 /** The set a rule can join: a team coin's league season (id <league>-<year>-<win|loss>, outcome <ABBR>.<ESPN id>), or the market's set. */
 export function leagueSetFor(r: BurnRule, c: DialCtx = {}): { id: string; outcome: string } | null {
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;

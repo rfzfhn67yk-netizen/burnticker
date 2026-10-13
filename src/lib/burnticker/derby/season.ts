@@ -13,5 +13,7 @@ export function derbyReadingInSeason(rule: BurnRule, r: { at?: string }): boolea
   if (d.selector === "bracket") return true;
   if (!r.at) return false;
   const at = Date.parse(r.at);
+  // sources-4: a record-close coin has its own stream; a recurring one may have no end (days null)
+  if (d.selector === "high") return Number.isFinite(at) && at >= dayMs(d.season.start) && (d.season.days === null || at < dayMs(d.season.start) + d.season.days * 86_400_000);
   return Number.isFinite(at) && at >= dayMs(d.season.start) && at < seasonEndMs(d);
 }

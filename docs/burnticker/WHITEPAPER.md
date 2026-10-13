@@ -89,7 +89,7 @@ it maps outcomes to burns. It can apply to markets that do not exist yet.
 | `market` | one market ticker: a one-shot rule that resolves once, after which the supply is fixed |
 | `kind: binary` | reads the settled yes-or-no result (Polymarket: the payout vector on Polygon; Kalshi's `result` only for coins launched on it before 2026-10-10); `onYes` and `onNo` give the burn for each outcome |
 | `kind: scalar` | reads the settled number and counts `unit`s from a baseline (`previousSettlement` or a number) in a direction (`up`, `down`, `abs`) |
-| `fractionOfPool` / `tokens` | buyback mode: fraction `f` of the burn pool per unit (1 % to 10 %); vault mode: tokens per unit |
+| `fractionOfPool` / `tokens` | buyback mode: fraction `f` of the burn pool per unit (1 % to 25 % for a rule that repeats, up to 100 % for a one-shot; rules.ts RULE_BOUNDS); vault mode: tokens per unit |
 | `onVoid` | `skip`, the only policy |
 | `pair` | rivalry pairs (§5): `pairId`, `side`, `counterpartMint` |
 

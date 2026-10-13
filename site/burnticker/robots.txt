@@ -1,4 +1,3 @@
-# burnticker.com (audit 4, BT-21). Cloudflare may prepend its managed content-signal block to this file.
 User-agent: *
 Allow: /
 

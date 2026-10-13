@@ -12,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS, FIRST_USE, TWO_PATHS, WALKTHROUGH_LINK } from "../src/lib/burnticker/siteNav.mjs";
 import { deficitQueueCore } from "../src/lib/burnticker/deficitQueueCore.mjs";
+import { cardAge } from "../src/lib/burnticker/cardAge.mjs";
 import { OPERATOR_LINE } from "../src/lib/burnticker/trustpack/copy.ts";
 import { prerequisiteLineFor } from "../src/lib/burnticker/launchReview.ts";
 
@@ -64,10 +65,19 @@ export function deficitQueueScript(): string {
   return `<script>\nwindow.deficitQueueCore = ${deficitQueueCore.toString()};\n</script>`;
 }
 
+/**
+ * The card age (ChatGPT audit 6 item 23): the SAME function the app's cards run (cardAge.mjs), written into the home page as source, so
+ * the static home and /burnticker cannot print different ages for one coin.
+ */
+export function cardAgeScript(): string {
+  return `<script>\nwindow.btCardAge = ${cardAge.toString()};\n</script>`;
+}
+
 /** Every marked region: file, region name, renderer. */
 export const REGIONS: Region[] = [
   ...shell("site/burnticker/index.html", ""),
   { file: "site/burnticker/index.html", name: "hero", render: heroHtml },
+  { file: "site/burnticker/index.html", name: "age-core", render: cardAgeScript },
   ...shell("site/burnticker/status/index.html", SITE_ORIGIN),
   ...shell("site/burnticker/fallback/index.html", ""),
   ...shell("site/deficit/index.html", SITE_ORIGIN),

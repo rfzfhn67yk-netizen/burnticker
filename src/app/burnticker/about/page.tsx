@@ -12,6 +12,8 @@ import { HOW_IT_WORKS } from "@/lib/burnticker/siteNav.mjs";
 import { SEASONS_LINKS } from "../_components/nav";
 import { WHY_CREATE } from "@/lib/burnticker/creatorCopy";
 import { RAISE_PRESETS_SOL } from "@/lib/burnticker/launchPresets";
+import { endExplainer } from "@/lib/burnticker/describe";
+import { shareLimitsText } from "@/lib/burnticker/rules";
 
 const DESCRIPTION = "How Burnticker works: one locked rule per coin, a public result that settles it, a program that burns what the coin's own fees bought back, and a receipt anyone can check.";
 export const metadata: Metadata = {
@@ -74,6 +76,10 @@ export default function AboutPage() {
           <li>Connect a wallet, then approve the launch in it. A single coin is one transaction. The review lists every transaction before your wallet opens. That creates the coin on Raydium LaunchLab and records the rule. You pay the venue&apos;s creation cost and the network fee. Creators receive no trading-fee revenue, because the creator&apos;s share of the fees goes to the coin&apos;s burn pool.</li>
         </ol>
         <p className="text-neutral-400">The rule is locked at launch. A different rule means a different coin.</p>
+        <p className="text-neutral-400" data-share-limits>{shareLimitsText()}</p>
+        <h3 className="pt-1 font-medium" id="when-a-rule-ends">When a rule ends</h3>
+        {/* ChatGPT audit 6 item 3: the review, the coin text and this page read the same end text (describe.ts endText) */}
+        <ul className="list-disc pl-5 space-y-1 text-neutral-200" data-end-explainer>{endExplainer().map((s) => <li key={s}>{s}</li>)}</ul>
         <h3 className="pt-1 font-medium" id="why-create">Why create a coin</h3>
         <p className="text-neutral-200" data-why-create>{WHY_CREATE}</p>
         <p className="text-neutral-200" data-launch-state>{launch.sentence}</p>

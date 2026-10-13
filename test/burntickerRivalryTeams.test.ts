@@ -33,7 +33,7 @@ describe("a rivalry pair of two teams", () => {
   test("the page: two team lists, then One game or This season; the game-first Matchup stays on the free-text path", () => {
     assert.match(page, /\{rivalA && \(rivalB \? picked\(rivalB, "Second team", \(\) => setRivalB\(null\)\) : list\(rivalA\.abbr, setRivalB, "Second team"\)\)\}/);
     assert.match(page, /onClick=\{\(\) => chooseRivals\(rivalA, rivalB, "season"\)\}/);
-    assert.match(page, /if \(!\(mode === "game" && meet\)\) setPairMode\("season"\);/);
+    assert.match(page, /if \(!\(mode === "game" && meet\)\) \{ setPairMode\("season"\); renameForSeason\(a, b\); \}/, "website-20 audit 7 item 9: the season coins are renamed for what they count");
     assert.match(page, /\{flow === "pair" && step === "pick" && guide\.follow !== "rivalry" && \(/);
     assert.match(page, /chooseGame\(mode === "game" && meet \? meet : seasonHit\);/, "the review names both sides by the matchup tickers (chooseGame sets pairTickers)");
     assert.match(page, /const tk = pairTickers\(g\.pair\.a\.abbr, g\.pair\.b\.abbr\)/);

@@ -7,7 +7,7 @@ import type { OracleAdapter } from "@/lib/burnticker/oracle/types";
 import { feedById } from "@/lib/burnticker/catalogue";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { isFirstSnowSeries, snowSeasonEnd, snowSeasonVoidFromMs } from "@/lib/burnticker/sources/nws";
-import { readingMatches, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
+import { readingMatches, RevisedReadingError, selectorKeyOf, wideRule, type PairRole, type ReceiptRow, type Registry, type TokenRow } from "@/lib/burnticker/registry";
 import { DECIMALS, endSinkOf, isOneShot, pairClause, pairMirrorRule, ruleMappings, SWEEP_EVERY_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { endStep, firstWindDownDay, fullSpendUnits, gatedStatus, unitStep, unitSteps, voidByEndMs, windDownUnits, type CarryPolicy, type EndReceiptKind, type PairGate, type SettledEvent } from "@/lib/burnticker/units";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
@@ -178,6 +178,10 @@ export async function fetchDue(d: KeeperDeps, tokens: readonly TokenRow[]): Prom
       out.push({ key, written, refusals: r.refusals, awaitingFinal: r.awaitingFinal, error: null, skipped: false });
     } catch (e) {
       const msg = (e as Error).message.slice(0, 200);
+      if (e instanceof RevisedReadingError) {
+        const text = `${key}: the source revised ${e.eventId} from ${e.recorded} to ${e.now} after it was recorded. The recorded value stands, nothing is counted twice, and this source is held until the operator acts.`;
+        if (d.registry.recordAlert({ kind: "revised-reading", key: `revised-reading:${key}:${e.eventId}:${e.now}`, text, meta: { selectorKey: key, eventId: e.eventId, recorded: e.recorded, revised: e.now } }, now)) d.log(`  [held] ${text}`);
+      }
       const failures = st.failures + 1;
       d.registry.setFeedState({ selectorKey: key, lastFetchAt: now, lastOkAt: st.lastOkAt, failures, lastError: msg, nextFetchAt: now + backoffMs(failures - 1) });
       d.log(`  [feed] ${key}: ${msg} — retrying in ${Math.round(backoffMs(failures - 1) / 1000)} s`);
@@ -613,6 +617,10 @@ export function detectRuleEnd(d: KeeperDeps, t: TokenRow, locked: LockedRule, ga
     if (ev) {
       const all = ev.units > 0 && ev.status !== "voided" && (ev.mapping?.fractionOfPool ?? 0) >= 1;
       end = { mode: all ? "drain" : "winddown", reason: all ? `the one-shot settled ${(ev.result ?? "YES").toUpperCase()} at 100 % of the pool` : `the one-shot settled ${(ev.result ?? ev.kind).toUpperCase()}`, at: Date.parse(ev.settledAt) || d.now() };
+    } else if (d.derby?.ended && t.selectorKey.startsWith("derby:")) {
+      // owner decision 2026-10-12 (item 70): a flippening whose last window stayed unreadable after its retries ends VOID, no receipt
+      const x = d.derby.ended(t);
+      if (x) end = { mode: "winddown", reason: x.reason, at: x.atMs };
     }
   } else if (locked.rule.oracle === "catalogue" && isFirstSnowSeries(locked.rule.series)) {
     // THE FIRST SNOW RESOLVES ONCE (owner intent 2026-10-12; a keeper correction to match the promised rule, not an economics change):

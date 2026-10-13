@@ -33,7 +33,7 @@ export async function collectFeedData(p: Platform, now = Date.now(), root = proc
       try {
         const d = await tokenPageData(p, t, now);
         coins.push({ ticker: t.ticker, mint: t.mint, burns: d.status.burned.count, lastBurnAt: d.status.burned.lastAt ?? null, cluster: d.status.cluster, readOk: true, events: eventsFromStatus(d.status, d.receipts, coinKey(t, shared)) });
-        const row = upcomingFromStatus(d.status, d.receipts, coinKey(t, shared));
+        const row = upcomingFromStatus(d.status, d.receipts, coinKey(t, shared), t.mint);
         if (row) upcoming.push(row);
       } catch { coins.push({ ticker: t.ticker, mint: t.mint, burns: 0, lastBurnAt: null, readOk: false, events: [] }); }
     }

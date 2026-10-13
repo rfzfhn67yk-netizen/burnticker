@@ -53,14 +53,17 @@ describe("three decisions to a coin", () => {
   test("the review card's happy state shows no field: name and ticker open on 'edit', the note on 'add a note'; Launch is the last decision", () => {
     const src = read(REVIEW);
     const inputs = elements(src).filter((e) => /^<(input|textarea|select)/.test(e.tag));
-    const editBlock = src.slice(src.indexOf("{editing ? ("), src.indexOf(") : null}"));
-    const noteBlock = src.slice(src.indexOf("{p.note && (noteOpen ? ("), src.indexOf("add a note</button>)}"));
-    for (const e of inputs) { const at = src.indexOf(e.tag); assert.ok(editBlock.includes(e.tag) || noteBlock.includes(e.tag), `a field visible before anything is clicked: ${name(REVIEW, e)} @${at}`); }
+    const editBlock = src.slice(src.indexOf("{mode === \"full\" && editing ? ("), src.indexOf(") : null}"));
+    const noteBlock = src.slice(src.indexOf("const noteField = p.note && (noteOpen ||"), src.indexOf("add a note</button>);"));
+    // website-20 (audit 6 item 12): step 4 "Name and look" is the one screen whose job is the fields
+    const nameStep = src.slice(src.indexOf('if (mode === "name") return ('), src.indexOf("data-review-card data-mode={mode}"));
+    for (const e of inputs) { const at = src.indexOf(e.tag); assert.ok(editBlock.includes(e.tag) || noteBlock.includes(e.tag) || nameStep.includes(e.tag), `a field visible before anything is clicked: ${name(REVIEW, e)} @${at}`); }
     assert.match(src, /useState\(false\), \[noteOpen/, "the name editor starts closed");
     const required = elements(src).filter((e) => decisionOf(e.tag)).map((e) => decisionOf(e.tag));
     assert.deepEqual([...new Set(required)], ["name", "launch"], "the review card asks only for the name (optional edit) and Launch");
     // website-15 item 12: the reading matter is collapsed below the button, but no dial or field hides in a disclosure
-    for (const d of src.match(/<details[\s\S]*?<\/details>/g) ?? []) assert.doesNotMatch(d, /role="radio"|<input|<textarea|data-decision|data-optional/, "no disclosure of dials on the review card");
+    // website-20 (the owner's mobile rule: everything else behind a tap): the raise, already chosen, is the one preset row in a disclosure
+    for (const d of src.match(/<details[\s\S]*?<\/details>/g) ?? []) if (!/data-raise>/.test(d)) assert.doesNotMatch(d, /role="radio"|<input|<textarea|data-decision|data-optional/, "no disclosure of dials on the review card");
     assert.ok(src.indexOf("data-review-more") > src.indexOf('data-decision="launch"'), "the collapsed blocks sit below the launch button");
   });
 
@@ -70,7 +73,9 @@ describe("three decisions to a coin", () => {
     for (const f of ["team", "pair", "single", "feed", "browse"]) assert.match(order, new RegExp(`${f}: \\["[a-z]+", "review", "launch"\\]`), `${f} has one pick step, then the review card`);
     assert.match(src, /applyRule = [\s\S]*?setStep\("review"\)/, "a search card, an election candidate and an outcome land on the review card");
     assert.match(src, /chooseGame = [\s\S]*?setStep\("review"\)/, "a game lands on the review card");
-    assert.equal((src.match(/<ReviewCard\b/g) ?? []).length, 1, "one review card for every page path");
+    // website-20: the guided path's step 4 renders the same card in its "name" mode; the review itself is still one card
+    assert.equal((src.match(/<ReviewCard\b/g) ?? []).length, 2, "one review card for every page path, plus its name step");
+    assert.equal((src.match(/<ReviewCard mode="name"/g) ?? []).length, 1);
     assert.equal((read(TILE).match(/<ReviewCard\b/g) ?? []).length, 1, "Coin vs Coin: two coins → the same review card");
   });
 

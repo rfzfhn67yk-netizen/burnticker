@@ -12,8 +12,9 @@ import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
  *   magnitude  4 to 8.5 in half steps.  region  world (no suffix), conus, california, alaska, japan (the boxes below).
  *
  * CLINICAL COPY ONLY: a reading is a count of events at or above a magnitude. Place names, felt reports, alert levels, tsunami flags and
- * anything about people are never read, stored or shown. NOT LAUNCHABLE until the owner confirms (LAUNCHPAD-PATH §7 refuses disaster
- * feeds; the catalogue's usgs.quakes6 carries the same flag), and refuse.json refuses "earthquake" in market titles.
+ * anything about people are never read, stored or shown. ADMITTED by the owner on 2026-10-12 (~18:05 Denver: "natural disasters would be
+ * cool, add them all"): a coin counts an instrument's reading (a magnitude), never harm. The older usgs.quakes6 entry stays unmapped and
+ * unlaunchable, and refuse.json still refuses "earthquake" in MARKET titles (the refuse list is unchanged; it applies to markets).
  *
  * How it fails: an HTTP error, a body without features, or an event without a readable time raises or refuses; the keeper writes nothing.
  */
@@ -54,4 +55,37 @@ export function usgsText(s: { magnitude: string; region: string | null }, spends
     block: `For every day with no earthquake of magnitude ${m} or more ${w}, ${spends}, with a receipt on chain. ${src} A day with one burns nothing.` };
   return { name: `Magnitude ${m} Count`, ticker: `QUAKEM${m.replace(".", "")}`, oneLiner: `burns for every earthquake of magnitude ${m} or more ${w}`,
     block: `For every earthquake of magnitude ${m} or more ${w}, ${spends}, with a receipt on chain. ${src} The reading is a count of events and nothing else.` };
+}
+
+/**
+ * THE ONE-SHOT FORM (sources-3, 2026-10-12; the owner: "natural disasters would be cool, burn per event or burn 100% on the next event").
+ *
+ *   usgs.quakenext:<magnitude>[/<region>]   the whole share once, on the first UTC day after launch with a reviewed earthquake of at least
+ *                                            that magnitude, worldwide or in the region. Days without one give no reading at all (never a
+ *                                            0, which would end the coin); the keeper ends the coin on its first receipt.
+ *   magnitude  6 to 8 in half steps (a rarer bar than the recurring count, so the coin is about one notable reading).
+ *
+ * Nothing can make this already decided: every day after launch is a new chance, so the review never refuses it as over.
+ */
+export const USGS_QUAKENEXT_ID = "usgs.quakenext";
+export const USGS_NEXT_MAGNITUDES = ["6", "6.5", "7", "7.5", "8"] as const;
+export function parseUsgsNextSeries(id: string): { magnitude: string; region: string | null } | null {
+  const m = /^usgs\.quakenext:(\d(?:\.5)?)(?:\/([a-z]+))?$/.exec(id);
+  if (!m || !(USGS_NEXT_MAGNITUDES as readonly string[]).includes(m[1])) return null;
+  if (m[2] !== undefined && !USGS_REGIONS[m[2]]) return null;
+  return { magnitude: m[1], region: m[2] ?? null };
+}
+export function applyUsgsQuakeNext(cfg: HttpSourceConfig, param: string): HttpSourceConfig {
+  const s = parseUsgsNextSeries(`${USGS_QUAKENEXT_ID}:${param}`);
+  if (!s) throw new Error(`usgs.quakenext: ${param} is not <magnitude 6–8 in half steps>[/<${Object.keys(USGS_REGIONS).join("|")}>]`);
+  const box = s.region ? USGS_REGIONS[s.region].box : null;
+  const bbox = box ? `&minlatitude=${box[0]}&maxlatitude=${box[1]}&minlongitude=${box[2]}&maxlongitude=${box[3]}` : "";
+  const sub = (u: string) => u.split("{magnitude}").join(s.magnitude).split("{bbox}").join(bbox);
+  return { ...cfg, request: { ...cfg.request, url: sub(cfg.request.url) }, sourceUrl: sub(cfg.sourceUrl), title: `The next reviewed magnitude ${s.magnitude} or more ${where(s.region)} (USGS)`, unit: { ...cfg.unit, label: `the next magnitude ${s.magnitude} or more`, definition: `one reading: the first UTC day after launch with a reviewed earthquake of magnitude ${s.magnitude} or more ${where(s.region)}` } };
+}
+/** The one-shot's coin text (lint-clean; test/burntickerSources3.test.ts). */
+export function usgsNextText(s: { magnitude: string; region: string | null }, spends: string): { name: string; ticker: string; oneLiner: string; block: string; oneShot: true } {
+  const m = s.magnitude, w = where(s.region);
+  return { name: `Next Magnitude ${m}`, ticker: `NEXTM${m.replace(".", "")}`, oneLiner: `burns once on the next earthquake of magnitude ${m} or more ${w}`, oneShot: true,
+    block: `On the first day after launch with an earthquake of magnitude ${m} or more ${w}, ${spends} once, with a receipt on chain. Only events the USGS has reviewed count, and each UTC day is read two days after it ends. The reading is a magnitude and nothing else.` };
 }

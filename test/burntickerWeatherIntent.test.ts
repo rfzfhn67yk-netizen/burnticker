@@ -143,7 +143,8 @@ describe("intent audit item 7: the lead sentence renders whole", () => {
     const rule = validateRule({ schema: "burnticker.rules/v1", oracle: "catalogue", series: "fred.UNRATE", market: null, filter: {}, kind: "scalar", scalar: { unit: 0.1, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null } as BurnRule);
     const ctx = { ticker: "JOBLESS", feed: { title: "U.S. unemployment rate", sourceName: f.sourceName, unitLabel: "0.1 percentage-point move" } };
     const plain = describeRule(rule, ctx), inv = describeRule({ ...rule, inverse: true } as BurnRule, ctx);
-    assert.equal(plain.lead, "For every 0.1 percentage-point move, the burn pool spends 2% buying $JOBLESS on Raydium and burns it, with a receipt on chain.");
+    // sources-4 (audit 201): a rule measured against the previous reading names a change, never a total
+    assert.equal(plain.lead, "For each full change of 0.1 percentage point in the U.S. unemployment rate, up or down, since the previous reading, the burn pool spends 2% buying $JOBLESS on Raydium and burns it, with a receipt on chain.");
     assert.equal(inv.lead, "For every reading of U.S. unemployment rate that does not move, the burn pool spends 2% buying $JOBLESS on Raydium and burns it, with a receipt on chain.");
     assert.ok(inv.ruleBlock.startsWith(inv.lead));
     assert.equal(leadSentence("The U.S. Treasury publishes it. Then it is read."), "The U.S. Treasury publishes it.");

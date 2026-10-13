@@ -21,23 +21,54 @@ export interface SelectRows {
   columnsFrom?: string;
   /** Keep rows whose field matches (BLS "-" months out, ESPN finished games only …). */
   filter?: { path: string; regex: string; negate?: boolean };
+  /** sources-3: more row conditions, all of which must hold (a regex, or `min`: the field read as a number is at least min). */
+  filters?: RowCond[];
+  /** sources-3: headerless CSV (the NHC best-track files): the column names, in order. */
+  columns?: string[];
+  /** sources-3: a named row reader for a body the generic selection cannot read (sources/hazardRows.ts, e.g. "hans.van"). */
+  custom?: string;
 }
+/** One row condition: a regex over the field, or a numeric floor (`min`). */
+export interface RowCond { path: string; regex?: string; min?: number; negate?: boolean }
 
 export interface PeriodSpec { path: string; format: "yyyy-mm-dd" | "iso" | "epoch-ms" | "epoch-s" | "yyyymmddhh" | "bls" | "jpl-cd" | "yyyy-mm" | "none" }
 export interface WeightRule { when: { path: string; regex: string }[]; weight: number }
 
+/**
+ * FAN-OUT READS (sources-3, 2026-10-12): one reading built from several files of one publisher.
+ *   days    the URL names one report day ({yymmdd:day}); the days `skip` to `skip + back - 1` before today are fetched, and each file's
+ *           rows belong to its own day (SPC's daily tornado report files). Every fetched day gets a reading, 0 when its file has no rows.
+ *   index   a directory page lists the files; the links matching `link` (URL templates expanded) are fetched, at most `max` (the NHC best-
+ *           track directory). More matches than `max` refuses the read: a partial season is never counted.
+ * Any file that fails fails the whole read, so the keeper writes nothing (unavailable, never a smaller count).
+ */
+export type FanOut = { kind: "days"; back: number; skip?: number } | { kind: "index"; url: string; link: string; max: number };
+/** The body a fan-out read returns: one part per file (the index page itself is the part keyed "index"). */
+export interface FanOutBody { __parts: { key?: string; day?: string; body: unknown }[] }
+
 export interface HttpSourceConfig {
   id: string; kind: "attested-http"; tier: Tier; title: string; sourceName: string; sourceUrl: string; cadence: string; pollEverySec: number;
-  request: { url: string; method?: "GET" | "POST"; body?: string; headers?: Record<string, string>; format: "json" | "csv" | "text" };
+  request: { url: string; method?: "GET" | "POST"; body?: string; headers?: Record<string, string>; format: "json" | "csv" | "text"; fanOut?: FanOut };
   select: SelectRows & {
     /** Scalar series: the row's value field (or CSV column). */
     value?: { path: string; scale?: number };
-    /** Count series: each row counts `weight` (first matching rule, else `default`) into its period. */
-    count?: { rules?: WeightRule[]; default: number };
+    /** Count series: each row counts `weight` (first matching rule, else `default`) into its period. `distinct` (sources-3): a path
+     *  whose value is a key (a storm number); each key counts once, in its earliest qualifying period. */
+    count?: { rules?: WeightRule[]; default: number; distinct?: string };
     /** Text pages: a regex with named groups `period` and `value` (tier 5). */
     regex?: { pattern: string; flags?: string };
     /** A single number (GitHub stars, Steam players, TVL, a block height): the reading is "today's value" at poll time. */
-    snapshot?: { path: string };
+    snapshot?: {
+      path: string;
+      /**
+       * COUNT THE ROWS, ONE BY ONE (owner decision 2026-10-12, website-20 item 107: openFDA matches a search's conditions across
+       * different submissions of one application, so its total counted applications with a recent SUPPLEMENT approval). When set, the
+       * snapshot is the number of rows under `rows` having at least one element under `any` that matches every `when` condition and, with
+       * `withinDays`, whose `withinDays.path` date (YYYYMMDD) falls in the last `days` days. Each row counts once, whatever else it lists.
+       * The publisher's total at `path` must equal the rows read (one page); otherwise the read is refused, never undercounted.
+       */
+      countRows?: { rows: string; any: string; when: { path: string; regex: string }[]; withinDays?: { path: string; days: number } };
+    };
     /**
      * A ONE-SHOT MILESTONE (sources-2, 2026-10-12: "burns when <repo> passes N stars"): the number at `path` is read at poll time and,
      * once it is at or above `at` (the series parameter's N, set by the catalogue), the source gives ONE reading with the fixed id
@@ -46,8 +77,29 @@ export interface HttpSourceConfig {
      * a public channel); a refusal is never a reading.
      */
     milestone?: { path: string; at?: number; guard?: { path: string; min: number; why: string } };
+    /**
+     * A ONE-SHOT ON THE NEXT EVENT (sources-3, 2026-10-12: "burns once on the next M7.0 or greater"): after counting, only periods whose
+     * count is at least `atLeast` are kept, each with the value 1, and periods below it give no reading at all (never a 0, which would
+     * end the coin). The keeper plans only periods after the coin's launch and ends a one-shot on its first receipt, so the coin burns
+     * once, on the first qualifying period after launch.
+     */
+    oneShot?: { atLeast: number };
+    /**
+     * A RECORD (sources-4, 2026-10-12: "burns every time it sets a new high"): after the value series is read (complete days only), each
+     * day becomes 1 when its value is above every earlier value in the body (`span` "all": the publisher's whole history, which the body
+     * carries) or above each value of the previous `span` days, and 0 otherwise. Days without a full comparison window give no reading.
+     * `once`: only the 1s are kept (the keeper ends a one-shot on its first receipt after launch). The baseline is the publisher's own
+     * history, re-read in full on every poll; a day already recorded is never re-read by the keeper.
+     */
+    record?: { span: "all" | number; once?: boolean };
   };
-  period: PeriodSpec & { kind: "day" | "month" | "week" | "quarter"; dropFirst?: boolean; completeAfterDays?: number; zeroFill?: boolean };
+  /**
+   * `endsOn` (sources-3): the last day a one-shot can qualify (a hurricane season's November 30). Periods after it are not read; once it
+   * is complete, the source gives one more reading, id `ended-<day>` with the value 0, so a one-shot with no event in time ends with
+   * nothing burned through the keeper's ordinary end path. `zeroFillFromDays`: a count series seeds its first period that many days back,
+   * so a window with no rows at all still reads 0 per day (the volcano notices).
+   */
+  period: PeriodSpec & { kind: "day" | "month" | "week" | "quarter"; dropFirst?: boolean; completeAfterDays?: number; zeroFill?: boolean; endsOn?: string; zeroFillFromDays?: number };
   unit: { size: number; label: string; definition: string }; direction: Direction; baseline: "previousSettlement" | number; carry: CarryPolicy; valueLabel: string;
   plausibility: { min: number; max: number; maxAbsDelta?: number };
   memoSource: string; fixture: string | null; flags: string[]; needsKey?: string | null; launchable: boolean; note?: string;
@@ -64,6 +116,8 @@ export interface HttpSourceConfig {
   operator?: string;
   /** The fact this source reads; sources sharing it are cross-reads of each other (sources/types.ts FactSpec). */
   fact?: FactSpec;
+  /** The owner's single-publisher exception (singleSource.ts): honoured only for the ids listed there. */
+  settlement?: "single-official-source";
 }
 
 /** A terms read: where, when, what it says for this use, and whether settling a coin on it is allowed. */
@@ -133,6 +187,48 @@ export function toPeriod(v: unknown, spec: PeriodSpec, kind: HttpSourceConfig["p
 export const periodAt = (p: string): string => p;
 
 const matches = (row: Record<string, unknown>, cond: { path: string; regex: string }): boolean => new RegExp(cond.regex).test(String(jsonOne(row, cond.path) ?? ""));
+const holds = (row: Record<string, unknown>, c: RowCond): boolean => {
+  const v = jsonOne(row, c.path);
+  const ok = c.min !== undefined ? (v !== undefined && v !== null && String(v).trim() !== "" && Number.isFinite(Number(v)) && Number(v) >= c.min) : new RegExp(c.regex ?? "").test(String(v ?? ""));
+  return ok !== !!c.negate;
+};
+
+/** Headerless CSV rows keyed by the configured column names (cells trimmed). */
+export function parseCsvColumns(text: string, columns: readonly string[]): Record<string, string>[] {
+  return text.split(/\r?\n/).filter((l) => l.trim()).map((l) => { const cells = l.split(","); return Object.fromEntries(columns.map((h, i) => [h, (cells[i] ?? "").trim()])); });
+}
+
+/**
+ * NAMED ROW READERS (sources-3): a body the generic selection cannot read becomes plain rows here. `refusal` refuses the whole read
+ * (nothing is counted). Registered by the source modules at import (sources/hazardRows.ts), so this file keeps no source knowledge.
+ */
+export type CustomRows = (body: unknown) => { rows: Record<string, unknown>[]; refusal: string | null };
+export const CUSTOM_ROWS: Record<string, CustomRows> = {};
+
+const isFanOut = (b: unknown): b is FanOutBody => !!b && typeof b === "object" && Array.isArray((b as FanOutBody).__parts);
+
+/** One body → its rows (CSV with a header, headerless CSV, a JSON path, or a named reader); null refuses the whole read. */
+function rowsOf(cfg: HttpSourceConfig, body: unknown, refusals: string[]): Record<string, unknown>[] | null {
+  const S = cfg.select;
+  if (S.custom) {
+    const f = CUSTOM_ROWS[S.custom];
+    if (!f) { refusals.push(`schema: no row reader named ${S.custom}`); return null; }
+    const r = f(body);
+    if (r.refusal) { refusals.push(r.refusal); return null; }
+    return r.rows;
+  }
+  if (cfg.request.format === "csv" || (cfg.request.format === "text" && S.columns)) return S.columns ? parseCsvColumns(String(body), S.columns) : parseCsv(String(body));
+  const found = jsonPath(body, S.rows);
+  // "$" (or any path) landing on ONE array fans out to its elements (NOAA's body is the array itself).
+  const raw = found.length === 1 && Array.isArray(found[0]) ? (found[0] as unknown[]) : found;
+  if (S.columnsFrom) {
+    const cols = jsonOne(body, S.columnsFrom);
+    if (!Array.isArray(cols)) { refusals.push(`schema: no columns at ${S.columnsFrom}`); return null; }
+    return raw.map((r) => (Array.isArray(r) ? Object.fromEntries((cols as string[]).map((c, i) => [c, r[i]])) : {}));
+  }
+  if (!raw.length && S.rows !== "$") refusals.push(`schema: no rows at ${S.rows}`);
+  return raw.filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
+}
 
 /** Rows → readings, oldest first, plus refusals. Pure. `nowMs` decides which periods are complete. */
 export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): { readings: SettledEvent[]; refusals: string[] } {
@@ -145,6 +241,23 @@ export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): 
   const lastComplete: string | null = lastDay ?? (P.kind === "month" ? addDays(today, -(P.completeAfterDays ?? 1)).slice(0, 7) : null);
   const complete = (period: string): boolean => (lastComplete === null ? true : period <= lastComplete);
   // SNAPSHOT: one number at poll time → today's reading (the day's value is the latest poll; the keeper records it once the day closes).
+  if (S.snapshot?.countRows) {
+    const C = S.snapshot.countRows;
+    const rows = jsonPath(body, C.rows).filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
+    const total = Number(jsonOne(body, S.snapshot.path));
+    if (!Number.isFinite(total)) return { readings: [], refusals: [`schema: snapshot ${S.snapshot.path} is not a number`] };
+    if (total !== rows.length) return { readings: [], refusals: [`schema: the publisher lists ${total} records and ${rows.length} were read in one page, so the count cannot be complete`] };
+    const from = C.withinDays ? addDays(today, -C.withinDays.days).replace(/-/g, "") : null, to = today.replace(/-/g, "");
+    const n = rows.filter((r) => jsonPath(r, C.any).some((el) => {
+      const e = el as Record<string, unknown>;
+      if (!e || typeof e !== "object" || !C.when.every((c) => matches(e, c))) return false;
+      if (!C.withinDays) return true;
+      const d = String(jsonOne(e, C.withinDays.path) ?? "");
+      return /^\d{8}$/.test(d) && d >= from! && d <= to;
+    })).length;
+    if (n < cfg.plausibility.min || n > cfg.plausibility.max) return { readings: [], refusals: [`level: ${n} is outside ${cfg.plausibility.min}–${cfg.plausibility.max}`] };
+    return { readings: [mk(P.kind === "month" ? today.slice(0, 7) : today, String(n))], refusals };
+  }
   if (S.snapshot) {
     const raw = cfg.request.format === "text" ? String(body).trim() : jsonOne(body, S.snapshot.path);
     const n = Number(raw);
@@ -178,28 +291,41 @@ export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): 
     }
     return { readings: [...out].filter(([p]) => complete(p)).sort().map(([p, v]) => mk(p, v)), refusals };
   }
-  // ROWS.
-  let rows: Record<string, unknown>[];
-  if (cfg.request.format === "csv") rows = parseCsv(String(body));
-  else {
-    const found = jsonPath(body, S.rows);
-    // "$" (or any path) landing on ONE array fans out to its elements (NOAA's body is the array itself).
-    const raw = found.length === 1 && Array.isArray(found[0]) ? (found[0] as unknown[]) : found;
-    if (S.columnsFrom) {
-      const cols = jsonOne(body, S.columnsFrom);
-      if (!Array.isArray(cols)) return { readings: [], refusals: [`schema: no columns at ${S.columnsFrom}`] };
-      rows = raw.map((r) => (Array.isArray(r) ? Object.fromEntries((cols as string[]).map((c, i) => [c, r[i]])) : {}));
-    } else rows = raw.filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
-    if (!raw.length && S.rows !== "$") refusals.push(`schema: no rows at ${S.rows}`);
+  // ROWS (a fan-out read: every part's rows, each tagged with its report day as `__day` when the part has one).
+  let rows: Record<string, unknown>[] = [];
+  const seeds: string[] = [];
+  if (isFanOut(body)) {
+    for (const part of body.__parts) {
+      if (part.key === "index") continue;
+      const rs = rowsOf(cfg, part.body, refusals);
+      if (rs === null) return { readings: [], refusals };
+      if (part.day) { seeds.push(part.day); for (const r of rs) r.__day = part.day; }
+      rows.push(...rs);
+    }
+  } else {
+    const rs = rowsOf(cfg, body, refusals);
+    if (rs === null) return { readings: [], refusals };
+    rows = rs;
   }
   if (S.filter) rows = rows.filter((r) => matches(r, S.filter!) !== !!S.filter!.negate);
+  if (S.filters) rows = rows.filter((r) => S.filters!.every((c) => holds(r, c)));
   const byPeriod = new Map<string, number>();
   const values = new Map<string, string>();
   let minPeriod: string | null = null;
+  for (const d of seeds) if (minPeriod === null || d < minPeriod) minPeriod = d;
+  if (P.zeroFillFromDays !== undefined && P.kind === "day") { const d = addDays(today, -P.zeroFillFromDays); if (minPeriod === null || d < minPeriod) minPeriod = d; }
+  // count.distinct: each key (a storm) counts once, in the earliest period any of its qualifying rows falls in
+  const firstOf = new Map<string, { period: string; row: Record<string, unknown> }>();
   for (const r of rows) {
     const period = toPeriod(jsonOne(r, P.path), P, P.kind, r);
     if (!period) { refusals.push(`schema: a row without a readable period at ${P.path}`); continue; }
     if (minPeriod === null) minPeriod = period; else if (period < minPeriod) minPeriod = period;
+    if (S.count?.distinct) {
+      const key = String(jsonOne(r, S.count.distinct) ?? "");
+      const had = firstOf.get(key);
+      if (!had || period < had.period) firstOf.set(key, { period, row: r });
+      continue;
+    }
     if (S.count) {
       const w = S.count.rules?.find((rule) => rule.when.every((c) => matches(r, c)))?.weight ?? S.count.default;
       byPeriod.set(period, (byPeriod.get(period) ?? 0) + w);
@@ -210,6 +336,10 @@ export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): 
       values.set(period, v === null ? canonicalDecimal(raw) : canonicalDecimal(numToDec(v)));
     }
   }
+  if (S.count?.distinct) for (const { period, row } of firstOf.values()) {
+    const w = S.count.rules?.find((rule) => rule.when.every((c) => matches(row, c)))?.weight ?? S.count.default;
+    byPeriod.set(period, (byPeriod.get(period) ?? 0) + w);
+  }
   let readings: SettledEvent[] = [];
   if (S.count) {
     if (minPeriod !== null && lastDay !== null) {
@@ -218,6 +348,12 @@ export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): 
       else readings = [...byPeriod].filter(([p]) => p >= first && complete(p)).sort().map(([p, v]) => mk(p, String(v)));
     } else readings = [...byPeriod].filter(([p]) => complete(p)).sort().map(([p, v]) => mk(p, String(v)));
   } else readings = [...values].filter(([p]) => complete(p)).sort().map(([p, v]) => mk(p, v));
+  if (S.oneShot) readings = readings.filter((r) => Number(r.value) >= S.oneShot!.atLeast).map((r) => ({ ...r, value: "1" }));
+  if (S.record) readings = recordReadings(readings, S.record, cfg.title);
+  if (P.endsOn) {
+    readings = readings.filter((r) => r.id <= P.endsOn!);
+    if (lastComplete !== null && P.endsOn <= lastComplete) readings.push({ id: `ended-${P.endsOn}`, at: P.endsOn, result: null, value: "0", title: `${cfg.title}: the window ended on ${P.endsOn}`, sourceUrl });
+  }
   // Plausibility: a level outside the bounds, or a step beyond maxAbsDelta, is refused and nothing after it is read.
   const out: SettledEvent[] = [];
   for (let i = 0; i < readings.length; i++) {
@@ -229,10 +365,32 @@ export function parseBody(cfg: HttpSourceConfig, body: unknown, nowMs: number): 
   return { readings: out, refusals };
 }
 
-/** URL templates: {today}, {from:N} (N days back), {yyyymmdd:today}, {yyyymmdd:from:N}. */
+/**
+ * A value series (oldest first, one per complete day) → record readings: 1 for a day above every earlier value (span "all") or above each
+ * value of the previous `span` days, 0 otherwise; the first day, and any day without `span` earlier days, gives no reading. `once` keeps
+ * the 1s only. Each reading's title names the value and the record it was compared with. Pure.
+ */
+export function recordReadings(readings: readonly SettledEvent[], rec: { span: "all" | number; once?: boolean }, title: string): SettledEvent[] {
+  const xs = [...readings].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const out: SettledEvent[] = [];
+  for (let i = 0; i < xs.length; i++) {
+    const from = rec.span === "all" ? null : addDays(xs[i].id, -rec.span);
+    const prev = xs.slice(0, i).filter((p) => from === null || p.id >= from);
+    if (!prev.length || (rec.span !== "all" && (prev[0].id !== from || prev.length < rec.span))) continue;
+    let best = prev[0];
+    for (const p of prev) if (Number(p.value) > Number(best.value)) best = p;
+    const isRecord = Number(xs[i].value) > Number(best.value);
+    if (rec.once && !isRecord) continue;
+    out.push({ ...xs[i], value: isRecord ? "1" : "0", title: `${title}: ${xs[i].id} read ${xs[i].value}, ${isRecord ? "a record" : "not a record"} (the record before it was ${best.value} on ${best.id})` });
+  }
+  return out;
+}
+
+/** URL (and POST body) templates: {today}, {from:N} (N days back), {yyyymmdd:today}, {yyyymmdd:from:N}; sources-3: {yyyy} (this UTC
+ *  year), {unix:from:N} (the UTC midnight N days back, in seconds). */
 export function expandUrl(tpl: string, nowMs: number): string {
   const today = isoDay(nowMs);
-  return tpl.replace(/\{yyyymmdd:today\}/g, today.replace(/-/g, "")).replace(/\{yyyymmdd:from:(\d+)\}/g, (_m, n) => addDays(today, -Number(n)).replace(/-/g, "")).replace(/\{today\}/g, today).replace(/\{from:(\d+)\}/g, (_m, n) => addDays(today, -Number(n)));
+  return tpl.replace(/\{yyyy\}/g, today.slice(0, 4)).replace(/\{unix:from:(\d+)\}/g, (_m, n) => String(Date.parse(`${addDays(today, -Number(n))}T00:00:00Z`) / 1000)).replace(/\{yyyymmdd:today\}/g, today.replace(/-/g, "")).replace(/\{yyyymmdd:from:(\d+)\}/g, (_m, n) => addDays(today, -Number(n)).replace(/-/g, "")).replace(/\{today\}/g, today).replace(/\{from:(\d+)\}/g, (_m, n) => addDays(today, -Number(n)));
 }
 
 /** The key a keyed source reads from its `keyEnv` (trimmed), or null. */
@@ -243,14 +401,34 @@ export async function fetchBody(cfg: HttpSourceConfig, nowMs: number, fetchImpl:
   const key = sourceKey(cfg, env);
   if (cfg.needsKey && !key) throw new Error(`${cfg.id}: unavailable: needs a key (${cfg.needsKey}) that is not configured`);
   const token = cfg.tokenEnv ? (env[cfg.tokenEnv] ?? "").trim() : "";
-  const url = expandUrl(cfg.request.url, nowMs).split("{key}").join(encodeURIComponent(key ?? ""));
-  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), timeoutMs);
-  try {
-    const res = await fetchImpl(url, { signal: ac.signal, headers: { accept: cfg.request.format === "json" ? "application/json" : "*/*", "user-agent": "burnticker/0.1 (event-indexed burn receipts; polite polling)", ...(cfg.request.headers ?? {}), ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(cfg.request.method === "POST" ? { method: "POST", body: cfg.request.body } : {}) } as never);
-    if (!res.ok) throw new Error(`HTTP ${res.status} from ${cfg.sourceName}`);
-    if (cfg.request.format === "json") return await res.json();
-    return res.text ? await res.text() : String(await res.json());
-  } finally { clearTimeout(t); }
+  const one = async (u: string, format: HttpSourceConfig["request"]["format"], post: boolean): Promise<unknown> => {
+    const url = expandUrl(u, nowMs).split("{key}").join(encodeURIComponent(key ?? ""));
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), timeoutMs);
+    try {
+      const res = await fetchImpl(url, { signal: ac.signal, headers: { accept: format === "json" ? "application/json" : "*/*", "user-agent": "burnticker/0.1 (event-indexed burn receipts; polite polling)", ...(cfg.request.headers ?? {}), ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(post ? { method: "POST", body: cfg.request.body === undefined ? undefined : expandUrl(cfg.request.body, nowMs) } : {}) } as never);
+      if (!res.ok) throw new Error(`HTTP ${res.status} from ${cfg.sourceName}`);
+      if (format === "json") return await res.json();
+      return res.text ? await res.text() : String(await res.json());
+    } finally { clearTimeout(t); }
+  };
+  const post = cfg.request.method === "POST";
+  const f = cfg.request.fanOut;
+  if (!f) return one(cfg.request.url, cfg.request.format, post);
+  const parts: FanOutBody["__parts"] = [];
+  if (f.kind === "days") {
+    const today = isoDay(nowMs);
+    for (let i = f.skip ?? 0; i < (f.skip ?? 0) + f.back; i++) {
+      const day = addDays(today, -i);
+      parts.push({ day, body: await one(cfg.request.url.split("{yymmdd:day}").join(day.slice(2).replace(/-/g, "")), cfg.request.format, post) });
+    }
+    return { __parts: parts };
+  }
+  const index = String(await one(f.url, "text", false));
+  const names = [...new Set([...index.matchAll(new RegExp(expandUrl(f.link, nowMs), "g"))].map((m) => m[0]))].sort();
+  if (names.length > f.max) throw new Error(`${cfg.id}: unavailable: the index lists ${names.length} files, more than the ${f.max} a read takes`);
+  parts.push({ key: "index", body: names.join("\n") });
+  for (const n of names) parts.push({ key: n, body: await one(cfg.request.url.split("{file}").join(n), cfg.request.format, post) });
+  return { __parts: parts };
 }
 
 /** A config entry as a ResolutionSource. */

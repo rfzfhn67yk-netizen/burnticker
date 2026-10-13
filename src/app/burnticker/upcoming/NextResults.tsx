@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useHome } from "../_components/useHome";
 import { useWatchlist } from "../_components/useWatchlist";
 import { FollowButton } from "../_components/FollowButton";
 import { EmptyState } from "../_components/EmptyState";
 import { SETTLEMENT_LABEL, upcomingNotice, type UpcomingRow } from "@/lib/burnticker/upcoming";
-import { WATCH_NOTE } from "@/lib/burnticker/watchlist";
+import { WATCH_NOTE, coinWatchKey } from "@/lib/burnticker/watchlist";
 
 /**
  * NEXT RESULTS (website-14, product idea 3; src/lib/burnticker/upcoming.ts). For each coin, the result its rule waits for, the source,
@@ -18,12 +18,16 @@ const denver = (iso: string) => { try { return `${new Intl.DateTimeFormat("en-US
 
 export default function NextResults() {
   const { data, error } = useHome();
-  const watch = useWatchlist();
+
   const [only, setOnly] = useState(false);
   // website-15 (code review 6 P2 2): ready, partial or unavailable; a failure is never an empty list
   const set = data?.upcoming ?? null;
   const all: UpcomingRow[] = Array.isArray(set?.rows) ? set!.rows : [];
-  const rows = all.filter((r) => !only || watch.list.results.includes(r.ticker));
+  // private review 8 F1: a followed result is a coin key (network and mint), never a ticker
+  const listed = useMemo(() => (data ? all.filter((r) => r.mint).map((r) => ({ ticker: r.ticker, network: r.network, mint: r.mint! })) : null), [data, all]);
+  const watch = useWatchlist(listed);
+  const keyOf = (r: UpcomingRow) => coinWatchKey(r.network, r.mint);
+  const rows = all.filter((r) => { const k = keyOf(r); return !only || (!!k && watch.list.results.includes(k)); });
   const notice = data ? upcomingNotice(set) : null;
   const failed = !!data && (!set || set.state === "unavailable");
   return (
@@ -44,10 +48,10 @@ export default function NextResults() {
       {data && rows.length > 0 && (
         <ol className="space-y-3" aria-label="Next results">
           {rows.map((r) => (
-            <li key={r.ticker} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3" data-upcoming={r.ticker} data-status={r.status}>
+            <li key={keyOf(r) ?? r.ticker} className="rounded-lg border border-neutral-800 bg-neutral-900 p-3" data-upcoming={r.ticker} data-status={r.status}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-base font-semibold"><a className="underline" href={r.href}>{r.name} <span className="font-mono text-neutral-400">${r.ticker}</span></a>{r.network !== "mainnet" && <span className="ml-2 bt-chip">devnet</span>}</h2>
-                <FollowButton ticker={r.ticker} kind="results" label={`the next result for $${r.ticker}`} />
+                {keyOf(r) && <FollowButton watchKey={keyOf(r)!} ticker={r.ticker} kind="results" label={`the next result for $${r.ticker}`} />}
               </div>
               <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
                 <div><dt className="text-neutral-500">The result it waits for</dt><dd className="text-neutral-100">{r.event}</dd></div>

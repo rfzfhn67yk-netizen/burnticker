@@ -24,9 +24,17 @@ import type { BurnRule } from "@/lib/burnticker/rules";
  */
 
 /** Catalogue series that resolve once: a single game, the first snow, a named launch, a star or channel milestone. */
-export const CATALOGUE_ONE_SHOT_RE = /^(espn\.game|nws\.snow|ll2\.launch|github\.milestone|youtube\.milestone):/;
+export const CATALOGUE_ONE_SHOT_RE = /^(espn\.game|nws\.snow|ll2\.launch|github\.milestone|youtube\.milestone|usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning|defillama\.tvlnext):/;
 /** The catalogue one-shots the keeper ends after their one reading (rules.ts isOneShot). ESPN games and the first snow keep their own end. */
-export const KEEPER_ONE_SHOT_RE = /^(ll2\.launch|github\.milestone|youtube\.milestone):/;
+export const KEEPER_ONE_SHOT_RE = /^(ll2\.launch|github\.milestone|youtube\.milestone|usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning|defillama\.tvlnext):/;
+
+/**
+ * sources-3 (2026-10-12): the NEXT-EVENT one-shots (the next earthquake at a magnitude, the next hurricane at a category this season, the
+ * next day with N tornado reports, the next wildfire to reach a size, the next raise of a volcano to WARNING). Each one burns on the first
+ * qualifying period after its launch, so an earlier qualifying period never makes it "already decided"; only a closed window does (a
+ * hurricane season that is over). In both regexes above.
+ */
+export const NEXT_EVENT_ONE_SHOT_RE = /^(usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning|defillama\.tvlnext):/;
 
 /** The plain choice the review card shows (WIRING-SOURCES.md). */
 export const INVERSE_CHOICE = { off: "Burn when it happens", on: "Burn on the days it does not happen" } as const;
