@@ -201,3 +201,11 @@ test("a typed name belongs to its subject: a new team / market / pair regenerate
   assert.match(page, /set\("editedFor", setEditedFor\);/);
   assert.doesNotMatch(page, /It stays when the rule changes/);
 });
+
+// owner, 2026-10-12 evening (76ers, 2027 champion): the outcome list put the name at the left and "burn if this one wins" at the far
+// right with dead space between. Each row is now one full-width button that lights on hover and focus, so name and action read together.
+test("outcome rows: the whole row is one button, lit on hover and focus", () => {
+  const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
+  assert.match(page, /<li key=\{m\.conditionId\}><button type="button" data-decision="what" disabled=\{m\.closed\} onClick=\{\(\) => pickPoly\(m\)\} className="group flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left hover:bg-neutral-800 hover:text-neutral-100 focus-visible:bg-neutral-800/);
+  assert.doesNotMatch(page, /<li key=\{m\.conditionId\} className="flex items-center justify-between gap-2"><span>/);
+});
