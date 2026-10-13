@@ -279,3 +279,12 @@ describe("the mainnet guard", () => {
     assert.match(launchRefusal({ cluster: "devnet", flagCluster: "mainnet", dryRun: true, iUnderstand: true, env: {} })!, /--cluster mainnet but the RPC is devnet/);
   });
 });
+
+// owner question 2026-10-12 ("are we planning on launching through the platform?"): the launch script's default platform on mainnet is
+// Raydium's own, whose fees reach no burn pool. A mainnet --send without --platform or BURNTICKER_PLATFORM_ID is refused in the source.
+test("a mainnet --send names the platform on purpose: no --platform and no BURNTICKER_PLATFORM_ID is refused", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync("scripts/burnkeeper-launch.mts", "utf8");
+  assert.match(src, /if \(SEND && flagCluster === "mainnet" && !opt\("platform"\) && !process\S{5}BURNTICKER_PLATFORM_ID\) die\("refusing to --send on mainnet without --platform/);
+  assert.match(src, /const platformId = pubkeyArg\(opt\("platform"\) \?\? process\S{5}BURNTICKER_PLATFORM_ID, "--platform"\) \?\? DEFAULT_PLATFORM\[flagCluster\];/);
+});
