@@ -50,7 +50,10 @@ export class IrysUploader implements PinUploader {
     if (this.o.cluster !== "mainnet") chain = chain.withRpc(this.o.rpcUrl ?? "https://api.devnet.solana.com").devnet();
     const client = await chain;
     const r = await client.upload(Buffer.from(body), { tags: [{ name: "Content-Type", value: contentType }, ...tags] });
-    return { id: r.id, url: this.o.cluster === "mainnet" ? `https://arweave.net/${r.id}` : `https://devnet.irys.xyz/${r.id}` };
+    // 2026-10-13: Irys bundles free uploads to Arweave on its own schedule (the 10-12 $DEFICIT pin was still unseeded a day later, so
+    // arweave.net answered 404 while gateway.irys.xyz served it). The gateway URL is the same id, served at once and from Arweave once
+    // seeded, and it is one of the three forms launchGate's PINNED_URI_RE accepts.
+    return { id: r.id, url: this.o.cluster === "mainnet" ? `https://gateway.irys.xyz/${r.id}` : `https://devnet.irys.xyz/${r.id}` };
   }
 }
 
