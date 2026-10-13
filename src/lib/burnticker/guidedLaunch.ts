@@ -71,7 +71,7 @@ export const PATTERNS: Record<PatternId, { label: string; sentence: string }> = 
   every: { label: "Every time it happens", sentence: "The coin spends a share of its pool each time the thing happens: each win, each $1B, each unit." },
   fade: { label: "When it does not happen", sentence: "The coin spends a share of its pool on each day or reading where the thing does not happen." },
   once: { label: "Once, when it settles", sentence: "The coin spends a large share of its pool one time, when a market or a single result settles." },
-  winner: { label: "Winner takes the burn", sentence: "Two coins are linked. When a result fires one coin's rule, the other coin's share for it moves to that coin's burn pool." },
+  winner: { label: "Winner takes the burn", sentence: "Two coins are linked. When a result fires one coin's rule, that coin's own pool and the other coin's share for the result are both spent burning that coin. The winning coin's supply shrinks; the other coin's does not." },
 };
 export const PATTERN_ORDER: readonly PatternId[] = ["every", "fade", "once", "winner"];
 
