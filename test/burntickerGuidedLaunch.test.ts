@@ -89,8 +89,9 @@ describe("the four questions", () => {
     assert.equal(endSentences(poly()).kind, "flagship"); assert.match(endSentences(poly()).sentences[0], /goes to \$DEFICIT's burn/);
     const pairRule = { ...poly(), pair: { winnerTakesBurn: true } } as unknown as BurnRule;
     assert.equal(endSentences(pairRule).kind, "pair-winner"); assert.match(endSentences(pairRule).sentences[0], /rival coin/);
-    // a Coin vs Coin rule (derby/tile.ts tileRule) carries the wind-down alone, no end sink: the sentence says the wind-down
-    assert.match(read("src/lib/burnticker/derby/tile.ts"), /onEnd: \{ windDownDays: 28, sweepThresholdLamports: 50_000_000 \}/);
+    // a rule with the wind-down alone (no end sink) says the wind-down; since the owner rule of 2026-10-13 a Coin vs Coin rule (derby/tile.ts
+    // tileRule) carries the end sink too, so a losing coin never burns itself (a new launch with the wind-down alone is refused)
+    assert.match(read("src/lib/burnticker/derby/tile.ts"), /onEnd: \{ windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true \}/);
     const derby = { ...season("LAD"), onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000 } } as BurnRule;
     assert.equal(endSentences(derby).kind, "self");
     for (const r of [season("LAD"), poly(), pairRule, derby, debt()]) { const e = endSentences(r); for (const s of e.sentences) clean(s); assert.equal(e.options.filter((o) => o.available).length <= 1, true); for (const o of e.options) { clean(o.label); if (o.reason) clean(o.reason); } }

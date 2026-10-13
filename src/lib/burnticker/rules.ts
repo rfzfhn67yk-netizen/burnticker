@@ -152,7 +152,10 @@ export interface BurnRule {
    * The wind-down when the rule ends, and the retired-coin sweep threshold (see NO BURN POOL IS EVER LEFT BEHIND); absent on rules
    * created before it.
    */
-  onEnd?: { windDownDays: number; sweepThresholdLamports: number; /** END SINKS (LAUNCHPAD-PATH §45): see END_SINK below. Absent = the old wind-down for every end. */ endSink?: true };
+  onEnd?: { windDownDays: number; sweepThresholdLamports: number; /** END SINKS (LAUNCHPAD-PATH §45): see END_SINK below. Absent = the old wind-down for every end. "incinerator" (round 5) = the SOL itself is sent to Solana's incinerator. */ endSink?: true | "incinerator";
+    /** NAMED-COIN END SINK (end-sink picker, 2026-10-13; end.rs END_SINK_MINT): the live Burnticker coin whose burn pool takes the rest at a
+     *  resolved end, with its ticker for the words. Needs `endSink`. The program falls back to $DEFICIT when that coin is not live then. */
+    mint?: string; ticker?: string };
   /**
    * BURN TARGET (round 5, owner 2026-10-13; burnTarget.ts): this coin's burn pool swaps SOL for ANOTHER token on that token's pinned
    * Raydium CPMM pool and burns it, instead of burning itself. Buyback mode only; pinned before the coin exists (pin_burn_target), hashed
@@ -272,14 +275,36 @@ export const DEFAULT_ON_END = { windDownDays: DEFAULT_WIND_DOWN_DAYS, sweepThres
 /** The wind-down clause alone (no end sink): rules made before §45, and league-mode rules (`set`) until league-set sinks exist. */
 export const WIND_DOWN_ON_END = { windDownDays: DEFAULT_WIND_DOWN_DAYS, sweepThresholdLamports: DEFAULT_SWEEP_THRESHOLD_LAMPORTS } as const;
 /** The onEnd a new launch gets when its rule names none: DEFAULT_ON_END (with the end sink), or the wind-down alone for a league-mode rule. */
-export const defaultOnEndFor = (rule: unknown): { windDownDays: number; sweepThresholdLamports: number; endSink?: true } =>
+export const defaultOnEndFor = (rule: unknown): { windDownDays: number; sweepThresholdLamports: number; endSink?: true | "incinerator" } =>
   rule && typeof rule === "object" && (rule as { set?: unknown }).set != null ? { ...WIND_DOWN_ON_END } : { ...DEFAULT_ON_END };
-export type EndSinkKind = "flagship" | "pair-winner";
+/** Solana's incinerator (solana_program::incinerator::ID): a vanity address nobody holds a key for; the runtime burns what it is credited. */
+export const INCINERATOR_ADDRESS = "1nc1nerator11111111111111111111111111111111";
+/**
+ * ROUND 5 (owner 2026-10-13): `onEnd.endSink: "incinerator"` — at a RESOLVED end the SOL left in the burn pool (and the later trickle) is
+ * sent to Solana's incinerator (burn_receipts burn_sol_on_end; EndSink kind INCINERATOR), no swap and no price impact. Single coins
+ * only: a paired coin ends on the pair-winner sink. A VOID end keeps the wind-down on the coin, as for every sink.
+ */
+export type EndSinkKind = "flagship" | "pair-winner" | "mint" | "incinerator";
 export const endSinkOf = (r: Pick<BurnRule, "onEnd" | "pair" | "kind" | "binary" | "scalar">): EndSinkKind | null => {
-  if (r.onEnd?.endSink !== true) return null;
+  const e = r.onEnd?.endSink;
+  if (e !== true && e !== "incinerator") return null;
   if (ruleMappings(r).some((m) => m.mapping.tokens !== undefined)) return null;
-  return pairWinnerTakesBurn(r) ? "pair-winner" : "flagship";
+  if (e === "incinerator") return "incinerator";
+  return pairWinnerTakesBurn(r) ? "pair-winner" : r.onEnd?.mint ? "mint" : "flagship";
 };
+/**
+ * THE LOSING PATH NEVER BURNS THIS COIN (owner rule, 2026-10-13 ~09:05 Denver). When the team loses, the event resolves against the coin
+ * or the rule ends without firing, the rest must leave the coin: another live coin's burn, $DEFICIT's burn, the pair winner, or (round 5)
+ * Solana's incinerator. A new launch whose rule could carry an end sink but ends on the wind-down alone (an onEnd without `endSink`, so
+ * the rest burns this coin on every end) is refused with this sentence. Burning the rest here stays only on the winning path (the
+ * champion path, a one-shot that fired). Rules that cannot carry a sink are not refused: a league-mode rule (`set`), a fixed-token rule.
+ */
+export const END_SELF_ON_LOSS_REFUSAL = "This coin cannot burn itself when it loses or its rule ends without firing. Pick where the rest goes then: another live coin's burn or $DEFICIT's burn.";
+export function endSelfOnLossProblem(r: Pick<BurnRule, "onEnd" | "pair" | "kind" | "binary" | "scalar" | "set" | "vault">): string | null {
+  if (!r.onEnd || r.onEnd.endSink === true || r.onEnd.endSink === "incinerator" || r.set || r.vault) return null;
+  if (ruleMappings(r).some((m) => m.mapping.tokens !== undefined)) return null;
+  return END_SELF_ON_LOSS_REFUSAL;
+}
 export const ONE_SHOT_MAX_FRACTION = 1;
 /**
  * Resolves once: one market, a derby flippening, or (sources-2, 2026-10-12) a first-party one-shot that has exactly one reading ever: a
@@ -501,10 +526,17 @@ export function validateRule(raw: unknown): BurnRule {
   }
   const onEnd = (r as { onEnd?: unknown }).onEnd;
   if (onEnd !== undefined && onEnd !== null) {
-    const o = onEnd as { windDownDays?: unknown; sweepThresholdLamports?: unknown; endSink?: unknown };
-    if (typeof o !== "object" || !Number.isInteger(o.windDownDays) || (o.windDownDays as number) < 7 || (o.windDownDays as number) > 90 || !Number.isInteger(o.sweepThresholdLamports) || (o.sweepThresholdLamports as number) < 1_000_000 || (o.sweepThresholdLamports as number) > 10_000_000_000 || (o.endSink !== undefined && o.endSink !== true) || Object.keys(o).some((k) => k !== "windDownDays" && k !== "sweepThresholdLamports" && k !== "endSink")) p.push("onEnd must be { windDownDays: 7–90, sweepThresholdLamports: 1,000,000–10,000,000,000, endSink?: true }");
+    const o = onEnd as { windDownDays?: unknown; sweepThresholdLamports?: unknown; endSink?: unknown; mint?: unknown; ticker?: unknown };
+    if (typeof o !== "object" || !Number.isInteger(o.windDownDays) || (o.windDownDays as number) < 7 || (o.windDownDays as number) > 90 || !Number.isInteger(o.sweepThresholdLamports) || (o.sweepThresholdLamports as number) < 1_000_000 || (o.sweepThresholdLamports as number) > 10_000_000_000 || (o.endSink !== undefined && o.endSink !== true && o.endSink !== "incinerator") || Object.keys(o).some((k) => !["windDownDays", "sweepThresholdLamports", "endSink", "mint", "ticker"].includes(k))) p.push("onEnd must be { windDownDays: 7–90, sweepThresholdLamports: 1,000,000–10,000,000,000, endSink?: true | \"incinerator\", mint?: <coin mint>, ticker?: <its ticker> }");
+    // the named-coin end sink: a mint and its ticker together, on a rule with the end sink, never on a pair-winner pair
+    if (o.mint !== undefined || o.ticker !== undefined) {
+      if (typeof o.mint !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(o.mint) || typeof o.ticker !== "string" || !/^[A-Z0-9]{1,10}$/.test(o.ticker)) p.push("onEnd.mint and onEnd.ticker name the coin whose burn takes the rest: a mint address and its ticker (capital letters and digits), both or neither");
+      if (o.endSink !== true) p.push("onEnd.mint needs onEnd.endSink: true");
+      if ((r.pair as { winnerTakesBurn?: unknown } | null | undefined)?.winnerTakesBurn === true) p.push("onEnd.mint: a winner-takes-the-burn pair sends the rest to the pair winner, so it cannot name another coin");
+    }
     // §45: league sets (the champion coin of a league season) are a later program round; the program refuses that sink kind today.
-    if (o.endSink === true && set !== undefined && set !== null) p.push("onEnd.endSink cannot be combined with an outcome set yet (league-set end sinks are a later program round)");
+    if ((o.endSink === true || o.endSink === "incinerator") && set !== undefined && set !== null) p.push("onEnd.endSink cannot be combined with an outcome set yet (league-set end sinks are a later program round)");
+    if (o.endSink === "incinerator" && r.pair !== undefined && r.pair !== null) p.push("onEnd.endSink \"incinerator\" is for a single coin: a paired coin ends on the pair-winner sink (endSink: true)");
   }
   if (typeof r.floorUsd !== "string" || !/^\d+(\.\d{1,2})?$/.test(r.floorUsd)) p.push("floorUsd must be a decimal string with ≤ 2 decimals");
   if (typeof r.reserveSol !== "string" || !/^\d+(\.\d{1,9})?$/.test(r.reserveSol)) p.push("reserveSol must be a decimal string with ≤ 9 decimals");
@@ -536,7 +568,7 @@ export function validateRule(raw: unknown): BurnRule {
     onVoid: "skip", floorUsd: r.floorUsd as string, reserveSol: r.reserveSol as string, vault: mode === "vault" ? vault : null,
     pair: pair === null ? null : { pairId: pair.pairId, side: pair.side, counterpartMint: pair.counterpartMint ?? null, ...(pair.clause !== undefined ? { clause: pair.clause, voidBy: pair.voidBy } : {}), ...(pair.winnerTakesBurn === true ? { winnerTakesBurn: true as const } : {}), ...(pair.race ? { race: { slug: pair.race.slug, markets: [pair.race.markets[0], pair.race.markets[1]] as [string, string] } } : {}), ...(pair.game ? { game: { series: [pair.game.series[0], pair.game.series[1]] as [string, string] } } : {}) },
     ...(set !== undefined && set !== null ? { set: { id: (set as { id: string }).id, outcome: (set as { outcome: string }).outcome, forwardBps: (set as { forwardBps: number }).forwardBps } } : {}),
-    ...(onEnd !== undefined && onEnd !== null ? { onEnd: { windDownDays: (onEnd as { windDownDays: number }).windDownDays, sweepThresholdLamports: (onEnd as { sweepThresholdLamports: number }).sweepThresholdLamports, ...((onEnd as { endSink?: unknown }).endSink === true ? { endSink: true as const } : {}) } } : {}),
+    ...(onEnd !== undefined && onEnd !== null ? { onEnd: { windDownDays: (onEnd as { windDownDays: number }).windDownDays, sweepThresholdLamports: (onEnd as { sweepThresholdLamports: number }).sweepThresholdLamports, ...((onEnd as { endSink?: unknown }).endSink === true ? { endSink: true as const } : (onEnd as { endSink?: unknown }).endSink === "incinerator" ? { endSink: "incinerator" as const } : {}), ...(typeof (onEnd as { mint?: unknown }).mint === "string" ? { mint: (onEnd as { mint: string }).mint, ticker: (onEnd as { ticker: string }).ticker } : {}) } } : {}),
     ...(r.oracle === "derby" ? { derby: derby as DerbySpec } : {}),
     ...(inverse === true ? { inverse: true as const } : {}),
     ...(burnTarget !== undefined && burnTarget !== null ? { burnTarget: { mint: (burnTarget as BurnTargetField).mint, pool: (burnTarget as BurnTargetField).pool, symbol: (burnTarget as BurnTargetField).symbol, feedId: (burnTarget as BurnTargetField).feedId } } : {}),
@@ -647,7 +679,8 @@ export function onEndText(r: Pick<BurnRule, "onEnd" | "set" | "pair" | "kind" | 
   const sink = endSinkOf(r);
   if (sink) {
     const weeks0 = r.onEnd.windDownDays % 7 === 0 ? `${r.onEnd.windDownDays / 7 === 4 ? "four" : r.onEnd.windDownDays / 7} weeks` : `${r.onEnd.windDownDays} days`;
-    const where = sink === "pair-winner" ? "the winning coin's burn pool when the partner coin won the last result and is still live, and $DEFICIT's burn pool otherwise" : "$DEFICIT's burn pool (the platform's flagship coin)";
+    const where = sink === "pair-winner" ? "the winning coin's burn pool when the partner coin won the last result and is still live, and $DEFICIT's burn pool otherwise" : sink === "mint" ? `$${r.onEnd.ticker}'s burn pool (coin ${r.onEnd.mint}) when that coin is live then, and $DEFICIT's burn pool otherwise` : "$DEFICIT's burn pool (the platform's flagship coin)";
+    if (sink === "incinerator") return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever SOL is left in the burn pool is sent to Solana's incinerator (${INCINERATOR_ADDRESS}), which nothing can spend from, and so is any fee income that arrives after that; no coin is swapped for it, nothing is refunded and nobody is paid. When the rule ends void (a voided market or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
     return ` When the rule ends with a result${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}, whatever is left in the burn pool moves to ${where} and burns that coin, and so does any fee income that arrives after that; nothing is refunded and nobody is paid. When the rule ends void (a voided market, a voided pair or a cancelled season), whatever is left burns down on this coin on a daily clock over ${weeks0} (at least 99% of it), then the coin retires, and later fee income is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week).`;
   }
   const lg = r.set && r.set.forwardBps > 0 ? ` and ${Math.round(r.set.forwardBps) / 100}% of the leftover burns the winning coin of set ${r.set.id} once the program's forward_to_winner instruction is live (queued, not deployed); when it is not — or there is no winning coin, or it is not graduated — all of it stays here`: "";

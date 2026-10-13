@@ -13,10 +13,10 @@ held crank when the pool is drained under the floor.
 | build | bytes | executable hash |
 | --- | --- | --- |
 | round 4 (deployed, rebuilt here from the base branch) | 826,384 | `d9d447524754d52d1083c5027ebe2772fe779814c329fb07363dc90350ded2ae` (= the table) |
-| round 5 mainnet (default features) | 947,600 | `ac47edb5c07e2b846c74956f55c10068827b401ba1d2f3bfc0b1946427dc5832` |
-| round 5 devnet (`--features devnet`) | 947,576 | `596e03225d0ce718d0b1eba10464fc5d27081f4d750914e1cae1f7c610cb8b9c` |
+| round 5 mainnet (default features) | 967,304 | `224d10b192e9d7e7378bdac8df8343afac929dc2e4a35a3966009d5ec616ca87` |
+| round 5 devnet (`--features devnet`) | 967,280 | `50fc618e4108cf77f5a7223c0c3558b6f745a129e597b1e30e43518e75aaf8c6` |
 
-The program grows by about 121 KB, so the program data must be extended before the upgrade (step U2). Staging table for the upgrade
+The program grows by about 141 KB, so the program data must be extended before the upgrade (step U2). Staging table for the upgrade
 script: `docs/burnkeeper/evidence/devnet-round5/verified-build.round5.json` (config/burnticker/verified-build.json is untouched).
 Rebuild and check these numbers yourself in step U1; re-hash if the branch moved after this plan was written.
 
@@ -33,11 +33,11 @@ export BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5   # this shell only: lets initializ
 
 ## U. Upgrade burn_receipts on devnet through the Squads vault
 
-1. `OUT=$OUT bash scripts/ops/verified-build.sh --local | tee $E/build.log` prints burn_receipts devnet `596e0322…8b9c` (947,576 B)
+1. `OUT=$OUT bash scripts/ops/verified-build.sh --local | tee $E/build.log` prints burn_receipts devnet `50fc618e…f8c6` (967,280 B)
    (the "DIFFER" against the deployed table is expected).
-2. Room for the bigger program: `solana program show $PROG -u "$DEVNET_RPC"` (note "Data Length"). If it is under 947,576, extend by the
-   difference rounded up to a multiple of 10,240; from 826,392 that is 122,880 bytes (about 0.86 SOL of rent):
-   `solana program extend $PROG 122880 -u "$DEVNET_RPC" -k $D/payer.json | tee $E/extend.log`
+2. Room for the bigger program: `solana program show $PROG -u "$DEVNET_RPC"` (note "Data Length"). If it is under 967,280, extend by the
+   difference rounded up to a multiple of 10,240; from 826,392 that is 143,360 bytes (about 1.00 SOL of rent):
+   `solana program extend $PROG 143360 -u "$DEVNET_RPC" -k $D/payer.json | tee $E/extend.log`
 3. `solana program write-buffer $OUT/local-devnet/burn_receipts.so -u "$DEVNET_RPC" -k $D/payer.json | tee $E/buffer.log` (note BUFFER)
 4. `solana program set-buffer-authority <BUFFER> --new-buffer-authority $VAULT -u "$DEVNET_RPC" -k $D/payer.json | tee $E/set-buffer-authority.log`
 5. Dry run, then the proposal:
@@ -45,7 +45,7 @@ export BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5   # this shell only: lets initializ
    then the same line with `--send > $E/squads-upgrade.json` (note the transaction index N).
 6. Votes with `$D/squads-a.json` and `$D/squads-b.json` (`squads-multisig-cli proposal-vote … --transaction-index N --action approve | tee -a $E/squads-votes.log`).
 7. After the time lock: `squads-multisig-cli vault-transaction-execute … --transaction-index N | tee $E/squads-execute.log`.
-8. Read back: `bash scripts/ops/verified-build.sh --onchain devnet | tee $E/onchain-verify.log` shows `596e0322…`.
+8. Read back: `bash scripts/ops/verified-build.sh --onchain devnet | tee $E/onchain-verify.log` shows `50fc618e…`.
 
 ## C. Old coins are unchanged (right after U)
 
@@ -106,7 +106,7 @@ WIF pool would. AMM v4 is exercised by the LiteSVM suite only (a devnet AMM v4 p
    through the vault (`propose-target-pool --mint <TGTX> --admin $VAULT --pool <POOL2>` dry run prints the instruction), veto once with the
    keeper key (`veto-target-pool --attester $D/keeper.json --send`), propose again, wait 48 h, `apply-target-pool --send`.
 
-Checklist for the owner: U8 shows `596e0322…`; the old coin's crank is still crank_buyback with memo v2; TGTX's crank burned TBONK
+Checklist for the owner: U8 shows `50fc618e…`; the old coin's crank is still crank_buyback with memo v2; TGTX's crank burned TBONK
 (supply down by `got`) with memo v3; the pushed and the held cranks moved nothing. Paste the JSON files into `docs/burnkeeper/evidence/devnet-round5/`
 (they hold no secret) and the agent writes the run log.
 
@@ -119,7 +119,7 @@ burn the coin itself: do not roll back while a target coin holds fuel on that cl
 
 ## Mainnet (not part of this plan)
 
-Only after a round-5 blind review: the same steps through the mainnet vault, an extend of 122,880 bytes (947,600 − 826,384 rounded up),
+Only after a round-5 blind review: the same steps through the mainnet vault, an extend of 143,360 bytes (967,304 − 826,384 rounded up),
 the verified-build table rewritten, then the host flag `BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5` and the page wiring (WIRING-ROUND5.md).
 Before offering BONK or WIF, read both mints on mainnet (no mint authority, no freeze authority, classic SPL Token) and pick a CPMM pool
 that passes `check-target` (at least 50 SOL of reserve, fee at most 1 %).

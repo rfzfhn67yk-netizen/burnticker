@@ -391,6 +391,13 @@ pub const END_SINK_MINT: u8 = 1;
 pub const END_SINK_LEAGUE_SET: u8 = 2;
 #[constant]
 pub const END_SINK_PAIR_WINNER: u8 = 3;
+/// Burn the SOL itself (owner, 2026-10-13): after a RESOLVED end the leftover SOL goes to Solana's incinerator (burn_sol_on_end),
+/// no swap, no price impact. EndSink.sink_mint holds INCINERATOR_ID.
+#[constant]
+pub const END_SINK_INCINERATOR: u8 = 4;
+/// Solana's incinerator (solana_program::incinerator::ID): a vanity address nobody holds a key for; the runtime burns the lamports
+/// credited to it at the end of the block. burn_sol_on_end sends nowhere else.
+pub const INCINERATOR_ID: Pubkey = pubkey!("1nc1nerator11111111111111111111111111111111");
 /// EndSink.min_forward_lamports bounds (the rules' onEnd.sweepThresholdLamports range): forward_on_end moves nothing smaller.
 #[constant]
 pub const END_FORWARD_MIN_LAMPORTS_FLOOR: u64 = 1_000_000;

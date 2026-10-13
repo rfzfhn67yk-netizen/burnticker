@@ -26,8 +26,8 @@ export function ruleFor(src: SourceCard, fraction: number): { selector: { oracle
   return { selector: { oracle: "catalogue", series: src.id }, mapping: { kind: "scalar", scalar: { unit: src.unit.size, perUnit: { fractionOfPool: fraction }, baseline: src.baseline, direction: src.direction as "up" | "down" | "abs" } } };
 }
 
-/** The wind-down a rule without `onEnd` gets (the same default the server and the SDK add): 28 days, sweep above 0.05 SOL. */
-export const DEFAULT_ON_END = { windDownDays: 28, sweepThresholdLamports: 50_000_000 } as const;
+/** The end a rule without `onEnd` gets (the same default the server and the SDK add): 28 days, sweep above 0.05 SOL, and the rest to $DEFICIT's burn at a result (a coin never burns itself on its losing path). */
+export const DEFAULT_ON_END = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
 
 export interface LaunchPreview { lines: string[]; rulesSha256: string; localSha256: string; unsigned: { transaction: string; signers: string[] }[]; ready: boolean }
 

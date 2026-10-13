@@ -190,6 +190,18 @@ pub fn governance_hash(admin: &Pubkey, quorum: u8, attesters: &[AttesterEntry]) 
     solana_sha256_hasher::hashv(&[GOVERNANCE_HASH_DOMAIN, &parts]).to_bytes()
 }
 
+/// Round 5 (owner, 2026-10-13): a coin must not burn itself on its losing path. The program's RESOLVED end (the rule settled and this
+/// coin did not keep its pool: the "lost" path) forwards to the EndSink; a coin without one would wind down on itself. So the r5 create
+/// refuses a buyback coin without an end sink (the flagship itself, which cannot name one, and vault-mode coins, which have no burn
+/// pool, are exempt). SELF stays possible for the won path: a VOID end (the champion path) keeps the hashed wind-down on the coin.
+/// Coins created by initialize_token (round 4) are untouched and read as before.
+pub fn handle_initialize_token_r5(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Result<()> {
+    if args.rule.mode == MODE_BUYBACK && ctx.accounts.mint.key() != BURNTICKER_FLAGSHIP {
+        require!(ctx.accounts.end_sink.is_some(), BurnError::LostPathBurnsSelf);
+    }
+    handle_initialize_token(ctx, args)
+}
+
 pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Result<()> {
     let rent_min = Rent::get()?.minimum_balance(0);
     validate_rule(&args.rule, rent_min)?;

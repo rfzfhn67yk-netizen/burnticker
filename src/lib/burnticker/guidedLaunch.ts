@@ -321,7 +321,9 @@ export function electionAuthorityLines(certified: string): string[] {
   ];
 }
 
-export type EndKind = "flagship" | "named-coin" | "pair-winner" | "self";
+export type EndKind = "flagship" | "named-coin" | "pair-winner" | "incinerator" | "self";
+/** Round 5: the incinerator end's choice label (step 4 and the review's end facts). */
+export const INCINERATOR_CHOICE_LABEL = "The SOL left is sent to Solana's incinerator, which nothing can spend from";
 export interface EndOption { kind: EndKind; label: string; available: boolean; reason: string | null }
 /**
  * THE END, FROM THE RULE (step 4). The program pins one end sink at creation (EndSink kinds 0, 1 and 3); the sentences come from the sink
@@ -332,18 +334,88 @@ export interface EndOption { kind: EndKind; label: string; available: boolean; r
 export const PERPETUAL_END_LINE = "This coin has no end. It keeps burning on every result that qualifies, for as long as its pool holds SOL, so nothing is ever left over to send anywhere.";
 export function endSentences(rule: BurnRule, o: { team?: string | null } = {}): { kind: EndKind; sentences: string[]; options: EndOption[] } {
   const sink = describeEndSink(rule);
-  const kind: EndKind = sink === "pair-winner" ? "pair-winner" : sink === "flagship" ? "flagship" : "self";
+  const kind: EndKind = sink === "pair-winner" ? "pair-winner" : sink === "flagship" ? "flagship" : sink === "mint" ? "named-coin" : sink === "incinerator" ? "incinerator" : "self";
   // ChatGPT audit 6 item 3: the sentences are describe.ts endText's, the same the review API's endsLine and the coin description say
   const e = endText(rule, { team: o.team ?? null });
   const sentences = [...e.result.split(/(?<=\.)\s+(?=[A-Z$])/), ...(e.void ? [e.void] : [])];
   // website-20 item 58: a coin with no end never reaches its end sink, so no end is offered as "this coin's end"
   if (windowKindOf(rule) === "perpetual" && kind !== "pair-winner") return { kind: "self", sentences, options: [] };
   const options: EndOption[] = [
-    { kind: "flagship", label: kind === "flagship" && championPathRule(rule) ? sentences.join(" ") : "The rest goes to $DEFICIT", available: kind === "flagship", reason: kind === "flagship" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival first." : "This kind of coin has no end sink today." },
+    { kind: "flagship", label: kind === "flagship" && championPathRule(rule) ? sentences.join(" ") : "The rest goes to $DEFICIT", available: kind === "flagship", reason: kind === "flagship" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival first." : kind === "named-coin" ? "This coin names another coin instead." : "This kind of coin has no end sink today." },
     { kind: "pair-winner", label: "The rest goes to the rival", available: kind === "pair-winner", reason: kind === "pair-winner" ? null : "Only two linked coins can name each other." },
-    { kind: "named-coin", label: "The rest goes to another coin you name", available: false, reason: "The launch page does not build this end." },
+    { kind: "named-coin", label: kind === "named-coin" ? sentences[0] : "The rest goes to another coin you name", available: kind === "named-coin", reason: kind === "named-coin" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival." : kind === "flagship" ? "Pick it under When it ends." : "This kind of coin has no end sink today." },
+    // round 5 (owner 2026-10-13): burn the SOL itself; single coins only (a linked pair ends on the rival)
+    { kind: "incinerator", label: INCINERATOR_CHOICE_LABEL, available: kind === "incinerator", reason: kind === "incinerator" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival." : "Pick it under When it ends." },
   ];
   return { kind, sentences, options };
+}
+
+/**
+ * THE END CHOICE (owner, 2026-10-13: "pick another coin to burn (except the losing coin) or give the option to burn the SOL"; END-SINK-
+ * OPTIONS-BRIEF item 2, and the owner rule of ~09:05 the same morning: a coin never burns itself on its losing path). Where the rest goes
+ * when the rule ends without this coin winning, one sentence each:
+ *
+ *   coin      the rest goes to another live coin's burn (the picker over GET /sinks); end.rs falls to $DEFICIT when that coin is not live
+ *   deficit   the rest goes to $DEFICIT's burn (the default)
+ *   burn-sol  the rest is sent to Solana's incinerator; shown only when the launch state says the round-5 program has that sink
+ *             (launchAvailability.ts burnSol, absent today, so hidden)
+ *
+ * "The rest burns this coin" is never a choice for that path. It stays only on the winning path, and only where the rule has one: a
+ * champion-path team coin whose team wins the title (`winning`). A settled or linked pair keeps the pair winner and shows no choice.
+ */
+export type EndChoiceKind = "deficit" | "coin" | "burn-sol";
+export interface EndChoice { kind: EndChoiceKind; mint?: string; ticker?: string }
+export const END_CHOICE_DEFAULT: EndChoice = { kind: "deficit" };
+export const END_CHOICE_LABEL = "Where the rest goes if this coin does not win";
+export const END_CHOICE_LINES = {
+  self: "The rest burns this coin.",
+  coin: "The rest goes to another coin's burn.",
+  deficit: "The rest goes to $DEFICIT's burn.",
+  burnSol: "The rest is sent to Solana's incinerator, which nothing can spend from.",
+} as const;
+/** Why "the rest burns this coin" is not offered for the losing path (said once beside the choices). */
+export const SELF_ON_LOSS_LINE = "A coin does not burn itself when it loses or its rule ends without firing: the rest leaves this coin then.";
+export const SINK_PICKER_LABEL = "Pick a coin";
+export const SINK_SEARCH_PLACEHOLDER = "Search by ticker, name or rule";
+export const SINK_NONE_LINE = "No other live coin on this network can take the rest yet, so it goes to $DEFICIT's burn.";
+export const SINK_NO_MATCH_LINE = "No live coin matches that search.";
+/** The picked coin, in a sentence, with end.rs's fall-through. */
+export const pickedSinkLine = (ticker: string): string => `The rest goes to $${ticker}'s burn; if $${ticker} is not live then, to $DEFICIT's burn.`;
+export interface EndChoiceModel { offered: boolean; winning: string | null; options: { kind: EndChoiceKind; line: string }[] }
+/**
+ * What the end choice shows for `rule` (with its onEnd, or the default end): offered for a coin whose sink is $DEFICIT or a named coin and
+ * that can end; never for a winner-takes-the-burn pair (the pair winner), a league-mode coin, a fixed-token rule or a coin with no end.
+ */
+export function endChoiceModel(rule0: BurnRule, o: { burnSol?: boolean; sinkPicker?: boolean; team?: string | null } = {}): EndChoiceModel {
+  // a rule sent without onEnd gets the default end (the $DEFICIT sink) from the server (handlers.ts defaultOnEndFor); a league-mode rule does not
+  const rule = rule0.onEnd || rule0.set ? rule0 : ({ ...rule0, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } } as BurnRule);
+  const sink = describeEndSink(rule);
+  const offered = (sink === "flagship" || sink === "mint") && !rule.set && windowKindOf(rule) !== "perpetual";
+  if (!offered) return { offered: false, winning: null, options: [] };
+  const winning = championPathRule(rule) ? `If ${o.team ?? "the team"} win the championship, the rest burns this coin.` : null;
+  return {
+    offered, winning,
+    options: [
+      // owner decision 2026-10-13 evening: the "another coin" choice is hidden unless the host exposes it (BURNTICKER_END_SINK_PICKER=1)
+      ...(o.sinkPicker ? [{ kind: "coin" as const, line: END_CHOICE_LINES.coin }] : []),
+      { kind: "deficit", line: END_CHOICE_LINES.deficit },
+      ...(o.burnSol ? [{ kind: "burn-sol" as const, line: END_CHOICE_LINES.burnSol }] : []),
+    ],
+  };
+}
+/** The choice a rule already carries (a draft read back). */
+export const endChoiceOf = (rule: BurnRule | null): EndChoice => (rule?.onEnd?.mint && rule.onEnd.ticker ? { kind: "coin", mint: rule.onEnd.mint, ticker: rule.onEnd.ticker } : END_CHOICE_DEFAULT);
+/**
+ * The rule with the choice applied. Only where endChoiceModel offers it; any other rule comes back unchanged. "coin" without a picked coin
+ * is $DEFICIT until one is picked. "burn-sol" sets `burnSol` on the end, the field the round-5 sink reads (the review refuses it until then).
+ */
+export function withEndChoice(rule: BurnRule, c: EndChoice): BurnRule {
+  if (!endChoiceModel(rule, { burnSol: true }).offered) return rule;
+  const base = rule.onEnd ?? { windDownDays: 28, sweepThresholdLamports: 50_000_000 };
+  const { mint: _m, ticker: _t, ...rest } = base as typeof base & { mint?: string; ticker?: string; burnSol?: true };
+  delete (rest as { burnSol?: true }).burnSol;
+  const onEnd = c.kind === "coin" && c.mint && c.ticker ? { ...rest, endSink: true as const, mint: c.mint, ticker: c.ticker } : c.kind === "burn-sol" ? { ...rest, endSink: true as const, burnSol: true } : { ...rest, endSink: true as const };
+  return { ...rule, onEnd } as BurnRule;
 }
 
 /**

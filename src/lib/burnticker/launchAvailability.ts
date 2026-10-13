@@ -25,7 +25,7 @@ export const CREATOR_LAUNCHES_PREVIEW_FLAG = "BURNTICKER_CREATOR_LAUNCHES_PREVIE
 export type LaunchMode = "closed" | "preview" | "open";
 export type LaunchType = "team" | "matchup" | "markets" | "elections" | "feeds" | "weather" | "derby" | "pairs";
 export interface TypeAvailability { type: LaunchType; label: string; available: boolean; reason: string | null }
-export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve" | "burn-real"; label: string; available: boolean; reason: string | null }
+export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve" | "burn-real" | /** round 5: the incinerator end sink; no host lists it yet */ "burn-sol" | /** the "another coin" end choice; off until the list is curated */ "end-sink-picker"; label: string; available: boolean; reason: string | null }
 export interface LaunchAvailabilityModel {
   mode: LaunchMode;
   /** True only in `open` mode: the one flag that lets a bundle be built. */
@@ -57,6 +57,8 @@ export const PAIRS_BLOCKER = "On mainnet this site has not turned on the program
 export const BURN_REAL_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
 export const BURN_REAL_WAITING = "A coin that burns a real token, such as WIF or BONK, instead of itself waits for the round-5 program, which is not deployed on this site.";
 export const burnRealFromEnv = (env: Env = process.env): boolean => (env[BURN_REAL_LAYOUT_ENV] ?? "").trim() === "r5";
+/** BURNTICKER_END_SINK_PICKER=1 offers "the rest goes to another coin's burn"; anything else keeps $DEFICIT as the only sink choice. */
+export const sinkPickerFromEnv = (env: Env = process.env): boolean => /^(1|true|on|yes)$/i.test((env.BURNTICKER_END_SINK_PICKER ?? "").trim());
 
 export function launchModeFromEnv(env: Env = process.env): LaunchMode {
   if (on(env[CREATOR_LAUNCHES_FLAG])) return "open";
@@ -92,6 +94,8 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
     { id: "feeds", label: "Public data publishers (Treasury, BLS, FRED, …)", available: true, reason: null },
     { id: "pair-curve", label: "Pair curve (registered pairs on mainnet)", available: pairCurve, reason: pairCurve ? null : "the pair curve is turned off on this site" },
     { id: "burn-real", label: "Coins that burn a real token instead of themselves (the round-5 program)", available: burnRealFromEnv(env), reason: burnRealFromEnv(env) ? null : BURN_REAL_WAITING },
+    // owner decision 2026-10-13 evening: a sink coin has a beneficiary, $DEFICIT has none; the picker stays off until the list is curated
+    { id: "end-sink-picker", label: "Sending the rest to another coin's burn", available: sinkPickerFromEnv(env), reason: sinkPickerFromEnv(env) ? null : "The rest of a losing coin goes to $DEFICIT's burn on this site." },
   ];
   return { mode, transactions: mode === "open", cluster, banner: mode === "preview" ? PREVIEW_BANNER : mode === "closed" ? CREATOR_LAUNCHES_CLOSED : null, types, sources };
 }
@@ -191,6 +195,14 @@ export interface SiteLaunchState {
   hostedSigning: HostedSigning;
   /** Round 5: whether a coin may burn a real token on this site (the round-5 program is deployed), and the waiting line when not. */
   burnReal: { available: boolean; line: string | null };
+  /**
+   * End-sink picker (2026-10-13): whether a coin may send its rest to Solana's incinerator (a round-5 program sink another change builds).
+   * Read from a `burn-sol` source; no host exposes one today, so it is false and the step-4 slot stays hidden (fail closed).
+   */
+  burnSol: { available: boolean };
+  /** The "another coin's burn" end choice. Owner decision 2026-10-13 evening: held back until the list is curated (a sink coin has a
+   *  beneficiary; $DEFICIT has none). Read from an `end-sink-picker` source that only BURNTICKER_END_SINK_PICKER=1 exposes. */
+  sinkPicker: { available: boolean };
   /** The launch button may sign and send: open, freshly read, hosted signing complete. */
   canSign: boolean;
   /** The wizard (search, tiles, review card) may render: open or preview, freshly read. */
@@ -259,6 +271,8 @@ function stateFrom(read: SiteLaunchRead, m: LaunchAvailabilityModel, hostedSigni
     read, mode, cluster: m.cluster, types: m.types,
     pairs: { available: pairsA.available, line: pairsA.available ? null : PAIRS_UNAVAILABLE_LINE, detail: pairsA.available ? null : pairsA.reason },
     burnReal: burnRealOf(m, fresh),
+    burnSol: { available: fresh && m.sources.some((x) => x.id === "burn-sol" && x.available === true) },
+    sinkPicker: { available: fresh && m.sources.some((x) => x.id === "end-sink-picker" && x.available === true) },
     hostedSigning, canSign, wizard: fresh && (mode === "open" || mode === "preview"), sentence, signingSentence, walletNote: WALLET_NOTE,
     meta: { description: `${SITE_HEADLINE} ${read === "ready" ? sentence : SITE_SENTENCE.closed}` },
     readAt,

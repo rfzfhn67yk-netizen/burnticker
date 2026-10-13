@@ -1,6 +1,7 @@
 import fs from "node:fs";
+import { burnRealFromEnv } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
-import { lockRule, ruleStatement, isMeetingsRule, gameMirrorId, withFullFraction, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { endSelfOnLossProblem, lockRule, ruleStatement, isMeetingsRule, gameMirrorId, withFullFraction, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { allocationFor, raiseLamportsOf, raiseProblem } from "@/lib/burnticker/launchBundle";
 import { pairCurveEnabled } from "@/lib/burnKeeper/pairCurveCrank";
 import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS as PAIR_DEV_FEE_BPS, FEE_BPS as PAIR_FEE_BPS } from "@/lib/pairCurve/pricing";
@@ -8,6 +9,7 @@ import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERA
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
 import { describeRule, endText, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
+import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
 import { drainWarning, reviewProjection, type Projection } from "@/lib/burnticker/projection";
 import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
@@ -249,7 +251,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
   /** sources-7 H6: the season-over refusal (seasonOver.ts seasonOverFor, read by the route); refused as a problem, never only a warning */ seasonOver?: SeasonOverRefusal | null;
-  /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null } = {}): { review: LaunchReview } | { problems: string[] } {
+  /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null;
+  /** the end-sink picker (endSinks.ts): the live coins a rule may name in onEnd.mint (the route reads the registry); absent = not checked */ sinks?: readonly SinkCoin[] | null } = {}): { review: LaunchReview } | { problems: string[] } {
   const env = o.env ?? process.env;
   const cluster = hostCluster(env);
   const problems: string[] = [];
@@ -265,7 +268,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const now = o.now ?? Date.now();
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
   const settled = settledPairInput(body.pair);
-  for (const x of ruleRefusals(locked, { kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null })) problems.push(x.message);
+  for (const x of ruleRefusals(locked, { programRound5: burnRealFromEnv(env), kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks: o.sinks ?? null })) problems.push(x.message);
   // sources-7 H7: a coin against its own staked or wrapped form (derby/spec.ts wrapperPairProblem), as the tile and admission refuse it
   { const d = locked.rule.derby; if (d?.selector === "coinvs") { const w = wrapperPairProblem(d.a, d.b); if (w) problems.push(w); } }
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
@@ -308,6 +311,11 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const cr = !pair && body.companion && typeof body.companion === "object" ? (body.companion as { rule?: unknown }).rule : undefined;
   if (cr && typeof cr === "object" && !Array.isArray(cr)) {
     try { companionLocked = lockRule((cr as { onEnd?: unknown }).onEnd === undefined ? { ...(cr as object), onEnd: { ...DEFAULT_ON_END } } : cr); } catch (e) { problems.push(`Coin B. ${(e as Error).message}`); }
+    // an independent pair: coin B picks its own end, checked as coin A's is (the losing path leaves the coin; a named coin is live)
+    if (companionLocked) {
+      const self = endSelfOnLossProblem(companionLocked.rule); if (self) problems.push(`Coin B. ${self}`);
+      if (o.sinks) { const why = namedSinkProblem(companionLocked.rule, o.sinks); if (why) problems.push(`Coin B. ${why}`); }
+    }
   }
   // Round 5 (WIRING-ROUND5 item 1): side B's own pinned token, checked as the bundle route checks it (handlers.ts prepareLaunch)
   let pinB: BurnTargetField | null = null;

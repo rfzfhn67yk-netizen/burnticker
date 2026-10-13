@@ -72,7 +72,7 @@ describe("launch.ts", () => {
     assert.match(p.rulesSha256, /^[0-9a-f]{64}$/);
     const src = (await bt.catalogue()).sources.find((s) => s.id === "treasury.debt")!;
     const { selector, mapping } = ruleFor(src, 0.02);
-    assert.equal(rules.sha256({ ...rules.compose(selector, mapping), onEnd: { windDownDays: 28, sweepThresholdLamports: 50000000 } }), p.rulesSha256, "the same bytes the SDK locks (with the default wind-down)");
+    assert.equal(rules.sha256({ ...rules.compose(selector, mapping), onEnd: { windDownDays: 28, sweepThresholdLamports: 50000000, endSink: true } }), p.rulesSha256, "the same bytes the SDK locks (with the default end)");
     assert.ok(p.unsigned.length >= 1);
     for (const u of p.unsigned) {
       const tx = Transaction.from(Buffer.from(u.transaction, "base64"));

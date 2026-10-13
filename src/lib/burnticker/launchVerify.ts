@@ -1,4 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
+import { BURN_TARGET_EXTERNAL } from "@/lib/burnReceipts/burnTarget";
 import { decodeTokenConfig } from "@/lib/burnReceipts/accounts";
 import { POOL_POLICY_CREATOR_IS_FEE_PDA, POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
@@ -63,7 +64,8 @@ export interface TxReader {
 
 /** burn_receipts initialize_token: discriminator and account slots, from the program's IDL (payer 0, creator 1, mint 2). */
 const INIT_DEF = BURN_RECEIPTS_IDL.instructions.find((i) => i.name === "initialize_token")!;
-const INIT_DISC = Buffer.from(INIT_DEF.discriminator);
+/** initialize_token and round 5's initialize_token_r5 (the same accounts and arguments under another discriminator). */
+const INIT_DISCS = BURN_RECEIPTS_IDL.instructions.filter((i) => i.name === "initialize_token" || i.name === "initialize_token_r5").map((i) => Buffer.from(i.discriminator));
 const slot = (name: string) => { const i = INIT_DEF.accounts.findIndex((a) => a.name === name); if (i < 0) throw new Error(`burn_receipts IDL: initialize_token has no ${name} account`); return i; };
 const INIT_CREATOR = slot("creator"), INIT_MINT = slot("mint");
 /**
@@ -103,12 +105,17 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
 
       // 1. initialize_token for THIS mint and creator, called as an instruction of burn_receipts (not merely a key in the list)
       const ofProgram = ixs.filter((ix) => ix.program === program);
-      if (!ofProgram.length) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
-      const inits = ofProgram.filter((ix) => ix.data.length >= 8 && ix.data.subarray(0, 8).equals(INIT_DISC));
-      if (!inits.length) return { ok: false, status: 422, reason: `the transaction's burn_receipts instruction is not initialize_token: ${NOT_THIS}` };
+      // round 5: a coin with a pinned token locks its rule (initialize_token + pin_burn_target) one transaction BEFORE its LaunchLab
+      // create (launchBundle.ts launchTransactions), and the confirming step is that create, which calls no burn_receipts instruction.
+      // Such a transaction is taken only for a LaunchLab draft whose TokenConfig on chain burns a pinned token (checked below), and step
+      // 3 still requires the create. Any transaction that does call burn_receipts must carry this coin's initialize_token, as before.
+      const splitCreate = !ofProgram.length && expect.venue.kind === "launchlab";
+      if (!ofProgram.length && !splitCreate) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
+      const inits = ofProgram.filter((ix) => ix.data.length >= 8 && INIT_DISCS.some((d) => ix.data.subarray(0, 8).equals(d)));
+      if (!inits.length && !splitCreate) return { ok: false, status: 422, reason: `the transaction's burn_receipts instruction is not initialize_token: ${NOT_THIS}` };
       const forMint = inits.filter((ix) => ix.accounts[INIT_MINT] === expect.mint);
-      if (!forMint.length) return { ok: false, status: 422, reason: `the transaction's initialize_token is for another mint (${inits.map((ix) => ix.accounts[INIT_MINT] ?? "none").join(", ")}), not this coin's mint ${expect.mint}: ${NOT_THIS}` };
-      if (!forMint.some((ix) => ix.accounts[INIT_CREATOR] === expect.creator)) return { ok: false, status: 422, reason: `the transaction's initialize_token names another creator, not the draft's creator ${expect.creator}: ${NOT_THIS}` };
+      if (!splitCreate && !forMint.length) return { ok: false, status: 422, reason: `the transaction's initialize_token is for another mint (${inits.map((ix) => ix.accounts[INIT_MINT] ?? "none").join(", ")}), not this coin's mint ${expect.mint}: ${NOT_THIS}` };
+      if (!splitCreate && !forMint.some((ix) => ix.accounts[INIT_CREATOR] === expect.creator)) return { ok: false, status: 422, reason: `the transaction's initialize_token names another creator, not the draft's creator ${expect.creator}: ${NOT_THIS}` };
 
       // 2. the TokenConfig as the chain holds it now: the program's, this mint's, locking the draft's rule
       const mintKey = new PublicKey(expect.mint), programKey = new PublicKey(program);
@@ -116,11 +123,14 @@ export function connectionLaunchVerifier(reader: TxReader, o: { burnProgramId: s
       let cfgInfo: Awaited<ReturnType<TxReader["getAccountInfo"]>>;
       try { cfgInfo = await reader.getAccountInfo(cfgAddress, "confirmed"); }
       catch (e) { return { ok: false, status: 502, reason: `the coin's TokenConfig could not be read from the RPC just now (${(e as Error).message.slice(0, 120)}); retry` }; }
+      // a transaction without a burn_receipts call is judged only as a pinned-token coin's create: no config of that kind, the old answer
+      if (splitCreate && (!cfgInfo || cfgInfo.owner.toBase58() !== program)) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
       if (!cfgInfo) return { ok: false, status: 422, reason: `no TokenConfig for this mint under the burn_receipts program on chain (${cfgAddress.toBase58()}): initialize_token did not complete, ${NOT_THIS}` };
       if (cfgInfo.owner.toBase58() !== program) return { ok: false, status: 422, reason: `the account at the coin's TokenConfig address is not owned by the burn_receipts program: ${NOT_THIS}` };
       let cfg: ReturnType<typeof decodeTokenConfig>;
       try { cfg = decodeTokenConfig(cfgInfo.data); } catch (e) { return { ok: false, status: 422, reason: `the coin's TokenConfig does not decode (${(e as Error).message.slice(0, 80)}): ${NOT_THIS}` }; }
       if (cfg.mint.toBase58() !== expect.mint || cfg.creator.toBase58() !== expect.creator) return { ok: false, status: 422, reason: `the TokenConfig on chain names another mint or creator: ${NOT_THIS}` };
+      if (splitCreate && cfg.burn_target_kind !== BURN_TARGET_EXTERNAL) return { ok: false, status: 422, reason: `the transaction does not call the burn_receipts program (initialize_token): ${NOT_THIS}` };
       if (hex(cfg.rules_sha256) !== expect.rulesSha.toLowerCase()) return { ok: false, status: 422, reason: `the TokenConfig on chain locks another rule (rules sha256 ${short(hex(cfg.rules_sha256))}) than this draft's (${short(expect.rulesSha)}): ${NOT_THIS}` };
 
       // 3. the venue the draft expects, completed

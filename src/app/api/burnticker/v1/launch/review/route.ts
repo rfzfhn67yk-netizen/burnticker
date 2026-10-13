@@ -6,6 +6,7 @@ import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
+import { liveSinks, type SinkCoin } from "@/lib/burnticker/endSinks";
 import { lookalikeRows } from "@/lib/burnticker/launchGuards";
 import { seasonNotStartedLine, seasonOverFor } from "@/lib/burnticker/seasonOver";
 import { espnClient } from "@/lib/burnticker/sources/native";
@@ -54,7 +55,10 @@ export async function POST(req: Request) {
     // sources-7 H6: a season rule on a team whose season is over is refused (seasonOver.ts), from the platform's schedule port
     const seasonOver = await seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule);
     const game = await gameFor((body as { rule?: unknown }).rule);
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game });
+    // the end-sink picker: the live coins on this network a rule may name to take the rest (endSinks.ts); unreadable = none
+    let sinks: SinkCoin[] = [];
+    try { const p = platform(); sinks = liveSinks(p.registry, p.cluster); } catch { sinks = []; }
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game, sinks });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

@@ -166,13 +166,14 @@ export function PatternStep({ preview, options, value, onPick, shares, share, on
  * The end, stated on the review (website-20; pass B item 18, audit 6 item 12): the sentences read from the rule, then the ends the program
  * can pin that this coin does not use, one tap away. Never a menu with one live choice.
  */
-export function EndSection({ sentences, options, title = null }: { sentences: string[]; options: EndOption[]; /** website-21: a rivalry series pair names its one end ("The rest goes to the series winner") */ title?: string | null }) {
+export function EndSection({ sentences, options, title = null, choice = null }: { sentences: string[]; options: EndOption[]; /** website-21: a rivalry series pair names its one end ("The rest goes to the series winner") */ title?: string | null; /** the end-sink picker (EndChoicePicker), when this coin may pick */ choice?: ReactNode }) {
   const other = options.filter((o) => !o.available);
   return (
     <section className="min-w-0 space-y-1 rounded-lg border border-neutral-800 p-3 text-sm" aria-label={title ?? END_LABEL} data-end-section>
       <h3 className="text-xs font-medium text-neutral-400">{END_LABEL}</h3>
       {title && <p className="font-medium text-amber-200" data-end-title>{title}</p>}
       <div className="min-w-0 space-y-1 break-words text-neutral-100" data-end-sentences>{sentences.map((s) => <p key={s}>{s}</p>)}</div>
+      {choice}
       {other.length > 0 && (
         <details className="text-xs text-neutral-400" data-other-ends>
           <summary className="cursor-pointer">Other ends, not used here</summary>

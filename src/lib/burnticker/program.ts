@@ -7,7 +7,7 @@ import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
 import { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { solToLamports } from "@/lib/burnKeeper/rules";
-import { DECIMALS, TOTAL_SUPPLY, endSinkOf, ruleMappings, type BurnRule, type RuleMode } from "@/lib/burnticker/rules";
+import { DECIMALS, INCINERATOR_ADDRESS, TOTAL_SUPPLY, endSinkOf, ruleMappings, type BurnRule, type RuleMode } from "@/lib/burnticker/rules";
 import { FakeLockFees, fakeLockAddress, operatorTreasuryFor, type LockFeesClient } from "@/lib/burnticker/lockFees";
 import { FakePairForward, type PairForwardClient } from "@/lib/burnticker/pairForward";
 import { FakeEndSink, type EndSinkClient } from "@/lib/burnticker/endSinkClient";
@@ -105,10 +105,12 @@ export interface BurnProgramClient {
  * winner-takes-the-burn pair coin (the partner = `pairMint`; a pair without one is refused), nothing for a rule without `onEnd.endSink`
  * or in vault mode. The minimum forward is the rule's onEnd.sweepThresholdLamports.
  */
-export function endSinkPin(rule: BurnRule | undefined, pairMint: string | null | undefined): { kind: "flagship" | "pair-winner"; minForwardLamports: bigint } | null {
+export function endSinkPin(rule: BurnRule | undefined, pairMint: string | null | undefined): { kind: "flagship" | "pair-winner" | "mint" | "incinerator"; sinkMint?: string; minForwardLamports: bigint } | null {
   const k = rule ? endSinkOf(rule) : null;
   if (!k || !rule?.onEnd) return null;
   if (k === "pair-winner" && !pairMint) throw new Error("initialize_token: a winner-takes-the-burn pair coin pins its partner as its end sink, and no partner mint was given");
+  // the named-coin sink (end.rs END_SINK_MINT): the coin the creator picked; the program refuses the coin itself
+  if (k === "mint") return { kind: k, sinkMint: rule.onEnd.mint!, minForwardLamports: BigInt(rule.onEnd.sweepThresholdLamports) };
   return { kind: k, minForwardLamports: BigInt(rule.onEnd.sweepThresholdLamports) };
 }
 
@@ -249,7 +251,7 @@ export class FakeBurnProgram implements BurnProgramClient {
         if (i.mode === "buyback" && this.autoRegisterPool) this.tokens.get(i.mint)!.registerPool();
         // §45: the EndSink the rule pins (the program refuses one on the flagship itself)
         const pin = endSinkPin(i.rule, i.pairMint);
-        if (pin && this.pinEndSinks && i.mint !== this.endSink.flagship) this.endSink.port(i.mint).pinned = { kind: pin.kind, sinkMint: pin.kind === "pair-winner" ? i.pairMint! : this.endSink.flagship, minForwardLamports: pin.minForwardLamports };
+        if (pin && this.pinEndSinks && i.mint !== this.endSink.flagship) this.endSink.port(i.mint).pinned = { kind: pin.kind, sinkMint: pin.kind === "pair-winner" ? i.pairMint! : pin.kind === "mint" ? pin.sinkMint! : pin.kind === "incinerator" ? INCINERATOR_ADDRESS : this.endSink.flagship, minForwardLamports: pin.minForwardLamports };
         this.lockFees.port(i.mint).memoPrefix = c.memoPrefix;
         // round 2: register_pool runs after register_fee_key through the lock path; it registers the pool on the coin's fake program too
         this.lockFees.port(i.mint).onRegisterPool = () => { const f = this.tokens.get(i.mint); if (f && !f.cfg.poolRegistered) f.registerPool(); };

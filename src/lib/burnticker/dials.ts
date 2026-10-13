@@ -122,7 +122,7 @@ export function applyDial(r: BurnRule, dial: DialId, value: string | number, c: 
     if (dial === "forward" && !r.set) return r;
     // §45: league-set end sinks are a later program round, so a league-mode coin keeps the wind-down (rules.ts refuses endSink with set);
     // sources-2: league mode on also drops the fade side (inverse.ts refuses inverse with set)
-    const { endSink: _noSink, ...windDown } = (r.onEnd ?? ON_END_DEFAULT) as { windDownDays: number; sweepThresholdLamports: number; endSink?: true };
+    const { endSink: _noSink, mint: _noMint, ticker: _noTicker, ...windDown } = (r.onEnd ?? ON_END_DEFAULT) as { windDownDays: number; sweepThresholdLamports: number; endSink?: true; mint?: string; ticker?: string };
     const { inverse: _inv, ...plain } = rest as BurnRule & { inverse?: unknown };
     return { ...plain, onEnd: windDown, set: { id: r.set?.id ?? ls.id, outcome: r.set?.outcome ?? ls.outcome, forwardBps: bps } } as BurnRule;
   }

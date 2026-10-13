@@ -1,8 +1,10 @@
 import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { burnRealFromEnv } from "@/lib/burnticker/launchAvailability";
 import type { Platform } from "@/lib/burnticker/server";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
+import { liveSinks } from "@/lib/burnticker/endSinks";
 import { identityRefusals, ruleRefusals, sampleEligibility, settledPairInput, settledPairSinkProblems } from "@/lib/burnticker/launchPreflight";
 import { teamTicker } from "@/lib/burnticker/tickers";
 import { knownLookalike } from "@/lib/burnticker/ops/cloneServe";
@@ -569,7 +571,10 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // SETTLED-EVENT PAIRS (owner 2026-10-13): two candidates in one race (pair.market + pair.race) or two teams in one game (pair.opp) are
   // registered LaunchLab pairs, winner takes the burn, both end sinks pair-winner naming each other (launchPreflight.ts settledPairInput)
   const settled = settledPairInput(b.pair);
-  { const rr = ruleRefusals(locked, { kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
+  // the end-sink picker: a rule naming a coin to take the rest is checked against the live coins on this network (endSinks.ts); an
+  // unreadable registry leaves the list empty, so the named coin is refused (fail closed)
+  const sinks = locked.rule.onEnd?.mint ? (() => { try { return liveSinks(p.registry, p.cluster); } catch { return []; } })() : null;
+  { const rr = ruleRefusals(locked, { programRound5: burnRealFromEnv(process.env), kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null, sinks, own: o.mint ? [o.mint] : [], partners: locked.rule.pair?.counterpartMint ? [locked.rule.pair.counterpartMint] : [] }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   // sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over, from the platform's schedule port (one bounded read)
   { const so = await seasonOverFor(locked.rule, p.seasonSchedule); if (so) return { error: fail(so.status, so.message, { code: so.code, next: so.next, problems: [so.message] }) }; }
   const list = loadRefuseList();

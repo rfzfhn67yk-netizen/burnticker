@@ -108,6 +108,12 @@ pub fn format_forward(prefix: &str, from: &Pubkey, to: &Pubkey, record_date: u32
     )
 }
 
+/// The incinerator end sink's receipt: `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1` (the SOL itself, sent to Solana's incinerator).
+pub fn format_end_burn(prefix: &str, lamports: u64) -> String {
+    let t = crate::constants::INCINERATOR_ID.to_string();
+    format!("{prefix}|endburn|to={}|lamports={lamports}|v1", &t[..12])
+}
+
 /// LAUNCHPAD-PATH §45 end-sink receipt: `<PREFIX>|endfwd|to=<sink mint 12>|lamports=N|v1`.
 pub fn format_end_forward(prefix: &str, to: &Pubkey, lamports: u64) -> String {
     let t = to.to_string();

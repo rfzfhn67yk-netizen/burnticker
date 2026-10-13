@@ -11,7 +11,7 @@ import { programClusterOf, solanaProgramPort } from "@/lib/burnKeeper/programAda
 import type { Cluster } from "@/lib/burnKeeper/solana";
 import { counterRule, endSinkPin, type BurnProgramClient, type InitializeTokenInput, type SerializedIx } from "@/lib/burnticker/program";
 import { ChainEndSink } from "@/lib/burnticker/endSinkChain";
-import { END_SINK_FLAGSHIP, END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endSink";
+import { endSinkKindCode } from "@/lib/burnReceipts/endSink";
 import { ChainLockFees } from "@/lib/burnticker/lockFeesChain";
 import { ChainPairForward } from "@/lib/burnticker/pairForwardChain";
 import { dateU32 } from "@/lib/burnticker/pairForward";
@@ -87,7 +87,8 @@ export class ProgramBurnClient implements BurnProgramClient {
     // §45: the EndSink the rule pins — refused on a program without round 4 (the description would promise a sink nobody pinned)
     const endPin = endSinkPin(i.rule, i.pairMint);
     if (endPin && !(this.o.endSinksLive ?? endSinksLiveFromEnv())) throw new Error(`initialize_token: this rule sends its leftover to an end sink, and end sinks are not live on this program yet (${END_SINKS_LIVE_FLAG} is off)`);
-    const endSink = endPin ? { kind: endPin.kind === "pair-winner" ? END_SINK_PAIR_WINNER : END_SINK_FLAGSHIP, minForwardLamports: endPin.minForwardLamports } : undefined;
+    if (endPin?.kind === "incinerator" && initializeTokenLayoutFromEnv() !== "r5") throw new Error("initialize_token: this rule sends the SOL left at the end to Solana's incinerator, and that end sink needs the round-5 program (BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5)");
+    const endSink = endPin ? { kind: endSinkKindCode(endPin.kind), ...(endPin.kind === "mint" ? { sinkMint: new PublicKey(endPin.sinkMint!) } : {}), minForwardLamports: endPin.minForwardLamports } : undefined;
     if (!/^[0-9a-f]{64}$/.test(i.rulesSha256)) throw new Error("initialize_token: rulesSha256 must be 64 hex characters");
     // policies 0 and 2: the program refuses unless launchlab_platform == BURNTICKER_PLATFORM (round 2) — pass the host's or the pinned one
     const pin = PROGRAM_BURNTICKER_PLATFORM[programClusterOf(this.o.cluster)];
@@ -95,7 +96,7 @@ export class ProgramBurnClient implements BurnProgramClient {
     const ix = initializeTokenIx({ programId: this.o.programId, payer: creator, creator, mint, ...(launchlabPlatform ? { launchlabPlatform } : {}), args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: i.attesters.map((a) => operatorAttester(new PublicKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
-    }, layout: (this.o.endSinksLive ?? endSinksLiveFromEnv()) ? "r4" : initializeTokenLayoutFromEnv(), ...(endSink ? { endSink } : {}), ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });
+    }, layout: initializeTokenLayoutFromEnv() === "r5" ? "r5" : (this.o.endSinksLive ?? endSinksLiveFromEnv()) ? "r4" : initializeTokenLayoutFromEnv(), ...(endSink ? { endSink } : {}), ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });
     // Round 5: a rule with a burn target pins it right after initialize_token, while the coin's mint does not exist yet (the same mint
     // signature). Refused unless the host says the program is round 5, and unless the pool passes the program's admission now.
     const pins: SerializedIx[] = [];

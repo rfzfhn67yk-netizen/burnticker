@@ -24,6 +24,7 @@
 //!   apply_paired_attester_change  permissionless after the timelock, a paired coin: the partner's quorum co-signs the new set
 //!   submit_rule_end        permissionless; a quorum of the coin's attesters ends its rule (resolved | void) — coins with an end sink
 //!   forward_on_end         permissionless after a RESOLVED end: the remaining fuel (and later trickle) → the end sink's fee PDA
+//!   burn_sol_on_end        permissionless after a RESOLVED end, incinerator sink only: the remaining SOL → Solana's incinerator
 //!   initialize_platform    upgrade-authority-signed, once: the program-wide pre-audit burn-pool cap (sunsets automatically)
 //!   propose_cap_raise / cancel_cap_raise / renounce_platform_authority    platform authority (48 h timelock; raise only)
 //!   apply_cap_raise        permissionless after the timelock
@@ -69,6 +70,12 @@ pub mod burn_receipts {
 
     pub fn initialize_token(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Result<()> {
         instructions::initialize_token::handle_initialize_token(ctx, args)
+    }
+
+    /// Round 5's create (the "r5" layout): initialize_token's accounts and arguments, plus the owner's rule that a coin never burns
+    /// itself on its losing path: a buyback coin must pin an end sink (another coin, the flagship, the pair winner or the incinerator).
+    pub fn initialize_token_r5(ctx: Context<InitializeToken>, args: InitializeTokenArgs) -> Result<()> {
+        instructions::initialize_token::handle_initialize_token_r5(ctx, args)
     }
 
     pub fn register_pool(ctx: Context<RegisterPool>) -> Result<()> {
@@ -165,6 +172,10 @@ pub mod burn_receipts {
 
     pub fn forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
         instructions::end::handle_forward_on_end(ctx)
+    }
+
+    pub fn burn_sol_on_end(ctx: Context<BurnSolOnEnd>) -> Result<()> {
+        instructions::end::handle_burn_sol_on_end(ctx)
     }
 
     pub fn set_registration_policy(ctx: Context<RegistrationPolicyAdmin>, policy: u8, pool: Pubkey) -> Result<()> {

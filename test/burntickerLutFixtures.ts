@@ -7,7 +7,7 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import { buildLaunchBundle, buildPairBundles, SdkLaunchLab, type LaunchBundle } from "@/lib/burnticker/launchBundle";
 import { buildPairCurveLaunch, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
 import { counterRule, endSinkPin, FakeBurnProgram } from "@/lib/burnticker/program";
-import { END_SINK_FLAGSHIP, END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endSink";
+import { endSinkKindCode } from "@/lib/burnReceipts/endSink";
 import { DEFAULT_ON_END } from "@/lib/burnticker/rules";
 import { initializeTokenIx, operatorAttester } from "@/lib/burnReceipts/instructions";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
@@ -34,7 +34,7 @@ export class RealIdProgram extends FakeBurnProgram {
     const programId = new PublicKey(this.programId), mint = new PublicKey(i.mint), creator = new PublicKey(i.creator);
     // §45: the EndSink exactly as ProgramBurnClient pins it (a real account + the Option-encoded args)
     const pin = endSinkPin(i.rule, i.pairMint);
-    const endSink = pin ? { kind: pin.kind === "pair-winner" ? END_SINK_PAIR_WINNER : END_SINK_FLAGSHIP, minForwardLamports: pin.minForwardLamports } : undefined;
+    const endSink = pin ? { kind: endSinkKindCode(pin.kind), ...(pin.sinkMint ? { sinkMint: new PublicKey(pin.sinkMint) } : {}), minForwardLamports: pin.minForwardLamports } : undefined;
     const ix = initializeTokenIx({ ...(endSink ? { endSink } : {}), programId, payer: creator, creator, mint, launchlabPlatform: BURNTICKER_PLATFORM[this.network], args: {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: [operatorAttester(ADMIN)], quorum: 1, fixed_pool: PublicKey.default, admin: ADMIN,

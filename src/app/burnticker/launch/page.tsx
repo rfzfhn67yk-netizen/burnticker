@@ -58,6 +58,9 @@ import { LIVE_NOW, parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, typ
 import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { fold, meaningful, queryTokens } from "@/lib/burnticker/textMatch";
+import { EndChoicePicker } from "./EndChoicePicker";
+import { END_CHOICE_DEFAULT, endChoiceModel, withEndChoice, type EndChoice } from "@/lib/burnticker/guidedLaunch";
+import type { SinkCoin } from "@/lib/burnticker/endSinks";
 import { EndSection, FollowStep, GuidedTop, PatternStep, RivalryKindStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { creatorLinks } from "@/lib/burnticker/creatorProfile";
@@ -267,6 +270,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [pcOut, setPcOut] = useState<{ pairId: string; pc: PairCurveLaunchBundle; keys: { a: string; b: string } | null; notes: string[] } | null>(null);
   // the dials (dials.ts): the rule as edited on the create screen, valid while the path's own rule is unchanged (key)
   const [draft, setDraft] = useState<{ key: string; a: BurnRule; b: BurnRule | null } | null>(null);
+  // THE END CHOICE (END-SINK-OPTIONS-BRIEF item 2; guidedLaunch.ts endChoiceModel): where each coin's rest goes when it does not win. A
+  // linked pair keeps the pair winner and shows no choice; an independent pair's two coins pick their own.
+  const [endA, setEndA] = useState<EndChoice>(END_CHOICE_DEFAULT);
+  const [endB, setEndB] = useState<EndChoice>(END_CHOICE_DEFAULT);
+  const [sinks, setSinks] = useState<SinkCoin[] | null>(null);
   // "Launch one like this": the source coin's dials, applied once to the rule the new pick builds
   const [pendingDials, setPendingDials] = useState<{ fraction: number; side: string | null; window: string | null; games: number | null; league: boolean; from: string; inverse?: boolean } | null>(null);
   // the auto-generated description (describe.ts): the flavour line is editable (null = the template's), the rule block never is
@@ -401,6 +409,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       const words = (v: PT) => ({ description: String(v.description ?? ""), x: String(v.x ?? ""), telegram: String(v.telegram ?? ""), website: String(v.website ?? "") });
       set("profileText", (v: PT) => { setProfile((x) => ({ ...x, ...words(v) })); if (v.hadImage) setImageGone(true); });
       set("profileBText", (v: PT) => { setProfileB((x) => ({ ...x, ...words(v) })); if (v.hadImage) setImageGone(true); });
+      // the end-sink picker: each coin's end choice (a picked coin keeps its mint and ticker; the review re-checks it is still live)
+      set("endA", setEndA); set("endB", setEndB);
       set("uq", setUq); set("origin", setOrigin); set("editedFor", setEditedFor); set("eventInfo", setEventInfo); set("srcWarnings", setSrcWarnings); set("bq", setBq); set("wx", setWx); set("draft", setDraft); set("flavour", setFlavour); set("flavourB", setFlavourB); set("cardCtx", setCardCtx); set("cardYear", setCardYear); set("cardSet", setCardSet); set("nameAuto", setNameAuto); set("tickerAuto", setTickerAuto); set("ownImage", setOwnImage); set("note", setNote);
   };
   useEffect(() => {
@@ -458,7 +468,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (linked) { try { window.history.replaceState(window.history.state, "", window.location.pathname); } catch { /* ignore */ } }
     setReady(true);
   }, []);
-  const snapshot = JSON.stringify({ guide, raiseSol, elPick, rivalA, rivalB, rivalGame, rivalSeason, profileText: { description: profile.description, x: profile.x, telegram: profile.telegram, website: profile.website, hadImage: !!profile.image }, profileBText: { description: profileB.description, x: profileB.x, telegram: profileB.telegram, website: profileB.website, hadImage: !!profileB.image }, profileBadge: profile.badge, eventInfo, uq, origin, srcWarnings, bq, wx, flow, step, leagueSeries, team, winLose, game, swap, pairMode, meetingsYear, pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn, fraction, name, ticker, description, imageUrl, link, xUrl, tg, cat, nameB, tickerB, descB, imageB, firstBuy, pasted, q2, draft, flavour, flavourB, cardCtx, cardYear, cardSet, nameAuto, tickerAuto, editedFor, ownImage, note });
+  const snapshot = JSON.stringify({ guide, raiseSol, elPick, rivalA, rivalB, rivalGame, rivalSeason, profileText: { description: profile.description, x: profile.x, telegram: profile.telegram, website: profile.website, hadImage: !!profile.image }, profileBText: { description: profileB.description, x: profileB.x, telegram: profileB.telegram, website: profileB.website, hadImage: !!profileB.image }, profileBadge: profile.badge, eventInfo, uq, origin, srcWarnings, bq, wx, flow, step, leagueSeries, team, winLose, game, swap, pairMode, meetingsYear, pick, filter, kind, mode, onYes, onNoEnabled, onNo, unit, perUnit, baseline, direction, tokensYes, vaultShare, burnOn, fraction, name, ticker, description, imageUrl, link, xUrl, tg, cat, nameB, tickerB, descB, imageB, firstBuy, pasted, q2, draft, flavour, flavourB, cardCtx, cardYear, cardSet, endA, endB, nameAuto, tickerAuto, editedFor, ownImage, note });
   // nothing is stored until something is chosen, so an untouched first screen never replaces a saved draft
   useEffect(() => { if (ready && (step !== "choose" || guide.phase !== "follow")) { try { sessionStorage.setItem(STORE, snapshot); } catch { /* private mode: no memory, no harm */ } } }, [ready, snapshot]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -660,8 +670,18 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const realOneOffered = site.burnReal.available && !pairOn && !!rule0 && !rule0.vault;
   const fieldOne = realOneOffered ? realField(realOne, realNet) : null;
   const fieldOneKey = fieldOne ? JSON.stringify(fieldOne) : "";
-  const rule: BurnRule | null = useMemo(() => (rule0 && (fieldOne || rule0.burnTarget) ? withRealBurn(rule0, fieldOne) : rule0), [rule0, fieldOneKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const ruleB: BurnRule | null = draft && draft.key === baseKey ? draft.b : baseRuleB;
+  // a linked pair (a rivalry series, a settled-event pair, a registered pair) keeps the pair-winner end; every other coin takes its choice
+  const endPickable = !meetingsOn && !settledPick && !(pairOn && !baseRuleB);
+  const rule: BurnRule | null = useMemo(() => { const r = rule0 && (fieldOne || rule0.burnTarget) ? withRealBurn(rule0, fieldOne) : rule0; return r && endPickable ? withEndChoice(r, endA) : r; }, [rule0, fieldOneKey, endA, endPickable]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ruleB0: BurnRule | null = draft && draft.key === baseKey ? draft.b : baseRuleB;
+  const ruleB: BurnRule | null = useMemo(() => (ruleB0 && endPickable ? withEndChoice(ruleB0, endB) : ruleB0), [ruleB0, endB, endPickable]);
+  // the coins that can take the rest (GET /sinks on this network), read when the review opens; a failed read leaves the list empty
+  useEffect(() => {
+    if ((step !== "review" && guide.phase !== "name" && guide.phase !== "review") || !endPickable) return;
+    let live = true;
+    getJson<{ sinks: SinkCoin[] }>(`${V1}/sinks?network=${realNet}`).then((j) => { if (live) setSinks(j.sinks ?? []); }).catch(() => { if (live) setSinks([]); });
+    return () => { live = false; };
+  }, [step, guide.phase, endPickable, realNet]);
   // website-21: a rivalry series pair is described and ended as the bundle builds it (winner takes the burn, the pair-winner end sink)
   // website-23: a settled-event pair likewise, its race or its game locked in the pair clause (the race's or the game's own end)
   const ruleShown = useMemo((): BurnRule | null => (rule && settledPick && ruleB ? settledAsShown(rule, "A", settledPick, { a: rule, b: ruleB }) : rule && meetingsOn ? ({ ...rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule) : rule), [rule, ruleB, meetingsOn, settledPick]);
@@ -1831,6 +1851,16 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         // website-21: the guided review states the end as one fact (the end section shows only without facts): the one end, its sentence
         // and the pair's 30-day both-or-neither deadline
         const meetingsEndFact = `${MEETINGS_END_LABEL}. ${MEETINGS_END_LINE} ${MEETINGS_DEADLINE_LINE}`;
+        // the end-sink picker: each coin's choice of where its rest goes when it does not win (both coins of an independent pair)
+        const teamRef = team?.nickname ? `the ${team.nickname}` : null;
+        const choiceA = endPickable && rule ? endChoiceModel(rule, { burnSol: site.burnSol.available, sinkPicker: site.sinkPicker.available, team: teamRef }) : null;
+        const choiceB = endPickable && pairOn && ruleB ? endChoiceModel(ruleB, { burnSol: site.burnSol.available, sinkPicker: site.sinkPicker.available }) : null;
+        const endChoiceBlock = choiceA?.offered || choiceB?.offered ? (
+          <div className={`grid min-w-0 gap-3 ${choiceA?.offered && choiceB?.offered ? "md:grid-cols-2" : ""}`} data-end-choices>
+            {choiceA?.offered && <EndChoicePicker model={choiceA} value={endA} onChange={(c) => { flowStats.current.decisions++; setEndA(c); }} sinks={sinks} who={pairOn && ruleB ? `$${ticker.toUpperCase() || "A"}` : null} locked={busy} side="a" />}
+            {choiceB?.offered && <EndChoicePicker model={choiceB} value={endB} onChange={(c) => { flowStats.current.decisions++; setEndB(c); }} sinks={sinks} who={`$${tickerB.toUpperCase() || "B"}`} locked={busy} side="b" />}
+          </div>
+        ) : null;
         // website-23: a settled-event pair's one end (the race's or the game's pair-winner end) and its 30-day both-or-neither deadline
         const settledEndFact = `${SETTLED_END_LABEL}. ${end.sentences.join(" ")} ${SETTLED_DEADLINE_LINE}`;
         const endLines = pairOn && ruleB ?end.sentences.map((x) => x.replace(/^(When the rule ends|When the result is in|After the last game or reading the rule covers), the rest of the pool/, "$1, the rest of each coin's pool")) : end.sentences;
@@ -1854,7 +1884,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           { label: FACT_LABELS.trigger, value: trigger, edit: editTo("which") },
           { label: FACT_LABELS.coin, value: settledPick ? settledWhichCoinLine(settledPick, { a: ticker || "A", b: tickerB || "B" }) : meetingsOn ? meetingsWhichCoinLine({ a: ticker || "A", b: tickerB || "B", teamA: A, teamB: B }) : whichCoinLine(ticker || "A", coinsN === 2 ? tickerB || "B" : null), edit: editTo("name") },
           { label: FACT_LABELS.amount, value: `${budget.line} ${shareOfBudgetLine(shareValue)} ${shareExample(shareValue)}`, edit: editTo("burn") },
-          { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : settledPick ? settledEndFact : endLines.join(" ") || PERPETUAL_END_LINE, edit: null },
+          { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : settledPick ? settledEndFact : endLines.join(" ") || PERPETUAL_END_LINE, edit: null, extra: endChoiceBlock },
           { label: FACT_LABELS.cost, value: costLine(shownReview.review && reviewCurrent ? shownReview.review.costs.totalSol : null, coinsN), edit: null },
         ] : null;
         const coinsForName = coins;
@@ -1885,7 +1915,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           return <>
             {namesRemade && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-200" role="status" data-names-remade>{NAMES_REMADE_LINE}</p>}
             {keptProfile && keptProfile.length > 0 && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-200" role="status" data-kept-profile>{keptProfileLine(keptProfile)} <button type="button" data-nav className="underline" onClick={() => setKeptProfile(null)}>{KEPT_PROFILE_REUSE}</button> <button type="button" data-nav className="ml-2 underline" onClick={() => { setProfile((x) => ({ ...x, description: "", x: "", telegram: "", website: "" })); setProfileB((x) => ({ ...x, description: "", x: "", telegram: "", website: "" })); setNote(""); setKeptProfile(null); }}>{KEPT_PROFILE_FRESH}</button></p>}
-            <ReviewCard mode="name" coins={coinsForName} sentence={sentence} ends={null} shares={{ options: [...shareOptions], value: shareValue, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
+            <ReviewCard mode="name" endChoice={endChoiceBlock} coins={coinsForName} sentence={sentence} ends={null} shares={{ options: [...shareOptions], value: shareValue, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
             image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
             profile={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" who={`$${ticker || "A"}`} side="a" /><ProfileFields value={profileB} onChange={setProfileB} generated={genB} part="text" who={`$${tickerB || "B"}`} side="b" /></div> : <ProfileFields value={profile} onChange={setProfile} generated={genA} part="text" side="a" />}
             note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}
@@ -1915,7 +1945,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             <ReviewCard
               mode={guide.follow ? "review" : "full"}
               facts={reviewFacts}
-              endSection={meetingsOn ? <EndSection title={MEETINGS_END_LABEL} sentences={[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE]} options={[]} /> : settledPick ? <EndSection title={SETTLED_END_LABEL} sentences={[...end.sentences, SETTLED_DEADLINE_LINE]} options={[]} /> : <EndSection sentences={endLines} options={end.options} />}
+              endSection={meetingsOn ? <EndSection title={MEETINGS_END_LABEL} sentences={[MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE]} options={[]} /> : settledPick ? <EndSection title={SETTLED_END_LABEL} sentences={[...end.sentences, SETTLED_DEADLINE_LINE]} options={[]} /> : <EndSection sentences={endLines} options={end.options} choice={endChoiceBlock} />}
               authority={authority}
               edgeNotes={edgeNotes}
               upfront={upfrontLines(RAISE_PRESETS_SOL)}

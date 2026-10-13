@@ -473,6 +473,178 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "args": []
     },
     {
+      "name": "burn_sol_on_end",
+      "discriminator": [
+        234,
+        239,
+        199,
+        255,
+        13,
+        181,
+        171,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_wsol",
+          "writable": true
+        },
+        {
+          "name": "wsol_mint",
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "end_sink",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  110,
+                  100,
+                  95,
+                  115,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "rule_end",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  117,
+                  108,
+                  101,
+                  95,
+                  101,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "incinerator",
+          "writable": true,
+          "address": "1nc1nerator11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "memo_program",
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "cancel_attester_change",
       "discriminator": [
         252,
@@ -3055,6 +3227,172 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "initialize_token_r5",
+      "docs": [
+        "Round 5's create (the \"r5\" layout): initialize_token's accounts and arguments, plus the owner's rule that a coin never burns",
+        "itself on its losing path: a buyback coin must pin an end sink (another coin, the flagship, the pair winner or the incinerator)."
+      ],
+      "discriminator": [
+        112,
+        210,
+        185,
+        185,
+        98,
+        26,
+        1,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "creator",
+          "docs": [
+            "Recorded as creator and initial admin."
+          ],
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "the token) can create the one config this mint will ever have. The mint account need not exist yet (LaunchLab creates it in",
+            "the next instruction); it is validated as an SPL Token mint at every crank."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_vault",
+          "docs": [
+            "The fee PDA (system-owned, no data). Funded here with the rule's reserve so that fee transfers of any size can land in it."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "launchlab_platform",
+          "docs": [
+            "lock/burn scales and platformCpCreator are read and PINNED here (review-3 M-3). Omitted otherwise."
+          ],
+          "optional": true
+        },
+        {
+          "name": "pair_mint",
+          "docs": [
+            "[\"pair_link\", mint] is written: provisional until the partner's initialize_token names this mint back within",
+            "PAIRING_WINDOW_SECS, or paired at once when the partner already did (then pass its PairLink and TokenConfig too)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "pair_link",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "partner_link",
+          "docs": [
+            "L-3): empty when this coin is first, the partner's link naming this mint when the partner was first."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "partner_config",
+          "docs": [
+            "The partner's TokenConfig — when the partner initialized first (its pair_state becomes PAIRED)."
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "partner_config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "end_sink",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitializeTokenArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "link_pair",
       "docs": [
         "LAUNCHPAD-PATH §40: pair the two coins of a pair_curve Pair (the Pair is the witness). Permissionless, idempotent."
@@ -5413,6 +5751,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "SolBurnedOnEnd",
+      "discriminator": [
+        0,
+        123,
+        79,
+        224,
+        221,
+        38,
+        46,
+        98
+      ]
+    },
+    {
       "name": "SpendCapBound",
       "discriminator": [
         20,
@@ -6149,6 +6500,16 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6128,
       "name": "TargetPriceDeviation",
       "msg": "burn target: the pool's price is further from the Pyth price than the rule allows (the SOL is held)"
+    },
+    {
+      "code": 6129,
+      "name": "NotIncineratorSink",
+      "msg": "burn_sol_on_end: this coin's end sink is not the incinerator (use forward_on_end), or the destination is not Solana's incinerator"
+    },
+    {
+      "code": 6130,
+      "name": "LostPathBurnsSelf",
+      "msg": "initialize_token_r5: a buyback coin's not-resolved (lost) end must go to another coin, the flagship, the pair winner or the incinerator, never to its own wind-down: pin an end sink"
     }
   ],
   "types": [
@@ -8407,6 +8768,43 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "SolBurnedOnEnd",
+      "docs": [
+        "The incinerator end sink: after a RESOLVED end the leftover SOL was sent to Solana's incinerator (burn_sol_on_end)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "to",
+            "docs": [
+              "Always INCINERATOR_ID."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "lamports",
+            "type": "u64"
+          },
+          {
+            "name": "unwrapped_lamports",
+            "docs": [
+              "Of `lamports`, what came from unwrapping the fee PDA's WSOL first."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "cranker",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "SpendCapBound",
       "docs": [
         "crank_buyback spent less than its target — the 2 % reserve cap and/or the platform basis bound bound; the rest is carried."
@@ -9163,6 +9561,15 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ],
       "type": "u8",
       "value": "0"
+    },
+    {
+      "name": "END_SINK_INCINERATOR",
+      "docs": [
+        "Burn the SOL itself (owner, 2026-10-13): after a RESOLVED end the leftover SOL goes to Solana's incinerator (burn_sol_on_end),",
+        "no swap, no price impact. EndSink.sink_mint holds INCINERATOR_ID."
+      ],
+      "type": "u8",
+      "value": "4"
     },
     {
       "name": "END_SINK_LEAGUE_SET",

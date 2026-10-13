@@ -10,7 +10,7 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AnchorDeserialize, Discriminator};
 use anchor_spl::associated_token::get_associated_token_address;
 use burn_receipts::constants::*;
-use burn_receipts::events::ForwardedOnEnd;
+use burn_receipts::events::{ForwardedOnEnd, SolBurnedOnEnd};
 use burn_receipts::math;
 use burn_receipts::state::RuleParams;
 use common::cpmm::{self, Pool};
@@ -607,4 +607,158 @@ fn a_round3_token_config_reads_and_cranks_unchanged_under_round4() {
     crank(&mut env, &k, &c, D2).unwrap();
     assert_eq!(env.reading(&reading_pda(&config_pda(&c.mint), D2)).unwrap().outcome, OUTCOME_BURNED);
     assert!(env.mint_supply(&c.mint) < supply, "the round-3 coin burned under round 4");
+}
+
+
+// =================================================================================================================================
+// the incinerator end sink (owner, 2026-10-13): burn the SOL itself
+// =================================================================================================================================
+
+#[test]
+fn the_incinerator_sink_is_pinned_with_its_address_and_names_nothing_else() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let _f = flagship(&mut env, &att);
+    let k = Keypair::new();
+    init_end(&mut env, &k, &att.pubkey(), buyback_rule(), END_SINK_INCINERATOR, Pubkey::default(), MIN, None).unwrap();
+    let s = end_sink(&env, &k.pubkey()).unwrap();
+    assert_eq!((s.sink_kind, s.sink_mint), (END_SINK_INCINERATOR, INCINERATOR_ID));
+    assert_eq!(INCINERATOR_ID.to_string(), "1nc1nerator11111111111111111111111111111111");
+    assert!(!INCINERATOR_ID.is_on_curve(), "no key can sign for the incinerator");
+    // naming anything but the incinerator is refused
+    let k2 = Keypair::new();
+    expect_anchor_err(init_end(&mut env, &k2, &att.pubkey(), buyback_rule(), END_SINK_INCINERATOR, Pubkey::new_unique(), MIN, None), "InvalidEndSink");
+    init_end(&mut env, &k2, &att.pubkey(), buyback_rule(), END_SINK_INCINERATOR, INCINERATOR_ID, MIN, None).unwrap();
+}
+
+/// After a RESOLVED end the SOL above the reserve (the WSOL unwrapped first) lands at the incinerator and nowhere else; the fee PDA keeps
+/// its reserve and its WSOL account; the cranker pays only its fee; forward_on_end refuses this kind; a wrong destination is refused.
+#[test]
+fn a_resolved_incinerator_coin_sends_its_sol_to_the_incinerator_and_nothing_else_moves() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let f = flagship(&mut env, &att);
+    let c = ending_coin(&mut env, &att, END_SINK_INCINERATOR, Pubkey::default(), 3 * SOL, 4);
+    let k = cranker(&mut env);
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &INCINERATOR_ID)], &[&k]), "AccountNotInitialized");
+    submit_rule_end(&mut env, &c.mint, D2, END_STATE_RESOLVED, &[&att]).unwrap();
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &INCINERATOR_ID)], &[&k]), "EndReadingsPending");
+    env.set_time(T0 + 86_400);
+    crank(&mut env, &k, &c, D2).unwrap();
+    let fw = get_associated_token_address(&fee_pda(&c.mint), &NATIVE_MINT);
+    env.ok(&[anchor_lang::solana_program::system_instruction::transfer(&env.payer.pubkey(), &fw, 200_000_000), anchor_spl::token::spl_token::instruction::sync_native(&anchor_spl::token::ID, &fw).unwrap()], &[]);
+    // forward_on_end refuses this kind, to any coin
+    expect_anchor_err(env.send(&[ix_forward_on_end(&k.pubkey(), &c.mint, &f.mint, None, None)], &[&k]), "InvalidEndSink");
+    // any destination but the incinerator is refused
+    let thief = Pubkey::new_unique();
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &thief)], &[&k]), "NotIncineratorSink");
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &k.pubkey())], &[&k]), "NotIncineratorSink");
+    // the burn
+    let want = spendable(&env, &c.mint);
+    let reserve = env.config(&config_pda(&c.mint)).rule.reserve_lamports;
+    let inc0 = env.lamports(&INCINERATOR_ID);
+    let k0 = env.lamports(&k.pubkey());
+    let ff0 = env.lamports(&fee_pda(&f.mint));
+    let supply0 = env.mint_supply(&c.mint);
+    let meta = env.ok(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &INCINERATOR_ID)], &[&k]);
+    assert_eq!(env.lamports(&INCINERATOR_ID) - inc0, want, "everything spendable, SOL and unwrapped WSOL, lands at the incinerator");
+    assert_eq!(env.lamports(&fee_pda(&c.mint)), reserve, "the reserve stays");
+    assert_eq!(env.token_amount(&fw), 0, "the WSOL account is kept, empty");
+    assert_eq!(env.lamports(&k.pubkey()), k0, "the WSOL account's new rent is refunded to the cranker: it gains or loses nothing");
+    assert_eq!(env.lamports(&fee_pda(&f.mint)), ff0, "no coin receives anything");
+    assert_eq!(env.mint_supply(&c.mint), supply0, "no swap, no burn of the coin");
+    let ev: SolBurnedOnEnd = event(&meta).expect("SolBurnedOnEnd");
+    assert_eq!((ev.mint, ev.to, ev.lamports, ev.unwrapped_lamports, ev.cranker), (c.mint, INCINERATOR_ID, want, 200_000_000, k.pubkey()));
+    assert!(meta.logs.iter().any(|l| l.contains(&format!("|endburn|to=1nc1nerator1|lamports={want}|v1"))));
+    let re = rule_end(&env, &c.mint).unwrap();
+    assert_eq!((re.forwarded_lamports, re.forwards), (want, 1));
+    // nothing left: refused; the trickle above the minimum goes the same way
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &INCINERATOR_ID)], &[&k]), "NothingToForward");
+    env.transfer_sol(&fee_pda(&c.mint), MIN);
+    env.set_time(env.now() + 1);
+    let inc1 = env.lamports(&INCINERATOR_ID);
+    env.ok(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &INCINERATOR_ID)], &[&k]);
+    assert_eq!(env.lamports(&INCINERATOR_ID) - inc1, MIN);
+    assert_eq!(rule_end(&env, &c.mint).unwrap().forwards, 2);
+}
+
+/// burn_sol_on_end refuses a coin whose sink is not the incinerator, and a VOID end (the won path keeps its wind-down).
+#[test]
+fn burn_sol_on_end_refuses_other_sinks_and_void_ends() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let _f = flagship(&mut env, &att);
+    let k = cranker(&mut env);
+    let c = ending_coin(&mut env, &att, END_SINK_FLAGSHIP, Pubkey::default(), SOL, 0);
+    submit_rule_end(&mut env, &c.mint, D2, END_STATE_RESOLVED, &[&att]).unwrap();
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &c.mint, &INCINERATOR_ID)], &[&k]), "NotIncineratorSink");
+    let v = ending_coin(&mut env, &att, END_SINK_INCINERATOR, Pubkey::default(), SOL, 0);
+    submit_rule_end(&mut env, &v.mint, D2, END_STATE_VOID, &[&att]).unwrap();
+    expect_anchor_err(env.send(&[ix_burn_sol_on_end(&k.pubkey(), &v.mint, &INCINERATOR_ID)], &[&k]), "NotEndedResolved");
+}
+
+// =================================================================================================================================
+// initialize_token_r5: a coin never burns itself on its losing path (owner, 2026-10-13)
+// =================================================================================================================================
+
+fn init_r5(env: &mut Env, mint: &Keypair, attester: &Pubkey, rule: RuleParams, sink: Option<(u8, Pubkey)>, pair: Option<(Pubkey, bool)>) -> TxResult {
+    let creator = Keypair::new();
+    let mut args = init_args(rule, vec![*attester], 1);
+    args.admin = creator.pubkey();
+    if let Some((kind, s)) = sink {
+        args.end_sink_kind = kind;
+        args.end_sink_mint = if s == Pubkey::default() { None } else { Some(s) };
+        args.end_sink_min_lamports = MIN;
+    }
+    let payer = env.payer.pubkey();
+    let platform = (rule.mode == MODE_BUYBACK && rule.pool_policy == POOL_POLICY_CREATOR_IS_FEE_PDA).then_some(TEST_LAUNCHLAB_PLATFORM);
+    let ix = ix_initialize_r5(&payer, &creator.pubkey(), &mint.pubkey(), args, platform, pair.map(|p| p.0), pair.map(|p| p.1).unwrap_or(false));
+    env.send(&[ix], &[&creator, mint])
+}
+
+#[test]
+fn the_r5_create_refuses_self_on_the_lost_path_and_takes_every_other_sink() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let f = flagship(&mut env, &att);
+    // SELF on the lost path (no end sink: a resolved end would wind down on the coin itself): refused
+    let s = Keypair::new();
+    expect_anchor_err(init_r5(&mut env, &s, &att.pubkey(), buyback_rule(), None, None), "LostPathBurnsSelf");
+    // the round-4 create is untouched: the same coin without a sink is still accepted there
+    init(&mut env, &s, &att.pubkey(), buyback_rule(), None).unwrap();
+    // flagship, a named coin, the incinerator, the pair winner: accepted
+    for (kind, sink) in [(END_SINK_FLAGSHIP, Pubkey::default()), (END_SINK_MINT, f.mint), (END_SINK_INCINERATOR, Pubkey::default())] {
+        let k = Keypair::new();
+        init_r5(&mut env, &k, &att.pubkey(), buyback_rule(), Some((kind, sink)), None).unwrap();
+        assert_eq!(end_sink(&env, &k.pubkey()).unwrap().sink_kind, kind);
+    }
+    let (ka, kb) = (Keypair::new(), Keypair::new());
+    init_r5(&mut env, &ka, &att.pubkey(), buyback_rule(), Some((END_SINK_PAIR_WINNER, Pubkey::default())), Some((kb.pubkey(), false))).unwrap();
+    init_r5(&mut env, &kb, &att.pubkey(), buyback_rule(), Some((END_SINK_PAIR_WINNER, Pubkey::default())), Some((ka.pubkey(), true))).unwrap();
+    assert_eq!(end_sink(&env, &kb.pubkey()).unwrap().sink_mint, ka.pubkey());
+    // a vault-mode coin has no burn pool, so no losing-path SOL: accepted without a sink
+    let v = Keypair::new();
+    init_r5(&mut env, &v, &att.pubkey(), vault_rule(), None, None).unwrap();
+}
+
+/// SELF stays on the won path: an r5 coin whose rule ends VOID (the champion path) keeps the hashed wind-down on itself.
+#[test]
+fn an_r5_coin_keeps_self_on_the_won_path() {
+    let mut env = Env::new();
+    let att = Keypair::new();
+    let f = flagship(&mut env, &att);
+    let k = Keypair::new();
+    init_r5(&mut env, &k, &att.pubkey(), buyback_rule(), Some((END_SINK_FLAGSHIP, Pubkey::default())), None).unwrap();
+    let c = market(&mut env, &k);
+    submit(&mut env, &c.mint, D1, V1, &[&att]).unwrap();
+    submit(&mut env, &c.mint, D2, V1, &[&att]).unwrap();
+    env.transfer_sol(&fee_pda(&c.mint), 2 * SOL);
+    submit_rule_end(&mut env, &c.mint, D2, END_STATE_VOID, &[&att]).unwrap();
+    let kc = cranker(&mut env);
+    expect_anchor_err(env.send(&[ix_forward_on_end(&kc.pubkey(), &c.mint, &f.mint, None, None)], &[&kc]), "NotEndedResolved");
+    env.set_time(T0 + 86_400);
+    submit(&mut env, &c.mint, D3, V1 + 7 * UNIT, &[&att]).unwrap();
+    let supply = env.mint_supply(&c.mint);
+    crank(&mut env, &kc, &c, D3).unwrap();
+    assert!(env.mint_supply(&c.mint) < supply, "the won path burns this coin on its wind-down");
 }

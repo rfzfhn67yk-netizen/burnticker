@@ -82,9 +82,10 @@ const ser = (ix: TransactionInstruction, label: string): SerializedIx => ({ prog
  * in its optional slot. Null for a placeholder (the FakeBurnProgram's JSON body) — then the bundle is not ready.
  */
 export function toPairCurvePolicy(ix: SerializedIx, burnReceiptsProgramId: string, launchlabPlatform: string): SerializedIx | null {
-  const def = BURN_RECEIPTS_IDL.instructions.find((i) => i.name === "initialize_token")!;
   const data0 = Buffer.from(ix.dataBase64, "base64");
-  if (ix.programId !== burnReceiptsProgramId || data0.length < 8 || !data0.subarray(0, 8).equals(Buffer.from(def.discriminator))) return null;
+  // round 5: the r5 create (initialize_token_r5) has initialize_token's accounts and arguments; it is re-encoded under its own name
+  const def = BURN_RECEIPTS_IDL.instructions.find((i) => (i.name === "initialize_token" || i.name === "initialize_token_r5") && data0.length >= 8 && data0.subarray(0, 8).equals(Buffer.from(i.discriminator)));
+  if (ix.programId !== burnReceiptsProgramId || !def) return null;
   // §45: a round-3 layout (instructions.ts initializeTokenIx "r3") has one account fewer and no end-sink args: decode it as round 4 with
   // the empty end-sink args appended, and cut them (and the slot) again below
   const r3 = ix.keys.length === def.accounts.length - 1;
@@ -106,7 +107,7 @@ export function toPairCurvePolicy(ix: SerializedIx, burnReceiptsProgramId: strin
   const es = args as { end_sink_kind?: number; end_sink_mint?: PublicKey | null };
   if (es.end_sink_kind === END_SINK_PAIR_WINNER && !es.end_sink_mint && pairSlot >= 0 && ix.keys[pairSlot] && ix.keys[pairSlot].pubkey !== burnReceiptsProgramId) es.end_sink_mint = new PublicKey(ix.keys[pairSlot].pubkey);
   const keys = ix.keys.map((k, i) => (i === at(slot) ? { pubkey: launchlabPlatform, isSigner: false, isWritable: false } : [...omit].some((j) => at(j) === i) ? { pubkey: burnReceiptsProgramId, isSigner: false, isWritable: false } : k));
-  const enc = encodeInstruction(BURN_RECEIPTS_IDL, "initialize_token", { args });
+  const enc = encodeInstruction(BURN_RECEIPTS_IDL, def.name, { args });
   return { ...ix, keys, dataBase64: (r3 ? enc.subarray(0, enc.length - 10) : enc).toString("base64"), label: `${ix.label} — registration policy 2 (pair curve)` };
 }
 

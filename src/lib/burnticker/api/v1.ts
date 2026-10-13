@@ -18,6 +18,7 @@ import type { FetchLike as RpcFetchLike } from "@/lib/burnKeeper/attesters/polym
 import { fail, ok, type ApiResult } from "@/lib/burnticker/api/http";
 import { lookupCoin, registryCoinKey, sharedTickerBody, type CoinLookup } from "@/lib/burnticker/coinLookup";
 import { API_PREFIX, buildOpenApi } from "@/lib/burnticker/api/spec";
+import { liveSinks, SINK_FALLBACK_LINE } from "@/lib/burnticker/endSinks";
 import { buildCoverage, type CoverageMatrix } from "@/lib/burnticker/coverage";
 import { logNoCardSearch, recordLaunchTimings } from "@/lib/burnticker/api/product";
 
@@ -141,6 +142,17 @@ export async function v1Confirm(p: Platform, body: Record<string, unknown>): Pro
   if (r.status !== 200) return r;
   const t = p.registry.token(mint)!;
   return ok({ ok: true, ticker: t.ticker, mint: t.mint, status: t.status, note: (r.body as { note: string }).note });
+}
+
+/** GET /sinks (1.17.0; endSinks.ts): the live coins a new rule may name in onEnd.mint, on this host's network or the one asked for. */
+export function v1Sinks(p: Platform, q: URLSearchParams): ApiResult {
+  const network = q.get("network") ?? p.cluster;
+  if (network !== "devnet" && network !== "mainnet" && network !== p.cluster) return fail(400, "The network must be devnet or mainnet.");
+  const exclude = (q.get("exclude") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (exclude.some((m) => !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(m))) return fail(400, "Each mint in exclude must be a Solana address.");
+  p.registry.expireDrafts();
+  const sinks = liveSinks(p.registry, network, exclude);
+  return ok({ network, sinks, count: sinks.length, fallback: SINK_FALLBACK_LINE });
 }
 
 export function v1ListTokens(p: Platform, q: URLSearchParams): ApiResult {

@@ -56,7 +56,7 @@ export const highHashInput = (b: HighSpec): string => canonical(b);
 export const highShares = (once: boolean): { options: readonly number[]; fallback: number } => (once ? { options: SHARE_PRESETS.oneShot, fallback: DEFAULT_SHARE.oneShot } : { options: SHARE_PRESETS.recurring, fallback: DEFAULT_SHARE.recurring });
 /** The rule (rules.ts validateRule: a scalar, 1 for a record day, never paired, never inverted). */
 export function highRule(b: HighSpec, seriesHash: string, fraction: number): BurnRule {
-  return { schema: "burnticker.rules/v1", oracle: "derby", series: derbySeriesId(b, () => seriesHash), market: null, filter: {}, kind: "scalar", binary: null, scalar: { unit: 1, perUnit: { fractionOfPool: Number(fraction.toFixed(4)) }, baseline: 0, direction: "up" }, pair: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, derby: b, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000 } } as unknown as BurnRule;
+  return { schema: "burnticker.rules/v1", oracle: "derby", series: derbySeriesId(b, () => seriesHash), market: null, filter: {}, kind: "scalar", binary: null, scalar: { unit: 1, perUnit: { fractionOfPool: Number(fraction.toFixed(4)) }, baseline: 0, direction: "up" }, pair: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, derby: b, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } } as unknown as BurnRule;
 }
 /** The two greyed patterns and why (step 3's "Other patterns"). */
 export function highGreyed(r: BurnRule | null): { id: "fade" | "winner"; label: string; reason: string }[] {

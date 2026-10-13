@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import type { EndOutcome, EndSinkPort } from "@/lib/burnticker/endSinkClient";
-import { endForwardLine } from "@/lib/burnticker/endSinkClient";
+import { endBurnLine, endForwardLine } from "@/lib/burnticker/endSinkClient";
 import type { Registry, TokenRow } from "@/lib/burnticker/registry";
-import { endSinkOf, isOneShot, SWEEP_EVERY_DAYS, type LockedRule } from "@/lib/burnticker/rules";
+import { endSinkOf, INCINERATOR_ADDRESS, isOneShot, SWEEP_EVERY_DAYS, type LockedRule } from "@/lib/burnticker/rules";
 import type { PairGate } from "@/lib/burnticker/units";
 import { COUNTER_BASE, counterSourceUrl, type BurnProgramClient } from "@/lib/burnticker/program";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
@@ -190,8 +190,10 @@ export async function endSinkStep(d: EndSinkStepDeps, t: TokenRow, locked: Locke
   const r = await sendOnce(d, port, t, `endfwd-${today}`, tx, `forward_on_end ${today} → ${plan.target}`);
   if (r !== "confirmed") { d.log(`  [end] $${t.ticker}: forward to the end sink ${r}`); return mine("resolved", `$${t.ticker}: forward to the end sink ${r}`); }
   const facts = await port.forwardFacts(tx.signature);
-  const to = reg.token(plan.target)?.ticker ?? (plan.target === client.flagship ? "DEFICIT" : plan.target.slice(0, 8));
-  const line = endForwardLine(t.ticker, to, facts?.lamports ?? BigInt(0));
+  // round 5: the incinerator end sink sends the SOL itself to Solana's incinerator (burn_sol_on_end); no coin receives it
+  const burned = plan.target === INCINERATOR_ADDRESS;
+  const to = burned ? "incinerator" : reg.token(plan.target)?.ticker ?? (plan.target === client.flagship ? "DEFICIT" : plan.target.slice(0, 8));
+  const line = burned ? endBurnLine(t.ticker, facts?.lamports ?? BigInt(0)) : endForwardLine(t.ticker, to, facts?.lamports ?? BigInt(0));
   reg.setStatus(lastKey, today, d.now());
   reg.setStatus(`rule.endfwd.${t.mint}`, { signature: tx.signature, to: plan.target, intended: plan.intended, lamports: (facts?.lamports ?? BigInt(0)).toString(), memo: facts?.memo ?? null, at: d.now(), line }, d.now());
   d.log(`  [end] $${t.ticker}: ${line} — ${tx.signature}`);

@@ -261,4 +261,8 @@ pub enum BurnError {
     PythUnusable,
     #[msg("burn target: the pool's price is further from the Pyth price than the rule allows (the SOL is held)")]
     TargetPriceDeviation,
+    #[msg("burn_sol_on_end: this coin's end sink is not the incinerator (use forward_on_end), or the destination is not Solana's incinerator")]
+    NotIncineratorSink,
+    #[msg("initialize_token_r5: a buyback coin's not-resolved (lost) end must go to another coin, the flagship, the pair winner or the incinerator, never to its own wind-down: pin an end sink")]
+    LostPathBurnsSelf,
 }
