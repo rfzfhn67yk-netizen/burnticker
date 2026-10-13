@@ -24,6 +24,7 @@
     "src/lib/burnReceipts/instructions.ts",
     "src/lib/burnReceipts/math.ts",
     "src/lib/burnReceipts/memo.ts",
+    "src/lib/burnReceipts/memoV3.ts",
     "src/lib/burnReceipts/pairs.ts",
     "src/lib/burnReceipts/pda.ts",
     "src/lib/burnReceipts/platformPins.ts",

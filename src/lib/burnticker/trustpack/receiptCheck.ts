@@ -44,10 +44,11 @@ export interface ReceiptCheckResult { verified: boolean; checks: ReceiptCheck[];
  */
 export function classifySignatureInput(raw: string): { state: "missing" | "malformed" | "valid"; reason: string | null } {
   const s = raw.trim();
-  if (!s) return { state: "missing", reason: "paste a transaction signature" };
-  if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(s)) return { state: "malformed", reason: "a signature uses base58 characters only (no 0, O, I, l, spaces or punctuation)" };
+  // QA 11 L8: each reason is one plain sentence, shown as it is; nothing is sent to an RPC for a malformed signature
+  if (!s) return { state: "missing", reason: "Paste a transaction signature to check it." };
+  if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(s)) return { state: "malformed", reason: "That is not a Solana transaction signature. A signature uses only base58 letters and digits, with no 0, O, I or l, and no spaces or punctuation." };
   const bytes = b58decode(s);
-  if (!bytes || bytes.length !== 64) return { state: "malformed", reason: `a signature is 64 bytes (about 88 base58 characters); this decodes to ${bytes ? bytes.length : 0} bytes` };
+  if (!bytes || bytes.length !== 64) return { state: "malformed", reason: `That is not a Solana transaction signature. A signature is 64 bytes, about 88 characters, and this one decodes to ${bytes ? bytes.length : 0} bytes.` };
   return { state: "valid", reason: null };
 }
 

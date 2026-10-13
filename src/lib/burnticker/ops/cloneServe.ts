@@ -1,6 +1,6 @@
 import "server-only";
 import type { Platform } from "@/lib/burnticker/server";
-import { cloneStore, cloneTerms, clonesJson, type ClonesJson } from "@/lib/burnticker/ops/cloneWatch";
+import { cloneStore, cloneTerms, clonesJson, termSinceFor, type ClonesJson } from "@/lib/burnticker/ops/cloneWatch";
 
 /**
  * KNOWN LOOKALIKES (ChatGPT audit 7 item 2): a mint on the Not Burnticker list, answered as such by /v1/search, the coins search and
@@ -22,5 +22,6 @@ export function knownLookalike(p: Pick<Platform, "registry">, mint: string): { k
 /** The "Not Burnticker" list from this host's registry database (what the clone watch recorded) — the page and GET /v1/clones. */
 export function clonesFor(p: Pick<Platform, "registry">, nowMs = Date.now()): ClonesJson {
   const tokens = p.registry.tokens().filter((t) => t.status !== "expired");
-  return clonesJson(cloneStore(p.registry.db), cloneTerms(tokens.filter((t) => t.status !== "draft").map((t) => t.ticker)), new Set(p.registry.tokens().map((t) => t.mint)), nowMs);
+  // QA 11 M12: a token whose pool predates the name it matched is left out (termSinceFor dates each name)
+  return clonesJson(cloneStore(p.registry.db), cloneTerms(tokens.filter((t) => t.status !== "draft").map((t) => t.ticker)), new Set(p.registry.tokens().map((t) => t.mint)), nowMs, termSinceFor(tokens));
 }

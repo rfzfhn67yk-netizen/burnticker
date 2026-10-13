@@ -8,8 +8,9 @@ import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
 import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, gameMirrorId, GAME_WIN_SERIES_RE, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
 import { nameProblem } from "@/lib/burnticker/launchFields";
-import { isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
+import { DESCRIPTION_TOTAL_LIMIT, isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
+import { PIN_IX_LABEL_PREFIX, createAfterPinText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 
 /**
  * THE LAUNCH BUNDLE (LAUNCHPAD-PATH §1 step 6; 2026-10-09). One wallet approval signs: (a) burn_receipts.initialize_token (TokenConfig
@@ -150,7 +151,7 @@ export interface LaunchBundle {
  * fade-side team coin, and any team coin with a creator description, was refused by the bundle after a clean review. The description
  * lives in the pinned metadata JSON, not on chain, so nothing upstream limits it.
  */
-export const DESCRIPTION_LIMIT = 1_500;
+export const DESCRIPTION_LIMIT = DESCRIPTION_TOTAL_LIMIT;
 const TICKER_RE = /^[A-Z0-9]{2,10}$/;
 const PUBKEY_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -220,6 +221,31 @@ function pairVoidByOf(rule: LockedRule["rule"]): number {
   return Number(v.replace(/-/g, ""));
 }
 
+/**
+ * The bundle's transactions. A coin that burns itself: ONE transaction, initialize_token + LaunchLab create (+ first buy), unchanged.
+ * A coin with a pinned token (rules.ts burnTarget; WIRING-ROUND5 item 2): pin_burn_target must run after initialize_token (it reads the
+ * TokenConfig) and before the coin's mint exists (the program refuses MintAlreadyCreated), and initialize_token + pin + create is over
+ * the packet limit, so it is TWO: [initialize_token, pin_burn_target], then [LaunchLab create (+ first buy)]. Measured as v0 against the
+ * lookup table (test/burntickerPinSteps.test.ts): the first is at most about 1,020 bytes, the second is the create alone. Both are signed
+ * by the creator and the mint. The recovery records keep their meaning: step i is transaction i of this list, as before.
+ * A rule with a pinned token whose program client emitted no pin is refused: the coin would launch burning itself.
+ */
+export function launchTransactions(input: Pick<LaunchInput, "ticker" | "firstBuySol">, locked: LockedRule, initIxs: SerializedIx[], createIxs: SerializedIx[], link = false): LaunchBundle["transactions"] {
+  const isPin = (ix: SerializedIx) => ix.label.startsWith(PIN_IX_LABEL_PREFIX);
+  const pins = initIxs.filter(isPin), init = initIxs.filter((ix) => !isPin(ix));
+  const bt = locked.rule.burnTarget;
+  const firstBuy = Number(input.firstBuySol) > 0 ? " + first buy" : "";
+  if (!bt) {
+    if (pins.length) throw new Error("launch: the program client pinned a burn pool for a rule that burns its own coin");
+    return [{ label: "initialize_token + LaunchLab create" + firstBuy, signers: ["creator", "mint"], instructions: [...initIxs, ...createIxs] }];
+  }
+  if (pins.length !== 1) throw new Error(`launch: this rule burns ${bt.symbol}, and the burn program client did not pin ${bt.symbol}'s pool, so the coin would burn itself instead. Nothing was built.`);
+  return [
+    { label: pinStepText(input.ticker, bt.symbol, { link }), signers: ["creator", "mint"], instructions: [...init, pins[0]] },
+    { label: `${createAfterPinText(input.ticker)} (LaunchLab create${firstBuy})`, signers: ["creator", "mint"], instructions: createIxs },
+  ];
+}
+
 /** Composes the bundle. Pure apart from the mint keypair (fresh unless injected) and the two clients (fakes until the real ones land). */
 export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): Promise<LaunchBundle> {
   const problems = launchProblems(input);
@@ -263,7 +289,7 @@ export async function buildLaunchBundle(input: LaunchInput, deps: LaunchDeps): P
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), vestDays: alloc.vestDays, cliffDays: alloc.cliffDays, lpBurnedPct: LP_BURNED_PCT, lpLockedPct: LP_LOCKED_PCT, teamAllocationPct: 0 },
     fees: { curve: CURVE_FEES, postGraduation: postGraduationFeesFor(input.cluster), creatorSliceBps: CREATOR_FEE_SLICE_BPS, sentence: feeSplitSentence(input.cluster), devFeeWallet: deps.devFeeWallet },
     burnPoolAuthority,
-    transactions: [{ label: "initialize_token + LaunchLab create" + (Number(input.firstBuySol) > 0 ? " + first buy" : ""), signers: ["creator", "mint"], instructions: [...init.instructions, ...create.instructions] }],
+    transactions: launchTransactions(input, locked, init.instructions, create.instructions, !!deps.partnerFirst),
     notes: [...create.notes, `LaunchLab's recorded creator is the burn program's fee PDA ${burnPoolAuthority} (its WSOL ATA ${pool.feeWsol} receives the claimed curve fees), not the human creator and not the keeper — the keeper only pays gas; the creator-fee slot pays the burn pool 100% (owner, 2026-10-09; review finding H-2)`, `${LP_POLICY_LINE}: ${LP_LOCKED_PCT}% of the graduation LP locked with Raydium's LP lock and its Fee Key owned by the burn program (platform config, not creator-configurable); team allocation 0%`, "the first burn needs fee income or a seed deposit into the burn pool; anyone can deposit, nobody can withdraw", "no referral code, fee discount or hidden parameter exists: every parameter is in rules.json"],
   };
 }
@@ -276,7 +302,7 @@ export interface PairLaunchInput {
   /** Side A: the full launch input; its rule's `pair` field is set here (pairId, side A, counterpart null) whatever the caller sent. */
   a: LaunchInput;
   /** Side B: its own name/ticker/image/links; creator, first buy, acknowledgements and cluster are side A's. Its rule is derived. */
-  b: { ticker: string; name: string; description: string; imageUrl: string | null; links: { label: string; url: string }[] };
+  b: { ticker: string; name: string; description: string; imageUrl: string | null; links: { label: string; url: string }[]; /** side B's own pinned token (round 5); side A's is never inherited */ burnTarget?: BurnTargetField | null };
   /** Optional; derived from the tickers and the selector when absent (deterministic). */
   pairId?: string;
   /**
@@ -354,10 +380,15 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...deps, ...(kpB ? { pairMint: kpB.publicKey.toBase58(), partnerFirst: false } : {}) });
   // a head-to-head series: side B counts ITS team's results on the mirror series (direction up), so each coin reads its own team
   // two candidates: side B reads candidate B's own market with the same YES mapping (never the inverted one)
-  const ruleB = mirror ? validateRule({ ...ruleA, series: mirror, pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } })
-    : race ? validateRule({ ...ruleA, market: race.markets[1], pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } })
-    : game ? validateRule({ ...ruleA, series: game.series[1], pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } })
+  // Round 5 (WIRING-ROUND5 item 1): each side carries its OWN pinned token. Side A's never reaches side B (every branch below starts
+  // from ruleA, so it is stripped here); side B's comes from input.b.burnTarget and is part of side B's hashed rule.
+  const { burnTarget: _sideATarget, ...ruleABase } = ruleA;
+  void _sideATarget;
+  const ruleB0 = mirror ? { ...ruleABase, series: mirror, pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: a.mint } }
+    : race ? { ...ruleABase, market: race.markets[1], pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: a.mint } }
+    : game ? { ...ruleABase, series: game.series[1], pair: { ...ruleA.pair!, side: "B" as const, counterpartMint: a.mint } }
     : invertMapping(ruleA, a.mint, pairId);
+  const ruleB = validateRule(input.b.burnTarget ? { ...ruleB0, burnTarget: input.b.burnTarget } : ruleB0);
   const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: kpB ?? undefined, ...(kpB ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });
   return { pairId, a, b, selector, notes: [
     ...(race ? [`candidates pair ${pairId}: ${input.a.ticker} on market ${race.markets[0]} and ${input.b.ticker} on market ${race.markets[1]}, two outcomes of the race ${race.slug}; the race counts once both markets are final: exactly one YES → that coin burns its own pool and the other's pool forwards to it; otherwise both pools go to $DEFICIT's burn at the end`] : []),

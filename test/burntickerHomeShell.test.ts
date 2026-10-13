@@ -107,7 +107,7 @@ describe("the featured cards (review items 12 and 13; Codex review 5 F4)", () =>
   });
   test("$REHEARSAL: the one rehearsal sentence (website-15 item 9); the devnet coin's total and receipt from its confirmed evidence", () => {
     assert.equal(f[1].note, "A test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it.");
-    assert.doesNotMatch(f[1].note!, /not for trading/); assert.equal(f[1].receipt, null); assert.equal(f[1].href, "/burnticker/trust#rehearsals");
+    assert.doesNotMatch(f[1].note!, /not for trading/); assert.equal(f[1].receipt, null); assert.equal(f[1].href, "/burnticker/t/REHEARSAL");
     assert.equal(f[1].burned.text, null, "not read here: a dash with the operator's dated record as the reason");
     assert.match(read("src/app/burnticker/trust/page.tsx"), /id="rehearsals">Rehearsal coins</);
     const s = sampleReceipts();

@@ -3,13 +3,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { DESCRIPTION_ONE_PARAGRAPH, IMAGE_CANCEL_LABEL, IMAGE_KEEP_GENERATED_LABEL, IMAGE_RIGHTS_REQUIRED, notSquareLine, oneParagraph, squareCrop } from "@/lib/burnticker/guidedLaunch";
-import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, imageFromTransfer } from "@/lib/burnticker/creatorProfile";
+import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, descriptionRoom, descriptionRoomProblem, imageFromTransfer } from "@/lib/burnticker/creatorProfile";
 import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { BADGE_UNAVAILABLE_LINE, IMAGE_READ_FAILED, IMAGE_SIZE_HELP, pickImage } from "@/lib/burnticker/profileImagePick";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
 import { LinkedWords } from "../_components/LinkedWords";
 import { CUSTOM_IMAGES_OFF_LINE } from "@/lib/burnticker/creatorCopy";
+import { fieldRuleSentence } from "./fieldChecks";
 
 /**
  * THE CREATOR'S IMAGE, DESCRIPTION AND LINKS ON THE REVIEW CARD (website-15 item 13; owner decisions 2026-10-12). Above the rule
@@ -52,11 +53,12 @@ export const profileFieldId = (side: "a" | "b", field: ProfileField | "note" | "
  * generated art with CUSTOM_IMAGES_OFF_LINE instead of the file control.
  */
 export type ProfileUpdate = ProfileValue | ((prev: ProfileValue) => ProfileValue);
-export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true, pasteTarget = true, side = "a" }: { value: ProfileValue; /** a state setter: every change is merged into the latest value (intent audit 5 item 14) */ onChange: (v: ProfileUpdate) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean; /** website-19: an image pasted anywhere on the page lands here (side A of a pair; side B takes drops) */ pasteTarget?: boolean; /** website-22: which coin's fields these are (their ids, for the review's Edit links) */ side?: "a" | "b" }) {
+export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true, pasteTarget = true, side = "a", generated = null }: { /** website-25 (WIRING-SOURCES7 H2): the coin's generated paragraph (the review's coins[i].description), so the counter and the limit are the room it leaves */ generated?: string | null; value: ProfileValue; /** a state setter: every change is merged into the latest value (intent audit 5 item 14) */ onChange: (v: ProfileUpdate) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean; /** website-19: an image pasted anywhere on the page lands here (side A of a pair; side B takes drops) */ pasteTarget?: boolean; /** website-22: which coin's fields these are (their ids, for the review's Edit links) */ side?: "a" | "b" }) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [fileErr, setFileErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
   // website-22 (QA 9 item 11): a link is checked when the field is left (and again on every change after that), beside the field
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  // website-25 (QA 11 H5): a field that already holds a link (the creator came back with Edit from the review) shows its error at once
+  const [touched, setTouched] = useState<Record<string, boolean>>(() => Object.fromEntries(LINK_FIELDS.map(([k]) => [k, !!value[k].trim()])));
   const [paraNote, setParaNote] = useState(false);
   // website-22 (QA 9 item 14): the picked image's size, so a picture that is not square says so and shows the square the coin keeps
   const [dims, setDims] = useState<{ src: string; w: number; h: number } | null>(null);
@@ -127,7 +129,7 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
         ) : <div className="bt-profile-square shrink-0" aria-hidden="true"><span>Receipt art</span></div>}
         <div className="min-w-0 flex-1 space-y-1">
           <label htmlFor={`${profileFieldId(side, "image")}-file`} className="block text-neutral-300">Image</label>
-          <input id={`${profileFieldId(side, "image")}-file`} type="file" data-optional="profile" accept="image/png,image/jpeg,image/gif,image/webp" aria-describedby={`${uid}-imghelp`} className="block w-full min-w-0 text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+          <input id={`${profileFieldId(side, "image")}-file`} type="file" data-optional="profile" accept="image/png,image/jpeg,image/gif,image/webp" aria-describedby={`${uid}-imghelp`} className="block w-full min-w-0 text-xs" onChange={(e) => { pick(e.target.files?.[0] ?? null); e.target.value = ""; }} />
           <p id={`${uid}-imghelp`}>{IMAGE_WAYS} {IMAGE_HELP} {IMAGE_SIZE_HELP}</p>
           <p data-image-rights><LinkedWords text={IMAGE_RIGHTS_LINE} links={[{ words: "terms of use", href: "/burnticker/terms" }]} /></p>
           {busy && <p role="status">Adding the receipt mark.</p>}
@@ -151,7 +153,7 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
           })()}
           {value.image && (
             <>
-              <label className="flex items-start gap-2 text-neutral-200"><input id={profileFieldId(side, "image")} type="checkbox" data-optional="profile" data-rights-box aria-invalid={!value.rights} checked={value.rights} onChange={(e) => set({ rights: e.target.checked })} /><span data-rights-line>{RIGHTS_LINE}</span></label>
+              <label className="flex items-start gap-2 text-neutral-200"><input id={profileFieldId(side, "image")} type="checkbox" data-optional="profile" data-rights-box aria-invalid={!value.rights} checked={value.rights} onChange={(e) => { set({ rights: e.target.checked }); if (e.target.checked) setFileErr(null); }} /><span data-rights-line>{RIGHTS_LINE}</span></label>
               {!value.rights && <p className="text-amber-300" data-rights-needed>{IMAGE_RIGHTS_REQUIRED}</p>}
               <button type="button" data-optional="profile" className="underline" onClick={() => { latest.cancel(); set({ image: null, rights: false, imageState: null }); setFileErr(null); setBusy(false); }}>Remove the image</button>
             </>
@@ -161,11 +163,12 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
       {showText && <>
       {(() => {
         // website-22 (audit 10 item 8): one paragraph, said where it happened; invisible and text-direction characters said beside the field
-        const descId = profileFieldId(side, "description"), descErr = controlCharProblem(value.description, "description") || (value.description.length > DESCRIPTION_MAX ? `The description can be at most ${DESCRIPTION_MAX} characters.` : "");
+        const descId = profileFieldId(side, "description"), descErr = controlCharProblem(value.description, "description") || (value.description.length > DESCRIPTION_MAX ? `The description can be at most ${DESCRIPTION_MAX} characters.` : "") || (generated ? descriptionRoomProblem(generated, value.description) : null) || fieldRuleSentence("description", value.description) || "";
+        const max = generated ? Math.min(DESCRIPTION_MAX, descriptionRoom(generated)) : DESCRIPTION_MAX;
         return (<>
-          <label className="block" htmlFor={descId}>Description. It follows the rule sentence on the coin&apos;s page, as one paragraph.</label>
+          <label className="block" htmlFor={descId}>Description. It follows the rule sentence on the coin&apos;s page, as one paragraph. Links go in the fields below it.</label>
           <textarea id={descId} data-optional="profile" data-profile-field="description" className={input} rows={3} maxLength={DESCRIPTION_MAX} value={value.description} aria-invalid={!!descErr} onChange={(e) => { const p = oneParagraph(e.target.value); setParaNote(p.changed); set({ description: p.value }); }} aria-describedby={`${uid}-count${paraNote ? ` ${uid}-para` : ""}${descErr ? ` ${uid}-descerr` : ""}`} />
-          <p id={`${uid}-count`}>{value.description.length} of {DESCRIPTION_MAX} characters.</p>
+          <p id={`${uid}-count`}>{value.description.length} of {max} characters.</p>
           {paraNote && <p id={`${uid}-para`} className="text-amber-300" role="status" data-one-paragraph>{DESCRIPTION_ONE_PARAGRAPH}</p>}
           {descErr && <p id={`${uid}-descerr`} className="text-red-400" data-field-error="description">{descErr}</p>}
         </>);

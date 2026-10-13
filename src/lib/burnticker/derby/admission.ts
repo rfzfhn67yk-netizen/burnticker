@@ -3,7 +3,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { loadRefuseList, refusalsFor, type RefuseList } from "@/lib/burnticker/oracle/refuse";
 import { loadOwnTokens, ownTokenRefusalFrom, type OwnTokenList } from "@/lib/ownTokens";
-import { DERBY_MIN_LIQUIDITY_USD, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, isoDate as isoDateOf, nextUtcMidnight, sameUnderlying, seasonEndMs, underlyingKey, type DerbySpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { DERBY_MIN_LIQUIDITY_USD, INDEX_PROXY_SYMBOLS, indexProxiesEnabled, isoDate as isoDateOf, nextUtcMidnight, sameUnderlying, seasonEndMs, wrapperPairProblem, underlyingKey, type DerbySpec, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { cryptoBase, loadPythCatalogue, type PythFeedRow } from "@/lib/burnticker/derby/pyth";
 import { crossQuote } from "@/lib/burnticker/derby/cross";
 import { derbyStore } from "@/lib/burnticker/derby/store";
@@ -62,6 +62,7 @@ export async function derbyAdmission(rule: BurnRule, d: DerbyAdmissionDeps): Pro
   const out: DerbyRefusal[] = [];
   if (spec.selector === "coinvs") {
     if (underlyingKey(spec.a) === underlyingKey(spec.b) || sameUnderlying(spec.a, spec.b)) out.push({ kind: "feed", symbol: null, reason: "The two coins must be different." });
+    { const w = wrapperPairProblem(spec.a, spec.b); if (w) out.push({ kind: "feed", symbol: null, reason: w }); }
     out.push(...await underlyingRefusals(spec.a, d), ...await underlyingRefusals(spec.b, d));
     const earliest = nextUtcMidnight(d.now);
     if (spec.season.start < earliest) out.push({ kind: "season", symbol: null, reason: `The season starts on ${spec.season.start}, but the earliest is ${earliest}, the first full window after launch.` });

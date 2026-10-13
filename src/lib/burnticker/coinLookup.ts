@@ -54,3 +54,31 @@ export function sharedTickerBody(r: Pick<Registry, "lockedRule">, l: Extract<Coi
 export function sharedTickerText(l: Extract<CoinLookup, { kind: "many" }>): string {
   return [sharedTickerSentence(l.ticker), ...l.tokens.map((t) => `${t.name}: ${t.mint}`)].join("\n");
 }
+
+/**
+ * WHETHER /burnticker/t/<key> HAS A PAGE (QA walkthrough 11 M13, 2026-10-13: an unknown ticker answered HTTP 200). The layout calls
+ * notFound() when this is false. A coin the registry knows has a page, and so does a ticker several coins share (the chooser). So do the
+ * pages that exist without a registry row: $DEFICIT's pre-launch page (PRELAUNCH_PAGE_TICKERS) and a disclosed rehearsal coin
+ * (transparency.json `rehearsals`, by symbol or mint). A registry that cannot be read, or a rehearsal list that cannot be read (`served`
+ * null), never turns into a 404: the page explains itself as before.
+ */
+export const PRELAUNCH_PAGE_TICKERS: readonly string[] = ["DEFICIT"];
+export function coinPageFound(rawKey: string, lookup: (key: string) => CoinLookup, served: { tickers: readonly string[]; mints: readonly string[] } | null = { tickers: [], mints: [] }): boolean {
+  const key = decode(rawKey).trim();
+  if (!key) return false;
+  const upper = key.toUpperCase();
+  if (PRELAUNCH_PAGE_TICKERS.includes(upper)) return true;
+  if (served && (served.tickers.some((t) => t.toUpperCase() === upper) || served.mints.includes(key))) return true;
+  let l: CoinLookup;
+  try { l = lookup(key); } catch { return true; }
+  if (l.kind !== "none") return true;
+  return served === null;
+}
+
+/** The coin page's title when the share preview does not set one: the coin's name and ticker, or the ticker as written. */
+export function coinPageTitle(rawKey: string, l: CoinLookup | null): string {
+  if (l?.kind === "one") return `${l.token.name} ($${l.token.ticker}) on Burnticker`;
+  if (l?.kind === "many") return `$${l.ticker} on Burnticker`;
+  const key = decode(rawKey).trim();
+  return isMintKey(key) ? "A coin on Burnticker" : `$${key.toUpperCase()} on Burnticker`;
+}

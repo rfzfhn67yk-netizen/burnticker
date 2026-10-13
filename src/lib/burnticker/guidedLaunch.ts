@@ -5,7 +5,7 @@ import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse"
 import { LIVE_NOW, gameSeries, meetingsPairSeries, noPlayoffs, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
-import { DESCRIPTION_MAX, linkProblem } from "@/lib/burnticker/creatorProfile";
+import { DESCRIPTION_MAX, descriptionRoomProblem, linkProblem } from "@/lib/burnticker/creatorProfile";
 import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { fitName } from "@/lib/burnticker/launchFields";
 
@@ -91,7 +91,8 @@ export const EVENT_LEVEL_REFUSAL = "This market is a set of outcomes. Pick one o
  */
 export function oneShotSentences(o: { share: number; happened: string; subject: "they" | "it"; no?: boolean }): string[] {
   const what = o.share >= 1 ? "its whole pool" : `${pctLabel(o.share)} of its pool`;
-  const tail = o.no ? `If ${o.subject} ${o.subject === "they" ? "do" : "does"}, the rest goes to $DEFICIT's burn. A voided market is not a NO.` : `If ${o.subject} ${o.subject === "they" ? "do" : "does"} not, the rest goes to $DEFICIT's burn.`;
+  // sources-7 (QA walkthrough 11 M2): the NO side's other case is the market resolving YES, said as that ("If it does" read as the NO)
+  const tail = o.no ? "If the market resolves YES instead, the rest goes to $DEFICIT's burn. A voided market is not a NO." : `If ${o.subject} ${o.subject === "they" ? "do" : "does"} not, the rest goes to $DEFICIT's burn.`;
   return [`This coin burns ${what} once, when Polymarket's payout says ${o.happened}.`, "The burn lands in slices sized to the pool's liquidity.", tail];
 }
 
@@ -214,21 +215,29 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
  */
 export function budgetCopy(rule: BurnRule, share: number, unit: string | null): { label: string; line: string; math: string | null } {
   const p = pctLabel(share);
-  if (isOneShotRule(rule)) return { label: "Share of the burn pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity.`, math: null };
+  // Round 5 (WIRING-ROUND5 item 6): a coin with a pinned token (rules.ts burnTarget) swaps SOL for that token and burns it; the words
+  // follow the token, and its cap is 2% of the SOL in that token's pinned pool (crank_target_burn), not the coin's own pool
+  const sym = rule.burnTarget?.symbol ?? null;
+  const act = sym ? `swapping SOL for ${sym} and burning it` : "buying and burning this coin";
+  if (isOneShotRule(rule)) {
+    if (sym) return { label: "Share of the burn pool, once", line: `${share >= 1 ? "This coin spends its whole pool once" : `This coin spends ${p} of its pool once`}, when the result is in, ${act}. The burn lands in slices sized to the SOL in ${sym}'s pinned Raydium pool.`, math: null };
+    return { label: "Share of the burn pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity.`, math: null };
+  }
   // QA pass 9 #18 and #20 (2026-10-13): the fade side is said for what the rule reads (a game day, a day with none of the events, or a
   // number that did not move), and a unit of one is a noun ("each earthquake", never "each 1 earthquake")
   if (rule.kind === "scalar" && rule.inverse) {
     const e = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null;
-    if (e) return { label: "Share of the burn pool per game day", line: `Each game day without the result the rule names spends ${p} of the burn pool buying and burning this coin. A day with two games counts once.`, math: null };
-    if (rule.scalar?.baseline === 0) return { label: "Share of the burn pool per day", line: `Each day with none of the events the rule counts spends ${p} of the burn pool buying and burning this coin. A day counts once at most.`, math: null };
-    return { label: "Share of the burn pool per reading", line: `Each reading where the number does not move the rule's way spends ${p} of the burn pool buying and burning this coin. A reading counts once at most, however flat it was.`, math: null };
+    if (e) return { label: "Share of the burn pool per game day", line: `Each game day without the result the rule names spends ${p} of the burn pool ${act}. A day with two games counts once.`, math: null };
+    if (rule.scalar?.baseline === 0) return { label: "Share of the burn pool per day", line: `Each day with none of the events the rule counts spends ${p} of the burn pool ${act}. A day counts once at most.`, math: null };
+    return { label: "Share of the burn pool per reading", line: `Each reading where the number does not move the rule's way spends ${p} of the burn pool ${act}. A reading counts once at most, however flat it was.`, math: null };
   }
+  const cap = sym ? `One burn run spends at most 2% of the SOL in ${sym}'s pinned Raydium pool, and the rest waits for the next run.` : "One burn run buys with at most 2% of the SOL in the coin's Raydium pool, and the rest waits for the next run.";
   if (rule.kind === "scalar" && unit) {
     const three = Math.round((1 - (1 - share) ** 3) * 10000) / 100;
     const u = unit.replace(/^1\s+(?=\D)/, "");
-    return { label: `Share of the burn pool per ${u}`, line: `Each ${u} spends ${p} of what is left in the burn pool buying and burning this coin.`, math: `A reading with several units compounds, so 3 units spend about ${three}%, not ${Math.round(share * 300 * 10) / 10}%. One burn run buys with at most 2% of the SOL in the coin's Raydium pool, and the rest waits for the next run.` };
+    return { label: `Share of the burn pool per ${u}`, line: `Each ${u} spends ${p} of what is left in the burn pool ${act}.`, math: `A reading with several units compounds, so 3 units spend about ${three}%, not ${Math.round(share * 300 * 10) / 10}%. ${cap}` };
   }
-  return { label: "Share of the burn pool per result", line: `Each result that fires the rule spends ${p} of the burn pool buying and burning this coin. The token amount bought varies.`, math: null };
+  return { label: "Share of the burn pool per result", line: `Each result that fires the rule spends ${p} of the burn pool ${act}. ${sym ? `The amount of ${sym} each swap gets varies.` : "The token amount bought varies."}`, math: null };
 }
 /** Pass B item 15: what a share means in SOL, with a round number and no price or return in it. */
 export function shareExample(share: number): string {
@@ -244,7 +253,7 @@ export const derbyShareLine = (daily: number, flip: number): string => `Each mod
  * THE PATTERN WORDS FOR THE THING PICKED (pass B item 12, audit 6 item 16): "After each Dodgers win", never "each day or reading" on a team
  * coin. Generic words stay for the paths with no subject to name.
  */
-export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: "win" | "loss" | "draw" | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null }): { label: string; sentence: string } {
+export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: "win" | "loss" | "draw" | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null; /** sources-7 M2: the picked game's date ("Sat, May 1, 2027") when it is not their next listed game */ gameLabel?: string | null }): { label: string; sentence: string } {
   const s = o.subject;
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: MEETINGS_WINNER_LINE };
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "game" && id === "winner") return { label: PATTERNS.winner.label, sentence: GAME_PAIR_SENTENCE };
@@ -258,7 +267,7 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
   if (o.follow === "rivalry" && o.pairKind === "teams") {
     if (id === "every") return { label: "Each time its own team loses", sentence: "Each coin spends a share of its own burn pool after each game its team loses, this season." };
     if (id === "fade") return { label: "Each game its own team does not lose", sentence: "Each coin spends a share of its own burn pool after each game its team wins or ties, this season." };
-    if (id === "once") return { label: "Their next game only", sentence: "When their next listed game is final, the coin of the team that lost burns once." };
+    if (id === "once") return o.gameLabel ? { label: `Their game on ${o.gameLabel} only`, sentence: `When their game on ${o.gameLabel} is final, the coin of the team that lost burns once.` } : { label: "Their next game only", sentence: "When their next listed game is final, the coin of the team that lost burns once." };
   }
   if (o.follow === "market" && id === "fade") return { label: MARKET_NO_LABEL, sentence: MARKET_NO_SENTENCE };
   // website-22 (audit 10 item 22): a one-time market's two sides are its YES and its NO payout, each once
@@ -737,7 +746,7 @@ export function lpDisclosureFor(venue: LaunchVenue, lp: string, pairLp: string):
 }
 
 /** The profile fields the checks read (ProfileFields.tsx ProfileValue has these and more). */
-export interface ProfileChecked { image: unknown | null; rights: boolean; description: string; x: string; telegram: string; website: string; imageState?: "pending" | "failed" | null }
+export interface ProfileChecked { image: unknown | null; rights: boolean; description: string; x: string; telegram: string; website: string; imageState?: "pending" | "failed" | null; /** sources-7 H2: the coin's generated rule paragraph (the review's coins[].description), so the Name step checks the room it leaves */ generated?: string | null }
 /** The field a profile problem belongs to (the review's Edit link focuses it). */
 export type ProfileField = "image" | "description" | "x" | "telegram" | "website";
 /**
@@ -750,6 +759,7 @@ export function profileFieldProblems(v: ProfileChecked): { field: ProfileField; 
   const isp = imageStateProblem(v.imageState ?? null); if (isp) out.push({ field: "image", text: isp });
   if (v.image && !v.rights) out.push({ field: "image", text: "Confirm the image line, or remove the image." });
   if (v.description.length > DESCRIPTION_MAX) out.push({ field: "description", text: `The description can be at most ${DESCRIPTION_MAX} characters.` });
+  { const rp = v.generated ? descriptionRoomProblem(v.generated, v.description) : null; if (rp) out.push({ field: "description", text: rp }); }
   const cc = controlCharProblem(v.description, "description"); if (cc) out.push({ field: "description", text: cc });
   for (const [k, label] of LINK_FIELDS) { const lp = linkFieldProblem(label, v[k]); if (lp) out.push({ field: k, text: lp }); }
   return out;

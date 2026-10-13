@@ -37,6 +37,8 @@ export default function ReceiptVerifier({ card }: { card: string }) {
   useEffect(() => { const q = new URLSearchParams(window.location.search); setWantDemo(q.get("demo") === "1"); if (q.get("cluster") === "mainnet") { setCluster("mainnet"); setRpc(PUBLIC_RPC.mainnet); } }, []);
   useEffect(() => { if (demo && sig && samples && !busy && !res) { setDemo(false); void run(); } }, [demo, sig, samples]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // website-25 (WIRING-SOURCES7, QA 11 L8): the button waits for a well-formed signature, and the reason shows as it is typed
+  const sigCheck = classifySignatureInput(sig);
   async function run() {
     const input = classifySignatureInput(sig);
     if (input.state !== "valid") { setRes(null); setErr(null); setSigError(input.reason); return; }
@@ -87,12 +89,12 @@ export default function ReceiptVerifier({ card }: { card: string }) {
           </label>
           <label className="grid min-w-0 gap-1"><span className="text-neutral-400">Transaction signature</span>
             <input className={`w-full min-w-0 rounded border ${sigError ? "border-red-500" : "border-neutral-700"} bg-neutral-950 p-2 font-mono break-all`} value={sig} onChange={(e) => { setSig(e.target.value); setSigError(null); }} spellCheck={false} placeholder="88 base58 characters" aria-invalid={sigError ? true : undefined} aria-describedby={sigError ? "sig-error" : undefined} />
-            {sigError && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">Not checked: {sigError}. This is a typing problem. It says nothing about any receipt.</span>}
+            {(sigError ?? (sig.trim() && sigCheck.state !== "valid" ? sigCheck.reason : null)) && <span id="sig-error" className="text-red-400" role="alert" data-field-error="signature">{sigError ?? sigCheck.reason} It says nothing about any receipt.</span>}
           </label>
           <label className="grid min-w-0 gap-1"><span className="text-neutral-400">{cluster === "mainnet" ? "RPC endpoint (use any mainnet RPC you trust)" : "RPC endpoint (use any devnet RPC you trust)"}</span>
             <input className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 p-2 font-mono" value={rpc} onChange={(e) => setRpc(e.target.value)} spellCheck={false} />
           </label>
-          <div><button type="button" disabled={busy} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
+          <div><button type="button" disabled={busy || sigCheck.state !== "valid"} aria-describedby={sigCheck.state !== "valid" && sig.trim() ? "sig-error" : undefined} onClick={run} className="rounded bg-violet-700 px-3 py-2 text-white disabled:opacity-50">{busy ? "Checking…" : "Verify in this browser"}</button></div>
           <p className="text-neutral-500">{CHECK_COPY.verifierPrivacy} {CHECK_COPY.verifierScope}</p>
         </div>
       </details>

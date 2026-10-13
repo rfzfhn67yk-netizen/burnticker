@@ -1,3 +1,4 @@
+import { SEASON_OVER_LINK_LINE } from "@/lib/burnticker/seasonOver";
 import { LEAGUES, SPORTS, isLeague, parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamsOf, type LeagueId, type Sport } from "@/lib/burnticker/sources/espn";
 import { espnGameUrl } from "@/lib/burnticker/sources/gameSettle";
 import { dateRange, seasonBoards, type SeasonBoard, type SeasonCoinInput } from "@/lib/burnticker/seasons";
@@ -34,7 +35,7 @@ export function parseSeasonSlug(league: LeagueId, slug: string): number | null {
 }
 export const leaguePath = (league: LeagueId, year: number): string => `${LEAGUES_PATH}/${encodeURIComponent(league)}/${seasonSlug(league, year)}`;
 /** website-20 item 119: the launch page opens on this league with this team picked (the guided team path, step 2). */
-export const launchHref = (teamName: string, league?: string, abbr?: string): string => (league && abbr ? `/burnticker/launch?league=${encodeURIComponent(league)}&team=${encodeURIComponent(abbr)}` : `/burnticker/launch?q=${encodeURIComponent(teamName)}`);
+export const launchHref = (teamName: string, league?: string, abbr?: string, o: { seasonOver?: boolean } = {}): string => (league && abbr ? `/burnticker/launch?league=${encodeURIComponent(league)}&team=${encodeURIComponent(abbr)}${o.seasonOver ? "&season=over" : ""}` : `/burnticker/launch?q=${encodeURIComponent(teamName)}`);
 
 /** A team coin's league and season year, or null (not a team coin, or a perpetual / next-N / legacy window). */
 export function coinSeason(c: Pick<SeasonCoinInput, "rule">): { league: LeagueId; year: number; window: "season" | "post" } | null {
@@ -114,7 +115,7 @@ export function settledGames(league: LeagueId, readings: readonly GameReading[],
 
 // ---- one league season -------------------------------------------------------------------------------------------------------
 
-export interface LeagueTeamRow { abbr: string; name: string; coins: { ticker: string; outcome: string }[]; launchHref: string }
+export interface LeagueTeamRow { abbr: string; name: string; coins: { ticker: string; outcome: string }[]; launchHref: string; /** sources-7 H6: the team's season is over (the page read the schedule); its link carries `season=over` */ seasonOver: boolean; warning: string | null }
 export interface LeagueSeasonPage {
   league: LeagueId; leagueLabel: string; sport: Sport; year: number; slug: string; seasonLabel: string; path: string;
   current: boolean;
@@ -129,7 +130,7 @@ export interface LeagueSeasonPage {
   jsonLd: Record<string, unknown>[];
 }
 
-export interface LeagueSeasonInput { league: LeagueId; year: number; coins: readonly SeasonCoinInput[]; readings: readonly GameReading[]; nowMs: number; origin: string; ogImage: string }
+export interface LeagueSeasonInput { league: LeagueId; year: number; coins: readonly SeasonCoinInput[]; readings: readonly GameReading[]; nowMs: number; origin: string; ogImage: string; /** sources-7 H6: the teams whose season is over (seasonOver.ts seasonStatus over the league's schedule); absent = not read */ seasonOver?: ReadonlySet<string> | null }
 
 export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
   const L = LEAGUES[i.league], label = seasonLabel(i.league, i.year), slug = seasonSlug(i.league, i.year), path = leaguePath(i.league, i.year);
@@ -144,8 +145,8 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
     if (!e || e.kind !== "team") continue;
     coinsByTeam.set(e.abbr, [...(coinsByTeam.get(e.abbr) ?? []), { ticker: c.ticker, outcome: e.outcome }]);
   }
-  const teams = teamsOf(i.league).map((t) => ({ abbr: t.abbr, name: t.name, coins: coinsByTeam.get(t.abbr) ?? [], launchHref: launchHref(t.name, i.league, t.abbr) }))
-    .sort((a, b) => (b.coins.length > 0 ? 1 : 0) - (a.coins.length > 0 ? 1 : 0) || a.name.localeCompare(b.name));
+  const teams = teamsOf(i.league).map((t) => { const over = !!i.seasonOver?.has(t.abbr); return { abbr: t.abbr, name: t.name, coins: coinsByTeam.get(t.abbr) ?? [], launchHref: launchHref(t.name, i.league, t.abbr, { seasonOver: over }), seasonOver: over, warning: over ? SEASON_OVER_LINK_LINE : null }; })
+    .sort((a, b) => (a.seasonOver ? 1 : 0) - (b.seasonOver ? 1 : 0) || (b.coins.length > 0 ? 1 : 0) - (a.coins.length > 0 ? 1 : 0) || a.name.localeCompare(b.name));
   const to = new Date(i.nowMs).toISOString().slice(0, 10), from = new Date(i.nowMs - 6 * 86_400_000).toISOString().slice(0, 10);
   const rows = settledGames(i.league, i.readings, from, to);
   const n = inSeason.length;

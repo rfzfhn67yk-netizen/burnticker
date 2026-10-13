@@ -117,3 +117,24 @@ export function targetHeldLine(symbol: string, err: string): string | null {
   if (err === "TargetFeeTier") return `${symbol} pool unhealthy: the pinned pool's fee is now above 1%, so the burn pool's SOL is held.`;
   return null;
 }
+
+// ---- the pin transaction (WIRING-ROUND5 items 2 to 4) -----------------------------------------------------------------------------
+
+/**
+ * The BurnTarget account pin_burn_target creates: 8 + BurnTarget::INIT_SPACE (programs/burn-receipts state.rs) = 373 bytes.
+ * test/burntickerPinSteps.test.ts sums it from the IDL's own type, so a layout change cannot leave this number behind.
+ */
+export const BURN_TARGET_ACCOUNT_BYTES = 373;
+/** The label the burn program client gives the pin instruction (programClient.ts); the bundle splits on it. */
+export const PIN_IX_LABEL_PREFIX = "burn_receipts.pin_burn_target";
+/**
+ * The step that carries the pin, as the review and the bundle both name it. It matches the launch page's `^Pin .+'s Raydium pool for \$`,
+ * so the page knows the server counted it. On LaunchLab the rule is locked and the pool pinned in one transaction and the coin created
+ * in the next; on the pair curve one transaction locks the rule, pins the pool and then creates the coin's mint.
+ */
+export const pinStepText = (ticker: string, symbol: string, o: { link?: boolean; thenCreate?: boolean } = {}): string =>
+  `Pin ${symbol}'s Raydium pool for $${ticker} after locking in its rule${o.link ? " and linking the two coins" : ""}${o.thenCreate ? `, then create $${ticker}` : ""}`;
+/** The create step that follows a pin on LaunchLab. */
+export const createAfterPinText = (ticker: string): string => `Create $${ticker}`;
+/** What the review says about the pin, once, when any coin pins a token. */
+export const PIN_STEP_NOTE = "A coin that burns a real token pins the Raydium pool it swaps on while the coin does not exist yet: its rule is locked and the pool pinned first, and the coin is created after that, all signed by the coin's new key and your wallet.";

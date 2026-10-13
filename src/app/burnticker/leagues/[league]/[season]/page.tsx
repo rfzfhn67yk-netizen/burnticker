@@ -10,6 +10,8 @@ import { leagueData } from "@/lib/burnticker/leaguesServe";
 import { launchAvailability } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
 import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
+import { seasonStatus, type SeasonSchedule } from "@/lib/burnticker/seasonOver";
+import { seasonYearAt, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
 
 export const dynamic = "force-dynamic";
 
@@ -20,14 +22,29 @@ export const dynamic = "force-dynamic";
  */
 type Params = { params: Promise<{ league: string; season: string }> };
 
-function load(league: string, season: string): { page: LeagueSeasonPage | null; err: string | null; shared?: Set<string> } {
+/**
+ * website-25 (WIRING-SOURCES7 H6): the teams whose season is over, from one bounded schedule read (seasonOver.ts seasonStatus, the same
+ * read /v1/sports/teams makes), for the current season only. Null when the schedule cannot be read, so nothing is greyed on a guess.
+ */
+async function seasonOverTeams(league: LeagueId, year: number): Promise<Set<string> | null> {
+  if (year !== seasonYearAt(league, Date.now())) return null;
+  let sched: SeasonSchedule | null | undefined = null;
+  try { sched = platform().seasonSchedule; } catch { return null; }
+  if (!sched) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const games = await Promise.race([sched(league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
+  clearTimeout(timer);
+  return games ? new Set(teamsOf(league).map((t) => t.abbr).filter((a) => seasonStatus(a, games, true).status === "over")) : null;
+}
+
+function load(league: string, season: string, seasonOver: ReadonlySet<string> | null = null): { page: LeagueSeasonPage | null; err: string | null; shared?: Set<string> } {
   const r = resolveLeagueSeason(league, season);
   if (!r) return { page: null, err: null };
   const origin = publicOrigin();
   const og = `${origin}${LEAGUES_PATH}/${encodeURIComponent(r.league)}/${encodeURIComponent(season)}/og`;
   try {
     const d = leagueData(platform());
-    return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: d.coins, readings: d.readings, nowMs: Date.now(), origin, ogImage: og }), err: null, shared: sharedTickers(d.tickers) };
+    return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: d.coins, readings: d.readings, nowMs: Date.now(), origin, ogImage: og, seasonOver }), err: null, shared: sharedTickers(d.tickers) };
   } catch (e) {
     return { page: leagueSeasonPage({ league: r.league, year: r.year, coins: [], readings: [], nowMs: Date.now(), origin, ogImage: og }), err: e instanceof Error ? e.message : String(e) };
   }
@@ -47,7 +64,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function LeagueSeasonRoute({ params }: Params) {
   const { league, season } = await params;
-  const { page: p, err, shared = new Set<string>() } = load(league, season);
+  const r0 = resolveLeagueSeason(league, season);
+  const over = r0 ? await seasonOverTeams(r0.league, r0.year) : null;
+  const { page: p, err, shared = new Set<string>() } = load(league, season, over);
   if (!p) notFound();
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const withCoins = p.teams.filter((t) => t.coins.length > 0), rest = p.teams.filter((t) => t.coins.length === 0);
@@ -74,10 +93,10 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       <section className="space-y-2" aria-label="teams">
         <h2 className="text-lg font-medium">Teams</h2>
         {withCoins.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{withCoins.map((t) => (
-          <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{(launch.open || launchPreview) && <Link className="text-xs underline" href={t.launchHref}>{launch.open ? "launch a coin for this team" : "preview a coin for this team"}</Link>}</li>
+          <li key={t.abbr} className={card + ` flex flex-wrap items-baseline justify-between gap-2${t.seasonOver ? " opacity-70" : ""}`} data-season-over={t.seasonOver ? "" : undefined}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{(launch.open || launchPreview) && <Link className="text-xs underline" href={t.launchHref}>{launch.open ? "launch a coin for this team" : "preview a coin for this team"}</Link>}{t.warning && <span className="basis-full text-xs text-amber-300/80" data-season-warning>{t.warning}</span>}</li>
         ))}</ul>}
         <details open={withCoins.length === 0 && rest.length <= 40} className="text-xs" data-teams><summary className="cursor-pointer text-neutral-400">{withCoins.length ? `${rest.length} ${rest.length === 1 ? "team has" : "teams have"} no coin this season` : `All ${rest.length} teams`}</summary>
-          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span>{(launch.open || launchPreview) && <Link className="underline" href={t.launchHref}>{launch.open ? "launch a coin for this team" : "preview a coin for this team"}</Link>}</li>)}</ul>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className={`flex flex-wrap justify-between gap-x-2 border-b border-neutral-800 py-1${t.seasonOver ? " text-neutral-500" : ""}`} data-season-over={t.seasonOver ? "" : undefined}><span>{t.name}</span>{(launch.open || launchPreview) && <Link className="underline" href={t.launchHref}>{launch.open ? "launch a coin for this team" : "preview a coin for this team"}</Link>}{t.warning && <span className="basis-full text-[11px] text-amber-300/80" data-season-warning>{t.warning}</span>}</li>)}</ul>
         </details>
       </section>
       {/* site audit #9 / BT-10 (2026-10-11): before any coin has a receipt, the empty scoreboard and settled-games sections collapse into one

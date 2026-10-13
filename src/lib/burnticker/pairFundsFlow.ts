@@ -1,4 +1,4 @@
-import { PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
+import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE, postGraduationShareLine, type PostGraduationShares } from "@/lib/burnticker/feeShareLine";
 import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
 
 /**
@@ -18,7 +18,16 @@ export interface FundsFlow { version: PairRuleVersion; versionLabel: string; one
 
 export const pairRuleVersion = (winnerTakesBurn: boolean): PairRuleVersion => (winnerTakesBurn ? "winner-takes-the-burn" : "separate-pools");
 
-const FEES = `Each coin's trades pay a creator fee into that coin's own burn pool. ${PAIR_OPERATOR_SHARE_LINE} Nothing can be withdrawn from a burn pool.`;
+/**
+ * sources-7 (QA walkthrough 11 H3: the series pair's review said 0.17% and 0.04% here and 0.88% and 0.08% in its fee table, and called
+ * the burn pool's share a "creator fee"). The fee step is built from one post-graduation split: the pair curve's own coins use the pair
+ * split (creator fee off); every LaunchLab pair (a rivalry series, two candidates, two teams in one game) uses the LaunchLab tier's split,
+ * and the review passes fees.ts postGraduationFeesFor(cluster), the same source as its fee table.
+ */
+type SplitLike = { legs: readonly { label: string; bps: number }[] } | PostGraduationShares;
+export const pairFeesText = (fees?: SplitLike | null, o: { pairCurve?: boolean } = {}): string =>
+  `Part of every trade's fee goes into that coin's own burn pool, and the creator gets none of it. ${fees ? postGraduationShareLine(fees) : o.pairCurve ? PAIR_OPERATOR_SHARE_LINE : OPERATOR_SHARE_LINE} Nothing can be withdrawn from a burn pool.`;
+const FEES = pairFeesText(null, { pairCurve: true });
 
 export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b: string } = { a: "A", b: "B" }): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
@@ -55,13 +64,13 @@ export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b:
  * live and still paired, else to $DEFICIT; the winning coin burns down its own rest (endSinkKeeper.ts); a level series records a void end
  * and each coin burns down on itself.
  */
-export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a: string; b: string }, o: { playoffs?: boolean } = {}): FundsFlow {
+export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a: string; b: string }, o: { playoffs?: boolean; fees?: SplitLike | null } = {}): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
   return {
     version: "winner-takes-the-burn", versionLabel: "Rule version: winner takes the burn, every game between two teams this season",
     oneLiner: `Each game between ${teamRefByName(teams.a)} and ${teamRefByName(teams.b)} burns the coin of the team that won it, and at the end of the season the rest goes to the coin of the team that won more of those games.`,
     steps: [
-      { title: "Where fees come from", text: FEES },
+      { title: "Where fees come from", text: pairFeesText(o.fees) },
       { title: "After each game between them", text: "The coin of the team that won spends its own share of its burn pool burning itself. The other coin sends exactly the share its own rule sets for that game to the winning coin's burn pool, in a public transaction with a memo, and that SOL is spent burning the winning coin too. Games against other teams do nothing." },
       { title: "At the end of the season", text: `When both teams' seasons are over${o.playoffs === false ? "" : ", playoffs included"}, the coin of the team that won fewer of the games between them sends what is left in its burn pool, and any fees that arrive later, to the other coin's burn pool. The coin of the team that won more burns down what is left on itself. For example, if ${teamRefByName(teams.a)} won more, ${B} sends its rest to the ${A} burn pool and all of it burns ${A}.` },
     ],
@@ -84,7 +93,7 @@ export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a:
  * forward_on_end sends whatever is left, and later fees, to the winner while it is live and still paired (partner_won), else to $DEFICIT;
  * with no single winner no PairResult exists and both ends go to $DEFICIT. `names` are the two candidates or the two teams.
  */
-export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a: string; b: string }, names: { a: string; b: string }): FundsFlow {
+export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a: string; b: string }, names: { a: string; b: string }, o: { fees?: SplitLike | null } = {}): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
   const game = shape === "game";
   const nameA = game ? teamRefByName(names.a) : names.a, nameB = game ? teamRefByName(names.b) : names.b;
@@ -92,7 +101,7 @@ export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a:
     version: "winner-takes-the-burn", versionLabel: game ? "Rule version: winner takes the burn, two teams in one game" : "Rule version: winner takes the burn, two candidates in one race",
     oneLiner: game ? GAME_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE,
     steps: [
-      { title: "Where fees come from", text: FEES },
+      { title: "Where fees come from", text: pairFeesText(o.fees) },
       { title: game ? "When the game is final" : "When both markets are final", text: game
         ? `The result counts once, when a second source agrees on it. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.`
         : `The race counts once, when both candidates' markets are final. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.` },

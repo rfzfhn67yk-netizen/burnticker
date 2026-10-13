@@ -287,6 +287,13 @@
       "scope": "creator",
       "pattern": "(https?://|www\\.|\\b[a-z0-9-]+\\.(com|io|xyz|fun|net|org|gg|app|co|tv)\\b|t\\.me/|@[A-Za-z0-9_]{3,})",
       "note": "no links or handles in a creator's note, name or ticker"
+    },
+    {
+      "id": "campaign",
+      "category": "no-affiliation",
+      "scope": "creator",
+      "pattern": "(\\b(vote|re-?elect|elect)\\s+(?!(count|counts|share|shares|total|totals|margin|tally|day|result|results)\\b)[a-z]{2,}|\\b[a-z]{2,}\\s+for\\s+(senate|president|governor|congress|mayor|house|office|sheriff|judge|council|assembly|attorney general|state senate)\\b)",
+      "note": "sources-7 (QA walkthrough 11 H9): a campaign slogan in a creator's name, ticker or note (Vote Talarico, Paxton for Senate, Elect X) reads as the candidate's own coin; a coin about a race says what it burns on instead"
     }
   ],
   "allowed": [

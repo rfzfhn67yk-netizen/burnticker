@@ -73,8 +73,8 @@ describe("item 3: what a creator reads (per game and at the season's end)", () =
     assert.ok(v.end.void!.startsWith(MEETINGS_LEVEL_SENTENCE));
     const desc = v.coins[0].description!;
     assert.match(desc, /^\$PHIVBOS burns when the 76ers beat the Celtics\./);
-    assert.match(desc, /For every game the 76ers win against the Celtics in the 2025–26 season, playoffs included/);
-    assert.match(desc, /When the Celtics win one of those games, this coin's share for that game goes to the burn pool of the Celtics coin instead\./);
+    assert.match(desc, /For each of those wins in the 2025–26 season, playoffs included/);   // sources-7 H2: the series paragraph says each fact once
+    assert.match(desc, /When the Celtics win instead, this coin's share for that game goes to the other coin's burn pool\./);
     assert.equal((desc.match(WINDOW_SENTENCE.season) ?? []).length, 1, desc);
     assert.match(v.meetings!.descriptionB, /^\$BOSVPHI burns when the Celtics beat the 76ers\./);
     for (const t of [desc, v.meetings!.descriptionB, v.end.result, v.end.void!, v.rule.endsLine, v.meetings!.flow.oneLiner, ...v.meetings!.flow.steps.map((s) => s.text), ...v.meetings!.flow.outcomes.flatMap((o) => [o.when, o.then]), v.meetings!.flow.never]) plain(t, "review");
@@ -93,7 +93,7 @@ describe("item 3: what a creator reads (per game and at the season's end)", () =
     const e = endText({ ...meetingsRule(), pair: { pairId: "x-vs-y-z", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule);
     assert.equal(e.kind, "pair-winner");
     const d = describeRule({ ...meetingsRule(), pair: { pairId: "x-vs-y-z", side: "A", counterpartMint: null, winnerTakesBurn: true } } as BurnRule, { ticker: "PHIVBOS" });
-    assert.match(d.windowSentence, /whatever is left burns the coin of the team that won more of the games between them, or \$DEFICIT if that coin is not live, and the coin retires/);
+    assert.match(d.windowSentence, /whatever is left burns the coin of the team that won more of these games, or \$DEFICIT if that coin is not live, and the coin retires/);
     assert.match(d.badge, /^2025–26 SEASON SERIES$/);
   });
   test("the launch page's option copy (item 6): label, one line, step 3 winner only, step 4 the series winner; plain", () => {

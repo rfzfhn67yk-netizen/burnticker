@@ -11,6 +11,8 @@ import { END_SINK_FLAGSHIP, END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endS
 import { DEFAULT_ON_END } from "@/lib/burnticker/rules";
 import { initializeTokenIx, operatorAttester } from "@/lib/burnReceipts/instructions";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
+import { pinBurnTargetIx } from "@/lib/burnReceipts/burnTarget";
+import type { BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { configPda, vaultAddress } from "@/lib/burnReceipts/pda";
 import { BURNTICKER_PLATFORM, LAUNCHLAB_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { DEFAULT_SOL_CONFIG } from "@/lib/burnKeeper/launch";
@@ -37,7 +39,12 @@ export class RealIdProgram extends FakeBurnProgram {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: [operatorAttester(ADMIN)], quorum: 1, fixed_pool: PublicKey.default, admin: ADMIN,
     }, ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy } : {}) });
-    return { tokenConfig: configPda(programId, mint).toBase58(), instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (real encoding; test)", keys: ix.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(ix.data).toString("base64") }] };
+    // round 5: a rule with a pinned token gets the real pin_burn_target encoding, as ProgramBurnClient appends it (pool accounts are
+    // stand-ins: admission reads the chain, the wire size does not)
+    const bt = i.rule?.burnTarget;
+    const pins = bt ? [pinBurnTargetIx({ programId, payer: creator, mint, targetMint: new PublicKey(bt.mint), pool: new PublicKey(bt.pool), ammConfig: Keypair.generate().publicKey, wsolVault: Keypair.generate().publicKey, targetVault: Keypair.generate().publicKey, feedId: bt.feedId })] : [];
+    const s = (x: typeof ix, label: string) => ({ programId: this.programId, label, keys: x.keys.map((k) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner, isWritable: k.isWritable })), dataBase64: Buffer.from(x.data).toString("base64") });
+    return { tokenConfig: configPda(programId, mint).toBase58(), instructions: [s(ix, "burn_receipts.initialize_token (real encoding; test)"), ...pins.map((x) => s(x, `burn_receipts.pin_burn_target (${bt!.symbol}; real encoding; test)`))] };
   }
 }
 
@@ -55,24 +62,25 @@ export interface Fixture { name: string; signers: Keypair[][]; steps: { label: s
 /** One LaunchLab coin (the F3 fixture: no first buy), with its creator and mint keypairs. */
 /** The longest on-chain strings a creator can choose: a 32-character name, a 10-character ticker, the hosted metadata URI (longer than an Arweave pin). */
 const WORST_URI = (m: string) => `https://burnticker.com/api/burnticker/metadata/${m}`;
-export async function singleCoin(network: Network, o: { creator?: Keypair; firstBuySol?: string; vault?: boolean; worst?: boolean } = {}): Promise<{ bundle: LaunchBundle; creator: Keypair; mint: Keypair }> {
+export async function singleCoin(network: Network, o: { creator?: Keypair; firstBuySol?: string; vault?: boolean; worst?: boolean; target?: BurnTargetField } = {}): Promise<{ bundle: LaunchBundle; creator: Keypair; mint: Keypair }> {
   const creator = o.creator ?? Keypair.generate(), mint = Keypair.generate();
-  const bundle = await buildLaunchBundle({ creator: creator.publicKey.toBase58(), ticker: o.worst ? "ABCDEFGHIJ" : "REALL", name: o.worst ? "N".repeat(32) : "Real launch", description: "a test", imageUrl: null, links: [], rule: o.vault ? VAULT_RULE : { ...BRONCOS, onEnd: { ...DEFAULT_ON_END } }, firstBuySol: o.firstBuySol ?? "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: network },
+  const bundle = await buildLaunchBundle({ creator: creator.publicKey.toBase58(), ticker: o.worst ? "ABCDEFGHIJ" : "REALL", name: o.worst ? "N".repeat(32) : "Real launch", description: "a test", imageUrl: null, links: [], rule: o.vault ? VAULT_RULE : { ...BRONCOS, onEnd: { ...DEFAULT_ON_END }, ...(o.target ? { burnTarget: o.target } : {}) }, firstBuySol: o.firstBuySol ?? "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: network },
     { program: new RealIdProgram(network), launchLab: realLaunchLab(network), devFeeWallet: null, attesters: [ADMIN.toBase58()], quorum: 1, metadataUri: o.worst ? WORST_URI : URI, mintKeypair: mint, allowMainnet: true });
   return { bundle, creator, mint };
 }
 
 /** Two LaunchLab coins linked through initialize_token's pair_mint (a matchup with the pair curve off). */
-export async function launchlabPair(network: Network, creator = Keypair.generate(), worst = false) {
+/** `targets`: round 5, each side's own pinned token (side A's in its rule, side B's as b.burnTarget). */
+export async function launchlabPair(network: Network, creator = Keypair.generate(), worst = false, targets: { a?: BurnTargetField; b?: BurnTargetField } = {}) {
   const LOSE = { ...BRONCOS, binary: { onYes: null, onNo: { fractionOfPool: 0.02 } } };
-  const input = { creator: creator.publicKey.toBase58(), ticker: worst ? "ABCDEFGHIJ" : "PAIRA", name: worst ? "A".repeat(32) : "Pair A", description: "", imageUrl: null, links: [], rule: LOSE, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: network };
-  const pair = await buildPairBundles({ a: input, b: { ticker: worst ? "BCDEFGHIJK" : "PAIRB", name: worst ? "B".repeat(32) : "Pair B", description: "", imageUrl: null, links: [] } }, { program: new RealIdProgram(network), launchLab: realLaunchLab(network), devFeeWallet: null, attesters: [ADMIN.toBase58()], quorum: 1, metadataUri: worst ? WORST_URI : URI, allowMainnet: true });
+  const input = { creator: creator.publicKey.toBase58(), ticker: worst ? "ABCDEFGHIJ" : "PAIRA", name: worst ? "A".repeat(32) : "Pair A", description: "", imageUrl: null, links: [], rule: { ...LOSE, ...(targets.a ? { burnTarget: targets.a } : {}) }, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true }, cluster: network };
+  const pair = await buildPairBundles({ a: input, b: { ticker: worst ? "BCDEFGHIJK" : "PAIRB", name: worst ? "B".repeat(32) : "Pair B", description: "", imageUrl: null, links: [], ...(targets.b ? { burnTarget: targets.b } : {}) } }, { program: new RealIdProgram(network), launchLab: realLaunchLab(network), devFeeWallet: null, attesters: [ADMIN.toBase58()], quorum: 1, metadataUri: worst ? WORST_URI : URI, allowMainnet: true });
   return { pair, creator };
 }
 
 /** A pair-curve set (create mint A + initialize_token, create mint B + initialize_token, init_pair). */
-export async function pairCurveSet(network: Network, creator = Keypair.generate()): Promise<{ pc: PairCurveLaunchBundle; creator: Keypair; keys: { a: string; b: string } }> {
-  const { pair } = await launchlabPair(network, creator);
+export async function pairCurveSet(network: Network, creator = Keypair.generate(), targets: { a?: BurnTargetField; b?: BurnTargetField } = {}): Promise<{ pc: PairCurveLaunchBundle; creator: Keypair; keys: { a: string; b: string } }> {
+  const { pair } = await launchlabPair(network, creator, false, targets);
   const pc = await buildPairCurveLaunch(pair, creator.publicKey.toBase58(), { cluster: network, burnReceiptsProgramId: PROGRAM_IDS[network].burn_receipts });
   return { pc, creator, keys: { a: pair.a.mintSecretKey!, b: pair.b.mintSecretKey! } };
 }

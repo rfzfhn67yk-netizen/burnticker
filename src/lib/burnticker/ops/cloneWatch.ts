@@ -25,6 +25,33 @@ export const PLATFORM_TERMS = ["DEFICIT", "BURNTICKER"];
 export const LP_PRESENT_USD = 500;
 export const LP_GONE_USD = 50;
 export const BUNDLE_MIN_WALLETS = 5;
+/**
+ * QA walkthrough 11 M12 (2026-10-13): a token whose pool was created BEFORE the name it is said to imitate existed is not a lookalike
+ * ($DDP "Debt Deficit and Porky", pool created 2026-08-07, was flagged for the word Deficit). The platform's own names date from the
+ * Burnticker plan that first named $DEFICIT, written 2026-10-09 (the launch-debt-egg-2026-10-09 study and the owner's pivot to the burn
+ * launchpad that day); a launched ticker is dated by its earliest coin in the registry (termSinceFor). A token with no pool time is kept.
+ */
+export const PLATFORM_TERM_SINCE: Readonly<Record<string, string>> = { DEFICIT: "2026-10-09T00:00:00Z", BURNTICKER: "2026-10-09T00:00:00Z" };
+const PLATFORM_SINCE_MS: Readonly<Record<string, number>> = Object.fromEntries(Object.entries(PLATFORM_TERM_SINCE).map(([k, v]) => [k, Date.parse(v)]));
+
+/** When each term came to exist: the platform's names (PLATFORM_TERM_SINCE) and each launched ticker's earliest registry coin. */
+export function termSinceFor(tokens: readonly { ticker: string; createdAt: number; status: string }[]): Record<string, number> {
+  const out: Record<string, number> = { ...PLATFORM_SINCE_MS };
+  for (const t of tokens) {
+    if (t.status === "draft" || t.status === "expired" || !Number.isFinite(t.createdAt)) continue;
+    const k = t.ticker.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (k in PLATFORM_SINCE_MS) continue;
+    out[k] = Math.min(out[k] ?? Infinity, t.createdAt);
+  }
+  return out;
+}
+
+/** True when the token's pool was created before the term it matched existed (it cannot be imitating it). */
+export function predatesTerm(poolCreatedAt: number | null, term: string, since: Readonly<Record<string, number>> = PLATFORM_SINCE_MS): boolean {
+  const at = since[term.toUpperCase()];
+  return poolCreatedAt !== null && Number.isFinite(poolCreatedAt) && at !== undefined && poolCreatedAt < at;
+}
+
 export const dexSearchUrl = (term: string): string => `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(term)}`;
 
 /** The search terms: the platform's own names and every launched ticker, unique. */
@@ -110,7 +137,7 @@ export function evidenceLines(r: Omit<CloneRow, "evidence">): string[] {
   // ChatGPT audit 7 item 2: the reason states the similarity rule that matched (lookalike.ts skeleton / compare), never "$DEFICIT reads as
   // the same letters as $DEFICIT"
   const exact = (r.symbol || "").replace(/^\$/, "").toUpperCase() === r.matched.term.toUpperCase();
-  out.push(how === "ticker reads as the same letters" ? (exact ? `It uses the ticker ${target} exactly, on a different mint from the Burnticker coin.` : `The ticker ${sym} spells ${target} once look-alike characters are read as the letters they imitate (for example 0 as O, 1 as I, rn as m) and case, accents and punctuation are ignored.`) : how === "ticker one letter away" ? `The ticker ${sym} differs from ${target} by one letter: one added, removed, changed or swapped.` : how === "ticker is a copycat variant" ? `The ticker ${sym} is ${target} with a common prefix or suffix added (such as INU, AI or 2).` : how === "name contains it" ? `The name of ${sym} contains ${target}.` : `${sym} looks like ${target}. The match is that the ${how}.`);
+  out.push(how === "ticker reads as the same letters" ? (exact ? `It uses the ticker ${target} exactly, on a different mint from the Burnticker coin.` : `The ticker ${sym} spells ${target} once look-alike characters are read as the letters they imitate (for example 0 as O, 1 as I, rn as m) and case, accents and punctuation are ignored.`) : how === "ticker one letter away" ? `The ticker ${sym} differs from ${target} by one letter: one added, removed, changed or swapped.` : how === "ticker is a copycat variant" ? `The ticker ${sym} is ${target} with a common prefix or suffix added (such as INU, AI or 2).` : how === "name contains it" ? `The name of ${sym} contains the word ${r.matched.term === "BURNTICKER" ? "Burnticker" : r.matched.term.charAt(0) + r.matched.term.slice(1).toLowerCase()}.` : `${sym} looks like ${target}. The match is that the ${how}.`);
   if (r.bundle) out.push(`${r.bundle.wallets} wallets each hold exactly ${r.bundle.sharePct.toFixed(2)} % of the supply.`);
   if (r.lp.state === "pulled" && r.lp.pulledAt) out.push(`The liquidity was pulled at ${utc(r.lp.pulledAt)}.`);
   else if (r.lp.state === "thin") out.push(`The pool held less than $${LP_PRESENT_USD} of liquidity when it was seen.`);
@@ -144,9 +171,15 @@ const stores = new WeakMap<DatabaseSync, CloneStore>();
 export function cloneStore(db: DatabaseSync): CloneStore { let s = stores.get(db); if (!s) { s = new CloneStore(db); stores.set(db, s); } return s; }
 
 /** The public list: the latest observation per token, with its first-seen time, the LP state over its history and the evidence. */
-export function cloneRows(obs: readonly CloneObservation[], ownMints: ReadonlySet<string> = new Set()): CloneRow[] {
+export function cloneRows(obs: readonly CloneObservation[], ownMints: ReadonlySet<string> = new Set(), termSince: Readonly<Record<string, number>> = PLATFORM_SINCE_MS): CloneRow[] {
   const by = new Map<string, CloneObservation[]>();
   for (const o of obs) if (!ownMints.has(o.mint)) by.set(o.mint, [...(by.get(o.mint) ?? []), o]);
+  // QA 11 M12: a token whose pool predates the term it matched is not listed (the oldest pool time recorded for it is used)
+  for (const [mint, list] of by) {
+    const created = list.map((o) => o.poolCreatedAt).filter((x): x is number => typeof x === "number");
+    const last = list.reduce((a, b) => (b.at >= a.at ? b : a));
+    if (created.length && predatesTerm(Math.min(...created), last.matched.term, termSince)) by.delete(mint);
+  }
   const rows: CloneRow[] = [];
   for (const [mint, list] of by) {
     const hist = [...list].sort((a, b) => a.at - b.at), last = hist[hist.length - 1];
@@ -158,13 +191,27 @@ export function cloneRows(obs: readonly CloneObservation[], ownMints: ReadonlySe
     };
     rows.push({ ...base, evidence: evidenceLines(base) });
   }
-  return rows.sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.mint.localeCompare(b.mint));
+  // QA 11 M12: sorted by first seen, newest first
+  return rows.sort((a, b) => b.firstSeenAt.localeCompare(a.firstSeenAt) || a.mint.localeCompare(b.mint));
 }
 
 export interface ClonesJson { schema: typeof CLONES_SCHEMA; generatedAt: string; terms: string[]; note: string; clones: CloneRow[]; lastScan: { at: string; hits: number; errors: string[] } | null }
 export const CLONES_NOTE = "Tokens whose name or ticker resembles a Burnticker coin and that are not Burnticker coins, with what the chain and the pool index showed. Evidence only — no person is named and no intent is claimed. Check any mint yourself on /burnticker/verify.";
-export function clonesJson(store: CloneStore, terms: readonly string[], ownMints: ReadonlySet<string>, nowMs: number): ClonesJson {
-  return { schema: CLONES_SCHEMA, generatedAt: new Date(nowMs).toISOString(), terms: [...terms], note: CLONES_NOTE, clones: cloneRows(store.observations(), ownMints), lastScan: store.lastScan() };
+export function clonesJson(store: CloneStore, terms: readonly string[], ownMints: ReadonlySet<string>, nowMs: number, termSince: Readonly<Record<string, number>> = PLATFORM_SINCE_MS): ClonesJson {
+  return { schema: CLONES_SCHEMA, generatedAt: new Date(nowMs).toISOString(), terms: [...terms], note: CLONES_NOTE, clones: cloneRows(store.observations(), ownMints, termSince), lastScan: store.lastScan() };
+}
+
+/**
+ * The page's sentence about the last scan (QA 11 M12: "saw 0 of them" sat next to six listed tokens). A scan counts the tokens its
+ * searches returned that time; a listed token stays listed from the scan that first recorded it.
+ */
+export function lastScanSentence(listed: number, last: { at: string; hits: number; errors: readonly string[] } | null): string {
+  if (!last) return "No scan has run on this site yet.";
+  const when = `${last.at.slice(11, 16)} UTC on ${last.at.slice(0, 10)}`;
+  const errs = last.errors.length ? ` It had ${last.errors.length} search ${last.errors.length === 1 ? "error" : "errors"}.` : "";
+  if (!listed) return `The last scan ran at ${when} and found no lookalike tokens.${errs}`;
+  if (!last.hits) return `The last scan ran at ${when}. Its searches did not find any of the listed tokens this time, and each one stays listed from the scan that first recorded it.${errs}`;
+  return `The last scan ran at ${when} and found ${last.hits} of the listed tokens.${errs}`;
 }
 
 // ---- one scan ---------------------------------------------------------------------------------------------------------------------
@@ -175,6 +222,8 @@ export interface CloneWatchDeps {
   registered?: (mint: string) => Promise<boolean | null>;
   /** Top holders (raw amounts) and the raw supply, from an RPC; null when not readable. */
   holders?: (mint: string) => Promise<{ holders: { address: string; amount: string }[]; supply: string; exclude: string[] } | null>;
+  /** When each term came to exist (termSinceFor); the platform's names only when absent. A pool created earlier is not recorded. */
+  termSince?: Readonly<Record<string, number>>;
   /** Pause between searches (DexScreener allows 300 a minute; we stay far under). */
   pauseMs?: number;
 }
@@ -190,7 +239,7 @@ export async function scanClones(d: CloneWatchDeps): Promise<{ observations: Clo
       for (const h of poolsFromDexScreener(await res.json())) {
         if (d.ownMints.has(h.mint)) continue;
         const m = matchTerm(h, d.terms);
-        if (!m) continue;
+        if (!m || predatesTerm(h.poolCreatedAt, m.term, d.termSince ?? PLATFORM_SINCE_MS)) continue;
         const have = best.get(h.mint);
         if (!have || (h.liquidityUsd ?? -1) > (have.liquidityUsd ?? -1)) best.set(h.mint, { ...h, matched: m });
       }

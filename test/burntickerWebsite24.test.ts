@@ -17,7 +17,7 @@ import { candidatesPairRule } from "@/lib/burnticker/guidedLaunch";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import {
   BURN_TARGET_BYTES, PIN_NOTE, POOL_FIELD_LABEL, REAL_OFF_LINE, SIDE_REAL_OFF, SINGLE_REAL_PICKS, admissionFrom, admissionKey, admissionUrl, checkingLine, lockStepLabel, noPoolLine,
-  pinStepLabel, poolFieldHelp, realBlockers, realField, realHeldLine, realMemoBurn, realNotOffered, realPickFor, realReadSentence, realReviewNotes, receiptRealLine, ruleRealBurn, withPinSteps, withRealBurn, type SideReal,
+  pinStepLabel, poolFieldHelp, realBlockers, realField, realHeldLine, realNotOffered, realPickFor, realReadSentence, realReviewNotes, receiptRealLine, ruleRealBurn, withPinSteps, withRealBurn, type SideReal,
 } from "@/app/burnticker/launch/burnReal";
 
 const cfg = loadCopyLintConfig();
@@ -106,8 +106,18 @@ describe("the review", () => {
     assert.match(tile, /notes=\{\[x\.window, x\.tie, \.\.\.realReviewNotes\(realList\)\]\}/);
     assert.match(page, /notes\.push\(\.\.\.realReviewNotes\(realOneList\)\);/);
   });
-  test("the pre-wallet summary counts the pin: one more transaction, two signatures, the account's rent; idempotent", () => {
+  test("the server's review counts the pin itself (launchReview.ts pins), so the page adds nothing", () => {
     const rv = buildLaunchReview({ rule: withRealBurn(SINGLE, realField(HELD, "devnet")), ticker: "WIFFIRE", name: "Wif Fire", raiseSol: "85" } as never, { env: ENV, reserved: new Set() });
+    assert.ok("review" in rv); if (!("review" in rv)) return;
+    assert.equal(rv.review.transactions.count, 2);
+    assert.match(rv.review.transactions.steps[0].label, /^Pin .+'s Raydium pool for \$/);
+    assert.deepEqual(rv.review.pins.map((x) => [x.ticker, x.symbol, x.step]), [["WIFFIRE", "BONK", 1]]);
+    assert.equal(withPinSteps(rv.review, [{ ticker: "WIFFIRE", symbol: "BONK" }]), rv.review, "the server counted it: the page adds nothing");
+    assert.equal(BURN_TARGET_BYTES, 373);
+  });
+  test("the pre-wallet summary counts the pin: one more transaction, two signatures, the account's rent; idempotent", () => {
+    // the page's own fallback, on a review that does not count the pin (a server from before WIRING-ROUND5 item 4)
+    const rv = buildLaunchReview({ rule: SINGLE, ticker: "WIFFIRE", name: "Wif Fire", raiseSol: "85" } as never, { env: ENV, reserved: new Set() });
     assert.ok("review" in rv); if (!("review" in rv)) return;
     const before = rv.review;
     const after = withPinSteps(before, [{ ticker: "WIFFIRE", symbol: "BONK" }]);
@@ -129,19 +139,26 @@ describe("the review", () => {
     // a linked pair's side B keeps "and link the two coins" after its pin
     const pair = { ...before, transactions: { ...before.transactions, count: 2, steps: [{ label: "Create $A and lock in its rule", signers: ["your wallet"] }, { label: "Create $B and link the two coins", signers: ["your wallet"] }] } };
     assert.deepEqual(withPinSteps(pair, [{ ticker: "B", symbol: "WIF" }]).transactions.steps.map((s) => s.label), ["Create $A and lock in its rule", "Lock in $B's rule", "Pin WIF's Raydium pool for $B, then create $B and link the two coins"]);
-    assert.match(tile, /<PreWalletSummary review=\{shown\.review \? withPinSteps\(shown\.review, realList\) : null\}/);
-    assert.match(page, /<PreWalletSummary review=\{shownReview\.review \? withPinSteps\(shownReview\.review, realOneList\) : null\}/);
+    // website-25 (base 61fd2f2e): the server counts the pin (review.pins), so the pages show its summary as it is and add nothing
+    assert.match(tile, /<PreWalletSummary review=\{shown\.review\}/);
+    assert.match(page, /<PreWalletSummary review=\{shownReview\.review\}/);
+    assert.doesNotMatch(tile + page, /withPinSteps\(/);
   });
 });
 
 describe("the coin page: receipts, held lines and the trust section", () => {
   const memo = formatTargetMemo({ prefix: "DEBT", recordDate: "2026-10-08", source: "pyth", prev: "1.00", now: "1.10", delta: "0.10", units: 3, pool: "1000000000", spent: "20000000", got: "1234", burn: "1234", target: BONK.mint, own: "0", swap: POOL.slice(0, 12), rulesSha12: "abcdefabcdef", version: "v3" });
-  test("the browser-safe memo read agrees with the library's parseTargetMemo", () => {
+  test("the coin page reads memo v3 with the library's own browser-safe parseTargetMemo (memoV3.ts: no Buffer, no web3)", () => {
     const lib = parseTargetMemo(memo)!;
     assert.ok(lib);
-    assert.deepEqual(realMemoBurn(memo), { burn: lib.burn, mint: lib.target });
-    assert.equal(realMemoBurn("DEBT|2026-10-08|src=x|v2"), null);
-    assert.equal(realMemoBurn(null), null);
+    assert.equal(lib.burn, "1234"); assert.equal(lib.target, BONK.mint);
+    assert.equal(parseTargetMemo("DEBT|2026-10-08|src=x|v2"), null);
+    const src = read("src/app/burnticker/launch/burnReal.ts");
+    assert.match(src, /from "@\/lib\/burnReceipts\/memoV3"/);
+    assert.doesNotMatch(src, /realMemoBurn/);
+    const v3 = read("src/lib/burnReceipts/memoV3.ts");
+    assert.doesNotMatch(v3, /^import /m);
+    assert.doesNotMatch(v3, /Buffer\./);
   });
   test("a receipt that burned the pinned token reads \"burned 1,234 real BONK\"; another mint or no field reads as before", () => {
     const f = ruleRealBurn(JSON.stringify(validateRule(withRealBurn(SINGLE, realField(HELD, "devnet")))));

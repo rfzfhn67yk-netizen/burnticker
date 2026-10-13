@@ -12,7 +12,9 @@ import type { FetchLike } from "@/lib/burnticker/oracle/types";
 import { DerbyAdapter } from "@/lib/burnticker/derby/adapter";
 import { HIGH_NOT_READ_HERE, highSpanOf, highUnderlyingProblem } from "@/lib/burnticker/derby/highTile";
 import { highReview } from "@/lib/burnticker/derby/high";
-import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { wrapperPairProblem, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { tileRule } from "@/lib/burnticker/derby/tile";
+import { preflightSelector } from "@/lib/burnticker/coverage/preflight";
 
 /**
  * BURN DERBY'S API (2026-10-10; spec in api/derbySpec.ts, OpenAPI 1.4.0): GET /derby (every bracket and derby pair), GET /derby/{id}
@@ -84,4 +86,33 @@ export async function v1DerbySearch(p: Platform, q: URLSearchParams): Promise<Ap
     const hits = await searchDerbyCoins(query, { fetchImpl: p.derbyFetch ?? (globalThis.fetch as unknown as FetchLike) }, { assets });
     return ok({ query, assets, hits, note: `Each result shows the asset a rule locks, with its Pyth feed, its mint and its second source. The brackets and pairs are at ${API_PREFIX}/derby.` });
   } catch (e) { return fail(502, `Search is not working just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
+}
+
+/**
+ * sources-7 (QA walkthrough 11 H7): the pair check the coin-vs-coin tile runs as soon as both coins are picked, so a creator learns before
+ * the review that the pair cannot launch. A wrapper pair (derby/spec.ts wrapperPairProblem) is refused before anything is read; a
+ * flippening reads both sizes through the same preflight the bundle runs (coverage/preflight.ts, already-decided when coin A is already
+ * the larger one) and, when it is refused for that, says whether the other order would be a real flippening (`swap`). The daily race
+ * reads nothing here: its sources are checked again at review and at the bundle.
+ */
+export async function v1DerbyPairCheck(p: Platform, body: Record<string, unknown> | null, now = Date.now()): Promise<ApiResult> {
+  const a = body?.a as DerbyUnderlying | undefined, b = body?.b as DerbyUnderlying | undefined;
+  const shape = (x: unknown): string | null => { const u = x && typeof x === "object" ? x as Partial<DerbyUnderlying> : null; return u && typeof u.symbol === "string" && /^[A-Za-z0-9]{1,12}$/.test(u.symbol) && typeof u.cross === "string" && u.cross ? null : "Send each coin as the derby search returns it, with its symbol and its second source."; };
+  const bad = shape(a) ?? shape(b);
+  if (!a || !b || bad) return fail(400, bad ?? "Send the two coins as a and b, each as the derby search returns it.");
+  const flip = body?.flip === true;
+  const w = wrapperPairProblem(a, b);
+  if (w) return ok({ ok: false, flip, swap: false, refusal: { code: "wrapper-pair", reason: w } });
+  if (!flip) return ok({ ok: true, flip, swap: false, refusal: null });
+  const deps = { now, derby: { pools: p.derbyPools ?? null, fetchImpl: p.derbyFetch ?? (globalThis.fetch as unknown as FetchLike), hermes: p.derbyHermes ?? null } };
+  const ruleFor = (x: DerbyUnderlying, y: DerbyUnderlying) => tileRule({ a: x, b: y, window: "daily", seasonDays: 30, flip: true, fraction: 1, now }, "0".repeat(64), { a: "A", b: "B" }).rule;
+  const r = ruleFor(a, b);
+  if (!r) return fail(400, "These two coins cannot be compared as a flippening.");
+  try {
+    const pf = await preflightSelector(r, deps);
+    if (pf.ok || !pf.refusal) return ok({ ok: true, flip, swap: false, refusal: null });
+    let swap = false;
+    if (pf.refusal.code === "already-decided") { const rb = ruleFor(b, a); if (rb) { const back = await preflightSelector(rb, deps); swap = back.ok; } }
+    return ok({ ok: false, flip, swap, refusal: { code: pf.refusal.code, reason: pf.refusal.reason } });
+  } catch (e) { return fail(502, `The two coins' sizes could not be read just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
 }

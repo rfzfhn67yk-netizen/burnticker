@@ -1,7 +1,9 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import type { LaunchReview, ReviewCost } from "@/lib/burnticker/launchReview";
-import { SUGGESTED_TARGETS, admissionLine, burnTargetShapeProblems, targetHeldLine, targetReceiptLine, targetReviewSentence, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import { BURN_TARGET_ACCOUNT_BYTES, SUGGESTED_TARGETS, admissionLine, burnTargetShapeProblems, targetHeldLine, targetReceiptLine, targetReviewSentence, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import { LAMPORTS_PER_SIGNATURE, rentLamports, solText } from "@/lib/burnticker/launchCost";
+// the library's own memo v3 reader, browser-safe (memoV3.ts: no web3, no Buffer); it replaced this page's duplicate reader
+import { parseTargetMemo } from "@/lib/burnReceipts/memoV3";
 
 /**
  * WEBSITE-24 (WIRING-ROUND5, owner 2026-10-13: "make the actual wif and bonk coins burn"): the launch page's half of a coin that burns a
@@ -112,8 +114,8 @@ export function realReadSentence(symbols: { a: string; b: string }, list: { tick
 export const realReviewNotes = (list: { ticker: string; symbol: string; daysOf?: string | null }[]): string[] =>
   list.map((x) => targetReviewSentence({ ticker: x.ticker || "TICKER", symbol: x.symbol, daysOf: x.daysOf ?? null }));
 
-/** The BurnTarget account the pin creates (programs/burn-receipts, 340 bytes with its discriminator). */
-export const BURN_TARGET_BYTES = 340;
+/** The BurnTarget account the pin creates (programs/burn-receipts, 373 bytes with its discriminator; the library's number). */
+export const BURN_TARGET_BYTES = BURN_TARGET_ACCOUNT_BYTES;
 export const PIN_SIGNATURES = 2;
 export const lockStepLabel = (ticker: string): string => `Lock in $${ticker}'s rule`;
 export const pinStepLabel = (ticker: string, symbol: string, link = false): string => `Pin ${symbol}'s Raydium pool for $${ticker}, then create $${ticker}${link ? " and link the two coins" : ""}`;
@@ -162,21 +164,10 @@ export function ruleRealBurn(rulesText: string | null | undefined): BurnTargetFi
   } catch { return null; }
 }
 
-/**
- * A memo v3 (crank_target_burn) read without web3 or Buffer, so the coin page can run it in the browser: the burned amount and the burned
- * mint. Field for field the layout of src/lib/burnReceipts/memo.ts parseTargetMemo (test/burntickerWebsite24.test.ts checks the two agree).
- */
-export function realMemoBurn(memo: string | null | undefined): { burn: string; mint: string } | null {
-  if (!memo) return null;
-  const p = memo.split("|");
-  if (p.length !== 16 || p[15] !== "v3" || !p[10].startsWith("burn=") || !p[11].startsWith("target=")) return null;
-  const burn = p[10].slice(5), mint = p[11].slice(7);
-  return /^\d+(\.\d+)?$/.test(burn) && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint) ? { burn, mint } : null;
-}
 /** "burned 1,234 real BONK" for a receipt whose memo burned the pinned token; null otherwise. */
 export function receiptRealLine(memo: string | null | undefined, field: BurnTargetField | null): string | null {
-  const m = realMemoBurn(memo);
-  return m && field && m.mint === field.mint ? targetReceiptLine(m.burn, field.symbol) : null;
+  const m = parseTargetMemo(memo ?? "");
+  return m && field && m.target === field.mint ? targetReceiptLine(m.burn, field.symbol) : null;
 }
 /** A held crank's line when the text (a skipped reason or the last error) names one of the program's pool errors. */
 export function realHeldLine(field: BurnTargetField | null, text: string | null | undefined): string | null {

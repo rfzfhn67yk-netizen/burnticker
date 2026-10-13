@@ -59,7 +59,7 @@ export default function VerifyMintPage() {
             <div className="col-span-2 sm:col-span-3"><dt className="text-neutral-500">rules sha256</dt><dd className="font-mono break-all">{v.coin.rulesSha256}</dd></div>
           </dl>}
           <ul className="space-y-1 text-xs">{v.checks.map((c) => <li key={c.id}><span className={c.ok === true ? "text-emerald-400" : c.ok === false ? "text-red-400" : "text-neutral-500"}>{c.ok === true ? "✓" : c.ok === false ? "✗" : "–"}</span> {c.detail}</li>)}</ul>
-          <p className="text-xs text-neutral-500 break-all">Mint {v.mint}. The catalogue was read on {v.cluster}.</p>
+          <p className="text-xs text-neutral-500 break-all">Mint {v.mint}.{v.verdict === "invalid" ? "" : ` The catalogue was read on ${v.cluster}.`}</p>
           <p className="text-xs">{v.links.page && <><Link className="underline" href={v.links.page}>coin page →</Link> · </>}<Link className="underline" href={v.links.verifier}>verify a receipt transaction →</Link></p>
         </section>
       )}

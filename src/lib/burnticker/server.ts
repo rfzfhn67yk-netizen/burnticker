@@ -34,7 +34,8 @@ import { readLifecycleDates } from "@/lib/burnticker/lifecycleDates";
 import { jsonRpc } from "@/lib/burnticker/trustpack/receiptCheck";
 import { rpcUrlFor } from "@/lib/burnticker/networks";
 import { kalshiEnabled, polymarketDiscoveryEnabled } from "@/lib/burnticker/venues";
-import { nativeSourceById, setNativeClients } from "@/lib/burnticker/sources/native";
+import { espnClient, nativeSourceById, setNativeClients } from "@/lib/burnticker/sources/native";
+import type { SeasonSchedule } from "@/lib/burnticker/seasonOver";
 import { derbyTitle } from "@/lib/burnticker/api/handlers";
 
 /**
@@ -56,6 +57,8 @@ export interface Platform {
   derbyPools?: PoolPort | null;
   /** Burn Derby: Hermes, only when BURNTICKER_PYTH_API_KEY is set (keyless price paths answer 401). */
   derbyHermes?: HermesClient | null;
+  /** sources-7 (QA walkthrough 11 H6): a league's games for the next days (the review and the bundle refuse a season rule on a team whose season is over). Absent: nothing is read and nothing is refused. */
+  seasonSchedule?: SeasonSchedule | null;
   /** BURNTICKER_POLYMARKET_DISCOVERY_ENABLED (venues.ts): false withholds Polymarket discovery (search, Browse, elections); undefined = on. Settlement unaffected. */
   polymarketDiscovery?: boolean;
   /** The Arweave uploader (pin.ts; Irys with BURNTICKER_UPLOAD_PAYER). Null/absent: every launch is refused unless hosted metadata is allowed. */
@@ -126,7 +129,7 @@ export function platform(env: Readonly<Record<string, string | undefined>> = pro
   // Team coins: games settle on their Polymarket on-chain payout where a moneyline market exists, else TheSportsDB (gameSettle.ts).
   setNativeClients({ games: { ...envGameDeps(env), ...(polymarketDiscoveryEnabled(env) ? polymarketGameReaders(polymarket) : { market: null, payout: null }) } });
   cached = {
-    registry, derbyPools, derbyHermes,
+    registry, derbyPools, derbyHermes, seasonSchedule: (league, days) => espnClient().upcoming(league, days),
     oracles: { kalshi, catalogue: new CatalogueAdapter(), polymarket, derby }, kalshi, polymarket, program, launchLab, cluster,
     publishDir: (env.BURNTICKER_PUBLISH_DIR ?? "").trim() || path.join("data", "burnticker-site"),
     allowMainnet, devFeeWallet: devFeeWallet(env), keeperPubkey: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((env.BURNTICKER_KEEPER_PUBKEY ?? "").trim()) ? (env.BURNTICKER_KEEPER_PUBKEY ?? "").trim() : null, platformId, stubs, market, kalshiEnabled: kalshiEnabled(env), polymarketDiscovery: polymarketDiscoveryEnabled(env),

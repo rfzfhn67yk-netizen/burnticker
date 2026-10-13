@@ -334,4 +334,32 @@ export function derbyStatement(d: DerbySpec, side: "A" | "B" | null, pairId: str
  * than the second when it is created has nothing to flip, so it is refused at creation (coverage/preflight.ts, code "already-decided",
  * from the live primary values times each mint's circulating supply). The daily comparison is not affected. Equal sizes are not ahead.
  */
+/**
+ * WRAPPER PAIRS (sources-7, QA walkthrough 11 H7): SOL against one of its own staking tokens (JITOSOL, MSOL, BSOL, BNSOL and the rest),
+ * BTC against a wrapped bitcoin, ETH against a wrapped or staked ether, or two forms of the same asset. The two move almost together and
+ * the staking yield or the wrapper's discount decides nearly every window, so the race is close to settled in advance. Refused at pick
+ * time (the tile), on the review and at admission. By symbol, case-insensitive.
+ */
+export const WRAPPED_FORMS: Readonly<Record<string, readonly string[]>> = {
+  SOL: ["WSOL", "JITOSOL", "MSOL", "BSOL", "BNSOL", "JUPSOL", "INF", "STSOL", "HSOL", "DSOL", "VSOL", "BBSOL", "PICOSOL", "HUBSOL", "STRONGSOL", "EZSOL", "LAINESOL", "COMPASSSOL", "BONKSOL", "SSOL", "JSOL", "ADRASOL", "CGNTSOL", "EDGESOL", "PATHSOL"],
+  BTC: ["WBTC", "CBBTC", "TBTC", "ZBTC", "LBTC", "XBTC", "SOLVBTC", "FBTC", "BTCB", "UBTC"],
+  ETH: ["WETH", "STETH", "WSTETH", "CBETH", "RETH", "WEETH", "METH", "EZETH", "RSETH", "SFRXETH", "FRXETH", "OETH"],
+};
+const wrappedBaseOf = (symbol: string): string | null => {
+  const s = symbol.trim().toUpperCase().replace(/^\$/, "");
+  if (WRAPPED_FORMS[s]) return s;
+  for (const [base, forms] of Object.entries(WRAPPED_FORMS)) if (forms.includes(s)) return base;
+  return null;
+};
+/** The plain refusal for a wrapper pair, or null when the two coins are not forms of the same asset. */
+export function wrapperPairProblem(a: Pick<DerbyUnderlying, "symbol">, b: Pick<DerbyUnderlying, "symbol">): string | null {
+  const ba = wrappedBaseOf(a.symbol), bb = wrappedBaseOf(b.symbol);
+  if (!ba || ba !== bb) return null;
+  const A = a.symbol.trim().toUpperCase(), Bs = b.symbol.trim().toUpperCase();
+  const tail = "so the two move almost together and the small gap between them decides nearly every day. Pick two coins that are not forms of the same asset.";
+  if (A === ba) return `${Bs} is a wrapped form of ${ba}, ${tail}`;
+  if (Bs === ba) return `${A} is a wrapped form of ${ba}, ${tail}`;
+  return `${A} and ${Bs} are both forms of ${ba}, ${tail}`;
+}
+
 export const flipAlreadyAheadSentence = (a: string, b: string): string => `${a} already closes above ${b} in size, so there is nothing to flip. A flippening can launch only while ${a} is the smaller of the two.`;

@@ -48,7 +48,7 @@ describe("QA 9 item 1: a natural disaster's burn-pattern cards are one stable se
   test("the page reads the chosen card from hazards.ts, keeps the hazard words, and moves fade to the per-event form first", () => {
     assert.match(page, /const curPattern: PatternId \| null = guide\.follow === "disaster" \? hazardPatternOptions\(rule, Date\.now\(\)\)\.preselected/);
     assert.match(page, /return stablePatternOptions\(cur\.options, sib && "series" in sib \? hazardPatternOptions\(hazardRule\(sib\.series\), now\)\.options : null\);/);
-    assert.match(page, /const options = guide\.follow === "disaster" \? po\.options : po\.options\.map/, "the hazard labels are never overwritten by the generic words");
+    assert.match(page, /const options0 = guide\.follow === "disaster" \? po\.options : po\.options\.map/, "the hazard labels are never overwritten by the generic words");
     assert.match(page, /const back = rule\.series \? hazardSwap\(rule\.series, "every", Date\.now\(\)\) : null;[\s\S]{0,260}setWantInverse\("on"\)/);
   });
 });
@@ -142,9 +142,11 @@ describe("QA 9 items 7, 13 and 14, audit 10 item 19: the image and the public pr
     assert.deepEqual(squareCrop(1200, 600), { left: 25, top: 0, width: 50, height: 100 });
     assert.deepEqual(squareCrop(600, 1200), { left: 0, top: 25, width: 100, height: 50 });
     assert.deepEqual(squareCrop(512, 512), { left: 0, top: 0, width: 100, height: 100 });
-    assert.match(page, /disabled=\{rightsMissing\} onClick=\{\(\) => setGuide\(\(g\) => \(\{ \.\.\.g, phase: "review" \}\)\)\}>Review<\/button>/);
-    assert.match(page, /\{rightsMissing && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>\{IMAGE_RIGHTS_REQUIRED\}<\/p>\}/);
-    assert.match(tile, /next=\{next\("Review", "review", rightsMissing, rightsMissing \? IMAGE_RIGHTS_REQUIRED : null\)\}/);
+    assert.match(page, /disabled=\{nameStepBlocked\} onClick=\{\(\) => setGuide\(\(g\) => \(\{ \.\.\.g, phase: "review" \}\)\)\}>Review<\/button>/);
+    // website-25 (QA 11 H5): the same line, now also for every other field problem (NAME_STEP_BLOCKED)
+    assert.match(page, /\{nameStepBlocked && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>\{rightsMissing \? IMAGE_RIGHTS_REQUIRED : NAME_STEP_BLOCKED\}<\/p>\}/);
+    // website-25 (QA 11 H5): held for every field problem, the image line among them
+    assert.match(tile, /next=\{next\("Review", "review", nameBlockedP, nameBlockedP \? \(rightsMissing \? IMAGE_RIGHTS_REQUIRED : NAME_STEP_BLOCKED\) : null\)\}/);
     assert.match(fields, /data-image-not-square role="status"/); assert.match(fields, /squareCrop\(shape\.w, shape\.h\)/);
   });
 });
@@ -162,7 +164,7 @@ describe("QA 9 item 8: the projection includes the share the creator chose", () 
 describe("QA 9 items 9, 39 and audit 10 item 14: one flow from every entry", () => {
   test("the free text is one line at the top of step 1, the six cards stay primary, and the older chooser is gone", () => {
     assert.match(steps, /search = null \}: \{/); assert.match(steps, /data-step-heading>\{GUIDED_STEPS\[0\]\.question\}<\/h2>\n      \{search\}/);
-    assert.match(page, /<FollowStep search=\{searchBlock\} value=\{guide\.follow\}/);
+    assert.match(page, /<FollowStep search=\{searchBlock\} value=\{guide\.follow \?\? prevFollow\}/);
     assert.match(page, /<label htmlFor="bt-free-text" className="shrink-0 text-sm text-neutral-300">Or describe it<\/label>/);
     assert.doesNotMatch(page, /…or start from one of these|data-classic|begin\("browse"\); setCat\(c\.id\)/);
     assert.doesNotMatch(page, /<CoinVsCoinTile pairCurve=/, "no second Coin vs Coin entry beside the six cards");
@@ -250,7 +252,7 @@ describe("QA 9 item 38, audit 10 items 13 and 17: Coin comparison walks the real
   });
   test("the cost sits beside Launch both, with what it leaves out", () => {
     plain(PAIR_COST_EXCLUSIONS); assert.match(PAIR_COST_EXCLUSIONS, /rent is not measured yet/);
-    assert.match(tile, /costNote=\{PAIR_COST_EXCLUSIONS\}/); assert.match(page, /costNote=\{venue === "linked" \|\| venue === "pair-curve" \? PAIR_COST_EXCLUSIONS : null\}/);
+    assert.match(tile, /costNote=\{shown\.review\?\.venue === "pair-curve" \? shown\.review\.costs\.note : PAIR_COST_EXCLUSIONS\}/); assert.match(page, /costNote=\{venue === "linked" \|\| venue === "pair-curve" \? PAIR_COST_EXCLUSIONS : null\}/);
     assert.match(card, /\{p\.costNote && <span className="block text-xs text-neutral-400" data-cost-note>\{p\.costNote\}<\/span>\}/);
   });
 });
