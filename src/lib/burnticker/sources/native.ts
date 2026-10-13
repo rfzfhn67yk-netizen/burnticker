@@ -55,7 +55,10 @@ function espnSource(id: string, s: EspnSeries): NativeSource {
   return {
     id, family: s.kind === "team" ? "espn.team" : "espn.game", title: espnSeriesTitle(s), sourceName: `${settles}; confirmed by ${crossLabel}`,
     sourceUrl: `https://www.thesportsdb.com/`, tier: 4, cadence: s.kind === "team" ? "every game day" : "resolves once, after the game",
-    unit: { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
+    unit: s.kind === "team" && s.window.kind === "meetings"
+      // the rivalry series (espn.ts window `meetings`): a signed reading per game day, and one season-end reading
+      ? { size: 1, label: "1 win against the rival", definition: `each ${t.name} win against ${teamByAbbr(s.league, s.window.opp)?.name ?? s.window.opp} this season (a loss reads −1, a draw 0), ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final; when both seasons are over, one more reading: +1 if ${t.name} won more of the games between them, −1 if fewer, none if level` }
+      : { size: 1, label: s.kind === "team" ? `1 ${s.outcome}` : `the ${s.outcome}`, definition: `each ${t.name} ${s.outcome} in a completed game, ${settles}, read ≥ 6 h after the start and only once ${crossLabel} agrees on the final${LEAGUES[s.league].draws ? "" : "; a tie counts as neither"}` },
     direction: "up", baseline: 0, carry: "none", pollEverySec: 3600,
     flags: [off ? `the game list comes from ${CROSS_LABEL[off]} (free, official)` : "the game list comes from TheSportsDB (needs BURNTICKER_THESPORTSDB_KEY)", "TheSportsDB (commercial license) needs BURNTICKER_THESPORTSDB_KEY; API-Sports (optional) BURNTICKER_APISPORTS_KEY", "at least two independent sources must read every game and agree (a source check; one operator attester signs the reading)"],
     launchable: { ok: true, why: null }, crossRead: crossLabel, descriptorId: "polymarket.gamepayout", crossReadId: off ?? "thesportsdb.v2",

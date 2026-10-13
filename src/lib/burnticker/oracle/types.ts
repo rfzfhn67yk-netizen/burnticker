@@ -35,7 +35,7 @@ export interface ResolvedSelector {
   settlementSourceUrl: string | null;
   /** A first-party series with a window (ESPN team coins): where the window stands — open, ended, its end. The rules-core wind-down
    *  (onEnd) reads `ended`; a perpetual window never ends. */
-  window?: { perpetual: boolean; ended: boolean; endsAt: string | null; reason: string; lastGame?: unknown; /** website-18: an ended season window's champion verdict (espn.ts championOf) and the day it was read from */ champion?: boolean | null; championDate?: string | null };
+  window?: { perpetual: boolean; ended: boolean; endsAt: string | null; reason: string; lastGame?: unknown; /** website-18: an ended season window's champion verdict (espn.ts championOf) and the day it was read from */ champion?: boolean | null; championDate?: string | null; /** a rivalry series (espn.ts window `meetings`) that ended: its season-end reading's day (null when level) */ series?: { endDay: string | null } | null };
 }
 
 export interface ImpliedChance { chance: number | null; marketTicker: string | null; closeTime: string | null; basis: string }

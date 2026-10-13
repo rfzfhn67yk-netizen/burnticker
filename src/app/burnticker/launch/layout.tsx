@@ -16,5 +16,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function LaunchLayout({ children }: { children: ReactNode }) {
   // website-13 (2026-10-12): the one wallet provider is the shell's (ShellWalletProviders, mounted by the root layout); SignCard reads it
-  return children;
+  // audit 7 item 16: Skip to content, first in the tab order (globals.css .bt-skip shows it on focus), lands on the wizard's <main>
+  return <><a className="bt-skip" href="#launch-main" data-skip-link>Skip to content</a>{children}</>;
 }

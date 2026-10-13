@@ -1,4 +1,4 @@
-import type { BurnRule, LockedRule } from "@/lib/burnticker/rules";
+import { isMeetingsRule, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { feedById, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
 import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -42,7 +42,24 @@ export const reserveProblem = (reserveSol: string): string | null => {
   return Number.isFinite(v) && v >= RESERVE_SOL.min && v <= RESERVE_SOL.max ? null : `The reserve must be between ${RESERVE_SOL.min} and ${RESERVE_SOL.max} SOL. It stays in the coin's burn pool and is never spent, and every launch on this site uses 0.02 SOL.`;
 };
 
-export interface RuleCtx { kalshiEnabled?: boolean; now?: number }
+export interface RuleCtx { kalshiEnabled?: boolean; now?: number; /** the launch is a registered pair (the body's `pair` side) */ pair?: boolean }
+
+/**
+ * THE RIVALRY SERIES' OWN REFUSALS (sources/espn.ts window `meetings`). A head-to-head season series is launched only as a pair, one coin
+ * per team, so the series winner has a partner to take the rest; it keeps the pair-winner end sink; it has no fade side (a reading is
+ * already signed: a loss is the other coin's win).
+ */
+export const MEETINGS_SINGLE_REFUSAL = "Every game between two teams this season is launched as a pair, one coin for each team. Add the second team's coin.";
+export const MEETINGS_FADE_REFUSAL = "Every game between two teams has no fade side: a loss for one team is already a win for the other team's coin.";
+export const MEETINGS_END_REFUSAL = "Every game between two teams this season ends by sending whatever is left to the coin of the team that won more of their games, so the rule must keep its end sink.";
+export function meetingsRefusals(r: BurnRule, ctx: Pick<RuleCtx, "pair"> = {}): PreflightRefusal[] {
+  if (!isMeetingsRule(r)) return [];
+  const out: PreflightRefusal[] = [];
+  if (!ctx.pair && !r.pair) out.push({ status: 400, code: "meetings-pair-only", message: MEETINGS_SINGLE_REFUSAL });
+  if (r.inverse) out.push({ status: 400, code: "meetings-no-fade", message: MEETINGS_FADE_REFUSAL });
+  if (r.onEnd && r.onEnd.endSink !== true) out.push({ status: 400, code: "meetings-end-sink", message: MEETINGS_END_REFUSAL });
+  return out;
+}
 
 /** The rule refusals, in the order the bundle route meets them. The first one is the bundle's answer; the review lists them all. */
 export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRefusal[] {
@@ -52,7 +69,7 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
   if (r.oracle === "kalshi" && ctx.kalshiEnabled === false) out.push({ status: 503, code: "venue-off", message: KALSHI_UNAVAILABLE });
   if (r.oracle === "catalogue") {
     const native = nativeSourceById(r.series!);
-    if (native) { const np = nativeRuleProblems(native, r); if (np.length) out.push({ status: 400, code: "source-rule", message: np.join("; ") }); }
+    if (native) { const np = nativeRuleProblems(native, r); if (np.length) out.push({ status: 400, code: "source-rule", message: np.join("; ") }); out.push(...meetingsRefusals(r, ctx)); }
     else {
       const feed = feedById(r.series!);
       if (!feed) out.push({ status: 400, code: "unknown-source", message: "This rule names a source that is not in the catalogue. Pick one from the catalogue." });

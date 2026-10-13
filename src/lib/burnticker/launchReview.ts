@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { lockRule, ruleStatement, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { lockRule, ruleStatement, isMeetingsRule, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { allocationFor, raiseLamportsOf, raiseProblem } from "@/lib/burnticker/launchBundle";
 import { pairCurveEnabled } from "@/lib/burnKeeper/pairCurveCrank";
 import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS as PAIR_DEV_FEE_BPS, FEE_BPS as PAIR_FEE_BPS } from "@/lib/pairCurve/pricing";
@@ -14,7 +14,8 @@ import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
 import type { LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
 import { linksProblems, withCreatorText } from "@/lib/burnticker/creatorProfile";
-import { parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
+import { meetingsMirror, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
+import { meetingsFundsFlow, type FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule, type ScheduledGame } from "@/lib/burnticker/timing";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
@@ -104,6 +105,21 @@ export interface LaunchReview {
    * graduation warning when that is within dueWarningDays, and what an unplayed game does. Null for a rule that repeats.
    */
   timing: { dueAt: string | null; dueLabel: string | null; dueWithinDays: number | null; warning: string | null; unplayed: string | null } | null;
+  /**
+   * A rivalry series pair (every game between two teams this season; rules.ts isMeetingsRule): where the money goes per game and at the
+   * season's end (pairFundsFlow.ts meetingsFundsFlow) and side B's own generated description (its rule reads the mirror series). Absent
+   * otherwise.
+   */
+  meetings?: { flow: FundsFlow; descriptionB: string } | null;
+}
+
+/** A rivalry series pair's review block: the per-game and season-end money path, and side B's description from the mirror rule. */
+function meetingsReview(rule: BurnRule, tickerA: string, tickerB: string, ctx: Omit<DescribeCtx, "ticker">): { flow: FundsFlow; descriptionB: string } | null {
+  const e = rule.series ? parseEspnSeries(rule.series) : null, mirror = rule.series ? meetingsMirror(rule.series) : null;
+  if (e?.kind !== "team" || e.window.kind !== "meetings" || !mirror) return null;
+  const a = teamByAbbr(e.league, e.abbr)?.nickname ?? e.abbr, b = teamByAbbr(e.league, e.window.opp)?.nickname ?? e.window.opp;
+  const ruleB = { ...rule, series: mirror } as BurnRule;
+  return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
 }
 
 export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
@@ -192,7 +208,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   try { locked = lockRule(raw); } catch (e) { return { problems: [(e as Error).message] }; }
   const now = o.now ?? Date.now();
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
-  for (const x of ruleRefusals(locked, { kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now })) problems.push(x.message);
+  for (const x of ruleRefusals(locked, { kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object") })) problems.push(x.message);
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
   // audit 6 test A: a registered pair locks side A's rule with a pair clause (handlers.ts buildPairBundles); a source that cannot pair
   // (an ESPN team, a feed) is refused there, so the review says so here
@@ -247,16 +263,20 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const typeAvailable = !!ta?.available && !twoCoinBlocked;
   const typeReason = twoCoinBlocked ? `${PAIRS_UNAVAILABLE_LINE} ${model.types.pairs.reason ?? ""}`.trim() : ta?.reason ?? (type ? null : "The web launcher does not offer this kind of rule.");
   // Codex F1: the venue the bundle route selects (handlers.ts prepareLaunch: a registered pair goes to pair_curve when the flag is on)
-  const venue: "launchlab" | "pair-curve" = pair && pairCurveEnabled(env) ? "pair-curve" : "launchlab";
+  // a head-to-head season pair always launches on LaunchLab (handlers.ts: the pair curve is for crypto references)
+  const venue: "launchlab" | "pair-curve" = pair && pairCurveEnabled(env) && !isMeetingsRule(locked.rule) ? "pair-curve" : "launchlab";
   // audit 6 item 26: the source's own title and unit (as the bundle route reads them), so no text falls back to the raw series id
   const src = sourceText(locked.rule, now);
   const ctx = { ...serverDescribeCtx(locked.rule, body.descCtx, { seriesTitle: o.seriesTitle ?? src?.title ?? null, feed: src?.feed ?? null, stated: o.stated ?? null }), ...(src?.subjectName ? { subjectName: src.subjectName } : {}) };
-  const text = describeRule(locked.rule, { ticker: ticker || "TICKER", ...ctx });
+  // a rivalry series pair is described as the pair the bundle builds (buildPairBundles: winner takes the burn, the pair-winner end sink)
+  const meetingsPair = !!pair && isMeetingsRule(locked.rule);
+  const asBuilt: BurnRule = meetingsPair ? { ...locked.rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } : locked.rule;
+  const text = describeRule(asBuilt, { ticker: ticker || "TICKER", ...ctx });
   // the description the bundle pins: the generated paragraph, then the creator's own text, within the bundle's ceiling
   { const full = withCreatorText(text.paragraph, creatorText); if (full.length > DESCRIPTION_LIMIT) problems.push(`The description, the rule's paragraph and your own text together, comes to ${full.length.toLocaleString("en-US")} characters, and a coin's description can be at most ${DESCRIPTION_LIMIT.toLocaleString("en-US")}. Shorten your text.`); }
   const espn = locked.rule.oracle === "catalogue" && locked.rule.series ? parseEspnSeries(locked.rule.series) : null;
   const teamName = espn ? teamByAbbr(espn.league, espn.abbr)?.nickname ?? null : null;
-  const end = endText(locked.rule, { team: teamName ? `the ${teamName}` : null });
+  const end = endText(asBuilt, { team: teamName ? `the ${teamName}` : null });
   const alloc = allocationFor(locked);
   const per = (s: typeof CURVE_FEES) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });
   const perPc = (s: typeof PAIR_CURVE_FEES.curve | typeof PAIR_CURVE_FEES.post) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });
@@ -357,6 +377,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     end: { kind: end.kind, result: end.result, void: end.void },
     projection: reviewProjection(locked.rule, now),
     timing,
+    ...(meetingsPair ? { meetings: meetingsReview(asBuilt, ticker, String(pair.ticker ?? "").toUpperCase(), ctx) } : {}),
   };
   return { review };
 }

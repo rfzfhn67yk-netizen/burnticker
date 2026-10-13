@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import { teamTicker, type TeamWindow } from "@/lib/burnticker/tickers";
-import { championSeries, LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
+import { championSeries, LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { fedregEoText, isFedregEo } from "@/lib/burnticker/sources/fedreg";
 import { ll2Text, parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
@@ -192,6 +192,9 @@ export function endExplainer(): string[] {
   const one = endText(base), pair = endText({ ...base, pair: { pairId: "x", side: "A", counterpartMint: null, winnerTakesBurn: true } } as unknown as BurnRule);
   return [one.result, `In a winner-takes-the-burn pair: ${pair.result.replace(/^When/, "when")}`, one.void!, PERPETUAL_SENTENCE.replace("This coin has", "A coin with no end date has").replace(" and does not retire", " and never retires")];
 }
+/** The season-end sentence of a rivalry series coin (endText's result line). */
+export const MEETINGS_END_RESULT = "When both teams' seasons are over, the coin of the team that won fewer of the games between them sends the rest of its pool, and any fees that arrive later, to the other coin's burn pool, or to $DEFICIT's burn if that coin is not live. The coin of the team that won more burns down what is left on itself. Then the coin retires.";
+const isMeetingsSeries = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e?.kind === "team" && e.window.kind === "meetings"; };
 export interface EndText { kind: "perpetual" | "self" | "flagship" | "pair-winner" | "champion"; result: string; void: string | null; line: string }
 export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText {
   const days = r.onEnd?.windDownDays ?? 28;
@@ -202,6 +205,7 @@ export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText 
   // the coin description says the same void sentence (END_SINK_VOID_SENTENCE is this text at the default 28 days)
   const VOID = days === 28 ? END_SINK_VOID_SENTENCE : END_SINK_VOID_SENTENCE.replace("over four weeks", over);
   if (!sink) return mk("self", `When the rule ends, the coin's own burn pool burns down what is left ${over}, then the coin retires. A retired coin's pool keeps burning any fees it still receives. This end only burns this coin and sends nothing to another coin.`, null);
+  if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
   if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team"); return mk("champion", `${won} ${lost}`, VOID); }
   return mk("flagship", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to $DEFICIT's burn. Then the coin retires.", VOID);
@@ -330,7 +334,7 @@ const oneShotSentence = (r: BurnRule, iso: string | null | undefined, onWhat: st
 export function windowKindOf(r: BurnRule): WindowKind {
   const series = r.oracle === "catalogue" ? r.series ?? "" : "";
   const e = series ? parseEspnSeries(series) : null;
-  if (e) return e.kind === "game" ? "one-shot" : e.window.kind === "legacy" ? (e.window.scope === "post" ? "post" : "season") : e.window.kind;
+  if (e) return e.kind === "game" ? "one-shot" : e.window.kind === "legacy" ? (e.window.scope === "post" ? "post" : "season") : e.window.kind === "meetings" ? "season" : e.window.kind;
   if (CATALOGUE_ONE_SHOT_RE.test(series)) return "one-shot";
   if (r.oracle === "derby" && r.derby?.selector === "high") return r.derby.once ? "one-shot" : "perpetual";
   if (r.oracle === "polymarket" || r.market) return "one-shot";
@@ -349,6 +353,7 @@ export function windowBadge(r: BurnRule, ctx: Pick<DescribeCtx, "endsAt" | "ende
     if (w.kind === "post") return `POSTSEASON ${seasonLabel(e.league, w.year)}${ended}`;
     if (w.kind === "next") return `NEXT ${w.n} GAME${w.n === 1 ? "" : "S"}${end ? ` · ENDS ${end}` : ""}`;
     if (w.kind === "perpetual") return "PERPETUAL";
+    if (w.kind === "meetings") return `${seasonLabel(e.league, w.year)} SEASON SERIES${ended}`;
     return `${w.scope === "post" ? "POSTSEASON" : "THIS SEASON"}${ended}`;
   }
   if (windowKindOf(r) === "one-shot") return `ONE-SHOT${end ? ` · ${end}` : ""}`;
@@ -376,8 +381,9 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const tk = (window: TeamWindow, games: number | null = null): string => teamTicker(s.abbr, { league: s.league, window, games, outcome: o, inverse: inv });
   // owner decision 2026-10-12 (website-20 item 78): a level cup tie decided on penalties follows the declared winner (gameSettle.ts settleGame)
   const pens = L0.draws ? ` ${PENALTIES_SENTENCE}` : "";
+  if (s.kind === "team" && s.window.kind === "meetings") return meetingsText(r, s.league, s.abbr, s.window, c, mk, { ref, nick, pens, cross });
   if (s.kind === "team") {
-    const w: Window = s.window;
+    const w = s.window as Exclude<Window, { kind: "meetings" }>;
     const settle = inv ? `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} A day with two games counts once, and a game day with a ${noun} burns nothing.` : `Each game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} Nothing happens on ${other}.`;
     const oneLiner = inv ? `burns on every game day ${ref} do not ${verb}` : `burns when ${ref} ${verb}`;
     const every = (scope: string) => inv ? `For every ${nick} game day without a ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}` : `For every ${nick} ${noun} ${scope}, ${spends(r, t)}, with a receipt on chain. ${settle}`;
@@ -416,6 +422,28 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
   const oneLiner = `burns if ${ref} ${verb}${c.game ? ` ${c.game.home ? "against" : "at"} ${opp}` : " that game"}`;
   return mk(`${nick} ${o === "win" ? "Win" : o === "draw" ? "Draw" : "Lose"}`, tk("game"), oneLiner, `If ${ref} ${verb}${vs}, ${spends(r, t)} once, with a receipt on chain. The game's result comes from ${SPORTS_RESULT}. ${cap(cross)} confirms it.${pens} Nothing happens otherwise${o === "draw" ? "" : `, and a ${tie} burns nothing`}.`,
     oneShotSentence(r, c.game?.startsAt ?? c.endsAt), "one-shot", "one-shot");
+}
+
+/**
+ * THE RIVALRY SERIES (sources/espn.ts window `meetings`; owner 2026-10-12): every game between two teams this season, one coin per team,
+ * winner takes the burn. What moves is the program's (pair.rs forward_to_winner per meeting; end.rs forward_on_end to the pair winner of
+ * the season-end result, else $DEFICIT): each meeting's loser sends its share for that game to the winner's burn pool; at the season's end
+ * the coin of the team that won fewer of the games sends what is left to the other coin's burn pool; a level series moves nothing and each
+ * coin burns down on its own pool.
+ */
+export const MEETINGS_LEVEL_SENTENCE = "If the two teams won the same number of games against each other, nothing moves at the end and whatever is left burns down on this coin over four weeks.";
+export const teamRef = (league: LeagueId, nickname: string): string => (LEAGUES[league].sport === "soccer" || league === "cfb" || league === "mcbb" || league === "wcbb" ? nickname : `the ${nickname}`);
+export const meetingsTicker = (abbr: string, opp: string): string => `${abbr.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}V${opp.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}`.slice(0, 10);
+function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Window, { kind: "meetings" }>, c: DescribeCtx, mk: (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]) => CoinText, o: { ref: string; nick: string; pens: string; cross: string }): CoinText {
+  const oppTeam = teamById(league, w.oppId) ?? teamByAbbr(league, w.opp);
+  const oppNick = oppTeam?.nickname ?? w.opp, oref = teamRef(league, oppNick), L = seasonLabel(league, w.year), t = c.ticker;
+  const scope = `in the ${L} season${noPlayoffs(league) ? "" : ", playoffs included"}`;
+  // no "buy" in this copy (the brief's plain-English rule): the share is spent on the coin in its own pool and every token is burned
+  const spend = `${fractionText(r)} of the burn pool is spent on $${t} in its Raydium pool${sliced(r) ? ", in slices sized to the pool's liquidity," : ""} and every token it gets is burned`;
+  const check = CROSS[league] ? "The league's own feed confirms it." : "A second, independent source confirms it.";
+  const rules = `For every game ${o.ref} win against ${oref} ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}. ${check}${o.pens} When ${oref} win one of those games, this coin's share for that game goes to the burn pool of the ${oppNick} coin instead. A draw moves nothing, and a postponed or cancelled game counts for neither side. ${MEETINGS_LEVEL_SENTENCE}`;
+  const windowSentence = `This coin covers the ${L} season only, including ${noPlayoffs(league) ? "every match of the competition" : "the playoffs"}. After both teams' last game, whatever is left burns the coin of the team that won more of the games between them, or $DEFICIT if that coin is not live, and the coin retires. It does not continue into ${nextSeason(league, w.year)}.`;
+  return mk(`${o.nick} vs ${oppNick} ${L}`, meetingsTicker(abbr, w.opp), `burns when ${o.ref} beat ${oref}`, rules, windowSentence, "season", "recurring");
 }
 
 /** A level cup tie decided on penalties (website-20 item 78, owner decision 2026-10-12). */

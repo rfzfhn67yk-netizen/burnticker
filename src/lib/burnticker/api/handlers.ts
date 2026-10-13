@@ -1,5 +1,5 @@
 import type { Platform } from "@/lib/burnticker/server";
-import { EVENT_LEVEL_REFUSAL, eventLevelRule } from "@/lib/burnticker/guidedLaunch";
+import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
 import { identityRefusals, ruleRefusals, sampleEligibility } from "@/lib/burnticker/launchPreflight";
@@ -10,7 +10,7 @@ import { ONCHAIN_FACTS, onchainSource } from "@/lib/burnticker/sources/onchain";
 import { driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
 import { TIER_LABEL, sourceTypeLabel } from "@/lib/burnticker/sources/types";
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
-import { validateRule, lockRule, ruleStatement, BURNTICKER_RULES_SCHEMA, defaultOnEndFor, type LockedRule } from "@/lib/burnticker/rules";
+import { validateRule, lockRule, ruleStatement, isMeetingsRule, BURNTICKER_RULES_SCHEMA, defaultOnEndFor, type LockedRule } from "@/lib/burnticker/rules";
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
@@ -28,7 +28,7 @@ import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
 import { describeRule } from "@/lib/burnticker/describe";
 import { universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
 import { BALLOT_NOTE, RACE_TYPES, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
-import { LEAGUES, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
@@ -330,6 +330,37 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
   } catch (e) { return fail(502, `The schedule could not be read just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
 }
 
+/**
+ * THE RIVALRY SERIES PICKER (RIVALRY-SERIES-BRIEF item 4): every game between two teams this season, regular season and postseason, from
+ * the league's own schedule (MLB StatsAPI, the NHL feed, the NBA feed) or TheSportsDB with its licensed key — never ESPN. Each game with its
+ * date, whether it is a playoff game, and where it stands from team `a`'s side (win, loss, draw, void, pending); the head-to-head count so
+ * far; both series ids (sources/espn.ts window `meetings`) and the pair's names and tickers. `offered` is false when the schedule lists no
+ * game between them (the option is then not offered for that pair).
+ */
+export async function sportsRivalry(_p: Platform, q: { league?: string | null; a?: string | null; b?: string | null }): Promise<ApiResult> {
+  const league = q.league?.trim().toLowerCase() ?? "";
+  if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
+  const ta = teamByAbbr(league, q.a?.trim() ?? ""), tb = teamByAbbr(league, q.b?.trim() ?? "");
+  if (!ta || !tb) return fail(400, `Name two teams of the ${LEAGUES[league].label} by their abbreviation, as /sports/teams lists them.`);
+  if (ta.abbr === tb.abbr) return fail(400, "Pick two different teams.");
+  const source = league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's own feed." : "The schedule comes from TheSportsDB, with a licensed key.";
+  const names = meetingsPairNames(ta, tb);
+  const base = { league, label: LEAGUES[league].label, source, option: { label: RIVALRY_SERIES_LABEL, line: RIVALRY_SERIES_LINE }, a: { abbr: ta.abbr, team: ta.name, nickname: ta.nickname, ...names.a }, b: { abbr: tb.abbr, team: tb.name, nickname: tb.nickname, ...names.b } };
+  let games: Game[];
+  try { games = await espnClient().season(league, ta.abbr); } catch (e) {
+    const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160));
+    return ok({ ...base, year: null, season: null, series: null, scheduleNote: sp.line, scheduleDetail: sp.detail, offered: false, offeredLine: sp.line, meetings: [], count: 0, tally: null });
+  }
+  const year = games.find((g) => g.seasonYear)?.seasonYear ?? seasonYearAt(league, Date.now());
+  const isB = (x: Game["home"]) => x.abbr === tb.abbr;
+  const rows = games.filter((g) => isB(g.home) || isB(g.away)).sort((x, y) => x.startsAt.localeCompare(y.startsAt)).map((g) => {
+    const result = meetingOutcome(g, ta.abbr);
+    return { eventId: g.eventId, startsAt: g.startsAt, date: g.date, playoff: g.seasonType === 3, home: g.home.abbr, away: g.away.abbr, title: g.name, status: result === "pending" ? (g.state === "in" ? "in progress" : "scheduled") : result === "void" ? "postponed or cancelled" : "final", result, score: g.completed && g.home.score !== null && g.away.score !== null ? { home: g.home.score, away: g.away.score } : null };
+  });
+  const tally = tallyMeetings(rows.map((r) => r.result));
+  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered: rows.length > 0, offeredLine: rows.length ? null : MEETINGS_NONE_LINE, meetings: rows, count: rows.length, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
+}
+
 /** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */
 export const venueFlags = (p: Platform): VenueFlags => ({ kalshi: p.kalshiEnabled !== false, polymarket: p.polymarketDiscovery !== false, feeds: true });
 
@@ -524,7 +555,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): the same rule refusals the read-only review lists, in order:
   // vault mode, a venue this host has off, an oracle no coin launches on yet, a source's fixed unit / launchability / decided result, the
   // reserve bounds and an unsafe title regex. The first one answers; every one is in `problems`.
-  { const rr = ruleRefusals(locked, { kalshiEnabled: p.kalshiEnabled !== false, now: Date.now() }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
+  { const rr = ruleRefusals(locked, { kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name;
@@ -699,7 +730,8 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
       // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).
-      const pairCurve = pairCurveEnabled(process.env) ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
+      // a head-to-head season pair (rules.ts isMeetingsRule) is two LaunchLab coins linked at creation: the pair curve is for crypto references
+      const pairCurve = pairCurveEnabled(process.env) && !isMeetingsRule(locked.rule) ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
       const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note, pairCurve ? null : pair.a.addresses.poolId) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links, "", pairCurve ? null : pair.b.addresses.poolId) : null;
       const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;

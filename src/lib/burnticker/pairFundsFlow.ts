@@ -46,3 +46,33 @@ export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b:
     never: "Nothing is paid to holders on any outcome. SOL only moves between two program accounts that nobody can withdraw from, and holders' balances are never touched.",
   };
 }
+
+/**
+ * A RIVALRY SERIES PAIR (every game between two teams this season; sources/espn.ts window `meetings`). The same winner-takes-the-burn
+ * money path, said per game and at the season's end, each claim from the program: after each game, pair.rs forward_to_winner moves the
+ * losing coin's share for that game to the winning coin's burn pool (a draw moves nothing; a winner without a live pool gets 0); at the
+ * end, end.rs forward_on_end moves what is left in the losing coin's pool to the pair winner of the season-end result while that coin is
+ * live and still paired, else to $DEFICIT; the winning coin burns down its own rest (endSinkKeeper.ts); a level series records a void end
+ * and each coin burns down on itself.
+ */
+export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a: string; b: string }): FundsFlow {
+  const A = `$${tickers.a}`, B = `$${tickers.b}`;
+  return {
+    version: "winner-takes-the-burn", versionLabel: "Rule version: winner takes the burn, every game between two teams this season",
+    oneLiner: `Each game between the ${teams.a} and the ${teams.b} burns the coin of the team that won it, and at the end of the season the rest goes to the coin of the team that won more of those games.`,
+    steps: [
+      { title: "Where fees come from", text: FEES },
+      { title: "After each game between them", text: "The coin of the team that won spends its own share of its burn pool burning itself. The other coin sends exactly the share its own rule sets for that game to the winning coin's burn pool, in a public transaction with a memo, and that SOL is spent burning the winning coin too. Games against other teams do nothing." },
+      { title: "At the end of the season", text: `When both teams' seasons are over, playoffs included, the coin of the team that won fewer of the games between them sends what is left in its burn pool, and any fees that arrive later, to the other coin's burn pool. The coin of the team that won more burns down what is left on itself. For example, if the ${teams.a} won more, ${B} sends its rest to the ${A} burn pool and all of it burns ${A}.` },
+    ],
+    outcomes: [
+      { when: "A game ends in a draw", then: "Nothing moves for that game. It counts for neither team." },
+      { when: "A game is postponed or cancelled", then: "It counts for neither team until it is played." },
+      { when: "The winning coin of a game has no live trading pool", then: "Nothing moves for that game. The share stays in the other coin's pool." },
+      { when: "The two teams won the same number of games against each other", then: "Nothing moves at the end. Each coin burns down what is left on itself over four weeks." },
+      { when: "The coin of the team that won more has no live trading pool at the end", then: "The other coin's rest goes to $DEFICIT's burn instead." },
+      { when: "No result 72 hours after a game's reading", then: "That coin burns the game as an unpaired coin, from its own pool, and that game can no longer forward." },
+    ],
+    never: "Nothing is paid to holders on any outcome. SOL only moves between two program accounts that nobody can withdraw from, and holders' balances are never touched.",
+  };
+}

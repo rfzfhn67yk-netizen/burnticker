@@ -254,7 +254,8 @@ describe("walkthrough snags and the launch-intent audits", () => {
   });
 
   test("snag 2: a Matchup has the shared raise picker and the review's own raise; Coin vs Coin too when its venue takes one", () => {
-    assert.match(page, /raise=\{pairOn && !ruleB \? null : \{/);
+    // website-21: a rivalry series pair (two LaunchLab coins) shows the shared raise when the review answers one
+    assert.match(page, /raise=\{pairOn && !ruleB \? null : meetingsOn && !shownReview\.review\?\.raise \? null : \{/);
     assert.match(tile, /raise=\{shown\.review\?\.raise \? \{ options: \[\.\.\.RAISE_PRESETS_SOL\], value: raiseSol/);
     assert.match(tile, /firstBuySol: "0", raiseSol,/);
   });

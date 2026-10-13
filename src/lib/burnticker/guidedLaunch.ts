@@ -1,8 +1,8 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { championPathRule, describeEndSink, endText, windowKindOf } from "@/lib/burnticker/describe";
+import { championPathRule, describeEndSink, endText, meetingsTicker, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
-import { parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { meetingsPairSeries, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 
@@ -93,8 +93,12 @@ export function oneShotSentences(o: { share: number; happened: string; subject: 
 }
 
 /** What blocks the launch while an image is being prepared, or after its preparation failed (intent audit 5 item 15). */
-export const IMAGE_PENDING = "The image is still being prepared. Wait a moment, or remove it.";
-export const IMAGE_FAILED = "The image could not be prepared. Choose it again, or remove it.";
+export const IMAGE_PENDING = "The image is still being prepared. Wait a moment, or cancel it.";
+/** audit 7 item 15: a rejected image is not on the coin, so the way out never says "remove": choose another, or keep the generated art. */
+export const IMAGE_FAILED = "The image could not be used. Choose another image, or keep the generated art.";
+/** audit 7 item 15: the one button beside an image still being prepared, and beside one that was rejected. */
+export const IMAGE_CANCEL_LABEL = "Cancel the image";
+export const IMAGE_KEEP_GENERATED_LABEL = "Keep the generated art";
 export const imageStateProblem = (s: "pending" | "failed" | null): string | null => (s === "pending" ? IMAGE_PENDING : s === "failed" ? IMAGE_FAILED : null);
 
 /** A saved draft keeps the words and links but never an image (intent audit 5 item 11). */
@@ -114,7 +118,8 @@ export const PATTERN_REASON = {
   titleMarketLoading: "Looking for a market on this team's title.",
   needsTwo: "Winner takes the burn needs two linked coins. Pick a coin against another coin in step 1.",
   noMeeting: "These two teams have no listed game right now. Pick This season instead.",
-  teamsSeparate: "Two team coins launch as two separate coins, and each one burns from its own pool. Winner takes the burn is offered for a coin against another coin.",
+  teamsSeparate: "Two team coins launch as two separate coins, and each one burns from its own pool. Winner takes the burn is offered for every game between them this season.",
+  meetingsOnly: "Every game between them this season is a linked pair where the winner takes the burn, so this pattern does not apply to it.",
   candidatesSeparate: "Two candidates settle on two separate markets, so each coin burns from its own pool.",
   candidatesEvery: "A race is decided once, so it cannot burn every time.",
   derbyEvery: "In a coin against another coin, each day's result fires one side's rule, and that side takes the burn.",
@@ -132,6 +137,8 @@ export interface PatternInput {
   pairKind?: "teams" | "candidates" | null;
   /** Two teams: whether they have a listed game against each other (false greys "once"). */
   meeting?: boolean | null;
+  /** Two teams: the rivalry option picked in step 2 (RIVALRY_*_LABEL): one game, every loss this season, or every game between them. */
+  rivalryScope?: "game" | "season" | "meetings" | null;
 }
 
 const isOneShotRule = (r: BurnRule): boolean => windowKindOf(r) === "one-shot" || (r.oracle === "catalogue" && CATALOGUE_ONE_SHOT_RE.test(r.series ?? ""));
@@ -150,6 +157,8 @@ export function patternOptions(i: PatternInput): { options: PatternOption[]; pre
   // a coin against another coin: each day's winner takes the burn, or once, the flippening (the first day one passes the other)
   if (i.follow === "coins") return { options: [mk("every", PATTERN_REASON.derbyEvery), mk("fade", PATTERN_REASON.derbyFade), mk("once", null), mk("winner", null)], preselected: (r as { derby?: { flip?: boolean } } | null)?.derby?.flip ? "once" : "winner" };
   if (i.follow === "rivalry" && i.pairKind === "candidates") return { options: [mk("every", PATTERN_REASON.candidatesEvery), mk("fade", PATTERN_REASON.oneShotFade), mk("once", null), mk("winner", PATTERN_REASON.candidatesSeparate)], preselected: "once" };
+  // two teams, every game between them this season: a linked pair, winner takes the burn and nothing else
+  if (i.follow === "rivalry" && i.rivalryScope === "meetings") return { options: [mk("every", PATTERN_REASON.meetingsOnly), mk("fade", PATTERN_REASON.meetingsOnly), mk("once", PATTERN_REASON.meetingsOnly), mk("winner", null)], preselected: "winner" };
   if (i.follow === "rivalry") {
     // two teams: this season (each coin burns when its own team loses), its fade side, or this game only
     const fade = r && dialsFor(r).inverse ? null : r && !isOneShotRule(r) ? plainInverseReason(r) || null : null;
@@ -217,8 +226,9 @@ export const derbyShareLine = (daily: number, flip: number): string => `Each mod
  * THE PATTERN WORDS FOR THE THING PICKED (pass B item 12, audit 6 item 16): "After each Dodgers win", never "each day or reading" on a team
  * coin. Generic words stay for the paths with no subject to name.
  */
-export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: "win" | "loss" | "draw" | null; pairKind?: "teams" | "candidates" | null }): { label: string; sentence: string } {
+export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: "win" | "loss" | "draw" | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null }): { label: string; sentence: string } {
   const s = o.subject;
+  if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: MEETINGS_WINNER_LINE };
   if (o.follow === "team" && s) {
     const won = o.outcome === "loss" ? "loss" : o.outcome === "draw" ? "draw" : "win";
     if (id === "every") return { label: `After each ${s} ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
@@ -410,6 +420,7 @@ export function teamTickerForRule(r: BurnRule, abbr?: string | null): string | n
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
   if (!e) return null;
   if (e.kind !== "team") return teamTicker(abbr ?? e.abbr, { league: e.league, window: "game", outcome: e.outcome, inverse: !!r.inverse });
+  if (e.window.kind === "meetings") return meetingsTicker(abbr ?? e.abbr, e.window.opp);
   const w = e.window, window = w.kind === "legacy" ? (w.scope === "post" ? "post" : "season") : w.kind;
   return teamTicker(abbr ?? e.abbr, { league: e.league, window, games: w.kind === "next" ? w.n : null, outcome: e.outcome, inverse: !!r.inverse });
 }
@@ -440,12 +451,70 @@ export const RIVALRY_GAME_LABEL = "One game between them";
 export const RIVALRY_GAME_LINE = "Pick the game. When it is final, the coin of the team that lost burns once.";
 export const RIVALRY_SEASON_LABEL = "Every loss this season";
 export const RIVALRY_SEASON_LINE = "Each coin burns every time its own team loses any game this season, through the postseason, not only the games between these two.";
-export const RIVALRY_SCOPE_LINE = "Two separate coins, one for each team. Each burns from its own pool, and no SOL moves between them.";
+export const RIVALRY_SCOPE_LINE = "The first two options make two separate coins, one for each team. Each burns from its own pool, and no SOL moves between them. The third links the two coins, so SOL moves to the winning coin's burn.";
 /** Item 154: a failed schedule read is never "no listed game". */
 export const SCHEDULE_UNAVAILABLE_LINE = "The schedule could not be read just now, so their games are not shown.";
 export const NO_LISTED_MEETING_LINE = "The schedule lists no game between them right now.";
 /** Item 157: what the list covers. */
 export const scheduleCoverageLine = (n: number): string => (n > 1 ? `The league's schedule lists ${n} games between them from today on. Pick the one the coins follow.` : n === 1 ? "The league's schedule lists one game between them from today on." : "Only games the league's schedule lists from today on can be picked.");
+/**
+ * THE THIRD RIVALRY OPTION (owner 2026-10-12: "sixers vs celtics as a pair ... burn schedule based on their head-to-head games ... leftover
+ * fees burning the season series winner"): every game between the two teams this season, regular season and postseason, as a linked pair
+ * (sources/espn.ts window `meetings`). Step 3 offers only "Winner takes the burn"; step 4 says the rest goes to the series winner. What
+ * moves is the program's (pair.rs forward_to_winner per game; end.rs forward_on_end to the pair winner of the season-end result).
+ */
+export const RIVALRY_SERIES_LABEL = "Every game between them this season";
+export const RIVALRY_SERIES_LINE = "A linked pair. Each game between them burns the coin of the team that won it, and at the end of the season the rest goes to the team that won more of them.";
+export const MEETINGS_WINNER_LINE = "After each game between the two teams, the coin of the team that won spends its own share and the other coin's share for that game, both burning the winning coin. A draw moves nothing.";
+export const MEETINGS_END_LABEL = "The rest goes to the series winner";
+export const MEETINGS_END_LINE = "When both seasons are over, the coin of the team that won fewer of their games sends what is left to the other coin's burn. If they won the same number, nothing moves and each coin burns down what is left on itself.";
+export const MEETINGS_NONE_LINE = "The league's schedule lists no game between these two teams this season, so this option is not offered for them.";
+/** rules.ts DEFAULT_ON_END, copied (rules.ts is not client-safe); test/burntickerRivalrySeriesReview.test.ts pins the two equal. */
+export const MEETINGS_ON_END = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
+/** The two rules of a rivalry series pair: side A on its team's series, side B on the mirror; both end on the pair-winner sink. */
+export function meetingsPairRules(league: LeagueId, a: string, b: string, year: number, fraction = DEFAULT_SHARE.recurring): { a: BurnRule; b: BurnRule } {
+  const s = meetingsPairSeries(league, a, b, year);
+  return { a: { ...firstPartyRule(s.a, fraction), onEnd: { ...MEETINGS_ON_END } }, b: { ...firstPartyRule(s.b, fraction), onEnd: { ...MEETINGS_ON_END } } };
+}
+/** The pair's names and tickers: "76ers vs Celtics" and "Celtics vs 76ers", $PHIVBOS and $BOSVPHI (tickers are upper case everywhere). */
+export function meetingsPairNames(a: { abbr: string; nickname: string | null; name: string }, b: { abbr: string; nickname: string | null; name: string }): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
+  const n = pairNames(a.nickname ?? a.name, b.nickname ?? b.name), t = pairTickers(a.abbr, b.abbr);
+  return { a: { name: n.a, ticker: t.a }, b: { name: n.b, ticker: t.b } };
+}
+/**
+ * website-21 (WIRING-RIVALRY-SERIES "gaps"): the pair's both-or-neither deadline (launchBundle.ts defaultVoidBy, 30 days after launch),
+ * said once on the review beside the end.
+ */
+export const MEETINGS_DEADLINE_LINE = "Both coins have 30 days from launch to graduate and register their trading pools. If either one does not, the pair is void and each coin burns down what is left on its own pool.";
+/** The pair page of a rivalry series pair (tokenPage.ts, /burnticker/p): two series, one per team, never one shared market. */
+export const MEETINGS_PAIR_PAGE_LINE = "Each coin reads its own team's games against the other team. Each game burns the coin of the team that won it.";
+/** Whether a pair's selector is a rivalry series (sources/espn.ts window `meetings`); client-safe, unlike rules.ts isMeetingsRule. */
+export const isMeetingsSelector = (key: string | null | undefined): boolean => { if (!key) return false; const e = parseEspnSeries(key.split(":").slice(0, 2).join(":")); return e?.kind === "team" && e.window.kind === "meetings"; };
+/**
+ * Step 3's preview and the review's rule sentence for a rivalry series pair: both coins' one-liners (describe.ts, "burns when the 76ers
+ * beat the Celtics"), then what each game between them moves (pairFundsFlow.ts meetingsFundsFlow, said with the chosen share).
+ */
+export const meetingsPairSentence = (o: { a: string; b: string; oneA: string; oneB: string; share: string }): string =>
+  `$${o.a} ${o.oneA}, and $${o.b} ${o.oneB}. After each game between them, the coin of the team that won spends ${o.share} of its own burn pool, and the other coin sends ${o.share} of its pool to the winning coin's burn.`;
+/** The review's "Which coin burns" fact for a rivalry series pair: the winning team's coin, which also takes the other coin's share. */
+export const meetingsWhichCoinLine = (o: { a: string; b: string; teamA: string; teamB: string }): string =>
+  `$${o.a} when the ${o.teamA} win a game between them, and $${o.b} when the ${o.teamB} win one. The winning coin also takes the other coin's share for that game.`;
+/** Step 2: the heading of the meetings list under the third rivalry option. */
+export const MEETINGS_LIST_LABEL = "Their games this season";
+/** One game between the two teams as GET /v1/sports/rivalry lists it (`result` is from team a's side). */
+export interface MeetingRow { eventId: string; startsAt: string; date?: string; playoff: boolean; home: string; away: string; status: string; result: string }
+/**
+ * The meetings list (step 2): soonest first, each with where it is played from the first team's side ("vs BOS" at home, "at BOS" away),
+ * whether it is a playoff game, and its state once it is not just scheduled ("PHI won", "BOS won", "draw", "in progress", "postponed or
+ * cancelled").
+ */
+export function meetingsListRows(ms: readonly MeetingRow[], a: string, b: string): { key: string; startsAt: string; where: string; playoff: boolean; state: string | null }[] {
+  return [...ms].sort((x, y) => x.startsAt.localeCompare(y.startsAt)).map((m) => ({
+    key: m.eventId, startsAt: m.startsAt, where: m.home === a ? `vs ${b}` : `at ${b}`, playoff: !!m.playoff,
+    state: m.result === "win" ? `${a} won` : m.result === "loss" ? `${b} won` : m.result === "draw" ? "draw" : m.result === "void" || m.status === "postponed or cancelled" ? "postponed or cancelled" : m.status === "in progress" ? "in progress" : null,
+  }));
+}
+
 /** Item 155: a cleared second team is said once. */
 export const RIVAL_SAME_TEAM = "The second team was cleared, because it is now the first team. Pick another second team.";
 /** Audit 7 item 9: season coins are named for what they count ("Guardians 2026 Losses", $CLEL). */

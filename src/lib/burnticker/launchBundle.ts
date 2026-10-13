@@ -5,7 +5,7 @@ import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
 import { CURVE_FEES, postGraduationFeesFor, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, LP_LOCKED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
-import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
 import { nameProblem } from "@/lib/burnticker/launchFields";
 import { isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
@@ -290,6 +290,8 @@ export interface PairLaunchInput {
 /** The default voidBy for a pair: 30 days after launch (UTC date). */
 export const defaultVoidBy = (now = Date.now()): string => new Date(now + 30 * 86_400_000).toISOString().slice(0, 10);
 
+/** A head-to-head series pair always ends on the pair-winner sink (the rest goes to the series winner); a rule without the end sink is refused. */
+export const MEETINGS_END_SINK_REFUSAL = "A head-to-head season pair sends whatever is left at the end to the coin of the team that won more of their games, so its rule must keep the end sink (onEnd.endSink).";
 export interface PairBundles { pairId: string; a: LaunchBundle; b: LaunchBundle; selector: string; notes: string[] }
 
 /**
@@ -301,7 +303,12 @@ export interface PairBundles { pairId: string; a: LaunchBundle; b: LaunchBundle;
 export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps): Promise<PairBundles> {
   if (input.a.ticker === input.b.ticker) throw new Error("pair: the two sides need different tickers");
   const probe = validateRule({ ...(input.a.rule as object), pair: null });
-  if (!PAIR_ORACLES.includes(probe.oracle)) throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket) or a Burn Derby coin-vs-coin selector");
+  // the rivalry series (sources/espn.ts window `meetings`): the one catalogue source that pairs; side B reads the mirror series
+  const meetings = isMeetingsRule(probe);
+  if (!PAIR_ORACLES.includes(probe.oracle) && !meetings) throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket), a Burn Derby coin-vs-coin selector, or a head-to-head season series between two teams");
+  const mirror = meetings ? meetingsMirrorId(probe.series!) : null;
+  if (meetings && !mirror) throw new Error("pair: the head-to-head series names a team or an opponent this site does not know");
+  if (meetings && probe.onEnd && probe.onEnd.endSink !== true) throw new Error(MEETINGS_END_SINK_REFUSAL);
   const selector = probe.market ?? `${probe.series}${probe.filter.tickerIncludes ? `:${probe.filter.tickerIncludes}` : ""}`;
   const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, selector);
   // Both or neither: the clause is part of BOTH sides' canonical rules (invertMapping carries it to side B), so each hash locks it.
@@ -317,7 +324,8 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   // the one deps.attesters / deps.quorum below; refuse a set the program would refuse anyway.
   if (new Set(deps.attesters).size !== deps.attesters.length) throw new Error("pair: both coins need one attester set of distinct keys (the program refuses PairAttestersDiffer otherwise)");
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...deps, ...(kpB ? { pairMint: kpB.publicKey.toBase58(), partnerFirst: false } : {}) });
-  const ruleB = invertMapping(ruleA, a.mint, pairId);
+  // a head-to-head series: side B counts ITS team's results on the mirror series (direction up), so each coin reads its own team
+  const ruleB = mirror ? validateRule({ ...ruleA, series: mirror, pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } }) : invertMapping(ruleA, a.mint, pairId);
   const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: kpB ?? undefined, ...(kpB ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });
   return { pairId, a, b, selector, notes: [
     `rivalry pair ${pairId}: ${input.a.ticker} (side A) and ${input.b.ticker} (side B) on selector ${selector}; each settlement burns exactly one side`,

@@ -25,6 +25,10 @@ import { createLatest } from "@/lib/burnticker/latestOnly";
 import { fingerprintFor, prepareIfCurrent, profileRevision, startFingerprint, STALE_PREPARE_SENTENCE, type Fingerprint } from "@/lib/burnticker/preparedLaunch";
 import { deepLinkPick, deepLinkQuery, editedFrom, generatedNames, pickerNote, searchToken, visibleHits, NONE_EDITED, type EditedFields } from "@/lib/burnticker/coinPicker";
 import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileProblems, type ProfileValue } from "./ProfileFields";
+import { describeRule, endText } from "@/lib/burnticker/describe";
+import { highText, type HighBaseline, type HighSpan, type HighSpec } from "@/lib/burnticker/derby/high";
+import { HIGH_CHOICE_LABEL, HIGH_CHOICE_LINE, HIGH_NEW_DAY, HIGH_PATTERNS, HIGH_PICKER_LABEL, HIGH_PYTH_ONLY, HIGH_READING, HIGH_RUN_NOTE, HIGH_SPAN_CHOICES, HIGH_SPAN_LABEL, PAIR_CHOICE_LABEL, PAIR_CHOICE_LINE, highBlock, highGreyed, highHashInput, highRule, highShares } from "@/lib/burnticker/derby/highTile";
+import { LaunchRequestError, launchErrorMessage, type LaunchErrorBody } from "@/lib/burnticker/pairLaunchClient";
 
 /**
  * "COIN VS COIN" — the Burn Derby wizard tile (2026-10-10; cut to presets the same day, the owner: "the UI needs to be simpler, even if it
@@ -98,12 +102,154 @@ function CoinPicker({ label, value, onPick, exclude, initial, locked = false }: 
 }
 
 /**
+ * WIRING-SOURCES4 (website-21): A COIN'S RECORD CLOSE, the tile's other choice (derby/high.ts, derby/highTile.ts). One reference coin
+ * (the derby search, Pyth feeds only), how far back its record reaches, every record close or once on the next one, then the server's
+ * baseline read (POST /v1/derby/high): its refusal is the review's refusal sentence, its line sits under the rule sentence. The block's
+ * season starts on the day the baseline was read (UTC); when the UTC day turns the record is read again (derby/admission.ts refuses an
+ * older one). One coin, one LaunchLab launch; the same review, prepare latch and gates as every launch.
+ */
+function RecordClose({ blocked = null, customImages = true }: { blocked?: string | null; customImages?: boolean }) {
+  const wallet = useWallet();
+  const creator = wallet.publicKey?.toBase58() ?? "";
+  const [ref, setRef] = useState<Hit | null>(null), [span, setSpan] = useState<HighSpan>("all"), [once, setOnce] = useState(false);
+  // each pattern keeps its own share (the recurring row defaults to 2 %, the one-time row to 100 %)
+  const [shares, setShares] = useState<{ every: number; once: number }>({ every: highShares(false).fallback, once: highShares(true).fallback });
+  const fraction = once ? shares.once : shares.every;
+  const setFraction = (v: number) => setShares((x) => (once ? { ...x, once: v } : { ...x, every: v }));
+  const [raiseSol, setRaiseSol] = useState<RaisePreset>(DEFAULT_RAISE_SOL);
+  const [names, setNames] = useState({ name: "", ticker: "" }), [edited, setEdited] = useState({ name: false, ticker: false });
+  const [prof, setProf] = useState<ProfileValue>(EMPTY_PROFILE);
+  const [now, setNow] = useState(() => Date.now());
+  const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  useEffect(() => { const t = setInterval(() => setNow((n) => (utcDay(Date.now()) !== utcDay(n) ? Date.now() : n)), 60_000); return () => clearInterval(t); }, []);
+  const today = utcDay(now);
+  const [retry, setRetry] = useState(0), [newDay, setNewDay] = useState(false);
+  const firstDay = useRef(today); useEffect(() => { if (firstDay.current !== today) { firstDay.current = today; setNewDay(true); } }, [today]);
+  const u = ref?.underlying ?? null;
+  const noPyth = !!ref && !u?.pyth;
+  const baseKey = u && u.pyth ? `${today}|${span}|${JSON.stringify(u)}|${retry}` : "";
+  const [base, setBase] = useState<{ key: string; busy: boolean; baseline: HighBaseline | null; line: string | null; refusal: string | null; error: string | null; today: string | null } | null>(null);
+  useEffect(() => {
+    if (!baseKey || !u) { setBase(null); return; }
+    let live = true;
+    setBase({ key: baseKey, busy: true, baseline: null, line: null, refusal: null, error: null, today: null });
+    fetch("/api/burnticker/v1/derby/high", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ u, span }) })
+      .then(async (r) => { const j = await r.json().catch(() => null); if (!r.ok) throw new Error(j?.error ?? `HTTP ${r.status}`); return j as { today: string; baseline?: HighBaseline; line?: string; refusal?: { reason: string } }; })
+      .then((j) => { if (live) setBase({ key: baseKey, busy: false, baseline: j.baseline ?? null, line: j.line ?? null, refusal: j.refusal?.reason ?? null, error: null, today: j.today }); })
+      .catch((e) => { if (live) setBase({ key: baseKey, busy: false, baseline: null, line: null, refusal: null, error: String((e as Error).message ?? e), today: null }); });
+    return () => { live = false; };
+  }, [baseKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const block: HighSpec | null = u && base && base.key === baseKey && base.baseline && base.today ? highBlock({ u, span, once, baseline: base.baseline, nowMs: Date.parse(`${base.today}T12:00:00Z`) }) : null;
+  const hashIn = block ? highHashInput(block) : null;
+  const [hash, setHash] = useState<{ input: string; hex: string } | null>(null);
+  useEffect(() => { if (!hashIn) return; let live = true; void sha256HexWeb(hashIn).then((hex) => { if (live) setHash({ input: hashIn, hex }); }); return () => { live = false; }; }, [hashIn]);
+  const rule: BurnRule | null = block && hash && hash.input === hashIn ? highRule(block, hash.hex, fraction) : null;
+  const gen = block ? highText(block, "") : null;
+  useEffect(() => { if (!gen) return; setNames((n) => ({ name: edited.name ? n.name : gen.name, ticker: edited.ticker ? n.ticker : gen.ticker })); }, [gen?.name, gen?.ticker, edited.name, edited.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
+  const text = useMemo(() => { if (!rule) return null; try { return describeRule(rule, { ticker: names.ticker.toUpperCase() || "TICKER" }); } catch { return null; } }, [rule, names.ticker]);
+  // the review (POST /v1/launch/review), keyed by the draft's revision; Launch prepares only the reviewed draft
+  const [slot, setSlot] = useState<ReviewSlot<LaunchReview>>(EMPTY_REVIEW_SLOT);
+  const reviewKey = draftRevision([rule, names, raiseSol, prof.description, profileRevision(prof)]);
+  const curRev = useRef(reviewKey); curRev.current = reviewKey;
+  const seqRef = useRef(0);
+  useEffect(() => {
+    if (!rule) return;
+    const seq = ++seqRef.current, rev = reviewKey;
+    setSlot((x) => reviewRequested(x, rev, seq));
+    const t = setTimeout(() => {
+      fetch("/api/burnticker/v1/launch/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: names.ticker.toUpperCase(), name: names.name, raiseSol, creatorDescription: prof.description, links: profileBody(prof).links }) })
+        .then(async (r) => { const j = await r.json().catch(() => null); if (!r.ok) throw new Error(r.status === 403 ? "creator launches are closed on this site" : `the review could not be read (HTTP ${r.status})`); return j as LaunchReview; })
+        .then((j) => setSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
+        .catch((e) => setSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: String((e as Error).message) })));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [reviewKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = reviewFor(slot, reviewKey), reviewCurrent = reviewMatchesDraft(slot, reviewKey);
+  const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ bundle: Bundle; ticker: string } | null>(null);
+  const signPlan = useMemo(() => (out ? launchlabPlan([out.bundle]) : null), [out]);
+  const launch = async () => {
+    if (!rule || !text || !creator || !reviewMatchesDraft(slot, curRev.current)) return;
+    // the UTC day turned since the record was read: read it again for a launch today, then the creator presses Launch again
+    if (base?.today && utcDay(Date.now()) !== base.today) { setNow(Date.now()); setErr(HIGH_NEW_DAY); return; }
+    setBusy(true); setErr(null); setOut(null);
+    const sentRev = curRev.current, ticker = names.ticker.toUpperCase();
+    const body = { creator, ticker, name: names.name, description: text.paragraph, note: "", imageUrl: null, rule, firstBuySol: "0", raiseSol, acknowledgements: { ruleLocked: true, noReturns: true }, ...profileBody(prof) };
+    try {
+      const got = await prepareIfCurrent(sentRev, () => curRev.current, async () => {
+        const r = await fetch("/api/burnticker/launch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        const j = await r.json().catch(() => null);
+        if (!r.ok) throw new LaunchRequestError(r.status, j?.code ?? null, launchErrorMessage(r.status, j as LaunchErrorBody | null, r.headers.get("retry-after")));
+        return j as { bundle: Bundle };
+      });
+      if ("stale" in got) { setErr(STALE_PREPARE_SENTENCE); return; }
+      setOut({ bundle: got.ok.bundle, ticker });
+    } catch (e) { setErr(String((e as Error).message ?? e)); } finally { setBusy(false); }
+  };
+  const sh = highShares(once);
+  const ready = !!rule && /^[A-Z0-9]{2,10}$/.test(names.ticker.toUpperCase()) && !!names.name.trim();
+  const greyed = highGreyed(rule);
+  return (
+    <div className="space-y-3" data-record-close>
+      <div className="min-w-0 max-w-md"><CoinPicker label={HIGH_PICKER_LABEL} value={ref} onPick={(h) => { setRef(h); setNewDay(false); }} exclude={null} locked={busy || !!out} /></div>
+      {noPyth && <p className="text-xs text-amber-300" role="status" data-high-no-pyth>{HIGH_PYTH_ONLY}</p>}
+      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={HIGH_SPAN_LABEL} data-high-span>
+        <span className="text-xs text-neutral-400">{HIGH_SPAN_LABEL}</span>
+        {HIGH_SPAN_CHOICES.map((c) => <button key={String(c.span)} type="button" role="radio" aria-checked={span === c.span} data-decision="what" disabled={busy || !!out} onClick={() => setSpan(c.span)} className={`rounded-full border px-3 py-1 text-sm ${span === c.span ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{c.label}</button>)}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Burn pattern" data-high-patterns>
+        {([false, true] as const).map((o) => { const p = o ? HIGH_PATTERNS.once : HIGH_PATTERNS.every; return (
+          <button key={String(o)} type="button" role="radio" aria-checked={once === o} data-decision="what" data-pattern={o ? "once" : "every"} disabled={busy || !!out} onClick={() => setOnce(o)} className={`rounded-lg border p-3 text-left text-sm ${once === o ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"}`}>
+            <span className="block font-medium">{p.label}</span><span className="mt-0.5 block text-xs text-neutral-300">{p.line}</span>
+          </button>
+        ); })}
+      </div>
+      <details className="text-xs text-neutral-400" data-pattern-greyed><summary className="cursor-pointer">{OTHER_PATTERNS_LABEL}</summary>{greyed.map((g) => <p key={g.id} className="mt-1" data-pattern={g.id} data-available="no"><span className="text-neutral-200">{g.label}.</span> {g.reason}</p>)}</details>
+      {newDay && <p className="text-xs text-amber-300" role="status" data-high-new-day>{HIGH_NEW_DAY}</p>}
+      {base?.busy && <p className="text-xs text-neutral-400" role="status">{HIGH_READING}</p>}
+      {base && !base.busy && base.error && <p className="text-xs text-amber-300" role="status" data-high-unread>The daily closes could not be read just now. <button type="button" data-nav className="underline" onClick={() => setRetry((n) => n + 1)}>Retry</button><span className="block break-words font-mono text-neutral-500">{base.error}</span></p>}
+      {base && !base.busy && base.refusal && <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="alert" data-high-refusal>{base.refusal}</p>}
+      {rule && text && !out && (
+        <ReviewCard
+          coins={[{ key: "a", name: names.name, ticker: names.ticker, onName: (v) => { setEdited((e) => ({ ...e, name: true })); setNames((n) => ({ ...n, name: v })); }, onTicker: (v) => { setEdited((e) => ({ ...e, ticker: true })); setNames((n) => ({ ...n, ticker: v })); }, image: prof.image ? chosenPreview(prof)! : art(rule, names.ticker), oneLiner: text.oneLiner, oracle: "derby", badge: text.badge }]}
+          sentence={text.lead}
+          notes={[...(base?.line ? [base.line] : []), ...(once ? [HIGH_RUN_NOTE] : [])]}
+          ends={endText(rule).line}
+          shares={{ options: [...sh.options], value: fraction, onChange: setFraction }}
+          raise={{ options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: setRaiseSol, line: shown.review?.raise?.line ?? null }}
+          graduation={shown.review?.graduation ?? null}
+          image={<ProfileFields value={prof} onChange={setProf} part="image" customImages={customImages} />}
+          profile={<ProfileFields value={prof} onChange={setProf} part="text" />}
+          profileProblems={profileProblems(prof)}
+          problems={reviewCurrent ? shown.review?.problems ?? [] : []}
+          error={err}
+          busy={busy}
+          ready={ready}
+          creator={creator || null}
+          onLaunch={() => { void launch(); }}
+          summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
+          blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)}
+        />
+      )}
+      {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={(t) => `/burnticker/t/${t}`} />}
+    </div>
+  );
+}
+
+/** The generated receipt art for a rule not launched yet (coinArt.ts via /burnticker/img/preview.svg), never "NO IMAGE". */
+function art(r: BurnRule | null, tk: string): string {
+  const b64u = (x: string) => btoa(unescape(encodeURIComponent(x))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return r ? `/burnticker/img/preview.svg?r=${b64u(JSON.stringify(r))}&t=${encodeURIComponent(tk || "TICKER")}&l=${encodeURIComponent(ruleOneLiner(r).slice(0, 120))}` : "";
+}
+
+/**
  * `blocked`: why the wallet cannot open (preview mode, a closed host, pairs off on this host) — the review card disables its button and
  * says so. `unavailable`: Coin vs Coin cannot launch on this host at all (launch audit 5 L02) — the tile says why before any picking.
  */
 export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true, startOpen = false, entry = null }: { /** website-20 item 60: the link that opened the page (the page drops its parameters from the address once read), so a template or a derby link still lands on what it names */ entry?: { template: string | null; a: string; b: string } | null; pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean; /** website-19: the guided path opens it as question 2, with the burn pattern and the end beside the review */ startOpen?: boolean } = {}) {
   const wallet = useWallet();
   const [open, setOpen] = useState(startOpen);
+  // WIRING-SOURCES4: two coins racing, or one coin's record close (RecordClose above)
+  const [kind, setKind] = useState<"pair" | "high">("pair");
   // `/burnticker/launch?derby=1&a=WIF&b=SHIB` (the Burn Derby page and the search card) opens the tile with both searches filled in.
   const [initial, setInitial] = useState<{ a: string; b: string }>({ a: "", b: "" });
   useEffect(() => {
@@ -179,9 +325,6 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   const hash = choice ? fingerprintFor(fp, tileHashInput(choice)) : null;
   const model = choice && hash ? tileRule(choice, hash, { a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }) : null;
   const ruleB: BurnRule | null = model?.rule ? { ...model.rule, binary: { onYes: null, onNo: model.rule.binary!.onYes } } : null;
-  const b64u = (x: string) => btoa(unescape(encodeURIComponent(x))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  /** The generated receipt art for a rule not launched yet (coinArt.ts via /burnticker/img/preview.svg), never "NO IMAGE". */
-  const art = (r: BurnRule | null, tk: string) => (r ? `/burnticker/img/preview.svg?r=${b64u(JSON.stringify(r))}&t=${encodeURIComponent(tk || "TICKER")}&l=${encodeURIComponent(ruleOneLiner(r).slice(0, 120))}` : "");
   // L13: the start boundary too, in UTC (the windows' clock) — the facts list above adds Denver time
   const ends = choice ? (() => { const s = tileSpec(choice).season; const start = new Date(`${s.start}T00:00:00Z`), end = new Date(Date.parse(`${s.start}T00:00:00Z`) + s.days * 86_400_000); const d = (x: Date) => x.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); return `The windows run from ${d(start)} 00:00 UTC to ${d(end)} 00:00 UTC, which is ${s.days} daily windows. Then each coin's own burn pool burns down over 28 days and the coins retire.`; })() : null;
 
@@ -251,6 +394,22 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
     </div>
   ) : tileButton;
   if (!open || unavailable) return tile;
+  const kindChoice = (
+    <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="What the coins follow" data-derby-kind>
+      {(["pair", "high"] as const).map((k) => (
+        <button key={k} type="button" role="radio" aria-checked={kind === k} data-decision="what" data-derby-kind-choice={k} disabled={busy || !!prepared} onClick={() => setKind(k)} className={`rounded-lg border p-3 text-left text-sm ${kind === k ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"}`}>
+          <span className="block font-medium">{k === "pair" ? PAIR_CHOICE_LABEL : HIGH_CHOICE_LABEL}</span><span className="mt-0.5 block text-xs text-neutral-300">{k === "pair" ? PAIR_CHOICE_LINE : HIGH_CHOICE_LINE}</span>
+        </button>
+      ))}
+    </div>
+  );
+  if (kind === "high") return (
+    <section className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-4 sm:col-span-2" aria-label={HIGH_CHOICE_LABEL}>
+      <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">{HIGH_CHOICE_LABEL}</h3>{!startOpen && <button className="text-xs underline" data-nav onClick={() => setOpen(false)}>close</button>}</div>
+      {kindChoice}
+      <RecordClose blocked={blocked} customImages={customImages} />
+    </section>
+  );
   // intent audit item 5: the two sides must be told apart (ticker and name, any case or spacing)
   const identity = pairIdentityProblems({ ticker: names.ta, name: names.a }, { ticker: names.tb, name: names.b });
   const ready = !!model?.rule && !model.problems.length && /^[A-Z0-9]{2,10}$/.test(names.ta) && /^[A-Z0-9]{2,10}$/.test(names.tb) && identity.length === 0 && !!names.a.trim() && !!names.b.trim();
@@ -260,6 +419,7 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   return (
     <section className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-4 sm:col-span-2" aria-label="Coin vs Coin">
       <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">{flip ? "Flippening" : "Coin vs Coin"}</h3><span className="flex gap-3 text-xs"><a className="underline" href="/burnticker/derby">Burn Derby pairs and brackets →</a>{!(out || pcOut) && <button className="underline" data-nav onClick={() => setOpen(false)}>close</button>}</span></div>
+      {kindChoice}
       {startOpen && (
         <div className="space-y-2" data-guided-derby>
           <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Burn pattern">

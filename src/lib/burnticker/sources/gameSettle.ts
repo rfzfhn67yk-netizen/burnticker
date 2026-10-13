@@ -1,6 +1,6 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { LEAGUES, SETTLE_AFTER_START_MS, gamesFor, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, SETTLE_AFTER_START_MS, asMeetings, dedupeListings, gamesFor, meetingsEndReason, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
 
 /**
  * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
@@ -254,6 +254,8 @@ const outcomeFor = (winner: "home" | "away" | "tie", g: Game, abbr: string, team
 /** Settled readings for a team or game series since `sinceIso` (the keeper and the back-test). */
 export async function sportsSettled(client: EspnClient, s: EspnSeries, sinceIso: string | null, d: GameDeps, o: { nowMs?: number } = {}): Promise<ResolvedSelector> {
   const now = o.nowMs ?? Date.now();
+  const ms = asMeetings(s);
+  if (ms) return meetingsSettled(client, ms, d, now);
   const all = await gamesFor(client, s, sinceIso);
   const games = all.filter((g) => !sinceIso || g.date > sinceIso.slice(0, 10));
   const tid = s.kind === "team" ? s.teamId : null;
@@ -305,4 +307,55 @@ export function polymarketGameReaders(poly: { search(q: string, o?: { status?: "
     },
     payout: async (id) => { const c = await poly.readChain(id); return { resolved: c.resolved, outcome: c.outcome }; },
   };
+}
+
+/**
+ * A RIVALRY SERIES' READINGS (espn.ts SERIES, window `meetings`; owner 2026-10-12). Every meeting of the season is settled each read (a
+ * season has a handful, the client caches, and the registry refuses a changed value for a day it holds), so the head-to-head count is
+ * always the settled one, never the schedule's own scores:
+ *   a meeting day     value = the side's wins minus its losses that day (+1, −1, or 0 for a draw or a split day), the same rules as a team
+ *                     coin's day (gameSettle settleGame: two independent reads must agree; a cup tie on penalties follows the declared
+ *                     winner); a postponed or cancelled meeting counts for neither side and holds nothing
+ *   the season's end  both teams' seasons over (windowStatus over BOTH schedules, postseason included) and every meeting settled: one more
+ *                     reading the day after the last game, +1 to the side that won more meetings, −1 to the other; a level series
+ *                     writes nothing and the window ends void (MEETINGS_LEVEL_REASON)
+ * While any meeting still awaits its result or is held, the window does not end.
+ */
+export async function meetingsSettled(client: EspnClient, s: MeetingsSeries, d: GameDeps, now: number): Promise<ResolvedSelector> {
+  const w = s.window;
+  const meetings = await gamesFor(client, s, null);
+  const byDay = new Map<string, { value: number; titles: string[]; url: string; method: string }>();
+  const waitingDays = new Set<string>(), refusals: string[] = [], outcomes: MeetingOutcome[] = [];
+  let awaiting = 0, unsettled = 0;
+  for (const g of meetings) {
+    if (!g.completed && (g.state === "post" || POSTPONED_RE.test(g.detail))) { if (g.state === "post" || /cancel/i.test(g.detail)) outcomes.push("void"); continue; }
+    if (!g.completed) { unsettled++; continue; }
+    if (Date.parse(g.startsAt) + SETTLE_AFTER_START_MS > now) { awaiting++; unsettled++; waitingDays.add(g.date); continue; }
+    const v = await settleGame(client, g, d);
+    if (v.kind === "awaiting") { awaiting++; unsettled++; waitingDays.add(g.date); continue; }
+    if (v.kind === "held") { unsettled++; const r = /^no primary|^cross-read missing/.test(v.why) ? v.why : `${g.eventId} ${g.name}: ${v.why}`; if (!refusals.includes(r)) refusals.push(r); waitingDays.add(g.date); continue; }
+    const out = outcomeFor(v.winner, g, s.abbr, s.teamId);
+    if (out === null) continue;
+    outcomes.push(out === "tie" ? "draw" : out === "win" ? "win" : out === "loss" ? "loss" : "draw");
+    const cur = byDay.get(g.date) ?? { value: 0, titles: [], url: v.url, method: "" };
+    cur.value += out === "win" ? 1 : out === "loss" ? -1 : 0;
+    const score = v.final ? `${g.away.abbr} ${v.final.away} @ ${g.home.abbr} ${v.final.home}` : `${g.away.abbr} @ ${g.home.abbr}`;
+    cur.titles.push(`${score} final (${out === "tie" ? "draw" : `${s.abbr} ${out}`}, head to head) · settled on ${SETTLED_ON[v.settledOn]} · confirmed by ${v.confirmedBy} · see this game on ESPN → ${espnGameUrl(g.league, g.date)}`);
+    cur.method = v.ops.map((op) => (op === "on-chain payout" ? "onchain-payout" : op === "TheSportsDB" ? "thesportsdb" : op)).join("+");
+    byDay.set(g.date, cur);
+  }
+  for (const day of waitingDays) byDay.delete(day);
+  const events: SettledEvent[] = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, x]) => ({ id: date, at: date, result: null, value: String(x.value), title: x.titles.join(" · "), sourceUrl: x.url, method: x.method } as SettledEvent));
+  // the window: both teams' whole seasons (the later season end is the series' end)
+  const [mine, theirs] = await Promise.all([client.season(s.league, s.teamId ?? s.abbr, w.year), client.season(s.league, w.oppId || w.opp, w.year)]);
+  let window = windowStatus(s, dedupeListings([...mine, ...theirs]), now);
+  if (window.ended && unsettled > 0) window = { ...window, ended: false, reason: `both seasons are over, but ${unsettled} game${unsettled === 1 ? "" : "s"} between them ${unsettled === 1 ? "has" : "have"} no settled result yet` };
+  else if (window.ended) {
+    const t = tallyMeetings(outcomes);
+    const team = teamById(s.league, s.teamId ?? "")?.name ?? teamByAbbr(s.league, s.abbr)?.name ?? s.abbr, opp = teamById(s.league, w.oppId)?.name ?? teamByAbbr(s.league, w.opp)?.name ?? w.opp;
+    const endDay = t.leader === "level" || !window.endsAt ? null : seriesEndDay(window.endsAt);
+    if (endDay) events.push({ id: endDay, at: endDay, result: null, value: t.leader === "team" ? "1" : "-1", title: `The season series is over: ${team} won ${t.wins}, ${opp} won ${t.losses}${t.draws ? `, ${t.draws} drawn` : ""}. This is the season-end result of the head-to-head series.`, sourceUrl: [...byDay.values()].pop()?.url ?? "", method: "head-to-head-tally" } as SettledEvent);
+    window = { ...window, reason: meetingsEndReason(t, team, opp), series: { ...t, endDay } };
+  }
+  return { events, awaitingFinal: awaiting, refusals, settlementSourceUrl: null, window };
 }

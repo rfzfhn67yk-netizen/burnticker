@@ -7,7 +7,8 @@
 // It prints a failure summary by category. BURNTICKER_TEST_A_REPORT=1 prints and never fails (the before-fix run).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { prepareLaunch, sportsTeams, search, catalogueSources } from "@/lib/burnticker/api/handlers";
+import { prepareLaunch, sportsTeams, sportsRivalry, search, catalogueSources } from "@/lib/burnticker/api/handlers";
+import { meetingsPairNames, meetingsPairRules } from "@/lib/burnticker/guidedLaunch";
 import { buildLaunchReview, type LaunchReview } from "@/lib/burnticker/launchReview";
 import { LEAGUES, teamsOf, teamSeries, gameSeries, seasonYearAt, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
@@ -22,6 +23,17 @@ import { BUCS_CID, EAGLES_CID } from "./burntickerPolyHelpers.ts";
 import { closingSoonCard } from "@/lib/burnticker/search";
 import { ESPN_NOW, espnFixtureClient } from "./burntickerFirstPartyHelpers.ts";
 
+/** The first opponent team `a` meets this season in the fixtures (via /sports/rivalry), or null. */
+async function sportsRivalryFirst(p: Parameters<typeof sportsRivalry>[0], league: LeagueId, a: string): Promise<{ opp: string; year: number } | null> {
+  for (const b of teamsOf(league)) {
+    if (b.abbr === a) continue;
+    const r = await sportsRivalry(p, { league, a, b: b.abbr });
+    const body = r.body as { offered?: boolean; year?: number | null };
+    if (r.status === 200 && body.offered && body.year) return { opp: b.abbr, year: body.year };
+    if (r.status === 200 && (body as { scheduleNote?: string | null }).scheduleNote) return null;   // this league's schedule is not readable here
+  }
+  return null;
+}
 const REPORT_ONLY = process.env.BURNTICKER_TEST_A_REPORT === "1";
 const ENV = { BURNTICKER_CLUSTER: "devnet", BURNTICKER_CREATOR_LAUNCHES_ENABLED: "1" } as Record<string, string>;
 const fails = new Map<string, { n: number; samples: string[] }>();
@@ -129,6 +141,29 @@ test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_00
       }
     }
   }
+
+  // ---- 1b. RIVALRY-SERIES item 4: a meetings pair (every game between two teams this season) for every league with a listed meeting ----
+  // Both the review and the bundle accept it (the one ESPN-family pair that is allowed); the review carries the per-game and season-end
+  // money path and side B's description; a lone meetings coin is refused by both.
+  const leaguesWithMeetings: string[] = [];
+  for (const league of Object.keys(LEAGUES) as LeagueId[]) {
+    for (const t of teamsOf(league)) {
+      const r = await sportsRivalryFirst(p, league, t.abbr);
+      if (!r) continue;
+      leaguesWithMeetings.push(league);
+      const year = r.year, rules = meetingsPairRules(league, t.abbr, r.opp, year), names = meetingsPairNames(t, teamsOf(league).find((x) => x.abbr === r.opp)!);
+      for (const f of SHARES) {
+        const rv = await setup(p, `${league} ${t.abbr}v${r.opp} meetings ${f}`, { rule: { ...rules.a, scalar: { ...rules.a.scalar!, perUnit: { fractionOfPool: f } } }, ticker: names.a.ticker, name: names.a.name, raiseSol: "85", pair: { ticker: names.b.ticker, name: names.b.name, description: "", imageUrl: null, links: [] } }, { series: rules.a.series });
+        if (rv.refused) fail("meetings pair refused", `${league} ${t.abbr} v ${r.opp} ${f}`);
+        if (rv.review && !rv.review.meetings) fail("meetings review has no money path", `${league} ${t.abbr} v ${r.opp}`);
+        if (rv.review && rv.review.end.kind !== "pair-winner") fail("meetings end is not the pair winner", `${league}: ${rv.review.end.kind}`);
+      }
+      const lone = await setup(p, `${league} ${t.abbr}v${r.opp} meetings alone`, { rule: rules.a, ticker: names.a.ticker, name: names.a.name, raiseSol: "85" }, { series: rules.a.series });
+      if (!lone.refused) fail("a lone meetings coin was not refused", `${league} ${t.abbr}`);
+      break;
+    }
+  }
+  if (!leaguesWithMeetings.length) fail("no league with a listed meeting in the fixtures", "TEST A item 4");
 
   // ---- 2. every catalogue source × shares × directions -----------------------------------------------------------------------------
   const sources = catalogueSources(ESPN_NOW).sources as unknown as { id: string; kind: string; unit: { size: number } | null; direction: string | null; baseline: unknown; launchable: { ok: boolean } }[];
