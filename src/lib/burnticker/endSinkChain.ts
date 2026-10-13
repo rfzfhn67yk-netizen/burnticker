@@ -3,7 +3,7 @@ import { fetchTokenConfig } from "@/lib/burnReceipts/accounts";
 import { sourceUrlHash } from "@/lib/burnReceipts/attestation";
 import { assertSignableGenesis, NATIVE_MINT, type Cluster } from "@/lib/burnReceipts/constants";
 import { anchorErrorName, assertClusterAllowed, memoFromTransaction, signTransaction, type ProgramContext } from "@/lib/burnReceipts/crank";
-import { attestRuleEnd, END_SINK_FLAGSHIP, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_RESOLVED, END_STATE_VOID, fetchEndSink, fetchRuleEnd, FLAGSHIP_MINT, parseEndForwardMemo, planForwardOnEnd, submitRuleEndIx } from "@/lib/burnReceipts/endSink";
+import { attestRuleEnd, END_SINK_FLAGSHIP, END_SINK_INCINERATOR, END_SINK_MINT, END_SINK_PAIR_WINNER, END_STATE_RESOLVED, END_STATE_VOID, fetchEndSink, fetchRuleEnd, FLAGSHIP_MINT, parseEndForwardMemo, planForwardOnEnd, submitRuleEndIx } from "@/lib/burnReceipts/endSink";
 import { associatedTokenAddress, feePda } from "@/lib/burnReceipts/pda";
 import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
 import type { EndSinkClient, EndSinkKindView, EndSinkPort, EndForwardReadiness } from "@/lib/burnticker/endSinkClient";
@@ -25,7 +25,7 @@ export interface ChainEndSinkOpts {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const KIND: Record<number, EndSinkKindView> = { [END_SINK_FLAGSHIP]: "flagship", [END_SINK_MINT]: "mint", [END_SINK_PAIR_WINNER]: "pair-winner" };
+const KIND: Record<number, EndSinkKindView> = { [END_SINK_FLAGSHIP]: "flagship", [END_SINK_MINT]: "mint", [END_SINK_PAIR_WINNER]: "pair-winner", [END_SINK_INCINERATOR]: "incinerator" };
 
 export class ChainEndSink implements EndSinkClient {
   readonly flagship: string;

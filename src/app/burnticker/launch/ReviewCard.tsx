@@ -101,7 +101,7 @@ export interface ReviewCardProps {
    */
   mode?: "full" | "name" | "review";
   /** The five things always visible on the review (guidedLaunch.ts FACT_LABELS), each with an Edit link back to its step. */
-  facts?: { label: string; value: string; edit?: (() => void) | null }[] | null;
+  facts?: { label: string; value: string; edit?: (() => void) | null; /** the end-sink picker under "When it ends" */ extra?: ReactNode }[] | null;
   /** The end, stated (guidedLaunch.ts END_LABEL and endSentences). */
   endSection?: ReactNode;
   /** Item 53: who decides an election coin's result (guidedLaunch.ts electionAuthorityLines). */
@@ -110,6 +110,8 @@ export interface ReviewCardProps {
   edgeNotes?: string[] | null;
   /** Audit 6 item 14: what to know before you start, said again on the review. */
   upfront?: string[] | null;
+  /** step 4: where the rest goes when this coin does not win (the end-sink picker; the review's "When it ends" fact shows the same) */
+  endChoice?: ReactNode;
   /** Step 4's own Next button. */
   next?: ReactNode;
   /** Pass B item 16: the compounding arithmetic, behind "How the amount is calculated". */
@@ -294,6 +296,7 @@ export function ReviewCard(p: ReviewCardProps) {
         {p.note && <p className="mt-2 text-xs text-neutral-400" data-note-vs-description>{NOTE_VS_DESCRIPTION}</p>}
         <div className="mt-2 min-w-0 space-y-3">{p.profile}{noteField}</div>
       </details>
+      {p.endChoice && <section className="min-w-0 space-y-1 rounded-lg border border-neutral-800 p-3" aria-label="When it ends" data-name-end-choice><h3 className="text-xs font-medium text-neutral-400">When it ends</h3>{p.endChoice}</section>}
       {fieldProblems.length > 0 && problemList("Not ready yet")}
       {p.next}
     </section>
@@ -304,7 +307,7 @@ export function ReviewCard(p: ReviewCardProps) {
         <dl className="min-w-0 divide-y divide-neutral-800 rounded-lg border border-neutral-800" data-review-facts>
           {p.facts.map((f) => (
             <div key={f.label} className="flex min-w-0 items-start justify-between gap-3 px-3 py-2" data-fact={f.label}>
-              <div className="min-w-0"><dt className="text-xs text-neutral-500">{f.label}</dt><dd className="break-words text-sm text-neutral-100">{f.value}</dd></div>
+              <div className="min-w-0 flex-1"><dt className="text-xs text-neutral-500">{f.label}</dt><dd className="break-words text-sm text-neutral-100">{f.value}</dd>{f.extra && <div className="mt-2 min-w-0">{f.extra}</div>}</div>
               {f.edit && <button type="button" data-nav className="shrink-0 text-xs underline text-neutral-300" aria-label={`Edit: ${f.label.toLowerCase()}`} onClick={f.edit}>Edit</button>}
             </div>
           ))}

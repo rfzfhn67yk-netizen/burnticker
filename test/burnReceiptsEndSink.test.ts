@@ -84,7 +84,10 @@ describe("burnReceipts end sinks (LAUNCHPAD-PATH §45)", () => {
     const re = { version: 1, bump: 251, mint, record_date: 20261012, outcome: END_STATE_RESOLVED, signers_mask: 1, source_url_hash: new Uint8Array(32).fill(3), proof_hash: new Uint8Array(32), submitted_at: BigInt(5), forwarded_lamports: BigInt(7), forwards: 2, last_forward_at: BigInt(6), reserved: new Uint8Array(32) };
     const r = decodeRuleEnd(Buffer.concat([accountDiscriminator(BURN_RECEIPTS_IDL, "RuleEnd"), encodeType(BURN_RECEIPTS_IDL, { defined: { name: "RuleEnd" } }, re)]));
     assert.deepEqual([r.record_date, r.outcome, r.forwards, r.forwarded_lamports], [20261012, END_STATE_RESOLVED, 2, BigInt(7)]);
-    assert.deepEqual(parseEndForwardMemo(`DEBT|endfwd|to=${sink.toBase58().slice(0, 12)}|lamports=42|v1`), { prefix: "DEBT", to12: sink.toBase58().slice(0, 12), lamports: BigInt(42) });
+    assert.deepEqual(parseEndForwardMemo(`DEBT|endfwd|to=${sink.toBase58().slice(0, 12)}|lamports=42|v1`), { prefix: "DEBT", to12: sink.toBase58().slice(0, 12), lamports: BigInt(42), burned: false });
+    // round 5: the incinerator end sink's receipt (burn_sol_on_end); `endburn` to anything but the incinerator is not a receipt
+    assert.deepEqual(parseEndForwardMemo("DEBT|endburn|to=1nc1nerator1|lamports=42|v1"), { prefix: "DEBT", to12: "1nc1nerator1", lamports: BigInt(42), burned: true });
+    assert.equal(parseEndForwardMemo(`DEBT|endburn|to=${sink.toBase58().slice(0, 12)}|lamports=42|v1`), null);
     assert.equal(parseEndForwardMemo("DEBT|forward|from=x|to=y|period=2026-10-12|lamports=1|v1"), null);
   });
 });

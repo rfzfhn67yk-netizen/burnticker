@@ -1086,3 +1086,39 @@ pub fn rule_end(env: &Env, mint: &Pubkey) -> Option<burn_receipts::state::RuleEn
     use anchor_lang::AccountDeserialize;
     env.svm.get_account(&rule_end_pda(mint)).filter(|a| !a.data.is_empty()).map(|a| burn_receipts::state::RuleEnd::try_deserialize(&mut a.data.as_slice()).unwrap())
 }
+
+/// burn_sol_on_end (the incinerator end sink). `incinerator` is normally INCINERATOR_ID; a test passes another key to see it refused.
+pub fn ix_burn_sol_on_end(cranker: &Pubkey, mint: &Pubkey, incinerator: &Pubkey) -> Instruction {
+    let f = fee_pda(mint);
+    Instruction::new_with_bytes(
+        burn_receipts::ID,
+        &burn_receipts::instruction::BurnSolOnEnd {}.data(),
+        burn_receipts::accounts::BurnSolOnEnd {
+            cranker: *cranker,
+            platform: platform_pda(),
+            config: config_pda(mint),
+            fee_vault: f,
+            fee_wsol: get_associated_token_address(&f, &NATIVE_MINT),
+            wsol_mint: NATIVE_MINT,
+            end_sink: end_sink_pda(mint),
+            rule_end: rule_end_pda(mint),
+            incinerator: *incinerator,
+            token_program: spl_token::ID,
+            associated_token_program: anchor_spl::associated_token::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
+            memo_program: MEMO_PROGRAM_ID,
+            event_authority: event_authority(),
+            program: burn_receipts::ID,
+        }
+        .to_account_metas(None),
+    )
+}
+
+/// initialize_token_r5: the same accounts and arguments as ix_initialize_full, under the round-5 create's discriminator.
+#[allow(clippy::too_many_arguments)]
+pub fn ix_initialize_r5(payer: &Pubkey, creator: &Pubkey, mint: &Pubkey, args: burn_receipts::InitializeTokenArgs, launchlab_platform: Option<Pubkey>, pair_mint: Option<Pubkey>, partner_first: bool) -> Instruction {
+    use anchor_lang::Discriminator;
+    let mut ix = ix_initialize_full(payer, creator, mint, args, launchlab_platform, pair_mint, partner_first);
+    ix.data[..8].copy_from_slice(burn_receipts::instruction::InitializeTokenR5::DISCRIMINATOR);
+    ix
+}

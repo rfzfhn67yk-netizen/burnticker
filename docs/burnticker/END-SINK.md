@@ -33,6 +33,32 @@ its partner's leftover lands in its pool, and its own leftover burns it through 
 own coin first ("burns everything"), then records the end and forwards only the trickle. League sets are a later round (`set` and
 `endSink` cannot be combined; league-mode coins keep the wind-down). Vault-mode coins have no burn pool and get no sink.
 
+## Round 5 additions (owner, 2026-10-13; built on the round-5 branch, not deployed)
+
+**Burn the SOL itself (the incinerator end sink).** A fourth sink a creator can pick: `onEnd.endSink: "incinerator"` in the hashed rule
+(single coins only; a pair ends on the pair winner). It pins EndSink kind `END_SINK_INCINERATOR` (4) at creation, with
+`sink_mint = 1nc1nerator11111111111111111111111111111111`, Solana's incinerator (`solana_program::incinerator::ID`: nobody holds its
+key, and the runtime destroys the lamports it is credited at the end of each block). After a quorum-signed RESOLVED end, anyone calls
+`burn_sol_on_end`: the fee PDA's WSOL is unwrapped into the fee PDA (its WSOL account closed and created again in the same instruction,
+the cranker's rent refunded), then min(the SOL above the reserve, the burn-pool cap) goes to the incinerator. No swap, no price impact,
+the reserve stays. Memo `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1`, event `SolBurnedOnEnd`; later fee income goes the same way
+(the minimum and the weekly keeper sweep as for other sinks; a send under an empty account's rent-exempt minimum, 890,880 lamports,
+waits). The incinerator account is address-checked, and `forward_on_end` refuses this kind, so the SOL has no other way out. A VOID end
+keeps the wind-down on the coin, as for every sink. Receipts say "sent to Solana's incinerator, which nothing can spend from". The keeper
+(`endSinkKeeper.ts`) runs it through the same port (`planForward` / `buildForward`); a host without round 5 refuses the choice in the
+preflight (`incinerator-not-live`).
+
+**No self-burn on the losing path (deliberate restriction).** The round-5 create is `initialize_token_r5` (initialize_token's accounts and
+arguments, its own discriminator; the site's `BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5`). It refuses a buyback coin without an end sink
+(`LostPathBurnsSelf`): the not-resolved, losing end must go to the flagship, a named coin, the pair winner or the incinerator, never to
+the coin's own wind-down. SELF stays on the won path: a VOID end (a champion coin whose team won the title) keeps the hashed wind-down on
+the coin. The flagship and vault-mode coins are exempt. `initialize_token` (round 4) is unchanged, and every config it created reads as
+before; the reviewer risk list (EXTERNAL-BURN.md item 14) notes that the old entrypoint still accepts a coin without a sink.
+
+**The four end choices** a creator sees (step 4 and the review's end facts; WIRING-END-SINKS.md has the sentences): $DEFICIT (the
+flagship), another live coin you name (onEnd.mint, the end-sink picker), the rival (a linked pair only), Solana's
+incinerator.
+
 ## Done
 
 - Program: EndSink (`end_sink_mint` is an `Option<Pubkey>`: None = the flagship, or the pair_mint of the same create, which keeps a

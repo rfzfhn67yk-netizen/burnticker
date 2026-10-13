@@ -23,6 +23,7 @@ import { DEBT_RULE } from "./burntickerHelpers.ts";
 import { BUCS_CID, EAGLES_CID } from "./burntickerPolyHelpers.ts";
 import { closingSoonCard } from "@/lib/burnticker/search";
 import { ESPN_NOW, espnFixtureClient } from "./burntickerFirstPartyHelpers.ts";
+process.env.BURNTICKER_END_SINK_PICKER = "1"; // the picker is a host option (off by default since 2026-10-13); these tests exercise it on
 
 /** The first opponent team `a` meets this season in the fixtures (via /sports/rivalry), or null. */
 async function sportsRivalryFirst(p: Parameters<typeof sportsRivalry>[0], league: LeagueId, a: string): Promise<{ opp: string; year: number } | null> {

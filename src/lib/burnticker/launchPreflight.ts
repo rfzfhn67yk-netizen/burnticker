@@ -1,4 +1,6 @@
-import { endSinkOf, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { sinkPickerFromEnv } from "@/lib/burnticker/launchAvailability";
+import { namedSinkProblem, type SinkCoin } from "@/lib/burnticker/endSinks";
+import { endSelfOnLossProblem, endSinkOf, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { feedById, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
 import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -43,9 +45,14 @@ export const reserveProblem = (reserveSol: string): string | null => {
   return Number.isFinite(v) && v >= RESERVE_SOL.min && v <= RESERVE_SOL.max ? null : `The reserve must be between ${RESERVE_SOL.min} and ${RESERVE_SOL.max} SOL. It stays in the coin's burn pool and is never spent, and every launch on this site uses 0.02 SOL.`;
 };
 
+/** Round 5: why the incinerator end cannot be picked on a host whose burn program is older. */
+export const INCINERATOR_WAITING = "Sending the SOL left at the end to Solana's incinerator needs the next version of the burn program, which this site does not run yet. Pick another end.";
 export interface RuleCtx { kalshiEnabled?: boolean; now?: number; /** the launch is a registered pair (the body's `pair` side) */ pair?: boolean;
   /** two candidates in one race: the body's pair names candidate B's market (`pair.market`) and the race (`pair.race`) */ candidates?: { marketB: string | null; race: string | null } | null;
-  /** two teams in one game: the body's pair names the other team (`pair.opp`) */ game?: { opp: string | null } | null }
+  /** two teams in one game: the body's pair names the other team (`pair.opp`) */ game?: { opp: string | null } | null;
+  /** end-sink picker (endSinks.ts): the live coins on this network a rule may name in onEnd.mint; absent = not checked here */ sinks?: readonly SinkCoin[] | null;
+  /** this launch's own mints, and the other side of this coin's pair: neither may take the rest */ own?: readonly string[]; partners?: readonly string[];
+  /** round 5: the host's burn program is round 5 (BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5); false refuses the incinerator end */ programRound5?: boolean }
 
 /**
  * THE RIVALRY SERIES' OWN REFUSALS (sources/espn.ts window `meetings`). A head-to-head season series is launched only as a pair, one coin
@@ -154,6 +161,14 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
     }
   } else if (r.oracle !== "kalshi" && r.oracle !== "polymarket" && r.oracle !== "derby") out.push({ status: 400, code: "oracle-off", message: `Coins cannot launch on the ${r.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.` });
   out.push(...candidatesRefusals(r, ctx), ...gamePairRefusals(r, ctx));
+  // round 5: the incinerator end sink exists only on the round-5 program (initialize_token pins EndSink kind INCINERATOR)
+  if (endSinkOf(r) === "incinerator" && ctx.programRound5 === false) out.push({ status: 503, code: "incinerator-not-live", message: INCINERATOR_WAITING });
+  // the owner rule of 2026-10-13: the losing path never burns this coin (rules.ts endSelfOnLossProblem); said once beside a pair's own refusal
+  { const why = endSelfOnLossProblem(r); if (why && !out.some((x) => /end-sink$/.test(x.code))) out.push({ status: 400, code: "end-self-on-loss", message: why }); }
+  // the end-sink picker: a named coin must be a live coin from the list, never this coin or its pair partner (endSinks.ts)
+  // owner decision 2026-10-13 evening: a named sink coin is refused unless the host offers the picker (BURNTICKER_END_SINK_PICKER=1)
+  if (r.onEnd?.mint && !sinkPickerFromEnv(process.env)) out.push({ status: 400, code: "end-sink-picker-off", message: "This site sends the rest of a losing coin to $DEFICIT's burn. Pick that choice." });
+  else if (ctx.sinks) { const why = namedSinkProblem(r, ctx.sinks, { own: ctx.own, partners: ctx.partners }); if (why) out.push({ status: 400, code: "end-sink-coin", message: why }); }
   { const rp = reserveProblem(r.reserveSol); if (rp) out.push({ status: 400, code: "reserve", message: rp }); }
   if (r.filter.titleRegex !== undefined) { const why = regexProblem(r.filter.titleRegex); if (why) out.push({ status: 400, code: "unsafe-regex", message: why }); }
   return out;

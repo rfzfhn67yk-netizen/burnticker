@@ -23,18 +23,18 @@
       "builds": {
         "mainnet": {
           "features": [],
-          "bytes": 947600,
-          "hash": "ac47edb5c07e2b846c74956f55c10068827b401ba1d2f3bfc0b1946427dc5832",
-          "sha256": "1bbdd5a58de5edc1ae4df03593ebde6e363d5b758b66becf28686fbd4928fbeb",
+          "bytes": 967304,
+          "hash": "224d10b192e9d7e7378bdac8df8343afac929dc2e4a35a3966009d5ec616ca87",
+          "sha256": "dc32f5fb893063f98e6980058cfa240fbf19fde1613b72e70c5629f0e1756dd1",
           "status": "round 5, built 2026-10-13, NOT deployed"
         },
         "devnet": {
           "features": [
             "devnet"
           ],
-          "bytes": 947576,
-          "hash": "596e03225d0ce718d0b1eba10464fc5d27081f4d750914e1cae1f7c610cb8b9c",
-          "sha256": "9875ae35b2c72f77a122a35eaadf1d54676a1ba78915a897d7b892086855d3ca",
+          "bytes": 967280,
+          "hash": "50fc618e4108cf77f5a7223c0c3558b6f745a129e597b1e30e43518e75aaf8c6",
+          "sha256": "63fcde84eab407bd15a07bbd823645470e71116b1bbd59fada1b0a6ddcc0a9f0",
           "status": "round 5, built 2026-10-13, NOT deployed"
         }
       },

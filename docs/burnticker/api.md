@@ -50,6 +50,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | POST | `/launch/bundle` | — | write | unsigned base64 transactions + the review payload the wizard shows; registers a DRAFT unless `register: false`; never signs. Since 1.3.0 the selector's creation **preflight** runs first (primary + independent cross-read, or the Polymarket payout vector + Gamma) and a failure refuses the bundle (400 `code: "preflight"`, or 502 when a read failed) with the `preflight` result attached; every Kalshi rule is refused. On success the bundle carries `preflight` (null when `BURNTICKER_PREFLIGHT_STRICT` is off on the host) |
 | POST | `/launch/confirm` `{ mint, signature }` | — | write | the landed launch transaction takes the draft live; settlements after this moment count (409 once the draft has expired) |
 | POST | `/launch/review` `{ rule, ticker, name, note?, descCtx?, pair?, companion?, warnings? }` | — | read | (API 1.14.0, launch audit 5 L02 / L06; `src/lib/burnticker/launchReview.ts`) the read-only pre-wallet review: network, launch type and availability, canonical rule + sha256, names and tickers, allocation, fee split per 1 SOL, transactions and signer roles, estimated SOL, prerequisites, who can change what, problems. Builds, pins, registers and reads nothing; answers in preview and open modes (closed: 403 `creator-launches-closed`) |
+| GET | `/sinks?network=&exclude=` | 30 s | read | (API 1.17.0) the live coins a new coin may name to take its rest when its rule ends: `{ network, sinks: [{ mint, ticker, name, rule }], count, fallback }`; never $DEFICIT (its own choice), never a coin in `exclude` or its pair partner |
 | GET | `/tokens?status=&limit=&offset=` | 30 s | read | the registry: status (`draft` / `live` / `paused` / `retired` / `expired`), rule hash, receipt and burn counts (no network calls) |
 | GET | `/tokens/{ticker}` | 30 s | read | `status` (supply, burned, pool, `next` = next possible burn + implied chance), `receipts`, `readings` (each with `sourceUrl`, `method` and, for Polymarket, `proof` = the Polygon payout locator), exact `rulesText`; `{ticker}` may be the mint |
 | GET | `/tokens/{ticker}/receipts` | 30 s | read | every receipt, recomputed at request time (`verify.verified`) |
@@ -399,3 +400,21 @@ does not exist yet or was not checked here. A text cell that starts like a sprea
   that repeats, up to 1.00 for a one-shot.
 - Every place a title regex is evaluated (the Kalshi and Polymarket readers, the registry) runs it through `safeRegexTest`: a refused
   pattern never runs, and the title is cut to 300 characters.
+
+## The end-sink picker (API 1.17.0, 2026-10-13)
+
+When a rule ends on a result, the rest of the burn pool leaves the coin. A new launch picks where it goes:
+
+- `$DEFICIT's burn`: `onEnd: { windDownDays, sweepThresholdLamports, endSink: true }` (what a rule sent without `onEnd` gets).
+- another live coin's burn: the same with `mint` and `ticker` from `GET /sinks`, for example
+  `onEnd: { windDownDays: 28, sweepThresholdLamports: 50000000, endSink: true, mint: "<mint>", ticker: "LAD" }`. The program pins it at
+  creation (end.rs `END_SINK_MINT`). If that coin is not live when the rule ends, the rest goes to $DEFICIT's burn instead; the review's
+  `end.result` and the coin's description both say so ("the rest goes to $LAD's burn; if $LAD is not live then, to $DEFICIT's burn").
+- a winner-takes-the-burn pair keeps the pair winner (`mint` is refused there), and a pair's other side is never in the list.
+
+`POST /launch/review` and `POST /launch/bundle` refuse a `mint` that is not in the list (`end-sink-coin`: a coin that is not live on this
+network, this coin itself, or its pair partner) in a plain sentence. An independent pair's second coin (`companion.rule`) picks its own.
+
+A coin never burns itself on its losing path (owner rule, 2026-10-13). A new rule that could carry an end sink and ends on the wind-down
+alone (`onEnd` without `endSink`) is refused (`end-self-on-loss`). Burning the rest on the coin itself stays only on the winning path: a
+champion-path team coin whose team wins the title, or a one-shot that fired. Rules made before this are untouched.

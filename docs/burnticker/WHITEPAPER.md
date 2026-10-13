@@ -806,11 +806,12 @@ terms are drafted in `SECURITY.md` but not published.
 - **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
   `crankers[3]`, `cranker_count`, reserved.
 
-### 13.3 Instructions (39, generated from `src/lib/burnReceipts/idl.ts`)
+### 13.3 Instructions (41, generated from `src/lib/burnReceipts/idl.ts`)
 
 | Instruction | Arguments | Signers | Class |
 |---|---|---|---|
 | `initialize_token` | args | payer, creator, mint | creation |
+| `initialize_token_r5` | args | payer, creator, mint | creation |
 | `initialize_platform` | authority, burn_pool_cap_lamports, cap_sunset_ts, crankers | payer, upgrade_authority | creation |
 | `submit_reading` | record_date, value, source_url_hash, proof_hash | payer (+ quorum via Ed25519) | permissionless |
 | `crank_buyback` | record_date | cranker | permissionless |
@@ -829,6 +830,7 @@ terms are drafted in `SECURITY.md` but not published.
 | `apply_paired_attester_change` | — | caller (+ the partner's quorum via Ed25519) | permissionless |
 | `submit_rule_end` | record_date, outcome, source_url_hash, proof_hash | payer (+ quorum via Ed25519) | permissionless |
 | `forward_on_end` | — | cranker (allowlist while the cap is in force) | permissionless |
+| `burn_sol_on_end` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `register_fee_key` | — | payer | permissionless |
 | `claim_lock_fees` | — | cranker (allowlist while the cap is in force) | permissionless |
 | `check_pool_health` | — | caller | permissionless |
@@ -850,14 +852,14 @@ terms are drafted in `SECURITY.md` but not published.
 | `renounce_platform_authority` | — | authority | privileged |
 | `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
 
-The program has 42 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
+The program has 43 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
 BurnPoolCapBound, BurnTargetPinned, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, EndSinkPinned,
 FeeKeyRegistered, ForwardedOnEnd, ForwardedToWinner, LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked,
 PairResultMissing, PairResultSubmitted (plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered,
 PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted,
-RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, RuleEnded, SpendCapBound, SpendCarried,
-TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TokenInitialized. Error codes: 129. (Round 5, a coin that
-burns another token: docs/burnticker/EXTERNAL-BURN.md; built, not deployed.)
+RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, RuleEnded, SolBurnedOnEnd, SpendCapBound, SpendCarried,
+TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TokenInitialized. Error codes: 131. (Round 5, a coin that
+burns another token: docs/burnticker/EXTERNAL-BURN.md; the incinerator end sink and the r5 create: docs/burnticker/END-SINK.md; built, not deployed.)
 
 The pair program (`pair_curve`, IDL in `src/lib/pairCurve/idl.ts`) has 9 entrypoints. `init_pair` takes args, is signed by the payer
 and the creator, and creates the pair. The two curve-trade instructions take a side, an amount and a slippage bound, and the trader

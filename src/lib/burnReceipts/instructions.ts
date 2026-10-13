@@ -105,9 +105,10 @@ export interface InitializeTokenArgs {
  * FLIP the default to "r4" once both deployments run round 4 (docs/burnticker/END-SINK.md "What flips").
  */
 /**
- * ROUND 5 ("r5", a coin that burns another token): initialize_token is BYTE-FOR-BYTE round 4's (the target is pinned by a separate
- * mint-signed instruction, pin_burn_target, sent right after it while the coin's mint does not exist yet), so "r5" builds the r4 bytes.
- * The flag value says the deployed program is round 5: only then may a create carry pin_burn_target (burnTarget.ts pinBurnTargetIx).
+ * ROUND 5 ("r5"): the create is initialize_token_r5 — round 4's accounts and arguments under its own discriminator, plus the owner's rule
+ * (2026-10-13) that a coin never burns itself on its losing path: the program refuses a buyback coin without an end sink
+ * (LostPathBurnsSelf). The flag value says the deployed program is round 5: only then may a create carry pin_burn_target
+ * (burnTarget.ts pinBurnTargetIx) or the incinerator end sink.
  */
 export type InitializeTokenLayout = "r3" | "r4" | "r5";
 export const INITIALIZE_TOKEN_DEFAULT_LAYOUT: InitializeTokenLayout = "r3";
@@ -129,14 +130,14 @@ const R4_EMPTY_END_SINK_ARG_BYTES = 10;
 export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; creator: PublicKey; mint: PublicKey; args: InitializeTokenArgs; launchlabPlatform?: PublicKey; pairMint?: PublicKey; partnerFirst?: boolean; pairVoidBy?: number; endSink?: { kind: number; sinkMint?: PublicKey; minForwardLamports: bigint | number }; layout?: InitializeTokenLayout }): TransactionInstruction {
   const layout = o.layout ?? (o.endSink ? "r4" : initializeTokenLayoutFromEnv());
   if (layout === "r3" && (o.endSink || o.args.end_sink_kind || o.args.end_sink_mint || o.args.end_sink_min_lamports)) throw new Error("initialize_token: an end sink needs the round-4 program (layout r4)");
-  const ix = initializeTokenIxR4(o);
+  const ix = initializeTokenIxR4(o, layout === "r5" ? "initialize_token_r5" : "initialize_token");
   if (layout === "r4" || layout === "r5") return ix;
   const slot = IDL.instructions.find((i) => i.name === "initialize_token")!.accounts.findIndex((a) => a.name === "end_sink");
   return new TransactionInstruction({ programId: ix.programId, keys: ix.keys.filter((_, i) => i !== slot), data: Buffer.from(ix.data.subarray(0, ix.data.length - R4_EMPTY_END_SINK_ARG_BYTES)) });
 }
 
-function initializeTokenIxR4(o: Parameters<typeof initializeTokenIx>[0]): TransactionInstruction {
-  return build(o.programId, "initialize_token", {
+function initializeTokenIxR4(o: Parameters<typeof initializeTokenIx>[0], name: "initialize_token" | "initialize_token_r5" = "initialize_token"): TransactionInstruction {
+  return build(o.programId, name, {
     payer: o.payer,
     creator: o.creator,
     mint: o.mint,

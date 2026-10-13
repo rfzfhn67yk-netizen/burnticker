@@ -3,6 +3,9 @@ import type { ConfirmOutcome, SignedTx } from "@/lib/burnKeeper/programPort";
 import type { FakeProgram } from "@/lib/burnKeeper/fakeProgram";
 import { formatDate, spendablePool } from "@/lib/burnReceipts/math";
 import { parseEndForwardMemo } from "@/lib/burnReceipts/endSink";
+import { INCINERATOR_ADDRESS } from "@/lib/burnticker/rules";
+/** The rent-exempt minimum of an empty account (Rent::minimum_balance(0)): the smallest credit the incinerator accepts. */
+export const INCINERATOR_MIN_LAMPORTS = BigInt(890_880);
 
 /**
  * END SINKS FROM THE KEEPER'S SIDE (owner decision 2026-10-11, LAUNCHPAD-PATH §45; burn_receipts program round 4, end.rs). The typed
@@ -18,7 +21,7 @@ import { parseEndForwardMemo } from "@/lib/burnReceipts/endSink";
  */
 
 export type EndOutcome = "resolved" | "void";
-export type EndSinkKindView = "flagship" | "mint" | "pair-winner" | "league-set";
+export type EndSinkKindView = "flagship" | "mint" | "pair-winner" | "league-set" | "incinerator";
 export interface EndSinkView { kind: EndSinkKindView; sinkMint: string; minForwardLamports: bigint }
 export interface RuleEndView { recordDate: number; outcome: EndOutcome; forwardedLamports: bigint; forwards: number; lastForwardAt: number }
 /** What forward_on_end would do now; "ready" carries the destination the program will pick. */
@@ -51,6 +54,11 @@ export interface EndSinkClient {
 
 /** The end-forward memo (program memo.rs format_end_forward), parsed by the program builder's client. */
 export { parseEndForwardMemo };
+/** Round 5: the plain receipt line for a landed burn_sol_on_end (the incinerator end sink). */
+export function endBurnLine(fromTicker: string, lamports: bigint): string {
+  const SOL = BigInt(1_000_000_000), frac = (lamports % SOL).toString().padStart(9, "0").replace(/0+$/, "");
+  return `$${fromTicker}'s rule ended with a result, so ${lamports / SOL}${frac ? `.${frac}` : ""} SOL left in its burn pool was sent to Solana's incinerator, which nothing can spend from.`;
+}
 /** The plain receipt line for a landed end forward. */
 export function endForwardLine(fromTicker: string, toTicker: string, lamports: bigint): string {
   const SOL = BigInt(1_000_000_000), frac = (lamports % SOL).toString().padStart(9, "0").replace(/0+$/, "");
@@ -76,6 +84,8 @@ export class FakeEndSinkPort implements EndSinkPort {
   pinned: EndSinkView | null = null;
   rule: RuleEndView | null = null;
   simErr: string | null = null;
+  /** Round 5: lamports this coin sent to the incinerator (burn_sol_on_end), for tests. */
+  incinerated = BigInt(0);
   dropSends = false;
   private readonly fake: (m: string) => FakeProgram;
   private readonly flagshipOf: () => string;
@@ -106,6 +116,7 @@ export class FakeEndSinkPort implements EndSinkPort {
     if (f.cfg.crankCursor !== f.cfg.lastRecordDate && f.cfg.poolRegistered) return { status: "readings-pending" };
     const live = (m: string): boolean => { try { const x = this.fake(m); return x.cfg.poolRegistered && x.endState.state === "live" && x.cfg.mode === "buyback"; } catch { return false; } };
     const flagship = this.flagshipOf();
+    if (s.kind === "incinerator") return { status: "ready", target: INCINERATOR_ADDRESS, intended: INCINERATOR_ADDRESS };
     let intended = flagship;
     if (s.kind === "mint") intended = s.sinkMint;
     else if (s.kind === "pair-winner" && this.partnerWon(this.mint, s.sinkMint, this.rule.recordDate)) intended = s.sinkMint;
@@ -135,6 +146,20 @@ export class FakeEndSinkPort implements EndSinkPort {
     }
     const d = this.destination();
     if (d.status !== "ready") return { err: d.status === "readings-pending" ? "EndReadingsPending" : d.status === "flagship-not-live" ? "FlagshipNotLive" : "NotEndedResolved" };
+    if (this.pinned!.kind === "incinerator") {
+      // burn_sol_on_end: the WSOL unwrapped into the fee PDA first, then the SOL above the reserve (under the cap) to the incinerator,
+      // never under the rent-exempt minimum of an empty account (the runtime refuses a smaller credit to the incinerator)
+      const solAll = (f.feeLamports + f.wsol) > f.cfg.reserveLamports ? f.feeLamports + f.wsol - f.cfg.reserveLamports : Z;
+      const amt = f.capLamports !== null && solAll > f.capLamports ? f.capLamports : solAll;
+      if (amt === Z || (amt < this.pinned!.minForwardLamports && this.rule!.forwards > 0) || amt < INCINERATOR_MIN_LAMPORTS) return { err: "NothingToForward" };
+      if (!commit) return { memo: null };
+      f.feeLamports += f.wsol; f.wsol = Z; f.feeLamports -= amt;
+      f.cfg = { ...f.cfg, carriedSpendLamports: Z };
+      this.incinerated += amt;
+      const r0 = this.rule!;
+      this.rule = { ...r0, forwardedLamports: r0.forwardedLamports + amt, forwards: r0.forwards + 1, lastForwardAt: Math.floor(this.now() / 1000) };
+      return { memo: `${f.cfg.memoPrefix}|endburn|to=${INCINERATOR_ADDRESS.slice(0, 12)}|lamports=${amt}|v1` };
+    }
     const solAvail = f.feeLamports > f.cfg.reserveLamports ? f.feeLamports - f.cfg.reserveLamports : Z;
     const actual = solAvail + f.wsol;
     const amount = f.capLamports !== null && actual > f.capLamports ? f.capLamports : actual;

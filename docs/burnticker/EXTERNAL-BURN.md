@@ -102,7 +102,7 @@ target's pool.
 
 ## Reviewer risk list (round 5)
 
-1. **Program size:** 826,384 → 947,600 bytes (mainnet build; VERIFIED-BUILD.md); both clusters need
+1. **Program size:** 826,384 → 967,304 bytes (mainnet build; VERIFIED-BUILD.md); both clusters need
    `solana program extend` before the upgrade.
 2. **Pyth is now in the trust base** of every target burn: a wrong or compromised Pyth price within the deviation band can shift min-out
    by up to the band; the pool-vs-Pyth band (two-sided, the rule's 1.25–3 %) and slippage (≤ 3 %) bound it. A Pyth outage holds target
@@ -122,6 +122,15 @@ target's pool.
 10. **Field reuse:** `Reading.owed` = own-coin burn on target readings; `TokenConfig.total_burned` counts own tokens only.
 11. **Admin re-pin trust:** the vault can re-pin to any pool passing admission + Pyth; the veto keys are the operator's.
 12. **Public docs move early:** the powers register, whitepaper and CHECK-THIS-YOURSELF describe round 5 before deploy ("built, not deployed").
+13. **The incinerator end sink (same round):** `burn_sol_on_end` is a fifth way SOL leaves a fee PDA, only after a quorum-signed RESOLVED
+   end, only for a coin whose pinned EndSink kind is INCINERATOR, only to `1nc1nerator11111111111111111111111111111111` (address-checked).
+   It closes the fee PDA's WSOL account to unwrap it and creates it again in the same instruction (the cranker's ATA rent refunded from
+   the account's own rent); review that close/re-create pair. Sends under an empty account's rent-exempt minimum wait. docs/burnticker/END-SINK.md.
+14. **Deliberate restriction, no self-burn on the losing path:** `initialize_token_r5` refuses a buyback coin without an end sink
+   (`LostPathBurnsSelf`). It is a second create entrypoint with initialize_token's accounts and arguments; `initialize_token` itself is
+   unchanged, so a caller who sends the old discriminator to the round-5 program can still create a coin without a sink. The site's
+   r5 layout always sends `initialize_token_r5`. Making `initialize_token` refuse as well is a one-line change if the owner wants the rule
+   binding on every caller (it would also need the earlier test harness to pin sinks).
 
 ## Not done (owner steps)
 

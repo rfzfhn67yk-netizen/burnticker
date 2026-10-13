@@ -160,15 +160,25 @@ const BURN_DOWN = "it burns down whatever is left over four weeks and then retir
  * whatever is left at a resolved end to its sink's burn pool, so its window sentence says where the leftover burns, and one more sentence
  * says what a void end does instead. A test pins this copy equal to rules.ts endSinkOf.
  */
-export const describeEndSink = (r: Pick<BurnRule, "onEnd" | "pair" | "kind" | "binary" | "scalar">): "flagship" | "pair-winner" | null => {
-  if (r.onEnd?.endSink !== true) return null;
+export const describeEndSink = (r: Pick<BurnRule, "onEnd" | "pair" | "kind" | "binary" | "scalar">): "flagship" | "pair-winner" | "mint" | "incinerator" | null => {
+  const e = r.onEnd?.endSink;
+  if (e !== true && e !== "incinerator") return null;
   const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { tokens?: number } | null | undefined;
   if (m?.tokens !== undefined) return null;
-  return (r.pair as { winnerTakesBurn?: boolean } | null | undefined)?.winnerTakesBurn ? "pair-winner" : "flagship";
+  if (e === "incinerator") return "incinerator";
+  return (r.pair as { winnerTakesBurn?: boolean } | null | undefined)?.winnerTakesBurn ? "pair-winner" : r.onEnd?.mint ? "mint" : "flagship";
 };
-const sinkPhrase = (k: "flagship" | "pair-winner"): string => (k === "pair-winner" ? "whatever is left burns the winning coin, or $DEFICIT if there isn't one," : "whatever is left burns $DEFICIT,");
+/** The named sink's ticker ("$X"), for a rule whose end sink names a coin (end-sink picker); "$DEFICIT" otherwise. */
+export const sinkTickerOf = (r: Pick<BurnRule, "onEnd">): string => (r.onEnd?.mint && r.onEnd.ticker ? `$${r.onEnd.ticker}` : "$DEFICIT");
+/** end.rs: a named coin that is not live when the rule ends falls to $DEFICIT. The one clause every surface says it with. */
+export const namedSinkFallback = (x: string): string => `if ${x} is not live then, to $DEFICIT's burn`;
+/** Round 5: the incinerator end sink, in the words every surface uses (the owner's: "sent to Solana's incinerator, which nothing can spend from"). */
+export const INCINERATOR_WORDS = "Solana's incinerator, which nothing can spend from";
+/** The end result sentence of a coin whose end sink is the incinerator (endText's result line). */
+export const INCINERATOR_END_RESULT = `When the rule ends on a result, the SOL left in the pool, and any fees that arrive later, is sent to ${INCINERATOR_WORDS}. No coin is swapped for it. Then the coin retires.`;
+const sinkPhrase = (k: "flagship" | "pair-winner" | "mint" | "incinerator", r?: Pick<BurnRule, "onEnd">): string => (k === "pair-winner" ? "whatever is left burns the winning coin, or $DEFICIT if there isn't one," : k === "incinerator" ? `whatever SOL is left is sent to ${INCINERATOR_WORDS},` : k === "mint" && r ? `whatever is left burns ${sinkTickerOf(r)}, or $DEFICIT if ${sinkTickerOf(r)} is not live then,` : "whatever is left burns $DEFICIT,");
 /** The window sentence's ending: the four-week burn-down, or (end sinks) where the leftover burns. */
-const burnDown = (r: BurnRule): string => { const k = describeEndSink(r); return k ? `${sinkPhrase(k)} and the coin retires` : BURN_DOWN; };
+const burnDown = (r: BurnRule): string => { const k = describeEndSink(r); return k ? `${sinkPhrase(k, r)} and the coin retires` : BURN_DOWN; };
 /** The void sentence that follows the window sentence of a rule with an end sink ("" otherwise). */
 export const END_SINK_VOID_SENTENCE = "If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead.";
 /** QA pass 9 #19 (2026-10-13): "the season is cancelled" only where a season exists (a team or rivalry coin); every other rule says the result. */
@@ -184,9 +194,10 @@ const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindO
  * a champion's coin ends on the ordinary wind-down on itself, any other end forwards the rest to $DEFICIT. The program can pin only
  * $DEFICIT, a named existing coin or a pair partner when a coin is created, so "the champion's coin" is not offered.
  */
-export const championPathRule = (r: BurnRule): boolean => r.oracle === "catalogue" && !r.inverse && !r.set && describeEndSink(r) === "flagship" && championSeries(r.series) !== null;
+// end-sink picker (2026-10-13): the champion path keeps the self-burn on the winning path whichever sink takes the losing path ($DEFICIT or a named coin)
+export const championPathRule = (r: BurnRule): boolean => r.oracle === "catalogue" && !r.inverse && !r.set && (describeEndSink(r) === "flagship" || describeEndSink(r) === "mint") && championSeries(r.series) !== null;
 /** The champion path's two end sentences, one per outcome (the review card and the locked description say both). */
-export const championEndSentences = (ref: string): [string, string] => [`If ${ref} win the championship, the rest of the pool burns here.`, "If they do not, the rest goes to $DEFICIT's burn."];
+export const championEndSentences = (ref: string, sink: string = "$DEFICIT"): [string, string] => [`If ${ref} win the championship, the rest of the pool burns here.`, sink === "$DEFICIT" ? "If they do not, the rest goes to $DEFICIT's burn." : `If they do not, the rest goes to ${sink}'s burn; ${namedSinkFallback(sink)}.`];
 export const PERPETUAL_SENTENCE = "This coin has no end date and does not retire.";
 
 /**
@@ -218,7 +229,7 @@ export const GAME_CANCELLED_SENTENCE = "If the game is cancelled, nothing moves 
 /** The season-end sentence of a rivalry series coin (endText's result line). */
 export const MEETINGS_END_RESULT = "When both teams' seasons are over, the coin of the team that won fewer of the games between them sends the rest of its pool, and any fees that arrive later, to the other coin's burn pool, or to $DEFICIT's burn if that coin is not live. The coin of the team that won more burns down what is left on itself. Then the coin retires.";
 const isMeetingsSeries = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e?.kind === "team" && e.window.kind === "meetings"; };
-export interface EndText { kind: "perpetual" | "self" | "flagship" | "pair-winner" | "champion"; result: string; void: string | null; line: string }
+export interface EndText { kind: "perpetual" | "self" | "flagship" | "pair-winner" | "champion" | "mint" | "incinerator"; result: string; void: string | null; line: string }
 export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText {
   const days = r.onEnd?.windDownDays ?? 28;
   const over = days === 28 ? "over four weeks" : `over ${days} days`;
@@ -228,11 +239,14 @@ export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText 
   // the coin description says the same void sentence (END_SINK_VOID_SENTENCE is this text at the default 28 days)
   const VOID = days === 28 ? voidSentenceFor(r) : voidSentenceFor(r).replace("over four weeks", over);
   if (!sink) return mk("self", `When the rule ends, the coin's own burn pool burns down what is left ${over}, then the coin retires. A retired coin's pool keeps burning any fees it still receives. This end only burns this coin and sends nothing to another coin.`, null);
+  if (sink === "incinerator") return mk("incinerator", INCINERATOR_END_RESULT, VOID);
   if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", CANDIDATES_END_RESULT, VOID);
   if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
-  if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team"); return mk("champion", `${won} ${lost}`, VOID); }
+  if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team", sinkTickerOf(r)); return mk("champion", `${won} ${lost}`, VOID); }
+  // end-sink picker: the coin the creator named, and end.rs's fall-through when that coin is not live at the end
+  if (sink === "mint") { const x = sinkTickerOf(r); return mk("mint", `When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to ${x}'s burn; ${namedSinkFallback(x)}. Then the coin retires.`, VOID); }
   return mk("flagship", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to $DEFICIT's burn. Then the coin retires.", VOID);
 }
 /**
@@ -316,7 +330,7 @@ export function leadSentence(text: string): string {
 }
 /** One pattern per window kind; a description matches exactly one of them, exactly once (test/burntickerDescribe.test.ts). */
 export const WINDOW_SENTENCE: Record<WindowKind, RegExp> = {
-  season: /This coin covers the [^.]*? season only(?:, including (?:the playoffs|every match of the competition)\. After [^.]*? last game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?|\. If [^.]*? win the championship, the rest of the pool burns here\. If they do not, the rest goes to \$DEFICIT's burn\.)/g,
+  season: /This coin covers the [^.]*? season only(?:, including (?:the playoffs|every match of the competition)\. After [^.]*? last game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?|\. If [^.]*? win the championship, the rest of the pool burns here\. If they do not, the rest goes to \$[A-Z0-9]+'s burn(?:; if \$[A-Z0-9]+ is not live then, to \$DEFICIT's burn)?\.)/g,
   post: /This coin covers [^.]*? postseason only\. After [^.]*? last playoff game, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\.(?: It does not continue into [^.]+\.)?/g,
   next: /This coin covers [^.]*? next \d+ games? only, from [^.]*?\d{4}\. After game \d+, (?:it burns down whatever is left over four weeks and then retires|whatever is left burns [^.]*?, and the coin retires)\./g,
   perpetual: /This coin has no end date and does not retire\./g,
@@ -344,7 +358,7 @@ const nextSeason = (league: LeagueId, year: number) => seasonLabel(league, year 
 /** League mode (rules.ts `set`): the conditional forward, in the description whenever the rule carries it. */
 export const leagueSentence = (r: BurnRule): string => (r.set && r.set.forwardBps > 0 ? ` In league mode, ${Math.round(r.set.forwardBps) / 100}% of the leftover goes to the winning coin of set ${r.set.id} if the forwarding instruction is live by season end. Otherwise it burns down on this coin.` : "");
 const oneShotSentence = (r: BurnRule, iso: string | null | undefined, onWhat: string | null = null) => {
-  const k = describeEndSink(r), then = k ? `${sinkPhrase(k)} and the coin retires` : "it burns down over four weeks and retires";
+  const k = describeEndSink(r), then = k ? `${sinkPhrase(k, r)} and the coin retires` : "it burns down over four weeks and retires";
   return onWhat ? `This coin resolves once, on ${onWhat}. Then ${then}.` : `This coin resolves once${iso ? `, on ${day(iso)}` : ""}. Then ${then}.`;
 };
 
@@ -410,7 +424,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
       const L = seasonLabel(s.league, w.year);
       return mk(`${nick} ${L} ${Noun}`, tk("season"), oneLiner,
         `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the postseason. ${sliced(r) ? `Each burn buys $${t} on Raydium in slices sized to the pool's liquidity.` : `Each burn buys $${t} on Raydium, with a receipt on chain.`} ${settle}`,
-        `This coin covers the ${L} season only. ${championEndSentences(ref).join(" ")}`, "season", "recurring");
+        `This coin covers the ${L} season only. ${championEndSentences(ref, sinkTickerOf(r)).join(" ")}`, "season", "recurring");
     }
     if (w.kind === "season") {
       const L = seasonLabel(s.league, w.year);

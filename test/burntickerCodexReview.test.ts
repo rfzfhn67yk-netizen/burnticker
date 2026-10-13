@@ -71,9 +71,9 @@ const encodeAcc = (idl: typeof BURN_RECEIPTS_IDL | typeof PAIR_CURVE_IDL, name: 
   return Buffer.concat([accountDiscriminator(idl, name), encodeType(idl, t, v)]);
 };
 type ChainAcc = [string, { owner: PublicKey; data: Buffer }];
-const tokenConfigAcc = (programId: string, mint: string, o: { creator: string; rulesSha: string; policy?: number }): ChainAcc => [configPda(new PublicKey(programId), new PublicKey(mint)).toBase58(), { owner: new PublicKey(programId), data: encodeAcc(BURN_RECEIPTS_IDL, "TokenConfig", (v) => {
+const tokenConfigAcc = (programId: string, mint: string, o: { creator: string; rulesSha: string; policy?: number; burnTargetKind?: number }): ChainAcc => [configPda(new PublicKey(programId), new PublicKey(mint)).toBase58(), { owner: new PublicKey(programId), data: encodeAcc(BURN_RECEIPTS_IDL, "TokenConfig", (v) => {
   v.mint = new PublicKey(mint); v.creator = new PublicKey(o.creator); v.rules_sha256 = Buffer.from(o.rulesSha, "hex"); v.registration_policy = o.policy ?? 0;
-  (v.rule as Record<string, unknown>).pool_policy = o.policy ?? 0; v.version = 1;
+  (v.rule as Record<string, unknown>).pool_policy = o.policy ?? 0; v.version = 1; v.burn_target_kind = o.burnTargetKind ?? 0;
 }) }];
 const pairAcc = (mintA: string, mintB: string, creator: string, shaA: string, shaB: string): ChainAcc => [pairPda(new PublicKey(mintA), new PublicKey(mintB)).toBase58(), { owner: PAIR_CURVE_PROGRAM_ID, data: encodeAcc(PAIR_CURVE_IDL, "Pair", (v) => {
   v.mints = [new PublicKey(mintA), new PublicKey(mintB)]; v.creator = new PublicKey(creator); v.rules_sha256_a = Buffer.from(shaA, "hex"); v.rules_sha256_b = Buffer.from(shaB, "hex"); v.version = 1;
@@ -579,7 +579,7 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     return VersionedMessage.deserialize(t.serializeMessage());
   };
   const landed = (message: unknown, blockTime = NOW / 1000) => ({ blockTime, meta: { err: null, loadedAddresses: { writable: [], readonly: [] } }, transaction: { message } });
-  const tokenConfig = (mint: string, o: { creator?: string; rulesSha: string; policy?: number }) => tokenConfigAcc(PROGRAM, mint, { creator: o.creator ?? CREATOR_F3, rulesSha: o.rulesSha, policy: o.policy })[1];
+  const tokenConfig = (mint: string, o: { creator?: string; rulesSha: string; policy?: number; burnTargetKind?: number }) => tokenConfigAcc(PROGRAM, mint, { creator: o.creator ?? CREATOR_F3, rulesSha: o.rulesSha, policy: o.policy, burnTargetKind: o.burnTargetKind })[1];
   const pairAccount = (mintA: string, mintB: string, shaA: string, shaB: string) => pairAcc(mintA, mintB, CREATOR_F3, shaA, shaB)[1];
   const chain = chainReader;
   const cfgAt = (mint: string) => configPda(new PublicKey(PROGRAM), new PublicKey(mint)).toBase58();
@@ -639,6 +639,17 @@ describe("F3 (review 2) — a launch confirmation authenticates initialize_token
     assert.equal(p2.ok, false); assert.match(JSON.stringify(p2), /registration policy|pair curve/);
     const noLl = await connectionLaunchVerifier(chain(landed(signed(ixs, [creatorKp, mintKp])), [cfg]), { ...opts, launchLabProgramId: null }).verify("s", exp);
     assert.equal(noLl.ok, false, "a host that does not know its LaunchLab program cannot check the venue: refused, never accepted");
+  });
+  test("round 5: a coin with a pinned token is confirmed on its LaunchLab create alone (initialize_token + pin landed one step before), only when its TokenConfig burns a pinned token", async () => {
+    const { mintKp, exp, ixs, b } = await singleCoin();
+    const onlyCreate = ixs.filter((i) => i.programId.toBase58() !== PROGRAM);
+    const target = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256, burnTargetKind: 1 })] as const;
+    assert.deepEqual(await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [target as never]), opts).verify("s", exp), { ok: true, blockTimeMs: NOW });
+    const self = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: b.rules.sha256 })] as const;
+    const r = await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [self as never]), opts).verify("s", exp);
+    assert.equal(r.ok, false); assert.match(JSON.stringify(r), /does not call the burn_receipts program/);
+    const wrongRule = [cfgAt(b.mint), tokenConfig(b.mint, { rulesSha: "ab".repeat(32), burnTargetKind: 1 })] as const;
+    assert.equal((await connectionLaunchVerifier(chain(landed(signed(onlyCreate, [creatorKp, mintKp])), [wrongRule as never]), opts).verify("s", exp)).ok, false);
   });
   test("a correct LaunchLab launch passes (legacy and v0 messages), with the block time as the baseline", async () => {
     const { mintKp, exp, ixs, cfg } = await singleCoin();

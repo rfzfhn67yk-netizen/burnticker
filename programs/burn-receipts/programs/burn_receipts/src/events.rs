@@ -401,6 +401,18 @@ pub struct ForwardedOnEnd {
     pub cranker: Pubkey,
 }
 
+/// The incinerator end sink: after a RESOLVED end the leftover SOL was sent to Solana's incinerator (burn_sol_on_end).
+#[event]
+pub struct SolBurnedOnEnd {
+    pub mint: Pubkey,
+    /// Always INCINERATOR_ID.
+    pub to: Pubkey,
+    pub lamports: u64,
+    /// Of `lamports`, what came from unwrapping the fee PDA's WSOL first.
+    pub unwrapped_lamports: u64,
+    pub cranker: Pubkey,
+}
+
 /// Round 5: the coin's burn target was pinned (pin_burn_target, before the coin existed).
 #[event]
 pub struct BurnTargetPinned {

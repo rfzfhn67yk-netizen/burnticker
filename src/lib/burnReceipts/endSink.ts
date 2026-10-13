@@ -1,7 +1,7 @@
 import { type Connection, PublicKey, SystemProgram, SYSVAR_INSTRUCTIONS_PUBKEY, type TransactionInstruction } from "@solana/web3.js";
 import { fetchTokenConfig, type TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 import { ed25519SharedMessageInstruction, signAttestation } from "@/lib/burnReceipts/attestation";
-import { type Cluster, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, type Cluster, MEMO_PROGRAM_ID, MODE_BUYBACK, NATIVE_MINT, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeAccount } from "@/lib/burnReceipts/idlCoder";
 import { buildIx, createAtaIdempotentIx } from "@/lib/burnReceipts/instructions";
@@ -40,6 +40,12 @@ export const END_SINK_MINT = num("END_SINK_MINT");
 /** Reserved for league sets: initialize_token refuses it until they land. */
 export const END_SINK_LEAGUE_SET = num("END_SINK_LEAGUE_SET");
 export const END_SINK_PAIR_WINNER = num("END_SINK_PAIR_WINNER");
+/** Round 5: the SOL itself goes to Solana's incinerator (burn_sol_on_end). */
+export const END_SINK_INCINERATOR = num("END_SINK_INCINERATOR");
+/** Solana's incinerator, read from the IDL (burn_sol_on_end's address-checked `incinerator` account): solana_program::incinerator::ID. */
+export const INCINERATOR = new PublicKey((BURN_RECEIPTS_IDL.instructions.find((i) => i.name === "burn_sol_on_end")!.accounts.find((a) => a.name === "incinerator") as { address?: string }).address!);
+/** A rule's end-sink kind (rules.ts endSinkOf) as the program's EndSink.sink_kind. */
+export const endSinkKindCode = (k: "flagship" | "pair-winner" | "mint" | "incinerator"): number => (k === "pair-winner" ? END_SINK_PAIR_WINNER : k === "mint" ? END_SINK_MINT : k === "incinerator" ? END_SINK_INCINERATOR : END_SINK_FLAGSHIP);
 export const END_FORWARD_MIN_LAMPORTS_FLOOR = BigInt(idlConstant("END_FORWARD_MIN_LAMPORTS_FLOOR"));
 export const END_FORWARD_MIN_LAMPORTS_CEIL = BigInt(idlConstant("END_FORWARD_MIN_LAMPORTS_CEIL"));
 export const END_ATTESTATION_DOMAIN = JSON.parse(idlConstant("END_ATTESTATION_DOMAIN")) as string;
@@ -161,6 +167,29 @@ export function forwardOnEndIx(o: { programId: PublicKey; cranker: PublicKey; mi
   }, {});
 }
 
+/**
+ * burn_sol_on_end — the incinerator end sink: after a RESOLVED end the fee PDA's WSOL is unwrapped (its account kept) and the SOL above
+ * the reserve, under the cap, goes to Solana's incinerator. The program address-checks the incinerator; nothing else can be passed.
+ */
+export function burnSolOnEndIx(o: { programId: PublicKey; cranker: PublicKey; mint: PublicKey }): TransactionInstruction {
+  const f = feePda(o.programId, o.mint);
+  return buildIx(o.programId, "burn_sol_on_end", {
+    cranker: o.cranker,
+    platform: platformPda(o.programId),
+    config: configPda(o.programId, o.mint),
+    fee_vault: f,
+    fee_wsol: associatedTokenAddress(f, NATIVE_MINT),
+    wsol_mint: NATIVE_MINT,
+    end_sink: endSinkPda(o.programId, o.mint),
+    rule_end: ruleEndPda(o.programId, o.mint),
+    incinerator: INCINERATOR,
+    token_program: TOKEN_PROGRAM_ID,
+    associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
+    system_program: SystemProgram.programId,
+    memo_program: MEMO_PROGRAM_ID,
+  }, {});
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // the destination (mirrors end.rs handle_forward_on_end)
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -181,15 +210,17 @@ export type EndForwardPlan =
  */
 export async function planForwardOnEnd(connection: Connection, programId: PublicKey, cluster: Cluster, mint: PublicKey, cranker: PublicKey): Promise<EndForwardPlan> {
   const flagship = FLAGSHIP_MINT[cluster];
-  if (flagship.equals(PublicKey.default)) return { status: "flagship-not-pinned" };
   const cfg = await fetchTokenConfig(connection, programId, mint);
   if (!cfg) throw new Error(`no TokenConfig for ${mint.toBase58()}`);
   const c = cfg.config;
   const sink = await fetchEndSink(connection, programId, mint);
   if (!sink) return { status: "no-end-sink" };
+  if (sink.sink_kind !== END_SINK_INCINERATOR && flagship.equals(PublicKey.default)) return { status: "flagship-not-pinned" };
   if (c.end_state === END_STATE_VOID) return { status: "void" };
   if (c.end_state !== END_STATE_RESOLVED) return { status: "not-ended" };
   if (c.crank_cursor !== c.last_record_date && !c.cpmm_pool.equals(PublicKey.default)) return { status: "readings-pending" };
+  // round 5: the incinerator sink needs no destination coin; burn_sol_on_end sends the SOL to the incinerator and nowhere else
+  if (sink.sink_kind === END_SINK_INCINERATOR) return { status: "ready", target: INCINERATOR, intended: INCINERATOR, sinkKind: sink.sink_kind, instructions: [burnSolOnEndIx({ programId, cranker, mint })] };
   let intended = flagship;
   let pair: { partner: PublicKey; endDate: number } | undefined;
   if (sink.sink_kind === END_SINK_MINT) intended = sink.sink_mint;
@@ -218,8 +249,14 @@ export async function planForwardOnEnd(connection: Connection, programId: Public
   };
 }
 
-/** The end-sink receipt memo: `<PREFIX>|endfwd|to=<12>|lamports=N|v1`. */
-export function parseEndForwardMemo(memo: string): { prefix: string; to12: string; lamports: bigint } | null {
-  const m = /^([A-Z0-9]{2,12})\|endfwd\|to=([1-9A-HJ-NP-Za-km-z]{1,12})\|lamports=(\d+)\|v1$/.exec(memo.trim());
-  return m ? { prefix: m[1], to12: m[2], lamports: BigInt(m[3]) } : null;
+/**
+ * The end-sink receipt memo: `<PREFIX>|endfwd|to=<12>|lamports=N|v1` (forward_on_end), or `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1`
+ * (burn_sol_on_end: the SOL sent to Solana's incinerator; `burned` true).
+ */
+export function parseEndForwardMemo(memo: string): { prefix: string; to12: string; lamports: bigint; burned: boolean } | null {
+  const m = /^([A-Z0-9]{2,12})\|(endfwd|endburn)\|to=([1-9A-HJ-NP-Za-km-z]{1,12})\|lamports=(\d+)\|v1$/.exec(memo.trim());
+  if (!m) return null;
+  const burned = m[2] === "endburn";
+  if (burned && m[3] !== INCINERATOR.toBase58().slice(0, 12)) return null;
+  return { prefix: m[1], to12: m[3], lamports: BigInt(m[4]), burned };
 }

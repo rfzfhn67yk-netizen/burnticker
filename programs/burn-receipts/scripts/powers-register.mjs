@@ -40,6 +40,13 @@ const POWERS = {
     cannot: "Run twice for a mint; be run by anyone without the mint keypair; change anything afterwards (the end sink included); pin a league-set sink (not supported yet) or an end sink on the flagship itself.",
     timelock: null, sunset: "Single use per mint.", funds: "Payer → fee PDA: the reserve only (rent for the PDA).",
   },
+  initialize_token_r5: {
+    class: "creation",
+    signers: { payer: "anyone", creator: "creator", mint: "mint_keypair" },
+    can: "Round 5's create: exactly initialize_token (the same accounts, arguments and checks), plus the owner's rule of 2026-10-13 that a coin never burns itself on its losing path: a buyback coin must pin an end sink (the flagship, a named coin, the pair winner or Solana's incinerator), so a RESOLVED end never winds down on the coin itself. The flagship and vault-mode coins are exempt.",
+    cannot: "Create a buyback coin without an end sink (LostPathBurnsSelf); do anything initialize_token cannot.",
+    timelock: null, sunset: "Single use per mint (one TokenConfig per mint, whichever create made it).", funds: "Payer → fee PDA: the reserve only (rent for the PDA).",
+  },
   register_pool: {
     class: "permissionless",
     signers: { registrar: "anyone" },
@@ -270,6 +277,13 @@ const POWERS = {
     cannot: "Choose the amount or the destination (only a burn_receipts fee PDA, which spends only through crank_buyback); run before a resolved end, under the minimum, below the reserve, or while the coin's window readings are unprocessed; send to a sink that is not live, or to a flagship without a verified pool (then nothing moves); run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
     timelock: null, sunset: "None.", funds: "Resolved coin's fee PDA SOL / WSOL → the end sink's (or the flagship's) fee PDA SOL / WSOL account (then burned by that coin's cranks).",
   },
+  burn_sol_on_end: {
+    class: "permissionless",
+    signers: { cranker: "anyone" },
+    can: "Round 5, the incinerator end sink (EndSink kind INCINERATOR, pinned at creation): after a RESOLVED end, once the coin's readings inside its window are processed (or it has no verified pool), unwrap the fee PDA's WSOL into the fee PDA (its WSOL account closed and created again, the cranker's rent refunded from it) and send min(the fee PDA's SOL above the reserve, the burn-pool cap while in force) to Solana's incinerator (1nc1nerator11111111111111111111111111111111, address-checked; nobody holds its key and the runtime burns what it receives). Memo endburn, event SolBurnedOnEnd. Callable again for the later trickle above the end sink's minimum.",
+    cannot: "Send to any address but the incinerator; run for a coin whose end sink is another kind (forward_on_end refuses the incinerator kind, so the two never overlap); choose the amount; run before a resolved end, below the reserve, under the minimum after the first send, under an empty account's rent-exempt minimum, or while the coin's window readings are unprocessed.",
+    timelock: null, sunset: "None.", funds: "Resolved coin's fee PDA SOL (and its WSOL, unwrapped) → Solana's incinerator, where it is destroyed.",
+  },
   apply_paired_attester_change: {
     class: "permissionless",
     signers: { caller: "anyone" },
@@ -323,9 +337,9 @@ const POWERS = {
 };
 
 const NON_POWERS = [
-  "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses) and inside crank_target_burn (round 5: only into the PINNED pool's WSOL vault, for the other token, burned in the same instruction); tokens leave only by burn.",
+  "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses) and inside burn_sol_on_end (round 5: only for a coin whose pinned end sink is the incinerator, only after a quorum-signed RESOLVED end, only to Solana's incinerator, address-checked) and inside crank_target_burn (round 5: only into the PINNED pool's WSOL vault, for the other token, burned in the same instruction); tokens leave only by burn.",
   "Round 5: no instruction changes the other token a coin burns; only the pool it is swapped on can be re-pinned (propose_target_pool → 48 h, any attester can veto → apply_target_pool, the same checks).",
-  "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).",
+  "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them); and, in burn_sol_on_end (round 5, the incinerator end sink), the fee PDA's own WSOL account, closed into the fee PDA to unwrap its WSOL and created again in the same instruction at the same address, the cranker's rent refunded from it.",
   "No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.",
   "No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.",
   "No fee is charged by the program, so there is no fee to change. The LP-fee split of claim_lock_fees (80 % burn pool / 20 % operator) and the operator treasury are compiled constants: no instruction, config field or key changes them (LAUNCHPAD-PATH §35).",

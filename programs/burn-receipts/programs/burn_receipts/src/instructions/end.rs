@@ -9,6 +9,7 @@
 //!       FLAGSHIP     BURNTICKER_FLAGSHIP ($DEFICIT, compiled per cluster; perpetual)
 //!       MINT         a named coin — while it is live (a verified pool, its own rule not ended), else the flagship
 //!       LEAGUE_SET   reserved for league sets (initialize_token refuses it until they land)
+//!       INCINERATOR  Solana's incinerator (INCINERATOR_ID): the SOL itself is burned (burn_sol_on_end), no swap, no price impact
 //!       PAIR_WINNER  the coin's pair partner — only when the period of the end date (RuleEnd.record_date) has a PairResult naming the
 //!                    partner as winner and the partner is live and still paired; otherwise the flagship. (During the contest the
 //!                    loser's fuel already moves by forward_to_winner; this is the remainder after the end.)
@@ -24,13 +25,13 @@
 
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
-use anchor_spl::associated_token::get_associated_token_address;
+use anchor_spl::associated_token::{self, get_associated_token_address, AssociatedToken};
 use anchor_spl::token::{self, Token};
 
 use crate::attest::{attested_mask, canonical_end_message};
 use crate::constants::*;
 use crate::error::BurnError;
-use crate::events::{EndSinkPinned, ForwardedOnEnd, RuleEnded};
+use crate::events::{EndSinkPinned, ForwardedOnEnd, RuleEnded, SolBurnedOnEnd};
 use crate::guards::require_fee_token_account_intact;
 use crate::instructions::crank_common::{active_cap, crankers_in_force};
 use crate::instructions::pair::{create_pda, read_link, wsol_synced_or_zero};
@@ -87,6 +88,11 @@ pub fn pin_end_sink<'info>(
                 None => require!(pool_policy == POOL_POLICY_PAIR_CURVE, BurnError::InvalidEndSink),
             }
             s
+        }
+        END_SINK_INCINERATOR => {
+            // the SOL itself: no coin is named; the stored "sink mint" is the incinerator address, the only destination allowed
+            require!(a.sink_mint.is_none() || a.sink_mint == Some(INCINERATOR_ID), BurnError::InvalidEndSink);
+            INCINERATOR_ID
         }
         // END_SINK_LEAGUE_SET: league sets are a later round
         _ => return err!(BurnError::InvalidEndSink),
@@ -360,5 +366,129 @@ pub fn handle_forward_on_end(ctx: Context<ForwardOnEnd>) -> Result<()> {
         wsol_lamports: wsol_part,
         cranker: ctx.accounts.cranker.key(),
     });
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// burn_sol_on_end (the incinerator end sink, owner 2026-10-13)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// PERMISSIONLESS (the cranker allowlist applies while the pre-audit cap is in force), for a coin whose EndSink kind is INCINERATOR and
+/// whose rule ended RESOLVED with every reading inside the window processed (the same gates as forward_on_end). The fee PDA's WSOL is
+/// unwrapped first (its account closed into the fee PDA and created again at the cranker's cost, refunded from the account's own
+/// rent), then min(fee PDA SOL above the reserve, the burn-pool cap) is transferred to Solana's incinerator — the account is
+/// address-checked, so no other destination can be passed. No swap, no price impact. The reserve stays. Memo
+/// `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1`, event SolBurnedOnEnd. Callable again for the later trickle (minimum as for
+/// forward_on_end). forward_on_end refuses this kind (InvalidEndSink), so the SOL can only ever reach the incinerator.
+#[event_cpi]
+#[derive(Accounts)]
+pub struct BurnSolOnEnd<'info> {
+    #[account(mut)]
+    pub cranker: Signer<'info>,
+    /// CHECK: the platform PDA (seeds-checked) — its cap and cranker allowlist, as for crank_buyback.
+    #[account(seeds = [PLATFORM_SEED], bump)]
+    pub platform: UncheckedAccount<'info>,
+    #[account(mut, seeds = [CONFIG_SEED, config.mint.as_ref()], bump = config.bump)]
+    pub config: Box<Account<'info, TokenConfig>>,
+    #[account(mut, seeds = [FEE_SEED, config.mint.as_ref()], bump = config.fee_bump)]
+    pub fee_vault: SystemAccount<'info>,
+    /// CHECK: ATA(fee PDA, WSOL) — address-checked; may not exist (then it holds nothing and is left alone).
+    #[account(mut, address = get_associated_token_address(&fee_vault.key(), &NATIVE_MINT) @ BurnError::FeeAccountTampered)]
+    pub fee_wsol: UncheckedAccount<'info>,
+    /// CHECK: address-checked: the WSOL mint (to create the fee PDA's WSOL account again after unwrapping).
+    #[account(address = NATIVE_MINT)]
+    pub wsol_mint: UncheckedAccount<'info>,
+    #[account(seeds = [END_SINK_SEED, config.mint.as_ref()], bump = end_sink.bump)]
+    pub end_sink: Box<Account<'info, EndSink>>,
+    #[account(mut, seeds = [RULE_END_SEED, config.mint.as_ref()], bump = rule_end.bump)]
+    pub rule_end: Box<Account<'info, RuleEnd>>,
+    /// CHECK: address-checked: Solana's incinerator, the only destination.
+    #[account(mut, address = INCINERATOR_ID @ BurnError::NotIncineratorSink)]
+    pub incinerator: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+    /// CHECK: address-checked: the SPL Memo program.
+    #[account(address = MEMO_PROGRAM_ID)]
+    pub memo_program: UncheckedAccount<'info>,
+}
+
+pub fn handle_burn_sol_on_end(ctx: Context<BurnSolOnEnd>) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    let a = &ctx.accounts;
+    let c = &a.config;
+    require!(a.end_sink.sink_kind == END_SINK_INCINERATOR && a.end_sink.sink_mint == INCINERATOR_ID, BurnError::NotIncineratorSink);
+    require!(c.end_state == END_STATE_RESOLVED, BurnError::NotEndedResolved);
+    require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
+    require!(c.crank_cursor == c.last_record_date || c.cpmm_pool == Pubkey::default(), BurnError::EndReadingsPending);
+    let crankers = crankers_in_force(&a.platform.to_account_info(), now)?;
+    require!(crankers.is_empty() || crankers.contains(&a.cranker.key()), BurnError::CrankerNotAllowed);
+
+    let reserve = c.rule.reserve_lamports;
+    let mint = c.mint;
+    let fee_bump = c.fee_bump;
+    let fee_seeds: &[&[u8]] = &[FEE_SEED, mint.as_ref(), &[fee_bump]];
+    let fee = a.fee_vault.to_account_info();
+
+    // ----- unwrap the WSOL into the fee PDA, keeping its WSOL account (the LaunchLab claim lands there) -----
+    let wsol_acc = a.fee_wsol.to_account_info();
+    let mut unwrapped = 0u64;
+    if wsol_synced_or_zero(&wsol_acc)? > 0 {
+        require_fee_token_account_intact(&wsol_acc, &fee.key(), &NATIVE_MINT, false)?;
+        let before = fee.lamports();
+        token::close_account(CpiContext::new_with_signer(
+            token::ID,
+            token::CloseAccount { account: wsol_acc.clone(), destination: fee.clone(), authority: fee.clone() },
+            &[fee_seeds],
+        ))?;
+        let released = fee.lamports().checked_sub(before).ok_or(BurnError::MathOverflow)?;
+        let cranker_before = a.cranker.lamports();
+        associated_token::create_idempotent(CpiContext::new(
+            associated_token::ID,
+            associated_token::Create {
+                payer: a.cranker.to_account_info(),
+                associated_token: wsol_acc.clone(),
+                authority: fee.clone(),
+                mint: a.wsol_mint.to_account_info(),
+                system_program: a.system_program.to_account_info(),
+                token_program: a.token_program.to_account_info(),
+            },
+        ))?;
+        let rent = cranker_before.checked_sub(a.cranker.lamports()).ok_or(BurnError::MathOverflow)?;
+        require!(rent <= released, BurnError::MathOverflow);
+        if rent > 0 {
+            system_program::transfer(
+                CpiContext::new_with_signer(system_program::ID, system_program::Transfer { from: fee.clone(), to: a.cranker.to_account_info() }, &[fee_seeds]),
+                rent,
+            )?;
+        }
+        unwrapped = released - rent;
+        require_fee_token_account_intact(&wsol_acc, &fee.key(), &NATIVE_MINT, false)?;
+    }
+
+    // ----- the amount: the SOL above the reserve, under the cap -----
+    let sol_avail = fee.lamports().saturating_sub(reserve);
+    let amount = match active_cap(&a.platform.to_account_info(), now)? {
+        Some(cap) if sol_avail > cap => cap,
+        _ => sol_avail,
+    };
+    require!(amount > 0 && (amount >= a.end_sink.min_forward_lamports || a.rule_end.forwards == 0), BurnError::NothingToForward);
+    // the incinerator holds nothing between blocks (the runtime burns what it is credited), so each transfer must itself reach the
+    // rent-exempt minimum of an empty account, or the runtime refuses it; a smaller remainder waits for the trickle
+    require!(amount >= Rent::get()?.minimum_balance(0), BurnError::NothingToForward);
+    system_program::transfer(
+        CpiContext::new_with_signer(system_program::ID, system_program::Transfer { from: fee.clone(), to: a.incinerator.to_account_info() }, &[fee_seeds]),
+        amount,
+    )?;
+    require!(fee.lamports() >= reserve, BurnError::ReserveBreached);
+    let m = memo::format_end_burn(c.memo_prefix_str(), amount);
+    memo::emit_memo(&a.memo_program.to_account_info(), &m)?;
+
+    ctx.accounts.config.carried_spend_lamports = 0;
+    let r = &mut ctx.accounts.rule_end;
+    r.forwarded_lamports = r.forwarded_lamports.saturating_add(amount);
+    r.forwards = r.forwards.saturating_add(1);
+    r.last_forward_at = now;
+    emit_cpi!(SolBurnedOnEnd { mint, to: INCINERATOR_ID, lamports: amount, unwrapped_lamports: unwrapped.min(amount), cranker: ctx.accounts.cranker.key() });
     Ok(())
 }

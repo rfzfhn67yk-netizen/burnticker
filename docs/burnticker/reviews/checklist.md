@@ -258,3 +258,22 @@ built and tested on a branch and not deployed; a coin without a burn target (eve
   applies within 14 days of the proposal, the same admission.
 - **What a reviewer checks.** SOL leaves a fee PDA in four places now: `crank_buyback`, `crank_target_burn` (only into the pinned target
   pool's WSOL vault, for target tokens burned in the same instruction), `forward_to_winner` and `forward_on_end`.
+
+## Erratum 2026-10-13 (end-sink options, program round 5)
+
+The text above and the earlier errata stay as written. Two owner decisions of 2026-10-13 are in the same unreleased round 5
+(docs/burnticker/END-SINK.md):
+
+- **Instruction count (item 1).** burn_receipts now has **41 entrypoints**: the 39 above plus `initialize_token_r5` and
+  `burn_sol_on_end`. The IDL, the Powers Register and the whitepaper's §13.3 list 41 (43 event types, 131 error codes).
+- **The incinerator end sink.** A new EndSink kind, `END_SINK_INCINERATOR` (4), pinned at creation like the others. After a
+  quorum-signed RESOLVED end, `burn_sol_on_end` unwraps the fee PDA's WSOL (its account is kept) and sends the SOL above the reserve, under
+  the burn-pool cap, to Solana's incinerator `1nc1nerator11111111111111111111111111111111` (address-checked; nobody holds its key and the
+  runtime destroys what it receives). Memo `<PREFIX>|endburn|to=1nc1nerator1|lamports=N|v1`, event `SolBurnedOnEnd`. `forward_on_end`
+  refuses this kind, so the SOL of such a coin has exactly one way out. A send below an empty account's rent-exempt minimum waits.
+- **No self-burn on the losing path (deliberate restriction).** `initialize_token_r5` is `initialize_token` (same accounts and arguments)
+  that refuses a buyback coin without an end sink (`LostPathBurnsSelf`): a RESOLVED end must go to the flagship, a named coin, the pair
+  winner or the incinerator. A VOID end (the won path of a champion coin) keeps the hashed wind-down on the coin. `initialize_token`
+  itself is unchanged, and so is every config it created.
+- **What a reviewer checks.** SOL leaves a fee PDA in five places now: `crank_buyback`, `crank_target_burn`, `forward_to_winner`,
+  `forward_on_end` and `burn_sol_on_end` (only to the incinerator, only for a coin whose pinned sink is the incinerator).

@@ -35,7 +35,7 @@ export function tileRule(c: TileChoice, seriesHash: string, tickers: { a: string
   const sentence = derbySentence(spec, tickers.a, tickers.b, c.fraction);
   if (problems.length) return { rule: null, spec, sentence, problems };
   const m = { fractionOfPool: Number(c.fraction.toFixed(4)) };
-  const rule = { schema: "burnticker.rules/v1", oracle: "derby", series: derbySeriesId(spec, () => seriesHash), market: null, filter: {}, kind: "binary", binary: { onYes: m, onNo: null }, scalar: null, pair: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, derby: spec, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000 } } as BurnRule;
+  const rule = { schema: "burnticker.rules/v1", oracle: "derby", series: derbySeriesId(spec, () => seriesHash), market: null, filter: {}, kind: "binary", binary: { onYes: m, onNo: null }, scalar: null, pair: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, derby: spec, onEnd: { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } } as BurnRule;
   return { rule, spec, sentence, problems };
 }
 

@@ -45,7 +45,7 @@ describe("burnReceipts client — IDL", () => {
   });
   test("no instruction can withdraw, close or sweep", () => {
     const names = BURN_RECEIPTS_IDL.instructions.map((i) => i.name).sort();
-    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "apply_target_pool", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_target_burn", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "link_pair", "pin_burn_target", "propose_attesters", "propose_cap_raise", "propose_target_pool", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy", "veto_target_pool"]);
+    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "apply_target_pool", "burn_sol_on_end", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_target_burn", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "initialize_token_r5", "link_pair", "pin_burn_target", "propose_attesters", "propose_cap_raise", "propose_target_pool", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy", "veto_target_pool"]);
   });
 });
 
@@ -217,10 +217,12 @@ describe("burnReceipts client — instructions", () => {
     assert.equal(initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r3" }), "r3");
     assert.equal(initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r4" }), "r4");
     assert.throws(() => initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "4" }), /^Error: BURNTICKER_INITIALIZE_TOKEN_LAYOUT must be r3, r4 or r5, not "4"\.$/);
-    // round 5: initialize_token is round 4's bytes exactly (the target rides in pin_burn_target)
+    // round 5: initialize_token_r5 — round 4's accounts and argument bytes under its own discriminator (the program adds the rule that a
+    // buyback coin pins an end sink: no self-burn on the losing path)
     assert.equal(initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r5" }), "r5");
     const r5 = initializeTokenIx({ programId: PID, payer, creator: payer, mint: MINT, args: initArgs, layout: "r5" });
-    assert.deepEqual(r5.data, init.data); assert.equal(r5.keys.length, init.keys.length);
+    assert.deepEqual(r5.data.subarray(0, 8), anchorDisc("global", "initialize_token_r5"));
+    assert.deepEqual(r5.data.subarray(8), init.data.subarray(8)); assert.deepEqual(r5.keys, init.keys);
     const prev = process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT;
     try {
       process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT = "r4";
