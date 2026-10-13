@@ -1,5 +1,5 @@
 import { ATTESTATION_DOMAIN, CARRY_CONSECUTIVE, GENESIS_HASH, KIND_BASELINE, KIND_RESET, MAX_QUORUM, MAX_SPEND_RESERVE_BPS, PACKET_DATA_SIZE, QUEUE_UNBLOCK_SECS, UNTRADEABLE_MAX_GAP_SECS } from "@/lib/burnReceipts/constants";
-import { formatBuybackMemo, formatDebtMemo } from "@/lib/burnReceipts/memo";
+import { formatBuybackMemo, formatDebtMemo, formatTargetMemo } from "@/lib/burnReceipts/memo";
 import { buybackSpend, deltaPlausible, formatDate, formatFixed, formatSignedFixed, rawToTokens, reserveSpendCap, settleVault, spendablePool, step } from "@/lib/burnReceipts/math";
 import type { ConfirmOutcome, Cosignature, CrankPlan, ProgramConfigView, ProgramPort, ProgramReadingView, ReadingInput, SignedTx } from "@/lib/burnKeeper/programPort";
 import { PublicKey } from "@solana/web3.js";
@@ -29,6 +29,8 @@ export interface FakeProgramInit {
   tokensPerUnit?: bigint; vaultAllocation?: bigint; attesters: string[]; quorum?: number; heldKeys?: string[]; decimals?: number; now?: () => number;
   /** The genesis the program build binds into signed messages (default: mainnet's — the default build). */
   clusterGenesis?: string;
+  /** Round 5: the coin burns this TARGET token (pin_burn_target): its cranks are crank_target_burn on the pinned pool. */
+  burnTarget?: { mint: string; pool: string; decimals: number };
 }
 
 /**
@@ -40,7 +42,7 @@ export const readingTxBytes = (signatures: number, messageBytes: number): number
 
 type Payload =
   | { kind: "reading"; recordDate: number; prevDate: number; value: bigint; keys: string[] }
-  | { kind: "crank"; crank: "no_units" | "vault" | "buyback"; recordDate: number }
+  | { kind: "crank"; crank: "no_units" | "vault" | "buyback" | "target"; recordDate: number }
   | { kind: "forward"; recordDate: number }
   | { kind: "other" };
 
@@ -101,6 +103,15 @@ export class FakeProgram implements ProgramPort {
    * later than the end lands (RuleEnded) and no such reading cranks (ForwardOnEndRequired); a VOID end changes nothing here.
    */
   endState: { state: "live" | "resolved" | "void"; date: number } = { state: "live", date: 0 };
+  /**
+   * ROUND 5 (a coin with a burn target): the pinned target pool's state ("ok", or the program's two hold refusals), its SOL reserve (the
+   * 2 % cap's base), the target tokens one SOL buys, and the target's supply (what the burns take out of).
+   */
+  burnTarget: { mint: string; pool: string; decimals: number } | null = null;
+  targetPool: "ok" | "unhealthy" | "below-floor" = "ok";
+  targetPoolReserveWsol = big(1_000) * big(1_000_000_000);
+  targetTokensPerSol = big(2_000_000) * big(100_000);
+  targetSupply = big(80_000_000_000) * big(100_000);
 
   constructor(i: FakeProgramInit) {
     this.programId = i.programId ?? "BurnReceiptsFakeProgram11111111111111111111";
@@ -125,6 +136,11 @@ export class FakeProgram implements ProgramPort {
       carriedSpendLamports: Z, totalBurned: Z, totalSpentLamports: Z, shortfall: Z, readings: 0, burns: 0,
     };
     if (i.mode === "buyback") this.feeLamports = this.cfg.reserveLamports;
+    if (i.burnTarget) {
+      if (i.mode !== "buyback") throw new Error("WrongMode: only a buyback coin can have a burn target");
+      this.burnTarget = { ...i.burnTarget };
+      this.cfg = { ...this.cfg, burnsTarget: true };
+    }
   }
 
   /** register_pool (permissionless after graduation). */
@@ -177,6 +193,11 @@ export class FakeProgram implements ProgramPort {
     const D = next.recordDate;
     if (next.units === 0) return { kind: "no_units", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "no_units", recordDate: D }) };
     if (this.cfg.mode === "vault") return { kind: "vault", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "vault", recordDate: D }) };
+    // Round 5: a target coin never waits for a pool of its own (it trades on the pinned target pool).
+    if (this.burnTarget) {
+      if (this.pairGate && this.pairGate(D, this.readingSubmittedAt.get(D) ?? null) === "lost") return { kind: "forward", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "target", recordDate: D }) };
+      return { kind: "target", recordDate: D, build: async () => this.mk({ kind: "crank", crank: "target", recordDate: D }) };
+    }
     if (!this.cfg.poolRegistered) return { status: "waiting-for-pool", recordDate: D };
     // Like burnReceipts/crank.ts planCrank: a paired coin that LOST the period plans "forward" (the keeper runs forward_to_winner through
     // its pair port; building it here as a crank is refused ForwardRequired, as on chain).
@@ -221,7 +242,7 @@ export class FakeProgram implements ProgramPort {
     const d = this.cfg.valueDecimals;
     return { prefix: this.cfg.memoPrefix, recordDate: formatDate(r.recordDate), source: this.cfg.memoSource, prev: formatFixed(r.prevValue, d), now: formatFixed(r.value, d), delta: formatSignedFixed(r.delta, d), units: r.units, rulesSha12: this.rulesSha256.slice(0, 12), valueDecimals: d };
   }
-  private execCrank(D: number, kind: "no_units" | "vault" | "buyback", commit: boolean): { err: string } | { memo: string | null } {
+  private execCrank(D: number, kind: "no_units" | "vault" | "buyback" | "target", commit: boolean): { err: string } | { memo: string | null } {
     const r0 = this.readings.get(D);
     if (!r0) return { err: "AccountNotInitialized" };
     if (r0.processed) return { err: "AlreadyProcessed" };
@@ -246,6 +267,7 @@ export class FakeProgram implements ProgramPort {
       return { memo: s.exhausted ? null : formatDebtMemo({ ...this.head(r), burn: rawToTokens(s.burn, this.decimals), ...(s.shortfall > Z ? { short: rawToTokens(s.shortfall, this.decimals) } : {}), version: "v1" }) };
     }
     if (this.cfg.mode !== "buyback") return { err: "WrongMode" };
+    if (kind === "target" || this.burnTarget) return this.execTarget(D, r, kind, commit);
     if (!this.cfg.poolRegistered) return { err: "PoolNotRegistered" };
     if (this.endState.state === "resolved" && D > this.endState.date) return { err: "ForwardOnEndRequired" };
     const g = this.pairGate ? this.pairGate(D, this.readingSubmittedAt.get(D) ?? null) : null;
@@ -289,6 +311,51 @@ export class FakeProgram implements ProgramPort {
     return { memo: formatBuybackMemo({ ...this.head(r), pool: basis.toString(), spent: spent.toString(), got: rawToTokens(got, this.decimals), burn: rawToTokens(burned, this.decimals), swap: spent > Z ? (r.pool ?? this.cfg.pool!).slice(0, 12) : "none", version: "v2" }) };
   }
 
+  /** crank_target_burn as the program runs it (crank_buyback refuses a target coin with BurnTargetSet; a self coin refuses the target crank). */
+  private execTarget(D: number, r: ProgramReadingView, kind: string, commit: boolean): { err: string } | { memo: string | null } {
+    const bt = this.burnTarget;
+    if (!bt) return { err: "NoBurnTarget" };
+    if (kind !== "target") return { err: "BurnTargetSet" };
+    if (this.endState.state === "resolved" && D > this.endState.date) return { err: "ForwardOnEndRequired" };
+    const g = this.pairGate ? this.pairGate(D, this.readingSubmittedAt.get(D) ?? null) : null;
+    if (g === "lost") return { err: "ForwardRequired" };
+    if (g === "pending") return { err: "PairResultPending" };
+    if (commit && (g === "forward-missing" || g === "missing")) this.pairEvents.push({ name: g === "missing" ? "PairResultMissing" : "PairForwardMissing", recordDate: D });
+    if (commit && this.strayWsolLamports > Z) { this.wsol += this.strayWsolLamports; this.strayWsolLamports = Z; }
+    const poolActual = spendablePool(this.feeLamports, this.cfg.reserveLamports, this.wsol + this.strayWsolLamports);
+    const basis = this.capLamports !== null && poolActual > this.capLamports ? this.capLamports : poolActual;
+    const ruleSpend = buybackSpend(basis, big(r.units), this.cfg.fractionPerUnitBps);
+    const carriedIn = this.cfg.carriedSpendLamports;
+    const t = ruleSpend + carriedIn;
+    const target = t < poolActual ? t : poolActual;
+    let spent = Z, got = Z, outcome = "below-floor", carriedOut: bigint;
+    const age = Math.floor(this.now() / 1000) - Math.floor((this.readingSubmittedAt.get(D) ?? this.now()) / 1000);
+    if (target === Z || target < this.cfg.floorLamports) carriedOut = carriedIn < poolActual ? carriedIn : poolActual;
+    else if (this.targetPool !== "ok") {
+      if (age < QUEUE_UNBLOCK_SECS) return { err: this.targetPool === "below-floor" ? "TargetPoolBelowFloor" : "TargetPoolUnhealthy" };
+      carriedOut = target; // 30 days after the reading: processed below-floor, the whole spend carried
+    } else {
+      if (this.twap === "unavailable") return { err: "TwapUnavailable" };
+      if (this.twap === "deviation") return { err: "TwapDeviation" };
+      const cap = reserveSpendCap(this.targetPoolReserveWsol, MAX_SPEND_RESERVE_BPS);
+      let spend = target < cap ? target : cap;
+      if (basis < spend) spend = basis;
+      if (spend === Z || spend < this.cfg.floorLamports) carriedOut = target;
+      else { spent = spend; got = (spend * this.targetTokensPerSol) / big(1_000_000_000); outcome = "burned"; carriedOut = target - spend; }
+    }
+    if (!commit) return { memo: null };
+    if (spent > Z) {
+      const fromLamports = spent > this.wsol ? spent - this.wsol : Z;
+      this.feeLamports -= fromLamports; this.wsol = this.wsol + fromLamports - spent;
+    }
+    const own = this.feeTokens;
+    this.feeTokens = Z; this.supply -= own; this.targetSupply -= got;
+    Object.assign(r, { processed: true, outcome, poolLamports: basis, poolActualLamports: poolActual, ruleSpendLamports: ruleSpend, carriedInLamports: carriedIn, carriedOutLamports: carriedOut, spentLamports: spent, got, burned: got, owed: own, pool: bt.pool });
+    this.readings.set(D, r);
+    this.cfg = { ...this.cfg, crankCursor: D, totalBurned: this.cfg.totalBurned + own, totalSpentLamports: this.cfg.totalSpentLamports + spent, burns: this.cfg.burns + (got > Z || own > Z ? 1 : 0), carriedSpendLamports: carriedOut };
+    return { memo: formatTargetMemo({ ...this.head(r), pool: basis.toString(), spent: spent.toString(), got: rawToTokens(got, bt.decimals), burn: rawToTokens(got, bt.decimals), target: bt.mint, own: rawToTokens(own, this.decimals), swap: spent > Z ? bt.pool.slice(0, 12) : "none", version: "v3" }) };
+  }
+
   async simulate(raw: Uint8Array) {
     if (this.simErr) return { err: this.simErr, logs: [`Program log: AnchorError occurred. Error Code: ${this.simErr}.`] };
     const p = this.payloads.get(new TextDecoder().decode(raw));
@@ -327,7 +394,7 @@ export class FakeProgram implements ProgramPort {
   strangerCrank(): string | null {
     const next = this.nextInLine();
     if (!next) return null;
-    const kind = next.units === 0 ? "no_units" : this.cfg.mode === "vault" ? "vault" : "buyback";
+    const kind = next.units === 0 ? "no_units" : this.cfg.mode === "vault" ? "vault" : this.burnTarget ? "target" : "buyback";
     const sig = `stranger${++this.n}x${this.mint.replace(/[^1-9A-HJ-NP-Za-km-z]/g, "").slice(0, 8)}`.padEnd(32, "Z");
     const payload: Payload = { kind: "crank", crank: kind, recordDate: next.recordDate };
     this.payloads.set(sig, payload);

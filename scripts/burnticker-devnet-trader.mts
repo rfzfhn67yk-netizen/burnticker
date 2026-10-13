@@ -8,13 +8,17 @@
 //   curve-buy  --mint <pubkey> --sol <amount>                       LaunchLab buy_exact_in on the token's curve
 //   curve-sell --mint <pubkey> --pct <1..100>                       LaunchLab sell_exact_in of that share of the payer's tokens
 //   cpmm-swap  --mint <pubkey> --pool <pubkey> --dir buy --sol <amount> | --dir sell (--pct <1..100> | --tokens <ui amount>)   CPMM swap_base_input
+//   cpmm-create --mint <token> --sol <amount> --tokens <ui amount> [--decimals 6]   (round 5 devnet run: a WSOL/<token> CPMM pool on the
+//              devnet tier the platform uses (CPMM_TIER.devnet, 0.5 % with the creator fee), created by the payer — the stand-in for
+//              BONK's pool that a coin's burn target points at; the payer keeps the LP: the pool is not ours)
 //   common:    --payer <keypath>  [--slippage-bps 500]  [--rpc <devnet url>]  [--send]
 //
 // Instructions come from the pinned SDK's own low-level builders (@raydium-io/raydium-sdk-v2 0.2.74-alpha), as in launch.ts.
 
 import { ComputeBudgetProgram, Connection, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction, type TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
-import { buyExactInInstruction, sellExactInInstruction, makeSwapCpmmBaseInInstruction, getPdaLaunchpadAuth, getPdaLaunchpadPoolId, getPdaCreatorVault, getPdaPlatformVault, getPdaPoolAuthority, LaunchpadPool, LaunchpadConfig, PlatformConfig, Curve } from "@raydium-io/raydium-sdk-v2";
+import { buyExactInInstruction, sellExactInInstruction, makeSwapCpmmBaseInInstruction, makeCreateCpmmPoolInInstruction, getCreatePoolKeys, DEVNET_PROGRAM_ID, getPdaLaunchpadAuth, getPdaLaunchpadPoolId, getPdaCreatorVault, getPdaPlatformVault, getPdaPoolAuthority, LaunchpadPool, LaunchpadConfig, PlatformConfig, Curve } from "@raydium-io/raydium-sdk-v2";
+import { CPMM_TIER } from "../src/lib/burnticker/cpmmTier.ts";
 import { associatedTokenAddress, base58Encode, closeAccountIx, clusterOfGenesis, createAtaIdempotentIx, explorerUrl, syncNativeIx, TOKEN_PROGRAM_ID } from "../src/lib/burnKeeper/solana.ts";
 import { LAUNCHLAB_PROGRAM, WSOL_MINT, CPMM_PROGRAM_ID } from "../src/lib/burnKeeper/launchlab.ts";
 import { fetchCpmmPool } from "../src/lib/burnReceipts/cpmm.ts";
@@ -27,7 +31,7 @@ const SEND = args.includes("--send");
 const rpc = opt("rpc") ?? "https://api.devnet.solana.com";
 const connection = new Connection(rpc, "confirmed");
 if (clusterOfGenesis(await connection.getGenesisHash()) !== "devnet") die(`${new URL(rpc).host} is not devnet — this tool is devnet-only`);
-if (!["status", "curve-buy", "curve-sell", "cpmm-swap"].includes(CMD ?? "")) die("command: status | curve-buy | curve-sell | cpmm-swap");
+if (!["status", "curve-buy", "curve-sell", "cpmm-swap", "cpmm-create"].includes(CMD ?? "")) die("command: status | curve-buy | curve-sell | cpmm-swap | cpmm-create");
 const mint = new PublicKey(opt("mint") ?? die("--mint is required"));
 const slippageBps = BigInt(opt("slippage-bps") ?? 500);
 const LL = LAUNCHLAB_PROGRAM.devnet, CPMM = CPMM_PROGRAM_ID.devnet;
@@ -132,4 +136,28 @@ if (CMD === "status") {
   ixs.push(makeSwapCpmmBaseInInstruction(CPMM, payer.publicKey, getPdaPoolAuthority(CPMM).publicKey, p.ammConfig, p.address, inAcc, outAcc, inVault, outVault, TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, inMint, outMint, p.observationKey, new BN(amountIn.toString()), new BN(minOut.toString())));
   ixs.push(closeAccountIx(wsol, payer.publicKey, payer.publicKey));
   await run(payer, ixs, { pool: p.address, dir, amountIn, quotedOut: quoted, minOut, reserveSolBefore: solRes, reserveTokBefore: tokRes });
+}
+
+// Round 5 (external burn targets): a devnet WSOL/<token> CPMM pool for a coin's burn target to point at.
+if (CMD === "cpmm-create") {
+  const payer = await payerKey();
+  const sol = lamports(opt("sol") ?? die("--sol <amount> is required"));
+  const decimals = Number(opt("decimals") ?? 6);
+  const tokens = BigInt(Math.round(Number(opt("tokens") ?? die("--tokens <ui amount> is required")) * 10 ** decimals));
+  const configId = new PublicKey(CPMM_TIER.devnet.id);
+  // CPMM orders the two mints by bytes: token_0 < token_1.
+  const wsolFirst = Buffer.compare(WSOL_MINT.toBuffer(), mint.toBuffer()) < 0;
+  const [mintA, mintB] = wsolFirst ? [WSOL_MINT, mint] : [mint, WSOL_MINT];
+  const [amountA, amountB] = wsolFirst ? [sol, tokens] : [tokens, sol];
+  const keys = getCreatePoolKeys({ programId: CPMM, configId, mintA, mintB });
+  const wsolAta = associatedTokenAddress(payer.publicKey, WSOL_MINT), tokenAta = associatedTokenAddress(payer.publicKey, mint);
+  const ixs: TransactionInstruction[] = [
+    createAtaIdempotentIx(payer.publicKey, payer.publicKey, WSOL_MINT),
+    SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: wsolAta, lamports: Number(sol) }),
+    syncNativeIx(wsolAta),
+    makeCreateCpmmPoolInInstruction(CPMM, payer.publicKey, configId, keys.authority, keys.poolId, mintA, mintB, keys.lpMint,
+      wsolFirst ? wsolAta : tokenAta, wsolFirst ? tokenAta : wsolAta, associatedTokenAddress(payer.publicKey, keys.lpMint), keys.vaultA, keys.vaultB,
+      DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_FEE_ACC, TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, keys.observationId, new BN(amountA.toString()), new BN(amountB.toString()), new BN(0)),
+  ];
+  await run(payer, ixs, { pool: keys.poolId, ammConfig: configId, lpMint: keys.lpMint, vaultA: keys.vaultA, vaultB: keys.vaultB, observation: keys.observationId, mintA, mintB, amountA, amountB, note: "the pool opens one second after creation; seed TWAP history with cpmm-swap before the first crank" });
 }

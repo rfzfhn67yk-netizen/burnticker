@@ -156,7 +156,9 @@ pub struct TokenConfig {
     pub end_state: u8,
     /// The RuleEnd's record_date (YYYYMMDD; 0 while live). After a RESOLVED end no reading may be dated later.
     pub end_date: u32,
-    pub reserved: [u8; 1],
+    /// Round 5: BURN_TARGET_SELF (0, every config created before round 5: this byte was `reserved`) or BURN_TARGET_EXTERNAL (the coin
+    /// burns the target pinned in its BurnTarget ["burn_target", mint]; crank_buyback refuses it, crank_target_burn cranks it).
+    pub burn_target_kind: u8,
 }
 
 impl TokenConfig {
@@ -308,7 +310,8 @@ pub struct Reading {
     pub got: u64,
     /// Raw tokens burned (buyback: got + any creator-fee tokens already in the fee PDA's token account).
     pub burned: u64,
-    /// Vault: raw tokens owed this day (planned + shortfall carried in, capped by the allocation).
+    /// Vault: raw tokens owed this day (planned + shortfall carried in, capped by the allocation). Round 5, a target reading
+    /// (crank_target_burn): the coin's OWN raw tokens burned in the same crank (`burned`, `got` are then in the target's units).
     pub owed: u64,
     /// Vault: raw tokens owed and not burned, carried out.
     pub shortfall: u64,
@@ -454,4 +457,47 @@ pub fn end_sink_address(mint: &Pubkey) -> (Pubkey, u8) {
 
 pub fn rule_end_address(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(&[RULE_END_SEED, mint.as_ref()], &crate::ID)
+}
+
+/// Round 5: the token a coin burns instead of itself, and the Raydium CPMM pool its SOL is swapped on. ["burn_target", mint]. Written
+/// once by pin_burn_target (mint-signed, before the coin's mint exists). `target_mint` never changes; the pool fields change only
+/// through apply_target_pool (admin proposal, 48 h, attester veto, the same admission).
+#[account]
+#[derive(InitSpace)]
+pub struct BurnTarget {
+    pub version: u8,
+    pub bump: u8,
+    /// The coin.
+    pub mint: Pubkey,
+    /// The token burned (plain SPL Token, no mint or freeze authority).
+    pub target_mint: Pubkey,
+    pub target_decimals: u8,
+    /// TARGET_POOL_CPMM or TARGET_POOL_AMM_V4.
+    pub pool_kind: u8,
+    /// The target's Pyth price feed id (Crypto.<TARGET>/USD), pinned with the target; SOL/USD is compiled (PYTH_SOL_USD_FEED_ID).
+    pub target_feed_id: [u8; 32],
+    /// The pinned pool and the accounts read from it at admission (the crank requires exactly these). `amm_config` is the CPMM
+    /// AmmConfig, or the AMM v4 vault authority PDA; `observation` is the CPMM observation account, or the AMM v4 pool itself (AMM v4
+    /// has none; the pool's own address keeps the crank's account list one shape).
+    pub pool: Pubkey,
+    pub amm_config: Pubkey,
+    pub wsol_vault: Pubkey,
+    pub target_vault: Pubkey,
+    pub observation: Pubkey,
+    pub wsol_is_token_0: bool,
+    pub pinned_at: i64,
+    /// Target raw units destroyed, lamports spent on the target and cranks that burned some of it.
+    pub total_target_burned: u64,
+    pub total_spent_lamports: u64,
+    pub burns: u32,
+    /// How many times the pool was re-pinned (a re-pin may change the pool kind; never the token or the feed).
+    pub repins: u32,
+    /// A pending re-pin (apply_target_pool), applicable from `pending_eta` for 14 days after the proposal; 0 = none.
+    pub pending_pool: Pubkey,
+    pub pending_eta: i64,
+    pub reserved: [u8; 32],
+}
+
+pub fn burn_target_address(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[BURN_TARGET_SEED, mint.as_ref()], &crate::ID)
 }

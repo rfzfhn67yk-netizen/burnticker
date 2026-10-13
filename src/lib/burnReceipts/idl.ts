@@ -368,6 +368,111 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "args": []
     },
     {
+      "name": "apply_target_pool",
+      "docs": [
+        "Round 5: permissionless after the timelock, within 14 days of the proposal; the new pool passes the same admission."
+      ],
+      "discriminator": [
+        226,
+        44,
+        251,
+        208,
+        119,
+        217,
+        56,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "burn_target",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  114,
+                  110,
+                  95,
+                  116,
+                  97,
+                  114,
+                  103,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_mint"
+        },
+        {
+          "name": "new_pool"
+        },
+        {
+          "name": "new_amm_config"
+        },
+        {
+          "name": "new_wsol_vault"
+        },
+        {
+          "name": "new_target_vault"
+        },
+        {
+          "name": "sol_price_update"
+        },
+        {
+          "name": "target_price_update"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "cancel_attester_change",
       "discriminator": [
         252,
@@ -521,6 +626,87 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
                   114,
                   109
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel_target_pool",
+      "discriminator": [
+        148,
+        146,
+        103,
+        172,
+        154,
+        87,
+        51,
+        28
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "burn_target",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  114,
+                  110,
+                  95,
+                  116,
+                  97,
+                  114,
+                  103,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
               }
             ]
           }
@@ -1578,6 +1764,405 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       ]
     },
     {
+      "name": "crank_target_burn",
+      "docs": [
+        "Round 5: the target coin's crank — swap SOL for the target on the pinned pool and burn it, with memo v3. Permissionless."
+      ],
+      "discriminator": [
+        215,
+        224,
+        153,
+        127,
+        117,
+        111,
+        88,
+        45
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reading",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  97,
+                  100,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "arg",
+                "path": "record_date"
+              }
+            ]
+          }
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "burn_target",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  114,
+                  110,
+                  95,
+                  116,
+                  97,
+                  114,
+                  103,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The coin's own mint: creator-fee tokens of the coin that reached the fee PDA are burned here too (as crank_buyback does)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "fee_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_wsol",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "fee_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "wsol_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "fee_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "fee_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "target_mint",
+          "docs": [
+            "The pinned target mint (SPL Token only: the constraint refuses a Token-2022 account)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "target_tokens",
+          "docs": [
+            "The fee PDA's own account for the target: the swap delivers into it and everything in it is burned."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "fee_vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "target_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "wsol_mint",
+          "address": "So11111111111111111111111111111111111111112"
+        },
+        {
+          "name": "pool_state",
+          "writable": true
+        },
+        {
+          "name": "amm_config"
+        },
+        {
+          "name": "cpmm_authority"
+        },
+        {
+          "name": "wsol_vault",
+          "writable": true
+        },
+        {
+          "name": "target_vault",
+          "writable": true
+        },
+        {
+          "name": "observation_state",
+          "writable": true
+        },
+        {
+          "name": "swap_program"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "memo_program",
+          "address": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+        },
+        {
+          "name": "sol_price_update"
+        },
+        {
+          "name": "target_price_update"
+        },
+        {
+          "name": "pair_link",
+          "optional": true
+        },
+        {
+          "name": "pair_result",
+          "optional": true
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "record_date",
+          "type": "u32"
+        }
+      ]
+    },
+    {
       "name": "crank_vault",
       "discriminator": [
         221,
@@ -2563,6 +3148,129 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "args": []
     },
     {
+      "name": "pin_burn_target",
+      "docs": [
+        "Round 5: pin the coin's burn target (mint-signed, once, only before the coin's mint exists)."
+      ],
+      "discriminator": [
+        240,
+        146,
+        212,
+        133,
+        53,
+        224,
+        229,
+        110
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "(system-owned, no data): the target is fixed before anyone can hold the coin."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "burn_target",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  114,
+                  110,
+                  95,
+                  116,
+                  97,
+                  114,
+                  103,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_mint"
+        },
+        {
+          "name": "target_pool"
+        },
+        {
+          "name": "target_amm_config"
+        },
+        {
+          "name": "target_wsol_vault"
+        },
+        {
+          "name": "target_token_vault"
+        },
+        {
+          "name": "sol_price_update"
+        },
+        {
+          "name": "target_price_update"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "target_feed_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "propose_attesters",
       "discriminator": [
         11,
@@ -2676,6 +3384,95 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         {
           "name": "new_cap_lamports",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "propose_target_pool",
+      "docs": [
+        "Round 5: admin proposes a new pool for the same target (48 h timelock)."
+      ],
+      "discriminator": [
+        165,
+        162,
+        248,
+        174,
+        122,
+        16,
+        190,
+        54
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "burn_target",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  114,
+                  110,
+                  95,
+                  116,
+                  97,
+                  114,
+                  103,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "pool",
+          "type": "pubkey"
         }
       ]
     },
@@ -3957,9 +4754,103 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "veto_target_pool",
+      "docs": [
+        "Round 5: any current attester kills a pending target-pool re-pin."
+      ],
+      "discriminator": [
+        185,
+        176,
+        94,
+        165,
+        28,
+        125,
+        81,
+        40
+      ],
+      "accounts": [
+        {
+          "name": "attester",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "burn_target",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  114,
+                  110,
+                  95,
+                  116,
+                  97,
+                  114,
+                  103,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "TokenConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
+    {
+      "name": "BurnTarget",
+      "discriminator": [
+        156,
+        55,
+        118,
+        137,
+        199,
+        161,
+        201,
+        186
+      ]
+    },
     {
       "name": "EndSink",
       "discriminator": [
@@ -4129,6 +5020,19 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         2,
         137,
         227
+      ]
+    },
+    {
+      "name": "BurnTargetPinned",
+      "discriminator": [
+        185,
+        214,
+        21,
+        3,
+        154,
+        172,
+        44,
+        170
       ]
     },
     {
@@ -4532,6 +5436,58 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
         184,
         212,
         185
+      ]
+    },
+    {
+      "name": "TargetBurned",
+      "discriminator": [
+        136,
+        125,
+        230,
+        206,
+        251,
+        170,
+        239,
+        33
+      ]
+    },
+    {
+      "name": "TargetPoolProposalCancelled",
+      "discriminator": [
+        83,
+        43,
+        124,
+        104,
+        225,
+        151,
+        191,
+        229
+      ]
+    },
+    {
+      "name": "TargetPoolProposed",
+      "discriminator": [
+        195,
+        79,
+        86,
+        189,
+        115,
+        27,
+        216,
+        133
+      ]
+    },
+    {
+      "name": "TargetPoolRepinned",
+      "discriminator": [
+        46,
+        170,
+        28,
+        86,
+        34,
+        122,
+        231,
+        146
       ]
     },
     {
@@ -5098,6 +6054,101 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "code": 6109,
       "name": "FlagshipNotLive",
       "msg": "forward_on_end: the flagship has no verified pool"
+    },
+    {
+      "code": 6110,
+      "name": "BurnTargetSet",
+      "msg": "this coin burns a target token: crank it with crank_target_burn"
+    },
+    {
+      "code": 6111,
+      "name": "NoBurnTarget",
+      "msg": "this coin has no burn target"
+    },
+    {
+      "code": 6112,
+      "name": "BurnTargetAlreadyPinned",
+      "msg": "pin_burn_target: the coin already has a target, or has readings, burns or a verified pool"
+    },
+    {
+      "code": 6113,
+      "name": "MintAlreadyCreated",
+      "msg": "pin_burn_target: the coin's mint already exists; a target can only be pinned before the coin is created"
+    },
+    {
+      "code": 6114,
+      "name": "TargetIsSelf",
+      "msg": "burn target: the target is the coin itself"
+    },
+    {
+      "code": 6115,
+      "name": "TargetNotAllowed",
+      "msg": "burn target: WSOL or the empty key cannot be a target"
+    },
+    {
+      "code": 6116,
+      "name": "TargetNotSplToken",
+      "msg": "burn target: the target must be a plain SPL Token mint (Token-2022 is refused)"
+    },
+    {
+      "code": 6117,
+      "name": "TargetFreezeAuthority",
+      "msg": "burn target: the target mint has a freeze authority"
+    },
+    {
+      "code": 6118,
+      "name": "TargetMintAuthority",
+      "msg": "burn target: the target mint can still be minted"
+    },
+    {
+      "code": 6119,
+      "name": "TargetPoolInvalid",
+      "msg": "burn target: not a readable Raydium CPMM pool, or the AmmConfig or vault passed is not the pool's"
+    },
+    {
+      "code": 6120,
+      "name": "TargetPoolMints",
+      "msg": "burn target: the pool's mints are not exactly the target and WSOL on SPL Token"
+    },
+    {
+      "code": 6121,
+      "name": "TargetFeeTier",
+      "msg": "burn target: the pool's fee is above 1 %"
+    },
+    {
+      "code": 6122,
+      "name": "TargetPoolBelowFloor",
+      "msg": "burn target: the pool's SOL reserve is under the floor"
+    },
+    {
+      "code": 6123,
+      "name": "TargetPoolUnhealthy",
+      "msg": "burn target: the pinned pool is gone, disabled or changed (the SOL is held)"
+    },
+    {
+      "code": 6124,
+      "name": "TargetMismatch",
+      "msg": "burn target: an account is not the pinned one"
+    },
+    {
+      "code": 6125,
+      "name": "TargetPythInvalid",
+      "msg": "burn target: the Pyth account is not a fully verified PriceUpdateV2 of the pinned feed"
+    },
+    {
+      "code": 6126,
+      "name": "PythStale",
+      "msg": "burn target: the Pyth price is older than 60 seconds (the SOL is held)"
+    },
+    {
+      "code": 6127,
+      "name": "PythUnusable",
+      "msg": "burn target: the Pyth price is unusable (confidence over 1 %, not positive, or out of range; the SOL is held)"
+    },
+    {
+      "code": 6128,
+      "name": "TargetPriceDeviation",
+      "msg": "burn target: the pool's price is further from the Pyth price than the rule allows (the SOL is held)"
     }
   ],
   "types": [
@@ -5283,6 +6334,198 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "spent_lamports",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BurnTarget",
+      "docs": [
+        "Round 5: the token a coin burns instead of itself, and the Raydium CPMM pool its SOL is swapped on. [\"burn_target\", mint]. Written",
+        "once by pin_burn_target (mint-signed, before the coin's mint exists). `target_mint` never changes; the pool fields change only",
+        "through apply_target_pool (admin proposal, 48 h, attester veto, the same admission)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "The coin."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "target_mint",
+            "docs": [
+              "The token burned (plain SPL Token, no mint or freeze authority)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "target_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "pool_kind",
+            "docs": [
+              "TARGET_POOL_CPMM or TARGET_POOL_AMM_V4."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "target_feed_id",
+            "docs": [
+              "The target's Pyth price feed id (Crypto.<TARGET>/USD), pinned with the target; SOL/USD is compiled (PYTH_SOL_USD_FEED_ID)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pool",
+            "docs": [
+              "The pinned pool and the accounts read from it at admission (the crank requires exactly these). `amm_config` is the CPMM",
+              "AmmConfig, or the AMM v4 vault authority PDA; `observation` is the CPMM observation account, or the AMM v4 pool itself (AMM v4",
+              "has none; the pool's own address keeps the crank's account list one shape)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "amm_config",
+            "type": "pubkey"
+          },
+          {
+            "name": "wsol_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "observation",
+            "type": "pubkey"
+          },
+          {
+            "name": "wsol_is_token_0",
+            "type": "bool"
+          },
+          {
+            "name": "pinned_at",
+            "type": "i64"
+          },
+          {
+            "name": "total_target_burned",
+            "docs": [
+              "Target raw units destroyed, lamports spent on the target and cranks that burned some of it."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_spent_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "burns",
+            "type": "u32"
+          },
+          {
+            "name": "repins",
+            "docs": [
+              "How many times the pool was re-pinned (a re-pin may change the pool kind; never the token or the feed)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "pending_pool",
+            "docs": [
+              "A pending re-pin (apply_target_pool), applicable from `pending_eta` for 14 days after the proposal; 0 = none."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_eta",
+            "type": "i64"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BurnTargetPinned",
+      "docs": [
+        "Round 5: the coin's burn target was pinned (pin_burn_target, before the coin existed)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_kind",
+            "type": "u8"
+          },
+          {
+            "name": "amm_config",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "wsol_reserve_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "reference_x32",
+            "docs": [
+              "The Pyth target/SOL reference at the pin (raw target per lamport × 2^32) and the pool's spot at the same moment."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "spot_x32",
+            "type": "u128"
           }
         ]
       }
@@ -6615,7 +7858,8 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
           {
             "name": "owed",
             "docs": [
-              "Vault: raw tokens owed this day (planned + shortfall carried in, capped by the allocation)."
+              "Vault: raw tokens owed this day (planned + shortfall carried in, capped by the allocation). Round 5, a target reading",
+              "(crank_target_burn): the coin's OWN raw tokens burned in the same crank (`burned`, `got` are then in the target's units)."
             ],
             "type": "u64"
           },
@@ -7234,6 +8478,145 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       }
     },
     {
+      "name": "TargetBurned",
+      "docs": [
+        "Round 5: one target crank — SOL swapped on the pinned pool for the target, everything the fee PDA held in the target burned",
+        "(`target_burned`, target raw units), plus any of the coin's own tokens it held (`own_burned`, the coin's raw units)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "record_date",
+            "type": "u32"
+          },
+          {
+            "name": "target_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "spent_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "got",
+            "type": "u64"
+          },
+          {
+            "name": "target_burned",
+            "type": "u64"
+          },
+          {
+            "name": "own_burned",
+            "type": "u64"
+          },
+          {
+            "name": "reference_x32",
+            "docs": [
+              "The Pyth reference the crank checked the pool against (0 when nothing was swapped)."
+            ],
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TargetPoolProposalCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "cancelled_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "vetoed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TargetPoolProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "eta",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TargetPoolRepinned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool_kind",
+            "type": "u8"
+          },
+          {
+            "name": "wsol_reserve_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "caller",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "TokenConfig",
       "type": {
         "kind": "struct",
@@ -7601,13 +8984,12 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
             "type": "u32"
           },
           {
-            "name": "reserved",
-            "type": {
-              "array": [
-                "u8",
-                1
-              ]
-            }
+            "name": "burn_target_kind",
+            "docs": [
+              "Round 5: BURN_TARGET_SELF (0, every config created before round 5: this byte was `reserved`) or BURN_TARGET_EXTERNAL (the coin",
+              "burns the target pinned in its BurnTarget [\"burn_target\", mint]; crank_buyback refuses it, crank_target_burn cranks it)."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -7731,6 +9113,27 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
     }
   ],
   "constants": [
+    {
+      "name": "BURN_TARGET_EXTERNAL",
+      "type": "u8",
+      "value": "1"
+    },
+    {
+      "name": "BURN_TARGET_SEED",
+      "docs": [
+        "BurnTarget [\"burn_target\", mint] — the target mint and its pinned CPMM pool, written once by pin_burn_target."
+      ],
+      "type": "bytes",
+      "value": "[98, 117, 114, 110, 95, 116, 97, 114, 103, 101, 116]"
+    },
+    {
+      "name": "BURN_TARGET_SELF",
+      "docs": [
+        "TokenConfig.burn_target_kind (the byte that was `reserved`, zero on every earlier config): the coin burns itself / its BurnTarget."
+      ],
+      "type": "u8",
+      "value": "0"
+    },
     {
       "name": "END_ATTESTATION_DOMAIN",
       "docs": [
@@ -7925,12 +9328,49 @@ export const BURN_RECEIPTS_IDL: AnchorIdl = {
       "value": "1"
     },
     {
+      "name": "PYTH_MAX_AGE_SECS",
+      "docs": [
+        "A Pyth price older than this (publish_time) holds the crank like an unhealthy pool."
+      ],
+      "type": "i64",
+      "value": "60"
+    },
+    {
+      "name": "PYTH_MAX_CONF_BPS",
+      "docs": [
+        "A Pyth price whose confidence interval is wider than this share of the price holds the crank."
+      ],
+      "type": "u64",
+      "value": "100"
+    },
+    {
       "name": "RULE_END_SEED",
       "docs": [
         "RuleEnd [\"rule_end\", mint] — the quorum-signed end of a coin's rule (submit_rule_end)."
       ],
       "type": "bytes",
       "value": "[114, 117, 108, 101, 95, 101, 110, 100]"
+    },
+    {
+      "name": "TARGET_MAX_FEE_PPM",
+      "docs": [
+        "A target pool's fee (trade fee + the creator fee when the pool charges it), parts per million of volume: at most 1 %."
+      ],
+      "type": "u64",
+      "value": "10000"
+    },
+    {
+      "name": "TARGET_POOL_AMM_V4",
+      "type": "u8",
+      "value": "1"
+    },
+    {
+      "name": "TARGET_POOL_CPMM",
+      "docs": [
+        "BurnTarget.pool_kind: the pinned pool is a Raydium CPMM pool / a Raydium AMM v4 pool (swap-only status, swap_base_in_v2)."
+      ],
+      "type": "u8",
+      "value": "0"
     },
     {
       "name": "UNLINK_PAIR_VOIDED",

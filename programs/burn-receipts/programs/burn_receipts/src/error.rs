@@ -222,4 +222,43 @@ pub enum BurnError {
     NothingToForward,
     #[msg("forward_on_end: the flagship has no verified pool")]
     FlagshipNotLive,
+    // ----- round 5: burn targets -----
+    #[msg("this coin burns a target token: crank it with crank_target_burn")]
+    BurnTargetSet,
+    #[msg("this coin has no burn target")]
+    NoBurnTarget,
+    #[msg("pin_burn_target: the coin already has a target, or has readings, burns or a verified pool")]
+    BurnTargetAlreadyPinned,
+    #[msg("pin_burn_target: the coin's mint already exists; a target can only be pinned before the coin is created")]
+    MintAlreadyCreated,
+    #[msg("burn target: the target is the coin itself")]
+    TargetIsSelf,
+    #[msg("burn target: WSOL or the empty key cannot be a target")]
+    TargetNotAllowed,
+    #[msg("burn target: the target must be a plain SPL Token mint (Token-2022 is refused)")]
+    TargetNotSplToken,
+    #[msg("burn target: the target mint has a freeze authority")]
+    TargetFreezeAuthority,
+    #[msg("burn target: the target mint can still be minted")]
+    TargetMintAuthority,
+    #[msg("burn target: not a readable Raydium CPMM pool, or the AmmConfig or vault passed is not the pool's")]
+    TargetPoolInvalid,
+    #[msg("burn target: the pool's mints are not exactly the target and WSOL on SPL Token")]
+    TargetPoolMints,
+    #[msg("burn target: the pool's fee is above 1 %")]
+    TargetFeeTier,
+    #[msg("burn target: the pool's SOL reserve is under the floor")]
+    TargetPoolBelowFloor,
+    #[msg("burn target: the pinned pool is gone, disabled or changed (the SOL is held)")]
+    TargetPoolUnhealthy,
+    #[msg("burn target: an account is not the pinned one")]
+    TargetMismatch,
+    #[msg("burn target: the Pyth account is not a fully verified PriceUpdateV2 of the pinned feed")]
+    TargetPythInvalid,
+    #[msg("burn target: the Pyth price is older than 60 seconds (the SOL is held)")]
+    PythStale,
+    #[msg("burn target: the Pyth price is unusable (confidence over 1 %, not positive, or out of range; the SOL is held)")]
+    PythUnusable,
+    #[msg("burn target: the pool's price is further from the Pyth price than the rule allows (the SOL is held)")]
+    TargetPriceDeviation,
 }

@@ -52,6 +52,13 @@ export const WAIT_REASONS: Record<string, string> = {
   TwapUnavailable: "waiting for TWAP history — the pool's oracle needs 600–1,200 s of observations before the program will buy (late, never lost)",
   TwapDeviation: "waiting — the spot price sits more than the rule's deviation below the pool's TWAP (a pushed price); retried until it reverts",
   PoolNotTradable: "waiting — the registered pool is not tradable right now",
+  // Round 5 (a coin with a burn target): the pinned target pool is held, never swapped for another; the SOL stays in the fee PDA.
+  TargetPoolUnhealthy: "target pool unhealthy — the pinned target pool is gone, switched off or changed; the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
+  TargetPoolBelowFloor: "target pool unhealthy — the pinned target pool holds less SOL than the floor; the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
+  PythStale: "target pool unhealthy — the Pyth price for the target or SOL is more than 60 seconds old (Pyth's sponsored feed, or post a fresh update); the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
+  PythUnusable: "target pool unhealthy — the Pyth price's confidence is wider than 1 % (or it is out of range); the burn pool's SOL is held (after 30 days the reading is processed and its spend carried)",
+  TargetPriceDeviation: "target pool unhealthy — the pinned pool's price is further from the Pyth price than the rule allows (a pushed pool, or a market moving faster than Pyth); retried, the SOL is held (after 30 days the reading is processed and its spend carried)",
+  TargetFeeTier: "target pool unhealthy — the pinned target pool's fee is now above 1 %; the burn pool's SOL is held (after 30 days the reading is processed and its spend carried; the admin can re-pin)",
   EmptyReserves: "waiting — the registered pool has no reserves",
   // LAUNCHPAD-PATH §40: a paired coin's crank waits for the period's pair result (never reached by a single coin: pair_state 0).
   PairResultPending: "waiting — the period's pair result is not recorded yet; the burn waits up to 72 hours for it, then burns unpaired",
@@ -97,6 +104,8 @@ export function configRefusal(cfg: ProgramConfigView, loaded: LoadedRules): stri
   if (cfg.rulesSha256 !== loaded.sha256) return `the program config's rules sha256 ${cfg.rulesSha256.slice(0, 12)}… ≠ the rule file's ${loaded.sha12}… — wrong mint or wrong rule file; refusing`;
   if (cfg.valueDecimals !== 2) return `the program config reads values with ${cfg.valueDecimals} decimals; the Treasury feed is cents (2) — refusing`;
   if (cfg.memoPrefix !== r.memo.prefix) return `the program writes memos with prefix ${cfg.memoPrefix}, the rule file says ${r.memo.prefix} — refusing`;
+  // Round 5: the single-coin keeper ($DEFICIT) records burns of its own mint only; a coin with a burn target runs under the multi keeper.
+  if (cfg.burnsTarget) return "the program config burns a target token (round 5); the single-coin keeper records only self-burns — run it under the multi keeper; refusing";
   return null;
 }
 

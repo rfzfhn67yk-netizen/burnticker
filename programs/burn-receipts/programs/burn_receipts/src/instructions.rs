@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod burn_target;
 pub mod claim_launchlab;
 pub mod crank_buyback;
 pub mod crank_common;
@@ -15,6 +16,7 @@ pub mod register_pool;
 pub mod submit_reading;
 
 pub use admin::*;
+pub use burn_target::*;
 pub use claim_launchlab::*;
 pub use crank_buyback::*;
 pub use crank_no_units::*;

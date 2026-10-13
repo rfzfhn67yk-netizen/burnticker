@@ -7,6 +7,7 @@ import { formatDate } from "@/lib/burnReceipts/math";
 import { fetchPairLink, fetchPairResult, forwardToWinnerIx, PAIR_RESULT_GRACE_SECS, PAIR_RESULT_LOST, PAIR_STATE_PAIRED, pairResultFor } from "@/lib/burnReceipts/pairs";
 import { checkPoolHealthIx, claimLaunchlabCreatorFeeIx, crankBuybackIx, crankNoUnitsIx, crankVaultIx, createAtaIdempotentIx, eventAuthority, registerPoolIx, submitReadingIx, syncNativeIx } from "@/lib/burnReceipts/instructions";
 import { configPda, cpmmAuthority, feePda, feeTokenAddress, feeWsolAddress, launchlabPoolPda, vaultAddress } from "@/lib/burnReceipts/pda";
+import { BURN_TARGET_EXTERNAL, crankTargetBurnIx, feeTargetAddress, fetchBurnTarget, TARGET_POOL_HELD_ERRORS } from "@/lib/burnReceipts/burnTarget";
 
 /**
  * THE KEEPER'S HANDLE ON THE PROGRAM. Two jobs, both safe to retry:
@@ -266,12 +267,13 @@ export type CrankResult =
  * Errors that mean "not now", not "broken": the next run retries. WsolBalanceMismatch (review-2 F3): the fee PDA's WSOL balance moved
  * between the sync and the swap (the crank's own SyncNative normally prevents it) — retry.
  */
-export const DEFERRABLE_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "PairResultPending"]);
+export const DEFERRABLE_ERRORS = new Set(["TwapDeviation", "TwapUnavailable", "PoolNotTradable", "EmptyReserves", "WsolBalanceMismatch", "PairResultPending", ...TARGET_POOL_HELD_ERRORS]);
 /** Deferrals that are also untradeable observations: crankNext records them with check_pool_health (review-2 F6/F7 continuity). */
 export const UNTRADEABLE_ERRORS = new Set(["PoolNotTradable", "EmptyReserves"]);
 
-/** `forward` (LAUNCHPAD-PATH §40): a paired coin that LOST the period — its reading is processed by forward_to_winner instead. */
-export interface PlannedCrank { kind: "no_units" | "vault" | "buyback" | "forward"; recordDate: number; instructions: TransactionInstruction[]; config: TokenConfigAccount }
+/** `forward` (LAUNCHPAD-PATH §40): a paired coin that LOST the period — its reading is processed by forward_to_winner instead.
+ *  `target` (round 5): a coin with a burn target — crank_target_burn on its PINNED pool (`targetMint` names what burns). */
+export interface PlannedCrank { kind: "no_units" | "vault" | "buyback" | "forward" | "target"; recordDate: number; instructions: TransactionInstruction[]; config: TokenConfigAccount; targetMint?: PublicKey }
 
 /** Builds (does not send) the instructions for the next reading in line, or explains why there is nothing to do. */
 export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promise<PlannedCrank | Exclude<CrankResult, { status: "processed" | "deferred" }>> {
@@ -287,7 +289,9 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
     const config = configPda(ctx.programId, ctx.mint);
     return { kind: "vault", recordDate, config: c, instructions: [createAtaIdempotentIx({ payer: cranker, owner: config, mint: ctx.mint, ata: vaultAddress(ctx.programId, ctx.mint) }), crankVaultIx(base)] };
   }
-  if (!c.poolRegistered) return { status: "waiting-for-pool", recordDate };
+  // Round 5: a target coin trades on its pinned target pool, so it never waits for a pool of its own.
+  const burnsTarget = c.burn_target_kind === BURN_TARGET_EXTERNAL;
+  if (!burnsTarget && !c.poolRegistered) return { status: "waiting-for-pool", recordDate };
   // LAUNCHPAD-PATH §40: a PAIRED coin passes its partner (PairLink + the period's PairResult); if it LOST the period, the reading is
   // processed by forward_to_winner (its fuel → the winner's fee PDA) instead of a buyback.
   let partner: PublicKey | undefined;
@@ -318,9 +322,28 @@ export async function planCrank(ctx: ProgramContext, cranker: PublicKey): Promis
       };
     }
   }
-  const pool = await poolAccountsOrStandIns(ctx, c.cpmm_pool);
   const fee = feePda(ctx.programId, ctx.mint);
   const feeWsol = feeWsolAddress(ctx.programId, ctx.mint);
+  if (burnsTarget) {
+    const bt = await fetchBurnTarget(ctx.connection, ctx.programId, ctx.mint);
+    if (!bt) throw new Error(`config ${ctx.mint.toBase58()} burns a target but has no BurnTarget account`);
+    const t = bt.target;
+    return {
+      kind: "target",
+      recordDate,
+      config: c,
+      targetMint: t.target_mint,
+      // the program's LiteSVM suite measures this exact shape at 1,114 bytes (tests/burn_target.rs)
+      instructions: [
+        createAtaIdempotentIx({ payer: cranker, owner: fee, mint: NATIVE_MINT, ata: feeWsol }),
+        createAtaIdempotentIx({ payer: cranker, owner: fee, mint: ctx.mint, ata: feeTokenAddress(ctx.programId, ctx.mint) }),
+        createAtaIdempotentIx({ payer: cranker, owner: fee, mint: t.target_mint, ata: feeTargetAddress(ctx.programId, ctx.mint, t.target_mint) }),
+        syncNativeIx(feeWsol),
+        crankTargetBurnIx({ ...base, target: t, cluster: ctx.cluster, ...(partner ? { partner } : {}) }),
+      ],
+    };
+  }
+  const pool = await poolAccountsOrStandIns(ctx, c.cpmm_pool);
   return {
     kind: "buyback",
     recordDate,

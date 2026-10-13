@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AMOUNT_MATH_LABEL, END_LABEL, FOLLOW_CHOICES, GUIDED_STEPS, OTHER_PATTERNS_LABEL, UPFRONT_LABEL, createsLine, progressLabel, shareExample, whichHeading, type EndOption, type FollowId, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
 import { MAIN_RECURRING, pctLabel } from "@/lib/burnticker/launchPresets";
+import { CANDIDATES_PAIR_SENTENCE } from "@/lib/burnticker/describe";
 import { HAZARD_FOLLOW } from "@/lib/burnticker/hazards";
 
 /** WIRING-SOURCES3: the natural-disaster card leads step 1; the five others follow. */
@@ -111,7 +112,8 @@ export function RivalryKindStep({ onPick, teamsBlocked, value = null }: { onPick
       <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("rivalry")}</h2>
       <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={whichHeading("rivalry")}>
         {opt("teams", "Two teams", "One game, or a whole season. Each team gets its own coin.", teamsBlocked)}
-        {opt("candidates", "Two candidates in one race", "Each candidate gets its own coin, settled on that candidate's own market.", null)}
+        {/* WIRING-SETTLED-PAIRS (owner 2026-10-13): two candidates in one race are one linked pair, the only form offered */}
+        {opt("candidates", "Two candidates in one race", CANDIDATES_PAIR_SENTENCE, null)}
       </div>
     </section>
   );

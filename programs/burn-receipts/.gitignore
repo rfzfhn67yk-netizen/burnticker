@@ -8,3 +8,4 @@ test-ledger
 # Third-party program built from source by scripts/build-cpmm-fixture.sh (not committed).
 fixtures/*.so
 fixtures/raydium-cp-swap
+fixtures/raydium-amm

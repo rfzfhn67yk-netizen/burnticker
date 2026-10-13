@@ -104,7 +104,12 @@ export interface InitializeTokenArgs {
  * nothing else; the bytes are exactly round 3's). "r4" is required with `endSink`, and for any create on an upgraded program.
  * FLIP the default to "r4" once both deployments run round 4 (docs/burnticker/END-SINK.md "What flips").
  */
-export type InitializeTokenLayout = "r3" | "r4";
+/**
+ * ROUND 5 ("r5", a coin that burns another token): initialize_token is BYTE-FOR-BYTE round 4's (the target is pinned by a separate
+ * mint-signed instruction, pin_burn_target, sent right after it while the coin's mint does not exist yet), so "r5" builds the r4 bytes.
+ * The flag value says the deployed program is round 5: only then may a create carry pin_burn_target (burnTarget.ts pinBurnTargetIx).
+ */
+export type InitializeTokenLayout = "r3" | "r4" | "r5";
 export const INITIALIZE_TOKEN_DEFAULT_LAYOUT: InitializeTokenLayout = "r3";
 /** The host flag that flips the default without a code release (the opening sets it to r4 once both deployments run round 4). */
 export const INITIALIZE_TOKEN_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
@@ -115,8 +120,8 @@ export const INITIALIZE_TOKEN_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
 export function initializeTokenLayoutFromEnv(env: Readonly<Record<string, string | undefined>> = typeof process !== "undefined" ? process.env : {}): InitializeTokenLayout {
   const v = (env[INITIALIZE_TOKEN_LAYOUT_ENV] ?? "").trim();
   if (v === "") return INITIALIZE_TOKEN_DEFAULT_LAYOUT;
-  if (v === "r3" || v === "r4") return v;
-  throw new Error(`${INITIALIZE_TOKEN_LAYOUT_ENV} must be r3 or r4, not "${v}".`);
+  if (v === "r3" || v === "r4" || v === "r5") return v;
+  throw new Error(`${INITIALIZE_TOKEN_LAYOUT_ENV} must be r3, r4 or r5, not "${v}".`);
 }
 /** The bytes the three round-4 args take when no end sink is pinned: u8 kind 0, Option None (1 byte), u64 0. */
 const R4_EMPTY_END_SINK_ARG_BYTES = 10;
@@ -125,7 +130,7 @@ export function initializeTokenIx(o: { programId: PublicKey; payer: PublicKey; c
   const layout = o.layout ?? (o.endSink ? "r4" : initializeTokenLayoutFromEnv());
   if (layout === "r3" && (o.endSink || o.args.end_sink_kind || o.args.end_sink_mint || o.args.end_sink_min_lamports)) throw new Error("initialize_token: an end sink needs the round-4 program (layout r4)");
   const ix = initializeTokenIxR4(o);
-  if (layout === "r4") return ix;
+  if (layout === "r4" || layout === "r5") return ix;
   const slot = IDL.instructions.find((i) => i.name === "initialize_token")!.accounts.findIndex((a) => a.name === "end_sink");
   return new TransactionInstruction({ programId: ix.programId, keys: ix.keys.filter((_, i) => i !== slot), data: Buffer.from(ix.data.subarray(0, ix.data.length - R4_EMPTY_END_SINK_ARG_BYTES)) });
 }

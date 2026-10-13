@@ -7,7 +7,7 @@ import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { tileHashInput, tileRule } from "@/lib/burnticker/derby/tile";
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { INDEPENDENT_PAIR_LINE, TEMPLATES, settingsLine } from "@/lib/burnticker/templates";
+import { INDEPENDENT_PAIR_LINE, TEMPLATES, pairLineFor, settingsLine } from "@/lib/burnticker/templates";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 
 const cfg = loadCopyLintConfig();
@@ -40,7 +40,8 @@ describe("item 55: Coin vs Coin keeps a share per mode", () => {
 
 describe("items 51, 57 and 60: the templates gallery", () => {
   test("pair lines follow the real pairing; each card says what it lets you change and where its link lands", () => {
-    assert.equal(TEMPLATES.find((t) => t.id === "election-pair")!.pairLine, INDEPENDENT_PAIR_LINE);
+    assert.equal(TEMPLATES.find((t) => t.id === "election-pair")!.pairLine, pairLineFor("race"), "owner 2026-10-13: the election pair is a linked pair");
+    void INDEPENDENT_PAIR_LINE;
     for (const t of TEMPLATES) { clean(settingsLine(t)); assert.ok(t.cta && !/Start from this/.test(t.cta), t.id); clean(t.cta); }
     assert.match(settingsLine(TEMPLATES.find((t) => t.id === "flippening")!), /Fixed on the web/);
     const g = read("src/app/burnticker/templates/page.tsx");
@@ -63,17 +64,17 @@ describe("audit 7 item 8: pair names never stop mid-word", () => {
 });
 
 describe("review 8 F3 / audit 7 item 10: the election pair says the same thing everywhere", () => {
-  test("the template, the step-2 picker, the burn step and the review: two separate coins, each on its own market and its own pool", async () => {
+  // owner 2026-10-13: two candidates in one race are ONE linked pair (the only form); the step-2 picker's words are the launch page's
+  // (WIRING-SETTLED-PAIRS.md), so this checks the library's copy: the template, the burn step, the facts and the review sentence agree
+  test("the template, the burn step, the facts and the review: one linked pair, the winner's coin takes the loser's pool", async () => {
     const { PATTERN_REASON, candidateFacts } = await import("@/lib/burnticker/guidedLaunch");
+    const { CANDIDATES_PAIR_SENTENCE } = await import("@/lib/burnticker/describe");
     const t = TEMPLATES.find((x) => x.id === "election-pair")!;
-    const steps = read("src/app/burnticker/launch/GuidedSteps.tsx");
-    const picker = /"Two candidates in one race", "([^"]+)"/.exec(steps)![1];
     const f = candidateFacts({ a: "ELSA", b: "ROGE", candA: "El-Sayed", candB: "Rogers" });
-    for (const s of [t.example, t.pairLine!, t.settles, picker, PATTERN_REASON.candidatesSeparate, f.trigger, f.pays, f.moves]) {
-      assert.doesNotMatch(s, /fund|winner takes|both sides settle|or neither does|moves to/i, s);
-    }
-    assert.match(t.pairLine!, /two separate coins/); assert.match(t.example, /its own burn pool/); assert.match(settingsLine(t), /burns once/);
-    assert.match(picker, /own market/); assert.match(PATTERN_REASON.candidatesSeparate, /own pool/); assert.match(f.moves, /No SOL moves/);
+    assert.equal(t.pairLine, CANDIDATES_PAIR_SENTENCE);
+    for (const s of [t.example, t.pairLine!, f.pays, f.moves]) assert.match(s, /pool/, s);
+    assert.match(t.example, /two markets, one race/i); assert.match(settingsLine(t), /burns once/);
+    assert.match(PATTERN_REASON.candidatesLinked, /linked pair/); assert.match(f.moves, /\$DEFICIT's burn/);
     assert.match(read("src/app/burnticker/launch/page.tsx"), /durations=\{pairOn && !elPick && !meetingsOn \?/, "item 52: no 'this season' on an election pair (website-21: nor on a rivalry series pair)");
   });
 });

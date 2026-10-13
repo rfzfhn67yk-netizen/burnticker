@@ -12,7 +12,7 @@ import { buildPairBundles, FakeLaunchLab } from "@/lib/burnticker/launchBundle";
 import { KalshiClient, fixtureFetch, openMarketsUrl, seriesApiUrl, settledMarketsUrl } from "@/lib/burnticker/oracle/kalshi";
 import { CatalogueAdapter } from "@/lib/burnticker/catalogue";
 import { runCycle } from "@/lib/burnticker/multiKeeper";
-import { PAIR_BURN_SENTENCE, PAIR_REVIEW_LINE, pairResultSentence, pairWinnerOf } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE, PAIR_REVIEW_LINE, pairResultSentence, pairWinnerOf } from "@/lib/burnticker/describe";
 import { INDEPENDENT_PAIR_LINE, TEMPLATES, pairLineFor } from "@/lib/burnticker/templates";
 import { lockRule, pairMirrorRule, validateRule } from "@/lib/burnticker/rules";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
@@ -75,7 +75,9 @@ describe("review 2 F6 — one factual pair sentence, checked against the engine"
     // website-20 item 51: the line follows the pairing the launch page builds: Coin vs Coin and the flippening are registered pairs; a
     // matchup and an election pair are two separate launches (the page posts two coins), so nothing moves between them
     for (const id of ["coin-vs-coin", "flippening"]) assert.equal(TEMPLATES.find((t) => t.id === id)!.pairLine, PAIR_BURN_SENTENCE, id);
-    for (const id of ["election-pair", "matchup"]) { const l = TEMPLATES.find((t) => t.id === id)!.pairLine!; assert.equal(l, INDEPENDENT_PAIR_LINE, id); assert.doesNotMatch(l, /winner|fund|moves to/i, id); }
+    // owner 2026-10-13: an election pair and a one-game matchup are linked pairs too, each with its own one sentence (describe.ts)
+    assert.equal(TEMPLATES.find((t) => t.id === "election-pair")!.pairLine, CANDIDATES_PAIR_SENTENCE); assert.equal(TEMPLATES.find((t) => t.id === "matchup")!.pairLine, GAME_PAIR_SENTENCE);
+    void INDEPENDENT_PAIR_LINE;
     for (const t of TEMPLATES) if (t.shape === "pair") assert.equal(t.pairLine, pairLineFor(t.pairing), t.id);
     for (const t of TEMPLATES) {
       for (const s of [t.example, t.pairLine ?? ""]) {
@@ -91,7 +93,7 @@ describe("review 2 F6 — one factual pair sentence, checked against the engine"
     assert.doesNotMatch(home, /neither pool can pay/i);
     assert.doesNotMatch(home, /winning side burns part of its own pool/i);
     // the review card (launch page + the Coin vs Coin tile pass PAIR_REVIEW_LINE), Derby, the pair pages (Next + static twin)
-    assert.match(read("src/app/burnticker/launch/page.tsx"), /pairLine=\{pairOn && !ruleB \? PAIR_REVIEW_LINE : null\}/);
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /pairLine=\{settledPick \? reviewSettled\?\.sentence \?\? settledPairSentence\(settledPick\.shape\) : pairOn && !ruleB \? PAIR_REVIEW_LINE : null\}/);
     assert.match(read("src/app/burnticker/launch/CoinVsCoinTile.tsx"), /pairLine=\{PAIR_REVIEW_LINE\}/);
     const derby = read("src/app/burnticker/derby/page.tsx");
     assert.match(derby, /\{PAIR_BURN_SENTENCE\}/);

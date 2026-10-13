@@ -5,7 +5,7 @@ import { base58Encode } from "@/lib/burnKeeper/solana";
 import { buildCreateTx, buildVestingTx, planLaunch, type DescribedIx, type GlobalConfigView, type LaunchInput as SdkLaunchInput, type PlatformView } from "@/lib/burnKeeper/launch";
 import { CURVE_FEES, postGraduationFeesFor, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT, LP_LOCKED_PCT, burnPoolAddresses, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
-import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
+import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, isMeetingsRule, meetingsMirrorId, gameMirrorId, GAME_WIN_SERIES_RE, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
 import { nameProblem } from "@/lib/burnticker/launchFields";
 import { isWebLink, linksProblems } from "@/lib/burnticker/creatorProfile";
@@ -285,6 +285,19 @@ export interface PairLaunchInput {
    */
   voidBy?: string;
   now?: number;
+  /**
+   * TWO CANDIDATES IN ONE RACE (owner 2026-10-13: the linked form is the only form for candidates): side A's rule reads candidate A's
+   * Polymarket outcome market, side B reads `marketB` (candidate B's market of the same race `slug`). Both rules carry pair.race, both
+   * burn on their own YES at 100 %, both end on the pair-winner sink naming each other, and voidBy is the 30-day both-or-neither date.
+   * The caller (handlers.ts prepareLaunch) checks that both markets are named outcomes of that race.
+   */
+  race?: { slug: string; marketB: string };
+  /**
+   * TWO TEAMS IN ONE GAME (2026-10-13: a one-game rivalry pair is linked by default): side A's rule is its team's win series of the game
+   * (sources/espn.ts gameSeries, outcome `win`); side B reads the same game's win series of `opp` (rules.ts gameMirrorId). Both rules carry
+   * pair.game, both burn their whole budget on their own team's win, both end on the pair-winner sink naming each other.
+   */
+  game?: { opp: string };
 }
 
 /** The default voidBy for a pair: 30 days after launch (UTC date). */
@@ -292,6 +305,10 @@ export const defaultVoidBy = (now = Date.now()): string => new Date(now + 30 * 8
 
 /** A head-to-head series pair always ends on the pair-winner sink (the rest goes to the series winner); a rule without the end sink is refused. */
 export const MEETINGS_END_SINK_REFUSAL = "A head-to-head season pair sends whatever is left at the end to the coin of the team that won more of their games, so its rule must keep the end sink (onEnd.endSink).";
+/** A candidates pair always ends on the pair-winner sink: the loser's pool goes to the winner's burn, or to $DEFICIT's when nobody won. */
+export const CANDIDATES_END_SINK_REFUSAL = "Two candidates in one race send the losing coin's pool to the winning coin's burn, and both pools to $DEFICIT's burn when neither candidate wins, so both rules must keep the end sink (onEnd.endSink).";
+/** A one-game pair always ends on the pair-winner sink: the losing team's coin's pool goes to the winning team's coin's burn. */
+export const GAME_PAIR_END_SINK_REFUSAL = "Two teams in one game send the losing team's coin's pool to the winning team's coin's burn, and both pools to $DEFICIT's burn after a draw, so both rules must keep the end sink (onEnd.endSink).";
 export interface PairBundles { pairId: string; a: LaunchBundle; b: LaunchBundle; selector: string; notes: string[] }
 
 /**
@@ -305,17 +322,28 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   const probe = validateRule({ ...(input.a.rule as object), pair: null });
   // the rivalry series (sources/espn.ts window `meetings`): the one catalogue source that pairs; side B reads the mirror series
   const meetings = isMeetingsRule(probe);
-  if (!PAIR_ORACLES.includes(probe.oracle) && !meetings) throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket), a Burn Derby coin-vs-coin selector, or a head-to-head season series between two teams");
+  // two teams in one game: each coin on its own team's win series of that game; side B reads the mirror (the opponent's)
+  const gameB = input.game ? gameMirrorId(probe.series ?? "", input.game.opp) : null;
+  if (input.game && (probe.oracle !== "catalogue" || !GAME_WIN_SERIES_RE.test(probe.series ?? "") || !gameB)) throw new Error("pair: two teams in one game read each team's win series of that game, one per coin, and the two teams differ");
+  if (input.game && probe.onEnd && probe.onEnd.endSink !== true) throw new Error(GAME_PAIR_END_SINK_REFUSAL);
+  const game = gameB ? { series: [probe.series!, gameB] as [string, string] } : null;
+  if (!PAIR_ORACLES.includes(probe.oracle) && !meetings && !game) throw new Error("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket), a Burn Derby coin-vs-coin selector, or a head-to-head season series between two teams");
   const mirror = meetings ? meetingsMirrorId(probe.series!) : null;
   if (meetings && !mirror) throw new Error("pair: the head-to-head series names a team or an opponent this site does not know");
   if (meetings && probe.onEnd && probe.onEnd.endSink !== true) throw new Error(MEETINGS_END_SINK_REFUSAL);
+  // two candidates in one race: two Polymarket outcome markets, each side on its own, YES only; never the pair curve (handlers.ts)
+  const race = input.race ? { slug: input.race.slug, markets: [probe.market ?? "", input.race.marketB.toLowerCase()] as [string, string] } : null;
+  if (race) {
+    if (probe.oracle !== "polymarket" || !probe.market) throw new Error("pair: two candidates in one race read two Polymarket outcome markets, one per coin");
+    if (probe.onEnd && probe.onEnd.endSink !== true) throw new Error(CANDIDATES_END_SINK_REFUSAL);
+  }
   const selector = probe.market ?? `${probe.series}${probe.filter.tickerIncludes ? `:${probe.filter.tickerIncludes}` : ""}`;
-  const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, selector);
+  const pairId = input.pairId ?? pairIdFor(input.a.ticker, input.b.ticker, race ? race.slug : selector);
   // Both or neither: the clause is part of BOTH sides' canonical rules (invertMapping carries it to side B), so each hash locks it.
   // …and the onEnd wind-down (no burn pool is ever left behind), unless the caller's rule already names its own.
   // Winner takes the burn (2026-10-11): a one-shot pair moves the whole pool — both sides at 100 % (the loser forwards all of it).
   const probeFull = isOneShot(probe) ? withFullFraction(probe) : probe;
-  const ruleA = validateRule({ ...probeFull, onEnd: probe.onEnd ?? { ...DEFAULT_ON_END }, pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now), winnerTakesBurn: true } });
+  const ruleA = validateRule({ ...probeFull, onEnd: probe.onEnd ?? { ...DEFAULT_ON_END }, pair: { pairId, side: "A", counterpartMint: null, clause: PAIR_CLAUSE, voidBy: input.voidBy ?? defaultVoidBy(input.now), winnerTakesBurn: true, ...(race ? { race } : {}), ...(game ? { game } : {}) } });
   // On chain the pair is linked through initialize_token (LaunchLab pairs): A names B's mint (A is PROVISIONAL), B names A back with
   // partnerFirst inside the 7-day pairing window. So side A is never built alone: B's draft — its rule and its mint — exists before A's
   // initialize_token is composed. A caller-supplied mint public key (deps.mint) cannot pre-name B: those bundles pair in the registry only.
@@ -325,10 +353,16 @@ export async function buildPairBundles(input: PairLaunchInput, deps: LaunchDeps)
   if (new Set(deps.attesters).size !== deps.attesters.length) throw new Error("pair: both coins need one attester set of distinct keys (the program refuses PairAttestersDiffer otherwise)");
   const a = await buildLaunchBundle({ ...input.a, rule: ruleA }, { ...deps, ...(kpB ? { pairMint: kpB.publicKey.toBase58(), partnerFirst: false } : {}) });
   // a head-to-head series: side B counts ITS team's results on the mirror series (direction up), so each coin reads its own team
-  const ruleB = mirror ? validateRule({ ...ruleA, series: mirror, pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } }) : invertMapping(ruleA, a.mint, pairId);
+  // two candidates: side B reads candidate B's own market with the same YES mapping (never the inverted one)
+  const ruleB = mirror ? validateRule({ ...ruleA, series: mirror, pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } })
+    : race ? validateRule({ ...ruleA, market: race.markets[1], pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } })
+    : game ? validateRule({ ...ruleA, series: game.series[1], pair: { ...ruleA.pair!, side: "B", counterpartMint: a.mint } })
+    : invertMapping(ruleA, a.mint, pairId);
   const b = await buildLaunchBundle({ ...input.a, ticker: input.b.ticker, name: input.b.name, description: input.b.description, imageUrl: input.b.imageUrl, links: input.b.links, rule: ruleB }, { ...deps, mintKeypair: kpB ?? undefined, ...(kpB ? { pairMint: a.mint, partnerFirst: true } : {}), metadataUri: deps.metadataUriB ?? deps.metadataUri });
   return { pairId, a, b, selector, notes: [
-    `rivalry pair ${pairId}: ${input.a.ticker} (side A) and ${input.b.ticker} (side B) on selector ${selector}; each settlement burns exactly one side`,
+    ...(race ? [`candidates pair ${pairId}: ${input.a.ticker} on market ${race.markets[0]} and ${input.b.ticker} on market ${race.markets[1]}, two outcomes of the race ${race.slug}; the race counts once both markets are final: exactly one YES → that coin burns its own pool and the other's pool forwards to it; otherwise both pools go to $DEFICIT's burn at the end`] : []),
+    ...(game ? [`one-game pair ${pairId}: ${input.a.ticker} on ${game.series[0]} and ${input.b.ticker} on ${game.series[1]}; the game counts once both results are final: the winning team's coin burns its whole budget and the other coin's pool forwards to it; a draw sends both pools to $DEFICIT's burn at the end; a cancelled game ends void`] : []),
+    ...(race || game ? [] : [`rivalry pair ${pairId}: ${input.a.ticker} (side A) and ${input.b.ticker} (side B) on selector ${selector}; each settlement burns exactly one side`]),
     "sign A's bundle first, then B's: B's rule names A's mint as counterpart; A's counterpart is recorded in the registry (A is created before B's mint exists)",
     "program seam: burn_receipts TokenConfig may carry no counterpart field; the link is in both rules.json files (pairId) and the registry's pairs table",
     "winner takes the burn (owner decision 2026-10-11): fees from both coins burn the winner's supply — at each result the other coin's fuel for that result moves to the winner's burn pool (forward_to_winner); nobody is paid, the other coin's supply is untouched, a draw or void moves nothing",

@@ -3,7 +3,7 @@ import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } 
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
 import { CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_SHARE_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
-import { badgeFromText, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+import { badgeFromText, CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
 // website-21 (WIRING-RIVALRY-SERIES gap): a rivalry series pair reads two series, one per team, never one shared market
 import { isMeetingsSelector, MEETINGS_PAIR_PAGE_LINE } from "@/lib/burnticker/guidedLaunch";
 import { creatorTextOf } from "@/lib/burnticker/creatorProfile";
@@ -99,6 +99,8 @@ export interface PairTally {
 }
 
 /** One side's summary from its status (and receipts, for the last burn time). */
+/** A settled-event pair's one sentence for the pair pages (two candidates in one race, two teams in one game), from the locked statement. */
+const settledLineOf = (statement: string): string | null => (/ Candidates pair /.test(statement) ? CANDIDATES_PAIR_SENTENCE : / One-game pair /.test(statement) ? GAME_PAIR_SENTENCE : null);
 export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" | "burned" | "supply">, receipts: readonly Pick<ReceiptJson, "status" | "settledAt" | "burned">[] = []): PairSideSummary {
   const last = [...receipts].filter((r) => r.status === "confirmed" && r.burned && r.burned !== "0").sort((x, y) => (x.settledAt < y.settledAt ? 1 : -1))[0];
   return { ticker: s.ticker, name: s.name, mint: s.mint, burns: s.burned.count, burned: s.burned.total, supply: s.supply.current, lastBurnAt: last?.settledAt ?? null };
@@ -261,7 +263,13 @@ export function buildReceiptsJson(i: TokenPageInput): ReceiptJson[] {
     let recomputedUnits = b.units;
     if (!clock) try {
       // Winner takes the burn: a LOST receipt carries the units this coin would have had had it won — recomputed with the mirrored mapping.
-      const s = unitStep(b.pairRole === "lost" ? pairMirrorRule(rule) : rule, ev, { value: b.prevValue, carryOut: b.carryIn }, feed?.carry ?? "none");
+      // a settled-event pair (two candidates in one race, two teams in one game; multiKeeper.planRace): the event decides, not the coin's
+      // own reading alone — a won receipt is its own result, a lost one is one unit at its own mapping, a receipt with no role is nothing
+      const settledPair = !!rule.pair?.race || !!rule.pair?.game;
+      const own = unitStep(rule, ev, { value: b.prevValue, carryOut: b.carryIn }, feed?.carry ?? "none");
+      const map0 = ruleMappings(rule)[0]?.mapping ?? null;
+      const s = settledPair ? (b.pairRole === "lost" ? { ...own, units: 1, mapping: map0 } : b.pairRole === "won" ? own : { ...own, units: 0, mapping: null })
+        : unitStep(b.pairRole === "lost" ? pairMirrorRule(rule) : rule, ev, { value: b.prevValue, carryOut: b.carryIn }, feed?.carry ?? "none");
       recomputedUnits = s.units;
       if (s.units !== b.units) checks.push(`units: recomputed ${s.units}, recorded ${b.units}`);
       if (JSON.stringify(s.mapping) !== JSON.stringify(b.mapping)) checks.push("mapping: recomputed differs from recorded");
@@ -485,7 +493,7 @@ ${STATUS_CSS}
 .today{white-space:pre-wrap;word-break:break-word;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font:inherit;line-height:1.5}
 </style></head><body><main>
 <p><a href="../../">← Burnticker</a></p>
-${s.pair ? `<div class="rule"><strong>$${t} <span class="muted">vs</span> <a href="../${esc(s.pair.counterpart.ticker)}/">$${esc(s.pair.counterpart.ticker)}</a></strong>. This coin is side ${esc(s.pair.side)} of the rivalry pair <code>${esc(s.pair.pairId)}</code>. Both coins read the same market with opposite rules, so each result burns exactly one side. Burns ${s.pair.tally.burnsThis} : ${s.pair.tally.burnsOther}. Tokens burned ${fmt(s.pair.tally.burnedThis)} : ${fmt(s.pair.tally.burnedOther)}. Supply ${fmt(s.pair.tally.supplyThis)} : ${fmt(s.pair.tally.supplyOther)}.${s.pair.counterpart.lastBurnAt ? ` The other side last burned on ${esc(s.pair.counterpart.lastBurnAt.slice(0, 10))}.` : ""} <a href="../../p/${esc(s.pair.pairId)}/">Open the pair page</a>.</div>` : ""}
+${s.pair ? `<div class="rule"><strong>$${t} <span class="muted">vs</span> <a href="../${esc(s.pair.counterpart.ticker)}/">$${esc(s.pair.counterpart.ticker)}</a></strong>. This coin is side ${esc(s.pair.side)} of the rivalry pair <code>${esc(s.pair.pairId)}</code>. ${esc(settledLineOf(s.rules.statement) ?? "Both coins read the same market with opposite rules, so each result burns exactly one side.")} Burns ${s.pair.tally.burnsThis} : ${s.pair.tally.burnsOther}. Tokens burned ${fmt(s.pair.tally.burnedThis)} : ${fmt(s.pair.tally.burnedOther)}. Supply ${fmt(s.pair.tally.supplyThis)} : ${fmt(s.pair.tally.supplyOther)}.${s.pair.counterpart.lastBurnAt ? ` The other side last burned on ${esc(s.pair.counterpart.lastBurnAt.slice(0, 10))}.` : ""} <a href="../../p/${esc(s.pair.pairId)}/">Open the pair page</a>.</div>` : ""}
 <h1>$${t} <span class="muted" style="font-weight:400">${esc(s.name)}</span></h1>
 ${s.profile?.badge ? `<p><code>${esc(s.profile.badge)}</code></p>` : ""}${s.profile?.description ? `<p>${esc(s.profile.description)}</p>` : ""}${s.profile?.note ? `<p class="muted"><em>Creator's note (not part of the rule):</em> ${esc(s.profile.note)}</p>` : ""}
 <p class="muted">${esc(AFFILIATION_LINE)}</p>
@@ -659,7 +667,7 @@ ${STATUS_CSS}
 </style></head><body><main>
 <p><a href="../../">← Burnticker</a></p>
 <h1><a href="../../t/${A}/">$${A}</a> <span class="muted" style="font-weight:400">vs</span> <a href="../../t/${B}/">$${B}</a></h1>
-<p class="muted">This is the rivalry pair <code>${esc(tally.pairId)}</code>. ${isMeetingsSelector(a.selectorKey) ? `${esc(MEETINGS_PAIR_PAGE_LINE)} A draw, a postponed or a cancelled game moves nothing.` : `Both coins read the same market (<code>${esc(a.selectorKey)}</code>${a.seriesTitle ? `, ${esc(a.seriesTitle)}` : ""}) with opposite rules, so each result burns exactly one side. A voided market burns neither.`} Updated ${esc(a.generatedAt)}.</p>
+<p class="muted">This is the rivalry pair <code>${esc(tally.pairId)}</code>. ${isMeetingsSelector(a.selectorKey) ? `${esc(MEETINGS_PAIR_PAGE_LINE)} A draw, a postponed or a cancelled game moves nothing.` : settledLineOf(a.rules.statement) ? esc(settledLineOf(a.rules.statement)!) : `Both coins read the same market (<code>${esc(a.selectorKey)}</code>${a.seriesTitle ? `, ${esc(a.seriesTitle)}` : ""}) with opposite rules, so each result burns exactly one side. A voided market burns neither.`} Updated ${esc(a.generatedAt)}.</p>
 <div class="score">$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}</div>
 <div class="tiles">
 ${tiles}

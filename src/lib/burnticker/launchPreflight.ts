@@ -1,4 +1,4 @@
-import { isMeetingsRule, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { endSinkOf, gameMirrorId, GAME_WIN_SERIES_RE, isMeetingsRule, POLY_MARKET_RE, settledPairShape, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { feedById, feedRuleProblems, loadFixture, type Feed } from "@/lib/burnticker/catalogue";
 import { oneShotEligibility, type Eligibility } from "@/lib/burnticker/oneShotEligibility";
 import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -42,7 +42,9 @@ export const reserveProblem = (reserveSol: string): string | null => {
   return Number.isFinite(v) && v >= RESERVE_SOL.min && v <= RESERVE_SOL.max ? null : `The reserve must be between ${RESERVE_SOL.min} and ${RESERVE_SOL.max} SOL. It stays in the coin's burn pool and is never spent, and every launch on this site uses 0.02 SOL.`;
 };
 
-export interface RuleCtx { kalshiEnabled?: boolean; now?: number; /** the launch is a registered pair (the body's `pair` side) */ pair?: boolean }
+export interface RuleCtx { kalshiEnabled?: boolean; now?: number; /** the launch is a registered pair (the body's `pair` side) */ pair?: boolean;
+  /** two candidates in one race: the body's pair names candidate B's market (`pair.market`) and the race (`pair.race`) */ candidates?: { marketB: string | null; race: string | null } | null;
+  /** two teams in one game: the body's pair names the other team (`pair.opp`) */ game?: { opp: string | null } | null }
 
 /**
  * THE RIVALRY SERIES' OWN REFUSALS (sources/espn.ts window `meetings`). A head-to-head season series is launched only as a pair, one coin
@@ -60,6 +62,76 @@ export function meetingsRefusals(r: BurnRule, ctx: Pick<RuleCtx, "pair"> = {}): 
   if (r.onEnd && r.onEnd.endSink !== true) out.push({ status: 400, code: "meetings-end-sink", message: MEETINGS_END_REFUSAL });
   return out;
 }
+
+/**
+ * TWO CANDIDATES IN ONE RACE (owner 2026-10-13: the linked form is the default and the only form). The pair is two Polymarket outcome
+ * markets of one race, each coin on its own candidate's market, burning on its YES only; both coins keep the end sink, so each one's sink
+ * is pinned at creation as the pair winner naming the other (program.ts endSinkPin: PAIR_WINNER with pair_mint = the partner). The race
+ * check itself (both markets are named outcomes of the race) is the bundle route's, which reads Polymarket (handlers.ts prepareLaunch).
+ */
+export const CANDIDATES_SINK_REFUSAL = "Two candidates in one race need the end sink on both coins: the losing coin's pool goes to the winning coin's burn, and when neither candidate wins both pools go to $DEFICIT's burn.";
+export const CANDIDATES_MARKETS_REFUSAL = "Two candidates in one race read two Polymarket outcome markets of that race, one for each coin. Pick two different candidates of the same race.";
+export const CANDIDATES_YES_REFUSAL = "Each candidate's coin burns when its own candidate's market settles YES, so the rule burns on YES only.";
+export const CANDIDATES_RACE_REFUSAL = "Two candidates in one race need the race, so the site can check that both candidates are in it.";
+export function candidatesRefusals(r: BurnRule, ctx: Pick<RuleCtx, "candidates"> = {}): PreflightRefusal[] {
+  const c = ctx.candidates;
+  if (!c) return [];
+  const out: PreflightRefusal[] = [];
+  if (r.oracle !== "polymarket" || !r.market || !c.marketB || !POLY_MARKET_RE.test(c.marketB.toLowerCase()) || c.marketB.toLowerCase() === r.market) out.push({ status: 400, code: "candidates-markets", message: CANDIDATES_MARKETS_REFUSAL });
+  if (r.kind !== "binary" || !r.binary?.onYes || r.binary.onNo) out.push({ status: 400, code: "candidates-yes-only", message: CANDIDATES_YES_REFUSAL });
+  if (!c.race) out.push({ status: 400, code: "candidates-race", message: CANDIDATES_RACE_REFUSAL });
+  if (!r.onEnd || r.onEnd.endSink !== true) out.push({ status: 400, code: "candidates-end-sink", message: CANDIDATES_SINK_REFUSAL });
+  return out;
+}
+/**
+ * TWO TEAMS IN ONE GAME (2026-10-13: the one-game rivalry pair is linked by default, the same owner rule as the election pair). Each coin
+ * reads its own team's win series of the game (outcome `win`, 1 when its team won), side B the mirror (the other team's); both keep the
+ * end sink, so each one's sink is pinned at creation as the pair winner naming the other.
+ */
+export const GAME_PAIR_SINK_REFUSAL = "Two teams in one game need the end sink on both coins: the losing team's coin's pool goes to the winning team's coin's burn, and after a draw both pools go to $DEFICIT's burn.";
+export const GAME_PAIR_SERIES_REFUSAL = "Two teams in one game are linked on each team's own win in that game. Pick the game and two different teams in it.";
+export function gamePairRefusals(r: BurnRule, ctx: Pick<RuleCtx, "game"> = {}): PreflightRefusal[] {
+  const g = ctx.game;
+  if (!g) return [];
+  const out: PreflightRefusal[] = [];
+  if (r.oracle !== "catalogue" || !GAME_WIN_SERIES_RE.test(r.series ?? "") || !g.opp || !gameMirrorId(r.series ?? "", g.opp) || r.inverse) out.push({ status: 400, code: "game-pair-series", message: GAME_PAIR_SERIES_REFUSAL });
+  if (!r.onEnd || r.onEnd.endSink !== true) out.push({ status: 400, code: "game-pair-end-sink", message: GAME_PAIR_SINK_REFUSAL });
+  return out;
+}
+/**
+ * Both built sides of a settled-event pair (two candidates in one race, two teams in one game; the bundle's two locked rules): each ends
+ * on the pair-winner sink and names the other. Side B's rule names side A's mint; side A names B at creation through pair_mint
+ * (launchBundle.ts buildPairBundles), which the sink follows. Empty = both sinks are in place.
+ */
+export function settledPairSinkProblems(a: { rule: BurnRule; mint: string }, b: { rule: BurnRule; mint: string }): string[] {
+  const p: string[] = [];
+  const shape = settledPairShape(a.rule);
+  const sinkLine = shape === "game" ? GAME_PAIR_SINK_REFUSAL : CANDIDATES_SINK_REFUSAL;
+  for (const [s, x] of [["A", a], ["B", b]] as const) if (endSinkOf(x.rule) !== "pair-winner") p.push(`Coin ${s}. ${sinkLine}`);
+  if (b.rule.pair?.counterpartMint !== a.mint) p.push("Coin B does not name coin A as its partner.");
+  if (!shape || settledPairShape(b.rule) !== shape) p.push(CANDIDATES_MARKETS_REFUSAL);
+  else if (JSON.stringify(a.rule.pair?.race ?? a.rule.pair?.game) !== JSON.stringify(b.rule.pair?.race ?? b.rule.pair?.game)) p.push(shape === "game" ? GAME_PAIR_SERIES_REFUSAL : CANDIDATES_MARKETS_REFUSAL);
+  return p;
+}
+/**
+ * A launch body's `pair` side read as a settled-event pair: `{ market, race }` (candidate B's market and the race's Polymarket event
+ * slug) for two candidates in one race; `{ opp }` (the other team's abbreviation) for two teams in one game. Null for any other pair (Coin
+ * vs Coin, a one-market pair, a rivalry series). The bundle route and the review read the same body through this.
+ */
+export interface SettledPairInput { shape: "candidates" | "game"; candidates: { marketB: string | null; race: string | null } | null; game: { opp: string | null } | null; bundle: { race?: { slug: string; marketB: string }; game?: { opp: string } } }
+export function settledPairInput(pair: unknown): SettledPairInput | null {
+  if (!pair || typeof pair !== "object") return null;
+  const x = pair as { market?: unknown; race?: unknown; opp?: unknown };
+  const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+  if (x.market !== undefined || x.race !== undefined) {
+    const marketB = str(x.market)?.toLowerCase() ?? null, race = str(x.race);
+    return { shape: "candidates", candidates: { marketB, race }, game: null, bundle: marketB && race ? { race: { slug: race, marketB } } : {} };
+  }
+  if (x.opp !== undefined) { const opp = str(x.opp)?.toUpperCase() ?? null; return { shape: "game", candidates: null, game: { opp }, bundle: opp ? { game: { opp } } : {} }; }
+  return null;
+}
+/** The candidates name for settledPairSinkProblems. */
+export const candidatesSinkProblems = settledPairSinkProblems;
 
 /** The rule refusals, in the order the bundle route meets them. The first one is the bundle's answer; the review lists them all. */
 export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRefusal[] {
@@ -80,6 +152,7 @@ export function ruleRefusals(locked: LockedRule, ctx: RuleCtx = {}): PreflightRe
       }
     }
   } else if (r.oracle !== "kalshi" && r.oracle !== "polymarket" && r.oracle !== "derby") out.push({ status: 400, code: "oracle-off", message: `Coins cannot launch on the ${r.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.` });
+  out.push(...candidatesRefusals(r, ctx), ...gamePairRefusals(r, ctx));
   { const rp = reserveProblem(r.reserveSol); if (rp) out.push({ status: 400, code: "reserve", message: rp }); }
   if (r.filter.titleRegex !== undefined) { const why = regexProblem(r.filter.titleRegex); if (why) out.push({ status: 400, code: "unsafe-regex", message: why }); }
   return out;

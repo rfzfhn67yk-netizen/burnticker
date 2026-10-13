@@ -139,7 +139,19 @@ export function pairResultSentence(a: { ticker: string; rule: Pick<BurnRule, "ki
   if (!w) return `A ${result.toUpperCase()} result fires both rules or neither. That is a draw, and nothing moves between $${a.ticker} and $${b.ticker}.`;
   return `This result fires $${w.winner.ticker}'s rule: eligible fees from both coins fund $${w.winner.ticker}'s burn, and $${w.loser.ticker}'s share for it moves to $${w.winner.ticker}'s burn pool. Nothing is paid to holders.`;
 }
-const pairSentence = (r: BurnRule): string => (r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn ? ` ${PAIR_DESCRIPTION_SENTENCE}` : "");
+/**
+ * SETTLED-EVENT PAIRS (owner 2026-10-13: "since it's a settled event, the loser's burn pool should go to burning the winner's token"; the
+ * linked form is the default and the only form): two candidates in one race (rules.ts pair.race) and two teams in one game (pair.game).
+ * The one sentence each, said wherever the pair is explained (the coin's description, the review, the templates, the guide, the API).
+ * Plain words: no "buy", no prices, no "will", no dates.
+ */
+export const CANDIDATES_PAIR_SENTENCE = "Two markets, one race: the winner's coin burns its own pool on the result and takes the loser's pool at the end. If neither candidate wins, both pools go to $DEFICIT's burn.";
+export const GAME_PAIR_SENTENCE = "One game, two teams: the winning team's coin burns its own pool on the result and takes the losing team's coin's pool at the end. After a draw, both pools go to $DEFICIT's burn.";
+export const CANDIDATES_PAIR_DETAIL = "The race counts once, when both candidates' markets are final. If exactly one of them settles YES, that candidate's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. If both settle NO, because a third candidate won, or a market settles 50-50, nothing moves between the two coins.";
+export const GAME_PAIR_DETAIL = "The game counts once, when its result is final and a second source agrees. The winning team's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. A postponed game keeps both coins waiting. A cancelled game moves nothing between them, and each coin burns down what is left on itself.";
+export const settledPairShapeOf = (r: Pick<BurnRule, "pair">): "candidates" | "game" | null => (r.pair?.race ? "candidates" : r.pair?.game ? "game" : null);
+export const settledPairSentence = (shape: "candidates" | "game"): string => (shape === "game" ? GAME_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE);
+const pairSentence = (r: BurnRule): string => { const sh = settledPairShapeOf(r); return sh ? ` ${settledPairSentence(sh)}` : r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn ? ` ${PAIR_DESCRIPTION_SENTENCE}` : ""; };
 const BURN_DOWN = "it burns down whatever is left over four weeks and then retires";
 /**
  * END SINKS (LAUNCHPAD-PATH §45; rules.ts endSinkOf, copied here because rules.ts is not client-safe): a rule with `onEnd.endSink` sends
@@ -197,6 +209,10 @@ export function endExplainer(): string[] {
   const one = endText(base), pair = endText({ ...base, pair: { pairId: "x", side: "A", counterpartMint: null, winnerTakesBurn: true } } as unknown as BurnRule);
   return [one.result, `In a winner-takes-the-burn pair: ${pair.result.replace(/^When/, "when")}`, one.void!, PERPETUAL_SENTENCE.replace("This coin has", "A coin with no end date has").replace(" and does not retire", " and never retires")];
 }
+/** The end sentences of the settled-event pairs (endText's result lines). */
+export const CANDIDATES_END_RESULT = "When both markets are final and one candidate won, the other candidate's coin sends the rest of its pool, and any fees that arrive later, to the winning coin's burn, and the winning coin burns down what is left on itself. If neither candidate won, or a market settled 50-50, the rest goes to $DEFICIT's burn. Then the coin retires.";
+export const GAME_END_RESULT = "When the game is final, the losing team's coin sends the rest of its pool, and any fees that arrive later, to the winning team's coin's burn, and the winning coin burns down what is left on itself. After a draw, the rest goes to $DEFICIT's burn. Then the coin retires.";
+export const GAME_CANCELLED_SENTENCE = "If the game is cancelled, nothing moves between the two coins.";
 /** The season-end sentence of a rivalry series coin (endText's result line). */
 export const MEETINGS_END_RESULT = "When both teams' seasons are over, the coin of the team that won fewer of the games between them sends the rest of its pool, and any fees that arrive later, to the other coin's burn pool, or to $DEFICIT's burn if that coin is not live. The coin of the team that won more burns down what is left on itself. Then the coin retires.";
 const isMeetingsSeries = (r: BurnRule): boolean => { const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null; return e?.kind === "team" && e.window.kind === "meetings"; };
@@ -211,6 +227,8 @@ export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText 
   const VOID = days === 28 ? voidSentenceFor(r) : voidSentenceFor(r).replace("over four weeks", over);
   if (!sink) return mk("self", `When the rule ends, the coin's own burn pool burns down what is left ${over}, then the coin retires. A retired coin's pool keeps burning any fees it still receives. This end only burns this coin and sends nothing to another coin.`, null);
   if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
+  if (sink === "pair-winner" && settledPairShapeOf(r) === "candidates") return mk("pair-winner", CANDIDATES_END_RESULT, VOID);
+  if (sink === "pair-winner" && settledPairShapeOf(r) === "game") return mk("pair-winner", GAME_END_RESULT, `${GAME_CANCELLED_SENTENCE} ${VOID}`);
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
   if (championPathRule(r)) { const [won, lost] = championEndSentences(o.team ?? "the team"); return mk("champion", `${won} ${lost}`, VOID); }
   return mk("flagship", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to $DEFICIT's burn. Then the coin retires.", VOID);

@@ -90,7 +90,7 @@ describe("audit 10 item 3: the fee sentence by the venue the launch really uses"
     for (const v of ["independent", "linked"] as const) { const s = lpDisclosureFor(v, LP, PAIR); assert.ok(s.endsWith(LP), v); assert.ok(!s.includes(PAIR_OPERATOR_SHARE_LINE), v); plain(s.replace(LP, ""), v); }
     assert.doesNotMatch(card, /many \? PAIR_LP_LINE : LP_LINE/, "never chosen by the number of coins");
     assert.match(card, /\{lpDisclosure\(p\.venue \?\? \(many \? "independent" : "single"\)\)\}/);
-    assert.match(page, /const venue: LaunchVenue = !two && !\(pairOn && !ruleB\) \? "single" : meetingsOn \? "linked" : pairOn && !ruleB \? \(pairVenue === "pair-curve" \? "pair-curve" : "linked"\) : "independent";/);
+    assert.match(page, /const venue: LaunchVenue = !two && !\(pairOn && !ruleB\) \? "single" : meetingsOn \|\| settledPick \? "linked" : pairOn && !ruleB \? \(pairVenue === "pair-curve" \? "pair-curve" : "linked"\) : "independent";/);
     assert.match(tile, /const reviewVenue = venue === "pair-curve" \? "pair-curve" as const : "linked" as const;/);
     assert.doesNotMatch(lpDisclosureFor("independent", "", ""), /\d+%/, "no percentage typed by the page");
   });
@@ -242,7 +242,7 @@ describe("audit 10 item 11: words kept from another kind of coin are said, with 
 describe("QA 9 item 38, audit 10 items 13 and 17: Coin comparison walks the real steps", () => {
   test("the tile renders Which, Burns, Name and Review as the page's phases, and Back steps one at a time", () => {
     assert.match(page, /step === "choose" && guide\.follow === "coins" && guide\.phase !== "follow" && \(/);
-    assert.match(page, /<CoinVsCoinTile startOpen phase=\{guide\.phase\} onPhase=\{setCoinsPhase\} onAnswers=\{setCoinAnswers\}/);
+    assert.match(page, /<CoinVsCoinTile burnReal=\{site\.burnReal\} network=\{site\.cluster \?\? cluster\} startOpen phase=\{guide\.phase\} onPhase=\{setCoinsPhase\} onAnswers=\{setCoinAnswers\}/);
     assert.match(page, /if \(guide\.follow === "coins" && \(guide\.phase === "burn" \|\| guide\.phase === "name" \|\| guide\.phase === "review"\)\)/);
     for (const ph of ["which", "burn", "name"]) assert.match(tile, new RegExp(`if \\(phase === "${ph}"\\)`), ph);
     assert.match(tile, /<ReviewCard mode="review"/); assert.equal((tile.match(/<ReviewCard mode="name"/g) ?? []).length, 2, "the pair and the record close");

@@ -59,6 +59,25 @@ pub fn format_v2(h: &MemoHead, pool: u64, spent: u64, got_raw: u64, burn_raw: u6
     )
 }
 
+/// Round 5 target burn (crank_target_burn):
+///   v3: <head>|pool=…|spent=…|got=<target tokens>|burn=<target tokens>|target=<target mint, full base58>|own=<coin tokens>|swap=<pool 12>|rules=sha256:<12>|v3
+/// `got` and `burn` are in the TARGET's units (its decimals); `own` is the coin's own creator-fee tokens burned in the same instruction.
+#[allow(clippy::too_many_arguments)]
+pub fn format_target(h: &MemoHead, pool: u64, spent: u64, got_raw: u64, burn_raw: u64, target: &Pubkey, target_decimals: u8, own_raw: u64, own_decimals: u8, swap_ref: &str) -> String {
+    format!(
+        "{}|pool={}|spent={}|got={}|burn={}|target={}|own={}|swap={}|rules=sha256:{}|v3",
+        head(h),
+        pool,
+        spent,
+        raw_to_tokens(got_raw, target_decimals),
+        raw_to_tokens(burn_raw, target_decimals),
+        target,
+        raw_to_tokens(own_raw, own_decimals),
+        swap_ref,
+        hex12(h.rules_sha256)
+    )
+}
+
 /// `swap=` for a buyback that traded on `pool`.
 pub fn swap_ref(pool: &Pubkey) -> String {
     pool.to_string().chars().take(12).collect()
@@ -141,6 +160,20 @@ mod tests {
         assert_eq!(
             m,
             "DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=1000000000|spent=659438374|got=123.45|burn=123.45|swap=CPMMoo8L3F4N|rules=sha256:ffffffffffff|v2"
+        );
+        assert!(m.len() <= MEMO_MAX_BYTES);
+    }
+
+    #[test]
+    fn v3_target_shape() {
+        let r = [0xffu8; 32];
+        let bonk = Pubkey::new_from_array([7u8; 32]);
+        let m = format_target(&h(&r), 1_000_000_000, 659_438_374, 123_450_000_000, 123_450_000_000, &bonk, 5, 2_000_000, 6, "CPMMoo8L3F4N");
+        assert_eq!(
+            m,
+            format!(
+                "DEBT|2026-10-08|src=fiscaldata.treasury.gov debt_to_penny|prev=40284036147367.19|now=40305316210829.72|delta=21280063462.53|units=21|pool=1000000000|spent=659438374|got=1234500|burn=1234500|target={bonk}|own=2|swap=CPMMoo8L3F4N|rules=sha256:ffffffffffff|v3"
+            )
         );
         assert!(m.len() <= MEMO_MAX_BYTES);
     }

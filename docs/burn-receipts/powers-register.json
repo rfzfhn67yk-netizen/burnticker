@@ -4,7 +4,7 @@
     "name": "burn_receipts",
     "version": "0.1.0",
     "address_in_idl": "AuQjoSgq7upmyPBv2itwy2TSZ1VjoVipyy4z9wd7zhMM",
-    "idl_sha256": "6cd4fae89dac1c8259ecef19892ddae2a2334d824571f59e2ce4f43c51b1d522"
+    "idl_sha256": "94593a78c2bc50e26bee2813d9fccab7937d3c561794d229200919592e19e9de"
   },
   "roles": {
     "anyone": "Anyone with a funded wallet. Pays only the transaction fee (and rent where noted); chooses no amounts.",
@@ -87,6 +87,23 @@
       "temporary": false
     },
     {
+      "name": "apply_target_pool",
+      "class": "permissionless",
+      "signers": [
+        {
+          "account": "caller",
+          "role": "anyone"
+        }
+      ],
+      "gated_by": null,
+      "can": "Round 5: apply a pending pool proposal after its 48-hour timelock and within 14 days of the proposal, only if the proposed pool (CPMM or AMM v4) passes the same checks as pin_burn_target, Pyth included, for the same burned token and feed.",
+      "cannot": "Apply early or late, a pool other than the proposed one, a pool that fails the checks, or a different token.",
+      "timelock": "Executable only after the proposal's ETA, until 14 days after the proposal.",
+      "sunset": "None.",
+      "funds": "None.",
+      "temporary": false
+    },
+    {
       "name": "cancel_attester_change",
       "class": "privileged",
       "signers": [
@@ -136,6 +153,23 @@
       "sunset": "Gone once renounce_admin runs.",
       "funds": "None.",
       "temporary": true
+    },
+    {
+      "name": "cancel_target_pool",
+      "class": "privileged",
+      "signers": [
+        {
+          "account": "admin",
+          "role": "config_authority"
+        }
+      ],
+      "gated_by": null,
+      "can": "Round 5: withdraw a pending pool proposal.",
+      "cannot": "Change anything else.",
+      "timelock": null,
+      "sunset": "Gone at renounce_admin.",
+      "funds": "None.",
+      "temporary": false
     },
     {
       "name": "check_pool_health",
@@ -237,6 +271,23 @@
       "timelock": null,
       "sunset": "None.",
       "funds": "None.",
+      "temporary": false
+    },
+    {
+      "name": "crank_target_burn",
+      "class": "permissionless",
+      "signers": [
+        {
+          "account": "cranker",
+          "role": "anyone"
+        }
+      ],
+      "gated_by": null,
+      "can": "Round 5: for a coin that burns another token, the next reading in line: crank_buyback's spend (the rule on min(pool, cap), carried spend, floor) and guards on the PINNED pool only (address-checked; its program, mints, config or vault authority, fee and vaults re-read every time): the Pyth guard (both prices fully verified, at most 60 s old, confidence at most 1 %, the pool's price within the rule's deviation of the Pyth ratio both ways), for a CPMM pool its TWAP as well, min-out = the larger of the spot, Pyth and TWAP quotes less fee and slippage, at most 2 % of that pool's SOL reserve per crank, the post-CPI integrity checks; swap SOL (CPMM swap_base_input or AMM v4 swap_base_in_v2) for the other token into the fee PDA's own account for it and burn everything in that account, burn any of the coin's own tokens the fee PDA holds, write memo v3 naming the burned mint. A pool that is gone, switched off, changed, above the 1 % fee or under the SOL floor, a stale or wide Pyth price, or a pool away from Pyth refuses (the SOL is held); 30 days after the reading it is processed below-floor with its spend carried.",
+      "cannot": "Use any other pool or token; choose an amount; send SOL or tokens anywhere but the pinned pool (for the other token, then burned); run for a coin that burns itself (crank_buyback is refused for a coin that burns another token); run while the pre-audit cap is in force if a cranker allowlist exists and the cranker is not on it.",
+      "timelock": null,
+      "sunset": "None.",
+      "funds": "Fee PDA SOL / WSOL → the pinned pool's WSOL vault, in exchange for the other token, burned in the same instruction.",
       "temporary": false
     },
     {
@@ -354,6 +405,27 @@
       "temporary": false
     },
     {
+      "name": "pin_burn_target",
+      "class": "creation",
+      "signers": [
+        {
+          "account": "payer",
+          "role": "anyone"
+        },
+        {
+          "account": "mint",
+          "role": "mint_keypair"
+        }
+      ],
+      "gated_by": null,
+      "can": "Round 5 (a coin that burns another token): once, and only while the coin's mint account does not exist yet (before LaunchLab or pair_curve creates it), name the other token this coin burns instead of itself, its Pyth price feed, and ONE pool its SOL is swapped on (Raydium CPMM, or Raydium AMM v4 in swap-only status), in a BurnTarget account [\"burn_target\", mint]. Checks: the other token is a plain SPL Token mint (Token-2022 refused), not the coin and not WSOL, with no mint authority and no freeze authority; the pool's mints are exactly {that token, WSOL} on SPL Token, its fee at most 1 %, its SOL reserve (net of owed fees or PnL) at least 50 SOL (devnet build: 2 SOL); both Pyth prices (SOL/USD and the token's feed) fully verified, at most 60 s old, confidence at most 1 %, and the pool's price within the rule's deviation of the Pyth ratio. The pool's LP need not be locked: it is not ours. Sets TokenConfig.burn_target_kind = EXTERNAL.",
+      "cannot": "Run after the coin's mint exists, twice, on a vault-mode coin, or on a coin with readings, burns or a verified pool; be run without the mint keypair; pin a feed the pool's market disagrees with; change the token it burns or its feed ever after.",
+      "timelock": null,
+      "sunset": "Closed for good once the coin's mint exists.",
+      "funds": "Payer pays the BurnTarget account's rent (kept forever).",
+      "temporary": false
+    },
+    {
       "name": "propose_attesters",
       "class": "privileged",
       "signers": [
@@ -386,6 +458,23 @@
       "sunset": "Pointless after the cap's sunset (the cap no longer applies); gone once renounce_platform_authority runs.",
       "funds": "None.",
       "temporary": true
+    },
+    {
+      "name": "propose_target_pool",
+      "class": "privileged",
+      "signers": [
+        {
+          "account": "admin",
+          "role": "config_authority"
+        }
+      ],
+      "gated_by": null,
+      "can": "Round 5: propose a different CPMM pool for the SAME burned token (applicable 48 h later, for 14 days after the proposal; a new proposal replaces a pending one).",
+      "cannot": "Change the burned token; apply the proposal itself; skip the checks (apply re-runs them); act after renounce_admin.",
+      "timelock": "48 h before apply_target_pool can run.",
+      "sunset": "Gone at renounce_admin.",
+      "funds": "None.",
+      "temporary": false
     },
     {
       "name": "register_fee_key",
@@ -590,19 +679,39 @@
       "sunset": "Pointless once the switch window closes (cap sunset) or renounce_admin runs.",
       "funds": "None.",
       "temporary": true
+    },
+    {
+      "name": "veto_target_pool",
+      "class": "privileged",
+      "signers": [
+        {
+          "account": "attester",
+          "role": "attester_key"
+        }
+      ],
+      "gated_by": null,
+      "can": "VETO: clear a pending pool proposal for a coin that burns another token (round 5; any one current attester).",
+      "cannot": "Propose, apply or change a pool; touch the burned token, readings, rule or funds; act without a pending proposal.",
+      "timelock": null,
+      "sunset": "None.",
+      "funds": "None.",
+      "temporary": false
     }
   ],
   "privileged_powers": [
     "cancel_attester_change",
     "cancel_cap_raise",
     "cancel_registration_policy",
+    "cancel_target_pool",
     "clear_cranker_allowlist",
     "propose_attesters",
     "propose_cap_raise",
+    "propose_target_pool",
     "renounce_admin",
     "renounce_platform_authority",
     "set_registration_policy",
-    "veto_registration_policy"
+    "veto_registration_policy",
+    "veto_target_pool"
   ],
   "temporary_powers": [
     {
@@ -634,7 +743,8 @@
     }
   ],
   "non_powers": [
-    "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses); tokens leave only by burn.",
+    "No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses) and inside crank_target_burn (round 5: only into the PINNED pool's WSOL vault, for the other token, burned in the same instruction); tokens leave only by burn.",
+    "Round 5: no instruction changes the other token a coin burns; only the pool it is swapped on can be re-pinned (propose_target_pool → 48 h, any attester can veto → apply_target_pool, the same checks).",
     "No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).",
     "No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.",
     "No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.",

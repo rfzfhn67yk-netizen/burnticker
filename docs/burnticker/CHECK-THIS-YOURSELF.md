@@ -16,23 +16,28 @@ This table lists every instruction of both programs and the only place each one 
 | burn_receipts | `apply_cap_raise` | anyone | **none** | None. |
 | burn_receipts | `apply_paired_attester_change` | anyone | **none** | None. |
 | burn_receipts | `apply_registration_policy` | anyone | **none** | None. |
+| burn_receipts | `apply_target_pool` | anyone | **none** | None. |
 | burn_receipts | `cancel_attester_change` | config_authority | **none** | None. |
 | burn_receipts | `cancel_cap_raise` | platform_authority | **none** | None. |
 | burn_receipts | `cancel_registration_policy` | config_authority | **none** | None. |
+| burn_receipts | `cancel_target_pool` | config_authority | **none** | None. |
 | burn_receipts | `check_pool_health` | anyone | **none** | None. |
 | burn_receipts | `claim_launchlab_creator_fee` | anyone | **fees go into the burn pool** | LaunchLab creator vault (fee PDA, WSOL) → the fee PDA's WSOL account. |
 | burn_receipts | `claim_lock_fees` | anyone | **the locked LP's fees: 80% go to the burn pool and 20% to the operator treasury, both fixed in the code; the coin side is burned** | Raydium lock (accrued LP fees) → FEE_KEYS → fee PDA (80 % of the SOL) and OPERATOR_TREASURY (20 %); the coin side is burned. |
 | burn_receipts | `clear_cranker_allowlist` | platform_authority_or_listed_cranker | **none** | None. |
 | burn_receipts | `crank_buyback` | anyone | **SOL from the burn pool is swapped for the coin, and every token received is burned** | Fee PDA SOL → its WSOL account → CPMM pool vault; tokens received → burned (supply reduced). |
 | burn_receipts | `crank_no_units` | anyone | **none** | None. |
+| burn_receipts | `crank_target_burn` | anyone | **SOL from the burn pool is swapped, on the one pool pinned before the coin existed, for the other token the coin burns, and every token received is burned** | Fee PDA SOL / WSOL → the pinned pool's WSOL vault, in exchange for the other token, burned in the same instruction. |
 | burn_receipts | `crank_vault` | anyone | **tokens from the vault are burned** | Vault tokens → burned. |
 | burn_receipts | `forward_on_end` | anyone | **a coin whose rule ended with a result sends its remaining fuel, and any fees that arrive later, to its end sink's burn pool (the named coin while it is live, otherwise the flagship $DEFICIT), and that coin's own burns spend it** | Resolved coin's fee PDA SOL / WSOL → the end sink's (or the flagship's) fee PDA SOL / WSOL account (then burned by that coin's cranks). |
 | burn_receipts | `forward_to_winner` | anyone | **a paired coin's fuel for a period it lost goes to the winner's burn pool, in the formula's amount, and the winner's own burns spend it** | Loser fee PDA SOL / WSOL → winner fee PDA SOL / WSOL account (then burned by the winner's cranks). |
 | burn_receipts | `initialize_platform` | anyone + upgrade_authority | **rent only, paid by the caller** | Payer pays the PlatformConfig's rent. |
 | burn_receipts | `initialize_token` | anyone + creator + mint_keypair | **rent only, paid by the caller** | Payer → fee PDA: the reserve only (rent for the PDA). |
 | burn_receipts | `link_pair` | anyone | **rent only, paid by the caller** | Payer → the PairLinks' rent. |
+| burn_receipts | `pin_burn_target` | anyone + mint_keypair | **rent only, paid by the caller** | Payer pays the BurnTarget account's rent (kept forever). |
 | burn_receipts | `propose_attesters` | config_authority | **none** | None. |
 | burn_receipts | `propose_cap_raise` | platform_authority | **none** | None. |
+| burn_receipts | `propose_target_pool` | config_authority | **none** | None. |
 | burn_receipts | `register_fee_key` | anyone | **rent only, paid by the caller** | Payer → the record's rent. |
 | burn_receipts | `register_pair_pool` | anyone | **none** | None. |
 | burn_receipts | `register_pool` | anyone | **none** | None. |
@@ -45,6 +50,7 @@ This table lists every instruction of both programs and the only place each one 
 | burn_receipts | `submit_rule_end` | anyone | **rent only, paid by the caller** | Payer pays the RuleEnd account's rent (kept forever). |
 | burn_receipts | `unlink_pair` | anyone | **rent only, paid by the caller** | PairLink rent → each coin's fee PDA. |
 | burn_receipts | `veto_registration_policy` | attester_key | **none** | None. |
+| burn_receipts | `veto_target_pool` | attester_key | **none** | None. |
 | pair_curve | `burn_lp` | anyone | **fallback only: if lock_lp cannot run for 30 days, burn_lp destroys the side's LP tokens, and there are no LP fees after that** | Vault LP → burned; emptied LP account's rent → the side's burn pool. |
 | pair_curve | `buy` | trader | **the trader's own funds, priced by the formula, or pro rata after a void; the fees stay in the pair's vault** | Buyer → SOL vault (curve cost + fee); token vault → buyer (tokens). |
 | pair_curve | `claim_developer_fee` | anyone | **the 0.25% fee collected so far goes to the developer wallet set at setup** | SOL vault → developer wallet (the accrual only). |
@@ -57,7 +63,8 @@ This table lists every instruction of both programs and the only place each one 
 
 What does not exist, in the registers' own words:
 
-- (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses); tokens leave only by burn.
+- (burn_receipts) No withdraw, sweep, transfer, close or set-recipient instruction exists for the fee PDA, its token accounts, the vault or any program account. SOL leaves the fee PDA only inside crank_buyback (into its own WSOL account, then into the CPMM pool for tokens that are burned) inside forward_to_winner (LAUNCHPAD-PATH §40: only to the paired winner's fee PDA, only the formula amount for an attested lost period) and inside forward_on_end (LAUNCHPAD-PATH §45: only after a quorum-signed RESOLVED end, only to the fee PDA of the end sink the program picks — the pinned coin while it is live, else the compiled flagship — never an amount or a destination the caller chooses) and inside crank_target_burn (round 5: only into the PINNED pool's WSOL vault, for the other token, burned in the same instruction); tokens leave only by burn.
+- (burn_receipts) Round 5: no instruction changes the other token a coin burns; only the pool it is swapped on can be re-pinned (propose_target_pool → 48 h, any attester can veto → apply_target_pool, the same checks).
 - (burn_receipts) No program account (TokenConfig, Reading, PlatformConfig, FeeKeyRecord, fee PDA) is ever closed. The only accounts the program closes are the FEE_KEYS PDA's own transient WSOL and token accounts inside claim_lock_fees, created and emptied in the same instruction, their rent back to the cranker who paid it (to the fee PDA if someone else created them).
 - (burn_receipts) No pause or freeze exists. Nothing can stop cranks except the rule's own guards (a stale TWAP or a closed pool defers a burn day; it is never lost). The burn-pool cap limits how much of a pool one burn day may spend on; it never stops a burn.
 - (burn_receipts) No instruction mints tokens, and none holds a mint authority: the program's only token instructions are Burn (and SyncNative on its own WSOL account). There is no team allocation in the program.
@@ -80,20 +87,23 @@ What does not exist, in the registers' own words:
 
 ## 2. Who can do what
 
-Neither program has **any** power over funds. The burn program (`burn_receipts`) has 10 privileged instructions, and its register says "None." for the funds of every one. The pair program (`pair_curve`) has no privileged instructions.
+Neither program has **any** power over funds. The burn program (`burn_receipts`) has 13 privileged instructions, and its register says "None." for the funds of every one. The pair program (`pair_curve`) has no privileged instructions.
 
 | Program | Instruction | Holder | What it can do | Time lock | Note |
 |---|---|---|---|---|---|
 | burn_receipts | `cancel_attester_change` | config_authority | Withdraw a pending attester proposal. | — |  |
 | burn_receipts | `cancel_cap_raise` | platform_authority | Withdraw a pending cap raise. | — |  |
 | burn_receipts | `cancel_registration_policy` | config_authority | Withdraw a pending registration-policy switch. | — |  |
+| burn_receipts | `cancel_target_pool` | config_authority | Round 5: withdraw a pending pool proposal. | — |  |
 | burn_receipts | `clear_cranker_allowlist` | platform_authority_or_listed_cranker | Return crank_buyback to permissionless (clear the PlatformConfig's cranker allowlist). The platform authority OR any allowlisted key may do it, so lost keys plus a renounced authority never pin cranking to the list. | — | Review references: R3-4. |
 | burn_receipts | `propose_attesters` | config_authority | Propose a new attester set and quorum (add, rotate or remove attesters; quorum ≤ 3). | 48 hours (ATTESTER_TIMELOCK_SECS = 172,800), public: emits AttesterChangeProposed with the added and removed entries. |  |
 | burn_receipts | `propose_cap_raise` | platform_authority | Propose RAISING the burn-pool cap (the rule then spends on min(pool, new cap)). | 48 hours (CAP_TIMELOCK_SECS = 172,800), public: emits CapRaiseProposed. |  |
+| burn_receipts | `propose_target_pool` | config_authority | Round 5: propose a different CPMM pool for the SAME burned token (applicable 48 h later, for 14 days after the proposal; a new proposal replaces a pending one). | 48 h before apply_target_pool can run. |  |
 | burn_receipts | `renounce_admin` | config_authority | Give up the config authority forever (and cancel any pending proposal). Irreversible. | — |  |
 | burn_receipts | `renounce_platform_authority` | platform_authority | Give up the platform authority forever (cancels a pending raise). The cap stays as it is until its sunset. | — |  |
 | burn_receipts | `set_registration_policy` | config_authority | Propose switching the token's registration policy — to a fixed pool that must pass register_pool's creator + LP checks AND have ≥ 90 % of its live LP burned/locked or be the pool PDA of a LaunchLab-known AmmConfig (the pinned cpConfigId or the pinned platform's current one) when applied, or back to LaunchLab's migration pool (policy 0, needs the pinned platform). | 48 hours (ATTESTER_TIMELOCK_SECS), public: emits RegistrationPolicyProposed (eta, expires_at = proposal + 14 days); any current attester can veto it (veto_registration_policy). | Stranding recovery. Review references: R3-2. |
 | burn_receipts | `veto_registration_policy` | attester_key | Clear a pending registration-policy proposal (the cheap veto by the parties a pool switch would bypass). | — | Veto. Review references: R3-2. |
+| burn_receipts | `veto_target_pool` | attester_key | Clear a pending pool proposal for a coin that burns another token (round 5; any one current attester). | — | Veto. |
 
 The upgrade authority sits outside the programs' instructions. It is the one power above everything else.
 

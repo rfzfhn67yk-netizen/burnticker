@@ -44,6 +44,16 @@ it. Both programs are built at opt-level "z".
 | pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 413,224 | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` | `364eac3de338f5356d66bba2e74dca52859f4f0339c10dbdf759173339a701cf` = build (devnet vault transaction 20, same day) |
 <!-- || pair_curve | `2jQotwSG8WKNYr5pccxuVmNa314qcnnwmrhqbuakELkN` | devnet | `devnet` | 411,296 | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` | `ae947d591cfe357c8d911fc9e9fdc68800888d8a3fbb97b9113dfcf7d600bf42` = build (vault transaction 18, same run) | -->
 
+**Round 5 (external burn targets, docs/burnticker/EXTERNAL-BURN.md): built 2026-10-13 on the same Mac and toolchain, NOT deployed.**
+These rows go into the table above only when the upgrade lands (the staging copy for the upgrade script is
+docs/burnkeeper/evidence/devnet-round5/verified-build.round5.json; the same toolchain rebuilt round 4 from source to exactly
+`d9d44752…d2ae`, the deployed hash):
+
+- burn_receipts mainnet (default features): 947,600 B, executable hash `ac47edb5c07e2b846c74956f55c10068827b401ba1d2f3bfc0b1946427dc5832`
+- burn_receipts devnet (`devnet`): 947,576 B, executable hash `596e03225d0ce718d0b1eba10464fc5d27081f4d750914e1cae1f7c610cb8b9c`
+- The program grows by about 121 KB: each cluster's program data needs `solana program extend` by 122,880 bytes (about 0.86 SOL of
+  rent) before the upgrade (DEVNET-ROUND5-TEST-PLAN.md, step U2).
+
 **Bytecode version: sBPFv3 (SIMD-0500 checked 2026-10-11).** cargo-build-sbf 4.4.0 (Solana CLI 4.3.0, platform-tools v1.57, Anchor
 1.2.1) builds `--arch v3` by default, and all four rows above are sBPFv3 — ELF header `e_flags = 0x3` (`readelf -h <file>.so | grep
 Flags`), the same on the bytes read back from devnet. SIMD-0500 ("Disable deployment of SBPF v0, v1 and v2 programs", feature

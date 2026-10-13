@@ -4,7 +4,7 @@ import { formatDate, formatFixed, formatSignedFixed, hex12, rawToTokens } from "
 import type { ReadingAccount, TokenConfigAccount } from "@/lib/burnReceipts/accounts";
 
 /**
- * THE CANONICAL BURN MEMO — v1 (vault) and v2 (buyback), byte-for-byte the keeper's format:
+ * THE CANONICAL BURN MEMO — v1 (vault), v2 (buyback) and v3 (round 5: a target burn, below), byte-for-byte the program's format:
  *
  *   DEBT|2026-10-08|src=…|prev=…|now=…|delta=…|units=21|burn=2100000[|short=600000]|rules=sha256:<12>|v1
  *   DEBT|2026-10-08|src=…|prev=…|now=…|delta=…|units=21|pool=…|spent=…|got=…|burn=…|swap=…|rules=sha256:<12>|v2
@@ -113,11 +113,56 @@ export function parseBuybackMemo(s: string): BuybackMemo | null {
 }
 
 /**
+ * ROUND 5 target burn (crank_target_burn), memo v3 — the coin burned ANOTHER token:
+ *   DEBT|2026-10-08|src=…|prev=…|now=…|delta=…|units=21|pool=…|spent=…|got=…|burn=…|target=<target mint>|own=…|swap=…|rules=sha256:<12>|v3
+ * `got` / `burn` are in the TARGET's units (its decimals), `target` is the target mint in full, `own` the coin's own fee tokens burned in
+ * the same instruction (the coin's decimals; "0" when none).
+ */
+export interface TargetMemo {
+  prefix: string; recordDate: string; source: string; prev: string; now: string; delta: string; units: number;
+  pool: string; spent: string; got: string; burn: string; target: string; own: string; swap: string; rulesSha12: string; version: "v3";
+  valueDecimals?: number;
+}
+
+const BASE58_KEY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+export function formatTargetMemo(m: TargetMemo): string {
+  const bad = commonProblems(m);
+  for (const k of ["pool", "spent"] as const) if (!LAMPORTS.test(m[k])) bad.push(k);
+  for (const k of ["got", "burn", "own"] as const) if (!TOKENS.test(m[k])) bad.push(k);
+  if (!BASE58_KEY.test(m.target)) bad.push("target");
+  if (!SIG12.test(m.swap)) bad.push("swap");
+  if (!HEX12.test(m.rulesSha12)) bad.push("rulesSha12");
+  if (m.version !== "v3") bad.push("version");
+  if (!bad.length && BigInt(m.spent) > BigInt(m.pool)) bad.push("spent > pool");
+  if (bad.length) throw new Error(`memo v3: invalid field(s) ${bad.join(", ")}`);
+  return ceiling(`${head(m)}|pool=${m.pool}|spent=${m.spent}|got=${m.got}|burn=${m.burn}|target=${m.target}|own=${m.own}|swap=${m.swap}|rules=sha256:${m.rulesSha12}|${m.version}`);
+}
+
+export function parseTargetMemo(s: string): TargetMemo | null {
+  if (Buffer.byteLength(s, "utf8") > MEMO_MAX_BYTES) return null;
+  const parts = s.split("|");
+  if (parts.length !== 16) return null;
+  const keys = ["", "", "src", "prev", "now", "delta", "units", "pool", "spent", "got", "burn", "target", "own", "swap", "rules"];
+  const v: string[] = [];
+  for (let i = 2; i <= 14; i++) { const k = keys[i]; if (!parts[i].startsWith(`${k}=`)) return null; v[i] = parts[i].slice(k.length + 1); }
+  if (!/^\d+$/.test(v[6]) || !v[14].startsWith("sha256:")) return null;
+  const m: TargetMemo = { prefix: parts[0], recordDate: parts[1], source: v[2], prev: v[3], now: v[4], delta: v[5], units: Number(v[6]), pool: v[7], spent: v[8], got: v[9], burn: v[10], target: v[11], own: v[12], swap: v[13], rulesSha12: v[14].slice(7), version: parts[15] as "v3", ...(decimalsOf(v[3]) !== 2 ? { valueDecimals: decimalsOf(v[3]) } : {}) };
+  try { return formatTargetMemo(m) === s ? m : null; } catch { return null; }
+}
+
+/** The burned mint a memo names: the target for v3, else the coin itself (`coinMint`). */
+export function burnedMintOf(memo: string, coinMint: string): { mint: string; isTarget: boolean } {
+  const t = parseTargetMemo(memo);
+  return t ? { mint: t.target, isTarget: true } : { mint: coinMint, isTarget: false };
+}
+
+/**
  * The memo the program wrote for a processed reading, rebuilt from the TokenConfig and Reading accounts alone — the status page's
  * "verify it yourself": the chain's memo, the accounts and the source row must all agree. Returns null for readings that write no
  * memo (baseline / zero units / vault exhausted).
  */
-export function memoFromChain(c: TokenConfigAccount, r: ReadingAccount, mintDecimals: number): string | null {
+export function memoFromChain(c: TokenConfigAccount, r: ReadingAccount, mintDecimals: number, target?: { mint: PublicKey; decimals: number } | null): string | null {
   if (!r.processed || r.units === BigInt(0)) return null;
   const dec = c.rule.value_decimals;
   const h = {
@@ -131,6 +176,12 @@ export function memoFromChain(c: TokenConfigAccount, r: ReadingAccount, mintDeci
     rulesSha12: hex12(c.rules_sha256),
     valueDecimals: dec,
   };
+  // Round 5: a coin with a burn target writes memo v3 (got/burn in the target's units, the coin's own burned tokens in `owed`).
+  if (c.rule.mode === MODE_BUYBACK && c.burn_target_kind === 1) {
+    if (!target) throw new Error("memoFromChain: this coin burns a target; pass its BurnTarget (mint and decimals)");
+    const swap = r.spent_lamports > BigInt(0) ? (r.pool as PublicKey).toBase58().slice(0, 12) : "none";
+    return formatTargetMemo({ ...h, pool: r.pool_lamports.toString(), spent: r.spent_lamports.toString(), got: rawToTokens(r.got, target.decimals), burn: rawToTokens(r.burned, target.decimals), target: target.mint.toBase58(), own: rawToTokens(r.owed, mintDecimals), swap, version: "v3" });
+  }
   if (c.rule.mode === MODE_BUYBACK) {
     // Review-2 F9: the pool THIS reading traded on (stored on the Reading), so memos stay reproducible after a pool replacement.
     const pool = r.pool && !(r.pool as PublicKey).equals(PublicKey.default) ? (r.pool as PublicKey) : (c.cpmm_pool as PublicKey);

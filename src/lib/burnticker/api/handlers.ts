@@ -2,7 +2,7 @@ import type { Platform } from "@/lib/burnticker/server";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
-import { identityRefusals, ruleRefusals, sampleEligibility } from "@/lib/burnticker/launchPreflight";
+import { identityRefusals, ruleRefusals, sampleEligibility, settledPairInput, settledPairSinkProblems } from "@/lib/burnticker/launchPreflight";
 import { teamTicker } from "@/lib/burnticker/tickers";
 import { knownLookalike } from "@/lib/burnticker/ops/cloneServe";
 export { sampleEligibility };
@@ -23,7 +23,7 @@ import { CROSS_LABEL, countedOfficialOf } from "@/lib/burnticker/sources/gameSet
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
 import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBadge";
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
-import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
+import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
 import { describeRule } from "@/lib/burnticker/describe";
 import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
@@ -35,7 +35,7 @@ import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
 import { wideRule } from "@/lib/burnticker/registry";
 import { loadRefuseList, nameRefusals, refusalMessage, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
-import { buildLaunchBundle, buildPairBundles, launchProblems, raiseProblem, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
+import { buildLaunchBundle, buildPairBundles, defaultVoidBy, launchProblems, raiseProblem, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import { MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE, requestedOpeningPurchase } from "@/lib/burnticker/hostedLaunch";
 import { launchVenueOf } from "@/lib/burnticker/launchVerify";
 import { buildPairCurveLaunch, pairCurveEnabled, type PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
@@ -263,7 +263,7 @@ export async function electionPair(p: Platform, q: { slug?: string | null; a?: s
       try { const hits = await fecClient().searchCandidates(surname, office, race.state); return (hits.find((h) => !party || h.party === party) ?? hits[0])?.id ?? null; } catch { return null; }
     };
     const [fa, fb] = [await fecId(oa.label), await fecId(ob.label)];
-    return ok(scrubMarketData({ ...electionPairTemplate(race, oa, ob, { a: fa, b: fb }), note: "This makes two coins, one for each candidate. Until combined rules exist, each coin follows its own candidate's winner market. The pending list has the details." }));
+    return ok(scrubMarketData({ ...electionPairTemplate(race, oa, ob, { a: fa, b: fb }), note: "This makes one linked pair of two coins, one for each candidate. Two markets, one race: the winner's coin burns its own pool on the result and takes the loser's pool at the end. If neither candidate wins, both pools go to $DEFICIT's burn. Post linked.body to the launch route. The pending list has the details." }));
   } catch (e) { return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
 }
 
@@ -535,7 +535,7 @@ async function polymarketBacktest(p: Platform, locked: LockedRule, months: numbe
 
 export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule; preflight: PreflightResult | null }
 export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null; /** BURNTICKER_PAIR_CURVE_ENABLED: the pair launches through pair_curve (sign this instead of the two LaunchLab bundles). */ pairCurve?: PairCurveLaunchBundle }
-interface PairSideInput { ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown; /** website-18: side B's own creator text and uploaded image */ creatorDescription?: unknown; image?: unknown; imageRights?: unknown; imageBadge?: unknown }
+interface PairSideInput { /** two candidates in one race: candidate B's market and the race slug; two teams in one game: the other team; side B's own describe context */ market?: unknown; race?: unknown; opp?: unknown; descCtx?: unknown; ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown; /** website-18: side B's own creator text and uploaded image */ creatorDescription?: unknown; image?: unknown; imageRights?: unknown; imageBadge?: unknown }
 
 /**
  * Validation, refusals and the bundle — the launch route's whole pipeline. Refuses: invalid input, rules that do not lock, catalogue
@@ -571,7 +571,10 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): the same rule refusals the read-only review lists, in order:
   // vault mode, a venue this host has off, an oracle no coin launches on yet, a source's fixed unit / launchability / decided result, the
   // reserve bounds and an unsafe title regex. The first one answers; every one is in `problems`.
-  { const rr = ruleRefusals(locked, { kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
+  // SETTLED-EVENT PAIRS (owner 2026-10-13): two candidates in one race (pair.market + pair.race) or two teams in one game (pair.opp) are
+  // registered LaunchLab pairs, winner takes the burn, both end sinks pair-winner naming each other (launchPreflight.ts settledPairInput)
+  const settled = settledPairInput(b.pair);
+  { const rr = ruleRefusals(locked, { kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name;
@@ -729,11 +732,31 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     { const ir = identityRefusals({ ticker: side.ticker, name: side.name, description: creatorTextB }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, `Side B: ${ir[0].message}`, { code: ir[0].code, problems: ir.map((x) => `Side B: ${x.message}`) }) }; }
     if (bRefusals.length) return { error: fail(403, `Side B is refused: ${bRefusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: bRefusals }) };
     { const g = await launchGuardRefusal(p, { ticker: side.ticker, name: side.name, rule: null }); if (g) return { error: fail(g.status, `Side B is refused. ${g.error}`, g.extra) }; }
+    // two candidates: both markets must be named outcomes of the one race the body names (Polymarket's own index of open races)
+    if (settled?.shape === "candidates" && settled.bundle.race) {
+      if (p.polymarketDiscovery === false) return { error: fail(503, POLYMARKET_UNAVAILABLE) };
+      try {
+        const race = (await loadRaces((u) => p.polymarket.get(u), refuseTitlesList)).find((r) => r.slug === settled.bundle.race!.slug);
+        const ids = new Set(race?.outcomes.map((o) => o.conditionId) ?? []);
+        if (!race || !ids.has(locked.rule.market ?? "") || !ids.has(settled.bundle.race.marketB)) return { error: fail(400, "Both candidates must be named outcomes of the same open race. Pick the race again, then two of its candidates.", { code: "candidates-not-one-race" }) };
+      } catch (e) { return { error: fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`) }; }
+    }
+    // a settled-event pair has the 30-day both-or-neither date (its graduation deadline), not the market's own end date
+    const pairVoidBy = settled ? defaultVoidBy() : await oneShotVoidBy(p, locked) ?? undefined;
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
-      const probe = await buildPairBundles({ a: input, b: { ...side, description: "" }, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });
+      const probe = await buildPairBundles({ a: input, b: { ...side, description: "" }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });
       const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
-      side.description = withCreatorText(generatedParagraph(lockedB.rule, side.ticker, serverDescribeCtx(lockedB.rule, null, { seriesTitle, feed: feedText })), creatorTextB);
+      // a settled-event pair's side B is described from ITS OWN event (candidate B's market, read here; team B's win in the game), never
+      // side A's words (website-23: "$ROGEVELSA burns if the Democrats win"); its context is the body's pair.descCtx
+      let ctxB = serverDescribeCtx(lockedB.rule, null, { seriesTitle, feed: feedText });
+      if (settled) {
+        let titleB: string | null = null, statedB: ReturnType<typeof statedCtx> = null;
+        if (lockedB.rule.oracle === "polymarket" && lockedB.rule.market) { const info = await p.polymarket.seriesInfo(lockedB.rule.market).catch(() => null); titleB = info?.title ?? null; statedB = info ? statedCtx(info) : null; }
+        else if (lockedB.rule.oracle === "catalogue") titleB = nativeSourceById(lockedB.rule.series!)?.title ?? null;
+        ctxB = sideBDescribeCtx(lockedB.rule, (pb as { descCtx?: unknown }).descCtx, (body as { descCtx?: unknown }).descCtx, { seriesTitle: titleB, stated: statedB });
+      }
+      side.description = withCreatorText(generatedParagraph(lockedB.rule, side.ticker, ctxB), creatorTextB);
       input.description = withCreatorText(generatedParagraph(lockedA.rule, input.ticker, ctxA), creatorText);
       for (const [lk, tk, nm, desc, links, img, up] of [[lockedA, input.ticker, input.name, input.description, input.links, input.imageUrl, uploaded], [lockedB, side.ticker, side.name, side.description, side.links, side.imageUrl, upB.up]] as const) {
         const r = await pinFor(lk, tk, nm.trim(), desc, links, img, up);
@@ -742,12 +765,14 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // an uploaded image is shown from its pinned Arweave copy, per side
       const shownImage = (tk: string, url: string | null, up: unknown) => (up ? pins.get(tk)?.imageUri ?? url : url);
       input.imageUrl = shownImage(input.ticker, input.imageUrl, uploaded); side.imageUrl = shownImage(side.ticker, side.imageUrl, upB.up);
-      const pair = await buildPairBundles({ a: input, b: side, voidBy: await oneShotVoidBy(p, locked) ?? undefined }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
+      const pair = await buildPairBundles({ a: input, b: side, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
       // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).
       // a head-to-head season pair (rules.ts isMeetingsRule) is two LaunchLab coins linked at creation: the pair curve is for crypto references
-      const pairCurve = pairCurveEnabled(process.env) && !isMeetingsRule(locked.rule) ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
+      // …and so are two candidates in one race and two teams in one game: a LaunchLab pair linked at creation, both sinks naming each other
+      if (settled) { const sp = settledPairSinkProblems({ rule: lockRule(JSON.parse(pair.a.rules.text)).rule, mint: pair.a.mint }, { rule: lockRule(JSON.parse(pair.b.rules.text)).rule, mint: pair.b.mint }); if (sp.length) return { error: fail(400, sp.join(" "), { code: "settled-pair-sinks", problems: sp }) }; }
+      const pairCurve = pairCurveEnabled(process.env) && !isMeetingsRule(locked.rule) && !settled ? await buildPairCurveLaunch(pair, input.creator, { cluster: p.cluster, burnReceiptsProgramId: p.program.programId, cpConfigId: process.env.BURNTICKER_CP_CONFIG_ID?.trim() || undefined }) : undefined;
       const tokenA = o.register ? register(pair.a, input.ticker, input.imageUrl, input.links, note, pairCurve ? null : pair.a.addresses.poolId) : null;
       const tokenB = o.register ? register(pair.b, side.ticker, side.imageUrl, side.links, "", pairCurve ? null : pair.b.addresses.poolId) : null;
       const row = tokenA && tokenB ? p.registry.registerPair(pair.pairId, tokenA.mint, tokenB.mint) : null;

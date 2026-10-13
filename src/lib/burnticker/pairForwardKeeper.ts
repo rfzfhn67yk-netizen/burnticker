@@ -4,6 +4,7 @@ import type { Cosignature } from "@/lib/burnKeeper/programPort";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import type { BurnProgramClient } from "@/lib/burnticker/program";
 import type { PairRow, ReceiptRow, Registry, TokenRow } from "@/lib/burnticker/registry";
+import type { SettledEvent } from "@/lib/burnticker/units";
 import { pairWinnerTakesBurn } from "@/lib/burnticker/rules";
 import { PAIR_FORWARD_ALERT_SECS, PAIR_RESULT_ALERT_SECS, UNLINK_REASON_TEXT, forwardLine, pairErrorSentence, pairedOn, type ForwardFacts, type PairForwardPort, type PairResultView, type UnlinkReason } from "@/lib/burnticker/pairForward";
 
@@ -68,6 +69,46 @@ export function periodWinner(rows: readonly Pick<ReceiptRow, "pairRole" | "units
   const sum = (xs: readonly Pick<ReceiptRow, "pairRole" | "units">[], role: string) => xs.filter((b) => b.pairRole === role).reduce((a, b) => a + b.units, 0);
   const mine = sum(rows, "won") + sum(otherRows, "lost"), theirs = sum(rows, "lost") + sum(otherRows, "won");
   return mine > theirs ? me : theirs > mine ? other : null;
+}
+
+/**
+ * THE RESULT OF A SETTLED-EVENT PAIR (owner 2026-10-13: "since it's a settled event, the loser's burn pool should go to burning the
+ * winner's token"; rules.ts settledPairShape). Two shapes, one rule:
+ *   candidates  two outcome markets of one race (pair.race); a side "fired" when its own market paid YES; a split payout is "void"
+ *   game        two teams in one game (pair.game), each coin on its own team's win series; a side "fired" when its team won (reading 1)
+ * The two readings can arrive apart (two UMA windows hours apart; two schedules read on different cycles). The result counts once,
+ * from BOTH, and only when both are final:
+ *   held   either side has no final reading yet (a postponed game, a market inside its dispute window): neither coin plans anything
+ *   won    this side fired and the other did not: this coin's one-shot burns its pool; the other coin lost
+ *   lost   the other side fired and this one did not: this coin's fuel forwards to the winner (forward_to_winner), and what is left at
+ *          its end goes to the winner's burn too (end.rs partner_won: the result's PairResult names the winner)
+ *   none   neither fired (a third candidate won, a drawn game), both fired, or a market settled 50-50: no winner, nothing moves
+ *          between the coins, and at the end each pool goes to $DEFICIT's burn (the pair-winner sink falls through to the flagship)
+ * `at` is the result's day: the later of the two readings. Both coins' receipts carry it, so the keeper writes ONE PairResult for the
+ * event (multiKeeper.planRace dates both receipts there; ensurePairResult submits it before either crank). A cancelled game has no
+ * reading on either side: the existing one-game end applies (void, each coin burns down on itself).
+ */
+export type SidePayout = { state: "fired" | "not" | "void"; at: string };
+export type RaceVerdict = { kind: "held"; why: string } | { kind: "won" | "lost" | "none"; why: string; at: string };
+export function raceVerdict(mine: SidePayout | null, theirs: SidePayout | null, names: { me: string; other: string; shape?: "candidates" | "game" }): RaceVerdict {
+  const game = names.shape === "game", what = game ? "game" : "race", src = game ? "result" : "market";
+  if (!mine) return { kind: "held", why: `$${names.me}'s ${src} is not final yet; the ${what} counts once both sides are final` };
+  if (!theirs) return { kind: "held", why: `$${names.other}'s ${src} is not final yet; the ${what} counts once both sides are final` };
+  const t = (x: string) => { const ms = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(x) ? `${x}T00:00:00Z` : x); return Number.isFinite(ms) ? ms : 0; };
+  const at = t(theirs.at) > t(mine.at) ? theirs.at : mine.at;
+  if (mine.state === "fired" && theirs.state === "not") return { kind: "won", at, why: game ? `$${names.me}'s team won the game` : `$${names.me}'s candidate won the race: its market settled YES and $${names.other}'s settled NO` };
+  if (mine.state === "not" && theirs.state === "fired") return { kind: "lost", at, why: game ? `$${names.other}'s team won the game` : `$${names.other}'s candidate won the race: its market settled YES and $${names.me}'s settled NO` };
+  const why = mine.state === "void" || theirs.state === "void" ? "a market settled 50-50" : mine.state === "fired" ? (game ? "both sides read a win" : "both markets settled YES") : game ? "the game was a draw" : "neither candidate's market settled YES";
+  return { kind: "none", at, why: `no single winner in the ${what} (${why})` };
+}
+/** One side's reading as a payout: a market's YES / NO / split, or a game series' count (1 = its team won, 0 = it did not). */
+export function sidePayout(ev: Pick<SettledEvent, "result" | "value" | "at"> | null): SidePayout | null {
+  if (!ev) return null;
+  if (ev.result === "yes") return { state: "fired", at: ev.at };
+  if (ev.result === "no") return { state: "not", at: ev.at };
+  if (ev.result === "void") return { state: "void", at: ev.at };
+  if (ev.value === null) return null;
+  return { state: Number(ev.value) > 0 ? "fired" : "not", at: ev.at };
 }
 
 const alertKey = (kind: string, pair: string, D: number) => `${kind}:${pair}:${D}`;

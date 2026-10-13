@@ -400,3 +400,63 @@ pub struct ForwardedOnEnd {
     pub wsol_lamports: u64,
     pub cranker: Pubkey,
 }
+
+/// Round 5: the coin's burn target was pinned (pin_burn_target, before the coin existed).
+#[event]
+pub struct BurnTargetPinned {
+    pub config: Pubkey,
+    pub mint: Pubkey,
+    pub target_mint: Pubkey,
+    pub pool: Pubkey,
+    pub pool_kind: u8,
+    pub amm_config: Pubkey,
+    pub target_feed_id: [u8; 32],
+    pub wsol_reserve_lamports: u64,
+    /// The Pyth target/SOL reference at the pin (raw target per lamport × 2^32) and the pool's spot at the same moment.
+    pub reference_x32: u128,
+    pub spot_x32: u128,
+}
+
+/// Round 5: one target crank — SOL swapped on the pinned pool for the target, everything the fee PDA held in the target burned
+/// (`target_burned`, target raw units), plus any of the coin's own tokens it held (`own_burned`, the coin's raw units).
+#[event]
+pub struct TargetBurned {
+    pub config: Pubkey,
+    pub record_date: u32,
+    pub target_mint: Pubkey,
+    pub pool: Pubkey,
+    pub spent_lamports: u64,
+    pub got: u64,
+    pub target_burned: u64,
+    pub own_burned: u64,
+    /// The Pyth reference the crank checked the pool against (0 when nothing was swapped).
+    pub reference_x32: u128,
+}
+
+#[event]
+pub struct TargetPoolProposed {
+    pub config: Pubkey,
+    pub target_mint: Pubkey,
+    pub old_pool: Pubkey,
+    pub new_pool: Pubkey,
+    pub eta: i64,
+}
+
+#[event]
+pub struct TargetPoolProposalCancelled {
+    pub config: Pubkey,
+    pub pool: Pubkey,
+    pub cancelled_by: Pubkey,
+    pub vetoed: bool,
+}
+
+#[event]
+pub struct TargetPoolRepinned {
+    pub config: Pubkey,
+    pub target_mint: Pubkey,
+    pub old_pool: Pubkey,
+    pub new_pool: Pubkey,
+    pub pool_kind: u8,
+    pub wsol_reserve_lamports: u64,
+    pub caller: Pubkey,
+}

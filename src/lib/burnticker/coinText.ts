@@ -2,7 +2,7 @@ import type { BurnRule, LockedRule } from "@/lib/burnticker/rules";
 import { descriptionFooter } from "@/lib/burnticker/rules";
 import { badgeFromText, describeRule, type DescribeCtx } from "@/lib/burnticker/describe";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
-import { findTeams } from "@/lib/burnticker/sources/espn";
+import { findTeams, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 
 /**
  * THE DESCRIPTION IS GENERATED AND LOCKED (owner decision 2026-10-10, anti-misrepresentation): the launch route ignores any free-text
@@ -58,6 +58,24 @@ export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle
   // matches the preview; the words come from the server's own market read, never from the request
   if (rule.oracle === "polymarket" && rule.market && o.stated) out.stated = o.stated;
   return out;
+}
+
+/**
+ * SIDE B OF A SETTLED-EVENT PAIR (two candidates in one race, two teams in one game): its describe context from ITS OWN event words,
+ * never side A's (website-23 found "$ROGEVELSA burns if the Democrats win" for Michigan). `rawB` is the body's `pair.descCtx` (candidate
+ * B's market phrase, or team B's game); `seriesTitle` / `stated` are the server's own read of side B's market (or its game series). A
+ * one-game side B with no context of its own mirrors side A's game: the opponent is side A's team and home is flipped.
+ */
+export function sideBDescribeCtx(ruleB: BurnRule, rawB: unknown, rawA: unknown, o: { seriesTitle: string | null; stated?: DescribeCtx["stated"] }): Omit<DescribeCtx, "ticker"> {
+  let raw = rawB && typeof rawB === "object" && !Array.isArray(rawB) ? rawB as Record<string, unknown> : null;
+  const series = ruleB.pair?.game?.series;
+  if (!raw?.game && series && rawA && typeof rawA === "object") {
+    const ga = (rawA as { game?: { home?: unknown; startsAt?: unknown } }).game;
+    const ea = parseEspnSeries(series[0]);
+    const nick = ea ? teamByAbbr(ea.league, ea.abbr)?.nickname ?? null : null;
+    if (ga && typeof ga === "object" && nick) raw = { ...(raw ?? {}), game: { opponent: nick, home: ga.home !== true, startsAt: ga.startsAt } };
+  }
+  return serverDescribeCtx(ruleB, raw, { seriesTitle: o.seriesTitle, ...(o.stated ? { stated: o.stated } : {}) });
 }
 
 /**

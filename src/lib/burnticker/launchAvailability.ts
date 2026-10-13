@@ -25,7 +25,7 @@ export const CREATOR_LAUNCHES_PREVIEW_FLAG = "BURNTICKER_CREATOR_LAUNCHES_PREVIE
 export type LaunchMode = "closed" | "preview" | "open";
 export type LaunchType = "team" | "matchup" | "markets" | "elections" | "feeds" | "weather" | "derby" | "pairs";
 export interface TypeAvailability { type: LaunchType; label: string; available: boolean; reason: string | null }
-export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve"; label: string; available: boolean; reason: string | null }
+export interface SourceAvailability { id: "sports-settlement" | "sports-schedule" | "polymarket" | "nws" | "feeds" | "pair-curve" | "burn-real"; label: string; available: boolean; reason: string | null }
 export interface LaunchAvailabilityModel {
   mode: LaunchMode;
   /** True only in `open` mode: the one flag that lets a bundle be built. */
@@ -47,6 +47,16 @@ export const TYPE_UNAVAILABLE_CODE = "launch-type-unavailable";
 /** website-12 (2026-10-12, ChatGPT audit 6 A2): the ONE line beside every pair option, and the blocker behind its details. */
 export const PAIRS_UNAVAILABLE_LINE = "Paired launches are not available yet.";
 export const PAIRS_BLOCKER = "On mainnet this site has not turned on the program that runs pair launches, so a launch with two coins cannot be reviewed for signing or built here.";
+
+/**
+ * ROUND 5 (website-24, WIRING-ROUND5): a coin that burns a real token (WIF, BONK, ...) instead of itself needs the round-5 program, which
+ * the host names with BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5 (src/lib/burnReceipts/instructions.ts INITIALIZE_TOKEN_LAYOUT_ENV; the
+ * library refuses a pinned token on any other layout). Read here as a plain string so this module stays client-safe;
+ * test/burntickerWebsite24.test.ts pins the name to the library's constant. Until then the launch page hides the choice and says this line.
+ */
+export const BURN_REAL_LAYOUT_ENV = "BURNTICKER_INITIALIZE_TOKEN_LAYOUT";
+export const BURN_REAL_WAITING = "A coin that burns a real token, such as WIF or BONK, instead of itself waits for the round-5 program, which is not deployed on this site.";
+export const burnRealFromEnv = (env: Env = process.env): boolean => (env[BURN_REAL_LAYOUT_ENV] ?? "").trim() === "r5";
 
 export function launchModeFromEnv(env: Env = process.env): LaunchMode {
   if (on(env[CREATOR_LAUNCHES_FLAG])) return "open";
@@ -81,6 +91,7 @@ export function availabilityFromEnv(env: Env = process.env, cluster: string | nu
     { id: "nws", label: "National Weather Service daily climate reports", available: true, reason: null },
     { id: "feeds", label: "Public data publishers (Treasury, BLS, FRED, …)", available: true, reason: null },
     { id: "pair-curve", label: "Pair curve (registered pairs on mainnet)", available: pairCurve, reason: pairCurve ? null : "the pair curve is turned off on this site" },
+    { id: "burn-real", label: "Coins that burn a real token instead of themselves (the round-5 program)", available: burnRealFromEnv(env), reason: burnRealFromEnv(env) ? null : BURN_REAL_WAITING },
   ];
   return { mode, transactions: mode === "open", cluster, banner: mode === "preview" ? PREVIEW_BANNER : mode === "closed" ? CREATOR_LAUNCHES_CLOSED : null, types, sources };
 }
@@ -178,6 +189,8 @@ export interface SiteLaunchState {
   /** Coin vs Coin, registered pairs and the two-coin Matchup: one line and its blocker (null when available). */
   pairs: { available: boolean; line: string | null; detail: string | null };
   hostedSigning: HostedSigning;
+  /** Round 5: whether a coin may burn a real token on this site (the round-5 program is deployed), and the waiting line when not. */
+  burnReal: { available: boolean; line: string | null };
   /** The launch button may sign and send: open, freshly read, hosted signing complete. */
   canSign: boolean;
   /** The wizard (search, tiles, review card) may render: open or preview, freshly read. */
@@ -228,6 +241,12 @@ export function hostedSigningFor(cluster: string | null, env: Env = process.env)
   return { complete: h.canComplete, blockers: h.blockers };
 }
 
+/** Round 5 from the model's `burn-real` source; a missing source or an unfresh reading is "waiting" (fail closed). */
+function burnRealOf(m: LaunchAvailabilityModel, fresh: boolean): { available: boolean; line: string | null } {
+  const ok = fresh && m.sources.some((x) => x.id === "burn-real" && x.available === true);
+  return { available: ok, line: ok ? null : BURN_REAL_WAITING };
+}
+
 function stateFrom(read: SiteLaunchRead, m: LaunchAvailabilityModel, hostedSigning: HostedSigning, readAt: string | null): SiteLaunchState {
   const fresh = read === "ready";
   const mode: LaunchMode = fresh ? m.mode : "closed";
@@ -239,6 +258,7 @@ function stateFrom(read: SiteLaunchRead, m: LaunchAvailabilityModel, hostedSigni
   return {
     read, mode, cluster: m.cluster, types: m.types,
     pairs: { available: pairsA.available, line: pairsA.available ? null : PAIRS_UNAVAILABLE_LINE, detail: pairsA.available ? null : pairsA.reason },
+    burnReal: burnRealOf(m, fresh),
     hostedSigning, canSign, wizard: fresh && (mode === "open" || mode === "preview"), sentence, signingSentence, walletNote: WALLET_NOTE,
     meta: { description: `${SITE_HEADLINE} ${read === "ready" ? sentence : SITE_SENTENCE.closed}` },
     readAt,

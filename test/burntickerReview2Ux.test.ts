@@ -93,7 +93,7 @@ describe("review 2 — trust page: current facts, no contradictions", () => {
     assert.equal(reg.placeholder, false);
     const ids = reg.powers.map((p) => p.id);
     for (const id of ["propose_attesters", "renounce_admin", "set_registration_policy", "program-upgrade-authority"]) assert.ok(ids.includes(id), id);
-    assert.equal(reg.powers.filter((p) => p.source.includes("instructions.")).length, 10, "the register's ten privileged instructions");
+    assert.equal(reg.powers.filter((p) => p.source.includes("instructions.")).length, 13, "the register's thirteen privileged instructions (round 5 adds propose / cancel / veto_target_pool)");
     assert.doesNotMatch(read("src/app/burnticker/trust/page.tsx"), /placeholder until/);
   });
   test("program: this host's wiring, the chain deployment and the compiled value are three separate labels", () => {

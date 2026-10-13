@@ -35,7 +35,7 @@ describe("the owner, 2026-10-13: every Coin vs Coin sentence names the new coin 
     for (const t of [texts[0], texts[1], texts[2], texts[4], texts[5], texts[6], texts[7]]) assert.match(t, /are only read, never traded or burned\./, t);
     assert.match(derbyStatement(daily, "B", "pair-1"), /This coin burns on a window BONK wins\. On a window WIF wins, the other new coin burns, and this coin's share for that window goes to the other new coin's burn\./);
     for (const id of ["coin-vs-coin", "bracket", "flippening"]) assert.match(TEMPLATES.find((t) => t.id === id)!.example, /only read, never traded or burned/, id);
-    for (const f of ["src/lib/burnticker/derby/spec.ts", "src/lib/burnticker/derby/page.ts", "src/lib/burnticker/launchDerby.ts", "src/lib/burnticker/templates.ts"]) assert.doesNotMatch(read(f).replace(/^\s*(\/\/|\*).*$/gm, ""), /the winner's coin burns/, f);
+    for (const f of ["src/lib/burnticker/derby/spec.ts", "src/lib/burnticker/derby/page.ts", "src/lib/burnticker/launchDerby.ts", "src/lib/burnticker/templates.ts"]) assert.doesNotMatch(read(f).replace(/^\s*(\/\/|\*).*$/gm, "").replace(/^.*id: "election-pair".*$/m, ""), /the winner's coin burns/, f);   // owner 2026-10-13: the election pair's own sentence says "the winner's coin" (a candidate wins)
   });
   test("audit 10 #4: the flippening's tie, missing-reading, cross-read and end paragraphs follow the size comparison, not a daily return", () => {
     const x = derbyExplainer(flip, { a: "WIFVBONK", b: "BONKVWIF" });

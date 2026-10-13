@@ -36,16 +36,16 @@ describe("burnReceipts client — IDL", () => {
     const r = spawnSync(process.execPath, [path.join(import.meta.dirname, "..", "programs", "burn-receipts", "scripts", "powers-register.mjs"), "--check"], { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     const reg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "..", "docs", "burn-receipts", "powers-register.json"), "utf8"));
-    assert.deepEqual(reg.privileged_powers.sort(), ["cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "clear_cranker_allowlist", "propose_attesters", "propose_cap_raise", "renounce_admin", "renounce_platform_authority", "set_registration_policy", "veto_registration_policy"]);
+    assert.deepEqual(reg.privileged_powers.sort(), ["cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "clear_cranker_allowlist", "propose_attesters", "propose_cap_raise", "propose_target_pool", "renounce_admin", "renounce_platform_authority", "set_registration_policy", "veto_registration_policy", "veto_target_pool"]);
     const privilegedRoles = ["config_authority", "platform_authority", "attester_key", "platform_authority_or_listed_cranker"];
     for (const i of reg.instructions) if (i.class === "privileged") assert.ok(i.signers.every((s: { role: string }) => privilegedRoles.includes(s.role)));
     // Re-check R3-2 / R3-4: the attester's only transaction power is the veto; the allowlist can be cleared by a listed key.
-    assert.deepEqual(reg.instructions.filter((i: { signers: { role: string }[] }) => i.signers.some((s) => s.role === "attester_key")).map((i: { name: string }) => i.name), ["veto_registration_policy"]);
+    assert.deepEqual(reg.instructions.filter((i: { signers: { role: string }[] }) => i.signers.some((s) => s.role === "attester_key")).map((i: { name: string }) => i.name).sort(), ["veto_registration_policy", "veto_target_pool"]);
     assert.ok(reg.temporary_powers.every((t: { sunset: string }) => t.sunset.length > 0), "every temporary power names its sunset");
   });
   test("no instruction can withdraw, close or sweep", () => {
     const names = BURN_RECEIPTS_IDL.instructions.map((i) => i.name).sort();
-    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "link_pair", "propose_attesters", "propose_cap_raise", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy"]);
+    assert.deepEqual(names, ["apply_attester_change", "apply_cap_raise", "apply_paired_attester_change", "apply_registration_policy", "apply_target_pool", "cancel_attester_change", "cancel_cap_raise", "cancel_registration_policy", "cancel_target_pool", "check_pool_health", "claim_launchlab_creator_fee", "claim_lock_fees", "clear_cranker_allowlist", "crank_buyback", "crank_no_units", "crank_target_burn", "crank_vault", "forward_on_end", "forward_to_winner", "initialize_platform", "initialize_token", "link_pair", "pin_burn_target", "propose_attesters", "propose_cap_raise", "propose_target_pool", "register_fee_key", "register_pair_pool", "register_pool", "renounce_admin", "renounce_platform_authority", "replace_pool", "set_registration_policy", "submit_pair_result", "submit_reading", "submit_rule_end", "unlink_pair", "veto_registration_policy", "veto_target_pool"]);
   });
 });
 
@@ -104,13 +104,14 @@ describe("burnReceipts client — PDAs and accounts", () => {
       attesters: [operatorAttester(a1), ...Array.from({ length: 4 }, () => operatorAttester(PublicKey.default))], attester_count: 1, quorum: 1,
       pending_attesters: Array.from({ length: 5 }, () => operatorAttester(PublicKey.default)), pending_count: 0, pending_quorum: 0, pending_eta: BigInt(0),
       cpmm_pool: PublicKey.default, last_record_date: 20261008, last_value: BigInt("4030531621082972"), carry: BigInt(28006346253), crank_cursor: 20261007,
-      readings: 3, burns: 1, total_burned: BigInt(5), total_spent_lamports: BigInt(6), shortfall: BigInt(0), created_at: BigInt(1791547200), carried_spend_lamports: BigInt(11), pool_untradeable_since: BigInt(0), pool_untradeable_last_seen: BigInt(0), pool_verified: false, cluster_genesis: new PublicKey(G), registration_policy: 0, ll_platform: a1, ll_cp_config: PublicKey.default, ll_lock_scale_ppm: BigInt(1_000_000), pool_untradeable_candidate_at: BigInt(0), attester_added_at: [BigInt(1791547200), BigInt(0), BigInt(0), BigInt(0), BigInt(0)], pending_policy: 0, pending_policy_pool: PublicKey.default, pending_policy_eta: BigInt(0), pair_state: 2, pair_void_by: 20261120, pair_after_date: 20261007, pair_unlinked_at: BigInt(0), end_state: 1, end_date: 20261012, reserved: new Uint8Array(1),
+      readings: 3, burns: 1, total_burned: BigInt(5), total_spent_lamports: BigInt(6), shortfall: BigInt(0), created_at: BigInt(1791547200), carried_spend_lamports: BigInt(11), pool_untradeable_since: BigInt(0), pool_untradeable_last_seen: BigInt(0), pool_verified: false, cluster_genesis: new PublicKey(G), registration_policy: 0, ll_platform: a1, ll_cp_config: PublicKey.default, ll_lock_scale_ppm: BigInt(1_000_000), pool_untradeable_candidate_at: BigInt(0), attester_added_at: [BigInt(1791547200), BigInt(0), BigInt(0), BigInt(0), BigInt(0)], pending_policy: 0, pending_policy_pool: PublicKey.default, pending_policy_eta: BigInt(0), pair_state: 2, pair_void_by: 20261120, pair_after_date: 20261007, pair_unlinked_at: BigInt(0), end_state: 1, end_date: 20261012, burn_target_kind: 0,
     };
     const data = Buffer.concat([accountDiscriminator(BURN_RECEIPTS_IDL, "TokenConfig"), encodeType(BURN_RECEIPTS_IDL, { defined: { name: "TokenConfig" } }, cfg)]);
     const back = decodeTokenConfig(data);
     assert.equal(back.pair_state, 2, "LAUNCHPAD-PATH §40: pair_state took the first reserved byte");
     assert.deepEqual([back.pair_void_by, back.pair_after_date, back.pair_unlinked_at], [20261120, 20261007, BigInt(0)], "pair-forward r3 fields from the reserved bytes");
     assert.deepEqual([back.end_state, back.end_date], [1, 20261012], "LAUNCHPAD-PATH §45 fields from the reserved bytes");
+    assert.equal(back.burn_target_kind, 0, "round 5: the last reserved byte is burn_target_kind, 0 (self) on every earlier config");
     assert.equal(back.feedId, "treasury.debt_to_penny");
     assert.equal(back.memoSource, "fiscaldata.treasury.gov debt_to_penny");
     assert.equal(back.rule.fraction_per_unit_bps, 500);
@@ -215,13 +216,17 @@ describe("burnReceipts client — instructions", () => {
     assert.equal(initializeTokenLayoutFromEnv({}), "r3"); assert.equal(INITIALIZE_TOKEN_DEFAULT_LAYOUT, "r3");
     assert.equal(initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r3" }), "r3");
     assert.equal(initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r4" }), "r4");
-    assert.throws(() => initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "4" }), /^Error: BURNTICKER_INITIALIZE_TOKEN_LAYOUT must be r3 or r4, not "4"\.$/);
+    assert.throws(() => initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "4" }), /^Error: BURNTICKER_INITIALIZE_TOKEN_LAYOUT must be r3, r4 or r5, not "4"\.$/);
+    // round 5: initialize_token is round 4's bytes exactly (the target rides in pin_burn_target)
+    assert.equal(initializeTokenLayoutFromEnv({ BURNTICKER_INITIALIZE_TOKEN_LAYOUT: "r5" }), "r5");
+    const r5 = initializeTokenIx({ programId: PID, payer, creator: payer, mint: MINT, args: initArgs, layout: "r5" });
+    assert.deepEqual(r5.data, init.data); assert.equal(r5.keys.length, init.keys.length);
     const prev = process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT;
     try {
       process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT = "r4";
       assert.equal(initializeTokenIx({ programId: PID, payer, creator: payer, mint: MINT, args: initArgs }).keys.length, init.keys.length, "r4 from the host flag");
-      process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT = "r5";
-      assert.throws(() => initializeTokenIx({ programId: PID, payer, creator: payer, mint: MINT, args: initArgs }), /must be r3 or r4/);
+      process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT = "r6";
+      assert.throws(() => initializeTokenIx({ programId: PID, payer, creator: payer, mint: MINT, args: initArgs }), /must be r3, r4 or r5/);
     } finally { if (prev === undefined) delete process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT; else process.env.BURNTICKER_INITIALIZE_TOKEN_LAYOUT = prev; }
 
     const src = new Uint8Array(32).fill(5), proof = new Uint8Array(32).fill(6);

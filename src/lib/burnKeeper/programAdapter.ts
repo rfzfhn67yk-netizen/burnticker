@@ -46,6 +46,7 @@ export function configView(programId: PublicKey, mint: PublicKey, c: TokenConfig
     poolRegistered: c.poolRegistered, pool: c.poolRegistered ? c.cpmm_pool.toBase58() : null, poolUntradeableSince: c.pool_untradeable_since > BigInt(0) ? Number(c.pool_untradeable_since) : null,
     poolUntradeableLastSeen: c.pool_untradeable_last_seen > BigInt(0) ? Number(c.pool_untradeable_last_seen) : null, clusterGenesis: c.cluster_genesis.toBase58(),
     carriedSpendLamports: c.carried_spend_lamports, totalBurned: c.total_burned, totalSpentLamports: c.total_spent_lamports, shortfall: c.shortfall, readings: c.readings, burns: c.burns,
+    burnsTarget: c.burn_target_kind === 1,
   };
 }
 
