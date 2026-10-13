@@ -7,7 +7,7 @@ import { tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
 import { lookalikeRows } from "@/lib/burnticker/launchGuards";
-import { seasonOverFor } from "@/lib/burnticker/seasonOver";
+import { seasonNotStartedLine, seasonOverFor } from "@/lib/burnticker/seasonOver";
 import { espnClient } from "@/lib/burnticker/sources/native";
 import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     // sources-7 H6: a season rule on a team whose season is over is refused (seasonOver.ts), from the platform's schedule port
     const seasonOver = await seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule);
     const game = await gameFor((body as { rule?: unknown }).rule);
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, game });
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, seasonWarning: seasonNotStartedLine((body as { rule?: unknown }).rule), game });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

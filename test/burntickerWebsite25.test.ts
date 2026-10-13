@@ -67,7 +67,8 @@ describe("H5: the field rules in the browser match the server's lint", () => {
     assert.equal(room.length, 1); assert.equal(room[0].field, "description"); assert.match(room[0].text, /rule's own paragraph/);
   });
   test("the server's per-hit lint lines are recognised and dropped; its field problems are mapped to their field", () => {
-    for (const x of creatorTextProblems({ name: NAME, ticker: "", note: NOTE, description: DESC })) { assert.equal(isLintLine(x.reason), true, x.reason); assert.equal(isLintLine(`Coin B. ${x.reason}`), true); }
+    // sources-7 round 2: the server says the name step's own sentence, one per field, so the page's dedupe by text drops it
+    for (const x of creatorTextProblems({ name: NAME, ticker: "", note: NOTE, description: DESC })) assert.equal(x.reason, fieldRuleSentence(x.field as "name" | "note" | "description", x.field === "name" ? NAME : x.field === "note" ? NOTE : DESC), x.reason);
     assert.equal(isLintLine("The ticker needs 2 to 10 letters or digits."), false);
     assert.deepEqual(serverFieldOf(RESERVED_TICKER_REFUSAL), { side: "a", field: "ticker" });
     assert.deepEqual(serverFieldOf("Coin B. The ticker needs 2 to 10 letters or digits."), { side: "b", field: "ticker" });
@@ -80,8 +81,9 @@ describe("H5: the field rules in the browser match the server's lint", () => {
   });
   test("the walkthrough's draft: the review's lines become one per field, and the page holds Review", () => {
     const rv = (buildLaunchReview({ rule: DERBY.rule, ticker: "COLCUP", name: NAME, note: NOTE, creatorDescription: DESC } as never, { env: { BURNTICKER_CLUSTER: "mainnet", [CREATOR_LAUNCHES_FLAG]: "1" }, reserved: new Set() }) as { review: import("@/lib/burnticker/launchReview").LaunchReview }).review;
-    const lint = rv.problems.filter(isLintLine);
-    assert.ok(lint.length >= 7, "the server still lists each hit");
+    // sources-7 round 2: the server now says one sentence per field too, the same as the page's, and places it in fieldProblems
+    assert.equal(rv.problems.filter(isLintLine).length, 0);
+    for (const f of ["name", "note", "description"] as const) assert.equal(rv.fieldProblems.filter((x) => x.field === f && /cannot use/.test(x.text)).length, 1, f);
     const page = [fieldRuleSentence("name", NAME), noteIssue(NOTE), fieldRuleSentence("description", DESC)];
     assert.equal(page.filter(Boolean).length, 3, "three fields, three sentences");
   });

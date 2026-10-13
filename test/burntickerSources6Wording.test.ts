@@ -89,7 +89,7 @@ describe("QA pass 9 #23: Polymarket's resolution sentence keeps its links' meani
 });
 
 describe("audit 10 #9: content rules read ordinary words and denials", () => {
-  const bad = (t: string) => creatorTextProblems({ name: "Coin", ticker: "COIN", note: t }).map((p) => p.rule);
+  const bad = (t: string) => creatorTextProblems({ name: "Coin", ticker: "COIN", note: t }).flatMap((p) => p.rules);   // sources-7 round 2: one problem per field, every rule listed
   test("'moon' in ordinary language and an explicit denial pass; price talk, promises and endorsements are refused", () => {
     for (const ok of ["moon-club", "Harvest moon watchers", "The first crewed moon landing", "Not affiliated with any team.", "Not officially endorsed by anyone.", "No affiliation with the league.", "Unaffiliated fan coin."]) assert.deepEqual(bad(ok), [], ok);
     for (const [t, rule] of [["Officially endorsed by the USGS!", "affiliation"], ["Going to the moon", "to-the"], ["Mooning soon", "moon"], ["Our official partner coin", "affiliation"], ["Guaranteed to burn", "guarantee"]] as const) assert.ok(bad(t).includes(rule), `${t}: ${bad(t).join(",")}`);

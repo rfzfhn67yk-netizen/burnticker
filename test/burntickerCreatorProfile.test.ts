@@ -82,7 +82,7 @@ describe("the description and the links", () => {
     const label = await prepareLaunch(w.p, body({ links: [{ label: "Official site", url: "https://example.org" }] }), { register: false }) as Err;
     assert.equal(label.error.body.code, "copy-lint", "a link label passes the same lint");
     const rv = buildLaunchReview({ rule: RAYS, ticker: "RAYS26", name: "Rays 2026 Wins", creatorDescription: "The official coin of the Rays." } as never);
-    assert.ok("review" in rv && rv.review.problems.some((x) => /^The description "The official coin of the Rays\." contains "official"/.test(x)), "the review lists it before any wallet opens");
+    assert.ok("review" in rv && rv.review.problems.some((x) => /^The description cannot use “official”/.test(x)), "the review lists it before any wallet opens");
     assert.deepEqual(creatorLinks({ x: "http://x.com/a", telegram: "https://t.me/a" }), { links: [{ label: "Telegram", url: "https://t.me/a" }], problems: ["The X link has to start with https:// and have no spaces."] });
   });
 });

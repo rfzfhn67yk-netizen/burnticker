@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_ON_END, type BurnRule } from "@/lib/burnticker/rules";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
-import { gameSeries, teamSeries, type Game } from "@/lib/burnticker/sources/espn";
+import { gameSeries, seasonYearAt, teamSeries, type Game } from "@/lib/burnticker/sources/espn";
 import { seasonOverFor, seasonOverRefusal, seasonStatus, SEASON_OVER_LINK_LINE } from "@/lib/burnticker/seasonOver";
 import { buildLaunchReview } from "@/lib/burnticker/launchReview";
 import { prepareLaunch } from "@/lib/burnticker/api/handlers";
@@ -17,6 +17,9 @@ import { CREATOR, makeWorld } from "./burntickerApiHelpers.ts";
 const cfgLint = loadCopyLintConfig();
 const lint = (t: string) => { const r = lintCopy(t, cfgLint); assert.ok(r.ok, `${r.hits.map((h) => `${h.phrase} (${h.rule})`).join(", ")}\n${t}`); };
 const season = (abbr: string, outcome: "win" | "loss" = "win", year = 2026, kind: "season" | "post" = "season") => ({ ...firstPartyRule(teamSeries("mlb", abbr, outcome, { kind, year }), 0.02), onEnd: { ...DEFAULT_ON_END } }) as BurnRule;
+const SNOW = Date.parse("2026-10-13T12:00:00Z");
+/** The bundle reads the clock, so its test uses the season that is current when it runs. */
+const CUR = seasonYearAt("mlb", Date.now());
 const env = { BURNTICKER_CLUSTER: "mainnet", [CREATOR_LAUNCHES_FLAG]: "1" };
 const side = (abbr: string) => ({ abbr, name: abbr, nickname: abbr }) as unknown as Game["home"];
 /** The NLCS: every open game is a postseason game, and neither side is Colorado. */
@@ -41,11 +44,11 @@ describe("H6: a season rule on a team whose season is over", () => {
   });
 
   test("seasonOverFor reads the schedule once, within its time limit; an unreadable or slow schedule refuses nothing", async () => {
-    assert.equal((await seasonOverFor(season("COL"), async () => NLCS))?.code, "season-over");
-    assert.equal(await seasonOverFor(season("LAD"), async () => NLCS), null);
-    assert.equal(await seasonOverFor(season("COL"), async () => { throw new Error("down"); }), null);
-    assert.equal(await seasonOverFor(season("COL"), () => new Promise<Game[]>((res) => setTimeout(() => res(NLCS), 200)), { timeoutMs: 20 }), null);
-    assert.equal(await seasonOverFor(season("COL"), null), null);
+    assert.equal((await seasonOverFor(season("COL"), async () => NLCS, { now: SNOW }))?.code, "season-over");
+    assert.equal(await seasonOverFor(season("LAD"), async () => NLCS, { now: SNOW }), null);
+    assert.equal(await seasonOverFor(season("COL"), async () => { throw new Error("down"); }, { now: SNOW }), null);
+    assert.equal(await seasonOverFor(season("COL"), () => new Promise<Game[]>((res) => setTimeout(() => res(NLCS), 200)), { timeoutMs: 20, now: SNOW }), null);
+    assert.equal(await seasonOverFor(season("COL"), null, { now: SNOW }), null);
   });
 
   test("the review refuses it as a problem (not a warning at the bottom) and carries the next season", () => {
@@ -63,11 +66,11 @@ describe("H6: a season rule on a team whose season is over", () => {
     const w = await makeWorld();
     w.p.seasonSchedule = async () => NLCS;
     const base = { creator: CREATOR, firstBuySol: "0", acknowledgements: { ruleLocked: true, noReturns: true } };
-    const a = await prepareLaunch(w.p, { ...base, rule: season("COL"), ticker: "COLW", name: "Rockies Wins" }, { register: false }) as { error?: { status: number; body: { code: string; error: string; next?: { series: string } } } };
+    const a = await prepareLaunch(w.p, { ...base, rule: season("COL", "win", CUR), ticker: "COLW", name: "Rockies Wins" }, { register: false }) as { error?: { status: number; body: { code: string; error: string; next?: { series: string } } } };
     assert.equal(a.error?.status, 409);
     assert.equal(a.error?.body.code, "season-over");
-    assert.equal(a.error?.body.next?.series, teamSeries("mlb", "COL", "win", { kind: "season", year: 2027 }));
-    const b = await prepareLaunch(w.p, { ...base, rule: season("LAD"), ticker: "LADW", name: "Dodgers Wins" }, { register: false }) as { error?: { body: { code: string } } };
+    assert.equal(a.error?.body.next?.series, teamSeries("mlb", "COL", "win", { kind: "season", year: CUR + 1 }));
+    const b = await prepareLaunch(w.p, { ...base, rule: season("LAD", "win", CUR), ticker: "LADW", name: "Dodgers Wins" }, { register: false }) as { error?: { body: { code: string } } };
     assert.notEqual(b.error?.body.code, "season-over");
   });
 

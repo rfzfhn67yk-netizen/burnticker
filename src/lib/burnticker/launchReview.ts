@@ -93,6 +93,11 @@ export interface LaunchReview {
   operator: string;
   warnings: string[];
   problems: string[];
+  /**
+   * sources-7 round 2 (WIRING-WEBSITE25-REQUESTS H5): the problems that belong to a field the creator typed, each with its side and field,
+   * so a page never reads sentences to place them. Every `text` is also in `problems` (with "Coin B. " in front on a pair's side B).
+   */
+  fieldProblems: { side: "A" | "B"; field: "name" | "ticker" | "note" | "description" | "links"; text: string }[];
   /** website-19: what graduation means, with the raise choices and the fee rates (guidedLaunch.ts graduationExplainer). */
   graduation: string[];
   /**
@@ -193,6 +198,14 @@ export const PAIR_CURVE_FEES = {
 };
 /** Byte size of a classic SPL mint (pair_curve creates its own mints, pairCurve/client.ts createPairMintIxs). */
 export const SPL_MINT_BYTES = 82;
+/**
+ * sources-7 round 2 (WIRING-WEBSITE25-REQUESTS H4): what init_pair creates, from the program (programs/burn-receipts/programs/pair_curve):
+ * the Pair account (`space = 8 + Pair::INIT_SPACE`, state.rs; a test sums the struct's fields), the SOL vault funded to its rent minimum
+ * for zero bytes, and the two token vaults (ATA(vault, mint), `init_if_needed`, a classic token account of 165 bytes). The vault for
+ * wrapped SOL is made and closed inside graduation, so it is not part of the creator's cost.
+ */
+export const PAIR_ACCOUNT_BYTES = 946;
+export const PAIR_TOKEN_VAULT_BYTES = 165;
 
 /** A9: the governance sentences from the status record (current-status.json, operator.json) and the time lock last read from chain. */
 export function reviewGovernance(root: string, cluster: string, timeLockSecs: number | null): string[] {
@@ -240,6 +253,9 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const env = o.env ?? process.env;
   const cluster = hostCluster(env);
   const problems: string[] = [];
+  const fieldProblems: LaunchReview["fieldProblems"] = [];
+  /** One field problem: in the flat list (side B prefixed on a two-coin review) and in fieldProblems. */
+  const onField = (side: "A" | "B", field: LaunchReview["fieldProblems"][number]["field"], text: string, two: boolean) => { problems.push(two || side === "B" ? `Coin ${side}. ${text}` : text); fieldProblems.push({ side, field, text }); };
   if (!body.rule || typeof body.rule !== "object" || Array.isArray(body.rule)) return { problems: ["rule is required (a burnticker.rules/v1 object)"] };
   const raw = (body.rule as { onEnd?: unknown }).onEnd === undefined ? { ...(body.rule as object), onEnd: { ...DEFAULT_ON_END } } : body.rule;
   // website-19 (intent audit 2, item 1): an event-level market is refused in plain words before anything else
@@ -261,11 +277,11 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const ticker = String(body.ticker ?? "").toUpperCase(), name = String(body.name ?? "");
   const note = typeof body.note === "string" ? body.note.trim() : "";
   const sides: { side: "A" | "B"; name: string; ticker: string }[] = [{ side: "A", name, ticker }, ...(second ? [{ side: "B" as const, name: String(second.name ?? ""), ticker: String(second.ticker ?? "").toUpperCase() }] : [])];
+  const two = sides.length > 1;
   for (const s of sides) {
-    const p = sides.length > 1 ? `Coin ${s.side}. ` : "";
-    if (!/^[A-Z0-9]{2,10}$/.test(s.ticker)) problems.push(`${p}The ticker needs 2 to 10 letters or digits.`);
-    { const np = nameProblem(s.name); if (np) problems.push(`${p}${np}`); }
-    for (const x of creatorTextProblems({ name: s.name, ticker: s.ticker, note: s.side === "A" ? note : "" })) problems.push(`${p}${x.reason}`);
+    if (!/^[A-Z0-9]{2,10}$/.test(s.ticker)) onField(s.side, "ticker", "The ticker needs 2 to 10 letters or digits.", two);
+    { const np = nameProblem(s.name); if (np) onField(s.side, "name", np, two); }
+    for (const x of creatorTextProblems({ name: s.name, ticker: s.ticker, note: s.side === "A" ? note : "" })) onField(s.side, x.field === "link label" ? "links" : x.field, x.reason, two);
   }
   if (sides.length > 1 && sides[0].ticker === sides[1].ticker) problems.push("The two coins need different tickers.");
   if (sides.length > 1 && sides[0].name.trim() && sides[0].name.toUpperCase().replace(/[^A-Z0-9]/g, "") === sides[1].name.toUpperCase().replace(/[^A-Z0-9]/g, "")) problems.push("The two coins need different names.");
@@ -274,18 +290,18 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   let reserved: ReadonlySet<string> = new Set();
   try { reserved = o.reserved ?? loadReserved(); } catch { /* an unreadable list refuses nothing here; the launch route reads it again */ }
   const descOf = (i: number) => { const d = i === 0 ? (body as { creatorDescription?: unknown }).creatorDescription : second?.creatorDescription; return typeof d === "string" ? d : ""; };
-  sides.forEach((s, i) => { for (const x of identityRefusals({ ticker: s.ticker, name: s.name, description: descOf(i), note: i === 0 ? note : "" }, { reserved, existing: o.existing ?? null, rule: i === 0 ? locked.rule : null })) problems.push(`${sides.length > 1 ? `Coin ${s.side}. ` : ""}${x.message}`); });
-  if (note.length > NOTE_MAX) problems.push(`The note can be at most ${NOTE_MAX} characters.`);
+  sides.forEach((s, i) => { for (const x of identityRefusals({ ticker: s.ticker, name: s.name, description: descOf(i), note: i === 0 ? note : "" }, { reserved, existing: o.existing ?? null, rule: i === 0 ? locked.rule : null })) onField(s.side, x.field, x.message, two); });
+  if (note.length > NOTE_MAX) onField("A", "note", `The note can be at most ${NOTE_MAX} characters.`, false);
   // audit 7 item 3: the creator's links, checked exactly as the bundle checks them (creatorProfile.ts linksProblems)
-  if ((body as { links?: unknown }).links !== undefined) problems.push(...linksProblems((body as { links?: unknown }).links));
+  if ((body as { links?: unknown }).links !== undefined) for (const x of linksProblems((body as { links?: unknown }).links)) onField("A", "links", x, false);
   // website-15 item 13: the creator's own description passes the same creator lint and fits 280 characters
   const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
-  if (creatorText.length > DESCRIPTION_MAX) problems.push(`The description can be at most ${DESCRIPTION_MAX} characters.`);
-  for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorText })) problems.push(x.reason);
+  if (creatorText.length > DESCRIPTION_MAX) onField("A", "description", `The description can be at most ${DESCRIPTION_MAX} characters.`, false);
+  for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorText })) onField("A", "description", x.reason, false);
   // website-18: a pair's side B has its own description, checked the same way
   const creatorTextB = second && typeof second.creatorDescription === "string" ? second.creatorDescription.trim() : "";
-  if (creatorTextB.length > DESCRIPTION_MAX) problems.push(`Coin B. The description can be at most ${DESCRIPTION_MAX} characters.`);
-  for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorTextB })) problems.push(`Coin B. ${x.reason}`);
+  if (creatorTextB.length > DESCRIPTION_MAX) onField("B", "description", `The description can be at most ${DESCRIPTION_MAX} characters.`, true);
+  for (const x of creatorTextProblems({ name: "", ticker: "", note: "", description: creatorTextB })) onField("B", "description", x.reason, true);
   // website-19 (intent audit item 8): a Matchup's second coin carries its own rule; it is locked here like side A's so its exact text and
   // fingerprint are shown before signing
   let companionLocked: LockedRule | null = null;
@@ -334,10 +350,10 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const settledDescB = settled && settledPair?.b ? describeRule(settledPair.b, { ...sideBDescribeCtx(settledPair.b, (pair as { descCtx?: unknown } | null)?.descCtx, body.descCtx, { seriesTitle: sourceText(settledPair.b, now)?.title ?? null }), ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph : "";
   const paragraphB = meetingsBlock?.descriptionB ?? (settledDescB || null);
   const tickerB: string | null = (() => { try { const rb = meetingsPair ? { ...asBuilt, series: meetingsMirror(asBuilt.series ?? "") } as BurnRule : settledPair?.b ?? null; return rb ? describeRule(rb, { ...ctx, ticker: "" }).ticker || null : null; } catch { return null; } })();
-  for (const [gen, own, who] of [[text.paragraph, creatorText, ""], ...(paragraphB ? [[paragraphB, creatorTextB, "Coin B. "]] : [])] as [string, string, string][]) {
+  for (const [gen, own, side] of [[text.paragraph, creatorText, "A"], ...(paragraphB ? [[paragraphB, creatorTextB, "B"]] : [])] as [string, string, "A" | "B"][]) {
     const rp = descriptionRoomProblem(gen, own);
-    if (rp) problems.push(`${who}${rp}`);
-    else { const full = withCreatorText(gen, own); if (full.length > DESCRIPTION_LIMIT) problems.push(`${who}The description, the rule's paragraph and your own text together, comes to ${full.length.toLocaleString("en-US")} characters, and a coin's description can be at most ${DESCRIPTION_LIMIT.toLocaleString("en-US")}.`); }
+    if (rp) onField(side, "description", rp, false);
+    else { const full = withCreatorText(gen, own); if (full.length > DESCRIPTION_LIMIT) onField(side, "description", `The description, the rule's paragraph and your own text together, comes to ${full.length.toLocaleString("en-US")} characters, and a coin's description can be at most ${DESCRIPTION_LIMIT.toLocaleString("en-US")}.`, false); }
   }
   const espn = locked.rule.oracle === "catalogue" && locked.rule.series ? parseEspnSeries(locked.rule.series) : null;
   const teamName = espn ? teamByAbbr(espn.league, espn.abbr)?.nickname ?? null : null;
@@ -355,18 +371,20 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const pinRent = rentLamports(BURN_TARGET_ACCOUNT_BYTES);
   if (venue === "pair-curve") {
     const mintRent = rentLamports(SPL_MINT_BYTES), fee = 5 * LAMPORTS_PER_SIGNATURE;   // two signatures on each create, one on the link
+    const pairRent = rentLamports(PAIR_ACCOUNT_BYTES) + rentLamports(0) + 2 * rentLamports(PAIR_TOKEN_VAULT_BYTES);
     lines = [
       { label: `Rent for the account that stores each coin's rule, which is ${TOKEN_CONFIG_BYTES} bytes.`, sol: sol(rentConfig * 2), kind: "rent" },
       { label: "The reserve that moves into each coin's own burn pool. It stays with the coin.", sol: sol(reserve * 2), kind: "reserve" },
       { label: `Rent for the two new mints, ${SPL_MINT_BYTES} bytes each.`, sol: sol(mintRent * 2), kind: "rent" },
+      { label: `Rent for the pair's own account (${PAIR_ACCOUNT_BYTES} bytes), its SOL vault and its two token vaults (${PAIR_TOKEN_VAULT_BYTES} bytes each), made when the two coins are linked.`, sol: sol(pairRent), kind: "rent" },
       { label: "Network fees for five signatures across the three transactions. Priority fees are extra.", sol: sol(fee), kind: "fee" },
     ];
-    total = (rentConfig + reserve + mintRent) * 2 + fee;
+    total = (rentConfig + reserve + mintRent) * 2 + pairRent + fee;
     // round 5: a side with a pinned token locks its rule, pins the pool and creates its mint in its one transaction (pairCurveLaunch.ts)
     steps = [0, 1].map((i) => ({ label: targets[i] ? pinStepText(tk(i), targets[i]!.symbol, { thenCreate: true }) : `Create $${tk(i)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }));
     steps.push({ label: "Link the two coins as one pair on the pair curve", signers: ["your wallet"] });
     for (const i of [0, 1]) if (targets[i]) pins.push({ side: i === 0 ? "A" : "B", ticker: tk(i), symbol: targets[i]!.symbol, step: i + 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 0 });
-    costNote = "This is an estimate. It does not include the rent for the pair's own account and vaults, which has not been measured. Your wallet shows the exact amount before you approve. The reserve stays in each coin's burn pool, and the rent stays with the new accounts.";
+    costNote = "This is an estimate. It leaves out the vault for wrapped SOL, which is made and closed during graduation, and any priority fee your wallet adds. If someone already made a token vault, its rent is not charged again. Your wallet shows the exact amount before you approve. The reserve stays in each coin's burn pool, and the rent stays with the new accounts.";
   } else {
     const create = Math.round(LAUNCHLAB_CREATE_RENT_SOL * 1e9), fee = 2 * LAMPORTS_PER_SIGNATURE;
     lines = [
@@ -459,6 +477,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     operator: OPERATOR_LINE,
     warnings,
     problems,
+    fieldProblems,
     graduation: graduationLines(cluster),
     rules: [
       { side: "A" as const, ticker: tk(0), name, step: 1, text: locked.text, sha256: locked.sha256, derived: false },

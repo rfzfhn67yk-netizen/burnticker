@@ -32,7 +32,7 @@ describe("the creator's text is linted; the image is the receipt art", () => {
       const r = await prepareLaunch(w.p, body({ ticker: `T${Math.random().toString(36).slice(2, 7).toUpperCase()}`, ...o }), { register: false }) as Err;
       assert.ok("error" in r, JSON.stringify(o));
       assert.equal(r.error.status, 403); assert.equal(r.error.body.code, "copy-lint");
-      assert.match(r.error.body.error, new RegExp(`${field} "`));
+      assert.match(r.error.body.error, new RegExp(`The ${field} cannot `));   // sources-7 round 2: one plain sentence per field
       if (field !== "note" || !/price/.test(JSON.stringify(o))) assert.deepEqual(r.error.body.categories, ["no-affiliation"]);
     }
     assert.ok(!("error" in await prepareLaunch(w.p, body({ name: "Rays Win", ticker: "RAYSWIN" }), { register: false })), "\"Rays Win\" is allowed");

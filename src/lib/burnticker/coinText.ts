@@ -1,6 +1,7 @@
 import type { BurnRule, LockedRule } from "@/lib/burnticker/rules";
 import { descriptionFooter } from "@/lib/burnticker/rules";
 import { badgeFromText, describeRule, type DescribeCtx } from "@/lib/burnticker/describe";
+import { creatorFieldSentence } from "@/lib/burnticker/creatorWording";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { findTeams, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 
@@ -15,7 +16,7 @@ import { findTeams, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources
  */
 
 export const NOTE_MAX = 140;
-export interface CreatorTextProblem { field: "name" | "ticker" | "note" | "description" | "link label"; category: string; rule: string; phrase: string; reason: string }
+export interface CreatorTextProblem { field: "name" | "ticker" | "note" | "description" | "link label"; category: string; rule: string; phrase: string; reason: string; /** sources-7 round 2: every category and rule the field's hits fall under (the first are `category` and `rule`) */ categories: string[]; rules: string[] }
 
 /** The copy lint over what the creator typed. Empty → clean. */
 export function creatorTextProblems(o: { name: string; ticker: string; note: string; /** website-15 item 13 */ description?: string; linkLabels?: readonly string[] }): CreatorTextProblem[] {
@@ -24,7 +25,11 @@ export function creatorTextProblems(o: { name: string; ticker: string; note: str
   const fields: [string, string][] = [["name", o.name], ["ticker", o.ticker], ["note", o.note], ["description", o.description ?? ""], ...(o.linkLabels ?? []).map((l) => ["link label", l] as [string, string])];
   for (const [field, text] of fields as [CreatorTextProblem["field"], string][]) {
     if (!text.trim()) continue;
-    for (const h of lintCopy(text, cfg, { scope: "creator" }).hits) out.push({ field, category: h.category, rule: h.rule, phrase: h.phrase, reason: `The ${field} "${text.slice(0, 60)}" contains "${h.phrase}", which is not allowed. Rule broken: ${h.category} (${h.why}).` });
+    // sources-7 round 2 (WIRING-WEBSITE25-REQUESTS H5): ONE plain sentence per field (creatorWording.ts), the one the name step says, never
+    // a line per hit with the rule id and a cut quote
+    const hits = lintCopy(text, cfg, { scope: "creator" }).hits;
+    const reason = creatorFieldSentence(field, text, hits);
+    if (reason) out.push({ field, category: hits[0].category, rule: hits[0].rule, phrase: [...new Set(hits.map((h) => h.phrase.trim()))].join(", "), reason, categories: [...new Set(hits.map((h) => h.category))], rules: [...new Set(hits.map((h) => h.rule))] });
   }
   return out;
 }
