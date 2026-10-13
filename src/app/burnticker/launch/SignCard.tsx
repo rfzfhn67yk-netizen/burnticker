@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { abandonedSentence, browserPlanStorage, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, browserPlanStorage, pinReadProblems, withPlanLock, PLAN_LOCKED_SENTENCE, SESSION_SCOPE_LINE, confirmPlan, failureSentence, loadPlanRecord, markRecorded, planAbandoned, planProblems, planStepStates, planStorageKey, recordFailureSentence, sentRecoverySentence, signAndSendPlan, stepStatusText, type SendResult, type SignPlan } from "@/lib/burnticker/signPlan";
 import { lookupTablePinProblems, planNetwork, planSizeProblems, verifiedLookupTable } from "@/lib/burnticker/lookupTable";
 import type { LookupTablePin, Network } from "@/lib/burnticker/networks";
 import { NO_OPENING_PURCHASE_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
+import { archivePlanRecord, chainReadDeps } from "@/lib/burnticker/launchRecovery";
 
 /**
  * THE SIGNING CARD (2026-10-11): the one component that signs every launch — a single LaunchLab coin, two coins, a pair-curve set — from
@@ -43,24 +44,33 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
   const walletKey = wallet.publicKey?.toBase58() ?? null;
   const network = planNetwork(plan.steps.map((st) => st.instructions));
   // the lookup-table pin from the host (undefined = still reading, null = the read failed)
-  const [pins, setPins] = useState<Record<Network, LookupTablePin> | null | undefined>(undefined);
+  // launch audit 231: a failed read is retried in place (Read the setting again); a reload would drop the mint keys held in memory
+  const [pins, setPins] = useState<Record<Network, LookupTablePin> | null | undefined>(undefined), [pinTry, setPinTry] = useState(0);
   useEffect(() => {
     let live = true;
+    setPins(undefined);
     fetch("/api/burnticker/launch", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live) setPins(j?.lookupTables ?? null); }).catch(() => { if (live) setPins(null); });
     return () => { live = false; };
-  }, []);
+  }, [pinTry]);
   const pin = network && pins ? pins[network] ?? null : null;
-  const pinProblems = pins === undefined ? ["this page is still reading which lookup table this site uses"] : pins === null ? ["this site's lookup table setting could not be read, so nothing can be signed here; reload the page to try again"] : lookupTablePinProblems(network, pin);
+  const pinProblems = pins === undefined || pins === null ? pinReadProblems(pins) : lookupTablePinProblems(network, pin);
   const v0 = wallet.wallet?.adapter.supportedTransactionVersions;
   const problems = [...planProblems(plan, creator), ...pinProblems, ...planSizeProblems(plan.steps, creator, network), ...(creator && walletKey && walletKey !== creator ? ["the connected wallet is not the creator of this launch: connect the creator's wallet"] : []), ...(!wallet.signTransaction && walletKey ? ["this wallet cannot sign transactions"] : []), ...(walletKey && wallet.wallet && !v0?.has(0) ? ["this wallet cannot sign version-0 transactions"] : [])];
   /** the one safe action for an abandoned plan: drop its record and go back to the review, which builds a new plan with fresh mint keys */
-  const startNewPlan = () => { storage.remove(planStorageKey(plan)); window.location.assign(window.location.pathname); };
+  // launch audit 234: the replaced plan's signatures and mints stay readable in this tab's history (never a key)
+  const startNewPlan = () => { archivePlanRecord(storage, planStorageKey(plan)); window.location.assign(window.location.pathname); };
   const allLive = plan.confirms.length > 0 && plan.confirms.every((c) => confirmed.includes(c.mint));
   const n = plan.steps.length;
-  // a single coin goes to its page once it is live (a pair keeps the card with both links)
-  useEffect(() => { if (allLive && plan.confirms.length === 1) { const t = setTimeout(() => window.location.assign(coinHref(plan.confirms[0].ticker)), 1500); return () => clearTimeout(t); } }, [allLive]); // eslint-disable-line react-hooks/exhaustive-deps
+  // launch audit 230: once live, the card stays as a completion card with an Open link per coin (no timed redirect)
+  // launch audit 250: `busy` is React state, so two presses in one render, or a card mounted again mid-run, both read false; the plan
+  // lock (signPlan.ts withPlanLock, shared with the recovery notice) lets one run at a time touch this plan in this tab
   const go = async () => {
     if (!creator || !wallet.signTransaction || problems.length || busy) return;
+    const locked = await withPlanLock(planStorageKey(plan), run);
+    if (!locked.ran) setErr(PLAN_LOCKED_SENTENCE);
+  };
+  const run = async () => {
+    if (!creator || !wallet.signTransaction) return;
     setBusy(true); setErr(null);
     try {
       const r = await signAndSendPlan(plan, creator, {
@@ -69,8 +79,8 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
         lookupTable: () => verifiedLookupTable(connection, network, pin),
         sendRaw: (raw) => connection.sendRawTransaction(raw, { preflightCommitment: "confirmed" }),
         confirm: async (sig, bh) => (await connection.confirmTransaction({ signature: sig, ...bh }, "confirmed")).value,
-        getSignatureStatus: async (sig) => (await connection.getSignatureStatuses([sig], { searchTransactionHistory: true })).value[0] ?? null,
-        getBlockHeight: () => connection.getBlockHeight("confirmed"),
+        // launch recovery 255: status, height, the transaction history and the accounts a step creates, before anything is called unlanded
+        ...chainReadDeps(connection),
         storage,
       }, (i, sig) => setDone((d) => (d.length === i ? [...d, sig] : d)), done);
       setDone(r.signatures);
@@ -121,16 +131,20 @@ export function SignCard({ plan, creator, title, notes = [], coinHref, autoStart
       <p className="text-xs text-neutral-500" data-no-opening-purchase>{NO_OPENING_PURCHASE_SENTENCE}</p>
       {notes.length > 0 && <ul className="list-disc pl-5 text-xs text-neutral-500">{notes.map((x) => <li key={x}>{x}</li>)}</ul>}
       {allLive ? (
-        <p className="text-emerald-400">{plan.confirms.length > 1 ? "Both coins are live." : "Your coin is live — opening its page…"} {plan.confirms.map((c) => <a key={c.mint} className="ml-2 underline" href={coinHref(c.ticker)}>${c.ticker} →</a>)}</p>
+        <div className="space-y-2" data-launch-complete>
+          <p className="text-emerald-400">{plan.confirms.length > 1 ? "Both coins are live and recorded." : "Your coin is live and recorded."}</p>
+          <p className="flex flex-wrap gap-2">{plan.confirms.map((c) => <a key={c.mint} className="rounded bg-amber-400 px-4 py-2 text-sm font-semibold text-neutral-950" href={coinHref(c.ticker)}>Open ${c.ticker}</a>)}</p>
+        </div>
       ) : stopped?.state === "abandoned" ? (
         <button type="button" data-decision="new-plan" className="rounded border border-amber-400 px-5 py-2 text-base font-semibold text-amber-300" onClick={startNewPlan}>Start a new plan</button>
       ) : problems.length > 0 ? (
-        <div className="text-amber-400 text-xs"><p>Not signable here yet:</p><ul className="list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul></div>
+        <div className="text-amber-400 text-xs"><p>Not signable here yet:</p><ul className="list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul>{pins === null && <button type="button" data-pin-retry className="mt-1 rounded border border-amber-400 px-2 py-1 text-amber-300" onClick={() => setPinTry((x) => x + 1)}>Read the setting again</button>}</div>
       ) : (
         <button type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-50" disabled={busy} onClick={go}>
           {busy ? `Signing step ${Math.min(done.length + 1, n)} of ${n}…` : stopped?.state === "sent" ? `Check step ${(stopped.failedAt ?? 0) + 1} on chain and continue` : done.length >= n ? "Record the launch again" : done.length ? `Continue from step ${done.length + 1} of ${n}` : `Sign in your wallet (${n} step${n === 1 ? "" : "s"})`}
         </button>
       )}
+      {!allLive && <p className="text-xs text-neutral-500" data-session-scope>{SESSION_SCOPE_LINE}</p>}
       {err && <p className="text-xs text-red-400">{err}</p>}
     </div>
   );

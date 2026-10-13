@@ -78,7 +78,7 @@ describe("one league season", () => {
     assert.equal(nhl.teams.length, 32);
     assert.deepEqual(nhl.teams.slice(0, 2).map((t) => t.abbr).sort(), ["BOS", "EDM"]);
     assert.deepEqual(nhl.teams.find((t) => t.abbr === "EDM")!.coins, [{ ticker: "OILERS27", outcome: "win" }]);
-    assert.equal(nhl.teams.find((t) => t.abbr === "EDM")!.launchHref, "/burnticker/launch?q=Edmonton%20Oilers");
+    assert.equal(nhl.teams.find((t) => t.abbr === "EDM")!.launchHref, "/burnticker/launch?league=nhl&team=EDM");
   });
 
   test("settled games: the last seven days, one row per game, the reading's source line and the ESPN link only", () => {
@@ -146,7 +146,7 @@ describe("the sitemap", () => {
   const entries = sitemapEntries({ origin: ORIGIN, nowMs: NOW, coins: [{ ticker: "OILERS27", status: "live", at: 1 }, { ticker: "RAYS26", status: "retired", at: 1 }, { ticker: "DRAFTY", status: "draft", at: 1 }, { ticker: "GONE", status: "expired", at: 1 }], pairs: [{ pairId: "oilers-vs-flames-x" }], seasonCoins: COINS });
   const locs = entries.map((e) => e.loc);
   test("coins (never drafts), pairs, leagues (current seasons + seasons with coins), docs and the app pages", () => {
-    for (const p of ["/burnticker/t/OILERS27", "/burnticker/t/RAYS26", "/burnticker/p/oilers-vs-flames-x", "/burnticker/leagues", "/burnticker/leagues/nhl/2026-27", "/burnticker/leagues/mlb/2026", "/burnticker/leagues/eng.1/2026-27", "/burnticker/docs", "/whitepaper.html", "/api/burnticker/v1/openapi.json", "/burnticker/trust", "/burnticker/launch"]) assert.ok(locs.includes(`${ORIGIN}${p}`), p);
+    for (const p of ["/burnticker/t/OILERS27", "/burnticker/t/RAYS26", "/burnticker/p/oilers-vs-flames-x", "/burnticker/leagues", "/burnticker/leagues/nhl/2026-27", "/burnticker/leagues/mlb/2026", "/burnticker/leagues/eng.1/2026-27", "/burnticker/docs", "/whitepaper.html", "/burnticker/templates", "/burnticker/trust", "/burnticker/launch"]) assert.ok(locs.includes(`${ORIGIN}${p}`), p);
     assert.ok(!locs.some((l) => /DRAFTY|GONE|\/embed\/|\/badge\//.test(l)));
     assert.equal(new Set(locs).size, locs.length, "no duplicates");
   });

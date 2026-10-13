@@ -13,7 +13,7 @@ import { KalshiClient, fixtureFetch, openMarketsUrl, seriesApiUrl, settledMarket
 import { CatalogueAdapter } from "@/lib/burnticker/catalogue";
 import { runCycle } from "@/lib/burnticker/multiKeeper";
 import { PAIR_BURN_SENTENCE, PAIR_REVIEW_LINE, pairResultSentence, pairWinnerOf } from "@/lib/burnticker/describe";
-import { TEMPLATES } from "@/lib/burnticker/templates";
+import { INDEPENDENT_PAIR_LINE, TEMPLATES, pairLineFor } from "@/lib/burnticker/templates";
 import { lockRule, pairMirrorRule, validateRule } from "@/lib/burnticker/rules";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { BRONCOS, NOW, fx } from "./burntickerHelpers.ts";
@@ -72,8 +72,11 @@ describe("review 2 F6 — one factual pair sentence, checked against the engine"
     assert.deepEqual(lint(PAIR_BURN_SENTENCE), []);
     assert.ok(PAIR_REVIEW_LINE.startsWith(PAIR_BURN_SENTENCE), "the review card's line");
     // templates: registered pairs carry it exactly; a matchup says when it is a registered pair and then carries it
-    for (const id of ["election-pair", "coin-vs-coin"]) assert.equal(TEMPLATES.find((t) => t.id === id)!.pairLine, PAIR_BURN_SENTENCE, id);
-    assert.ok(TEMPLATES.find((t) => t.id === "matchup")!.pairLine!.endsWith(PAIR_BURN_SENTENCE));
+    // website-20 item 51: the line follows the pairing the launch page builds: Coin vs Coin and the flippening are registered pairs; a
+    // matchup and an election pair are two separate launches (the page posts two coins), so nothing moves between them
+    for (const id of ["coin-vs-coin", "flippening"]) assert.equal(TEMPLATES.find((t) => t.id === id)!.pairLine, PAIR_BURN_SENTENCE, id);
+    for (const id of ["election-pair", "matchup"]) { const l = TEMPLATES.find((t) => t.id === id)!.pairLine!; assert.equal(l, INDEPENDENT_PAIR_LINE, id); assert.doesNotMatch(l, /winner|fund|moves to/i, id); }
+    for (const t of TEMPLATES) if (t.shape === "pair") assert.equal(t.pairLine, pairLineFor(t.pairing), t.id);
     for (const t of TEMPLATES) {
       for (const s of [t.example, t.pairLine ?? ""]) {
         assert.deepEqual(lint(s), [], `${t.id}: ${s}`);

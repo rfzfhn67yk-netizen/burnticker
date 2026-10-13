@@ -21,6 +21,8 @@ export const SETTLEMENT_LABEL: Record<SettlementStatus, string> = { waiting: "Wa
 
 export interface UpcomingRow {
   ticker: string; name: string; href: string; network: "mainnet" | "devnet";
+  /** the coin's mint, when known: with the network it is the follow key (watchlist.ts; private review 8 F1) */
+  mint?: string | null;
   /** the result the rule waits for, in words */
   event: string;
   /** who publishes it, in words; never the event-contract venue's name */
@@ -38,6 +40,11 @@ export interface UpcomingRow {
 }
 
 export const UPCOMING_EMPTY = "No coin is registered on this site yet, so no result is being waited for. Each coin appears here once it is created and registered.";
+/**
+ * No coin is registered, but the page lists coins anyway (the featured $DEFICIT and test coins): the empty sentence must not say "no coin"
+ * under a list of coins (ChatGPT audit 6 item 22).
+ */
+export const UPCOMING_NONE_REGISTERED_LISTED = "No coin on this page is waiting for a result here yet. This list follows coins once they are registered on this site, and none of the coins above is registered yet.";
 /** Every registered coin is a draft, expired or retired (website-15, code review 6 P2 2). */
 export const UPCOMING_NONE_ACTIVE = "No pending results. No coin registered on this site is active right now.";
 /** The registry itself could not be read: unavailable, never "no coin". */
@@ -59,13 +66,17 @@ export function upcomingSet(rows: readonly UpcomingRow[], omitted: readonly Upco
   return { state, rows: [...rows], omitted: [...omitted], registered };
 }
 
-/** The one sentence a next-results list shows beside (partial) or instead of (empty, unavailable) its rows; null when the rows say it all. */
-export function upcomingNotice(u: UpcomingSet | null | undefined): string | null {
+/**
+ * The one sentence a next-results list shows beside (partial) or instead of (empty, unavailable) its rows; null when the rows say it all.
+ * `listed`: how many coins the same page shows elsewhere (the home's featured cards), so an empty registry under listed coins never reads
+ * "No coin is registered" as if the page were empty.
+ */
+export function upcomingNotice(u: UpcomingSet | null | undefined, listed = 0): string | null {
   if (!u || !Array.isArray(u.rows)) return UPCOMING_UNAVAILABLE;
   if (u.state === "unavailable") return u.registered === null ? UPCOMING_UNAVAILABLE : `The next results are unavailable, because this site could not read ${tickers(u.omitted)} just now.`;
   if (u.state === "partial") return `Some next results are missing, because this site could not read ${tickers(u.omitted)} just now.`;
   if (u.rows.length) return null;
-  return u.registered === 0 ? UPCOMING_EMPTY : UPCOMING_NONE_ACTIVE;
+  return u.registered === 0 ? (listed > 0 ? UPCOMING_NONE_REGISTERED_LISTED : UPCOMING_EMPTY) : UPCOMING_NONE_ACTIVE;
 }
 const tickers = (o: readonly UpcomingOmitted[]) => { const t = o.map((x) => `$${x.ticker}`); return t.length <= 1 ? (t[0] ?? "a coin") : `${t.slice(0, -1).join(", ")} and ${t[t.length - 1]}`; };
 
@@ -99,7 +110,7 @@ export function settlementOf(receipts: readonly ReceiptLike[], cluster: string):
 
 /** One registered coin's row. */
 /** `key`: the coin's URL key (coinKey.ts), its ticker while it alone holds it and its mint once the ticker is shared. */
-export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike[], key: string = s.ticker): UpcomingRow | null {
+export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike[], key: string = s.ticker, mint: string | null = null): UpcomingRow | null {
   if (s.status === "draft" || s.status === "expired" || s.status === "retired") return null;
   const st = settlementOf(receipts, s.cluster);
   const close = s.next.nextCloseTime, check = s.next.nextCheckAt;
@@ -108,7 +119,7 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
     : "This rule has no scheduled result that this site knows of.";
   const latestSrc = [...receipts].reverse().find((r) => r.settlementSourceUrl)?.settlementSourceUrl ?? null;
   return {
-    ticker: s.ticker, name: s.name, href: `/burnticker/t/${encodeURIComponent(key)}`, network: s.cluster === "devnet" ? "devnet" : "mainnet",
+    ticker: s.ticker, name: s.name, href: `/burnticker/t/${encodeURIComponent(key)}`, network: s.cluster === "devnet" ? "devnet" : "mainnet", mint,
     event: s.next.nextMarket ? `${s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey}, market ${s.next.nextMarket}` : s.seriesTitle ?? s.profile?.oneLiner ?? s.selectorKey,
     source: SOURCE[s.oracle] ?? "The source named in the rule", sourceUrl: latestSrc, schedule, nextAt: close ?? check, status: st.status, statusText: st.text, receiptHref: st.receiptHref,
   };
@@ -116,7 +127,7 @@ export function upcomingFromStatus(s: StatusLike, receipts: readonly ReceiptLike
 
 /** The $DEFICIT keeper's row, from its status.json, burns.json and the locked rule file's schedule. Null before the coin exists. */
 export function upcomingFromKeeper(statusFile: unknown, burnsFile: unknown, rules: { feedName: string; feedUrl: string | null; polls: readonly string[]; timeZone: string }): UpcomingRow | null {
-  const s = statusFile as { schema?: string; ticker?: string; cluster?: string; feed?: { lastRecordDate: string | null; nextPollAt: string | null }; program?: { queue?: { lastOnChain: string | null } } | null } | null;
+  const s = statusFile as { schema?: string; ticker?: string; cluster?: string; addresses?: { mint?: string | null } | null; feed?: { lastRecordDate: string | null; nextPollAt: string | null }; program?: { queue?: { lastOnChain: string | null } } | null } | null;
   if (!s || s.schema !== "burnkeeper.status/v1") return null;
   const raw = Array.isArray(burnsFile) ? burnsFile : burnsFile && typeof burnsFile === "object" && Array.isArray((burnsFile as { burns?: unknown }).burns) ? (burnsFile as { burns: unknown[] }).burns : null;
   // website-15 (code review 6, P2 1): a missing or wrong-shape burns.json is unavailable, never "counted no unit"
@@ -138,7 +149,7 @@ export function upcomingFromKeeper(statusFile: unknown, burnsFile: unknown, rule
   } else if (lastRead) text = `The reading for ${shortDay(lastRead) ?? lastRead} counted no unit, so nothing is due. The rule waits for the next business day.`;
   const polls = rules.polls.join(" and ");
   return {
-    ticker: t, name: "Deficit", href: "https://deficit.burnticker.com/", network: s.cluster === "devnet" ? "devnet" : "mainnet",
+    ticker: t, name: "Deficit", href: "https://deficit.burnticker.com/", network: s.cluster === "devnet" ? "devnet" : "mainnet", mint: s.addresses?.mint ?? null,
     event: "The next business day's U.S. national debt figure", source: rules.feedName, sourceUrl: rules.feedUrl,
     schedule: `The Treasury publishes each business day's figure on its own schedule. The keeper checks for it at ${polls} ${rules.timeZone === "America/New_York" ? "New York" : rules.timeZone} time.`,
     nextAt: s.feed?.nextPollAt ?? null, status, statusText: text, receiptHref,

@@ -59,7 +59,7 @@ describe("B: the Team path", () => {
   });
   test("everything else sits under one closed Advanced disclosure that lists the defaults; the image stays above it", () => {
     assert.match(card, /<details className="[^"]*" data-advanced>\s*<summary[^>]*>\{ADVANCED_LABEL\}<\/summary>/);
-    const img = card.indexOf("{p.image}"), wrap = card.indexOf("<AdvancedWrap advanced"), prof = card.indexOf("{p.profile}"), share = card.indexOf("aria-label={p.budget?.label ?? BUDGET_LABEL}"), inv = card.indexOf("data-inverse"), raise = card.indexOf("data-raise>"), note = card.indexOf('data-optional="note"'), end = card.indexOf("</AdvancedWrap>");
+    const wrap = card.indexOf("<AdvancedWrap advanced"), img = card.lastIndexOf("{p.image}", wrap), prof = card.indexOf("{p.profile}", wrap), share = card.indexOf("aria-label={p.budget?.label ?? BUDGET_LABEL}"), inv = card.indexOf("data-inverse"), raise = card.indexOf("data-raise>"), note = card.indexOf("{noteField}", wrap), end = card.indexOf("</AdvancedWrap>");
     assert.ok(img > 0 && img < wrap, "the image control is above Advanced");
     for (const [k, i] of Object.entries({ prof, share, inv, raise, note })) assert.ok(i > wrap && i < end, `${k} is inside Advanced`);
     assert.match(page, /advanced=\{teamPath \? \{ defaults: teamAdvancedDefaults\(/);
@@ -72,7 +72,7 @@ describe("B: the Team path", () => {
 describe("the image control: one coin, each coin of a pair, and a host without custom images", () => {
   test("the control renders for a single coin and for both coins of a Matchup and of Coin vs Coin, above Advanced", () => {
     assert.match(page, /image=\{pairOn && ruleB \? <div [^>]*data-pair-images>\{imageField\(profile, setProfile, [^)]*\)\}\{imageField\(profileB, setProfileB, [^)]*\)\}<\/div> : imageField\(profile, setProfile, null\)\}/);
-    assert.match(cvc, /image=\{<div [^>]*data-pair-images><ProfileFields value=\{profA\}[^>]*part="image"[^>]*\/><ProfileFields value=\{profB\}[^>]*part="image"[^>]*\/><\/div>\}/);
+    assert.match(cvc, /image=\{<div [^>]*data-pair-images>(?:\{imagesDropped[^\n]*?<\/p>\})?<ProfileFields value=\{profA\}[^>]*part="image"[^>]*\/><ProfileFields value=\{profB\}[^>]*part="image"[^>]*\/><\/div>\}/);
     assert.doesNotMatch(page, /profile=\{pairOn \? null/, "a pair no longer loses its profile fields");
   });
   test("custom images off on this host: the generated art and one sentence, never an empty space", () => {

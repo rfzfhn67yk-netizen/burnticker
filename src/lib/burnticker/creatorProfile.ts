@@ -86,9 +86,46 @@ export function isWebLink(raw: string): boolean {
   const labels = u.hostname.split(".");
   return labels.length >= 2 && labels.every((l) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(l)) && /^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/i.test(labels[labels.length - 1]);
 }
-/** The sentence for a link that is not a web address, naming its field. */
-export const linkProblem = (label: string, raw: string): string | null =>
-  !/^https:\/\/\S{1,200}$/.test(raw) ? `The ${label} link has to start with https:// and have no spaces.` : !isWebLink(raw) ? `The ${label} link is not a full web address. Use one like https://example.com.` : null;
+/**
+ * THE LINK FIELDS, PER FIELD (ChatGPT audit 7 item 3, 2026-10-12: "javascript:alert(1)" passed as an X link on the page, Telegram took any
+ * site, X took facebook.com, Website took burnticker.com). One check for the page, the review, the bundle and every place a link renders:
+ *
+ *   every field  https only, parsed (isWebLink): javascript:, data:, http: and anything that is not a full https address are refused
+ *   X            x.com or twitter.com (www. and mobile. allowed)
+ *   Telegram     t.me
+ *   Website      any public site except burnticker.com and its subdomains, an address whose letters read as "burnticker" or "deficit"
+ *                once look-alike characters are folded (burntlcker, burnt1cker, def1cit, rn for m), and internationalised addresses
+ *                (xn--), which can imitate any of these with letters from other scripts
+ */
+export type LinkField = "X" | "Telegram" | "Website";
+const SITE_NAMES = ["burnticker", "deficit"];
+/** The letters an address reads as: lower case, look-alike digits and letter pairs folded, separators dropped. */
+export const confusableSkeleton = (host: string): string => host.toLowerCase().replace(/rn/g, "m").replace(/vv/g, "w").replace(/[0o]/g, "o").replace(/[1il|]/g, "l").replace(/3/g, "e").replace(/4/g, "a").replace(/5/g, "s").replace(/7/g, "t").replace(/[^a-z]/g, "");
+const lookalikeOfSite = (host: string): boolean => {
+  const sk = confusableSkeleton(host.replace(/\.[a-z]+$/i, ""));
+  return SITE_NAMES.some((n) => { const ns = confusableSkeleton(n); if (sk.includes(ns)) return true; for (let i = 0; i + ns.length - 1 <= sk.length; i++) { const w = sk.slice(i, i + ns.length); if (w.length === ns.length && [...w].filter((c, k) => c !== ns[k]).length === 1) return true; } return false; });
+};
+export const fieldOfLabel = (label: string): LinkField => (/^(x|twitter)$/i.test(label.trim()) ? "X" : /^telegram$/i.test(label.trim()) ? "Telegram" : "Website");
+/** The sentence for a link that this field cannot take, naming the field, or null. */
+export function linkProblem(label: string, raw: string): string | null {
+  if (!/^https:\/\/\S{1,200}$/.test(raw)) return `The ${label} link has to start with https:// and have no spaces.`;
+  if (!isWebLink(raw)) return `The ${label} link is not a full web address. Use one like https://example.com.`;
+  const host = new URL(raw).hostname.toLowerCase();
+  const field = fieldOfLabel(label);
+  if (field === "X") return /^(?:(?:www|mobile)\.)?(?:x|twitter)\.com$/.test(host) ? null : `The ${label} link has to be an x.com or twitter.com address.`;
+  if (field === "Telegram") return host === "t.me" ? null : `The ${label} link has to be a t.me address.`;
+  if (/(^|\.)burnticker\.com$/.test(host)) return `The ${label} link cannot point at burnticker.com. Every coin already links to its own Burnticker page.`;
+  if (host.split(".").some((l) => l.startsWith("xn--"))) return `The ${label} link uses an internationalised address (xn--). Use the plain spelling of the address.`;
+  if (lookalikeOfSite(host)) return `The ${label} link's address reads like Burnticker's or $DEFICIT's. Link a site of your own.`;
+  return null;
+}
+/** Every problem with a request's links (at most 4, short labels, each passing its field's check): the review and the bundle call this. */
+export function linksProblems(links: unknown): string[] {
+  if (!Array.isArray(links) || links.length > 4 || links.some((l) => typeof l?.url !== "string" || typeof l?.label !== "string" || l.label.length > 24)) return ["links: up to 4 https URLs with short labels"];
+  return (links as { label: string; url: string }[]).map((l) => linkProblem(l.label, l.url)).filter((x): x is string => x !== null);
+}
+/** A stored link is shown only when it still passes its field's check (links registered before these checks included). */
+export const safeCreatorLink = (l: { label?: unknown; url?: unknown }): boolean => typeof l?.url === "string" && typeof l?.label === "string" && linkProblem(l.label, l.url) === null;
 
 /** The creator's links, from the three fields: https only, labelled X, Telegram or Website. Problems name the field. */
 export function creatorLinks(v: { x?: string; telegram?: string; website?: string }): { links: { label: string; url: string }[]; problems: string[] } {

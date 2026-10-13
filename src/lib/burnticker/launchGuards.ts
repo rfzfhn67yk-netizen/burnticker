@@ -10,8 +10,12 @@ import { lookalikeRefusal, mintAdoptionRefusal, type LookalikeHit } from "@/lib/
  */
 export interface GuardRefusal { status: 409; error: string; extra: { code: "lookalike" | "mint-exists"; hits?: LookalikeHit[] } }
 
+/** The registered coins as the lookalike check reads them (the bundle route below and the review route, launchPreflight identityRefusals). */
+export function lookalikeRows(registry: Pick<Platform["registry"], "tokens" | "lockedRule">): { ticker: string; name: string; status: string; rule: Pick<BurnRule, "oracle" | "series"> | null }[] {
+  return registry.tokens().map((t) => { let rule: Pick<BurnRule, "oracle" | "series"> | null = null; try { rule = registry.lockedRule(t).rule; } catch { rule = null; } return { ticker: t.ticker, name: t.name, status: t.status, rule }; });
+}
 export async function launchGuardRefusal(p: Pick<Platform, "registry" | "market">, c: { ticker: string; name: string; rule: Pick<BurnRule, "oracle" | "series"> | null; mint?: string | null }): Promise<GuardRefusal | null> {
-  const existing = p.registry.tokens().map((t) => { let rule: Pick<BurnRule, "oracle" | "series"> | null = null; try { rule = p.registry.lockedRule(t).rule; } catch { rule = null; } return { ticker: t.ticker, name: t.name, status: t.status, rule }; });
+  const existing = lookalikeRows(p.registry);
   const look = lookalikeRefusal({ ticker: c.ticker, name: c.name, rule: c.rule }, existing);
   if (look) return { status: 409, error: look.reason, extra: { code: "lookalike", hits: look.hits } };
   if (c.mint) {

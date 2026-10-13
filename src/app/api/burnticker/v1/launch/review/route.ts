@@ -6,10 +6,37 @@ import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
+import { lookalikeRows } from "@/lib/burnticker/launchGuards";
+import { SEASON_OVER_LINE, seasonStatus } from "@/lib/burnticker/api/handlers";
+import { espnClient } from "@/lib/burnticker/sources/native";
+import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
 import { cachedTimeLockSecs, currentStatusLive } from "@/lib/burnticker/currentStatus";
 
 export const dynamic = "force-dynamic";
+
+/** The season-over warning for a season rule on an ESPN team (handlers.ts seasonStatus), or null (any other rule, or no read in time). */
+async function seasonWarningFor(rule: unknown): Promise<string | null> {
+  const series = rule && typeof rule === "object" ? (rule as { oracle?: unknown; series?: unknown }) : null;
+  const e = series && series.oracle === "catalogue" && typeof series.series === "string" ? parseEspnSeries(series.series) : null;
+  if (!e || e.kind !== "team" || (e.window.kind !== "season" && e.window.kind !== "post")) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const games = await Promise.race([espnClient().upcoming(e.league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
+  clearTimeout(timer);
+  return games ? seasonStatus(e.abbr, games, true).status === "over" ? SEASON_OVER_LINE : null : null;
+}
+
+/** Audit 7 item 7: the game a one-game rule names, from the league's schedule (at most 3 seconds; null when not listed or not read). */
+async function gameFor(rule: unknown): Promise<{ eventId: string; startsAt: string; name: string; detail: string } | null> {
+  const r = rule && typeof rule === "object" ? (rule as { oracle?: unknown; series?: unknown }) : null;
+  const e = r && r.oracle === "catalogue" && typeof r.series === "string" ? parseEspnSeries(r.series) : null;
+  if (!e || e.kind !== "game") return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const games = await Promise.race([espnClient().upcoming(e.league, 30).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
+  clearTimeout(timer);
+  const g = games?.find((x) => x.eventId === e.eventId) ?? null;
+  return g ? { eventId: g.eventId, startsAt: g.startsAt, name: g.name, detail: g.detail } : null;
+}
 
 /** Builds nothing, pins nothing, registers nothing, reads no chain (one Gamma read for a one-market Polymarket rule): works in preview and open modes; a closed host refuses. */
 export async function POST(req: Request) {
@@ -31,7 +58,13 @@ export async function POST(req: Request) {
       stated = statedCtx(await Promise.race([read, new Promise<null>((res) => { timer = setTimeout(() => res(null), 4_000); })]));
       clearTimeout(timer);
     }
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated });
+    // audit 6 items 8 and 2: the platform's Kalshi flag and its registered coins (the lookalike refusal the bundle makes); a season rule
+    // for a team with no games left carries the season-over warning (one schedule read, at most 3 seconds, never required)
+    let existingRows: ReturnType<typeof lookalikeRows> | null = null;
+    try { existingRows = lookalikeRows(platform().registry); } catch { existingRows = null; }
+    const seasonWarning = await seasonWarningFor((body as { rule?: unknown }).rule);
+    const game = await gameFor((body as { rule?: unknown }).rule);
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonWarning, game });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];

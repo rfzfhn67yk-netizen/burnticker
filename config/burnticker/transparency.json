@@ -169,7 +169,7 @@
       "label": "Squads 2-of-3 vault",
       "pubkey": null,
       "envVar": "BURNTICKER_UPGRADE_AUTHORITY",
-      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 during launch week, by owner decision on 2026-10-11, and 48 h is planned from around 2026-10-23. This page reads the live value from the chain. The second is the platform authority, which can only raise the pre-audit burn-pool cap, behind a 48 h time lock. The third is each token's config authority, which can only change the attester set, behind a 48 h time lock."
+      "description": "Holds three powers. The first is the program upgrade authority. Its Squads time lock is 0 during launch week, by owner decision on 2026-10-11, and 48 h is planned from a week or more after the soft launch. This page reads the live value from the chain. The second is the platform authority, which can only raise the pre-audit burn-pool cap, behind a 48 h time lock. The third is each token's config authority, which can only change the attester set, behind a 48 h time lock."
     },
     {
       "role": "squads-member-1",
@@ -211,6 +211,7 @@
     {
       "symbol": "REHEARSAL",
       "date": "2026-10-11",
+      "createdAt": "2026-10-11T23:04:58Z",
       "mint": "FwXiFscFSYXzvPVzV4rCw4UBcGDhT53xHDpsL3pVpzkp",
       "status": "done 2026-10-11, first reading signed, no burn yet",
       "text": "A test coin the operator made on Oct 11 to check fees and signing. It is listed so you can see it exists, not so you trade it. It was created on 2026-10-11 under the real mainnet platform settings (94x5qDDJ…EfYy9) to prove that fees go where they should and that signed readings work on mainnet. Its LP is locked forever. Its mint is FwXiFscF…pzkp. Its rules hash (sha256) is 2d109965…f99d, which is the $DEFICIT rule with the ticker changed. The operator bought 0.1 SOL of it at creation, and that is the only trade from the operator's own wallets. Unrelated wallets bought into the pool within seconds. It does not prove a mainnet burn, because nothing burns unless the curve fills to 85 SOL. The curve has not filled, so nothing has burned. The evidence is in docs/burnkeeper/evidence/mainnet-rehearsal-2026-10-11/rehearsal.json."

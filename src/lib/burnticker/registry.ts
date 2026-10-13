@@ -1,3 +1,4 @@
+import { safeRegexTest } from "@/lib/burnticker/safeRegex";
 import type { LockFeeClaimRow } from "@/lib/burnticker/lockFees";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
@@ -242,7 +243,7 @@ export function readingMatches(rule: BurnRule, r: { id: string; title: string | 
   if (rule.oracle === "derby") return derbyReadingInSeason(rule, r);
   if (rule.oracle === "catalogue" || rule.market) return true;
   if (rule.filter.tickerIncludes && !r.id.includes(rule.filter.tickerIncludes)) return false;
-  if (rule.filter.titleRegex && !new RegExp(rule.filter.titleRegex).test(r.title ?? "")) return false;
+  if (rule.filter.titleRegex && !safeRegexTest(rule.filter.titleRegex, r.title ?? "")) return false;   // audit 6 item 8: a refused pattern never runs
   return true;
 }
 
@@ -363,7 +364,7 @@ export class Registry {
     this.tx(() => {
       for (const e of events) {
         const have = this.db.prepare("SELECT result, value FROM readings WHERE oracle=? AND selector_key=? AND event_id=?").get(oracle, selectorKey, e.id) as { result: string | null; value: string | null } | undefined;
-        if (have) { if ((have.result ?? null) !== (e.result ?? null) || (have.value ?? null) !== (e.value ?? null)) throw new Error(`registry: ${selectorKey} ${e.id} already recorded as ${have.result ?? have.value}, the oracle now says ${e.result ?? e.value} — holding`); continue; }
+        if (have) { if ((have.result ?? null) !== (e.result ?? null) || (have.value ?? null) !== (e.value ?? null)) throw new RevisedReadingError(selectorKey, e.id, have.result ?? have.value, e.result ?? e.value); continue; }
         this.db.prepare("INSERT INTO readings (oracle, selector_key, event_id, settled_at, result, value, title, source_url, settlement_source_url, method, proof, attested_by, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
           .run(oracle, selectorKey, e.id, e.at, e.result, e.value, e.title, e.sourceUrl, meta.settlementSourceUrl, meta.method?.(e) ?? e.method ?? null, e.proof ?? null, JSON.stringify(meta.attestedBy), now);
         n++;
@@ -567,3 +568,17 @@ export class Registry {
 
 export const openRegistry = (file: string): Registry => new Registry(file);
 export const REGISTRY_FILE = path.join("data", "burnticker.db");
+
+/**
+ * A PUBLISHER REVISED A PERIOD ALREADY RECORDED (owner decision 2026-10-12, website-20 item 84: keep holding). The keeper never counts a
+ * revision a second time and never replaces the recorded value: the source's key holds, and the alert names the key, the period and both
+ * values (multiKeeper.ts fetchDue).
+ */
+export class RevisedReadingError extends Error {
+  readonly selectorKey: string; readonly eventId: string; readonly recorded: string | null; readonly now: string | null;
+  constructor(selectorKey: string, eventId: string, recorded: string | null, now: string | null) {
+    super(`registry: ${selectorKey} ${eventId} already recorded as ${recorded}, the oracle now says ${now} — holding`);
+    this.name = "RevisedReadingError";
+    this.selectorKey = selectorKey; this.eventId = eventId; this.recorded = recorded; this.now = now;
+  }
+}

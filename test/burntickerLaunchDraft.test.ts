@@ -206,7 +206,7 @@ describe("L02 — availability: closed, preview and open, per type, per source, 
     assert.match(v.authority, /can still be upgraded/); assert.doesNotMatch(v.authority, /no one can change/i);
     assert.equal(v.rule.endsLine, "This coin has no end date and does not retire.", "a perpetual rule says so and nothing else");
     const once = buildLaunchReview({ rule: firstPartyRule("espn.game:mlb-401999999-TB-loss", 0.1), ticker: "TBGAME", name: "Rays Game" }, { env: {} });
-    assert.ok("review" in once); assert.match(once.review.rule.endsLine, /burns down what is left over 28 days/);
+    assert.ok("review" in once); assert.match(once.review.rule.endsLine, /goes to \$DEFICIT's burn\. Then the coin retires\. If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead\./);
     assert.equal(v.costs.lines.find((l) => l.kind === "fee")!.sol, "0.00001", "small amounts keep their digits");
     assert.doesNotMatch(WIND_DOWN_LINE, /DEFICIT|sink|winner/i, "only the deployed self-burn wind-down");
     assert.match(v.operator, /contact@burnticker\.com/);
@@ -259,7 +259,7 @@ describe("L05 — provenance from the resolver; schedule problems are display pr
 
   test("warnings travel into the review; election settlement sentences carry no raw URL", async () => {
     const page = read("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /setSrcWarnings\(c\.note \? \[c\.note\] : \[\]\)/); assert.match(page, /warnings=\{srcWarnings\}/);
+    assert.match(page, /setSrcWarnings\(c\.note \? \[c\.note\] : \[\]\)/); assert.match(page, /warnings=\{\[\.\.\.srcWarnings, /, "website-20 (WIRING-PARITY audit 6 #8): the review's own warnings join the source's");
     const r = await universalSearch("El-Sayed wins Michigan Senate", deps());
     assert.doesNotMatch(r.cards[0].settlement, /https?:\/\//);
   });
@@ -270,7 +270,9 @@ describe("L07 — fields say what is wrong, next to the field", () => {
     assert.match(wxThresholdProblem("high", "abc")!, /not a temperature/); assert.equal(wxThresholdProblem("high", "90"), null);
     assert.match(wxThresholdProblem("high", "90.5")!, /whole number/); assert.match(wxThresholdProblem("rain", "0.555")!, /two decimals/); assert.equal(wxThresholdProblem("rain", "0.29"), null);
     assert.match(nameProblem(""), /Enter a name/); assert.equal(nameProblem("Detroit Heat"), "");
-    assert.match(tickerProblem("A"), /2 to 10/); assert.deepEqual(tickerNormalised("A B!?"), { value: "AB", note: "Tickers use only the letters A to Z and the digits 0 to 9, so “A B!?” became “AB”." });
+    assert.match(tickerProblem("A"), /2 to 10/); assert.deepEqual(tickerNormalised("A B!?"), { value: "AB", note: "Tickers use only the letters A to Z and the digits 0 to 9, so spaces, “!”, “?” were removed. “A B!?” became “AB”." });
+    // website-20 (audit 6 item 5): a cut at 10 characters is said, never silent
+    assert.deepEqual(tickerNormalised("ABCDEFGHIJKLMN"), { value: "ABCDEFGHIJ", note: "A ticker has at most 10 characters, so “ABCDEFGHIJKLMN” was cut to “ABCDEFGHIJ”." });
     assert.equal(tickerNormalised("dtwhot").note, null, "a case change alone is not reported");
     const card = read("src/app/burnticker/launch/ReviewCard.tsx");
     assert.match(card, /aria-invalid=\{!!nErr\}/); assert.match(card, /aria-describedby=\{nErr \? `\$\{nId\}-err` : undefined\}/);
@@ -283,7 +285,7 @@ describe("L08 — accessibility in the review card and the wallet dialog", () =>
   test("labels per control, Coin A / B, two radiogroups, the wallet close button named, focus returned", () => {
     const card = read("src/app/burnticker/launch/ReviewCard.tsx");
     assert.match(card, /<label htmlFor=\{nId\}>\{who\}Name<\/label>/); assert.match(card, /Coin \$\{i === 0 \? "A" : "B"\}/);
-    assert.match(card, /role="radiogroup" aria-label=\{p\.budget\?\.label \?\? BUDGET_LABEL\}/); assert.match(card, /export const BUDGET_LABEL = "Burn budget per result";/);   // website-12 (A4): the dial is a share of the burn budget assert.match(card, /role="radiogroup" aria-label="How long the coins run"/);
+    assert.match(card, /role="radiogroup" aria-label=\{p\.budget\?\.label \?\? BUDGET_LABEL\}/); assert.match(card, /export const BUDGET_LABEL = "Share of the burn pool per result";/);   // website-12 (A4): the dial is a share of the burn budget assert.match(card, /role="radiogroup" aria-label="How long the coins run"/);
     assert.match(read("src/app/burnticker/launch/WalletProviders.tsx"), /aria-label", "Close the wallet list"/);
     assert.match(card, /launchBtn\.current\?\.focus\(\)/);
   });
@@ -298,11 +300,12 @@ describe("L09 — the review fits 320 px", () => {
 });
 
 describe("L11 — category mapping and stale results", () => {
-  test("weather keeps weather events only; the previous category's cards clear on a switch; nested loads end", () => {
-    const wx = loadCategories().find((c) => c.id === "weather")!;
+  // sources-3 (2026-10-12): the weather tile is gone; the weather Polymarket tags now feed Natural disasters, which keeps disaster events only
+  test("natural disasters keep disaster events only; the previous category's cards clear on a switch; nested loads end", () => {
+    const wx = loadCategories().find((c) => c.id === "disasters")!;
     const ev = (title: string) => ({ slug: title.toLowerCase().replace(/\W+/g, "-"), title, url: "https://polymarket.com/event/x", endDate: null, closed: false, markets: [], marketCount: 1, refused: [] });
-    const cards = categoryCards(wx, { feeds: [], polymarket: [ev("Largest IPO in 2026?"), ev("Human moon landing by 2027?"), ev("New pandemic declared?"), ev("Hottest year on record?")] as never, kalshi: [] });
-    assert.deepEqual(cards.filter((c) => c.venue === "polymarket").map((c) => c.title), ["Hottest year on record?"]);
+    const cards = categoryCards(wx, { feeds: [], polymarket: [ev("Largest IPO in 2026?"), ev("Human moon landing by 2027?"), ev("New pandemic declared?"), ev("Hottest year on record?"), ev("How many named storms in 2026?")] as never, kalshi: [] });
+    assert.deepEqual(cards.filter((c) => c.venue === "polymarket").map((c) => c.title), ["How many named storms in 2026?"]);
     const page = read("src/app/burnticker/launch/page.tsx");
     assert.match(page, /if \(browseCat\.current !== cat\) \{ browseCat\.current = cat; setCards\(null\)/); assert.match(page, /seq !== browseSeq\.current/);
     assert.match(page, /AbortSignal\.timeout\(15_000\)/); assert.match(page, /drill !== null && drill === c\.pick\.series/, "a feed card (series null) never shows a stuck 'Loading events'"); assert.doesNotMatch(read("config/burnticker/refuse.json"), /LAUNCHPAD-PATH/);

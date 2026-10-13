@@ -143,7 +143,7 @@ describe("one current-status source (website brief §4)", () => {
     const now0 = buildCurrentStatus({ env: {}, chain: facts(0), now: 0 });
     const main = now0.upgradeAuthority.find((u) => u.cluster === "mainnet")!;
     assert.equal(main.timeLockSecs, 0); assert.equal(main.timeLockSource, "chain"); assert.equal(main.plannedTimeLockSecs, 172800);
-    assert.equal(main.line, "The mainnet Squads time lock is 0 (none) today, read from chain. The plan is 48 h from around 2026-10-23.");
+    assert.equal(main.line, "The mainnet Squads time lock is 0 (none) today, read from chain. The plan is 48 h from a week or more after the soft launch.");
     assert.match(main.why, /owner decided on 2026-10-11/i);
     assert.equal(now0.releaseRequirements.find((r) => r.id === "time-lock")!.status, "open");
     assert.equal(buildCurrentStatus({ env: {}, chain: facts(172800), now: 0 }).releaseRequirements.find((r) => r.id === "time-lock")!.status, "done");

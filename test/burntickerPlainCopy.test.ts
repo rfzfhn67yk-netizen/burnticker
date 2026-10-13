@@ -134,6 +134,9 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   "legalCopy.ts", "feeds.ts", "csvServe.ts", "exportLinks.ts",
   // sources-2 (2026-10-12): the new publishers' coin text, the fade side's choice and Polymarket's stated-source sentences
   "sources/fedreg.ts", "sources/launchLibrary.ts", "sources/usgs.ts", "sources/github.ts", "sources/youtube.ts", "sources/polyStated.ts", "inverse.ts",
+  "sources/nhc.ts", "sources/spc.ts", "sources/nifc.ts", "sources/volcano.ts", "hazards.ts", "singleSource.ts",
+  // sources-4 (2026-10-12): the record daily close sentences
+  "derby/high.ts", "paramNames.ts",
   // website-16 (2026-10-12): the legitimacy pass, the changelog, incidents, bounty, press kit, walk-through and history pages
   "historyCopy.ts", "settlementCopy.ts",
   // website-17 (2026-10-12): the creator benefits, the rank line, the featured-placement rules and the example tickets
@@ -147,7 +150,15 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   // launch-intent audit 5 (2026-10-12): the name and link checks and the team-query sentences
   "launchFields.ts", "creatorProfile.ts", "teamQuery.ts",
   // fees copy (2026-10-12): the operator's post-graduation share, led by the whole swap
-  "feeShareLine.ts"]
+  "feeShareLine.ts",
+  // semantics-verify (2026-10-12): the rules' edge cases, one sentence per website-20 VERIFY item
+  "ruleEdgeCases.ts",
+  // semantics-verify Part 4 (2026-10-12): the burn-pool cap in force
+  "capInForce.ts",
+  // launch-media-recovery (2026-10-12): the image pick, the signing card's and the recovery notice's sentences, the coin picker's lines
+  "profileImagePick.ts", "signPlan.ts", "launchRecovery.ts", "coinPicker.ts", "preparedLaunch.ts",
+  // site polish (ChatGPT audit 6 items 21 to 25): the visitor-facing host gaps and the one card age
+  "hostGaps.ts", "cardAge.mjs"]
   .map((f) => `src/lib/burnticker/${f}`);
 
 describe("plain-English copy: no shorthand on any page (website-9)", () => {

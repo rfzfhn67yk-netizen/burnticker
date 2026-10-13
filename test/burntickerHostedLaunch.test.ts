@@ -193,7 +193,7 @@ describe("(b) the mainnet allowance, (c) no opening purchase, (d) no vault mode:
   test("vault mode is refused on the hosted path and hidden in the wizard with one plain sentence", async () => {
     const w = await makeWorld();
     const r = await prepareLaunch(w.p, body({ rule: VAULT_RULE }), { register: true });
-    assert.ok("error" in r); assert.equal(r.error.status, 400); assert.deepEqual(r.error.body, { error: VAULT_HIDDEN_SENTENCE, code: "vault-off" });
+    assert.ok("error" in r); assert.equal(r.error.status, 400); assert.deepEqual(r.error.body, { error: VAULT_HIDDEN_SENTENCE, code: "vault-off", problems: [VAULT_HIDDEN_SENTENCE] });
     const page = read("src/app/burnticker/launch/page.tsx");
     assert.doesNotMatch(page, /set\("mode", setMode\)/, "a stored vault mode is never restored");
     assert.deepEqual([...page.matchAll(/setMode\(("[a-z]+")\)/g)].map((m) => m[1]), ['"buyback"'], "the wizard only ever sets buyback");
@@ -230,7 +230,9 @@ describe("(e) the lookup-table pin is read from the host at runtime", () => {
     const card = read("src/app/burnticker/launch/SignCard.tsx");
     assert.match(card, /fetch\("\/api\/burnticker\/launch"/);
     assert.match(card, /lookupTable: \(\) => verifiedLookupTable\(connection, network, pin\)/);
-    assert.match(card, /pins === undefined \? \["this page is still reading which lookup table this site uses"\]/);
+    // launch audit 231: the still-reading and read-failed sentences moved to signPlan.ts pinReadProblems (a failed read is retried in place)
+    assert.match(card, /pins === undefined \|\| pins === null \? pinReadProblems\(pins\)/);
+    assert.match(read("src/lib/burnticker/signPlan.ts"), /if \(pins === undefined\) return \["this page is still reading which lookup table this site uses"\]/);
     assert.doesNotMatch(card, /lookupTablePinProblems\(network\)\b/, "no compiled-in pin check left");
   });
   test("`verify` prints a paste-able record and the exact host lines", () => {

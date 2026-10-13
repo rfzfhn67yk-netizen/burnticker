@@ -3,7 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { imageStateProblem } from "@/lib/burnticker/guidedLaunch";
-import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, imageFileProblem, imageFromTransfer, pastedImageName } from "@/lib/burnticker/creatorProfile";
+import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, imageFromTransfer } from "@/lib/burnticker/creatorProfile";
+import { BADGE_UNAVAILABLE_LINE, IMAGE_READ_FAILED, IMAGE_SIZE_HELP, pickImage } from "@/lib/burnticker/profileImagePick";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
 import { LinkedWords } from "../_components/LinkedWords";
@@ -19,7 +20,7 @@ import { CUSTOM_IMAGES_OFF_LINE } from "@/lib/burnticker/creatorCopy";
  * `badgedUrl` is the server's preview WITH the receipt mark (the bytes a launch pins when `badge` is on); `plainUrl` is the creator's
  * file as chosen; `base64` is that original, which the launch sends. `badge` (owner, 2026-10-12): optional, on by default.
  */
-export interface ProfileImage { badgedUrl: string; plainUrl: string; contentType: string; base64: string; name: string }
+export interface ProfileImage { badgedUrl: string; plainUrl: string; contentType: string; base64: string; name: string; /** launch audit 221: the mark service did not answer, so the plain file is used and there is no mark to choose */ badgeUnavailable?: boolean }
 /** `imageState` (intent audit 5 item 15): an image still being prepared, or one that failed, blocks the launch until it is resolved. */
 export interface ProfileValue { image: ProfileImage | null; rights: boolean; badge: boolean; description: string; x: string; telegram: string; website: string; imageState?: "pending" | "failed" | null }
 export const EMPTY_PROFILE: ProfileValue = { image: null, rights: false, badge: true, description: "", x: "", telegram: "", website: "" };
@@ -59,29 +60,16 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
   // pick or removal came after it (createLatest), so a slow preview can never restore an old image or undo a newer edit
   const set = (p: Partial<ProfileValue>) => onChange((prev) => ({ ...prev, ...p }));
   const latest = useRef(createLatest()).current;
-  const pick = (f0: File | null) => {
-    setFileErr(null);
-    if (!f0) return;
-    // a pasted image has no name of its own; it gets one, and then takes the same checks and preview as a chosen file
-    const f = f0.name ? f0 : new File([f0], pastedImageName(f0.type), { type: f0.type });
-    const bad = imageFileProblem({ size: f.size, type: f.type });
-    if (bad) { latest.cancel(); setFileErr(bad); set({ imageState: "failed" }); return; }
-    const token = latest.next();
-    set({ imageState: "pending" });
-    const r = new FileReader();
-    // the preview is the server's badged copy (the same compositing a launch pins), so the creator sees the receipt mark before the wallet
-    r.onload = () => {
-      const url = String(r.result ?? ""); const base64 = url.slice(url.indexOf(",") + 1);
-      if (!latest.isCurrent(token)) return;
-      setBusy(true);
-      fetch("/api/burnticker/launch/image-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: { contentType: f.type, base64 } }) })
-        .then(async (res) => { const j = await res.json().catch(() => null) as { contentType?: string; base64?: string; error?: string } | null; if (!res.ok || !j?.base64) throw new Error(j?.error ?? "The preview could not be made just now."); return j; })
-        .then((j) => { if (latest.isCurrent(token)) set({ image: { badgedUrl: `data:${j.contentType};base64,${j.base64}`, plainUrl: url, contentType: f.type, base64, name: f.name }, rights: false, imageState: null }); })
-        .catch((e: Error) => { if (latest.isCurrent(token)) { setFileErr(e.message); set({ imageState: "failed" }); } })
-        .finally(() => { if (latest.isCurrent(token)) setBusy(false); });
-    };
-    r.onerror = () => { if (!latest.isCurrent(token)) return; setFileErr("The image could not be read. Try another file."); set({ imageState: "failed" }); };
-    r.readAsDataURL(f);
+  // launch audit 219–225 (profileImagePick.ts): every way out of a pick clears the busy line, a failed replacement keeps the image already
+  // chosen, a mark service that cannot answer leaves the plain file usable without the mark, and an empty browser type is read from the bytes
+  const valueRef = useRef(value); valueRef.current = value;
+  const pick = (f: File | null) => {
+    void pickImage<ProfileValue>(f, {
+      latest, update: (fn) => onChange(fn), hasImage: () => !!valueRef.current.image, setBusy, setError: setFileErr,
+      readDataUrl: (file) => new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result ?? "")); r.onerror = () => reject(new Error(IMAGE_READ_FAILED)); r.readAsDataURL(file); }),
+      // the preview is the server's badged copy (the same compositing a launch pins), so the creator sees the receipt mark before the wallet
+      preview: async (image) => { const res = await fetch("/api/burnticker/launch/image-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image }) }); return { status: res.status, body: await res.json().catch(() => null) }; },
+    });
   };
   const input = "mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm";
   // website-19 (owner, 2026-10-12): paste an image anywhere on the page (Cmd or Ctrl and V), or drop one on the control. A paste into a
@@ -118,7 +106,7 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
           // both previews side by side; the one that will be pinned is outlined
           <div className="flex shrink-0 gap-2" data-image-previews>
             {/* eslint-disable-next-line @next/next/no-img-element -- a local preview */}
-            <figure className={`bt-profile-square${value.badge ? " is-chosen" : ""}`} data-preview="badged"><img src={value.image.badgedUrl} alt="With the receipt mark" width={72} height={72} /></figure>
+            {!value.image.badgeUnavailable && <figure className={`bt-profile-square${value.badge ? " is-chosen" : ""}`} data-preview="badged"><img src={value.image.badgedUrl} alt="With the receipt mark" width={72} height={72} /></figure>}
             {/* eslint-disable-next-line @next/next/no-img-element -- a local preview */}
             <figure className={`bt-profile-square${value.badge ? "" : " is-chosen"}`} data-preview="plain"><img src={value.image.plainUrl} alt="Without the receipt mark" width={72} height={72} /></figure>
           </div>
@@ -126,13 +114,14 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
         <div className="min-w-0 flex-1 space-y-1">
           <label htmlFor={`${uid}-img`} className="block text-neutral-300">Image</label>
           <input id={`${uid}-img`} type="file" data-optional="profile" accept="image/png,image/jpeg,image/gif,image/webp" aria-describedby={`${uid}-imghelp`} className="block w-full min-w-0 text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} />
-          <p id={`${uid}-imghelp`}>{IMAGE_WAYS} {IMAGE_HELP}</p>
+          <p id={`${uid}-imghelp`}>{IMAGE_WAYS} {IMAGE_HELP} {IMAGE_SIZE_HELP}</p>
           <p data-image-rights><LinkedWords text={IMAGE_RIGHTS_LINE} links={[{ words: "terms of use", href: "/burnticker/terms" }]} /></p>
           {busy && <p role="status">Adding the receipt mark.</p>}
           {fileErr && <p className="text-red-400" role="alert">{fileErr}</p>}
           {!value.image && value.imageState && <button type="button" data-optional="profile" className="underline" onClick={() => { latest.cancel(); set({ imageState: null }); setFileErr(null); setBusy(false); }}>Remove the image</button>}
-          {value.image && <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" data-badge-toggle checked={value.badge} onChange={(e) => set({ badge: e.target.checked })} /><span>{BADGE_TOGGLE}</span></label>}
-          {value.image && <p data-badge-note>{BADGE_NOTE}</p>}
+          {value.image && !value.image.badgeUnavailable && <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" data-badge-toggle checked={value.badge} onChange={(e) => set({ badge: e.target.checked })} /><span>{BADGE_TOGGLE}</span></label>}
+          {value.image && !value.image.badgeUnavailable && <p data-badge-note>{BADGE_NOTE}</p>}
+          {value.image?.badgeUnavailable && <p data-badge-unavailable>{BADGE_UNAVAILABLE_LINE}</p>}
           {value.image && (
             <>
               <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" checked={value.rights} onChange={(e) => set({ rights: e.target.checked })} /><span data-rights-line>{RIGHTS_LINE}</span></label>

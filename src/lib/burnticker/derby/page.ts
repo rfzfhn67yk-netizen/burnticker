@@ -74,7 +74,7 @@ export function derbyPairJson(reg: Pick<Registry, "token" | "lockedRule" | "getS
   const ta = reg.token(pair.mintA), tb = reg.token(pair.mintB);
   if (!ta || !tb) return null;
   const d = reg.lockedRule(ta).rule.derby;
-  if (!d || d.selector === "bracket") return null;
+  if (!d || d.selector === "bracket" || d.selector === "high") return null;
   const rows = store.windows(pair.selectorKey);
   const inSeason = (r: WindowRow) => { const at = Date.parse(r.at); return at >= Date.parse(`${d.season.start}T00:00:00Z`) && at < seasonEndMs(d); };
   const ra = new Map(receiptsA.map((r) => [r.eventId, r])), rb = new Map(receiptsB.map((r) => [r.eventId, r]));
@@ -161,5 +161,5 @@ export function tournamentSummaries(reg: Pick<Registry, "tokens" | "getStatus" |
   return store.tournaments().map((row) => { const j = derbyTournamentJson(reg, JSON.parse(row.json) as Tournament, row.sha256, now, store); return { id: j.id, title: j.title, size: j.size, start: j.start, end: j.end, roundDays: j.roundDays, status: j.status, currentRound: j.currentRound, champion: j.champion }; });
 }
 
-export const isDerbySpec = (d: DerbySpec | undefined): d is CoinVsSpec | PriceSpec => !!d && d.selector !== "bracket";
+export const isDerbySpec = (d: DerbySpec | undefined): d is CoinVsSpec | PriceSpec => !!d && d.selector !== "bracket" && d.selector !== "high";
 export { roundCount, slotSelectorKey };

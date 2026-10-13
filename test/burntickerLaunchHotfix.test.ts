@@ -29,11 +29,11 @@ const season = (f = 0.02) => ({ ...firstPartyRule(teamSeries("mlb", "LAD", "win"
 const poly = (side: "yes" | "no" = "yes"): BurnRule => ({ schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: "0x" + "ab".repeat(32), filter: {}, kind: "binary", binary: side === "yes" ? { onYes: { fractionOfPool: 1 }, onNo: null } : { onYes: null, onNo: { fractionOfPool: 1 } }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, onEnd: { ...DEFAULT_ON_END } } as BurnRule);
 
 describe("the owner: easier to follow", () => {
-  test("a progress strip of four short labels, answered ones showing the choice and going back on a tap", () => {
-    assert.deepEqual(GUIDED_STEPS.map((s) => s.short), ["Follows", "Which", "Burns", "Ends"]);
+  test("a progress strip of five short labels, answered ones showing the choice and going back on a tap", () => {
+    assert.deepEqual(GUIDED_STEPS.map((s) => s.short), ["Follows", "Which", "Burns", "Name", "Review"]);
     assert.match(steps, /const text = done && a \? `\$\{st\.short\}: \$\{a\}` : st\.short;/);
     assert.match(steps, /onClick=\{\(\) => onJump\(st\.id\)\}/); assert.match(steps, /aria-current=\{cur \? "step" : undefined\}/);
-    assert.match(page, /follow: FOLLOW_CHOICES\.find\(\(c\) => c\.id === guide\.follow\)\?\.label\.toLowerCase\(\)/);
+    assert.match(page, /follow: guide\.follow === "disaster" \? HAZARD_FOLLOW\.label\.toLowerCase\(\) : FOLLOW_CHOICES\.find\(\(c\) => c\.id === guide\.follow\)\?\.label\.toLowerCase\(\)/);
   });
   test("step 1's cards are a title and one line (the examples behind one disclosure); every choice is a named button with a focus ring", () => {
     for (const c of FOLLOW_CHOICES) { assert.ok(c.line.length <= 46, c.line); clean(c.line); }
@@ -43,7 +43,7 @@ describe("the owner: easier to follow", () => {
     // a read-page style query by name finds each choice: the accessible name is the title
     const names = [...steps.matchAll(/aria-label=\{(c|o)\.label\}/g)].length;
     assert.ok(names >= 2, "step 1 and step 3 choices are named");
-    for (const n of ["A team", "A market", "A number someone publishes", "A coin against another coin", "A rivalry pair"]) assert.ok(FOLLOW_CHOICES.some((c) => c.label === n), n);
+    for (const n of ["Team", "Event outcome", "Published data", "Coin comparison", "Rivalry"]) assert.ok(FOLLOW_CHOICES.some((c) => c.label === n), n);
     assert.match(page, /aria-label=\{t\.name\} aria-pressed=\{team\?\.abbr === t\.abbr\}/, "step 2's team buttons are named");
   });
   test("the step's one action stays in view above the tab bar; the ticker strip is off on the launch page", () => {
@@ -147,7 +147,9 @@ describe("launch-intent audit 5", () => {
     const p3 = applyLatest(l, slow("third"), (v) => got.push(v)); l.cancel(); release.third();
     assert.equal(await p3, false); assert.deepEqual(got, ["second"], "a removed image never comes back");
     assert.match(fields, /const set = \(p: Partial<ProfileValue>\) => onChange\(\(prev\) => \(\{ \.\.\.prev, \.\.\.p \}\)\);/);
-    assert.match(fields, /if \(latest\.isCurrent\(token\)\) set\(\{ image:/);
+    // launch audit 219–225: the pick moved to profileImagePick.ts pickImage, which applies an answer only while its token is current
+    assert.match(fields, /void pickImage<ProfileValue>\(f, \{\s*latest, update: \(fn\) => onChange\(fn\)/);
+    assert.match(read("src/lib/burnticker/profileImagePick.ts"), /if \(!current\(\)\) return "stale";\n  if \("refused" in answer\)/);
     for (const re of [/\.then\(\(j\) => \{ if \(!live\) throw new Error\("stale"\); return j; \}\)\.then\(\(j\) => \(setScheduleNote/, /getJson<ElPair>\([^)]*\)\.then\(\(j\) => \{ if \(live\) setEpair\(j\); \}\)/, /\.then\(\(j\) => \{ if \(live\) setFound\(/, /return \(\) => \{ live = false; clearTimeout\(t\); \};/]) assert.match(page, re);
   });
   test("15: an image still being prepared, or one that failed, blocks the launch until it is resolved", async () => {
@@ -161,7 +163,7 @@ describe("launch-intent audit 5", () => {
   });
   test("19: the Coin vs Coin draft is versioned, kept across a refresh and Back, and cleared by Start over", () => {
     assert.match(tile, /export const CVC_STORE = "burnticker\.launch\.cvc\.v1";/);
-    assert.match(tile, /const d: CvcDraft = \{ v: 1, a, b, names, fraction, flip, raiseSol, edited, profA: words\(profA\), profB: words\(profB\) \};/);
+    assert.match(tile, /const d: CvcDraft = \{ v: 1, a, b, names, fraction, shares, flip, raiseSol, edited, profA: words\(profA\), profB: words\(profB\), images: \{ a: !!profA\.image, b: !!profB\.image \} \};/);
     assert.match(tile, /if \(!d \|\| d\.v !== 1\) return;/);
     assert.match(page, /sessionStorage\.removeItem\(STORE\); sessionStorage\.removeItem\(CVC_STORE\);/);
   });
@@ -170,4 +172,32 @@ describe("launch-intent audit 5", () => {
     assert.match(page, /onStartOver=\{\(\) => startOver\(\)\} confirm=\{null\}/);
     assert.match(page, /onClick=\{\(\) => startOver\(\)\}>start over<\/button>/, "the free-text path's button uses the same confirmation");
   });
+});
+
+// owner, 2026-10-12 evening: "whenever i type 2 letters when naming a coin it accepts those 2 letters as the name and moves on".
+// The review editor opened only while a field problem or the name prompt applied, so the second letter (which satisfies the
+// 2-visible-character rule) closed the fields mid-typing. Now the editor latches open and only "done" closes it.
+test("review editor: once open it stays open until the creator presses done (no close on the second typed letter)", () => {
+  const src = fs.readFileSync("src/app/burnticker/launch/ReviewCard.tsx", "utf8");
+  assert.match(src, /const forcedOpen = fieldProblems\.length > 0 \|\| \(!!p\.namePrompt && !p\.coins\.some/);
+  assert.match(src, /useEffect\(\(\) => \{ if \(forcedOpen\) setEditState\(true\); \}, \[forcedOpen\]\);/);
+  assert.match(src, /const editing = editState \|\| forcedOpen;/);
+  assert.doesNotMatch(src, /editState \|\| fieldProblems\.length > 0 \|\| \(!!p\.namePrompt && !editState/, "the old self-closing predicate is gone");
+  // the only way the editor closes is the done button toggling editState
+  assert.match(src, /onClick=\{\(\) => setEditState\(!editState\)\}/);
+});
+
+// owner, 2026-10-12 evening: a half-made coin named "Ea" kept its name on the next coin ("the name was locked on Ea"). A typed name
+// or ticker now belongs to the subject it was typed for (editedFor); picking a different thing to follow regenerates both.
+test("a typed name belongs to its subject: a new team / market / pair regenerates name and ticker", () => {
+  const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
+  assert.match(page, /const \[editedFor, setEditedFor\] = useState<string \| null>\(null\);/);
+  assert.match(page, /const subjectKey = \[flow, guide\.follow \?\? "", rule\?\.oracle \?\? "", rule\?\.market \?\? rule\?\.series \?\? "", team\?\.abbr \?\? "", sideA\?\.abbr \?\? "", sideB\?\.abbr \?\? ""\]\.join\("\|"\);/);
+  assert.match(page, /if \(editedFor !== subjectKey\) \{ setNameAuto\(true\); setTickerAuto\(true\); setEditedFor\(null\); \}/);
+  // every manual edit records the subject, and the draft keeps it across a reload
+  assert.equal((page.match(/setNameAuto\(false\); setEditedFor\(subjectKey\)/g) ?? []).length, 2);
+  assert.match(page, /setTickerAuto\(false\); setEditedFor\(subjectKey\)/);
+  assert.match(page, /nameAuto, tickerAuto, editedFor, ownImage, note \}\);/);
+  assert.match(page, /set\("editedFor", setEditedFor\);/);
+  assert.doesNotMatch(page, /It stays when the rule changes/);
 });

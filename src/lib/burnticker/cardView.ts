@@ -3,6 +3,8 @@ import { progressOf, type ProgressView } from "@/lib/burnticker/progress";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import type { StatedJson } from "@/lib/burnticker/pageTypes";
 import { coinPageHref } from "@/lib/burnticker/coinKey";
+import { cardAge } from "@/lib/burnticker/cardAge.mjs";
+import { coinWatchKey } from "@/lib/burnticker/watchlist";
 /**
  * ONE COIN CARD, ONE FIELD ORDER (website-10, 2026-10-12; rebuilt by website-13 the same day for Claude site audit 2 item 7 and ChatGPT
  * audit 6 A10 / A11, with the owner's decision to show the market cap). Every surface that lists coins prints the same rows in the same
@@ -71,6 +73,10 @@ export interface CardView {
   receipt: { href: string } | null;
   /** why "Check receipt" is off */
   receiptWhy: string | null;
+  /** the coin's follow key, network and mint (watchlist.ts coinWatchKey; private review 8 F1); null when the card cannot be followed */
+  watchKey?: string | null;
+  /** what each empty row says instead of a dash (emptyLabels below); set by the home API for the static page, computed by the app */
+  empty?: Partial<Record<"progress" | "nextSettle" | "curve" | "mcap" | "holders" | "age" | "burned", string>>;
 }
 
 /** The fixed row order, by key. test/burntickerHomeShell.test.ts holds the component and the static renderer to it. */
@@ -137,14 +143,63 @@ export function pctOfSupply(pct: number): string {
   return `${shown}% of supply`;
 }
 
-/** The age of a coin from its creation time: "3 days", "5 hours", "under an hour". Past records only; nothing counts down. */
-export function ageText(iso: string | null, now: number): string | null {
-  if (!iso) return null;
-  const ms = now - Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00Z` : iso);
-  if (!Number.isFinite(ms)) return null;
-  if (ms < 3_600_000) return "under an hour";
-  const h = Math.floor(ms / 3_600_000), d = Math.floor(h / 24);
-  return d >= 1 ? `${d} day${d === 1 ? "" : "s"}` : `${h} hour${h === 1 ? "" : "s"}`;
+/**
+ * The age of a coin from its creation time: "3 days", "5 hours", "under an hour"; a record that gives only a day counts whole days in the
+ * viewer's own time zone. Past records only; nothing counts down. ONE function for the app and the static home (cardAge.mjs; ChatGPT
+ * audit 6 item 23, audit 7 item 23).
+ */
+export const ageText = (iso: string | null, now: number): string | null => cardAge(iso, now);
+
+/**
+ * WHAT AN EMPTY FIELD SAYS (ChatGPT audit 6 item 23): never a bare "—". A coin that does not exist yet says "Not created yet"; a field
+ * with no reading says "No data yet"; a field that cannot apply says "Not applicable"; a rule with no scheduled result says "None
+ * scheduled". The reason stays behind the same tap-or-focus control (Why.tsx, the static page's btWhy).
+ */
+export const EMPTY_LABEL = { notCreated: "Not created yet", noData: "No data yet", notApplicable: "Not applicable", noneScheduled: "None scheduled" } as const;
+/** Whether a card is a coin that does not exist yet (the "Not created yet" or "Not launched" badge). */
+export const isNotCreated = (v: Pick<CardView, "tags">): boolean => v.tags.some((t) => t.label === "Not created yet" || t.label === "Not launched");
+export function emptyLabel(v: Pick<CardView, "tags">, why: string | null): string {
+  if (isNotCreated(v)) return EMPTY_LABEL.notCreated;
+  const w = why ?? "";
+  if (/does not apply|not applicable|never had/i.test(w)) return EMPTY_LABEL.notApplicable;
+  if (/no scheduled result|no result is scheduled/i.test(w)) return EMPTY_LABEL.noneScheduled;
+  return EMPTY_LABEL.noData;
+}
+/** The rows that can be empty, by key; the API sends these labels with each card so the static page prints the same words. */
+export const EMPTY_ROWS = ["progress", "nextSettle", "curve", "mcap", "holders", "age", "burned"] as const;
+export function emptyLabels(v: CardView): Record<(typeof EMPTY_ROWS)[number], string> {
+  return {
+    progress: emptyLabel(v, v.progressWhy), nextSettle: emptyLabel(v, v.nextSettle.why), curve: emptyLabel(v, v.curve.why), mcap: emptyLabel(v, v.mcap.why),
+    holders: emptyLabel(v, v.holders.why), age: emptyLabel(v, v.createdWhy), burned: emptyLabel(v, v.burned.why),
+  };
+}
+
+/**
+ * A market cap read from the curve, before graduation, is the curve's price times the whole supply, which can look large beside a small
+ * raise (28 SOL beside 0.1 SOL raised). It is labelled so (ChatGPT audit 6 item 23): "28 SOL (curve-implied)". After graduation it is the
+ * pool's number and carries no label.
+ */
+export const CURVE_IMPLIED = "curve-implied";
+export function mcapText(value: string, quote: string | null | undefined, phase: IndexCoin["phase"] | undefined): string {
+  return `${groupDigits(value)} ${quote ?? "SOL"}${phase === "graduated" ? "" : ` (${CURVE_IMPLIED})`}`;
+}
+
+const COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+/**
+ * The sentence above the featured cards, counted from the cards actually shown (ChatGPT audit 6 item 22: the page said "two disclosed
+ * test coins" while a mainnet host showed one). Null when no card is shown.
+ */
+export function featuredLine(cards: readonly Pick<CardView, "id" | "tags">[]): string | null {
+  if (!cards.length) return null;
+  const deficit = cards.some((c) => c.id === "deficit");
+  const tests = cards.filter((c) => c.id !== "deficit");
+  const n = tests.length;
+  const word = COUNT_WORDS[n] ?? String(n);
+  const testPart = `${word} disclosed test coin${n === 1 ? "" : "s"}`;
+  const lead = deficit ? (n ? `These are $DEFICIT, the operator's first coin, and ${testPart}.` : "This is $DEFICIT, the operator's first coin.")
+    : `${n === 1 ? "This is" : "These are"} ${testPart}.`;
+  const devnet = tests.some((c) => c.tags.some((t) => t.tone === "devnet"));
+  return devnet ? `${lead} The devnet card is a practice run on a test network where tokens have no money value.` : lead;
 }
 
 /** What the coins index (GET /api/burnticker/tokens) says about one registered coin. */
@@ -193,11 +248,11 @@ export function cardViewFromIndex(t: IndexCoin, raiseSol: string | null, cluster
   if (t.pairId) tags.push({ label: "Pair", tone: "neutral" });
   if (t.badge) tags.push({ label: t.badge, tone: "neutral" });
   const curve = curveCell(t, raiseSol);
-  const mcap: CardCell = t.marketCap ? { text: `${groupDigits(t.marketCap)} ${t.quote ?? "SOL"}`, why: t.phase === "graduated" ? MCAP_POOL_MEANING : CARD_MEANINGS.mcap }
+  const mcap: CardCell = t.marketCap ? { text: mcapText(t.marketCap, t.quote, t.phase), why: t.phase === "graduated" ? MCAP_POOL_MEANING : CARD_MEANINGS.mcap }
     : { text: null, why: t.phase === "graduated" ? t.poolNote || NOT_READ.mcapPool : NOT_READ.mcapNotRead };
   const pct = typeof t.pctOfSupply === "number" ? t.pctOfSupply : null;
   return {
-    id: t.mint, ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
+    id: t.mint, watchKey: coinWatchKey(cluster, t.mint), ticker: t.ticker, name: t.name, imageUrl: t.imageUrl, group: cluster === "mainnet" && t.status !== "draft" ? "public" : "test", tags, note: null,
     rule: t.oneLiner.replace(/^./, (c) => c.toUpperCase()), creatorText: t.creatorText ?? null, links: t.links ?? [],
     stated: t.stated ? statedSentences(t.stated, t.stated.finalAfter) : null,
     rank: t.rank ?? null,

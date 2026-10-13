@@ -1,5 +1,6 @@
 "use client";
 
+import { safeCreatorLink } from "@/lib/burnticker/creatorProfile";
 import { REHEARSAL_SENTENCE } from "@/lib/burnticker/rehearsalCopy";
 import { useEffect, useState } from "react";
 import { HostDiagnostics } from "../../_components/HostDiagnostics";
@@ -163,7 +164,7 @@ export default function TokenPage() {
             <span className="font-mono" title={s.mint}>CA {short(s.mint)}</span><CopyButton text={s.mint} label="copy address" />
             {/* growth batch: the program's own word on this mint (verifyMint.ts) — the verifier page answers for any mint */}
             {s.program?.initialized ? <Link className="bt-chip bt-chip-grad" href={`/burnticker/verify?mint=${s.mint}`} title="The burn program has a record for this coin.">verified by program · mint {short(s.mint)}</Link> : <Link className="underline" href={`/burnticker/verify?mint=${s.mint}`} title="This site has not read the burn program's record for this coin.">check this coin</Link>}
-            {(prof?.links ?? []).map((l) => <a key={l.url} href={l.url} rel="nofollow noopener ugc" target="_blank" className="underline">{l.label}</a>)}
+            {(prof?.links ?? []).filter(safeCreatorLink).map((l) => <a key={l.url} href={l.url} rel="noopener noreferrer nofollow ugc" target="_blank" className="underline">{l.label}</a>)}
           </div>
           {prof?.description && <p className="text-sm text-neutral-200 max-w-2xl leading-relaxed whitespace-pre-line" data-coin-description>{prof.description}</p>}
           {prof?.note && <div className="max-w-2xl rounded border border-neutral-700 p-2 text-xs text-neutral-300"><div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">creator&apos;s note (not part of the rule)</div>{prof.note}</div>}

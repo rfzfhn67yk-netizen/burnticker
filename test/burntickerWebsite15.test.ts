@@ -161,7 +161,7 @@ describe("item 4: the back-test fails gracefully (Claude site audit 3 item 2)", 
     const { BACKTEST_UNAVAILABLE } = await import("@/lib/burnticker/oracle/backtest");
     assert.equal(BACKTEST_UNAVAILABLE, "Backtest unavailable."); clean(BACKTEST_UNAVAILABLE, "backtest");
     const pg = read("src/app/burnticker/launch/page.tsx");
-    assert.match(pg, /\{btErr && btFor === btKey && <div[^>]*data-backtest-unavailable><p>\{BACKTEST_UNAVAILABLE\}<\/p><details/);
+    assert.match(pg, /\{btErr && btFor === btKey && !rv\?\.projection && <div[^>]*data-backtest-unavailable><p>\{BACKTEST_UNAVAILABLE\}<\/p><details/, "website-20: shown only when the review has no projection (WIRING-PARITY audit 6 #11)");
     assert.match(pg, /await r\.json\(\)\.catch\(\(\) =>/, "a non-JSON 502 page is still an error, not a crash");
     const route = read("src/app/api/burnticker/oracle/backtest/route.ts");
     assert.match(route, /console\.error\("\[burnticker\/backtest\] the back-test route failed:", e\)/);
@@ -194,8 +194,8 @@ describe("item 6: progress and readiness, one model (Claude site audit 3 item 4a
     assert.equal(pre.done, 0); assert.equal(pre.now, "Not created"); assert.ok(pre.steps.every((s) => s.state === "todo"), "no step lit before the coin exists");
     assert.equal(progressSummary(pre), "Step 0 of 6. The coin is not created yet.");
     const curve = progressOf(readinessOf({ launched: true, phase: "curve", raisedSol: 1, graduationSol: 85, poolVerified: false, latest: null }));
-    assert.equal(curve.now, "Next: graduated"); assert.deepEqual(curve.steps.map((s) => s.state), ["done", "done", "current", "todo", "todo", "todo"]);
-    assert.equal(progressNow(6), "Burned"); assert.equal(progressNow(3), "Next: pool registered");
+    assert.equal(curve.now, "Next: graduation"); assert.deepEqual(curve.steps.map((s) => s.state), ["done", "done", "current", "todo", "todo", "todo"]);
+    assert.equal(progressNow(6), "Burned"); assert.equal(progressNow(3), "Next: pool registration");
     for (let d = 0; d <= PROGRESS_STEPS.length; d++) assert.doesNotMatch(progressNow(d), /^Now:/);
     const panel = read("src/app/burnticker/_components/ReadinessPanel.tsx"), strip = read("src/app/burnticker/_components/ProgressStrip.tsx"), home = read("site/burnticker/index.html");
     assert.match(panel, /const p = progressOf\(r\);/); assert.match(panel, /step \{p\.done\} of \{PROGRESS_STEPS\.length\}/); assert.doesNotMatch(panel, /READINESS_ORDER/);
@@ -227,10 +227,10 @@ describe("item 7: missing-value reasons (Claude site audit 3 items 4b, 4c, 15; C
   test("the dash is a button described by its reason, opened by tap or focus; no reason is printed inline with a leading period", () => {
     const why = read("src/app/burnticker/_components/Why.tsx"), card = read("src/app/burnticker/_components/CoinCard.tsx"), home = read("site/burnticker/index.html");
     assert.match(why, /<button type="button" className="bt-why-btn" aria-describedby=\{id\} aria-expanded=\{open\}/); assert.match(why, /role="tooltip"/); assert.match(why, /useId\(\)/);
-    assert.match(card, /return <Why why=\{c\.why \?\? "This site has no reading for this field\."\} \/>;/);
+    assert.match(card, /return <Why label=\{emptyLabel\(v, c\.why\)\} why=\{c\.why \?\? "This site has no reading for this field\."\} \/>;/);
     for (const src of [card, home]) assert.doesNotMatch(src, /sr-only">\. \{|"sh-sr", "\. " \+|r\.textContent = "\. " \+ why/, "no inline reason with a period prefix");
     assert.match(home, /window\.btWhy = function \(label, why, name\)/); assert.match(home, /b\.setAttribute\("aria-describedby", id\)/);
-    assert.match(home, /if \(c\.text === null\) return window\.btWhy\("\\u2014"/);
+    assert.match(home, /if \(c\.text === null\) return window\.btWhy\(label \|\| "No data yet"/); // site polish: the empty label, not a dash
     const css = read("config/public-repo/overlay/src/app/globals.css");
     assert.match(css, /\.bt-why-tip\.is-open, \.bt-why-btn:focus-visible \+ \.bt-why-tip \{ display: block; \}/);
   });
@@ -284,7 +284,7 @@ describe("item 9: $REHEARSAL in one sentence, and its pool read like any coin's 
     const rh = rehearsalCreate()!;
     assert.equal(rh.poolId, "AAT9VJAhAJv7o5mZtm3EYLhSdcsxPZB7eTYbjd9phRgG"); assert.equal(rh.date, "2026-10-11");
     const read1 = featuredCoins(scratchRoot("planned"), null, [], null, NOW, { phase: "curve", raised: "1.25", threshold: "85", quote: "SOL", progressPct: 1.47, marketCap: "30.5" }).find((v) => v.id === "rehearsal")!;
-    assert.deepEqual([read1.curve.raised, read1.curve.of], ["1.25", "85 SOL"]); assert.equal(read1.progress!.now, "Next: graduated"); assert.equal(read1.mcap.text, "30.5 SOL");
+    assert.deepEqual([read1.curve.raised, read1.curve.of], ["1.25", "85 SOL"]); assert.equal(read1.progress!.now, "Next: graduation"); assert.equal(read1.mcap.text, "30.5 SOL (curve-implied)");
     const unread = featuredCoins(scratchRoot("planned"), null, [], null, NOW, null).find((v) => v.id === "rehearsal")!;
     assert.equal(unread.curve.raised, null); assert.equal(unread.mcap.text, null); assert.equal(unread.progress, null);
     assert.equal(unread.curve.why, "This site could not read $REHEARSAL's pool just now."); clean(unread.curve.why!, "unread");
@@ -403,7 +403,7 @@ describe("item 18: copy edits (ChatGPT code review 6)", () => {
     assert.ok(featuredCoins(scratchRoot("planned"), null, [], null, NOW)[0].note!.includes(tag));
     assert.match(read("src/app/burnticker/upcoming/NextResults.tsx"), /Publication times come from the source and may change\./);
     assert.equal(WALLET_COPY.prompt, "View a wallet's created coins without signing a transaction.");
-    assert.match(read("src/app/burnticker/templates/page.tsx"), /"Choose a league and team on the next screen\."/); assert.doesNotMatch(read("src/app/burnticker/templates/page.tsx"), /opacity-60/);
+    assert.match(read("src/lib/burnticker/templates.ts"), /cta: "Choose a team"/); // website-20 item 60: the link says where it lands assert.doesNotMatch(read("src/app/burnticker/templates/page.tsx"), /opacity-60/);
     const fs2 = read("src/app/burnticker/_components/FooterSwitch.tsx");
     assert.match(fs2, /<summary>Show the full receipt<\/summary>\{full\}/);
     const { footerVariant } = await import("@/app/burnticker/_components/nav");

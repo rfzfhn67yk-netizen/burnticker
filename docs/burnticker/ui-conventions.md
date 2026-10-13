@@ -240,7 +240,7 @@ GET /api/burnticker/v1/ops/search-misses → `timeToLaunch.flow`) for the before
 | Any burn share other than the presets; the per-unit share of a number feed | `rule.binary.onYes / onNo.fractionOfPool`, `rule.scalar.perUnit` in POST /api/burnticker/v1/launch/bundle |
 | A team coin's window (postseason, next N games, perpetual) and the side (win / loss / draw) | `rule.series` (`espn.team:<lg>-<ABBR>.<id>-<side>-<window>`) in POST /v1/launch/bundle; the sentence search still reads "… lose" |
 | League mode, outcome sets, end-of-window forwarding | `rule.onEnd` / league set in POST /v1/launch/bundle |
-| Coin vs Coin weekly windows, run lengths other than 30 days, brackets | a `derby` rule in POST /v1/launch/bundle; brackets: the operator's bracket registration |
+| Coin vs Coin weekly windows (weekly comparisons are available through the API only), run lengths other than 30 days, brackets | a `derby` rule in POST /v1/launch/bundle; brackets: the operator's bracket registration |
 | The flippening checkbox | its own template card (`/burnticker/launch?template=flippening`); any flippening rule via POST /v1/launch/bundle |
 | Election pairs (two candidates, two coins) | GET /api/burnticker/v1/elections/pair, then POST /api/burnticker/launch with `pair` |
 | Polymarket "every market of an event", recurring tag selectors, the question filter; Kalshi series filters and pasted tickers | `rule.series` (`event:<slug>`, `tag:<slug>`) and `rule.filter` in POST /v1/launch/bundle |
@@ -266,7 +266,7 @@ No model runs at request time (`src/lib/burnticker/search.ts`).
 
 **The same create screen from every path.** Search card, Elections, Browse, Team coin, Matchup, Any market and Advanced all land on it.
 The rule's dials sit on top (`src/lib/burnticker/dials.ts`):
-- the share of the pool: 1–10 % for a recurring rule (default 2 %), 1–100 % for a one-shot (default 10 %);
+- the share of the pool: 1–25 % for a recurring rule (default 2 %), up to 100 % for a one-shot (the site offers 50 or 100 %, default 100 %); rules.ts shareLimitsText is the wording;
 - the side: win / loss / draw, or YES / NO;
 - a team coin's window: this season, this postseason only, the next N games, or perpetual;
 - an NWS threshold;

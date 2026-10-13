@@ -33,7 +33,8 @@ export function parseSeasonSlug(league: LeagueId, slug: string): number | null {
   return span === "later" ? a + 1 : a;
 }
 export const leaguePath = (league: LeagueId, year: number): string => `${LEAGUES_PATH}/${encodeURIComponent(league)}/${seasonSlug(league, year)}`;
-export const launchHref = (teamName: string): string => `/burnticker/launch?q=${encodeURIComponent(teamName)}`;
+/** website-20 item 119: the launch page opens on this league with this team picked (the guided team path, step 2). */
+export const launchHref = (teamName: string, league?: string, abbr?: string): string => (league && abbr ? `/burnticker/launch?league=${encodeURIComponent(league)}&team=${encodeURIComponent(abbr)}` : `/burnticker/launch?q=${encodeURIComponent(teamName)}`);
 
 /** A team coin's league and season year, or null (not a team coin, or a perpetual / next-N / legacy window). */
 export function coinSeason(c: Pick<SeasonCoinInput, "rule">): { league: LeagueId; year: number; window: "season" | "post" } | null {
@@ -143,7 +144,7 @@ export function leagueSeasonPage(i: LeagueSeasonInput): LeagueSeasonPage {
     if (!e || e.kind !== "team") continue;
     coinsByTeam.set(e.abbr, [...(coinsByTeam.get(e.abbr) ?? []), { ticker: c.ticker, outcome: e.outcome }]);
   }
-  const teams = teamsOf(i.league).map((t) => ({ abbr: t.abbr, name: t.name, coins: coinsByTeam.get(t.abbr) ?? [], launchHref: launchHref(t.name) }))
+  const teams = teamsOf(i.league).map((t) => ({ abbr: t.abbr, name: t.name, coins: coinsByTeam.get(t.abbr) ?? [], launchHref: launchHref(t.name, i.league, t.abbr) }))
     .sort((a, b) => (b.coins.length > 0 ? 1 : 0) - (a.coins.length > 0 ? 1 : 0) || a.name.localeCompare(b.name));
   const to = new Date(i.nowMs).toISOString().slice(0, 10), from = new Date(i.nowMs - 6 * 86_400_000).toISOString().slice(0, 10);
   const rows = settledGames(i.league, i.readings, from, to);

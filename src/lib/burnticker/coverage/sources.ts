@@ -4,6 +4,7 @@ import type { PriceFeedSourceConfig } from "@/lib/burnticker/sources/types";
 import type { NativeSourceConfig } from "@/lib/burnticker/catalogue";
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { CrossReadPair, Eligibility, FactSpec, SourceDescriptor } from "@/lib/burnticker/coverage/types";
+import { isSingleOfficialSource } from "@/lib/burnticker/singleSource";
 
 /**
  * SOURCES FOR THE SETTLEMENT-COVERAGE AUDIT (2026-10-10): normalising every source into one descriptor, the PRIMARY and CROSS-READ
@@ -56,7 +57,7 @@ export function describeEntry(e: HttpSourceConfig | CopycatSourceConfig | Native
   return {
     id: e.id, kind: e.kind, tier: e.tier, title: e.title, operator, domain: domainOf(url), fact: http?.fact ?? null,
     launchable: e.launchable && !needsKey, launchableWhy: needsKey ? `needs a key: ${needsKey}` : e.launchable ? null : (e.note ?? "not launchable"),
-    readable: !needsKey && (http ? true : false), snapshot: !!http?.select.snapshot, flags: e.flags, venue: /^kalshi\b/i.test(e.id) ? "kalshi" : e.kind === "onchain" ? "onchain" : "feed",
+    readable: !needsKey && (http ? true : false), snapshot: !!http?.select.snapshot, flags: e.flags, singleSource: http ? isSingleOfficialSource(http) : false, venue: /^kalshi\b/i.test(e.id) ? "kalshi" : e.kind === "onchain" ? "onchain" : "feed",
   };
 }
 

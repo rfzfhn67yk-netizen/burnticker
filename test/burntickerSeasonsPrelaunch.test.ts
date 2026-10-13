@@ -24,7 +24,9 @@ test("league pages lead with Teams; empty scoreboard and settled games collapse 
 
 test("no launch invitation while closed: every team launch link and the Derby create link sit behind launch.open", () => {
   const links = [...league.matchAll(/launch a coin for this team/g)].length;
-  assert.equal(links, [...league.matchAll(/\{launch\.open && <Link[^>]*href=\{t\.launchHref\}>launch a coin for this team<\/Link>\}/g)].length);
+  // website-20 item 119: a closed host shows nothing; a preview host shows "preview a coin for this team" (the wizard runs, nothing is sent)
+  assert.equal(links, [...league.matchAll(/\{\(launch\.open \|\| launchPreview\) && <Link[^>]*href=\{t\.launchHref\}>\{launch\.open \? "launch a coin for this team" : "preview a coin for this team"\}<\/Link>\}/g)].length);
+  assert.match(league, /const launchPreview = !launch\.open && siteLaunchState\([a-z.]+\)\.wizard;/);
   assert.ok(links >= 1);
   const derby = read("src/app/burnticker/derby/page.tsx");
   assert.match(derby, /\{launchOpen\s*\n?\s*\? <Link[^>]*href=\{`\/burnticker\/launch\?derby=1/);

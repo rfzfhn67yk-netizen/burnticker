@@ -36,6 +36,19 @@ function markBytes(root: string): Buffer {
   throw new Error("the Burnticker receipt mark could not be read on this host");
 }
 
+/**
+ * WIRING-MEDIA-RECOVERY item 221: the checks the badge path runs (the bytes decode as an image, at least 16 pixels on each side), for an
+ * image pinned without the mark too. badgeCreatorImage runs the same two checks before it composites.
+ */
+export async function checkCreatorImage(bytes: Uint8Array): Promise<{ ok: { width: number; height: number } } | { error: string }> {
+  const sharp = (await import("sharp")).default;
+  let meta;
+  try { meta = await sharp(bytes, { pages: 1 }).metadata(); } catch { return { error: "The image could not be read. Send a PNG, JPG, GIF or WebP file." }; }
+  const w = meta.width ?? 0, h = meta.height ?? 0;
+  if (w < 16 || h < 16) return { error: "The image is too small. Send one at least 16 pixels on each side." };
+  return { ok: { width: w, height: h } };
+}
+
 /** Composites the mark onto an already-checked creator image. Never returns more than IMAGE_MAX_BYTES. */
 export async function badgeCreatorImage(bytes: Uint8Array, contentType: string, root = process.cwd()): Promise<{ ok: { bytes: Uint8Array; contentType: "image/png" | "image/jpeg"; side: number } } | { error: string }> {
   const sharp = (await import("sharp")).default;

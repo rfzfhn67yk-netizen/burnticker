@@ -1,3 +1,5 @@
+import { highSpecProblems, highStatement, type HighSpec } from "@/lib/burnticker/derby/high";
+
 /**
  * BURN DERBY — THE SELECTOR (owner-approved 2026-10-10: "build it all"). A derby is a rivalry pair whose selector is the RELATIVE
  * PERFORMANCE OF TWO EXISTING COINS over a window: "every UTC day WIF out-gains SHIB". Side A's coin burns on a window A wins, side B's
@@ -73,7 +75,9 @@ export interface PriceSpec {
   season: { start: string; days: number };
 }
 
-export type DerbySpec = CoinVsSpec | BracketSpec | PriceSpec;
+/** RECORD DAILY CLOSES (sources-4, 2026-10-12; derby/high.ts): one reference coin's daily close against its record. */
+export type DerbySpec = CoinVsSpec | BracketSpec | PriceSpec | HighSpec;
+export type { HighSpec };
 
 /**
  * Pyth's US index feeds (Equity.Index.US500 / US30 / US100) are excluded unless BURNTICKER_INDEX_PROXIES_ENABLED=1 — index-licence caution:
@@ -104,8 +108,9 @@ const CROSS_RE = /^(jup:[1-9A-HJ-NP-Za-km-z]{32,44}|dexscreener:[a-z0-9-]{2,24}:
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const TOURNAMENT_ID_RE = /^[a-z0-9][a-z0-9-]{2,31}$/;
 
-/** coinvs:<A>-<B>:<daily|weekly>:<pct|mcap>[-flip]:<10 hex> · bracket:<tournament id>:<slot> · price:<SYM>:<daily|weekly>:<10 hex>. */
-export const DERBY_SERIES_RE = /^(coinvs:[A-Z0-9]{1,12}-[A-Z0-9]{1,12}:(daily|weekly):(pct|mcap)(-flip)?:[0-9a-f]{10}|bracket:[a-z0-9][a-z0-9-]{2,31}:\d{1,2}|price:[A-Z0-9]{1,12}:(daily|weekly):[0-9a-f]{10})$/;
+/** coinvs:<A>-<B>:<daily|weekly>:<pct|mcap>[-flip]:<10 hex> · bracket:<tournament id>:<slot> · price:<SYM>:<daily|weekly>:<10 hex> ·
+ *  high:<SYM>:<all|30d|90d>[-once]:<10 hex> (sources-4: the hash covers the whole block, baseline included, so each coin has its own stream). */
+export const DERBY_SERIES_RE = /^(coinvs:[A-Z0-9]{1,12}-[A-Z0-9]{1,12}:(daily|weekly):(pct|mcap)(-flip)?:[0-9a-f]{10}|bracket:[a-z0-9][a-z0-9-]{2,31}:\d{1,2}|price:[A-Z0-9]{1,12}:(daily|weekly):[0-9a-f]{10}|high:[A-Z0-9]{1,12}:(all|30d|90d)(-once)?:[0-9a-f]{10})$/;
 export const isDerbySeries = (s: string): boolean => DERBY_SERIES_RE.test(s);
 
 /** Keys sorted at every level (the same canonical form as rules.json, without the trailing newline). */
@@ -120,6 +125,28 @@ export function canonical(v: unknown): string {
 
 /** The stable identity of an underlying (what readings and samples are keyed by): its Pyth feed, else its pool. */
 export const underlyingKey = (u: DerbyUnderlying): string => (u.pyth ? `pyth:${u.pyth}` : u.pool ? `pool:${u.pool}` : `redstone:${u.redstone}`);
+
+/**
+ * EVERY NAME AN UNDERLYING ANSWERS TO (semantics-verify item 74, 2026-10-12): its Pyth feed, its mint, its pool, its RedStone feed and the
+ * token its cross-read reads ("jup:<mint>" and a Solana DexScreener address name the mint; an EVM address is compared without case).
+ * Two sides that share any of these are the same coin under two aliases, so a derby of them is refused: underlyingKey alone let a coin
+ * read through Pyth on one side and through RedStone or a pool on the other race against itself.
+ */
+export function underlyingAliases(u: Partial<DerbyUnderlying>): Set<string> {
+  const out = new Set<string>();
+  if (u.pyth) out.add(`pyth:${u.pyth}`);
+  if (u.mint) out.add(`token:solana:${u.mint}`);
+  if (u.pool) out.add(`pool:${u.pool}`);
+  if (u.redstone) out.add(`redstone:${u.redstone.toUpperCase()}`);
+  if (typeof u.cross === "string") {
+    const j = /^jup:(.+)$/.exec(u.cross), d = /^dexscreener:([a-z0-9-]+):(.+)$/.exec(u.cross), r = /^redstone:(.+)$/.exec(u.cross);
+    if (j) out.add(`token:solana:${j[1]}`);
+    else if (d) out.add(`token:${d[1]}:${/^0x/i.test(d[2]) ? d[2].toLowerCase() : d[2]}`);
+    else if (r) out.add(`redstone:${r[1].toUpperCase()}`);
+  }
+  return out;
+}
+export const sameUnderlying = (a: Partial<DerbyUnderlying>, b: Partial<DerbyUnderlying>): boolean => { const x = underlyingAliases(a); return [...underlyingAliases(b)].some((k) => x.has(k)); };
 
 function underlyingProblems(u: unknown, label: string, p: string[]): void {
   const x = u as Partial<DerbyUnderlying> | null;
@@ -148,7 +175,7 @@ export function derbySpecProblems(raw: unknown): string[] {
   if (d.selector === "coinvs") {
     underlyingProblems(d.a, "a", p); underlyingProblems(d.b, "b", p);
     if (d.a && d.b && typeof d.a === "object" && typeof d.b === "object") {
-      if (underlyingKey(d.a as DerbyUnderlying) === underlyingKey(d.b as DerbyUnderlying) || (d.a.mint && d.a.mint === d.b.mint) || (d.a.pyth && d.a.pyth === d.b.pyth)) p.push("derby: the two coins must be distinct");
+      if (underlyingKey(d.a as DerbyUnderlying) === underlyingKey(d.b as DerbyUnderlying) || sameUnderlying(d.a, d.b)) p.push("derby: the two coins must be distinct");
       if (d.a.symbol === d.b.symbol) p.push("derby: the two coins need different symbols");
     }
     if (d.window !== "daily" && d.window !== "weekly") p.push('derby.window must be "daily" or "weekly"');
@@ -173,13 +200,18 @@ export function derbySpecProblems(raw: unknown): string[] {
     if (x.window !== "daily" && x.window !== "weekly") p.push('derby.window must be "daily" or "weekly"');
     seasonProblems(x.season, x.window, p);
     for (const k of Object.keys(x)) if (!["selector", "u", "window", "season"].includes(k)) p.push(`derby.${k} is not a known key`);
+  } else if (d.selector === "high") {
+    const x = d as unknown as Partial<HighSpec>;
+    underlyingProblems(x.u, "u", p);
+    highSpecProblems(x, p);
+    for (const k of Object.keys(x)) if (!["selector", "u", "span", "once", "season", "baseline"].includes(k)) p.push(`derby.${k} is not a known key`);
   } else if (d.selector === "bracket") {
     if (typeof d.tournamentId !== "string" || !TOURNAMENT_ID_RE.test(d.tournamentId)) p.push("derby.tournamentId must be 3–32 lowercase letters/digits/dashes");
     if (typeof d.tournamentSha !== "string" || !/^[0-9a-f]{64}$/.test(d.tournamentSha)) p.push("derby.tournamentSha must be a sha256 (64 lowercase hex)");
     if (!Number.isInteger(d.slot) || (d.slot as number) < 0 || (d.slot as number) > 15) p.push("derby.slot must be a seed slot 0–15");
     underlyingProblems(d.underlying, "underlying", p);
     for (const k of Object.keys(d)) if (!["selector", "tournamentId", "tournamentSha", "slot", "underlying"].includes(k)) p.push(`derby.${k} is not a known key`);
-  } else p.push('derby.selector must be "coinvs", "price" or "bracket"');
+  } else p.push('derby.selector must be "coinvs", "price", "high" or "bracket"');
   return p;
 }
 
@@ -199,6 +231,7 @@ export const coinvsHashInput = (d: CoinVsSpec): string => canonical({ a: d.a, b:
 export function derbySeriesId(d: DerbySpec, sha256Hex: (s: string) => string): string {
   if (d.selector === "bracket") return `bracket:${d.tournamentId}:${d.slot}`;
   if (d.selector === "price") return `price:${d.u.symbol}:${d.window}:${sha256Hex(canonical({ u: d.u, window: d.window })).slice(0, 10)}`;
+  if (d.selector === "high") return `high:${d.u.symbol}:${d.span === "all" ? "all" : `${d.span}d`}${d.once ? "-once" : ""}:${sha256Hex(canonical(d)).slice(0, 10)}`;
   return `coinvs:${d.a.symbol}-${d.b.symbol}:${d.window}:${d.measure}${d.flip ? "-flip" : ""}:${sha256Hex(coinvsHashInput(d)).slice(0, 10)}`;
 }
 
@@ -268,6 +301,7 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
 /** The rule paragraph for the token page (rules.ts ruleStatement delegates here for oracle "derby"). */
 export function derbyStatement(d: DerbySpec, side: "A" | "B" | null, pairId: string | null, scalar: { unit: number; direction: string } | null = null): string {
   const feed = (u: DerbyUnderlying) => (u.pyth ? `${u.symbol}/USD on Pyth (feed ${u.pyth.slice(0, 12)}…)` : `${u.symbol} from the time-weighted average of pool ${u.pool!.slice(0, 8)}… (its vault balances, turned from SOL into USD with Pyth)`);
+  if (d.selector === "high") return highStatement(d);
   if (d.selector === "price") {
     const wnd = d.window === "daily" ? "UTC day (00:00 to 00:00)" : "UTC week (Monday 00:00 to Monday 00:00)";
     const dir = scalar?.direction === "down" ? "fall" : "rise";
@@ -284,3 +318,10 @@ export function derbyStatement(d: DerbySpec, side: "A" | "B" | null, pairId: str
   if (d.flip) return `This is a one-shot flippening. The first ${wnd} that ends with ${d.a.symbol}'s size above ${d.b.symbol}'s settles YES. Size is circulating supply times ${feed(d.a)} for ${d.a.symbol}, and times ${feed(d.b)} for ${d.b.symbol}. If the season ends without that, it settles NO.${pairText} ${season} After that, nothing more is read. A cross-read that disagrees by more than ${DERBY_DISAGREEMENT_PP}% on the comparison withholds the reading, so there is no reading and no burn.`;
   return `Every ${wnd}, ${d.a.symbol}'s ${measure} (${feed(d.a)}) is compared with ${d.b.symbol}'s (${feed(d.b)}). The larger one wins the window. A window ${d.a.symbol} wins settles YES, and a window ${d.b.symbol} wins settles NO. An exact tie is a void and burns nothing.${pairText} ${season} A cross-read from an independent operator that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the margin withholds the window, so there is no reading and no burn. Readings use each coin's feed at the boundaries. Our own coins' trading is never read.`;
 }
+
+/**
+ * A FLIPPENING THAT IS ALREADY DECIDED (owner decision 2026-10-12, website-20 item 66): a flippening whose first coin is already larger
+ * than the second when it is created has nothing to flip, so it is refused at creation (coverage/preflight.ts, code "already-decided",
+ * from the live primary values times each mint's circulating supply). The daily comparison is not affected. Equal sizes are not ahead.
+ */
+export const flipAlreadyAheadSentence = (a: string, b: string): string => `${a} already closes above ${b} in size, so there is nothing to flip. A flippening can launch only while ${a} is the smaller of the two.`;

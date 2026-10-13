@@ -48,11 +48,11 @@
   "programs": [
     {
       "name": "burn_receipts",
-      "version": "pair-forward round 3 build",
-      "note": "the winner-takes-the-burn round 3 build, with terminal-only unlink evidence, a shared attester set and the mainnet pins compiled in. The end-of-rule sink (round 4) is not built.",
+      "version": "round 4 build (end sinks and pairs)",
+      "note": "the round 4 build: end-of-rule sinks (a finished rule's leftover pool goes to the winner or to $DEFICIT), the pair-forward path, terminal-only unlink evidence, a shared attester set and the mainnet pins compiled in. Deployed on mainnet on 2026-10-12 through the Squads vault; the bytes on chain equal this build. The independent re-check of round 4 is still open (see the plan below), and creator launches are closed.",
       "mainnetDeploy": {
-        "date": "2026-10-11",
-        "slot": 455814493,
+        "date": "2026-10-12",
+        "slot": 456198354,
         "onChainSha256": "b1f51c4826a0b79a865ec8aa26ffbab7a0a40b08cad04235a45c215f630526c7",
         "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "evidence": "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log"
@@ -60,11 +60,11 @@
     },
     {
       "name": "pair_curve",
-      "version": "pair-forward round 3 build",
-      "note": "pair launches stay switched off on mainnet",
+      "version": "round 4 build (end sinks and pairs)",
+      "note": "the round 4 build: link_pair runs inside init_pair, so a pair is registered when it is created. Deployed on mainnet on 2026-10-12 through the Squads vault; the bytes on chain equal this build. The host flag for pair launches is on, and creator launches are closed, so no public pair exists on mainnet yet.",
       "mainnetDeploy": {
-        "date": "2026-10-11",
-        "slot": 455815136,
+        "date": "2026-10-12",
+        "slot": 456201604,
         "onChainSha256": "8effaac2f1a1c19ff1505ce72f28d1ae60c02c971f2411ffab707bfd29fbded2",
         "upgradeAuthority": "8zsHrHjSgunnLmVyPG848GLw5a9xai6u8SZCYaskWrDV",
         "evidence": "docs/burnkeeper/evidence/mainnet-round4/onchain-verify-after-pc.log"
@@ -74,8 +74,8 @@
   "squads": {
     "mainnet": {
       "plannedTimeLockSecs": 172800,
-      "plannedFrom": "around 2026-10-23",
-      "why": "The owner decided on 2026-10-11 to keep the mainnet vault's time lock at 0 during launch week, so that deploy and config fixes are not delayed. It is to be raised to 48 h after that. Until then, a 2-of-3 vote can act at once.",
+      "plannedFrom": "a week or more after the soft launch",
+      "why": "The owner decided on 2026-10-11, and again on 2026-10-12, to keep the mainnet vault's time lock at 0 through launch week, so that deploy and config fixes are not delayed. It is to be raised to 48 h at least a week after the soft launch. Until then, a 2-of-3 vote can act at once.",
       "operatorControlledKeys": 2,
       "keyControl": "The vault has three keys but only two controllers. The owner holds members A and B, which are two of the three keys, so the owner alone meets the 2-of-3 threshold. Member C is a person outside the operator who holds the third key and is not named publicly. While the owner holds two keys, the third key adds no independent approval."
     },
@@ -278,17 +278,17 @@
     },
     {
       "id": "end-sink",
-      "text": "Build and review the end-of-rule sink (program round 4) before creator launches open.",
-      "status": "open"
+      "text": "Build the end-of-rule sink (program round 4). It is built and deployed on mainnet and devnet, with a devnet run on record.",
+      "status": "done"
     },
     {
-      "id": "r3-recheck",
-      "text": "Get an independent re-check of pair-forward round 3 before pairs run on mainnet.",
+      "id": "r4-recheck",
+      "text": "Get an independent re-check of the round 4 programs (pair-forward and end sinks) now that they are deployed on mainnet.",
       "status": "open"
     },
     {
       "id": "time-lock",
-      "text": "Raise the mainnet Squads time lock from 0 to 48 h. This is planned for around 2026-10-23.",
+      "text": "Raise the mainnet Squads time lock from 0 to 48 h. The owner's decision is to do this at least a week after the soft launch.",
       "status": "open",
       "derivedFromChain": "mainnet-time-lock"
     },
@@ -315,8 +315,8 @@
   ],
   "design": [
     "Rules are locked at launch; a different rule is a different coin.",
-    "In a pair, the winner takes the burn. Fees from both coins burn the winner's supply. This runs on devnet and is switched off on mainnet.",
-    "When a rule ends and resolves, its leftover burn pool goes to a sink, which is the contest's winner or else $DEFICIT. This is designed but not built.",
+    "In a pair, the winner takes the burn. Fees from both coins burn the winner's supply. The round 4 program carries this on devnet and mainnet; the host flag for pair launches is on, and creator launches are closed, so no public pair runs on mainnet yet.",
+    "When a rule ends and resolves, its leftover burn pool goes to a sink, which is the contest's winner or else $DEFICIT. The round 4 program carries this on devnet and mainnet; it has run on devnet (the devnet round 4 evidence folder), and no mainnet rule has ended yet.",
     "The Squads 2-of-3 vault holds the upgrade authority. As the last step it is to be set to none, which is not done yet."
   ],
   "historical": [

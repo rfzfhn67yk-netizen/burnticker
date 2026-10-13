@@ -60,7 +60,7 @@ export default function FeeLedgerPage() {
           <p className="text-xs text-neutral-300">{l.expenses.whatTheFeePaysFor}</p>
           <p className="text-xs text-neutral-500">{LEDGER_COPY.expensesSource}</p>
           <div className="overflow-x-auto mt-2"><table className="w-full text-xs"><thead className="text-neutral-400 text-left"><tr><th className="p-2">Item</th><th className="p-2">Cadence</th><th className="p-2 text-right">USD</th><th className="p-2">Note</th></tr></thead>
-            <tbody>{l.expenses.items.map((e) => <tr key={e.id} className="border-t border-neutral-800 align-top"><td className="p-2">{e.label}</td><td className="p-2">{e.cadence}</td><td className="p-2 text-right tabular-nums">{e.usd === null ? <span className="text-amber-400">{LEDGER_COPY.placeholder}{e.todo ? ` (${e.todo})` : ""}</span> : `$${e.usd.toLocaleString("en-US")}`}</td><td className="p-2 text-neutral-400">{e.note}</td></tr>)}</tbody></table></div>
+            <tbody>{l.expenses.items.map((e) => <tr key={e.id} className="border-t border-neutral-800 align-top"><td className="p-2">{e.label}</td><td className="p-2">{e.cadence}</td><td className="p-2 text-right tabular-nums">{e.usd === null ? <span className="text-amber-400">{LEDGER_COPY.placeholder}</span> : `$${e.usd.toLocaleString("en-US")}`}</td><td className="p-2 text-neutral-400">{e.note}</td></tr>)}</tbody></table></div>
         </section>
         {l.entries.length > 0 && <section className={card}>
           <h2 className="font-medium">{LEDGER_COPY.entriesTitle}</h2>

@@ -1,4 +1,5 @@
-import { KEEPER_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { KEEPER_ONE_SHOT_RE, NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { nhcSeasonOpen, parseNhcSeries } from "@/lib/burnticker/sources/nhc";
 import { jsonOne, parseBody, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
 import { milestoneProblem, parseGithubSeries } from "@/lib/burnticker/sources/github";
 import { parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
@@ -19,6 +20,10 @@ import { parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
  */
 
 export const ALREADY_DECIDED_SENTENCE = "This one-time event already has its result, so a new coin on it is not offered. A coin only counts results that come after its launch, so it could never burn on this one.";
+/** sources-3: a hurricane-season one-shot after its season (November 30, UTC): the window is closed, so no storm can count. */
+/** sources-4: a record series whose last complete day is already its record (the coin-record twin is derby/high.ts HIGH_ALREADY_SENTENCE). */
+export const RECORD_ALREADY_SENTENCE = "This series' last complete day is already its record, so a new coin on it is not offered. A coin on a record must start below the record, so that its first burn is a new one.";
+export const SEASON_OVER_SENTENCE = "This hurricane season is over, so a coin on its next storm is not offered. The rule only counts storms after its launch and inside the season it names.";
 
 /** Whether a series is a one-time catalogue series (the keeper ends it after its one reading). */
 export const isOneTimeSeries = (series: string | null | undefined): boolean => !!series && KEEPER_ONE_SHOT_RE.test(series);
@@ -49,7 +54,18 @@ const OPEN: Eligibility = { decided: false, reason: null, subject: null };
  * is of this very series) → whether the one-time event is already decided, and why in words.
  */
 export function oneShotEligibility(series: string, cfg: HttpSourceConfig, body: unknown, nowMs: number): Eligibility {
+  // sources-4: a record source (recurring or once) whose last complete day is already a record is refused (never a day-one burn)
+  if (cfg.select.record) {
+    const r = parseBody({ ...cfg, select: { ...cfg.select, record: { ...cfg.select.record, once: false } } }, body, nowMs).readings;
+    const last = r[r.length - 1];
+    if (last?.value === "1") return { decided: true, reason: `${RECORD_ALREADY_SENTENCE} ${last.title}.`, subject: null };
+  }
   if (!isOneTimeSeries(series)) return OPEN;
+  // sources-3: a next-event one-shot is decided only by a closed window (a hurricane season that is over), never by an earlier event
+  if (NEXT_EVENT_ONE_SHOT_RE.test(series)) {
+    const n = parseNhcSeries(series);
+    return n?.kind === "next" && !nhcSeasonOpen(n.year, nowMs) ? { decided: true, reason: SEASON_OVER_SENTENCE, subject: null } : OPEN;
+  }
   const l = parseLl2Series(series);
   if (l?.kind === "launch") {
     const info = ll2LaunchInfo(body);

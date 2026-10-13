@@ -31,7 +31,9 @@ describe("items 1 and 2: a name needs visible characters and fits 32 bytes of UT
       assert.equal(nameProblem(n), s, JSON.stringify(n));
       assert.deepEqual(nameIssues(n), [s], JSON.stringify(n));
     }
-    assert.equal(nameProblem("A​"), "The name needs at least 2 visible characters.");
+    // ChatGPT audit 6 item 9: a zero-width character beside visible ones is refused as an invisible character
+    assert.equal(nameProblem("A​"), "The name has a line break, tab, invisible or text-direction character. Use plain letters, digits, spaces and punctuation.");
+    assert.equal(nameProblem("A"), "The name needs at least 2 visible characters.");
     plain(s);
   });
   test("legitimate Unicode passes: accents, CJK, Cyrillic, emoji with joiners", () => {

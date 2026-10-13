@@ -12,7 +12,7 @@ import { SeasonsTabs } from "../_components/SeasonsTabs";
 import { coinPageHref, sharedTickers } from "@/lib/burnticker/coinKey";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Scoreboards", description: "Burnticker keeps one scoreboard for each league and season, ranked by receipts. Rivalry pairs and Burn Derby brackets are listed below the scoreboards." };
+export const metadata: Metadata = { title: "Scoreboards", description: "Burnticker keeps one scoreboard for each league and season, ranked by receipts. Rivalry pairs and Burn Derby brackets are listed below the scoreboards.", alternates: { canonical: "/burnticker/rivalries" } }; // audit 7 item 27: a canonical URL
 
 /**
  * SCOREBOARDS (route /burnticker/rivalries; under the nav's "Seasons"; audit 4 BT-22: the nav label names /burnticker/leagues, whose

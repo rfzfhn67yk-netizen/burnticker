@@ -20,8 +20,8 @@ describe("field help", () => {
       for (const t of [h.what, h.does]) { const r = lintCopy(t, cfg); assert.ok(r.ok, `${id}: ${r.hits.map((x) => `${x.phrase} (${x.rule})`).join(", ")}`); }
     }
     assert.match(FIELD_HELP["share-recurring"].does, /pool is fees, not supply/); assert.match(FIELD_HELP["share-recurring"].does, /inflation goal/);
-    assert.match(FIELD_HELP["share-oneshot"].does, /burns down over four weeks either way/);
-    assert.match(FIELD_HELP.window.does, /retires and burns down over four weeks when the window ends/);
+    assert.match(FIELD_HELP["share-oneshot"].does, /goes to \$DEFICIT's burn, or burns down on this coin over four weeks if the result is voided/);
+    assert.match(FIELD_HELP.window.does, /the rest of the pool goes to \$DEFICIT's burn and the coin retires/);
   });
 
   for (const { f, src } of FILES) test(`${f}: every rendered input carries data-help and its FieldHelp`, () => {
@@ -37,7 +37,7 @@ describe("field help", () => {
   // checkboxes left the web UI (API-only; test/burntickerThreeDecisions.test.ts asserts they are gone). What remains still has help.
   test("the owner's list, after the cut: the pickers, elections, weather, Coin vs Coin and the review card's fields", () => {
     const all = FILES.map((x) => x.src).join("\n");
-    for (const id of ["search", "league-pick", "team-pick", "team-search", "game-search", "market-search", "outcome-search", "browse-filter", "nws-station", "nws-threshold", "race-type", "race-state", "derby-coin", "name", "ticker", "note"]) assert.ok(all.includes(`"${id}"`), `${id} is rendered`);
+    for (const id of ["search", "league-pick", "team-search", "game-search", "market-search", "outcome-search", "browse-filter", "nws-station", "nws-threshold", "race-type", "race-state", "derby-coin", "name", "ticker", "note"]) assert.ok(all.includes(`"${id}"`), `${id} is rendered`);
   });
 
   test("the component: a button with aria-describedby, a role=tooltip, hover / focus / tap, Escape and outside-tap close, label-safe click", () => {

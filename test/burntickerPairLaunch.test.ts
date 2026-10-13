@@ -4,7 +4,8 @@
 // signed in order, each mint transaction by its mint key and then the wallet, resumable at the failed step.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { Keypair, SystemProgram, type VersionedTransaction } from "@solana/web3.js";
+import { Keypair, SystemProgram, VersionedTransaction } from "@solana/web3.js";
+import { bytesToBase58 } from "@/lib/burnticker/signPlan";
 import { limiter } from "@/lib/burnticker/api/http";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
@@ -110,22 +111,23 @@ describe("signing the pair-curve set", () => {
   });
 
   test("in order: each mint transaction carries its mint signature before the wallet signs; confirmed one by one; tx 1 / tx 2 confirm the drafts", async () => {
-    const log: string[] = [];
+    const log: string[] = [], sent: string[] = [];
     const deps = {
       latestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 100 }),
       signTransaction: async (tx: VersionedTransaction) => { const signed = tx.signatures.filter((s) => s.some((b) => b !== 0)); log.push(`wallet sees ${signed.length} mint sig(s)`); tx.sign([creator]); return tx; },
       lookupTable: async () => null,
-      sendRaw: async (raw: Uint8Array) => { log.push(`send ${raw.length > 0}`); return `sig${log.filter((l) => l.startsWith("send")).length}`; },
+      // launch recovery 254: the plan confirms the submitted transaction's own signature (the RPC's answer is ignored); `sent` records it
+      sendRaw: async (raw: Uint8Array) => { log.push(`send ${raw.length > 0}`); sent.push(bytesToBase58(VersionedTransaction.deserialize(raw).signatures[0])); return `sig${log.filter((l) => l.startsWith("send")).length}`; },
       confirm: async (sig: string) => { log.push(`confirm ${sig}`); return { err: null }; },
     };
     const r = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, deps);
-    assert.deepEqual(r, { signatures: ["sig1", "sig2", "sig3"], failedAt: null, error: null });
-    assert.deepEqual(log, ["wallet sees 1 mint sig(s)", "send true", "confirm sig1", "wallet sees 1 mint sig(s)", "send true", "confirm sig2", "wallet sees 0 mint sig(s)", "send true", "confirm sig3"]);
+    assert.deepEqual(r, { signatures: sent, failedAt: null, error: null }); assert.equal(sent.length, 3);
+    assert.deepEqual(log, ["wallet sees 1 mint sig(s)", "send true", `confirm ${sent[0]}`, "wallet sees 1 mint sig(s)", "send true", `confirm ${sent[1]}`, "wallet sees 0 mint sig(s)", "send true", `confirm ${sent[2]}`]);
     // the half-signed refusal: a mint transaction without its key never reaches the wallet or the chain
     const none: string[] = [];
     const noKeys = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), null, { ...deps, signTransaction: async (tx) => { none.push("wallet"); return tx; }, sendRaw: async () => { none.push("send"); return "x"; } });
     assert.deepEqual([noKeys.failedAt, noKeys.signatures, none], [0, [], []]);
-    assert.deepEqual(launchedSignatures(pc, r.signatures), [{ mint: pc.mints.a, launchTx: "sig1" }, { mint: pc.mints.b, launchTx: "sig2" }], "tx 1 confirms A, tx 2 confirms B — never init_pair");
+    assert.deepEqual(launchedSignatures(pc, r.signatures), [{ mint: pc.mints.a, launchTx: sent[0] }, { mint: pc.mints.b, launchTx: sent[1] }], "tx 1 confirms A, tx 2 confirms B — never init_pair");
     const t1 = buildPairCurveTx(pc.transactions[0], creator.publicKey.toBase58(), keys, "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi");
     const at = t1.message.staticAccountKeys.findIndex((k) => k.equals(mintA.publicKey));
     assert.ok(at > 0 && t1.signatures[at].length === 64 && t1.signatures[at].some((b) => b !== 0), "mint A signed its transaction");
@@ -133,20 +135,20 @@ describe("signing the pair-curve set", () => {
   });
 
   test("a refusal in the wallet stops the run at that step; pressing again resumes there and never re-sends a confirmed step", async () => {
-    let refuse = true; const sent: number[] = [];
+    let refuse = true; const sent: number[] = [], real: string[] = [];
     const deps = {
       latestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 1 }),
       signTransaction: async (tx: VersionedTransaction) => { if (refuse && tx.message.staticAccountKeys.some((k) => k.equals(mintB.publicKey))) throw new Error("User rejected the request."); tx.sign([creator]); return tx; },
       lookupTable: async () => null,
-      sendRaw: async () => { sent.push(sent.length + 1); return `s${sent.length}`; },
+      sendRaw: async (raw: Uint8Array) => { sent.push(sent.length + 1); real.push(bytesToBase58(VersionedTransaction.deserialize(raw).signatures[0])); return `s${sent.length}`; },
       confirm: async () => ({ err: null }),
     };
     const first = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, deps);
-    assert.deepEqual([first.signatures, first.failedAt], [["s1"], 1]);
+    assert.deepEqual([first.signatures, first.failedAt], [[real[0]], 1], "launch recovery 254: the submitted transaction's own signature");
     assert.equal(first.error, "Step 2 of 3 was not signed in the wallet");
     refuse = false;
     const again = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, deps, undefined, first.signatures);
-    assert.deepEqual(again.signatures, ["s1", "s2", "s3"]); assert.deepEqual(sent, [1, 2, 3], "tx 1 sent once");
+    assert.deepEqual(again.signatures, real); assert.deepEqual(sent, [1, 2, 3], "tx 1 sent once");
     const chainErr = await signAndSendPairCurve(pc, creator.publicKey.toBase58(), keys, { ...deps, confirm: async () => ({ err: { InstructionError: [0, "Custom"] } }) });
     assert.match(chainErr.error!, /Step 1 of 3 failed because the chain rejected it/);
   });

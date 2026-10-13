@@ -9,7 +9,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { limiter } from "@/lib/burnticker/api/http";
-import { abandonedSentence, feesPaidLamports, planAbandoned, storedStepStates, LAMPORTS_PER_SIGNATURE, browserPlanStorage, listStoredLaunches, memoryPlanStorage, recoverStoredLaunch, storedLaunchSentence, confirmPlan, failureSentence, launchlabPlan, loadPlanRecord, planConfirmations, planProblems, planStepStates, planStorageKey, reconcilePending, recordFailureSentence, signAndSendPlan, stepStatusText, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
+import { abandonedSentence, bytesToBase58, feesPaidLamports, planAbandoned, storedStepStates, LAMPORTS_PER_SIGNATURE, browserPlanStorage, listStoredLaunches, memoryPlanStorage, recoverStoredLaunch, storedLaunchSentence, confirmPlan, failureSentence, launchlabPlan, loadPlanRecord, planConfirmations, planProblems, planStepStates, planStorageKey, reconcilePending, recordFailureSentence, signAndSendPlan, stepStatusText, type LaunchlabBundleLike, type SignPlan } from "@/lib/burnticker/signPlan";
 import { launchedErrorMessage } from "@/lib/burnticker/pairLaunchClient";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { gameSeries, teamSeries } from "@/lib/burnticker/sources/espn";
@@ -42,7 +42,10 @@ const PATHS: [string, string, unknown][] = [
 
 const fakeDeps = (log: string[], over: Partial<{ refuseAt: number; chainErrAt: number }> = {}) => {
   let n = 0;
+  // launch recovery 254: the plan keeps the submitted transaction's own signature; `sent` records it (the RPC's answer is not used)
+  const sent: string[] = [];
   return {
+    sent,
     latestBlockhash: async () => ({ blockhash: BH, lastValidBlockHeight: 1 }),
     signTransaction: async (tx: VersionedTransaction) => {
       const pre = tx.signatures.filter((s) => s.some((b) => b !== 0)).length;
@@ -50,7 +53,7 @@ const fakeDeps = (log: string[], over: Partial<{ refuseAt: number; chainErrAt: n
       log.push(`wallet signs (${pre} key signature(s) already on it)`); tx.sign([creatorKp]); return tx;
     },
     lookupTable: async () => null,
-    sendRaw: async () => { n++; log.push(`send ${n}`); return `sig${n}`; },
+    sendRaw: async (raw: Uint8Array) => { n++; log.push(`send ${n}`); sent.push(bytesToBase58(VersionedTransaction.deserialize(raw).signatures[0])); return `sig${n}`; },
     confirm: async () => ({ err: over.chainErrAt === n ? { InstructionError: [0, "Custom"] } : null }),
   };
 };
@@ -108,8 +111,9 @@ describe("failures: never half-signed, resume at the failed step, plain sentence
   test("a refusal in the wallet stops at that step; the next press resumes there; a chain error says so", async () => {
     const plan = launchlabPlan([bundle()]);
     const log: string[] = [];
-    const first = await signAndSendPlan(plan, CREATOR, fakeDeps(log, { refuseAt: 1 }));
-    assert.deepEqual([first.signatures, first.failedAt, first.error], [["sig1"], 1, "Step 2 of 2 was not signed in the wallet"]);
+    const d1 = fakeDeps(log, { refuseAt: 1 });
+    const first = await signAndSendPlan(plan, CREATOR, d1);
+    assert.deepEqual([first.signatures, first.failedAt, first.error], [[d1.sent[0]], 1, "Step 2 of 2 was not signed in the wallet"]);
     const again = await signAndSendPlan(plan, CREATOR, fakeDeps(log), undefined, first.signatures);
     assert.equal(again.signatures.length, 2); assert.equal(log.filter((l) => l.startsWith("send")).length, 2, "step 1 sent once");
     const chain = await signAndSendPlan(plan, CREATOR, fakeDeps([], { chainErrAt: 1 }));
@@ -203,8 +207,9 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     const one = chain({ confirmThrows: true, store, height: 50 });
     const first = await signAndSendPlan(plan, CREATOR, one.deps);
     assert.equal(first.state, "sent", "absent but still within its blockhash: unknown, not rebuilt");
+    // launch recovery 255: expiry plus an empty status is proof only with the history read and the create's accounts absent
     const two = chain({ store, height: 101 });
-    const again = await signAndSendPlan(plan, CREATOR, two.deps, undefined, first.signatures);
+    const again = await signAndSendPlan(plan, CREATOR, { ...two.deps, getTransaction: async () => null, expectedAccounts: async () => "absent" as const }, undefined, first.signatures);
     assert.equal(again.error, null);
     assert.equal(two.sent.length, 2, "a fresh create and the first buy");
     assert.notEqual(two.sent[0], one.sent[0], "the create was rebuilt with a fresh blockhash");
@@ -293,13 +298,13 @@ describe("an ambiguous confirmation keeps the sent transaction and recovers it (
     assert.equal(done.get(key), null); assert.deepEqual(listStoredLaunches(done), []);
     // provably expired and absent: failed, and the sentence says start again from the review (no keys to rebuild with)
     const exp = memoryPlanStorage(); exp.set(key, before.get(key)!);
-    const x = await recoverStoredLaunch(exp, listStoredLaunches(exp)[0], { getSignatureStatus: async () => null, getBlockHeight: async () => 101 }, fetchFn, () => "refused");
+    const x = await recoverStoredLaunch(exp, listStoredLaunches(exp)[0], { getSignatureStatus: async () => null, getBlockHeight: async () => 101, getTransaction: async () => null, expectedAccounts: async () => "absent" }, fetchFn, () => "refused");
     assert.match(x.text, /did not take effect .* start the launch again from the review/);
     // the launch page mounts the notice; it reads storage after mount and never signs or sends
     const src = fs.readFileSync(path.join(import.meta.dirname, "..", "src/app/burnticker/launch/LaunchRecovery.tsx"), "utf8");
     assert.match(fs.readFileSync(path.join(import.meta.dirname, "..", "src/app/burnticker/launch/page.tsx"), "utf8"), /<LaunchRecovery \/>/);
     assert.doesNotMatch(src, /sendRawTransaction|signTransaction/);
-    assert.match(src, /useEffect\(\(\) => \{ setItems\(listStoredLaunches\(storage\)\); \}/);
+    assert.match(src, /useEffect\(\(\) => \{ setView\(\{ items: listStoredLaunches\(storage\), finished: \[\] \}\);/);
   });
 
   test("the browser storage wraps sessionStorage and survives its absence", () => {
@@ -350,21 +355,24 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
   test("create A confirmed, then the run stops; after the reload the keys are gone: nothing reaches the wallet or the chain, every remaining step is abandoned", async () => {
     const coins = twoCoins(), store = memoryPlanStorage();
     const plan = launchlabPlan(coins);
-    const first = await signAndSendPlan(plan, CREATOR, { ...fakeDeps([], { refuseAt: 1 }), storage: store });
-    assert.deepEqual([first.signatures, first.failedAt], [["sig1"], 1]);
+    const d1 = fakeDeps([], { refuseAt: 1 });
+    const first = await signAndSendPlan(plan, CREATOR, { ...d1, storage: store });
+    const sig1 = d1.sent[0];
+    assert.deepEqual([first.signatures, first.failedAt], [[sig1], 1]);
     // the page reloads: the bundles come back without their keys (never stored); the record is the only memory
     const reloaded = launchlabPlan(coins.map((c) => ({ ...c, mintSecretKey: null })));
     const rec = loadPlanRecord(store, reloaded)!;
-    assert.deepEqual(rec.paid, [{ step: 0, signature: "sig1", lamports: 2 * LAMPORTS_PER_SIGNATURE }], "create A paid two signatures' fee");
+    assert.deepEqual(rec.paid, [{ step: 0, signature: sig1, lamports: 2 * LAMPORTS_PER_SIGNATURE }], "create A paid two signatures' fee");
     assert.equal(planAbandoned(reloaded, rec), true);
     const log: string[] = []; let sends = 0;
     const d = fakeDeps(log);
     const r = await signAndSendPlan(reloaded, CREATOR, { ...d, sendRaw: async () => { sends++; return "x"; }, storage: store });
     assert.deepEqual([log, sends], [[], 0], "no step built: the wallet saw nothing, nothing was sent — no duplicate create");
-    assert.deepEqual([r.failedAt, r.state, r.signatures], [1, "abandoned", ["sig1"]]);
+    assert.deepEqual([r.failedAt, r.state, r.signatures], [1, "abandoned", [sig1]]);
     assert.match(r.error!, /1 of the 4 steps is confirmed on chain\. Steps 2–4 of 4 are abandoned because the mint key was lost on reload/);
-    assert.match(r.error!, /Nothing from this plan is live until the create step confirms/);
-    assert.match(r.error!, /The fee already spent is 0\.00001 SOL/);
+    // launch audit 232: per coin — $AYE's create confirmed, so it exists on chain; $BEE was never created
+    assert.match(r.error!, /\$AYE was created on chain, but it is not recorded from this plan\. \$BEE was not created\./);
+    assert.match(r.error!, /The network transaction fees already paid come to 0\.00001 SOL/);
     assert.match(r.error!, /The only safe thing to do is to start the launch again from the review, as a new plan\./);
     assert.equal(failureSentence(r, 4), r.error, "the card shows that sentence as is");
     assert.deepEqual(planStepStates(4, r.signatures, r), ["confirmed", "abandoned", "abandoned", "abandoned"]);
@@ -374,7 +382,7 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
     const listed = listStoredLaunches(store);
     assert.equal(listed.length, 1);
     assert.deepEqual(storedStepStates(listed[0].rec), ["confirmed", "abandoned", "abandoned", "abandoned"]);
-    assert.match(storedLaunchSentence(listed[0]), /For \$AYE and \$BEE, 1 of the 4 steps is confirmed on chain\. Steps 2–4 of 4 are abandoned.*The fee already spent is 0\.00001 SOL/);
+    assert.match(storedLaunchSentence(listed[0]), /For \$AYE and \$BEE, 1 of the 4 steps is confirmed on chain\. Steps 2–4 of 4 are abandoned.*The network transaction fees already paid come to 0\.00001 SOL/);
   });
 
   test("a step sent with its outcome unknown is pending reconcile, not abandoned; a plan with nothing on chain is not abandoned (just not signable)", async () => {
@@ -396,7 +404,7 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
     assert.equal(feesPaidLamports(rec), 2 * LAMPORTS_PER_SIGNATURE + LAMPORTS_PER_SIGNATURE, "the confirmed create (2 signatures) and the rejected step (1)");
     const s = abandonedSentence({ ...rec, confirms: plan.confirms, steps: 2 });
     assert.match(s, /Its create steps are confirmed, but the launch is not recorded from this plan/);
-    assert.match(s, /The fee already spent is 0\.000015 SOL/);
+    assert.match(s, /The network transaction fees already paid come to 0\.000015 SOL/);
     assert.ok(lintCopy(s, cfg).ok, s);
   });
 
@@ -404,7 +412,7 @@ describe("an abandoned plan after a reload (F4 residual): confirmed / pending re
     const card = read("src/app/burnticker/launch/SignCard.tsx");
     assert.match(card, /st === "abandoned" && <span[^>]*>· \{stepStatusText\("abandoned"\)\}/);
     assert.match(card, /stopped\?\.state === "abandoned" \? \(\s*<button[^>]*data-decision="new-plan"[^>]*onClick=\{startNewPlan\}>Start a new plan<\/button>/);
-    assert.match(card, /const startNewPlan = \(\) => \{ storage\.remove\(planStorageKey\(plan\)\); window\.location\.assign\(window\.location\.pathname\); \}/);
+    assert.match(card, /const startNewPlan = \(\) => \{ archivePlanRecord\(storage, planStorageKey\(plan\)\); window\.location\.assign\(window\.location\.pathname\); \}/);
     assert.match(card, /planAbandoned\(plan, stored\)/);
     assert.ok(!/odds|price|chance/i.test(card.replace(/\/\*[\s\S]*?\*\//g, "")));
   });

@@ -186,3 +186,8 @@ second mint impersonating a community). The score stays a function of the publis
 - Interest-rate feeds have no keyless independent cross-read: listed as primaries without one (the preflight refuses a rate rule).
 - The wizard tile launches coin-vs-coin pairs; single-asset rules and bracket fan coins launch through the API (`POST /v1/launch/bundle`)
   and `scripts/burnticker-derby.mts fan-rule`.
+
+## Weekly comparisons
+
+Weekly comparisons are available through the API only (owner decision 2026-10-12). The launch page sets up daily windows and a 30-day
+run; a weekly window (Monday 00:00 UTC to the next Monday) is a `derby` rule sent to `POST /api/burnticker/v1/launch/bundle`.

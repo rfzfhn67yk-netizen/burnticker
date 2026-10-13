@@ -1,3 +1,4 @@
+import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { platform } from "@/lib/burnticker/server";
@@ -9,7 +10,7 @@ import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
 import { SeasonsTabs } from "../_components/SeasonsTabs";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Burn Derby", description: "Coin vs Coin pairs and brackets. In a pair, fees from both coins burn the coin whose rule the day's result fires. The receipts are the scoreboard." };
+export const metadata: Metadata = { title: "Burn Derby", description: "Coin vs Coin pairs and brackets. In a pair, fees from both coins burn the coin whose rule the day's result fires. The receipts are the scoreboard.", alternates: { canonical: "/burnticker/derby" } }; // audit 7 item 27: a canonical URL
 
 /**
  * BURN DERBY — THE INDEX (2026-10-10): open coin-vs-coin pairs (score as a receipt tally, the last days as a strip, the season end), active
@@ -56,7 +57,7 @@ export default async function DerbyIndex({ searchParams }: { searchParams: Promi
       <header className="space-y-2">
         <SeasonsTabs current="/burnticker/derby" />
         <h1 className="text-2xl font-semibold">Burn Derby</h1>
-        <p className="text-neutral-400 text-sm max-w-3xl">Each pair compares two coins people already hold, once every UTC day or once every week. The values come from Pyth&apos;s feeds or from a pool&apos;s time-weighted average. A second data publisher checks each value. That second source is a check on the data. It is not a second signer: one signer, run by the operator, signs every reading. A tie burns neither coin. The receipts are the scoreboard.</p>
+        <p className="text-neutral-400 text-sm max-w-3xl">Each pair compares two coins people already hold, once every UTC day. {edgeCase(62)} The values come from Pyth&apos;s feeds or from a pool&apos;s time-weighted average. A second data publisher checks each value. That second source is a check on the data. It is not a second signer: one signer, run by the operator, signs every reading. A tie burns neither coin. The receipts are the scoreboard.</p>
         <p className="text-amber-200 text-sm max-w-3xl" aria-label="pair rule">{PAIR_BURN_SENTENCE}</p>
         <p className="text-neutral-500 text-xs">{NO_WALLET_LINE}</p>
         {launchOpen

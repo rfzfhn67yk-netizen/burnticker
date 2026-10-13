@@ -66,7 +66,7 @@ describe("items 4 and 8: host diagnostics behind a disclosure; missing automatio
       const s = read(f); assert.doesNotMatch(s, /On this host: \$\{|On this host: \{/, f); assert.match(s, /<HostDiagnostics stubs=\{/, f);
     }
     const c = read("src/app/burnticker/_components/HostDiagnostics.tsx");
-    assert.match(c, /<details[^>]*data-host-diagnostics>/); assert.match(c, /operator details<\/summary>/);
+    assert.match(c, /<details data-host-diagnostics>/); assert.match(c, /HOST_NOTES_SUMMARY/); assert.doesNotMatch(c, /Some live data is not connected/);
     const server = read("src/lib/burnticker/server.ts");
     assert.doesNotMatch(server, /"burn_receipts program: not deployed/, "a host without a program id does not claim the program is not deployed");
     assert.match(server, /no program id wired on this host/);

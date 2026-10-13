@@ -228,12 +228,12 @@ html:not(.prelaunch) #prelaunch{display:none}
 :root[data-theme="light"]{--sh-bg:#f2eee4;--sh-counter:#e9e4d7;--sh-line:#d3ccbc;--sh-ink:#1b1916;--sh-dim:#4d473f;--sh-paper:#fbf9f4;--sh-stamp:#5b3fa3;--sh-scorch:#8a5a24}
 .sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
-.sh-header{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--sh-bg) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
+.sh-header{position:sticky;top:0;z-index:40;background:var(--sh-bg);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
 .sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
 .sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
 .sh-mark{width:34px;height:34px;border-radius:50%;display:block}
 .sh-word{font:700 1.02rem/1 var(--sh-mono);letter-spacing:.16em}
-.sh-nav{display:none;align-items:center;gap:2px}
+.sh-nav{display:none;align-items:center;gap:6px;margin-left:12px} /* private review 8: room between the wordmark, the links and Learn at 1440 */
 .sh-nav a,.sh-learn>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
 .sh-learn>summary::-webkit-details-marker{display:none}
 .sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
@@ -278,16 +278,18 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 @media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
 @media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}}
 @media (max-width:899px){
-  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
-  .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:color-mix(in srgb,var(--sh-bg) 94%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
-  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;font:700 10px/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
+  body{padding-bottom:calc(62px + env(safe-area-inset-bottom) + 12px)}
+  .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
+  .sh-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:60px;min-width:44px;font:700 12px/1 var(--sh-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none}
   .sh-tabbar a span:first-child{display:block;line-height:0}
   .sh-icon{width:20px;height:20px;display:block}
   .sh-tabbar a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 2px 0 var(--sh-stamp)}
 }
-@media (max-width:899px){.sh-ticker{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}.sh-ticker.is-end{-webkit-mask-image:none;mask-image:none}}
+.sh-ticker.more-end{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 40px),transparent)}
+.sh-ticker.more-start{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px);mask-image:linear-gradient(90deg,transparent,#000 40px)}
+.sh-ticker.more-start.more-end{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
 @media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
-@media (max-width:400px){.sh-word{display:none}}
+@media (max-width:479px){.sh-word{display:none}} /* audit 7 item 18: the wordmark returns only where the header tools fit beside it (no overflow at 401 to 479 px) */
 </style>
 <!-- site-shell:css:end -->
 </head>
@@ -379,7 +381,9 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
     <div class="ready ready-top" id="readiness" data-readiness="not-launched" aria-live="polite">
       <p class="rk" id="readyStep">Step 0 of 6 toward a first burn</p>
       <p class="rl" id="readyLabel">Not launched</p>
-      <p class="rd" id="readyDetail">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once buyers have put in its raise, which this page reads from the coin's own pool after launch, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p>
+      <!-- private review 8: one short sentence first; the full path stays one tap away -->
+      <p class="rd" id="readyDetail">Burns can begin only after the coin graduates, its pool is registered, and the Treasury reports a qualifying rise in debt.</p>
+      <details class="rd-more"><summary>How the first burn happens</summary><p class="rd">Nothing burns until the curve fills and the debt rises. $DEFICIT first trades on its LaunchLab curve. The curve graduates once buyers have put in its raise, which this page reads from the coin's own pool after launch, and a seed gift to the burn pool does not count toward that. Next, its pool has to be registered and verified. After that, only a Treasury reading with at least one full $1B unit can start a burn. <a href="https://github.com/rfzfhn67yk-netizen/burnticker/blob/main/docs/burnticker/FIRST-BURN-PATH.md">The full path to a first burn</a>.</p></details>
     </div>
     <!-- the queued-units counter (website-14, LAUNCHPAD-PATH §73): filled in from status.json and burns.json by deficitQueueCore below -->
     <div class="queue" id="queue" data-queue="loading" aria-live="polite">
@@ -640,7 +644,7 @@ burn  = every token the swap delivered</pre>
     // ONE readiness state (src/lib/burnticker/readiness.ts), derived by the keeper into status.json; the static default above is "Not launched".
     // website-15 item 6: the same six steps as the app's progress strip (src/lib/burnticker/progress.ts PROGRESS_DONE), never a seven-step count
     var READY_DONE = { "not-launched": 0, "on-curve": 2, "awaiting-registration": 3, "awaiting-event": 4, "below-floor": 4, deferred: 5, burned: 6 };
-    if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); $("readyStep").textContent = "Step " + (READY_DONE[s.readiness.state] != null ? READY_DONE[s.readiness.state] : "?") + " of 6 toward a first burn"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
+    if (s.readiness && s.readiness.label) { $("readiness").setAttribute("data-readiness", s.readiness.state); var more = document.querySelector(".rd-more"); if (more) more.hidden = s.readiness.state !== "not-launched"; $("readyStep").textContent = "Step " + (READY_DONE[s.readiness.state] != null ? READY_DONE[s.readiness.state] : "?") + " of 6 toward a first burn"; $("readyLabel").textContent = s.readiness.label; $("readyDetail").textContent = s.readiness.detail; }
     var isSample = !!s.sample || s.cluster === "replay";
     if (isSample || (s.cluster && s.cluster !== "mainnet-beta")) {
       var b = $("banner"); b.classList.add("show");
@@ -1072,12 +1076,12 @@ window.deficitQueueCore = function deficitQueueCore(status, burnsFile, now) {
 })();
 (function () {
   // THE ACTIVITY LINE (website-14): burns, signed readings, graduations and pool registrations from GET /api/burnticker/home, each
-  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. On phones the strip
-  // scrolls sideways, so its right edge fades until the end is reached.
+  // labelled with its kind and linking its own evidence; never a placeholder row. No events: one line saying so. When the strip is wider
+  // than the screen it scrolls sideways, and the edge that still has more fades (ChatGPT audit 6 item 24, the app's useScrollEdges).
   var box = document.querySelector("[data-activity]"); if (!box || !window.fetch) return;
   var KIND = {"burn":"Burn","reading":"Reading","graduation":"Graduated","pool":"Pool registered","created":"Created","reserved":"Mint reserved"};
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
-  function edge() { box.classList.toggle("is-end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 4); }
+  function edge() { box.classList.toggle("more-start", box.scrollLeft > 4); box.classList.toggle("more-end", box.scrollLeft + box.clientWidth < box.scrollWidth - 4); }
   box.addEventListener("scroll", edge); window.addEventListener("resize", edge);
   window.btHome.then(function (j) {
     box.textContent = "";

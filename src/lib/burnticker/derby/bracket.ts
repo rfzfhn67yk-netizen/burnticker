@@ -1,5 +1,5 @@
 import { DEFAULT_ON_END, RULE_BOUNDS } from "@/lib/burnticker/rules";
-import { addDays, canonical, DERBY_BRACKET_SIZES, DERBY_ROUND_DAYS, derbySpecProblems, TOURNAMENT_ID_RE, underlyingKey, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { addDays, canonical, DERBY_BRACKET_SIZES, DERBY_ROUND_DAYS, derbySpecProblems, sameUnderlying, TOURNAMENT_ID_RE, underlyingKey, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 import { cmpDec, mulDec, subDec } from "@/lib/burnticker/derby/measure";
 import { fromScaled, toScaled } from "@/lib/burnticker/units";
 
@@ -45,7 +45,8 @@ export function tournamentProblems(raw: unknown): string[] {
       for (const x of derbySpecProblems({ selector: "bracket", tournamentId: "probe", tournamentSha: "0".repeat(64), slot: 0, underlying: u })) p.push(`underlyings[${i}]: ${x.replace(/^derby\.underlying\.?/, "")}`);
     });
     const keys = t.underlyings.map((u) => (u && typeof u === "object" ? underlyingKey(u) : String(u)));
-    if (new Set(keys).size !== keys.length) p.push("underlyings must be distinct coins");
+    const objs = t.underlyings.filter((u): u is DerbyUnderlying => !!u && typeof u === "object");
+    if (new Set(keys).size !== keys.length || objs.some((u, i) => objs.slice(i + 1).some((v) => sameUnderlying(u, v)))) p.push("underlyings must be distinct coins");
     const syms = t.underlyings.map((u) => u?.symbol);
     if (new Set(syms).size !== syms.length) p.push("underlyings need distinct symbols");
   }

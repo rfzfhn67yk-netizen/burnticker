@@ -1,3 +1,4 @@
+import { safeRegexTest } from "@/lib/burnticker/safeRegex";
 import { POLY_EVENT_SERIES_RE, POLY_MARKET_RE, POLY_TAG_SERIES_RE, type BurnRule } from "@/lib/burnticker/rules";
 import type { EventResult, SettledEvent } from "@/lib/burnticker/units";
 import type { FetchLike, ImpliedChance, OracleAdapter, ResolvedSelector, SeriesSummary } from "@/lib/burnticker/oracle/types";
@@ -168,7 +169,7 @@ export function polySelectorMatches(rule: Pick<BurnRule, "oracle" | "series" | "
     if (s.type && m.sportsMarketType !== s.type) return false;
     if (s.glob && !(m.eventSlug && globMatch(s.glob, m.eventSlug))) return false;
   }
-  if (rule.filter.titleRegex && !new RegExp(rule.filter.titleRegex).test(m.question)) return false;
+  if (rule.filter.titleRegex && !safeRegexTest(rule.filter.titleRegex, m.question)) return false;   // audit 6 item 8: a refused pattern never runs
   return true;
 }
 

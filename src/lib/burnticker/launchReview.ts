@@ -7,7 +7,15 @@ import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS 
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
-import { describeRule, type DescribeCtx } from "@/lib/burnticker/describe";
+import { describeRule, endText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
+import { reviewProjection, type Projection } from "@/lib/burnticker/projection";
+import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
+import type { LookalikeExisting } from "@/lib/burnticker/lookalike";
+import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
+import { linksProblems, withCreatorText } from "@/lib/burnticker/creatorProfile";
+import { parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
+import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule, type ScheduledGame } from "@/lib/burnticker/timing";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
 import { nameProblem } from "@/lib/burnticker/launchFields";
@@ -16,8 +24,8 @@ import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, graduationExplainer } from "@/lib/burnticker/guidedLaunch";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
-import { RESERVED_REFUSAL, isReserved, loadReserved } from "@/lib/burnticker/reservedNames";
-import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
+import { loadReserved } from "@/lib/burnticker/reservedNames";
+import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, decimalSolToLamports, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
 
 /**
  * THE READ-ONLY REVIEW PAYLOAD (ChatGPT launch audit 5, L02 / L06, 2026-10-11): everything a creator should see before connecting a
@@ -81,6 +89,21 @@ export interface LaunchReview {
   rules: { side: "A" | "B"; ticker: string; name: string; step: number; text: string; sha256: string; derived: boolean }[];
   /** website-19 (walkthrough snag 16): the dispute-window sentence on every one-market Polymarket review, whichever path built it. */
   dispute: string | null;
+  /**
+   * ChatGPT audit 6 item 3: how the rule ends, the two ends stated apart (describe.ts endText): `result` when it ends on a result (the rest
+   * goes to the sink pinned at creation), `void` when it is voided or the season is cancelled (the wind-down on this coin), or null.
+   */
+  end: { kind: string; result: string; void: string | null };
+  /**
+   * ChatGPT audit 6 item 11: the plain projection from the source's saved sample at 1, 2 and 5% side by side (projection.ts, through the
+   * keeper's own unit engine and burnMath's compounding), or the reason there is none.
+   */
+  projection: Projection;
+  /**
+   * ChatGPT audit 7 items 7 and 11: when a one-time result is due (the game the rule names, or the market's end), how many days away, the
+   * graduation warning when that is within dueWarningDays, and what an unplayed game does. Null for a rule that repeats.
+   */
+  timing: { dueAt: string | null; dueLabel: string | null; dueWithinDays: number | null; warning: string | null; unplayed: string | null } | null;
 }
 
 export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
@@ -96,7 +119,7 @@ export const PREREQUISITE_STATES = [
   "Queued: a result is due, and the burn waits for the next run of the program.",
   "Delayed: the program held the burn, for example because the pool's price moved too far. The SOL stays in the burn pool.",
   "Below the floor: the amount due was smaller than the minimum spend fixed at launch, so nothing was bought.",
-  `Capped: until the program is audited, each burn pool spends from at most ${PRE_AUDIT_POOL_CAP_SOL} SOL. Anything above that waits.`,
+  `Capped: each burn pool spends from at most the burn-pool cap, ${PRE_AUDIT_POOL_CAP_SOL} SOL unless the platform's multisig raises it through a public 48-hour wait. Anything above that waits until the cap rises or ends.`,
 ];
 const solOf = (lamports: bigint): string => (Number(lamports) / 1e9).toLocaleString("en-US", { maximumFractionDigits: 3 });
 /**
@@ -146,9 +169,18 @@ export function graduationLines(cluster: string): string[] {
   return graduationExplainer({ raises: RAISE_PRESETS_SOL, curveFeePct: bpsPct(CURVE_FEES.totalBps), curveBurnPoolPct: bpsPct(burn), poolFeePct: bpsPct(postGraduationFeesFor(cluster).totalBps) });
 }
 
-const endsLine = (windowSentence: string, perpetual: boolean): string => (perpetual ? "This coin has no end date and does not retire." : `${windowSentence} ${WIND_DOWN_LINE}`.trim());
+/** ChatGPT audit 6 item 3: the end line is endText's, after the window sentence with its own end clause taken out (it said it twice). */
+const endsLine = (windowSentence: string, end: ReturnType<typeof endText>): string => {
+  if (end.kind === "perpetual") return end.result;
+  const window = windowSentence.split(/(?<=\.)\s+/).filter((x) => !/burns \$DEFICIT|burns the winning coin|burns down|retires|voided or the season is cancelled|win the championship|If they do not/.test(x)).join(" ");
+  return `${window} ${end.line}`.trim();
+};
 
-export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"] } = {}): { review: LaunchReview } | { problems: string[] } {
+export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<string, string | undefined>>; root?: string; /** website-19: the reserved names (tests pass their own) */ reserved?: ReadonlySet<string>; seriesTitle?: string | null; timeLockSecs?: number | null; /** the server's own read of a one-market Polymarket rule (coinText.ts statedCtx), so the review's description matches the pinned one */ stated?: DescribeCtx["stated"];
+  /** audit 6 item 8: whether this host serves Kalshi (the platform's flag; default from the env) */ kalshiEnabled?: boolean;
+  /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
+  /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
+  /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null } = {}): { review: LaunchReview } | { problems: string[] } {
   const env = o.env ?? process.env;
   const cluster = hostCluster(env);
   const problems: string[] = [];
@@ -158,7 +190,13 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   if (eventLevelRule(raw as BurnRule)) return { problems: [EVENT_LEVEL_REFUSAL] };
   let locked: LockedRule;
   try { locked = lockRule(raw); } catch (e) { return { problems: [(e as Error).message] }; }
+  const now = o.now ?? Date.now();
+  // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
+  for (const x of ruleRefusals(locked, { kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now })) problems.push(x.message);
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
+  // audit 6 test A: a registered pair locks side A's rule with a pair clause (handlers.ts buildPairBundles); a source that cannot pair
+  // (an ESPN team, a feed) is refused there, so the review says so here
+  if (pair) { try { lockRule({ ...(raw as object), pair: { pairId: "review-pair", side: "A", counterpartMint: null } }); } catch (e) { problems.push((e as Error).message.replace(/^rule: /, "")); } }
   const second = pair ?? (body.companion && typeof body.companion === "object" ? body.companion : null);
   const ticker = String(body.ticker ?? "").toUpperCase(), name = String(body.name ?? "");
   const note = typeof body.note === "string" ? body.note.trim() : "";
@@ -171,11 +209,15 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   }
   if (sides.length > 1 && sides[0].ticker === sides[1].ticker) problems.push("The two coins need different tickers.");
   if (sides.length > 1 && sides[0].name.trim() && sides[0].name.toUpperCase().replace(/[^A-Z0-9]/g, "") === sides[1].name.toUpperCase().replace(/[^A-Z0-9]/g, "")) problems.push("The two coins need different names.");
-  // website-19 (owner, 2026-10-12): the platform's reserved names, for the ticker and the name of every side
+  // website-19 (owner, 2026-10-12): the platform's reserved names, for the ticker and the name of every side; audit 6 items 8 and 9: the
+  // same identity refusals the bundle route makes (refuse-list name patterns, major coins' tickers, control characters, lookalikes)
   let reserved: ReadonlySet<string> = new Set();
   try { reserved = o.reserved ?? loadReserved(); } catch { /* an unreadable list refuses nothing here; the launch route reads it again */ }
-  for (const s of sides) if (isReserved(s.ticker, reserved) || isReserved(s.name, reserved)) problems.push(`${sides.length > 1 ? `Coin ${s.side}. ` : ""}${RESERVED_REFUSAL}`);
+  const descOf = (i: number) => { const d = i === 0 ? (body as { creatorDescription?: unknown }).creatorDescription : second?.creatorDescription; return typeof d === "string" ? d : ""; };
+  sides.forEach((s, i) => { for (const x of identityRefusals({ ticker: s.ticker, name: s.name, description: descOf(i), note: i === 0 ? note : "" }, { reserved, existing: o.existing ?? null, rule: i === 0 ? locked.rule : null })) problems.push(`${sides.length > 1 ? `Coin ${s.side}. ` : ""}${x.message}`); });
   if (note.length > NOTE_MAX) problems.push(`The note can be at most ${NOTE_MAX} characters.`);
+  // audit 7 item 3: the creator's links, checked exactly as the bundle checks them (creatorProfile.ts linksProblems)
+  if ((body as { links?: unknown }).links !== undefined) problems.push(...linksProblems((body as { links?: unknown }).links));
   // website-15 item 13: the creator's own description passes the same creator lint and fits 280 characters
   const creatorText = typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription).trim() : "";
   if (creatorText.length > DESCRIPTION_MAX) problems.push(`The description can be at most ${DESCRIPTION_MAX} characters.`);
@@ -191,8 +233,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   if (cr && typeof cr === "object" && !Array.isArray(cr)) {
     try { companionLocked = lockRule((cr as { onEnd?: unknown }).onEnd === undefined ? { ...(cr as object), onEnd: { ...DEFAULT_ON_END } } : cr); } catch (e) { problems.push(`Coin B. ${(e as Error).message}`); }
   }
+  // audit 6 item 8: the bundle route takes any share inside the rule's bounds, so a share off the web launcher's preset row is a warning
   const pp = presetProblem(locked.rule);
-  if (pp) problems.push(pp);
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
   const raiseSol = body.raiseSol === undefined || body.raiseSol === null ? DEFAULT_RAISE_SOL : String(body.raiseSol);
   const rp = raiseProblem(raiseSol, cluster);
@@ -206,13 +248,20 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const typeReason = twoCoinBlocked ? `${PAIRS_UNAVAILABLE_LINE} ${model.types.pairs.reason ?? ""}`.trim() : ta?.reason ?? (type ? null : "The web launcher does not offer this kind of rule.");
   // Codex F1: the venue the bundle route selects (handlers.ts prepareLaunch: a registered pair goes to pair_curve when the flag is on)
   const venue: "launchlab" | "pair-curve" = pair && pairCurveEnabled(env) ? "pair-curve" : "launchlab";
-  const ctx = serverDescribeCtx(locked.rule, body.descCtx, { seriesTitle: o.seriesTitle ?? null, stated: o.stated ?? null });
+  // audit 6 item 26: the source's own title and unit (as the bundle route reads them), so no text falls back to the raw series id
+  const src = sourceText(locked.rule, now);
+  const ctx = { ...serverDescribeCtx(locked.rule, body.descCtx, { seriesTitle: o.seriesTitle ?? src?.title ?? null, feed: src?.feed ?? null, stated: o.stated ?? null }), ...(src?.subjectName ? { subjectName: src.subjectName } : {}) };
   const text = describeRule(locked.rule, { ticker: ticker || "TICKER", ...ctx });
+  // the description the bundle pins: the generated paragraph, then the creator's own text, within the bundle's ceiling
+  { const full = withCreatorText(text.paragraph, creatorText); if (full.length > DESCRIPTION_LIMIT) problems.push(`The description, the rule's paragraph and your own text together, comes to ${full.length.toLocaleString("en-US")} characters, and a coin's description can be at most ${DESCRIPTION_LIMIT.toLocaleString("en-US")}. Shorten your text.`); }
+  const espn = locked.rule.oracle === "catalogue" && locked.rule.series ? parseEspnSeries(locked.rule.series) : null;
+  const teamName = espn ? teamByAbbr(espn.league, espn.abbr)?.nickname ?? null : null;
+  const end = endText(locked.rule, { team: teamName ? `the ${teamName}` : null });
   const alloc = allocationFor(locked);
   const per = (s: typeof CURVE_FEES) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });
   const perPc = (s: typeof PAIR_CURVE_FEES.curve | typeof PAIR_CURVE_FEES.post) => ({ phase: s.phase, legs: s.legs.map((l) => ({ label: l.label, sol: bpsPerSol(l.bps) })), totalSol: bpsPerSol(s.totalBps) });
   const coins = sides.length;
-  const rentConfig = rentLamports(TOKEN_CONFIG_BYTES), reserve = Math.round(Number(locked.rule.reserveSol) * 1e9);
+  const rentConfig = rentLamports(TOKEN_CONFIG_BYTES), reserve = decimalSolToLamports(locked.rule.reserveSol);
   const tk = (i: number) => sides[i]?.ticker || (i === 0 ? "A" : "B");
   let lines: ReviewCost[], total: number, steps: { label: string; signers: string[] }[], costNote: string;
   if (venue === "pair-curve") {
@@ -247,6 +296,15 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const share = shareOf(locked.rule);
   const shareText = share === null ? "a vault amount" : pctLabel(share);
   const warnings = Array.isArray(body.warnings) ? (body.warnings as unknown[]).filter((w): w is string => typeof w === "string" && w.length <= 300).slice(0, 6) : [];
+  if (pp) warnings.push(pp);
+  // audit 7 items 7 and 11: the one-time result's own due date (the picked game, never "the next meeting"), and the warning when it is near
+  const oneTime = text.windowKind === "one-shot";
+  const game = oneTime && o.game && gameOfRule(locked.rule, [o.game]) ? o.game : null;
+  const dueIso = game ? game.startsAt : oneTime ? (ctx as { endsAt?: string | null }).endsAt ?? null : null;
+  const due = dueTiming(dueIso, now, dueWarningDays(env));
+  const timing = oneTime ? { dueAt: due.dueAt, dueLabel: game ? gameDueLabel(game) : null, dueWithinDays: due.dueWithinDays, warning: due.warning, unplayed: espn?.kind === "game" ? UNPLAYED_GAME_LINE : null } : null;
+  if (timing?.warning) warnings.push(timing.warning);
+  if (o.seasonWarning) warnings.unshift(o.seasonWarning);
   const n = steps.length;
   const recovery = n === 1
     ? ["If you reject the request in your wallet, nothing is sent and nothing is charged. The draft is kept for 24 hours, so you can press the button again."]
@@ -262,7 +320,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const review: LaunchReview = {
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
-    rule: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule, { seriesTitle: o.seriesTitle ?? null }), sentence: text.lead, share: shareText, presets: `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, text.windowKind === "perpetual") },
+    rule: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
     coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB } })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
@@ -296,6 +354,9 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       ...(pair ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: 2, text: "", sha256: "", derived: true }] : []),
     ],
     dispute: locked.rule.oracle === "polymarket" && locked.rule.market ? (o.stated ? statedSentences(o.stated, o.stated.finalAfter) : DISPUTE_DEFAULT) : null,
+    end: { kind: end.kind, result: end.result, void: end.void },
+    projection: reviewProjection(locked.rule, now),
+    timing,
   };
   return { review };
 }

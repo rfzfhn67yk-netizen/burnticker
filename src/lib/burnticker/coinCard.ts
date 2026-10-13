@@ -1,6 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { TEAM_ALIASES, type TeamAlias } from "@/lib/burnticker/oracle/events";
 import { describeEndSink, describeRule } from "@/lib/burnticker/describe";
+import { highText } from "@/lib/burnticker/derby/high";
 
 /**
  * THE COIN CARD'S ONE-LINER (2026-10-10): the few words a launchpad card has room for — "burns when the Eagles lose" — derived from
@@ -32,7 +33,11 @@ export function oneShotAllLiner(rule: BurnRule, event: string, endDate: string |
 
 export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, aliases: readonly TeamAlias[] = TEAM_ALIASES, endDate: string | null = null): string {
   const title = (seriesTitle ?? "").trim();
-  const all = oneShotAllLiner(rule, title || rule.market || rule.series || "the event", endDate ?? rule.pair?.voidBy ?? null);
+  // website-20 item 54: a flippening at 100 % names the event in words ("SOL's market cap passes ETH's") on BOTH sides, never the
+  // rule's internal selector id; side B (the inverted rule) fires when the pass never comes
+  const fd = rule.oracle === "derby" && rule.derby?.selector === "coinvs" && rule.derby.flip ? rule.derby : null;
+  const flipEvent = fd ? (rule.binary?.onNo && !rule.binary.onYes ? `${fd.a.symbol}'s market cap never passes ${fd.b.symbol}'s` : `${fd.a.symbol}'s market cap passes ${fd.b.symbol}'s`) : null;
+  const all = oneShotAllLiner(rule, flipEvent ?? (title || rule.market || rule.series || "the event"), endDate ?? rule.pair?.voidBy ?? (fd ? "the run ends" : null));
   if (all) return all;
   if (rule.oracle === "catalogue" && rule.series && /^(espn|nws)\./.test(rule.series)) { try { return describeRule(rule, { ticker: "COIN" }).oneLiner; } catch { /* an unknown team or station: the generic line */ } }
   if (rule.oracle === "catalogue") return `burns on the ${title || rule.series} feed`;
@@ -44,6 +49,7 @@ export function ruleOneLiner(rule: BurnRule, seriesTitle: string | null = null, 
       return d.flip ? (win === d.a.symbol ? `burns once if ${d.a.symbol}'s market cap passes ${d.b.symbol}'s` : `burns once if ${d.a.symbol}'s market cap never passes ${d.b.symbol}'s`) : `burns every ${every(d.window)} ${win} out-gains ${lose}`;
     }
     if (d.selector === "price") return `burns per ${rule.scalar?.unit ?? "?"}% ${d.u.symbol} ${rule.scalar?.direction === "down" ? "falls" : "rises"} each ${every(d.window)}`;
+    if (d.selector === "high") return highText(d, "").oneLiner;
     return `burns on ${d.underlying.symbol}'s winning days in bracket ${d.tournamentId}`;
   }
   if (rule.kind === "binary" && rule.binary) {

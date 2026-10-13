@@ -37,6 +37,8 @@ export interface SourceDescriptor {
   /** Whether a single read returns one poll-time value (no publication schedule). */
   snapshot: boolean;
   flags: string[];
+  /** The owner's single-publisher exception (singleSource.ts): settles on this source alone, no cross-read. */
+  singleSource?: boolean;
   venue: "feed" | "onchain" | "polymarket" | "kalshi" | "stub";
 }
 

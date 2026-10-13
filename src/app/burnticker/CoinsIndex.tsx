@@ -8,11 +8,12 @@ import { ViewCard, SkeletonGrid, ago } from "./_components/CoinCard";
 import { useLaunchAvailability } from "./_components/useLaunchAvailability";
 import { useHome } from "./_components/useHome";
 import { useWatchlist } from "./_components/useWatchlist";
-import { WATCH_NOTE } from "@/lib/burnticker/watchlist";
+import { useScrollEdges } from "./_components/useScrollEdges";
+import { WATCH_FORGET, WATCH_NOTE, coinWatchKey, watchAmbiguous, type ListedCoin } from "@/lib/burnticker/watchlist";
 import { SEASONS_LINKS } from "./_components/nav";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
-import { CARD_MEANINGS, cardViewFromIndex, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
+import { CARD_MEANINGS, cardViewFromIndex, featuredLine, type CardView, type IndexCoin } from "@/lib/burnticker/cardView";
 import { GRID_TABS, gridState, tabCoins, type GridTab } from "@/lib/burnticker/coinsGrid";
 import { FEATURED_RULES_LINE } from "@/lib/burnticker/featuredSlots";
 import { sharedTickers } from "@/lib/burnticker/coinKey";
@@ -41,8 +42,9 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const [q, setQ] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const home = useHome();
-  const watch = useWatchlist();
   const searchBox = useRef<HTMLInputElement>(null);
+  // ChatGPT audit 6 item 24: the filter row scrolls sideways on narrow screens; the edge that still has more fades
+  const tabsHint = useScrollEdges<HTMLDivElement>([ix]);
   useEffect(() => { fetch("/api/burnticker/tokens").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); setIx(j); }).catch((e) => setErr(String(e.message ?? e))); }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
   useEffect(() => { try { const s = sessionStorage.getItem("bt-coins-tab") as GridTab | null; if (s && GRID_TABS.some((x) => x.id === s)) setTab(s); } catch { /* private window */ } }, []);
@@ -68,9 +70,12 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
   const s = q.trim().toLowerCase();
   const featured: CardView[] = useMemo(() => (home.data?.featured ?? []).filter((v) => !s || `${v.ticker} ${v.name} ${v.rule} ${v.mint?.address ?? ""}`.toLowerCase().includes(s)), [home.data, s]);
   const listable = useMemo(() => (ix?.tokens ?? []).filter((t) => t.status !== "expired"), [ix]);
+  // private review 8 F1: follows are by network and mint; old ticker follows resolve against the listed coins only when one coin matches
+  const listedCoins: ListedCoin[] | null = useMemo(() => (ix ? listable.map((t) => ({ ticker: t.ticker, network: ix.cluster, mint: t.mint })) : null), [ix, listable]);
+  const watch = useWatchlist(listedCoins);
   // tickers are not unique (owner 2026-10-12): a coin whose ticker another coin shares links by its mint
   const sharedSet = useMemo(() => sharedTickers(listable), [listable]);
-  const coins = useMemo(() => tabCoins(tab, listable.filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), watch.list.coins), [listable, tab, s, watch.list.coins]);
+  const coins = useMemo(() => tabCoins(tab, listable.filter((t) => !s || `${t.ticker} ${t.name} ${t.oneLiner} ${t.seriesTitle ?? ""} ${t.mint}`.toLowerCase().includes(s)), (t) => { const k = coinWatchKey(ix?.cluster, t.mint); return !!k && watch.list.coins.includes(k); }), [listable, tab, s, watch.list.coins, ix?.cluster]);
   const pairs = useMemo(() => (ix?.pairs ?? []).filter((p) => !s || `${p.a.ticker} ${p.b.ticker} ${p.a.name} ${p.b.name} ${p.seriesTitle ?? ""}`.toLowerCase().includes(s)), [ix, s]);
   const audit = auditBadgeView(ix?.audit ?? null);
   const launch = useLaunchAvailability();
@@ -86,7 +91,7 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
       <section className="space-y-3" aria-labelledby="bt-coins-h">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <h1 id="bt-coins-h" className="text-xl font-semibold">Coins</h1>
-          <div className="bt-tabs" role="tablist" aria-label="Filter coins">
+          <div ref={tabsHint.ref} onScroll={tabsHint.onScroll} className={`bt-tabs ${tabsHint.className}`} role="tablist" aria-label="Filter coins">
             {GRID_TABS.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} aria-controls="bt-coins-panel" title={t.rule} className={`bt-tab${tab === t.id ? " is-active" : ""}`} onClick={() => pick(t.id)}>{t.label}{t.id === "pairs" && ix ? <> <span className="bt-tab-count" aria-label={`${ix.pairs.length} pair${ix.pairs.length === 1 ? "" : "s"}`}>{ix.pairs.length}</span></> : null}</button>)}
           </div>
           {/* one search per screen: the header carries it from 640 px up; on phones this box is the search (the tab bar's Search focuses it) */}
@@ -95,6 +100,13 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
         <p className="text-xs text-neutral-500" id="bt-tab-rule">{rule}{tab === "following" ? ` ${WATCH_NOTE}` : ""}{tab !== "pairs" ? " Each coin's curve completes at the raise its creator chose, and the card reads it from the coin's own pool." : ""}</p>
 
         <div id="bt-coins-panel" role="tabpanel" aria-describedby="bt-tab-rule" data-grid-state={state.kind}>
+          {tab === "following" && watch.ambiguous.filter((a) => a.kind === "coins").map((a) => (
+            <div key={a.ticker} className="mb-3 rounded-md border border-amber-700/60 p-3 text-xs" role="status" data-watch-ambiguous={a.ticker}>
+              <p>{watchAmbiguous(a.ticker, a.candidates.length)}</p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">{listable.filter((t) => t.ticker.toUpperCase() === a.ticker).map((t) => <ViewCard key={t.mint} v={cardViewFromIndex(t, null, ix?.cluster ?? "mainnet", sharedSet)} now={now} />)}</div>
+              <button type="button" className="bt-watch mt-2" onClick={() => watch.forget("coins", a.ticker)}>{WATCH_FORGET}</button>
+            </div>
+          ))}
           {state.kind === "loading" && <SkeletonGrid n={3} label={tab === "pairs" ? "Loading the pairs." : "Loading the coins."} />}
           {state.kind === "error" && <EmptyState kind="unavailable" body={state.body} details={state.details} />}
           {state.kind === "unavailable" && <EmptyState kind="unavailable" body={state.body} />}
@@ -132,7 +144,8 @@ export default function BurntickerIndex({ seasons }: { seasons: SeasonsPreview |
             <ul className="mt-1 max-w-xl list-disc space-y-1 pl-4">{Object.values(CARD_MEANINGS).map((m) => <li key={m}>{m}</li>)}</ul>
           </details>
         </div>
-        <p className="text-xs text-neutral-500">$DEFICIT is the operator&apos;s first coin. The other cards are a disclosed test coin on mainnet and the devnet practice run. Devnet is a test network where tokens have no money value.</p>
+        {/* ChatGPT audit 6 item 22: the sentence counts the cards this host serves (cardView.ts featuredLine), never a fixed "two" */}
+        {home.data && featuredLine(home.data.featured) && <p className="text-xs text-neutral-500" data-featured-line>{featuredLine(home.data.featured)}</p>}
         {home.error ? <EmptyState compact kind="unavailable" body="The featured coins could not be read just now." details={home.error} />
           : !home.data ? <SkeletonGrid n={3} label="Loading the featured coins." />
           : featured.length === 0 ? <EmptyState compact kind="no-activity" body={s ? `No featured coin matches "${q.trim()}".` : "No featured coin is listed."} />

@@ -44,6 +44,7 @@
   --bt-radius: 8px;
   --bt-dur: 150ms;
   --bt-focus: var(--bt-stamp);
+  --bt-tabbar-h: 62px;
   color-scheme: dark;
 }
 
@@ -73,7 +74,8 @@ body.bt-body {
 .bt-skip:focus { left: 8px; }
 
 /* ---- header: the counter the receipts land on ---- */
-.bt-header { position: sticky; top: 0; z-index: 40; background: color-mix(in srgb, var(--bt-bg) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 2px dashed var(--bt-line); }
+/* ChatGPT audit 6 item 21: the header and the phone tab bar are opaque, so the page never shows through them while it scrolls */
+.bt-header { position: sticky; top: 0; z-index: 40; background: var(--bt-bg); border-bottom: 2px dashed var(--bt-line); }
 .bt-header-row { max-width: 72rem; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
 .bt-brand { display: flex; align-items: center; gap: 10px; color: var(--bt-ink); text-decoration: none; flex: 0 0 auto; }
 .bt-mark { width: 34px; height: 34px; border-radius: 50%; display: block; box-shadow: 0 0 0 1px var(--bt-line); }
@@ -143,7 +145,8 @@ body.bt-body {
 @media (min-width: 640px) { .bt-search { display: block; } .bt-wallet { display: inline-flex; } }
 @media (max-width: 420px) { .bt-launch-head { padding: 9px 9px; font-size: .7rem; } .bt-header-row { gap: 8px; } .bt-header-tools { gap: 4px; } }
 /* under 400 px the mark carries the brand alone, so the header row (mark, Launch a coin, theme, MENU) fits a 320 px phone */
-@media (max-width: 400px) { .bt-wordmark { display: none; } }
+/* audit 7 item 18: the wordmark returns only where the header tools fit beside it (the row overflowed at 414 to 454 px) */
+@media (max-width: 479px) { .bt-wordmark { display: none; } }
 @media (min-width: 900px) {
   .bt-nav-desktop { display: flex; }
   .bt-header-tools { margin-left: 8px; }
@@ -253,9 +256,12 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-seasons { border-top: 2px dashed var(--bt-line); padding-top: 18px; }
 .bt-tabbar { display: none; }
 @media (max-width: 899px) {
-  body.bt-body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
-  .bt-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: color-mix(in srgb, var(--bt-bg) 94%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
-  .bt-tabbar-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 60px; font: 700 10px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; }
+  /* audit 6 item 21: the page ends above the tab bar (60 px plus its 2 px border) and the phone's safe area, so no footer link or
+     button sits under it; the bar itself is opaque */
+  body.bt-body { padding-bottom: calc(var(--bt-tabbar-h) + env(safe-area-inset-bottom) + 12px); }
+  .bt-tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; background: var(--bt-bg); border-top: 2px dashed var(--bt-line); padding-bottom: env(safe-area-inset-bottom); }
+  /* audit 7 item 21: labels at 12 px, each tab a full-height hit area of at least 44 px */
+  .bt-tabbar-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 60px; min-width: 44px; font: 700 12px/1 var(--font-mono); letter-spacing: .03em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; }
   .bt-tabbar-glyph { font-size: 18px; line-height: 1; }
   .bt-tabbar-item.is-active { color: var(--bt-ink); box-shadow: inset 0 2px 0 var(--bt-stamp); }
   .bt-tabbar-item.is-launch .bt-tabbar-glyph { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 22px; border-radius: 4px; background: var(--bt-stamp-solid); color: var(--bt-stamp-ink); }
@@ -269,7 +275,8 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 @media (max-width: 559px) { .bt-progress:not(.is-compact) .bt-progress-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 8px; } }
 .bt-progress-dot { display: block; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--bt-line) 85%, transparent); }
 .bt-progress-step.is-done .bt-progress-dot { background: var(--bt-stamp-solid); }
-.bt-progress-step.is-current .bt-progress-dot { background: var(--bt-scorch); }
+/* audit 7 item 23: the next step is an outline, never a filled dot, so a coin on its curve (2 of 6 done) never reads as 3 of 6 */
+.bt-progress-step.is-current .bt-progress-dot { background: transparent; box-shadow: inset 0 0 0 2px var(--bt-scorch); }
 .bt-progress-step.is-current { color: var(--bt-ink); }
 /* website-15 item 6: a step that does not apply to this coin (the devnet rehearsal coin had no curve): an outlined dot, never a lit one */
 .bt-progress-step.is-na .bt-progress-dot { background: transparent; box-shadow: inset 0 0 0 1px var(--bt-muted); }
@@ -281,14 +288,19 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-ticker-kind { display: inline-block; margin-right: 6px; padding: 1px 5px; border: 1px solid var(--bt-line); border-radius: 3px; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--bt-dim); }
 .bt-watch { font: 700 .7rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--bt-dim); background: transparent; border: 1px solid var(--bt-line); border-radius: 4px; padding: 6px 8px; cursor: pointer; }
 .bt-watch[aria-pressed="true"] { color: var(--bt-ink); border-color: var(--bt-stamp); }
-@media (max-width: 899px) {
-  .bt-ticker { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
-  .bt-ticker.is-end { -webkit-mask-image: none; mask-image: none; }
-}
+/* ChatGPT audit 6 item 24: a row that scrolls sideways (the activity line, the Coins filters) fades the edge that still has more
+   (useScrollEdges.ts sets more-start / more-end), at every width */
+.bt-scroll-hint.more-end { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
+.bt-scroll-hint.more-start { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px); mask-image: linear-gradient(90deg, transparent, #000 40px); }
+.bt-scroll-hint.more-start.more-end { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
 
 /* website-15 item 7: a value not read is a dash button; its reason opens under it on tap, click or keyboard focus (phones included) */
 .bt-why { position: relative; display: inline-block; }
 .bt-why-btn { font: inherit; color: inherit; background: none; border: 0; padding: 0 2px; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+/* ChatGPT audit 7 item 21: small help controls ("?", the reason behind an empty field) get a 44 x 44 px hit area from an invisible
+   layer centred on them, so the page layout does not grow; the site-wide :focus-visible ring stays visible on them */
+.bt-hit, .bt-why-btn { position: relative; }
+.bt-hit::after, .bt-why-btn::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
 .bt-why-mark { display: inline-block; margin-left: 3px; min-width: 1.1em; height: 1.1em; line-height: 1.1em; border-radius: 99px; border: 1px solid var(--bt-line); font: 700 .62rem/1.05em var(--font-mono); text-align: center; color: var(--bt-muted); vertical-align: 1px; }
 .bt-why-tip { display: none; position: absolute; z-index: 20; left: 0; top: calc(100% + 4px); width: max-content; max-width: min(18rem, 80vw); padding: 6px 8px; border: 1px solid var(--bt-line); border-radius: 6px; background: var(--bt-counter, #1b1814); color: var(--bt-ink); font: 400 .75rem/1.35 var(--font-space-grotesk, system-ui), system-ui, sans-serif; text-transform: none; letter-spacing: 0; white-space: normal; }
 .bt-why-tip.is-open, .bt-why-btn:focus-visible + .bt-why-tip { display: block; }

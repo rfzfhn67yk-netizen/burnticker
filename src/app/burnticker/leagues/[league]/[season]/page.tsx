@@ -1,3 +1,4 @@
+import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -54,6 +55,8 @@ export default async function LeagueSeasonRoute({ params }: Params) {
   let cluster: string | null = null;
   try { cluster = platform().cluster; } catch { cluster = null; }
   const launch = launchAvailability(process.env, cluster);
+  // website-20 item 119: while launches are closed but the preview runs, the team links say Preview
+  const launchPreview = !launch.open && siteLaunchState(process.env).wizard;
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-8 text-sm">
       {p.jsonLd.map((j, k) => <script key={k} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(j).replace(/</g, "\\u003c") }} />)}
@@ -69,10 +72,10 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       <section className="space-y-2" aria-label="teams">
         <h2 className="text-lg font-medium">Teams</h2>
         {withCoins.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{withCoins.map((t) => (
-          <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{launch.open && <Link className="text-xs underline" href={t.launchHref}>launch a coin for this team</Link>}</li>
+          <li key={t.abbr} className={card + " flex flex-wrap items-baseline justify-between gap-2"}><span>{t.name} <span className="text-xs text-neutral-500">{t.coins.map((c) => `$${c.ticker}`).join(" · ")}</span></span>{(launch.open || launchPreview) && <Link className="text-xs underline" href={t.launchHref}>{launch.open ? "launch a coin for this team" : "preview a coin for this team"}</Link>}</li>
         ))}</ul>}
         <details open={withCoins.length === 0 && rest.length <= 40} className="text-xs" data-teams><summary className="cursor-pointer text-neutral-400">{withCoins.length ? `${rest.length} ${rest.length === 1 ? "team has" : "teams have"} no coin this season` : `All ${rest.length} teams`}</summary>
-          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span>{launch.open && <Link className="underline" href={t.launchHref}>launch a coin for this team</Link>}</li>)}</ul>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map((t) => <li key={t.abbr} className="flex justify-between gap-2 border-b border-neutral-800 py-1"><span>{t.name}</span>{(launch.open || launchPreview) && <Link className="underline" href={t.launchHref}>{launch.open ? "launch a coin for this team" : "preview a coin for this team"}</Link>}</li>)}</ul>
         </details>
       </section>
       {/* site audit #9 / BT-10 (2026-10-11): before any coin has a receipt, the empty scoreboard and settled-games sections collapse into one

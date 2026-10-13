@@ -16,5 +16,20 @@
     "DEBT",
     "REHEARSAL",
     "USA_DEFICIT"
+  ],
+  "majorsNote": "Tickers of major coins and stablecoins (ChatGPT audit 6 item 9). A new coin cannot use one as its ticker or as its whole name, ignoring case, spaces and punctuation. Add one line to block another.",
+  "majorsRefusal": "That is the ticker of a major coin, so a new coin cannot use it. Pick a ticker of your own.",
+  "majors": [
+    "SOL",
+    "WSOL",
+    "USDC",
+    "USDT",
+    "BTC",
+    "WBTC",
+    "ETH",
+    "WETH",
+    "BONK",
+    "WIF",
+    "JUP"
   ]
 }

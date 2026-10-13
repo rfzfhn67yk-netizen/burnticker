@@ -5,6 +5,7 @@ import { memoFromTransaction } from "@/lib/burnReceipts/crank";
 import { initializeTokenIx, initializeTokenLayoutFromEnv, operatorAttester } from "@/lib/burnReceipts/instructions";
 import { configPda, vaultAddress } from "@/lib/burnReceipts/pda";
 import { burnPoolFor } from "@/lib/burnKeeper/burnPool";
+import { assertSolUsd } from "@/lib/burnKeeper/rules";
 import type { ProgramPort } from "@/lib/burnKeeper/programPort";
 import { programClusterOf, solanaProgramPort } from "@/lib/burnKeeper/programAdapter";
 import type { Cluster } from "@/lib/burnKeeper/solana";
@@ -76,8 +77,9 @@ export class ProgramBurnClient implements BurnProgramClient {
   async initializeToken(i: InitializeTokenInput) {
     if (!i.rule) throw new Error("initialize_token: the locked rule is required (the counter mapping reads its fractions)");
     if (!this.o.admin) throw new Error("initialize_token: BURNTICKER_ADMIN (the config authority — the Squads 2-of-3 vault) is not set");
+    // item 165: the floor is pinned in lamports here, once, at the SOL price of this moment; a missing or absurd price refuses
     const solUsd = await this.o.solUsd();
-    if (!(solUsd > 0)) throw new Error("initialize_token: no SOL price to set the floor in lamports");
+    try { assertSolUsd(solUsd); } catch (e) { throw new Error(`initialize_token: ${(e as Error).message}`); }
     const floorLamports = BigInt(Math.ceil((Number(i.rule.floorUsd) / solUsd) * 1e9));
     const c = counterRule(i.rule, i.ticker, i.selectorKey, { floorLamports });
     const mint = new PublicKey(i.mint), creator = new PublicKey(i.creator);

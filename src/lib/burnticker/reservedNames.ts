@@ -14,25 +14,33 @@ export const RESERVED_FILE = path.join("config", "burnticker", "reserved-tickers
 /** The refusal lives in the client-safe copy module (guidedLaunch.ts) so the launch page can match it without reading files. */
 export { RESERVED_REFUSAL } from "@/lib/burnticker/guidedLaunch";
 import { RESERVED_REFUSAL } from "@/lib/burnticker/guidedLaunch";
-export interface ReservedList { schema: "burnticker.reserved-tickers/v1"; reserved: string[]; refusal?: string }
+export interface ReservedList { schema: "burnticker.reserved-tickers/v1"; reserved: string[]; refusal?: string; /** ChatGPT audit 6 item 9: major coins' tickers */ majors?: string[]; majorsRefusal?: string }
 
 /** Upper-case letters and digits only: the form both sides are compared in. */
 export const normaliseName = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 export function parseReserved(raw: unknown): ReservedList {
   const r = raw as Partial<ReservedList> | null;
-  if (!r || r.schema !== "burnticker.reserved-tickers/v1" || !Array.isArray(r.reserved) || r.reserved.some((x) => typeof x !== "string" || !normaliseName(x))) throw new Error(`${RESERVED_FILE}: not a burnticker.reserved-tickers/v1 file`);
+  if (!r || r.schema !== "burnticker.reserved-tickers/v1" || !Array.isArray(r.reserved) || r.reserved.some((x) => typeof x !== "string" || !normaliseName(x)) || (r.majors !== undefined && (!Array.isArray(r.majors) || r.majors.some((x) => typeof x !== "string" || !normaliseName(x))))) throw new Error(`${RESERVED_FILE}: not a burnticker.reserved-tickers/v1 file`);
   return r as ReservedList;
 }
 
-let cache: { file: string; mtimeMs: number; set: Set<string> } | null = null;
-/** The reserved names, normalised. Re-read when the file changes, so a line the owner adds applies without a restart. */
-export function loadReserved(file = RESERVED_FILE): Set<string> {
+let cache: { file: string; mtimeMs: number; set: Set<string>; majors: Set<string> } | null = null;
+const read = (file: string) => {
   const st = fs.statSync(file);
-  if (cache && cache.file === file && cache.mtimeMs === st.mtimeMs) return cache.set;
-  const set = new Set(parseReserved(JSON.parse(fs.readFileSync(file, "utf8"))).reserved.map(normaliseName));
-  cache = { file, mtimeMs: st.mtimeMs, set };
-  return set;
+  if (cache && cache.file === file && cache.mtimeMs === st.mtimeMs) return cache;
+  const l = parseReserved(JSON.parse(fs.readFileSync(file, "utf8")));
+  cache = { file, mtimeMs: st.mtimeMs, set: new Set(l.reserved.map(normaliseName)), majors: new Set((l.majors ?? []).map(normaliseName)) };
+  return cache;
+};
+/** The reserved names, normalised. Re-read when the file changes, so a line the owner adds applies without a restart. */
+export function loadReserved(file = RESERVED_FILE): Set<string> { return read(file).set; }
+/** Major coins' tickers (SOL, USDC, USDT, BTC, ETH, WSOL, BONK, WIF, JUP …), normalised, from the same file's `majors`. */
+export function loadMajors(file = RESERVED_FILE): Set<string> { return read(file).majors; }
+/** ChatGPT audit 6 item 9: the refusal for a major coin's ticker, used as a ticker or as the whole name. */
+export const MAJOR_REFUSAL = "That is the ticker of a major coin, so a new coin cannot use it. Pick a ticker of your own.";
+export function majorProblem(side: { ticker: string; name: string }, set: ReadonlySet<string> = loadMajors()): string | null {
+  return isReserved(side.ticker, set) || isReserved(side.name, set) ? MAJOR_REFUSAL : null;
 }
 
 /** True when the ticker or name, normalised, is on the reserved list. */

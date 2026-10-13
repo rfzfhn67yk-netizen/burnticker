@@ -376,3 +376,23 @@ For $DEFICIT before it is registered here, the rows come from its keeper's publi
 not recompute them). `spent` is SOL, `got` and `burned` are whole tokens, `value` is the source's own figure. An empty cell means the value
 does not exist yet or was not checked here. A text cell that starts like a spreadsheet formula gets a leading apostrophe. Unknown coin
 **404**; a keeper file that exists and cannot be read **503**; a keeper that has not published yet gives the header row alone.
+
+## Review parity (API 1.15.0, ChatGPT audits 6 and 7, 2026-10-12)
+
+- `POST /launch/review` runs the bundle route's own refusals (`src/lib/burnticker/launchPreflight.ts`): a catalogue source that is not
+  launchable, an oracle this host has off (`uma`, Kalshi without its flag), an unknown series, a reserve outside 0.001 to 1 SOL, a title
+  regex that could backtrack catastrophically, major coins' tickers (`majors` in `config/burnticker/reserved-tickers.json`), control
+  characters in a name, description or note, lookalikes of registered coins, and links that fail their field (X = x.com or twitter.com,
+  Telegram = t.me, no burnticker.com, look-alike or `xn--` addresses). `problems` is empty exactly when the bundle would be built on an
+  open host. A share off the web launcher's presets is a warning, not a problem: the bundle accepts any share inside the rule's bounds.
+- New review fields: `end` (`result` and `void` stated apart), `projection` (1, 2 and 5% from the source's saved sample, or the reason),
+  `timing` (a one-time result's due date, the game the rule names, the due-soon warning, what an unplayed game does).
+- `GET /sports/teams`: `season.status` (`upcoming`, `none-listed`, `unknown`, `over`) and `season.warning`; teams with a listed game first;
+  `record` only when the schedule has one; `ticker` is the one team ticker (`src/lib/burnticker/tickers.ts`), with the league's tag when
+  several leagues share a code (`$ATLMLB`, `$ATLNBA`).
+- `GET /search`: one-time markets closing within 48 hours are hidden unless `closingSoon=1` (`hiddenClosingSoon` counts them); a pasted
+  mint on the Not Burnticker list answers `lookalike`. `GET /verify-mint/{mint}` carries the same `lookalike`.
+- `GET /sources/{id}/preview` carries `projection`. The fraction limits are in `shareLimitsText()` (rules.ts): 0.01 to 0.25 for a rule
+  that repeats, up to 1.00 for a one-shot.
+- Every place a title regex is evaluated (the Kalshi and Polymarket readers, the registry) runs it through `safeRegexTest`: a refused
+  pattern never runs, and the title is cut to 300 characters.

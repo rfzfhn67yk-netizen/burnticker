@@ -8,15 +8,18 @@ import type { PreflightCode, PreflightReading, PreflightResult, SourceDescriptor
 import { compareFact, crossReadsOf, describeEntry, primaryEligibility } from "@/lib/burnticker/coverage/sources";
 import { nextExpected } from "@/lib/burnticker/coverage/schedule";
 import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
-import { DERBY_DISAGREEMENT_PP } from "@/lib/burnticker/derby/spec";
+import { DERBY_DISAGREEMENT_PP, flipAlreadyAheadSentence } from "@/lib/burnticker/derby/spec";
+import { atHighOnLaunch } from "@/lib/burnticker/derby/high";
 import { PYTH_SOL_USD, pythFeedAccount, pythSnapshotFromAccount, type PythRead } from "@/lib/burnticker/derby/pyth";
 import { crossQuote, REDSTONE_LATEST_URL } from "@/lib/burnticker/derby/cross";
 import { redstonePrimary } from "@/lib/burnticker/derby/redstone";
-import { samplePool, type PoolPort } from "@/lib/burnticker/derby/pools";
-import { mulDec, truncDec } from "@/lib/burnticker/derby/measure";
+import { readSupply, samplePool, type PoolPort } from "@/lib/burnticker/derby/pools";
+import { cmpDec, mulDec, truncDec } from "@/lib/burnticker/derby/measure";
 import { marketHours } from "@/lib/burnticker/derby/adapter";
 import { nativeSourceById } from "@/lib/burnticker/sources/native";
 import { isOneTimeSeries, oneShotEligibility } from "@/lib/burnticker/oneShotEligibility";
+import { NEXT_EVENT_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { isSingleOfficialSource, singleSourceMethod } from "@/lib/burnticker/singleSource";
 
 /**
  * THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit). Before a coin is created on a selector, the selector is run live
@@ -109,7 +112,10 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
   if (!last && !oneTime) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-readings", reason: `${feed.id} returned no complete reading.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
   // A read that parses but stops short (a plausibility refusal, a frozen endpoint) leaves an old last reading: the schedule says a newer
   // one was due more than STALE_GRACE_MS ago → refused, with the parser's refusal as the reason (FRED's full-history CSV, 10-10).
-  if (last && next.at && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id}, but the next one was due on ${next.at.slice(0, 10)}.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
+  // sources-3: a next-event one-shot reads only on its events, so an old last reading is not a stale feed
+  if (last && next.at && !NEXT_EVENT_ONE_SHOT_RE.test(feed.id) && Date.parse(next.at) + STALE_GRACE_MS < now) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "stale-primary", reason: `${feed.id}'s latest complete reading is ${last.id}, but the next one was due on ${next.at.slice(0, 10)}.${pr.refusals.length ? ` The parser said: ${pr.refusals[0]}` : ""}`, status: 502 });
+  // the owner's single-publisher exception (singleSource.ts, 2026-10-12): the natural-disaster feeds settle on their own publisher
+  if (isSingleOfficialSource(feed.config)) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis, agreementBasis: singleSourceMethod(feed.config.id) }, null);
   const crosses = crossReadsOf(desc, all);
   if (!crosses.length) return result(rule, now, { primary, nextExpectedAt: next.at, nextExpectedBasis: next.basis }, { code: "no-cross-read", reason: `${feed.id} has no independent second source for the same fact, run by another operator on another domain. So it cannot settle a coin on its own reading.` });
   const feeds = catalogue(deps.root);
@@ -265,9 +271,12 @@ async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number):
   if (!spec) return result(rule, now, { primary: none }, { code: "unknown-selector", reason: "A derby rule must include its derby settings." });
   const d = deps.derby ?? {};
   const fetchImpl = d.fetchImpl ?? deps.fetchImpl ?? (fetch as unknown as FetchLike);
-  const us = spec.selector === "coinvs" ? [spec.a, spec.b] : spec.selector === "price" ? [spec.u] : [spec.underlying];
+  const us = spec.selector === "coinvs" ? [spec.a, spec.b] : spec.selector === "price" || spec.selector === "high" ? [spec.u] : [spec.underlying];
+  // sources-4: a record-close coin whose reference is already at its record is refused (never a day-one burn)
+  if (spec.selector === "high") { const at = atHighOnLaunch(spec.baseline); if (at) return result(rule, now, { primary: none }, { code: "already-decided", reason: at }); }
   const basis: string[] = [];
   let first: { primary: PreflightResult["primary"]; crossRead: PreflightResult["crossRead"] } | null = null;
+  const values: string[] = [];
   for (const u of us) {
     const pr = await derbyPrimary(u, d, now, fetchImpl);
     const kind = u.cross.split(":")[0];
@@ -283,6 +292,18 @@ async function preflightDerby(rule: BurnRule, deps: PreflightDeps, now: number):
     basis.push(line);
     if (diff * 100 > DERBY_DISAGREEMENT_PP) return result(rule, now, { primary, crossRead, agreement: false, agreementBasis: basis.join(" ") }, { code: "disagreement", reason: `The primary source and its second source disagree. ${line}` });
     first ??= { primary, crossRead };
+    values.push(pr.value);
+  }
+  // item 66 (owner decision 2026-10-12): a flippening whose first coin is already the larger one has nothing to flip: refused here
+  if (spec.selector === "coinvs" && spec.flip) {
+    const sizes: string[] = [];
+    for (const [i, u] of [spec.a, spec.b].entries()) {
+      let supply: string | null = null, why = "no Solana read port on this host";
+      if (d.pools && u.mint) { try { supply = (await readSupply(d.pools, u.mint)).supply; } catch (e) { why = (e as Error).message.slice(0, 120); } }
+      if (supply === null) return result(rule, now, { primary: first!.primary, crossRead: first!.crossRead, agreement: true, agreementBasis: basis.join(" ") }, { code: "primary-unreadable", reason: `The circulating supply of ${u.symbol} could not be read just now, so it cannot be checked that ${spec.a.symbol} is still the smaller coin. The reason was: ${why}.`, status: 502 });
+      sizes.push(mulDec(values[i], supply));
+    }
+    if (cmpDec(sizes[0], sizes[1]) > 0) return result(rule, now, { primary: first!.primary, crossRead: first!.crossRead, agreement: true, agreementBasis: basis.join(" ") }, { code: "already-decided", reason: flipAlreadyAheadSentence(spec.a.symbol, spec.b.symbol), status: 400 });
   }
   const next = new Date(Math.floor(now / 86_400_000) * 86_400_000 + 86_400_000).toISOString();
   return result(rule, now, { primary: first!.primary, crossRead: first!.crossRead, nextExpectedAt: next, nextExpectedBasis: "the next 00:00 UTC window boundary", agreement: true, agreementBasis: basis.join(" ") }, null);

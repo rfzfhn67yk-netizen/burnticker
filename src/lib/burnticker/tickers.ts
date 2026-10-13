@@ -1,0 +1,55 @@
+import { LEAGUES, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
+
+/**
+ * THE ONE TEAM-COIN TICKER (ChatGPT audit 6 item 6, 2026-10-12): three generators disagreed (the wizard's $LAD / $LADWS / $LADNOWIN, the
+ * search's $DODGERS26 / $DODGERSWS, the teams API's $DIAMONDBAC) and the defaults collided across leagues ($ATL for the Braves, Hawks,
+ * Falcons, Dream and Atlanta United; $ARI for the Diamondbacks and the Cardinals). The wizard, /v1/search and /v1/sports/teams all call
+ * this one function now.
+ *
+ *   $LAD        the season's wins          $LADL     its losses             $LADPO    the postseason
+ *   $LADNEXT5   the next five games        $LADALL   every season           $LADNOWIN the fade side
+ *   $LADWS      the title, once            $LADLGM   one game's loss
+ *
+ * A team code that more than one league uses gets the league's tag after it ($ATLMLB, $ATLNBA, $ATLNFL, $ATLWNBA, $ATLMLS), so the
+ * default ticker is unique per league and season; two teams of one league that share their first four letters get the fifth letter of
+ * their own code (college lists). The registry's taken check still runs at review (tickerCheck.ts), with two free suggestions. Client-safe.
+ */
+export const LEAGUE_TAG: Record<string, string> = {
+  mlb: "MLB", nba: "NBA", wnba: "WNBA", nhl: "NHL", nfl: "NFL", cfb: "CFB", mcbb: "MBB", wcbb: "WBB", "usa.1": "MLS", "usa.nwsl": "NWSL",
+  "eng.1": "EPL", "eng.2": "EFL", "esp.1": "LIGA", "ita.1": "SERA", "ger.1": "BUND", "fra.1": "LIG1", "ned.1": "ERED", "por.1": "PORT", "sco.1": "SPFL",
+  "bra.1": "BRA", "arg.1": "ARG", "mex.1": "LMX", "uefa.champions": "UCL", "uefa.europa": "UEL", "uefa.europa.conf": "UECL",
+};
+const CHAMP: Record<string, string> = { mlb: "WS", nfl: "SB", nba: "TITLE", nhl: "CUP" };
+const code = (s: string, max = 4): string => s.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, max);
+
+let leaguesByCode: Map<string, Set<string>> | null = null;
+/** Which leagues use each four-character team code (built once from the team lists). */
+function codeLeagues(): Map<string, Set<string>> {
+  if (leaguesByCode) return leaguesByCode;
+  const m = new Map<string, Set<string>>();
+  for (const l of Object.keys(LEAGUES)) for (const t of teamsOf(l as LeagueId)) { const c = code(t.abbr); const s = m.get(c) ?? new Set<string>(); s.add(l); m.set(c, s); }
+  leaguesByCode = m;
+  return m;
+}
+/** The team's own code in its league, unique within the league (a fifth letter when two codes share their first four). */
+function teamCode(abbr: string, league: string | null | undefined): string {
+  const A = code(abbr);
+  if (!league || !(league in LEAGUES)) return A;
+  const full = abbr.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (full.length > 4 && teamsOf(league as LeagueId).some((t) => code(t.abbr) === A && t.abbr.toUpperCase().replace(/[^A-Z0-9]/g, "") !== full)) return full.slice(0, 5);
+  return A;
+}
+
+export type TeamWindow = "season" | "post" | "next" | "perpetual" | "title" | "game";
+export function teamTicker(abbr: string, o: { league?: string | null; window?: TeamWindow | null; games?: number | null; outcome?: "win" | "loss" | "draw" | null; inverse?: boolean }): string {
+  const A = teamCode(abbr, o.league);
+  const shared = !!o.league && (codeLeagues().get(code(abbr))?.size ?? 0) > 1;
+  const tag = shared ? LEAGUE_TAG[o.league!] ?? code(o.league!, 3) : "";
+  if (o.window === "title") return `${A}${CHAMP[o.league ?? ""] ?? "CHAMP"}`.slice(0, 10);
+  const side = o.inverse ? `NO${o.outcome === "loss" ? "LOSS" : o.outcome === "draw" ? "DRAW" : "WIN"}` : o.outcome === "loss" ? "L" : o.outcome === "draw" ? "D" : "";
+  const win = o.window === "post" ? "PO" : o.window === "next" ? `NEXT${o.games ?? 5}` : o.window === "perpetual" ? "ALL" : o.window === "game" ? "GM" : "";
+  // the league tag comes first after the code; a long fade or next-games suffix shortens the tag before anything else is cut
+  const rest = `${side}${win}`;
+  const room = Math.max(0, 10 - A.length - rest.length);
+  return `${A}${tag.slice(0, Math.max(room, Math.min(tag.length, 1)))}${rest}`.slice(0, 10);
+}

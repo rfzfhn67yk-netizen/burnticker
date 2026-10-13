@@ -204,10 +204,12 @@ export const ONE_SHOT_MAX_FRACTION = 1;
  * Resolves once: one market, a derby flippening, or (sources-2, 2026-10-12) a first-party one-shot that has exactly one reading ever: a
  * named launch (ll2.launch), a star or channel milestone (github.milestone, youtube.milestone). The keeper ends those after the reading.
  */
-export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby"> & { series?: string | null }): boolean => r.market !== null || (r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip === true) || (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? ""));
+export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby"> & { series?: string | null }): boolean => r.market !== null || (r.oracle === "derby" && r.derby?.selector === "coinvs" && r.derby.flip === true) || (r.oracle === "derby" && r.derby?.selector === "high" && r.derby.once === true) || (r.oracle === "catalogue" && KEEPER_ONE_SHOT_RE.test(r.series ?? ""));
 
+/** ChatGPT audit 6 item 27: the share limits in words, from RULE_BOUNDS (the OpenAPI document, the field help and /about read this). */
+export const shareLimitsText = (): string => `A rule that repeats spends ${Math.round(RULE_BOUNDS.fractionOfPool.min * 100)}% to ${Math.round(RULE_BOUNDS.fractionOfPool.max * 100)}% of the burn pool per unit (fractionOfPool ${RULE_BOUNDS.fractionOfPool.min} to ${RULE_BOUNDS.fractionOfPool.max}). A rule that resolves once (one market, a named launch, a milestone, the flippening) may spend up to ${Math.round(ONE_SHOT_MAX_FRACTION * 100)}% (up to ${ONE_SHOT_MAX_FRACTION.toFixed(2)}). A single game and the first snow are not drained at once, so they keep the repeating limits.`;
 export const RULE_BOUNDS = {
-  /** Recurring rules: 1–10 % of the pool per unit. A one-shot may go to 100 % (ONE_SHOT_MAX_FRACTION; see "ONE-SHOT 100 %" above). */
+  /** Recurring rules: 1–25 % of the pool per unit. A one-shot may go to 100 % (ONE_SHOT_MAX_FRACTION; see "ONE-SHOT 100 %" above). */
   // owner, 2026-10-12: a recurring rule may spend up to 25 % per unit (the program allows up to 100 %; one burn run stays capped at 2 % of the pool's SOL)
   fractionOfPool: { min: 0.01, max: 0.25 },
   vaultShare: { min: 0.10, max: 0.30 },
@@ -293,6 +295,12 @@ export function validateRule(raw: unknown): BurnRule {
       if (r.kind !== "scalar") p.push('derby: a single-asset rule is "scalar" (the window\'s % change counted in units of percentage points)');
       else if (r.scalar && (r.scalar.baseline !== 0 || (r.scalar.direction !== "up" && r.scalar.direction !== "down") || typeof r.scalar.unit !== "number" || r.scalar.unit < 0.1 || r.scalar.unit > 100)) p.push('derby: a single-asset scalar is { unit: 0.1–100 (percentage points), baseline: 0, direction: "up" | "down" }');
     }
+    if (sel === "high") {
+      // sources-4: a record-close day is one unit (reading 1), any other day 0; a single coin (no pair), never inverted.
+      if (r.kind !== "scalar") p.push('derby: a record-close rule is "scalar" (1 for a record day, 0 otherwise)');
+      else if (r.scalar && (r.scalar.unit !== 1 || r.scalar.baseline !== 0 || r.scalar.direction !== "up")) p.push('derby: a record-close rule\'s scalar is { unit: 1, baseline: 0, direction: "up" }');
+      if (r.pair !== null && r.pair !== undefined) p.push("pair: a record-close coin is a single coin (it reads one reference against its own record)");
+    }
     if (sel === "bracket") {
       if (r.kind !== "scalar") p.push('derby: a bracket fan coin is "scalar" (the day\'s points: 1 for a win, 2 in the final, 0 for a loss)');
       else if (r.scalar && (r.scalar.unit !== 1 || r.scalar.baseline !== 0 || r.scalar.direction !== "up")) p.push("derby: a bracket fan coin's scalar is { unit: 1, baseline: 0, direction: \"up\" }");
@@ -330,7 +338,7 @@ export function validateRule(raw: unknown): BurnRule {
     if (r.oracle === "derby" && Object.keys(filter).length) p.push("derby: filter must be {} (the derby block is the whole selector)");
   }
   if (r.kind !== "binary" && r.kind !== "scalar") p.push('kind must be "binary" or "scalar"');
-  const oneShot = market !== null || (r.oracle === "derby" && (derby as { selector?: string; flip?: boolean } | undefined)?.selector === "coinvs" && (derby as { flip?: boolean }).flip === true) || (r.oracle === "catalogue" && typeof series === "string" && KEEPER_ONE_SHOT_RE.test(series));
+  const oneShot = market !== null || (r.oracle === "derby" && (derby as { selector?: string; flip?: boolean } | undefined)?.selector === "coinvs" && (derby as { flip?: boolean }).flip === true) || (r.oracle === "derby" && (derby as { selector?: string; once?: boolean } | undefined)?.selector === "high" && (derby as { once?: boolean }).once === true) || (r.oracle === "catalogue" && typeof series === "string" && KEEPER_ONE_SHOT_RE.test(series));
   const checkMapping = (label: string, m: unknown): void => {
     if (!isMapping(m)) { p.push(`${label} must be { fractionOfPool } or { tokens }`); return; }
     const mode = mappingMode(m);
@@ -552,13 +560,16 @@ export function onEndText(r: Pick<BurnRule, "onEnd" | "set" | "pair" | "kind" | 
   return ` When the rule ends for any reason${endDate ? ` (${endDate} at the latest for a one-shot)` : ""}${lg}, whatever is left in the burn pool burns down on a daily clock over ${weeks} (at least 99% of it), then the coin retires; fee income that arrives after that is swept and burned whenever it passes ${r.onEnd.sweepThresholdLamports / 1e9} SOL (at most once a week) — no pool is left behind.`;
 }
 
-export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null; marketTitle?: string | null; feedTitle?: string | null } = {}): string {
+export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null; marketTitle?: string | null; feedTitle?: string | null; /** audit 6 item 26: the catalogue unit in words ("1 win", "$1B added") */ unitLabel?: string | null } = {}): string {
   if (r.oracle === "derby" && r.derby) {
     const m = ruleMappings(r)[0]?.mapping;
     const burn = m ? mapText(m, r.derby.selector === "coinvs" ? "for that window" : "per unit") : "burns nothing";
+    if (r.derby.selector === "high") return `${derbyStatement(r.derby, null, null, null)} On a record day, the keeper ${m ? mapText(m, r.derby.once ? "once" : "for that day") : "burns nothing"}.${onEndText(r)}`;
     return `${derbyStatement(r.derby, r.pair?.side ?? null, r.pair?.pairId ?? null, r.scalar ? { unit: r.scalar.unit, direction: r.scalar.direction } : null)} On a window this coin wins, the keeper ${burn}. A voided (tied) window burns nothing.${pairClauseText(r)}${winnerTakesBurnText(r)}${onEndText(r)}`;
   }
-  const what = r.oracle === "catalogue" ? `the ${names.feedTitle ?? r.series} feed`
+  // ChatGPT audit 6 item 26: a catalogue source is named by its title, never by its id ("espn.team:mlb-LAD.19-win-s2026"); a caller
+  // without the title gets "this coin's source" (the rule's canonical text and fingerprint carry the id)
+  const what = r.oracle === "catalogue" ? (names.feedTitle ? `the source "${names.feedTitle}"` : "this coin's source")
     : r.oracle === "polymarket" ? polySelectorText(r, names)
     : r.market ? `the Kalshi market ${r.market}${names.marketTitle ? ` ("${names.marketTitle}")` : ""}`
     : `every market in the Kalshi series ${r.series}${names.seriesTitle ? ` ("${names.seriesTitle}")` : ""}${r.filter.tickerIncludes ? ` whose ticker contains "${r.filter.tickerIncludes}"` : ""}${r.filter.titleRegex ? ` whose title matches /${r.filter.titleRegex}/` : ""}`;
@@ -573,11 +584,15 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
   const base = s.baseline === "previousSettlement" ? "the previous settlement" : `a fixed baseline of ${s.baseline}`;
   if (r.inverse) {
     const did = s.direction === "up" ? "rise above" : s.direction === "down" ? "fall below" : "move away from";
-    return `Each time ${what} settles, a reading that does not ${did} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")}. A reading that does ${did} it, by any amount, burns nothing. A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
+    return `Each time ${what} ${r.oracle === "catalogue" ? "publishes a reading" : "settles"}, a reading that does not ${did} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")}. A reading that does ${did} it, by any amount, burns nothing. ${r.oracle === "catalogue" ? "A voided reading" : "A voided market"} burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
   }
   const dir = s.direction === "up" ? "above" : s.direction === "down" ? "below" : "away from (either direction)";
   const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}${winnerTakesBurnText(r)}` : "";
-  return `Each time ${what} settles, every full ${s.unit} ${dir} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")} (buyback spend compounds: pool × (1 − (1 − f)^units)).${pair} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
+  // a catalogue count ("1 win", "1 launch") from a baseline of 0 reads as a count; any other unit as "every <unit> <direction> <baseline>"
+  const unitWords = names.unitLabel ? names.unitLabel : `full ${s.unit}`;
+  const counted = r.oracle === "catalogue" && s.baseline === 0 && s.direction === "up" && !!names.unitLabel;
+  const head = r.oracle === "catalogue" ? `Each time ${what} publishes a reading, ${counted ? `every ${unitWords} in it counts as one unit` : `every ${unitWords} ${dir} ${base} is one unit`}` : `Each time ${what} settles, every full ${s.unit} ${dir} ${base} is one unit`;
+  return `${head}, and the keeper ${mapText(s.perUnit, "per unit")} (buyback spend compounds: pool × (1 − (1 − f)^units)).${pair} ${r.oracle === "catalogue" ? "A voided reading" : "A voided market"} burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
 }
 
 /** The description footer: feed/selector, the rule hash and the fixed disclaimer. */

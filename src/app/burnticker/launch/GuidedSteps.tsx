@@ -1,8 +1,12 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { FOLLOW_CHOICES, GUIDED_STEPS, progressLabel, type EndOption, type FollowId, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
+import { useState, type ReactNode } from "react";
+import { AMOUNT_MATH_LABEL, END_LABEL, FOLLOW_CHOICES, GUIDED_STEPS, OTHER_PATTERNS_LABEL, UPFRONT_LABEL, createsLine, progressLabel, shareExample, whichHeading, type EndOption, type FollowId, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
 import { MAIN_RECURRING, pctLabel } from "@/lib/burnticker/launchPresets";
+import { HAZARD_FOLLOW } from "@/lib/burnticker/hazards";
+
+/** WIRING-SOURCES3: the natural-disaster card leads step 1; the five others follow. */
+const STEP1_CHOICES = [{ ...HAZARD_FOLLOW, coins: 1 as const }, ...FOLLOW_CHOICES];
 
 /**
  * THE GUIDED LAUNCH'S SCREENS (website-19; guidedLaunch.ts holds every word and every rule). One question per screen with the progress
@@ -10,18 +14,20 @@ import { MAIN_RECURRING, pctLabel } from "@/lib/burnticker/launchPresets";
  * Presentational: the launch page owns the state and the rules.
  */
 
-export type GuidedPhase = "follow" | "which" | "burn" | "end" | "review";
+export type GuidedPhase = "follow" | "which" | "burn" | "name" | "review";
+/** Audit 6 item 4 / pass D item 40: every step's heading takes focus on a step change (the page moves focus to it). */
+export const STEP_HEADING = "data-step-heading";
 
 /**
  * THE PROGRESS STRIP (owner, 2026-10-12: "make the step workflow easier to follow"): four short labels, the current one lit, an answered
  * one showing the choice ("Follows: a team") and tappable to go back to it; Back and Start over beside it on every step.
  */
 export function GuidedTop({ phase, onBack, onStartOver, confirm, answers = {}, onJump }: { phase: GuidedPhase; onBack: (() => void) | null; onStartOver: () => void; confirm: ReactNode; answers?: Partial<Record<GuidedPhase, string>>; onJump?: (p: GuidedPhase) => void }) {
-  const i = phase === "review" ? GUIDED_STEPS.length : GUIDED_STEPS.findIndex((s) => s.id === phase);
+  const i = GUIDED_STEPS.findIndex((s) => s.id === phase);
   return (
     <div className="space-y-1" data-guided-top>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-400">
-        <span className="sr-only" data-guided-progress>{i < GUIDED_STEPS.length ? `${progressLabel(i)}: ${GUIDED_STEPS[i].question}` : "Review"}</span>
+        <span className="sr-only" data-guided-progress>{`${progressLabel(i)}: ${GUIDED_STEPS[i].question}`}</span>
         <ol className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Progress" data-progress-strip>
           {GUIDED_STEPS.map((st, k) => {
             const done = k < i, cur = k === i, a = answers[st.id];
@@ -53,25 +59,27 @@ export function StickyAction({ children }: { children: ReactNode }) {
 }
 
 /** Question 1: what the coin follows. Compact cards (title and one line); a tap picks and moves on. */
-export function FollowStep({ onPick, blocked }: { onPick: (f: FollowId) => void; blocked: (f: FollowId) => string | null }) {
+export function FollowStep({ onPick, blocked, upfront = [], extra = null }: { onPick: (f: FollowId) => void; blocked: (f: FollowId) => string | null; /** audit 6 item 14 */ upfront?: string[]; /** WIRING-SOURCES3: an extra entry card after the five */ extra?: ReactNode }) {
   return (
     <section className="space-y-2" aria-label={GUIDED_STEPS[0].question} data-guided-step="follow">
-      <h2 className="text-lg font-semibold sm:text-xl">{GUIDED_STEPS[0].question}</h2>
+      <h2 className="text-lg font-semibold sm:text-xl outline-none" tabIndex={-1} data-step-heading>{GUIDED_STEPS[0].question}</h2>
       <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={GUIDED_STEPS[0].question}>
-        {FOLLOW_CHOICES.map((c) => { const why = blocked(c.id); return (
+        {STEP1_CHOICES.map((c) => { const why = blocked(c.id); return (
           <div key={c.id} className={`min-w-0 rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-follow={c.id}>
             <button type="button" data-decision="what" data-follow-choice={c.id} aria-label={c.label} aria-describedby={`follow-${c.id}-line`} disabled={!!why} onClick={() => onPick(c.id)} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed">
-              <span className="min-w-0"><span className="block text-base font-semibold">{c.label}</span><span id={`follow-${c.id}-line`} className="block truncate text-sm text-neutral-300">{c.line}</span></span>
+              <span className="min-w-0"><span className="block text-base font-semibold">{c.label} <span className="ml-1 align-middle text-[11px] font-normal text-neutral-400" data-creates={c.coins}>{createsLine(c.coins)}</span></span><span id={`follow-${c.id}-line`} className="block truncate text-sm text-neutral-300">{c.line}</span></span>
               <span aria-hidden="true" className="shrink-0 text-neutral-500">›</span>
             </button>
             {why && <p className="px-3 pb-2 text-xs text-amber-300">{why}</p>}
           </div>
         ); })}
+        {extra}
       </div>
       <details className="text-xs text-neutral-400" data-follow-examples>
         <summary className="cursor-pointer">Examples</summary>
-        <ul className="mt-1 space-y-1">{FOLLOW_CHOICES.map((c) => <li key={c.id}><span className="text-neutral-200">{c.label}.</span> {c.sentence} {c.example}</li>)}</ul>
+        <ul className="mt-1 space-y-1">{STEP1_CHOICES.map((c) => <li key={c.id}><span className="text-neutral-200">{c.label}.</span> {c.sentence} {c.example}</li>)}</ul>
       </details>
+      {upfront.length > 0 && <details className="text-xs text-neutral-400" data-upfront><summary className="cursor-pointer">{UPFRONT_LABEL}</summary>{upfront.map((x) => <p key={x} className="mt-1">{x}</p>)}</details>}
     </section>
   );
 }
@@ -85,7 +93,7 @@ export function RivalryKindStep({ onPick, teamsBlocked }: { onPick: (k: "teams" 
   );
   return (
     <section className="space-y-3" aria-label={GUIDED_STEPS[1].question} data-guided-step="which">
-      <h2 className="text-xl font-semibold">{GUIDED_STEPS[1].question}</h2>
+      <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("rivalry")}</h2>
       <div className="grid gap-2 sm:grid-cols-2">
         {opt("teams", "Two teams", "One game, or a whole season. Each team gets its own coin.", teamsBlocked)}
         {opt("candidates", "Two candidates in one race", "Each candidate gets its own coin, settled on that candidate's own market.", null)}
@@ -95,13 +103,18 @@ export function RivalryKindStep({ onPick, teamsBlocked }: { onPick: (k: "teams" 
 }
 
 /** Question 3: the four patterns, the share row and the sentence the coin carries. */
-export function PatternStep({ preview, options, value, onPick, shares, share, onShare, next }: { preview: ReactNode; options: PatternOption[]; value: PatternId | null; onPick: (p: PatternId) => void; shares: readonly number[]; share: number; onShare: (v: number) => void; next: ReactNode }) {
+export function PatternStep({ preview, options, value, onPick, shares, share, onShare, next, math = null, notice = null, extra = null, pairLabel = false, drain = null }: { /** WIRING-PARITY audit 7 #6: how fast a large share empties the pool */ drain?: string | null; /** item 159: a pair's share is set once for both coins */ pairLabel?: boolean; preview: ReactNode; options: PatternOption[]; value: PatternId | null; onPick: (p: PatternId) => void; shares: readonly number[]; share: number; onShare: (v: number) => void; next: ReactNode; /** pass B item 16 */ math?: string | null; /** audit 6 item 7: why a tap did nothing */ notice?: string | null; /** WIRING-SOURCES3: extra choices (a disaster coin's per-event / next-event pair) */ extra?: ReactNode }) {
+  const offered = options.filter((o) => o.available), other = options.filter((o) => !o.available);
+  // item 153: More and Less always toggle; the chosen share stays visible on the main row
+  const [more, setMore] = useState(false);
+  const MAIN = MAIN_RECURRING as readonly number[];
+  const mainRow = shares.filter((f) => shares.length <= 3 || MAIN.includes(f) || (!more && Math.abs(f - share) < 1e-9));
   return (
     <section className="space-y-3" aria-label={GUIDED_STEPS[2].question} data-guided-step="burn">
-      <h2 className="text-xl font-semibold">{GUIDED_STEPS[2].question}</h2>
+      <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{GUIDED_STEPS[2].question}</h2>
       <div className="min-w-0 break-words rounded-lg border border-amber-400/50 bg-neutral-900 p-3 text-sm text-neutral-100" data-guided-preview aria-live="polite">{preview}</div>
       <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Burn pattern">
-        {options.map((o) => (
+        {offered.map((o) => (
           <button key={o.id} type="button" role="radio" aria-checked={value === o.id} aria-label={o.label} data-decision="what" data-pattern={o.id} data-available={o.available ? "yes" : "no"} disabled={!o.available} onClick={() => onPick(o.id)} className={`rounded-lg border p-3 text-left text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${value === o.id ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"} disabled:cursor-not-allowed disabled:opacity-50`}>
             <span className="block font-medium">{o.label}</span>
             <span className="mt-0.5 block text-xs text-neutral-300">{o.sentence}</span>
@@ -109,32 +122,44 @@ export function PatternStep({ preview, options, value, onPick, shares, share, on
           </button>
         ))}
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="Share of the pool">
-        <span className="text-xs text-neutral-500">Share of the pool</span>
-        {shares.filter((f) => shares.length <= 3 || (MAIN_RECURRING as readonly number[]).includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
-        {shares.length > 3 && <details className="inline-block" open={!(MAIN_RECURRING as readonly number[]).includes(share)} data-share-more><summary className="cursor-pointer text-xs text-neutral-400">More</summary><span className="ml-1 inline-flex gap-2">
-            {shares.filter((f) => !(MAIN_RECURRING as readonly number[]).includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
-        </span></details>}
+      {extra}
+      {notice && <p className="text-xs text-amber-300" role="status" data-pattern-notice>{notice}</p>}
+      {other.length > 0 && (
+        <details className="text-xs text-neutral-400" data-other-patterns>
+          <summary className="cursor-pointer">{OTHER_PATTERNS_LABEL}</summary>
+          <ul className="mt-1 space-y-1">{other.map((o) => <li key={o.id} data-pattern={o.id} data-available="no" aria-disabled="true"><span className="text-neutral-200">{o.label}.</span> {o.reason}</li>)}</ul>
+        </details>
+      )}
+      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={pairLabel ? "Share of each coin's burn pool, the same for both" : "Share of the burn pool"}>
+        <span className="text-xs text-neutral-500">{pairLabel ? "Share of each coin's burn pool, the same for both" : "Share of the burn pool"}</span>
+        {mainRow.map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
+        {shares.length > 3 && <button type="button" data-optional="preset" aria-expanded={more} className="text-xs text-neutral-400 underline" onClick={() => setMore(!more)} data-share-more>{more ? "Less" : "More"}</button>}
+        {more && shares.filter((f) => !mainRow.includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
       </div>
+      <p className="text-xs text-neutral-400" data-share-example>{shareExample(share)}</p>
+      {drain && <p className="text-xs text-amber-200" data-drain>{drain}</p>}
+      {math && <details className="text-xs text-neutral-400" data-amount-math><summary className="cursor-pointer">{AMOUNT_MATH_LABEL}</summary><p className="mt-1">{math}</p></details>}
       {next}
     </section>
   );
 }
 
-/** Question 4: the end, as sentences from the rule, with the ends the program pins listed (the ones not built greyed). */
-export function EndStep({ sentences, options, next }: { sentences: string[]; options: EndOption[]; next: ReactNode }) {
+/**
+ * The end, stated on the review (website-20; pass B item 18, audit 6 item 12): the sentences read from the rule, then the ends the program
+ * can pin that this coin does not use, one tap away. Never a menu with one live choice.
+ */
+export function EndSection({ sentences, options }: { sentences: string[]; options: EndOption[] }) {
+  const other = options.filter((o) => !o.available);
   return (
-    <section className="space-y-3" aria-label={GUIDED_STEPS[3].question} data-guided-step="end">
-      <h2 className="text-xl font-semibold">{GUIDED_STEPS[3].question}</h2>
-      <div className="min-w-0 space-y-1 break-words rounded-lg border border-amber-400/50 bg-neutral-900 p-3 text-sm text-neutral-100" data-end-sentences>{sentences.map((s) => <p key={s}>{s}</p>)}</div>
-      <ul className="space-y-1 text-sm" aria-label="Ends the program can pin">
-        {options.map((o) => (
-          <li key={o.kind} className={`rounded border p-2 ${o.available ? "border-amber-400" : "border-neutral-800 opacity-60"}`} data-end-option={o.kind} data-available={o.available ? "yes" : "no"}>
-            <span className="font-medium">{o.label}</span>{o.available ? <span className="ml-2 text-xs text-amber-300">This coin&apos;s end</span> : <span className="block text-xs text-neutral-400">{o.reason}</span>}
-          </li>
-        ))}
-      </ul>
-      {next}
+    <section className="min-w-0 space-y-1 rounded-lg border border-neutral-800 p-3 text-sm" aria-label={END_LABEL} data-end-section>
+      <h3 className="text-xs font-medium text-neutral-400">{END_LABEL}</h3>
+      <div className="min-w-0 space-y-1 break-words text-neutral-100" data-end-sentences>{sentences.map((s) => <p key={s}>{s}</p>)}</div>
+      {other.length > 0 && (
+        <details className="text-xs text-neutral-400" data-other-ends>
+          <summary className="cursor-pointer">Other ends, not used here</summary>
+          <ul className="mt-1 space-y-1">{other.map((o) => <li key={o.kind} data-end-option={o.kind}><span className="text-neutral-200">{o.label}.</span> {o.reason}</li>)}</ul>
+        </details>
+      )}
     </section>
   );
 }

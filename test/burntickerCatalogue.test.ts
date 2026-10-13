@@ -4,7 +4,7 @@
 // adapter on a fake RPC, and the market/assertion stubs' pure decoders.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { CATALOGUE, CatalogueAdapter, catalogue, feedById, feedRuleProblems, fixtureReadings, loadFixture, loadSourcesConfig, previewFromFixture } from "@/lib/burnticker/catalogue";
+import { CATALOGUE, CatalogueAdapter, DEFAULT_PARAMS, catalogue, feedById, feedRuleProblems, fixtureReadings, loadFixture, loadSourcesConfig, previewFromFixture } from "@/lib/burnticker/catalogue";
 import { expandUrl, jsonPath, parseBody, parseCsv, toPeriod } from "@/lib/burnticker/sources/attestedHttp";
 import { onchainSource, type SolanaRpcPort } from "@/lib/burnticker/sources/onchain";
 import { ctfOutcome, umaOutcome, driftBetStub, hedgehogStub, polymarketCard, umaStub } from "@/lib/burnticker/sources/stubs";
@@ -24,7 +24,7 @@ describe("sources.json: every configured source", () => {
       assert.ok([3, 4, 5].includes(c.tier), `${c.id} tier`);
       assert.ok(TIER_LABEL[c.tier]);
       assert.ok(c.unit.size > 0 && c.unit.label && c.unit.definition, `${c.id} unit`);
-      const f = feedById(c.id) ?? feedById(`${c.id}:${{ "wiki.views": "Bitcoin", "github.stars": "anza-xyz/agave", "steam.players": "730", "defillama.tvl": "raydium", "edgar.8k": "0000320193", "ll2.provider": "121", "ll2.launch": "7d1afb26-6f9c-429b-9ccf-29012fd1e519", "usgs.quakes": "5.5", "github.releases": "anza-xyz/agave", "github.milestone": "anza-xyz/agave.1900", "youtube.milestone": "UCLA_DiR1FfKNvjuUpBHmylQ/subscribers.15000000" }[c.id] ?? ""}`);
+      const f = feedById(c.id) ?? feedById(`${c.id}:${{ "wiki.views": "Bitcoin", "github.stars": "anza-xyz/agave", "steam.players": "730", "defillama.tvl": "raydium", "edgar.8k": "0000320193", "ll2.provider": "121", "ll2.launch": "7d1afb26-6f9c-429b-9ccf-29012fd1e519", "usgs.quakes": "5.5", "github.releases": "anza-xyz/agave", "github.milestone": "anza-xyz/agave.1900", "youtube.milestone": "UCLA_DiR1FfKNvjuUpBHmylQ/subscribers.15000000" }[c.id] ?? DEFAULT_PARAMS[c.id] ?? ""}`);
       assert.ok(f, `${c.id} resolves`);
       if (!c.fixture) { assert.ok(c.needsKey || c.note, `${c.id}: no fixture needs a reason`); assert.equal(f!.launchable.ok, false); continue; }
       const { readings, refusals } = fixtureReadings(f!, NOW);
@@ -85,7 +85,7 @@ describe("sources.json: every configured source", () => {
     assert.equal(p.totals.units, 5);
     assert.deepEqual(feedRuleProblems(feedById("treasury.debt")!, validateRule(DEBT_RULE)), []);
     assert.ok(feedRuleProblems(feedById("treasury.debt")!, rule("treasury.debt", 5e8, "up", "previousSettlement")).some((x) => /unit must be 1000000000/.test(x)));
-    assert.ok(feedRuleProblems(feedById("usgs.quakes6")!, rule("usgs.quakes6", 1, "up", 0)).some((x) => /Coins cannot launch on usgs\.quakes6 yet/.test(x)));
+    assert.ok(feedRuleProblems(feedById("usgs.quakes6")!, rule("usgs.quakes6", 1, "up", 0)).some((x) => /Coins cannot launch on "Earthquakes of magnitude 6 or more \(USGS\)" yet/.test(x)));
   });
   test("the catalogue adapter reads through an injected fetch, filters by since, never returns a price", async () => {
     const f = feedById("treasury.debt")!;
@@ -94,7 +94,7 @@ describe("sources.json: every configured source", () => {
     const r = await a.settledSince(validateRule(DEBT_RULE), "2026-10-05");
     assert.deepEqual(r.events.map((e) => e.id), ["2026-10-06", "2026-10-07", "2026-10-08"]);
     assert.equal((await a.impliedChance()).chance, null);
-    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "eia.gasoline", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /Coins cannot launch on eia\.gasoline yet\. The reason is: needs a key/);
+    await assert.rejects(a.settledSince(validateRule({ ...DEBT_RULE, series: "eia.gasoline", scalar: { unit: 0.05, perUnit: { fractionOfPool: 0.02 }, baseline: "previousSettlement", direction: "abs" } }), null), /Coins cannot launch on "U\.S\. regular gasoline retail price, weekly \(EIA\)" yet\. The reason is: needs a key/);
     assert.equal((await a.searchSeries("egg"))[0].ticker, "bls.eggs");
   });
 });

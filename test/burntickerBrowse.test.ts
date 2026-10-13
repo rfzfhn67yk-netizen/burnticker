@@ -182,7 +182,9 @@ describe("GET /api/burnticker/v1/browse — venue-agnostic, Kalshi behind BURNTI
 
   test("the taxonomy file: eleven categories, every feed id it names exists in sources.json or the on-chain facts", () => {
     const cats = loadCategories();
-    assert.deepEqual(cats.map((c) => c.id), ["sports", "politics", "economics", "financials", "weather", "science", "culture", "crypto", "companies", "health", "world"]);
+    // sources-3 (2026-10-12): Natural disasters first; the weather tile is gone and its NWS rules sit under Science, Space & Weather
+    assert.deepEqual(cats.map((c) => c.id), ["disasters", "sports", "politics", "economics", "financials", "science", "culture", "crypto", "companies", "health", "world"]);
+    assert.deepEqual(cats.find((c) => c.id === "science")!.native, ["nws:high", "nws:rain", "nws:snow"]);
     const ids = new Set([...(JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "../config/burnticker/sources.json"), "utf8")) as { sources: { id: string }[] }).sources.map((s) => s.id), "solana.blockHeight", "solana.slot"]);
     for (const c of cats) for (const f of c.feeds) assert.ok(ids.has(f), `${c.id}: feed ${f} exists`);
     assert.ok(!cats.some((c) => c.feeds.includes("usgs.quakes6")), "the disaster-adjacent feed stays unmapped");
@@ -200,7 +202,7 @@ describe("GET /api/burnticker/v1/browse — venue-agnostic, Kalshi behind BURNTI
     const firstNonFeed = page.cards.findIndex((c) => c.venue !== "feed");
     assert.ok(page.counts.feeds > 0 && firstNonFeed === page.counts.feeds, "feeds come first");
     assert.equal(page.cards[0].id, "feed:treasury.debt", "in the taxonomy's order");
-    assert.equal(page.cards[0].pick.oracle, "catalogue"); assert.equal(page.cards[0].example, "burns for every $1B added");
+    assert.equal(page.cards[0].pick.oracle, "catalogue"); assert.equal(page.cards[0].example, "burns for each full increase of $1B over the previous reading", "audit 201: a change over the previous reading, never a total");
     assert.ok(page.counts.kalshi > 0 && page.cards.some((c) => c.id === "kalshi:KXFEDDECISION"));
     assert.ok(page.errors.some((e) => /^Polymarket's economy events could not be read/.test(e)), "a venue without data is named, the page still renders");
     const cfg = loadCopyLintConfig();

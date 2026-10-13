@@ -9,7 +9,7 @@ import { operatorShareClause } from "@/lib/burnticker/feeShareLine";
 
 export const CHECK_COPY = {
   title: "Check this yourself",
-  intro: "This is a skeptic's checklist, written against ourselves. Every line says where to look, so you never have to take our word for anything. The receipt verifier runs in your browser and asks the chain and the original data source directly.",
+  intro: "Check the money flows, operator powers and a real burn receipt against the source records. Every line says where to look, so you never have to take our word for anything. The receipt verifier runs in your browser and asks the chain and the original data source directly.",
   moneyTitle: "Where money can go",
   moneyIntro: "This table lists every instruction in both programs and the only place each one can move SOL or tokens. Neither program has an instruction that withdraws, sweeps or sends funds out.",
   powersTitle: "Who can do what",
@@ -39,7 +39,7 @@ export const LEDGER_COPY = {
   entriesTitle: "Every transaction (from chain)",
   expensesTitle: "What the fee pays for",
   expensesSource: "These amounts are operator-entered: the operator typed them into config/burnticker/expenses.json. An amount that is not known yet says so.",
-  placeholder: "amount not given yet",
+  placeholder: "not supplied", // private review 8: never the raw TODO_EXPENSE_* token
   oneOff: "one-off",
   unavailable: "The chain could not be read from this site just now. The wallet blocks are never filled in from other records instead.",
   regenerated: "This ledger is rebuilt from the chain once a month by the keeper host, or on request. When no published copy is less than an hour old, the API reads the chain directly.",

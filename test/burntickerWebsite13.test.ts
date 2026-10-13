@@ -66,7 +66,7 @@ describe("the grid's states (ChatGPT audit 6 A5): unavailable is never empty", (
   test("the coins page: list first, no hero, the PAIRS0 label fixed, one search box per screen", () => {
     const p = read("src/app/burnticker/CoinsIndex.tsx");
     assert.doesNotMatch(code(p), /HERO|HOW_IT_WORKS|bt-hero|bt-how/, "the hero and the three steps live on / only (Claude site audit 2 item 5)");
-    assert.ok(p.indexOf('<h1 id="bt-coins-h"') < p.indexOf('className="bt-tabs"'), "it starts at the Coins heading");
+    assert.ok(p.indexOf('<h1 id="bt-coins-h"') < p.indexOf('className={`bt-tabs '), "it starts at the Coins heading");
     assert.match(p, /\{t\.label\}\{t\.id === "pairs" && ix \? <> <span className="bt-tab-count" aria-label=/, "a space and a badge between Pairs and its count");
     assert.match(read("config/public-repo/overlay/src/app/globals.css"), /@media \(min-width: 640px\) \{ \.bt-grid-search \{ display: none; \} \}/);
     assert.match(p, /data-grid-state=\{state\.kind\}/);

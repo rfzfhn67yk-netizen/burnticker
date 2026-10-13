@@ -25,7 +25,7 @@ export function FieldHelp({ id }: { id: string }) {
   return (
     <span ref={ref} className="bt-help relative ml-1 inline-block align-middle" data-help-for={id}>
       <button type="button" aria-label="What to enter here" aria-describedby={tipId} aria-expanded={open}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-neutral-600 font-mono text-[10px] leading-none text-neutral-300 hover:border-amber-400 hover:text-amber-300 focus:border-amber-400 focus:outline-none"
+        className="bt-hit inline-flex h-5 w-5 items-center justify-center rounded-full border border-neutral-600 font-mono text-[12px] leading-none text-neutral-300 hover:border-amber-400 hover:text-amber-300 focus-visible:border-amber-400"
         onMouseEnter={() => setOpen(true)} onMouseLeave={() => { if (!pinned) setOpen(false); }}
         onFocus={() => setOpen(true)} onBlur={() => { if (!pinned) setOpen(false); }}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPinned(!pinned || !open); setOpen(!(pinned && open)); }}><span aria-hidden="true" className="select-none before:content-['?']" /></button>
