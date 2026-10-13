@@ -10,9 +10,9 @@
 //                              [--twap-window 1200] [--twap-deviation-bps 300] [--fixed-pool <pubkey>]
 //                              [--end-sink flagship:<min lamports> | mint:<mint>:<min> | pair-winner:<partner>:<min>]   (§45: pins the
 //                              coin's EndSink; omitted = none, the hashed wind-down. The flagship itself never takes one.)
-//                              [--program-round 3|4]   the deployed program's initialize_token layout: default from
-//                              BURNTICKER_INITIALIZE_TOKEN_LAYOUT (r3 | r4), else 3 (mainnet and devnet until the round-4 upgrade);
-//                              --end-sink implies 4
+//                              [--program-round 3|4|5]   the deployed program's initialize_token layout: default from
+//                              BURNTICKER_INITIALIZE_TOKEN_LAYOUT (r3 | r4 | r5), else 3; --end-sink implies 4; 5 sends round 4's bytes
+//                              (round 5: a coin that burns another token runs pin-burn-target next, before the mint exists)
 //                              Prints the rules file's sha256 it will PIN on chain (publish it) and the RuleParams derived from the file.
 //                              Buyback + pool policy 0 needs --launchlab-platform (its cpConfigId / LP scales / platformCpCreator are pinned).
 //   register-pool              --mint <pubkey> --pool <pubkey> [--fixed]       (policy 0 passes the token's LaunchLab pool automatically)
@@ -40,6 +40,16 @@
 //   submit-rule-end            --mint <pubkey> --date YYYYMMDD --outcome resolved|void --attester <keypath>... [--source-url <url>]
 //   forward-on-end             --mint <pubkey>   (after a RESOLVED end: the program's destination, computed by planForwardOnEnd)
 //   end-status                 --mint <pubkey>   READ-ONLY: end_state, the EndSink, the RuleEnd and what forward_on_end would do
+//   Round 5 — burn targets (a coin that burns another token; crank above runs crank_target_burn for such a coin):
+//   check-target               --target-mint <pubkey> --pool <pubkey> --feed <hex> [--mint <coin>] [--max-dev-bps 300]   READ-ONLY: the
+//                              program's admission (CPMM or AMM v4 pool, Pyth sponsored feeds), from chain
+//   pin-burn-target            --mint <keypath> --target-mint <pubkey> --pool <pubkey> --feed <hex>   (mint-signed, after initialize-token,
+//                              before the coin's mint exists; refused in plain words when the admission fails)
+//   target-status              --mint <pubkey>   READ-ONLY: burn_target_kind, the BurnTarget, and the pinned pool's admission now
+//   propose-target-pool        --mint <pubkey> --admin <keypath|pubkey> --pool <pubkey>   (48 h; the target token never changes)
+//   cancel-target-pool         --mint <pubkey> --admin <keypath|pubkey>
+//   veto-target-pool           --mint <pubkey> --attester <keypath|pubkey>   (any current attester)
+//   apply-target-pool          --mint <pubkey>   (after 48 h, within 14 days; the proposed pool passes the same admission)
 //   initialize-platform        --upgrade-authority <keypath|pubkey> --authority <pubkey> --sunset <unix seconds|ISO date> [--cranker <pubkey>]...
 //                              (the cap is always the 25 SOL default at creation; ≤ 3 crankers, enforced only while the cap is in force)
 //   set-registration-policy    --mint <pubkey> --admin <keypath|pubkey> --policy 0|1 [--pool <pubkey>]   (48 h timelock; stranding recovery)
@@ -85,9 +95,10 @@ import { attestReading, sourceUrlHash } from "../src/lib/burnReceipts/attestatio
 import { fetchCpmmPool } from "../src/lib/burnReceipts/cpmm.ts";
 import { confirmByPolling, planCrank, poolAccountsOrStandIns, redactRpcUrl } from "../src/lib/burnReceipts/crank.ts";
 import { loadRules } from "../src/lib/burnKeeper/rules.ts";
+import { applyTargetPoolIx, BURN_TARGET_EXTERNAL, burnTargetPda, cancelTargetPoolIx, checkTargetAdmission, fetchBurnTarget, pinBurnTargetIx, proposeTargetPoolIx, vetoTargetPoolIx } from "../src/lib/burnReceipts/burnTarget.ts";
 
 const args = process.argv.slice(2);
-const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "unlink-pair", "pair-status", "submit-rule-end", "forward-on-end", "end-status"] as const;
+const COMMANDS = ["initialize-token", "register-pool", "claim-launchlab-creator-fee", "check-pool-health", "initialize-platform", "set-registration-policy", "cancel-registration-policy", "apply-registration-policy", "veto-registration-policy", "verify-platform-pins", "register-fee-key", "claim-lock-fees", "submit-reading", "crank", "link-pair", "submit-pair-result", "forward-to-winner", "unlink-pair", "pair-status", "submit-rule-end", "forward-on-end", "end-status", "check-target", "pin-burn-target", "target-status", "propose-target-pool", "cancel-target-pool", "veto-target-pool", "apply-target-pool"] as const;
 type Command = (typeof COMMANDS)[number];
 const CMD = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : null;
 const flag = (n: string) => args.includes(`--${n}`);
@@ -222,6 +233,24 @@ if (CMD === "end-status") {
   console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), end_state: cfg.config.end_state, end_date: cfg.config.end_date, crank_cursor: cfg.config.crank_cursor, last_record_date: cfg.config.last_record_date, endSink: await fetchEndSink(connection, programId, mint), ruleEnd: await fetchRuleEnd(connection, programId, mint), forwardOnEnd: view }), null, 2));
   process.exit(0);
 }
+// READ-ONLY (no payer): round 5 burn targets.
+if (CMD === "check-target") {
+  const targetMint = pubkeyOf(opt("target-mint"), "--target-mint") ?? die("--target-mint <pubkey> is required");
+  const pool = pubkeyOf(opt("pool"), "--pool") ?? die("--pool <pubkey> is required");
+  const coin = pubkeyOf(opt("mint"), "--mint") ?? undefined;
+  const feed = (opt("feed") ?? die("--feed <Pyth feed id hex> is required")).toLowerCase();
+  const a = await checkTargetAdmission(connection, { cluster, targetMint, pool, feedId: feed, maxDevBps: Number(opt("max-dev-bps") ?? 300), ...(coin ? { coinMint: coin } : {}) });
+  console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, rpc: rpcShown, ...a }), null, 2));
+  process.exit(a.ok ? 0 : 1);
+}
+if (CMD === "target-status") {
+  const mint = pubkeyOf(opt("mint"), "--mint") ?? die("--mint <pubkey> is required");
+  const cfg = (await fetchTokenConfig(connection, programId, mint)) ?? die(`no TokenConfig for ${mint.toBase58()}`);
+  const bt = await fetchBurnTarget(connection, programId, mint);
+  const now = bt ? await checkTargetAdmission(connection, { cluster, targetMint: bt.target.target_mint, pool: bt.target.pool, coinMint: mint, feedId: Buffer.from(bt.target.target_feed_id).toString("hex"), maxDevBps: cfg.config.rule.max_twap_deviation_bps }) : null;
+  console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), burn_target_kind: cfg.config.burn_target_kind, burnTarget: bt ? { address: bt.address, ...bt.target } : null, pinnedPoolNow: now }), null, 2));
+  process.exit(0);
+}
 // READ-ONLY (no payer): LAUNCHPAD-PATH §40 pair state.
 if (CMD === "pair-status") {
   const mint = pubkeyOf(opt("mint"), "--mint") ?? die("--mint <pubkey> is required");
@@ -232,7 +261,7 @@ if (CMD === "pair-status") {
   console.log(JSON.stringify(jsonSafe({ command: CMD, cluster, mint: mint.toBase58(), pair_state: cfg.config.pair_state, pair_void_by: cfg.config.pair_void_by, pair_after_date: cfg.config.pair_after_date, pair_unlinked_at: cfg.config.pair_unlinked_at, link, date: d, result, view: d ? pairResultFor(result, mint) : null }), null, 2));
   process.exit(0);
 }
-const payer: Party = (await party("payer", false)) ?? (CMD === "initialize-platform" ? await party("upgrade-authority") : CMD === "set-registration-policy" || CMD === "cancel-registration-policy" ? await party("admin") : CMD === "veto-registration-policy" ? await party("attester") : null) ?? die("--payer <keypath|pubkey> is required");
+const payer: Party = (await party("payer", false)) ?? (CMD === "initialize-platform" ? await party("upgrade-authority") : CMD === "set-registration-policy" || CMD === "cancel-registration-policy" ? await party("admin") : CMD === "veto-registration-policy" || CMD === "veto-target-pool" ? await party("attester") : CMD === "propose-target-pool" || CMD === "cancel-target-pool" ? await party("admin") : null) ?? die("--payer <keypath|pubkey> is required");
 const mintArg = (): PublicKey => pubkeyOf(opt("mint"), "--mint") ?? die("--mint <pubkey> is required");
 const tokenWatch = (mint: PublicKey): Watch[] => [{ address: configPda(programId, mint), kind: "TokenConfig" }, { address: feePda(programId, mint), kind: "lamports" }];
 
@@ -264,10 +293,12 @@ if (CMD === "initialize-token") {
     if (parts[0] === "pair-winner" && parts.length === 3) return { kind: END_SINK_PAIR_WINNER, sinkMint: pubkeyOf(parts[1], "--end-sink")!, minForwardLamports: min };
     return die("--end-sink flagship:<min> | mint:<mint>:<min> | pair-winner:<partner>:<min>");
   })();
-  const round = opt("program-round") ?? (endSink || initializeTokenLayoutFromEnv() === "r4" ? "4" : "3");
-  if (round !== "3" && round !== "4") die("--program-round 3|4");
-  if (endSink && round !== "4") die("--end-sink needs --program-round 4 (the round-4 program)");
-  const ix = initializeTokenIx({ programId, payer: payer.publicKey, creator: creator.publicKey, mint: mint.publicKey, launchlabPlatform, layout: round === "4" ? "r4" : "r3", ...(endSink ? { endSink } : {}), args: {
+  // r4 and r5 send the same initialize_token bytes (round 5 pins a burn target in a separate instruction)
+  const envLayout = initializeTokenLayoutFromEnv();
+  const round = opt("program-round") ?? (envLayout === "r5" ? "5" : endSink || envLayout === "r4" ? "4" : "3");
+  if (round !== "3" && round !== "4" && round !== "5") die("--program-round 3|4|5");
+  if (endSink && round === "3") die("--end-sink needs --program-round 4 or 5");
+  const ix = initializeTokenIx({ programId, payer: payer.publicKey, creator: creator.publicKey, mint: mint.publicKey, launchlabPlatform, layout: round === "5" ? "r5" : round === "4" ? "r4" : "r3", ...(endSink ? { endSink } : {}), args: {
     feed_id: loaded.rules.feed.id, memo_prefix: loaded.rules.memo.prefix, memo_source: loaded.rules.feed.memoSource, rules_sha256: Buffer.from(loaded.sha256, "hex"), rule,
     attesters, quorum: Number(opt("quorum") ?? 1), fixed_pool: fixedPool ?? PublicKey.default, admin,
   } });
@@ -458,4 +489,46 @@ if (CMD === "veto-registration-policy") {
   const mint = mintArg();
   const attester = (await party("attester"))!;
   await run([vetoRegistrationPolicyIx({ programId, attester: attester.publicKey, mint })], payer, [attester], tokenWatch(mint));
+}
+// Round 5: re-pinning a burn target's POOL (the target token never changes).
+if (CMD === "propose-target-pool") {
+  const mint = mintArg();
+  const admin = (await party("admin"))!;
+  const pool = pubkeyOf(opt("pool"), "--pool") ?? die("--pool <pubkey> is required");
+  const cfg = (await fetchTokenConfig(connection, programId, mint)) ?? die(`no TokenConfig for ${mint.toBase58()}`);
+  if (cfg.config.burn_target_kind !== BURN_TARGET_EXTERNAL) die("this coin has no burn target");
+  const bt = (await fetchBurnTarget(connection, programId, mint))!;
+  const a = await checkTargetAdmission(connection, { cluster, targetMint: bt.target.target_mint, pool, coinMint: mint, feedId: Buffer.from(bt.target.target_feed_id).toString("hex"), maxDevBps: cfg.config.rule.max_twap_deviation_bps });
+  if (!a.ok) say(`warning: the proposed pool fails admission today (apply_target_pool would refuse it): ${a.problems.join(" ")}`);
+  await run([proposeTargetPoolIx({ programId, admin: admin.publicKey, mint, pool })], payer, [admin], [...tokenWatch(mint), { address: burnTargetPda(programId, mint), kind: "lamports" }]);
+}
+if (CMD === "cancel-target-pool") {
+  const mint = mintArg();
+  const admin = (await party("admin"))!;
+  await run([cancelTargetPoolIx({ programId, admin: admin.publicKey, mint })], payer, [admin], tokenWatch(mint));
+}
+if (CMD === "veto-target-pool") {
+  const mint = mintArg();
+  const attester = (await party("attester"))!;
+  await run([vetoTargetPoolIx({ programId, attester: attester.publicKey, mint })], payer, [attester], tokenWatch(mint));
+}
+if (CMD === "apply-target-pool") {
+  const mint = mintArg();
+  const bt = (await fetchBurnTarget(connection, programId, mint)) ?? die("this coin has no burn target");
+  if (bt.target.pending_eta === BigInt(0)) die("no target-pool proposal is pending");
+  const feedHex = Buffer.from(bt.target.target_feed_id).toString("hex");
+  const a = await checkTargetAdmission(connection, { cluster, targetMint: bt.target.target_mint, pool: bt.target.pending_pool, coinMint: mint, feedId: feedHex });
+  if (!a.ammConfig || !a.wsolVault || !a.targetVault) die(`the proposed pool cannot be read: ${a.problems.join(" ")}`);
+  await run([applyTargetPoolIx({ programId, caller: payer.publicKey, mint, targetMint: bt.target.target_mint, newPool: bt.target.pending_pool, newAmmConfig: a.ammConfig!, newWsolVault: a.wsolVault!, newTargetVault: a.targetVault!, feedId: feedHex })], payer, [], [...tokenWatch(mint), { address: burnTargetPda(programId, mint), kind: "lamports" }], { admission: a });
+}
+if (CMD === "pin-burn-target") {
+  const mint = (await party("mint"))!;
+  const targetMint = pubkeyOf(opt("target-mint"), "--target-mint") ?? die("--target-mint <pubkey> is required");
+  const pool = pubkeyOf(opt("pool"), "--pool") ?? die("--pool <pubkey> is required");
+  const feed = (opt("feed") ?? die("--feed <Pyth feed id hex> is required")).toLowerCase();
+  const cfg = (await fetchTokenConfig(connection, programId, mint.publicKey)) ?? die("run initialize-token first (no TokenConfig for this mint)");
+  const a = await checkTargetAdmission(connection, { cluster, targetMint, pool, coinMint: mint.publicKey, feedId: feed, maxDevBps: cfg.config.rule.max_twap_deviation_bps });
+  if (!a.ok || !a.ammConfig || !a.wsolVault || !a.targetVault) die(`the program would refuse this target: ${a.problems.join(" ")}`);
+  say(`burn target ${targetMint.toBase58()} on ${a.poolKind === 1 ? "AMM v4" : "CPMM"} pool ${pool.toBase58()}: admission passes (SOL reserve ${a.wsolReserve} lamports, fee ${a.feePpm} ppm)`);
+  await run([pinBurnTargetIx({ programId, payer: payer.publicKey, mint: mint.publicKey, targetMint, pool, ammConfig: a.ammConfig!, wsolVault: a.wsolVault!, targetVault: a.targetVault!, feedId: feed })], payer, [mint], [...tokenWatch(mint.publicKey), { address: burnTargetPda(programId, mint.publicKey), kind: "lamports" }], { admission: a });
 }

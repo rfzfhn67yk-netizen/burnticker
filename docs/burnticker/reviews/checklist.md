@@ -230,3 +230,31 @@ before this round) is unchanged:
   `init_pair` transaction. P3-2: `apply_paired_attester_change` sets the one new set on BOTH coins and both PairLinks in one instruction
   (it now takes the partner's PairLink). P3-I1: `forward_to_winner` refuses `NotPaired` after an unlink, so the plain loser burns its own
   period. The entrypoint, event and error counts above are unchanged.
+
+## Erratum 2026-10-13 (external burn targets, program round 5)
+
+The text above and the earlier errata stay as written. Round 5 lets a coin burn ANOTHER token (docs/burnticker/EXTERNAL-BURN.md). It is
+built and tested on a branch and not deployed; a coin without a burn target (every coin before this round) runs the same code as before:
+
+- **Instruction count (item 1).** burn_receipts now has **39 entrypoints**: the 33 above plus `pin_burn_target`, `crank_target_burn`,
+  `propose_target_pool`, `cancel_target_pool`, `veto_target_pool` and `apply_target_pool`. The IDL, the Powers Register and the
+  whitepaper's §13.3 list 39 (42 event types, 129 error codes).
+- **TokenConfig.** The last reserved byte is now `burn_target_kind` (0 = the coin burns itself, the value on every earlier config; 1 = it
+  burns the token pinned in its BurnTarget ["burn_target", mint]). The account size and every other offset are unchanged.
+  `crank_buyback` refuses a coin with a target (`BurnTargetSet`); `initialize_token` is byte-for-byte round 4's.
+- **pin_burn_target.** Mint-signed, once, and only while the coin's mint account does not exist yet. Admission: a plain SPL Token target
+  (Token-2022 refused) with no mint or freeze authority, not the coin and not WSOL; ONE pool of exactly {target, WSOL} on SPL Token: a CPMM
+  pool (swaps on) or an AMM v4 pool in swap-only status (reserve = vault − owed PnL), fee at most 1 %, SOL reserve at least 50 SOL
+  (devnet build 2 SOL); the target's Pyth feed pinned, both Pyth prices fully verified and fresh, and the pool's price within the rule's
+  deviation of the Pyth ratio. The pool's LP is not required to be locked: it is not ours.
+- **The Pyth guard.** Every target crank (both pool kinds) refuses a pool away from the Pyth target/SOL ratio and takes its minimum output
+  from Pyth (a CPMM pool's TWAP is checked as well); a stale or wide Pyth price holds the crank (`PythStale` / `PythUnusable` /
+  `TargetPriceDeviation`), and a wrong price account is refused (`TargetPythInvalid`).
+- **crank_target_burn.** crank_buyback's spend and guards on the PINNED pool, at most 2 % of that pool's SOL reserve per crank; burns
+  what it received from the fee PDA's own account for the target, then any of the coin's own tokens; memo v3 names the target mint. A
+  pool that is gone, off, changed or under the floor refuses (`TargetPoolUnhealthy` / `TargetPoolBelowFloor`, the SOL is held); 30 days
+  after the reading it is processed below-floor with its spend carried.
+- **Re-pinning.** The target token never changes. The pool can be re-pinned: admin proposes, 48 h, any current attester vetoes, anyone
+  applies within 14 days of the proposal, the same admission.
+- **What a reviewer checks.** SOL leaves a fee PDA in four places now: `crank_buyback`, `crank_target_burn` (only into the pinned target
+  pool's WSOL vault, for target tokens burned in the same instruction), `forward_to_winner` and `forward_on_end`.

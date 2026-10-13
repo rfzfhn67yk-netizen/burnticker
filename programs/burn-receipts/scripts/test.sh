@@ -15,6 +15,11 @@ if [ ! -f "$here/fixtures/raydium_cp_swap.so" ]; then
   bash "$here/scripts/build-cpmm-fixture.sh"
 fi
 
+# Round 5: the real Raydium AMM v4 program (raydium-amm, pinned commit) for the AMM v4 target-pool suite.
+if [ ! -f "$here/fixtures/raydium_amm.so" ]; then
+  bash "$here/scripts/build-amm-v4-fixture.sh"
+fi
+
 mock_so="$here/fixtures/launchlab_mock.so"
 mock_src="$here/mocks/launchlab_mock"
 if [ ! -f "$mock_so" ] || [ -n "$(find "$mock_src/src" "$mock_src/Cargo.toml" -newer "$mock_so" -print -quit)" ]; then

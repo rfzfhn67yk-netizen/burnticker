@@ -324,7 +324,7 @@ describe("item 12: the launch review, short by default (Claude site audit 3 item
     assert.doesNotMatch(pw, /endsLine/, "the end of the rule is said once, in its own block");
     assert.equal((rc.match(/<RetirementFacts/g) ?? []).length, 1);
     assert.doesNotMatch(pg, /data-vault-hidden|VAULT_HIDDEN_SENTENCE/, "the vault dev note is deleted");
-    assert.match(pg, /cost=\{shownReview\.review && reviewCurrent \? `The estimated cost is about \$\{shownReview\.review\.costs\.totalSol\} SOL\.` : null\}/);
+    assert.match(pg, /cost=\{shownReview\.review && reviewCurrent \? `The estimated cost is about \$\{withPinSteps\(shownReview\.review, realOneList\)\.costs\.totalSol\} SOL\.` : null\}/);
   });
   test("the preview notice sticks at the shared header's measured height, not a fixed top-14", () => {
     const pg = read("src/app/burnticker/launch/page.tsx"), head = read("src/app/burnticker/_components/SiteHeader.tsx");

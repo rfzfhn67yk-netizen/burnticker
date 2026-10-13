@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { lockRule, ruleStatement, isMeetingsRule, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
+import { lockRule, ruleStatement, isMeetingsRule, gameMirrorId, withFullFraction, DEFAULT_ON_END, DEFAULT_WIND_DOWN_DAYS, type BurnRule, type LockedRule } from "@/lib/burnticker/rules";
 import { allocationFor, raiseLamportsOf, raiseProblem } from "@/lib/burnticker/launchBundle";
 import { pairCurveEnabled } from "@/lib/burnKeeper/pairCurveCrank";
 import { DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_LAMPORTS, DEV_FEE_BPS as PAIR_DEV_FEE_BPS, FEE_BPS as PAIR_FEE_BPS } from "@/lib/pairCurve/pricing";
 import { CPMM_LP_BPS, CPMM_TRADE_BPS, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS } from "@/lib/burnticker/fees";
 import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
-import { describeRule, endText, type DescribeCtx } from "@/lib/burnticker/describe";
+import { describeRule, endText, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
 import { reviewProjection, type Projection } from "@/lib/burnticker/projection";
 import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
@@ -15,10 +15,11 @@ import type { LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
 import { linksProblems, withCreatorText } from "@/lib/burnticker/creatorProfile";
 import { meetingsMirror, noPlayoffs, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
-import { meetingsFundsFlow, type FundsFlow } from "@/lib/burnticker/pairFundsFlow";
+import { meetingsFundsFlow, settledPairFundsFlow, type FundsFlow } from "@/lib/burnticker/pairFundsFlow";
+import { settledPairInput, type SettledPairInput } from "@/lib/burnticker/launchPreflight";
 import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule, type ScheduledGame } from "@/lib/burnticker/timing";
-import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
+import { creatorTextProblems, NOTE_MAX, serverDescribeCtx, sideBDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
 import { nameProblem } from "@/lib/burnticker/launchFields";
 import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
@@ -44,7 +45,7 @@ import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, 
  */
 
 /** `pair` = side B of a registered pair (its rule is derived from side A's); `companion` = a second, independent coin launched alongside (a matchup's other team). */
-export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
+export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** two candidates in one race: candidate B's market and the race slug */ market?: unknown; race?: unknown; /** two teams in one game: the other team */ opp?: unknown; /** a settled pair's side B: its own describe context (candidate B's event words, or team B's game), as `descCtx` is side A's */ descCtx?: unknown; /** the two candidates' or teams' names, for the money path */ names?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
 export interface ReviewCost { label: string; sol: string; kind: "rent" | "reserve" | "fee" }
 export interface LaunchReview {
   schema: "burnticker.launch-review/v1";
@@ -112,7 +113,29 @@ export interface LaunchReview {
    * otherwise.
    */
   meetings?: { flow: FundsFlow; descriptionB: string } | null;
+  /**
+   * A settled-event pair (owner 2026-10-13: two candidates in one race, or two teams in one game; launchPreflight.ts settledPairInput):
+   * the shape, the one sentence, where the money goes (pairFundsFlow.ts settledPairFundsFlow) and side B's own generated description.
+   * Absent otherwise.
+   */
+  settled?: { shape: "candidates" | "game"; sentence: string; flow: FundsFlow; descriptionB: string } | null;
 }
+
+/** Side A and side B of a settled-event pair as the bundle builds them (side B reads the other market or the other team's win series). */
+function settledAsBuilt(rule: BurnRule, s: SettledPairInput): { a: BurnRule; b: BurnRule | null } {
+  const full = withFullFraction(rule);
+  const base = { pairId: "review-pair", counterpartMint: null, winnerTakesBurn: true as const };
+  if (s.shape === "candidates") {
+    const mB = s.bundle.race?.marketB ?? null, race = mB && rule.market ? { slug: s.bundle.race!.slug, markets: [rule.market, mB] as [string, string] } : undefined;
+    return { a: { ...full, pair: { ...base, side: "A", ...(race ? { race } : {}) } } as BurnRule, b: race ? { ...full, market: mB, pair: { ...base, side: "B", race } } as BurnRule : null };
+  }
+  const sB = s.bundle.game ? gameMirrorId(rule.series ?? "", s.bundle.game.opp) : null, game = sB ? { series: [rule.series!, sB] as [string, string] } : undefined;
+  return { a: { ...full, pair: { ...base, side: "A", ...(game ? { game } : {}) } } as BurnRule, b: game ? { ...full, series: sB, pair: { ...base, side: "B", game } } as BurnRule : null };
+}
+const settledNames = (names: unknown, sides: { name: string }[]): { a: string; b: string } => {
+  const n = names && typeof names === "object" ? names as { a?: unknown; b?: unknown } : {};
+  return { a: typeof n.a === "string" && n.a.trim() ? n.a.trim() : sides[0]?.name || "side A", b: typeof n.b === "string" && n.b.trim() ? n.b.trim() : sides[1]?.name || "side B" };
+};
 
 /** A rivalry series pair's review block: the per-game and season-end money path, and side B's description from the mirror rule. */
 function meetingsReview(rule: BurnRule, tickerA: string, tickerB: string, ctx: Omit<DescribeCtx, "ticker">): { flow: FundsFlow; descriptionB: string } | null {
@@ -209,11 +232,13 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   try { locked = lockRule(raw); } catch (e) { return { problems: [(e as Error).message] }; }
   const now = o.now ?? Date.now();
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
-  for (const x of ruleRefusals(locked, { kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object") })) problems.push(x.message);
+  const settled = settledPairInput(body.pair);
+  for (const x of ruleRefusals(locked, { kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null })) problems.push(x.message);
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
   // audit 6 test A: a registered pair locks side A's rule with a pair clause (handlers.ts buildPairBundles); a source that cannot pair
   // (an ESPN team, a feed) is refused there, so the review says so here
-  if (pair) { try { lockRule({ ...(raw as object), pair: { pairId: "review-pair", side: "A", counterpartMint: null } }); } catch (e) { problems.push((e as Error).message.replace(/^rule: /, "")); } }
+  // a settled-event pair is probed as built (its race or its game locked in the pair field; rules.ts raceProblems / gameProblems)
+  if (pair) { try { lockRule(settled ? settledAsBuilt(locked.rule, settled).a : { ...(raw as object), pair: { pairId: "review-pair", side: "A", counterpartMint: null } }); } catch (e) { problems.push((e as Error).message.replace(/^rule: /, "")); } }
   const second = pair ?? (body.companion && typeof body.companion === "object" ? body.companion : null);
   const ticker = String(body.ticker ?? "").toUpperCase(), name = String(body.name ?? "");
   const note = typeof body.note === "string" ? body.note.trim() : "";
@@ -265,13 +290,16 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const typeReason = twoCoinBlocked ? `${PAIRS_UNAVAILABLE_LINE} ${model.types.pairs.reason ?? ""}`.trim() : ta?.reason ?? (type ? null : "The web launcher does not offer this kind of rule.");
   // Codex F1: the venue the bundle route selects (handlers.ts prepareLaunch: a registered pair goes to pair_curve when the flag is on)
   // a head-to-head season pair always launches on LaunchLab (handlers.ts: the pair curve is for crypto references)
-  const venue: "launchlab" | "pair-curve" = pair && pairCurveEnabled(env) && !isMeetingsRule(locked.rule) ? "pair-curve" : "launchlab";
+  // …and so do two candidates in one race and two teams in one game (settled-event pairs: a LaunchLab pair linked at creation)
+  const venue: "launchlab" | "pair-curve" = pair && pairCurveEnabled(env) && !isMeetingsRule(locked.rule) && !settled ? "pair-curve" : "launchlab";
   // audit 6 item 26: the source's own title and unit (as the bundle route reads them), so no text falls back to the raw series id
   const src = sourceText(locked.rule, now);
   const ctx = { ...serverDescribeCtx(locked.rule, body.descCtx, { seriesTitle: o.seriesTitle ?? src?.title ?? null, feed: src?.feed ?? null, stated: o.stated ?? null }), ...(src?.subjectName ? { subjectName: src.subjectName } : {}) };
   // a rivalry series pair is described as the pair the bundle builds (buildPairBundles: winner takes the burn, the pair-winner end sink)
   const meetingsPair = !!pair && isMeetingsRule(locked.rule);
-  const asBuilt: BurnRule = meetingsPair ? { ...locked.rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } : locked.rule;
+  // a settled-event pair, as buildPairBundles builds side A: 100 % (a one-shot pair), winner takes the burn, the race or the game locked
+  const settledPair = settled ? settledAsBuilt(locked.rule, settled) : null;
+  const asBuilt: BurnRule = meetingsPair ? { ...locked.rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } : settledPair ? settledPair.a : locked.rule;
   const text = describeRule(asBuilt, { ticker: ticker || "TICKER", ...ctx });
   // the description the bundle pins: the generated paragraph, then the creator's own text, within the bundle's ceiling
   { const full = withCreatorText(text.paragraph, creatorText); if (full.length > DESCRIPTION_LIMIT) problems.push(`The description, the rule's paragraph and your own text together, comes to ${full.length.toLocaleString("en-US")} characters, and a coin's description can be at most ${DESCRIPTION_LIMIT.toLocaleString("en-US")}. Shorten your text.`); }
@@ -383,6 +411,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     projection: reviewProjection(locked.rule, now),
     timing,
     ...(meetingsPair ? { meetings: meetingsReview(asBuilt, ticker, String(pair.ticker ?? "").toUpperCase(), ctx) } : {}),
+    ...(settled && settledPair ? { settled: { shape: settled.shape, sentence: settledPairSentence(settled.shape), flow: settledPairFundsFlow(settled.shape, { a: ticker || "A", b: String(pair?.ticker ?? "").toUpperCase() || "B" }, settledNames(pair?.names, sides)), descriptionB: settledPair.b ? describeRule(settledPair.b, { ...sideBDescribeCtx(settledPair.b, (pair as { descCtx?: unknown } | null)?.descCtx, body.descCtx, { seriesTitle: sourceText(settledPair.b, now)?.title ?? null }), ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph : "" } } : {}),
   };
   return { review };
 }

@@ -13,6 +13,8 @@ import { ReadinessPanel } from "../../_components/ReadinessPanel";
 import { readinessFromStatus } from "@/lib/burnticker/readiness";
 import { FIRST_BURN_PATH_URL } from "@/lib/burnticker/currentStatusLinks";
 import { receiptRowStatus } from "@/lib/burnticker/verificationStatus";
+import { targetActionSentence, targetTrustCopy } from "@/lib/burnticker/burnTarget";
+import { realHeldLine, receiptRealLine, ruleRealBurn } from "../../launch/burnReal";
 import { useParams } from "next/navigation";
 import { CoinThumb, CurveBar, VenueChip, ago } from "../../_components/CoinCard";
 import { COIN_TAB_LABEL, burnsAfterGraduation, checkReceiptHref, coinTabs, holdersShareLine, initialTab, marketFacts, raydiumLink, ruleFacts, type CoinTab, type FactRow } from "@/lib/burnticker/coinPage";
@@ -129,6 +131,10 @@ export default function TokenPage() {
   const venue = s.oracle === "kalshi" ? "the prediction market that settles it" : s.oracle === "polymarket" ? "Polymarket, with each result read on Polygon" : "the source's own published data";
   const trade = raydiumLink(m?.trade);
   const facts = ruleFacts(d.rulesText, s.rules.oneShot);
+  // website-24 (WIRING-ROUND5): a coin that burns a real token (its rule's pinned field): receipts read memo v3, the trust section says
+  // what such a burn can and cannot do
+  const real = ruleRealBurn(d.rulesText);
+  const realHeld = realHeldLine(real, s.health.lastError);
   const tabs = coinTabs(hasHolders);
   const ready = readinessFromStatus(s as unknown as Parameters<typeof readinessFromStatus>[0], d.receipts as unknown as Parameters<typeof readinessFromStatus>[1]);
   // readiness.ts decides: a coin on its curve, or graduated with its pool not yet registered, cannot burn yet
@@ -249,7 +255,7 @@ export default function TokenPage() {
                   </div>
                   {b.title && /settled on /.test(b.title) && <div className="mt-1 text-[11px] text-neutral-400">{[...new Set((b.title.match(/settled on [^·]+· confirmed by [^·]+/g) ?? []).map((x) => x.trim()))].join(" · ")}{[...b.title.matchAll(/see this game on ESPN → (https:\/\/www\.espn\.com\/\S+)/g)].map((m) => <a key={m[1]} className="ml-2 underline" href={m[1]} rel="noopener" target="_blank">see this game on ESPN →</a>)}</div>}
                   <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
-                    <span>{b.status === "confirmed" ? <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{b.status}{b.skippedReason ? `. ${b.skippedReason}` : ""}</span>}</span>
+                    <span>{b.status === "confirmed" ? (() => { const rl = receiptRealLine(b.memo, real); return rl ? <><b className="tabular-nums" data-real-receipt>{rl}</b> from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</> : <><b className="tabular-nums">{fmt(b.burned ?? "0")}</b> burned from {count(b.units, "unit")}{b.spent ? `, spending ${b.spent} SOL` : ""}</>; })() : <span className="text-neutral-500" title={b.skippedReason ?? ""}>{realHeldLine(real, b.skippedReason) ?? <>{b.status}{b.skippedReason ? `. ${b.skippedReason}` : ""}</>}</span>}</span>
                     <span className="flex flex-wrap gap-2">{b.txUrl && <a className="underline" href={b.txUrl}>transaction</a>}{b.settlementSourceUrl && <a className="underline" href={b.settlementSourceUrl}>source</a>}{(() => { const v = receiptRowStatus(b); return <span className={v.status === "passed" ? "text-emerald-400" : v.status === "failed" ? "text-red-400" : "text-neutral-500"} title={v.title} data-receipt-status={v.status}>{v.status === "passed" ? "✓ " : v.status === "failed" ? "✗ " : ""}{v.label}</span>; })()}{(() => { const href = checkReceiptHref(b.signature, s.cluster); return href ? <a className="underline font-medium" href={href} data-check-receipt>Check receipt</a> : null; })()}</span>
                   </div>
                 </li>
@@ -268,7 +274,7 @@ export default function TokenPage() {
             {b.verify.checks.length > 0 && <p className="text-red-400">Checks that did not pass: {b.verify.checks.join("; ")}</p>}
           </details>)}
         </section>
-        <p className="text-xs text-neutral-500">{s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
+        <p className="text-xs text-neutral-500">{s.health.pending === 1 ? "One receipt is" : `${s.health.pending} receipts are`} pending and {s.health.unverified === 1 ? "one is" : `${s.health.unverified} are`} unverified.{realHeld ? ` ${realHeld}` : s.health.lastError ? ` The last error was: ${s.health.lastError}` : ""}</p>
       </div>
 
       <div id="panel-rule" role="tabpanel" aria-labelledby="tab-rule" hidden={tab !== "rule"} className="space-y-5">
@@ -276,7 +282,7 @@ export default function TokenPage() {
           <div className="flex items-baseline justify-between"><h2 className="font-mono text-xs uppercase tracking-widest">The rule, locked at launch</h2><a className="text-[11px] underline" href={`/api/burnticker/tokens/${encodeURIComponent(key)}?format=rules`}>rules.json</a></div>
           <p className="mt-2">{s.rules.statement}</p>
           <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-            <div><dt className="text-neutral-500">The dial</dt><dd>{facts.dial ?? "The rule file does not name a share of the burn pool."}</dd></div>
+            <div><dt className="text-neutral-500">The dial</dt><dd>{facts.dial ?? "The rule file does not name a share of the burn pool."}{real ? <span className="block" data-real-dial>{targetActionSentence(real.symbol)}</span> : null}</dd></div>
             <div><dt className="text-neutral-500">The window</dt><dd>{facts.window}{prof?.badge ? ` The rule's window reads ${prof.badge}.` : ""}</dd></div>
             <div><dt className="text-neutral-500">The end</dt><dd>{s.lifecycle ? `${s.lifecycle.line} ` : ""}{facts.end}{facts.window !== PERPETUAL_SENTENCE && <RetirementFacts className="mt-1" />}</dd></div>
           </dl>
@@ -291,6 +297,13 @@ export default function TokenPage() {
             <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>
             <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>.{s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} {s.trust.lpLockedPct ?? 100}% of the liquidity is locked. {postGraduationShareLine(s.fees.postGraduation)} The team allocation is {s.trust.teamAllocationPct}%.</p>
           </details>
+          {real && (() => { const t = targetTrustCopy(real.symbol); return (
+            <details className="mt-2 text-xs" data-real-trust><summary className="cursor-pointer text-neutral-400">What burning the real {real.symbol} can and cannot do</summary>
+              <p className="mt-1"><b>Can:</b></p><ul className="list-disc space-y-0.5 pl-5">{t.can.map((x) => <li key={x}>{x}</li>)}</ul>
+              <p className="mt-1"><b>Cannot:</b></p><ul className="list-disc space-y-0.5 pl-5">{t.cannot.map((x) => <li key={x}>{x}</li>)}</ul>
+              <p className="mt-1 break-all text-neutral-500">{real.symbol}&apos;s mint {real.mint}, its pinned pool {real.pool}.</p>
+            </details>
+          ); })()}
         </section>
         {s.disclosure.eventContract && <p className={card + " border-l-4 border-l-orange-500 text-xs"}>{s.disclosure.eventContract}</p>}
         {/* No burn pool is ever left behind (2026-10-10): the fee flow. The coin's lifecycle line is in "The end" above. */}

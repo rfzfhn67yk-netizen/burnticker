@@ -5,6 +5,8 @@ import { fecSeries } from "@/lib/burnticker/sources/fec";
 import { nativeRule } from "@/lib/burnticker/sources/native";
 import { defaultVoidBy } from "@/lib/burnticker/launchBundle";
 import { DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
+import { CANDIDATES_PAIR_DETAIL, CANDIDATES_PAIR_SENTENCE } from "@/lib/burnticker/describe";
+import { candidatesPairRule } from "@/lib/burnticker/guidedLaunch";
 
 /**
  * THE ELECTION-PAIR TEMPLATE (owner-approved 2026-10-10): candidate A vs candidate B for one race → two coins, one per candidate, each
@@ -37,6 +39,12 @@ export interface ElectionPair {
   voidClause: { kind: "both-or-neither"; voidBy: string | null; pendingPair: boolean; fallbackClock: "wind-down-28d"; status: string };
   launchable: { component: "winner"; why: string };
   pending: string[];
+  /**
+   * THE LINKED FORM (owner 2026-10-13: the default and the only form for two candidates in one race): the one sentence, its detail, and
+   * the bundle body the launch page posts — side A's rule (candidate A's market, YES only, the end sink on) and the pair side naming
+   * candidate B's market and the race (handlers.ts prepareLaunch builds one LaunchLab pair, never the pair curve).
+   */
+  linked: { sentence: string; detail: string; body: { rule: BurnRule; ticker: string; name: string; pair: { ticker: string; name: string; market: string; race: string } } };
 }
 
 const candidateOf = (o: RaceOutcome) => o.label.replace(/\s*\([A-Z]\)$/, "").trim();
@@ -56,7 +64,7 @@ export function electionPairTemplate(race: Race, a: RaceOutcome, b: RaceOutcome,
       sentences: {
         fecBeats: fecRule ? `Burns ${pct(ff)} of the burn pool on each FEC reporting period in which ${sur}'s campaign reports more receipts than ${other}'s.` : null,
         mapping: candidateMappingLine(race, me, tickerOf(sur)),
-        winner: `Burns ${pct(wf)} of the burn pool once, when the ${me.label} outcome of the ${race.title.replace(/ Election Winner$/, "")} race resolves YES on Polymarket's on-chain payout. The ${race.stateName ?? "state"} certified result is the cross-check.`,
+        winner: `Burns ${pct(wf)} of the burn pool once, when the ${me.label} outcome of the ${race.title.replace(/ Election Winner$/, "")} race resolves YES on Polymarket's on-chain payout and ${them.label}'s resolves NO, and takes $${tickerOf(other)}'s pool at the end. The ${race.stateName ?? "state"} certified result is the cross-check.`,
       },
     };
   };
@@ -64,8 +72,10 @@ export function electionPairTemplate(race: Race, a: RaceOutcome, b: RaceOutcome,
     race: { slug: race.slug, title: race.title, settlesOn: race.settlesOn, state: race.state },
     a: side(a, b, fec.a, fec.b), b: side(b, a, fec.b, fec.a),
     crossRead: { name: race.sos.name, url: race.sos.url },
-    voidClause: { kind: "both-or-neither", voidBy: race.settlesOn ? race.settlesOn.slice(0, 10) : defaultVoidBy(), pendingPair: true, fallbackClock: "wind-down-28d", status: `This clause is locked into both rules at launch. Event burns apply once both coins have a registered pool. If ${race.settlesOn ? race.settlesOn.slice(0, 10) : "its void date"} ends without both, the pair is void, and each coin's pool then winds down over 28 days.` },
-    launchable: { component: "winner", why: "Each coin's rule can read only one source today, so each side launches on its winner rule for now." },
+    // owner 2026-10-13: the linked pair's both-or-neither date is 30 days after launch (handlers.ts prepareLaunch passes defaultVoidBy)
+    voidClause: { kind: "both-or-neither", voidBy: defaultVoidBy(), pendingPair: true, fallbackClock: "wind-down-28d", status: "This clause is locked into both rules at launch. Burns apply once both coins have a trading pool. If one coin has none 30 days after launch, the pair is void, and each coin's pool then burns down on itself over 28 days." },
+    launchable: { component: "winner", why: "Each coin's rule can read only one source today, so each side launches on its winner rule, as one linked pair." },
+    linked: { sentence: CANDIDATES_PAIR_SENTENCE, detail: CANDIDATES_PAIR_DETAIL, body: { rule: candidatesPairRule(a.conditionId, wf), ticker: tickerOf(surnameOf(a)), name: `${surnameOf(a)} ${race.state ?? ""}`.trim(), pair: { ticker: tickerOf(surnameOf(b)), name: `${surnameOf(b)} ${race.state ?? ""}`.trim(), market: b.conditionId, race: race.slug } } },
     pending: [
       "Rules that combine two sources on one coin (composite rules) are not available yet, so the FEC rule is shown and hashed but not launched.",
       "The only second source for the FEC rule is the FEC itself, run by the same operator. The coverage check refuses it until a government source may use a second publication channel.",

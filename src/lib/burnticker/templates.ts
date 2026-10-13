@@ -4,7 +4,7 @@
  * launch link. The coin and pair pages' "Launch one like this" uses `likeHref` instead: same shape, the team / race / feed re-pickable,
  * the dials copied. Client-safe.
  */
-import { PAIR_BURN_SENTENCE, describeRule } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE, describeRule } from "@/lib/burnticker/describe";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { nwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
@@ -32,10 +32,12 @@ export interface Template {
   operatorOnly?: string;
   /**
    * website-20 item 51: how a two-coin template's coins are linked ON THE LAUNCH PAGE TODAY. "registered" = one shared pair (winner takes
-   * the burn: Coin vs Coin, the flippening); "independent" = two separate launches (a matchup, an election pair: the page posts two coins).
+   * the burn: Coin vs Coin, the flippening); "independent" = two separate launches; "race" = two candidates in one race and "game" = two
+   * teams in one game, both linked pairs since 2026-10-13 (owner: the loser's pool burns the winner; describe.ts CANDIDATES_PAIR_SENTENCE,
+   * GAME_PAIR_SENTENCE).
    * The pair line is derived from this, never written by hand.
    */
-  pairing?: "registered" | "independent";
+  pairing?: "registered" | "independent" | "race" | "game";
   /** website-20 item 60: the link's words, saying where it lands ("Choose a team"), never a generic "Start from this". */
   cta: string;
 }
@@ -43,7 +45,7 @@ export interface Template {
 /** website-20 item 51: the one sentence for two separately launched coins. */
 export const INDEPENDENT_PAIR_LINE = "These are two separate coins. Each one burns from its own pool, and no SOL moves between them.";
 /** The gallery's pair line, from the pairing the launch page really builds. */
-export const pairLineFor = (pairing: Template["pairing"]): string | undefined => (pairing === "registered" ? PAIR_BURN_SENTENCE : pairing === "independent" ? INDEPENDENT_PAIR_LINE : undefined);
+export const pairLineFor = (pairing: Template["pairing"]): string | undefined => (pairing === "registered" ? PAIR_BURN_SENTENCE : pairing === "race" ? CANDIDATES_PAIR_SENTENCE : pairing === "game" ? GAME_PAIR_SENTENCE : pairing === "independent" ? INDEPENDENT_PAIR_LINE : undefined);
 /**
  * website-20 item 57: what the web launcher lets the creator change for this template, said per template (the gallery used to promise
  * "Every dial stays editable until launch" for every one, though Coin vs Coin fixes its windows and a one-shot burns once).
@@ -73,9 +75,9 @@ const R = pctLabel(DEFAULT_SHARE.recurring), O = pctLabel(DEFAULT_SHARE.oneShot)
 const TEMPLATES0: Template[] = [
   { id: "team-season", title: "Team, this season", shape: "recurring", example: `$RAYS26 burns ${R} of its pool every time the Rays win a game this season, then retires.`, settles: "each game's on-chain payout where a market exists, or otherwise a licensed final score, confirmed by the league's official feed", href: "/burnticker/launch?template=team-season", lands: "choices", choices: "pick the league and the team", type: "team", share: DEFAULT_SHARE.recurring, cta: "Choose a team" },
   { id: "team-oneshot", title: "Team wins the title", shape: "one-shot", example: `$RAYSWS burns ${O} once if the Rays win the World Series.`, settles: "Polymarket's on-chain payout for the championship market, checked against the league's official results", href: "/burnticker/launch?template=team-oneshot", lands: "choices", choices: "pick the championship card from a search for the example", type: "markets", share: DEFAULT_SHARE.oneShot, cta: "Find the title market" },
-  { id: "matchup", title: "Matchup: two coins, one game", shape: "pair", example: "$LAKERS and $CELTICS on tonight's game: each coin's rule fires when its own team loses. Launched on two separate results they are two separate coins, each burning its own pool.", settles: "the game's on-chain payout or a licensed final score, confirmed by a second independent source", href: "/burnticker/launch?template=matchup", pairing: "independent", lands: "choices", choices: "pick the league and two teams, then one game or the season", type: "matchup", share: DEFAULT_SHARE.oneShot, cta: "Choose two teams" },
+  { id: "matchup", title: "Matchup: two coins, one game", shape: "pair", example: "$LAKERS and $CELTICS on tonight's game, a linked pair: the winning team's coin burns its own pool on the result and takes the losing team's coin's pool at the end. After a draw, both pools go to $DEFICIT's burn.", settles: "the game's on-chain payout or a licensed final score, confirmed by a second independent source", href: "/burnticker/launch?template=matchup", pairing: "game", lands: "choices", choices: "pick the league and two teams, then one game or the season", type: "matchup", share: DEFAULT_SHARE.oneShot, cta: "Choose two teams" },
   { id: "election-oneshot", title: "A candidate wins a race", shape: "one-shot", example: `$ELSAYED burns ${O} once if Abdul El-Sayed wins the Michigan Senate race.`, settles: "Polymarket's on-chain payout, checked against the state's certified result", href: "/burnticker/launch?template=election-oneshot", lands: "choices", choices: "pick the race and the candidate", type: "elections", share: DEFAULT_SHARE.oneShot, cta: "Choose a race" },
-  { id: "election-pair", title: "Election pair: candidate A vs B", shape: "pair", example: "$ELSAYED and $ROGERS: each settles on its own candidate's market and spends only its own burn pool.", settles: "each candidate's own market, on its on-chain payout, checked against the state's certified result", href: "/burnticker/launch?template=election-pair", pairing: "independent", lands: "choices", choices: "pick the race and two candidates", type: "pairs", share: DEFAULT_SHARE.oneShot, cta: "Choose a race and two candidates" },
+  { id: "election-pair", title: "Two candidates in one race", shape: "pair", example: "$ELSAYED and $ROGERS, two markets, one race: the winner's coin burns its own pool on the result and takes the loser's pool at the end. If neither candidate wins, both pools go to $DEFICIT's burn.", settles: "both candidates' markets, on their on-chain payouts, checked against the state's certified result", href: "/burnticker/launch?template=election-pair", pairing: "race", lands: "choices", choices: "pick the race and two candidates", type: "pairs", share: DEFAULT_SHARE.oneShot, cta: "Choose a race and two candidates" },
   { id: "number-feed", title: "A public number (debt, CPI)", shape: "recurring", example: `$DEBTUP burns ${R} of its pool for every $1B the U.S. debt rises.`, settles: "the publisher's own feed (Treasury, BLS, FRED), confirmed by a second publisher of the same figure", href: "/burnticker/launch?template=number-feed", lands: "choices", choices: "pick the Treasury card from a search for the example", type: "feeds", share: DEFAULT_SHARE.recurring, cta: "Find the debt source" },
   { id: "weather", title: "Weather threshold", shape: "recurring", example: weatherText().lead, settles: "the National Weather Service's daily climate report, checked against the Iowa Environmental Mesonet", href: "/burnticker/launch?template=weather", lands: "review", choices: null, type: "weather", share: WEATHER_TEMPLATE.share, cta: "Open this example" },
   { id: "launch-count", title: "Rocket launches", shape: "recurring", example: `$LAUNCH burns ${R} of its pool for every orbital launch that reaches orbit.`, settles: "Launch Library 2's records (shown on Polymarket where a market exists)", href: "/burnticker/launch?template=launch-count", lands: "choices", choices: "pick the Launch Library card from a search for the example", type: "feeds", share: DEFAULT_SHARE.recurring, cta: "Find the launch source" },

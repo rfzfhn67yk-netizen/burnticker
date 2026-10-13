@@ -543,8 +543,14 @@ export class Registry {
     if (rb.pair?.pairId !== pairId || rb.pair.side !== "B" || rb.pair.counterpartMint !== mintA) throw new Error(`registry: ${b.ticker}'s rule is not side B of ${pairId} naming ${mintA}`);
     // a rivalry series pair (rules.ts isMeetingsRule) reads two series, one per team, each the other's mirror; every other pair shares one
     const mirrored = ra.oracle === "catalogue" && rb.oracle === "catalogue" && !!ra.series && meetingsMirrorId(ra.series) === rb.series;
-    if (a.selectorKey !== b.selectorKey && !mirrored) throw new Error("registry: a pair shares one selector key");
-    const ca = JSON.stringify({ c: ra.pair?.clause ?? null, v: ra.pair?.voidBy ?? null, e: ra.onEnd ?? null }), cb = JSON.stringify({ c: rb.pair?.clause ?? null, v: rb.pair?.voidBy ?? null, e: rb.onEnd ?? null });
+    // two candidates in one race (rules.ts PairRace): two outcome markets, each side on its own, the same race locked in both rules
+    const race = !!ra.pair.race && !!rb.pair.race && JSON.stringify(ra.pair.race) === JSON.stringify(rb.pair.race) && ra.market === ra.pair.race.markets[0] && rb.market === ra.pair.race.markets[1];
+    if (!!ra.pair.race !== !!rb.pair.race || ((ra.pair.race || rb.pair.race) && !race)) throw new Error("registry: both sides of a candidates pair lock the same race, side A on its first market and side B on its second");
+    // two teams in one game (rules.ts PairGame): each side on its own team's win series, the same two series locked in both rules
+    const game = !!ra.pair.game && !!rb.pair.game && JSON.stringify(ra.pair.game) === JSON.stringify(rb.pair.game) && ra.series === ra.pair.game.series[0] && rb.series === ra.pair.game.series[1];
+    if (!!ra.pair.game !== !!rb.pair.game || ((ra.pair.game || rb.pair.game) && !game)) throw new Error("registry: both sides of a one-game pair lock the same two series, side A on its team's and side B on the other team's");
+    if (a.selectorKey !== b.selectorKey && !mirrored && !race && !game) throw new Error("registry: a pair shares one selector key");
+    const ca = JSON.stringify({ c: ra.pair?.clause ?? null, v: ra.pair?.voidBy ?? null, e: ra.onEnd ?? null, w: ra.pair?.winnerTakesBurn ?? null }), cb = JSON.stringify({ c: rb.pair?.clause ?? null, v: rb.pair?.voidBy ?? null, e: rb.onEnd ?? null, w: rb.pair?.winnerTakesBurn ?? null });
     if (ca !== cb) throw new Error("registry: both sides of a pair carry the same both-or-neither clause and onEnd (clause, voidBy, onEnd)");
     this.db.prepare("INSERT INTO pairs (pair_id, mint_a, mint_b, selector_key, created_at) VALUES (?,?,?,?,?)").run(pairId, mintA, mintB, a.selectorKey, now);
     return this.pair(pairId)!;

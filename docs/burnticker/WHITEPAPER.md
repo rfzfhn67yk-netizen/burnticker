@@ -806,7 +806,7 @@ terms are drafted in `SECURITY.md` but not published.
 - **PlatformConfig:** `authority`, `burn_pool_cap_lamports`, `cap_sunset_ts`, `pending_cap_lamports`, `pending_cap_eta`, `created_at`,
   `crankers[3]`, `cranker_count`, reserved.
 
-### 13.3 Instructions (33, generated from `src/lib/burnReceipts/idl.ts`)
+### 13.3 Instructions (39, generated from `src/lib/burnReceipts/idl.ts`)
 
 | Instruction | Arguments | Signers | Class |
 |---|---|---|---|
@@ -816,6 +816,9 @@ terms are drafted in `SECURITY.md` but not published.
 | `crank_buyback` | record_date | cranker | permissionless |
 | `crank_vault` | record_date | cranker | permissionless |
 | `crank_no_units` | record_date | cranker | permissionless |
+| `pin_burn_target` | target_feed_id | payer, mint (before the mint exists) | creation |
+| `crank_target_burn` | record_date | cranker | permissionless |
+| `apply_target_pool` | — | caller | permissionless |
 | `claim_launchlab_creator_fee` | — | payer | permissionless |
 | `register_pool` | — | registrar | permissionless |
 | `register_pair_pool` | — | registrar | permissionless |
@@ -839,18 +842,22 @@ terms are drafted in `SECURITY.md` but not published.
 | `set_registration_policy` | policy, pool | admin | privileged |
 | `cancel_registration_policy` | — | admin | privileged |
 | `veto_registration_policy` | — | attester | privileged |
+| `propose_target_pool` | pool | admin | privileged |
+| `cancel_target_pool` | — | admin | privileged |
+| `veto_target_pool` | — | attester | privileged |
 | `propose_cap_raise` | new_cap_lamports | authority | privileged |
 | `cancel_cap_raise` | — | authority | privileged |
 | `renounce_platform_authority` | — | authority | privileged |
 | `clear_cranker_allowlist` | — | caller (authority or listed cranker) | privileged |
 
-The program has 37 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
-BurnPoolCapBound, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, EndSinkPinned,
+The program has 42 event types: AdminRenounced, AttesterChangeApplied, AttesterChangeCancelled, AttesterChangeProposed,
+BurnPoolCapBound, BurnTargetPinned, BuybackQueueUnblocked, CapRaiseCancelled, CapRaiseProposed, CapRaised, CrankerAllowlistCleared, EndSinkPinned,
 FeeKeyRegistered, ForwardedOnEnd, ForwardedToWinner, LaunchLabCreatorFeeClaimed, LockFeesClaimed, PairForwardMissing, PairLinked,
 PairResultMissing, PairResultSubmitted (plain `emit!`), PairUnlinked, PlatformAuthorityRenounced, PlatformInitialized, PoolRegistered,
 PoolReplaced, PoolUntradeableCleared, PoolUntradeableFlagged, ReadingProcessed, ReadingReset, ReadingSubmitted,
 RegistrationPolicyApplied, RegistrationPolicyCancelled, RegistrationPolicyProposed, RuleEnded, SpendCapBound, SpendCarried,
-TokenInitialized. Error codes: 110.
+TargetBurned, TargetPoolProposalCancelled, TargetPoolProposed, TargetPoolRepinned, TokenInitialized. Error codes: 129. (Round 5, a coin that
+burns another token: docs/burnticker/EXTERNAL-BURN.md; built, not deployed.)
 
 The pair program (`pair_curve`, IDL in `src/lib/pairCurve/idl.ts`) has 9 entrypoints. `init_pair` takes args, is signed by the payer
 and the creator, and creates the pair. The two curve-trade instructions take a side, an amount and a slippage bound, and the trader

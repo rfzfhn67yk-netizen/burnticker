@@ -1,5 +1,5 @@
 import { PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
-import { PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
 
 /**
  * WHERE A PAIR'S MONEY GOES, IN PLAIN WORDS (website brief 2026-10-11 §2), by rule version:
@@ -72,6 +72,44 @@ export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a:
       { when: "The two teams won the same number of games against each other", then: "Nothing moves at the end. Each coin burns down what is left on itself over four weeks." },
       { when: "The coin of the team that won more has no live trading pool at the end", then: "The other coin's rest goes to $DEFICIT's burn instead." },
       { when: "No result 72 hours after a game's reading", then: "That coin burns the game as an unpaired coin, from its own pool, and that game can no longer forward." },
+    ],
+    never: "Nothing is paid to holders on any outcome. SOL only moves between two program accounts that nobody can withdraw from, and holders' balances are never touched.",
+  };
+}
+
+/**
+ * A SETTLED-EVENT PAIR (owner 2026-10-13): two candidates in one race, or two teams in one game. Each claim is the program's and the
+ * keeper's: the result counts once both sides are final (multiKeeper.planRace); the keeper writes one PairResult naming the winner;
+ * pair.rs forward_to_winner moves the losing coin's pool (100 %, this one-shot's share) to the winning coin's burn pool; end.rs
+ * forward_on_end sends whatever is left, and later fees, to the winner while it is live and still paired (partner_won), else to $DEFICIT;
+ * with no single winner no PairResult exists and both ends go to $DEFICIT. `names` are the two candidates or the two teams.
+ */
+export function settledPairFundsFlow(shape: "candidates" | "game", tickers: { a: string; b: string }, names: { a: string; b: string }): FundsFlow {
+  const A = `$${tickers.a}`, B = `$${tickers.b}`;
+  const game = shape === "game";
+  const nameA = game ? teamRefByName(names.a) : names.a, nameB = game ? teamRefByName(names.b) : names.b;
+  return {
+    version: "winner-takes-the-burn", versionLabel: game ? "Rule version: winner takes the burn, two teams in one game" : "Rule version: winner takes the burn, two candidates in one race",
+    oneLiner: game ? GAME_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE,
+    steps: [
+      { title: "Where fees come from", text: FEES },
+      { title: game ? "When the game is final" : "When both markets are final", text: game
+        ? `The result counts once, when a second source agrees on it. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.`
+        : `The race counts once, when both candidates' markets are final. If ${nameA} won, ${A} spends its whole burn pool burning itself, and ${B} sends its pool to the ${A} burn pool, in a public transaction with a memo, where it burns ${A} too. If ${nameB} won, the same happens the other way round.` },
+      { title: "At the end", text: `The losing coin sends whatever is left in its burn pool, and any fees that arrive later, to the winning coin's burn pool. The winning coin burns down what is left on itself. If there was no single winner, each coin sends what is left to $DEFICIT's burn.` },
+    ],
+    outcomes: game ? [
+      { when: "The game ends in a draw", then: "Nothing moves between the two coins. At the end each pool goes to $DEFICIT's burn." },
+      { when: "The game is postponed", then: "Both coins wait until it is played." },
+      { when: "The game is cancelled", then: "Nothing moves between the two coins. Each coin burns down what is left on itself over four weeks." },
+      { when: "The winning coin has no live trading pool", then: "The losing coin's pool goes to $DEFICIT's burn instead." },
+      { when: "One coin never reaches its trading pool within 30 days", then: "The pair is void. Nothing moves between the two coins, and each coin burns down what is left on itself." },
+    ] : [
+      { when: "A third candidate wins, so both markets settle NO", then: "Nothing moves between the two coins. At the end each pool goes to $DEFICIT's burn." },
+      { when: "A market settles 50-50", then: "There is no single winner. Nothing moves between the two coins, and at the end each pool goes to $DEFICIT's burn." },
+      { when: "One market is final and the other is not", then: "Both coins wait. The race counts once, when both are final." },
+      { when: "The winning coin has no live trading pool", then: "The losing coin's pool goes to $DEFICIT's burn instead." },
+      { when: "One coin never reaches its trading pool within 30 days", then: "The pair is void. Nothing moves between the two coins, and each coin burns down what is left on itself." },
     ],
     never: "Nothing is paid to holders on any outcome. SOL only moves between two program accounts that nobody can withdraw from, and holders' balances are never touched.",
   };

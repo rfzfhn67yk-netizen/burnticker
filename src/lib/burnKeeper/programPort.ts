@@ -31,6 +31,9 @@ export interface ProgramConfigView {
   /** Latest untradeable observation (a gap over 24 h restarts the spell) and the genesis the signed message binds — client v3. */
   poolUntradeableLastSeen?: number | null; clusterGenesis?: string;
   carriedSpendLamports: bigint; totalBurned: bigint; totalSpentLamports: bigint; shortfall: bigint; readings: number; burns: number;
+  /** Round 5: true when the coin burns a TARGET token (crank_target_burn; a target reading's `burned`/`got` are the target's units and
+   *  `owed` the coin's own tokens burned). Absent on older ports = false. */
+  burnsTarget?: boolean;
 }
 
 /** One Reading account. `outcome` by name (pending / no-units / burned / below-floor / short / exhausted). */
@@ -42,7 +45,7 @@ export interface ProgramReadingView {
   pool?: string | null;
 }
 
-export type CrankKind = "no_units" | "vault" | "buyback" | "forward"; // forward: LAUNCHPAD-PATH §40, a paired coin that lost the period
+export type CrankKind = "no_units" | "vault" | "buyback" | "forward" | "target"; // forward: LAUNCHPAD-PATH §40, a paired coin that lost the period; target: round 5, a coin that burns another token
 /** The next reading in line and how to crank it. `build` signs the crank only when called — after earlier signatures are resolved. */
 export type CrankPlan = { kind: CrankKind; recordDate: number; build: () => Promise<SignedTx> } | { status: "idle" } | { status: "waiting-for-pool"; recordDate: number };
 

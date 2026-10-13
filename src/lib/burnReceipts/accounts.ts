@@ -44,6 +44,9 @@ export interface TokenConfigAccount {
   /** LAUNCHPAD-PATH §45: 0 live / 1 ended resolved / 2 ended void (endSink.ts), and the end date (0 while live). */
   end_state: number;
   end_date: number;
+  /** Round 5: 0 the coin burns itself (every config before round 5: the byte was `reserved`) / 1 it burns the target in its BurnTarget
+   *  (burnTarget.ts; crank_target_burn, never crank_buyback). */
+  burn_target_kind: number;
   // conveniences
   feedId: string; memoPrefix: string; memoSource: string; activeAttesters: AttesterEntry[]; adminRenounced: boolean; poolRegistered: boolean;
 }

@@ -316,7 +316,7 @@ pub fn handle_initialize_token(ctx: Context<InitializeToken>, args: InitializeTo
     c.pair_unlinked_at = 0;
     c.end_state = END_STATE_LIVE;
     c.end_date = 0;
-    c.reserved = [0u8; 1];
+    c.burn_target_kind = BURN_TARGET_SELF;
 
     // LAUNCHPAD-PATH §40: the partner coin (optional).
     let pairing = match ctx.accounts.pair_mint.as_ref() {

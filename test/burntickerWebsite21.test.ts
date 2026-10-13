@@ -106,17 +106,18 @@ describe("website-21: step 3, Winner takes the burn only", () => {
     assert.deepEqual(po.options.filter((o) => o.available).map((o) => o.id), ["winner"]);
     for (const o of po.options.filter((x) => !x.available)) assert.equal(o.reason, PATTERN_REASON.meetingsOnly);
     assert.equal(patternWords("winner", { follow: "rivalry", pairKind: "teams", rivalryScope: "meetings" }).sentence, MEETINGS_WINNER_LINE);
-    for (const scope of ["game", "season"] as const) {
-      const w = patternOptions({ follow: "rivalry", pairKind: "teams", rule: r, rivalryScope: scope }).options.find((o) => o.id === "winner")!;
-      assert.equal(w.available, false); assert.equal(w.reason, PATTERN_REASON.teamsSeparate);
-    }
+    // 2026-10-13: one game is a linked pair too (winner only); every loss this season stays two separate coins
+    const season = patternOptions({ follow: "rivalry", pairKind: "teams", rule: r, rivalryScope: "season" }).options.find((o) => o.id === "winner")!;
+    assert.equal(season.available, false); assert.equal(season.reason, PATTERN_REASON.teamsSeparate);
+    const one = patternOptions({ follow: "rivalry", pairKind: "teams", rule: r, rivalryScope: "game" });
+    assert.equal(one.preselected, "winner"); assert.deepEqual(one.options.filter((o) => o.available).map((o) => o.id), ["winner"]);
   });
   test("the page passes the scope, selects the winner, ignores other taps and keeps the recurring shares", () => {
     assert.match(page, /const rivalryScope = pairKindNow === "teams" \? \(meetingsOn \? "meetings" as const : pairMode === "game" \? "game" as const : "season" as const\) : null;/);
     assert.match(page, /meeting: rivalSeason \? !!rivalGame : null, rivalryScope \}\)/);
     assert.match(page, /pairKind: pairKindNow, rivalryScope \}\) \}\)\);/);
-    assert.match(page, /guide\.follow === "rivalry" \? \(meetingsOn \? "winner" :/);
-    assert.match(page, /if \(meetingsOn\) return;/);
+    assert.match(page, /guide\.follow === "rivalry" \? \(meetingsOn \|\| settledPick \? "winner" :/);
+    assert.match(page, /if \(meetingsOn \|\| settledPick\) return;/);
     assert.match(page, /meetingsOn \? PATTERNS\.winner\.label\.toLowerCase\(\)/, "the progress strip says the pattern");
   });
 });
@@ -151,9 +152,9 @@ describe("website-21: the review", () => {
     assert.match(page, /const endRule = ruleShown \?\? rule;/);
   });
   test("launch: one LaunchLab pair (never two separate coins, never the pair curve), side B's description from the review", () => {
-    assert.match(page, /if \(pairOn && ruleB && !meetingsOn\) \{/);
-    assert.match(page, /const descB = meetingsOn \? \(reviewMeetings\?\.descriptionB \?\? finalDescriptionB\) : finalDescriptionB;/);
-    assert.match(page, /meetingsOn \? "launchlab" : pairVenue\);/);
+    assert.match(page, /if \(pairOn && ruleB && !meetingsOn && !settledPick\) \{/);
+    assert.match(page, /const descB = meetingsOn \? \(reviewMeetings\?\.descriptionB \?\? finalDescriptionB\) : settledPick \? \(reviewSettled\?\.descriptionB \|\| finalDescriptionB\) : finalDescriptionB;/);
+    assert.match(page, /meetingsOn \|\| settledPick \? "launchlab" : pairVenue\);/);
     // the preview and launch gates are the ones every pair uses
     assert.match(page, /blocked=\{walletBlocked\(pairOn \? "matchup" : launchTypeOf\(rule\), pairOn\)\}/);
     assert.match(page, /if \(!rule \|\| !reviewMatchesDraft\(reviewSlot, curRev\.current\)\) return;/);
@@ -163,8 +164,9 @@ describe("website-21: the review", () => {
 
 describe("website-21: the pair pages say a rivalry series pair reads two series", () => {
   test("tokenPage.ts and /burnticker/p use MEETINGS_PAIR_PAGE_LINE for a meetings selector", () => {
-    assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{isMeetingsSelector\(a\.selectorKey\) \? `\$\{esc\(MEETINGS_PAIR_PAGE_LINE\)\} A draw, a postponed or a cancelled game moves nothing\.` : `Both coins read the same market/);
-    assert.match(read("src/app/burnticker/p/[pairId]/page.tsx"), /\{isMeetingsSelector\(d\.pair\.selectorKey\) \? <>\{MEETINGS_PAIR_PAGE_LINE\} A draw, a postponed or a cancelled game moves nothing\.<\/> : <>Both coins read the same market/);
+    // 2026-10-13: a settled-event pair (two candidates, one game) has its own sentence between the two
+    assert.match(read("src/lib/burnticker/tokenPage.ts"), /\$\{isMeetingsSelector\(a\.selectorKey\) \? `\$\{esc\(MEETINGS_PAIR_PAGE_LINE\)\} A draw, a postponed or a cancelled game moves nothing\.` : settledLineOf\(a\.rules\.statement\) \? esc\(settledLineOf\(a\.rules\.statement\)!\) : `Both coins read the same market/);
+    assert.match(read("src/app/burnticker/p/[pairId]/page.tsx"), /\{isMeetingsSelector\(d\.pair\.selectorKey\) \? <>\{MEETINGS_PAIR_PAGE_LINE\} A draw, a postponed or a cancelled game moves nothing\.<\/> : settledLineOf\(d\.a\.status\.rules\.statement\) \? <span data-settled-pair-line>\{settledLineOf\(d\.a\.status\.rules\.statement\)\}<\/span> : <>Both coins read the same market/);
     plain(`${MEETINGS_PAIR_PAGE_LINE} A draw, a postponed or a cancelled game moves nothing.`);
     assert.equal(isMeetingsSelector(meetingsPairRules("nba", "PHI", "BOS", 2026).a.series), true);
   });
@@ -214,7 +216,7 @@ describe("website-21: the guided review's Ends fact", () => {
     const which = meetingsWhichCoinLine({ a: "PHIVBOS", b: "BOSVPHI", teamA: "76ers", teamB: "Celtics" });
     plain(which); assert.equal(which, "$PHIVBOS when the 76ers win a game between them, and $BOSVPHI when the Celtics win one. The winning coin also takes the other coin's share for that game.");
     assert.doesNotMatch(which, /its own pool/, "never the two-separate-coins line");
-    assert.match(page, /value: meetingsOn \? meetingsWhichCoinLine\(\{ a: ticker \|\| "A", b: tickerB \|\| "B", teamA: A, teamB: B \}\) : whichCoinLine/);
-    plain(RIVALRY_SCOPE_LINE); assert.match(RIVALRY_SCOPE_LINE, /^The first two options make two separate coins/); assert.match(RIVALRY_SCOPE_LINE, /The third links the two coins/);
+    assert.match(page, / : meetingsOn \? meetingsWhichCoinLine\(\{ a: ticker \|\| "A", b: tickerB \|\| "B", teamA: A, teamB: B \}\) : whichCoinLine/);
+    plain(RIVALRY_SCOPE_LINE); assert.match(RIVALRY_SCOPE_LINE, /^One game and every game between them are linked pairs/); assert.match(RIVALRY_SCOPE_LINE, /Every loss this season makes two separate coins/);
   });
 });

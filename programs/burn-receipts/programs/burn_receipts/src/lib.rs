@@ -34,7 +34,14 @@
 //!   veto_registration_policy    any current attester: kill a pending registration-policy proposal
 //!   clear_cranker_allowlist     platform authority or any allowlisted key: return crank_buyback to permissionless (the allowlist
 //!                          stops applying at the cap sunset or 90 days after initialize_platform)
+//!   pin_burn_target        round 5, mint-signed, once, only before the coin's mint exists: the coin burns another SPL token (target
+//!                          mint immutable; its WSOL CPMM pool pinned after admission checks)
+//!   crank_target_burn      round 5, permissionless: crank_buyback's spend and guards on the pinned target pool → burn the target →
+//!                          memo v3 (crank_buyback refuses a coin with a target)
+//!   propose_target_pool / cancel_target_pool / veto_target_pool / apply_target_pool   round 5: re-pin the target POOL (admin, 48 h,
+//!                          attester veto, the same admission; the target mint never changes)
 
+pub mod amm_v4;
 pub mod attest;
 pub mod constants;
 pub mod cpmm;
@@ -45,6 +52,7 @@ pub mod instructions;
 pub mod math;
 pub mod memo;
 pub mod pair_curve;
+pub mod pyth;
 pub mod state;
 
 use anchor_lang::prelude::*;
@@ -198,5 +206,34 @@ pub mod burn_receipts {
 
     pub fn renounce_platform_authority(ctx: Context<PlatformAuthorityOnly>) -> Result<()> {
         instructions::platform::handle_renounce_platform_authority(ctx)
+    }
+
+    /// Round 5: pin the coin's burn target (mint-signed, once, only before the coin's mint exists).
+    pub fn pin_burn_target(ctx: Context<PinBurnTarget>, target_feed_id: [u8; 32]) -> Result<()> {
+        instructions::burn_target::handle_pin_burn_target(ctx, target_feed_id)
+    }
+
+    /// Round 5: the target coin's crank — swap SOL for the target on the pinned pool and burn it, with memo v3. Permissionless.
+    pub fn crank_target_burn(ctx: Context<CrankTargetBurn>, record_date: u32) -> Result<()> {
+        instructions::burn_target::handle_crank_target_burn(ctx, record_date)
+    }
+
+    /// Round 5: admin proposes a new pool for the same target (48 h timelock).
+    pub fn propose_target_pool(ctx: Context<TargetPoolAdmin>, pool: Pubkey) -> Result<()> {
+        instructions::burn_target::handle_propose_target_pool(ctx, pool)
+    }
+
+    pub fn cancel_target_pool(ctx: Context<TargetPoolAdmin>) -> Result<()> {
+        instructions::burn_target::handle_cancel_target_pool(ctx)
+    }
+
+    /// Round 5: any current attester kills a pending target-pool re-pin.
+    pub fn veto_target_pool(ctx: Context<VetoTargetPool>) -> Result<()> {
+        instructions::burn_target::handle_veto_target_pool(ctx)
+    }
+
+    /// Round 5: permissionless after the timelock, within 14 days of the proposal; the new pool passes the same admission.
+    pub fn apply_target_pool(ctx: Context<ApplyTargetPool>) -> Result<()> {
+        instructions::burn_target::handle_apply_target_pool(ctx)
     }
 }

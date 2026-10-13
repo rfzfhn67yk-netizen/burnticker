@@ -69,8 +69,8 @@ describe("check: where money can go, who can do what", () => {
     assert.equal(c.money.find((m) => m.instruction === "claim_launchlab_creator_fee")?.outflowClass, "intoPool");
     for (const m of c.money.filter((x) => x.class === "privileged")) assert.equal(m.outflowClass, "none", `${m.instruction}: a privileged instruction moves no funds`);
   });
-  test("none over funds in either program; burn_receipts has exactly its 10 privileged instructions; pair_curve none", () => {
-    assert.deepEqual(c.programs.map((p) => [p.name, p.privileged, p.overFunds]), [["burn_receipts", 10, "none"], ["pair_curve", 0, "none"]]);
+  test("none over funds in either program; burn_receipts has exactly its 13 privileged instructions (round 5 adds propose / cancel / veto_target_pool); pair_curve none", () => {
+    assert.deepEqual(c.programs.map((p) => [p.name, p.privileged, p.overFunds]), [["burn_receipts", 13, "none"], ["pair_curve", 0, "none"]]);
     assert.ok(c.powers.every((p) => /^None\.?$/.test(p.funds)));
   });
   test("what is not done names every gap the owner listed: one attester, upgrade authority, no firm review, third signer, bounty wallet, entity, interim build, the open pair_curve findings, the mainnet rehearsal", () => {

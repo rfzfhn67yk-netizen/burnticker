@@ -15,6 +15,7 @@ import { END_SINK_FLAGSHIP, END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endS
 import { ChainLockFees } from "@/lib/burnticker/lockFeesChain";
 import { ChainPairForward } from "@/lib/burnticker/pairForwardChain";
 import { dateU32 } from "@/lib/burnticker/pairForward";
+import { checkTargetAdmission, pinBurnTargetIx } from "@/lib/burnReceipts/burnTarget";
 
 /**
  * THE REAL burn_receipts CLIENT FOR BURNTICKER (2026-10-10) — see program.ts for the interface and the unit counter. Per-token
@@ -95,7 +96,18 @@ export class ProgramBurnClient implements BurnProgramClient {
       feed_id: c.feedId, memo_prefix: c.memoPrefix, memo_source: c.memoSource, rules_sha256: Buffer.from(i.rulesSha256, "hex"), rule: c.rule,
       attesters: i.attesters.map((a) => operatorAttester(new PublicKey(a))), quorum: i.quorum, fixed_pool: PublicKey.default, admin: this.o.admin,
     }, layout: (this.o.endSinksLive ?? endSinksLiveFromEnv()) ? "r4" : initializeTokenLayoutFromEnv(), ...(endSink ? { endSink } : {}), ...(i.pairMint ? { pairMint: new PublicKey(i.pairMint), partnerFirst: !!i.partnerFirst, pairVoidBy: i.pairVoidBy ?? dateU32((i.rule.pair as { voidBy?: string } | null | undefined)?.voidBy) } : {}) });
-    return { tokenConfig: configPda(this.o.programId, mint).toBase58(), instructions: [serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)] };
+    // Round 5: a rule with a burn target pins it right after initialize_token, while the coin's mint does not exist yet (the same mint
+    // signature). Refused unless the host says the program is round 5, and unless the pool passes the program's admission now.
+    const pins: SerializedIx[] = [];
+    const bt = (i.rule as { burnTarget?: { mint: string; pool: string; symbol: string; feedId: string } }).burnTarget;
+    if (bt) {
+      if (initializeTokenLayoutFromEnv() !== "r5") throw new Error("initialize_token: this rule burns a target token, and burn targets need the round-5 program (BURNTICKER_INITIALIZE_TOKEN_LAYOUT=r5)");
+      const a = await checkTargetAdmission(this.o.connection, { cluster: programClusterOf(this.o.cluster), targetMint: new PublicKey(bt.mint), pool: new PublicKey(bt.pool), coinMint: mint, feedId: bt.feedId, maxDevBps: c.rule.max_twap_deviation_bps });
+      if (!a.ok || !a.ammConfig || !a.wsolVault || !a.targetVault) throw new Error(`initialize_token: ${bt.symbol} cannot be a burn target: ${a.problems.join(" ")}`);
+      // Its own transaction after initialize_token (the two together exceed the packet limit), before the coin's mint exists.
+      pins.push(serialize(pinBurnTargetIx({ programId: this.o.programId, payer: creator, mint, targetMint: a.targetMint, pool: a.pool, ammConfig: a.ammConfig, wsolVault: a.wsolVault, targetVault: a.targetVault, feedId: bt.feedId }), `burn_receipts.pin_burn_target (${bt.symbol} ${bt.mint} on ${a.poolKind === 1 ? "AMM v4" : "CPMM"} pool ${bt.pool}, Pyth feed ${bt.feedId.slice(0, 12)}…; its own transaction after initialize_token, before the coin's mint exists)`));
+    }
+    return { tokenConfig: configPda(this.o.programId, mint).toBase58(), instructions: [...[serialize(ix, `burn_receipts.initialize_token (counter: ${c.feedId}, ${c.rule.mode === MODE_BUYBACK ? `${c.rule.fraction_per_unit_bps} bps per unit, floor ${floorLamports} lamports ≈ $${i.rule.floorUsd} at $${solUsd.toFixed(2)}/SOL` : `${c.rule.tokens_per_unit} raw per unit`}${i.pairMint ? `; pair_mint ${i.pairMint}${i.partnerFirst ? " (completes the pairing)" : " (provisional for 7 days)"}` : ""})`)], ...pins] };
   }
   feePdaFor(mint: string) { return burnPoolFor(this.o.programId, new PublicKey(mint)).feePda.toBase58(); }
   vaultFor(mint: string) { return vaultAddress(this.o.programId, new PublicKey(mint)).toBase58(); }

@@ -121,6 +121,6 @@ describe("249 [VERIFY] a venue 409 waits for a second press, with a fresh review
     // the defect: `if (nv && !retried) { setVenue(nv); return run(nv, true); }` built the other venue's terms without a new review or press
     assert.doesNotMatch(c, /return run\(nv, true\)/);
     assert.match(c, /const nv = venueFrom409\(e\); if \(nv\) setVenue\(nv\); setErr\(String\(\(e as Error\)\.message \?\? e\)\);/);
-    assert.match(c, /const reviewKey = draftRevision\(\[model\?\.rule \?\? null, names, profA\.description, profB\.description, raiseSol, venue\]\);/);
+    assert.match(c, /const reviewKey = draftRevision\(\[ruleA, fieldB, names, profA\.description, profB\.description, raiseSol, venue\]\);/);
   });
 });

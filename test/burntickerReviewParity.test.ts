@@ -8,7 +8,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prepareLaunch, sportsTeams, sportsRivalry, search, catalogueSources } from "@/lib/burnticker/api/handlers";
-import { meetingsPairNames, meetingsPairRules, reviewBlockers } from "@/lib/burnticker/guidedLaunch";
+import { meetingsPairNames, meetingsPairRules, reviewBlockers, candidatesPairRule, gamePairRule } from "@/lib/burnticker/guidedLaunch";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE } from "@/lib/burnticker/describe";
 import { buildLaunchReview, type LaunchReview } from "@/lib/burnticker/launchReview";
 import { LEAGUES, teamsOf, teamSeries, gameSeries, seasonYearAt, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
@@ -258,6 +259,15 @@ test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_00
     if (!t?.unplayed) fail("rivalry: unplayed game not stated", `${g.eventId} ${me.abbr} ${rule.series}`);
     if (t && t.dueWithinDays !== null && t.dueWithinDays <= 14 && !rv.review.warnings.some((w) => /due within/.test(w))) fail("one-shot due soon without the warning", `${g.eventId}: ${t.dueWithinDays} days`);
     checkReview(`rivalry ${g.eventId} ${me.abbr}`, lockRule({ ...rule, onEnd: { ...DEFAULT_ON_END } }).rule, rv.review, { series: rule.series });
+    // 2026-10-13: the same game as ONE linked pair (the default): each coin on its own team's win, both sinks naming each other, LaunchLab
+    setups++;
+    const linkedRule = gamePairRule("mlb", g.eventId, me.abbr);
+    let lv: ReturnType<typeof buildLaunchReview>;
+    try { lv = buildLaunchReview({ rule: linkedRule, ticker: `${me.abbr}GM`.slice(0, 10), name: `${me.nickname || me.abbr} Game`.slice(0, 32), raiseSol: "85", pair: { ticker: `${them.abbr}GM`.slice(0, 10), name: `${them.nickname || them.abbr} Game`.slice(0, 32), opp: them.abbr } } as never, { env: { ...ENV, BURNTICKER_PAIR_CURVE_ENABLED: "1" }, now: ESPN_NOW }); } catch (e) { fail("throws (review)", `linked game ${g.eventId}: ${(e as Error).message}`); continue; }
+    if (!("review" in lv)) { fail("linked game: review refused", `${g.eventId}: ${lv.problems.join(" | ")}`); continue; }
+    if (lv.review.problems.length) fail("linked game: problems", `${g.eventId} ${me.abbr}: ${lv.review.problems.join(" | ")}`);
+    if (lv.review.venue !== "launchlab") fail("linked game: not LaunchLab", `${g.eventId}: ${lv.review.venue}`);
+    if (lv.review.settled?.sentence !== GAME_PAIR_SENTENCE || lv.review.end.kind !== "pair-winner") fail("linked game: sentence or end", `${g.eventId}: ${lv.review.settled?.sentence} / ${lv.review.end.kind}`);
   }
 
   // ---- 8 (audit 7). election pairs and market one-shots: two candidates' markets, due soon / not soon --------------------------------
@@ -265,13 +275,20 @@ test("TEST A: review ↔ bundle parity over ≥ 5,000 setups", { timeout: 600_00
   for (const days of [1, 3, 13, 15, 40]) for (const f of ONE_SHOT) {
     const endsAt = new Date(ESPN_NOW + days * 86_400_000).toISOString();
     const a = market(EAGLES_CID, f, endsAt), b = market(BUCS_CID, f, endsAt);
-    for (const [label, body] of [[`market one-shot ${days}d ${f}`, { ...a, ticker: "CANDA", name: "Candidate A" }], [`election pair ${days}d ${f}`, { ...a, ticker: "CANDA", name: "Candidate A", companion: { ...b, ticker: "CANDB", name: "Candidate B" } }]] as const) {
+    // owner 2026-10-13: an election pair is ONE linked pair (candidate B's market and the race on the pair side), never two separate coins
+    const linked = { rule: { ...candidatesPairRule(EAGLES_CID, f) }, descCtx: { endsAt } };
+    for (const [label, body] of [[`market one-shot ${days}d ${f}`, { ...a, ticker: "CANDA", name: "Candidate A" }], [`election pair ${days}d ${f}`, { ...linked, ticker: "CANDA", name: "Candidate A", pair: { ticker: "CANDB", name: "Candidate B", market: b.rule.market, race: "michigan-senate-election-winner" } }]] as const) {
       setups++;
       let rv: ReturnType<typeof buildLaunchReview>;
       try { rv = buildLaunchReview(body as never, { env: ENV, now: ESPN_NOW }); } catch (e) { fail("throws (review)", `${label}: ${(e as Error).message}`); continue; }
       if (!("review" in rv)) { fail("market: review refused", `${label}: ${rv.problems.join(" | ")}`); continue; }
       const warned = rv.review.warnings.some((w) => /due within/.test(w));
       if (warned !== days <= 14) fail("one-shot due-soon warning wrong", `${label}: warned=${warned}`);
+      if (label.startsWith("election pair")) {
+        if (rv.review.venue !== "launchlab" || rv.review.settled?.sentence !== CANDIDATES_PAIR_SENTENCE || rv.review.end.kind !== "pair-winner") fail("election pair: not the linked LaunchLab pair", `${label}: ${rv.review.venue} ${rv.review.end.kind}`);
+        if (rv.review.problems.length) fail("election pair: problems", `${label}: ${rv.review.problems.join(" | ")}`);
+        continue;
+      }
       checkReview(label, lockRule({ ...a.rule, onEnd: { ...DEFAULT_ON_END } }).rule, rv.review);
     }
   }

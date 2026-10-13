@@ -1,8 +1,8 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
+import { CANDIDATES_PAIR_SENTENCE, GAME_PAIR_SENTENCE, championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
-import { LIVE_NOW, meetingsPairSeries, noPlayoffs, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LIVE_NOW, gameSeries, meetingsPairSeries, noPlayoffs, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 import { DESCRIPTION_MAX, linkProblem } from "@/lib/burnticker/creatorProfile";
@@ -125,7 +125,9 @@ export const PATTERN_REASON = {
   noMeeting: "These two teams have no listed game right now. Pick This season instead.",
   teamsSeparate: "Two team coins launch as two separate coins, and each one burns from its own pool. Winner takes the burn is offered for every game between them this season.",
   meetingsOnly: "Every game between them this season is a linked pair where the winner takes the burn, so this pattern does not apply to it.",
-  candidatesSeparate: "Two candidates settle on two separate markets, so each coin burns from its own pool.",
+  // owner 2026-10-13: two candidates in one race and two teams in one game are linked pairs, winner takes the burn and nothing else
+  candidatesLinked: "Two candidates in one race are a linked pair where the winner takes the burn, so this pattern does not apply to them.",
+  gameLinked: "Two teams in one game are a linked pair where the winner takes the burn, so this pattern does not apply to them.",
   candidatesEvery: "A race is decided once, so it cannot burn every time.",
   derbyEvery: "In a coin against another coin, each day's result fires one side's rule, and that side takes the burn.",
   derbyFade: "On a valid, non-tied result, one of the two sides fires, so there is no separate side for when it does not happen. A tie or a withheld reading burns neither coin.",
@@ -161,7 +163,10 @@ export function patternOptions(i: PatternInput): { options: PatternOption[]; pre
   const mk = (id: PatternId, reason: string | null): PatternOption => ({ id, ...PATTERNS[id], available: reason === null, reason });
   // a coin against another coin: each day's winner takes the burn, or once, the flippening (the first day one passes the other)
   if (i.follow === "coins") return { options: [mk("every", PATTERN_REASON.derbyEvery), mk("fade", PATTERN_REASON.derbyFade), mk("once", null), mk("winner", null)], preselected: (r as { derby?: { flip?: boolean } } | null)?.derby?.flip ? "once" : "winner" };
-  if (i.follow === "rivalry" && i.pairKind === "candidates") return { options: [mk("every", PATTERN_REASON.candidatesEvery), mk("fade", PATTERN_REASON.oneShotFade), mk("once", null), mk("winner", PATTERN_REASON.candidatesSeparate)], preselected: "once" };
+  // two candidates in one race (owner 2026-10-13: the linked form is the only form): winner takes the burn and nothing else
+  if (i.follow === "rivalry" && i.pairKind === "candidates") return { options: [mk("every", PATTERN_REASON.candidatesEvery), mk("fade", PATTERN_REASON.candidatesLinked), mk("once", PATTERN_REASON.candidatesLinked), mk("winner", null)], preselected: "winner" };
+  // two teams in one game: the same linked pair (coordinator 2026-10-13)
+  if (i.follow === "rivalry" && i.rivalryScope === "game") return { options: [mk("every", PATTERN_REASON.gameLinked), mk("fade", PATTERN_REASON.gameLinked), mk("once", PATTERN_REASON.gameLinked), mk("winner", i.meeting === false ? PATTERN_REASON.noMeeting : null)], preselected: "winner" };
   // two teams, every game between them this season: a linked pair, winner takes the burn and nothing else
   if (i.follow === "rivalry" && i.rivalryScope === "meetings") return { options: [mk("every", PATTERN_REASON.meetingsOnly), mk("fade", PATTERN_REASON.meetingsOnly), mk("once", PATTERN_REASON.meetingsOnly), mk("winner", null)], preselected: "winner" };
   if (i.follow === "rivalry") {
@@ -242,6 +247,8 @@ export const derbyShareLine = (daily: number, flip: number): string => `Each mod
 export function patternWords(id: PatternId, o: { follow: FollowId; subject?: string | null; outcome?: "win" | "loss" | "draw" | null; pairKind?: "teams" | "candidates" | null; rivalryScope?: "game" | "season" | "meetings" | null }): { label: string; sentence: string } {
   const s = o.subject;
   if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "meetings" && id === "winner") return { label: PATTERNS.winner.label, sentence: MEETINGS_WINNER_LINE };
+  if (o.follow === "rivalry" && o.pairKind === "teams" && o.rivalryScope === "game" && id === "winner") return { label: PATTERNS.winner.label, sentence: GAME_PAIR_SENTENCE };
+  if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "winner") return { label: PATTERNS.winner.label, sentence: CANDIDATES_PAIR_SENTENCE };
   if (o.follow === "team" && s) {
     const won = o.outcome === "loss" ? "loss" : o.outcome === "draw" ? "draw" : "win";
     if (id === "every") return { label: `After each ${s} ${won}`, sentence: `The coin spends a share of its burn pool after each game the ${s} ${won === "win" ? "win" : won === "loss" ? "lose" : "draw"}.` };
@@ -254,7 +261,6 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
     if (id === "once") return { label: "Their next game only", sentence: "When their next listed game is final, the coin of the team that lost burns once." };
   }
   if (o.follow === "market" && id === "fade") return { label: MARKET_NO_LABEL, sentence: MARKET_NO_SENTENCE };
-  if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "once") return { label: "If this candidate wins", sentence: "Each coin burns once, if its own candidate's market pays out YES." };
   // website-22 (audit 10 item 22): a one-time market's two sides are its YES and its NO payout, each once
   if (o.follow === "market" && id === "once") return { label: MARKET_YES_LABEL, sentence: MARKET_YES_SENTENCE };
   return { label: PATTERNS[id].label, sentence: PATTERNS[id].sentence };
@@ -375,16 +381,32 @@ export function matchupFacts(o: { a: string; b: string; oneLinerA: string; oneLi
   return { kind: "independent", trigger, burned: `The coin whose rule fires is bought and burned. ${rules}`, pays: "Each coin pays from its own burn pool.", moves: "No SOL moves between the two coins, because they are separate launches.", example };
 }
 
-/** Two candidates of one race as two coins (walkthrough snag 7): each settles on its own outcome's market, and nothing moves between them. */
-export function candidateFacts(o: { a: string; b: string; candA: string; candB: string }): { kind: "independent"; trigger: string; burned: string; pays: string; moves: string; example: string } {
+/**
+ * Two candidates of one race (owner 2026-10-13: a linked pair, the only form): the four facts, said for the two coins. The race counts once,
+ * when both markets are final; the winner's coin burns its own pool and takes the loser's pool at the end; no single winner sends both
+ * pools to $DEFICIT's burn.
+ */
+export function candidateFacts(o: { a: string; b: string; candA: string; candB: string }): { kind: "winner-takes-the-burn"; trigger: string; burned: string; pays: string; moves: string; example: string } {
   const A = `$${o.a || "A"}`, B = `$${o.b || "B"}`;
   return {
-    kind: "independent",
-    trigger: `These are two separate coins. ${A} settles on the market for ${o.candA}, and ${B} on the market for ${o.candB}.`,
-    burned: "The coin whose candidate's market pays out YES is bought and burned once. If neither candidate wins, neither coin burns.",
-    pays: "Each coin pays from its own burn pool.",
-    moves: "No SOL moves between the two coins, because they are separate launches.",
-    example: `For example, if ${o.candA} wins, ${A} spends its share of its own burn pool and the tokens it buys are burned, and ${B} does nothing.`,
+    kind: "winner-takes-the-burn",
+    trigger: `${A} follows the market for ${o.candA}, and ${B} the market for ${o.candB}. The race counts once, when both markets are final.`,
+    burned: "Only the winning candidate's coin is burned. The other coin's supply is untouched.",
+    pays: "The winning coin spends its whole burn pool on itself. The other coin's pool goes to the winning coin's burn at the end.",
+    moves: `SOL moves from the losing coin's burn pool to the winning coin's. If neither candidate wins, or a market settles 50-50, nothing moves between them and both pools go to $DEFICIT's burn. Nothing is paid to holders.`,
+    example: `For example, if ${o.candA} wins, ${A} burns its own pool on itself, and ${B}'s pool goes to ${A}'s burn too.`,
+  };
+}
+/** Two teams in one game (2026-10-13: a linked pair by default): the four facts, said for the two coins. */
+export function gamePairFacts(o: { a: string; b: string; teamA: string; teamB: string; tie: "tie" | "draw" }): { kind: "winner-takes-the-burn"; trigger: string; burned: string; pays: string; moves: string; example: string } {
+  const A = `$${o.a || "A"}`, B = `$${o.b || "B"}`;
+  return {
+    kind: "winner-takes-the-burn",
+    trigger: `${A} follows ${teamRefByName(o.teamA)} and ${B} follows ${teamRefByName(o.teamB)} in one game. The game counts once, when its result is final.`,
+    burned: "Only the winning team's coin is burned. The other coin's supply is untouched.",
+    pays: "The winning coin spends its whole burn pool on itself. The losing coin's pool goes to the winning coin's burn at the end.",
+    moves: `SOL moves from the losing coin's burn pool to the winning coin's. After a ${o.tie}, nothing moves between them and both pools go to $DEFICIT's burn. A postponed game keeps both coins waiting, and a cancelled one moves nothing. Nothing is paid to holders.`,
+    example: `For example, if ${teamRefByName(o.teamA)} win, ${A} burns its own pool on itself, and ${B}'s pool goes to ${A}'s burn too.`,
   };
 }
 
@@ -404,6 +426,19 @@ export function meetingOf<G extends { expectedAt?: string | null; pair: { a: { a
 export function seasonPairRules(league: LeagueId, a: string, b: string, year: number, fraction = DEFAULT_SHARE.recurring): { a: BurnRule; b: BurnRule } {
   const w = { kind: "season" as const, year };
   return { a: firstPartyRule(teamSeries(league, a, "loss", w), fraction), b: firstPartyRule(teamSeries(league, b, "loss", w), fraction) };
+}
+
+/**
+ * A ONE-GAME PAIR (2026-10-13: linked by default): side A's rule is its own team's win in the game (100 %, the one-shot default; the
+ * end sink on), and the bundle body's pair names the other team (`pair.opp`), whose coin reads the same game's win series of that team
+ * (rules.ts gameMirrorId). The bundle route builds both sides (launchBundle.ts buildPairBundles `game`).
+ */
+export function gamePairRule(league: LeagueId, eventId: string, a: string, fraction: number = DEFAULT_SHARE.oneShot): BurnRule {
+  return { ...firstPartyRule(gameSeries(league, eventId, a, "win"), fraction), onEnd: { ...MEETINGS_ON_END } };
+}
+/** A candidates pair's side A rule: candidate A's market, YES only, 100 % by default, the end sink on (the body's pair names B's market and the race). */
+export function candidatesPairRule(conditionId: string, fraction: number = DEFAULT_SHARE.oneShot): BurnRule {
+  return { schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: conditionId.toLowerCase(), filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: fraction }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, onEnd: { ...MEETINGS_ON_END } } as BurnRule;
 }
 
 // ---- generated tickers and names (owner, 2026-10-12: "two teamwifs") ----
@@ -471,12 +506,12 @@ export function meetingsOf<G extends { expectedAt?: string | null; pair: { a: { 
 }
 /** Item 158 and audit 7 item 9: the two choices say before the tap what each coin follows. */
 export const RIVALRY_GAME_LABEL = "One game between them";
-export const RIVALRY_GAME_LINE = "Pick the game. When it is final, the coin of the team that lost burns once.";
+export const RIVALRY_GAME_LINE = "A linked pair. Pick the game. When it is final, the winning team's coin burns its own pool and takes the losing team's coin's pool at the end.";
 export const RIVALRY_SEASON_LABEL = "Every loss this season";
 export const RIVALRY_SEASON_LINE = "Each coin burns every time its own team loses any game this season, through the postseason, not only the games between these two.";
 /** QA pass 9 #19: "through the postseason" only for a league that has one (European soccer leagues and the UEFA cups do not). */
 export const rivalrySeasonLine = (league: LeagueId | null): string => (league && noPlayoffs(league) ? "Each coin burns every time its own team loses any match this season, not only the matches between these two." : RIVALRY_SEASON_LINE);
-export const RIVALRY_SCOPE_LINE = "The first two options make two separate coins, one for each team. Each burns from its own pool, and no SOL moves between them. The third links the two coins, so SOL moves to the winning coin's burn.";
+export const RIVALRY_SCOPE_LINE = "One game and every game between them are linked pairs, so SOL moves to the winning coin's burn. Every loss this season makes two separate coins, one for each team, and no SOL moves between them.";
 /** Item 154: a failed schedule read is never "no listed game". */
 export const SCHEDULE_UNAVAILABLE_LINE = "The schedule could not be read just now, so their games are not shown.";
 export const NO_LISTED_MEETING_LINE = "The schedule lists no game between them right now.";

@@ -368,6 +368,8 @@ export function ReviewCard(p: ReviewCardProps) {
         </div>
       )}
       {p.pairDiagram && <PairDiagram kind={p.pairDiagram} />}
+      {/* website-23 (WIRING-SETTLED-PAIRS): a settled-event pair says its one sentence (review.settled.sentence) above its four facts */}
+      {p.pairFacts && p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line data-settled-line>{p.pairLine}</p>}
       {p.pairFacts ? (mode === "review"
         // website-22 (audit 10 item 24): on the review the four facts sit one tap away; the diagram above says the one thing to know
         ? <details className="min-w-0 text-xs text-neutral-300" data-pair-facts={p.pairFacts.kind}><summary className="cursor-pointer">How the two coins burn</summary><ul className="mt-1 list-disc space-y-0.5 break-words pl-5 text-amber-200" aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul></details>

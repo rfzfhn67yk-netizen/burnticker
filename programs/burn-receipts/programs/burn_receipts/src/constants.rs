@@ -410,3 +410,50 @@ pub const BURNTICKER_FLAGSHIP: Pubkey = pubkey!("AJJ4XxCUYr8zzMWm8FYg3xh638LYAAA
 pub const BURNTICKER_FLAGSHIP: Pubkey = pubkey!("4QnwyiBMm2Caz5tJr9hNGzT2wqZcMipZjFHiSBu7AM4F");
 #[cfg(all(feature = "test-pins", not(feature = "devnet")))]
 pub const BURNTICKER_FLAGSHIP: Pubkey = pubkey!("H4JcMPicKkHcxxDjkyyrLoQj7Kcibd9t815ak4UvTr9M");
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Round 5 (owner, 2026-10-13): a coin that burns another token (instructions/burn_target.rs, docs/burnticker/EXTERNAL-BURN.md)
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+/// BurnTarget ["burn_target", mint] — the target mint and its pinned CPMM pool, written once by pin_burn_target.
+#[constant]
+pub const BURN_TARGET_SEED: &[u8] = b"burn_target";
+/// TokenConfig.burn_target_kind (the byte that was `reserved`, zero on every earlier config): the coin burns itself / its BurnTarget.
+#[constant]
+pub const BURN_TARGET_SELF: u8 = 0;
+#[constant]
+pub const BURN_TARGET_EXTERNAL: u8 = 1;
+/// A target pool's fee (trade fee + the creator fee when the pool charges it), parts per million of volume: at most 1 %.
+#[constant]
+pub const TARGET_MAX_FEE_PPM: u64 = 10_000;
+/// The target pool's liquidity floor: its WSOL reserve net of owed fees, at admission and at every crank. With the 2 % per-crank cap a
+/// crank on a pool at the floor spends at most 1 SOL (mainnet). Devnet's floor is lower so a devnet pool can be seeded from faucets.
+/// (Not an IDL constant: it differs per build; src/lib/burnReceipts/constants.ts mirrors both values.)
+#[cfg(not(feature = "devnet"))]
+pub const TARGET_MIN_WSOL_RESERVE_LAMPORTS: u64 = 50_000_000_000;
+#[cfg(feature = "devnet")]
+pub const TARGET_MIN_WSOL_RESERVE_LAMPORTS: u64 = 2_000_000_000;
+
+/// BurnTarget.pool_kind: the pinned pool is a Raydium CPMM pool / a Raydium AMM v4 pool (swap-only status, swap_base_in_v2).
+#[constant]
+pub const TARGET_POOL_CPMM: u8 = 0;
+#[constant]
+pub const TARGET_POOL_AMM_V4: u8 = 1;
+/// Raydium AMM v4 (raydium-amm; the fixture is built from commit d26944bfb76fb5fa8f91e5d440c2050ed358ef81).
+#[cfg(not(feature = "devnet"))]
+pub const AMM_V4_PROGRAM_ID: Pubkey = pubkey!("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
+#[cfg(feature = "devnet")]
+pub const AMM_V4_PROGRAM_ID: Pubkey = pubkey!("DRaya7Kj3aMWQSy19kSjvmuwq9docCHofyP9kanQGaav");
+/// Pyth's Solana receiver program (the same id on mainnet and devnet): owner of every PriceUpdateV2 account, sponsored or posted.
+pub const PYTH_RECEIVER_PROGRAM_ID: Pubkey = pubkey!("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
+/// Pyth's SOL/USD feed id (Crypto.SOL/USD), the denominator of every target/SOL reference.
+pub const PYTH_SOL_USD_FEED_ID: [u8; 32] = [
+    0xef, 0x0d, 0x8b, 0x6f, 0xda, 0x2c, 0xeb, 0xa4, 0x1d, 0xa1, 0x5d, 0x40, 0x95, 0xd1, 0xda, 0x39, 0x2a, 0x0d, 0x2f, 0x8e, 0xd0, 0xc6, 0xc7, 0xbc, 0x0f, 0x4c,
+    0xfa, 0xc8, 0xc2, 0x80, 0xb5, 0x6d,
+];
+/// A Pyth price older than this (publish_time) holds the crank like an unhealthy pool.
+#[constant]
+pub const PYTH_MAX_AGE_SECS: i64 = 60;
+/// A Pyth price whose confidence interval is wider than this share of the price holds the crank.
+#[constant]
+pub const PYTH_MAX_CONF_BPS: u64 = 100;

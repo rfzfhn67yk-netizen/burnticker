@@ -1,6 +1,7 @@
 import { rulesSha256 } from "@/lib/burnKeeper/rules";
 import { derbySeriesId, derbySpecProblems, derbyStatement, isDerbySeries, type DerbySpec } from "@/lib/burnticker/derby/spec";
 import { inverseRefusal, KEEPER_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
+import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 
 /**
  * BURNTICKER RULES (2026-10-09; the owner's redesign the same evening: the event space is OPEN). A rule is a SELECTOR plus an
@@ -53,6 +54,64 @@ export function meetingsMirrorId(series: string): string | null {
 export const isMeetingsRule = (r: { oracle?: unknown; series?: unknown }): boolean => r.oracle === "catalogue" && typeof r.series === "string" && MEETINGS_SERIES_RE.test(r.series);
 
 /**
+ * TWO CANDIDATES IN ONE RACE (owner decisions 2026-10-13 ~06:05 and ~06:10 Denver: "since it's a settled event, the loser's burn pool
+ * should go to burning the winner's token"; the linked form is the default and the only form for candidates). Each coin follows its own
+ * candidate's Polymarket outcome market of ONE race (a one-shot, onYes only); the two are a registered LaunchLab pair whose rules carry
+ * `pair.race = { slug, markets: [side A's market, side B's market] }`, so each side's hash locks the race and both markets. The race is
+ * decided once, when BOTH markets are final: exactly one paid YES → that coin won, the other lost (the keeper's race result,
+ * multiKeeper.planToken); both NO, a split payout or both YES → no winner (each pool goes to $DEFICIT's burn at the end).
+ */
+export interface PairRace { slug: string; markets: [string, string] }
+export const RACE_SLUG_RE = /^[a-z0-9][a-z0-9-]{2,127}$/;
+/** Is this a candidates pair side (two outcome markets of one race)? */
+export const isCandidatesRule = (r: { pair?: { race?: unknown } | null }): boolean => !!r.pair && typeof r.pair === "object" && r.pair.race !== undefined && r.pair.race !== null;
+/** The partner's market of a candidates pair side, or null. */
+export const candidatesPartnerMarket = (r: Pick<BurnRule, "pair">): string | null => (r.pair?.race ? r.pair.race.markets[r.pair.side === "A" ? 1 : 0] : null);
+/**
+ * TWO TEAMS IN ONE GAME (coordinator 2026-10-13, the same owner rule for settled events): the one-game rivalry pair is linked by default.
+ * Each coin reads its OWN team's win series of the one game (sources/espn.ts gameSeries, outcome `win`: 1 when that team won, 0 when it
+ * lost or drew); the two ids are each other's mirror (the team swapped for the opponent). `pair.game = { series: [side A's, side B's] }`
+ * locks both in both hashes. Exactly one win → that coin's whole budget burns it and the loser's pool forwards to it; a draw → no winner
+ * (each pool to $DEFICIT's burn at the end); a postponed game waits; a cancelled game ends void (each coin burns down on itself).
+ */
+export interface PairGame { series: [string, string] }
+export const GAME_WIN_SERIES_RE = /^espn\.game:([a-z0-9.]+)-(\d{4,12})-([A-Z0-9]{2,6})-win$/;
+/** The other team's win series of the same game (the team swapped), by spelling alone. */
+export const gameMirrorId = (series: string, opp: string): string | null => { const m = GAME_WIN_SERIES_RE.exec(series); return m && m[3] !== opp.toUpperCase() ? `espn.game:${m[1]}-${m[2]}-${opp.toUpperCase()}-win` : null; };
+export const isGamePairRule = (r: { pair?: { game?: unknown } | null }): boolean => !!r.pair && typeof r.pair === "object" && r.pair.game !== undefined && r.pair.game !== null;
+/** The two settled-event pair shapes (one race's two candidates, one game's two teams), or null for any other rule. */
+export const settledPairShape = (r: { pair?: { race?: unknown; game?: unknown } | null }): "candidates" | "game" | null => (isCandidatesRule(r) ? "candidates" : isGamePairRule(r) ? "game" : null);
+export const isSettledPairRule = (r: { pair?: { race?: unknown; game?: unknown } | null }): boolean => settledPairShape(r) !== null;
+/** The problems of a `pair.game` field against its rule (empty = a valid one-game pair side). Pure. */
+export function gameProblems(r: { oracle?: unknown; series?: unknown; kind?: unknown; scalar?: { direction?: unknown } | null; inverse?: unknown; pair?: { side?: unknown; game?: unknown; race?: unknown } | null }): string[] {
+  const g = r.pair?.game as { series?: unknown } | undefined | null;
+  if (g === undefined || g === null) return [];
+  const p: string[] = [];
+  const ss = typeof g === "object" ? g.series : undefined;
+  const m = Array.isArray(ss) && ss.length === 2 && ss.every((x) => typeof x === "string") ? ss.map((x) => GAME_WIN_SERIES_RE.exec(x as string)) : null;
+  if (!m || !m[0] || !m[1] || m[0][1] !== m[1][1] || m[0][2] !== m[1][2] || m[0][3] === m[1][3]) p.push("pair.game.series must be the two teams' win series of one game, side A's first");
+  if (typeof g === "object" && Object.keys(g).some((k) => k !== "series")) p.push("pair.game takes only series");
+  if (r.pair?.race !== undefined) p.push("pair: a pair is two candidates in one race or two teams in one game, not both");
+  if (r.oracle !== "catalogue" || !Array.isArray(ss) || ss[r.pair?.side === "B" ? 1 : 0] !== r.series) p.push(`pair.game: side ${r.pair?.side === "B" ? "B" : "A"} reads ${r.pair?.side === "B" ? "the second" : "the first"} series of pair.game.series`);
+  if (r.kind !== "scalar" || r.scalar?.direction !== "up" || r.inverse) p.push("pair.game: each team's coin counts its own team's win");
+  return p;
+}
+/** The problems of a `pair.race` field against its rule (empty = a valid candidates side). Pure. */
+export function raceProblems(r: { oracle?: unknown; market?: unknown; kind?: unknown; binary?: { onYes?: unknown; onNo?: unknown } | null; pair?: { side?: unknown; race?: unknown } | null }): string[] {
+  const race = r.pair?.race as { slug?: unknown; markets?: unknown } | undefined | null;
+  if (race === undefined || race === null) return [];
+  const p: string[] = [];
+  if (typeof race !== "object" || typeof race.slug !== "string" || !RACE_SLUG_RE.test(race.slug)) p.push("pair.race.slug must be the race's Polymarket event slug (3–128 lowercase letters, digits and dashes)");
+  const m = (race as { markets?: unknown }).markets;
+  if (!Array.isArray(m) || m.length !== 2 || !m.every((x) => typeof x === "string" && POLY_MARKET_RE.test(x)) || m[0] === m[1]) p.push("pair.race.markets must be two different Polymarket condition ids, side A's market first");
+  if (typeof race === "object" && Object.keys(race).some((k) => k !== "slug" && k !== "markets")) p.push("pair.race takes only slug and markets");
+  if (r.oracle !== "polymarket" || typeof r.market !== "string") p.push("pair.race: a candidates pair reads two Polymarket outcome markets of one race, one market per coin");
+  else if (Array.isArray(m) && m[r.pair?.side === "B" ? 1 : 0] !== r.market) p.push(`pair.race: side ${r.pair?.side === "B" ? "B" : "A"} reads ${r.pair?.side === "B" ? "the second" : "the first"} market of pair.race.markets`);
+  if (r.kind !== "binary" || !r.binary || !r.binary.onYes || r.binary.onNo) p.push("pair.race: each candidate's coin burns on its own market's YES only");
+  return p;
+}
+
+/**
  * POLYMARKET SELECTORS (2026-10-10). One market = its CTF condition id, lowercase hex (`market: "0x…64"`), a one-shot. Recurring =
  * `series` in one of two forms:
  *   tag:<tag slug>[/<sports market type>][:<event slug glob>]   every binary market Gamma lists under the tag (e.g. "tag:nfl/moneyline",
@@ -94,6 +153,12 @@ export interface BurnRule {
    * created before it.
    */
   onEnd?: { windDownDays: number; sweepThresholdLamports: number; /** END SINKS (LAUNCHPAD-PATH §45): see END_SINK below. Absent = the old wind-down for every end. */ endSink?: true };
+  /**
+   * BURN TARGET (round 5, owner 2026-10-13; burnTarget.ts): this coin's burn pool swaps SOL for ANOTHER token on that token's pinned
+   * Raydium CPMM pool and burns it, instead of burning itself. Buyback mode only; pinned before the coin exists (pin_burn_target), hashed
+   * here so the rules file says exactly which token and pool. Absent = the coin burns itself (every rule before round 5).
+   */
+  burnTarget?: BurnTargetField;
   /**
    * OUTCOME SETS (opt-in, owner design 2026-10-10; the program instruction is QUEUED — docs/burnticker/PROGRAM-UPGRADE-QUEUE.md): this
    * coin is the member of set `id` bound to ONE `outcome` of the set's selector (a team id in a league season, a Polymarket outcome, a
@@ -153,6 +218,10 @@ export interface PairField {
    * winner's burn pool while the winner is live. Locked by both sides' hashes; absent on pairs created before the decision.
    */
   winnerTakesBurn?: true;
+  /** A candidates pair (two outcome markets of one race; owner 2026-10-13): the race and both markets, side A's first. Absent otherwise. */
+  race?: PairRace;
+  /** A one-game pair (two teams in one game; 2026-10-13): both teams' win series of the game, side A's first. Absent otherwise. */
+  game?: PairGame;
 }
 /** Does this pair forward the loser's fuel to the winner (winner takes the burn)? */
 export const pairWinnerTakesBurn = (r: Pick<BurnRule, "pair">): boolean => r.pair?.winnerTakesBurn === true;
@@ -384,7 +453,7 @@ export function validateRule(raw: unknown): BurnRule {
       if (pair.side !== "A" && pair.side !== "B") p.push('pair.side must be "A" or "B"');
       if (pair.counterpartMint !== null && (typeof pair.counterpartMint !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(pair.counterpartMint))) p.push("pair.counterpartMint must be a Solana address or null");
       if (pair.side === "B" && pair.counterpartMint === null) p.push("pair side B must name side A's mint as counterpartMint");
-      if (!PAIR_ORACLES.includes(r.oracle as OracleId) && !isMeetingsRule(r)) p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket), a Burn Derby coin-vs-coin selector, or a head-to-head season series between two teams");
+      if (!PAIR_ORACLES.includes(r.oracle as OracleId) && !isMeetingsRule(r) && pair.game === undefined) p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket), a Burn Derby coin-vs-coin selector, or a head-to-head season series between two teams");
       if (isMeetingsRule(r) && r.kind === "scalar" && r.scalar && r.scalar.direction !== "up") p.push('pair: a head-to-head series side counts its own team\'s wins (direction "up"); the other team\'s coin reads the mirror series');
       if (r.oracle === "derby" && (derby as DerbySpec | undefined)?.selector === "bracket") p.push("pair: a bracket fan coin is a single coin (coin-vs-coin and single-asset derby rules pair)");
       if (r.kind === "scalar" && r.scalar && r.scalar.direction === "abs") p.push('pair: a scalar side needs direction "up" or "down" (abs cannot be inverted)');
@@ -395,7 +464,11 @@ export function validateRule(raw: unknown): BurnRule {
         if (typeof pair.voidBy !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(pair.voidBy) || new Date(`${pair.voidBy}T00:00:00Z`).toISOString().slice(0, 10) !== pair.voidBy) p.push("pair.voidBy must be a YYYY-MM-DD date (UTC)");
       }
       if (pair.winnerTakesBurn !== undefined && pair.winnerTakesBurn !== true) p.push("pair.winnerTakesBurn must be true or absent (pairs created before 2026-10-11 carry none)");
-      for (const k of Object.keys(pair)) if (!["pairId", "side", "counterpartMint", "clause", "voidBy", "winnerTakesBurn"].includes(k)) p.push(`pair.${k} is not a known key`);
+      // two candidates of one race: each side on its own outcome market, both markets locked in both rules (raceProblems)
+      if (pair.race !== undefined) { p.push(...raceProblems(r as Parameters<typeof raceProblems>[0])); if (pair.winnerTakesBurn !== true) p.push("pair.race: a candidates pair is a winner-takes-the-burn pair (pair.winnerTakesBurn: true)"); }
+      // two teams in one game: each side on its own team's win series of that game (gameProblems)
+      if (pair.game !== undefined) { p.push(...gameProblems(r as Parameters<typeof gameProblems>[0])); if (pair.winnerTakesBurn !== true) p.push("pair.game: a one-game pair is a winner-takes-the-burn pair (pair.winnerTakesBurn: true)"); }
+      for (const k of Object.keys(pair)) if (!["pairId", "side", "counterpartMint", "clause", "voidBy", "winnerTakesBurn", "race", "game"].includes(k)) p.push(`pair.${k} is not a known key`);
     }
   }
   if (r.kind === "scalar") {
@@ -448,7 +521,12 @@ export function validateRule(raw: unknown): BurnRule {
       if (!Number.isInteger(vault.cliffDays) || vault.cliffDays < 0 || vault.cliffDays > 365) p.push("vault.cliffDays must be a whole number 0–365");
     }
   } else if (vault !== null) p.push("buyback mode: vault must be null");
-  for (const k of Object.keys(r)) if (!["schema", "oracle", "series", "market", "filter", "kind", "binary", "scalar", "onVoid", "floorUsd", "reserveSol", "vault", "pair", "derby", "onEnd", "set", "inverse"].includes(k)) p.push(`${k} is not a known key`);
+  const burnTarget = (r as { burnTarget?: unknown }).burnTarget;
+  if (burnTarget !== undefined && burnTarget !== null) {
+    p.push(...burnTargetShapeProblems(burnTarget));
+    if (mode === "vault") p.push("burnTarget: a vault-mode coin has no burn pool to spend on a target");
+  }
+  for (const k of Object.keys(r)) if (!["schema", "oracle", "series", "market", "filter", "kind", "binary", "scalar", "onVoid", "floorUsd", "reserveSol", "vault", "pair", "derby", "onEnd", "set", "inverse", "burnTarget"].includes(k)) p.push(`${k} is not a known key`);
   if (p.length) throw new Error(`rule: ${p.join("; ")}`);
   return {
     schema: BURNTICKER_RULES_SCHEMA, oracle: r.oracle as OracleId, series, market, filter,
@@ -456,11 +534,12 @@ export function validateRule(raw: unknown): BurnRule {
     binary: r.kind === "binary" ? { onYes: r.binary!.onYes ?? null, onNo: r.binary!.onNo ?? null } : null,
     scalar: r.kind === "scalar" ? { unit: r.scalar!.unit, perUnit: r.scalar!.perUnit, baseline: r.scalar!.baseline, direction: r.scalar!.direction } : null,
     onVoid: "skip", floorUsd: r.floorUsd as string, reserveSol: r.reserveSol as string, vault: mode === "vault" ? vault : null,
-    pair: pair === null ? null : { pairId: pair.pairId, side: pair.side, counterpartMint: pair.counterpartMint ?? null, ...(pair.clause !== undefined ? { clause: pair.clause, voidBy: pair.voidBy } : {}), ...(pair.winnerTakesBurn === true ? { winnerTakesBurn: true as const } : {}) },
+    pair: pair === null ? null : { pairId: pair.pairId, side: pair.side, counterpartMint: pair.counterpartMint ?? null, ...(pair.clause !== undefined ? { clause: pair.clause, voidBy: pair.voidBy } : {}), ...(pair.winnerTakesBurn === true ? { winnerTakesBurn: true as const } : {}), ...(pair.race ? { race: { slug: pair.race.slug, markets: [pair.race.markets[0], pair.race.markets[1]] as [string, string] } } : {}), ...(pair.game ? { game: { series: [pair.game.series[0], pair.game.series[1]] as [string, string] } } : {}) },
     ...(set !== undefined && set !== null ? { set: { id: (set as { id: string }).id, outcome: (set as { outcome: string }).outcome, forwardBps: (set as { forwardBps: number }).forwardBps } } : {}),
     ...(onEnd !== undefined && onEnd !== null ? { onEnd: { windDownDays: (onEnd as { windDownDays: number }).windDownDays, sweepThresholdLamports: (onEnd as { sweepThresholdLamports: number }).sweepThresholdLamports, ...((onEnd as { endSink?: unknown }).endSink === true ? { endSink: true as const } : {}) } } : {}),
     ...(r.oracle === "derby" ? { derby: derby as DerbySpec } : {}),
     ...(inverse === true ? { inverse: true as const } : {}),
+    ...(burnTarget !== undefined && burnTarget !== null ? { burnTarget: { mint: (burnTarget as BurnTargetField).mint, pool: (burnTarget as BurnTargetField).pool, symbol: (burnTarget as BurnTargetField).symbol, feedId: (burnTarget as BurnTargetField).feedId } } : {}),
   };
 }
 
@@ -470,7 +549,10 @@ export function validateRule(raw: unknown): BurnRule {
  * both outcomes) throws. Each side is then hashed on its own (lockRule): two rules, two hashes, one pairId in both.
  */
 export function invertMapping(a: BurnRule, counterpartMint: string | null, pairId: string = a.pair?.pairId ?? ""): BurnRule {
-  const base = { ...a, pair: { ...(a.pair ?? {}), pairId, side: "B" as const, counterpartMint } };
+  // Round 5: a burn target is chosen per side ("Burn the real <symbol>" on each tile), so side B never inherits side A's.
+  const { burnTarget: _sideATarget, ...rest } = a;
+  void _sideATarget;
+  const base = { ...rest, pair: { ...(a.pair ?? {}), pairId, side: "B" as const, counterpartMint } };
   if (a.kind === "binary" && a.binary) return validateRule({ ...base, binary: { onYes: a.binary.onNo, onNo: a.binary.onYes } });
   if (a.kind === "scalar" && a.scalar) return validateRule({ ...base, scalar: { ...a.scalar, direction: a.scalar.direction === "up" ? "down" : a.scalar.direction === "down" ? "up" : "abs" } });
   throw new Error("invertMapping: not a binary or scalar rule");
@@ -555,7 +637,7 @@ export function pairClauseText(r: Pick<BurnRule, "pair">): string {
  */
 export function winnerTakesBurnText(r: Pick<BurnRule, "pair" | "market">): string {
   if (!pairWinnerTakesBurn(r)) return "";
-  const oneShot = !!r.market;
+  const oneShot = !!r.market || !!r.pair?.game;
   return ` Winner takes the burn: ${WINNER_TAKES_BURN_LINE.toLowerCase()} At each result the other coin's fuel for that result (its own fraction of its own burn pool${oneShot ? ", all of it for this one-shot pair" : ""}) moves to the winning coin's burn pool, and the winning coin's next burn buys and burns the winning coin; the other coin's supply is untouched and nobody is paid. A draw or a void moves nothing.${oneShot ? " After the result, whatever the other coin's burn pool still spends (its end-of-rule burns and later sweeps) also goes to the winning coin's burn pool while that coin is live." : ""}`;
 }
 
@@ -589,7 +671,8 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
   if (r.kind === "binary" && r.binary) {
     const yes = r.binary.onYes ? `When ${what} settles YES, the keeper ${mapText(r.binary.onYes, "for that market")}.` : `A YES settlement of ${what} burns nothing.`;
     const no = r.binary.onNo ? ` When it settles NO, ${r.binary.onYes ? "it" : "the keeper"} ${mapText(r.binary.onNo, "for that market")}.` : " A NO settlement burns nothing.";
-    const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side burns on the opposite outcome, so each settlement burns exactly one of the two.` : "";
+    const pair = r.pair?.race ? ` Candidates pair ${r.pair.pairId}, side ${r.pair.side}: the other coin follows the other candidate's market (${candidatesPartnerMarket(r)}) of the same race (${r.pair.race.slug}). The race counts once, when both markets are final: if exactly one of the two settles YES, that coin won the race and the other lost it; if both settle NO, both settle YES or either one splits its payout, neither coin won and the result moves nothing between them.`
+      : r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side burns on the opposite outcome, so each settlement burns exactly one of the two.` : "";
     const poly = r.oracle === "polymarket" ? " YES is the market's first outcome and NO its second; the result is the payout the Conditional Tokens contract on Polygon records, and a 50-50 resolution is a void." : "";
     return `${yes}${no}${pair}${pairClauseText(r)}${winnerTakesBurnText(r)}${poly} A voided market burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
   }
@@ -600,7 +683,8 @@ export function ruleStatement(r: BurnRule, names: { seriesTitle?: string | null;
     return `Each time ${what} ${r.oracle === "catalogue" ? "publishes a reading" : "settles"}, a reading that does not ${did} ${base} is one unit, and the keeper ${mapText(s.perUnit, "per unit")}. A reading that does ${did} it, by any amount, burns nothing. ${r.oracle === "catalogue" ? "A voided reading" : "A voided market"} burns nothing. Settled results only; prices are never read.${onEndText(r)}`;
   }
   const dir = s.direction === "up" ? "above" : s.direction === "down" ? "below" : "away from (either direction)";
-  const pair = r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}${winnerTakesBurnText(r)}` : "";
+  const pair = r.pair?.game ? ` One-game pair ${r.pair.pairId}, side ${r.pair.side}: the other coin counts the other team's win in the same game (${r.pair.game.series[r.pair.side === "A" ? 1 : 0]}). The game counts once both results are final: the coin of the team that won burns, the other coin's pool moves to its burn, and a draw moves nothing between them.${pairClauseText(r)}${winnerTakesBurnText(r)}`
+    : r.pair ? ` Rivalry pair ${r.pair.pairId}, side ${r.pair.side}: the other side counts the opposite direction.${pairClauseText(r)}${winnerTakesBurnText(r)}` : "";
   // a catalogue count ("1 win", "1 launch") from a baseline of 0 reads as a count; any other unit as "every <unit> <direction> <baseline>"
   const unitWords = names.unitLabel ? names.unitLabel : `full ${s.unit}`;
   const counted = r.oracle === "catalogue" && s.baseline === 0 && s.direction === "up" && !!names.unitLabel;

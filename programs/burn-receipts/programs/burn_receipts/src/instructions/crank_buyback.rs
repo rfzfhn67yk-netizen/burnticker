@@ -110,6 +110,8 @@ pub fn handle_crank_buyback(ctx: Context<CrankBuyback>, _record_date: u32) -> Re
     let (rule, mint_key, fee_bump, pool_key) = {
         let c = &ctx.accounts.config;
         require!(c.rule.mode == MODE_BUYBACK, BurnError::WrongMode);
+        // Round 5: a coin with a burn target spends its fuel only on the target (crank_target_burn); a self-target config passes.
+        require!(c.burn_target_kind == BURN_TARGET_SELF, BurnError::BurnTargetSet);
         require!(c.cpmm_pool != Pubkey::default(), BurnError::PoolNotRegistered);
         // Review-2 F5/F14: only a pool that passed register_pool's provenance checks (fixed pools included) is ever traded on.
         require!(c.pool_verified, BurnError::PoolNotVerified);

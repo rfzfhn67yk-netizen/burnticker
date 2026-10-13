@@ -74,13 +74,13 @@ describe("the four questions", () => {
     assert.equal(rel.preselected, "once"); assert.equal(rel.options.find((o) => o.id === "every")!.available, false);
   });
 
-  test("pairs: two coins take winner or the flippening; two teams take every, fade or one game; two candidates take once only", () => {
+  test("pairs: two coins take winner or the flippening; two teams take every, fade or one game; two candidates take winner only (owner 2026-10-13: the linked form)", () => {
     const c = patternOptions({ follow: "coins", rule: null });
     assert.deepEqual(c.options.filter((o) => o.available).map((o) => o.id), ["once", "winner"]); assert.equal(c.preselected, "winner");
     const t = patternOptions({ follow: "rivalry", rule: season("LAD", "loss"), pairKind: "teams" });
     assert.deepEqual(t.options.filter((o) => o.available).map((o) => o.id), ["every", "fade", "once"]); assert.match(t.options.find((o) => o.id === "winner")!.reason!, /two separate coins/);
     const e = patternOptions({ follow: "rivalry", rule: poly(), pairKind: "candidates" });
-    assert.deepEqual(e.options.filter((o) => o.available).map((o) => o.id), ["once"]);
+    assert.deepEqual(e.options.filter((o) => o.available).map((o) => o.id), ["winner"]); assert.equal(e.preselected, "winner");
   });
 
   test("the end sentence matches the end sink the rule pins (EndSink kinds 0 and 3, or none)", () => {
@@ -255,13 +255,14 @@ describe("walkthrough snags and the launch-intent audits", () => {
 
   test("snag 2: a Matchup has the shared raise picker and the review's own raise; Coin vs Coin too when its venue takes one", () => {
     // website-21: a rivalry series pair (two LaunchLab coins) shows the shared raise when the review answers one
-    assert.match(page, /raise=\{pairOn && !ruleB \? null : meetingsOn && !shownReview\.review\?\.raise \? null : \{/);
+    assert.match(page, /raise=\{pairOn && !ruleB \? null : \(meetingsOn \|\| settledPick\) && !shownReview\.review\?\.raise \? null : \{/);
     assert.match(tile, /raise=\{shown\.review\?\.raise \? \{ options: \[\.\.\.RAISE_PRESETS_SOL\], value: raiseSol/);
     assert.match(tile, /firstBuySol: "0", raiseSol,/);
   });
 
   test("snags 7 and 8, audit 2 items 4 and 5: two candidates become two coins on their own markets; the sentence comes from the market's question", () => {
-    assert.match(page, /if \(pairOn && elPick\) return \{ a: applyDial\(elPick\.a\.rule, "fraction", DEFAULT_SHARE\.oneShot\)/);
+    // website-23 (WIRING-SETTLED-PAIRS): two candidates in one race are one linked pair; side A on candidate A's market, side B in `pair`
+    assert.match(page, /if \(pairOn && elPick\) return \{ a: candidatesPairRule\(elPick\.a\.conditionId, DEFAULT_SHARE\.oneShot\)/);
     assert.match(page, /if \(pairOn && elPick\) return \{ eventPhrase: elPick\.a\.question\.replace/);
     // website-22 (audit 10 item 6): the sentence lives in guidedLaunch.ts partyMarketWarning, with the ticker as a placeholder
     assert.match(page, /partyMarketWarning\(o\.question, sur\(o\), side\)/);
