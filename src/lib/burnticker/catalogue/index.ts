@@ -203,7 +203,7 @@ export class CatalogueAdapter implements OracleAdapter {
     return n ? { oracle: "catalogue", ticker: n.id, title: n.title, category: "tier 4", frequency: n.cadence, settlementSource: { name: n.sourceName, url: n.sourceUrl }, tags: n.flags } : null;
   }
   async settledSince(rule: BurnRule, sinceIso: string | null): Promise<ResolvedSelector> {
-    // native first-party sources (ESPN scoreboard with its cross-read, NWS daily climate): their own reader, the same fixed-unit check
+    // native first-party sources (the sports results with their cross-read, NWS daily climate): their own reader, the same fixed-unit check
     const native = rule.series ? nativeSourceById(rule.series) : null;
     if (native) { const np = nativeRuleProblems(native, rule); if (np.length) throw new Error(`catalogue: ${np.join("; ")}`); return native.settledSince(rule, sinceIso); }
     const feed = rule.series ? feedById(rule.series, this.o) : null;

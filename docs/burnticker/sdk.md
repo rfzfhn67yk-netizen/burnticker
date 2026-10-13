@@ -2,7 +2,7 @@
 
 Burnticker launches memecoins whose supply burns on a verifiable event — two coins on one matchup (a rivalry pair: when a side
 loses, its coin burns) or one coin on one rule. Readings come from first-party primaries with an independent cross-read (Treasury,
-BLS, FRED, ESPN, NWS, EDGAR, on-chain data; $DEFICIT runs on Treasury data directly) or from an on-chain Polymarket payout (the
+BLS, FRED, the leagues' own feeds and TheSportsDB, NWS, EDGAR, on-chain data; $DEFICIT runs on Treasury data directly) or from an on-chain Polymarket payout (the
 result read from the payout vector on Polygon). Kalshi is discovery-only and off by default (its terms do not permit settlement on
 its data; the launch preflight refuses Kalshi rules). Everything below works the same for every source.
 

@@ -47,7 +47,7 @@ export function describeEntry(e: HttpSourceConfig | CopycatSourceConfig | Native
       launchable: e.launchable && !needsKey, launchableWhy: needsKey ? `needs a key: ${needsKey}` : e.launchable ? null : (e.note ?? "not launchable"),
       readable: !needsKey, snapshot: true, flags: e.flags, venue: "feed" };
   }
-  // native sources (sources/native.ts: ESPN scoreboard, NWS climate, FEC) are keeper-read primary APIs with their own reader; their
+  // native sources (sources/native.ts: sports results, NWS climate, FEC) are keeper-read primary APIs with their own reader; their
   // descriptor comes straight from the entry (2026-10-10)
   if (e.kind === "native") return { id: e.id, kind: "attested-http", tier: e.tier, title: e.title, operator: e.operator, domain: domainOf(e.sourceUrl), fact: e.fact, launchable: e.launchable, launchableWhy: e.launchable ? null : (e.note ?? "cross-read only"), readable: e.readable, snapshot: false, flags: e.flags, venue: "feed" };
   const http = e.kind === "attested-http" ? (e as HttpSourceConfig) : null;

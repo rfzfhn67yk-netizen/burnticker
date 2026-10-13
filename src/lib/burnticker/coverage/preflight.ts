@@ -137,7 +137,7 @@ async function preflightCatalogue(rule: BurnRule, deps: PreflightDeps, now: numb
 }
 
 /**
- * NATIVE first-party sources (sources/native.ts — the ESPN scoreboard with its league cross-reads, the NWS climate report with the Iowa
+ * NATIVE first-party sources (sources/native.ts — the sports results with their league cross-reads, the NWS climate report with the Iowa
  * Environmental Mesonet): the family's descriptor in sources.json must be a primary, the source's own cross-read must be an independent
  * cross-read of the same fact under the same gate (another operator on another domain), and the live check must find the latest
  * reading confirmed. Same refusal codes as the feeds.

@@ -15,7 +15,7 @@ A **primary** is a first-party source adapter: kind attested-http or on-chain, t
 | Category | Verdict | Primaries | Independent cross-reads | Polymarket tags |
 |---|---|---|---|---|
 | Natural disasters | **settleable** | `usgs.quakes`, `usgs.quakenext`, `nhc.storms`, `nhc.hurricanes`, `nhc.next`, `spc.tornadoes`, `spc.tornadoday`, `nifc.acres`, `nifc.firesize`, `usgs.volcanoraise`, `usgs.volcanowarning` | none | weather, climate-science |
-| Sports | **settleable** | `polymarket.gamepayout`, `thesportsdb.v2` | `thesportsdb.v2` (of `polymarket.gamepayout`), `nhl.score` (of `polymarket.gamepayout`), `mlb.statsapi` (of `polymarket.gamepayout`), `nba.cdn` (of `polymarket.gamepayout`), `apisports.games` (of `polymarket.gamepayout`), `polymarket.gamepayout` (of `thesportsdb.v2`), `nhl.score` (of `thesportsdb.v2`), `mlb.statsapi` (of `thesportsdb.v2`), `nba.cdn` (of `thesportsdb.v2`), `apisports.games` (of `thesportsdb.v2`) | sports |
+| Sports | **settleable** | `polymarket.gamepayout`, `thesportsdb.v2` | `thesportsdb.v2` (of `polymarket.gamepayout`), `nhl.score` (of `polymarket.gamepayout`), `mlb.statsapi` (of `polymarket.gamepayout`), `apisports.games` (of `polymarket.gamepayout`), `polymarket.gamepayout` (of `thesportsdb.v2`), `nhl.score` (of `thesportsdb.v2`), `mlb.statsapi` (of `thesportsdb.v2`), `apisports.games` (of `thesportsdb.v2`) | sports |
 | Elections & Politics | adjudicated-only (Polymarket) | `fedreg.finalRules`, `fedreg.eo`, `fec.reports` | none | elections, politics |
 | Economics | **settleable** | `treasury.debt`, `fred.UNRATE`, `fred.CPIAUCSL`, `fred.GFDEBTN`, `bls.eggs` | `fred.GFDEBTN` (of `treasury.debt`), `bls.LNS14000000` (of `fred.UNRATE`), `bls.CUSR0000SA0` (of `fred.CPIAUCSL`), `treasury.debt` (of `fred.GFDEBTN`), `fred.APU0000708111` (of `bls.eggs`) | economy |
 | Financial markets | **settleable** | `pyth.equity`, `pyth.fx`, `pyth.metal`, `pyth.commodity`, `pyth.rates` | `redstone.equity` (of `pyth.equity`), `redstone.fx` (of `pyth.fx`), `redstone.metal` (of `pyth.metal`), `redstone.commodity` (of `pyth.commodity`) | finance |
@@ -52,7 +52,7 @@ By the owner's decision of 2026-10-12, these settle on their publisher's own pub
 
 ## Sports — settleable
 
-A primary source is checked by an independent second source. The pairs are polymarket.gamepayout with thesportsdb.v2, polymarket.gamepayout with nhl.score, polymarket.gamepayout with mlb.statsapi, polymarket.gamepayout with nba.cdn, polymarket.gamepayout with apisports.games, thesportsdb.v2 with nhl.score, thesportsdb.v2 with mlb.statsapi, thesportsdb.v2 with nba.cdn, thesportsdb.v2 with apisports.games.
+A primary source is checked by an independent second source. The pairs are polymarket.gamepayout with thesportsdb.v2, polymarket.gamepayout with nhl.score, polymarket.gamepayout with mlb.statsapi, polymarket.gamepayout with apisports.games, thesportsdb.v2 with nhl.score, thesportsdb.v2 with mlb.statsapi, thesportsdb.v2 with apisports.games.
 
 | Source | Role | Operator | Domain | Tier | Fact | 90-day hit rate | Median latency | Disagreement |
 |---|---|---|---|---|---|---|---|---|
@@ -60,15 +60,14 @@ A primary source is checked by an independent second source. The pairs are polym
 | `thesportsdb.v2` | primary; cross-read of `polymarket.gamepayout` | TheSportsDB (commercial license) | thesportsdb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 | `nhl.score` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | National Hockey League | nhle.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 | `mlb.statsapi` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | MLB Advanced Media | mlb.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
-| `nba.cdn` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | National Basketball Association | nba.com | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 | `apisports.games` | cross-read of `polymarket.gamepayout`; cross-read of `thesportsdb.v2` | API-Sports | api-sports.io | 4 | `sports.game.final-score` | n/a | n/a | n/a |
 
 | Selector kind | Verdict | Why |
 |---|---|---|
-| Advanced, with our own feed (`scalar`) | **settleable** | A primary source is checked by an independent second source. The pairs are polymarket.gamepayout with thesportsdb.v2, polymarket.gamepayout with nhl.score, polymarket.gamepayout with mlb.statsapi, polymarket.gamepayout with nba.cdn, polymarket.gamepayout with apisports.games, thesportsdb.v2 with nhl.score, thesportsdb.v2 with mlb.statsapi, thesportsdb.v2 with nba.cdn, thesportsdb.v2 with apisports.games. |
+| Advanced, with our own feed (`scalar`) | **settleable** | A primary source is checked by an independent second source. The pairs are polymarket.gamepayout with thesportsdb.v2, polymarket.gamepayout with nhl.score, polymarket.gamepayout with mlb.statsapi, polymarket.gamepayout with apisports.games, thesportsdb.v2 with nhl.score, thesportsdb.v2 with mlb.statsapi, thesportsdb.v2 with apisports.games. |
 | Any market, using a Polymarket tag or event (`series-binary`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tag sports. No primary source here gives a yes-or-no result. |
 | Any market, using one market (`one-shot`) | adjudicated-only (Polymarket) | The result comes from the on-chain payout on Polygon for the Polymarket tag sports. No primary source here gives a yes-or-no result. |
-| Team coin (`team-coin`) | **settleable** | Nothing is read from ESPN. The schedule comes from the league's own feed for MLB, NHL and NBA, and from TheSportsDB with a licensed key for other leagues. Each game settles on its on-chain payout where a Polymarket moneyline market exists, and on TheSportsDB's final score otherwise. It counts once a second, independent operator agrees. The on-chain payout and TheSportsDB confirm each other, the league's official feed is read where it is free, and API-Sports is optional. Each league is listed below. |
+| Team coin (`team-coin`) | **settleable** | Nothing is read from ESPN. The schedule comes from the league's own feed for MLB and NHL, from the NBA's feed when it answers and otherwise TheSportsDB for the NBA, and from TheSportsDB with a licensed key for other leagues. Each game settles on its on-chain payout where a Polymarket moneyline market exists, and on TheSportsDB's final score otherwise. It counts once a second, independent operator agrees. The on-chain payout and TheSportsDB confirm each other, the league's official feed is read where it is free and answers, and API-Sports is optional. Each league is listed below. |
 | Matchup pair, for this game only (`matchup-game`) | **settleable** | Two coins follow one game, one for each team. The game settles on its on-chain payout where a moneyline market exists, and on TheSportsDB's licensed final score otherwise. It counts once a second, independent operator agrees. |
 | Matchup pair, for every game this season (`matchup-season`) | **settleable** | Two team coins follow their own teams. Each game settles on its on-chain payout or on TheSportsDB's final score, once a second, independent operator agrees. |
 
@@ -276,14 +275,14 @@ No primary source maps to this category.
 
 ## Per league — team coins and matchups
 
-No ESPN reads. A league's games come from its free official schedule (MLB StatsAPI, NHL api-web, NBA cdn), else from TheSportsDB v2 under its commercial license (`BURNTICKER_THESPORTSDB_KEY`). Each game settles on **primary A**, its on-chain payout where a Polymarket moneyline market exists, else **primary B**, TheSportsDB's final.
+No ESPN reads. A league's games come from its free official schedule (MLB StatsAPI, NHL api-web), else from TheSportsDB v2 under its commercial license (`BURNTICKER_THESPORTSDB_KEY`). The NBA's own feed is read first when it answers; it has answered HTTP 403 since 2026-10-12, so the NBA's games come from TheSportsDB and settle on the on-chain payout and TheSportsDB. Each game settles on **primary A**, its on-chain payout where a Polymarket moneyline market exists, else **primary B**, TheSportsDB's final.
 
 The game needs two independent sources (publishers) that agree; that is a source check, and one operator attester still signs the reading. The on-chain payout and TheSportsDB confirm each other when both exist. The league's official feed is a further read where it is free. API-Sports (`BURNTICKER_APISPORTS_KEY`) is optional.
 
 | League | Sport | Teams | Schedule | Game with a market | Game without a market | Verdict |
 | --- | --- | ---: | --- | --- | --- | --- |
 | MLB (`mlb`) | baseball | 30 | mlb.statsapi (free) | on-chain payout + mlb.statsapi (no key) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + mlb.statsapi | settleable |
-| NBA (`nba`) | basketball | 30 | nba.cdn (free) | on-chain payout + nba.cdn (no key) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + nba.cdn | settleable |
+| NBA (`nba`) | basketball | 30 | nba.cdn when it answers, else thesportsdb.v2 (needs `BURNTICKER_THESPORTSDB_KEY`) | on-chain payout + TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + API-Sports (needs `BURNTICKER_APISPORTS_KEY`) | settleable with the TheSportsDB key |
 | NCAA men's basketball (`mcbb`) | basketball | 362 | thesportsdb.v2 (needs `BURNTICKER_THESPORTSDB_KEY`) | on-chain payout + TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + API-Sports (needs `BURNTICKER_APISPORTS_KEY`) | settleable with the TheSportsDB key |
 | NCAA women's basketball (`wcbb`) | basketball | 362 | thesportsdb.v2 (needs `BURNTICKER_THESPORTSDB_KEY`) | on-chain payout + TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + API-Sports (needs `BURNTICKER_APISPORTS_KEY`) | settleable with the TheSportsDB key |
 | WNBA (`wnba`) | basketball | 15 | thesportsdb.v2 (needs `BURNTICKER_THESPORTSDB_KEY`) | on-chain payout + TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + API-Sports (needs `BURNTICKER_APISPORTS_KEY`) | settleable with the TheSportsDB key |
@@ -308,4 +307,4 @@ The game needs two independent sources (publishers) that agree; that is a source
 | UEFA Conference League (`uefa.europa.conf`) · draws | soccer | 36 | thesportsdb.v2 (needs `BURNTICKER_THESPORTSDB_KEY`) | on-chain payout + TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + API-Sports (needs `BURNTICKER_APISPORTS_KEY`) | settleable with the TheSportsDB key |
 | UEFA Europa League (`uefa.europa`) · draws | soccer | 35 | thesportsdb.v2 (needs `BURNTICKER_THESPORTSDB_KEY`) | on-chain payout + TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) | TheSportsDB (needs `BURNTICKER_THESPORTSDB_KEY`) + API-Sports (needs `BURNTICKER_APISPORTS_KEY`) | settleable with the TheSportsDB key |
 
-3 of 25 leagues settle games that have a market with no key at all (the on-chain payout plus the league's official feed). The other 22 need the TheSportsDB key for their schedule and their second read. A game without a market in those leagues also needs API-Sports.
+2 of 25 leagues settle games that have a market with no key at all (the on-chain payout plus the league's official feed). The other 23 need the TheSportsDB key for their schedule and their second read. A game without a market in those leagues also needs API-Sports.
