@@ -31,7 +31,7 @@ describe("launch gate (website brief §1: no wizard flash before the gate resolv
     const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
     assert.match(page, /useState<LaunchGateState>\(LAUNCH_GATE_LOADING\)/);
     assert.match(page, /if \(!wizardMayRender\(gate\)\) return <LaunchGate /);
-    assert.ok(page.indexOf("if (!wizardMayRender(gate))") < page.indexOf('aria-label="Describe the event"'), "the gate returns before the first wizard control");
+    assert.ok(page.indexOf("if (!wizardMayRender(gate))") < page.indexOf('data-free-text'), "the gate returns before the first wizard control");
     assert.doesNotMatch(page, /launchesOpen/, "no tri-state boolean that renders the wizard while null");
     const gate = fs.readFileSync("src/app/burnticker/launch/LaunchGate.tsx", "utf8");
     for (const k of ["loading", "unavailable", "closed"]) assert.match(gate, new RegExp(`data-launch-gate="${k}"`));

@@ -16,7 +16,35 @@ import { derbySymbol, dexscreenerUrl, JUP_SEARCH_URL, REDSTONE_LATEST_URL, token
  * A hit with no usable cross-read says so (`cross: null` + `why`): the creation preflight would refuse it.
  */
 
-export interface DerbyCoinHit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null }
+export interface DerbyCoinHit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null; /** QA pass 9 #32: how the result tells two coins with one symbol apart */ shortMint?: string | null; mark?: string; label?: string; /** audit 10 #22: the second source as a sentence */ crossLine?: string | null }
+/** "EKpQ…zcjm": the first and last four characters of a mint. */
+export const shortMint = (mint: string | null | undefined): string | null => (mint && mint.length > 10 ? `${mint.slice(0, 4)}…${mint.slice(-4)}` : mint ?? null);
+/** "$12.3M": a liquidity figure in short form. */
+export const liquidityLabel = (usd: number | null | undefined): string | null => {
+  if (usd === null || usd === undefined || !Number.isFinite(usd)) return null;
+  const [d, s] = usd >= 1e9 ? [1e9, "B"] : usd >= 1e6 ? [1e6, "M"] : usd >= 1e3 ? [1e3, "K"] : [1, ""];
+  return `$${(usd / d).toLocaleString("en-US", { maximumFractionDigits: 1 })}${s}`;
+};
+/**
+ * QA pass 9 #32 (2026-10-13): two coins can share a symbol, so each result says which one it is: its short mint, its liquidity and whether
+ * Jupiter marks it verified ("WIF · EKpQ…zcjm · $12.3M liquidity · verified"). A feed with no Solana mint says so.
+ */
+export function withHitLabel(h: DerbyCoinHit): DerbyCoinHit {
+  const sm = shortMint(h.mint), liq = liquidityLabel(h.liquidityUsd);
+  const mark = h.source === "pyth" && !h.mint ? "price feed, no Solana mint" : h.verified ? "verified" : "not verified";
+  return { ...h, shortMint: sm, mark, label: [h.symbol, sm, liq ? `${liq} liquidity` : null, mark].filter(Boolean).join(" · "), crossLine: h.underlying ? crossReadSentence(h.underlying.cross, h.symbol) : null };
+}
+/**
+ * The second source of a Coin vs Coin input as a sentence (audit 10 #22: the page showed "cross-read jup"): who is read and for what.
+ */
+export function crossReadSentence(cross: string | null | undefined, symbol: string): string | null {
+  if (!cross) return null;
+  const [kind, a, b] = cross.split(":");
+  if (kind === "jup") return `Jupiter's quote for ${symbol} (mint ${shortMint(a)}) is read as the second source, from a different operator.`;
+  if (kind === "redstone") return `RedStone's signed value for ${a} is read as the second source, from a different operator.`;
+  if (kind === "dexscreener") return `DexScreener's value for ${symbol} on ${a ? a[0].toUpperCase() + a.slice(1) : "its home chain"}${b ? ` (contract ${shortMint(b)})` : ""} is read as the second source, from a different operator.`;
+  return `A second source from a different operator is read for ${symbol}.`;
+}
 
 /** RedStone's id for a Pyth symbol: coins by base ("SHIB"), FX as "EUR_FX", metals/equities by base ("XAU", "AAPL"). */
 export function redstoneIdFor(row: Pick<PythFeedRow, "symbol" | "asset_type">): string | null {
@@ -95,7 +123,8 @@ export async function searchDerbyCoins(q: string, d: SearchDeps, o: { assets?: "
       why: tw && "underlying" in tw ? "no Pyth feed: read from its deepest SOL pool (time-weighted vault balances), cross-read by Jupiter" : tw && "why" in tw ? `no Pyth feed: ${tw.why}` : enough ? "no Pyth feed: search for it by name to resolve its pool" : `no Pyth feed and $${Math.round(t.liquidity ?? 0).toLocaleString("en-US")} of liquidity (needs $${DERBY_MIN_LIQUIDITY_USD.toLocaleString("en-US")})` });
     if (out.length >= (o.limit ?? 12) * 2) break;
   }
-  return out;
+  // audit 10 #21: a usable reference (one with a second source) comes before the ones the preflight would refuse; order is kept within each
+  return out.map(withHitLabel).sort((a, b) => Number(!!b.underlying) - Number(!!a.underlying));
 }
 
 /** A TWAP underlying for a Jupiter token (its deepest SOL pool), or why not. */

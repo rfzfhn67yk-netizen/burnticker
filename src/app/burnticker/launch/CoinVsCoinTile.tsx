@@ -19,12 +19,13 @@ import { derbyExplainer } from "@/lib/burnticker/launchDerby";
 import { PreWalletSummary } from "./PreWalletSummary";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { DEFAULT_RAISE_SOL, DEFAULT_SHARE, RAISE_PRESETS_SOL, SHARE_PRESETS, type RaisePreset } from "@/lib/burnticker/launchPresets";
-import { derbyShareLine, endSentences, OTHER_PATTERNS_LABEL, pairIdentityProblems, patternOptions, PATTERNS, IMAGE_NOT_KEPT } from "@/lib/burnticker/guidedLaunch";
+import { derbyShareLine, endSentences, pairIdentityProblems, patternOptions, PATTERNS, IMAGE_NOT_KEPT, FACT_LABELS, GUIDED_STEPS, IMAGE_RIGHTS_REQUIRED, PAIR_COST_EXCLUSIONS, budgetCopy, costLine, shareExample, shareOfBudgetLine, triggerText, whichCoinLine, whichHeading } from "@/lib/burnticker/guidedLaunch";
+import { PatternStep, StickyAction, type GuidedPhase } from "./GuidedSteps";
 import { edgeCase } from "@/lib/burnticker/ruleEdgeCases";
 import { createLatest } from "@/lib/burnticker/latestOnly";
 import { fingerprintFor, prepareIfCurrent, profileRevision, startFingerprint, STALE_PREPARE_SENTENCE, type Fingerprint } from "@/lib/burnticker/preparedLaunch";
 import { deepLinkPick, deepLinkQuery, editedFrom, generatedNames, pickerNote, searchToken, visibleHits, NONE_EDITED, type EditedFields } from "@/lib/burnticker/coinPicker";
-import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileProblems, type ProfileValue } from "./ProfileFields";
+import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldProblems, type ProfileValue } from "./ProfileFields";
 import { describeRule, endText } from "@/lib/burnticker/describe";
 import { highText, type HighBaseline, type HighSpan, type HighSpec } from "@/lib/burnticker/derby/high";
 import { HIGH_CHOICE_LABEL, HIGH_CHOICE_LINE, HIGH_NEW_DAY, HIGH_PATTERNS, HIGH_PICKER_LABEL, HIGH_PYTH_ONLY, HIGH_READING, HIGH_RUN_NOTE, HIGH_SPAN_CHOICES, HIGH_SPAN_LABEL, PAIR_CHOICE_LABEL, PAIR_CHOICE_LINE, highBlock, highGreyed, highHashInput, highRule, highShares } from "@/lib/burnticker/derby/highTile";
@@ -39,11 +40,18 @@ import { LaunchRequestError, launchErrorMessage, type LaunchErrorBody } from "@/
  * a checkbox. Launch posts the pair to /api/burnticker/launch — side A on "A wins", side B derived by inversion.
  */
 
+/** website-22 (audit 10 item 22): the cross-read named in words ("checked against Jupiter"), never its key ("cross-read jup"). */
+const lower1 = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
+export const crossName = (cross: string | null | undefined): string => {
+  const k = (cross ?? "").split(":")[0];
+  return k === "jup" ? "Jupiter" : k === "dexscreener" ? "DexScreener" : k === "redstone" ? "RedStone" : "a second source";
+};
+
 /** The Coin vs Coin draft in sessionStorage, version 1 (intent audit 5 item 19). */
 export const CVC_STORE = "burnticker.launch.cvc.v1";
 /** `edited`: per field since launch audit 248 (an older draft's single boolean is read by editedFrom); `images`: whether an image was chosen (the image itself is never kept; launch audit 227); `shares`: website-20 item 55, the share per mode */
 interface CvcDraft { v: 1; a: Hit | null; b: Hit | null; names: { a: string; b: string; ta: string; tb: string }; fraction: number; shares?: { daily: number; flip: number }; flip: boolean; raiseSol: string; edited: EditedFields | boolean; profA: Partial<ProfileValue>; profB: Partial<ProfileValue>; images?: { a: boolean; b: boolean } }
-interface Hit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null }
+interface Hit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null; /** sources-6 (QA 9 #32): the result line ("WIF · EKpQ…zcjm · $12.3M liquidity · verified") and the cross-read in words */ label?: string; crossLine?: string }
 interface Bundle { mint: string; ticker: string; ready: boolean; pending: string[]; mintSecretKey: string | null; rules: { sha256: string; statement: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[] }
 
 /**
@@ -75,15 +83,15 @@ function CoinPicker({ label, value, onPick, exclude, initial, locked = false }: 
   }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   if (value) return (
     <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm flex items-center justify-between gap-2">
-      <div><div className="text-xs text-neutral-400">{label}</div><div className="font-semibold">{value.symbol} <span className="text-xs text-neutral-500 font-normal">{value.source === "pyth" ? "Pyth feed" : "pool TWAP"} · cross-read {value.underlying?.cross.split(":")[0] ?? "—"}</span></div></div>
-      {!locked && <button className="text-xs underline" data-decision="what" onClick={() => onPick(null)}>change</button>}
+      <div><div className="text-xs text-neutral-400">{label}</div><div className="font-semibold">{value.symbol} <span className="text-xs text-neutral-500 font-normal">{value.source === "pyth" ? "Pyth feed" : "pool TWAP"}, {value.crossLine ?? `checked against ${crossName(value.underlying?.cross)}`}</span></div></div>
+      {!locked && <button className="text-xs underline" data-decision="what" aria-label={`Change the ${lower1(label)}`} onClick={() => onPick(null)}>change</button>}
     </div>
   );
   const shown = visibleHits(hits, exclude);
   const note = pickerNote({ query: q, searched, busy, error: err, hits, exclude, ambiguous: q.trim() === (initial ?? "").trim() ? ambiguous : [] });
   return (
     <div className="space-y-2">
-      <label className="block text-xs text-neutral-400">{label}<FieldHelp id="derby-coin" /><input data-help="derby-coin" data-decision="what" className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" placeholder="a ticker, a name or a mint — WIF, BONK, SHIB…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+      <label className="block text-xs text-neutral-400">{label}<FieldHelp id="derby-coin" /><input data-help="derby-coin" data-decision="what" aria-label={`Search for the ${lower1(label)}`} className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm" placeholder="a ticker, a name or a mint — WIF, BONK, SHIB…" value={q} onChange={(e) => setQ(e.target.value)} /></label>
       {busy && <p className="text-xs text-neutral-500">Searching…</p>}
       {err && <p className="text-xs text-red-400">{err}</p>}
       {note && <p className="text-xs text-neutral-400" data-picker-note>{note}</p>}
@@ -91,7 +99,7 @@ function CoinPicker({ label, value, onPick, exclude, initial, locked = false }: 
         {shown.map((h) => (
           <li key={`${h.source}:${h.feed ?? h.mint}`}>
             <button disabled={!h.underlying} data-decision="what" onClick={() => onPick(h)} className={`w-full text-left px-2 py-1.5 text-sm ${h.underlying ? "hover:bg-neutral-900" : "opacity-60 cursor-not-allowed"}`}>
-              <span className="font-medium">{h.symbol}</span> <span className="text-xs text-neutral-500">{h.name}</span> <span className="ml-1 rounded bg-neutral-800 px-1.5 text-[10px]">{h.source === "pyth" ? "Pyth" : "Jupiter"}</span>
+              {h.label ? <span className="font-medium" data-hit-label>{h.label}</span> : <><span className="font-medium">{h.symbol}</span> <span className="text-xs text-neutral-500">{h.name}</span></>} <span className="ml-1 rounded bg-neutral-800 px-1.5 text-[10px]">{h.source === "pyth" ? "Pyth" : "Jupiter"}</span>
               {h.why && <span className="block text-[11px] text-neutral-500">{h.why}</span>}
             </button>
           </li>
@@ -108,7 +116,9 @@ function CoinPicker({ label, value, onPick, exclude, initial, locked = false }: 
  * season starts on the day the baseline was read (UTC); when the UTC day turns the record is read again (derby/admission.ts refuses an
  * older one). One coin, one LaunchLab launch; the same review, prepare latch and gates as every launch.
  */
-function RecordClose({ blocked = null, customImages = true }: { blocked?: string | null; customImages?: boolean }) {
+/** website-22: what the progress strip says for each answered step of the tile. */
+export interface TileAnswers { which: string | null; burn: string | null; name: string | null }
+function RecordClose({ blocked = null, customImages = true, phase: phaseIn = null, onPhase, onAnswers }: { blocked?: string | null; customImages?: boolean; phase?: GuidedPhase | null; onPhase?: (p: GuidedPhase) => void; onAnswers?: (a: TileAnswers) => void }) {
   const wallet = useWallet();
   const creator = wallet.publicKey?.toBase58() ?? "";
   const [ref, setRef] = useState<Hit | null>(null), [span, setSpan] = useState<HighSpan>("all"), [once, setOnce] = useState(false);
@@ -188,51 +198,57 @@ function RecordClose({ blocked = null, customImages = true }: { blocked?: string
   const sh = highShares(once);
   const ready = !!rule && /^[A-Z0-9]{2,10}$/.test(names.ticker.toUpperCase()) && !!names.name.trim();
   const greyed = highGreyed(rule);
-  return (
-    <div className="space-y-3" data-record-close>
-      <div className="min-w-0 max-w-md"><CoinPicker label={HIGH_PICKER_LABEL} value={ref} onPick={(h) => { setRef(h); setNewDay(false); }} exclude={null} locked={busy || !!out} /></div>
-      {noPyth && <p className="text-xs text-amber-300" role="status" data-high-no-pyth>{HIGH_PYTH_ONLY}</p>}
-      <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={HIGH_SPAN_LABEL} data-high-span>
-        <span className="text-xs text-neutral-400">{HIGH_SPAN_LABEL}</span>
-        {HIGH_SPAN_CHOICES.map((c) => <button key={String(c.span)} type="button" role="radio" aria-checked={span === c.span} data-decision="what" disabled={busy || !!out} onClick={() => setSpan(c.span)} className={`rounded-full border px-3 py-1 text-sm ${span === c.span ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{c.label}</button>)}
+  // website-22 (QA 9 item 38, audit 10 item 13): the record close walks the real steps too (which coin, how it burns, name, review)
+  useEffect(() => { onAnswers?.({ which: ref?.symbol ?? null, burn: once ? HIGH_PATTERNS.once.label.toLowerCase() : HIGH_PATTERNS.every.label.toLowerCase(), name: names.ticker ? `$${names.ticker.toUpperCase()}` : null }); }, [ref?.symbol, once, names.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
+  const phase: GuidedPhase = phaseIn && phaseIn !== "follow" ? phaseIn : "which";
+  {
+    const coin = { key: "a", name: names.name, ticker: names.ticker, onName: (v: string) => { setEdited((e) => ({ ...e, name: true })); setNames((n) => ({ ...n, name: v })); }, onTicker: (v: string) => { setEdited((e) => ({ ...e, ticker: true })); setNames((n) => ({ ...n, ticker: v })); }, image: prof.image ? chosenPreview(prof)! : art(rule, names.ticker), oneLiner: text?.oneLiner ?? "", oracle: "derby", badge: text?.badge ?? null };
+    const next = (label: string, to: GuidedPhase, disabled = false, why: string | null = null) => <StickyAction>{why && <p className="mb-1 text-xs text-amber-300" role="status">{why}</p>}<button type="button" data-nav disabled={disabled} className="w-full rounded bg-amber-400 px-4 py-2 text-sm font-medium text-neutral-950 disabled:opacity-40 sm:w-auto" onClick={() => onPhase?.(to)}>{label}</button></StickyAction>;
+    const status = <>{newDay && <p className="text-xs text-amber-300" role="status" data-high-new-day>{HIGH_NEW_DAY}</p>}{base?.busy && <p className="text-xs text-neutral-400" role="status">{HIGH_READING}</p>}{base && !base.busy && base.error && <p className="text-xs text-amber-300" role="status" data-high-unread>The daily closes could not be read just now. <button type="button" data-nav className="underline" onClick={() => setRetry((n) => n + 1)}>Retry</button><span className="block break-words font-mono text-neutral-500">{base.error}</span></p>}{base && !base.busy && base.refusal && <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="alert" data-high-refusal>{base.refusal}</p>}</>;
+    if (phase === "which") return (
+      <div className="space-y-3" data-record-close data-guided-phase="which">
+        <div className="min-w-0 max-w-md"><CoinPicker label={HIGH_PICKER_LABEL} value={ref} onPick={(h) => { setRef(h); setNewDay(false); }} exclude={null} locked={busy || !!out} /></div>
+        {noPyth && <p className="text-xs text-amber-300" role="status" data-high-no-pyth>{HIGH_PYTH_ONLY}</p>}
+        <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={HIGH_SPAN_LABEL} data-high-span>
+          <span className="text-xs text-neutral-400" aria-hidden="true">{HIGH_SPAN_LABEL}</span>
+          {HIGH_SPAN_CHOICES.map((c) => <button key={String(c.span)} type="button" role="radio" aria-checked={span === c.span} data-decision="what" disabled={busy || !!out} onClick={() => setSpan(c.span)} className={`rounded-full border px-3 py-1 text-sm ${span === c.span ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{c.label}</button>)}
+        </div>
+        {status}
+        {next("Next", "burn", !rule)}
       </div>
-      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Burn pattern" data-high-patterns>
-        {([false, true] as const).map((o) => { const p = o ? HIGH_PATTERNS.once : HIGH_PATTERNS.every; return (
-          <button key={String(o)} type="button" role="radio" aria-checked={once === o} data-decision="what" data-pattern={o ? "once" : "every"} disabled={busy || !!out} onClick={() => setOnce(o)} className={`rounded-lg border p-3 text-left text-sm ${once === o ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"}`}>
-            <span className="block font-medium">{p.label}</span><span className="mt-0.5 block text-xs text-neutral-300">{p.line}</span>
-          </button>
-        ); })}
-      </div>
-      <details className="text-xs text-neutral-400" data-pattern-greyed><summary className="cursor-pointer">{OTHER_PATTERNS_LABEL}</summary>{greyed.map((g) => <p key={g.id} className="mt-1" data-pattern={g.id} data-available="no"><span className="text-neutral-200">{g.label}.</span> {g.reason}</p>)}</details>
-      {newDay && <p className="text-xs text-amber-300" role="status" data-high-new-day>{HIGH_NEW_DAY}</p>}
-      {base?.busy && <p className="text-xs text-neutral-400" role="status">{HIGH_READING}</p>}
-      {base && !base.busy && base.error && <p className="text-xs text-amber-300" role="status" data-high-unread>The daily closes could not be read just now. <button type="button" data-nav className="underline" onClick={() => setRetry((n) => n + 1)}>Retry</button><span className="block break-words font-mono text-neutral-500">{base.error}</span></p>}
-      {base && !base.busy && base.refusal && <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="alert" data-high-refusal>{base.refusal}</p>}
-      {rule && text && !out && (
-        <ReviewCard
-          coins={[{ key: "a", name: names.name, ticker: names.ticker, onName: (v) => { setEdited((e) => ({ ...e, name: true })); setNames((n) => ({ ...n, name: v })); }, onTicker: (v) => { setEdited((e) => ({ ...e, ticker: true })); setNames((n) => ({ ...n, ticker: v })); }, image: prof.image ? chosenPreview(prof)! : art(rule, names.ticker), oneLiner: text.oneLiner, oracle: "derby", badge: text.badge }]}
-          sentence={text.lead}
-          notes={[...(base?.line ? [base.line] : []), ...(once ? [HIGH_RUN_NOTE] : [])]}
-          ends={endText(rule).line}
-          shares={{ options: [...sh.options], value: fraction, onChange: setFraction }}
-          raise={{ options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: setRaiseSol, line: shown.review?.raise?.line ?? null }}
-          graduation={shown.review?.graduation ?? null}
-          image={<ProfileFields value={prof} onChange={setProf} part="image" customImages={customImages} />}
-          profile={<ProfileFields value={prof} onChange={setProf} part="text" />}
-          profileProblems={profileProblems(prof)}
-          problems={reviewCurrent ? shown.review?.problems ?? [] : []}
-          error={err}
-          busy={busy}
-          ready={ready}
-          creator={creator || null}
-          onLaunch={() => { void launch(); }}
-          summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
-          blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)}
-        />
-      )}
+    );
+    if (phase === "burn") return (
+      <PatternStep preview={<p>{text?.lead ?? HIGH_READING}</p>} options={[...([false, true] as const).map((o) => ({ id: (o ? "once" : "every") as "once" | "every", label: (o ? HIGH_PATTERNS.once : HIGH_PATTERNS.every).label, sentence: (o ? HIGH_PATTERNS.once : HIGH_PATTERNS.every).line, available: true, reason: null })), ...greyed.map((g) => ({ id: g.id as "fade" | "winner", label: g.label, sentence: "", available: false, reason: g.reason }))]}
+        value={once ? "once" : "every"} onPick={(id) => setOnce(id === "once")} shares={sh.options} share={fraction} onShare={setFraction} next={next("Next", "name", !rule)} extra={status} />
+    );
+    if (!rule || !text) return <div className="space-y-3" data-record-close>{status}{next("Back to the coin", "which")}</div>;
+    if (phase === "name") return (
+      <ReviewCard mode="name" coins={[coin]} sentence={text.lead} ends={null} shares={{ options: [...sh.options], value: fraction, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
+        image={<ProfileFields value={prof} onChange={setProf} part="image" customImages={customImages} side="a" />} profile={<ProfileFields value={prof} onChange={setProf} part="text" side="a" />}
+        profileProblems={profileFieldProblems(prof).map((x) => x.text)} next={next("Review", "review", !!prof.image && !prof.rights, !!prof.image && !prof.rights ? IMAGE_RIGHTS_REQUIRED : null)} />
+    );
+    const b = budgetCopy(rule, fraction, null);
+    return (<>
+      {!out && <ReviewCard mode="review"
+        facts={[
+          { label: FACT_LABELS.trigger, value: triggerText({ lead: text.lead, fallback: text.oneLiner }), edit: () => onPhase?.("which") },
+          { label: FACT_LABELS.coin, value: whichCoinLine(names.ticker.toUpperCase() || "TICKER", null), edit: () => onPhase?.("name") },
+          { label: FACT_LABELS.amount, value: `${b.line} ${shareOfBudgetLine(fraction)} ${shareExample(fraction)}`, edit: () => onPhase?.("burn") },
+          { label: FACT_LABELS.ends, value: endText(rule).line, edit: null },
+          { label: FACT_LABELS.cost, value: costLine(shown.review && reviewCurrent ? shown.review.costs.totalSol : null, 1), edit: null },
+        ]}
+        publicProfile={{ coins: [{ side: "a", image: coin.image, name: names.name, ticker: names.ticker, description: prof.description, links: profileBody(prof).links, note: null }], edit: () => onPhase?.("name") }}
+        coins={[coin]} sentence={text.lead} notes={[...(base?.line ? [base.line] : []), ...(once ? [HIGH_RUN_NOTE] : [])]} ends={endText(rule).line}
+        shares={{ options: [...sh.options], value: fraction, onChange: setFraction }}
+        raise={{ options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: setRaiseSol, line: shown.review?.raise?.line ?? null }} graduation={shown.review?.graduation ?? null}
+        profileProblems={profileFieldProblems(prof).map((x) => ({ text: x.text, edit: () => onPhase?.("name") }))}
+        problems={reviewCurrent ? shown.review?.problems ?? [] : []} error={err} busy={busy} ready={ready} creator={creator || null} onLaunch={() => { void launch(); }}
+        cost={shown.review && reviewCurrent ? `The estimated cost is about ${shown.review.costs.totalSol} SOL.` : null} venue="single"
+        summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
+        blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
       {out && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${out.ticker}`} coinHref={(t) => `/burnticker/t/${t}`} />}
-    </div>
-  );
+    </>);
+  }
 }
 
 /** The generated receipt art for a rule not launched yet (coinArt.ts via /burnticker/img/preview.svg), never "NO IMAGE". */
@@ -245,7 +261,7 @@ function art(r: BurnRule | null, tk: string): string {
  * `blocked`: why the wallet cannot open (preview mode, a closed host, pairs off on this host) — the review card disables its button and
  * says so. `unavailable`: Coin vs Coin cannot launch on this host at all (launch audit 5 L02) — the tile says why before any picking.
  */
-export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true, startOpen = false, entry = null }: { /** website-20 item 60: the link that opened the page (the page drops its parameters from the address once read), so a template or a derby link still lands on what it names */ entry?: { template: string | null; a: string; b: string } | null; pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean; /** website-19: the guided path opens it as question 2, with the burn pattern and the end beside the review */ startOpen?: boolean } = {}) {
+export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable = null, unavailableDetail = null, customImages = true, startOpen = false, entry = null, phase: phaseIn = null, onPhase, onAnswers }: { /** website-22 (QA 9 item 38): the guided step on screen (which, burn, name, review), set by the page */ phase?: GuidedPhase | null; onPhase?: (p: GuidedPhase) => void; onAnswers?: (a: TileAnswers) => void; /** website-20 item 60: the link that opened the page (the page drops its parameters from the address once read), so a template or a derby link still lands on what it names */ entry?: { template: string | null; a: string; b: string } | null; pairCurve?: boolean; blocked?: string | null; unavailable?: string | null; /** A2: the blocker behind the one line, in its details */ unavailableDetail?: string | null; /** website-18: the host takes custom images (catalogue customImages) */ customImages?: boolean; /** website-19: the guided path opens it as question 2, with the burn pattern and the end beside the review */ startOpen?: boolean } = {}) {
   const wallet = useWallet();
   const [open, setOpen] = useState(startOpen);
   // WIRING-SOURCES4: two coins racing, or one coin's record close (RecordClose above)
@@ -393,6 +409,8 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
       <div className="px-5 pb-4">{unavailableDetail ? <details id="cvc-why" className="text-xs text-amber-300" data-pairs-blocked><summary className="cursor-pointer">{unavailable}</summary><p className="mt-1 text-neutral-400">{unavailableDetail}</p></details> : <p id="cvc-why" className="text-xs text-amber-300">{unavailable}</p>}</div>
     </div>
   ) : tileButton;
+  // website-22 (QA 9 item 38, audit 10 item 13): the progress strip's answers for the steps the tile walks
+  useEffect(() => { if (kind === "pair") onAnswers?.({ which: a && b ? `${a.symbol} vs ${b.symbol}` : null, burn: flip ? "once, the flippening" : PATTERNS.winner.label.toLowerCase(), name: names.ta ? `$${names.ta.toUpperCase()} and $${names.tb.toUpperCase()}` : null }); }, [kind, a?.symbol, b?.symbol, flip, names.ta, names.tb]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!open || unavailable) return tile;
   const kindChoice = (
     <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="What the coins follow" data-derby-kind>
@@ -403,11 +421,14 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
       ))}
     </div>
   );
+  // website-22: in the guided launch each step is its own screen, with the page's progress strip, Back and Start over above it
+  const stepHead = (p: GuidedPhase) => <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{p === "which" ? whichHeading("coins") : GUIDED_STEPS.find((s) => s.id === p)?.question}</h2>;
+  const phase: GuidedPhase = phaseIn && phaseIn !== "follow" ? phaseIn : "which";
   if (kind === "high") return (
-    <section className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-4 sm:col-span-2" aria-label={HIGH_CHOICE_LABEL}>
-      <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">{HIGH_CHOICE_LABEL}</h3>{!startOpen && <button className="text-xs underline" data-nav onClick={() => setOpen(false)}>close</button>}</div>
-      {kindChoice}
-      <RecordClose blocked={blocked} customImages={customImages} />
+    <section className="space-y-3" aria-label={HIGH_CHOICE_LABEL} data-guided-step={phase} data-derby-guided="high">
+      {phase !== "burn" && stepHead(phase)}
+      {phase === "which" && kindChoice}
+      <RecordClose blocked={blocked} customImages={customImages} phase={phase} onPhase={onPhase} onAnswers={onAnswers} />
     </section>
   );
   // intent audit item 5: the two sides must be told apart (ticker and name, any case or spacing)
@@ -416,66 +437,79 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   // website-19: the burn pattern (each day's winner, or once: the flippening) and the end, read from the rule
   const po = patternOptions({ follow: "coins", rule: model?.rule ?? null });
   const end = model?.rule ? endSentences(model.rule) : null;
-  return (
-    <section className="rounded-xl border border-amber-400/60 bg-neutral-900 p-4 space-y-4 sm:col-span-2" aria-label="Coin vs Coin">
-      <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">{flip ? "Flippening" : "Coin vs Coin"}</h3><span className="flex gap-3 text-xs"><a className="underline" href="/burnticker/derby">Burn Derby pairs and brackets →</a>{!(out || pcOut) && <button className="underline" data-nav onClick={() => setOpen(false)}>close</button>}</span></div>
-      {kindChoice}
-      {startOpen && (
-        <div className="space-y-2" data-guided-derby>
-          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Burn pattern">
-            {po.options.filter((o) => o.id === "winner" || o.id === "once").map((o) => { const on = o.id === "once" ? flip : !flip; return (
-              <button key={o.id} type="button" role="radio" aria-checked={on} data-decision="what" data-pattern={o.id} onClick={() => setFlip(o.id === "once")} className={`rounded-lg border p-3 text-left text-sm ${on ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"}`}>
-                <span className="block font-medium">{o.id === "once" ? "Once: the flippening" : PATTERNS.winner.label}</span>
-                <span className="mt-0.5 block text-xs text-neutral-300">{o.id === "once" ? "Read once a day at 00:00 UTC for 30 days. The first day coin A's value is above coin B's, coin A's rule fires once. If that day never comes, coin B's rule fires once at the end of the run." : "Read once a day at 00:00 UTC for 30 days. Each day, the coin whose reference gained more fires its rule, and the other coin's share for that day moves to its burn pool."}</span>
-              </button>
-            ); })}
-          </div>
-          <p className="text-xs text-neutral-300" data-share-memory>{derbyShareLine(shares.daily, shares.flip)}</p>
-          <details className="text-xs text-neutral-400" data-pattern-greyed><summary className="cursor-pointer">{OTHER_PATTERNS_LABEL}</summary>{po.options.filter((o) => !o.available).map((o) => <p key={o.id} className="mt-1"><span className="text-neutral-200">{o.label}.</span> {o.reason}</p>)}</details>
-          {end && <div className="space-y-0.5 text-xs text-neutral-300" data-end-sentences><p className="font-medium text-neutral-200">At the end</p>{end.sentences.map((x) => <p key={x}>{x}</p>)}</div>}
+  {
+    // website-22 (QA 9 item 38, audit 10 item 13): Coin comparison and the flippening walk Which, Burns, Name and Review like every coin
+    const next = (label: string, to: GuidedPhase, disabled = false, why: string | null = null) => <StickyAction>{why && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>{why}</p>}<button type="button" data-nav disabled={disabled} className="w-full rounded bg-amber-400 px-4 py-2 text-sm font-medium text-neutral-950 disabled:opacity-40 sm:w-auto" onClick={() => onPhase?.(to)}>{label}</button></StickyAction>;
+    const coinsNow = [
+      { key: "a", name: names.a, ticker: names.ta, onName: (v: string) => { setEdited((e) => ({ ...e, a: true })); setNames((n) => ({ ...n, a: v })); }, onTicker: (v: string) => { setEdited((e) => ({ ...e, ta: true })); setNames((n) => ({ ...n, ta: v })); }, image: profA.image ? chosenPreview(profA)! : art(model?.rule ?? null, names.ta), oneLiner: model?.rule ? ruleOneLiner(model.rule) : "", oracle: "derby", badge: null },
+      { key: "b", name: names.b, ticker: names.tb, onName: (v: string) => { setEdited((e) => ({ ...e, b: true })); setNames((n) => ({ ...n, b: v })); }, onTicker: (v: string) => { setEdited((e) => ({ ...e, tb: true })); setNames((n) => ({ ...n, tb: v })); }, image: profB.image ? chosenPreview(profB)! : art(ruleB, names.tb), oneLiner: ruleB ? ruleOneLiner(ruleB) : "", oracle: "derby", badge: null },
+    ];
+    const TA = names.ta.toUpperCase() || "A", TB = names.tb.toUpperCase() || "B";
+    const blockers = [...profileFieldProblems(profA).map((x) => ({ text: `$${TA}: ${x.text}`, edit: () => onPhase?.("name") })), ...profileFieldProblems(profB).map((x) => ({ text: `$${TB}: ${x.text}`, edit: () => onPhase?.("name") })), ...identity.map((x) => ({ text: x, edit: () => onPhase?.("name") }))];
+    const rightsMissing = (!!profA.image && !profA.rights) || (!!profB.image && !profB.rights);
+    if (phase === "which") return (
+      <section className="space-y-3" aria-label="Coin vs Coin" data-guided-step="which" data-derby-guided="pair">
+        {stepHead("which")}
+        {kindChoice}
+        <p className="text-xs text-neutral-300" data-derby-explainer>The two coins you pick are <b>reference feeds</b>. Burnticker only reads their published feeds and never trades or burns them. Launching creates two <b>new</b> coins, and their own trading fees pay for their burns.</p>
+        <div className="grid min-w-0 gap-3 md:grid-cols-2">
+          <CoinPicker key={`a-${initial.a}`} initial={initial.a} label={flip ? "Reference coin A, the one that may pass the other" : "Reference coin A"} value={a} onPick={setA} exclude={b} locked={busy || !!prepared} />
+          <CoinPicker key={`b-${initial.b}`} initial={initial.b} label={flip ? "Reference coin B, the one that may be passed" : "Reference coin B"} value={b} onPick={setB} exclude={a} locked={busy || !!prepared} />
         </div>
-      )}
-      <p className="text-xs text-neutral-300" data-derby-explainer>The two coins you pick are <b>reference feeds</b>. Burnticker only reads their published feeds and never trades or burns them. Launching creates two <b>new</b> coins, and their own trading fees pay for their burns.</p>
-      <div className="grid min-w-0 gap-3 md:grid-cols-2">
-        <CoinPicker key={`a-${initial.a}`} initial={initial.a} label={flip ? "Reference coin A, the one that may pass the other" : "Reference coin A"} value={a} onPick={setA} exclude={b} locked={busy || !!prepared} />
-        <CoinPicker key={`b-${initial.b}`} initial={initial.b} label={flip ? "Reference coin B, the one that may be passed" : "Reference coin B"} value={b} onPick={setB} exclude={a} locked={busy || !!prepared} />
+        <p className="text-[11px] text-neutral-500" data-same-coin>{edgeCase(74)}</p>
+        {picksMoved && <p className="text-xs text-amber-300" role="status" data-picks-moved>{edgeCase(96)}</p>}
+        {next("Next", "burn", !a?.underlying || !b?.underlying)}
+      </section>
+    );
+    if (phase === "burn") {
+      const options = po.options.map((o) => (o.id === "once" ? { ...o, label: "Once: the flippening", sentence: "Read once a day at 00:00 UTC for 30 days. The first day coin A's value is above coin B's, coin A's rule fires once. If that day never comes, coin B's rule fires once at the end of the run." } : o.id === "winner" ? { ...o, label: PATTERNS.winner.label, sentence: "Read once a day at 00:00 UTC for 30 days. Each day, the coin whose reference gained more fires its rule, and the other coin's share for that day moves to its burn pool." } : o));
+      return (
+        <div data-derby-guided="pair">
+          <PatternStep preview={<p>{model?.sentence ?? "Reading the two coins."}</p>} options={options} value={flip ? "once" : "winner"} onPick={(id) => setFlip(id === "once")} shares={flip ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring} share={fraction} onShare={setFraction} pairLabel
+            extra={<><p className="text-xs text-neutral-300" data-share-memory>{derbyShareLine(shares.daily, shares.flip)}</p>{end && <div className="space-y-0.5 text-xs text-neutral-300" data-end-sentences><p className="font-medium text-neutral-200">At the end</p>{end.sentences.map((x) => <p key={x}>{x}</p>)}</div>}</>}
+            next={next("Next", "name", !model?.rule)} />
+        </div>
+      );
+    }
+    if (!model?.rule) return <section className="space-y-3" data-derby-guided="pair"><p className="text-sm text-neutral-300">Reading the two coins.</p>{next("Back to the coins", "which")}</section>;
+    if (phase === "name") return (
+      <div data-derby-guided="pair">
+        <ReviewCard mode="name" coins={coinsNow} sentence={model.sentence} ends={null} shares={{ options: [...(flip ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring)], value: fraction, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
+          image={<div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imagesDropped && !profA.image && !profB.image && <p className="text-xs text-amber-300 md:col-span-2" data-image-not-kept>{IMAGE_NOT_KEPT}</p>}<ProfileFields value={profA} onChange={setProfA} part="image" who={`$${TA}`} customImages={customImages} side="a" /><ProfileFields value={profB} onChange={setProfB} part="image" who={`$${TB}`} customImages={customImages} pasteTarget={false} side="b" /></div>}
+          profile={<div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profA} onChange={setProfA} part="text" who={`$${TA}`} side="a" /><ProfileFields value={profB} onChange={setProfB} part="text" who={`$${TB}`} side="b" /></div>}
+          profileProblems={blockers} next={next("Review", "review", rightsMissing, rightsMissing ? IMAGE_RIGHTS_REQUIRED : null)} />
       </div>
-      <p className="text-[11px] text-neutral-500" data-same-coin>{edgeCase(74)}</p>
-      {picksMoved && <p className="text-xs text-amber-300" role="status" data-picks-moved>{edgeCase(96)}</p>}
-      {model && !out && !pcOut && (() => { const x = derbyExplainer(model.spec, { a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }); return (
-        <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-neutral-300" aria-label="What this creates" data-derby-facts>
-          <li>{x.references}</li><li>{x.created}</li><li>{x.window}</li><li>{x.start}</li><li>{x.end}</li><li>{x.tie} {edgeCase(69)}</li><li>{x.missing} {edgeCase(87)}</li>
-          {flip && <li>{edgeCase(66)}</li>}{flip && <li>{edgeCase(70)}</li>}<li>{edgeCase(72)}</li><li>{edgeCase(62)}</li>
-        </ul>
-      ); })()}
-      {model && !out && !pcOut && (
-        <ReviewCard
-          coins={[
-            { key: "a", name: names.a, ticker: names.ta, onName: (v) => { setEdited((e) => ({ ...e, a: true })); setNames((n) => ({ ...n, a: v })); }, onTicker: (v) => { setEdited((e) => ({ ...e, ta: true })); setNames((n) => ({ ...n, ta: v })); }, image: profA.image ? chosenPreview(profA)! : art(model.rule, names.ta), oneLiner: model.rule ? ruleOneLiner(model.rule) : "", oracle: "derby", badge: null },
-            { key: "b", name: names.b, ticker: names.tb, onName: (v) => { setEdited((e) => ({ ...e, b: true })); setNames((n) => ({ ...n, b: v })); }, onTicker: (v) => { setEdited((e) => ({ ...e, tb: true })); setNames((n) => ({ ...n, tb: v })); }, image: profB.image ? chosenPreview(profB)! : art(ruleB, names.tb), oneLiner: ruleB ? ruleOneLiner(ruleB) : "", oracle: "derby", badge: null },
+    );
+    const x = derbyExplainer(model.spec, { a: TA, b: TB });
+    const bud = budgetCopy(model.rule, fraction, null);
+    const reviewVenue = venue === "pair-curve" ? "pair-curve" as const : "linked" as const;
+    return (
+      <div className="space-y-3" data-derby-guided="pair">
+        {!out && !pcOut && <ReviewCard mode="review"
+          facts={[
+            { label: FACT_LABELS.trigger, value: triggerText({ pair: { a: TA, b: TB, oneA: ruleOneLiner(model.rule), oneB: ruleB ? ruleOneLiner(ruleB) : "" }, fallback: model.sentence }), edit: () => onPhase?.("which") },
+            { label: FACT_LABELS.coin, value: whichCoinLine(TA, TB, true), edit: () => onPhase?.("name") },
+            { label: FACT_LABELS.amount, value: `${bud.line} ${shareOfBudgetLine(fraction)} ${shareExample(fraction)}`, edit: () => onPhase?.("burn") },
+            { label: FACT_LABELS.ends, value: ends ?? "", edit: null },
+            { label: FACT_LABELS.cost, value: costLine(shown.review && reviewCurrent ? shown.review.costs.totalSol : null, 2), edit: null },
           ]}
-          sentence={model.sentence}
-          pairLine={PAIR_REVIEW_LINE}
-          pairFacts={winnerTakesBurnFacts(names.ta.toUpperCase() || "A", names.tb.toUpperCase() || "B")}
-          ends={ends}
+          publicProfile={{ coins: [
+            { side: "a", image: coinsNow[0].image, name: names.a, ticker: names.ta, description: profA.description, links: profileBody(profA).links, note: null },
+            { side: "b", image: coinsNow[1].image, name: names.b, ticker: names.tb, description: profB.description, links: profileBody(profB).links, note: null },
+          ], edit: () => onPhase?.("name") }}
+          coins={coinsNow} sentence={model.sentence} pairLine={PAIR_REVIEW_LINE} pairFacts={winnerTakesBurnFacts(TA, TB)} pairDiagram="linked" venue={reviewVenue} ends={ends}
+          notes={[x.window, x.tie]}
           shares={{ options: [...(flip ? SHARE_PRESETS.oneShot : SHARE_PRESETS.recurring)], value: fraction, onChange: setFraction }}
           raise={shown.review?.raise ? { options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: setRaiseSol, line: shown.review.raise.line } : null}
           graduation={shown.review?.graduation ?? null}
-          image={<div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imagesDropped && !profA.image && !profB.image && <p className="text-xs text-amber-300 md:col-span-2" data-image-not-kept>{IMAGE_NOT_KEPT}</p>}<ProfileFields value={profA} onChange={setProfA} part="image" who={`$${names.ta.toUpperCase() || "A"}`} customImages={customImages} /><ProfileFields value={profB} onChange={setProfB} part="image" who={`$${names.tb.toUpperCase() || "B"}`} customImages={customImages} pasteTarget={false} /></div>}
-          profile={<div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profA} onChange={setProfA} part="text" who={`$${names.ta.toUpperCase() || "A"}`} /><ProfileFields value={profB} onChange={setProfB} part="text" who={`$${names.tb.toUpperCase() || "B"}`} /></div>}
-          profileProblems={[...profileProblems(profA).map((x) => `$${names.ta.toUpperCase() || "A"}: ${x}`), ...profileProblems(profB).map((x) => `$${names.tb.toUpperCase() || "B"}: ${x}`), ...identity]}
-          problems={model.problems}
-          error={err}
-          busy={busy}
-          ready={ready}
-          creator={creator || null}
-          onLaunch={() => { void launch(); }}
+          profileProblems={blockers} problems={model.problems} error={err} busy={busy} ready={ready} creator={creator || null} onLaunch={() => { void launch(); }}
+          cost={shown.review && reviewCurrent ? `The estimated cost is about ${shown.review.costs.totalSol} SOL for both coins.` : null} costNote={PAIR_COST_EXCLUSIONS}
           summary={<PreWalletSummary review={shown.review} loading={shown.loading} error={shown.error} updating={slot.rev !== reviewKey && !!slot.review} />}
-          blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)}
-        />
-      )}
-      {prepared && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${prepared.tickers.a} and $${prepared.tickers.b}`} coinHref={(t) => `/burnticker/t/${t}`} />}
-      {(pcOut || out) && <p className="text-xs"><a className="underline" href={`/burnticker/p/${(pcOut ?? out)!.pairId}`}>Open the pair page →</a></p>}
-    </section>
-  );
+          blocked={blocked ?? (reviewCurrent ? null : REVIEW_UPDATING)} />}
+        {!out && !pcOut && <details className="text-xs text-neutral-300"><summary className="cursor-pointer">What this creates, in full</summary><ul className="mt-1 min-w-0 list-disc space-y-0.5 break-words pl-5" aria-label="What this creates" data-derby-facts><li>{x.references}</li><li>{x.created}</li><li>{x.window}</li><li>{x.start}</li><li>{x.end}</li><li>{x.tie}</li><li>{x.missing}</li>{flip && <li>{edgeCase(66)}</li>}{flip && <li>{edgeCase(70)}</li>}<li>{edgeCase(72)}</li><li>{edgeCase(62)}</li></ul></details>}
+        {prepared && signPlan && <SignCard plan={signPlan} creator={creator || null} title={`Launch $${prepared.tickers.a} and $${prepared.tickers.b}`} coinHref={(t) => `/burnticker/t/${t}`} />}
+        {(pcOut || out) && <p className="text-xs"><a className="underline" href={`/burnticker/p/${(pcOut ?? out)!.pairId}`}>Open the pair page →</a></p>}
+      </div>
+    );
+  }
 }

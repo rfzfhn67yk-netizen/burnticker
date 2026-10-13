@@ -4,6 +4,7 @@ import type { FetchLike, ResolvedSelector } from "@/lib/burnticker/oracle/types"
 import { TEAM_ALIASES, aliasLookup, type TeamAlias } from "@/lib/burnticker/oracle/events";
 import { TEAM_IDS } from "@/lib/burnticker/sources/teamColors";
 import { PROVIDER_TEAM_IDS } from "@/lib/burnticker/sources/providerTeams";
+import { FBS_TEAM_IDS } from "@/lib/burnticker/sources/fbs";
 import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { type: "json" };
 
 /**
@@ -99,7 +100,7 @@ const ESPN_ABBR: Record<"NFL" | "NBA" | "MLB" | "NHL", Record<string, string>> =
 interface FrozenTeam { id: string; abbr: string; name: string; short: string; location: string; nickname: string; color: string; alt: string }
 const FROZEN = (ESPN_TEAMS as unknown as { leagues: Record<string, FrozenTeam[]> }).leagues;
 
-export interface EspnTeam { league: LeagueId; abbr: string; city: string; nickname: string; name: string; ticker: string; alt: string[]; id?: string | null; colors?: [string, string] | null; /** a college team is named only by its full name or its mascot ("Michigan" alone is a state, not a team) */ strictKeys?: string[] | null }
+export interface EspnTeam { league: LeagueId; /** the PIN abbreviation series ids carry (never changed) */ abbr: string; /** QA pass 9 #29: the conventional display abbreviation (MCI, MUN); equal to abbr unless DISPLAY_ABBR names one */ code?: string; city: string; nickname: string; name: string; ticker: string; alt: string[]; id?: string | null; colors?: [string, string] | null; /** a college team is named only by its full name or its mascot ("Michigan" alone is a state, not a team) */ strictKeys?: string[] | null }
 /**
  * The alias table disambiguates shared cities with a letter ("Chicago C", "New York Y") and names the Athletics by nickname alone; review 2
  * §2 (2026-10-11) saw "Chicago C Cubs" and "Athletics Athletics" on the league pages. The display city drops the letter; a city equal to
@@ -107,7 +108,7 @@ export interface EspnTeam { league: LeagueId; abbr: string; city: string; nickna
  */
 export const displayCity = (city: string): string => city.replace(/\s+[A-Z]{1,2}$/, "");
 export const displayTeamName = (city: string, nickname: string): string => { const c = displayCity(city).trim(); return !c || c === nickname ? nickname : `${c} ${nickname}`; };
-const toTeam = (league: LeagueId, a: TeamAlias): EspnTeam => ({ league, abbr: ESPN_ABBR[LEAGUES[league].alias!][a.abbr] ?? a.abbr, city: displayCity(a.city), nickname: a.nickname, name: displayTeamName(a.city, a.nickname), ticker: a.nickname.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10), alt: [a.abbr, ...a.alt] });
+const toTeam = (league: LeagueId, a: TeamAlias): EspnTeam => ({ league, abbr: ESPN_ABBR[LEAGUES[league].alias!][a.abbr] ?? a.abbr, code: ESPN_ABBR[LEAGUES[league].alias!][a.abbr] ?? a.abbr, city: displayCity(a.city), nickname: a.nickname, name: displayTeamName(a.city, a.nickname), ticker: a.nickname.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10), alt: [a.abbr, ...a.alt] });
 /** A frozen ESPN team: the short name ("Arsenal", "Inter Miami", "Georgia") is what people say; the nickname alone is ambiguous in college. */
 /** "Inter Miami CF" → "Inter Miami", "AFC Bournemouth" → "Bournemouth": the club name people say. */
 export const clubName = (n: string): string => n.replace(/^(AFC|FC|CF|SC|CD|CA|AC|AS|SS|SSC|US|RC|RCD)\s+|\s+(FC|CF|SC|AFC)$/g, "").trim() || n;
@@ -117,7 +118,7 @@ const fromFrozen = (league: LeagueId, f: FrozenTeam): EspnTeam => {
   const soccerLike = LEAGUES[league].sport === "soccer";
   const nickname = soccerLike ? clubName(f.name || f.short) : LEAGUES[league].alias === null && (league === "cfb" || league === "mcbb" || league === "wcbb") ? (f.location || f.short) : (f.nickname || f.short);
   const college = league === "cfb" || league === "mcbb" || league === "wcbb";
-  return { league, abbr: f.abbr, city: f.location, nickname, name: f.name, ticker: nickname.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10), alt: [...new Set([f.abbr, f.short, f.name, f.location, soccerLike ? clubName(f.name) : ""].filter(Boolean))], id: f.id, colors: [f.color, f.alt], strictKeys: college ? [f.name, `${f.location} ${league === "cfb" ? "football" : "basketball"}`].filter(Boolean) : null };
+  return { league, abbr: f.abbr, code: displayAbbr(league, f.abbr), city: f.location, nickname, name: f.name, ticker: nickname.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10), alt: [...new Set([f.abbr, f.short, f.name, f.location, soccerLike ? clubName(f.name) : ""].filter(Boolean))], id: f.id, colors: [f.color, f.alt], strictKeys: college ? [f.name, `${f.location} ${league === "cfb" ? "football" : "basketball"}`].filter(Boolean) : null };
 };
 const teamCache = new Map<LeagueId, EspnTeam[]>();
 /** The static team table per league: the alias table (with ESPN's abbreviations) for MLB, NBA, NHL, NFL; ESPN's frozen lists for the rest. */
@@ -130,6 +131,27 @@ export function teamsOf(league: LeagueId): EspnTeam[] {
   return out;
 }
 export function teamByAbbr(league: LeagueId, abbr: string): EspnTeam | null { const A = abbr.toUpperCase(); return teamsOf(league).find((t) => t.abbr === A) ?? teamsOf(league).find((t) => t.alt.includes(A)) ?? null; }
+/**
+ * CONVENTIONAL DISPLAY ABBREVIATIONS (QA pass 9 #29, 2026-10-13: Manchester City showed as MNC and Manchester United as MAN). Only what a
+ * page shows and what a default ticker starts with changes; the pin abbreviation inside every series id (`espn.team:eng.1-MNC.382-…`)
+ * stays as it is, so no coin's rule or hash moves. Bayern shows as BAY where Manchester United now shows as MUN.
+ */
+export const DISPLAY_ABBR: Partial<Record<LeagueId, Record<string, string>>> = {
+  "eng.1": { MNC: "MCI", MAN: "MUN" }, "uefa.champions": { MNC: "MCI", MAN: "MUN", MUN: "BAY" }, "uefa.europa": { MNC: "MCI", MAN: "MUN", MUN: "BAY" }, "uefa.europa.conf": { MNC: "MCI", MAN: "MUN", MUN: "BAY" },
+  "ger.1": { MUN: "BAY" }, "sco.1": { HOM: "HEA", HIBS: "HIB" },
+};
+export const displayAbbr = (league: LeagueId, abbr: string): string => DISPLAY_ABBR[league]?.[abbr.toUpperCase()] ?? abbr.toUpperCase();
+/** The display code of a pin abbreviation (the team's own `code`, else the abbreviation). */
+export const teamCodeOf = (t: Pick<EspnTeam, "abbr" | "code">): string => t.code ?? t.abbr;
+/**
+ * THE TEAM PICKER'S LIST (QA pass 9 #28 and #29): every team of a league in alphabetical order of its name; college football lists the FBS
+ * only unless `division` is "all" (sources/fbs.ts).
+ */
+export type PickerDivision = "fbs" | "all";
+export function pickerTeams(league: LeagueId, o: { division?: PickerDivision | null } = {}): EspnTeam[] {
+  const all = teamsOf(league).filter((t) => league !== "cfb" || o.division === "all" || (!!t.id && FBS_TEAM_IDS.has(t.id)));
+  return [...all].sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
+}
 const normQ = (s: string) => ` ${s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()} `;
 /** Teams a free-text query names (nickname, city, abbreviation, alternative), across every league. */
 export function findTeams(q: string): EspnTeam[] {
@@ -268,12 +290,51 @@ const num = (v: unknown): number | null => { const x = typeof v === "object" && 
 
 export class ScheduleUnavailable extends Error {}
 export const SCHEDULE_NEEDS_KEY = "schedule needs the licensed key (BURNTICKER_THESPORTSDB_KEY)";
-const normName = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-/** A provider's team → our team (abbreviation first, then the name ending in our nickname or naming our club / college). */
+/**
+ * ONE NORMAL FORM FOR A TEAM NAME (QA pass 9 #5, 2026-10-13: TheSportsDB lists "Brighton and Hove Albion" where our table says "Brighton &
+ * Hove Albion", so the team showed no next game while its fixtures were listed). Accents, case, apostrophes and periods do not matter,
+ * "&" is read as "and", and "Saint" as "St" ("Union St.-Gilloise" = "Union Saint-Gilloise", "D.C. United" = "DC United").
+ */
+export const teamNameKey = (s: string): string => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/&/g, " and ").replace(/['’.]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\bsaint\b/g, "st");
+const normName = teamNameKey;
+/** Club words that are not part of a club's own name ("FC", "AC", "de", "and"), dropped when two names are compared word by word. */
+const CLUB_WORDS = new Set(["fc", "cf", "afc", "sc", "ac", "as", "ssc", "cd", "ca", "rc", "rcd", "us", "club", "de", "del", "da", "do", "the", "and", "y", "calcio", "sv", "vfb", "vfl", "tsg", "fk", "sk", "if", "cp", "04", "05", "07"]);
+const coreWords = (s: string): string[] => teamNameKey(s).split(" ").filter((w) => w.length > 1 && !CLUB_WORDS.has(w));
+/**
+ * Provider names no rule can read (checked against every TheSportsDB league fixture on 2026-10-13, test/burntickerSources6.test.ts): the
+ * provider's name, in teamNameKey form, → our abbreviation (the pin's abbreviation, never the display code).
+ */
+export const PROVIDER_NAME_ALIASES: Partial<Record<LeagueId, Record<string, string>>> = {
+  "ita.1": { "inter milan": "INT", inter: "INT" }, "ger.1": { koln: "KOE", "1 fc koln": "KOE" }, "bra.1": { "atletico mineiro": "CAM", "athletico paranaense": "CAP" },
+  "esp.1": { "athletic bilbao": "ATH", "deportivo alaves": "ALA" }, "usa.1": { "new york red bulls": "RBNY", "los angeles fc": "LAFC" },
+};
+/** Words that make a different club when added to a name ("Dundee United", "Manchester City", "Real Madrid Castilla"). */
+const DISTINCT_WORDS = new Set(["united", "city", "town", "county", "rovers", "athletic", "atletico", "wanderers", "albion", "hotspur", "real", "sporting", "inter", "dynamo", "dinamo", "castilla", "ii", "women", "femenino", "reserves", "u19", "u21", "u23"]);
+const uniqueOf = <T,>(xs: T[]): T | null => (xs.length === 1 ? xs[0] : null);
+/**
+ * A provider's team → our team, most certain first: the provider's id or our abbreviation; the full name, or one of our other names
+ * (short name, location), equal in teamNameKey form; a known provider alias; for US pro and college leagues the name ending in our
+ * nickname ("Los Angeles Lakers"); for clubs, the ONE team whose own words all appear in the provider's name or the reverse ("Estoril
+ * Praia" = "Estoril", "Sarmiento" = "Sarmiento (Junín)"). A club's last word alone never decides it: "Inter Milan" is not "AC Milan".
+ */
 export function ourTeam(league: LeagueId, name: string, abbr: string | null = null): EspnTeam | null {
   const ts = teamsOf(league), n = normName(name);
   if (abbr) { const A = abbr.toUpperCase(); const byProv = ts.find((t) => PROVIDER_TEAM_IDS[`${league}:${t.abbr}`] === A); if (byProv) return byProv; const byAbbr = ts.find((t) => t.abbr === A); if (byAbbr) return byAbbr; }
-  return ts.find((t) => n === normName(t.name)) ?? ts.find((t) => n.endsWith(` ${normName(t.nickname)}`) || n === normName(t.nickname)) ?? ts.find((t) => [t.name, ...t.alt].some((k) => k.length >= 4 && n === normName(k))) ?? null;
+  if (!n) return null;
+  const exact = ts.find((t) => n === normName(t.name)) ?? ts.find((t) => [t.nickname, ...t.alt].some((k) => k.length >= 3 && n === normName(k)));
+  if (exact) return exact;
+  const alias = PROVIDER_NAME_ALIASES[league]?.[n];
+  if (alias) { const t = ts.find((x) => x.abbr === alias); if (t) return t; }
+  if (LEAGUES[league].sport !== "soccer") return ts.find((t) => n.endsWith(` ${normName(t.nickname)}`) || n === normName(t.nickname)) ?? null;
+  const mine = new Set(coreWords(name));
+  if (!mine.size) return null;
+  const words = (t: EspnTeam) => [...new Set([t.name, t.nickname, ...t.alt].filter((k) => k.length >= 3).map((k) => coreWords(k)).filter((w) => w.length && w.some((x) => x.length >= 4)).map((w) => w.join(" ")))].map((w) => w.split(" "));
+  const within = (a: readonly string[], b: Set<string>) => a.every((w) => b.has(w));
+  // the provider's extra words may not name a different club ("Dundee United" is not "Dundee"); the most specific match wins
+  const extraOk = (w: readonly string[]) => [...mine].every((x) => w.includes(x) || !DISTINCT_WORDS.has(x));
+  const score = (t: EspnTeam) => Math.max(0, ...words(t).map((w) => (within(w, mine) && extraOk(w) ? w.length : within([...mine], new Set(w)) ? mine.size : 0)));
+  const scored = ts.map((t) => ({ t, s: score(t) })).filter((x) => x.s > 0), best = Math.max(0, ...scored.map((x) => x.s));
+  return uniqueOf(scored.filter((x) => x.s === best).map((x) => x.t));
 }
 const sideOf = (league: LeagueId, homeAway: "home" | "away", name: string, abbr: string | null, score: number | null, winner: boolean | null = null): GameSide => {
   const t = ourTeam(league, name, abbr);
@@ -317,6 +378,20 @@ export function nbaGames(body: unknown): Game[] {
     return mk("nba", g.gameId!, g.gameDateTimeUTC!, /^002/.test(g.gameId!) ? 2 : 3, year, g.gameStatus === 3 ? "post" : g.gameStatus === 2 ? "in" : "pre", g.gameStatus === 3, g.gameStatusText ?? "", sideOf("nba", "home", nm(g.homeTeam), null, num(g.homeTeam?.score)), sideOf("nba", "away", nm(g.awayTeam), null, num(g.awayTeam?.score)));
   });
 }
+/** TheSportsDB's status of a game being played (halves, quarters, periods, innings, half time, extra time, a break). */
+export const TSDB_LIVE_RE = /^(1H|2H|HT|ET|BT|P|LIVE|IN ?PLAY|IN ?PROGRESS|Q[1-4]|OT|[1-9](ST|ND|RD|TH)|P[1-3]|IN[1-9]|BREAK)\b/i;
+/**
+ * A GAME IN PROGRESS IS "LIVE NOW" (QA pass 9 #35, 2026-10-13: a game being played still read "starts 7:30 PM"). Live when its feed says so
+ * (state "in"), or, for a feed that marks only scheduled and final, once it has started and is not yet final within a sport's usual length.
+ */
+export const LIVE_NOW = "Live now";
+const GAME_HOURS: Record<Sport, number> = { baseball: 4.5, basketball: 3, hockey: 3.5, soccer: 2.5, football: 4.5 };
+export function isLive(g: Pick<Game, "completed" | "state" | "startsAt" | "detail" | "league">, nowMs: number): boolean {
+  if (g.completed || g.state === "post" || CANCELLED_RE.test(g.detail) || /postpon|suspend/i.test(g.detail)) return false;
+  if (g.state === "in") return true;
+  const t = Date.parse(g.startsAt);
+  return Number.isFinite(t) && t <= nowMs && nowMs - t < GAME_HOURS[LEAGUES[g.league]?.sport ?? "football"] * 3_600_000;
+}
 /** TheSportsDB's round number for a preseason game, in every league (dropped by tsdbGames). */
 export const TSDB_PRESEASON_ROUND = 500;
 /** The NBA's schedule and confirmation while its own feed does not answer, in the one wording every page uses (NBA_OFFICIAL_ANSWERS). */
@@ -346,7 +421,7 @@ export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[]
   const post = (e: Record<string, unknown>) => (league === "nba" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
   return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e)).map((e) => {
     const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
-    return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
+    return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : TSDB_LIVE_RE.test(String(e.strStatus ?? "")) ? "in" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
   });
 }
 /**

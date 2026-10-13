@@ -80,7 +80,7 @@ export function nativeCards(c: CategoryDef): SourceCard[] {
 }
 
 /** The catalogue card fields Browse reads (handlers.ts catalogueSources builds them). */
-export interface FeedCardInput { id: string; tier: number; tierLabel: string; title: string; sourceName: string; sourceUrl: string; cadence: string; unit: { label: string } | null; launchable: { ok: boolean; why: string | null }; flags: string[]; lastReading: { id: string; value: string | null } | null; refusals?: string[]; /** sources-4: when the saved sample was observed (audit 202) and how the rule measures (audit 201) */ fixtureFetchedAt?: string | null; baseline?: "previousSettlement" | number | null; direction?: "up" | "down" | "abs" | null; param?: string | null }
+export interface FeedCardInput { /** QA pass 9 #33: a one-time source whose result is already in (hidden from Browse) */ resolved?: boolean; /** QA pass 9 #25: the reading's unit ("USD", "USD millions"), for formatReading */ valueLabel?: string | null; id: string; tier: number; tierLabel: string; title: string; sourceName: string; sourceUrl: string; cadence: string; unit: { label: string } | null; launchable: { ok: boolean; why: string | null }; flags: string[]; lastReading: { id: string; value: string | null } | null; refusals?: string[]; /** sources-4: when the saved sample was observed (audit 202) and how the rule measures (audit 201) */ fixtureFetchedAt?: string | null; baseline?: "previousSettlement" | number | null; direction?: "up" | "down" | "abs" | null; param?: string | null }
 
 const baseId = (id: string) => id.split(":")[0];
 
@@ -109,8 +109,26 @@ export function unitExample(unit: { label: string } | null, measured?: { baselin
  * "Sample reading" with the day the sample was observed. "Latest reading" is kept for a live read the keeper verified, and nothing about
  * a source's health is inferred from a sample.
  */
-export function sampleReadingLabel(r: { id: string; value: string | null }, observedAt: string | null | undefined): string {
-  return `Sample reading ${r.id}${r.value !== null ? `: ${r.value}` : ""}${observedAt ? `, observed ${observedAt.slice(0, 10)}` : ", from a saved sample"}`;
+export function sampleReadingLabel(r: { id: string; value: string | null }, observedAt: string | null | undefined, valueLabel: string | null = null): string {
+  return `Sample reading ${r.id}${r.value !== null ? `: ${formatReading(r.value, valueLabel)}` : ""}${observedAt ? `, observed ${observedAt.slice(0, 10)}` : ", from a saved sample"}`;
+}
+/**
+ * A READING AS A PERSON READS IT (QA pass 9 #25, 2026-10-13: the national debt showed as 40310000000000 and FRED's GFDEBTN, which is in
+ * millions of dollars, as 38500000). Dollars over a million in short form ("$40.31T", "$38.50T" from USD millions), smaller dollars with
+ * cents, a percent with its sign, other large counts with thousands separators and their unit. A value that is not a number is kept.
+ */
+export function formatReading(value: string, valueLabel: string | null | undefined): string {
+  const n = Number(String(value).replace(/,/g, ""));
+  if (!value.trim() || !Number.isFinite(n)) return value;
+  const label = (valueLabel ?? "").trim();
+  const short = (usd: number): string => { const a = Math.abs(usd); const [d, s] = a >= 1e12 ? [1e12, "T"] : a >= 1e9 ? [1e9, "B"] : a >= 1e6 ? [1e6, "M"] : [1, ""]; return `${usd < 0 ? "-" : ""}$${(a / d).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${s}`; };
+  if (/^USD millions$/i.test(label)) return short(n * 1e6);
+  if (/^USD$/i.test(label)) return short(n);
+  const per = /^USD (per .+)$/i.exec(label);
+  if (per) return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${per[1]}`;
+  if (/^percent/i.test(label)) return `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+  const num = Math.abs(n) >= 10_000 ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(value);
+  return label && !/^(title|reached|rank)$/i.test(label) ? `${num} ${label}` : num;
 }
 
 /**
@@ -146,7 +164,7 @@ export function sourceRoleLabel(id: string): string {
 export function feedCard(f: FeedCardInput): SourceCard {
   return {
     id: `feed:${f.id}`, venue: "feed", venueLabel: f.sourceName, tier: f.tier, tierLabel: f.tier === 4 ? sourceRoleLabel(f.id) : f.tierLabel, title: f.title, cadence: f.cadence, kind: "scalar",
-    next: f.lastReading ? { label: sampleReadingLabel(f.lastReading, f.fixtureFetchedAt), at: null } : null,
+    next: f.lastReading ? { label: sampleReadingLabel(f.lastReading, f.fixtureFetchedAt, f.valueLabel ?? null), at: null } : null,
     example: unitExample(f.unit, { baseline: f.baseline, direction: f.direction, snapshot: /snapshot/i.test(f.cadence) }), launchable: f.launchable, refused: [], diagnostics: f.refusals ?? [], flags: f.flags,
     sourceName: f.sourceName, sourceUrl: f.sourceUrl, pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, configure: null,
     settlement: isSingleSourceSeries(f.id) ? singleSourceSentence(f.id) : null,
@@ -179,18 +197,39 @@ export function kalshiCard(s: BrowseSeries & { refused: string[] }): SourceCard 
 
 /** The category list: per category, how many sources each venue contributes on this host (feeds counted; Polymarket tags named; Kalshi categories named only when enabled). */
 export function categoryList(cats: readonly CategoryDef[], feeds: readonly FeedCardInput[], venues: VenueFlags): { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided: string | null; adjudicatedOnly: boolean }[] {
-  return cats.map((c) => ({ id: c.id, label: c.label, blurb: c.blurb, feeds: venues.feeds ? feeds.filter((f) => c.feeds.includes(baseId(f.id))).length + (c.native?.length ?? 0) : 0, polymarket: venues.polymarket ? c.polymarket : [], kalshi: venues.kalshi ? c.kalshi : [], guided: c.guided ?? null, adjudicatedOnly: c.adjudicatedOnly ?? false }));
+  return cats.map((c) => ({ id: c.id, label: c.label, blurb: c.blurb, feeds: venues.feeds ? feeds.filter((f) => c.feeds.includes(baseId(f.id)) && !f.resolved).length + (c.native?.length ?? 0) : 0, polymarket: venues.polymarket ? c.polymarket : [], kalshi: venues.kalshi ? c.kalshi : [], guided: c.guided ?? null, adjudicatedOnly: c.adjudicatedOnly ?? false }));
 }
 
+/**
+ * WHERE AN EVENT BELONGS BY ITS OWN WORDS (QA pass 9 #30, 2026-10-13: a broad Gamma tag filed the Fed's rate decision under Companies, an
+ * "Anthropic lab leak" market under Health and the Strait of Hormuz under Economics). Each category's home words; an event whose title
+ * names another category's home words and none of its own is left out of this category (it belongs to the other one).
+ */
+export const CATEGORY_HOME: Readonly<Record<string, RegExp>> = {
+  economics: /\b(Fed|FOMC|Federal Reserve|interest rates?|rate (cut|hike)s?|basis points?|bps|inflation|CPI|GDP|recession|unemployment|jobs report|payrolls|tariffs?|treasury yields?|national debt|debt ceiling)\b/i,
+  world: /\b(Hormuz|Strait|Iran|Israel|Gaza|Hamas|Hezbollah|Ukraine|Russia|Putin|Zelensky|China|Taiwan|North Korea|NATO|ceasefire|sanctions?|embassy|United Nations|UN Security Council|Venezuela|Syria|Yemen|Houthis?)\b/i,
+  companies: /\b(Anthropic|OpenAI|Google|Alphabet|Apple|Microsoft|Tesla|Nvidia|Amazon|Meta|xAI|IPO|earnings|CEO|acquisition|merger|layoffs?|stock split)\b/i,
+  health: /\b(FDA|vaccines?|measles|bird flu|H5N1|pandemic|outbreak|covid|WHO|CDC|disease|cancer|drug approval)\b/i,
+  politics: /\b(election|senate|house|congress|governor|president(ial)?|primary|nominee|impeach\w*|supreme court|cabinet|executive order)\b/i,
+  crypto: /\b(bitcoin|BTC|ethereum|ETH|solana|SOL|crypto|stablecoin|memecoin|token|airdrop)\b/i,
+  sports: /\b(NFL|NBA|MLB|NHL|MLS|Premier League|Champions League|World Cup|Super Bowl|World Series|Stanley Cup|playoffs?)\b/i,
+};
+/** Whether an event title belongs in category `id` by its own words (true when it names no category's home words). */
+export function eventFitsCategory(id: string, title: string): boolean {
+  const homes = Object.entries(CATEGORY_HOME).filter(([, re]) => re.test(title)).map(([k]) => k);
+  if (!(id in CATEGORY_HOME)) return true;   // science, culture, financials and disasters keep their own title patterns (categories.json)
+  return !homes.length || homes.includes(id);
+}
 /** One category's cards: feeds first (in the config's order), then Polymarket events, then Kalshi series; an optional text filter over title and source. */
 export function categoryCards(c: CategoryDef, parts: { feeds: readonly FeedCardInput[]; polymarket: readonly PolyEventHit[]; kalshi: readonly (BrowseSeries & { refused: string[] })[] }, o: { q?: string | null } = {}): SourceCard[] {
   const order = (id: string) => { const i = c.feeds.indexOf(baseId(id)); return i < 0 ? 999 : i; };
-  const feeds = parts.feeds.filter((f) => c.feeds.includes(baseId(f.id))).sort((a, b) => order(a.id) - order(b.id)).map(feedCard);
+  // QA pass 9 #33: a one-time source whose result is already in is not offered, so it is not listed either
+  const feeds = parts.feeds.filter((f) => c.feeds.includes(baseId(f.id)) && !f.resolved).sort((a, b) => order(a.id) - order(b.id)).map(feedCard);
   const seen = new Set<string>();
   // launch audit 5 L11: a category with a title pattern keeps only the events that are about it (the weather tags carried IPO, moon
   // landing and pandemic markets); the pattern is the category's own (categories.json), never a policy decision
   const fits = c.polymarketTitle ? new RegExp(c.polymarketTitle, "i") : null;
-  const poly = parts.polymarket.filter((e) => (!fits || fits.test(e.title)) && (seen.has(e.slug) ? false : (seen.add(e.slug), true))).map(polymarketCard);
+  const poly = parts.polymarket.filter((e) => (!fits || fits.test(e.title)) && eventFitsCategory(c.id, e.title) && (seen.has(e.slug) ? false : (seen.add(e.slug), true))).map(polymarketCard);
   const kal = parts.kalshi.map(kalshiCard);
   return [...nativeCards(c), ...feeds, ...poly, ...kal].filter((s) => sourceFilterMatch(o.q, `${s.title} ${s.venueLabel} ${s.sourceName ?? ""} ${s.id}`));
 }

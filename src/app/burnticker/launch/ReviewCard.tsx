@@ -13,7 +13,7 @@ import { RetirementFacts } from "../_components/RetirementFacts";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
-import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, UPFRONT_LABEL, shareExample } from "@/lib/burnticker/guidedLaunch";
+import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileMoreLabel, shareExample, type LaunchVenue } from "@/lib/burnticker/guidedLaunch";
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
@@ -71,8 +71,8 @@ export interface ReviewCardProps {
   image?: ReactNode;
   /** website-18: the Team path's one "Advanced" disclosure (closed by default) around every other choice, with the defaults it set. */
   advanced?: { defaults: string[] } | null;
-  /** website-15 item 13: what still blocks the launch in those fields (listed beside the button). */
-  profileProblems?: string[];
+  /** website-15 item 13: what still blocks the launch in those fields (listed beside the button); website-22: each with its Edit link. */
+  profileProblems?: Blocker[];
   /** L02 / site audit #4: why the wallet cannot open (preview mode, a closed host, a type this host cannot take); null = it can. */
   blocked?: string | null;
   /** L05: availability warnings carried from the source screen (a schedule that could not be read, …). */
@@ -113,6 +113,52 @@ export interface ReviewCardProps {
   next?: ReactNode;
   /** Pass B item 16: the compounding arithmetic, behind "How the amount is calculated". */
   amountMath?: string | null;
+  /**
+   * website-22 (audit 10 item 3): how the coins launch, which decides the fee sentence. "single" one LaunchLab coin; "independent" two
+   * separate LaunchLab launches; "linked" two LaunchLab coins linked at creation; "pair-curve" a registered pair on the pair curve, whose
+   * pools open with Raydium's creator fee off (PAIR_LP_LINE). Without it the card reads one coin, or two separate launches.
+   */
+  venue?: LaunchVenue | null;
+  /**
+   * website-22 (QA 9 items 11 and 13, audit 10 item 19): each coin's public profile as it is pinned, on the review, with an Edit link per
+   * field back to the name step. Replaces the coin previews there, so the full name shows on a phone.
+   */
+  publicProfile?: { coins: PublicProfileCoin[]; edit: (side: "a" | "b", field: ProfileFieldKey) => void } | null;
+  /** website-22 (audit 10 item 24): the small diagram of how two coins burn, beside the pair's facts. */
+  pairDiagram?: "independent" | "linked" | null;
+  /** website-22 (audit 10 item 17): what the estimate beside the launch button leaves out. */
+  costNote?: string | null;
+}
+export type { LaunchVenue } from "@/lib/burnticker/guidedLaunch";
+export type ProfileFieldKey = "name" | "ticker" | "image" | "description" | "x" | "telegram" | "website" | "note";
+export interface PublicProfileCoin { side: "a" | "b"; image: string; name: string; ticker: string; description: string; links: { label: string; url: string }[]; note: string | null }
+/** A blocker beside the launch button: its sentence and, when a field can fix it, the link back to that field. */
+export type Blocker = string | { text: string; edit?: (() => void) | null };
+const blockerText = (b: Blocker): string => (typeof b === "string" ? b : b.text);
+
+/**
+ * website-22 (audit 10 item 3): the fee sentence by the actual venue, never by the number of coins. Two separate LaunchLab launches and a
+ * LaunchLab pair are each an ordinary LaunchLab coin (LP_LINE for each); only the pair curve's pools open with the creator fee off.
+ */
+export const lpDisclosure = (venue: LaunchVenue): string => lpDisclosureFor(venue, LP_LINE, PAIR_LP_LINE);
+
+/** website-22 (audit 10 item 24): two separate pools, or a linked pair where the coin whose rule fires takes the burn. Decorative; the label says it. */
+export function PairDiagram({ kind }: { kind: "independent" | "linked" }) {
+  const label = PAIR_DIAGRAM_LABEL[kind];
+  return (
+    <figure className="flex min-w-0 items-center gap-3" data-pair-diagram={kind}>
+      <svg viewBox="0 0 120 56" width="120" height="56" role="img" aria-label={label} className="shrink-0 text-neutral-400">
+        <rect x="2" y="8" width="44" height="28" rx="6" fill="none" stroke="currentColor" />
+        <rect x="74" y="8" width="44" height="28" rx="6" fill="none" stroke="currentColor" />
+        <text x="24" y="26" textAnchor="middle" fontSize="11" fill="currentColor">A</text>
+        <text x="96" y="26" textAnchor="middle" fontSize="11" fill="currentColor">B</text>
+        {kind === "independent"
+          ? <><line x1="52" y1="22" x2="68" y2="22" stroke="currentColor" strokeDasharray="2 3" /><text x="60" y="50" textAnchor="middle" fontSize="9" fill="currentColor">no SOL moves</text></>
+          : <><path d="M70 22 H54" stroke="#fbbf24" strokeWidth="2" markerEnd="url(#bt-arrow)" /><defs><marker id="bt-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#fbbf24" /></marker></defs><text x="60" y="50" textAnchor="middle" fontSize="9" fill="currentColor">winner takes the burn</text></>}
+      </svg>
+      <figcaption className="min-w-0 break-words text-xs text-neutral-300">{label}</figcaption>
+    </figure>
+  );
 }
 
 /**
@@ -183,7 +229,10 @@ export function ReviewCard(p: ReviewCardProps) {
   // chooser); once connected it becomes "Launch", and pressing that is the signing step.
   // L07: every field problem, named per coin; the editor cannot be closed over a problem, and the list sits beside the button
   const many = p.coins.length > 1;
-  const fieldProblems = [...p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; return [nameProblem(c.name), tickerProblem(c.ticker)].filter(Boolean).map((x) => ({ key: c.key, text: `${who}${x}` })); }), ...(p.profileProblems ?? []).map((x) => ({ key: "profile", text: x }))];
+  const fieldEdit = (side: "a" | "b", f: "name" | "ticker") => (p.mode === "review" && p.publicProfile ? () => p.publicProfile!.edit(side, f) : null);
+  const fieldProblems: { key: string; text: string; edit: (() => void) | null }[] = [...p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; const side = i === 0 ? "a" as const : "b" as const; return ([[nameProblem(c.name), "name"], [tickerProblem(c.ticker), "ticker"]] as const).filter(([x]) => !!x).map(([x, f]) => ({ key: c.key, text: `${who}${x}`, edit: fieldEdit(side, f) })); }), ...(p.profileProblems ?? []).map((x) => ({ key: "profile", text: blockerText(x), edit: typeof x === "string" ? null : x.edit ?? null }))]
+    .filter((x, i, all) => all.findIndex((y) => y.text === x.text) === i);
+  const problemList = (label: string, id?: string) => <ul id={id} className="list-disc space-y-0.5 pl-5 text-xs text-red-400" aria-label={label} data-blockers>{fieldProblems.map((x) => <li key={x.text} className="break-words">{x.text}{x.edit && <> <button type="button" data-nav className="underline text-neutral-300" onClick={x.edit}>Edit</button></>}</li>)}</ul>;
   // owner, 2026-10-12 ("whenever i type 2 letters when naming a coin it accepts those 2 letters as the name and moves on"): the editor
   // used to be open only WHILE a field had a problem or the name prompt applied, so the second typed letter cleared the problem and the
   // fields vanished under the creator's cursor. Once the editor opens for any reason it stays open until the creator presses done.
@@ -207,7 +256,7 @@ export function ReviewCard(p: ReviewCardProps) {
       })}</>;
   const label = p.busy ? "Building…" : p.creator || p.blocked ? (many ? "Launch both" : "Launch") : "Connect wallet";
   const mode = p.mode ?? "full";
-  const noteId = `${uid}-note`;
+  const noteId = "bt-profile-a-note";
   const noteField = p.note && (noteOpen || mode === "name" ? (
     <div className="block text-xs text-neutral-400" data-note-field>
       <label htmlFor={noteId} className="block">{NOTE_LABEL}</label><FieldHelp id="note" />
@@ -222,7 +271,7 @@ export function ReviewCard(p: ReviewCardProps) {
       <div className={`grid min-w-0 gap-3 ${many ? "md:grid-cols-2" : ""}`} data-review-coins>
         {p.coins.map((c, i) => {
           const who = many ? `Coin ${i === 0 ? "A" : "B"} ` : "";
-          const nId = `${uid}-${c.key}-name`, tId = `${uid}-${c.key}-ticker`, nErr = nameProblem(c.name), tErr = tickerProblem(c.ticker), tNote = tickerNotes[c.key] ?? null;
+          const nId = `bt-profile-${c.key}-name`, tId = `bt-profile-${c.key}-ticker`, nErr = nameProblem(c.name), tErr = tickerProblem(c.ticker), tNote = tickerNotes[c.key] ?? null;
           return (
             <div key={c.key} className="min-w-0 space-y-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
               <div className="bt-preview-frame min-w-0 max-w-full overflow-hidden break-words"><CoinCard href={null} prelaunch c={{ ticker: c.ticker, name: c.name, imageUrl: c.image || null, oneLiner: c.oneLiner, oracle: c.oracle, status: "draft", phase: null, progressPct: null, raised: null, threshold: null, quote: "SOL", burns: 0, lastBurnAt: null, nextAt: null, launchedAt: null, badge: c.badge }} /></div>
@@ -237,11 +286,11 @@ export function ReviewCard(p: ReviewCardProps) {
       {tickerCheckList}
       {p.image}
       <details className="min-w-0 rounded-lg border border-neutral-800 p-3" data-profile-more open={!!p.note?.value}>
-        <summary className="cursor-pointer text-sm text-neutral-200">Description, links and a note. Each one is optional.</summary>
-        <p className="mt-2 text-xs text-neutral-400" data-note-vs-description>{NOTE_VS_DESCRIPTION}</p>
+        <summary className="cursor-pointer text-sm text-neutral-200">{profileMoreLabel(!!p.note)}</summary>
+        {p.note && <p className="mt-2 text-xs text-neutral-400" data-note-vs-description>{NOTE_VS_DESCRIPTION}</p>}
         <div className="mt-2 min-w-0 space-y-3">{p.profile}{noteField}</div>
       </details>
-      {fieldProblems.length > 0 && <ul className="list-disc pl-5 text-xs text-red-400" aria-label="Not ready yet">{fieldProblems.map((x) => <li key={x.text}>{x.text}</li>)}</ul>}
+      {fieldProblems.length > 0 && problemList("Not ready yet")}
       {p.next}
     </section>
   );
@@ -260,7 +309,30 @@ export function ReviewCard(p: ReviewCardProps) {
       {/* launch integrity 252: names, tickers, shares, raise, the profile and every other material choice are locked while the launch is
           prepared (busy); the editor latch is untouched, so an open editor stays open, only disabled, until done */}
       <fieldset disabled={p.busy} className="m-0 min-w-0 space-y-3 border-0 p-0" data-review-inputs>
-      <div className={`grid min-w-0 gap-3 ${many ? "md:grid-cols-2" : ""}`}>
+      {/* website-22 (QA 9 item 13, audit 10 item 19): the public profile as it is pinned, every field with its Edit link, full names */}
+      {mode === "review" && p.publicProfile && (
+        <section className={`grid min-w-0 gap-3 ${many ? "md:grid-cols-2" : ""}`} aria-label="Public profile" data-public-profile>
+          {p.publicProfile.coins.map((c) => {
+            const edit = (f: ProfileFieldKey, what: string) => <button type="button" data-nav className="shrink-0 text-xs underline text-neutral-300" aria-label={`Edit ${many ? `coin ${c.side.toUpperCase()}'s ` : "the "}${what}`} onClick={() => p.publicProfile!.edit(c.side, f)}>Edit</button>;
+            const row = (label: string, value: ReactNode, f: ProfileFieldKey, what: string) => <div className="flex min-w-0 items-start justify-between gap-3 px-3 py-2" data-profile-row={f}><div className="min-w-0"><dt className="text-xs text-neutral-500">{label}</dt><dd className="break-words text-sm text-neutral-100">{value}</dd></div>{edit(f, what)}</div>;
+            return (
+              <dl key={c.side} className="min-w-0 divide-y divide-neutral-800 rounded-lg border border-neutral-800" data-profile-coin={c.side}>
+                <div className="flex min-w-0 items-center gap-3 px-3 py-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a local preview (an uploaded file or the generated art) */}
+                  <img src={c.image} alt={`The image of $${c.ticker || "TICKER"}`} width={56} height={56} className="h-14 w-14 shrink-0 rounded-md bg-neutral-950 object-cover" data-profile-image />
+                  <div className="min-w-0 flex-1"><dt className="text-xs text-neutral-500">Name and ticker</dt><dd className="break-words text-base font-semibold text-neutral-100" data-profile-name>{c.name || "No name yet"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></dd></div>
+                  {edit("name", "name and ticker")}
+                </div>
+                {row("Image", c.image.startsWith("data:") ? "Your image" : "The generated receipt art", "image", "image")}
+                {row("Description", c.description.trim() || "None. The coin's page shows the rule sentence only.", "description", "description")}
+                {row("Links", c.links.length ? <span className="flex flex-wrap gap-x-3">{c.links.map((l) => <span key={l.label} className="break-all">{l.label}: {l.url}</span>)}</span> : "None", "x", "links")}
+                {c.note !== null && row("Note", c.note.trim() || "None", "note", "note")}
+              </dl>
+            );
+          })}
+        </section>
+      )}
+      {!(mode === "review" && p.publicProfile) && <div className={`grid min-w-0 gap-3 ${many ? "md:grid-cols-2" : ""}`}>
         {p.coins.map((c, i) => {
           const who = many ? `Coin ${i === 0 ? "A" : "B"} ` : "";
           const nId = `${uid}-${c.key}-name`, tId = `${uid}-${c.key}-ticker`, nErr = nameProblem(c.name), tErr = tickerProblem(c.ticker), tNote = tickerNotes[c.key] ?? null;
@@ -277,7 +349,7 @@ export function ReviewCard(p: ReviewCardProps) {
           </div>
           );
         })}
-      </div>
+      </div>}
       {mode === "full" && tickerCheckList}
       {mode === "full" && <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
         <button type="button" data-decision="name" className="underline disabled:no-underline disabled:opacity-60" aria-expanded={editing} disabled={editing && fieldProblems.length > 0} onClick={() => setEditState(!editState)}>{editing ? (fieldProblems.length ? "Fix the fields above first" : "done") : many ? "edit the names and tickers" : "edit the name or ticker"}</button>
@@ -295,7 +367,11 @@ export function ReviewCard(p: ReviewCardProps) {
           {p.event.criteria && <p className="mt-1 whitespace-pre-wrap text-neutral-400">{p.event.criteria.length > 600 ? `${p.event.criteria.slice(0, 600)}… The full rules are on the market page.` : p.event.criteria}</p>}
         </div>
       )}
-      {p.pairFacts ? <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-200" data-pair-facts={p.pairFacts.kind} aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul>
+      {p.pairDiagram && <PairDiagram kind={p.pairDiagram} />}
+      {p.pairFacts ? (mode === "review"
+        // website-22 (audit 10 item 24): on the review the four facts sit one tap away; the diagram above says the one thing to know
+        ? <details className="min-w-0 text-xs text-neutral-300" data-pair-facts={p.pairFacts.kind}><summary className="cursor-pointer">How the two coins burn</summary><ul className="mt-1 list-disc space-y-0.5 break-words pl-5 text-amber-200" aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul></details>
+        : <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-200" data-pair-facts={p.pairFacts.kind} aria-label="How the two coins burn">{pairFactLines(p.pairFacts).map((x) => <li key={x}>{x}</li>)}</ul>)
         : p.pairLine && <p className="min-w-0 break-words text-sm text-amber-200" data-pair-line>{p.pairLine} <FieldHelp id="pair-burn" /></p>}
       {p.warnings && p.warnings.length > 0 && <ul className="min-w-0 list-disc space-y-0.5 break-words pl-5 text-xs text-amber-300" aria-label="Source warnings">{p.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {p.authority && p.authority.length > 0 && <details className="min-w-0 text-xs text-neutral-300" data-authority><summary className="cursor-pointer">{ELECTION_AUTHORITY_LABEL}</summary>{p.authority.map((x) => <p key={x} className="mt-1 break-words">{x}</p>)}</details>}
@@ -308,8 +384,9 @@ export function ReviewCard(p: ReviewCardProps) {
         <span className="text-xs text-neutral-500" aria-hidden="true">{p.budget?.label ?? BUDGET_LABEL}</span>
         {/* owner, 2026-10-12: 1, 2 and 5 % on the row; 10 and 25 % behind "More" (open when one of them is chosen) */}
         {mainShares.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
-        {p.shares.options.length > 3 && <button type="button" data-optional="preset" aria-expanded={showMore} className="text-xs text-neutral-400 underline" onClick={() => setMoreShares(!moreShares)} data-share-more>{showMore ? "Less" : "More"}</button>}
         {p.shares.options.length > 3 && showMore && p.shares.options.filter((f) => !mainShares.includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
+        {/* website-22 (QA 9 item 37): More and Less sit at the end of the row, after every chip */}
+        {p.shares.options.length > 3 && <button type="button" data-optional="preset" aria-expanded={showMore} className="text-xs text-neutral-400 underline" onClick={() => setMoreShares(!moreShares)} data-share-more>{showMore ? "Less" : "More"}</button>}
       </div>
       {p.inverse && (
         <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="When the coin burns" data-inverse>
@@ -358,9 +435,9 @@ export function ReviewCard(p: ReviewCardProps) {
       </fieldset>
       {p.problems.length > 0 && <p className="min-w-0 break-words text-red-400">Can&apos;t launch this rule: {p.problems.join("; ")}</p>}
       {p.error && <p className="min-w-0 break-words text-red-400" role="alert">{p.error}</p>}
-      {p.cost && <p className="min-w-0 break-words text-sm text-neutral-200" data-cost-line>{p.cost}</p>}
+      {p.cost && <p className="min-w-0 break-words text-sm text-neutral-200" data-cost-line>{p.cost}{p.costNote && <span className="block text-xs text-neutral-400" data-cost-note>{p.costNote}</span>}</p>}
       <div className="space-y-1 pt-1">
-        {fieldProblems.length > 0 && <ul id={problemsId} className="list-disc pl-5 text-xs text-red-400" aria-label="Not ready to launch">{fieldProblems.map((x) => <li key={x.text}>{x.text}</li>)}</ul>}
+        {fieldProblems.length > 0 && problemList("Not ready to launch", problemsId)}
         {p.blocked && <p id={blockedId} className="min-w-0 break-words text-xs text-amber-300" data-wallet-blocked>{p.blocked}</p>}
         <button ref={launchBtn} type="button" data-decision="launch" className="rounded bg-amber-400 px-5 py-2 text-base font-semibold text-neutral-950 disabled:opacity-40" aria-describedby={[p.blocked ? blockedId : "", fieldProblems.length ? problemsId : ""].filter(Boolean).join(" ") || undefined} disabled={!p.ready || p.busy || p.problems.length > 0 || !!p.blocked || fieldProblems.length > 0} onClick={launch}>{label}</button>
         {!p.creator && !p.blocked && <p className="min-w-0 break-words text-[11px] text-neutral-500" data-connect-note>Connecting shares only your wallet&apos;s public address. The button then becomes Launch, and launching is a separate step that your wallet asks you to sign.</p>}
@@ -375,11 +452,11 @@ export function ReviewCard(p: ReviewCardProps) {
           </details>
         )}
         {p.summary}
-        {mode === "review" && p.upfront && p.upfront.length > 0 && <div className="min-w-0 space-y-1 text-neutral-300" data-upfront><p className="font-medium text-neutral-200">{UPFRONT_LABEL}</p>{p.upfront.map((x) => <p key={x} className="break-words">{x}</p>)}</div>}
+        {mode === "review" && p.upfront && p.upfront.length > 0 && <details className="min-w-0 text-neutral-300" data-upfront><summary className="cursor-pointer text-neutral-300">{UPFRONT_LABEL}</summary>{p.upfront.map((x) => <p key={x} className="mt-1 break-words">{x}</p>)}</details>}
         {p.edgeNotes && p.edgeNotes.length > 0 && <details className="min-w-0" data-edge-notes><summary className="cursor-pointer text-neutral-300">Unusual cases for this rule</summary>{p.edgeNotes.map((x) => <p key={x} className="mt-1 break-words text-neutral-400">{x}</p>)}</details>}
         <details className="min-w-0" data-terms open={mode === "review"}>
           <summary className="cursor-pointer text-neutral-300">What you confirm by launching</summary>
-          <p className="mt-1 break-words text-neutral-400">{RECEIPTS_LINE} {many ? PAIR_LP_LINE : LP_LINE}</p>
+          <p className="mt-1 break-words text-neutral-400" data-lp-line>{RECEIPTS_LINE} {lpDisclosure(p.venue ?? (many ? "independent" : "single"))}</p>
           <p className="mt-1 break-words text-neutral-400">{ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
         </details>
       </div>

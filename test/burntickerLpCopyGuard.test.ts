@@ -92,7 +92,7 @@ describe("LP locked forever: no public surface still claims the LP is burned", (
 
 // ---- 2. operator identity ----
 /** Fixtures and data that name a Colorado team or race (not the operator), and the fifty-state tables (elections, SPC tornado reports). */
-const COLORADO_OK = [/^config\/burnticker\/fixtures\//, /^config\/burnticker\/espn-teams\.json$/, /^src\/lib\/burnticker\/elections\.ts$/, /^src\/lib\/burnticker\/oracle\/events\.ts$/, /^src\/lib\/burnticker\/sources\/spc\.ts$/];
+const COLORADO_OK = [/^config\/burnticker\/fixtures\//, /^config\/burnticker\/espn-teams\.json$/, /^src\/lib\/burnticker\/elections\.ts$/, /^src\/lib\/burnticker\/oracle\/events\.ts$/, /^src\/lib\/burnticker\/sources\/spc\.ts$/, /^src\/lib\/burnticker\/sources\/fbs\.ts$/];
 
 describe("operator identity: neither the owner's name nor his state is on a public surface", () => {
   test("no 'Shane' / 'Cassidy' anywhere in scope, and no 'Colorado' outside the sports and election data", () => {

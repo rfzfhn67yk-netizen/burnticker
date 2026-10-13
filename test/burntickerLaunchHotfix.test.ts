@@ -121,7 +121,7 @@ describe("launch-intent audit 5", () => {
     assert.match(read("src/app/burnticker/_components/CoinCard.tsx"), /<span className="min-w-0 truncate">\{c\.name \|\| "Coin name"\}<\/span> <span className="shrink-0 font-mono text-sm text-neutral-400">\$\{c\.ticker \|\| "TICKER"\}<\/span>/);
   });
   test("4: a game's start is labelled as its start, not its result", () => {
-    assert.match(page, /starts \$\{denver\(t\.next\.expectedAt\)\}/); assert.match(page, /starts \{denver\(g\.expectedAt\)\}, result after the final/);
+    assert.match(page, /starts \$\{denver\(t\.next\.expectedAt\)\}/); assert.match(page, /starts \$\{denver\(g\.expectedAt\)\}`\}, result after the final/);
     assert.doesNotMatch(page, /result ~\$\{denver\(t\.next\.expectedAt\)\}/);
   });
   test("5: chosen leagues, categories and race types say so to assistive technology", () => {
@@ -155,7 +155,8 @@ describe("launch-intent audit 5", () => {
   test("15: an image still being prepared, or one that failed, blocks the launch until it is resolved", async () => {
     const { imageStateProblem, IMAGE_PENDING, IMAGE_FAILED } = await import("@/lib/burnticker/guidedLaunch");
     assert.equal(imageStateProblem("pending"), IMAGE_PENDING); assert.equal(imageStateProblem("failed"), IMAGE_FAILED); assert.equal(imageStateProblem(null), null);
-    assert.match(fields, /const isp = imageStateProblem\(v\.imageState \?\? null\); if \(isp\) out\.push\(isp\);/, "profileProblems lists it, and the review lists profileProblems beside the button");
+    // website-22: each problem carries its field, so the review's Edit link lands on it
+    assert.match(read("src/lib/burnticker/guidedLaunch.ts"), /const isp = imageStateProblem\(v\.imageState \?\? null\); if \(isp\) out\.push\(\{ field: "image", text: isp \}\);/, "profileProblems lists it, and the review lists profileProblems beside the button");
     clean(IMAGE_PENDING); clean(IMAGE_FAILED);
   });
   test("17: a deep link's parameters are read once and dropped, so a reload offers Resume", () => {

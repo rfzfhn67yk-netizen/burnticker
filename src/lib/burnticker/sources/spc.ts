@@ -1,4 +1,5 @@
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * SPC TORNADO REPORTS (sources-3, 2026-10-12). The NWS Storm Prediction Center's daily storm reports, the FILTERED tornado file for one
@@ -58,7 +59,7 @@ export function applySpc(cfg: HttpSourceConfig, param: string): HttpSourceConfig
 export function spcText(s: SpcSeries, spends: string, inverse: boolean): { name: string; ticker: string; oneLiner: string; block: string; oneShot: boolean } {
   const w = where(s.area), tag = s.area === "US" ? "US" : s.area;
   const src = "Duplicate reports are removed. A report day runs from 12:00 to 12:00 UTC and is read two days after it ends. These are preliminary reports, not rated tornadoes.";
-  if (s.kind === "day") return { name: `Next ${s.n}-Report Day ${tag}`.slice(0, 32), ticker: `TORN${s.n}${tag}`.slice(0, 10), oneLiner: `burns once on the next day with ${s.n === 1 ? "a tornado report" : `${s.n} or more tornado reports`} ${w}`, oneShot: true,
+  if (s.kind === "day") return { name: fitName(`Next ${s.n}-Report Day ${tag}`), ticker: `TORN${s.n}${tag}`.slice(0, 10), oneLiner: `burns once on the next day with ${s.n === 1 ? "a tornado report" : `${s.n} or more tornado reports`} ${w}`, oneShot: true,
     block: `On the first report day after launch with ${s.n === 1 ? "at least one tornado report" : `${s.n} or more tornado reports`} ${w}, ${spends} once, with a receipt on chain. ${src}` };
   if (inverse) return { name: `No Tornado Days ${tag}`, ticker: `NOTORN${tag}`.slice(0, 10), oneLiner: `burns on every day with no tornado report ${w}`, oneShot: false,
     block: `For every report day with no tornado report ${w}, ${spends}, with a receipt on chain. ${src} A day with a report burns nothing.` };

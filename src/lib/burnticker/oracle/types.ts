@@ -22,6 +22,8 @@ export interface SeriesSummary {
   tags: string[];
   /** sources-2: a one-market Polymarket selector's stated source and dispute window (oracle/polymarket.ts polyStated). Display only. */
   stated?: { resolutionSource: StatedSource; finalAfter: FinalAfter };
+  /** QA pass 9 #17: a one-market selector's end date (Gamma endDate), for the review's due-soon warning. Display only. */
+  endsAt?: string | null;
 }
 
 export interface OpenMarketSummary { ticker: string; title: string; closeTime: string | null; yesPrice: number | null; strikeType: string | null; floorStrike: number | null; capStrike: number | null }

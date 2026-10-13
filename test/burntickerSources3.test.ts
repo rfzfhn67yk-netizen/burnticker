@@ -341,7 +341,8 @@ describe("the launch option (hazards.ts; the page wiring is in WIRING-SOURCES3.m
   });
 
   test("hazardSwap: the same subject in the other pattern, both ways; a closed season refuses", () => {
-    const sw = (s: string, to: "every" | "once", at = NOW) => hazardSwap(s, to, at);
+    // sources-6 (QA pass 9 #40): a swap that changes a threshold or subject carries a notice (test/burntickerSources6Hazards.test.ts); compared here without it
+    const sw = (s: string, to: "every" | "once", at = NOW) => { const r = hazardSwap(s, to, at); if (r && "notice" in r) { const { notice: _n, ...x } = r; void _n; return x; } return r; };
     assert.deepEqual(sw("usgs.quakes:4.5/california", "once"), { series: "usgs.quakenext:6/california" });
     assert.deepEqual(sw("usgs.quakenext:7.5", "every"), { series: "usgs.quakes:7.5" });
     assert.deepEqual(sw("nhc.hurricanes:ep.4", "once"), { series: "nhc.next:ep.4.2026" });

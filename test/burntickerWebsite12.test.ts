@@ -240,7 +240,8 @@ describe("ChatGPT A2 / Claude 4: every pair entry path is off together, with one
   test("no top box of unavailable kinds; the Matchup and Coin vs Coin tiles grey out in place with the one line and the blocker in details", () => {
     assert.doesNotMatch(page, /Some kinds of coin cannot be launched/);
     assert.match(page, /const pairsBlocked: string \| null = site\.read === "ready" && !site\.pairs\.available \? site\.pairs\.line : null;/);
-    assert.match(page, /f === "pair" \? pairsBlocked \?\? typeBlocked\("matchup"\)/, "Matchup tile");
+    // website-22 (QA 9 item 39): the older tiles are gone; the rivalry step greys out its two-team choice with the same line
+    assert.match(page, /teamsBlocked=\{pairsBlocked \?\? typeBlocked\("matchup"\)\}/, "Matchup (two teams)");
     assert.match(page, /unavailable=\{pairsBlocked \?\? typeBlocked\("derby"\)\}/, "Coin vs Coin tile");
     assert.match(tile, /if \(unavailable\) \{ setOpen\(false\); return; \}/, "?derby=1 and the Coin vs Coin templates do not open it");
     assert.match(tile, /if \(!open \|\| unavailable\) return tile;/);

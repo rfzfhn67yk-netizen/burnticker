@@ -25,8 +25,8 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 
 /** Catalogue series that resolve once: a single game, the first snow, a named launch, a star or channel milestone. */
 export const CATALOGUE_ONE_SHOT_RE = /^(espn\.game|nws\.snow|ll2\.launch|github\.milestone|youtube\.milestone|usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning|defillama\.tvlnext):/;
-/** The catalogue one-shots the keeper ends after their one reading (rules.ts isOneShot). ESPN games and the first snow keep their own end. */
-export const KEEPER_ONE_SHOT_RE = /^(ll2\.launch|github\.milestone|youtube\.milestone|usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning|defillama\.tvlnext):/;
+/** The catalogue one-shots the keeper ends after their one reading (rules.ts isOneShot). QA pass 9 #3 (2026-10-13, owner decision 2026-10-12: one-shots default to 100 %): a single game is one of them; the first snow keeps its own end. */
+export const KEEPER_ONE_SHOT_RE = /^(espn\.game|ll2\.launch|github\.milestone|youtube\.milestone|usgs\.quakenext|nhc\.next|spc\.tornadoday|nifc\.firesize|usgs\.volcanowarning|defillama\.tvlnext):/;
 
 /**
  * sources-3 (2026-10-12): the NEXT-EVENT one-shots (the next earthquake at a magnitude, the next hurricane at a category this season, the

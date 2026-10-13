@@ -248,7 +248,7 @@ describe("item 8: feed and source diagnostics out of the UI (Claude site audit 3
     const pg = read("src/app/burnticker/launch/page.tsx");
     assert.doesNotMatch(pg, /\{scheduleNote && <p/, "no schedule banner on the picker"); assert.doesNotMatch(pg, /Technical detail:/);
     assert.doesNotMatch(pg, /setSrcWarnings\(scheduleNote/, "the schedule never becomes a review warning");
-    assert.match(pg, /: scheduleNote \? ` · \$\{NEXT_GAME_UNAVAILABLE\}` : ""/); assert.match(pg, /\{c\.scheduleUnavailable && <p[^>]*>\{NEXT_GAME_UNAVAILABLE\}<\/p>\}/);
+    assert.match(pg, /: scheduleNote \? NEXT_GAME_UNAVAILABLE : null\]\)/, "website-22 (QA 9 item 6): joined by teamLine, so no dangling dot"); assert.match(pg, /\{c\.scheduleUnavailable && <p[^>]*>\{NEXT_GAME_UNAVAILABLE\}<\/p>\}/);
     const h = read("src/lib/burnticker/api/handlers.ts");
     assert.equal((h.match(/console\.error\(`\[burnticker\/sports\] \$\{league\} schedule could not be read:`, e\)/g) ?? []).length, 2);
     assert.doesNotMatch(read("src/lib/burnticker/search.ts"), /rec\.note = scheduleNote/);

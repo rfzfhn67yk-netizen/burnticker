@@ -1,4 +1,4 @@
-import { LEAGUES, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, displayAbbr, teamCodeOf, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
 
 /**
  * THE ONE TEAM-COIN TICKER (ChatGPT audit 6 item 6, 2026-10-12): three generators disagreed (the wizard's $LAD / $LADWS / $LADNOWIN, the
@@ -27,7 +27,7 @@ let leaguesByCode: Map<string, Set<string>> | null = null;
 function codeLeagues(): Map<string, Set<string>> {
   if (leaguesByCode) return leaguesByCode;
   const m = new Map<string, Set<string>>();
-  for (const l of Object.keys(LEAGUES)) for (const t of teamsOf(l as LeagueId)) { const c = code(t.abbr); const s = m.get(c) ?? new Set<string>(); s.add(l); m.set(c, s); }
+  for (const l of Object.keys(LEAGUES)) for (const t of teamsOf(l as LeagueId)) { const c = code(teamCodeOf(t)); const s = m.get(c) ?? new Set<string>(); s.add(l); m.set(c, s); }
   leaguesByCode = m;
   return m;
 }
@@ -36,12 +36,14 @@ function teamCode(abbr: string, league: string | null | undefined): string {
   const A = code(abbr);
   if (!league || !(league in LEAGUES)) return A;
   const full = abbr.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (full.length > 4 && teamsOf(league as LeagueId).some((t) => code(t.abbr) === A && t.abbr.toUpperCase().replace(/[^A-Z0-9]/g, "") !== full)) return full.slice(0, 5);
+  if (full.length > 4 && teamsOf(league as LeagueId).some((t) => code(teamCodeOf(t)) === A && teamCodeOf(t).toUpperCase().replace(/[^A-Z0-9]/g, "") !== full)) return full.slice(0, 5);
   return A;
 }
 
 export type TeamWindow = "season" | "post" | "next" | "perpetual" | "title" | "game";
-export function teamTicker(abbr: string, o: { league?: string | null; window?: TeamWindow | null; games?: number | null; outcome?: "win" | "loss" | "draw" | null; inverse?: boolean }): string {
+export function teamTicker(abbr0: string, o: { league?: string | null; window?: TeamWindow | null; games?: number | null; outcome?: "win" | "loss" | "draw" | null; inverse?: boolean }): string {
+  // QA pass 9 #29: a default ticker starts with the team's conventional display code ($MCI, not $MNC); the pin abbreviation is unchanged
+  const abbr = o.league && o.league in LEAGUES ? displayAbbr(o.league as LeagueId, abbr0) : abbr0;
   const A = teamCode(abbr, o.league);
   const shared = !!o.league && (codeLeagues().get(code(abbr))?.size ?? 0) > 1;
   const tag = shared ? LEAGUE_TAG[o.league!] ?? code(o.league!, 3) : "";

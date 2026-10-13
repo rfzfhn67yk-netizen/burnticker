@@ -6,6 +6,7 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
 import { findTeams, gameSeries, noPlayoffs, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { findStations, type NwsMetric } from "@/lib/burnticker/sources/nws";
+import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { gameLine } from "@/lib/burnticker/oneShotEligibility";
 import { climateDaySentence, FIRST_SNOW_SEASON, leastReportable, parseWeatherIntent, planWeather, type WeatherIntent, type WeatherPlan } from "@/lib/burnticker/weatherIntent";
 import { nativeRule, nativeSourceById } from "@/lib/burnticker/sources/native";
@@ -15,11 +16,14 @@ import { scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { looksLikePerson, meaningful, nameMatch, queryTokens } from "@/lib/burnticker/textMatch";
 import { matchPolymarket, plainQuestion, outcomeLabel, outcomeTicker, searchQueries, splitQuery, type PickerOutcome } from "@/lib/burnticker/polySearch";
 import { teamTicker } from "@/lib/burnticker/tickers";
+import { feedById } from "@/lib/burnticker/catalogue";
+import { parseUsgsSeries, USGS_MAGNITUDES } from "@/lib/burnticker/sources/usgs";
 import { championshipCode, describeRule, tickerFrom, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets";
 import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenance";
 import { asksWomen, compoundOf, compoundSentence, isWomenLeague, milestoneOf, milestoneSentence, regularSeasonOnly, REGULAR_SEASON_SENTENCE, womenSentence, type Compound } from "@/lib/burnticker/teamQuery";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * INTENT → RULE CARDS (2026-10-10, the owner thinks in sentences, not sources). One box on the launch page takes a plain phrase and
@@ -183,7 +187,7 @@ function recurringCard(t: EspnTeam, games: readonly Game[], outcome: "win" | "lo
     settlement: SPORTS_SETTLEMENT, crossRead: CROSS_NAME[t.league], nextAt: w.next?.startsAt ?? null, settleAt: w.next?.startsAt ?? null, endAt: w.endsAt, endText: def.endText,
     howSettles: src.unit.definition, rule: def.rule, pick: { oracle: "catalogue", series, market: null, title: src.title }, source: { unit: src.unit, baseline: 0, direction: "up" },
     text: def.text, descCtx, badge: def.text.badge, windows, seasonYear: w.year, suggestedName: def.text.name, suggestedTicker: def.text.ticker, score: 3,
-    interpreted: `This reads every ${LEAGUES[t.league].sport === "soccer" ? "match" : "game"} the ${t.nickname} ${outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose"} in ${phrase0}. Game times are shown in Denver time. ${def.kind === "perpetual" ? "The coin has no end date and does not retire." : `The coin ${def.endText.replace(/, then /, ". Then it ")}.`}`,
+    interpreted: `This reads every ${LEAGUES[t.league].sport === "soccer" ? "match" : "game"} ${teamRef(t)} ${outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose"} in ${phrase0}. Game times are shown in Denver time. ${def.kind === "perpetual" ? "The coin has no end date and does not retire." : `The coin ${def.endText.replace(/, then the rest/, ". Then the rest").replace(/, then /, ". Then it ")}.`}`,
   };
 }
 
@@ -221,21 +225,21 @@ async function championshipCard(t: EspnTeam, d: SearchDeps, ti: TeamIntent = { y
   const title = `Burns ${pctLabel(DEFAULT_SHARE.oneShot)} once, if ${teamRef(t)} ${verb} ${champ}`;
   const m = ev.markets.find((x) => !x.inactive && (x.groupItemTitle?.toLowerCase() === t.name.toLowerCase() || x.groupItemTitle?.toLowerCase() === t.nickname.toLowerCase()));
   const rel = otherYear ? { alternative: true, score: 2.85 } : {};
-  if (!m) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: [otherYear, `The market has no outcome for the ${t.nickname}.`].filter(Boolean).join(" "), ...rel });
+  if (!m) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: [otherYear, `The market has no outcome for ${teamRef(t)}.`].filter(Boolean).join(" "), ...rel });
   if (m.closed) return card({ title, href: `https://polymarket.com/event/${ev.slug}`, endAt: ev.endDate, note: [otherYear, `The ${t.nickname} outcome is closed on Polymarket. The team is out, or the market has already settled.`].filter(Boolean).join(" "), ...rel });
   const rule = ti.negated ? polyRuleNo(m.conditionId, DEFAULT_SHARE.oneShot) : polyRule(m.conditionId, DEFAULT_SHARE.oneShot);
   const phrase = `${teamRef(t)} win ${champ}`;
   const code = championshipCode(t.league);
-  const suggest = ti.negated ? { name: `${t.nickname} Fall Short`.slice(0, 32), ticker: `NO${teamTicker(t.abbr, { league: t.league, window: "title" })}`.slice(0, 10) } : { name: `${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`.slice(0, 32), ticker: teamTicker(t.abbr, { league: t.league, window: "title" }) };   // audit 6 item 6: the one generator
+  const suggest = ti.negated ? { name: fitName(`${t.nickname} Fall Short`), ticker: `NO${teamTicker(t.abbr, { league: t.league, window: "title" })}`.slice(0, 10) } : { name: fitName(`${t.nickname} ${code === "WS" ? "World Series" : code === "CUP" ? "Cup" : "Champs"}`), ticker: teamTicker(t.abbr, { league: t.league, window: "title" }) };   // audit 6 item 6: the one generator
   const descCtx = { eventPhrase: phrase, crossRead: OFFICIAL_SHORT[t.league], endsAt: ev.endDate, suggest };
   const text = describeRule(rule, { ticker: "", ...descCtx });
-  const side = ti.negated ? `the NO side: it burns only if the market settles NO, meaning the ${t.nickname} did not win ${champ}. A voided or cancelled market never counts as a NO` : `the YES side: it burns if Polymarket's payout says the ${t.nickname} won ${champ}`;
+  const side = ti.negated ? `the NO side: it burns only if the market settles NO, meaning ${teamRef(t)} did not win ${champ}. A voided or cancelled market never counts as a NO` : `the YES side: it burns if Polymarket's payout says ${teamRef(t)} won ${champ}`;
   return card({
     title, subtitle: `${t.name}, in ${ev.title}`, nextAt: ev.endDate, settleAt: ev.endDate, endAt: ev.endDate, endText: "ends when the market resolves",
     howSettles: `Settles on Polymarket's on-chain payout for "${m.groupItemTitle}" in ${ev.title}; ${OFFICIAL[t.league]} are the published cross-check.${ev.description ? `\n\nResolution rules (Polymarket): ${ev.description}` : ""}`,
     rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${teamRef(t)} ${verb} ${champ} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" },
     text, descCtx, leagueSet: ti.negated ? null : { id: `champ-${t.league}-${year || "season"}`, outcome: t.abbr }, href: `https://polymarket.com/event/${ev.slug}`, suggestedName: text.name, suggestedTicker: text.ticker,
-    interpreted: `This reads whether the ${t.nickname} win ${champ}, in the Polymarket market “${ev.title}”. The coin takes ${side}. It settles once, when the market resolves.`,
+    interpreted: `This reads whether ${teamRef(t)} win ${champ}, in the Polymarket market “${ev.title}”. The coin takes ${side}. It settles once, when the market resolves.`,
     note: otherYear, ...rel,
   });
 }
@@ -265,8 +269,8 @@ export function queryDay(q: string): "today" | "tomorrow" | null {
 function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Suggestion {
   const own = g.home.abbr === t.abbr ? g.home : g.away, opp = own === g.home ? g.away : g.home;
   const series = gameSeries(t.league, g.eventId, t.abbr, outcome);
-  // website-19: a single game keeps the recurring presets (the keeper drains a 100 % one-shot only for markets and named releases)
-  const share = DEFAULT_SHARE.recurring, rule = nativeRule(series, { fractionOfPool: share });
+  // QA pass 9 #3 (owner decision 2026-10-12): a single game is a one-shot, so it takes the one-shot default (the keeper drains it after the result)
+  const share = DEFAULT_SHARE.oneShot, rule = nativeRule(series, { fractionOfPool: share });
   const descCtx = { game: { opponent: opp.nickname || opp.name, home: own === g.home, startsAt: g.startsAt } };
   const text = describeRule(rule, { ticker: "", ...descCtx });
   const verb = outcome === "win" ? "win" : outcome === "draw" ? "draw" : "lose";
@@ -316,7 +320,7 @@ async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<S
   const champ = await championshipCard(t, d, ti);
   if (CHAMP_WORDS.test(q)) { champ.score = champ.alternative ? 3.05 : 3.1; }   // the championship asked about leads; another year stays labelled
   // a negated query ("do not win") is never a win card: the recurring and matchup cards are related rules that say so
-  if (ti.negated) { rec.alternative = true; rec.note = [rec.note, `You asked about the ${t.nickname} not winning. This card counts their wins, so it is a related rule.`].filter(Boolean).join(" "); }
+  if (ti.negated) { rec.alternative = true; rec.note = [rec.note, `You asked about ${teamRef(t)} not winning. This card counts their wins, so it is a related rule.`].filter(Boolean).join(" "); }
   const pair = matchupCard(t, games, d.nowMs);
   const out = [rec, champ, ...(pair ? [pair] : [])];
   // L04: "tonight" / "today" / "tomorrow" names one game. Its own one-game card leads when the schedule lists a game that day; every
@@ -373,6 +377,7 @@ function weatherPlanCard(p: Extract<WeatherPlan, { ok: true }>, alternative: boo
   const share = DEFAULT_SHARE.recurring;
   const rule = (p.inverse ? { ...nativeRule(series, { fractionOfPool: share }), inverse: true } : nativeRule(series, { fractionOfPool: share })) as BurnRule;
   const text = describeRule(rule, { ticker: "" });
+  const freq = weatherFrequency(series, !!p.inverse);   // QA pass 9 #16
   const what = p.metric === "high" ? `every day ${s.city}'s official high is ${p.boundary}` : p.metric === "rain" ? `every day ${s.city} gets ${p.boundary}` : `once, on ${s.city}'s first snow of the season`;
   const seriesTitle = p.inverse ? `${s.city} daily ${p.metric === "high" ? `high below ${p.threshold} °F` : `rain below ${Number(p.threshold).toFixed(2)} in`} (NWS)` : src.title;
   const how = p.metric === "snow" ? `${src.unit.definition}. ${FIRST_SNOW_SEASON}` : p.inverse ? `a day whose official ${p.metric === "high" ? "high" : "precipitation"} at ${s.label} was ${p.boundary}. A day with no reading counts as nothing.` : src.unit.definition;
@@ -382,8 +387,8 @@ function weatherPlanCard(p: Extract<WeatherPlan, { ok: true }>, alternative: boo
     title: `Burns ${pctLabel(share)} ${what}`, subtitle: `${seriesTitle}, at station ${s.code}`, settlement: "the National Weather Service's daily climate report", crossRead: "the Iowa Environmental Mesonet",
     endText: p.metric === "snow" ? "ends after the first snow" : "no end date", howSettles: how, rule, pick: { oracle: "catalogue", series, market: null, title: seriesTitle },
     source: { unit: src.unit, baseline: 0, direction: "up" }, text, descCtx: {}, suggestedName: text.name, suggestedTicker: text.ticker, score: alternative || p.example ? 2.9 : 3,
-    interpreted: `This reads the ${s.label} weather station, code ${s.code}. ${reads}`,
-    note: alternative ? `This is the recurring rule, not the one day you typed. ${p.note ?? ""}`.trim() : p.note, alternative: alternative || p.example,
+    interpreted: `This reads the ${s.label} weather station, code ${s.code}. ${reads}${freq ? ` ${freq.line}` : ""}`,
+    note: [alternative ? `This is the recurring rule, not the one day you typed. ${p.note ?? ""}`.trim() : p.note, freq?.warning ?? null].filter(Boolean).join(" ") || null, alternative: alternative || p.example,
   };
 }
 
@@ -413,10 +418,32 @@ function weatherCards(q: string, intents: readonly WeatherIntent[]): Suggestion[
   return out;
 }
 
+/**
+ * WHAT AN EARTHQUAKE QUERY ASKS FOR (audit 10 #15, 2026-10-13: "earthquake above 7 in Japan" was offered magnitude 6 worldwide without a
+ * word). The magnitude and the region the query names, read against what the USGS adapter offers (magnitudes 4 to 8.5 in half steps; the
+ * world, the contiguous United States, California, Alaska or Japan); anything else it names is listed as not offered.
+ */
+export function quakeAsk(q: string): { magnitude: string | null; region: string | null; unsupported: string[] } {
+  const unsupported: string[] = [];
+  const m = /(?:magnitude|mag\.?|\bm|above|over|at least|greater than|bigger than|of|>=?)\s*(\d{1,2}(?:\.\d+)?)\b/i.exec(q) ?? /\b(\d(?:\.\d+)?)\s*(?:\+|or (?:more|higher|bigger|above))/i.exec(q);
+  let magnitude: string | null = null;
+  if (m) { const v = String(Number(m[1])); if ((USGS_MAGNITUDES as readonly string[]).includes(v)) magnitude = v; else unsupported.push(`magnitude ${m[1]} (the USGS reading offers 4 to 8.5 in half steps)`); }
+  const REG: [RegExp, string][] = [[/\bjapan(ese)?\b/i, "japan"], [/\bcalifornia\b/i, "california"], [/\balaska\b/i, "alaska"], [/\b(united states|u\.?s\.?a?\.?|america|conus|lower 48|contiguous)\b/i, "conus"]];
+  const region = REG.find(([re]) => re.test(q))?.[1] ?? null;
+  if (!region) { const place = /\b(?:in|near|off|around)\s+([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)*)/.exec(q)?.[1]; if (place && !/^(the|a|an)$/i.test(place)) unsupported.push(`${place} (the regions offered are the world, the contiguous United States, California, Alaska and Japan)`); }
+  return { magnitude, region, unsupported };
+}
 function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
   const nq = norm(q);
   const out: Suggestion[] = [];
-  for (const f of feeds) {
+  for (const f0 of feeds) {
+    let f = f0, ask: ReturnType<typeof quakeAsk> | null = null;
+    if (f0.id.startsWith("usgs.quakes:") && f0.launchable.ok) {
+      ask = quakeAsk(q);
+      const base = parseUsgsSeries(f0.id), want = base ? `usgs.quakes:${ask.magnitude ?? base.magnitude}${ask.region ? `/${ask.region}` : base.region ? `/${base.region}` : ""}` : null;
+      const exact = want && want !== f0.id ? feedById(want) : null;
+      if (exact && exact.unit && exact.baseline !== null && exact.direction) f = { ...f0, id: exact.id, title: exact.title, unit: exact.unit, baseline: exact.baseline, direction: exact.direction };
+    }
     if (!f.launchable.ok || !f.unit || f.baseline === null || !f.direction) continue;
     // a card here is always a recurring rule at the recurring default; a next-event one-shot (sources-3) is not one
     if (NEXT_EVENT_ONE_SHOT_RE.test(f.id)) continue;
@@ -430,6 +457,8 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
       ...base, id: `feed:${f.id}`, venue: "feed", venueLabel: `${f.sourceName}, a first-party source`, shape: "recurring", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.recurring)} per ${f.unit.label} — ${f.title}`, subtitle: f.cadence,
       settlement: f.sourceName, crossRead: isSingleSourceSeries(f.id) ? null : "an independent publisher of the same figure", endText: "no end date", howSettles: f.unit.definition, rule,
       pick: { oracle: "catalogue", series: f.id, market: null, title: f.title }, source: { unit: f.unit, baseline: typeof f.baseline === "number" ? f.baseline : 0, direction: "up" }, text, descCtx, suggestedName: text.name, suggestedTicker: text.ticker, score,
+      // audit 10 #15: what the query asked for that this source does not offer is named, and the card is a related rule
+      ...(ask && ask.unsupported.length ? { alternative: true, partial: true, note: `Not offered as asked: ${ask.unsupported.join("; ")}. This card is the closest rule the USGS reading supports: ${f.title.replace(/ \(USGS\)$/, "")}.` } : {}),
     });
   }
   return out;
@@ -531,7 +560,7 @@ async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; car
           const label = outcomeLabel(m), sentence = plainQuestion(m.question), rule = polyRule(m.conditionId);
           const descCtx = { eventPhrase: sentence, endsAt: m.endDate };
           const text = describeRule(rule, { ticker: outcomeTicker(label), ...descCtx });
-          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.oneShot)} once, if ${sentence} resolves YES`, subtitle: `${e.title}. YES means ${m.outcomes[0] ?? "Yes"}, and NO means ${m.outcomes[1] ?? "No"}.`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.outcomes[0] ?? "Yes"}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" }, text, descCtx, suggestedTicker: outcomeTicker(label), suggestedName: label.slice(0, 32), href: eventPageUrl(e.slug), score: mm.score });
+          cards.push({ ...base, id: `polymarket:${m.conditionId}`, venue: "polymarket", venueLabel: "Polymarket, settled by its on-chain payout", shape: "one-shot", title: `Burns ${pctLabel(shareOf(rule) ?? DEFAULT_SHARE.oneShot)} once, if ${sentence} resolves YES`, subtitle: `${e.title}. YES means ${m.outcomes[0] ?? "Yes"}, and NO means ${m.outcomes[1] ?? "No"}.`, settlement: "Polymarket's on-chain payout (Conditional Tokens on Polygon)", nextAt: m.endDate, settleAt: m.endDate, endAt: m.endDate, endText: "ends when the market resolves", howSettles: `Settles on "${m.question}" resolving ${m.outcomes[0] ?? "Yes"}.`, rule, pick: { oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No" }, text, descCtx, suggestedTicker: outcomeTicker(label), suggestedName: fitName(label), href: eventPageUrl(e.slug), score: mm.score });
         }
         for (const em of found.events) {
           const e = em.event;

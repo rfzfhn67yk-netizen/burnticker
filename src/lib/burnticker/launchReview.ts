@@ -14,8 +14,9 @@ import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
 import type { LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
 import { linksProblems, withCreatorText } from "@/lib/burnticker/creatorProfile";
-import { meetingsMirror, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
+import { meetingsMirror, noPlayoffs, parseEspnSeries, teamByAbbr } from "@/lib/burnticker/sources/espn";
 import { meetingsFundsFlow, type FundsFlow } from "@/lib/burnticker/pairFundsFlow";
+import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule, type ScheduledGame } from "@/lib/burnticker/timing";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
@@ -119,7 +120,7 @@ function meetingsReview(rule: BurnRule, tickerA: string, tickerB: string, ctx: O
   if (e?.kind !== "team" || e.window.kind !== "meetings" || !mirror) return null;
   const a = teamByAbbr(e.league, e.abbr)?.nickname ?? e.abbr, b = teamByAbbr(e.league, e.window.opp)?.nickname ?? e.window.opp;
   const ruleB = { ...rule, series: mirror } as BurnRule;
-  return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
+  return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }, { playoffs: !noPlayoffs(e.league) }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
 }
 
 export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
@@ -320,10 +321,14 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // audit 7 items 7 and 11: the one-time result's own due date (the picked game, never "the next meeting"), and the warning when it is near
   const oneTime = text.windowKind === "one-shot";
   const game = oneTime && o.game && gameOfRule(locked.rule, [o.game]) ? o.game : null;
-  const dueIso = game ? game.startsAt : oneTime ? (ctx as { endsAt?: string | null }).endsAt ?? null : null;
+  // QA pass 9 #17: an event outcome's due date is the market's own end date from the server's read when the page sent none
+  const dueIso = game ? game.startsAt : oneTime ? (ctx as { endsAt?: string | null }).endsAt ?? o.stated?.endsAt ?? null : null;
   const due = dueTiming(dueIso, now, dueWarningDays(env));
   const timing = oneTime ? { dueAt: due.dueAt, dueLabel: game ? gameDueLabel(game) : null, dueWithinDays: due.dueWithinDays, warning: due.warning, unplayed: espn?.kind === "game" ? UNPLAYED_GAME_LINE : null } : null;
   if (timing?.warning) warnings.push(timing.warning);
+  // QA pass 9 #16: a weather threshold that fires on almost every day, or almost never, at its station says so (the station's history)
+  const wxFreq = locked.rule.oracle === "catalogue" && locked.rule.series ? weatherFrequency(locked.rule.series, !!locked.rule.inverse) : null;
+  if (wxFreq?.warning) warnings.push(wxFreq.warning);
   if (o.seasonWarning) warnings.unshift(o.seasonWarning);
   const n = steps.length;
   const recovery = n === 1

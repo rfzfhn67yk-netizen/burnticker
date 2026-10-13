@@ -56,7 +56,9 @@ describe("audit 7 item 8: pair names never stop mid-word", () => {
     assert.deepEqual(pairNames("WIF", "BONK"), { a: "WIF vs BONK, WIF side", b: "BONK vs WIF, BONK side" });
     const long = pairNames("Timberwolves", "Trail Blazers Portland");
     for (const n of [long.a, long.b]) { assert.ok(new TextEncoder().encode(n).length <= 32, n); assert.doesNotMatch(n, /\s$/); }
-    assert.equal(long.a, "Timberwolves vs Trail Blazers");
+    // QA pass 9 #15 (sources-6): a cut team name is not a name ("Leeds United vs Manchester"); with no short code the side keeps its own whole name
+    assert.equal(long.a, "Timberwolves");
+    assert.equal(pairNames("Timberwolves", "Trail Blazers Portland", { a: "MIN", b: "POR" }).a, "Timberwolves vs POR");
   });
 });
 
@@ -127,7 +129,7 @@ describe("the FIX sentences and the new copy, each lint-clean", () => {
   test("items 151, 153, 154, 155, 156: the rivalry panel and the share row (source pins)", () => {
     const page = read("src/app/burnticker/launch/page.tsx"), steps = read("src/app/burnticker/launch/GuidedSteps.tsx"), card = read("src/app/burnticker/launch/ReviewCard.tsx");
     assert.match(page, /const other = \(t: Team \| null\) => !!t && !!t\.league && !!leagueSeries && t\.league !== leagueSeries;/);
-    assert.match(page, /schedFailed \? <span[^>]*data-schedule-unavailable>\{SCHEDULE_UNAVAILABLE_LINE\} <button[^>]*onClick=\{\(\) => setGamesRetry\(\(n\) => n \+ 1\)\}>Retry<\/button>/);
+    assert.match(page, /schedFailed \? <span[^>]*data-schedule-unavailable>\{rvNow\?\.scheduleNote \?\? SCHEDULE_UNAVAILABLE_LINE\} <button[^>]*onClick=\{\(\) => setRivalryRetry\(\(n\) => n \+ 1\)\}>Retry<\/button>/);
     assert.match(page, /\}, \[flow, leagueSeries, gameQ, gamesRetry\]\);/);
     assert.match(page, /if \(rivalB\?\.abbr === t\.abbr\) \{ setRivalB\(null\); setRivalNote\(RIVAL_SAME_TEAM\); \}/);
     assert.match(page, /onClick=\{\(\) => chooseRivals\(rivalA, rivalB, "game", m\)\}/);
@@ -156,8 +158,13 @@ describe("item 253 on the launch page: a prepare answer for an older draft sets 
 describe("WIRING-PARITY audit 7 #3: a refused link blocks Launch", () => {
   test("the page joins creatorLinks' problems to the profile's, and sends the links to the review", () => {
     const page = read("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /const linkAwareProblems = \(v: ProfileValue\): string\[\] => \[\.\.\.new Set\(\[\.\.\.profileProblems\(v\), \.\.\.creatorLinks\(/);
-    assert.equal((page.match(/profileProblems=\{\[\.\.\.linkAwareProblems\(profile\)/g) ?? []).length, 2);
+    // website-22 (QA 9 item 11): ProfileFields' profileFieldProblems runs creatorProfile.ts linkProblem per field (the server's own check),
+    // and the name step and the review list the same blockers, each with the field it belongs to
+    const fields = read("src/lib/burnticker/guidedLaunch.ts");
+    assert.match(fields, /for \(const \[k, label\] of LINK_FIELDS\) \{ const lp = linkFieldProblem\(label, v\[k\]\); if \(lp\) out\.push\(\{ field: k, text: lp \}\); \}/);
+    assert.match(fields, /export const linkFieldProblem = \(label: string, raw: string\): string \| null => \(raw\.trim\(\) \? linkProblem\(label, raw\.trim\(\)\) : null\);/);
+    assert.match(page, /profileFieldProblems\(profile\)\.map\(\(x\) => \(\{ text: two \? /);
+    assert.match(page, /profileProblems=\{profileBlockers\}/); assert.match(page, /profileProblems=\{allBlockers\}/);
     assert.match(page, /links: creatorLinks\(\{ x: profile\.x, telegram: profile\.telegram, website: profile\.website \}\)\.links/);
   });
 });

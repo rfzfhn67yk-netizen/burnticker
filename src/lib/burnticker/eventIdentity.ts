@@ -1,3 +1,5 @@
+import { fitName } from "@/lib/burnticker/launchFields";
+
 /**
  * A COIN'S NAME AND TICKER FROM THE EVENT, NOT THE LAST WORD (ChatGPT launch audit 5, L12, 2026-10-11: "Will LeBron James retire before
  * next NBA season?" became "season Wins / $SEASON" and the description said "burns if LeBron James retire before …"). From a market
@@ -46,7 +48,7 @@ export function eventIdentity(question: string): EventIdentity {
   for (let i = 1; i < words.length && i <= 6; i++) if (baseOf(words[i])) { vi = i; break; }
   if (vi < 0) {
     const first = words.find((w) => /^[A-Z0-9]/.test(w) && w.length > 1) ?? words[0] ?? "EVENT";
-    return { subject: raw, verb: null, rest: "", phrase: raw, name: raw.slice(0, 32), ticker: tickerOf(first, ""), confident: false };
+    return { subject: raw, verb: null, rest: "", phrase: raw, name: fitName(raw), ticker: tickerOf(first, ""), confident: false };
   }
   const subject = words.slice(0, vi).join(" "), verb = baseOf(words[vi])!, restWords = words.slice(vi + 1), rest = restWords.length ? ` ${restWords.join(" ")}` : "";
   const bare = subject.replace(/^the\s+/i, "").replace(/\s*\([A-Z]\)$/, "").trim();
@@ -60,7 +62,7 @@ export function eventIdentity(question: string): EventIdentity {
   const copula = verb === "be" || verb === "have" || verb === "become";
   const tail = copula && restWords[0] ? [titleCase(restWords[0].replace(/[,.;:]$/, ""))] : figure && ["reach", "hit", "cross", "exceed", "surpass", "top", "drop", "fall"].includes(verb) ? [figure.replace(/[,.;:]$/, "")] : [];
   let name = [verb === "win" ? (parts[parts.length - 1] ?? bare) : bare, titleCase(conj), ...tail].join(" ");
-  if (name.length > 32) name = [parts[parts.length - 1], titleCase(conj), ...tail].join(" ").slice(0, 32);
+  if (name.length > 32) name = fitName([parts[parts.length - 1], titleCase(conj), ...tail].join(" "));
   const suffix = SUFFIX[verb] ?? verb.toUpperCase().slice(0, 4);
   const confident = parts.length >= 1 && parts.length <= 6 && bare.length >= 2 && !/^(it|this|that|there|they)$/i.test(bare);
   return { subject, verb, rest, phrase, name, ticker: tickerOf(entityWord, suffix), confident };

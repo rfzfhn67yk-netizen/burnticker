@@ -1,6 +1,6 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
-import type { Race, RaceOutcome } from "@/lib/burnticker/elections";
+import { candidateMappingLine, type Race, type RaceOutcome } from "@/lib/burnticker/elections";
 import { fecSeries } from "@/lib/burnticker/sources/fec";
 import { nativeRule } from "@/lib/burnticker/sources/native";
 import { defaultVoidBy } from "@/lib/burnticker/launchBundle";
@@ -28,7 +28,7 @@ import { DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 export interface ElectionPairSide {
   outcome: RaceOutcome; candidate: string; fecCandidateId: string | null; name: string; ticker: string;
   components: { fecBeats: BurnRule | null; winner: BurnRule };
-  sentences: { fecBeats: string | null; winner: string };
+  sentences: { fecBeats: string | null; winner: string; /** audit 10 #5: the candidate and the market the coin settles on, with what a replacement does */ mapping: string };
 }
 export interface ElectionPair {
   race: { slug: string; title: string; settlesOn: string | null; state: string | null };
@@ -55,6 +55,7 @@ export function electionPairTemplate(race: Race, a: RaceOutcome, b: RaceOutcome,
       components: { fecBeats: fecRule, winner: winnerRule(me.conditionId, wf) },
       sentences: {
         fecBeats: fecRule ? `Burns ${pct(ff)} of the burn pool on each FEC reporting period in which ${sur}'s campaign reports more receipts than ${other}'s.` : null,
+        mapping: candidateMappingLine(race, me, tickerOf(sur)),
         winner: `Burns ${pct(wf)} of the burn pool once, when the ${me.label} outcome of the ${race.title.replace(/ Election Winner$/, "")} race resolves YES on Polymarket's on-chain payout. The ${race.stateName ?? "state"} certified result is the cross-check.`,
       },
     };

@@ -1,5 +1,5 @@
 import { PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
-import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+import { PAIR_BURN_SENTENCE, teamRefByName } from "@/lib/burnticker/describe";
 
 /**
  * WHERE A PAIR'S MONEY GOES, IN PLAIN WORDS (website brief 2026-10-11 §2), by rule version:
@@ -55,15 +55,15 @@ export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b:
  * live and still paired, else to $DEFICIT; the winning coin burns down its own rest (endSinkKeeper.ts); a level series records a void end
  * and each coin burns down on itself.
  */
-export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a: string; b: string }): FundsFlow {
+export function meetingsFundsFlow(tickers: { a: string; b: string }, teams: { a: string; b: string }, o: { playoffs?: boolean } = {}): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;
   return {
     version: "winner-takes-the-burn", versionLabel: "Rule version: winner takes the burn, every game between two teams this season",
-    oneLiner: `Each game between the ${teams.a} and the ${teams.b} burns the coin of the team that won it, and at the end of the season the rest goes to the coin of the team that won more of those games.`,
+    oneLiner: `Each game between ${teamRefByName(teams.a)} and ${teamRefByName(teams.b)} burns the coin of the team that won it, and at the end of the season the rest goes to the coin of the team that won more of those games.`,
     steps: [
       { title: "Where fees come from", text: FEES },
       { title: "After each game between them", text: "The coin of the team that won spends its own share of its burn pool burning itself. The other coin sends exactly the share its own rule sets for that game to the winning coin's burn pool, in a public transaction with a memo, and that SOL is spent burning the winning coin too. Games against other teams do nothing." },
-      { title: "At the end of the season", text: `When both teams' seasons are over, playoffs included, the coin of the team that won fewer of the games between them sends what is left in its burn pool, and any fees that arrive later, to the other coin's burn pool. The coin of the team that won more burns down what is left on itself. For example, if the ${teams.a} won more, ${B} sends its rest to the ${A} burn pool and all of it burns ${A}.` },
+      { title: "At the end of the season", text: `When both teams' seasons are over${o.playoffs === false ? "" : ", playoffs included"}, the coin of the team that won fewer of the games between them sends what is left in its burn pool, and any fees that arrive later, to the other coin's burn pool. The coin of the team that won more burns down what is left on itself. For example, if ${teamRefByName(teams.a)} won more, ${B} sends its rest to the ${A} burn pool and all of it burns ${A}.` },
     ],
     outcomes: [
       { when: "A game ends in a draw", then: "Nothing moves for that game. It counts for neither team." },

@@ -65,12 +65,12 @@ export function ReceiptThumb({ ticker, size = 88 }: { ticker: string; size?: num
   );
 }
 
-export function CoinThumb({ src, ticker, size = 88, generated = false }: { src: string | null; ticker: string; size?: number; generated?: boolean }) {
+export function CoinThumb({ src, ticker, size = 88, generated = false, preview = false }: { src: string | null; ticker: string; size?: number; generated?: boolean; /** website-22 (QA 9 item 7): a launch preview also shows the image file the creator just picked (a data: image) */ preview?: boolean }) {
   const [broken, setBroken] = useState(false);
   // no image of its own: the coin's generated image (coinArt.ts, GET /burnticker/img/<TICKER>.png) when it is registered; else the receipt
   // ChatGPT audit 6 item 23: a same-origin image (/burnticker/img/…, /burnticker/brand/…, $DEFICIT's art) is shown as is, so the app and
   // the static home print the one image a card names, never the generated initials instead
-  const url = src && /^https:\/\//.test(src) ? src : src && /^\/burnticker\/(img|brand)\/[\w.-]+$/.test(src) ? src : generated && /^[A-Z0-9]{2,10}$/.test(ticker) ? `/burnticker/img/${ticker}.svg` : null;
+  const url = preview && src && /^data:image\/(png|jpeg|gif|webp);base64,/.test(src) ? src : src && /^https:\/\//.test(src) ? src : src && /^\/burnticker\/(img|brand)\/[\w.-]+$/.test(src) ? src : generated && /^[A-Z0-9]{2,10}$/.test(ticker) ? `/burnticker/img/${ticker}.svg` : null;
   if (!url || broken) return <ReceiptThumb ticker={ticker} size={size} />;
   src = url;
   // eslint-disable-next-line @next/next/no-img-element -- creator images are arbitrary https URLs; no optimiser, no referrer
@@ -186,7 +186,7 @@ export function CoinCard({ c, href, prelaunch = false }: { c: CoinCardData; href
     return (
       <article className="bt-coin-card">
         <div className="flex gap-3">
-          <CoinThumb src={c.imageUrl} ticker={c.ticker} size={64} generated={!!href} />
+          <CoinThumb src={c.imageUrl} ticker={c.ticker} size={64} generated={!!href} preview />
           <div className="min-w-0 flex-1">
             {c.badge && <div className="flex flex-wrap gap-1.5"><span className="bt-chip bt-chip-window" title="The coin's window, fixed in its rule">{c.badge}</span></div>}
             <h3 className="mt-1 flex min-w-0 items-baseline gap-1 text-base font-semibold leading-tight"><span className="min-w-0 truncate">{c.name || "Coin name"}</span> <span className="shrink-0 font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>

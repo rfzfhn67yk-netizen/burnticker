@@ -78,6 +78,10 @@ export function statedClause(description: string | null | undefined): string | n
 
 /** The clause as coin text: links and bare domains out, "official information from" kept as the market says it, trimmed to 160. */
 export function statedPhrase(clause: string): string {
+  // QA pass 9 #23 (2026-10-13: "available at with the chart"): a link keeps its text ("[the BTC/USDT chart](https://…)" → "the BTC/USDT
+  // chart"), and a bare link becomes its site's name ("https://www.binance.com/…" → "the Binance website"), so no sentence loses its object
+  const site = (u: string) => { const h = /^(?:https?:\/\/)?(?:www\.)?([^/\s?#]+)/i.exec(u)?.[1] ?? ""; const name = h.split(".").slice(-2, -1)[0] ?? ""; return name ? `the ${name[0].toUpperCase()}${name.slice(1)} website` : " "; };
+  clause = clause.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1").replace(/\(\s*(?:https?:\/\/[^\s)]+|[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|gov|io|xyz|app|co)\b[^\s)]*)\s*\)/gi, " ").replace(URL_RE, (u) => site(u)).replace(BARE_DOMAIN, (d) => site(d));
   let p = clause.replace(URL_RE, " ").replace(BARE_DOMAIN, " ").replace(/\(\s*\)/g, " ").replace(/\s+found at\s*(?=[,;]|$)/gi, " ").replace(/\s+([,;])/g, "$1").replace(/\s{2,}/g, " ").trim();
   p = p.replace(/;\s*however,?\s*/i, ", and ").replace(/\bwill\b/gi, "may").replace(/[,;\s]+$/, "");
   if (p.length > 160) p = `${p.slice(0, 157).replace(/\s+\S*$/, "")}`;

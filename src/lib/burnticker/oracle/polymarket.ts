@@ -529,7 +529,7 @@ export class PolymarketClient implements OracleAdapter {
     const settlementSource = { name: "Conditional Tokens payout vector (Polygon)", url: POLYGONSCAN_CTF };
     if (POLY_MARKET_RE.test(ticker)) {
       const m = await this.marketByCondition(ticker);
-      return m ? { oracle: "polymarket", ticker, title: m.question, category: m.sportsMarketType, frequency: "once", settlementSource, tags: m.tags, stated: polyStated(m) } : null;
+      return m ? { oracle: "polymarket", ticker, title: m.question, category: m.sportsMarketType, frequency: "once", settlementSource, tags: m.tags, stated: polyStated(m), endsAt: m.endDate ?? null } : null;
     }
     const s = parsePolySeries(ticker);
     if (!s) return null;
