@@ -126,7 +126,9 @@ export const OPERATOR_CONTACT_TODO = "TODO_CONTACT_ADDRESS";
  * locked pool's liquidity fees only; feeShareLine.ts states it that way, from the designed split.
  */
 export const OPERATOR_SHARE_LINE = postGraduationShareLine(POST_GRADUATION_FEES);
-export const USE_OF_FEES = `Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume. ${OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;
+/** The fee disclosure in one line, the footer's DEV FEE row on every page (site-polish-2); USE_OF_FEES below is it plus the use. */
+export const DEV_FEE_LINE = `Burnticker takes ${BURNTICKER_DEV_FEE_BPS / 100}% of curve volume. ${OPERATOR_SHARE_LINE}`;
+export const USE_OF_FEES = `${DEV_FEE_LINE} The operator's part of the liquidity fees is fixed in code, and the coin side of those fees is burned. This income pays for the reading signers, hosting, the security reviews and bounty, and the operator. The operator and its wallets never trade any coin, including the platform's own. The only buybacks are each coin's program-run burn-pool purchases, and everything those purchases get is burned.`;
 /**
  * The attester line on the trust page (review 2 §2, 2026-10-11): the present fact, not a schedule — Switchboard ended its services and no
  * independent second attester exists. `dueBy` (14 days after the first launch) stays as the owner's internal check-in date only.

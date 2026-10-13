@@ -19,7 +19,9 @@ test("the leagues index: one banner and the compact list while empty; the cards 
 test("league pages lead with Teams; empty scoreboard and settled games collapse into one line", () => {
   assert.ok(league.indexOf('aria-label="teams"') < league.indexOf('aria-label="scoreboard"'), "Teams before Scoreboard");
   assert.ok(league.indexOf('aria-label="teams"') < league.indexOf('aria-label="settled games"'));
-  assert.match(league, /p\.boards\.length === 0 && p\.games\.rows\.length === 0 && p\.champions\.length === 0 \? \(\s*<p[^>]*data-league-empty>/);
+  // site-polish-2 (2026-10-13): the one empty-state line now sits above the team list (test/burntickerSitePolish2.test.ts)
+  assert.match(league, /const empty = p\.boards\.length === 0 && p\.games\.rows\.length === 0 && p\.champions\.length === 0;/);
+  assert.match(league, /\{empty && <p[^>]*data-league-empty>/);
 });
 
 test("no launch invitation while closed: every team launch link and the Derby create link sit behind launch.open", () => {

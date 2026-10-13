@@ -171,6 +171,10 @@
 		import static_site
 	}
 
+	# The static pages' two typefaces (site/burnticker/fonts, siteNav.mjs SHELL_FONTS): the $DEFICIT and status hosts load them from here,
+	# and a browser fetches a font from another origin only with this header.
+	header /fonts/* Access-Control-Allow-Origin "*"
+
 	# The platform's static receipts site: landing page, index.json, audit.json, ops.json, tokens.html, t/<ticker>/{index.html,status.json,receipts.json,rules.json}.
 	handle {
 		root * /var/www/burnticker

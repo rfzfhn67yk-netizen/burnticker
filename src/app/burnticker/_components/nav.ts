@@ -53,7 +53,7 @@ export function activeNav(pathname: string | null): string | null {
 }
 
 /** The phone tab bar (TabBar.tsx, under 900 px, on every page since 2026-10-12): Coins, Search, Launch, Seasons and Learn. */
-export interface TabItem { label: string; href: string; icon: string }
+export interface TabItem { label: string; href: string; icon: string; /** the accessible name: the visible label first (QA pass 9 item 43) */ name: string }
 export const TABS: TabItem[] = SITE_TABS;
 export const LEARN_TAB = "/burnticker/about";
 

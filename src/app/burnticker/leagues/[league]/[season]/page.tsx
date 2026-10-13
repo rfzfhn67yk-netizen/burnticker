@@ -51,6 +51,7 @@ export default async function LeagueSeasonRoute({ params }: Params) {
   if (!p) notFound();
   const card = "rounded-lg border border-neutral-800 bg-neutral-900 p-3";
   const withCoins = p.teams.filter((t) => t.coins.length > 0), rest = p.teams.filter((t) => t.coins.length === 0);
+  const empty = p.boards.length === 0 && p.games.rows.length === 0 && p.champions.length === 0;
   // review 2 §2: no launch invitation while creator launches are closed (one availability state: creatorLaunches.ts)
   let cluster: string | null = null;
   try { cluster = platform().cluster; } catch { cluster = null; }
@@ -68,7 +69,8 @@ export default async function LeagueSeasonRoute({ params }: Params) {
       </header>
       {err && <p className="text-red-400 text-xs">The coin registry could not be read just now. The error was: {err}</p>}
 
-      {/* site audit #9: league pages lead with the Teams list */}
+      {empty && <p className="text-neutral-400 border border-dashed border-neutral-800 rounded p-3 text-xs" data-league-empty>No team coin in the {p.leagueLabel} has a receipt this season yet. The scoreboard and the list of settled games fill in from the coins&apos; own receipts. {NO_WALLET_LINE}{launch.open ? "" : ` ${launch.closedLine}`}</p>}
+      {/* site audit #9: league pages lead with the Teams list (after the one empty-state line, when there is one) */}
       <section className="space-y-2" aria-label="teams">
         <h2 className="text-lg font-medium">Teams</h2>
         {withCoins.length > 0 && <ul className="grid gap-2 sm:grid-cols-2">{withCoins.map((t) => (
@@ -79,10 +81,9 @@ export default async function LeagueSeasonRoute({ params }: Params) {
         </details>
       </section>
       {/* site audit #9 / BT-10 (2026-10-11): before any coin has a receipt, the empty scoreboard and settled-games sections collapse into one
-          line under the teams; with receipts they render in full */}
-      {p.boards.length === 0 && p.games.rows.length === 0 && p.champions.length === 0 ? (
-        <p className="text-neutral-400 border border-dashed border-neutral-800 rounded p-3 text-xs" data-league-empty>No team coin in the {p.leagueLabel} has a receipt this season yet. The scoreboard and the list of settled games fill in from the coins&apos; own receipts. {NO_WALLET_LINE}{launch.open ? "" : ` ${launch.closedLine}`}</p>
-      ) : <>
+          line; since site-polish-2 (the private review, 2026-10-13) that line sits ABOVE the team list, so a phone reads why the page is
+          empty before scrolling a 30-team roster; with receipts the sections render in full below the teams */}
+      {empty ? null : <>
       <section className="space-y-3" aria-label="scoreboard">
         <h2 className="text-lg font-medium">Scoreboard</h2>
         <p className="text-xs text-neutral-500">{NO_WALLET_LINE}{launch.open ? "" : ` ${launch.closedLine}`}</p>

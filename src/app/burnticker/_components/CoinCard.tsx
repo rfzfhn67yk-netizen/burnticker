@@ -126,7 +126,7 @@ export function ViewCard({ v, headingLevel = 3, now }: { v: CardView; headingLev
   return (
     <article className={`bt-coin-card${v.tags.some((x) => x.tone === "featured") ? " is-featured" : ""}`} data-card={v.id} data-group={v.group}>
       <div className="flex gap-3">
-        <div data-row="image">{v.href ? <a href={v.href} tabIndex={-1} aria-hidden="true"><CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} /></a> : <CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} />}</div>
+        <div data-row="image">{v.href ? <a href={v.href} tabIndex={-1} aria-label={`${v.name} $${v.ticker}, coin page`}><CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} /></a> : <CoinThumb src={v.imageUrl} ticker={v.ticker} size={64} />}</div>
         <div className="min-w-0 flex-1">
           <H className="text-base font-semibold leading-tight">
             {v.href

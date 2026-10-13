@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { OPERATOR_LINE, USE_OF_FEES } from "@/lib/burnticker/fees";
-import { FOOTER_COPY, FOOTER_LEGAL_LINKS } from "@/lib/burnticker/siteNav.mjs";
+import { OPERATOR_LINE, DEV_FEE_LINE } from "@/lib/burnticker/fees";
+import { FOOTER_COPY, FOOTER_LEGAL_LINKS, FOOTER_ROWS } from "@/lib/burnticker/siteNav.mjs";
 import { NAV, LEARN, API_BASE_PATH, type NavItem } from "./nav";
 import { MailSafe } from "./MailSafe";
 import { LinkedWords } from "./LinkedWords";
@@ -19,14 +19,19 @@ export function FooterLink({ n }: { n: NavItem }) {
   return <Link href={n.href}>{n.label}</Link>;
 }
 
+/**
+ * site-polish-2 (2026-10-13): the slip is the static pages' slip row for row (siteNav.mjs shellFooterHtml): no tagline repeating the
+ * hero, and each row one line plus a link to its detail (the private review: the footer repeated whole explanations on every page). The
+ * full use-of-fees paragraph (USE_OF_FEES) is on the Trust page; the row prints its first line, DEV_FEE_LINE. The API row's address
+ * answers (GET /api/burnticker/v1, QA pass 9 item 10). No year: the server's clock never changes the slip.
+ */
 export function SiteFooter() {
-  const year = new Date().getFullYear();
+  const R = FOOTER_ROWS;
   return (
     <footer className="bt-footer" id="disclosure">
       <div className="bt-slip">
         <div className="bt-slip-head">
           <span className="bt-slip-title">BURNTICKER</span>
-          <span className="bt-slip-sub">COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS</span>
         </div>
         <div className="bt-rule" />
         <p className="bt-slip-text bt-slip-never"><b>{FOOTER_COPY.never}</b></p>
@@ -36,15 +41,15 @@ export function SiteFooter() {
         <p className="bt-slip-text"><LinkedWords text={FOOTER_COPY.legal} links={FOOTER_LEGAL_LINKS} /></p>
         <div className="bt-rule" />
         <dl className="bt-rows">
-          <div><dt>OPERATOR</dt><dd><MailSafe text={OPERATOR_LINE} /></dd></div>
-          <div><dt>DEV FEE</dt><dd>{USE_OF_FEES}</dd></div>
-          <div><dt>API</dt><dd><Link href="/burnticker/docs">{API_BASE_PATH}</Link></dd></div>
+          <div><dt>{R.operator.label}</dt><dd><span data-operator-line><MailSafe text={OPERATOR_LINE} /></span> <Link href={R.operator.href}>{R.operator.more}</Link></dd></div>
+          <div><dt>{R.fees.label}</dt><dd><span data-fee-line>{DEV_FEE_LINE}</span> <Link href={R.fees.href}>{R.fees.more}</Link></dd></div>
+          <div><dt>{R.api.label}</dt><dd><a href={API_BASE_PATH}>{API_BASE_PATH}</a> · <Link href={R.api.href}>{R.api.more}</Link></dd></div>
         </dl>
         <div className="bt-rule" />
         <nav className="bt-slip-links" aria-label="Footer">
           {[...NAV, ...LEARN].map((n) => <FooterLink key={n.href} n={n} />)}
         </nav>
-        <p className="bt-slip-end">— {year} · KEEP THIS RECEIPT —</p>
+        <p className="bt-slip-end">— {R.end} —</p>
       </div>
     </footer>
   );

@@ -21,6 +21,8 @@
   --color-neutral-800: #2d2925;
   --color-neutral-900: #1d1a17;
   --color-neutral-950: #12100e;
+  /* Tailwind's amber 300 written out (the preview banner's text), so the contrast test measures the shade the page draws */
+  --color-amber-300: #ffd236;
 }
 
 :root {
@@ -37,6 +39,10 @@
   --bt-stamp-solid: #5b3fa3;
   --bt-stamp-ink: #ffffff;
   --bt-scorch: #c8873a;
+  /* audit 7 item 19 (site-polish-2): the venue chips as tokens, so the paper theme can re-ink them (test/burntickerSitePolish2.test.ts
+     measures every badge and the preview banner in both themes) */
+  --bt-chip-kalshi: #6fcf97;
+  --bt-chip-polymarket: #8ea2ff;
   /* BURNTICKER'S OWN SYSTEM (legitimacy pass, website-16; docs/burnticker/ui-conventions.md): one type scale (the same steps as the
      Tailwind text-xs … text-2xl classes the pages use), one spacing scale, one radius, one transition duration, one focus ring */
   --bt-fs-xs: .75rem; --bt-fs-sm: .875rem; --bt-fs-base: 1rem; --bt-fs-lg: 1.125rem; --bt-fs-xl: 1.25rem; --bt-fs-2xl: 1.5rem;
@@ -55,6 +61,9 @@
   color-scheme: light;
   --color-neutral-50: #0f0e0c; --color-neutral-100: #1b1916; --color-neutral-200: #2a2622; --color-neutral-300: #38332d; --color-neutral-400: #4d473f;
   --color-neutral-500: #6b645a; --color-neutral-600: #948c7e; --color-neutral-700: #bdb5a4; --color-neutral-800: #d3ccbc; --color-neutral-900: #e9e4d7; --color-neutral-950: #f2eee4;
+  --bt-chip-kalshi: #1d7346; --bt-chip-polymarket: #3b4fc4;
+  /* audit 7 item 19: amber 300 is the launch preview banner's text; left at Tailwind's own shade it read 1.25:1 on paper */
+  --color-amber-300: #7a4a00;
   --color-red-400: #b42318; --color-amber-400: #8f5400; --color-amber-200: #6f4200; --color-amber-900: #f3e2b8; --color-emerald-400: #1d7346;
 }
 
@@ -80,7 +89,7 @@ body.bt-body {
 .bt-brand { display: flex; align-items: center; gap: 10px; color: var(--bt-ink); text-decoration: none; flex: 0 0 auto; }
 .bt-mark { width: 34px; height: 34px; border-radius: 50%; display: block; box-shadow: 0 0 0 1px var(--bt-line); }
 .bt-wordmark { font: 700 1.08rem/1 var(--font-mono); letter-spacing: .16em; }
-.bt-nav-desktop { display: none; align-items: center; gap: 2px; }
+.bt-nav-desktop { display: none; align-items: center; gap: 6px; margin-left: 12px; } /* site-polish-2: the static shell's spacing (SHELL_CSS .sh-nav) */
 .bt-nav-link { font: 700 .8rem/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bt-dim); text-decoration: none; padding: 9px 10px; border-radius: 4px; white-space: nowrap; }
 .bt-nav-link:hover { color: var(--bt-ink); background: var(--bt-counter); }
 .bt-nav-link.is-active { color: var(--bt-ink); box-shadow: inset 0 -2px 0 var(--bt-stamp); border-radius: 0; }
@@ -196,8 +205,8 @@ a:hover > .bt-coin-card, a.bt-coin-card:hover { border-color: var(--bt-stamp); }
 .bt-thumb-ticker { font-weight: 700; line-height: 1; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-thumb-rule { width: 70%; border-top: 1px dashed color-mix(in srgb, var(--bt-paper-ink) 60%, transparent); }
 .bt-chip { display: inline-block; font: 700 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; padding: 3px 6px; border-radius: 3px; border: 1px solid var(--bt-line); color: var(--bt-dim); }
-.bt-chip-kalshi { color: #6fcf97; border-color: color-mix(in srgb, #6fcf97 45%, transparent); }
-.bt-chip-polymarket { color: #8ea2ff; border-color: color-mix(in srgb, #8ea2ff 45%, transparent); }
+.bt-chip-kalshi { color: var(--bt-chip-kalshi); border-color: color-mix(in srgb, var(--bt-chip-kalshi) 45%, transparent); }
+.bt-chip-polymarket { color: var(--bt-chip-polymarket); border-color: color-mix(in srgb, var(--bt-chip-polymarket) 45%, transparent); }
 .bt-chip-catalogue, .bt-chip-feed { color: var(--bt-scorch); border-color: color-mix(in srgb, var(--bt-scorch) 50%, transparent); }
 .bt-chip-grad { color: var(--bt-stamp-ink); background: var(--bt-stamp-solid); border-color: var(--bt-stamp-solid); }
 .bt-chip-draft { border-style: dashed; }

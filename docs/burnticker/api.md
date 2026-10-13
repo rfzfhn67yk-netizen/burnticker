@@ -63,6 +63,7 @@ curl -s "$API/tokens/BRONCO/verify/KXNFLGAME-26SEP27LARDEN-DEN" | jq '.verified,
 | GET | `/bounty` | 60 s | read | the bounty wallet (operator-held, funded 2026-10-11), its live balance read from chain, the decided reports |
 | GET | `/snapshots?limit=` | 60 s | read | (API 1.7.0, trust ops; `src/lib/burnticker/ops/snapshot.ts`) the daily registry snapshots pinned to Arweave, newest first: `{ date, sha256, arweaveTxId, url, rowCounts, bytes, capturedAt, verify }` — the append-only ledger (rules, readings, receipts, pairs, pair outcomes, rule ends, launch pins) as canonical JSONL; re-download and recompute with `scripts/burnticker-verify-snapshot.mts <txid>` |
 | GET | `/current-status` | 60 s | read | (API 1.13.0, website brief §4; `src/lib/burnticker/currentStatus.ts`) the one current-status summary: phase, network deployment, programs (devnet bytes = build, upgrade authority read from chain), attesters and quorum, each Squads vault's time lock read from chain beside the planned value, settlement providers, per-finding review status, open release requirements, design vs historical |
+| GET | `/` | 300 s | read | the base path itself (1.16.0): `{ name, version, openapi, docs }`, so the address the site footer prints answers |
 | GET | `/openapi.json` | 3600 s | read | the OpenAPI 3.1 document |
 
 ### `POST /launch/bundle`

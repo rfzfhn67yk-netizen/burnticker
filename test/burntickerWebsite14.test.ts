@@ -258,7 +258,7 @@ describe("item 6: two paths on arrival, and why someone creates a coin", () => {
   test("Explore and Create with one sentence each; Create opens the closed-launches dialog while closed", () => {
     const home = read("site/burnticker/index.html");
     assert.deepEqual(TWO_PATHS.map((p) => p.label), ["Explore coins", "Create a coin"]);
-    assert.match(home, /<a class="path path-create" href="\/burnticker\/launch" data-launch-button>/);
+    assert.match(home, /<a class="path path-create" href="\/burnticker\/launch" data-launch-button data-create-path>/);
     assert.match(read("src/lib/burnticker/siteNav.mjs"), /btns\.forEach\(function \(btn\) \{ btn\.addEventListener\("click"/, "every launch button opens the dialog");
     for (const p of TWO_PATHS) { clean(p.text, p.label); assert.equal(p.text.split(/(?<=\.)\s/).length, 1, "one sentence each"); }
     clean(WALKTHROUGH_LINK.text, "walkthrough link");
