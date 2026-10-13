@@ -19,12 +19,17 @@
  * THE SETTLEMENT IS UNCHANGED: a coin settles only on the payout the Conditional Tokens contract records (oracle/polymarket.ts
  * resolvePolymarket). A proposal inside its dispute window is not a payout; the keeper reads "not resolved" and waits.
  */
+/**
+ * The NBA's schedule and confirmation while its own feed does not answer (HTTP 403 since 2026-10-12, sources/espn.ts probe note), in
+ * the one wording every page uses. Defined here, with no imports, so the SDK's import closure stays as it is; espn.ts re-exports it.
+ */
+export const NBA_FEED_WORDING = "the NBA's feed when it answers, otherwise TheSportsDB under licence";
 
 export interface StatedPublisher { id: string; name: string; re: RegExp; sources: readonly string[]; factTags: readonly string[]; crossRead: string }
 /** Publishers a Polymarket description may name that the catalogue has an adapter for. */
 export const STATED_PUBLISHERS: readonly StatedPublisher[] = [
   { id: "mlb", name: "MLB", re: /\bMLB\b|\bmlb\.com\b|Major League Baseball/i, sources: ["mlb.statsapi"], factTags: ["mlb", "baseball", "world-series", "mlb-playoffs"], crossRead: "MLB's official feed" },
-  { id: "nba", name: "the NBA", re: /\bNBA\b|\bnba\.com\b/i, sources: ["nba.cdn"], factTags: ["nba", "basketball", "nba-finals", "nba-playoffs"], crossRead: "the NBA's official feed" },
+  { id: "nba", name: "the NBA", re: /\bNBA\b|\bnba\.com\b/i, sources: ["nba.cdn"], factTags: ["nba", "basketball", "nba-finals", "nba-playoffs"], crossRead: NBA_FEED_WORDING },
   { id: "nhl", name: "the NHL", re: /\bNHL\b|\bnhl\.com\b/i, sources: ["nhl.score"], factTags: ["nhl", "hockey", "stanley-cup"], crossRead: "the NHL's official scores" },
   { id: "bls", name: "the Bureau of Labor Statistics", re: /Bureau of Labor Statistics|\bbls\.gov\b|\bBLS\b/i, sources: ["bls.CUSR0000SA0", "bls.LNS14000000", "bls.eggs"], factTags: ["cpi", "inflation", "unemployment", "jobs-report", "egg-prices"], crossRead: "the Bureau of Labor Statistics release" },
   { id: "fed", name: "the Federal Reserve", re: /Federal Reserve|federalreserve\.gov|\bFOMC\b|stlouisfed\.org|\bFRED\b/i, sources: ["fred.UNRATE", "fred.CPIAUCSL", "fred.GFDEBTN"], factTags: ["cpi", "inflation", "unemployment"], crossRead: "the St. Louis Fed's FRED series" },
