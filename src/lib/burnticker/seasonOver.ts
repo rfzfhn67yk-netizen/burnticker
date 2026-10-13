@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { parseEspnSeries, seasonLabel, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { parseEspnSeries, seasonLabel, seasonYearAt, teamByAbbr, teamSeries, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { teamRef } from "@/lib/burnticker/describe";
 
 /**
@@ -33,33 +33,55 @@ function seasonOf(rule: Pick<BurnRule, "oracle" | "series">): { league: LeagueId
   return { league: e.league, abbr: e.abbr, outcome: e.outcome, year: e.window.year, window: e.window.kind };
 }
 
-/** The refusal for a season rule whose team's season is over (call it only once the schedule says so); null for any other rule. */
-export function seasonOverRefusal(rule: Pick<BurnRule, "oracle" | "series">): SeasonOverRefusal | null {
+/**
+ * The refusal for a season rule whose team's season is over (call it only once the schedule says so, or for an earlier season); null
+ * for any other rule. The offer is the next season that has not started: the season after the rule's, and never one before the current.
+ */
+export function seasonOverRefusal(rule: Pick<BurnRule, "oracle" | "series">, now: number = Date.now()): SeasonOverRefusal | null {
   const s = seasonOf(rule);
   if (!s) return null;
+  const nextYear = Math.max(s.year + 1, seasonYearAt(s.league, now));
   const team = teamByAbbr(s.league, s.abbr), ref = team ? teamRef(s.league, team.nickname) : s.abbr;
   const Ref = ref[0].toUpperCase() + ref.slice(1);
-  const label = seasonLabel(s.league, s.year), nextLabel = seasonLabel(s.league, s.year + 1);
+  const label = seasonLabel(s.league, s.year), nextLabel = seasonLabel(s.league, nextYear);
   let series: string;
-  try { series = teamSeries(s.league, s.abbr, s.outcome, { kind: s.window, year: s.year + 1 }); } catch { return null; }
+  try { series = teamSeries(s.league, s.abbr, s.outcome, { kind: s.window, year: nextYear }); } catch { return null; }
   const what = s.window === "post" ? "postseason" : "season";
   return {
     code: "season-over", status: 409,
     message: `${Ref} have no games left in the ${label} ${what}, so a coin on it would end right away and its pool would go to $DEFICIT. Pick the ${nextLabel} ${what} instead, or a coin on next season's title market from the event list.`,
-    next: { series, year: s.year + 1, label: nextLabel, window: s.window },
+    next: { series, year: nextYear, label: nextLabel, window: s.window },
   };
 }
 
 /** The platform's schedule port: the league's games for the next `days` days. */
 export type SeasonSchedule = (league: LeagueId, days: number) => Promise<Game[]>;
 
-/** One bounded schedule read (default 3 seconds), then the refusal when the team's season is over. Null on any other answer. */
-export async function seasonOverFor(rule: unknown, schedule: SeasonSchedule | null | undefined, o: { timeoutMs?: number } = {}): Promise<SeasonOverRefusal | null> {
+/**
+ * One bounded schedule read (default 3 seconds), then the refusal when the team's season is over. Null on any other answer.
+ * sources-7 round 2 (WIRING-WEBSITE25-REQUESTS H6: the offered 2027 season was refused as over too, because a season that has not
+ * started lists no games either): only the CURRENT season (espn.ts seasonYearAt) is read against the schedule; a later season is never
+ * over (the review says it is not listed yet, seasonNotStartedLine); an earlier season is over without a read.
+ */
+export async function seasonOverFor(rule: unknown, schedule: SeasonSchedule | null | undefined, o: { timeoutMs?: number; now?: number } = {}): Promise<SeasonOverRefusal | null> {
   const r = rule && typeof rule === "object" ? rule as Pick<BurnRule, "oracle" | "series"> : null;
   const s = r ? seasonOf(r) : null;
-  if (!s || !schedule) return null;
+  const now = o.now ?? Date.now();
+  if (!s) return null;
+  const cur = seasonYearAt(s.league, now);
+  if (s.year > cur) return null;
+  if (s.year < cur) return seasonOverRefusal(r!, now);
+  if (!schedule) return null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const games = await Promise.race([schedule(s.league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), o.timeoutMs ?? 3_000); })]);
   clearTimeout(timer);
-  return games && seasonStatus(s.abbr, games, true).status === "over" ? seasonOverRefusal(r!) : null;
+  return games && seasonStatus(s.abbr, games, true).status === "over" ? seasonOverRefusal(r!, now) : null;
+}
+
+/** A season rule on a season that has not started yet: said as a warning (its games are not listed yet), never refused. Null otherwise. */
+export function seasonNotStartedLine(rule: unknown, now: number = Date.now()): string | null {
+  const r = rule && typeof rule === "object" ? rule as Pick<BurnRule, "oracle" | "series"> : null;
+  const s = r ? seasonOf(r) : null;
+  if (!s || s.year <= seasonYearAt(s.league, now)) return null;
+  return `The ${seasonLabel(s.league, s.year)} ${s.window === "post" ? "postseason" : "season"} has not started, so its games are not listed yet. This coin counts them once they are on the schedule and played.`;
 }

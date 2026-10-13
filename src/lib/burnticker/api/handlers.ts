@@ -608,7 +608,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   if ("error" in upA) return upA;
   const uploaded = upA.up;
   const textProblems = creatorTextProblems({ name: input.name, ticker: input.ticker, note, description: creatorText, linkLabels: input.links.map((l) => String(l?.label ?? "")) });
-  if (textProblems.length) return { error: fail(403, `This launch is refused: ${textProblems.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(textProblems.map((x) => x.category))], problems: textProblems.map((x) => x.reason) }) };
+  if (textProblems.length) return { error: fail(403, `This launch is refused: ${textProblems.map((x) => x.reason).join("; ")}`, { code: "copy-lint", categories: [...new Set(textProblems.flatMap((x) => x.categories))], problems: textProblems.map((x) => x.reason) }) };
   // THE IMAGE IS THE GENERATED RECEIPT ART (owner decision 2026-10-10); a creator's own image only with BURNTICKER_CUSTOM_IMAGES_ENABLED.
   if (input.imageUrl && !p.customImages) return { error: fail(400, "This site does not take custom images. Every coin's image is its generated receipt art.", { code: "custom-image-off" }) };
   if (input.imageUrl && (body as { imageRights?: unknown }).imageRights !== true) return { error: fail(400, `Confirm the image line first: "${RIGHTS_LINE}"`, { code: "image-rights" }) };

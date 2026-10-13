@@ -5,7 +5,7 @@ import { nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/n
 import { KALSHI_UNAVAILABLE } from "@/lib/burnticker/venues";
 import { VAULT_HIDDEN_SENTENCE } from "@/lib/burnticker/hostedLaunch";
 import { loadRefuseList, nameRefusals } from "@/lib/burnticker/oracle/refuse";
-import { loadMajors, loadReserved, majorProblem, reservedProblem } from "@/lib/burnticker/reservedNames";
+import { isReserved, loadMajors, loadReserved, majorProblem, reservedProblem, RESERVED_TICKER_REFUSAL } from "@/lib/burnticker/reservedNames";
 import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
 import { lookalikeRefusal, type LookalikeExisting } from "@/lib/burnticker/lookalike";
@@ -187,18 +187,18 @@ export function otherTeamTickerProblem(ticker: string, rule: Pick<BurnRule, "ora
   return null;
 }
 
-export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): PreflightRefusal[] {
-  const out: PreflightRefusal[] = [];
+export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): (PreflightRefusal & { /** sources-7 round 2: the field it belongs to */ field: "name" | "ticker" | "description" | "note" })[] {
+  const out: (PreflightRefusal & { field: "name" | "ticker" | "description" | "note" })[] = [];
   // the name's control characters are nameProblem's (launchFields.ts), which both the review and the bundle already run
-  for (const [field, text] of [["description", s.description ?? ""], ["note", s.note ?? ""]] as const) { const c = controlCharProblem(text, field); if (c) out.push({ status: 400, code: "control-characters", message: c }); }
+  for (const [field, text] of [["description", s.description ?? ""], ["note", s.note ?? ""]] as const) { const c = controlCharProblem(text, field); if (c) out.push({ status: 400, code: "control-characters", message: c, field }); }
   let reserved: ReadonlySet<string> = new Set(), majors: ReadonlySet<string> = new Set();
   try { reserved = ctx.reserved ?? loadReserved(); } catch { /* an unreadable list refuses nothing */ }
   try { majors = ctx.majors ?? loadMajors(); } catch { /* the same */ }
-  { const rp = reservedProblem(s, reserved); if (rp) out.push({ status: 403, code: "reserved", message: rp }); }
-  { const mp = majorProblem(s, majors); if (mp) out.push({ status: 403, code: "major-ticker", message: mp }); }
-  { const ot = otherTeamTickerProblem(s.ticker, ctx.rule); if (ot) out.push({ status: 403, code: "other-team-ticker", message: ot }); }
-  if (ctx.refuseList !== false) try { const nr = nameRefusals(loadRefuseList(), s.name, s.ticker); if (nr.length) out.push({ status: 403, code: "refused", message: `This launch is refused: ${nr.map((x) => x.reason).join("; ")}` }); } catch { /* the bundle reads it again */ }
-  if (ctx.existing) { const look = lookalikeRefusal({ ticker: s.ticker, name: s.name, rule: ctx.rule ?? null }, ctx.existing); if (look) out.push({ status: 409, code: "lookalike", message: look.reason }); }
+  { const rp = reservedProblem(s, reserved); if (rp) out.push({ status: 403, code: "reserved", message: rp, field: rp === RESERVED_TICKER_REFUSAL ? "ticker" : "name" }); }
+  { const mp = majorProblem(s, majors); if (mp) out.push({ status: 403, code: "major-ticker", message: mp, field: isReserved(s.ticker, majors) ? "ticker" : "name" }); }
+  { const ot = otherTeamTickerProblem(s.ticker, ctx.rule); if (ot) out.push({ status: 403, code: "other-team-ticker", message: ot, field: "ticker" }); }
+  if (ctx.refuseList !== false) try { const nr = nameRefusals(loadRefuseList(), s.name, s.ticker); if (nr.length) out.push({ status: 403, code: "refused", message: `This launch is refused: ${nr.map((x) => x.reason).join("; ")}`, field: "name" }); } catch { /* the bundle reads it again */ }
+  if (ctx.existing) { const look = lookalikeRefusal({ ticker: s.ticker, name: s.name, rule: ctx.rule ?? null }, ctx.existing); if (look) out.push({ status: 409, code: "lookalike", message: look.reason, field: "ticker" }); }
   return out;
 }
 

@@ -267,7 +267,7 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
   if (o.follow === "rivalry" && o.pairKind === "teams") {
     if (id === "every") return { label: "Each time its own team loses", sentence: "Each coin spends a share of its own burn pool after each game its team loses, this season." };
     if (id === "fade") return { label: "Each game its own team does not lose", sentence: "Each coin spends a share of its own burn pool after each game its team wins or ties, this season." };
-    if (id === "once") return o.gameLabel ? { label: `Their game on ${o.gameLabel} only`, sentence: `When their game on ${o.gameLabel} is final, the coin of the team that lost burns once.` } : { label: "Their next game only", sentence: "When their next listed game is final, the coin of the team that lost burns once." };
+    if (id === "once") return o.gameLabel ? { label: `Their game on ${o.gameLabel} only`, sentence: `When their game on ${o.gameLabel} is final, each coin burns once if its own team lost. The two coins are not linked, so no SOL moves between them.` } : { label: "Their next game only", sentence: "When their next listed game is final, each coin burns once if its own team lost. The two coins are not linked, so no SOL moves between them." };
   }
   if (o.follow === "market" && id === "fade") return { label: MARKET_NO_LABEL, sentence: MARKET_NO_SENTENCE };
   // website-22 (audit 10 item 22): a one-time market's two sides are its YES and its NO payout, each once
