@@ -1,5 +1,5 @@
 import { CROSS_LABEL, SETTLED_ON, countedOfficialOf, crossIdOf } from "@/lib/burnticker/sources/gameSettle";
-import { LEAGUES, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, NBA_FEED_WORDING, type LeagueId } from "@/lib/burnticker/sources/espn";
 
 /**
  * WHERE A SPORTS RULE'S DATA COMES FROM, IN WORDS GENERATED FROM THE RESOLVER (ChatGPT launch audit 5, L05, 2026-10-11: the exact-market
@@ -22,7 +22,7 @@ import { LEAGUES, type LeagueId } from "@/lib/burnticker/sources/espn";
 /** The official feeds counted as a confirmation today (the NBA's only while it answers: gameSettle.ts countedOfficialOf). */
 const OFFICIAL_FEEDS = (["mlb", "nhl", "nba"] as LeagueId[]).map(countedOfficialOf).filter((x): x is NonNullable<typeof x> => !!x).map((id) => CROSS_LABEL[id]);
 /** The NBA's schedule while its own feed does not answer: the feed when it answers, else TheSportsDB under licence. */
-const NBA_SCHEDULE = "the NBA's feed when it answers, otherwise TheSportsDB under licence";
+const NBA_SCHEDULE = NBA_FEED_WORDING;
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`);
 
 export const SPORTS_PROVENANCE = {

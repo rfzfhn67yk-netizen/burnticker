@@ -22,7 +22,8 @@ import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { ty
  * No official NBA endpoint answers, so NBA_OFFICIAL_ANSWERS is false: the NBA schedule is read from TheSportsDB (league 4387) first and
  * the cdn is tried only when TheSportsDB cannot be read or no key is set. Re-probe and flip the flag if the cdn answers 200 again; the
  * series ids and team pins do not depend on which feed listed the games (teams resolve by name to the same frozen table). TheSportsDB's
- * NBA rounds (checked the same night on its public test key): intRound 0 regular season, 500 preseason (dropped), 125 to 180 the
+ * NBA rounds (checked the same night on its public test key): intRound 0 regular season, 500 preseason (dropped in every league read
+ * through TheSportsDB, not only the NBA), 125 to 180 the
  * playoffs (2025 second round 125, the 2025 Finals 180); a December game with a round number is the NBA Cup final, which does not count
  * in the standings and is dropped as the NBA's own feed did (game ids 006).
  *
@@ -316,6 +317,10 @@ export function nbaGames(body: unknown): Game[] {
     return mk("nba", g.gameId!, g.gameDateTimeUTC!, /^002/.test(g.gameId!) ? 2 : 3, year, g.gameStatus === 3 ? "post" : g.gameStatus === 2 ? "in" : "pre", g.gameStatus === 3, g.gameStatusText ?? "", sideOf("nba", "home", nm(g.homeTeam), null, num(g.homeTeam?.score)), sideOf("nba", "away", nm(g.awayTeam), null, num(g.awayTeam?.score)));
   });
 }
+/** TheSportsDB's round number for a preseason game, in every league (dropped by tsdbGames). */
+export const TSDB_PRESEASON_ROUND = 500;
+/** The NBA's schedule and confirmation while its own feed does not answer, in the one wording every page uses (NBA_OFFICIAL_ANSWERS). */
+export { NBA_FEED_WORDING } from "@/lib/burnticker/sources/polyStated";
 /** TheSportsDB league ids (v2 schedule/league/<id>/<season>). Checked against TheSportsDB's public league pages; verify on the licensed account. */
 export const TSDB_LEAGUE: Partial<Record<LeagueId, string>> = { wnba: "4516", mcbb: "4607", wcbb: "4608", nfl: "4391", cfb: "4479", "eng.1": "4328", "esp.1": "4335", "ita.1": "4332", "ger.1": "4331", "fra.1": "4334", "uefa.champions": "4480", "uefa.europa": "4481", "uefa.europa.conf": "5071", "usa.1": "4346", "usa.nwsl": "4521", "mex.1": "4350", "ned.1": "4337", "por.1": "4344", "eng.2": "4329", "sco.1": "4330", "bra.1": "4351", "arg.1": "4406", nba: "4387", mlb: "4424", nhl: "4380" };
 export const tsdbSeasonCode = (league: LeagueId, year: number): string => (LEAGUES[league].span === "single" ? String(year) : LEAGUES[league].span === "later" ? `${year - 1}-${year}` : `${year}-${year + 1}`);
@@ -335,8 +340,9 @@ export const redactKey = (url: string): string => url.replace(/(thesportsdb\.com
 export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[] {
   const lists = body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][]) : [];
   const nbaRound = (e: Record<string, unknown>) => { const r = Number(e.intRound ?? 0); return Number.isFinite(r) ? r : 0; };
-  // the NBA (header note): round 500 is the preseason and a December round is the NBA Cup final, neither counts; 100 to 499 is the playoffs
-  const keep = (e: Record<string, unknown>) => league !== "nba" || (nbaRound(e) !== 500 && !(nbaRound(e) >= 100 && String(e.dateEvent ?? e.strTimestamp ?? "").slice(5, 7) === "12"));
+  // TheSportsDB's round 500 is the PRESEASON in every league it lists (header note): never a game, a meeting or part of a season window.
+  // NBA only: a December game with a round number is the NBA Cup final, which does not count in the standings; 100 to 499 is the playoffs
+  const keep = (e: Record<string, unknown>) => nbaRound(e) !== TSDB_PRESEASON_ROUND && (league !== "nba" || !(nbaRound(e) >= 100 && String(e.dateEvent ?? e.strTimestamp ?? "").slice(5, 7) === "12"));
   const post = (e: Record<string, unknown>) => (league === "nba" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
   return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e)).map((e) => {
     const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
