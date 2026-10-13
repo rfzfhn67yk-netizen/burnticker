@@ -71,12 +71,12 @@ function assertCardChain(c: Suggestion) {
 }
 
 describe("L01 / L10 — one typed draft from every card and template to the program", () => {
-  test("the presets are one definition: recurring 1, 2 or 5 % (default 2), one-shot 100 or 50 % (default 100; website-19)", () => {
-    assert.deepEqual(SHARE_PRESETS, { recurring: [0.01, 0.02, 0.05], oneShot: [1, 0.5] });
+  test("the presets are one definition: recurring 1, 2, 5, 10 or 25 % (default 2), one-shot 100 or 50 % (default 100; owner 2026-10-12)", () => {
+    assert.deepEqual(SHARE_PRESETS, { recurring: [0.01, 0.02, 0.05, 0.1, 0.25], oneShot: [1, 0.5] });
     assert.deepEqual(DEFAULT_SHARE, { recurring: 0.02, oneShot: 1 });
-    assert.equal(presetRowLabel("recurring"), "1, 2 or 5%");
-    assert.deepEqual(snapToPreset(0.1, "recurring"), { value: 0.05, changed: true }, "a 10 % share is moved, and the move is reported");
-    assert.match(presetProblem(firstPartyRule(nwsSeries("high", "DTW", 90), 0.1))!, /burns 10% each time/);
+    assert.equal(presetRowLabel("recurring"), "1, 2, 5, 10 or 25%");
+    assert.deepEqual(snapToPreset(0.03, "recurring"), { value: 0.02, changed: true }, "a 3 % share is moved, and the move is reported");
+    assert.match(presetProblem(firstPartyRule(nwsSeries("high", "DTW", 90), 0.03))!, /burns 3% each time/);
   });
 
   test("the weather card (the audit's case): 'Detroit high above 90' burns 2 %, and the review, request and program all say 2 %", async () => {

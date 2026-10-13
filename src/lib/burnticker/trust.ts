@@ -5,6 +5,7 @@ import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { loadVerifiedBuild } from "@/lib/burnticker/trustpack/verifiedBuild";
 import { decodePlatform, type PlatformView } from "@/lib/burnKeeper/launch";
 import { upgradeDelaySummary } from "@/lib/burnticker/currentStatusText";
+import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { lpLockPolicyJson, operatorTreasuryRecord, type LpLockPolicyJson } from "@/lib/burnticker/lockFees";
 import { compareLivePlatform, CURVE_FEES, POST_GRADUATION_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, LP_FEES_TO_BURN_POOL_BPS, LP_FEES_TO_OPERATOR_BPS, BURNTICKER_DEV_FEE_BPS, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_CONTACT_TODO, USE_OF_FEES, attesterStatusLine, devFeeWallet, type LiveVsDesigned } from "@/lib/burnticker/fees";
 
@@ -360,7 +361,7 @@ export async function buildTrustPage(i: { reader: ChainReader | null; env?: Read
     transparency,
     statements: [
       `At graduation, ${LP_LOCKED_PCT}% of the LP is locked forever with Raydium's LP lock and can never be withdrawn. A creator cannot change this. The platform settings that do it are platformScale 1,000,000, creatorScale 0 and burnScale 0. The Fee Key belongs to the burn program's fee-keys account. Anyone can call the fee claim (claim_lock_fees), which splits the LP fees 80% to the coin's burn pool and 20% to the operator treasury. That split is fixed in code, and the coin side is burned. The program also sets a minimum share of locked LP for a burn pool: ≥ 50 % at registration (≥ 90 % for the fallback pool); our platform locks 100 % at graduation.`,
-      `The operator earns 20% of the LP fees after graduation. That is ${LP_FEES_TO_OPERATOR_BPS / 100}% of every swap after graduation, paid to ${operatorTreasuryRecord(cluster).who}. Another ${LP_FEES_TO_BURN_POOL_BPS / 100}% goes to the coin's burn pool. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No admin key can change the 80/20 split.`,
+      `${postGraduationShareLine(postGraduationFeesFor(cluster))} The operator's share is paid to ${operatorTreasuryRecord(cluster).who}. On the launch curve, the developer's share is ${BURNTICKER_DEV_FEE_BPS / 100}%. No admin key can change how the liquidity fees are split.`,
       "Creators get no cash from fees. The creator-fee slot pays 100% to the coin's burn pool.",
       "There is no team allocation. There is no presale, no private round and no airdrop to insiders. The platform holds no tokens at launch.",
       "Rules, readings and receipts are append-only. Database triggers refuse any update or delete. Changing a rule means launching a new token.",

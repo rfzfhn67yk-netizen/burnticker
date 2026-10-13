@@ -184,7 +184,7 @@ export function CoinCard({ c, href, prelaunch = false }: { c: CoinCardData; href
           <CoinThumb src={c.imageUrl} ticker={c.ticker} size={64} generated={!!href} />
           <div className="min-w-0 flex-1">
             {c.badge && <div className="flex flex-wrap gap-1.5"><span className="bt-chip bt-chip-window" title="The coin's window, fixed in its rule">{c.badge}</span></div>}
-            <h3 className="mt-1 truncate text-base font-semibold leading-tight">{c.name || "Coin name"} <span className="font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>
+            <h3 className="mt-1 flex min-w-0 items-baseline gap-1 text-base font-semibold leading-tight"><span className="min-w-0 truncate">{c.name || "Coin name"}</span> <span className="shrink-0 font-mono text-sm text-neutral-400">${c.ticker || "TICKER"}</span></h3>
           </div>
         </div>
         <dl className="bt-card-rows"><div data-row="rule"><dt>Rule</dt><dd>{asSentence(c.oneLiner)}</dd></div></dl>

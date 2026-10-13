@@ -16,9 +16,9 @@ const lint = (t: string) => lintCopy(t, loadCopyLintConfig()).hits.map((h) => `$
 const KALSHI_ONE_SHOT = { schema: "burnticker.rules/v1", oracle: "polymarket", series: null, market: `0x${"ab".repeat(32)}`, filter: {}, kind: "binary", binary: { onYes: { fractionOfPool: 1 }, onNo: null }, scalar: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null, pair: null, onEnd: WIND_DOWN_ON_END };
 
 describe("the schema", () => {
-  test("a one-shot may spend 100 %; a recurring rule stays ≤ 10 %; onEnd and the outcome set are locked by the hash", () => {
+  test("a one-shot may spend 100 %; a recurring rule stays ≤ 25 %; onEnd and the outcome set are locked by the hash", () => {
     assert.equal(lockRule(KALSHI_ONE_SHOT).rule.binary!.onYes!.fractionOfPool, 1);
-    assert.throws(() => lockRule({ ...KALSHI_ONE_SHOT, market: null, series: "tag:nfl/moneyline" }), /\[0\.01, 0\.1\].*one-shot may go to 1\.00/);
+    assert.throws(() => lockRule({ ...KALSHI_ONE_SHOT, market: null, series: "tag:nfl/moneyline" }), /\[0\.01, 0\.25\].*one-shot may go to 1\.00/);
     assert.throws(() => lockRule({ ...KALSHI_ONE_SHOT, onEnd: { windDownDays: 3, sweepThresholdLamports: 50_000_000 } }), /onEnd must be/);
     const withSet = lockRule({ ...KALSHI_ONE_SHOT, set: { id: "nfl-2026", outcome: "PHI", forwardBps: 10_000 } });
     assert.notEqual(withSet.sha256, lockRule(KALSHI_ONE_SHOT).sha256);

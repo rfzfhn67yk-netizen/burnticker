@@ -97,7 +97,7 @@ describe("the four questions", () => {
   test("the page: question 1 alone on the first screen, the classic search in a closed disclosure, Back and Start over at every step", () => {
     assert.match(page, /step === "choose" && guide\.phase === "follow" && <FollowStep/);
     assert.match(page, /<details className="[^"]*" open=\{classicOpen\}.*data-classic>/);
-    assert.match(page, /<GuidedTop phase=\{guide\.follow \? guide\.phase : "follow"\} onBack=\{guide\.follow \? back : null\} onStartOver=\{\(\) => startOver\(\)\}/);
+    assert.match(page, /<GuidedTop phase=\{guide\.follow \? guide\.phase : "follow"\} answers=\{guideAnswers\} onJump=\{jumpTo\} onBack=\{guide\.follow \? back : null\} onStartOver=\{\(\) => startOver\(\)\}/);
     assert.match(steps, /data-start-over>Start over<\/button>/); assert.match(steps, /data-nav className="underline" onClick=\{onBack\}>← Back<\/button>/);
     assert.match(page, /if \(guide\.follow && guide\.phase === "burn"\) \{/); assert.match(page, /if \(guide\.follow && guide\.phase === "end"\) \{/);
     assert.doesNotMatch(page, /data-help="search" autoFocus/, "nothing scrolls on the first paint");
@@ -109,7 +109,7 @@ describe("the four questions", () => {
     assert.match(mount, /setSavedDraft\(s\)/);
     assert.match(page, /useEffect\(\(\) => \{ const y = restoreScroll\.current; restoreScroll\.current = null; window\.scrollTo\(\{ top: y \?\? 0 \}\); \}, \[step\]\);/);
     assert.match(page, /You have a draft: \{String\(savedDraft\.name \|\| savedDraft\.ticker \|\| "unnamed"\)\}\. <button type="button" data-nav className="underline" onClick=\{resumeDraft\}>Resume<\/button>/);
-    assert.match(page, /const startOver = \(force = false\) => \{ if \(!force && needsConfirm\) \{ setConfirmOver\(true\); return; \} try \{ sessionStorage\.removeItem\(STORE\); \}/);
+    assert.match(page, /const startOver = \(force = false\) => \{ if \(!force && needsConfirm\) \{ setConfirmOver\(true\); return; \} try \{ sessionStorage\.removeItem\(STORE\);/);
     assert.match(page, /const needsConfirm = \(!nameAuto && !!name\.trim\(\)\) \|\| \(!tickerAuto && !!ticker\.trim\(\)\) \|\| !!profile\.image \|\| !!profileB\.image;/);
     assert.match(page, /const linked = wantPair \|\| q0\.get\("derby"\) === "1" \|\| !!q0\.get\("template"\) \|\| !!q0\.get\("like"\);\n\s+if \(linked\) \{ try \{ sessionStorage\.removeItem\(STORE\); \}/, "snag 6: a link never reopens a saved draft");
   });
@@ -188,7 +188,7 @@ describe("one-shots, budgets and the end before graduation", () => {
   test("one-shot presets are 100 or 50 % everywhere a rule resolves once (a market, a release, the flippening); the Dodgers sentence pins", () => {
     assert.deepEqual(SHARE_PRESETS.oneShot, [1, 0.5]); assert.equal(DEFAULT_SHARE.oneShot, 1);
     assert.equal(dialsFor(poly()).bounds.max, 1); assert.equal(dialsFor(firstPartyRule("ll2.launch:abc", 1) as BurnRule).bounds.max, 1);
-    assert.equal(dialsFor(firstPartyRule(gameSeries("mlb", "401999999", "LAD", "loss"), 0.02) as BurnRule).bounds.max, 0.1, "a single game stays at the recurring bounds: the keeper does not drain it");
+    assert.equal(dialsFor(firstPartyRule(gameSeries("mlb", "401999999", "LAD", "loss"), 0.02) as BurnRule).bounds.max, 0.25, "a single game stays at the recurring bounds: the keeper does not drain it");
     assert.match(tile, /shares=\{\{ options: \[\.\.\.\(flip \? SHARE_PRESETS\.oneShot : SHARE_PRESETS\.recurring\)\]/);
     assert.deepEqual(oneShotSentences({ share: 1, happened: "the Dodgers won the World Series", subject: "they" }), ["This coin burns its whole pool once, when Polymarket's payout says the Dodgers won the World Series.", "The burn lands in slices sized to the pool's liquidity.", "If they do not, the rest goes to $DEFICIT's burn."]);
     assert.equal(oneShotSentences({ share: 0.5, happened: "x", subject: "it" })[0], "This coin burns 50% of its pool once, when Polymarket's payout says x.");

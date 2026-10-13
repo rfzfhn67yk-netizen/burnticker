@@ -73,13 +73,31 @@ export function decodeCreatorImage(v: unknown): { ok: { bytes: Uint8Array; conte
   return { ok: { bytes, contentType: sniffed } };
 }
 
+/**
+ * A web address a creator may link (intent audit item 13, 2026-10-12: "https://?" passed the old pattern check). The address is PARSED
+ * (new URL) and must be https, at most 200 characters with no spaces, carry no user name or password, and name a host with a dot whose
+ * last label is a real top-level name ("x.com" passes; "x", "?" and "localhost" do not). The page and the server use this one check.
+ */
+export function isWebLink(raw: string): boolean {
+  if (typeof raw !== "string" || !/^https:\/\/\S{1,200}$/.test(raw)) return false;
+  let u: URL;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== "https:" || u.username || u.password) return false;
+  const labels = u.hostname.split(".");
+  return labels.length >= 2 && labels.every((l) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(l)) && /^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/i.test(labels[labels.length - 1]);
+}
+/** The sentence for a link that is not a web address, naming its field. */
+export const linkProblem = (label: string, raw: string): string | null =>
+  !/^https:\/\/\S{1,200}$/.test(raw) ? `The ${label} link has to start with https:// and have no spaces.` : !isWebLink(raw) ? `The ${label} link is not a full web address. Use one like https://example.com.` : null;
+
 /** The creator's links, from the three fields: https only, labelled X, Telegram or Website. Problems name the field. */
 export function creatorLinks(v: { x?: string; telegram?: string; website?: string }): { links: { label: string; url: string }[]; problems: string[] } {
   const links: { label: string; url: string }[] = [], problems: string[] = [];
   for (const [label, raw] of [["X", v.x], ["Telegram", v.telegram], ["Website", v.website]] as const) {
     const u = (raw ?? "").trim();
     if (!u) continue;
-    if (!/^https:\/\/\S{1,200}$/.test(u)) { problems.push(`The ${label} link has to start with https:// and have no spaces.`); continue; }
+    const lp = linkProblem(label, u);
+    if (lp) { problems.push(lp); continue; }
     links.push({ label, url: u });
   }
   return { links, problems };

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { FOLLOW_CHOICES, GUIDED_STEPS, progressLabel, type EndOption, type FollowId, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
-import { pctLabel } from "@/lib/burnticker/launchPresets";
+import { MAIN_RECURRING, pctLabel } from "@/lib/burnticker/launchPresets";
 
 /**
  * THE GUIDED LAUNCH'S SCREENS (website-19; guidedLaunch.ts holds every word and every rule). One question per screen with the progress
@@ -12,41 +12,66 @@ import { pctLabel } from "@/lib/burnticker/launchPresets";
 
 export type GuidedPhase = "follow" | "which" | "burn" | "end" | "review";
 
-/** The progress line and the two controls every step has: Back and Start over. */
-export function GuidedTop({ phase, onBack, onStartOver, confirm }: { phase: GuidedPhase; onBack: (() => void) | null; onStartOver: () => void; confirm: ReactNode }) {
-  const i = GUIDED_STEPS.findIndex((s) => s.id === phase);
+/**
+ * THE PROGRESS STRIP (owner, 2026-10-12: "make the step workflow easier to follow"): four short labels, the current one lit, an answered
+ * one showing the choice ("Follows: a team") and tappable to go back to it; Back and Start over beside it on every step.
+ */
+export function GuidedTop({ phase, onBack, onStartOver, confirm, answers = {}, onJump }: { phase: GuidedPhase; onBack: (() => void) | null; onStartOver: () => void; confirm: ReactNode; answers?: Partial<Record<GuidedPhase, string>>; onJump?: (p: GuidedPhase) => void }) {
+  const i = phase === "review" ? GUIDED_STEPS.length : GUIDED_STEPS.findIndex((s) => s.id === phase);
   return (
-    <div className="space-y-1" aria-label="Progress" data-guided-top>
+    <div className="space-y-1" data-guided-top>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-400">
-        <span data-guided-progress>{i >= 0 ? <>{progressLabel(i)}: <span className="text-neutral-200">{GUIDED_STEPS[i].question}</span></> : <span className="text-neutral-200">Review</span>}</span>
+        <span className="sr-only" data-guided-progress>{i < GUIDED_STEPS.length ? `${progressLabel(i)}: ${GUIDED_STEPS[i].question}` : "Review"}</span>
+        <ol className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Progress" data-progress-strip>
+          {GUIDED_STEPS.map((st, k) => {
+            const done = k < i, cur = k === i, a = answers[st.id];
+            const text = done && a ? `${st.short}: ${a}` : st.short;
+            const cls = `rounded-full px-2 py-0.5 ${cur ? "bg-amber-400 font-semibold text-neutral-950" : done ? "border border-neutral-600 text-neutral-200" : "text-neutral-500"}`;
+            return (
+              <li key={st.id} className="min-w-0" aria-current={cur ? "step" : undefined}>
+                {done && onJump ? <button type="button" data-nav className={`${cls} max-w-[11rem] truncate underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400`} onClick={() => onJump(st.id)} aria-label={`Change ${st.short.toLowerCase()}${a ? `, now ${a}` : ""}`} data-jump={st.id}>{text}</button> : <span className={`${cls} inline-block max-w-[11rem] truncate`}>{text}</span>}
+              </li>
+            );
+          })}
+        </ol>
         <span className="flex items-center gap-3">
           {onBack && <button type="button" data-nav className="underline" onClick={onBack}>← Back</button>}
           <button type="button" data-nav className="underline" onClick={onStartOver} data-start-over>Start over</button>
         </span>
       </div>
-      <div className="h-1.5 rounded bg-neutral-800"><div className="h-1.5 rounded bg-amber-400" style={{ width: `${(Math.max(0, i < 0 ? GUIDED_STEPS.length : i) + 1) / (GUIDED_STEPS.length + 1) * 100}%` }} /></div>
       {confirm}
     </div>
   );
 }
 
-/** Question 1: what the coin follows. */
+/**
+ * The step's one primary action ("Next", "Review"), kept in view at the bottom of the screen, above the phone tab bar (64 px plus the safe
+ * area below 900 px wide), never under it.
+ */
+export function StickyAction({ children }: { children: ReactNode }) {
+  return <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] z-20 -mx-1 rounded-lg bg-neutral-950/95 px-1 py-2 min-[900px]:bottom-4" data-sticky-action>{children}</div>;
+}
+
+/** Question 1: what the coin follows. Compact cards (title and one line); a tap picks and moves on. */
 export function FollowStep({ onPick, blocked }: { onPick: (f: FollowId) => void; blocked: (f: FollowId) => string | null }) {
   return (
-    <section className="space-y-3" aria-label={GUIDED_STEPS[0].question} data-guided-step="follow">
-      <h2 className="text-xl font-semibold">{GUIDED_STEPS[0].question}</h2>
-      <div className="grid gap-2 sm:grid-cols-2">
+    <section className="space-y-2" aria-label={GUIDED_STEPS[0].question} data-guided-step="follow">
+      <h2 className="text-lg font-semibold sm:text-xl">{GUIDED_STEPS[0].question}</h2>
+      <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={GUIDED_STEPS[0].question}>
         {FOLLOW_CHOICES.map((c) => { const why = blocked(c.id); return (
-          <div key={c.id} className={`rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-follow={c.id}>
-            <button type="button" data-decision="what" disabled={!!why} onClick={() => onPick(c.id)} className="w-full rounded-xl p-3 text-left hover:border-amber-400 focus:outline focus:outline-amber-400 disabled:cursor-not-allowed sm:p-4">
-              <span className="block text-base font-semibold">{c.label}</span>
-              <span className="mt-0.5 block text-sm text-neutral-300">{c.sentence}</span>
-              <span className="mt-1 block text-xs text-neutral-500">{c.example}</span>
+          <div key={c.id} className={`min-w-0 rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-follow={c.id}>
+            <button type="button" data-decision="what" data-follow-choice={c.id} aria-label={c.label} aria-describedby={`follow-${c.id}-line`} disabled={!!why} onClick={() => onPick(c.id)} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed">
+              <span className="min-w-0"><span className="block text-base font-semibold">{c.label}</span><span id={`follow-${c.id}-line`} className="block truncate text-sm text-neutral-300">{c.line}</span></span>
+              <span aria-hidden="true" className="shrink-0 text-neutral-500">›</span>
             </button>
-            {why && <p className="px-3 pb-3 text-xs text-amber-300">{why}</p>}
+            {why && <p className="px-3 pb-2 text-xs text-amber-300">{why}</p>}
           </div>
         ); })}
       </div>
+      <details className="text-xs text-neutral-400" data-follow-examples>
+        <summary className="cursor-pointer">Examples</summary>
+        <ul className="mt-1 space-y-1">{FOLLOW_CHOICES.map((c) => <li key={c.id}><span className="text-neutral-200">{c.label}.</span> {c.sentence} {c.example}</li>)}</ul>
+      </details>
     </section>
   );
 }
@@ -54,7 +79,7 @@ export function FollowStep({ onPick, blocked }: { onPick: (f: FollowId) => void;
 /** Question 2 for a rivalry pair: two teams, or two candidates. */
 export function RivalryKindStep({ onPick, teamsBlocked }: { onPick: (k: "teams" | "candidates") => void; teamsBlocked: string | null }) {
   const opt = (k: "teams" | "candidates", label: string, sentence: string, why: string | null) => (
-    <button key={k} type="button" data-decision="what" disabled={!!why} onClick={() => onPick(k)} className="w-full rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-left hover:border-amber-400 disabled:opacity-60 sm:p-4" data-rivalry={k}>
+    <button key={k} type="button" data-decision="what" aria-label={label} disabled={!!why} onClick={() => onPick(k)} className="w-full rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 border border-neutral-800 bg-neutral-900 p-3 text-left hover:border-amber-400 disabled:opacity-60 sm:p-4" data-rivalry={k}>
       <span className="block text-base font-semibold">{label}</span><span className="mt-0.5 block text-sm text-neutral-300">{sentence}</span>{why && <span className="mt-1 block text-xs text-amber-300">{why}</span>}
     </button>
   );
@@ -77,7 +102,7 @@ export function PatternStep({ preview, options, value, onPick, shares, share, on
       <div className="min-w-0 break-words rounded-lg border border-amber-400/50 bg-neutral-900 p-3 text-sm text-neutral-100" data-guided-preview aria-live="polite">{preview}</div>
       <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Burn pattern">
         {options.map((o) => (
-          <button key={o.id} type="button" role="radio" aria-checked={value === o.id} data-decision="what" data-pattern={o.id} data-available={o.available ? "yes" : "no"} disabled={!o.available} onClick={() => onPick(o.id)} className={`rounded-lg border p-3 text-left text-sm ${value === o.id ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"} disabled:cursor-not-allowed disabled:opacity-50`}>
+          <button key={o.id} type="button" role="radio" aria-checked={value === o.id} aria-label={o.label} data-decision="what" data-pattern={o.id} data-available={o.available ? "yes" : "no"} disabled={!o.available} onClick={() => onPick(o.id)} className={`rounded-lg border p-3 text-left text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${value === o.id ? "border-amber-400 bg-amber-400/10" : "border-neutral-800"} disabled:cursor-not-allowed disabled:opacity-50`}>
             <span className="block font-medium">{o.label}</span>
             <span className="mt-0.5 block text-xs text-neutral-300">{o.sentence}</span>
             {o.reason && <span className="mt-1 block text-xs text-amber-300" data-pattern-reason>{o.reason}</span>}
@@ -86,7 +111,10 @@ export function PatternStep({ preview, options, value, onPick, shares, share, on
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="Share of the pool">
         <span className="text-xs text-neutral-500">Share of the pool</span>
-        {shares.map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
+        {shares.filter((f) => shares.length <= 3 || (MAIN_RECURRING as readonly number[]).includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
+        {shares.length > 3 && <details className="inline-block" open={!(MAIN_RECURRING as readonly number[]).includes(share)} data-share-more><summary className="cursor-pointer text-xs text-neutral-400">More</summary><span className="ml-1 inline-flex gap-2">
+            {shares.filter((f) => !(MAIN_RECURRING as readonly number[]).includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
+        </span></details>}
       </div>
       {next}
     </section>

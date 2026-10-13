@@ -1,7 +1,7 @@
 import { explorerUrl } from "@/lib/burnKeeper/solana";
 import { buybackSpend, rawToTokens, solToLamports, spendablePool, tokensToRaw } from "@/lib/burnKeeper/rules";
 import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeeper/statusPage";
-import { CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
+import { CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_SHARE_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { badgeFromText, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
 import { creatorTextOf } from "@/lib/burnticker/creatorProfile";
@@ -27,6 +27,7 @@ import type { FinalAfter, StatedSource } from "@/lib/burnticker/sources/polyStat
 import { ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { PAIR_STATE_NAMES, parseForwardMemo, type PairLinks } from "@/lib/burnticker/pairForward";
 import { pairUnlinked } from "@/lib/burnticker/pairForwardKeeper";
+import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { LP_POLICY_BADGE, buildLpLockJson, feeKeysPda, operatorTreasuryFor, solscanUrl, type LpLockJson } from "@/lib/burnticker/lockFees";
 import { byCoin, siteKeysOf } from "@/lib/burnticker/coinKey";
 
@@ -102,7 +103,7 @@ export function sideSummary(s: Pick<TokenStatusJson, "ticker" | "name" | "mint" 
 }
 
 /** The fee-flow sentence every coin page carries (the app's coin page, t/[ticker]/page.tsx, prints the same words). */
-export const FEE_FLOW_LINE = "Creator fees go to the burn pool and are burned. The liquidity is locked forever, and its fees go 80% to the burn pool and 20% to the operator, fixed in code.";
+export const FEE_FLOW_LINE = `Creator fees go to the burn pool and are burned. The liquidity is locked forever. ${OPERATOR_SHARE_LINE}`;
 
 /** The lifecycle block from the registry (pure over its reads): ended, wind-down progress, the last sweep, the page's one line. */
 export function lifecycleFrom(reg: Pick<Registry, "ruleEnd" | "receipts" | "getStatus">, t: Pick<TokenRow, "mint" | "status">, rule: Pick<LockedRule["rule"], "onEnd" | "binary" | "scalar" | "kind">, poolLamports: bigint | null = null): LifecycleJson {
@@ -394,7 +395,7 @@ export function lpLockHtml(lp: LpLockJson | null | undefined): string {
   if (!lp) return "";
   const a = (addr: string | null, url: string | null) => (addr ? (url ? `<a href="${esc(url)}"><code>${esc(addr)}</code></a>` : `<code>${esc(addr)}</code>`) : "<em>shown at graduation</em>");
   return `<h2>${esc(LP_POLICY_BADGE)}</h2>
-<p>${esc(lp.line)}. ${lp.lockedPct}% of the liquidity from graduation is locked with Raydium's lock and can never be withdrawn. The burn program owns the Fee Key, which collects the pool's trading fees, and anyone can claim those fees (claim_lock_fees). ${lp.split.burnBps / 100}% of the SOL goes to this coin's burn pool and ${lp.split.operatorBps / 100}% goes to the operator treasury. The coin's own tokens from the fees are burned.</p>
+<p>${esc(lp.line)}. ${lp.lockedPct}% of the liquidity from graduation is locked with Raydium's lock and can never be withdrawn. The burn program owns the Fee Key, which collects the locked liquidity's share of the pool's trading fees, and anyone can claim those fees (claim_lock_fees). ${lp.split.burnBps / 100}% of the SOL goes to this coin's burn pool and ${lp.split.operatorBps / 100}% goes to the operator treasury. The coin's own tokens from the fees are burned.</p>
 <p class="muted">The lock program is ${a(lp.lockProgram, lp.urls.lockProgram)}. The Fee Key is ${a(lp.feeKey, lp.urls.feeKey)}, and its owner is ${a(lp.feeKeyOwner, lp.urls.feeKeyOwner)}.${lp.lockedLiquidity ? ` The locked liquidity is ${a(lp.lockedLiquidity, lp.urls.lockedLiquidity)}.` : ""} The operator treasury is ${lp.operatorTreasury ? a(lp.operatorTreasury, lp.urls.operatorTreasury) : "<em>not set on this network</em>"}.</p>
 <p class="muted">${lp.lastClaim ? `The last claim was at ${esc(lp.lastClaim.at.slice(0, 16).replace("T", " "))}Z: ${lp.lastClaim.txUrl ? `<a href="${esc(lp.lastClaim.txUrl)}">${esc(lp.lastClaim.line)}</a>` : esc(lp.lastClaim.line)} ${lp.totals.claims === 1 ? "There has been one claim" : `There have been ${lp.totals.claims} claims`}, ${esc(lp.totals.sol)} SOL in all: ${esc(lp.totals.toBurnPool)} SOL to the burn pool and ${esc(lp.totals.toOperator)} SOL to the operator.` : "Nobody has claimed the pool's fees yet."}${lp.note ? ` ${esc(lp.note)}` : ""}</p>`;
 }
@@ -510,10 +511,10 @@ ${programSection(s.program)}
 <p>${esc(s.fees.sentence)}</p>
 <div class="scroll">${feeTable(s.fees.curve)}</div>
 <div class="scroll" style="margin-top:8px">${feeTable(s.fees.postGraduation)}</div>
-<p class="muted">The creator's share of fees is ${s.fees.creatorSliceBps / 100}%. Creators earn no cash from fees, because the creator-fee slot pays the burn pool. At graduation, ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. Of every swap, ${postLegPct(s.fees.postGraduation, "burn pool (LP fees)")} goes to the burn pool and ${postLegPct(s.fees.postGraduation, "Burnticker (operator, LP fees)")} goes to the operator. That 80/20 split is fixed in code. Raydium's fixed CPMM creator fee also gives the burn pool ${postLegPct(s.fees.postGraduation, "burn pool")} of every swap.</p>
+<p class="muted">The creator's share of fees is ${s.fees.creatorSliceBps / 100}%. Creators earn no cash from fees, because the creator-fee slot pays the burn pool. At graduation, ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees fund the burn. ${esc(postGraduationShareLine(s.fees.postGraduation))} The operator's part of the liquidity fees is fixed in code. Of the burn pool's share, ${postLegPct(s.fees.postGraduation, "burn pool")} of every swap comes from Raydium's fixed CPMM creator fee.</p>
 ${lpLockHtml(s.lp)}
 <h2>What the operator can and cannot do</h2>
-<p class="muted">These lists come from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>.${s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever, and its fees go 80% to the burn pool and 20% to the operator. ${s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} The team allocation is ${s.trust.teamAllocationPct}%.</p>
+<p class="muted">These lists come from the <a href="${esc(s.trust.registerUrl)}">Powers Register</a>.${s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} ${s.trust.lpLockedPct ?? LP_LOCKED_PCT}% of the liquidity is locked forever. ${esc(postGraduationShareLine(s.fees.postGraduation))} ${s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} The team allocation is ${s.trust.teamAllocationPct}%.</p>
 <div class="rule"><strong>Can:</strong> ${s.trust.operator.can.map(esc).join("; ")}.<br><strong>Cannot:</strong> ${s.trust.operator.cannot.map(esc).join("; ")}.</div>
 <p class="muted">${esc(OPERATOR_LINE)}</p><p class="muted">${esc(USE_OF_FEES)} Creators may stay anonymous, but the creator's wallet is shown below.${s.mode === "buyback" ? ` ${esc(s.pool.queuedNote)}` : ""}</p>
 <h2>Reading signers</h2>

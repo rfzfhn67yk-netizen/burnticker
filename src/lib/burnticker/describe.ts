@@ -232,7 +232,9 @@ const fractionText = (r: BurnRule): string => {
   const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { fractionOfPool?: number; tokens?: number } | null | undefined;
   return m?.tokens !== undefined ? `${m.tokens.toLocaleString("en-US")} tokens from its vault` : `${Math.round((m?.fractionOfPool ?? 0) * 1000) / 10}%`;
 };
-const spends = (r: BurnRule, t: string) => { const p = fractionText(r); return p.endsWith("vault") ? `the coin burns ${p}` : `the burn pool spends ${p} buying $${t} on Raydium and burns it`; };
+// owner, 2026-10-12: above 5 % a burn is said to land in slices (one burn run buys with at most 2 % of the pool's SOL)
+const sliced = (r: BurnRule): boolean => { const m = (r.kind === "binary" ? (r.binary?.onYes ?? r.binary?.onNo) : r.scalar?.perUnit) as { fractionOfPool?: number } | null | undefined; return (m?.fractionOfPool ?? 0) > 0.05; };
+const spends = (r: BurnRule, t: string) => { const p = fractionText(r); return p.endsWith("vault") ? `the coin burns ${p}` : `the burn pool spends ${p} buying $${t} on Raydium${sliced(r) ? " in slices sized to the pool's liquidity" : ""} and burns it`; };
 /** "The result comes from X, cross-checked against Y." / "MLB's official feed confirms it." — the settlement sentences. */
 const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
 const SPORTS_RESULT = "its market's on-chain payout if it has one, or else from a licensed final score";
@@ -306,7 +308,7 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
       // the champion path: every win through the postseason, then the rest burns here (champion) or goes to $DEFICIT's burn
       const L = seasonLabel(s.league, w.year);
       return mk(`${nick} ${L} ${Noun}`, tickerFrom(nick, `${sfx}${yy(s.league, w.year)}`), oneLiner,
-        `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the postseason. Each burn buys $${t} on Raydium, with a receipt on chain. ${settle}`,
+        `This coin burns ${fractionText(r)} of its pool every game ${ref} win, through the last game of the postseason. ${sliced(r) ? `Each burn buys $${t} on Raydium in slices sized to the pool's liquidity.` : `Each burn buys $${t} on Raydium, with a receipt on chain.`} ${settle}`,
         `This coin covers the ${L} season only. ${championEndSentences(ref).join(" ")}`, "season", "recurring");
     }
     if (w.kind === "season") {

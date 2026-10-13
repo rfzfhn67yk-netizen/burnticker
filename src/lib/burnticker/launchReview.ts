@@ -10,6 +10,7 @@ import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_
 import { describeRule, type DescribeCtx } from "@/lib/burnticker/describe";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx } from "@/lib/burnticker/coinText";
 import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
+import { nameProblem } from "@/lib/burnticker/launchFields";
 import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
 import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
@@ -165,7 +166,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   for (const s of sides) {
     const p = sides.length > 1 ? `Coin ${s.side}. ` : "";
     if (!/^[A-Z0-9]{2,10}$/.test(s.ticker)) problems.push(`${p}The ticker needs 2 to 10 letters or digits.`);
-    if (s.name.trim().length < 2 || s.name.length > 32) problems.push(`${p}The name needs 2 to 32 characters.`);
+    { const np = nameProblem(s.name); if (np) problems.push(`${p}${np}`); }
     for (const x of creatorTextProblems({ name: s.name, ticker: s.ticker, note: s.side === "A" ? note : "" })) problems.push(`${p}${x.reason}`);
   }
   if (sides.length > 1 && sides[0].ticker === sides[1].ticker) problems.push("The two coins need different tickers.");

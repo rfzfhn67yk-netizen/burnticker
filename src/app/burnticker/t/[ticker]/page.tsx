@@ -28,6 +28,7 @@ import { RANK_MEANING } from "@/lib/burnticker/cardView";
 import { ShareBlock } from "../../creator/ShareBlock";
 import { SETTLEMENT_LINK } from "@/lib/burnticker/settlementCopy";
 import { likeHref } from "@/lib/burnticker/templates";
+import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { PERPETUAL_SENTENCE } from "@/lib/burnticker/describe";
 import { COIN_FEED_LINK, CSV_LINK_COPY, csvHref, feedHref } from "@/lib/burnticker/exportLinks";
 import type { LifecycleDatesJson, PoolMarketJson, StatedJson } from "@/lib/burnticker/pageTypes";
@@ -287,12 +288,12 @@ export default function TokenPage() {
           <p className="mt-2 text-[11px] text-neutral-500 break-all">Rule hash (sha256): {s.rules.sha256}</p>
           <details className="mt-2 text-xs"><summary className="cursor-pointer text-neutral-400">What the operator can and cannot do</summary>
             <p className="mt-1"><b>Can:</b> {s.trust.operator.can.join("; ")}.</p><p className="mt-1"><b>Cannot:</b> {s.trust.operator.cannot.join("; ")}.</p>
-            <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>.{s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} {s.trust.lpLockedPct ?? 100}% of the liquidity is locked, and its fees go 80% to the burn pool and 20% to the operator. The team allocation is {s.trust.teamAllocationPct}%.</p>
+            <p className="mt-1 text-neutral-500">These lists come from the <Link className="underline" href={s.trust.registerUrl}>Powers Register</Link>.{s.trust.operator.placeholder ? " The register file is not on this site, so these rows come from its settings." : ""} {s.trust.creatorCashBps === 0 ? "Creators get no cash from fees." : `Creators get ${s.trust.creatorCashBps / 100}% of fees in cash.`} {s.trust.lpLockedPct ?? 100}% of the liquidity is locked. {postGraduationShareLine(s.fees.postGraduation)} The team allocation is {s.trust.teamAllocationPct}%.</p>
           </details>
         </section>
         {s.disclosure.eventContract && <p className={card + " border-l-4 border-l-orange-500 text-xs"}>{s.disclosure.eventContract}</p>}
         {/* No burn pool is ever left behind (2026-10-10): the fee flow. The coin's lifecycle line is in "The end" above. */}
-        <p className="text-xs text-neutral-400">Creator fees go to the burn pool and are burned. The liquidity is locked forever, and its fees go 80% to the burn pool and 20% to the operator, fixed in code.</p>
+        <p className="text-xs text-neutral-400">Creator fees go to the burn pool and are burned. The liquidity is locked forever. {postGraduationShareLine(s.fees.postGraduation)}</p>
         {s.lp && <LpLockCard lp={s.lp} card={card} />}
         <section className="space-y-2">
           <h2 className="font-medium">Fees</h2><p>{s.fees.sentence}</p>
@@ -326,7 +327,7 @@ function LpLockCard({ lp, card }: { lp: LpBlock; card: string }) {
   return (
     <section className={card} aria-label="LP locked forever">
       <h2 className="font-mono text-xs uppercase tracking-widest">Liquidity locked forever</h2>
-      <p className="mt-2 text-xs">{lp.lockedPct}% of the liquidity from graduation is locked with Raydium&apos;s lock and can never be withdrawn. The burn program owns the Fee Key, which collects the pool&apos;s trading fees. Anyone can claim those fees. {lp.split.burnBps / 100}% of the SOL goes to this coin&apos;s burn pool and {lp.split.operatorBps / 100}% goes to the operator. The coin&apos;s own tokens from the fees are burned. These shares are fixed in code.</p>
+      <p className="mt-2 text-xs">{lp.lockedPct}% of the liquidity from graduation is locked with Raydium&apos;s lock and can never be withdrawn. The burn program owns the Fee Key, which collects the locked liquidity&apos;s share of the pool&apos;s trading fees. Anyone can claim those fees. Of those liquidity fees, {lp.split.burnBps / 100}% of the SOL goes to this coin&apos;s burn pool and {lp.split.operatorBps / 100}% goes to the operator. The coin&apos;s own tokens from the fees are burned. These shares are fixed in code.</p>
       <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
         <div><dt className="text-neutral-500">lock program</dt><dd>{addr(lp.lockProgram, lp.urls.lockProgram, "—")}</dd></div>
         <div><dt className="text-neutral-500">Fee Key</dt><dd>{addr(lp.feeKey, lp.urls.feeKey, "at graduation")}</dd></div>

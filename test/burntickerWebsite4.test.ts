@@ -2,6 +2,7 @@
 // its own file (test/burntickerF1Authority.test.ts); the rest are pinned here, one describe per item.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import fs from "node:fs";
 import { formatHits, lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
 import { EXPLORE_VERIFIED_BURN } from "@/lib/burnticker/currentStatusLinks";
@@ -132,7 +133,7 @@ describe("item 5: one current summary on Trust/Operator; configured wallets are 
   test("Trust: the current summary carries control and money once; the long disclosures sit behind one evidence disclosure; no 'nobody is paid'", async () => {
     const { buildCurrentStatus } = await import("@/lib/burnticker/currentStatus");
     const money = buildCurrentStatus({ env: {}, chain: {}, now: 0 }).lines.find((l) => l.startsWith("The operator earns"))!;
-    assert.match(money, /^The operator earns 0\.25% of curve trading volume and 20% of the SOL fees from the liquidity pool after graduation\. The other 80% of those SOL fees, and all of the token-side fees, go to each coin's burn pool\. Creators take no cash from fees\.$/);
+    assert.equal(money, `The operator earns 0.25% of curve trading volume. ${OPERATOR_SHARE_LINE} The coin side of the liquidity fees is burned. Creators take no cash from fees.`);
     clean(money, "money line");
     const page = read("src/app/burnticker/trust/page.tsx");
     const at = (m: string) => { const i = page.indexOf(m); assert.ok(i >= 0, m); return i; };

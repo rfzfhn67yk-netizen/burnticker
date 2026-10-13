@@ -70,7 +70,7 @@ describe("one shell, same links, same order, every surface (the owner's review i
 
   test("the app header: Launch a coin opens the closed-launches dialog while launches are closed; the phone menu traps focus and closes on Escape", () => {
     const h = read("src/app/burnticker/_components/SiteHeader.tsx");
-    assert.match(h, /\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch" data-launch-button>\{LAUNCH_LABELS\.button\}<\/Link>\s*: <button type="button" className="bt-launch-btn bt-launch-head" onClick=\{\(\) => setModal\(true\)\}/);
+    assert.match(h, /\{launchOpen\s*\? <Link className="bt-launch-btn bt-launch-head" href="\/burnticker\/launch" data-launch-button onClick=\{\(\) => announceLaunchStart\("\/burnticker\/launch"\)\}>\{LAUNCH_LABELS\.button\}<\/Link>\s*: <button type="button" className="bt-launch-btn bt-launch-head" onClick=\{\(\) => setModal\(true\)\}/);
     // website-13: the real wallet adapter button, to the right of Launch a coin, and again in the phone menu; never disabled
     assert.match(h, /data-launch-button>\}\s*<WalletButton \/>|data-launch-button>\{LAUNCH_LABELS\.button\}<\/button>\}\s*<WalletButton \/>/);
     assert.match(h, /<WalletButton variant="menu" \/>/);

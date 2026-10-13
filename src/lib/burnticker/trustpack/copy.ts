@@ -5,6 +5,7 @@
  * future tense about what the platform does next, never the word "audit" for a review, and no venue named that the settlement rules
  * exclude. Text quoted from the Powers Registers is the program's own documentation and is rendered as data.
  */
+import { operatorShareClause } from "@/lib/burnticker/feeShareLine";
 
 export const CHECK_COPY = {
   title: "Check this yourself",
@@ -55,7 +56,7 @@ export const OPERATOR_COPY = {
   walletsTitle: "Operator wallets",
   walletsIntro: "Only public keys are shown, each with where it comes from. The devnet keys are copied from the rehearsal records. The mainnet keys are the addresses the operator set up.",
   /** under the mainnet table: what the developer fee wallet receives (the table cell names the role only) */
-  devFeeNote: "The developer fee wallet is also the operator treasury. It receives the 0.25% fee on curve trades, the launch fees, and the operator's 20% share of liquidity-pool fees after a coin graduates.",
+  devFeeNote: `The developer fee wallet is also the operator treasury. It receives the 0.25% fee on curve trades, the launch fees, and, after a coin graduates, ${operatorShareClause()}.`,
   signedTitle: "Signed statement",
   signedPending: "The developer fee wallet listed above is the one that signs it. The text to sign is below.",
   neverBuysTitle: "Never buys a platform coin",

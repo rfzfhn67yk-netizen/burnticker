@@ -307,7 +307,7 @@ describe("pair funds flow, by rule version (website brief §2)", () => {
     const f = pairFundsFlow("winner-takes-the-burn", { a: "ELSAYED", b: "ROGERS" });
     assert.equal(f.oneLiner, PAIR_BURN_SENTENCE);
     const all = JSON.stringify(f);
-    for (const re of [/draw/i, /72 hours after a reading/, /forward does not land within 72 hours/, /no live trading pool/, /80%/, /never touched/, /Nothing is paid to holders/]) assert.match(all, re);
+    for (const re of [/draw/i, /72 hours after a reading/, /forward does not land within 72 hours/, /no live trading pool/, /20% of the locked pool's liquidity fees/, /never touched/, /Nothing is paid to holders/]) assert.match(all, re);
     assert.doesNotMatch(all, /Nobody is paid/, "the operator is paid fees; the sentence is about holders (UX report 3 item 6)");
     const old = pairFundsFlow("separate-pools");
     assert.match(old.versionLabel, /before 2026-10-11; none on mainnet/); assert.match(old.oneLiner, /neither pool pays the other/);

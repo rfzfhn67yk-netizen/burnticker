@@ -5,8 +5,27 @@
  * Client-safe and pure; test/burntickerLaunchFields.test.ts.
  */
 const okTicker = (t: string) => /^[A-Z0-9]{2,10}$/.test(t);
+/**
+ * Intent audit items 1 and 2 (2026-10-12): the on-chain token metadata (Metaplex, written by LaunchLab's create) holds a name of at most
+ * 32 BYTES of UTF-8 and a symbol of at most 10 bytes; the Raydium SDK checks only the symbol's length in code units, and nothing upstream
+ * truncates. So the name is measured in bytes here, on the page and on the server (launchReview.ts, launchBundle.ts launchProblems), and a
+ * name must hold at least 2 characters a person can see: spaces, zero-width characters, joiners, direction marks, variation selectors,
+ * fillers and lone combining marks do not count. Accents, CJK and emoji are visible and pass within the byte limit.
+ */
+export const NAME_MAX_BYTES = 32;
+export const SYMBOL_MAX_BYTES = 10;
+export const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
+/** The characters of a name a person can see (whitespace, format and control characters, fillers and lone marks removed). */
+export const visibleText = (s: string): string => s.replace(/[\s\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}\p{Mn}\p{Me}\u034F\u115F\u1160\u2800\u3164\uFE00-\uFE0F\uFFA0\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}]/gu, "");
 /** The field problems of one coin, each a sentence a person can act on ("" = fine). */
-export function nameProblem(name: string): string { const n = name.trim(); return !n ? "Enter a name for the coin." : n.length < 2 ? "The name needs at least 2 characters." : name.length > 32 ? "The name is at most 32 characters." : ""; }
+export function nameProblem(name: string): string {
+  const n = name.trim(), seen = Array.from(visibleText(n)).length, bytes = utf8Bytes(n);
+  return !n ? "Enter a name for the coin."
+    : seen === 0 ? "The name has no visible characters. Use letters, digits or symbols a person can see."
+    : seen < 2 ? "The name needs at least 2 visible characters."
+    : bytes > NAME_MAX_BYTES ? `The name takes ${bytes} bytes, and a coin's name can take at most ${NAME_MAX_BYTES}. Letters A to Z and digits take 1 byte each, while accented letters, other scripts and emoji take 2 to 4.`
+    : "";
+}
 export function tickerProblem(t: string): string { return !t ? "Enter a ticker of 2 to 10 letters or digits." : !okTicker(t) ? "A ticker has 2 to 10 letters or digits." : ""; }
 /** L07: the visible normalisation of a typed ticker ("A B!?" → "AB"), or null when nothing changed but the case. */
 export function tickerNormalised(raw: string): { value: string; note: string | null } {

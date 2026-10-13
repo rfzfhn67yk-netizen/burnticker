@@ -7,6 +7,8 @@ import { CURVE_FEES, postGraduationFeesFor, CREATOR_FEE_SLICE_BPS, LP_BURNED_PCT
 import { LP_POLICY_LINE } from "@/lib/burnticker/lockFees";
 import { DECIMALS, descriptionFooter, invertMapping, lockRule, DEFAULT_ON_END, PAIR_CLAUSE, withFullFraction, isOneShot, PAIR_ORACLES, pairIdFor, ruleStatement, TOTAL_SUPPLY, validateRule, type LockedRule } from "@/lib/burnticker/rules";
 import { isRaisePreset, RAISE_PRESETS_SOL } from "@/lib/burnticker/raisePresets";
+import { nameProblem } from "@/lib/burnticker/launchFields";
+import { isWebLink } from "@/lib/burnticker/creatorProfile";
 import { PLACEHOLDER_PROGRAM_ID, programExpressible, type BurnProgramClient, type SerializedIx } from "@/lib/burnticker/program";
 
 /**
@@ -150,10 +152,12 @@ export function launchProblems(i: LaunchInput): string[] {
   const p: string[] = [];
   if (!PUBKEY_RE.test(i.creator)) p.push("creator must be a Solana public key");
   if (!TICKER_RE.test(i.ticker)) p.push("ticker must be 2–10 capitals/digits");
-  if (typeof i.name !== "string" || i.name.trim().length < 2 || i.name.length > 32) p.push("name must be 2–32 characters");
+  // intent audit items 1 and 2: at least 2 visible characters and at most 32 bytes of UTF-8 (the metadata's limit), never truncated
+  { const np = typeof i.name === "string" ? nameProblem(i.name) : "Enter a name for the coin."; if (np) p.push(np); }
   if (typeof i.description !== "string" || i.description.length > 800) p.push("description must be ≤ 800 characters");
-  if (i.imageUrl !== null && !/^https:\/\/\S{1,200}$/.test(i.imageUrl)) p.push("imageUrl must be an https URL or null");
-  if (!Array.isArray(i.links) || i.links.length > 4 || i.links.some((l) => !/^https:\/\/\S{1,200}$/.test(l.url) || typeof l.label !== "string" || l.label.length > 24)) p.push("links: up to 4 https URLs with short labels");
+  // intent audit item 13: a parsed https address with a real host name ("https://?" and "https://x" are not web addresses)
+  if (i.imageUrl !== null && !isWebLink(i.imageUrl)) p.push("imageUrl must be an https URL or null");
+  if (!Array.isArray(i.links) || i.links.length > 4 || i.links.some((l) => typeof l?.url !== "string" || !isWebLink(l.url) || typeof l.label !== "string" || l.label.length > 24)) p.push("links: up to 4 https URLs with short labels");
   if (!/^\d+(\.\d{1,9})?$/.test(i.firstBuySol) || Number(i.firstBuySol) > 50) p.push("firstBuySol must be a SOL amount ≤ 50");
   if (!i.acknowledgements?.ruleLocked) p.push("you must acknowledge that the rule cannot be changed");
   if (!i.acknowledgements?.noReturns) p.push("you must acknowledge that you are not promising anyone anything");

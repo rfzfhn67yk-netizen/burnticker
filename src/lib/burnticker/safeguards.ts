@@ -2,8 +2,9 @@
  * GUARDRAILS, SAFEGUARDS AND WHO GETS WHAT (site audit #7/#8, R07, BT-17; 2026-10-11). These sat on the homepage, some twice (the
  * quorum-1 attester line and the time-lock line appeared verbatim in both "Current status" and "Safeguards"). The homepage now carries a
  * short status and links here; the trust page renders this module once, as static copy (no API read, so it shows even when the live data
- * cannot be read). Client-safe: no imports. Copy-linted by test/burntickerHome.test.ts.
+ * cannot be read). Client-safe: one import, the operator-share line (feeShareLine.ts, itself client-safe). Copy-linted by test/burntickerHome.test.ts.
  */
+import { OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 
 /** The eleven guardrails, in order (the old homepage strip). */
 export const GUARDRAILS = [
@@ -42,7 +43,7 @@ export const GUARDRAIL_DETAIL: Record<(typeof GUARDRAILS)[number], { kind: Guard
   "creators earn nothing": { kind: "enforced", text: "Creators receive no trading-fee revenue. The platform settings send the creator's share of the curve fees to the coin's burn pool. A creator can still hold or trade the coin like anyone else." },
   "no team buy": { kind: "policy", text: "There is no team allocation, and the operator makes no opening purchase." },
   "the platform never buys any coin": { kind: "policy", text: "The operator and its wallets never trade a coin launched here. This is a policy, checked by the monitor on the operator page. It is separate from each coin's program-run buyback, which buys only to burn." },
-  "LP locked forever, its fees fund the burn": { kind: "enforced", text: "At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. After graduation the program sends 80% of the SOL side of its fees to the coin's burn pool and 20% to the operator." },
+  "LP locked forever, its fees fund the burn": { kind: "enforced", text: `At graduation the platform settings lock all of the pool's liquidity with Raydium's lock. ${OPERATOR_SHARE_LINE}` },
   "rules locked at launch": { kind: "enforced", text: "No instruction in the current program can change a coin's rule. The program itself can still be upgraded, and the current status says who can approve an upgrade." },
 };
 export const GUARDRAIL_SUMMARY = "Each coin has one rule, and the rule is locked at launch. A program spends the coin's own fee pool on each burn, and nobody chooses the amount. Today one operator signs every reading. The program has had AI reviews, and no security firm has audited it.";
@@ -64,5 +65,5 @@ export const ADMISSION_RULES = "A rule settles on a public result. Its input is 
 export const WHO_GETS_WHAT: { who: string; text: string }[] = [
   { who: "The coin", text: "Its share of the trading fees goes to its burn pool, which is its burn budget. Burns draw on the accumulated budget. Trading adds funds, and a burn can be delayed or skipped when the spendable amount is too small. There is no team allocation, and the team buys nothing at launch." },
   { who: "The creator", text: "The creator pays the venue's creation cost and the network fee. The creator earns no cash from fees, because the creator's share is fixed at zero. What the creator gets is a coin whose burns are paid for by its own trading." },
-  { who: "Burnticker", text: "Burnticker takes 25 basis points of trading volume on the launch curve. That rate is set in the LaunchLab platform settings, and this page reads it live below. After a coin moves to its trading pool, the liquidity is locked forever. The program splits the fees from that liquidity: 80% goes to the coin's burn pool and 20% goes to the operator. Nothing is ever taken from a burn pool. The operator never trades a coin launched here. The only purchases are the program's own buybacks, and everything bought is burned." },
+  { who: "Burnticker", text: `Burnticker takes 25 basis points of trading volume on the launch curve. That rate is set in the LaunchLab platform settings, and this page reads it live below. After a coin moves to its trading pool, the liquidity is locked forever. ${OPERATOR_SHARE_LINE} Nothing is ever taken from a burn pool. The operator never trades a coin launched here. The only purchases are the program's own buybacks, and everything bought is burned.` },
 ];

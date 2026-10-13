@@ -208,7 +208,8 @@ export const isOneShot = (r: Pick<BurnRule, "market" | "oracle" | "derby"> & { s
 
 export const RULE_BOUNDS = {
   /** Recurring rules: 1–10 % of the pool per unit. A one-shot may go to 100 % (ONE_SHOT_MAX_FRACTION; see "ONE-SHOT 100 %" above). */
-  fractionOfPool: { min: 0.01, max: 0.10 },
+  // owner, 2026-10-12: a recurring rule may spend up to 25 % per unit (the program allows up to 100 %; one burn run stays capped at 2 % of the pool's SOL)
+  fractionOfPool: { min: 0.01, max: 0.25 },
   vaultShare: { min: 0.10, max: 0.30 },
   tokens: { min: 1, max: 100_000_000 },
   unitMinPositive: 1e-9,

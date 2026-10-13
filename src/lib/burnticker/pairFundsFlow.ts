@@ -1,3 +1,4 @@
+import { PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
 
 /**
@@ -17,7 +18,7 @@ export interface FundsFlow { version: PairRuleVersion; versionLabel: string; one
 
 export const pairRuleVersion = (winnerTakesBurn: boolean): PairRuleVersion => (winnerTakesBurn ? "winner-takes-the-burn" : "separate-pools");
 
-const FEES = "Each coin's trades pay a creator fee into that coin's own burn pool. After the coin moves to its trading pool, 80% of the locked liquidity's fees join it, and 20% go to the operator, fixed in code. Nothing can be withdrawn from a burn pool.";
+const FEES = `Each coin's trades pay a creator fee into that coin's own burn pool. ${PAIR_OPERATOR_SHARE_LINE} Nothing can be withdrawn from a burn pool.`;
 
 export function pairFundsFlow(version: PairRuleVersion, tickers: { a: string; b: string } = { a: "A", b: "B" }): FundsFlow {
   const A = `$${tickers.a}`, B = `$${tickers.b}`;

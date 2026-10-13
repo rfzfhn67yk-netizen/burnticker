@@ -1,6 +1,6 @@
 import { platform, tokenPageData, type Platform } from "@/lib/burnticker/server";
 import { feedById, loadFixture, previewFromFixture } from "@/lib/burnticker/catalogue";
-import { TIER_LABEL } from "@/lib/burnticker/sources/types";
+import { sourceTypeLabel } from "@/lib/burnticker/sources/types";
 import { catalogueLaunches } from "@/lib/burnticker/launchAvailability";
 import { BURNTICKER_RULES_SCHEMA, DISCLAIMER_FOOTER, lockRule, oracleDisclosure, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { backtestSentence } from "@/lib/burnticker/oracle/backtest";
@@ -61,7 +61,7 @@ export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()
   } catch (e) { return fail(400, (e as Error).message); }
   let pv;
   try { pv = previewFromFixture(feed, locked.rule, now); } catch (e) { return fail(404, `${feed.id} has no saved sample to preview. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
-  return ok({ id: feed.id, title: feed.title, tier: feed.tier, tierLabel: TIER_LABEL[feed.tier], launchable: feed.launchable, rule: locked.rule, sha256: locked.sha256, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), window: pv.window, totals: pv.totals, perMonth: pv.perMonth, rows: pv.rows, lastReading: pv.lastReading, fixtureFetchedAt: loadFixture(feed).fetchedAt, sentence: `${backtestSentence(pv)} This comes from the source's saved sample.`, note: "These totals are for display only. Receipts use the keeper's exact whole-number spend.", config: publicConfig(feed.config) });
+  return ok({ id: feed.id, title: feed.title, tier: feed.tier, tierLabel: sourceTypeLabel(feed), launchable: feed.launchable, rule: locked.rule, sha256: locked.sha256, statement: ruleStatement(locked.rule, { feedTitle: feed.title }), window: pv.window, totals: pv.totals, perMonth: pv.perMonth, rows: pv.rows, lastReading: pv.lastReading, fixtureFetchedAt: loadFixture(feed).fetchedAt, sentence: `${backtestSentence(pv)} This comes from the source's saved sample.`, note: "These totals are for display only. Receipts use the keeper's exact whole-number spend.", config: publicConfig(feed.config) });
 }
 
 export const v1KalshiSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiSearch(p, { q: q.get("q"), category: q.get("category"), series: q.get("series") });

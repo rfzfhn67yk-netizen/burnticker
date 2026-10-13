@@ -67,7 +67,10 @@ export function lockTournament(raw: unknown, sha256Hex: (s: string) => string): 
 
 export const roundCount = (t: Pick<Tournament, "underlyings">): number => Math.log2(t.underlyings.length);
 /** Units a winning day burns: 1, or 2 in the final while 2 × f stays within the rules' maximum. */
-export const finalUnits = (f: number): number => (Math.round(f * 2 * 1e6) <= Math.round(RULE_BOUNDS.fractionOfPool.max * 1e6) ? 2 : 1);
+// a final counts double while twice the share stays within 10 % (the bound when brackets were defined; kept when the recurring cap rose to 25 %,
+// so a bracket registered before keeps its finals)
+export const BRACKET_FINAL_MAX = 0.1;
+export const finalUnits = (f: number): number => (Math.round(f * 2 * 1e6) <= Math.round(BRACKET_FINAL_MAX * 1e6) ? 2 : 1);
 export const roundDates = (t: Pick<Tournament, "start" | "roundDays">, r: number): string[] => Array.from({ length: t.roundDays }, (_, i) => addDays(t.start, r * t.roundDays + i));
 export const tournamentEnd = (t: Tournament): string => addDays(t.start, roundCount(t) * t.roundDays);
 /** The derby_windows key a match's days are decided under (shared by both slots, so both fan coins see the same decision). */

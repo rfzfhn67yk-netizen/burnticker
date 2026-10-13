@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createLatest } from "@/lib/burnticker/latestOnly";
+import { imageStateProblem } from "@/lib/burnticker/guidedLaunch";
 import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, imageFileProblem, imageFromTransfer, pastedImageName } from "@/lib/burnticker/creatorProfile";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
@@ -18,7 +20,8 @@ import { CUSTOM_IMAGES_OFF_LINE } from "@/lib/burnticker/creatorCopy";
  * file as chosen; `base64` is that original, which the launch sends. `badge` (owner, 2026-10-12): optional, on by default.
  */
 export interface ProfileImage { badgedUrl: string; plainUrl: string; contentType: string; base64: string; name: string }
-export interface ProfileValue { image: ProfileImage | null; rights: boolean; badge: boolean; description: string; x: string; telegram: string; website: string }
+/** `imageState` (intent audit 5 item 15): an image still being prepared, or one that failed, blocks the launch until it is resolved. */
+export interface ProfileValue { image: ProfileImage | null; rights: boolean; badge: boolean; description: string; x: string; telegram: string; website: string; imageState?: "pending" | "failed" | null }
 export const EMPTY_PROFILE: ProfileValue = { image: null, rights: false, badge: true, description: "", x: "", telegram: "", website: "" };
 /** The preview that will be pinned. */
 export const chosenPreview = (v: ProfileValue): string | null => (v.image ? (v.badge ? v.image.badgedUrl : v.image.plainUrl) : null);
@@ -36,6 +39,7 @@ export function profileBody(v: ProfileValue): { creatorDescription: string; link
 /** What still blocks the launch in these fields (the review lists it beside the button). */
 export function profileProblems(v: ProfileValue): string[] {
   const out: string[] = [];
+  const isp = imageStateProblem(v.imageState ?? null); if (isp) out.push(isp);
   if (v.image && !v.rights) out.push("Confirm the image line, or remove the image.");
   if (v.description.length > DESCRIPTION_MAX) out.push(`The description can be at most ${DESCRIPTION_MAX} characters.`);
   for (const [label, u] of [["X", v.x], ["Telegram", v.telegram], ["Website", v.website]] as const) if (u.trim() && !/^https:\/\/\S{1,200}$/.test(u.trim())) out.push(`The ${label} link has to start with https:// and have no spaces.`);
@@ -47,29 +51,36 @@ export function profileProblems(v: ProfileValue): string[] {
  * in a disclosure ("text"); `who` names the side of a pair ("$LAKERS"); `customImages` false (the host takes no custom images) shows the
  * generated art with CUSTOM_IMAGES_OFF_LINE instead of the file control.
  */
-export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true, pasteTarget = true }: { value: ProfileValue; onChange: (v: ProfileValue) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean; /** website-19: an image pasted anywhere on the page lands here (side A of a pair; side B takes drops) */ pasteTarget?: boolean }) {
+export type ProfileUpdate = ProfileValue | ((prev: ProfileValue) => ProfileValue);
+export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true, pasteTarget = true }: { value: ProfileValue; /** a state setter: every change is merged into the latest value (intent audit 5 item 14) */ onChange: (v: ProfileUpdate) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean; /** website-19: an image pasted anywhere on the page lands here (side A of a pair; side B takes drops) */ pasteTarget?: boolean }) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [fileErr, setFileErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
-  const set = (p: Partial<ProfileValue>) => onChange({ ...value, ...p });
+  // intent audit 5 item 14: every change merges into the LATEST value (a functional update), and an image preview applies only if no newer
+  // pick or removal came after it (createLatest), so a slow preview can never restore an old image or undo a newer edit
+  const set = (p: Partial<ProfileValue>) => onChange((prev) => ({ ...prev, ...p }));
+  const latest = useRef(createLatest()).current;
   const pick = (f0: File | null) => {
     setFileErr(null);
     if (!f0) return;
     // a pasted image has no name of its own; it gets one, and then takes the same checks and preview as a chosen file
     const f = f0.name ? f0 : new File([f0], pastedImageName(f0.type), { type: f0.type });
     const bad = imageFileProblem({ size: f.size, type: f.type });
-    if (bad) { setFileErr(bad); return; }
+    if (bad) { latest.cancel(); setFileErr(bad); set({ imageState: "failed" }); return; }
+    const token = latest.next();
+    set({ imageState: "pending" });
     const r = new FileReader();
     // the preview is the server's badged copy (the same compositing a launch pins), so the creator sees the receipt mark before the wallet
     r.onload = () => {
       const url = String(r.result ?? ""); const base64 = url.slice(url.indexOf(",") + 1);
+      if (!latest.isCurrent(token)) return;
       setBusy(true);
       fetch("/api/burnticker/launch/image-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: { contentType: f.type, base64 } }) })
         .then(async (res) => { const j = await res.json().catch(() => null) as { contentType?: string; base64?: string; error?: string } | null; if (!res.ok || !j?.base64) throw new Error(j?.error ?? "The preview could not be made just now."); return j; })
-        .then((j) => set({ image: { badgedUrl: `data:${j.contentType};base64,${j.base64}`, plainUrl: url, contentType: f.type, base64, name: f.name }, rights: false }))
-        .catch((e: Error) => setFileErr(e.message))
-        .finally(() => setBusy(false));
+        .then((j) => { if (latest.isCurrent(token)) set({ image: { badgedUrl: `data:${j.contentType};base64,${j.base64}`, plainUrl: url, contentType: f.type, base64, name: f.name }, rights: false, imageState: null }); })
+        .catch((e: Error) => { if (latest.isCurrent(token)) { setFileErr(e.message); set({ imageState: "failed" }); } })
+        .finally(() => { if (latest.isCurrent(token)) setBusy(false); });
     };
-    r.onerror = () => setFileErr("The image could not be read. Try another file.");
+    r.onerror = () => { if (!latest.isCurrent(token)) return; setFileErr("The image could not be read. Try another file."); set({ imageState: "failed" }); };
     r.readAsDataURL(f);
   };
   const input = "mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm";
@@ -119,12 +130,13 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
           <p data-image-rights><LinkedWords text={IMAGE_RIGHTS_LINE} links={[{ words: "terms of use", href: "/burnticker/terms" }]} /></p>
           {busy && <p role="status">Adding the receipt mark.</p>}
           {fileErr && <p className="text-red-400" role="alert">{fileErr}</p>}
+          {!value.image && value.imageState && <button type="button" data-optional="profile" className="underline" onClick={() => { latest.cancel(); set({ imageState: null }); setFileErr(null); setBusy(false); }}>Remove the image</button>}
           {value.image && <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" data-badge-toggle checked={value.badge} onChange={(e) => set({ badge: e.target.checked })} /><span>{BADGE_TOGGLE}</span></label>}
           {value.image && <p data-badge-note>{BADGE_NOTE}</p>}
           {value.image && (
             <>
               <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" checked={value.rights} onChange={(e) => set({ rights: e.target.checked })} /><span data-rights-line>{RIGHTS_LINE}</span></label>
-              <button type="button" data-optional="profile" className="underline" onClick={() => { set({ image: null, rights: false }); setFileErr(null); }}>Remove the image</button>
+              <button type="button" data-optional="profile" className="underline" onClick={() => { latest.cancel(); set({ image: null, rights: false, imageState: null }); setFileErr(null); setBusy(false); }}>Remove the image</button>
             </>
           )}
         </div>

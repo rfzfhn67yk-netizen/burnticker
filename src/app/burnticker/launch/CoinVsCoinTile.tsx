@@ -31,6 +31,9 @@ import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileProble
  * a checkbox. Launch posts the pair to /api/burnticker/launch — side A on "A wins", side B derived by inversion.
  */
 
+/** The Coin vs Coin draft in sessionStorage, version 1 (intent audit 5 item 19). */
+export const CVC_STORE = "burnticker.launch.cvc.v1";
+interface CvcDraft { v: 1; a: Hit | null; b: Hit | null; names: { a: string; b: string; ta: string; tb: string }; fraction: number; flip: boolean; raiseSol: string; edited: boolean; profA: Partial<ProfileValue>; profB: Partial<ProfileValue> }
 interface Hit { symbol: string; name: string; source: "pyth" | "jupiter"; assetType: string; feed: string | null; mint: string | null; liquidityUsd: number | null; verified: boolean; underlying: DerbyUnderlying | null; why: string | null }
 interface Bundle { mint: string; ticker: string; ready: boolean; pending: string[]; mintSecretKey: string | null; rules: { sha256: string; statement: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[] }
 
@@ -106,6 +109,21 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
   const [names, setNames] = useState({ a: "", b: "", ta: "", tb: "" });
   // website-18 (the owner: "I also don't see the ability to change the thumbnail pic"): each coin of the pair has its own image, description and links
   const [profA, setProfA] = useState<ProfileValue>(EMPTY_PROFILE), [profB, setProfB] = useState<ProfileValue>(EMPTY_PROFILE);
+  // intent audit 5 item 19: the pair draft is kept across a refresh, Back and Resume (versioned; an image is never kept), and cleared by
+  // Start over (the page removes CVC_STORE with its own draft)
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current) return; restored.current = true;
+    const u = new URLSearchParams(window.location.search);
+    if (u.get("derby") === "1" || u.get("template")) return;
+    let d: CvcDraft | null = null;
+    try { d = JSON.parse(sessionStorage.getItem(CVC_STORE) ?? "null") as CvcDraft | null; } catch { d = null; }
+    if (!d || d.v !== 1) return;
+    if (d.a) setA(d.a); if (d.b) setB(d.b); setNames(d.names); setFlip(!!d.flip); if (typeof d.fraction === "number") setTimeout(() => setFraction(d!.fraction), 0);
+    if (d.raiseSol && (RAISE_PRESETS_SOL as readonly string[]).includes(d.raiseSol)) setRaiseSol(d.raiseSol as RaisePreset);
+    setEdited(!!d.edited);
+    setProfA((x) => ({ ...x, ...d!.profA })); setProfB((x) => ({ ...x, ...d!.profB }));
+  }, []);
   const [hash, setHash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false), [err, setErr] = useState<string | null>(null), [out, setOut] = useState<{ pairId: string; a: Bundle; b: Bundle; notes: string[] } | null>(null);
   const creator = wallet.publicKey?.toBase58() ?? "";
@@ -118,6 +136,12 @@ export function CoinVsCoinTile({ pairCurve = false, blocked = null, unavailable 
     if (a && b) { const t = pairTickers(a.symbol, b.symbol), n = pairNames(a.symbol, b.symbol); setNames({ a: n.a, b: n.b, ta: t.a, tb: t.b }); }
     else { if (a) setNames((n) => ({ ...n, a: n.a || defaultName(a.symbol), ta: n.ta || defaultTicker(a.symbol) })); if (b) setNames((n) => ({ ...n, b: n.b || defaultName(b.symbol), tb: n.tb || defaultTicker(b.symbol) })); }
   }, [a, b, edited]);
+  useEffect(() => {
+    if (!restored.current || (!a && !b)) return;
+    const words = (p: ProfileValue) => ({ description: p.description, x: p.x, telegram: p.telegram, website: p.website });
+    const d: CvcDraft = { v: 1, a, b, names, fraction, flip, raiseSol, edited, profA: words(profA), profB: words(profB) };
+    try { sessionStorage.setItem(CVC_STORE, JSON.stringify(d)); } catch { /* private mode */ }
+  }, [a, b, names, fraction, flip, raiseSol, edited, profA, profB]);
   const choice: TileChoice | null = a?.underlying && b?.underlying ? { a: a.underlying, b: b.underlying, window: window_, seasonDays, flip, fraction, now } : null;
   useEffect(() => { setHash(null); if (choice) sha256HexWeb(tileHashInput(choice)).then(setHash).catch(() => setHash(null)); }, [a, b, flip, fraction]); // eslint-disable-line react-hooks/exhaustive-deps
   const model = choice && hash ? tileRule(choice, hash, { a: names.ta.toUpperCase(), b: names.tb.toUpperCase() }) : null;
