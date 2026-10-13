@@ -119,6 +119,7 @@ const ROUTES: [RegExp, string, string[]][] = [
   [/^\/derby$/, "derby", []],
   [/^\/derby\/search$/, "derby/search", []],
   [/^\/derby\/high$/, "derby/high", []],
+  [/^\/derby\/pair$/, "derby/pair", []],
   [/^\/derby\/([^/]+)$/, "derby/[id]", ["id"]],
   [/^\/check$/, "check", []],
   [/^\/check\/receipts$/, "check/receipts", []],

@@ -114,7 +114,7 @@ describe("website-21 SOURCES4: the tile", () => {
   test("two choices in the tile; the record close reads the baseline, shows its refusal and its line, re-reads on a new UTC day", () => {
     assert.match(tile, /role="radiogroup" aria-label="What the coins follow" data-derby-kind/);
     assert.match(tile, /\{k === "pair" \? PAIR_CHOICE_LABEL : HIGH_CHOICE_LABEL\}/);
-    assert.match(tile, /<RecordClose blocked=\{blocked\} customImages=\{customImages\} phase=\{phase\} onPhase=\{onPhase\} onAnswers=\{onAnswers\} \/>/);
+    assert.match(tile, /<RecordClose initial=\{initial\.a\} blocked=\{blocked\} customImages=\{customImages\} phase=\{phase\} onPhase=\{onPhase\} onAnswers=\{onAnswers\} \/>/);
     assert.match(tile, /fetch\("\/api\/burnticker\/v1\/derby\/high", \{ method: "POST"/);
     assert.match(tile, /data-high-refusal>\{base\.refusal\}<\/p>/);
     assert.match(tile, /notes=\{\[\.\.\.\(base\?\.line \? \[base\.line\] : \[\]\), \.\.\.\(once \? \[HIGH_RUN_NOTE\] : \[\]\)\]\}/);

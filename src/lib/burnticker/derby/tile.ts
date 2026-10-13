@@ -1,5 +1,5 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
-import { coinvsHashInput, derbySentence, derbySeriesId, derbySpecProblems, DERBY_SEASON_DAYS, nextUtcMidnight, nextUtcMonday, type CoinVsSpec, type DerbyUnderlying, type DerbyWindow } from "@/lib/burnticker/derby/spec";
+import { coinvsHashInput, wrapperPairProblem, derbySentence, derbySeriesId, derbySpecProblems, DERBY_SEASON_DAYS, nextUtcMidnight, nextUtcMonday, type CoinVsSpec, type DerbyUnderlying, type DerbyWindow } from "@/lib/burnticker/derby/spec";
 
 /**
  * THE "COIN VS COIN" WIZARD TILE'S MODEL (2026-10-10). Pure and browser-safe: from two picked coins, a window, a season length and the
@@ -28,6 +28,8 @@ export const tileHashInput = (c: TileChoice): string => coinvsHashInput(tileSpec
 export function tileRule(c: TileChoice, seriesHash: string, tickers: { a: string; b: string }): { rule: BurnRule | null; spec: CoinVsSpec; sentence: string; problems: string[] } {
   const spec = tileSpec(c);
   const problems = derbySpecProblems(spec);
+  // sources-7 H7: a coin against its own staked or wrapped form is refused when the pair is picked
+  { const w = wrapperPairProblem(spec.a, spec.b); if (w) problems.push(w); }
   // website-19: the flippening resolves once (rules.ts isOneShot), so it takes the one-shot share, up to the whole pool
   if (!(c.fraction >= 0.01 && c.fraction <= (c.flip ? 1 : 0.25))) problems.push(c.flip ? "the one-time burn is 1–100% of the burn pool" : "the burn per winning window is 1–25% of the burn pool");
   const sentence = derbySentence(spec, tickers.a, tickers.b, c.fraction);

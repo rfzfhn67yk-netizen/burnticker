@@ -146,6 +146,25 @@ export function creatorLinks(v: { x?: string; telegram?: string; website?: strin
  */
 export const CREATOR_TEXT_SEPARATOR = "\n\n";
 export const withCreatorText = (generated: string, creatorText: string): string => [generated.trim(), creatorText.trim()].filter(Boolean).join(CREATOR_TEXT_SEPARATOR);
+/**
+ * The coin description's ceiling: the generated rule paragraph, the separator and the creator's own text (launchBundle.ts re-exports it
+ * as DESCRIPTION_LIMIT; kept here so the Name step can check it in the browser).
+ */
+export const DESCRIPTION_TOTAL_LIMIT = 1_500;
+/**
+ * sources-7 (QA walkthrough 11 H2): how many characters of the creator's own text fit after this generated paragraph — DESCRIPTION_MAX
+ * when the paragraph leaves the whole of it, less when it does not (never below 0). The Name step and the review both read it.
+ */
+export const descriptionRoom = (generated: string): number => Math.max(0, Math.min(DESCRIPTION_MAX, DESCRIPTION_TOTAL_LIMIT - generated.trim().length - CREATOR_TEXT_SEPARATOR.length));
+/** The Name step's sentence when the creator's text is longer than the room the rule's paragraph leaves (null: it fits). */
+export function descriptionRoomProblem(generated: string, creatorText: string): string | null {
+  const room = descriptionRoom(generated), n = creatorText.trim().length;
+  // a text over DESCRIPTION_MAX itself is the plain length check's sentence, not this one
+  if (n <= room || room === DESCRIPTION_MAX) return null;
+  return room === 0
+    ? "The rule's own paragraph fills this coin's description, so there is no room for your text. Leave the description empty."
+    : `Your description can be at most ${room.toLocaleString("en-US")} characters for this coin, because the rule's own paragraph uses the rest. It has ${n.toLocaleString("en-US")}.`;
+}
 /** The creator's own text from a stored description (after the generated paragraph); null when there is none. */
 export function creatorTextOf(description: string): string | null {
   const i = description.indexOf(CREATOR_TEXT_SEPARATOR);

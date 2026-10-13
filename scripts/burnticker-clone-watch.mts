@@ -12,7 +12,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { openRegistry, REGISTRY_FILE } from "@/lib/burnticker/registry";
 import { ProgramBurnClient } from "@/lib/burnticker/programClient";
-import { cloneStore, cloneTerms, evidenceLines, lpState, runCloneWatch, scanClones, type CloneWatchDeps } from "@/lib/burnticker/ops/cloneWatch";
+import { cloneStore, cloneTerms, evidenceLines, lpState, runCloneWatch, scanClones, termSinceFor, type CloneWatchDeps } from "@/lib/burnticker/ops/cloneWatch";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
 
 const dry = process.argv.includes("--dry-run");
@@ -27,7 +27,7 @@ const programId = (env.BURNTICKER_PROGRAM_ID ?? "").trim();
 const program = programId && (env.BURNTICKER_RPC_URL ?? "").trim() ? new ProgramBurnClient({ connection: conn, programId: new PublicKey(programId), cluster: env.BURNTICKER_CLUSTER === "mainnet" ? "mainnet" : "devnet", payer: null, admin: null, solUsd: async () => { throw new Error("not used"); } }) : null;
 
 const deps: CloneWatchDeps = {
-  terms, ownMints, fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), pauseMs: 400,
+  terms, ownMints, termSince: termSinceFor(tokens), fetchImpl: globalThis.fetch as unknown as FetchLike, now: () => Date.now(), pauseMs: 400,
   registered: program ? async (mint) => (await program.port(mint).config()) !== null : undefined,
   holders: async (mint) => {
     const pk = new PublicKey(mint);

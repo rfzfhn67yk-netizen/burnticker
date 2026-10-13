@@ -3,7 +3,7 @@ import type { Platform } from "@/lib/burnticker/server";
 import { loadTransparency } from "@/lib/burnticker/trust";
 import { buildChecklist } from "@/lib/burnticker/trustpack/checklist";
 import { sampleReceipts, DEVNET_PROGRAM_ID } from "@/lib/burnticker/trustpack/samples";
-import { checkReceiptTx, jsonRpc, PUBLIC_RPC, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
+import { checkReceiptTx, classifySignatureInput, jsonRpc, PUBLIC_RPC, type Rpc, type SourceFetch } from "@/lib/burnticker/trustpack/receiptCheck";
 import { isPubkey, isSignature } from "@/lib/burnticker/trustpack/base58";
 import { buildFeeLedgerDoc, loadExpenses, lpFeeLine, readPublishedLedger, readWalletHistory, type FeeLedgerDoc } from "@/lib/burnticker/trustpack/ledger";
 import { loadOperator, pinnedDevFeeWallet, placeholders, signedMessageView, type Cluster } from "@/lib/burnticker/trustpack/operator";
@@ -33,7 +33,8 @@ export const v1Check = (root = process.cwd()): ApiResult => ok(buildChecklist(ro
 export const v1CheckReceipts = (root = process.cwd()): ApiResult => ok(sampleReceipts(root));
 
 export async function v1CheckReceipt(signature: string, o: { rpc?: Rpc; fetchSource?: SourceFetch | null; root?: string } = {}): Promise<ApiResult> {
-  if (!isSignature(signature)) return fail(400, "not a transaction signature (base58, 64 bytes)", { code: "bad-signature" });
+  // QA 11 L8: a plain refusal, before any RPC call
+  if (!isSignature(signature)) return fail(400, classifySignatureInput(signature).reason ?? "That is not a Solana transaction signature.", { code: "bad-signature" });
   const samples = sampleReceipts(o.root);
   const s = samples.receipts.find((r) => r.signature === signature);
   const result = await checkReceiptTx({

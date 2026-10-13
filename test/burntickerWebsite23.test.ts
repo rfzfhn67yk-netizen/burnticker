@@ -93,7 +93,7 @@ describe("website-23: the posted body shape", () => {
     assert.match(page, /if \(pairMode === "game" && gameSides\) \{ const f = oneGameShare\(dialsFor\(gamePairRule\(/);
     assert.match(page, /return \{ a: gamePairRule\(gameSides\.league, gameSides\.eventId, gameSides\.a, f\), b: gamePairRule\(gameSides\.league, gameSides\.eventId, gameSides\.b, f\) \}/);
     // the gates stay: the editor latch, prepareIfCurrent, the reviewed-draft check
-    assert.match(page, /if \(editedFor !== subjectKey\) \{ setNameAuto\(true\); setTickerAuto\(true\); setEditedFor\(null\); \}/);
+    assert.match(page, /if \(editedFor !== subjectKey\) \{ setNameAuto\(true\); setTickerAuto\(true\); setEditedFor\(null\);/);
     assert.match(page, /const out = await prepareIfCurrent\(sentRev, \(\) => curRev\.current,/);
     assert.match(page, /if \(!rule \|\| !reviewMatchesDraft\(reviewSlot, curRev\.current\)\) return;/);
   });

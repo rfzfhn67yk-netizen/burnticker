@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { platform } from "@/lib/burnticker/server";
 import { clonesFor } from "@/lib/burnticker/ops/cloneServe";
-import type { ClonesJson } from "@/lib/burnticker/ops/cloneWatch";
+import { lastScanSentence, type ClonesJson } from "@/lib/burnticker/ops/cloneWatch";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Not Burnticker", description: "Tokens named like a Burnticker coin that are not Burnticker coins, with what the chain and the pool index showed. Check any mint yourself.", alternates: { canonical: "/burnticker/not-burnticker" } };
@@ -30,7 +30,7 @@ export default function NotBurntickerPage() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Not Burnticker</h1>
         <p className="text-neutral-400 max-w-3xl">These are tokens on Solana whose name or ticker looks like a Burnticker coin, or like Burnticker itself, and that are <b>not</b> Burnticker coins. A real Burnticker coin is registered with the burn program and has its own coin page on this site. You can check any token on <Link className="underline" href="/burnticker/verify">Verify a mint</Link>.</p>
-        <p className="text-xs text-neutral-500 max-w-3xl">{d?.note ?? "This list shows evidence only."} {d ? `The scan searches for ${d.terms.map((t) => (t === "BURNTICKER" ? "Burnticker" : `$${t}`)).join(", ")}.` : ""} {/* ChatGPT audit 7 item 2: the count is the list below; the last scan's own hits are said apart, as what that one scan saw */}{d ? `This list holds ${d.clones.length} ${d.clones.length === 1 ? "token" : "tokens"}, every lookalike recorded so far. ` : ""}{d?.lastScan ? `The last scan ran at ${d.lastScan.at.slice(0, 16).replace("T", " ")} UTC and saw ${d.lastScan.hits} of them${d.lastScan.errors.length ? `, with ${d.lastScan.errors.length} search ${d.lastScan.errors.length === 1 ? "error" : "errors"}` : ""}.` : "No scan has run on this site yet."}</p>
+        <p className="text-xs text-neutral-500 max-w-3xl">{d?.note ?? "This list shows evidence only."} {d ? `The scan searches for ${d.terms.map((t) => (t === "BURNTICKER" ? "Burnticker" : `$${t}`)).join(", ")}.` : ""} {/* ChatGPT audit 7 item 2: the count is the list below; the last scan's own hits are said apart, as what that one scan saw */}{d ? `This list holds ${d.clones.length} ${d.clones.length === 1 ? "token" : "tokens"}, every lookalike recorded so far. ` : ""}{/* QA 11 M12: never "saw 0 of them" beside a listed token (cloneWatch.ts lastScanSentence) */}{d ? lastScanSentence(d.clones.length, d.lastScan) : ""}</p>
       </header>
       {err && <p className="text-red-400 text-xs">The coin registry could not be read just now. The error was: {err}</p>}
       {d && d.clones.length === 0 && <p className="text-neutral-400 border border-neutral-800 rounded p-4">No lookalike tokens have been recorded.</p>}

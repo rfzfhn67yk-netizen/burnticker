@@ -1,3 +1,4 @@
+import { burnTargetShapeProblems, type BurnTargetField } from "@/lib/burnticker/burnTarget";
 import type { Platform } from "@/lib/burnticker/server";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
@@ -23,6 +24,7 @@ import { CROSS_LABEL, countedOfficialOf } from "@/lib/burnticker/sources/gameSet
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
 import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBadge";
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
+import { seasonOverFor, seasonStatus } from "@/lib/burnticker/seasonOver";
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, sideBDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
 import { describeRule } from "@/lib/burnticker/describe";
@@ -311,14 +313,7 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
  * game in it: a season coin would end at once and its pool would go to $DEFICIT. `none-listed` = no game for the team in the window
  * (a bye, the off-season or a schedule that lists only part of the league). `unknown` = the schedule could not be read.
  */
-export const SEASON_OVER_LINE = "Season over for this team: this coin would end right away and its pool would go to $DEFICIT.";
-export function seasonStatus(abbr: string, games: readonly Game[], readable: boolean): { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null } {
-  if (!readable) return { status: "unknown", warning: "This league's schedule could not be read, so whether this team has games left is not known." };
-  const open = games.filter((g) => !g.completed);
-  if (open.some((g) => g.home.abbr === abbr || g.away.abbr === abbr)) return { status: "upcoming", warning: null };
-  if (open.length && open.every((g) => g.seasonType === 3)) return { status: "over", warning: SEASON_OVER_LINE };
-  return { status: "none-listed", warning: "No game is listed for this team in the next 8 days. A season coin only burns on games still to come." };
-}
+export { SEASON_OVER_LINE, seasonStatus } from "@/lib/burnticker/seasonOver";
 
 /** GET /v1/sports/games?league=&q= — upcoming games for matchups (the league's own schedule or TheSportsDB, the next 8 days; no ESPN reads): both sides and each side's one-game loss selector. */
 export async function sportsGames(_p: Platform, q: { league?: string | null; q?: string | null }, nowMs = Date.now()): Promise<ApiResult> {
@@ -535,7 +530,7 @@ async function polymarketBacktest(p: Platform, locked: LockedRule, months: numbe
 
 export interface PreparedLaunch { bundle: LaunchBundle; token: TokenRow | null; seriesTitle: string | null; locked: LockedRule; preflight: PreflightResult | null }
 export interface PreparedPair { pairId: string; selector: string; notes: string[]; row: PairRow | null; bundles: { a: LaunchBundle; b: LaunchBundle }; tokens: { a: TokenRow | null; b: TokenRow | null }; seriesTitle: string | null; preflight: PreflightResult | null; /** BURNTICKER_PAIR_CURVE_ENABLED: the pair launches through pair_curve (sign this instead of the two LaunchLab bundles). */ pairCurve?: PairCurveLaunchBundle }
-interface PairSideInput { /** two candidates in one race: candidate B's market and the race slug; two teams in one game: the other team; side B's own describe context */ market?: unknown; race?: unknown; opp?: unknown; descCtx?: unknown; ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown; /** website-18: side B's own creator text and uploaded image */ creatorDescription?: unknown; image?: unknown; imageRights?: unknown; imageBadge?: unknown }
+interface PairSideInput { /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's rides in its rule */ burnTarget?: unknown; /** two candidates in one race: candidate B's market and the race slug; two teams in one game: the other team; side B's own describe context */ market?: unknown; race?: unknown; opp?: unknown; descCtx?: unknown; ticker?: unknown; name?: unknown; description?: unknown; imageUrl?: unknown; links?: unknown; /** website-18: side B's own creator text and uploaded image */ creatorDescription?: unknown; image?: unknown; imageRights?: unknown; imageBadge?: unknown }
 
 /**
  * Validation, refusals and the bundle — the launch route's whole pipeline. Refuses: invalid input, rules that do not lock, catalogue
@@ -575,11 +570,13 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
   // registered LaunchLab pairs, winner takes the burn, both end sinks pair-winner naming each other (launchPreflight.ts settledPairInput)
   const settled = settledPairInput(b.pair);
   { const rr = ruleRefusals(locked, { kalshiEnabled: p.kalshiEnabled !== false, now: Date.now(), pair: !!b.pair, candidates: settled?.candidates ?? null, game: settled?.game ?? null }); if (rr.length) return { error: fail(rr[0].status, rr.length === 1 ? rr[0].message : rr.map((x) => x.message).join("; "), { code: rr[0].code, problems: rr.map((x) => x.message) }) }; }
+  // sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over, from the platform's schedule port (one bounded read)
+  { const so = await seasonOverFor(locked.rule, p.seasonSchedule); if (so) return { error: fail(so.status, so.message, { code: so.code, next: so.next, problems: [so.message] }) }; }
   const list = loadRefuseList();
   const refusals: Refusal[] = nameRefusals(list, input.name, input.ticker);
   // website-19 (owner, 2026-10-12): the platform's reserved names (config/burnticker/reserved-tickers.json), for the ticker and the name;
   // audit 6 item 9: major coins' tickers and control characters in the creator's texts (the review runs the same identityRefusals)
-  { const ir = identityRefusals({ ticker: input.ticker, name: input.name, description: typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription) : "", note: typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note) : "" }, { refuseList: false }); if (ir.length) return { error: fail(ir[0].status, ir[0].message, { code: ir[0].code, problems: ir.map((x) => x.message) }) }; }
+  { const ir = identityRefusals({ ticker: input.ticker, name: input.name, description: typeof (body as { creatorDescription?: unknown }).creatorDescription === "string" ? String((body as { creatorDescription: string }).creatorDescription) : "", note: typeof (body as { note?: unknown }).note === "string" ? String((body as { note: string }).note) : "" }, { refuseList: false, rule: locked.rule }); if (ir.length) return { error: fail(ir[0].status, ir[0].message, { code: ir[0].code, problems: ir.map((x) => x.message) }) }; }
   let seriesTitle: string | null = null;
   let feedText: { title: string; sourceName: string; unitLabel: string } | null = null;
   let statedText: ReturnType<typeof statedCtx> = null;
@@ -741,11 +738,16 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
         if (!race || !ids.has(locked.rule.market ?? "") || !ids.has(settled.bundle.race.marketB)) return { error: fail(400, "Both candidates must be named outcomes of the same open race. Pick the race again, then two of its candidates.", { code: "candidates-not-one-race" }) };
       } catch (e) { return { error: fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`) }; }
     }
+    // Round 5 (WIRING-ROUND5 item 1): side B's own pinned token, checked like side A's field (rules.ts validateRule runs again when
+    // buildPairBundles locks side B's rule; a vault rule or a bad shape is refused there too)
+    const btRaw = pb.burnTarget;
+    if (btRaw !== undefined && btRaw !== null) { const bp = burnTargetShapeProblems(btRaw); if (bp.length) return { error: fail(400, `Side B: ${bp.join("; ")}`, { code: "burn-target", problems: bp }) }; }
+    const btB = btRaw === undefined || btRaw === null ? null : (btRaw as BurnTargetField);
     // a settled-event pair has the 30-day both-or-neither date (its graduation deadline), not the market's own end date
     const pairVoidBy = settled ? defaultVoidBy() : await oneShotVoidBy(p, locked) ?? undefined;
     try {
       // Side B's rule is side A's inverted (buildPairBundles); its description is generated from that rule after the bundle locks it.
-      const probe = await buildPairBundles({ a: input, b: { ...side, description: "" }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });
+      const probe = await buildPairBundles({ a: input, b: { ...side, description: "", burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: () => "ar://pending-upload-at-launch" });
       const lockedB = lockRule(JSON.parse(probe.b.rules.text)), lockedA = lockRule(JSON.parse(probe.a.rules.text));
       // a settled-event pair's side B is described from ITS OWN event (candidate B's market, read here; team B's win in the game), never
       // side A's words (website-23: "$ROGEVELSA burns if the Democrats win"); its context is the body's pair.descCtx
@@ -765,7 +767,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
       // an uploaded image is shown from its pinned Arweave copy, per side
       const shownImage = (tk: string, url: string | null, up: unknown) => (up ? pins.get(tk)?.imageUri ?? url : url);
       input.imageUrl = shownImage(input.ticker, input.imageUrl, uploaded); side.imageUrl = shownImage(side.ticker, side.imageUrl, upB.up);
-      const pair = await buildPairBundles({ a: input, b: side, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
+      const pair = await buildPairBundles({ a: input, b: { ...side, burnTarget: btB }, voidBy: pairVoidBy, ...(settled?.bundle ?? {}) }, { ...deps, metadataUri: uriFor(input.ticker), metadataUriB: uriFor(side.ticker) } as typeof deps);
       // 2026-10-10: behind BURNTICKER_PAIR_CURVE_ENABLED (default off) the pair launches through pair_curve (both graduate or neither).
       // Review N6: built BEFORE the drafts (a refused parameter set leaves no orphan draft), and the drafts then carry no LaunchLab
       // pool — under the pair curve the pool is the CPMM pool its graduation creates, registered later (policy 2).

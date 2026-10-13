@@ -95,7 +95,7 @@ describe("review items 13, 17, 19 and 43", () => {
     // the pinned NO rule (describe.ts, intent audit round 2): once, on a NO payout; a void never counts as a NO
     assert.match(t.oneLiner, /^burns if the Polymarket market settles NO, meaning the Dodgers did NOT win the 2026 World Series$/);
     assert.match(t.ruleBlock, /once, with a receipt on chain/); assert.match(t.ruleBlock, /voided or cancelled market never cou/);
-    assert.deepEqual(oneShotSentences({ share: 1, happened: "the Dodgers did not win the World Series", subject: "they", no: true }).slice(-1), ["If they do, the rest goes to $DEFICIT's burn. A voided market is not a NO."]);
+    assert.deepEqual(oneShotSentences({ share: 1, happened: "the Dodgers did not win the World Series", subject: "they", no: true }).slice(-1), ["If the market resolves YES instead, the rest goes to $DEFICIT's burn. A voided market is not a NO."]);   // sources-7 M2: the NO side's other case said as YES
   });
   test("17: the champion path's end shows the champion, not-champion and void branches from the rule", () => {
     const e = endSentences(season(), { team: "the Dodgers" });
@@ -194,7 +194,7 @@ test("a typed name belongs to its subject: a new team / market / pair regenerate
   const page = fs.readFileSync("src/app/burnticker/launch/page.tsx", "utf8");
   assert.match(page, /const \[editedFor, setEditedFor\] = useState<string \| null>\(null\);/);
   assert.match(page, /const subjectKey = \[flow, guide\.follow \?\? "", rule\?\.oracle \?\? "", rule\?\.market \?\? rule\?\.series \?\? "", team\?\.abbr \?\? "", sideA\?\.abbr \?\? "", sideB\?\.abbr \?\? ""\]\.join\("\|"\);/);
-  assert.match(page, /if \(editedFor !== subjectKey\) \{ setNameAuto\(true\); setTickerAuto\(true\); setEditedFor\(null\); \}/);
+  assert.match(page, /if \(editedFor !== subjectKey\) \{ setNameAuto\(true\); setTickerAuto\(true\); setEditedFor\(null\);/);
   // every manual edit records the subject, and the draft keeps it across a reload
   assert.equal((page.match(/setNameAuto\(false\); setEditedFor\(subjectKey\)/g) ?? []).length, 2);
   assert.match(page, /setTickerAuto\(false\); setEditedFor\(subjectKey\)/);

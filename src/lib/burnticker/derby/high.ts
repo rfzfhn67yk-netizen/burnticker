@@ -127,6 +127,17 @@ export function buildHighBaseline(span: HighSpan, history: readonly DayClose[], 
   return at ? { refusal: { code: "already-decided", reason: at } } : { baseline };
 }
 
+/**
+ * sources-7 (QA walkthrough 11 H1): the no-readings refusal on a host with no Pyth access key. Pyth gives past closes only to a keyed
+ * reader (pyth.ts KEYS), so without one the record can start only from closes this site saved itself; the sentence says which close is
+ * missing and why, never a bare "no readings".
+ */
+export function highNoKeyReason(span: HighSpan, through: string, saved: number): string {
+  const need = span === "all" ? `the daily close for ${through}, the day before launch` : `the ${span} daily closes up to ${through}, the day before launch`;
+  const have = saved ? ` It has saved ${saved} of them so far.` : "";
+  return `A record-close coin starts from ${need}. Pyth hands out past closes only to a site with a Pyth access key, and this site does not have one set up, so it can only use closes it saved itself.${have} Until the key is set up, or the site has saved every close the rule needs, a record-close coin cannot start here.`;
+}
+
 /** The already-decided refusal for a reference whose last close before launch is its record (null: not at its high). */
 export const HIGH_ALREADY_SENTENCE = "This reference's last daily close before launch is already its record, so a new coin on it is not offered. A coin on a record must start below the record, so that its first burn is a new one.";
 export function atHighOnLaunch(b: HighBaseline): string | null {

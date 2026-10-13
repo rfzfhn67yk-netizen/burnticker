@@ -24,6 +24,7 @@ import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets
 import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenance";
 import { asksWomen, compoundOf, compoundSentence, isWomenLeague, milestoneOf, milestoneSentence, regularSeasonOnly, REGULAR_SEASON_SENTENCE, womenSentence, type Compound } from "@/lib/burnticker/teamQuery";
 import { fitName } from "@/lib/burnticker/launchFields";
+import { recordCloseCardText, recordCloseHref, recordCloseIntent } from "@/lib/burnticker/recordCloseSearch";
 
 /**
  * INTENT → RULE CARDS (2026-10-10, the owner thinks in sentences, not sources). One box on the launch page takes a plain phrase and
@@ -436,6 +437,7 @@ export function quakeAsk(q: string): { magnitude: string | null; region: string 
 function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
   const nq = norm(q);
   const out: Suggestion[] = [];
+  const strong = new Set<string>();
   for (const f0 of feeds) {
     let f = f0, ask: ReturnType<typeof quakeAsk> | null = null;
     if (f0.id.startsWith("usgs.quakes:") && f0.launchable.ok) {
@@ -460,8 +462,14 @@ function feedCards(q: string, feeds: readonly FeedLike[]): Suggestion[] {
       // audit 10 #15: what the query asked for that this source does not offer is named, and the card is a related rule
       ...(ask && ask.unsupported.length ? { alternative: true, partial: true, note: `Not offered as asked: ${ask.unsupported.join("; ")}. This card is the closest rule the USGS reading supports: ${f.title.replace(/ \(USGS\)$/, "")}.` } : {}),
     });
+    if (kw) strong.add(out[out.length - 1].id);
   }
-  return out;
+  // QA 11 M5: "national debt" also listed executive orders, storms, hurricanes and wildfires (they share only "national"). When a feed
+  // matched the query's keywords, a feed that matched by title words alone stays only when it shares a one-word keyword the query used
+  // ("debt"), labelled related; a word that is only part of a keyword phrase ("national" of "national debt") does not keep it
+  if (!strong.size) return out;
+  const kwWords = new Set(Object.values(FEED_WORDS).flat().filter((w) => !w.includes(" ") && nq.includes(` ${w} `)));
+  return out.filter((c) => strong.has(c.id) || tokens(`${c.pick?.title ?? ""} ${c.settlement}`).some((w) => kwWords.has(w))).map((c) => (strong.has(c.id) ? c : { ...c, alternative: true }));
 }
 
 /** A one-shot Polymarket rule: the one-shot default preset (launchPresets.ts; the web offers 10 / 50 / 100 %, the API 1–100 %). */
@@ -572,6 +580,9 @@ async function searchAll(q: string, d: SearchDeps): Promise<{ query: string; car
   if (d.venues.kalshi && d.kalshiSearch) {
     try { for (const s of (await d.kalshiSearch(query)).slice(0, 2)) cards.push({ ...base, id: `kalshi:${s.ticker}`, venue: "kalshi", venueLabel: "Kalshi", shape: "recurring", title: s.title, subtitle: `Every market in the ${s.ticker} series`, settlement: s.settlementSource?.name ?? "Kalshi", pick: { oracle: "kalshi", series: s.ticker, market: null, title: s.title }, score: 0.5 + overlap(query, s.title) }); } catch (e) { errors.push(`kalshi: ${(e as Error).message.slice(0, 80)}`); }
   }
+  // QA 11 M5: "bitcoin record close" / "BTC all-time high" offer the record-close launch type (Coin comparison), above everything else
+  const rec = recordCloseIntent(query);
+  if (rec) { const t = recordCloseCardText(rec); cards.push({ ...base, id: `tile:record-close${rec.coin ? `:${rec.coin}` : ""}`, venue: "tile", venueLabel: "Coin comparison", shape: "tile", title: t.title, subtitle: t.subtitle, settlement: t.settlement, interpreted: t.interpreted, href: recordCloseHref(rec.coin), score: 2.5 }); }
   // a query that reads like a person's name ranks people (election outcomes) above everything else
   if (person) for (const c of cards) if (groupOf(c) === "elections") c.score += 1;
   const seen = new Set<string>();

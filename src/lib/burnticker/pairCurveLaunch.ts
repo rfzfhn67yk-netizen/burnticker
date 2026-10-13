@@ -11,6 +11,7 @@ import { DEFAULT_CURVE_SUPPLY, DEFAULT_MIN_SIDE_SHARE_BPS, DEFAULT_TARGET_RAISE_
 import { pairCurveEnabled, PAIR_CURVE_FLAG } from "@/lib/burnKeeper/pairCurveCrank";
 import type { PairBundles } from "@/lib/burnticker/launchBundle";
 import type { SerializedIx } from "@/lib/burnticker/program";
+import { PIN_IX_LABEL_PREFIX } from "@/lib/burnticker/burnTarget";
 
 /**
  * THE PAIR-CURVE LAUNCH PATH (2026-10-10; docs/burnticker/PAIR-CURVE.md). With BURNTICKER_PAIR_CURVE_ENABLED=1 (default OFF) a
@@ -130,10 +131,21 @@ export async function buildPairCurveLaunch(pair: PairBundles, creator: string, d
     const init = b.transactions.flatMap((t) => t.instructions).find((ix) => ix.label.startsWith("burn_receipts.initialize_token"));
     const re = init ? toPairCurvePolicy(init, deps.burnReceiptsProgramId, platform) : null;
     if (!re) pending.push(`Side ${side} has only a placeholder for the initialize_token step, because this site has no real client for the burn program (burn_receipts).`);
-    txs.push({
+    const mintIxs = createPairMintIxs({ payer: creatorKey, mint: m, vault, rentLamports: rent }).map((ix, i) => ser(ix, i === 0 ? `system.create_account (mint ${side})` : `spl_token.initialize_mint2 (mint ${side}, 6 decimals, authority = vault)`));
+    const initIx = re ? [re] : init ? [init] : [];
+    // Round 5 (WIRING-ROUND5 item 3): a side with a pinned token runs initialize_token, then pin_burn_target, then the mint creation, in
+    // its one transaction (the pin reads the TokenConfig and is refused once the mint exists). A side that burns itself is unchanged.
+    const pins = b.transactions.flatMap((t) => t.instructions).filter((ix) => ix.label.startsWith(PIN_IX_LABEL_PREFIX));
+    const bt = (JSON.parse(b.rules.text) as { burnTarget?: { symbol: string } }).burnTarget;
+    if (bt && pins.length !== 1) throw new Error(`pair curve: side ${side} burns ${bt.symbol}, and its bundle carries no pin for ${bt.symbol}'s pool`);
+    txs.push(bt ? {
+      label: `burn_receipts.initialize_token (policy 2) + burn_receipts.pin_burn_target (${bt.symbol}) + create mint ${side} (authority: the pair's SOL vault, no freeze authority)`,
+      signers: ["creator", side === "A" ? "mintA" : "mintB"],
+      instructions: [...initIx, pins[0], ...mintIxs],
+    } : {
       label: `create mint ${side} (authority: the pair's SOL vault, no freeze authority) + burn_receipts.initialize_token (policy 2)`,
       signers: ["creator", side === "A" ? "mintA" : "mintB"],
-      instructions: [...createPairMintIxs({ payer: creatorKey, mint: m, vault, rentLamports: rent }).map((ix, i) => ser(ix, i === 0 ? `system.create_account (mint ${side})` : `spl_token.initialize_mint2 (mint ${side}, 6 decimals, authority = vault)`)), ...(re ? [re] : init ? [init] : [])],
+      instructions: [...mintIxs, ...initIx],
     });
   }
   const pairIdHash = await import("node:crypto").then(({ createHash }) => Uint8Array.from(createHash("sha256").update(pair.pairId, "utf8").digest()));

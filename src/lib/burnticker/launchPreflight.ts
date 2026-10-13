@@ -9,6 +9,7 @@ import { loadMajors, loadReserved, majorProblem, reservedProblem } from "@/lib/b
 import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { regexProblem } from "@/lib/burnticker/safeRegex";
 import { lookalikeRefusal, type LookalikeExisting } from "@/lib/burnticker/lookalike";
+import { parseEspnSeries, teamByAbbr, teamCodeOf, teamsOf, type LeagueId } from "@/lib/burnticker/sources/espn";
 
 /**
  * THE ONE LAUNCH PREFLIGHT (ChatGPT audit 6 item 8, 2026-10-12: POST /launch/review answered 200 with no problems for setups the bundle
@@ -162,6 +163,30 @@ export interface IdentityInput { ticker: string; name: string; description?: str
 export interface IdentityCtx { /** false: the caller runs the refuse list's name patterns itself (the bundle route folds them into its refusals) */ refuseList?: boolean; reserved?: ReadonlySet<string>; majors?: ReadonlySet<string>; existing?: readonly LookalikeExisting[] | null; rule?: Pick<BurnRule, "oracle" | "series"> | null }
 
 /** A side's name, ticker and texts: the refuse list's name patterns, reserved names, major coins, control characters, lookalikes. */
+/**
+ * sources-7 (QA walkthrough 11 H9: $LAD was accepted on an Avalanche coin). On a team coin, a ticker that is another team's code on this
+ * site (its code, or its code with the generated win, loss or draw letter), in the major leagues or the coin's own league, reads as that
+ * team's coin, so it is refused. The coin's own team (and a rivalry series' other team) keep their codes; any other rule is not checked.
+ */
+const PRO_LEAGUES: readonly LeagueId[] = ["mlb", "nba", "nfl", "nhl", "wnba"];
+export function otherTeamTickerProblem(ticker: string, rule: Pick<BurnRule, "oracle" | "series"> | null | undefined): string | null {
+  const e = rule && rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null;
+  if (!e || e.kind !== "team") return null;
+  const t = ticker.trim().toUpperCase().replace(/^\$/, "");
+  if (!/^[A-Z0-9]{2,10}$/.test(t)) return null;
+  const own = new Set<string>();
+  const mine = teamByAbbr(e.league, e.abbr);
+  for (const x of [mine, e.window.kind === "meetings" ? teamByAbbr(e.league, e.window.opp) : null]) if (x) { own.add(x.abbr.toUpperCase()); own.add(teamCodeOf(x).toUpperCase()); }
+  const base = t.replace(/(L|W|D)$/, "");
+  if (own.has(t) || own.has(base)) return null;
+  for (const lg of [...new Set([...PRO_LEAGUES, e.league])]) {
+    let teams; try { teams = teamsOf(lg); } catch { continue; }
+    const hit = teams.find((x) => [x.abbr, teamCodeOf(x)].map((c) => c.toUpperCase()).some((c) => c === t || (c === base && c.length >= 2)));
+    if (hit) return `$${t} is the ticker of the ${hit.name} on this site, and this coin follows ${mine ? `the ${mine.name}` : "another team"}. Pick a ticker of your own, so nobody takes it for a ${hit.nickname} coin.`;
+  }
+  return null;
+}
+
 export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): PreflightRefusal[] {
   const out: PreflightRefusal[] = [];
   // the name's control characters are nameProblem's (launchFields.ts), which both the review and the bundle already run
@@ -171,6 +196,7 @@ export function identityRefusals(s: IdentityInput, ctx: IdentityCtx = {}): Prefl
   try { majors = ctx.majors ?? loadMajors(); } catch { /* the same */ }
   { const rp = reservedProblem(s, reserved); if (rp) out.push({ status: 403, code: "reserved", message: rp }); }
   { const mp = majorProblem(s, majors); if (mp) out.push({ status: 403, code: "major-ticker", message: mp }); }
+  { const ot = otherTeamTickerProblem(s.ticker, ctx.rule); if (ot) out.push({ status: 403, code: "other-team-ticker", message: ot }); }
   if (ctx.refuseList !== false) try { const nr = nameRefusals(loadRefuseList(), s.name, s.ticker); if (nr.length) out.push({ status: 403, code: "refused", message: `This launch is refused: ${nr.map((x) => x.reason).join("; ")}` }); } catch { /* the bundle reads it again */ }
   if (ctx.existing) { const look = lookalikeRefusal({ ticker: s.ticker, name: s.name, rule: ctx.rule ?? null }, ctx.existing); if (look) out.push({ status: 409, code: "lookalike", message: look.reason }); }
   return out;

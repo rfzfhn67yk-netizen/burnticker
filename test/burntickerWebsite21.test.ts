@@ -115,7 +115,7 @@ describe("website-21: step 3, Winner takes the burn only", () => {
   test("the page passes the scope, selects the winner, ignores other taps and keeps the recurring shares", () => {
     assert.match(page, /const rivalryScope = pairKindNow === "teams" \? \(meetingsOn \? "meetings" as const : pairMode === "game" \? "game" as const : "season" as const\) : null;/);
     assert.match(page, /meeting: rivalSeason \? !!rivalGame : null, rivalryScope \}\)/);
-    assert.match(page, /pairKind: pairKindNow, rivalryScope \}\) \}\)\);/);
+    assert.match(page, /pairKind: pairKindNow, rivalryScope, gameLabel \}\) \}\)\);/);
     assert.match(page, /guide\.follow === "rivalry" \? \(meetingsOn \|\| settledPick \? "winner" :/);
     assert.match(page, /if \(meetingsOn \|\| settledPick\) return;/);
     assert.match(page, /meetingsOn \? PATTERNS\.winner\.label\.toLowerCase\(\)/, "the progress strip says the pattern");
@@ -198,7 +198,7 @@ describe("website-21: audit 7 items 15 and 16", () => {
     assert.match(steps, /role="radio" aria-checked=\{value === c\.id\} data-decision="what" data-follow-choice/);
     assert.match(steps, /role="radiogroup" aria-label=\{whichHeading\("rivalry"\)\}/);
     assert.match(steps, /role="radio" aria-checked=\{value === k\}/);
-    assert.match(page, /<FollowStep search=\{searchBlock\} value=\{guide\.follow\}/); assert.match(page, /<RivalryKindStep value=\{guide\.pairKind\}/);
+    assert.match(page, /<FollowStep search=\{searchBlock\} value=\{guide\.follow \?\? prevFollow\}/); assert.match(page, /<RivalryKindStep value=\{guide\.pairKind\}/);
     assert.match(read("src/app/burnticker/launch/layout.tsx"), /<a className="bt-skip" href="#launch-main" data-skip-link>Skip to content<\/a>/);
     assert.match(page, /<main id="launch-main" tabIndex=\{-1\}/);
     // the "?" buttons: the shared 44 px hit layer and focus ring (site polish, audit 7 item 21) stay as they are

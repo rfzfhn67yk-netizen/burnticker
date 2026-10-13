@@ -9,7 +9,7 @@ import { governanceLines } from "@/lib/burnticker/currentStatusText";
 import { CURVE_FEES, postGraduationFeesFor, bpsPerSol, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL } from "@/lib/burnticker/fees";
 import { describeRule, endText, settledPairSentence, type DescribeCtx } from "@/lib/burnticker/describe";
 import { identityRefusals, ruleRefusals, sourceText } from "@/lib/burnticker/launchPreflight";
-import { reviewProjection, type Projection } from "@/lib/burnticker/projection";
+import { drainWarning, reviewProjection, type Projection } from "@/lib/burnticker/projection";
 import { kalshiEnabled as kalshiEnabledFromEnv } from "@/lib/burnticker/venues";
 import type { LookalikeExisting } from "@/lib/burnticker/lookalike";
 import { DESCRIPTION_LIMIT } from "@/lib/burnticker/launchBundle";
@@ -20,7 +20,7 @@ import { settledPairInput, type SettledPairInput } from "@/lib/burnticker/launch
 import { weatherFrequency } from "@/lib/burnticker/sources/nwsClimate";
 import { UNPLAYED_GAME_LINE, dueTiming, dueWarningDays, gameDueLabel, gameOfRule, type ScheduledGame } from "@/lib/burnticker/timing";
 import { creatorTextProblems, NOTE_MAX, serverDescribeCtx, sideBDescribeCtx } from "@/lib/burnticker/coinText";
-import { DESCRIPTION_MAX } from "@/lib/burnticker/creatorProfile";
+import { DESCRIPTION_MAX, descriptionRoom, descriptionRoomProblem } from "@/lib/burnticker/creatorProfile";
 import { nameProblem } from "@/lib/burnticker/launchFields";
 import { presetProblem, presetRowLabel, shareOf, shareShapeOf, pctLabel, DEFAULT_RAISE_SOL, RAISE_PRESETS_SOL, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, isRaisePreset } from "@/lib/burnticker/launchPresets";
 import { availabilityFromEnv, hostCluster, launchTypeOf, siteLaunchState, PAIRS_UNAVAILABLE_LINE, type LaunchAvailabilityModel, type LaunchType } from "@/lib/burnticker/launchAvailability";
@@ -28,6 +28,9 @@ import { OPERATOR_LINE } from "@/lib/burnticker/trustpack/copy";
 import { EVENT_LEVEL_REFUSAL, eventLevelRule, graduationExplainer } from "@/lib/burnticker/guidedLaunch";
 import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
+import { BURN_TARGET_ACCOUNT_BYTES, PIN_STEP_NOTE, burnTargetShapeProblems, createAfterPinText, pinStepText, type BurnTargetField } from "@/lib/burnticker/burnTarget";
+import type { SeasonOverRefusal } from "@/lib/burnticker/seasonOver";
+import { wrapperPairProblem } from "@/lib/burnticker/derby/spec";
 import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, decimalSolToLamports, launchLabCostLamports, rentLamports, solText as sol } from "@/lib/burnticker/launchCost";
 
 /**
@@ -45,7 +48,7 @@ import { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, 
  */
 
 /** `pair` = side B of a registered pair (its rule is derived from side A's); `companion` = a second, independent coin launched alongside (a matchup's other team). */
-export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** two candidates in one race: candidate B's market and the race slug */ market?: unknown; race?: unknown; /** two teams in one game: the other team */ opp?: unknown; /** a settled pair's side B: its own describe context (candidate B's event words, or team B's game), as `descCtx` is side A's */ descCtx?: unknown; /** the two candidates' or teams' names, for the money path */ names?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
+export interface ReviewInput { rule?: unknown; ticker?: unknown; name?: unknown; note?: unknown; descCtx?: unknown; pair?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** two candidates in one race: candidate B's market and the race slug */ market?: unknown; race?: unknown; /** two teams in one game: the other team */ opp?: unknown; /** a settled pair's side B: its own describe context (candidate B's event words, or team B's game), as `descCtx` is side A's */ descCtx?: unknown; /** round 5: side B's own pinned token (burnTarget.ts BurnTargetField); side A's is in `rule` */ burnTarget?: unknown; /** the two candidates' or teams' names, for the money path */ names?: unknown } | null; companion?: { ticker?: unknown; name?: unknown; creatorDescription?: unknown; /** website-19 (intent audit item 8): the second coin's own rule, locked and shown with its fingerprint */ rule?: unknown } | null; warnings?: unknown; /** website-14: the graduation preset, "40" / "60" / "85" (default 85) */ raiseSol?: unknown }
 export interface ReviewCost { label: string; sol: string; kind: "rent" | "reserve" | "fee" }
 export interface LaunchReview {
   schema: "burnticker.launch-review/v1";
@@ -58,10 +61,17 @@ export interface LaunchReview {
   signable: boolean;
   rule: { text: string; sha256: string; sha12: string; statement: string; sentence: string; share: string; presets: string; endsLine: string };
   /** website-18: `profile` is the creator's own description for that side (a pair carries one per side) */
-  coins: { side: "A" | "B"; name: string; ticker: string; description: string | null; profile: { description: string } }[];
+  coins: { side: "A" | "B"; name: string; ticker: string; description: string | null; profile: { description: string }; /** sources-7 H2: the characters of the creator's own text that fit after this coin's generated paragraph (creatorProfile.ts descriptionRoom) */ descriptionRoom: number; /** sources-7 H9: the rule's own generated ticker for this side (the ticker check suggests from it), or null */ suggestedTicker: string | null }[];
   allocation: { supply: string; curve: string; locked: string; reserve: string; teamAllocationPct: 0; lpLockedPct: number };
   feesPerSol: { phase: "curve" | "post-graduation"; legs: { label: string; sol: string }[]; totalSol: string }[];
   transactions: { count: number; steps: { label: string; signers: string[] }[]; note: string };
+  /**
+   * Round 5 (WIRING-ROUND5 item 4): every coin that pins a real token, with the step (1-based, as `rules[].step`) whose label starts
+   * "Pin <symbol>'s Raydium pool for $<ticker>", the BurnTarget account's size and rent, and the signatures the pin adds (2 on LaunchLab:
+   * its own transaction; 0 on the pair curve: it rides in the coin's one transaction). Already counted in `transactions` and `costs`:
+   * a page must not add them again. Empty when no coin pins a token.
+   */
+  pins: { side: "A" | "B"; ticker: string; symbol: string; step: number; bytes: number; rentSol: string; signatures: number }[];
   costs: { lines: ReviewCost[]; totalSol: string; note: string };
   prerequisites: string[];
   /** website-14 (LAUNCHPAD-PATH §75): the chosen graduation raise, the pool it starts, the three choices and what each means. */
@@ -119,6 +129,11 @@ export interface LaunchReview {
    * Absent otherwise.
    */
   settled?: { shape: "candidates" | "game"; sentence: string; flow: FundsFlow; descriptionB: string } | null;
+  /**
+   * sources-7 (QA walkthrough 11 H6): a season rule on a team whose season is over (seasonOver.ts): the refusal, also in `problems`, and
+   * the offer (the same rule on the next season; the title market is named in the sentence). Absent otherwise.
+   */
+  seasonOver?: { message: string; next: SeasonOverRefusal["next"] } | null;
 }
 
 /** Side A and side B of a settled-event pair as the bundle builds them (side B reads the other market or the other team's win series). */
@@ -138,12 +153,12 @@ const settledNames = (names: unknown, sides: { name: string }[]): { a: string; b
 };
 
 /** A rivalry series pair's review block: the per-game and season-end money path, and side B's description from the mirror rule. */
-function meetingsReview(rule: BurnRule, tickerA: string, tickerB: string, ctx: Omit<DescribeCtx, "ticker">): { flow: FundsFlow; descriptionB: string } | null {
+function meetingsReview(rule: BurnRule, tickerA: string, tickerB: string, ctx: Omit<DescribeCtx, "ticker">, cluster: string): { flow: FundsFlow; descriptionB: string } | null {
   const e = rule.series ? parseEspnSeries(rule.series) : null, mirror = rule.series ? meetingsMirror(rule.series) : null;
   if (e?.kind !== "team" || e.window.kind !== "meetings" || !mirror) return null;
   const a = teamByAbbr(e.league, e.abbr)?.nickname ?? e.abbr, b = teamByAbbr(e.league, e.window.opp)?.nickname ?? e.window.opp;
   const ruleB = { ...rule, series: mirror } as BurnRule;
-  return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }, { playoffs: !noPlayoffs(e.league) }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
+  return { flow: meetingsFundsFlow({ a: tickerA || "A", b: tickerB || "B" }, { a, b }, { playoffs: !noPlayoffs(e.league), fees: postGraduationFeesFor(cluster) }), descriptionB: describeRule(ruleB, { ...ctx, ticker: tickerB || "TICKER" }).paragraph };
 }
 
 export { LAMPORTS_PER_SIGNATURE, LAUNCHLAB_CREATE_RENT_SOL, TOKEN_CONFIG_BYTES, launchLabCostLamports, launchLabCostSol, rentLamports } from "@/lib/burnticker/launchCost";
@@ -189,15 +204,15 @@ export function reviewGovernance(root: string, cluster: string, timeLockSecs: nu
   } catch { return ["Who signs readings and who can upgrade the program could not be read just now. The Trust page has both."]; }
 }
 
-/** Who can change what — scoped to the current program permissions (L06; no unscoped "no one can change it"). */
-export function authorityLine(root = process.cwd()): string {
-  let threshold = "two of the three keys";
-  try {
-    const op = JSON.parse(fs.readFileSync(path.join(root, "config", "burnticker", "operator.json"), "utf8")) as { clusters?: { mainnet?: { squads?: { threshold?: string } } } };
-    const t = /^(\d) of (\d)$/.exec(op.clusters?.mainnet?.squads?.threshold ?? "");
-    if (t) threshold = `${["zero", "one", "two", "three", "four", "five"][Number(t[1])] ?? t[1]} of the ${["zero", "one", "two", "three", "four", "five"][Number(t[2])] ?? t[2]} keys`;
-  } catch { /* the default */ }
-  return `The coin's rule is fixed when it launches. A fingerprint of the rule is stored on chain with the coin, and no instruction in the program can change it. The program itself can still be upgraded. An upgrade needs ${threshold} that control the operator's Squads vault, a shared wallet that needs several signatures. The trust page shows how long an approved upgrade must wait before it runs.`;
+/**
+ * Who can change what — scoped to the current program permissions (L06; no unscoped "no one can change it"). sources-7 (QA walkthrough 11
+ * M8: the review said an upgrade "needs two of the three keys … a shared wallet that needs several signatures" while Trust says the owner
+ * holds two of the three and the time lock is 0): who controls the keys comes from the same status record as reviewGovernance and Trust
+ * (current-status.json squads.<cluster>.operatorControlledKeys, operator.json's threshold), through the same governanceLines sentence.
+ */
+export function authorityLine(root = process.cwd(), cluster = "mainnet"): string {
+  const keys = reviewGovernance(root, cluster, null)[1] ?? "Who controls the upgrade keys is on the Trust page.";
+  return `The coin's rule is fixed when it launches. A fingerprint of the rule is stored on chain with the coin, and no instruction in the program can change it. The program itself can still be upgraded, through the operator's Squads vault. ${keys} The trust page shows how long an approved upgrade must wait before it runs.`;
 }
 
 /** The dispute-window sentence when the server could not read the market's own window (UMA's documented default). */
@@ -220,6 +235,7 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   /** audit 6 item 8: whether this host serves Kalshi (the platform's flag; default from the env) */ kalshiEnabled?: boolean;
   /** audit 6 item 8: the registered coins, for the lookalike refusal the bundle route makes (null: not checked) */ existing?: readonly LookalikeExisting[] | null;
   /** audit 6 item 2: a team with no games left this season (the route reads the schedule) */ seasonWarning?: string | null; now?: number;
+  /** sources-7 H6: the season-over refusal (seasonOver.ts seasonOverFor, read by the route); refused as a problem, never only a warning */ seasonOver?: SeasonOverRefusal | null;
   /** audit 7 items 7 and 11: the game a one-game rule names, from the schedule (the route reads it); its start is the due date */ game?: ScheduledGame | null } = {}): { review: LaunchReview } | { problems: string[] } {
   const env = o.env ?? process.env;
   const cluster = hostCluster(env);
@@ -234,6 +250,8 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // THE ONE LAUNCH PREFLIGHT (launchPreflight.ts; ChatGPT audit 6 item 8): every rule refusal the bundle route makes, as problems
   const settled = settledPairInput(body.pair);
   for (const x of ruleRefusals(locked, { kalshiEnabled: o.kalshiEnabled ?? kalshiEnabledFromEnv(env), now, pair: !!(body.pair && typeof body.pair === "object"), candidates: settled?.candidates ?? null, game: settled?.game ?? null })) problems.push(x.message);
+  // sources-7 H7: a coin against its own staked or wrapped form (derby/spec.ts wrapperPairProblem), as the tile and admission refuse it
+  { const d = locked.rule.derby; if (d?.selector === "coinvs") { const w = wrapperPairProblem(d.a, d.b); if (w) problems.push(w); } }
   const pair = body.pair && typeof body.pair === "object" ? body.pair : null;
   // audit 6 test A: a registered pair locks side A's rule with a pair clause (handlers.ts buildPairBundles); a source that cannot pair
   // (an ESPN team, a feed) is refused there, so the review says so here
@@ -275,6 +293,15 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   if (cr && typeof cr === "object" && !Array.isArray(cr)) {
     try { companionLocked = lockRule((cr as { onEnd?: unknown }).onEnd === undefined ? { ...(cr as object), onEnd: { ...DEFAULT_ON_END } } : cr); } catch (e) { problems.push(`Coin B. ${(e as Error).message}`); }
   }
+  // Round 5 (WIRING-ROUND5 item 1): side B's own pinned token, checked as the bundle route checks it (handlers.ts prepareLaunch)
+  let pinB: BurnTargetField | null = null;
+  { const raw = pair ? (pair as { burnTarget?: unknown }).burnTarget : undefined;
+    if (raw !== undefined && raw !== null) {
+      const bp = burnTargetShapeProblems(raw);
+      if (bp.length) for (const x of bp) problems.push(`Coin B. ${x}`);
+      else if (locked.mode === "vault") problems.push("Coin B. burnTarget: a vault-mode coin has no burn pool to spend on a target");
+      else pinB = raw as BurnTargetField;
+    } }
   // audit 6 item 8: the bundle route takes any share inside the rule's bounds, so a share off the web launcher's preset row is a warning
   const pp = presetProblem(locked.rule);
   // website-14 (§75): the graduation raise, server-enforced: 40, 60 or 85 SOL on mainnet; 85 when the request names none
@@ -302,7 +329,16 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const asBuilt: BurnRule = meetingsPair ? { ...locked.rule, pair: { pairId: "review-pair", side: "A", counterpartMint: null, winnerTakesBurn: true } } : settledPair ? settledPair.a : locked.rule;
   const text = describeRule(asBuilt, { ticker: ticker || "TICKER", ...ctx });
   // the description the bundle pins: the generated paragraph, then the creator's own text, within the bundle's ceiling
-  { const full = withCreatorText(text.paragraph, creatorText); if (full.length > DESCRIPTION_LIMIT) problems.push(`The description, the rule's paragraph and your own text together, comes to ${full.length.toLocaleString("en-US")} characters, and a coin's description can be at most ${DESCRIPTION_LIMIT.toLocaleString("en-US")}. Shorten your text.`); }
+  // sources-7 H2: said as the room the rule's paragraph leaves (the Name step's own sentence), never "shorten your text" when there is none
+  const meetingsBlock = meetingsPair ? meetingsReview(asBuilt, ticker, String(pair!.ticker ?? "").toUpperCase(), ctx, cluster) : null;
+  const settledDescB = settled && settledPair?.b ? describeRule(settledPair.b, { ...sideBDescribeCtx(settledPair.b, (pair as { descCtx?: unknown } | null)?.descCtx, body.descCtx, { seriesTitle: sourceText(settledPair.b, now)?.title ?? null }), ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph : "";
+  const paragraphB = meetingsBlock?.descriptionB ?? (settledDescB || null);
+  const tickerB: string | null = (() => { try { const rb = meetingsPair ? { ...asBuilt, series: meetingsMirror(asBuilt.series ?? "") } as BurnRule : settledPair?.b ?? null; return rb ? describeRule(rb, { ...ctx, ticker: "" }).ticker || null : null; } catch { return null; } })();
+  for (const [gen, own, who] of [[text.paragraph, creatorText, ""], ...(paragraphB ? [[paragraphB, creatorTextB, "Coin B. "]] : [])] as [string, string, string][]) {
+    const rp = descriptionRoomProblem(gen, own);
+    if (rp) problems.push(`${who}${rp}`);
+    else { const full = withCreatorText(gen, own); if (full.length > DESCRIPTION_LIMIT) problems.push(`${who}The description, the rule's paragraph and your own text together, comes to ${full.length.toLocaleString("en-US")} characters, and a coin's description can be at most ${DESCRIPTION_LIMIT.toLocaleString("en-US")}.`); }
+  }
   const espn = locked.rule.oracle === "catalogue" && locked.rule.series ? parseEspnSeries(locked.rule.series) : null;
   const teamName = espn ? teamByAbbr(espn.league, espn.abbr)?.nickname ?? null : null;
   const end = endText(asBuilt, { team: teamName ? `the ${teamName}` : null });
@@ -313,6 +349,10 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   const rentConfig = rentLamports(TOKEN_CONFIG_BYTES), reserve = decimalSolToLamports(locked.rule.reserveSol);
   const tk = (i: number) => sides[i]?.ticker || (i === 0 ? "A" : "B");
   let lines: ReviewCost[], total: number, steps: { label: string; signers: string[] }[], costNote: string;
+  // round 5: the token each coin pins (side A's rule; side B's own field, or a Matchup companion's rule), and the BurnTarget rent
+  const targets: (BurnTargetField | null)[] = [locked.rule.burnTarget ?? null, pair ? pinB : companionLocked?.rule.burnTarget ?? null];
+  const pins: LaunchReview["pins"] = [];
+  const pinRent = rentLamports(BURN_TARGET_ACCOUNT_BYTES);
   if (venue === "pair-curve") {
     const mintRent = rentLamports(SPL_MINT_BYTES), fee = 5 * LAMPORTS_PER_SIGNATURE;   // two signatures on each create, one on the link
     lines = [
@@ -322,11 +362,10 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       { label: "Network fees for five signatures across the three transactions. Priority fees are extra.", sol: sol(fee), kind: "fee" },
     ];
     total = (rentConfig + reserve + mintRent) * 2 + fee;
-    steps = [
-      { label: `Create $${tk(0)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] },
-      { label: `Create $${tk(1)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] },
-      { label: "Link the two coins as one pair on the pair curve", signers: ["your wallet"] },
-    ];
+    // round 5: a side with a pinned token locks its rule, pins the pool and creates its mint in its one transaction (pairCurveLaunch.ts)
+    steps = [0, 1].map((i) => ({ label: targets[i] ? pinStepText(tk(i), targets[i]!.symbol, { thenCreate: true }) : `Create $${tk(i)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }));
+    steps.push({ label: "Link the two coins as one pair on the pair curve", signers: ["your wallet"] });
+    for (const i of [0, 1]) if (targets[i]) pins.push({ side: i === 0 ? "A" : "B", ticker: tk(i), symbol: targets[i]!.symbol, step: i + 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 0 });
     costNote = "This is an estimate. It does not include the rent for the pair's own account and vaults, which has not been measured. Your wallet shows the exact amount before you approve. The reserve stays in each coin's burn pool, and the rent stays with the new accounts.";
   } else {
     const create = Math.round(LAUNCHLAB_CREATE_RENT_SOL * 1e9), fee = 2 * LAMPORTS_PER_SIGNATURE;
@@ -337,11 +376,24 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
       { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * coins), kind: "fee" },
     ];
     total = launchLabCostLamports(locked.rule.reserveSol, coins);
-    steps = coins > 1
+    const plainSteps = coins > 1
       ? [{ label: `Create $${tk(0)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }, { label: pair ? `Create $${tk(1)} and link the two coins` : `Create $${tk(1)} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }]
       : [{ label: `Create $${ticker || "TICKER"} and lock in its rule`, signers: ["your wallet", "a new key made for this coin"] }];
+    // round 5 (WIRING-ROUND5 items 2 and 4): a coin with a pinned token is two transactions (launchBundle.ts launchTransactions): its rule
+    // locked and the pool pinned, then the coin created; the extra transaction's two signatures are counted here, and in `pins`
+    steps = [];
+    plainSteps.forEach((st, i) => {
+      const bt = targets[i];
+      if (!bt) { steps.push(st); return; }
+      const t = coins > 1 ? tk(i) : ticker || "TICKER";
+      steps.push({ label: pinStepText(t, bt.symbol, { link: !!pair && i === 1 }), signers: st.signers }, { label: createAfterPinText(t), signers: st.signers });
+      pins.push({ side: i === 0 ? "A" : "B", ticker: t, symbol: bt.symbol, step: steps.length - 1, bytes: BURN_TARGET_ACCOUNT_BYTES, rentSol: sol(pinRent), signatures: 2 });
+      total += fee;
+    });
+    lines[3] = { label: "Network fees for two signatures per transaction. Priority fees are extra.", sol: sol(fee * steps.length), kind: "fee" };
     costNote = "This is an estimate. Your wallet shows the exact amount before you approve. The reserve stays in the coin's burn pool, and the rent stays with the new accounts.";
   }
+  for (const x of pins) { lines.push({ label: `Rent for the account that pins ${x.symbol}'s pool to $${x.ticker}, which is ${x.bytes} bytes.`, sol: x.rentSol, kind: "rent" }); total += pinRent; }
   const share = shareOf(locked.rule);
   const shareText = share === null ? "a vault amount" : pctLabel(share);
   const warnings = Array.isArray(body.warnings) ? (body.warnings as unknown[]).filter((w): w is string => typeof w === "string" && w.length <= 300).slice(0, 6) : [];
@@ -357,8 +409,14 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
   // QA pass 9 #16: a weather threshold that fires on almost every day, or almost never, at its station says so (the station's history)
   const wxFreq = locked.rule.oracle === "catalogue" && locked.rule.series ? weatherFrequency(locked.rule.series, !!locked.rule.inverse) : null;
   if (wxFreq?.warning) warnings.push(wxFreq.warning);
-  if (o.seasonWarning) warnings.unshift(o.seasonWarning);
+  // sources-7 (QA walkthrough 11 M4): a share that drains the pool in days is said among the warnings, not only in the collapsed backtest
+  const projection = reviewProjection(locked.rule, now);
+  { const dw = drainWarning(locked.rule, projection); if (dw) warnings.push(dw); }
+  if (o.seasonOver) problems.push(o.seasonOver.message);
+  else if (o.seasonWarning) warnings.unshift(o.seasonWarning);
   const n = steps.length;
+  // the first step of side B (1-based): after side A's one or two transactions
+  const stepB = venue === "pair-curve" ? 2 : targets[0] ? 3 : 2;
   const recovery = n === 1
     ? ["If you reject the request in your wallet, nothing is sent and nothing is charged. The draft is kept for 24 hours, so you can press the button again."]
     : [
@@ -374,10 +432,11 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     schema: "burnticker.launch-review/v1", network: cluster, mode: model.mode, type, typeAvailable, typeReason,
     signable,
     rule: { text: locked.text, sha256: locked.sha256, sha12: locked.sha12, statement: ruleStatement(locked.rule, { seriesTitle: o.seriesTitle ?? null, feedTitle: src?.title ?? null, unitLabel: src?.unitLabel ?? null }), sentence: text.lead, share: shareText, presets: `The web launcher offers ${presetRowLabel(shareShapeOf(locked.rule))} for this kind of rule.`, endsLine: endsLine(text.windowSentence, end) },
-    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB } })),
+    coins: sides.map((s, i) => ({ side: s.side, name: s.name, ticker: s.ticker, description: i === 0 ? text.paragraph : null, profile: { description: i === 0 ? creatorText : creatorTextB }, descriptionRoom: i === 0 ? descriptionRoom(text.paragraph) : paragraphB ? descriptionRoom(paragraphB) : DESCRIPTION_MAX, suggestedTicker: i === 0 ? text.ticker || null : tickerB })),
     allocation: { supply: alloc.supply.toString(), curve: alloc.curve.toString(), locked: alloc.locked.toString(), reserve: alloc.reserve.toString(), teamAllocationPct: 0, lpLockedPct: LP_LOCKED_PCT },
     feesPerSol: venue === "pair-curve" ? [perPc(PAIR_CURVE_FEES.curve), perPc(PAIR_CURVE_FEES.post)] : [per(CURVE_FEES), per(postGraduationFeesFor(cluster))],
-    transactions: { count: n, steps, note: n === 1 ? "You sign the transaction in your wallet. The wallet shows the exact accounts and amount first, and nothing is sent until you approve." : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it." },
+    transactions: { count: n, steps, note: `${n === 1 ? "You sign the transaction in your wallet. The wallet shows the exact accounts and amount first, and nothing is sent until you approve." : "You sign each transaction in your wallet. The wallet shows the exact accounts and amount of each one first, and nothing in it is sent until you approve it."}${pins.length ? ` ${PIN_STEP_NOTE}` : ""}` },
+    pins,
     costs: { lines, totalSol: sol(total), note: costNote },
     prerequisites: [
       prerequisiteLineFor(venue, venue === "launchlab" ? raiseSol : null),
@@ -396,22 +455,23 @@ export function buildLaunchReview(body: ReviewInput, o: { env?: Readonly<Record<
     recovery,
     governance: reviewGovernance(o.root ?? process.cwd(), cluster, o.timeLockSecs ?? null),
     signing: !typeAvailable ? typeReason : !launchState.canSign ? launchState.signingSentence : problems.length ? "This draft has problems to fix before it can be signed." : null,
-    authority: authorityLine(o.root),
+    authority: authorityLine(o.root, cluster),
     operator: OPERATOR_LINE,
     warnings,
     problems,
     graduation: graduationLines(cluster),
     rules: [
       { side: "A" as const, ticker: tk(0), name, step: 1, text: locked.text, sha256: locked.sha256, derived: false },
-      ...(companionLocked ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: 2, text: companionLocked.text, sha256: companionLocked.sha256, derived: false }] : []),
-      ...(pair ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: 2, text: "", sha256: "", derived: true }] : []),
+      ...(companionLocked ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: stepB, text: companionLocked.text, sha256: companionLocked.sha256, derived: false }] : []),
+      ...(pair ? [{ side: "B" as const, ticker: tk(1), name: sides[1]?.name ?? "", step: stepB, text: "", sha256: "", derived: true }] : []),
     ],
     dispute: locked.rule.oracle === "polymarket" && locked.rule.market ? (o.stated ? statedSentences(o.stated, o.stated.finalAfter) : DISPUTE_DEFAULT) : null,
     end: { kind: end.kind, result: end.result, void: end.void },
-    projection: reviewProjection(locked.rule, now),
+    projection,
     timing,
-    ...(meetingsPair ? { meetings: meetingsReview(asBuilt, ticker, String(pair.ticker ?? "").toUpperCase(), ctx) } : {}),
-    ...(settled && settledPair ? { settled: { shape: settled.shape, sentence: settledPairSentence(settled.shape), flow: settledPairFundsFlow(settled.shape, { a: ticker || "A", b: String(pair?.ticker ?? "").toUpperCase() || "B" }, settledNames(pair?.names, sides)), descriptionB: settledPair.b ? describeRule(settledPair.b, { ...sideBDescribeCtx(settledPair.b, (pair as { descCtx?: unknown } | null)?.descCtx, body.descCtx, { seriesTitle: sourceText(settledPair.b, now)?.title ?? null }), ticker: String(pair?.ticker ?? "").toUpperCase() || "TICKER" }).paragraph : "" } } : {}),
+    ...(o.seasonOver ? { seasonOver: { message: o.seasonOver.message, next: o.seasonOver.next } } : {}),
+    ...(meetingsPair ? { meetings: meetingsBlock } : {}),
+    ...(settled && settledPair ? { settled: { shape: settled.shape, sentence: settledPairSentence(settled.shape), flow: settledPairFundsFlow(settled.shape, { a: ticker || "A", b: String(pair?.ticker ?? "").toUpperCase() || "B" }, settledNames(pair?.names, sides), { fees: postGraduationFeesFor(cluster) }), descriptionB: settledDescB } } : {}),
   };
   return { review };
 }

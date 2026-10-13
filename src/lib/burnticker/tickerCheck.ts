@@ -21,13 +21,23 @@ export function inUseWarning(ticker: string, coins: readonly InUseCoin[]): strin
   return `$${ticker} is in use by ${first.name}: ${first.rule.replace(/\.$/, "")}.${more} You can keep it, or pick a free one.`;
 }
 
-export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string> }): TickerCheck[] {
+/**
+ * sources-7 (QA walkthrough 11 H9): the suggestions come from the rule. A reserved ticker gets the rule's own generated ticker (`generated`,
+ * the review's coins[].suggestedTicker) when it is free, else that ticker's free variants, and nothing when there is no rule ticker; never
+ * the reserved name plus a digit. A ticker that is only in use keeps its own free variants.
+ */
+export function tickerChecks(sides: readonly { side: "A" | "B"; ticker: string; generated?: string | null }[], deps: { inUse: (ticker: string) => readonly TickerRow[]; reserved: ReadonlySet<string> }): TickerCheck[] {
   const own = new Set(sides.map((s) => s.ticker.toUpperCase()));
   const free = (t: string) => !own.has(t) && !isReserved(t, deps.reserved) && deps.inUse(t).length === 0;
+  const fromRule = (g: string | null | undefined): string[] => {
+    const t = (g ?? "").toUpperCase();
+    if (!/^[A-Z0-9]{2,10}$/.test(t) || isReserved(t, deps.reserved)) return [];
+    return free(t) ? [t, ...tickerSuggestions(t, free, 1)] : tickerSuggestions(t, free);
+  };
   return sides.filter((s) => /^[A-Z0-9]{2,10}$/.test(s.ticker.toUpperCase())).map((s) => {
     const ticker = s.ticker.toUpperCase();
     const inUse = deps.inUse(ticker).map((t) => ({ mint: t.mint, name: t.name, ticker: t.ticker, href: `/burnticker/t/${t.mint}`, rule: oneLine(t.rulesJson) }));
     const reserved = isReserved(ticker, deps.reserved);
-    return { side: s.side, ticker, inUse, reserved, suggestions: inUse.length || reserved ? tickerSuggestions(ticker, free) : [], warning: inUseWarning(ticker, inUse) };
+    return { side: s.side, ticker, inUse, reserved, suggestions: reserved ? fromRule(s.generated) : inUse.length ? tickerSuggestions(ticker, free) : [], warning: inUseWarning(ticker, inUse) };
   });
 }

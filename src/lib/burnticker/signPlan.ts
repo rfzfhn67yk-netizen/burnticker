@@ -593,7 +593,8 @@ export interface LaunchlabBundleLike { mint: string; ticker: string; ready: bool
 
 /**
  * One or more LaunchLab bundles → one plan, in the order given (a pair: A then B — B's rule names A's mint). Each bundle's "mint" signer
- * becomes its own key; its confirming step is its first transaction the mint signs (initialize_token + LaunchLab create).
+ * becomes its own key; its confirming step is its LAST transaction the mint signs, the one that creates the coin: initialize_token +
+ * LaunchLab create, or, for a coin with a pinned token (round 5), the LaunchLab create after [initialize_token + pin_burn_target].
  */
 export function launchlabPlan(bundles: readonly LaunchlabBundleLike[]): SignPlan {
   const plan: SignPlan = { steps: [], keys: {}, expect: {}, labels: {}, confirms: [], pending: [], missingKeys: bundles.length > 1 ? "the server did not hand over the mint keys, so the create transactions cannot be signed here" : "the server did not hand over the mint key, so the create transaction cannot be signed here" };
@@ -603,7 +604,7 @@ export function launchlabPlan(bundles: readonly LaunchlabBundleLike[]): SignPlan
     let confirmAt: number | null = null;
     for (const t of b.transactions) {
       const signers = t.signers.map((s) => (s === "mint" ? name : s));
-      if (confirmAt === null && signers.includes(name)) confirmAt = plan.steps.length;
+      if (signers.includes(name)) confirmAt = plan.steps.length;
       plan.steps.push({ label: bundles.length > 1 ? `$${b.ticker}: ${t.label}` : t.label, signers, instructions: t.instructions });
     }
     if (confirmAt !== null) plan.confirms.push({ mint: b.mint, ticker: b.ticker, step: confirmAt });

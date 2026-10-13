@@ -164,7 +164,8 @@ describe("WIRING-PARITY audit 7 #3: a refused link blocks Launch", () => {
     const fields = read("src/lib/burnticker/guidedLaunch.ts");
     assert.match(fields, /for \(const \[k, label\] of LINK_FIELDS\) \{ const lp = linkFieldProblem\(label, v\[k\]\); if \(lp\) out\.push\(\{ field: k, text: lp \}\); \}/);
     assert.match(fields, /export const linkFieldProblem = \(label: string, raw: string\): string \| null => \(raw\.trim\(\) \? linkProblem\(label, raw\.trim\(\)\) : null\);/);
-    assert.match(page, /profileFieldProblems\(profile\)\.map\(\(x\) => \(\{ text: two \? /);
+    // website-25: through fieldChecks.ts profileIssues (profileFieldProblems plus the description's wording rules)
+    assert.match(page, /issuesA = profileIssues\(profile, genA\)/); assert.match(page, /\.\.\.issuesA\.map\(\(x\) => \(\{ text: `\$\{sideTag\("a"\)\}\$\{x\.text\}`/);
     assert.match(page, /profileProblems=\{profileBlockers\}/); assert.match(page, /profileProblems=\{allBlockers\}/);
     assert.match(page, /links: creatorLinks\(\{ x: profile\.x, telegram: profile\.telegram, website: profile\.website \}\)\.links/);
   });

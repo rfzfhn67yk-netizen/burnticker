@@ -13,7 +13,7 @@ import { redstonePrimary } from "@/lib/burnticker/derby/redstone";
 import { REDSTONE_LATEST_URL } from "@/lib/burnticker/derby/cross";
 import { bracketState, matchKey, roundCount, slotMatchOn, slotPoints, tournamentEnd, type BracketState, type MatchDayResult, type Tournament } from "@/lib/burnticker/derby/bracket";
 import { derbyStore, type DerbyStore, type WindowRow } from "@/lib/burnticker/derby/store";
-import { addDay as highAddDay, buildHighBaseline, decideHigh, HIGH_HISTORY_MAX_DAYS, highDays, highLastDay, recordBefore, type DayClose, type HighSpec } from "@/lib/burnticker/derby/high";
+import { addDay as highAddDay, buildHighBaseline, decideHigh, HIGH_HISTORY_MAX_DAYS, highNoKeyReason, highDays, highLastDay, recordBefore, type DayClose, type HighSpec } from "@/lib/burnticker/derby/high";
 
 /**
  * THE DERBY ORACLE ADAPTER + THE KEEPER'S DERBY PASS (2026-10-10). The multi-token keeper treats `derby:` selector keys like any other:
@@ -283,25 +283,35 @@ export class DerbyAdapter implements OracleAdapter {
    * at its 00:00 UTC boundary through valueAt (a stored Hermes update, the Solana snapshot near the boundary, else Hermes with a key).
    * Seven missing days in a row after at least one close end the walk: the feed began there (`feedBegan`). Reaching `maxDays` leaves
    * feedBegan false, and the sentence says "since <date>, the first day read".
+   *
+   * WITHOUT A PYTH KEY (sources-7, QA walkthrough 11 H1: every record-close review on the live host answered no-readings, because Hermes
+   * answers every past update with 401 to a keyless reader and the host has no BURNTICKER_PYTH_API_KEY): the only closes are the ones this
+   * host saved itself (the keeper's Solana snapshots at each boundary). A gap there is not the feed's start, so the walk stops at the first
+   * missing day after a close and feedBegan stays false ("since <date>, the first day read"); a record is never built across a gap.
    */
-  async historyCloses(u: DerbyUnderlying, through: string, maxDays: number): Promise<{ closes: DayClose[]; feedBegan: boolean; misses: number }> {
-    const closes: DayClose[] = [];
+  async historyCloses(u: DerbyUnderlying, through: string, maxDays: number): Promise<{ closes: DayClose[]; feedBegan: boolean; misses: number; keyed: boolean }> {
+    const closes: DayClose[] = [], keyed = !!this.d.hermes;
     let run = 0, misses = 0;
     for (let i = 0; i < maxDays; i++) {
       const day = highAddDay(through, -i);
       const v = await this.valueAt(u, dayMs(day) + DAY_MS);
       if (v.ok) { closes.push({ day, close: v.value }); run = 0; continue; }
       misses++; run++;
-      if (closes.length && run >= 7) return { closes: closes.reverse(), feedBegan: true, misses };
+      if (closes.length && (!keyed || run >= 7)) return { closes: closes.reverse(), feedBegan: keyed, misses, keyed };
+      // keyless and nothing saved for the day before launch: no saved close can start the rule, so the walk stops here
+      if (!keyed && i === 0) return { closes: [], feedBegan: false, misses, keyed };
     }
-    return { closes: closes.reverse(), feedBegan: false, misses };
+    return { closes: closes.reverse(), feedBegan: false, misses, keyed };
   }
 
   /** The review's baseline for a record-close coin launched at `nowMs` (the history read, then derby/high.ts buildHighBaseline). */
   async highBaseline(u: DerbyUnderlying, span: HighSpec["span"], nowMs: number): Promise<ReturnType<typeof buildHighBaseline>> {
     const through = highAddDay(isoDate(nowMs), -1);
     const h = await this.historyCloses(u, through, span === "all" ? HIGH_HISTORY_MAX_DAYS : span);
-    return buildHighBaseline(span, h.closes, through, { feedBegan: h.feedBegan });
+    const r = buildHighBaseline(span, h.closes, through, { feedBegan: h.feedBegan });
+    // sources-7 H1: say what is missing, in plain words, when the refusal is the missing key and not the feed
+    if (!h.keyed && "refusal" in r && r.refusal.code === "no-readings") return { refusal: { code: "no-readings", reason: highNoKeyReason(span, through, h.closes.length) } };
+    return r;
   }
 
   /** The seasons of the tokens currently on a key (shared readings: the union of their windows). */

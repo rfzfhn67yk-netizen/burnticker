@@ -151,7 +151,9 @@ export const CANDIDATES_PAIR_DETAIL = "The race counts once, when both candidate
 export const GAME_PAIR_DETAIL = "The game counts once, when its result is final and a second source agrees. The winning team's coin burns its whole pool on itself, and the other coin's pool goes to the winning coin's burn. A postponed game keeps both coins waiting. A cancelled game moves nothing between them, and each coin burns down what is left on itself.";
 export const settledPairShapeOf = (r: Pick<BurnRule, "pair">): "candidates" | "game" | null => (r.pair?.race ? "candidates" : r.pair?.game ? "game" : null);
 export const settledPairSentence = (shape: "candidates" | "game"): string => (shape === "game" ? GAME_PAIR_SENTENCE : CANDIDATES_PAIR_SENTENCE);
-const pairSentence = (r: BurnRule): string => { const sh = settledPairShapeOf(r); return sh ? ` ${settledPairSentence(sh)}` : r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn ? ` ${PAIR_DESCRIPTION_SENTENCE}` : ""; };
+// sources-7 (QA walkthrough 11 H2): a rivalry series coin says where a lost game's share goes in its own sentence (meetingsText), so the
+// generic pair sentence is left out of its description, which must leave the creator's 280 characters inside the 1,500
+const pairSentence = (r: BurnRule): string => { const sh = settledPairShapeOf(r); return sh ? ` ${settledPairSentence(sh)}` : r.pair && (r.pair as { winnerTakesBurn?: boolean }).winnerTakesBurn && !isMeetingsSeries(r) ? ` ${PAIR_DESCRIPTION_SENTENCE}` : ""; };
 const BURN_DOWN = "it burns down whatever is left over four weeks and then retires";
 /**
  * END SINKS (LAUNCHPAD-PATH §45; rules.ts endSinkOf, copied here because rules.ts is not client-safe): a rule with `onEnd.endSink` sends
@@ -173,7 +175,7 @@ export const END_SINK_VOID_SENTENCE = "If the result is voided or the season is 
 export const END_SINK_VOID_SENTENCE_PLAIN = "If the result is voided, whatever is left burns down on this coin over four weeks instead.";
 export const isSportsRule = (r: Pick<BurnRule, "oracle" | "series">): boolean => r.oracle === "catalogue" && !!r.series && parseEspnSeries(r.series) !== null;
 export const voidSentenceFor = (r: Pick<BurnRule, "oracle" | "series">): string => (isSportsRule(r) ? END_SINK_VOID_SENTENCE : END_SINK_VOID_SENTENCE_PLAIN);
-const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindOf(r) !== "perpetual" ? ` ${voidSentenceFor(r)}` : "");
+const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindOf(r) !== "perpetual" && !isMeetingsSeries(r) ? ` ${voidSentenceFor(r)}` : "");
 /**
  * THE CHAMPION PATH (website-18, the owner on 2026-10-12: "say I want to pick the Dodgers to win the World Series: it should burn every
  * game they win until the last game of the World Series, then burn the remaining balance after they win. If they lose, it should ... burn
@@ -448,6 +450,10 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
  * coin burns down on its own pool.
  */
 export const MEETINGS_LEVEL_SENTENCE = "If the two teams won the same number of games against each other, nothing moves at the end and whatever is left burns down on this coin over four weeks.";
+/** The series description's one end-without-a-winner sentence: a level series, a voided result or a cancelled season (sources-7 H2). */
+export const MEETINGS_LEVEL_VOID_SENTENCE = "If neither team won more of these games, or the result is voided or the season is cancelled, nothing moves at the end and whatever is left burns down on this coin over four weeks.";
+/** PENALTIES_SENTENCE's short form in a series description (the same rule: a game settled on penalties follows the declared winner). */
+export const MEETINGS_PENALTIES_SENTENCE = "A tie decided on penalties counts for the side that won the shoot-out, not as a draw.";
 export const teamRef = (league: LeagueId, nickname: string): string => (LEAGUES[league].sport === "soccer" || league === "cfb" || league === "mcbb" || league === "wcbb" ? nickname : `the ${nickname}`);
 /**
  * QA pass 9 #21 (2026-10-13: "the Leeds United lose"): a team named without its league takes the article its league uses, found by name in
@@ -465,10 +471,15 @@ function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Wi
   const oppNick = oppTeam?.nickname ?? w.opp, oref = teamRef(league, oppNick), L = seasonLabel(league, w.year), t = c.ticker;
   const scope = `in the ${L} season${noPlayoffs(league) ? "" : ", playoffs included"}`;
   // no "buy" in this copy (the brief's plain-English rule): the share is spent on the coin in its own pool and every token is burned
-  const spend = `${fractionText(r)} of the burn pool is spent on $${t} in its Raydium pool${sliced(r) ? ", in slices sized to the pool's liquidity," : ""} and every token it gets is burned`;
+  const spend = `${fractionText(r)} of the burn pool is spent on this coin in its Raydium pool${sliced(r) ? ", in slices sized to the pool's liquidity," : ""} and every token it gets is burned`;
   const check = CROSS[league] ? "The league's own feed confirms it." : "A second, independent source confirms it.";
-  const rules = `For every game ${o.ref} win against ${oref} ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}. ${check}${o.pens} When ${oref} win one of those games, this coin's share for that game goes to the burn pool of the ${oppNick} coin instead. A draw moves nothing, and a postponed or cancelled game counts for neither side. ${MEETINGS_LEVEL_SENTENCE}`;
-  const windowSentence = `This coin covers the ${L} season only, including ${noPlayoffs(league) ? "every match of the competition" : "the playoffs"}. After both teams' last game, whatever is left burns the coin of the team that won more of the games between them, or $DEFICIT if that coin is not live, and the coin retires. It does not continue into ${nextSeason(league, w.year)}.`;
+  // sources-7 (QA walkthrough 11 H2: Arsenal vs Tottenham Hotspur came to 1,527 characters with no creator text): the series paragraph
+  // says each fact once. The other coin is "the other coin" after its first naming, the level series and a void end share one sentence
+  // (MEETINGS_LEVEL_VOID_SENTENCE), the penalties sentence is the short form, and the next season is not named (the window says "only").
+  // The money path in full is on the review (pairFundsFlow.ts meetingsFundsFlow) and the pair page.
+  const pens = o.pens ? ` ${MEETINGS_PENALTIES_SENTENCE}` : "";
+  const rules = `For each of those wins ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}. ${check}${pens} When ${oref} win instead, this coin's share for that game goes to the other coin's burn pool. A draw, or a postponed or cancelled game, counts for neither side.`;
+  const windowSentence = `This coin covers the ${L} season only, including ${noPlayoffs(league) ? "every match of the competition" : "the playoffs"}. After both teams' last game, whatever is left burns the coin of the team that won more of these games, or $DEFICIT if that coin is not live, and the coin retires. ${MEETINGS_LEVEL_VOID_SENTENCE}`;
   return mk(`${o.nick} vs ${oppNick} ${L}`, meetingsTicker(abbr, w.opp, league), `burns when ${o.ref} beat ${oref}`, rules, windowSentence, "season", "recurring");
 }
 

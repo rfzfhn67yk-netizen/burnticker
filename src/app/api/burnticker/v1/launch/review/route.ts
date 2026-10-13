@@ -7,24 +7,13 @@ import { tickerChecks, type TickerCheck } from "@/lib/burnticker/tickerCheck";
 import { loadReserved } from "@/lib/burnticker/reservedNames";
 import { platform } from "@/lib/burnticker/server";
 import { lookalikeRows } from "@/lib/burnticker/launchGuards";
-import { SEASON_OVER_LINE, seasonStatus } from "@/lib/burnticker/api/handlers";
+import { seasonOverFor } from "@/lib/burnticker/seasonOver";
 import { espnClient } from "@/lib/burnticker/sources/native";
 import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
 import { globalRefusal, hostCluster, launchModeFromEnv } from "@/lib/burnticker/launchAvailability";
 import { cachedTimeLockSecs, currentStatusLive } from "@/lib/burnticker/currentStatus";
 
 export const dynamic = "force-dynamic";
-
-/** The season-over warning for a season rule on an ESPN team (handlers.ts seasonStatus), or null (any other rule, or no read in time). */
-async function seasonWarningFor(rule: unknown): Promise<string | null> {
-  const series = rule && typeof rule === "object" ? (rule as { oracle?: unknown; series?: unknown }) : null;
-  const e = series && series.oracle === "catalogue" && typeof series.series === "string" ? parseEspnSeries(series.series) : null;
-  if (!e || e.kind !== "team" || (e.window.kind !== "season" && e.window.kind !== "post")) return null;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const games = await Promise.race([espnClient().upcoming(e.league, 8).catch(() => null), new Promise<null>((res) => { timer = setTimeout(() => res(null), 3_000); })]);
-  clearTimeout(timer);
-  return games ? seasonStatus(e.abbr, games, true).status === "over" ? SEASON_OVER_LINE : null : null;
-}
 
 /** Audit 7 item 7: the game a one-game rule names, from the league's schedule (at most 3 seconds; null when not listed or not read). */
 async function gameFor(rule: unknown): Promise<{ eventId: string; startsAt: string; name: string; detail: string } | null> {
@@ -62,9 +51,10 @@ export async function POST(req: Request) {
     // for a team with no games left carries the season-over warning (one schedule read, at most 3 seconds, never required)
     let existingRows: ReturnType<typeof lookalikeRows> | null = null;
     try { existingRows = lookalikeRows(platform().registry); } catch { existingRows = null; }
-    const seasonWarning = await seasonWarningFor((body as { rule?: unknown }).rule);
+    // sources-7 H6: a season rule on a team whose season is over is refused (seasonOver.ts), from the platform's schedule port
+    const seasonOver = await seasonOverFor((body as { rule?: unknown }).rule, platform().seasonSchedule);
     const game = await gameFor((body as { rule?: unknown }).rule);
-    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonWarning, game });
+    const r = buildLaunchReview(body, { timeLockSecs: cachedTimeLockSecs(cluster), stated, kalshiEnabled: platform().kalshiEnabled !== false, existing: existingRows, seasonOver, game });
     if ("problems" in r) return fail(400, r.problems.join("; "), { problems: r.problems });
     // website-14 (product idea 6): the registered coins that share this rule's canonical selector, for "View existing coins"
     let existing: ReturnType<typeof existingCoinsFor> = [];
@@ -74,7 +64,7 @@ export async function POST(req: Request) {
     let tickers: TickerCheck[] = [];
     try {
       const reg = platform().registry, reserved = loadReserved();
-      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson })), reserved });
+      tickers = tickerChecks(r.review.coins.map((c) => ({ side: c.side, ticker: c.ticker, generated: c.suggestedTicker })), { inUse: (t) => reg.tokensByTicker(t).map((x) => ({ mint: x.mint, name: x.name, ticker: x.ticker, rulesJson: x.rulesJson })), reserved });
     } catch { tickers = []; }
     return ok({ ...r.review, existing, tickers });
   });

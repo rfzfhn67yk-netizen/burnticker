@@ -255,7 +255,7 @@ export class FakeBurnProgram implements BurnProgramClient {
         this.lockFees.port(i.mint).onRegisterPool = () => { const f = this.tokens.get(i.mint); if (f && !f.cfg.poolRegistered) f.registerPool(); };
       } catch { /* not expressible: no on-chain config (the keeper reports why) */ }
     }
-    return { tokenConfig, instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (placeholder program id — nothing is sent)", keys: [{ pubkey: i.creator, isSigner: true, isWritable: true }, { pubkey: i.mint, isSigner: true, isWritable: false }, { pubkey: tokenConfig, isSigner: false, isWritable: true }, { pubkey: this.feePdaFor(i.mint), isSigner: false, isWritable: true }], dataBase64: Buffer.from(JSON.stringify({ ix: "initialize_token", rulesSha256: i.rulesSha256, selectorKey: i.selectorKey, mode: i.mode, quorum: i.quorum, attesters: i.attesters }), "utf8").toString("base64") }] };
+    return { tokenConfig, instructions: [{ programId: this.programId, label: "burn_receipts.initialize_token (placeholder program id — nothing is sent)", keys: [{ pubkey: i.creator, isSigner: true, isWritable: true }, { pubkey: i.mint, isSigner: true, isWritable: false }, { pubkey: tokenConfig, isSigner: false, isWritable: true }, { pubkey: this.feePdaFor(i.mint), isSigner: false, isWritable: true }], dataBase64: Buffer.from(JSON.stringify({ ix: "initialize_token", rulesSha256: i.rulesSha256, selectorKey: i.selectorKey, mode: i.mode, quorum: i.quorum, attesters: i.attesters }), "utf8").toString("base64") }, ...fakePin(this.programId, i)] };
   }
   /** The real program's seeds (src/lib/burnReceipts/pda.ts via burnPoolFor) under the placeholder id. */
   feePdaFor(mint: string) { return burnPoolFor(PLACEHOLDER_PROGRAM_ID, new PublicKey(mint)).feePda.toBase58(); }
@@ -270,4 +270,14 @@ export class FakeBurnProgram implements BurnProgramClient {
     for (const [signature, l] of f.landed) if (!l.err && l.memo && l.memo.startsWith(key)) return { signature, slot: l.slot, memo: l.memo };
     return null;
   }
+}
+
+/**
+ * Round 5: the fake's placeholder pin_burn_target for a rule with a pinned token (the real client's comes from programClient.ts), so the
+ * bundle's two-transaction shape (launchBundle.ts launchTransactions) is the same under the fake. Nothing is sent.
+ */
+function fakePin(programId: string, i: InitializeTokenInput): SerializedIx[] {
+  const bt = (i.rule as { burnTarget?: { mint: string; pool: string; symbol: string; feedId: string } } | undefined)?.burnTarget;
+  if (!bt) return [];
+  return [{ programId, label: `burn_receipts.pin_burn_target (placeholder program id; ${bt.symbol} ${bt.mint} on pool ${bt.pool} — nothing is sent)`, keys: [{ pubkey: i.creator, isSigner: true, isWritable: true }, { pubkey: i.mint, isSigner: true, isWritable: false }, { pubkey: bt.mint, isSigner: false, isWritable: false }, { pubkey: bt.pool, isSigner: false, isWritable: false }], dataBase64: Buffer.from(JSON.stringify({ ix: "pin_burn_target", feedId: bt.feedId }), "utf8").toString("base64") }];
 }

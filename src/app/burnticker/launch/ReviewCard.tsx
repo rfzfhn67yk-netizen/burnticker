@@ -16,6 +16,7 @@ import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
 import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, PAIR_DIAGRAM_LABEL, UPFRONT_LABEL, lpDisclosureFor, profileMoreLabel, shareExample, type LaunchVenue } from "@/lib/burnticker/guidedLaunch";
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
+import { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX } from "./pageCopy";
 import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 
 /**
@@ -33,7 +34,7 @@ import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
  * (docs/burnticker/ui-conventions.md § Presets, not dials). Pressing Launch is the acknowledgement: the line under the button says so.
  */
 
-export interface ReviewCoin { key: string; name: string; ticker: string; onName: (v: string) => void; onTicker: (v: string) => void; image: string; oneLiner: string; oracle: string; badge: string | null }
+export interface ReviewCoin { key: string; name: string; ticker: string; onName: (v: string) => void; onTicker: (v: string) => void; image: string; oneLiner: string; oracle: string; badge: string | null; /** website-25 (QA 11 H5): the wording rules on the name and the ticker, one sentence each (fieldChecks.ts), said under the field */ nameIssue?: string | null; tickerIssue?: string | null }
 export interface Chip<T extends string | number> { value: T; label: string }
 export interface ReviewCardProps {
   coins: ReviewCoin[];
@@ -193,6 +194,8 @@ export const PAIR_LP_LINE = `The pool's liquidity is locked forever. ${PAIR_OPER
 export const BUDGET_LABEL = "Share of the burn pool per result";
 /** Audit 6 item 5: the ticker field takes at most what the server accepts. */
 export const TICKER_INPUT_MAX = 10;
+/** website-25: the field limits and the reserved-ticker sentence live in pageCopy.ts (tests import it without the component) */
+export { NAME_INPUT_MAX, NAME_MAX_LINE, RESERVED_TICKER_LINE, TICKER_PASTE_MAX };
 /** website-14: the graduation preset's name. */
 export const RAISE_LABEL = "SOL raised before graduation";
 /** Labels of the note and the step-4 sections. */
@@ -229,8 +232,9 @@ export function ReviewCard(p: ReviewCardProps) {
   // chooser); once connected it becomes "Launch", and pressing that is the signing step.
   // L07: every field problem, named per coin; the editor cannot be closed over a problem, and the list sits beside the button
   const many = p.coins.length > 1;
-  const fieldEdit = (side: "a" | "b", f: "name" | "ticker") => (p.mode === "review" && p.publicProfile ? () => p.publicProfile!.edit(side, f) : null);
-  const fieldProblems: { key: string; text: string; edit: (() => void) | null }[] = [...p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; const side = i === 0 ? "a" as const : "b" as const; return ([[nameProblem(c.name), "name"], [tickerProblem(c.ticker), "ticker"]] as const).filter(([x]) => !!x).map(([x, f]) => ({ key: c.key, text: `${who}${x}`, edit: fieldEdit(side, f) })); }), ...(p.profileProblems ?? []).map((x) => ({ key: "profile", text: blockerText(x), edit: typeof x === "string" ? null : x.edit ?? null }))]
+  // website-25 (QA 11 H5): on the name step the Edit link moves focus to the field itself
+  const fieldEdit = (side: "a" | "b", f: "name" | "ticker") => (p.mode === "review" && p.publicProfile ? () => p.publicProfile!.edit(side, f) : p.mode === "name" ? () => { const el = document.getElementById(`bt-profile-${side}-${f}`); el?.scrollIntoView({ block: "center" }); el?.focus({ preventScroll: true }); } : null);
+  const fieldProblems: { key: string; text: string; edit: (() => void) | null }[] = [...p.coins.flatMap((c, i) => { const who = many ? `Coin ${i === 0 ? "A" : "B"}: ` : ""; const side = i === 0 ? "a" as const : "b" as const; return ([[nameProblem(c.name) || c.nameIssue || null, "name"], [tickerProblem(c.ticker) || c.tickerIssue || null, "ticker"]] as const).filter(([x]) => !!x).map(([x, f]) => ({ key: c.key, text: `${who}${x}`, edit: fieldEdit(side, f) })); }), ...(p.profileProblems ?? []).map((x) => ({ key: "profile", text: blockerText(x), edit: typeof x === "string" ? null : x.edit ?? null }))]
     .filter((x, i, all) => all.findIndex((y) => y.text === x.text) === i);
   const problemList = (label: string, id?: string) => <ul id={id} className="list-disc space-y-0.5 pl-5 text-xs text-red-400" aria-label={label} data-blockers>{fieldProblems.map((x) => <li key={x.text} className="break-words">{x.text}{x.edit && <> <button type="button" data-nav className="underline text-neutral-300" onClick={x.edit}>Edit</button></>}</li>)}</ul>;
   // owner, 2026-10-12 ("whenever i type 2 letters when naming a coin it accepts those 2 letters as the name and moves on"): the editor
@@ -249,7 +253,7 @@ export function ReviewCard(p: ReviewCardProps) {
         const coin = p.coins[t.side === "A" ? 0 : 1];
         return (
           <div key={t.side} className="min-w-0 break-words rounded border border-amber-400/40 p-2 text-xs text-amber-200" role="status" data-ticker-check={t.side}>
-            {t.reserved ? <p>{many ? `Coin ${t.side}: ` : ""}That name is reserved for the platform.</p> : <p>{many ? `Coin ${t.side}: ` : ""}${t.ticker} is in use by <a className="underline" href={t.inUse[0].href}>{t.inUse[0].name}</a>: {t.inUse[0].rule.replace(/\.$/, "")}.{t.inUse.length > 1 ? ` It is also used by ${t.inUse.length - 1} other coin${t.inUse.length === 2 ? "" : "s"}.` : ""} You can keep it, or pick a free one.</p>}
+            {t.reserved ? <p>{many ? `Coin ${t.side}: ` : ""}{RESERVED_TICKER_LINE}</p> : <p>{many ? `Coin ${t.side}: ` : ""}${t.ticker} is in use by <a className="underline" href={t.inUse[0].href}>{t.inUse[0].name}</a>: {t.inUse[0].rule.replace(/\.$/, "")}.{t.inUse.length > 1 ? ` It is also used by ${t.inUse.length - 1} other coin${t.inUse.length === 2 ? "" : "s"}.` : ""} You can keep it, or pick a free one.</p>}
             {t.suggestions.length > 0 && coin && <p className="mt-1 flex flex-wrap items-center gap-2">Free: {t.suggestions.map((s) => <button key={s} type="button" data-decision="name" className="rounded border border-neutral-600 px-2 py-0.5 font-mono" onClick={() => coin.onTicker(s)}>${s}</button>)}</p>}
           </div>
         );
@@ -271,13 +275,13 @@ export function ReviewCard(p: ReviewCardProps) {
       <div className={`grid min-w-0 gap-3 ${many ? "md:grid-cols-2" : ""}`} data-review-coins>
         {p.coins.map((c, i) => {
           const who = many ? `Coin ${i === 0 ? "A" : "B"} ` : "";
-          const nId = `bt-profile-${c.key}-name`, tId = `bt-profile-${c.key}-ticker`, nErr = nameProblem(c.name), tErr = tickerProblem(c.ticker), tNote = tickerNotes[c.key] ?? null;
+          const nId = `bt-profile-${c.key}-name`, tId = `bt-profile-${c.key}-ticker`, nErr = nameProblem(c.name) || c.nameIssue || null, tErr = tickerProblem(c.ticker) || c.tickerIssue || null, tNote = tickerNotes[c.key] ?? null;
           return (
             <div key={c.key} className="min-w-0 space-y-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
               <div className="bt-preview-frame min-w-0 max-w-full overflow-hidden break-words"><CoinCard href={null} prelaunch c={{ ticker: c.ticker, name: c.name, imageUrl: c.image || null, oneLiner: c.oneLiner, oracle: c.oracle, status: "draft", phase: null, progressPct: null, raised: null, threshold: null, quote: "SOL", burns: 0, lastBurnAt: null, nextAt: null, launchedAt: null, badge: c.badge }} /></div>
               <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
-                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={nId}>{who}Name</label><FieldHelp id="name" /><input id={nId} data-help="name" data-decision="name" aria-invalid={!!nErr} aria-describedby={nErr ? `${nId}-err` : undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" maxLength={32} value={c.name} onChange={(e) => c.onName(e.target.value)} />{nErr && <span id={`${nId}-err`} className="mt-0.5 block text-red-400">{nErr}</span>}</div>
-                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id="ticker" /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[`${tId}-rule`, tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ")} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_INPUT_MAX + 20} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} /><span id={`${tId}-rule`} className="mt-0.5 block text-neutral-500">2 to 10 letters or digits.</span>{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
+                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={nId}>{who}Name</label><FieldHelp id="name" /><input id={nId} data-help="name" data-decision="name" aria-invalid={!!nErr} aria-describedby={nErr ? `${nId}-err` : undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" maxLength={NAME_INPUT_MAX} value={c.name} onChange={(e) => c.onName(e.target.value)} />{nErr && <span id={`${nId}-err`} className="mt-0.5 block text-red-400">{nErr}</span>}{!nErr && c.name.length >= NAME_INPUT_MAX && <span className="mt-0.5 block text-amber-300" role="status" data-name-max>{NAME_MAX_LINE}</span>}</div>
+                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id="ticker" /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[`${tId}-rule`, tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ")} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_PASTE_MAX} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} /><span id={`${tId}-rule`} className="mt-0.5 block text-neutral-500">2 to 10 letters or digits.</span>{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
               </div>
             </div>
           );
@@ -342,8 +346,8 @@ export function ReviewCard(p: ReviewCardProps) {
             <div className="bt-preview-frame min-w-0 max-w-full overflow-hidden break-words"><CoinCard href={null} prelaunch c={{ ticker: c.ticker, name: c.name, imageUrl: c.image || null, oneLiner: c.oneLiner, oracle: c.oracle, status: "draft", phase: null, progressPct: null, raised: null, threshold: null, quote: "SOL", burns: 0, lastBurnAt: null, nextAt: null, launchedAt: null, badge: c.badge }} /></div>
             {mode === "full" && editing ? (
               <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
-                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={nId}>{who}Name</label><FieldHelp id="name" /><input id={nId} data-help="name" data-decision="name" aria-invalid={!!nErr} aria-describedby={nErr ? `${nId}-err` : undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" maxLength={32} value={c.name} onChange={(e) => c.onName(e.target.value)} />{nErr && <span id={`${nId}-err`} className="mt-0.5 block text-red-400">{nErr}</span>}</div>
-                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id="ticker" /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ") || undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_INPUT_MAX + 20} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} />{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
+                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={nId}>{who}Name</label><FieldHelp id="name" /><input id={nId} data-help="name" data-decision="name" aria-invalid={!!nErr} aria-describedby={nErr ? `${nId}-err` : undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm" maxLength={NAME_INPUT_MAX} value={c.name} onChange={(e) => c.onName(e.target.value)} />{nErr && <span id={`${nId}-err`} className="mt-0.5 block text-red-400">{nErr}</span>}{!nErr && c.name.length >= NAME_INPUT_MAX && <span className="mt-0.5 block text-amber-300" role="status" data-name-max>{NAME_MAX_LINE}</span>}</div>
+                <div className="min-w-0 text-xs text-neutral-400"><label htmlFor={tId}>{who}Ticker</label><FieldHelp id="ticker" /><input id={tId} data-help="ticker" data-decision="name" aria-invalid={!!tErr} aria-describedby={[tErr ? `${tId}-err` : "", tNote ? `${tId}-note` : ""].filter(Boolean).join(" ") || undefined} className="mt-1 w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-sm uppercase" maxLength={TICKER_PASTE_MAX} value={c.ticker} onChange={(e) => { const n = tickerNormalised(e.target.value); setTickerNotes((x) => ({ ...x, [c.key]: n.note })); c.onTicker(n.value); }} />{tErr && <span id={`${tId}-err`} className="mt-0.5 block text-red-400">{tErr}</span>}{tNote && <span id={`${tId}-note`} className="mt-0.5 block text-amber-300" role="status">{tNote}</span>}</div>
               </div>
             ) : null}
           </div>

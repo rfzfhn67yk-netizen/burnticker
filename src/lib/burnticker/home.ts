@@ -190,7 +190,8 @@ export function featuredCoins(root = process.cwd(), samples: SampleList | null =
       createdAt: rehearsal.createdAt ?? rehearsal.date ?? null, createdWhy: rehearsal.createdAt || rehearsal.date ? null : "The record does not give a creation date.",
       burned: cell(null, `This site does not read $REHEARSAL's burns. The operator's record says: ${rehearsal.status}.`),
       mint: rehearsal.mint ? { address: rehearsal.mint, label: "Mint address" } : null,
-      href: "/burnticker/trust#rehearsals", receipt: null, receiptWhy: "$REHEARSAL has no burn receipt.",
+      href: "/burnticker/t/REHEARSAL", receipt: null,   // website-25 (QA 11 M13): the card opens the coin page, which links the disclosure
+      receiptWhy: "$REHEARSAL has no burn receipt.",
     });
   }
 

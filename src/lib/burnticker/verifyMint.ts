@@ -1,4 +1,9 @@
 import { coinPageHref } from "@/lib/burnticker/coinKey";
+import { isPubkey } from "@/lib/burnticker/trustpack/base58";
+
+/** QA 11 L8: what an invalid address gets, instead of "not listed" and a catalogue line. */
+export const INVALID_ADDRESS_HEADLINE = "That is not a Solana address";
+export const INVALID_ADDRESS_SUMMARY = "A Solana address is 32 to 44 letters and digits from the base58 alphabet, which leaves out 0, O, I and l. Nothing was looked up.";
 /**
  * "IS THIS MINT A BURNTICKER COIN?" (growth batch, owner-approved 2026-10-10). Paste any Solana mint on /burnticker/verify (or call
  * GET /api/burnticker/v1/verify-mint/<mint>) and get one plain answer from two independent places:
@@ -54,7 +59,8 @@ export interface MintVerification {
   links: { verifier: string; page: string | null; self: string };
 }
 
-export const isSolanaAddress = (s: string): boolean => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
+/** QA 11 L8: base58 of 32 to 44 characters that decodes to exactly 32 bytes (the length check alone let "1111…" through). */
+export const isSolanaAddress = (s: string): boolean => isPubkey(s);
 
 /** The host network's read as a MintNetworkRead (for facts that carry only `program`). */
 function hostRead(f: MintFacts): MintNetworkRead {
@@ -74,7 +80,7 @@ const programCheck = (n: MintNetworkRead): MintCheck => ({
 export function verifyMint(f: MintFacts, nowMs: number): MintVerification {
   const base = { schema: VERIFY_MINT_SCHEMA, mint: f.mint, cluster: f.cluster, programId: f.programId, checkedAt: new Date(nowMs).toISOString(), links: { verifier: "/burnticker/check", page: null as string | null, self: `/burnticker/verify?mint=${encodeURIComponent(f.mint)}` } } as const;
   if (!isSolanaAddress(f.mint)) {
-    return { ...base, verdict: "invalid", headline: "Not a Solana address", summary: "A token address is 32 to 44 base58 characters long.", registration: { state: "unknown", networks: [] }, catalogue: { state: "absent", network: f.cluster }, disclosed: null, program: { read: false, config: null, rulesSha256: null, readings: null, burns: null }, coin: null, checks: [{ id: "address", ok: false, detail: "not a base58 address of 32–44 characters" }] };
+    return { ...base, verdict: "invalid", headline: INVALID_ADDRESS_HEADLINE, summary: INVALID_ADDRESS_SUMMARY, registration: { state: "unknown", networks: [] }, catalogue: { state: "absent", network: f.cluster }, disclosed: null, program: { read: false, config: null, rulesSha256: null, readings: null, burns: null }, coin: null, checks: [{ id: "address", ok: false, detail: "This is not a Solana address, so nothing was looked up." }] };
   }
   const read = f.program !== "unread";
   const prog = f.program !== "unread" ? f.program : null;

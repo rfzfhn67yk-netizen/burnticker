@@ -8,7 +8,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { AMM_V4_PROGRAM_ID, applyTargetPoolIx, BURN_TARGET_EXTERNAL, burnTargetPda, crankTargetBurnIx, judgeTargetAdmission, pinBurnTargetIx, PRICE_UPDATE_V2_DISCRIMINATOR, proposeTargetPoolIx, PYTH_RECEIVER_PROGRAM_ID, PYTH_SOL_USD_FEED_ID, quoteTargetCrank, sponsoredPriceAccount, TARGET_MIN_WSOL_RESERVE_LAMPORTS, TARGET_POOL_AMM_V4, TARGET_POOL_HELD_ERRORS, vetoTargetPoolIx, type BurnTargetAccount } from "@/lib/burnReceipts/burnTarget";
-import { CPMM_PROGRAM_ID, MAX_SPEND_RESERVE_BPS, NATIVE_MINT, QUEUE_UNBLOCK_SECS, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
+import { MEMO_V3_MAX_BYTES } from "@/lib/burnReceipts/memoV3";
+import { MEMO_MAX_BYTES, CPMM_PROGRAM_ID, MAX_SPEND_RESERVE_BPS, NATIVE_MINT, QUEUE_UNBLOCK_SECS, TOKEN_PROGRAM_ID } from "@/lib/burnReceipts/constants";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { burnedMintOf, formatTargetMemo, memoFromChain, parseBuybackMemo, parseTargetMemo, type TargetMemo } from "@/lib/burnReceipts/memo";
 import { reserveSpendCap } from "@/lib/burnReceipts/math";
@@ -206,6 +207,10 @@ describe("memo v3 (a target burn)", () => {
     assert.equal(parseTargetMemo(s.replace("|v3", "|v2")), null);
     assert.deepEqual(burnedMintOf(s, COIN.toBase58()), { mint: TARGET.toBase58(), isTarget: true });
     assert.throws(() => formatTargetMemo({ ...m, target: "not-a-key" }), /target/);
+  });
+  test("the browser-safe module's ceiling is the program's; an over-long memo is refused, never truncated", () => {
+    assert.equal(MEMO_V3_MAX_BYTES, MEMO_MAX_BYTES);
+    assert.throws(() => formatTargetMemo({ ...m, source: "é".repeat(300) }), /over the 566-byte ceiling/);
   });
   test("memoFromChain rebuilds it from the TokenConfig, the Reading and the BurnTarget (own tokens in `owed`)", () => {
     const cfg = { rule: { mode: 0, value_decimals: 0 }, burn_target_kind: BURN_TARGET_EXTERNAL, memoPrefix: "TEAMBONK", memoSource: "espn nfl", rules_sha256: Buffer.from("0123456789ab" + "0".repeat(52), "hex"), cpmm_pool: PublicKey.default } as unknown as TokenConfigAccount;

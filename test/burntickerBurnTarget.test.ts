@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 import { admissionLine, burnTargetShapeProblems, SUGGESTED_TARGETS, targetActionSentence, targetChoiceLabel, targetHeldLine, targetReceiptLine, targetReviewSentence, targetTrustCopy } from "@/lib/burnticker/burnTarget";
 import { invertMapping, validateRule } from "@/lib/burnticker/rules";
 import { lintCopy, loadCopyLintConfig } from "@/lib/launch/copyLint";
+import { budgetCopy } from "@/lib/burnticker/guidedLaunch";
+import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
 
 const BONK = { mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", pool: "HVNwzt7Pxfu76KHCMQPTLuTCLTm6WnQ1esLv4eizseSv", symbol: "BONK", feedId: "72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419" };
@@ -66,5 +68,24 @@ describe("the words", () => {
     assert.equal(targetReceiptLine("1234", "BONK"), "burned 1,234 real BONK");
     assert.equal(targetReceiptLine("1234567.25", "WIF"), "burned 1,234,567.25 real WIF");
     assert.equal(targetHeldLine("BONK", "TwapDeviation"), null);
+  });
+});
+
+describe("the budget row follows the pinned token (WIRING-ROUND5 item 6)", () => {
+  const cfg = loadCopyLintConfig();
+  const clean = (t: string) => { assert.deepEqual(lintCopy(t, cfg).hits.map((h) => h.rule), [], t); assert.doesNotMatch(t, /\bbuy|\bbought|\bprice\b|\bwill\b|\btarget/i, t); };
+  const self = validateRule(SIDE), real = validateRule({ ...SIDE, burnTarget: BONK });
+  const scalar = { ...real, kind: "scalar", binary: null, scalar: { baseline: null, unitSize: 1, fractionPerUnit: 0.02, direction: "up" } } as unknown as BurnRule;
+  const once = validateRule({ ...SIDE, series: null, filter: {}, market: "KXNFLGAME-26OCT11DENNYJ-DEN", burnTarget: BONK });
+  test("a coin that burns itself keeps its words; a pinned token is named, with no buy, bought, price or target in them", () => {
+    assert.match(budgetCopy(self, 0.05, null).line, /buying and burning this coin\. The token amount bought varies\.$/);
+    const r = budgetCopy(real, 0.05, null);
+    assert.equal(r.line, "Each result that fires the rule spends 5% of the burn pool swapping SOL for BONK and burning it. The amount of BONK each swap gets varies.");
+    const sc = budgetCopy(scalar, 0.02, "1 touchdown");
+    assert.match(sc.line, /swapping SOL for BONK and burning it\.$/);
+    assert.match(sc.math ?? "", /at most 2% of the SOL in BONK's pinned Raydium pool/);
+    const o = budgetCopy(once, 1, null);
+    assert.match(o.line, /swapping SOL for BONK and burning it\. The burn lands in slices sized to the SOL in BONK's pinned Raydium pool\.$/);
+    for (const x of [r, sc, o]) { clean(x.line); if (x.math) clean(x.math); clean(x.label); }
   });
 });
