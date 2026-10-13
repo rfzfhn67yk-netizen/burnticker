@@ -205,6 +205,9 @@ const rulesFile = opt("rules") ?? "config/burnkeeper/deficit.rules.json";
 const rules = loadRules(rulesFile);
 if (rules.rules.mint && rules.rules.mint !== mintKp.publicKey.toBase58()) die(`${rulesFile} names mint ${rules.rules.mint} but --mint-keypair is ${mintKp.publicKey.toBase58()}`);
 const platformId = pubkeyArg(opt("platform") ?? process.env.BURNTICKER_PLATFORM_ID, "--platform") ?? DEFAULT_PLATFORM[flagCluster];
+// owner question 2026-10-12 ("are we launching through the platform?"): a mainnet send must name the platform on purpose. With no
+// --platform and no BURNTICKER_PLATFORM_ID the default is Raydium's own platform, whose fees never reach a burn pool — refused.
+if (SEND && flagCluster === "mainnet" && !opt("platform") && !process.env.BURNTICKER_PLATFORM_ID) die("refusing to --send on mainnet without --platform (or BURNTICKER_PLATFORM_ID): the default is Raydium's own platform, not Burnticker's, so no fee would reach the burn pool");
 const configId = pubkeyArg(opt("config"), "--config") ?? DEFAULT_SOL_CONFIG[flagCluster];
 const [globalAcc, platformAcc, mintAcc] = await Promise.all([getAccount(configId), getAccount(platformId), getAccount(mintKp.publicKey)]);
 const global = decodeGlobalConfig((globalAcc ?? die(`LaunchLab config ${configId.toBase58()} not found on ${cluster}`)).data);

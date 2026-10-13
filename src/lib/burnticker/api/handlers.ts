@@ -91,7 +91,23 @@ export function publicConfig(cfg: HttpSourceConfig): Record<string, unknown> {
 }
 
 /** Every source the wizard can show, with kind and tier (+ the public selection config when `includeConfig`). */
+// owner, 2026-10-12 ("it takes over a second for the launch page to load"): building this list reads every source's fixture from disk
+// and runs its preview, about a second of CPU per request, and the launch page asks for it on every load. The result depends only on the
+// minute (sample eligibility) and includeConfig, so it is memoised per minute; a deploy restarts the process and empties it.
+const CATALOGUE_MEMO_MS = 60_000;
+const catalogueMemo = new Map<string, { sources: Record<string, unknown>[]; tiers: typeof TIER_LABEL; admission: typeof ADMISSION }>();
 export function catalogueSources(now: number, o: { includeConfig?: boolean } = {}): { sources: Record<string, unknown>[]; tiers: typeof TIER_LABEL; admission: typeof ADMISSION } {
+  const key = `${Math.floor(now / CATALOGUE_MEMO_MS)}:${o.includeConfig ? 1 : 0}`;
+  const hit = catalogueMemo.get(key);
+  if (hit) return hit;
+  const value = catalogueSourcesUncached(now, o);
+  if (catalogueMemo.size >= 8) catalogueMemo.delete(catalogueMemo.keys().next().value!);
+  catalogueMemo.set(key, value);
+  return value;
+}
+/** Test seam: forget the memo (a test that rewrites a fixture between two calls in the same minute). */
+export function forgetCatalogueMemo(): void { catalogueMemo.clear(); }
+function catalogueSourcesUncached(now: number, o: { includeConfig?: boolean } = {}): { sources: Record<string, unknown>[]; tiers: typeof TIER_LABEL; admission: typeof ADMISSION } {
   const http = catalogue().map((f) => {
     let last: { id: string; value: string | null; at: string } | null = null, readings: { id: string; value: string | null }[] = [], preview: unknown = null, fixtureFetchedAt: string | null = null, refusals: string[] = [];
     try {
