@@ -48,7 +48,7 @@ describe("202 (FIX): a saved sample is labelled as one, with its date", () => {
   test("the Browse card says Sample reading and the observation day, never last or latest reading", () => {
     const f: FeedCardInput = { id: "steam.players:730", tier: 4, tierLabel: "x", title: "Steam", sourceName: "Steam", sourceUrl: "https://x", cadence: "continuous; snapshot daily", unit: { label: "100k players" }, launchable: { ok: true, why: null }, flags: [], lastReading: { id: "2026-10-10", value: "1500000" }, fixtureFetchedAt: "2026-10-10T02:50:00Z", baseline: "previousSettlement", direction: "up", param: "730" };
     const c = feedCard(f);
-    assert.equal(c.next!.label, "Sample reading 2026-10-10: 1500000, observed 2026-10-10");
+    assert.equal(c.next!.label, "Sample reading 2026-10-10: 1,500,000, observed 2026-10-10");
     assert.doesNotMatch(c.next!.label, /latest|last reading/i);
     assert.equal(sampleReadingLabel({ id: "2026-10", value: null }, null), "Sample reading 2026-10, from a saved sample");
   });

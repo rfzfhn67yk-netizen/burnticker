@@ -1,4 +1,5 @@
 import { CUSTOM_ROWS, type HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * USGS VOLCANO ALERT LEVELS (sources-3, 2026-10-12). The USGS Volcano Hazards Program's notice system (HANS, volcanoes.usgs.gov/hans-
@@ -75,7 +76,7 @@ export function applyVolcanoWarning(cfg: HttpSourceConfig, param: string): HttpS
 /** The coin text pieces (lint-clean; test/burntickerSources3.test.ts): an alert level, nothing else. */
 export function volcanoText(s: NonNullable<ReturnType<typeof parseVolcanoSeries>>, spends: string, inverse: boolean): { name: string; ticker: string; oneLiner: string; block: string; oneShot: boolean } {
   const src = "The USGS notices state each volcano's alert level: normal, advisory, watch or warning.";
-  if (s.kind === "warning") return { name: `${s.name} Warning`.slice(0, 32), ticker: `${s.name.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 6)}WARN`.slice(0, 10), oneLiner: `burns once if the USGS raises ${s.name} to its warning level`, oneShot: true,
+  if (s.kind === "warning") return { name: fitName(`${s.name} Warning`), ticker: `${s.name.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 6)}WARN`.slice(0, 10), oneLiner: `burns once if the USGS raises ${s.name} to its warning level`, oneShot: true,
     block: `On the first day after launch on which the USGS raises ${s.name} to the warning alert level, ${spends} once, with a receipt on chain. ${src} Each UTC day is read the day after it ends. The reading is an alert level and nothing else.` };
   if (inverse) return { name: "No Alert Raise Days", ticker: "NORAISE", oneLiner: "burns on every day no U.S. volcano alert level is raised", oneShot: false,
     block: `For every day on which the USGS raises no U.S. volcano's alert level, ${spends}, with a receipt on chain. ${src} Each UTC day is read the day after it ends. A day with a raise burns nothing.` };

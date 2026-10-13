@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AMOUNT_MATH_LABEL, END_LABEL, FOLLOW_CHOICES, GUIDED_STEPS, OTHER_PATTERNS_LABEL, UPFRONT_LABEL, createsLine, progressLabel, shareExample, whichHeading, type EndOption, type FollowId, type PatternId, type PatternOption } from "@/lib/burnticker/guidedLaunch";
 import { MAIN_RECURRING, pctLabel } from "@/lib/burnticker/launchPresets";
 import { HAZARD_FOLLOW } from "@/lib/burnticker/hazards";
@@ -17,6 +17,8 @@ const STEP1_CHOICES = [{ ...HAZARD_FOLLOW, coins: 1 as const }, ...FOLLOW_CHOICE
 export type GuidedPhase = "follow" | "which" | "burn" | "name" | "review";
 /** Audit 6 item 4 / pass D item 40: every step's heading takes focus on a step change (the page moves focus to it). */
 export const STEP_HEADING = "data-step-heading";
+/** website-22 (QA 9 item 36): the measured height of the step's sticky action bar; the launch page pads its bottom by exactly this. */
+export const STICKY_VAR = "--bt-sticky-h";
 
 /**
  * THE PROGRESS STRIP (owner, 2026-10-12: "make the step workflow easier to follow"): four short labels, the current one lit, an answered
@@ -35,7 +37,8 @@ export function GuidedTop({ phase, onBack, onStartOver, confirm, answers = {}, o
             const cls = `rounded-full px-2 py-0.5 ${cur ? "bg-amber-400 font-semibold text-neutral-950" : done ? "border border-neutral-600 text-neutral-200" : "text-neutral-500"}`;
             return (
               <li key={st.id} className="min-w-0" aria-current={cur ? "step" : undefined}>
-                {done && onJump ? <button type="button" data-nav className={`${cls} max-w-[11rem] truncate underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400`} onClick={() => onJump(st.id)} aria-label={`Change ${st.short.toLowerCase()}${a ? `, now ${a}` : ""}`} data-jump={st.id}>{text}</button> : <span className={`${cls} inline-block max-w-[11rem] truncate`}>{text}</span>}
+                {/* website-22 (QA 9 item 24): a long answer ends in an ellipsis, and the whole answer is the chip's title */}
+                {done && onJump ? <button type="button" data-nav title={text} className={`${cls} block max-w-[11rem] truncate underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400`} onClick={() => onJump(st.id)} aria-label={`Change ${st.short.toLowerCase()}${a ? `, now ${a}` : ""}`} data-jump={st.id}>{text}</button> : <span title={text} className={`${cls} inline-block max-w-[11rem] truncate align-bottom`}>{text}</span>}
               </li>
             );
           })}
@@ -55,14 +58,26 @@ export function GuidedTop({ phase, onBack, onStartOver, confirm, answers = {}, o
  * height --bt-tabbar-h plus the safe area and a 10 px gap below 900 px wide), never under it, on the same opaque ground as the bar.
  */
 export function StickyAction({ children }: { children: ReactNode }) {
-  return <div className="sticky bottom-[calc(var(--bt-tabbar-h,62px)+env(safe-area-inset-bottom)+10px)] z-20 -mx-1 rounded-lg bg-neutral-950 px-1 py-2 min-[900px]:bottom-4" data-sticky-action>{children}</div>;
+  // website-22 (QA 9 item 36): the page's bottom padding is this bar's own height (--bt-sticky-h), measured, never a guess
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current, root = document.documentElement;
+    if (!el) return;
+    const set = () => root.style.setProperty(STICKY_VAR, `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    set();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(set);
+    ro?.observe(el);
+    return () => { ro?.disconnect(); root.style.removeProperty(STICKY_VAR); };
+  }, []);
+  return <div ref={ref} className="sticky bottom-[calc(var(--bt-tabbar-h,62px)+env(safe-area-inset-bottom)+10px)] z-20 -mx-1 rounded-lg bg-neutral-950 px-1 py-2 min-[900px]:bottom-4" data-sticky-action>{children}</div>;
 }
 
 /** Question 1: what the coin follows. Compact cards (title and one line); a tap picks and moves on. */
-export function FollowStep({ onPick, blocked, upfront = [], extra = null, value = null }: { /** audit 7 item 16: the card already chosen (aria-checked) */ value?: FollowId | null; onPick: (f: FollowId) => void; blocked: (f: FollowId) => string | null; /** audit 6 item 14 */ upfront?: string[]; /** WIRING-SOURCES3: an extra entry card after the five */ extra?: ReactNode }) {
+export function FollowStep({ onPick, blocked, upfront = [], extra = null, value = null, search = null }: { /** audit 7 item 16: the card already chosen (aria-checked) */ value?: FollowId | null; onPick: (f: FollowId) => void; blocked: (f: FollowId) => string | null; /** audit 6 item 14 */ upfront?: string[]; /** WIRING-SOURCES3: an extra entry card after the five */ extra?: ReactNode; /** website-22 (QA 9 item 39): the one free-text line, under the question and above the six cards */ search?: ReactNode }) {
   return (
     <section className="space-y-2" aria-label={GUIDED_STEPS[0].question} data-guided-step="follow">
       <h2 className="text-lg font-semibold sm:text-xl outline-none" tabIndex={-1} data-step-heading>{GUIDED_STEPS[0].question}</h2>
+      {search}
       <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={GUIDED_STEPS[0].question}>
         {STEP1_CHOICES.map((c) => { const why = blocked(c.id); return (
           <div key={c.id} className={`min-w-0 rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-follow={c.id}>
@@ -133,8 +148,9 @@ export function PatternStep({ preview, options, value, onPick, shares, share, on
       <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={pairLabel ? "Share of each coin's burn pool, the same for both" : "Share of the burn pool"}>
         <span className="text-xs text-neutral-500">{pairLabel ? "Share of each coin's burn pool, the same for both" : "Share of the burn pool"}</span>
         {mainRow.map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
-        {shares.length > 3 && <button type="button" data-optional="preset" aria-expanded={more} className="text-xs text-neutral-400 underline" onClick={() => setMore(!more)} data-share-more>{more ? "Less" : "More"}</button>}
         {more && shares.filter((f) => !mainRow.includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={Math.abs(share - f) < 1e-9} data-optional="preset" onClick={() => onShare(f)} className={`rounded-full border px-3 py-1 text-sm ${Math.abs(share - f) < 1e-9 ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-neutral-700"}`}>{pctLabel(f)}</button>)}
+        {/* website-22 (QA 9 item 37): More and Less sit at the end of the row, after every chip */}
+        {shares.length > 3 && <button type="button" data-optional="preset" aria-expanded={more} className="text-xs text-neutral-400 underline" onClick={() => setMore(!more)} data-share-more>{more ? "Less" : "More"}</button>}
       </div>
       <p className="text-xs text-neutral-400" data-share-example>{shareExample(share)}</p>
       {drain && <p className="text-xs text-amber-200" data-drain>{drain}</p>}

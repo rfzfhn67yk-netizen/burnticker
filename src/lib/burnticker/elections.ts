@@ -29,15 +29,21 @@ export const STATES: [string, string][] = [["AL", "Alabama"], ["AK", "Alaska"], 
 const byName = new Map(STATES.map(([a, n]) => [n.toLowerCase(), a]));
 export const stateName = (abbr: string): string | null => STATES.find(([a]) => a === abbr)?.[1] ?? null;
 
-export interface RaceClass { type: RaceType; state: string | null; district: string | null }
-/** An event title → its race, or null (not a race this flow offers). */
-export function classifyRace(title: string): RaceClass | null {
+export interface RaceClass { type: RaceType; state: string | null; district: string | null; /** a "(by individual)" listing of a district race: used only when the district has no party listing */ individual?: true }
+/**
+ * An event title → its race, or null (not a race this flow offers). QA pass 9 #26 (2026-10-13): Gamma's titles can end in spaces
+ * ("Alaska Governor Election Winner  ", "Nebraska Senate Election Winner  "), which dropped those races, and a district may be listed only
+ * "by individual" ("CA-40 House Election Winner (Individual)"), which dropped the 435th House race. Titles are trimmed, and the individual
+ * listing is read when it is the district's only one (loadRaces).
+ */
+export function classifyRace(title0: string): RaceClass | null {
+  const title = title0.replace(/\s+/g, " ").trim();
   let m = /^(.+?) Senate Election Winner$/.exec(title);
   if (m && byName.has(m[1].toLowerCase())) return { type: "senate", state: byName.get(m[1].toLowerCase())!, district: null };
   m = /^(.+?) Governor Election Winner$/.exec(title);
   if (m && byName.has(m[1].toLowerCase())) return { type: "governor", state: byName.get(m[1].toLowerCase())!, district: null };
-  m = /^([A-Z]{2})-(\d{1,2}|AL) House Election Winner$/.exec(title);
-  if (m && stateName(m[1])) return { type: "house", state: m[1], district: m[2] };
+  m = /^([A-Z]{2})-(\d{1,2}|AL) House Election Winner( \((?:by )?individual\))?$/i.exec(title);
+  if (m && stateName(m[1].toUpperCase())) return { type: "house", state: m[1].toUpperCase(), district: m[2].toUpperCase(), ...(m[3] ? { individual: true as const } : {}) };
   if (/^Which party will (win|hold|control) the (Senate|House)/i.test(title)) return { type: "control", state: null, district: null };
   return null;
 }
@@ -69,7 +75,7 @@ export function raceFromEvent(e: GammaEvent, refuse: (titles: string[]) => strin
   const ref = sosFor(c.state);
   const base = { type: c.type, state: c.state, stateName: st, district: c.district };
   return {
-    slug: e.slug, title: e.title, url: `https://polymarket.com/event/${e.slug}`, ...base, settlesOn: e.endDate ? e.endDate.slice(0, 10) : null, description: e.description,
+    slug: e.slug, title: e.title.replace(/\s+/g, " ").trim(), url: `https://polymarket.com/event/${e.slug}`, ...base, settlesOn: e.endDate ? e.endDate.slice(0, 10) : null, description: e.description,
     outcomes, hiddenPlaceholders: live.length - shown.length, sos: ref,
     settlement: `Polymarket's on-chain payout, checked against ${c.state && ref !== sosFor(null) ? `the ${st} Secretary of State's certified results` : `${st ? `${st}'s ` : ""}certified results from the state election office`}`,
     refused: refuse([e.title, ...shown.map((m) => m.question)]),
@@ -88,17 +94,48 @@ export function outcomeSettlesNote(r: Race, o: RaceOutcome): string {
     : `It settles on "${o.question}" resolving ${o.yes}.`;
 }
 
-export const electionsIndexUrl = (offset: number): string => `https://gamma-api.polymarket.com/events?tag_slug=midterms&closed=false&active=true&limit=100&offset=${offset}`;
-export const MAX_INDEX_PAGES = 12;
+/**
+ * THE CANDIDATE AND THE MARKET THE COIN READS (audit 10 #5, 2026-10-13): a candidate's coin names the candidate AND says which market
+ * settles it. A party market labelled with its nominee follows the party: if the party replaces the candidate, the coin follows the new
+ * nominee. A candidate's own market settles NO if that candidate does not win, withdraws or is replaced, and the coin then burns nothing.
+ */
+export function candidateMappingLine(r: Pick<Race, "type" | "stateName" | "district" | "state">, o: Pick<RaceOutcome, "label" | "question" | "partyMarket">, ticker: string | null = null): string {
+  const who = o.label.replace(/\s*\([A-Z]\)$/, "").trim(), coin = ticker ? `$${ticker}` : "This coin";
+  const party = /Democrat/i.test(o.question) ? "Democratic" : /Republican/i.test(o.question) ? "Republican" : null;
+  if (o.partyMarket && party) return `${coin} is named for ${who}, but it settles on the ${party} Party's market for the ${raceNoun(r)} (“${o.question}”). If the party replaces ${who} as its nominee, the coin follows the new nominee.`;
+  return `${coin} settles on ${who}'s own market (“${o.question}”). If ${who} does not win, withdraws or is replaced, that market settles NO and the coin burns nothing.`;
+}
 
-/** The open election races (paged until an empty page or MAX_INDEX_PAGES). `get` is the Polymarket client's cached getter. */
+export const electionsIndexUrl =(offset: number, tag: string = ELECTION_TAGS[0]): string => `https://gamma-api.polymarket.com/events?tag_slug=${tag}&closed=false&active=true&limit=100&offset=${offset}`;
+/**
+ * QA pass 9 #26 (2026-10-13, read live from Gamma): the `midterms` tag lists 1,215 open events, more than the 12 pages of 100 read before,
+ * so the last 15 were dropped; and the California governor's race is tagged `governor-midterms`, not `midterms`. The index reads up to 30
+ * pages of the main tag, then the per-office tags, merged by slug. A per-office tag that cannot be read leaves the main tag's races as they are.
+ * Gamma can answer fewer than 100 events on a page that is not the last (94 and 96 in the saved index), so only an empty page ends a tag.
+ */
+export const ELECTION_TAGS = ["midterms", "governor-midterms", "senate-midterms"] as const;
+export const MAX_INDEX_PAGES = 30;
+
+/** The open election races (each tag paged until an empty page or MAX_INDEX_PAGES). `get` is the Polymarket client's cached getter. */
 export async function loadRaces(get: (url: string) => Promise<unknown>, refuse: (titles: string[]) => string[] = () => []): Promise<Race[]> {
-  const out: Race[] = []; const seen = new Set<string>();
-  for (let i = 0; i < MAX_INDEX_PAGES; i++) {
-    const evs = parseEventsBody(await get(electionsIndexUrl(i * 100)));
-    if (!evs.length) break;
-    for (const e of evs) { if (seen.has(e.slug)) continue; seen.add(e.slug); const r = raceFromEvent(e, refuse); if (r && r.outcomes.length) out.push(r); }
+  const out: Race[] = []; const seen = new Set<string>(); const individual: Race[] = [];
+  for (const [ti, tag] of ELECTION_TAGS.entries()) {
+    for (let i = 0; i < MAX_INDEX_PAGES; i++) {
+      let body: unknown;
+      try { body = await get(electionsIndexUrl(i * 100, tag)); } catch (e) { if (ti === 0) throw e; break; }
+      const evs = parseEventsBody(body);
+      if (!evs.length) break;
+      for (const e of evs) {
+        if (seen.has(e.slug)) continue; seen.add(e.slug);
+        const r = raceFromEvent(e, refuse);
+        if (!r || !r.outcomes.length) continue;
+        (classifyRace(e.title)?.individual ? individual : out).push(r);
+      }
+    }
   }
+  // a district listed only "by individual" is still a race; one with a party listing keeps that one
+  const key = (r: Race) => `${r.type}:${r.state}:${r.district}`, have = new Set(out.map(key));
+  for (const r of individual) if (!have.has(key(r))) { have.add(key(r)); out.push(r); }
   return out;
 }
 

@@ -50,7 +50,8 @@
     {
       "id": "moon",
       "category": "price-returns",
-      "pattern": "\\bmoon(s|ed|ing|shot)?\\b"
+      "pattern": "\\b(moon(ed|ing|shot|shots|bags?)|(to|for) the moon|wen moon|moon (soon|mission|incoming))\\b",
+      "note": "QA pass 9 #9 (2026-10-13): price talk only (mooning, moonshot, moonbag, to the moon, wen moon); the noun in ordinary language (a moon landing, Harvest Moon, moon-club) is fine"
     },
     {
       "id": "multiplier",
@@ -383,6 +384,11 @@
       "id": "cpi-dataset",
       "pattern": "consumer price index",
       "note": "the Bureau of Labor Statistics' dataset name (CPI), a feed title — not a token price"
+    },
+    {
+      "id": "denial",
+      "pattern": "\\b(not|never|no longer|isn'?t|aren'?t|wasn'?t)\\s+(?:in any way\\s+)?(?:officially\\s+|formally\\s+)?(affiliated|endorsed|sponsored|partnered|associated|licensed|backed|official)\\b|\\bno (?:official |formal )?(affiliation|endorsement|partnership|sponsorship)\\b|\\bunaffiliated\\b",
+      "note": "QA pass 9 #9 (2026-10-13): an explicit denial ('Not affiliated with any team.') is the opposite of a claim; a claim ('Officially endorsed by the USGS!') still fails"
     }
   ]
 }

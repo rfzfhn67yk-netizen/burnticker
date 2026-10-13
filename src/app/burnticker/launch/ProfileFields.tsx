@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createLatest } from "@/lib/burnticker/latestOnly";
-import { IMAGE_CANCEL_LABEL, IMAGE_KEEP_GENERATED_LABEL, imageStateProblem } from "@/lib/burnticker/guidedLaunch";
+import { DESCRIPTION_ONE_PARAGRAPH, IMAGE_CANCEL_LABEL, IMAGE_KEEP_GENERATED_LABEL, IMAGE_RIGHTS_REQUIRED, notSquareLine, oneParagraph, squareCrop } from "@/lib/burnticker/guidedLaunch";
 import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, imageFromTransfer } from "@/lib/burnticker/creatorProfile";
+import { controlCharProblem } from "@/lib/burnticker/launchFields";
 import { BADGE_UNAVAILABLE_LINE, IMAGE_READ_FAILED, IMAGE_SIZE_HELP, pickImage } from "@/lib/burnticker/profileImagePick";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
 import { IMAGE_RIGHTS_LINE } from "@/lib/burnticker/legalCopy";
@@ -39,13 +40,11 @@ export function profileBody(v: ProfileValue): { creatorDescription: string; link
 
 /** What still blocks the launch in these fields (the review lists it beside the button). */
 export function profileProblems(v: ProfileValue): string[] {
-  const out: string[] = [];
-  const isp = imageStateProblem(v.imageState ?? null); if (isp) out.push(isp);
-  if (v.image && !v.rights) out.push("Confirm the image line, or remove the image.");
-  if (v.description.length > DESCRIPTION_MAX) out.push(`The description can be at most ${DESCRIPTION_MAX} characters.`);
-  for (const [label, u] of [["X", v.x], ["Telegram", v.telegram], ["Website", v.website]] as const) if (u.trim() && !/^https:\/\/\S{1,200}$/.test(u.trim())) out.push(`The ${label} link has to start with https:// and have no spaces.`);
-  return out;
+  return profileFieldProblems(v).map((x) => x.text);
 }
+export { profileFieldProblems, linkFieldProblem, LINK_FIELDS, type ProfileField } from "@/lib/burnticker/guidedLaunch";
+import { LINK_FIELDS, linkFieldProblem, profileFieldProblems, type ProfileField } from "@/lib/burnticker/guidedLaunch";
+export const profileFieldId = (side: "a" | "b", field: ProfileField | "note" | "name" | "ticker"): string => `bt-profile-${side}-${field}`;
 
 /**
  * website-18: `part` splits the fields so the image control stays on the review card ("image") while the description and links can sit
@@ -53,9 +52,24 @@ export function profileProblems(v: ProfileValue): string[] {
  * generated art with CUSTOM_IMAGES_OFF_LINE instead of the file control.
  */
 export type ProfileUpdate = ProfileValue | ((prev: ProfileValue) => ProfileValue);
-export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true, pasteTarget = true }: { value: ProfileValue; /** a state setter: every change is merged into the latest value (intent audit 5 item 14) */ onChange: (v: ProfileUpdate) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean; /** website-19: an image pasted anywhere on the page lands here (side A of a pair; side B takes drops) */ pasteTarget?: boolean }) {
+export function ProfileFields({ value, onChange, part = "all", who = null, customImages = true, pasteTarget = true, side = "a" }: { value: ProfileValue; /** a state setter: every change is merged into the latest value (intent audit 5 item 14) */ onChange: (v: ProfileUpdate) => void; part?: "all" | "image" | "text"; who?: string | null; customImages?: boolean; /** website-19: an image pasted anywhere on the page lands here (side A of a pair; side B takes drops) */ pasteTarget?: boolean; /** website-22: which coin's fields these are (their ids, for the review's Edit links) */ side?: "a" | "b" }) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [fileErr, setFileErr] = useState<string | null>(null), [busy, setBusy] = useState(false);
+  // website-22 (QA 9 item 11): a link is checked when the field is left (and again on every change after that), beside the field
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [paraNote, setParaNote] = useState(false);
+  // website-22 (QA 9 item 14): the picked image's size, so a picture that is not square says so and shows the square the coin keeps
+  const [dims, setDims] = useState<{ src: string; w: number; h: number } | null>(null);
+  const plainSrc = value.image?.plainUrl ?? null;
+  useEffect(() => {
+    if (!plainSrc) { setDims(null); return; }
+    let live = true;
+    const img = new Image();
+    img.onload = () => { if (live) setDims({ src: plainSrc, w: img.naturalWidth, h: img.naturalHeight }); };
+    img.src = plainSrc;
+    return () => { live = false; };
+  }, [plainSrc]);
+  const shape = dims && dims.src === plainSrc && dims.w !== dims.h ? dims : null;
   // intent audit 5 item 14: every change merges into the LATEST value (a functional update), and an image preview applies only if no newer
   // pick or removal came after it (createLatest), so a slow preview can never restore an old image or undo a newer edit
   const set = (p: Partial<ProfileValue>) => onChange((prev) => ({ ...prev, ...p }));
@@ -112,8 +126,8 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
           </div>
         ) : <div className="bt-profile-square shrink-0" aria-hidden="true"><span>Receipt art</span></div>}
         <div className="min-w-0 flex-1 space-y-1">
-          <label htmlFor={`${uid}-img`} className="block text-neutral-300">Image</label>
-          <input id={`${uid}-img`} type="file" data-optional="profile" accept="image/png,image/jpeg,image/gif,image/webp" aria-describedby={`${uid}-imghelp`} className="block w-full min-w-0 text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+          <label htmlFor={`${profileFieldId(side, "image")}-file`} className="block text-neutral-300">Image</label>
+          <input id={`${profileFieldId(side, "image")}-file`} type="file" data-optional="profile" accept="image/png,image/jpeg,image/gif,image/webp" aria-describedby={`${uid}-imghelp`} className="block w-full min-w-0 text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} />
           <p id={`${uid}-imghelp`}>{IMAGE_WAYS} {IMAGE_HELP} {IMAGE_SIZE_HELP}</p>
           <p data-image-rights><LinkedWords text={IMAGE_RIGHTS_LINE} links={[{ words: "terms of use", href: "/burnticker/terms" }]} /></p>
           {busy && <p role="status">Adding the receipt mark.</p>}
@@ -122,22 +136,52 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
           {value.image && !value.image.badgeUnavailable && <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" data-badge-toggle checked={value.badge} onChange={(e) => set({ badge: e.target.checked })} /><span>{BADGE_TOGGLE}</span></label>}
           {value.image && !value.image.badgeUnavailable && <p data-badge-note>{BADGE_NOTE}</p>}
           {value.image?.badgeUnavailable && <p data-badge-unavailable>{BADGE_UNAVAILABLE_LINE}</p>}
+          {value.image && shape && (() => {
+            const c = squareCrop(shape.w, shape.h), wide = shape.w >= shape.h;
+            return (
+              <div className="space-y-1" data-image-not-square role="status">
+                <p className="text-amber-300">{notSquareLine(shape.w, shape.h)}</p>
+                <div className="relative inline-block" style={{ width: wide ? 144 : Math.round(144 * shape.w / shape.h), height: wide ? Math.round(144 * shape.h / shape.w) : 144 }} data-image-crop>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a local preview */}
+                  <img src={value.image.plainUrl} alt="The whole image, with the square the coin shows outlined" className="h-full w-full rounded object-fill opacity-60" />
+                  <span aria-hidden="true" className="absolute border-2 border-amber-400" style={{ left: `${c.left}%`, top: `${c.top}%`, width: `${c.width}%`, height: `${c.height}%` }} />
+                </div>
+              </div>
+            );
+          })()}
           {value.image && (
             <>
-              <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" checked={value.rights} onChange={(e) => set({ rights: e.target.checked })} /><span data-rights-line>{RIGHTS_LINE}</span></label>
+              <label className="flex items-start gap-2 text-neutral-200"><input id={profileFieldId(side, "image")} type="checkbox" data-optional="profile" data-rights-box aria-invalid={!value.rights} checked={value.rights} onChange={(e) => set({ rights: e.target.checked })} /><span data-rights-line>{RIGHTS_LINE}</span></label>
+              {!value.rights && <p className="text-amber-300" data-rights-needed>{IMAGE_RIGHTS_REQUIRED}</p>}
               <button type="button" data-optional="profile" className="underline" onClick={() => { latest.cancel(); set({ image: null, rights: false, imageState: null }); setFileErr(null); setBusy(false); }}>Remove the image</button>
             </>
           )}
         </div>
       </div>}
       {showText && <>
-      <label className="block" htmlFor={`${uid}-desc`}>Description. It follows the rule sentence on the coin&apos;s page.</label>
-      <textarea id={`${uid}-desc`} data-optional="profile" className={input} rows={3} maxLength={DESCRIPTION_MAX} value={value.description} onChange={(e) => set({ description: e.target.value })} aria-describedby={`${uid}-count`} />
-      <p id={`${uid}-count`}>{value.description.length} of {DESCRIPTION_MAX} characters.</p>
+      {(() => {
+        // website-22 (audit 10 item 8): one paragraph, said where it happened; invisible and text-direction characters said beside the field
+        const descId = profileFieldId(side, "description"), descErr = controlCharProblem(value.description, "description") || (value.description.length > DESCRIPTION_MAX ? `The description can be at most ${DESCRIPTION_MAX} characters.` : "");
+        return (<>
+          <label className="block" htmlFor={descId}>Description. It follows the rule sentence on the coin&apos;s page, as one paragraph.</label>
+          <textarea id={descId} data-optional="profile" data-profile-field="description" className={input} rows={3} maxLength={DESCRIPTION_MAX} value={value.description} aria-invalid={!!descErr} onChange={(e) => { const p = oneParagraph(e.target.value); setParaNote(p.changed); set({ description: p.value }); }} aria-describedby={`${uid}-count${paraNote ? ` ${uid}-para` : ""}${descErr ? ` ${uid}-descerr` : ""}`} />
+          <p id={`${uid}-count`}>{value.description.length} of {DESCRIPTION_MAX} characters.</p>
+          {paraNote && <p id={`${uid}-para`} className="text-amber-300" role="status" data-one-paragraph>{DESCRIPTION_ONE_PARAGRAPH}</p>}
+          {descErr && <p id={`${uid}-descerr`} className="text-red-400" data-field-error="description">{descErr}</p>}
+        </>);
+      })()}
       <div className="grid min-w-0 gap-2 sm:grid-cols-3">
-        {([["x", "X"], ["telegram", "Telegram"], ["website", "Website"]] as const).map(([k, label]) => (
-          <label key={k} className="block min-w-0">{label}<input type="url" inputMode="url" data-optional="profile" placeholder="https://" className={input} value={value[k]} onChange={(e) => set({ [k]: e.target.value } as Partial<ProfileValue>)} /></label>
-        ))}
+        {LINK_FIELDS.map(([k, label]) => {
+          // website-22 (QA 9 item 11): the server's own rule for this field, checked when the field is left, said beside it
+          const id = profileFieldId(side, k), err = touched[k] ? linkFieldProblem(label, value[k]) : null;
+          return (
+            <div key={k} className="block min-w-0">
+              <label htmlFor={id}>{label}</label>
+              <input id={id} type="url" inputMode="url" data-optional="profile" data-profile-field={k} placeholder={k === "x" ? "https://x.com/…" : k === "telegram" ? "https://t.me/…" : "https://"} className={input} value={value[k]} aria-invalid={!!err} aria-describedby={err ? `${id}-err` : undefined} onBlur={() => setTouched((t) => ({ ...t, [k]: true }))} onChange={(e) => set({ [k]: e.target.value } as Partial<ProfileValue>)} />
+              {err && <span id={`${id}-err`} className="mt-0.5 block break-words text-red-400" data-field-error={k}>{err}</span>}
+            </div>
+          );
+        })}
       </div>
       </>}
     </fieldset>

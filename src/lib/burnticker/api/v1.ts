@@ -3,6 +3,7 @@ import { reviewProjection } from "@/lib/burnticker/projection";
 import { feedById, loadFixture, previewFromFixture } from "@/lib/burnticker/catalogue";
 import { sourceTypeLabel } from "@/lib/burnticker/sources/types";
 import { catalogueLaunches } from "@/lib/burnticker/launchAvailability";
+import { hazardCatalogue } from "@/lib/burnticker/hazards";
 import { BURNTICKER_RULES_SCHEMA, DISCLAIMER_FOOTER, lockRule, oracleDisclosure, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { receiptFormatTemplate, receiptKey } from "@/lib/burnticker/receipt";
@@ -48,7 +49,7 @@ const notOne = (p: Platform, l: Exclude<CoinLookup, { kind: "one" }>, id: string
 const links = (t: TokenRow, key: string = t.ticker) => ({ self: `${API_PREFIX}/tokens/${encodeURIComponent(key)}`, receipts: `${API_PREFIX}/tokens/${encodeURIComponent(key)}/receipts`, page: `/burnticker/t/${encodeURIComponent(key)}` });
 
 export function v1Catalogue(now = Date.now(), env: Record<string, string | undefined> = process.env): ApiResult {
-  return ok({ ...catalogueSources(now, { includeConfig: true }), launches: catalogueLaunches(env), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series are tier 1 adjudicated markets, searched live. Only settled results count, and prices are shown for display only." }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket yes-or-no markets are tier 1 adjudicated markets, searched live on Gamma. Each result is read from the on-chain payout on Polygon. Prices are shown for display only." } });
+  return ok({ ...catalogueSources(now, { includeConfig: true }), launches: catalogueLaunches(env), hazards: hazardCatalogue(), kalshi: { search: `${API_PREFIX}/kalshi/search?q=`, note: "Kalshi series are tier 1 adjudicated markets, searched live. Only settled results count, and prices are shown for display only." }, polymarket: { search: `${API_PREFIX}/polymarket/search?q=`, note: "Polymarket yes-or-no markets are tier 1 adjudicated markets, searched live on Gamma. Each result is read from the on-chain payout on Polygon. Prices are shown for display only." } });
 }
 
 export function v1SourcePreview(id: string, q: URLSearchParams, now = Date.now()): ApiResult {
@@ -76,13 +77,13 @@ export const v1Search = async (p: Platform, q: URLSearchParams): Promise<ApiResu
 };
 export const v1Elections = (p: Platform, q: URLSearchParams): Promise<ApiResult> => elections(p, { type: q.get("type"), state: q.get("state") });
 export const v1ElectionPair = (p: Platform, q: URLSearchParams): Promise<ApiResult> => electionPair(p, { slug: q.get("slug"), a: q.get("a"), b: q.get("b") });
-export const v1SportsTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsTeams(p, { league: q.get("league"), q: q.get("q") });
+export const v1SportsTeams = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsTeams(p, { league: q.get("league"), q: q.get("q"), division: q.get("division") });
 export const v1SportsGames = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsGames(p, { league: q.get("league"), q: q.get("q") });
 export const v1SportsRivalry = (p: Platform, q: URLSearchParams): Promise<ApiResult> => sportsRivalry(p, { league: q.get("league"), a: q.get("a"), b: q.get("b") });
 export const v1Browse = (p: Platform, q: URLSearchParams): Promise<ApiResult> => browse(p, { category: q.get("category"), q: q.get("q") });
 export const v1KalshiCategories = (p: Platform, q: URLSearchParams): Promise<ApiResult> => kalshiCategories(p, { category: q.get("category"), tag: q.get("tag"), q: q.get("q"), limit: q.get("limit"), offset: q.get("offset"), events: q.get("events"), polymarket: q.get("polymarket") });
 export const v1Backtest = (p: Platform, body: Record<string, unknown>): Promise<ApiResult> => runBacktest(p, body);
-export const v1PolymarketSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => polymarketSearch(p, { q: q.get("q"), status: q.get("status") });
+export const v1PolymarketSearch = (p: Platform, q: URLSearchParams): Promise<ApiResult> => polymarketSearch(p, { q: q.get("q"), status: q.get("status"), closingSoon: q.get("closingSoon") });
 /** POST /polymarket/backtest — a Polymarket rule's back-test from Gamma's closed markets (the same pipeline as /kalshi/backtest). */
 export async function v1PolymarketBacktest(p: Platform, body: Record<string, unknown>): Promise<ApiResult> {
   const oracle = (body.rule as { oracle?: unknown } | null | undefined)?.oracle;

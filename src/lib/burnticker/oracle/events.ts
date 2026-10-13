@@ -1,4 +1,5 @@
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * KALSHI EVENT + MARKET SEARCH (2026-10-10; the owner searched "eagles" to pair Eagles vs Jaguars and got nothing — series titles say
@@ -253,7 +254,7 @@ export function gameSides(e: KalshiEvent, aliases: readonly TeamAlias[] = TEAM_A
     const city = m.label.replace(/\s+[A-Z]{1,2}$/, "");   // "Los Angeles C" → "Los Angeles", "Chicago WS" → "Chicago"
     const name = nickname && !norm(city).includes(norm(nickname)) ? `${city} ${nickname}` : m.label;
     const raw = (nickname ?? m.label).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
-    return { abbr: m.suffix, marketTicker: m.ticker, label: m.label, nickname, name: name.slice(0, 32), ticker: raw.length >= 2 ? raw : m.suffix };
+    return { abbr: m.suffix, marketTicker: m.ticker, label: m.label, nickname, name: fitName(name), ticker: raw.length >= 2 ? raw : m.suffix };
   };
   return { a: side(teams[0]), b: side(teams[1]), tie };
 }
@@ -323,7 +324,7 @@ export function buildTeams(series: string, open: readonly KalshiEvent[], settled
     const nickname = nick ?? a?.nickname ?? null;
     const name = nickname && !norm(city).includes(norm(nickname)) ? `${city} ${nickname}` : (label ?? a?.city ?? abbr);
     const raw = (nickname ?? city).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
-    return { abbr, city, nickname, name: name.slice(0, 32), ticker: raw.length >= 2 ? raw : abbr, league: a?.league ?? null, filter: ownLegFilter(abbr), collisions: legFilterCollisions(abbr, series, aliases), next: null, record: { w: 0, l: 0, d: 0, since } };
+    return { abbr, city, nickname, name: fitName(name), ticker: raw.length >= 2 ? raw : abbr, league: a?.league ?? null, filter: ownLegFilter(abbr), collisions: legFilterCollisions(abbr, series, aliases), next: null, record: { w: 0, l: 0, d: 0, since } };
   };
   for (const e of [...open].sort((x, y) => (x.expectedAt ?? "9").localeCompare(y.expectedAt ?? "9"))) {
     const g = gameSides(e, aliases);

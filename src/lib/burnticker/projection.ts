@@ -17,6 +17,8 @@ import { pctLabel } from "@/lib/burnticker/launchPresets";
  * `drainLine` gives the share's arithmetic alone ("At 25% per win, about 76% of the pool is gone after 5 wins").
  */
 export const PROJECTION_SHARES = [0.01, 0.02, 0.05] as const;
+/** The shares a projection reads: 1, 2 and 5%, and the chosen share when it is another one (a one-time 100% has no history to project). */
+export const projectionShares = (chosen: number | null): number[] => [...new Set([...PROJECTION_SHARES, ...(chosen !== null && chosen > 0 && chosen < 1 ? [chosen] : [])])].sort((a, b) => a - b);
 export interface ProjectionRow { share: number; triggers: number; units: number; spentPct: number }
 export interface Projection { available: boolean; weeks: number | null; from: string | null; to: string | null; rows: ProjectionRow[]; lines: string[]; reason: string | null; drain: string | null }
 
@@ -40,7 +42,8 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
   if (!feed) return none(nativeSourceById(rule.series) ? "Team, game and weather sources are read live, so there is no saved sample to project from." : "There is no saved sample of this source to project from.");
   const rows: ProjectionRow[] = [];
   let from: string | null = null, to: string | null = null;
-  for (const s of PROJECTION_SHARES) {
+  // website-22 (QA 9 item 8): the share the creator chose is projected too, beside 1, 2 and 5%
+  for (const s of projectionShares(f)) {
     let pv;
     try { pv = previewFromFixture(feed, withShare(rule, s), now, root); } catch { return none("The saved sample of this source could not be read."); }
     const fired = pv.rows.filter((r) => r.mapping && r.units > 0);
@@ -53,8 +56,8 @@ export function reviewProjection(rule: BurnRule, now: number = Date.now(), root?
   const t = rows[0]?.triggers ?? 0;
   const lines = [
     `${span}, this rule would have triggered ${t} ${t === 1 ? "time" : "times"}.`,
-    ...rows.map((r) => `At ${pctLabel(r.share)}: ${pct(r.spentPct / 100)} of the pool spent.`),
-    "This holds the pool fixed apart from the rule's own spending, with no new fees and no per-run cap, so it shows how fast the rule drains a pool, not what a coin will hold.",
+    ...rows.map((r) => `At ${pctLabel(r.share)}${f !== null && Math.abs(r.share - f) < 1e-9 ? ", the share you chose" : ""}: ${pct(r.spentPct / 100)} of the pool spent.`),
+    "This holds the pool fixed apart from the rule's own spending, with no new fees and no per-run cap, so it shows how fast the rule drains a pool, not what a coin ends up holding.",
   ];
   return { available: true, weeks, from, to, rows, lines, reason: null, drain };
 }

@@ -1,4 +1,5 @@
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * NIFC WILDFIRE ACRES (sources-3, 2026-10-12). The National Interagency Fire Center's WFIGS year-to-date incident service (NIFC's
@@ -39,7 +40,7 @@ export function applyNifcFireSize(cfg: HttpSourceConfig, param: string): HttpSou
 /** The coin text pieces (lint-clean; test/burntickerSources3.test.ts): acres, nothing else. */
 export function nifcText(s: NonNullable<ReturnType<typeof parseNifcSeries>>, spends: string, inverse: boolean): { name: string; ticker: string; oneLiner: string; block: string; oneShot: boolean } {
   const src = "Only wildfire records in the United States count, not prescribed fires.";
-  if (s.kind === "size") return { name: `Next ${fmt(s.acres)} Acre Fire`.slice(0, 32), ticker: `FIRE${s.acres / 1000}K`, oneLiner: `burns once on the next wildfire to reach ${fmt(s.acres)} acres`, oneShot: true,
+  if (s.kind === "size") return { name: fitName(`Next ${fmt(s.acres)} Acre Fire`), ticker: `FIRE${s.acres / 1000}K`, oneLiner: `burns once on the next wildfire to reach ${fmt(s.acres)} acres`, oneShot: true,
     block: `When the first wildfire discovered after launch reaches ${fmt(s.acres)} acres, ${spends} once, with a receipt on chain. ${src} The reading is a fire's size in acres and the day it was discovered, and nothing else.` };
   if (inverse) return { name: "Flat Acre Days", ticker: "FLATACRES", oneLiner: "burns on every day the year's wildfire acres do not rise", oneShot: false,
     block: `For every day the year's total of wildfire acres in the United States does not rise, ${spends}, with a receipt on chain. ${src} Each day's total is read once the day is over in UTC. A day the total rises burns nothing.` };

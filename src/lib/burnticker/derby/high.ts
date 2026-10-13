@@ -1,5 +1,6 @@
 import { absDec, cmpDec, pctChange, subDec } from "@/lib/burnticker/derby/measure";
 import { DERBY_DISAGREEMENT_PP, type DerbyUnderlying } from "@/lib/burnticker/derby/spec";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * RECORD DAILY CLOSES (sources-4, 2026-10-12; the owner: "scheduled burns every time an existing coin hits a new all-time high, or stuff
@@ -206,10 +207,10 @@ export function highText(spec: HighSpec, spends: string): { name: string; ticker
   const tk = (sfx: string) => `${sym.slice(0, 10 - sfx.length)}${sfx}`;
   if (spec.once) {
     const by = spec.season.days ? addDay(spec.season.start, spec.season.days - 1) : null;
-    return { name: `${sym} Next${n} Record Close`.slice(0, 32), ticker: tk(spec.span === "all" ? "NREC" : `N${spec.span}`), oneLiner: `burns once on the first day ${sym} closes ${recordPhrase(spec)}`,
+    return { name: fitName(`${sym} Next${n} Record Close`), ticker: tk(spec.span === "all" ? "NREC" : `N${spec.span}`), oneLiner: `burns once on the first day ${sym} closes ${recordPhrase(spec)}`,
       block: `On the first UTC day from ${spec.season.start} whose daily close of ${sym} is ${recordPhrase(spec)}, ${spends} once, with a receipt on chain. ${src} ${base} ${DAILY_CLOSE_SENTENCE} ${withheld}${by ? ` If no day through ${by} sets a record, the coin ends without a burn.` : ""}` };
   }
-  return { name: `${sym}${n} Record Close`.slice(0, 32), ticker: tk(spec.span === "all" ? "REC" : `R${spec.span}`), oneLiner: `burns on every day ${sym} closes ${recordPhrase(spec)}`,
+  return { name: fitName(`${sym}${n} Record Close`), ticker: tk(spec.span === "all" ? "REC" : `R${spec.span}`), oneLiner: `burns on every day ${sym} closes ${recordPhrase(spec)}`,
     block: `For every UTC day from ${spec.season.start} whose daily close of ${sym} is ${recordPhrase(spec)}, ${spends}, with a receipt on chain. ${src} ${base} ${DAILY_CLOSE_SENTENCE} ${withheld} A day that closes at or under the record burns nothing.` };
 }
 

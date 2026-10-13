@@ -119,6 +119,10 @@ export function recordWindowEnd(d: Pick<KeeperDeps, "registry" | "dryRun" | "log
     if (t.status !== "live" || d.registry.ruleEnd(t.mint)) continue;
     const rule = d.registry.lockedRule(t).rule;
     if (!rule.onEnd) continue;
+    // QA pass 9 #3 (owner decision 2026-10-12): a single game is a one-shot. Its end comes from its own result receipt (detectRuleEnd: a
+    // drain when the result fired the rule at 100 %, else the end without a burn), so the window end is recorded here only for a game the
+    // schedule lists as cancelled (void). A postponed game keeps the window open, and the coin waits.
+    if (rule.oracle === "catalogue" && /^espn\.game:/.test(rule.series ?? "") && !/^void\b/.test(w.reason)) continue;
     let reason = `the coin's window ended: ${w.reason}`;
     // THE RIVALRY SERIES (espn.ts window `meetings`): the season-end reading (+1 to the side that won more meetings, −1 to the other) is
     // planned BEFORE the end is recorded (planToken skips a coin whose rule ended), so the end is dated at that reading and the pair's

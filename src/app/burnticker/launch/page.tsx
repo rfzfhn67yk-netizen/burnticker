@@ -14,7 +14,7 @@ import { plainSentence, ruleOneLiner } from "@/lib/burnticker/coinCard";
 import { CoinCard } from "../_components/CoinCard";
 import { FieldHelp } from "../_components/FieldHelp";
 import { useScrollEdges } from "../_components/useScrollEdges";
-import { CoinVsCoinTile, CVC_STORE } from "./CoinVsCoinTile";
+import { CoinVsCoinTile, CVC_STORE, type TileAnswers } from "./CoinVsCoinTile";
 import { LAUNCH_START_EVENT } from "@/lib/burnticker/launchStart";
 import { SignCard } from "./SignCard";
 import { launchlabPlan, pairCurvePlan } from "@/lib/burnticker/signPlan";
@@ -22,7 +22,7 @@ import type { SerializedIx } from "@/lib/burnticker/program";
 import { ReviewCard } from "./ReviewCard";
 import { launchErrorMessage, LaunchRequestError, PAIR_CURVE_REVIEW_LINE, postPairLaunch, venueFor, venueFrom409, type LaunchErrorBody, type PairVenue } from "@/lib/burnticker/pairLaunchClient";
 import type { PairCurveLaunchBundle } from "@/lib/burnticker/pairCurveLaunch";
-import { STATIONS, nwsSeries, parseNwsSeries } from "@/lib/burnticker/sources/nws";
+import { STATIONS, nwsSeries, parseNwsSeries, stationOptionLabel } from "@/lib/burnticker/sources/nws";
 import { applyDial, dialsFor, ON_END_DEFAULT, type DialId } from "@/lib/burnticker/dials";
 import { DEFICIT_SITE } from "@/lib/burnticker/creatorLaunches";
 import { NO_WALLET_LINE } from "@/lib/burnticker/glossary";
@@ -35,9 +35,9 @@ import { loadCatalogue } from "@/lib/burnticker/catalogueClient";
 import { NEXT_GAME_UNAVAILABLE, sourceUnavailableLine, sportsConfirmationLine, sportsProvenanceLine, SPORTS_PROVENANCE } from "@/lib/burnticker/sources/provenance";
 import { PreWalletSummary } from "./PreWalletSummary";
 import { BACKTEST_UNAVAILABLE } from "@/lib/burnticker/oracle/backtest";
-import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileProblems, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
+import { EMPTY_PROFILE, ProfileFields, chosenPreview, profileBody, profileFieldId, profileFieldProblems, type ProfileUpdate, type ProfileValue } from "./ProfileFields";
 import { teamAdvancedDefaults } from "@/lib/burnticker/creatorCopy";
-import { wxThresholdProblem } from "@/lib/burnticker/launchFields";
+import { nameProblem, tickerProblem, wxThresholdProblem } from "@/lib/burnticker/launchFields";
 import { composeRule, fieldsFromRule, launchBody } from "@/lib/burnticker/launchDraft";
 import type { LaunchReview } from "@/lib/burnticker/launchReview";
 import { LaunchGate } from "./LaunchGate";
@@ -48,9 +48,9 @@ import { EXAMPLES_AND_BENEFITS_LABEL } from "@/lib/burnticker/exampleTickets";
 import { DuplicateNotice } from "./DuplicateNotice";
 import type { ExistingCoin } from "@/lib/burnticker/duplicateRule";
 import { PairFundsFlow } from "../_components/PairFundsFlow";
-import { FundsFlowView } from "./ReviewCard";
+import { FundsFlowView, type Blocker, type LaunchVenue, type ProfileFieldKey } from "./ReviewCard";
 import { championPathRule, describeRule, shortDate, windowKindOf, DESCRIPTION_MAX, PAIR_REVIEW_LINE, independentPairFacts, winnerTakesBurnFacts, type CoinText, type DescribeCtx } from "@/lib/burnticker/describe";
-import { parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
+import { LIVE_NOW, parseEspnSeries, seasonYearAt, teamSeries, type LeagueId, type Window as TeamWindow } from "@/lib/burnticker/sources/espn";
 import { TEMPLATES, TEMPLATE_START, weatherTemplateDraft, type TemplateId } from "@/lib/burnticker/templates";
 import type { Suggestion as SearchSuggestion } from "@/lib/burnticker/search";
 import { fold, meaningful, queryTokens } from "@/lib/burnticker/textMatch";
@@ -61,9 +61,10 @@ import { drainLine } from "@/lib/burnticker/drain";
 import { sourceSubjectLabel } from "@/lib/burnticker/paramNames";
 import { prepareIfCurrent, profileRevision, STALE_PREPARE_SENTENCE } from "@/lib/burnticker/preparedLaunch";
 import { endText } from "@/lib/burnticker/describe";
-import { HAZARD_FOLLOW, HAZARD_KINDS, hazardPatternOptions, hazardSwap } from "@/lib/burnticker/hazards";
-import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, budgetCopy, oneShotSentences, candidateFacts, endSentences, matchupFacts, pairIdentityProblems, pairNames, pairTickers, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
+import { HAZARD_FOLLOW, HAZARD_KINDS, HAZARD_MEASURES, hazardControls, hazardPatternOptions, hazardSeriesFor, hazardSwap, isHazardSeries, type HazardKindId } from "@/lib/burnticker/hazards";
+import { FACT_LABELS, PATTERN_REASON, PERPETUAL_END_LINE, NO_LISTED_MEETING_LINE, RIVAL_SAME_TEAM, RIVALRY_GAME_LABEL, RIVALRY_GAME_LINE, RIVALRY_SCOPE_LINE, RIVALRY_SEASON_LABEL, RIVALRY_SEASON_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE, MEETINGS_END_LABEL, MEETINGS_END_LINE, MEETINGS_DEADLINE_LINE, MEETINGS_LIST_LABEL, PATTERNS, meetingsListRows, meetingsPairNames, meetingsPairRules, meetingsPairSentence, meetingsWhichCoinLine, type MeetingRow, SCHEDULE_UNAVAILABLE_LINE, meetingsOf, scheduleCoverageLine, seasonPairNames, costLine, electionAuthorityLines, patternWords, shareExample, upfrontLines, whichCoinLine, whichHeading, FOLLOW_CHOICES, activeUnit, eventForSide, followForRule, keptProfileLine, keptProfileParts, KEPT_PROFILE_FRESH, KEPT_PROFILE_REUSE, IMAGE_RIGHTS_REQUIRED, noteProblemOf, oneGameShare, PAIR_COST_EXCLUSIONS, mappingWarning, partyMarketWarning, pickDescribesRule, renderWarnings, reviewBlockers, shareOfBudgetLine, rivalrySeasonLine, stablePatternOptions, teamLine, triggerText, whichAnswer, IMAGE_NOT_KEPT, meetingOf, otherTeams, seasonPairRules, RESERVED_REFUSAL, beforeGraduationLine, budgetCopy, oneShotSentences, candidateFacts, endSentences, matchupFacts, pairIdentityProblems, pairNames, pairTickers, patternOptions, teamTicker, teamTickerForRule, unitPhrase, type FollowId, type PatternId } from "@/lib/burnticker/guidedLaunch";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
+import { PICKER_PAGE, pickerPage } from "@/lib/burnticker/polySearch";
 
 /**
  * THE LAUNCH PAGE (LAUNCHPAD-PATH §1; rebuilt 2026-10-10 on the owner's cut: "it feels overly complicated to get a coin set up … the UI
@@ -98,7 +99,7 @@ const LABELS: Record<Flow, Partial<Record<Step, string>>> = {
 type Suggestion = SearchSuggestion;
 /** Browse (GET /api/burnticker/v1/browse): one source, any venue, in one shape. */
 interface BrowseCategory { id: string; label: string; blurb: string; feeds: number; polymarket: string[]; kalshi: string[]; guided?: string | null; adjudicatedOnly?: boolean }
-interface ElOutcome { conditionId: string; label: string; question: string; yes: string; no: string; title: string; settles: string; rule: BurnRule }
+interface ElOutcome { conditionId: string; label: string; question: string; yes: string; no: string; title: string; settles: string; rule: BurnRule; /** sources-6 (audit 10 #5): which market a candidate's coin settles on, and what a replaced nominee does */ mapping?: string | null }
 interface ElRace { slug: string; title: string; url: string; settlesOn: string | null; description: string | null; hiddenPlaceholders: number; sos: { name: string; url: string }; settlement: string; refused: string[]; outcomes: ElOutcome[] }
 interface ElPairSide { candidate: string; name: string; ticker: string; components: { fecBeats: BurnRule | null; winner: BurnRule }; sentences: { fecBeats: string | null; winner: string }; outcome: { conditionId: string; question: string; yes: string; no: string } }
 interface ElPair { a: ElPairSide; b: ElPairSide; crossRead: { name: string; url: string }; pending: string[] }
@@ -108,19 +109,19 @@ interface Source { id: string; kind: string; tier: number; tierLabel: string; ti
 interface Backtest { sentence: string; text: string; sha256: string; sha12: string; mode: string; statement: string; seriesTitle: string | null; refusals: { reason: string }[]; matched: number; backtest: { rows: { id: string; at: string; title: string | null; result: string | null; value: string | null; units: number; kind: string }[]; totals: { events: number; burnEvents: number; voids: number; units: number; poolFractionSpent: number | null; tokens: number | null }; oneShot: { resolvesOn: string | null } | null } }
 interface Bundle { ready: boolean; pending: string[]; mint: string; ticker: string; mintSecretKey: string | null; rules: { text: string; sha256: string; statement: string; mode: string }; addresses: { feePda: string; feeWsol: string; vault: string | null; poolId: string | null; platformId: string }; transactions: { label: string; signers: string[]; instructions: SerializedIx[] }[]; notes: string[] }
 interface League { id: string; label: string; series: { ticker: string; title: string }[]; sport?: string; crossRead?: string | null; draws?: boolean }
-interface Team { /** WIRING-PARITY audit 6 #2: the season's state for this team, with its warning when no game is left */ seasonWarning?: string | null; abbr: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null } | null; record: { w: number; l: number; d: number; since: string }; series?: { win: string; loss: string }; recordText?: string | null }
+interface Team { /** WIRING-PARITY audit 6 #2: the season's state for this team, with its warning when no game is left */ seasonWarning?: string | null; abbr: string; /** sources-6 (QA 9 #29): the code shown and used for tickers; `abbr` is what the API takes */ code?: string; city: string; nickname: string | null; name: string; ticker: string; league: string | null; filter: string; collisions: string[]; next: { eventTicker: string; marketTicker: string; title: string; expectedAt: string | null; opponent: string | null; when?: string | null } | null; record: { w: number; l: number; d: number; since: string }; series?: { win: string; loss: string }; recordText?: string | null }
 /** The sports pickers (GET /v1/sports/teams, /v1/sports/games): the leagues' own schedules or TheSportsDB, never ESPN. */
-interface SportsTeam { abbr: string; city: string; nickname: string; name: string; ticker: string; league: string; series: { win: string; loss: string }; record?: string | null; season?: { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null }; next: { eventId: string; title: string; startsAt: string; detail: string; opponent: string; home: boolean } | null }
-interface SportsSide { abbr: string; name: string; nickname: string; ticker: string; record: string | null }
-interface SportsGame { eventId: string; league: string; title: string; startsAt: string; detail: string; a: SportsSide; b: SportsSide; series: { aLoss: string; bLoss: string } }
+interface SportsTeam { abbr: string; code?: string; city: string; nickname: string; name: string; ticker: string; league: string; series: { win: string; loss: string }; record?: string | null; season?: { status: "upcoming" | "none-listed" | "unknown" | "over"; warning: string | null }; next: { eventId: string; title: string; startsAt: string; detail: string; opponent: string; home: boolean; live?: boolean; when?: string | null } | null }
+interface SportsSide { abbr: string; code?: string; name: string; nickname: string; ticker: string; record: string | null; /** sources-6 (QA 9 #2): this side plays at home */ home?: boolean }
+interface SportsGame { eventId: string; league: string; title: string; startsAt: string; detail: string; live?: boolean; when?: string | null; a: SportsSide; b: SportsSide; series: { aLoss: string; bLoss: string } }
 const recordOf = (r: string | null | undefined): { w: number; l: number; d: number; since: string } => { const m = /^(\d+)-(\d+)(?:-(\d+))?$/.exec(r ?? ""); return { w: m ? Number(m[1]) : 0, l: m ? Number(m[2]) : 0, d: m && m[3] ? Number(m[3]) : 0, since: "" }; };
 /** website-21: GET /v1/sports/rivalry as the step-2 option reads it (`failed`: the read itself failed, never "no game"). */
-interface RivalryRead { key: string; busy: boolean; failed: string | null; offered: boolean; offeredLine: string | null; scheduleNote: string | null; season: string | null; year: number | null; source: string | null; meetings: MeetingRow[] }
-interface Side { abbr: string; marketTicker: string; label: string; nickname: string | null; name: string; ticker: string }
+interface RivalryRead { key: string; busy: boolean; failed: string | null; offered: boolean; offeredLine: string | null; scheduleNote: string | null; season: string | null; year: number | null; source: string | null; meetings: MeetingRow[]; /** sources-6 (QA 9 #4): what the one-game option searched */ oneGameSearched: string | null }
+interface Side { abbr: string; marketTicker: string; label: string; nickname: string | null; name: string; ticker: string; /** sources-6: the shown code (tickers); `abbr` stays the series pin */ code?: string; /** sources-6 (QA 9 #2): this side plays at home, from the schedule */ home?: boolean }
 interface PolyMarket { conditionId: string; question: string; yes: string; no: string; endDate: string | null; closed: boolean; sportsMarketType: string | null; /** the outcome's name inside its event (Gamma groupItemTitle), when named */ outcome?: string | null; /** sources-2 (oracle/polymarket.ts polyStated) */ resolutionSource?: StatedSource; finalAfter?: FinalAfter }
 interface PolyEvent { slug: string; title: string; url: string; endDate: string | null; closed: boolean; markets: PolyMarket[]; marketCount: number; refused: string[] }
 interface PolyTag { slug: string; label: string; events: number; series: string[] }
-interface PolyFound { events: PolyEvent[]; tags: PolyTag[]; markets: PolyMarket[] }
+interface PolyFound { events: PolyEvent[]; tags: PolyTag[]; markets: PolyMarket[]; /** sources-6 (QA 9 #17): markets ending within 48 hours, hidden unless asked for */ hiddenClosingSoon?: number }
 type Venue = "kalshi" | "polymarket";
 interface EventHit { eventTicker: string; seriesTicker: string; title: string; subTitle: string | null; category: string | null; expectedAt: string | null; closeTime: string | null; markets: { ticker: string; suffix: string; label: string; status: string }[]; matchedSides: string[]; pair: { a: Side; b: Side; tieMarket: string | null } | null; refused: string[] }
 
@@ -154,12 +155,33 @@ const getJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
   let r: Response;
   try { r = await fetch(url, init); } catch (e) { throw new ReadError("the source could not be reached just now", String((e as Error)?.message ?? e)); }
   const j = await r.json().catch(() => null) as { error?: string } | null;
-  if (!r.ok) throw new ReadError(r.status === 429 ? "too many requests for a moment — try again shortly" : "the source did not answer just now", `HTTP ${r.status}${j?.error ? `: ${j.error}` : ""}`);
+  // sources-6 (QA 9 #31): a refusal the API states (a 4xx with its own sentence) is shown as is
+  if (!r.ok) throw new ReadError(r.status === 429 ? "too many requests for a moment — try again shortly" : r.status >= 400 && r.status < 500 && j?.error ? j.error : "the source did not answer just now", `HTTP ${r.status}${j?.error ? `: ${j.error}` : ""}`);
   return j as T;
 };
+/**
+ * sources-6 (QA 9 #40): the values the threshold selects show for the series on screen: the creator's own choice, else the one value set
+ * whose series is the current one (a pattern switch carries a magnitude over), else the control's default.
+ */
+function hazardShownValues(kind: HazardKindId, pat: "every" | "once", series: string, chosen: Record<string, string>, now: number): Record<string, string> {
+  const ctls = hazardControls()[kind][pat];
+  const base = Object.fromEntries(ctls.map((c) => [c.id, chosen[c.id] ?? c.default]));
+  const hit = (v: Record<string, string>) => { const r = hazardSeriesFor(kind, pat, v, now); return "series" in r && r.series === series; };
+  if (hit(base)) return base;
+  const [c0, c1] = ctls;
+  for (const o0 of c0?.options ?? []) {
+    if (!c1) { const v = { [c0.id]: o0.value }; if (hit(v)) return v; continue; }
+    for (const o1 of c1.options) { const v = { [c0.id]: o0.value, [c1.id]: o1.value }; if (hit(v)) return v; }
+  }
+  return base;
+}
 /** L11: a refusal in plain words ("Burnticker does not offer coins on markets about deaths."), never an internal reference. */
 const refusedLine = (reasons: string[]): string => `Burnticker does not offer coins on ${reasons.join(", or on ")}.`;
 const detailOf = (e: unknown): string => (e instanceof ReadError ? e.detail : String((e as Error)?.message ?? e));
+/** website-22 (QA 9 item 41): a read that a pause can fix (too many requests, a gateway that did not answer, a host that was busy). */
+const transientRead = (e: unknown): boolean => /^HTTP (429|502|503|504)\b/.test(detailOf(e)) || /HTTP (429|502|503|504)\b/.test(String((e as Error)?.message ?? ""));
+const RETRY_MAX = 3;
+const RETRYING_LINE = "The server is busy just now, so the summary is read again in a few seconds.";
 /** L03: where the review was entered from — restored by Back (flow, step, the query or category, the scroll position). */
 type EntryKind = "search" | "exact" | "template" | "browse" | "team" | "matchup" | "like";
 interface Origin { kind: EntryKind; flow: Flow; step: Step; uq: string; q2: string; cat: string; bq: string; leagueSeries: string | null; scrollY: number }
@@ -263,7 +285,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [raiseSol, setRaiseSol] = useState<RaisePreset>(DEFAULT_RAISE_SOL);
   const [cardWin, setCardWin] = useState<Record<string, number>>({});
   // an event card's outcome picker (polySearch.ts): which card is open and the picker's own filter text
-  const [outPick, setOutPick] = useState<{ id: string; q: string } | null>(null);
+  const [outPick, setOutPick] = useState<{ id: string; q: string; shown?: number } | null>(null);
   // launch audit 5 L02: per-type availability from the catalogue (launchAvailability.ts), explained before any form
   const [avail, setAvail] = useState<LaunchAvailabilityModel | null>(null);
   // website-12: the one launch-state record (launchAvailability.ts siteLaunchState): every open / closed / signing sentence on this page
@@ -293,7 +315,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const [wantInverse, setWantInverse] = useState<"on" | "off" | null>(null);
   // owner, 2026-10-12: the page opens at the top; a saved draft is offered in one line, never jumped to
   const [savedDraft, setSavedDraft] = useState<Record<string, unknown> | null>(null);
-  const [confirmOver, setConfirmOver] = useState(false), [classicOpen, setClassicOpen] = useState(false);
+  const [confirmOver, setConfirmOver] = useState(false);
   // intent audit 5 item 11: a saved draft never keeps an image; the review says so once when the draft had one
   const [imageGone, setImageGone] = useState(false);
   // walkthrough snag 7: two candidates of one race, as two coins on their own markets
@@ -310,6 +332,24 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // website-21 (WIRING-RIVALRY-SERIES, owner 2026-10-12: "sixers vs celtics as a pair ... burn schedule based on their head-to-head games"):
   // the third rivalry option, every game between the two teams this season, read from GET /v1/sports/rivalry once both teams are picked
   const [rivalry, setRivalry] = useState<RivalryRead | null>(null), [rivalryRetry, setRivalryRetry] = useState(0), [meetingsYear, setMeetingsYear] = useState<number | null>(null);
+  // website-22 (audit 10 item 11): the words, links and note kept from the coin set up before a new step-1 choice, said once on step 4
+  const [keptProfile, setKeptProfile] = useState<string[] | null>(null);
+  // website-22 (QA 9 item 11): the field a review Edit link points at; step 4 opens, scrolls to it and focuses it
+  const [focusField, setFocusField] = useState<string | null>(null);
+  // website-22 (QA 9 item 41): a 429 or a 502 from the review or the back-test is retried after a pause, a few times, then said once;
+  // a new draft starts the count again
+  const [reviewRetry, setReviewRetry] = useState<{ rev: string; n: number }>({ rev: "", n: 0 }), [btRetry, setBtRetry] = useState<{ key: string; n: number }>({ key: "", n: 0 });
+  const searchRef = useRef<HTMLInputElement>(null), [focusSearch, setFocusSearch] = useState(false);
+  const lastFollow = useRef<FollowId | null>(null);
+  // sources-6 (QA 9 #28): college football lists the FBS first; "Show all divisions" asks for every team
+  const [teamsDivision, setTeamsDivision] = useState<"fbs" | "all">("fbs"), [divisionLine, setDivisionLine] = useState<string | null>(null);
+  // sources-6 (QA 9 #17): one-time Polymarket markets closing within 48 hours, hidden unless asked for
+  const [polyClosingSoon, setPolyClosingSoon] = useState(false);
+  const [hazardCatalogueOf, setHazardCatalogueOf] = useState<ReturnType<typeof hazardControls> | null>(null);
+  // sources-6 (QA 9 #40): the natural disaster picked in step 2 and the threshold values chosen per pattern
+  const [hazardKind, setHazardKind] = useState<HazardKindId | null>(null), [hazardVals, setHazardVals] = useState<{ every: Record<string, string>; once: Record<string, string> }>({ every: {}, once: {} });
+  // website-22: the Coin comparison tile's answers for the progress strip (it walks the guided steps itself)
+  const [coinAnswers, setCoinAnswers] = useState<TileAnswers | null>(null);
 
   const pairOn = flow === "pair";
   // website-21: a rivalry series pair (two teams, every game between them this season): one linked LaunchLab pair, side B on the mirror
@@ -370,7 +410,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       else if (st.flow) { setFlow(st.flow); setStep(ORDER[st.flow][0]); setGuide({ follow: st.flow === "team" ? "team" : st.flow === "pair" ? "rivalry" : "market", phase: "which", pairKind: st.flow === "pair" ? "teams" : null }); }
       else if (st.browse) { setFlow("browse"); setStep("pick"); setCat(st.browse); setGuide({ follow: tpl === "election-pair" ? "rivalry" : "market", phase: "which", pairKind: tpl === "election-pair" ? "candidates" : null }); }
       else if (st.derby) { setGuide({ follow: "coins", phase: "which", pairKind: null }); setEntry({ template: tpl, a: "", b: "" }); }
-      else { setFlow("team"); setStep("choose"); if (st.search) { setUq(st.search); setClassicOpen(true); } }
+      // website-22 (QA 9 item 9): a search template opens step 1 with its words in the search line, scrolled to and focused
+      else { setFlow("team"); setStep("choose"); if (st.search) { setUq(st.search); setFocusSearch(true); } }
     } else if (like) {
       // "Launch one like this" (a coin or pair page): the same rule shape, the team / race / feed re-pickable, the dials copied
       try { sessionStorage.removeItem(STORE); } catch { /* ignore */ }
@@ -381,11 +422,12 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
         const n = r.oracle === "catalogue" && r.series ? parseNwsSeries(r.series) : null;
         setPendingDials({ fraction: d.fraction, side: d.side?.value ?? null, window: d.window?.value ?? null, games: d.window?.games ?? null, league: !!d.league?.on, from: like.toUpperCase(), inverse: !!d.inverse?.on });
-        if (e?.kind === "team") { setFlow("team"); setStep("team"); setLeagueSeries(e.league); }
-        else if (e?.kind === "game") { setFlow("pair"); setStep("pick"); setLeagueSeries(e.league); }
-        else if (n) { setFlow("browse"); setStep("pick"); setCat("science"); setWx({ metric: n.metric, station: n.station, threshold: String(n.threshold ?? "") }); }
+        // website-22 (audit 10 item 14): "launch one like this" walks the same five steps as every other entry
+        if (e?.kind === "team") { setGuide({ follow: "team", phase: "which", pairKind: null }); setFlow("team"); setStep("team"); setLeagueSeries(e.league); }
+        else if (e?.kind === "game") { setGuide({ follow: "rivalry", phase: "which", pairKind: "teams" }); setFlow("pair"); setStep("pick"); setLeagueSeries(e.league); }
+        else if (n) { setGuide({ follow: "number", phase: "which", pairKind: null }); setFlow("browse"); setStep("pick"); setCat("science"); setWx({ metric: n.metric, station: n.station, threshold: String(n.threshold ?? "") }); }
         else if (r.oracle === "derby") { window.location.href = "/burnticker/launch?template=coin-vs-coin"; }
-        else if (r.oracle === "polymarket") { setFlow("single"); setStep("pick"); }
+        else if (r.oracle === "polymarket") { setGuide({ follow: "market", phase: "which", pairKind: null }); setFlow("single"); setStep("pick"); }
         else { setFlow("team"); setStep("choose"); setUq(j.status?.seriesTitle ?? ""); }
       }).catch(() => { /* the plain launch page */ });
     }
@@ -423,7 +465,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       let s: Record<string, unknown> | null = null;
       try { s = JSON.parse(sessionStorage.getItem(STORE) ?? "null"); } catch { s = null; }
       if (s && (s.step !== "choose" || (s.guide as { phase?: string } | undefined)?.phase !== "follow")) setSavedDraft(s);
-      setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); setConfirmOver(false); setClassicOpen(false); setOrigin(null);
+      setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); setConfirmOver(false); setOrigin(null);
       window.scrollTo({ top: 0 });
     };
     window.addEventListener(LAUNCH_START_EVENT, h);
@@ -432,7 +474,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const resumeDraft = () => { if (savedDraft) restoreFrom(savedDraft); setSavedDraft(null); window.scrollTo({ top: 0 }); };
 
   // site audit #18: the one shared catalogue read (catalogueClient.ts) — the header's availability uses the same promise
-  useEffect(() => { loadCatalogue().then((raw) => { const j = raw as { sources?: Source[]; cluster?: string; venues?: typeof venues; customImages?: boolean }; setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); setAvail(availabilityFromCatalogue(j)); const st = siteLaunchStateFromCatalogue(j); setSite(st); setGate(st.read === "stale" ? { kind: "unavailable", detail: st.sentence } : launchGateFromCatalogue(j)); }).catch((e) => { const why = String((e as Error).message ?? e); setSite(siteLaunchStateFromCatalogue(null, { failure: why })); setGate(launchGateFromCatalogue(null, why)); }); }, []);
+  useEffect(() => { loadCatalogue().then((raw) => { const j = raw as { sources?: Source[]; cluster?: string; venues?: typeof venues; customImages?: boolean; hazards?: { id: HazardKindId; controls: ReturnType<typeof hazardControls>[HazardKindId] }[] }; setSources(j.sources ?? []); setCluster(j.cluster ?? null); if (j.venues) { setVenues(j.venues); setPairVenue(venueFor(j.venues)); } setCustomImages(j.customImages === true); if (j.hazards) setHazardCatalogueOf(Object.fromEntries(j.hazards.map((h) => [h.id, h.controls])) as ReturnType<typeof hazardControls>); setAvail(availabilityFromCatalogue(j)); const st = siteLaunchStateFromCatalogue(j); setSite(st); setGate(st.read === "stale" ? { kind: "unavailable", detail: st.sentence } : launchGateFromCatalogue(j)); }).catch((e) => { const why = String((e as Error).message ?? e); setSite(siteLaunchStateFromCatalogue(null, { failure: why })); setGate(launchGateFromCatalogue(null, why)); }); }, []);
   // A2: no pair path while pairs are unavailable — a restored session, ?pair=1, the matchup template or "launch one like this" on a game
   useEffect(() => { if (site.read === "ready" && !site.pairs.available && flow === "pair" && step !== "choose") { setFlow("team"); setStep("choose"); setGame(null); setPairNotice(site.pairs.line); } }, [site, flow, step]);
   const curCat = cats.find((c) => c.id === cat);
@@ -442,6 +484,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   // intent audit 5 item 16: each picker below applies an answer only while its question is still the current one (`live`, cleared by the
   // effect's cleanup when the league, query, race type or state changes), and clears the old answer as soon as the question changes
   useEffect(() => { if (!etype) return; let live = true; setEbusy(true); setEraces(null); setEpair(null); setEsel([]); getJson<{ states: { abbr: string; name: string; races: number }[]; races: ElRace[] }>(`${V1}/elections?type=${etype}${estate ? `&state=${estate}` : ""}`).then((j) => { if (!live) return; setEstates(j.states); setEraces(etype === "control" || estate ? j.races : null); }).catch(() => { if (live) setEraces([]); }).finally(() => { if (live) setEbusy(false); }); return () => { live = false; }; }, [etype, estate]);
+  // website-22 (audit 10 item 16): the race type, state and picks belong to the picker that set them (one outcome, or two candidates);
+  // moving to the other picker starts its filters fresh
+  const electionPicker = `${guide.follow ?? ""}|${guide.pairKind ?? ""}`, lastPicker = useRef(electionPicker);
+  useEffect(() => { if (lastPicker.current === electionPicker) return; lastPicker.current = electionPicker; setEtype(null); setEstate(null); setEsel([]); setEraces(null); setEpair(null); }, [electionPicker]);
   useEffect(() => { if (esel.length !== 2 || !eraces?.[0]) { setEpair(null); return; } const race = eraces.find((r) => esel.every((c) => r.outcomes.some((o) => o.conditionId === c))); if (!race) return; let live = true; getJson<ElPair>(`${V1}/elections/pair?slug=${race.slug}&a=${esel[0]}&b=${esel[1]}`).then((j) => { if (live) setEpair(j); }).catch(() => { if (live) setEpair(null); }); return () => { live = false; }; }, [esel, eraces]);
   // the search box: 300 ms after the last keystroke, only for 3+ characters with at least one meaningful token, and only the response
   // to the LATEST query is shown (a sequence id discards a slow answer to an earlier keystroke); old results clear as soon as you type
@@ -504,28 +550,29 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   useEffect(() => {
     if ((flow !== "team" && !(flow === "pair" && guide.follow === "rivalry")) || !leagueSeries) return; setTeamsBusy(true); setTeams([]);
     let live = true;
-    getJson<{ teams: SportsTeam[]; scheduleNote?: string | null; scheduleDetail?: string | null }>(`${V1}/sports/teams?league=${leagueSeries}`).then((j) => { if (!live) throw new Error("stale"); return j; }).then((j) => (setScheduleNote(j.scheduleNote ?? null), setScheduleDetail(j.scheduleDetail ?? null), j)).then((j) => setTeams(j.teams.map((t) => ({ abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league: t.league, filter: t.series.win, collisions: [], series: t.series, recordText: t.record ?? null, record: recordOf(t.record), seasonWarning: t.season?.status === "over" || t.season?.status === "none-listed" ? t.season.warning : null,
-      next: t.next ? { eventTicker: t.next.eventId, marketTicker: t.next.eventId, title: t.next.title, expectedAt: t.next.startsAt, opponent: t.next.opponent } : null })))).catch(() => { if (live) setTeams([]); }).finally(() => { if (live) setTeamsBusy(false); });
+    // sources-6 (QA 9 #28, #29): the list is alphabetical as served; college football lists the FBS unless "Show all divisions" asks for all
+    getJson<{ teams: SportsTeam[]; scheduleNote?: string | null; scheduleDetail?: string | null; division?: { shown: string; line: string | null } }>(`${V1}/sports/teams?league=${leagueSeries}${teamsDivision === "all" ? "&division=all" : ""}`).then((j) => { if (!live) throw new Error("stale"); return j; }).then((j) => (setScheduleNote(j.scheduleNote ?? null), setScheduleDetail(j.scheduleDetail ?? null), setDivisionLine(j.division?.line ?? null), j)).then((j) => setTeams(j.teams.map((t) => ({ abbr: t.abbr, code: t.code ?? t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: t.ticker, league: t.league, filter: t.series.win, collisions: [], series: t.series, recordText: t.record ?? null, record: recordOf(t.record), seasonWarning: t.season?.status === "over" || t.season?.status === "none-listed" ? t.season.warning : null,
+      next: t.next ? { eventTicker: t.next.eventId, marketTicker: t.next.eventId, title: t.next.title, expectedAt: t.next.startsAt, opponent: t.next.opponent, when: t.next.when ?? null } : null })))).catch(() => { if (live) setTeams([]); }).finally(() => { if (live) setTeamsBusy(false); });
     return () => { live = false; };
-  }, [flow, leagueSeries, guide.follow]);
+  }, [flow, leagueSeries, guide.follow, teamsDivision]);
   useEffect(() => {
     if (flow !== "pair" || !leagueSeries) return;
     const url = `${V1}/sports/games?league=${leagueSeries}${gameQ.trim() ? `&q=${encodeURIComponent(gameQ.trim())}` : ""}`;
     setGamesBusy(true); setGames([]);
     let live = true;
-    const side = (x: SportsSide, series: string): Side => ({ abbr: x.abbr, marketTicker: series, label: x.name, nickname: x.nickname, name: x.name, ticker: x.ticker });
-    const t = setTimeout(() => { getJson<{ games: SportsGame[]; scheduleNote?: string | null; scheduleDetail?: string | null }>(url).then((j) => { if (!live) throw new Error("stale"); return j; }).then((j) => (setScheduleNote(j.scheduleNote ?? null), setScheduleDetail(j.scheduleDetail ?? null), j)).then((j) => setGames(j.games.map((g) => ({ eventTicker: g.eventId, seriesTicker: g.league, title: g.title, subTitle: g.detail, category: "Sports", expectedAt: g.startsAt, closeTime: null, markets: [], matchedSides: [], pair: { a: side(g.a, g.series.aLoss), b: side(g.b, g.series.bLoss), tieMarket: null }, refused: [] })))).catch((e) => { if (!live) return; setGames([]); setScheduleNote(NEXT_GAME_UNAVAILABLE); setScheduleDetail(detailOf(e)); console.error("[burnticker/launch] the games could not be read:", e); }).finally(() => { if (live) setGamesBusy(false); }); }, gameQ ? 300 : 0);
+    const side = (x: SportsSide, series: string): Side => ({ abbr: x.abbr, code: x.code ?? x.abbr, home: x.home, marketTicker: series, label: x.name, nickname: x.nickname, name: x.name, ticker: x.ticker });
+    const t = setTimeout(() => { getJson<{ games: SportsGame[]; scheduleNote?: string | null; scheduleDetail?: string | null }>(url).then((j) => { if (!live) throw new Error("stale"); return j; }).then((j) => (setScheduleNote(j.scheduleNote ?? null), setScheduleDetail(j.scheduleDetail ?? null), j)).then((j) => setGames(j.games.map((g) => ({ eventTicker: g.eventId, seriesTicker: g.league, title: g.title, subTitle: g.when ?? g.detail, category: "Sports", expectedAt: g.startsAt, closeTime: null, markets: [], matchedSides: [], pair: { a: side(g.a, g.series.aLoss), b: side(g.b, g.series.bLoss), tieMarket: null }, refused: [] })))).catch((e) => { if (!live) return; setGames([]); setScheduleNote(NEXT_GAME_UNAVAILABLE); setScheduleDetail(detailOf(e)); console.error("[burnticker/launch] the games could not be read:", e); }).finally(() => { if (live) setGamesBusy(false); }); }, gameQ ? 300 : 0);
     return () => { live = false; clearTimeout(t); };
   }, [flow, leagueSeries, gameQ, gamesRetry]);
   // website-21: the rivalry series read (every game between the two teams this season, from the league's own feed or TheSportsDB) once
   // both teams are picked; only the answer for the current two teams is kept
   useEffect(() => {
     if (flow !== "pair" || guide.follow !== "rivalry" || !leagueSeries || !rivalA || !rivalB) return;
-    const key = `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}`, empty = { failed: null, offered: false, offeredLine: null, scheduleNote: null, season: null, year: null, source: null, meetings: [] as MeetingRow[] };
+    const key = `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}`, empty = { failed: null, offered: false, offeredLine: null, scheduleNote: null, season: null, year: null, source: null, meetings: [] as MeetingRow[], oneGameSearched: null };
     let live = true;
     setRivalry({ key, busy: true, ...empty });
-    getJson<{ offered?: boolean; offeredLine?: string | null; scheduleNote?: string | null; season?: string | null; year?: number | null; source?: string | null; meetings?: MeetingRow[] }>(`${V1}/sports/rivalry?league=${encodeURIComponent(leagueSeries)}&a=${encodeURIComponent(rivalA.abbr)}&b=${encodeURIComponent(rivalB.abbr)}`)
-      .then((j) => { if (live) setRivalry({ key, busy: false, failed: null, offered: j.offered === true, offeredLine: j.offeredLine ?? null, scheduleNote: j.scheduleNote ?? null, season: j.season ?? null, year: j.year ?? null, source: j.source ?? null, meetings: j.meetings ?? [] }); })
+    getJson<{ offered?: boolean; offeredLine?: string | null; scheduleNote?: string | null; season?: string | null; year?: number | null; source?: string | null; meetings?: MeetingRow[]; oneGame?: { searched?: string | null } }>(`${V1}/sports/rivalry?league=${encodeURIComponent(leagueSeries)}&a=${encodeURIComponent(rivalA.abbr)}&b=${encodeURIComponent(rivalB.abbr)}`)
+      .then((j) => { if (live) setRivalry({ key, busy: false, failed: null, offered: j.offered === true, offeredLine: j.offeredLine ?? null, scheduleNote: j.scheduleNote ?? null, season: j.season ?? null, year: j.year ?? null, source: j.source ?? null, meetings: j.meetings ?? [], oneGameSearched: j.oneGame?.searched ?? null }); })
       .catch((e) => { if (live) setRivalry({ key, busy: false, ...empty, failed: detailOf(e) }); });
     return () => { live = false; };
   }, [flow, guide.follow, leagueSeries, rivalA?.abbr, rivalB?.abbr, rivalryRetry]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -544,11 +591,11 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
       const qs = encodeURIComponent(q2.trim());
       // Both venues at once; either may fail without hiding the other.
       const kalshi = !venues.kalshi ? Promise.resolve(setFound({ results: [], events: [], ranking: "series" })) : getJson<{ results: Series[]; events: EventHit[]; ranking: "events" | "series" }>(`${V1}/kalshi/search?q=${qs}`).then((j) => { if (live) setFound({ results: j.results ?? [], events: j.events ?? [], ranking: j.ranking ?? "series" }); }).catch(() => { if (live) setFound({ results: [], events: [], ranking: "series" }); });
-      const poly = !venues.polymarket ? Promise.resolve(setPolyFound({ events: [], tags: [], markets: [] })) : getJson<PolyFound>(`${V1}/polymarket/search?q=${qs}`).then((j) => { if (!live) return; setPolyFound({ events: j.events ?? [], tags: j.tags ?? [], markets: j.markets ?? [] }); setPolyErr(null); }).catch((e) => { if (!live) return; setPolyFound({ events: [], tags: [], markets: [] }); setPolyErr(String((e as Error).message)); });
+      const poly = !venues.polymarket ? Promise.resolve(setPolyFound({ events: [], tags: [], markets: [] })) : getJson<PolyFound>(`${V1}/polymarket/search?q=${qs}${polyClosingSoon ? "&closingSoon=1" : ""}`).then((j) => { if (!live) return; setPolyFound({ events: j.events ?? [], tags: j.tags ?? [], markets: j.markets ?? [], hiddenClosingSoon: j.hiddenClosingSoon ?? 0 }); setPolyErr(null); }).catch((e) => { if (!live) return; setPolyFound({ events: [], tags: [], markets: [] }); setPolyErr(String((e as Error).message)); });
       void Promise.allSettled([kalshi, poly]).then(() => { if (live) setFindBusy(false); });
     }, 400);
     return () => { live = false; clearTimeout(t); };
-  }, [flow, q2, venues.kalshi, venues.polymarket]);
+  }, [flow, q2, venues.kalshi, venues.polymarket, polyClosingSoon]);
 
   // ---- the rules ------------------------------------------------------------------------------------------------------------------
   // L01: the one typed path (launchDraft.ts) — the same pure functions the tests walk from every card to the locked rule
@@ -562,7 +609,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     // website-21: every game between the two teams this season: side A on its team's series, side B on the mirror (2 % default)
     if (pairMode === "meetings") { try { return meetingsPairRules(leagueSeries as LeagueId, sideA.abbr, sideB.abbr, meetingsYear ?? seasonYearAt(leagueSeries as LeagueId, Date.now()), DEFAULT_SHARE.recurring); } catch { return null; } }
     // a game pair is that game (one-shot: 10 % default); a season pair is this season or perpetual (recurring: 2 % default)
-    if (pairMode === "game") return { a: firstPartyRule(sideA.marketTicker, DEFAULT_SHARE.recurring), b: firstPartyRule(sideB.marketTicker, DEFAULT_SHARE.recurring) };
+    // website-22 (QA 9 item 3, owner): one game burns once, so it starts at the one-shot default (100 %) wherever the rule's dial runs to
+    // 100 %; the dial's bounds are the library's (dials.ts), so the page follows them and never forces a share the keeper would not drain
+    if (pairMode === "game") { const f = oneGameShare(dialsFor(firstPartyRule(sideA.marketTicker, DEFAULT_SHARE.recurring)).bounds.max); return { a: firstPartyRule(sideA.marketTicker, f), b: firstPartyRule(sideB.marketTicker, f) }; }
     const lg = leagueSeries as LeagueId;
     const w: TeamWindow = pairMode === "season" ? { kind: "season", year: cardYear ?? seasonYearAt(lg, Date.now()) } : { kind: "perpetual" };
     try { return w.kind === "season" ? seasonPairRules(lg, sideA.abbr, sideB.abbr, w.year) : { a: firstPartyRule(teamSeries(lg, sideA.abbr, "loss", w), 0.02), b: firstPartyRule(teamSeries(lg, sideB.abbr, "loss", w), 0.02) }; } catch { return null; }
@@ -634,14 +683,17 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     setShareNotice(`Your earlier choice for this kind of burn, ${presetPct(want)}, is selected again.`);
   }, [baseKey, oneShotRule]);   // eslint-disable-line react-hooks/exhaustive-deps
   // the coin text (describe.ts), re-rendered from the rule as it is now
-  const aHome = !!swap;
+  // sources-6 (QA 9 #2): home and away come from the schedule's own flag on side A (a flipped meeting keeps it), never from the swap
+  const aHome = sideA?.home ?? !!swap;
   const textCtx = useMemo((): Omit<DescribeCtx, "ticker"> => {
     if (!rule) return {};
     if (cardCtx && cardCtx.key === (rule.market ?? rule.series ?? "")) return cardCtx.ctx;
     if (pairOn && elPick) return { eventPhrase: elPick.a.question.replace(/^will\s+/i, "").replace(/\?$/, "") };
     if (pairOn && pairMode === "game" && game && sideB) return { game: { opponent: sideB.nickname ?? sideB.name, home: aHome, startsAt: game.expectedAt ?? "" } };
-    if (pick?.oracle === "polymarket") return { eventPhrase: pick.title.replace(/\s*\(resolves once\)$/, "").replace(/\?$/, "").replace(/^will\s+/i, ""), endsAt: null, ...(pick.market && eventInfo?.stated ? { stated: eventInfo.stated } : {}) };
-    if (pick?.oracle === "catalogue" && pick.source?.unit && !/^(espn|nws|fec)\./.test(pick.series ?? "")) return { feed: { title: pick.title, sourceName: pick.source.sourceName, unitLabel: pick.source.unit.label } };
+    // website-22 (audit 10 item 2): a pick lends its words only while it is the rule's own subject (never a market left from another path)
+    const own = pickDescribesRule(rule, pick);
+    if (own && pick?.oracle === "polymarket") return { eventPhrase: pick.title.replace(/\s*\(resolves once\)$/, "").replace(/\?$/, "").replace(/^will\s+/i, ""), endsAt: null, ...(pick.market && eventInfo?.stated ? { stated: eventInfo.stated } : {}) };
+    if (own && pick?.oracle === "catalogue" && pick.source?.unit && !/^(espn|nws|fec)\./.test(pick.series ?? "")) return { feed: { title: pick.title, sourceName: pick.source.sourceName, unitLabel: pick.source.unit.label } };
     return {};
   }, [rule, cardCtx, pairOn, pairMode, game, sideB, aHome, pick, eventInfo, elPick]);
   const text: CoinText | null = useMemo(() => { if (!ruleShown) return null; try { return describeRule(ruleShown, { ticker, ...textCtx }); } catch { return null; } }, [ruleShown, ticker, textCtx]);
@@ -649,16 +701,17 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const textB: CoinText | null = useMemo(() => { if (!ruleShownB) return null; try { return describeRule(ruleShownB, { ticker: tickerB, ...ctxB }); } catch { return null; } }, [ruleShownB, tickerB, ctxB]);
   const compose = (t: CoinText | null, _fl: string | null, fallback: string) => (t ? t.paragraph.slice(0, DESCRIPTION_MAX) : fallback);
   // a quick local read of the note (the server's lint is the one that counts: copy-lint.json, incl. no-affiliation)
-  const noteProblem = /https?:\/\/|www\.|\.(com|io|xyz|fun)\b/i.test(note) ? "no links in the note" : /\b(official|endorsed|partner(ed|ship)?|affiliated|backed|guaranteed|insured|audited|verified|licensed|sponsored)\b/i.test(note) ? "no claims of affiliation or endorsement" : null;
+  // website-22 (QA 9 item 12): a full sentence, said beside the note and in the review's list of what still blocks the launch
+  const noteProblem = noteProblemOf(note);
   const finalDescription = compose(text, flavour, description), finalDescriptionB = compose(textB, flavourB, descB);
   // the suggested name and ticker follow the rule (a window change re-suggests: $RAYS26 → $RAYS) until the creator types their own
   // website-19 (owner, 2026-10-12: "two teamwifs"): a team coin's ticker is the team code plus its window ($LAD, $LADWS, $LADNEXT5), a
   // pair's is the matchup ($LADVMIL and $MILVLAD); generated by default, re-suggested while the creator has not typed their own
   const genTicker = useMemo((): string | null => {
     if (!rule) return null;
-    if (flow === "team" && team) return teamTickerForRule(rule, team.abbr);
+    if (flow === "team" && team) return teamTickerForRule(rule, team.code ?? team.abbr);
     if (flow === "single" && guide.follow === "team" && team) return teamTicker(team.abbr, { league: leagueSeries, window: "title" });
-    if (flow === "pair" && sideA && sideB) return pairTickers(sideA.abbr, sideB.abbr).a;
+    if (flow === "pair" && sideA && sideB) return pairTickers(sideA.code ?? sideA.abbr, sideB.code ?? sideB.abbr).a;
     // walkthrough snag 13: the debt coin has one ticker from every path ($DEBT itself is reserved for the flagship's rule)
     if (rule.oracle === "catalogue" && rule.series === "treasury.debt") return rule.inverse ? "FLATDEBT" : "DEBTUP";
     return null;
@@ -711,12 +764,17 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (!rule) return;
     setBtBusy(true); setBtErr(null);
     try {
-      const run = async (x: BurnRule) => { const r = await fetch("/api/burnticker/oracle/backtest", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: x }) }); const j = await r.json().catch(() => ({} as { error?: string })); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); return j as Backtest; };
+      const run = async (x: BurnRule) => { const r = await fetch("/api/burnticker/oracle/backtest", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule: x }) }); const j = await r.json().catch(() => ({} as { error?: string })); if (!r.ok) throw new Error(`HTTP ${r.status}${j.error ? `: ${j.error}` : ""}`); return j as Backtest; };
       setBt(await run(rule));
       setBtB(ruleB ? await run(ruleB) : null);
       setBtFor(btKey);
-    } catch (e) { setBt(null); setBtB(null); setBtErr(String((e as Error).message)); setBtFor(btKey); } finally { setBtBusy(false); }
-  }, [rule, ruleB, btKey]);
+    } catch (e) {
+      setBt(null); setBtB(null); setBtErr(String((e as Error).message)); setBtFor(btKey);
+      // website-22 (QA 9 item 41): a 429 or 502 is asked again after a pause (2, 4, 8 s) for this rule only; a new rule starts the count again
+      const key = btKey, n = btRetry.key === key ? btRetry.n : 0;
+      if (transientRead(e) && n < RETRY_MAX) setTimeout(() => { setBtRetry({ key, n: n + 1 }); setBtFor((f) => (f === key ? "" : f)); setBtErr(null); }, 2000 * 2 ** n);
+    } finally { setBtBusy(false); }
+  }, [rule, ruleB, btKey, btRetry]);
   useEffect(() => {
     if (!rule || btFor === btKey || btBusy || step !== "review") return;
     const t = setTimeout(() => { void runBacktest(); }, 600);
@@ -735,15 +793,20 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const seq = ++reviewSeq.current, rev = reviewKey;
     setReviewSlot((x) => reviewRequested(x, rev, seq));
     const t = setTimeout(() => {
-      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: srcWarnings, raiseSol, creatorDescription: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, ...(pairOn && ruleB ? (meetingsOn
+      getJson<LaunchReview>(`${V1}/launch/review`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rule, ticker: ticker.toUpperCase(), name, note, descCtx: textCtx, warnings: renderWarnings(srcWarnings, ticker.toUpperCase(), tickerB.toUpperCase()), raiseSol, creatorDescription: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, ...(pairOn && ruleB ? (meetingsOn
             // website-21: a rivalry series pair is reviewed as the linked pair it launches as (side B rides in `pair`; never a two-coin `companion`)
             ? { pair: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, links: creatorLinks({ x: profileB.x, telegram: profileB.telegram, website: profileB.website }).links } }
             : { companion: { ticker: tickerB.toUpperCase(), name: nameB, creatorDescription: profileB.description, rule: ruleB } }) : {}) }) })
         .then((j) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, review: j })))
-        .catch((e) => setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: `${(e as Error).message} (${detailOf(e)})` })));
-    }, 400);
+        .catch((e) => {
+          // website-22 (QA 9 item 41): a busy or briefly unreachable server is asked again after a pause (2, 4, 8 s) for this draft only
+          const n = reviewRetry.rev === rev ? reviewRetry.n : 0, again = transientRead(e) && n < RETRY_MAX;
+          setReviewSlot((x) => reviewAnswered(x, curRev.current, { rev, seq, error: again ? RETRYING_LINE : `${(e as Error).message} (${detailOf(e)})` }));
+          if (again) setTimeout(() => { if (curRev.current === rev) setReviewRetry({ rev, n: n + 1 }); }, 2000 * 2 ** n);
+        });
+    }, 600);
     return () => clearTimeout(t);
-  }, [step, reviewKey, gate.kind]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, reviewKey, gate.kind, reviewRetry.rev, reviewRetry.n]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shownReview = reviewFor(reviewSlot, reviewKey);
   const reviewCurrent = reviewMatchesDraft(reviewSlot, reviewKey);
   // website-21: a rivalry series pair's review block (the per-game and season-end money path, side B's description)
@@ -751,7 +814,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
 
   // WIRING-PARITY audit 7 #3: a link the server refuses (X on x.com or twitter.com, Telegram on t.me, no look-alike or burnticker.com
   // address) is said under the fields and blocks Launch, the same check the review and the bundle run
-  const linkAwareProblems = (v: ProfileValue): string[] => [...new Set([...profileProblems(v), ...creatorLinks({ x: v.x, telegram: v.telegram, website: v.website }).problems])];
+  // website-22: profileFieldProblems (ProfileFields.tsx) runs the server's own link check per field, so the page and the review say the same thing
   const linksOf = useCallback(() => ([["website", link], ["X", xUrl], ["Telegram", tg]] as const).filter(([, u]) => /^https:\/\/\S+$/.test(u.trim())).map(([label, u]) => ({ label, url: u.trim() })), [link, xUrl, tg]);
   const launch = useCallback(async () => {
     if (!rule || !reviewMatchesDraft(reviewSlot, curRev.current)) return;   // A6: transactions are prepared only for the reviewed draft
@@ -816,17 +879,43 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     else setStep(ORDER[flow][0]);
   };
   /** The progress strip: a tap on an answered step goes back to it. */
+  /** website-22: the Coin comparison tile moves between the guided steps itself. */
+  const setCoinsPhase = (p: GuidedPhase) => setGuide((g) => ({ ...g, phase: p }));
   const jumpTo = (p: GuidedPhase) => {
     if (p === "follow") { setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); return; }
+    if (guide.follow === "coins" && step === "choose") { setGuide((g) => ({ ...g, phase: p })); return; }
     if (p === "which") { if (step === "review") toWhich(); return; }
     if (step === "review" && (p === "burn" || p === "name" || p === "review")) setGuide((g) => ({ ...g, phase: p }));
   };
+  /** website-22 (QA 9 item 11): a review Edit link opens step 4 and lands on that field (its disclosure opened, scrolled to, focused). */
+  const editField = (side: "a" | "b", field: ProfileFieldKey | "rights") => {
+    setFocusField(profileFieldId(side, field === "rights" ? "image" : field));
+    if (guide.follow && step === "review") setGuide((g) => ({ ...g, phase: "name" }));
+  };
+  useEffect(() => {
+    if (!focusField) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(focusField) ?? document.getElementById(`${focusField}-file`);
+      setFocusField(null);
+      if (!el) return;
+      for (let d = el.closest("details"); d; d = d.parentElement?.closest("details") ?? null) d.open = true;
+      el.scrollIntoView({ block: "center" }); el.focus({ preventScroll: true });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [focusField, guide.phase]);
+  // website-22 (QA 9 item 9): a search template's line is scrolled to and focused once it is on screen
+  useEffect(() => {
+    if (!focusSearch || !ready) return;
+    const t = setTimeout(() => { const el = searchRef.current; if (!el) return; setFocusSearch(false); el.scrollIntoView({ block: "center" }); el.focus({ preventScroll: true }); }, 80);
+    return () => clearTimeout(t);
+  }, [focusSearch, ready, step, guide.phase]);
   // the browser's Back and Forward: an earlier answered step is reopened; a later one only when it was already reached
   useEffect(() => {
     const h = () => {
       const p = (new URLSearchParams(window.location.search).get("step") ?? "follow") as GuidedPhase;
       if (p === "follow") { setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); return; }
       if (!guide.follow) return;
+      if (guide.follow === "coins" && step === "choose") { setGuide((g) => ({ ...g, phase: p })); return; }
       if (p === "which") { if (step === "review") toWhich(); return; }
       if (step === "review") setGuide((g) => ({ ...g, phase: p }));
     };
@@ -846,6 +935,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         else setStep(ORDER[flow][0]);
         return;
       }
+      // website-22 (QA 9 item 38): Coin comparison steps back one step at a time, like every other coin
+      if (guide.follow === "coins" && (guide.phase === "burn" || guide.phase === "name" || guide.phase === "review")) { const prev: Record<string, GuidedPhase> = { burn: "which", name: "burn", review: "name" }; setGuide((g) => ({ ...g, phase: prev[g.phase] ?? "which" })); return; }
       if (guide.follow === "rivalry" && guide.pairKind) { setGuide({ follow: "rivalry", phase: "which", pairKind: null }); setStep("choose"); return; }
       setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); return;
     }
@@ -879,9 +970,20 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     setHowSettles(o.how ?? null); setSettleNote(o.settlement ?? null);
     setStep("review");
   };
+  /**
+   * website-22 (audit 10 item 14, one flow): a card picked from the search line, a template's search or a deep link answers step 1 by
+   * the rule it builds, so it walks the same five steps (the burn, the name, the review) and never the older chooser.
+   */
+  const adoptFollow = (f: FollowId) => {
+    if (guide.follow) return;
+    if (lastFollow.current && lastFollow.current !== f) { const kept = keptProfileParts(profile, note); setKeptProfile(kept.length ? kept : null); }
+    lastFollow.current = f;
+    setGuide({ follow: f, phase: "which", pairKind: f === "rivalry" ? "teams" : null });
+  };
   /** An event card's outcome → the create screen: that outcome's own yes/no market, 10% once, its ticker ($SPIDER) editable. */
   const applyOutcome = (c: Suggestion, o: NonNullable<Suggestion["picker"]>["outcomes"][number]) => {
     if (lastShown.current) lastShown.current.clicked = true;
+    adoptFollow("market");
     markOrigin("search"); setShareNotice(null); setSrcWarnings(c.note ? [c.note] : []);
     setEventInfo({ question: o.question, url: c.href, outcome: o.yes ? `“${o.yes}”` : null, resolves: c.endAt ? denver(c.endAt) : null, criteria: c.howSettles });
     mark("card");
@@ -892,6 +994,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   /** A search card → the create screen: the window the card shows (team cards offer four), its text context, its suggested name. */
   const applySuggestion = (c: Suggestion, wi = 0) => {
     if (lastShown.current) lastShown.current.clicked = true;
+    { const r0 = c.windows?.[wi]?.rule ?? c.rule; adoptFollow(followForRule(r0, { matchup: !!c.matchup, hazard: isHazardSeries(r0?.series ?? null) })); }
     // L03 / L05: where this came from (Back returns there) and the card's own warning, carried into the review
     markOrigin("search"); setShareNotice(null); setSrcWarnings(c.note ? [c.note] : []);
     setEventInfo(c.pick?.oracle === "polymarket" ? { question: c.pick.title.replace(/\s*\(resolves once\)$/, ""), url: c.href, outcome: c.pick.yes ? `“${c.pick.yes}”` : null, resolves: c.endAt ? denver(c.endAt) : null, criteria: c.howSettles } : null);
@@ -932,7 +1035,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (!g.pair) return;
     setGame(g); setSwap(false); setPairMode("game"); setDraft(null); setFlavour(null); setFlavourB(null);
     // walkthrough snag 10: both sides named by the matchup, symmetrically ($LADVMIL and $MILVLAD; "Dodgers vs Brewers, Dodgers side")
-    const tk = pairTickers(g.pair.a.abbr, g.pair.b.abbr), nm = pairNames(g.pair.a.nickname ?? g.pair.a.name, g.pair.b.nickname ?? g.pair.b.name);
+    const tk = pairTickers(g.pair.a.code ?? g.pair.a.abbr, g.pair.b.code ?? g.pair.b.abbr), nm = pairNames(g.pair.a.nickname ?? g.pair.a.name, g.pair.b.nickname ?? g.pair.b.name, { a: g.pair.a.code ?? g.pair.a.abbr, b: g.pair.b.code ?? g.pair.b.abbr });
     setElPick(null); setSrcSuggest({ name: null, ticker: null });
     if (nameAuto) { setName(nm.a); setNameB(nm.b); }
     if (tickerAuto) { setTicker(tk.a); setTickerB(tk.b); }
@@ -942,6 +1045,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   /** Question 1 (website-19): what the coin follows, then the picker for question 2. */
   const pickFollow = (f: FollowId) => {
     flowStats.current.decisions++;
+    // website-22 (audit 10 item 11): words typed for another kind of coin stay, and step 4 says so with Reuse and Start fresh
+    if (lastFollow.current && lastFollow.current !== f) { const kept = keptProfileParts(profile, note); setKeptProfile(kept.length ? kept : null); }
+    lastFollow.current = f;
     setGuide({ follow: f, phase: "which", pairKind: null }); setTitleCard(null);
     if (f === "team") begin("team");
     else if (f === "market") begin("single");
@@ -954,11 +1060,16 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     if (k === "teams") begin("pair"); else { begin("browse"); setCat("politics"); }
   };
   /** The owner's rivalry pair: two teams, then one game (their next listed meeting) or this season (each coin burns when its team loses). */
-  const sideOfTeam = (t: Team): Side => ({ abbr: t.abbr, marketTicker: t.series?.loss ?? t.filter, label: t.name, nickname: t.nickname, name: t.name, ticker: t.ticker });
+  /** sources-6 (QA 9 #2, #4): the meetings still to be played as one-game choices, side A the first team picked, at home or away as listed. */
+  const oneGameHits = (rv: RivalryRead | null, a: Team, b: Team): EventHit[] => (rv && !rv.busy ? rv.meetings : []).filter((m) => !!m.oneGame).map((m) => ({
+    eventTicker: m.eventId, seriesTicker: leagueSeries ?? "", title: `${a.name} vs ${b.name}`, subTitle: null, category: "Sports", expectedAt: m.startsAt, closeTime: null, markets: [], matchedSides: [], refused: [],
+    pair: { a: { ...sideOfTeam(a), marketTicker: m.oneGame!.series.aLoss, home: m.oneGame!.aHome }, b: { ...sideOfTeam(b), marketTicker: m.oneGame!.series.bLoss, home: !m.oneGame!.aHome }, tieMarket: null },
+  })).sort((x, y) => Date.parse(x.expectedAt ?? "") - Date.parse(y.expectedAt ?? ""));
+  const sideOfTeam = (t: Team): Side => ({ abbr: t.abbr, code: t.code ?? t.abbr, marketTicker: t.series?.loss ?? t.filter, label: t.name, nickname: t.nickname, name: t.name, ticker: t.ticker });
   const chooseRivals = (a: Team, b: Team, mode: "game" | "season" | "meetings", chosen: EventHit | null = null) => {
     const seasonHit: EventHit = { eventTicker: `${leagueSeries}-${a.abbr}-${b.abbr}-season`, seriesTicker: leagueSeries ?? "", title: `${a.name} vs ${b.name}`, subTitle: null, category: "Sports", expectedAt: null, closeTime: null, markets: [], matchedSides: [], pair: { a: sideOfTeam(a), b: sideOfTeam(b), tieMarket: null }, refused: [] };
     // audit 7 item 7, item 156: the exact meeting picked is the one the rule binds; without a pick, the next listed one
-    const m = chosen ?? meetingOf(games, a.abbr, b.abbr);
+    const m = chosen ?? oneGameHits(rivalry?.key === `${leagueSeries}:${a.abbr}:${b.abbr}` ? rivalry : null, a, b)[0] ?? meetingOf(games, a.abbr, b.abbr);
     // the meeting with side A first, so $AVB is always the first team picked
     const meet: EventHit | null = m && m.pair ? (m.pair.a.abbr === a.abbr ? m : { ...m, pair: { a: m.pair.b, b: m.pair.a, tieMarket: m.pair.tieMarket } }) : null;
     setRivalSeason(seasonHit); setRivalGame(meet);
@@ -991,8 +1102,9 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     const side = (o: ElOutcome, t: string): Side => ({ abbr: sur(o), marketTicker: o.conditionId, label: o.label, nickname: sur(o), name: o.label, ticker: t });
     markOrigin("browse"); setOrigin(null);
     // snag 8: a market that is not about the person by name is said in one honest sentence (the party's market settles it)
-    const honest = (o: ElOutcome, t: string) => (fold(o.question).includes(fold(sur(o))) ? null : `$${t} settles on the market "${o.question}". That market is about the party's result, not ${sur(o)} by name.`);
-    setSrcWarnings([honest(a, tk.a), honest(b, tk.b)].filter((x): x is string => !!x));
+    // website-22 (audit 10 item 6): the warning names the coin by the ticker on screen when it is shown, never the one generated here
+    const honest = (o: ElOutcome, side: "A" | "B") => (o.mapping ? mappingWarning(o.mapping, side) : fold(o.question).includes(fold(sur(o))) ? null : partyMarketWarning(o.question, sur(o), side));
+    setSrcWarnings([honest(a, "A"), honest(b, "B")].filter((x): x is string => !!x));
     setElPick({ race: r, a, b });
     setGame({ eventTicker: r.slug, seriesTicker: "elections", title: r.title, subTitle: null, category: "Politics", expectedAt: r.settlesOn, closeTime: null, markets: [], matchedSides: [], pair: { a: side(a, tk.a), b: side(b, tk.b), tieMarket: null }, refused: [] });
     setSwap(false); setPairMode("game"); setDraft(null); setFlavour(null); setFlavourB(null);
@@ -1037,7 +1149,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
     : <div className={card + " space-y-3"}><h2 className="font-medium outline-none" tabIndex={-1} data-step-heading>Choose a league</h2>{leaguePicker}</div>;
   const chip = (v: Venue) => <span className={`ml-2 inline-block rounded px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide ring-1 ${v === "kalshi" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40" : "bg-indigo-500/15 text-indigo-300 ring-indigo-500/40"}`}>{v === "kalshi" ? "Kalshi" : "Polymarket"}</span>;
   // intent audit 2 item 1: a closed market is refused here as well as greyed in the list
-  const pickPoly = (m: PolyMarket) => { if (m.closed) return; markOrigin("exact"); setSrcWarnings([]); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, criteria: null, stated: m.resolutionSource && m.finalAfter ? { phrase: m.resolutionSource.phrase, text: m.resolutionSource.text, crossRead: m.resolutionSource.crossRead ? { text: m.resolutionSource.crossRead.text } : null, finalAfter: { text: m.finalAfter.text, ifDisputed: m.finalAfter.ifDisputed } } : null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setBurnOn("yes"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); setPolyPreset(null); next(); };
+  const pickPoly = (m: PolyMarket) => { if (m.closed) return; markOrigin("exact"); setSrcWarnings([]); setSrcSuggest({ name: m.outcome ? m.outcome.slice(0, 32) : null, ticker: null }); const ev = polyFound?.events.find((e) => e.markets.some((x) => x.conditionId === m.conditionId)); setEventInfo({ question: m.question, url: ev?.url ?? null, outcome: `“${m.yes}”`, resolves: m.endDate ? denver(m.endDate) : ev?.endDate ? denver(ev.endDate) : null, criteria: null, stated: m.resolutionSource && m.finalAfter ? { phrase: m.resolutionSource.phrase, text: m.resolutionSource.text, crossRead: m.resolutionSource.crossRead ? { text: m.resolutionSource.crossRead.text } : null, finalAfter: { text: m.finalAfter.text, ifDisputed: m.finalAfter.ifDisputed } } : null }); setPick({ oracle: "polymarket", series: null, market: m.conditionId, title: `${m.question} (resolves once)`, yes: m.yes, no: m.no }); setKind("binary"); setBurnOn("yes"); setOnYes(DEFAULT_SHARE.oneShot); setFilter(""); setPolyPreset(null); next(); };
   const pickPolySeries = (series: string, title: string) => { markOrigin("exact"); setSrcWarnings([]); setPick({ oracle: "polymarket", series, market: null, title }); setKind("binary"); setFilter(""); setPolyPreset(series.includes("/moneyline") ? "^[^:]+ vs\\. [^:]+$" : null); next(); };
   const badge = (abbr: string) => <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-800 font-mono text-xs font-bold tracking-tight text-amber-300 ring-1 ring-neutral-700">{abbr}</span>;
   const kalshiOff = !venues.kalshi;
@@ -1050,16 +1162,17 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
 
   // launch audit 5 L02: per-type availability (the catalogue's model), shown before any form and on every card that leads to a type
   // the progress strip's answers ("Follows: a team", "Which: Dodgers", "Burns: every time", "Ends: $DEFICIT")
-  const guideAnswers: Partial<Record<GuidedPhase, string>> = !guide.follow ? {} : {
+  const guideAnswers: Partial<Record<GuidedPhase, string>> = !guide.follow ? {} : guide.follow === "coins" ? {
+    follow: FOLLOW_CHOICES.find((c) => c.id === "coins")?.label.toLowerCase(), which: coinAnswers?.which ?? undefined, burn: coinAnswers?.burn ?? undefined, name: coinAnswers?.name ?? undefined,
+  } : {
     follow: guide.follow === "disaster" ? HAZARD_FOLLOW.label.toLowerCase() : FOLLOW_CHOICES.find((c) => c.id === guide.follow)?.label.toLowerCase(),
-    which: pairOn && sideA && sideB ? `${sideA.nickname ?? sideA.name} vs ${sideB.nickname ?? sideB.name}` : flow === "team" && team ? team.nickname ?? team.name : guide.follow === "team" && team ? team.nickname ?? team.name : pick?.title ? (sourceSubjectLabel(pick.series ?? "") ?? pick.title.replace(/\s*\(resolves once\)$/, "")).slice(0, 28) : undefined,
-    burn: meetingsOn ? PATTERNS.winner.label.toLowerCase() : rule ? (rule.inverse ? "when it does not happen" : windowKindOf(rule) === "one-shot" ? "once" : "every time") : undefined,
+    which: pairOn && sideA && sideB ? `${sideA.nickname ?? sideA.name} vs ${sideB.nickname ?? sideB.name}` : flow === "team" && team ? team.nickname ?? team.name : guide.follow === "team" && team ? team.nickname ?? team.name : pick?.title ? whichAnswer(sourceSubjectLabel(pick.series ?? "") ?? pick.title) : undefined,
+    burn: meetingsOn ? PATTERNS.winner.label.toLowerCase() : rule && guide.follow === "market" && rule.kind === "binary" ? (!rule.binary?.onYes && rule.binary?.onNo ? "if it resolves NO" : "if it resolves YES") : rule ? (rule.inverse ? "when it does not happen" : windowKindOf(rule) === "one-shot" ? "once" : "every time") : undefined,
     name: ticker ? `$${ticker}${pairOn && tickerB ? ` and $${tickerB}` : ""}` : undefined,
   };
   const typeBlocked = (t: LaunchType | null): string | null => { if (!t || !avail) return null; const a = avail.types[t]; return a.available ? null : `${a.label} launches are not available on this site. ${a.reason ?? ""}`.trim(); };
   /** A2: the one line beside every pair option (Coin vs Coin, the two-coin Matchup, registered pairs) while pairs are unavailable. */
   const pairsBlocked: string | null = site.read === "ready" && !site.pairs.available ? site.pairs.line : null;
-  const pairsWhy = (id: string) => pairsBlocked ? <details id={id} className="mt-2 text-xs text-amber-300" data-pairs-blocked><summary className="cursor-pointer">{pairsBlocked}</summary><p className="mt-1 text-neutral-400">{site.pairs.detail}</p></details> : null;
   const cardBlocked = (c: Suggestion): string | null => (c.matchup || c.venue === "tile" ? pairsBlocked : null) ?? typeBlocked(c.matchup ? "matchup" : c.picker ? "markets" : launchTypeOf(c.rule));
   const firstActionable = ures ? ures.cards.findIndex((c) => !c.refused.length && (!!c.picker || !!c.rule || !!c.matchup) && !cardBlocked(c)) : -1;
   const preview = gate.kind === "preview";
@@ -1068,64 +1181,15 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
   const walletBlocked = (t: LaunchType | null, two = false): string | null => (two ? pairsBlocked : null) ?? typeBlocked(t) ?? site.signingSentence ?? (step === "review" && !reviewCurrent ? REVIEW_UPDATING : null);
   // website brief §1: the gate resolves before any launch control renders (loading → skeleton; closed / unavailable → no controls)
   if (!wizardMayRender(gate)) return <LaunchGate state={gate as Exclude<LaunchGateState, { kind: "open" | "preview" }>} deficitHref={DEFICIT_SITE} noWalletLine={NO_WALLET_LINE} />;
-
-  return (
-    <main id="launch-main" tabIndex={-1} className="mx-auto max-w-4xl px-4 pt-6 pb-28 min-[900px]:pb-6 space-y-5 outline-none" data-launch-main>
-      <header className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">Launch a coin {cluster === "devnet" && <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-sky-500/40" title="BURNTICKER_CLUSTER=devnet: test network, no real money">Devnet</span>}</h1>
-          {(step === "choose" || !guide.follow) && <p className="hidden text-neutral-400 text-sm sm:block">Every <Link className="underline" href="/burnticker">Burnticker</Link> coin settles on a primary source, such as the BLS, the Treasury, the National Weather Service or a league&apos;s own feed, or on a Polymarket payout read from the chain. The rule is locked at launch. <Link className="underline" href="/burnticker/trust">See what the operator can and cannot do.</Link></p>}
-        </div>
-        <span className="flex items-center gap-3 text-xs"><Link className="underline text-neutral-400" href="/burnticker/templates">Templates</Link><Link className="underline text-neutral-400" href="/burnticker/me">Your coins</Link>{step !== "choose" && !guide.follow && <button data-nav className="text-neutral-500 underline" onClick={() => startOver()}>start over</button>}</span>
-      </header>
-      {/* website-15 item 12 (ChatGPT repair 1): sticks right under the shared header, whose measured height SiteHeader writes to --bt-header-h; website-18: from the sm width up only (at 390 px it covered the links and the step header while scrolling) */}
-      {preview && <p className="z-30 sm:sticky rounded border border-amber-400 bg-neutral-950/95 px-3 py-2 text-sm font-medium text-amber-300" style={{ top: "var(--bt-header-h, 3.5rem)" }} role="status" data-preview-banner>{PREVIEW_BANNER}</p>}
-      <LaunchRecovery />
-
-      {/* intent audit 5 item 20: the one Start over confirmation, for the guided steps, the free-text review and a resumed draft alike */}
-      {confirmOver && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-300" role="alert" data-start-over-confirm>Start over clears every choice on this draft. <button type="button" data-nav className="underline" onClick={() => startOver(true)}>Start over</button> <button type="button" data-nav className="ml-2 underline" onClick={() => setConfirmOver(false)}>Keep going</button></p>}
-      {savedDraft && step === "choose" && guide.phase === "follow" && (
-        <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status" data-saved-draft>You have a draft: {String(savedDraft.name || savedDraft.ticker || "unnamed")}. <button type="button" data-nav className="underline" onClick={resumeDraft}>Resume</button> <button type="button" data-nav className="ml-2 underline" onClick={() => startOver(true)}>Discard it</button></p>
-      )}
-      {(guide.follow || step === "choose") && step !== "launch" ? (
-        <GuidedTop phase={guide.follow ? guide.phase : "follow"} answers={guideAnswers} onJump={jumpTo} onBack={guide.follow ? back : null} onStartOver={() => startOver()} confirm={null} />
-      ) : (
-        <div aria-label="Progress">
-          <div className="flex items-center justify-between text-xs text-neutral-400"><span>Step {idx + 1} of {order.length}: <span className="text-neutral-200">{LABELS[flow][step]}</span></span><span data-entry-label>{step === "review" && origin ? (origin.kind === "browse" ? `Browse · ${cats.find((c) => c.id === origin.cat)?.label ?? origin.cat}` : ENTRY_LABEL[origin.kind]) : flow === "team" ? "Team coin" : flow === "pair" ? "Matchup pair" : flow === "single" ? "Exact market" : flow === "browse" ? "Browse" : "Advanced"}</span></div>
-          <div className="mt-1 h-1.5 rounded bg-neutral-800"><div className="h-1.5 rounded bg-amber-400" style={{ width: `${((idx + 1) / order.length) * 100}%` }} /></div>
-        </div>
-      )}
-
-
-      {pendingDials?.from && <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status">Launching one like ${pendingDials.from}: pick the {flow === "team" ? "team" : flow === "pair" ? "game" : flow === "browse" ? "source" : "market"}, and the review card opens with the same shape{pendingDials.side ? ` (on a ${pendingDials.side})` : ""}.</p>}
-
-      {step === "choose" && guide.phase === "follow" && <FollowStep value={guide.follow} upfront={upfrontLines(RAISE_PRESETS_SOL)} onPick={pickFollow} blocked={(f) => (f === "disaster" ? typeBlocked("feeds") : f === "team" ? typeBlocked("team") : f === "coins" ? pairsBlocked ?? typeBlocked("derby") : f === "rivalry" ? null : f === "market" ? (marketsOff ? "Markets are not available on this site." : null) : null)} />}
-      {step === "choose" && guide.follow === "rivalry" && guide.phase === "which" && !guide.pairKind && <RivalryKindStep value={guide.pairKind} onPick={pickRivalry} teamsBlocked={pairsBlocked ?? typeBlocked("matchup")} />}
-      {step === "choose" && guide.follow === "disaster" && guide.phase === "which" && (
-        <section className="space-y-3" data-guided-step="which" data-disaster-kinds><h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("disaster")}</h2>
-          <div className="grid gap-2 sm:grid-cols-2">{HAZARD_KINDS.map((k) => (
-            <button key={k.id} type="button" data-decision="what" data-hazard={k.id} onClick={() => chooseHazard(k.every, k.label, k.publisher)} className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
-              <span className="block text-base font-semibold">{k.label}</span><span className="block text-xs text-neutral-400">{k.publisher}</span>
-            </button>
-          ))}</div>
-        </section>
-      )}
-      {step === "choose" && guide.follow === "coins" && guide.phase === "which" && (
-        <section className="space-y-3" data-guided-step="which"><h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("coins")}</h2>
-          <CoinVsCoinTile startOpen entry={entry} pairCurve={venues.pairCurve === true} customImages={customImages} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
-        </section>
-      )}
-      {step === "choose" && guide.phase === "follow" && (
-      <details className="rounded-lg border border-neutral-800 p-3" open={classicOpen} onToggle={(e) => setClassicOpen((e.target as HTMLDetailsElement).open)} data-classic>
-      <summary className="cursor-pointer text-sm text-neutral-300">Or describe the event in your own words</summary>
-      <div className="mt-3 space-y-5">
-      {step === "choose" && (
-        <section className="space-y-3" aria-label="Describe the event">
-          <label className="block">
-            <span className="text-lg font-medium">Describe the event</span>
-            <FieldHelp id="search" /><input data-decision="what" data-help="search" enterKeyHint="search" className={input + " mt-1 text-base py-3"} value={uq} onChange={(e) => setUq(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); /* site audit #10: Enter moves to the first result (results appear as you type) */ const first = document.querySelector<HTMLElement>("[data-first-result]"); if (first) first.focus(); } }} placeholder="e.g. 'Rays win the World Series', 'Lakers win tonight', 'Arsenal win', 'Oilers lose', 'El-Sayed wins Michigan Senate', 'Detroit high above 90'" aria-label="Describe the event" />
-          </label>
-          <p className="text-xs text-neutral-500"><button className="underline" data-decision="what" disabled={marketsOff} onClick={() => !marketsOff && begin("single")}>or find a market by its exact listing</button></p>
+  // website-22 (QA 9 item 39): the free-text line and its results, at the top of step 1 (FollowStep's search slot)
+  const searchBlock = (
+        <section className="space-y-2" aria-label="Describe it in your own words" data-free-text>
+          {/* website-22 (QA 9 item 39, owner: the middle path): the free text is one line at the top of step 1; the six cards stay primary */}
+          <div className="flex min-w-0 items-center gap-2">
+            <label htmlFor="bt-free-text" className="shrink-0 text-sm text-neutral-300">Or describe it</label>
+            <input id="bt-free-text" ref={searchRef} data-decision="what" data-help="search" enterKeyHint="search" className={input + " min-w-0 flex-1 py-2"} value={uq} onChange={(e) => setUq(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); /* site audit #10: Enter moves to the first result (results appear as you type) */ const first = document.querySelector<HTMLElement>("[data-first-result]"); if (first) first.focus(); } }} placeholder="Rays win the World Series, Detroit high above 90…" />
+            <FieldHelp id="search" />
+          </div>
           {shortQuery && <p className="text-sm text-neutral-500">Type a few more letters…</p>}
           {ubusy && <p className="text-sm text-neutral-500">Searching every source…</p>}
           {ures && (ures as { hiddenClosingSoon?: number }).hiddenClosingSoon ? <p className="text-xs text-neutral-400" data-closing-soon>{(ures as { hiddenClosingSoon?: number }).hiddenClosingSoon} one-time markets closing within 48 hours are hidden. <button type="button" data-nav className="underline" onClick={() => setClosingSoon(true)}>Show closing soon</button></p> : null}
@@ -1158,10 +1222,10 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     : c.picker ? <div className="mt-2 space-y-1">
                       <button data-decision="what" data-first-result={ci === firstActionable ? "" : undefined} className="rounded bg-amber-400 px-3 py-1 text-xs font-medium text-neutral-950" aria-expanded={outPick?.id === c.id} onClick={() => setOutPick(outPick?.id === c.id ? null : { id: c.id, q: "" })}>{outPick?.id === c.id ? "Close the list" : `Pick a ${c.picker.noun === "outcome" ? "name" : c.picker.noun} →`}</button>
                       {outPick?.id === c.id && <div className="rounded border border-neutral-700 p-2" aria-label="outcome picker">
-                        <label className="block text-xs text-neutral-400">Find a {c.picker.noun === "outcome" ? "name" : c.picker.noun}<FieldHelp id="outcome-search" /><input data-decision="what" data-help="outcome-search" autoFocus className={input + " mt-1"} value={outPick.q} onChange={(e) => setOutPick({ id: c.id, q: e.target.value })} placeholder={`type part of the ${c.picker.noun === "outcome" ? "name" : c.picker.noun}'s name`} /></label>
-                        <ul className="mt-1 max-h-56 overflow-y-auto divide-y divide-neutral-800">{c.picker.outcomes.filter((o) => !outPick.q.trim() || fold(o.label).replace(/ /g, "").includes(fold(outPick.q).replace(/ /g, ""))).map((o) => (
+                        <label className="block text-xs text-neutral-400">Find a {c.picker.noun === "outcome" ? "name" : c.picker.noun}<FieldHelp id="outcome-search" /><input data-decision="what" data-help="outcome-search" autoFocus className={input + " mt-1"} value={outPick.q} onChange={(e) => setOutPick({ id: c.id, q: e.target.value, shown: PICKER_PAGE })} placeholder={`type part of the ${c.picker.noun === "outcome" ? "name" : c.picker.noun}'s name`} /></label>
+                        {/* sources-6 (audit 10 #21): long outcome lists filter and page (polySearch.ts pickerPage) */}{(() => { const pg = pickerPage(c.picker.outcomes, outPick.q, outPick.shown); return (<><ul className="mt-1 max-h-56 overflow-y-auto divide-y divide-neutral-800">{pg.outcomes.map((o) => (
                           <li key={o.conditionId}><button data-decision="what" className="flex w-full items-center justify-between gap-2 py-1 text-left text-xs hover:text-amber-300" onClick={() => applyOutcome(c, o)}><span>{o.label}</span><span className="font-mono text-neutral-500">${o.ticker}</span></button></li>
-                        ))}</ul>
+                        ))}</ul>{pg.moreLabel && <button type="button" data-nav className="mt-1 text-xs underline" data-picker-more onClick={() => setOutPick({ id: c.id, q: outPick.q, shown: (outPick.shown ?? PICKER_PAGE) + PICKER_PAGE })}>{pg.moreLabel}</button>}</>); })()}
                         <p className="mt-1 text-[11px] text-neutral-500">Each name is its own yes/no market; your coin burns once if the one you pick wins.</p>
                       </div>}
                     </div>
@@ -1172,37 +1236,62 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
             </ul>
           )}
           {ures && ures.cards.length === 0 && !ubusy && (
-            <div className="rounded-lg border border-dashed border-neutral-700 p-3 text-sm text-neutral-400">There is no close match. Try one of these categories: {(ures.categories ?? []).map((c) => <button data-decision="what" key={c.id} className="ml-2 underline" onClick={() => { begin("browse"); setCat(c.id); }}>{c.label}</button>)}</div>
+            <div className="rounded-lg border border-dashed border-neutral-700 p-3 text-sm text-neutral-400">There is no close match. Try one of these categories: {(ures.categories ?? []).map((c) => <button data-decision="what" key={c.id} className="ml-2 underline" onClick={() => { pickFollow("number"); setCat(c.id); }}>{c.label}</button>)}</div>
           )}
         </section>
+  );
+
+  return (
+    // website-22 (QA 9 item 36): the bottom padding is the sticky action bar's measured height (GuidedSteps STICKY_VAR), not a fixed guess
+    <main id="launch-main" tabIndex={-1} className="mx-auto max-w-4xl px-4 pt-6 pb-[calc(var(--bt-sticky-h,0px)+1.5rem)] space-y-5 outline-none" data-launch-main>
+      <header className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">Launch a coin {cluster === "devnet" && <span className="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-sky-500/40" title="BURNTICKER_CLUSTER=devnet: test network, no real money">Devnet</span>}</h1>
+          {(step === "choose" || !guide.follow) && <p className="hidden text-neutral-400 text-sm sm:block">Every <Link className="underline" href="/burnticker">Burnticker</Link> coin settles on a primary source, such as the BLS, the Treasury, the National Weather Service or a league&apos;s own feed, or on a Polymarket payout read from the chain. The rule is locked at launch. <Link className="underline" href="/burnticker/trust">See what the operator can and cannot do.</Link></p>}
+        </div>
+        <span className="flex items-center gap-3 text-xs"><Link className="underline text-neutral-400" href="/burnticker/templates">Templates</Link><Link className="underline text-neutral-400" href="/burnticker/me">Your coins</Link>{step !== "choose" && !guide.follow && <button data-nav className="text-neutral-500 underline" onClick={() => startOver()}>start over</button>}</span>
+      </header>
+      {/* website-15 item 12 (ChatGPT repair 1): sticks right under the shared header, whose measured height SiteHeader writes to --bt-header-h; website-18: from the sm width up only (at 390 px it covered the links and the step header while scrolling) */}
+      {preview && <p className="z-30 sm:sticky rounded border border-amber-400 bg-neutral-950/95 px-3 py-2 text-sm font-medium text-amber-300" style={{ top: "var(--bt-header-h, 3.5rem)" }} role="status" data-preview-banner>{PREVIEW_BANNER}</p>}
+      <LaunchRecovery />
+
+      {/* intent audit 5 item 20: the one Start over confirmation, for the guided steps, the free-text review and a resumed draft alike */}
+      {confirmOver && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-300" role="alert" data-start-over-confirm>Start over clears every choice on this draft. <button type="button" data-nav className="underline" onClick={() => startOver(true)}>Start over</button> <button type="button" data-nav className="ml-2 underline" onClick={() => setConfirmOver(false)}>Keep going</button></p>}
+      {savedDraft && step === "choose" && guide.phase === "follow" && (
+        <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status" data-saved-draft>You have a draft: {String(savedDraft.name || savedDraft.ticker || "unnamed")}. <button type="button" data-nav className="underline" onClick={resumeDraft}>Resume</button> <button type="button" data-nav className="ml-2 underline" onClick={() => startOver(true)}>Discard it</button></p>
+      )}
+      {(guide.follow || step === "choose") && step !== "launch" ? (
+        <GuidedTop phase={guide.follow ? guide.phase : "follow"} answers={guideAnswers} onJump={jumpTo} onBack={guide.follow ? back : null} onStartOver={() => startOver()} confirm={null} />
+      ) : (
+        <div aria-label="Progress">
+          <div className="flex items-center justify-between text-xs text-neutral-400"><span>Step {idx + 1} of {order.length}: <span className="text-neutral-200">{LABELS[flow][step]}</span></span><span data-entry-label>{step === "review" && origin ? (origin.kind === "browse" ? `Browse · ${cats.find((c) => c.id === origin.cat)?.label ?? origin.cat}` : ENTRY_LABEL[origin.kind]) : flow === "team" ? "Team coin" : flow === "pair" ? "Matchup pair" : flow === "single" ? "Exact market" : flow === "browse" ? "Browse" : "Advanced"}</span></div>
+          <div className="mt-1 h-1.5 rounded bg-neutral-800"><div className="h-1.5 rounded bg-amber-400" style={{ width: `${((idx + 1) / order.length) * 100}%` }} /></div>
+        </div>
       )}
 
-      {step === "choose" && (
-        <section className="space-y-3" aria-label="What do you want to launch?">
-          <h2 className="text-lg font-medium">…or start from one of these</h2>
-          {pairNotice && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-300" role="status" data-pair-notice>{pairNotice} {site.pairs.detail}</p>}
-          <div className="grid gap-3 sm:grid-cols-2">
-            {([
-              ["team", "Team coin", "Any team in any league — baseball, basketball, hockey, soccer, football. It burns on every win this season. For losses, type “… lose” in the box above.", "For example, $RAYS26, $ARSENAL or $OILERS"],
-              ["pair", "Matchup", "Two teams, two separate coins. Each coin burns itself when its own team loses, and no SOL moves between them.", "For example, $LAKERS vs $CELTICS"],
-              ["browse", "Any result", "Natural disasters, elections, the economy, space or culture. Pick a category, then a source.", "For example, the national debt, Denver's high or a Senate race"],
-            ] as const).map(([f, title, body, eg]) => { const pairTile = f === "pair" && !!pairsBlocked; const why = f === "team" ? typeBlocked("team") : f === "pair" ? pairsBlocked ?? typeBlocked("matchup") : null; return (
-              <div key={f} className={`rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-tile={f} data-unavailable={why ? "" : undefined}>
-                <button data-decision="what" disabled={!!why} aria-describedby={why ? `tile-${f}-why` : undefined} onClick={() => begin(f)} className="w-full text-left rounded-xl p-5 hover:border-amber-400 focus:outline focus:outline-amber-400 disabled:cursor-not-allowed">
-                  <div className="text-lg font-semibold">{title}</div>
-                  <p className="mt-1 text-sm text-neutral-300">{body}</p>
-                  <p className="mt-3 text-xs text-neutral-500">{eg}</p>
-                </button>
-                {pairTile ? <div className="px-5 pb-4">{pairsWhy(`tile-${f}-why`)}</div> : why && <p id={`tile-${f}-why`} className="px-5 pb-4 text-xs text-amber-300">{why}</p>}
-              </div>
-            ); })}
-            <CoinVsCoinTile pairCurve={venues.pairCurve === true} customImages={customImages} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
-          </div>
-          <p className="text-xs text-neutral-500"><Link className="underline" href="/burnticker/templates">Start with one of {TEMPLATES.length} templates.</Link></p>
+
+      {pendingDials?.from && <p className="rounded border border-amber-400/50 p-2 text-sm text-amber-200" role="status">Launching one like ${pendingDials.from}: pick the {flow === "team" ? "team" : flow === "pair" ? "game" : flow === "browse" ? "source" : "market"}, and the review card opens with the same shape{pendingDials.side ? ` (on a ${pendingDials.side})` : ""}.</p>}
+
+      {/* A2: a pair path that could not open says so once, on step 1 */}
+      {step === "choose" && guide.phase === "follow" && pairNotice && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-300" role="status" data-pair-notice>{pairNotice} {site.pairs.detail}</p>}
+      {step === "choose" && guide.phase === "follow" && <FollowStep search={searchBlock} value={guide.follow} upfront={upfrontLines(RAISE_PRESETS_SOL)} onPick={pickFollow} blocked={(f) => (f === "disaster" ? typeBlocked("feeds") : f === "team" ? typeBlocked("team") : f === "coins" ? pairsBlocked ?? typeBlocked("derby") : f === "rivalry" ? null : f === "market" ? (marketsOff ? "Markets are not available on this site." : null) : null)} />}
+      {step === "choose" && guide.follow === "rivalry" && guide.phase === "which" && !guide.pairKind && <RivalryKindStep value={guide.pairKind} onPick={pickRivalry} teamsBlocked={pairsBlocked ?? typeBlocked("matchup")} />}
+      {step === "choose" && guide.follow === "disaster" && guide.phase === "which" && (
+        <section className="space-y-3" data-guided-step="which" data-disaster-kinds><h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("disaster")}</h2>
+          <div className="grid gap-2 sm:grid-cols-2">{HAZARD_KINDS.map((k) => (
+            <button key={k.id} type="button" data-decision="what" data-hazard={k.id} onClick={() => { setHazardKind(k.id); setHazardVals({ every: {}, once: {} }); chooseHazard(k.every, k.label, k.publisher); }} className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">
+              <span className="block text-base font-semibold">{k.label}</span><span className="block text-xs text-neutral-400">{k.publisher}</span>
+            </button>
+          ))}</div>
         </section>
       )}
-      </div>
-      </details>
+      {/* website-22 (QA 9 item 38, audit 10 item 13): Coin comparison and the flippening walk the real Which, Burns, Name and Review steps;
+          the tile stays mounted across them, so every pick, share and name is kept */}
+      {step === "choose" && guide.follow === "coins" && guide.phase !== "follow" && (
+        <div data-coins-steps>
+          {(pairsBlocked ?? typeBlocked("derby")) && <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("coins")}</h2>}
+          <CoinVsCoinTile startOpen phase={guide.phase} onPhase={setCoinsPhase} onAnswers={setCoinAnswers} entry={entry} pairCurve={venues.pairCurve === true} customImages={customImages} blocked={walletBlocked("derby", true)} unavailable={pairsBlocked ?? typeBlocked("derby")} unavailableDetail={pairsBlocked ? site.pairs.detail : null} />
+        </div>
       )}
 
       {/* ---------------------------------------------------------------- TEAM COIN ---------------------------------------------------------------- */}
@@ -1212,12 +1301,12 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           {leagueSeries && (
             <div className={card + " space-y-3"}>
               <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium outline-none" tabIndex={-1} data-step-heading>{whichHeading("team")}</h2><FieldHelp id="team-search" /><input data-decision="what" data-help="team-search" aria-label="Search teams in this league" className={input + " w-full sm:w-64"} placeholder={teams.length ? `${teams.slice(0, 3).map((t) => t.nickname ?? t.name).join(", ")}…` : "Type a team name"} value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
-              {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}
+              {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}{leagueSeries === "cfb" && <p className="text-xs text-neutral-400" data-division>{teamsDivision === "fbs" ? divisionLine : null} <button type="button" data-nav className="underline" onClick={() => setTeamsDivision((d) => (d === "all" ? "fbs" : "all"))}>{teamsDivision === "all" ? "Show the FBS only" : "Show all divisions"}</button></p>}
               {!teamsBusy && !teams.length && <p className="text-sm text-neutral-500">No teams found for this league right now.</p>}
               <div className="grid gap-2 sm:grid-cols-2">{teams.filter(teamFilter).map((t) => (
                 <button data-decision="what" key={t.abbr} aria-label={t.name} aria-pressed={team?.abbr === t.abbr} onClick={() => chooseTeam(t)} className={`flex items-center gap-3 rounded-lg border p-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${team?.abbr === t.abbr ? "border-amber-400" : "border-neutral-800"}`}>
-                  {badge(t.abbr)}
-                  <div className="min-w-0"><div className="font-medium truncate">{t.name}</div><div className="text-xs text-neutral-400">{t.recordText ? `${record(t)} this season` : ""}{t.next ? ` · next: ${t.next.opponent ? `vs ${t.next.opponent}` : t.next.title}, starts ${denver(t.next.expectedAt)}` : scheduleNote ? ` · ${NEXT_GAME_UNAVAILABLE}` : ""}</div>{t.seasonWarning && <div className="text-xs text-amber-300" data-season-warning>{t.seasonWarning}</div>}</div>
+                  {badge(t.code ?? t.abbr)}
+                  <div className="min-w-0"><div className="font-medium truncate">{t.name}</div><div className="text-xs text-neutral-400" data-team-line>{teamLine([t.recordText ? `${record(t)} this season` : null, t.next ? `next: ${t.next.opponent ? `vs ${t.next.opponent}` : t.next.title}, ${t.next.when ?? `starts ${denver(t.next.expectedAt)}`}` : scheduleNote ? NEXT_GAME_UNAVAILABLE : null])}</div>{t.seasonWarning && <div className="text-xs text-amber-300" data-season-warning>{t.seasonWarning}</div>}</div>
                 </button>
               ))}</div>
               <p className="text-xs text-neutral-500"><span className="bt-chip bt-chip-feed mr-1">on-chain payout · league&apos;s official feed</span>Each game settles on {SPORTS_PROVENANCE.settlement}. {sportsConfirmationLine()} Next games come from {SPORTS_PROVENANCE.schedule}. Times are in Denver time.</p>
@@ -1233,14 +1322,18 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           {leagueFolded}
           {leagueSeries && (() => {
             // items 154 and 156: every listed meeting of the two teams, each its own choice; a failed schedule read says so, with Retry
-            const meets = rivalA && rivalB ? meetingsOf(games, rivalA.abbr, rivalB.abbr) : [];
-            const schedFailed = !gamesBusy && scheduleNote === NEXT_GAME_UNAVAILABLE && !games.length;
+            // sources-6 (QA 9 #4): the one-game choices are every meeting still to be played in the season's schedule (GET /v1/sports/rivalry
+            // meetings[].oneGame), never only the next eight days of games; the search it made is said under the option
+            const rvNow = rivalA && rivalB && rivalry?.key === `${leagueSeries}:${rivalA.abbr}:${rivalB.abbr}` ? rivalry : null;
+            const meets = rivalA && rivalB ? oneGameHits(rvNow, rivalA, rivalB) : [];
+            const gamesReading = !rvNow || rvNow.busy;
+            const schedFailed = !!rvNow && !rvNow.busy && (!!rvNow.failed || !!rvNow.scheduleNote);
             const list = (exclude: string | null, onPick: (t: Team) => void, label: string) => (
               <div className={card + " space-y-2"} data-team-list={label}>
                 <div className="flex items-center justify-between gap-2 flex-wrap"><h2 className="font-medium">{label}</h2><FieldHelp id="team-search" /><input data-decision="what" data-help="team-search" aria-label={`Search teams for the ${label.toLowerCase()}`} className={input + " w-full sm:w-64"} placeholder={teams.length ? `${otherTeams(teams, exclude).slice(0, 3).map((t) => t.nickname ?? t.name).join(", ")}…` : "Type a team name"} value={teamQ} onChange={(e) => setTeamQ(e.target.value)} /></div>
-                {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}
+                {teamsBusy && <p className="text-sm text-neutral-500">Loading teams…</p>}{leagueSeries === "cfb" && <p className="text-xs text-neutral-400" data-division>{teamsDivision === "fbs" ? divisionLine : null} <button type="button" data-nav className="underline" onClick={() => setTeamsDivision((d) => (d === "all" ? "fbs" : "all"))}>{teamsDivision === "all" ? "Show the FBS only" : "Show all divisions"}</button></p>}
                 <div className="grid gap-2 sm:grid-cols-2">{otherTeams(teams, exclude).filter(teamFilter).map((t) => (
-                  <button data-decision="what" key={t.abbr} data-team={t.abbr} aria-label={t.name} onClick={() => { setTeamQ(""); onPick(t); }} className="flex items-center gap-3 rounded-lg border border-neutral-800 p-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">{badge(t.abbr)}<span className="min-w-0 truncate font-medium">{t.name}</span></button>
+                  <button data-decision="what" key={t.abbr} data-team={t.abbr} aria-label={t.name} onClick={() => { setTeamQ(""); onPick(t); }} className="flex items-center gap-3 rounded-lg border border-neutral-800 p-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400">{badge(t.code ?? t.abbr)}<span className="min-w-0 truncate font-medium">{t.name}</span></button>
                 ))}</div>
               </div>
             );
@@ -1257,15 +1350,15 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                   <div className="rounded-lg border border-neutral-800 p-3 text-left" data-rivalry-games>
                     <span className="block font-medium">{RIVALRY_GAME_LABEL}</span>
                     <span className="mt-0.5 block text-xs text-neutral-300">{RIVALRY_GAME_LINE}</span>
-                    {gamesBusy ? <span className="mt-1 block text-xs text-neutral-400">Looking for their games.</span>
-                      : schedFailed ? <span className="mt-1 block text-xs text-amber-300" role="status" data-schedule-unavailable>{SCHEDULE_UNAVAILABLE_LINE} <button type="button" data-nav className="underline" onClick={() => setGamesRetry((n) => n + 1)}>Retry</button></span>
+                    {gamesReading ? <span className="mt-1 block text-xs text-neutral-400">Looking for their games.</span>
+                      : schedFailed ? <span className="mt-1 block text-xs text-amber-300" role="status" data-schedule-unavailable>{rvNow?.scheduleNote ?? SCHEDULE_UNAVAILABLE_LINE} <button type="button" data-nav className="underline" onClick={() => setRivalryRetry((n) => n + 1)}>Retry</button></span>
                       : meets.length === 0 ? <span className="mt-1 block text-xs text-neutral-400" data-no-meeting>{NO_LISTED_MEETING_LINE}</span>
-                      : <span className="mt-1 flex flex-wrap gap-2">{meets.slice(0, 6).map((m) => <button key={m.eventTicker} type="button" data-decision="what" data-meeting={m.eventTicker} onClick={() => chooseRivals(rivalA, rivalB, "game", m)} className="rounded-full border border-neutral-700 px-3 py-1 text-xs hover:border-amber-400">{denver(m.expectedAt)}</button>)}</span>}
-                    {!gamesBusy && !schedFailed && <span className="mt-1 block text-[11px] text-neutral-500" data-schedule-source>{scheduleCoverageLine(meets.length)}</span>}
+                      : <span className="mt-1 flex flex-wrap gap-2">{meets.slice(0, 6).map((m) => <button key={m.eventTicker} type="button" data-decision="what" data-meeting={m.eventTicker} onClick={() => chooseRivals(rivalA, rivalB, "game", m)} className="rounded-full border border-neutral-700 px-3 py-1 text-xs hover:border-amber-400">{denver(m.expectedAt)} {m.pair?.a.home ? `vs ${rivalB.code ?? rivalB.abbr}` : `at ${rivalB.code ?? rivalB.abbr}`}</button>)}</span>}
+                    {!gamesReading && !schedFailed && <span className="mt-1 block text-[11px] text-neutral-500" data-schedule-source data-one-game-searched>{rvNow?.oneGameSearched ?? scheduleCoverageLine(meets.length)}</span>}
                   </div>
                   <button type="button" data-decision="what" onClick={() => chooseRivals(rivalA, rivalB, "season")} className="rounded-lg border border-amber-400 p-3 text-left">
                     <span className="block font-medium">{RIVALRY_SEASON_LABEL}</span>
-                    <span className="mt-0.5 block text-xs text-neutral-300">{RIVALRY_SEASON_LINE}</span>
+                    <span className="mt-0.5 block text-xs text-neutral-300">{rivalrySeasonLine((leagueSeries ?? null) as LeagueId | null)}</span>
                   </button>
                   {(() => {
                     // website-21 (WIRING-RIVALRY-SERIES): the third option, every game between them this season, with its meetings list
@@ -1312,8 +1405,8 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               {!gamesBusy && !games.length && <p className="text-sm text-neutral-500">{scheduleNote ? NEXT_GAME_UNAVAILABLE : <>No upcoming games{gameQ ? ` matching “${gameQ}”` : ""}.</>}</p>}
               <ul className="divide-y divide-neutral-800">{games.map((g) => (
                 <li key={g.eventTicker}><button data-decision="what" onClick={() => { markOrigin("matchup"); setSrcWarnings([]); chooseGame(g); }} className="flex w-full items-center gap-3 py-2 text-left hover:bg-neutral-800/40">
-                  {badge(g.pair!.a.abbr)}<span className="text-neutral-500 text-xs">vs</span>{badge(g.pair!.b.abbr)}
-                  <span className="min-w-0"><span className="block font-medium truncate">{g.pair!.a.name} vs {g.pair!.b.name}</span><span className="block text-xs text-neutral-400">starts {denver(g.expectedAt)}, result after the final{g.pair!.tieMarket ? " · this league has draws" : ""}{g.refused.length ? ` · ${refusedLine(g.refused)}` : ""}</span></span>
+                  {badge(g.pair!.a.code ?? g.pair!.a.abbr)}<span className="text-neutral-500 text-xs">vs</span>{badge(g.pair!.b.code ?? g.pair!.b.abbr)}
+                  <span className="min-w-0"><span className="block font-medium truncate">{g.pair!.a.name} vs {g.pair!.b.name}</span><span className="block text-xs text-neutral-400">{g.subTitle === LIVE_NOW ? g.subTitle : `starts ${denver(g.expectedAt)}`}, result after the final{g.pair!.tieMarket ? " · this league has draws" : ""}{g.refused.length ? ` · ${refusedLine(g.refused)}` : ""}</span></span>
                 </button></li>
               ))}</ul>
             </div>
@@ -1351,6 +1444,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               const poly = pm && (
                 <div key="polymarket" className="space-y-2">
                   {(pm.events.length > 0 || pm.markets.length > 0) && <h3 className="text-xs uppercase tracking-wide text-neutral-500">Events and markets{chip("polymarket")}</h3>}
+                  {!polyClosingSoon && (pm.hiddenClosingSoon ?? 0) > 0 && <p className="text-xs text-neutral-400" data-closing-soon>{pm.hiddenClosingSoon} one-time markets closing within 48 hours are hidden. <button type="button" data-nav className="underline" onClick={() => setPolyClosingSoon(true)}>Show closing soon</button></p>}
                   {pm.markets.map((m) => <div key={m.conditionId} className="flex items-center justify-between gap-2 rounded border border-neutral-800 p-2 text-sm"><span>{m.question} <span className="text-xs text-neutral-500">YES = {m.yes}, NO = {m.no}</span></span><button data-decision="what" className="text-xs underline disabled:no-underline disabled:opacity-50" disabled={m.closed} onClick={() => pickPoly(m)}>{m.closed ? "closed" : "burn on this market →"}</button></div>)}
                   {pm.events.map((e) => (
                     <div key={e.slug} className="rounded border border-neutral-800 p-2">
@@ -1395,7 +1489,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                 <div className={card + " space-y-3"} aria-label="Elections">
                   <h3 className="font-medium">Pick a race</h3>
                   <div className="flex flex-wrap items-center gap-2"><FieldHelp id="race-type" />{etypes.map((t) => <button data-decision="what" key={t.id} aria-pressed={etype === t.id} className={`bt-tab${etype === t.id ? " is-active" : ""}`} onClick={() => { setEtype(t.id); setEstate(null); }}>{t.label} <span className="bt-tab-count">{t.races}</span></button>)}{!etypes.length && (etypesErr ? <span className="text-xs text-red-400">{etypesErr}</span> : <span className="text-xs text-neutral-500">Loading races…</span>)}</div>
-                  {etype && etype !== "control" && <label className="block text-sm">State <FieldHelp id="race-state" /><select data-decision="what" data-help="race-state" className={input + " inline w-56 ml-1"} value={estate ?? ""} onChange={(e) => setEstate(e.target.value || null)}><option value="">choose a state…</option>{estates.map((x) => <option key={x.abbr} value={x.abbr}>{x.name} ({x.races})</option>)}</select></label>}
+                  {etype && etype !== "control" && <label className="block text-sm">State <FieldHelp id="race-state" /><select data-decision="what" data-help="race-state" aria-label="State" className={input + " inline w-56 ml-1"} value={estate ?? ""} onChange={(e) => setEstate(e.target.value || null)}><option value="">choose a state…</option>{estates.map((x) => <option key={x.abbr} value={x.abbr}>{x.name} ({x.races})</option>)}</select></label>}
                   {ebusy && <p className="text-xs text-neutral-500">Loading…</p>}
                   {eraces?.length === 0 && <p className="text-xs text-neutral-500">No open race listed here.</p>}
                   {eraces?.map((r) => (
@@ -1404,14 +1498,14 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                       <div className="text-xs text-neutral-500">Settled by: {r.settlement} — <a className="underline" href={r.sos.url} rel="noopener" target="_blank">{r.sos.name}</a>{r.hiddenPlaceholders ? `. ${r.hiddenPlaceholders === 1 ? "One unnamed placeholder outcome is" : `${r.hiddenPlaceholders} unnamed placeholder outcomes are`} hidden.` : ""}</div>
                       {r.refused.length ? <p className="text-xs text-red-400">{refusedLine(r.refused)}</p> : <ul className="mt-1 space-y-1">{r.outcomes.map((o) => (
                         <li key={o.conditionId} className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-medium">{o.label}</span>
+                          <span className="min-w-0"><span className="font-medium">{o.label}</span>{o.mapping && <span className="block text-[11px] text-neutral-400" data-mapping>{o.mapping}</span>}</span>
                           {guide.pairKind === "candidates"
-                            ? <button data-decision="what" className={`text-xs underline ${esel.includes(o.conditionId) ? "text-neutral-100" : "text-amber-300"}`} aria-pressed={esel.includes(o.conditionId)} onClick={() => setEsel((xs) => (xs.includes(o.conditionId) ? xs.filter((x) => x !== o.conditionId) : [...xs.filter((x) => r.outcomes.some((y) => y.conditionId === x)), o.conditionId].slice(-2)))}>{esel.includes(o.conditionId) ? "Picked" : "Pick"}</button>
-                            : <button data-decision="what" className="text-xs underline text-amber-300" onClick={() => {
+                            ? <button data-decision="what" className={`text-xs underline ${esel.includes(o.conditionId) ? "text-neutral-100" : "text-amber-300"}`} aria-label={`Pick ${o.label.replace(/\s*\([A-Z]\)$/, "")}`} aria-pressed={esel.includes(o.conditionId)} onClick={() => setEsel((xs) => (xs.includes(o.conditionId) ? xs.filter((x) => x !== o.conditionId) : [...xs.filter((x) => r.outcomes.some((y) => y.conditionId === x)), o.conditionId].slice(-2)))}>{esel.includes(o.conditionId) ? "Picked" : "Pick"}</button>
+                            : <button data-decision="what" className="text-xs underline text-amber-300" aria-label={`Use ${o.label.replace(/\s*\([A-Z]\)$/, "")} wins`} onClick={() => {
                             // intent audit 2 item 5: the coin's sentence comes from the market's own question; a party market is said as one
                             const sur = o.label.replace(/\s*\([A-Z]\)$/, "").trim().split(/\s+/).pop() ?? o.label, phrase = o.question.replace(/^will\s+/i, "").replace(/\?$/, "");
                             const tk = sur.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
-                            markOrigin("browse"); setSrcWarnings(fold(o.question).includes(fold(sur)) ? [] : [`$${tk} settles on the market "${o.question}". That market is about the party's result, not ${sur} by name.`]);
+                            markOrigin("browse"); setSrcWarnings(o.mapping ? [mappingWarning(o.mapping, "A")] : fold(o.question).includes(fold(sur)) ? [] : [partyMarketWarning(o.question, sur)]);
                             setEventInfo({ question: o.question, url: r.url, outcome: `“${o.yes}”`, resolves: r.settlesOn, criteria: r.description, certified: r.settlement.replace(/^.*checked against /, "") });
                             applyRule(o.rule, { oracle: "polymarket", series: null, market: o.conditionId, title: `${phrase} (resolves once)`, yes: o.yes, no: o.no }, { name: `${sur} Wins`, ticker: tk, how: `${o.settles}${r.description ? `\n\nResolution rules (Polymarket): ${r.description}` : ""}`, settlement: `${r.settlement}, ${r.sos.name}` }); }}>Use: {o.label} wins →</button>}
                         </li>
@@ -1427,7 +1521,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               {guide.pairKind !== "candidates" && <>
               {cardsBusy && <p className="text-sm text-neutral-500">Loading sources…</p>}
               {bq.trim() && <p className="text-xs text-neutral-400" data-active-filter>Showing {cats.find((c) => c.id === cat)?.label ?? cat} sources matching “{bq.trim()}”. <button type="button" data-nav className="underline" onClick={() => setBq("")}>Show all in this category</button></p>}
-              {!cardsBusy && cards && cards.length === 0 && <div className="rounded border border-dashed border-neutral-700 p-4 text-sm text-neutral-400" data-empty-filter><p>This site has no source in this category{bq ? ` matching “${bq}”` : ""} yet.</p>{bq.trim() && <p className="mt-2 flex flex-wrap gap-3"><button type="button" data-nav className="underline" onClick={() => setBq("")}>Clear the filter</button><button type="button" data-nav className="underline" onClick={() => { setUq(bq.trim()); setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); setClassicOpen(true); }}>Search all sources for “{bq.trim()}”</button></p>}</div>}
+              {!cardsBusy && cards && cards.length === 0 && <div className="rounded border border-dashed border-neutral-700 p-4 text-sm text-neutral-400" data-empty-filter><p>This site has no source in this category{bq ? ` matching “${bq}”` : ""} yet.</p>{bq.trim() && <p className="mt-2 flex flex-wrap gap-3"><button type="button" data-nav className="underline" onClick={() => setBq("")}>Clear the filter</button><button type="button" data-nav className="underline" onClick={() => { setUq(bq.trim()); setGuide({ follow: null, phase: "follow", pairKind: null }); setStep("choose"); setFocusSearch(true); }}>Search all sources for “{bq.trim()}”</button></p>}</div>}
               <div className={`grid gap-2 lg:grid-cols-2${cardsBusy ? " opacity-50" : ""}`} aria-busy={cardsBusy}>{/* snag 18: a source this host has no key for is not listed at all */}{(cards ?? []).filter((c) => c.launchable.ok || !/needs a key|API_KEY|not configured|licen[cs]ed key/i.test(c.launchable.why ?? "")).map((c) => (
                 <div key={c.id} className={`rounded-lg border p-3 text-sm ${c.launchable.ok ? "border-neutral-800 bg-neutral-900" : "border-neutral-900 opacity-70"}`}>
                   <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
@@ -1463,7 +1557,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
                     const sid = `wx-station-${wx.metric}`, tid = `wx-threshold-${wx.metric}`;
                     return (
                     <div className="mt-2 border-t border-neutral-800 pt-2 text-xs space-y-2">
-                      <div><label htmlFor={sid}>Station</label> <FieldHelp id="nws-station" /><select id={sid} data-decision="what" data-help="nws-station" className={input + " inline w-full sm:w-56 sm:ml-1"} value={wx.station} onChange={(e) => setWx({ ...wx, station: e.target.value })}>{STATIONS.map((x) => <option key={x.code} value={x.code}>{x.label} ({x.code})</option>)}</select></div>
+                      <div><label htmlFor={sid}>Station</label> <FieldHelp id="nws-station" /><select id={sid} data-decision="what" data-help="nws-station" className={input + " inline w-full sm:w-56 sm:ml-1"} value={wx.station} onChange={(e) => setWx({ ...wx, station: e.target.value })}>{STATIONS.map((x) => <option key={x.code} value={x.code}>{stationOptionLabel(x)}</option>)}</select></div>
                       {wx.metric !== "snow" && <div><label htmlFor={tid}>{wx.metric === "high" ? "Burn on days whose high reaches this many °F" : "Burn on days with at least this many inches of rain"}</label> <FieldHelp id="nws-threshold" /><input id={tid} data-decision="what" data-help="nws-threshold" inputMode="decimal" aria-invalid={!!thrErr} aria-describedby={thrErr ? `${tid}-err` : undefined} className={input + " inline w-24 ml-1"} value={wx.threshold} onChange={(e) => setWx({ ...wx, threshold: e.target.value })} />{thrErr && <span id={`${tid}-err`} className="block text-red-400">{thrErr}</span>}</div>}
                       <button data-decision="what" className="underline text-amber-300 disabled:text-neutral-500 disabled:no-underline" disabled={!!thrErr} aria-describedby={thrErr ? `${tid}-err` : undefined} onClick={() => { if (thrErr) return; const thr = wx.metric === "snow" ? null : Number(wx.threshold); const series = nwsSeries(wx.metric, wx.station, thr); const st = STATIONS.find((x) => x.code === wx.station)!; markOrigin("browse"); applyRule(firstPartyRule(series, DEFAULT_SHARE.recurring), { oracle: "catalogue", series, market: null, title: `${st.city} ${wx.metric === "high" ? `daily high ≥ ${thr} °F` : wx.metric === "rain" ? `rain day ≥ ${Number(thr).toFixed(2)} in` : "first snow of the season"} (NWS)` }, { name: `${st.city} ${wx.metric === "high" ? "Heat" : wx.metric === "rain" ? "Rain" : "Snow"}`, ticker: `${st.code}${wx.metric === "high" ? "HOT" : wx.metric === "rain" ? "RAIN" : "SNOW"}`, settlement: "the National Weather Service's daily climate report, cross-checked against the Iowa Environmental Mesonet", source: weatherSource(wx.metric) }); }}>Use this rule →</button>
                       {thrErr && <span className="ml-2 text-neutral-500">Fix the threshold to continue.</span>}
@@ -1499,19 +1593,25 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         // website-18 THE TEAM PATH: league, team, this card, Launch. The card says the defaults in one sentence each (the burn on every
         // win through the postseason, then the champion and the not-champion ends); every other choice sits under one closed "Advanced"
         const teamPath = flow === "team" && !pairOn && championPathRule(rule);
-        const imageField = (v: ProfileValue, set: (x: ProfileUpdate) => void, who: string | null, pasteTarget = true) => <ProfileFields key={who ?? "a"} value={v} onChange={set} part="image" who={who} customImages={customImages} pasteTarget={pasteTarget} />;
+        const imageField = (v: ProfileValue, set: (x: ProfileUpdate) => void, who: string | null, pasteTarget = true, side: "a" | "b" = "a") => <ProfileFields key={side} value={v} onChange={set} part="image" who={who} customImages={customImages} pasteTarget={pasteTarget} side={side} />;
         const coins = pairOn && ruleB ? [coinA, { key: "b", name: nameB, ticker: tickerB, onName: (v: string) => { setNameB(v); setNameAuto(false); setEditedFor(subjectKey); noteEdit(); }, onTicker: (v: string) => { setTickerB(v); setTickerAuto(false); noteEdit(); }, image: profileB.image ? chosenPreview(profileB)! : genImg(ruleB, tickerB, textB?.oneLiner ?? ""), oneLiner: textB?.oneLiner ?? ruleOneLiner(ruleB), oracle: "catalogue", badge: textB?.badge ?? null }] : [coinA];
         // intent audit item 3: a two-coin sentence is read from the two rules (the fade side included), never written for the plain side
         // website-21: a rivalry series pair says both coins' rules, then what each game between them moves (pairFundsFlow.ts meetingsFundsFlow)
+        // website-22 (audit 10 items 1 and 2): the pick and the event card speak for this rule only, and for the side it burns on
+        const ownPick = pickDescribesRule(rule, pick);
+        const eventShown = eventForSide(ownPick ? eventInfo : null, rule, { yes: pick?.yes ?? null, no: pick?.no ?? null });
+        const oneShotParts = rule.oracle === "polymarket" && rule.market && !pairOn && rule.kind === "binary" ? (() => { const no = !rule.binary?.onYes && !!rule.binary?.onNo, champ = ({ mlb: "World Series", nba: "NBA Finals", nhl: "Stanley Cup", nfl: "Super Bowl" } as Record<string, string>)[leagueSeries ?? ""] ?? "championship";
+          return oneShotSentences({ share: shareValue, no, subject: guide.follow === "team" && team ? "they" : "it", happened: guide.follow === "team" && team ? `the ${team.nickname ?? team.name} ${no ? "did not win" : "won"} the ${champ}` : eventShown?.question ? `“${eventShown.question.replace(/\?$/, "")}” resolved ${no ? "NO" : eventShown.outcome ?? "YES"}` : `the market resolved ${no ? "NO" : "YES"}` }); })() : null;
         const sentence0 = meetingsOn && sideA && sideB && text && textB
           ? meetingsPairSentence({ a: ticker || "A", b: tickerB || "B", oneA: text.oneLiner, oneB: textB.oneLiner, share: shareText })
           : pairOn && sideA && sideB && text && textB
           ? `$${ticker || "A"} ${text.oneLiner}, and $${tickerB || "B"} ${textB.oneLiner}. Each coin spends ${shareText} of its own burn pool when its rule fires.`
           : pairOn && sideA && sideB
           ? (season ? `$${ticker} spends ${shareText} of its burn pool every time the ${A} lose this season, and $${tickerB} does the same for the ${B}. They are two separate coins with two separate records.` : `When ${game?.title ?? "the game"} is final, the coin of the team that lost spends ${shareText} of its own burn pool: $${ticker} if the ${A} lose, $${tickerB} if the ${B} lose.`)
-          : rule.oracle === "polymarket" && rule.market && !pairOn && rule.kind === "binary" ? (() => { const no = !rule.binary?.onYes && !!rule.binary?.onNo, champ = ({ mlb: "World Series", nba: "NBA Finals", nhl: "Stanley Cup", nfl: "Super Bowl" } as Record<string, string>)[leagueSeries ?? ""] ?? "championship";
-              return oneShotSentences({ share: shareValue, no, subject: guide.follow === "team" ? "they" : "it", happened: guide.follow === "team" && team ? `the ${team.nickname ?? team.name} ${no ? "did not win" : "won"} the ${champ}` : eventInfo?.question ? `“${eventInfo.question.replace(/\?$/, "")}” resolved ${no ? "NO" : eventInfo.outcome ?? "YES"}` : `the market resolved ${no ? "NO" : "YES"}` }).join(" "); })()
-          : text ? (teamPath ? `${text.lead} ${text.windowSentence.replace(/^This coin covers [^.]*\.\s*/, "")}` : text.lead) : plainSentence(rule, ticker, pick?.title ?? bt?.seriesTitle ?? null);
+          : oneShotParts ? oneShotParts.join(" ")
+          : text ? (teamPath ? `${text.lead} ${text.windowSentence.replace(/^This coin covers [^.]*\.\s*/, "")}` : text.lead) : plainSentence(rule, ticker, ownPick ? pick?.title ?? null : bt?.seriesTitle ?? null);
+        // website-22 (audit 10 item 7): the trigger fact is built from its parts, never cut at the first full stop ("U.S." broke it)
+        const trigger = triggerText({ pair: pairOn && sideA && sideB && text && textB ? { a: ticker, b: tickerB, oneA: text.oneLiner, oneB: textB.oneLiner } : null, oneShot: oneShotParts?.[0] ?? null, lead: pairOn ? null : text?.lead ?? null, fallback: sentence0 });
         // owner, 2026-10-12: above 5 % a recurring burn lands in slices (one burn run buys with at most 2 % of the pool's SOL); said once
         const sentence = !oneShotRule && shareValue > SLICED_ABOVE && !/in slices sized/.test(sentence0) ? `${sentence0} The burn lands in slices sized to the pool's liquidity.` : sentence0;
         const problems = btFresh ? [...(bt?.refusals ?? []), ...(pairOn ? btB?.refusals ?? [] : [])].map((r) => r.reason) : [];
@@ -1532,11 +1632,20 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         if (timing?.warning) notes.push(timing.warning);
         if (!nameAuto && name.trim()) notes.push(`Keeping the name you typed, “${name}”. It stays while you set up this coin; picking a different thing to follow generates a new one. Press edit to change it.`);
         // guided step 3: the four patterns for the thing picked; guided step 4: the end, from the rule
-        const curPattern: PatternId | null = guide.follow === "team" ? (flow === "single" ? "once" : rule.inverse ? "fade" : "every") : guide.follow === "rivalry" ? (meetingsOn ? "winner" : elPick || pairMode === "game" ? "once" : rule.inverse ? "fade" : "every") : guide.follow === "market" ? (rule.kind === "binary" && rule.binary?.onNo && !rule.binary.onYes ? "fade" : "once") : windowKindOf(rule) === "one-shot" ? "once" : rule.inverse ? "fade" : "every";
+        // website-22 (QA 9 item 1): a natural-disaster coin's chosen card is the one hazards.ts reads from its series (a next-event series is
+        // "once"), and a team coin opened from the search box is read from its rule (no team picked in step 2)
+        const curPattern: PatternId | null = guide.follow === "disaster" ? hazardPatternOptions(rule, Date.now()).preselected
+          : guide.follow === "team" ? (rule.oracle === "polymarket" ? "once" : rule.inverse ? "fade" : "every") : guide.follow === "rivalry" ? (meetingsOn ? "winner" : elPick || pairMode === "game" ? "once" : rule.inverse ? "fade" : "every") : guide.follow === "market" ? (rule.kind === "binary" && rule.binary?.onNo && !rule.binary.onYes ? "fade" : "once") : windowKindOf(rule) === "one-shot" ? "once" : rule.inverse ? "fade" : "every";
         const pickPattern = (pt: PatternId) => {
           flowStats.current.decisions++; setPatternNotice(null);
           // audit 6 item 1: a new pattern is a new rule, so the generated name and ticker follow it (a name or ticker the creator typed stays)
-          setSrcSuggest({ name: null, ticker: null });
+          // a market keeps its outcome's name on either side (YES or NO is the same subject)
+          if (guide.follow !== "market") setSrcSuggest({ name: null, ticker: null });
+          if (guide.follow === "team" && !team) {
+            // website-22 (audit 10 item 14): a team coin opened from the search box has its rule but no team picked in step 2
+            if (pt === "once") { setPatternNotice(PATTERN_REASON.noTitleMarket); return; }
+            if (dialsFor(rule, dialCtx).inverse) setDial("inverse", pt === "fade" ? "on" : "off"); return;
+          }
           if (guide.follow === "team") {
             // audit 6 item 7: a tap never does nothing silently
             if (pt === "once") { if (titleCard?.card) applySuggestion(titleCard.card); else setPatternNotice(titleCard?.state === "loading" ? PATTERN_REASON.titleMarketLoading : PATTERN_REASON.noTitleMarket); return; }
@@ -1545,33 +1654,74 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
           }
           if (guide.follow === "rivalry") {
             if (meetingsOn) return;   // website-21: every game between them offers Winner takes the burn only (patternOptions rivalryScope "meetings")
-            if (pt === "once") { if (rivalSeason && !rivalGame) { setPatternNotice(PATTERN_REASON.noMeeting); return; } if (rivalGame) { setGame(rivalGame); const g = rivalGame.pair; if (g && nameAuto) { const nm = pairNames(g.a.nickname ?? g.a.name, g.b.nickname ?? g.b.name); setName(nm.a); setNameB(nm.b); } if (g && tickerAuto) { const tk = pairTickers(g.a.abbr, g.b.abbr); setTicker(tk.a); setTickerB(tk.b); } } setPairMode("game"); return; }
+            if (pt === "once") { if (rivalSeason && !rivalGame) { setPatternNotice(PATTERN_REASON.noMeeting); return; } if (rivalGame) { setGame(rivalGame); const g = rivalGame.pair; if (g && nameAuto) { const nm = pairNames(g.a.nickname ?? g.a.name, g.b.nickname ?? g.b.name, { a: g.a.code ?? g.a.abbr, b: g.b.code ?? g.b.abbr }); setName(nm.a); setNameB(nm.b); } if (g && tickerAuto) { const tk = pairTickers(g.a.code ?? g.a.abbr, g.b.code ?? g.b.abbr); setTicker(tk.a); setTickerB(tk.b); } } setPairMode("game"); return; }
             if (rivalSeason) setGame(rivalSeason); setPairMode("season"); if (rivalA && rivalB) renameForSeason(rivalA, rivalB); setWantInverse(pt === "fade" ? "on" : "off"); return;
           }
           if (guide.follow === "market") { setDial("side", pt === "fade" ? "no" : "yes"); return; }
           if (guide.follow === "disaster") {
-            if (pt === "fade") { setDial("inverse", "on"); return; }
+            // website-22 (QA 9 item 1): the fade side lives on the per-event form; from the next-event form it switches there first
+            if (pt === "fade") {
+              if (dialsFor(rule, dialCtx).inverse) { setDial("inverse", "on"); return; }
+              const back = rule.series ? hazardSwap(rule.series, "every", Date.now()) : null;
+              if (back && "series" in back) { applyRule(hazardRule(back.series), { oracle: "catalogue", series: back.series, market: null, title: pick?.title ?? "" }, { settlement: settleNote }); setWantInverse("on"); }
+              return;
+            }
             const sw = rule.series ? hazardSwap(rule.series, pt === "once" ? "once" : "every", Date.now()) : null;
             if (!sw || "refused" in sw) { if (sw) setPatternNotice(sw.refused); return; }
             const title = pick?.title ?? "";
             applyRule(hazardRule(sw.series), { oracle: "catalogue", series: sw.series, market: null, title }, { settlement: settleNote });
+            // sources-6 (QA 9 #40): a switch that changes a threshold or the subject says so beside the cards
+            if (sw.notice) setPatternNotice(sw.notice);
             return;
           }
           setDial("inverse", pt === "fade" ? "on" : "off");
         };
-        const budget = budgetCopy(rule, shareValue, unitPhrase(pick?.source?.unit ?? null));
-        const preview = <><p>{sentence}</p>{!sentence.includes(" once, when ") && <p className="mt-1 text-xs text-neutral-300">{budget.line}</p>}</>;
+        // website-22 (audit 10 item 2): the unit is the active rule's own, never a source picked on another path
+        const budget = budgetCopy(rule, shareValue, unitPhrase(activeUnit(rule, pick)));
+        const preview = <><p>{sentence}</p>{!sentence.includes(" once, when ") && <p className="mt-1 text-xs text-neutral-300">{budget.line}</p>}{renderWarnings(srcWarnings, ticker, tickerB).map((w) => <p key={w} className="mt-1 text-xs text-amber-200" data-preview-warning>{w}</p>)}</>;
         const nextBtn = (label: string, to: GuidedPhase) => <StickyAction><button type="button" data-nav className={primary + " w-full sm:w-auto"} onClick={() => setGuide((g) => ({ ...g, phase: to }))}>{label}</button></StickyAction>;
         const pairKindNow = guide.follow === "rivalry" ? (elPick ? "candidates" as const : "teams" as const) : null;
         const rivalryScope = pairKindNow === "teams" ? (meetingsOn ? "meetings" as const : pairMode === "game" ? "game" as const : "season" as const) : null;
         const teamOutcome = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series)?.outcome ?? null : null;
         if (guide.follow && guide.phase === "burn") {
-          const po = guide.follow === "disaster" ? hazardPatternOptions(rule, Date.now()) : patternOptions({ follow: guide.follow, rule, titleMarket: titleCard?.state ?? "loading", pairKind: pairKindNow, meeting: rivalSeason ? !!rivalGame : null, rivalryScope });
+          // website-22 (QA 9 item 1): a natural disaster's cards are the same set in both its forms (per event, next event), with its own words
+          const hazardOpts = (): ReturnType<typeof hazardPatternOptions>["options"] => {
+            const now = Date.now(), cur = hazardPatternOptions(rule, now), once = cur.preselected === "once";
+            const sib = rule.series ? hazardSwap(rule.series, once ? "every" : "once", now) : null;
+            return stablePatternOptions(cur.options, sib && "series" in sib ? hazardPatternOptions(hazardRule(sib.series), now).options : null);
+          };
+          const po = guide.follow === "disaster" ? { options: hazardOpts() } : patternOptions({ follow: guide.follow, rule, titleMarket: guide.follow === "team" && !team ? "none" : titleCard?.state ?? "loading", pairKind: pairKindNow, meeting: rivalSeason ? !!rivalGame : null, rivalryScope });
           // pass B item 12, audit 6 item 16: the patterns name the thing picked ("After each Dodgers win")
           const subject = guide.follow === "team" && team ? team.nickname ?? team.name : null;
-          const options = po.options.map((o) => ({ ...o, ...patternWords(o.id, { follow: guide.follow!, subject, outcome: teamOutcome === "loss" ? "loss" : teamOutcome === "draw" ? "draw" : "win", pairKind: pairKindNow, rivalryScope }) }));
+          const options = guide.follow === "disaster" ? po.options : po.options.map((o) => ({ ...o, ...patternWords(o.id, { follow: guide.follow!, subject, outcome: teamOutcome === "loss" ? "loss" : teamOutcome === "draw" ? "draw" : "win", pairKind: pairKindNow, rivalryScope }) }));
           const drain = !oneShotRule && shareValue > SLICED_ABOVE ? drainLine(shareValue, guide.follow === "team" && team ? (teamOutcome === "loss" ? "loss" : "win") : "result") : null;
-          return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice} next={nextBtn("Next", "name")} />;
+          // sources-6 (QA 9 #40, audit 10 #18): a natural disaster's thresholds as choices the adapter reads, and what the pattern measures
+          const hk: HazardKindId | null = hazardKind ?? (/^usgs\.volcano/.test(rule.series ?? "") ? "volcano" : /^usgs\.quake/.test(rule.series ?? "") ? "quake" : /^nhc\./.test(rule.series ?? "") ? "hurricane" : /^spc\./.test(rule.series ?? "") ? "tornado" : /^nifc\./.test(rule.series ?? "") ? "wildfire" : null);
+          const hazardExtra = guide.follow === "disaster" && hk ? (() => {
+            const hazardKind = hk;
+            const pat: "every" | "once" = curPattern === "once" ? "once" : "every", now = Date.now();
+            const ctls = (hazardCatalogueOf ?? hazardControls())[hazardKind]?.[pat] ?? [];
+            const shown = hazardShownValues(hazardKind, pat, rule.series ?? "", hazardVals[pat], now);
+            const change = (id: string, v: string) => {
+              const vals = { ...shown, [id]: v }; setHazardVals((x) => ({ ...x, [pat]: vals }));
+              const r = hazardSeriesFor(hazardKind, pat, vals, now);
+              if ("refused" in r) { setPatternNotice(r.refused); return; }
+              setPatternNotice(null);
+              applyRule(hazardRule(r.series), { oracle: "catalogue", series: r.series, market: null, title: pick?.title ?? "" }, { settlement: settleNote });
+              if (pat === "every" && rule.inverse) setWantInverse("on");
+            };
+            return (
+              <div className="space-y-2" data-hazard-controls>
+                <p className="text-xs text-neutral-300" data-hazard-measures>{HAZARD_MEASURES[hazardKind][pat]}</p>
+                {ctls.length > 0 && <div className="flex flex-wrap gap-3">{ctls.map((c) => (
+                  <label key={c.id} className="block text-xs text-neutral-400">{c.label}<FieldHelp id="hazard-threshold" />
+                    <select data-decision="what" data-help="hazard-threshold" data-hazard-control={c.id} className={input + " mt-1 block w-auto"} value={shown[c.id] ?? c.default} onChange={(e) => change(c.id, e.target.value)}>{c.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+                  </label>
+                ))}</div>}
+              </div>
+            );
+          })() : null;
+          return <PatternStep drain={drain} preview={preview} options={options} value={curPattern} onPick={pickPattern} shares={shareOptions} share={shareValue} onShare={setShare} pairLabel={pairOn && !!ruleB} math={budget.math} notice={patternNotice} extra={hazardExtra} next={nextBtn("Next", "name")} />;
         }
         // the end, stated on the review (the server adds the default end, with the $DEFICIT sink, to a rule sent without one)
         // website-21: a rivalry series pair ends as built (the pair-winner sink): the rest goes to the series winner, and no other end is offered
@@ -1596,22 +1746,50 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
         const coinsN: 1 | 2 = pairOn && ruleB ? 2 : 1;
         const editTo = (p: GuidedPhase) => () => { if (p === "which") toWhich(); else setGuide((g) => ({ ...g, phase: p })); };
         const reviewFacts = guide.follow ? [
-          { label: FACT_LABELS.trigger, value: sentence0.split(/(?<=\.)\s/)[0], edit: editTo("which") },
+          { label: FACT_LABELS.trigger, value: trigger, edit: editTo("which") },
           { label: FACT_LABELS.coin, value: meetingsOn ? meetingsWhichCoinLine({ a: ticker || "A", b: tickerB || "B", teamA: A, teamB: B }) : whichCoinLine(ticker || "A", coinsN === 2 ? tickerB || "B" : null), edit: editTo("name") },
-          { label: FACT_LABELS.amount, value: `${budget.line} ${shareExample(shareValue)}`, edit: editTo("burn") },
+          { label: FACT_LABELS.amount, value: `${budget.line} ${shareOfBudgetLine(shareValue)} ${shareExample(shareValue)}`, edit: editTo("burn") },
           { label: FACT_LABELS.ends, value: meetingsOn ? meetingsEndFact : endLines.join(" ") || PERPETUAL_END_LINE, edit: null },
           { label: FACT_LABELS.cost, value: costLine(shownReview.review && reviewCurrent ? shownReview.review.costs.totalSol : null, coinsN), edit: null },
         ] : null;
         const coinsForName = coins;
+        const two = pairOn && !!ruleB;
+        // website-22 (QA 9 items 11 and 12, audit 10 item 10): every problem in the name step's fields, each with the field it belongs to,
+        // so the review lists all of them (the note included) and each one's Edit link lands on its field
+        const profileBlockers: Blocker[] = [
+          ...profileFieldProblems(profile).map((x) => ({ text: two ? `$${ticker || "A"}: ${x.text}` : x.text, edit: () => editField("a", x.field) })),
+          ...(two ? profileFieldProblems(profileB).map((x) => ({ text: `$${tickerB || "B"}: ${x.text}`, edit: () => editField("b", x.field) })) : []),
+          ...(noteProblem && !pairOn ? [{ text: noteProblem, edit: () => editField("a", "note") }] : []),
+          ...identity.map((x) => ({ text: x, edit: () => editField("b", /ticker/.test(x) ? "ticker" : "name") })),
+        ];
+        // QA 9 item 14: the image line is confirmed on step 4; Next waits, and says why beside it
+        const rightsMissing = (!!profile.image && !profile.rights) || (two && !!profileB.image && !profileB.rights);
         if (guide.follow && guide.phase === "name") {
-          return <ReviewCard mode="name" coins={coinsForName} sentence={sentence} ends={null} shares={{ options: [...shareOptions], value: shareValue, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
-            image={pairOn && ruleB ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`)}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false)}</div> : imageField(profile, setProfile, null)}
-            profile={pairOn && ruleB ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} part="text" who={`$${ticker || "A"}`} /><ProfileFields value={profileB} onChange={setProfileB} part="text" who={`$${tickerB || "B"}`} /></div> : <ProfileFields value={profile} onChange={setProfile} part="text" />}
+          return <>
+            {keptProfile && keptProfile.length > 0 && <p className="rounded border border-amber-400/50 p-2 text-xs text-amber-200" role="status" data-kept-profile>{keptProfileLine(keptProfile)} <button type="button" data-nav className="underline" onClick={() => setKeptProfile(null)}>{KEPT_PROFILE_REUSE}</button> <button type="button" data-nav className="ml-2 underline" onClick={() => { setProfile((x) => ({ ...x, description: "", x: "", telegram: "", website: "" })); setProfileB((x) => ({ ...x, description: "", x: "", telegram: "", website: "" })); setNote(""); setKeptProfile(null); }}>{KEPT_PROFILE_FRESH}</button></p>}
+            <ReviewCard mode="name" coins={coinsForName} sentence={sentence} ends={null} shares={{ options: [...shareOptions], value: shareValue, onChange: () => {} }} problems={[]} error={null} busy={false} ready={ready} creator={creator || null} onLaunch={() => {}}
+            image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
+            profile={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} part="text" who={`$${ticker || "A"}`} side="a" /><ProfileFields value={profileB} onChange={setProfileB} part="text" who={`$${tickerB || "B"}`} side="b" /></div> : <ProfileFields value={profile} onChange={setProfile} part="text" side="a" />}
             note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}
             tickerChecks={reviewCurrent ? rv?.tickers ?? null : null}
-            profileProblems={[...linkAwareProblems(profile), ...(pairOn && ruleB ? linkAwareProblems(profileB).map((x) => `$${tickerB || "B"}: ${x}`) : []), ...identity]}
-            next={nextBtn("Review", "review")} />;
+            profileProblems={profileBlockers}
+            next={<StickyAction>{rightsMissing && <p className="mb-1 text-xs text-amber-300" role="status" data-next-blocked>{IMAGE_RIGHTS_REQUIRED}</p>}<button type="button" data-nav className={primary + " w-full sm:w-auto"} disabled={rightsMissing} onClick={() => setGuide((g) => ({ ...g, phase: "review" }))}>Review</button></StickyAction>} />
+          </>;
         }
+        // website-22 (audit 10 item 10): the server's own problems join the list, each said once (a problem the page already names is not repeated)
+        const clientSaid = new Set([nameProblem(name), tickerProblem(ticker), ...(two ? [nameProblem(nameB), tickerProblem(tickerB)] : []), ...profileFieldProblems(profile).map((x) => x.text), ...(two ? profileFieldProblems(profileB).map((x) => x.text) : []), noteProblem ?? "", ...problems].filter(Boolean).map((x) => x.replace(/\.$/, "").toLowerCase()));
+        const serverBlockers = reviewCurrent ? (shownReview.review?.problems ?? []).filter((x) => !clientSaid.has(x.replace(/^Coin [AB]\. /, "").replace(/\.$/, "").toLowerCase())) : [];
+        const allBlockers: Blocker[] = [...profileBlockers, ...reviewBlockers({ serverProblems: serverBlockers }).map((t) => ({ text: t, edit: /description/i.test(t) ? () => editField(/^Coin B\. /.test(t) ? "b" : "a", "description") : /\bnote\b/i.test(t) ? () => editField("a", "note") : null }))];
+        // audit 10 item 3: the fee sentence by the venue the launch really uses
+        const venue: LaunchVenue = !two && !(pairOn && !ruleB) ? "single" : meetingsOn ? "linked" : pairOn && !ruleB ? (pairVenue === "pair-curve" ? "pair-curve" : "linked") : "independent";
+        // QA 9 item 13, audit 10 item 19: the public profile as it is pinned, with an Edit link per field
+        const publicProfile = guide.follow ? {
+          coins: [
+            { side: "a" as const, image: coinA.image, name, ticker, description: profile.description, links: creatorLinks({ x: profile.x, telegram: profile.telegram, website: profile.website }).links, note: pairOn ? null : note },
+            ...(two ? [{ side: "b" as const, image: coins[1].image, name: nameB, ticker: tickerB, description: profileB.description, links: creatorLinks({ x: profileB.x, telegram: profileB.telegram, website: profileB.website }).links, note: null }] : []),
+          ],
+          edit: (side: "a" | "b", f: ProfileFieldKey) => editField(side, f),
+        } : null;
         return (
           <>
             <ReviewCard
@@ -1630,7 +1808,7 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               shares={{ options: [...shareOptions], value: shareValue, onChange: setShare }}
               inverse={curDials?.inverse ? { options: curDials.inverse.options, value: curDials.inverse.on ? "on" : "off", onChange: (v) => { flowStats.current.decisions++; setDial("inverse", v); } } : null}
               raise={pairOn && !ruleB ? null : meetingsOn && !shownReview.review?.raise ? null : { options: [...RAISE_PRESETS_SOL], value: raiseSol, onChange: (v) => { flowStats.current.decisions++; setRaiseSol(v); }, line: shownReview.review?.raise?.line ?? null }}
-              durations={pairOn && !elPick && !meetingsOn ? { options: [...(rivalSeason && !rivalGame ? [] : [{ value: "game", label: RIVALRY_GAME_LABEL.toLowerCase() }]), { value: "season", label: RIVALRY_SEASON_LABEL.toLowerCase() }], value: pairMode === "game" ? "game" : "season", onChange: (v) => { flowStats.current.decisions++; if (rivalSeason) setGame(v === "game" && rivalGame ? rivalGame : rivalSeason); setPairMode(v === "game" ? "game" : "season"); if (v !== "game" && rivalA && rivalB) renameForSeason(rivalA, rivalB); else if (v === "game" && rivalGame?.pair) { const g = rivalGame.pair; if (nameAuto) { const nm = pairNames(g.a.nickname ?? g.a.name, g.b.nickname ?? g.b.name); setName(nm.a); setNameB(nm.b); } if (tickerAuto) { const tk = pairTickers(g.a.abbr, g.b.abbr); setTicker(tk.a); setTickerB(tk.b); } } } } : null}
+              durations={pairOn && !elPick && !meetingsOn ? { options: [...(rivalSeason && !rivalGame ? [] : [{ value: "game", label: RIVALRY_GAME_LABEL.toLowerCase() }]), { value: "season", label: RIVALRY_SEASON_LABEL.toLowerCase() }], value: pairMode === "game" ? "game" : "season", onChange: (v) => { flowStats.current.decisions++; if (rivalSeason) setGame(v === "game" && rivalGame ? rivalGame : rivalSeason); setPairMode(v === "game" ? "game" : "season"); if (v !== "game" && rivalA && rivalB) renameForSeason(rivalA, rivalB); else if (v === "game" && rivalGame?.pair) { const g = rivalGame.pair; if (nameAuto) { const nm = pairNames(g.a.nickname ?? g.a.name, g.b.nickname ?? g.b.name, { a: g.a.code ?? g.a.abbr, b: g.b.code ?? g.b.abbr }); setName(nm.a); setNameB(nm.b); } if (tickerAuto) { const tk = pairTickers(g.a.code ?? g.a.abbr, g.b.code ?? g.b.abbr); setTicker(tk.a); setTickerB(tk.b); } } } } : null}
               note={pairOn ? null : { value: note, onChange: setNote, problem: noteProblem }}
               problems={problems}
               error={launchErr}
@@ -1641,14 +1819,18 @@ function LaunchWizard({ onReset }: { onReset: () => void }) {
               duplicate={<DuplicateNotice existing={(shownReview.review as (LaunchReview & { existing?: ExistingCoin[] }) | null)?.existing ?? []} />}
               summary={<PreWalletSummary review={shownReview.review} loading={shownReview.loading} error={shownReview.error} updating={reviewSlot.rev !== reviewKey && !!reviewSlot.review} />}
               cost={shownReview.review && reviewCurrent ? `The estimated cost is about ${shownReview.review.costs.totalSol} SOL.` : null}
-              image={pairOn && ruleB ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`)}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false)}</div> : imageField(profile, setProfile, null)}
-              profile={pairOn && ruleB ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} part="text" who={`$${ticker || "A"}`} /><ProfileFields value={profileB} onChange={setProfileB} part="text" who={`$${tickerB || "B"}`} /></div> : <ProfileFields value={profile} onChange={setProfile} part="text" />}
+              costNote={venue === "linked" || venue === "pair-curve" ? PAIR_COST_EXCLUSIONS : null}
+              venue={venue}
+              publicProfile={publicProfile}
+              pairDiagram={two || (pairOn && !ruleB) ? (venue === "independent" ? "independent" : "linked") : null}
+              image={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2" data-pair-images>{imageField(profile, setProfile, `$${ticker || "A"}`, true, "a")}{imageField(profileB, setProfileB, `$${tickerB || "B"}`, false, "b")}</div> : imageField(profile, setProfile, null)}
+              profile={two ? <div className="grid min-w-0 gap-2 md:grid-cols-2"><ProfileFields value={profile} onChange={setProfile} part="text" who={`$${ticker || "A"}`} side="a" /><ProfileFields value={profileB} onChange={setProfileB} part="text" who={`$${tickerB || "B"}`} side="b" /></div> : <ProfileFields value={profile} onChange={setProfile} part="text" side="a" />}
               advanced={teamPath ? { defaults: teamAdvancedDefaults({ sharePct: pct(shareValue), raiseSol: raiseSol, minForwardSol: String(ON_END_DEFAULT.sweepThresholdLamports / 1e9), profile: { image: !!profile.image, description: !!profile.description.trim(), links: [profile.x, profile.telegram, profile.website].filter((x) => x.trim()).length } }) } : null}
-              profileProblems={[...linkAwareProblems(profile), ...(pairOn && ruleB ? linkAwareProblems(profileB).map((x) => `$${tickerB || "B"}: ${x}`) : []), ...identity, ...(reviewCurrent ? (shownReview.review?.problems ?? []).filter((x) => /^(Coin B\. )?The description /.test(x) || x.endsWith(RESERVED_REFUSAL) || /set of outcomes/.test(x)) : [])]}
+              profileProblems={allBlockers}
               blocked={walletBlocked(pairOn ? "matchup" : launchTypeOf(rule), pairOn)}
-              warnings={[...srcWarnings, ...(reviewCurrent ? (rv as { warnings?: string[] } | null)?.warnings ?? [] : [])]}
+              warnings={[...new Set([...renderWarnings(srcWarnings, ticker, tickerB), ...(reviewCurrent ? (rv as { warnings?: string[] } | null)?.warnings ?? [] : [])])]}
               shareNotice={shareNotice}
-              event={flow === "single" && pick?.oracle === "polymarket" && !pairOn ? eventInfo : null}
+              event={flow === "single" && pick?.oracle === "polymarket" && !pairOn ? eventShown : null}
               budget={budget}
               dispute={reviewCurrent ? rv?.dispute ?? null : null}
               graduation={rv?.graduation ?? null}

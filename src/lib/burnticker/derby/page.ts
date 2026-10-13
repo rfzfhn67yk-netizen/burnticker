@@ -104,7 +104,7 @@ export function derbyPairJson(reg: Pick<Registry, "token" | "lockedRule" | "getS
     season: { start: d.season.start, days: d.season.days, endsOn, over: now >= seasonEndMs(d), windows: windows.length, windowsDone: days.length },
     score, forwarded: { aToB: fa.sol, bToA: fb.sol, windows: fa.n + fb.n }, days: days.sort((x, y) => (x.at < y.at ? -1 : 1)),
     retired: { a: ta.status === "retired" ? retiredReasonOf(reg, ta.mint) ?? "retired" : null, b: tb.status === "retired" ? retiredReasonOf(reg, tb.mint) ?? "retired" : null },
-    note: d.selector === "coinvs" ? "the winner's coin burns; a tie burns neither (a void receipt still posts); a withheld window (the cross-read disagreed or a value was missing) burns nothing" : "each side counts its own direction of the move; a withheld window burns nothing",
+    note: d.selector === "coinvs" && d.flip ? `$${ta.ticker} burns once on the first window ${d.a.symbol} passes ${d.b.symbol}, and $${tb.ticker} once if the run ends without it; ${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned; a withheld window (the cross-read disagreed or a value was missing) settles nothing` : d.selector === "coinvs" ? `$${ta.ticker} burns on a window ${d.a.symbol} wins and $${tb.ticker} on a window ${d.b.symbol} wins, each taking the other new coin's share for that window; ${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned; a tie burns neither (a void receipt still posts); a withheld window (the cross-read disagreed or a value was missing) burns nothing` : "each side counts its own direction of the move; a withheld window burns nothing",
   };
 }
 

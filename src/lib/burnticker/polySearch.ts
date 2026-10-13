@@ -78,7 +78,18 @@ export function outcomeTicker(label: string): string {
 }
 
 export interface MarketMatch { kind: "market"; event: GammaEvent; market: GammaMarket; score: number; inFamily: boolean }
-export interface PickerOutcome { label: string; conditionId: string; question: string; yes: string; no: string; ticker: string }
+export interface PickerOutcome { label: string; conditionId: string; question: string; yes: string; no: string; ticker: string; /** audit 10 #21: the parent market and its end, so a long list keeps its context */ parent?: string; endsAt?: string | null }
+/**
+ * A LONG OUTCOME LIST (audit 10 #21, 2026-10-13): filtered by the words typed (label or question, any case or accent), then shown a page at a
+ * time with what is left ("Show 24 more"), each outcome keeping its parent market and end date.
+ */
+export const PICKER_PAGE = 12;
+export function pickerPage<T extends Pick<PickerOutcome, "label" | "question">>(outcomes: readonly T[], filter: string | null, shown = PICKER_PAGE): { outcomes: T[]; total: number; more: number; moreLabel: string | null } {
+  const f = fold(filter ?? "");
+  const hits = f ? outcomes.filter((o) => fold(`${o.label} ${o.question}`).includes(f)) : [...outcomes];
+  const list = hits.slice(0, Math.max(1, shown)), more = hits.length - list.length;
+  return { outcomes: list, total: hits.length, more, moreLabel: more > 0 ? `Show ${Math.min(more, PICKER_PAGE)} more of ${more}` : null };
+}
 export interface EventMatch { kind: "event"; event: GammaEvent; outcomes: PickerOutcome[]; score: number; noun: string; note: string | null; phrase: EventPhrase }
 
 const overlapTitle = (tokens: string[], title: string): number => { if (!tokens.length) return 0; const t = new Set(fold(title).split(" ")); return tokens.filter((w) => t.has(w)).length / tokens.length; };
@@ -119,7 +130,7 @@ export function matchPolymarket(s: SplitQuery, events: readonly GammaEvent[], re
     const sc = 1.4 + overlapTitle(phraseTokens, e.title) * 0.6 + (/\bwinner\b/i.test(e.title) ? 0.3 : 0) + (specific ? 0.9 : 0) + flagship + (entityTokens.length && specific ? 0.3 : 0);
     const noun = specific ? s.phrase.noun : "outcome";
     const note = entityTokens.length ? `"${s.entity}" is not one of this market's ${noun}s — pick a listed ${noun}, or use the nearest "${s.entity}" market.` : null;
-    eventsOut.push({ kind: "event", event: e, outcomes: outs.map((m) => ({ label: outcomeLabel(m), conditionId: m.conditionId, question: m.question, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No", ticker: outcomeTicker(outcomeLabel(m)) })), score: sc, noun, note, phrase: s.phrase });
+    eventsOut.push({ kind: "event", event: e, outcomes: outs.map((m) => ({ label: outcomeLabel(m), conditionId: m.conditionId, question: m.question, yes: m.outcomes[0] ?? "Yes", no: m.outcomes[1] ?? "No", ticker: outcomeTicker(outcomeLabel(m)), parent: e.title.trim(), endsAt: m.endDate ?? e.endDate ?? null })), score: sc, noun, note, phrase: s.phrase });
   }
   return { markets, events: eventsOut };
 }

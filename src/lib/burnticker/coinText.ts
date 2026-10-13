@@ -64,10 +64,10 @@ export function serverDescribeCtx(rule: BurnRule, raw: unknown, o: { seriesTitle
  * The describe context's `stated` from the server's read of one Polymarket market (oracle/polymarket.ts seriesInfo → polyStated), in
  * the same shape the launch page passes to describeRule. Null when the read carried none (a tag or event series, or no read).
  */
-export function statedCtx(summary: { stated?: { resolutionSource: { phrase: string | null; crossRead: { text: string } | null }; finalAfter: { text: string } } } | null | undefined): NonNullable<DescribeCtx["stated"]> | null {
+export function statedCtx(summary: { stated?: { resolutionSource: { phrase: string | null; crossRead: { text: string } | null }; finalAfter: { text: string } }; endsAt?: string | null } | null | undefined): NonNullable<DescribeCtx["stated"]> | null {
   const s = summary?.stated;
   if (!s) return null;
-  return { phrase: s.resolutionSource.phrase, crossRead: s.resolutionSource.crossRead ? { text: s.resolutionSource.crossRead.text } : null, finalAfter: { text: s.finalAfter.text } };
+  return { phrase: s.resolutionSource.phrase, crossRead: s.resolutionSource.crossRead ? { text: s.resolutionSource.crossRead.text } : null, finalAfter: { text: s.finalAfter.text }, ...(summary?.endsAt ? { endsAt: summary.endsAt } : {}) };
 }
 
 /** The generated paragraph for a launch (the registry stores it + the rule footer; see metadataDescription). */

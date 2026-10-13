@@ -1,10 +1,13 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { dialsFor } from "@/lib/burnticker/dials";
-import { championPathRule, describeEndSink, endText, meetingsTicker, windowKindOf } from "@/lib/burnticker/describe";
+import { championPathRule, describeEndSink, endText, meetingsTicker, teamRefByName, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
-import { meetingsPairSeries, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { LIVE_NOW, meetingsPairSeries, noPlayoffs, parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
+import { DESCRIPTION_MAX, linkProblem } from "@/lib/burnticker/creatorProfile";
+import { controlCharProblem } from "@/lib/burnticker/launchFields";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * THE GUIDED LAUNCH (website-19; the owner, 2026-10-12: "should we have the coin launch be a step by step process with a guide, giving
@@ -105,7 +108,9 @@ export const imageStateProblem = (s: "pending" | "failed" | null): string | null
 export const IMAGE_NOT_KEPT = "A saved draft does not keep an image. Add it again if you want one.";
 
 /** A one-time market's fade side, said with its real cadence. */
-export const MARKET_NO_SENTENCE = "The coin spends its share once, if the market settles NO. A voided market is not a NO.";
+/** QA pass 9 #22 (2026-10-13): the market's NO option is said as what it is, with its own helper (never "each day or reading"). */
+export const MARKET_NO_LABEL = "If it resolves NO";
+export const MARKET_NO_SENTENCE = "The coin spends its share once, if the market resolves NO. A voided market is not a NO, and nothing burns for it.";
 
 /** The reasons a pattern is greyed, in plain words. */
 export const PATTERN_REASON = {
@@ -173,7 +178,7 @@ export function patternOptions(i: PatternInput): { options: PatternOption[]; pre
     return { options: [mk("every", null), mk("fade", e ? fadeReason : null), mk("once", r?.oracle === "polymarket" ? null : onceReason), winner], preselected: r?.oracle === "polymarket" ? "once" : r?.inverse ? "fade" : "every" };
   }
   // a one-time market's "does not happen" is its NO side: once, on a NO payout (never "each day or reading")
-  if (i.follow === "market") return { options: [mk("every", PATTERN_REASON.marketOnce), { ...mk("fade", r && r.kind === "binary" ? null : PATTERN_REASON.marketFade), sentence: MARKET_NO_SENTENCE }, mk("once", null), winner], preselected: r?.kind === "binary" && r.binary?.onNo && !r.binary.onYes ? "fade" : "once" };
+  if (i.follow === "market") return { options: [mk("every", PATTERN_REASON.marketOnce), { ...mk("fade", r && r.kind === "binary" ? null : PATTERN_REASON.marketFade), label: MARKET_NO_LABEL, sentence: MARKET_NO_SENTENCE }, mk("once", null), winner], preselected: r?.kind === "binary" && r.binary?.onNo && !r.binary.onYes ? "fade" : "once" };
   // a published number: the recurring rule and its fade side, or a one-time release
   if (one) return { options: [mk("every", PATTERN_REASON.oneShotEvery), mk("fade", PATTERN_REASON.oneShotFade), mk("once", null), winner], preselected: "once" };
   const fade = r ? (dialsFor(r).inverse ? null : plainInverseReason(r) || PATTERN_REASON.oneShotFade) : null;
@@ -205,10 +210,18 @@ export function unitPhrase(unit: { label: string } | null | undefined, valueLabe
 export function budgetCopy(rule: BurnRule, share: number, unit: string | null): { label: string; line: string; math: string | null } {
   const p = pctLabel(share);
   if (isOneShotRule(rule)) return { label: "Share of the burn pool, once", line: share >= 1 ? "This coin burns its whole pool once, when the result is in. The burn lands in slices sized to the pool's liquidity." : `This coin burns ${p} of its pool once, when the result is in. The burn lands in slices sized to the pool's liquidity.`, math: null };
-  if (rule.kind === "scalar" && rule.inverse) return { label: "Share of the burn pool per reading", line: `Each reading where the number does not move the rule's way spends ${p} of the burn pool buying and burning this coin. A reading counts once at most, however flat it was.`, math: null };
+  // QA pass 9 #18 and #20 (2026-10-13): the fade side is said for what the rule reads (a game day, a day with none of the events, or a
+  // number that did not move), and a unit of one is a noun ("each earthquake", never "each 1 earthquake")
+  if (rule.kind === "scalar" && rule.inverse) {
+    const e = rule.oracle === "catalogue" && rule.series ? parseEspnSeries(rule.series) : null;
+    if (e) return { label: "Share of the burn pool per game day", line: `Each game day without the result the rule names spends ${p} of the burn pool buying and burning this coin. A day with two games counts once.`, math: null };
+    if (rule.scalar?.baseline === 0) return { label: "Share of the burn pool per day", line: `Each day with none of the events the rule counts spends ${p} of the burn pool buying and burning this coin. A day counts once at most.`, math: null };
+    return { label: "Share of the burn pool per reading", line: `Each reading where the number does not move the rule's way spends ${p} of the burn pool buying and burning this coin. A reading counts once at most, however flat it was.`, math: null };
+  }
   if (rule.kind === "scalar" && unit) {
     const three = Math.round((1 - (1 - share) ** 3) * 10000) / 100;
-    return { label: `Share of the burn pool per ${unit}`, line: `Each ${unit} spends ${p} of what is left in the burn pool buying and burning this coin.`, math: `A reading with several units compounds, so 3 units spend about ${three}%, not ${Math.round(share * 300 * 10) / 10}%. One burn run buys with at most 2% of the SOL in the coin's Raydium pool, and the rest waits for the next run.` };
+    const u = unit.replace(/^1\s+(?=\D)/, "");
+    return { label: `Share of the burn pool per ${u}`, line: `Each ${u} spends ${p} of what is left in the burn pool buying and burning this coin.`, math: `A reading with several units compounds, so 3 units spend about ${three}%, not ${Math.round(share * 300 * 10) / 10}%. One burn run buys with at most 2% of the SOL in the coin's Raydium pool, and the rest waits for the next run.` };
   }
   return { label: "Share of the burn pool per result", line: `Each result that fires the rule spends ${p} of the burn pool buying and burning this coin. The token amount bought varies.`, math: null };
 }
@@ -240,7 +253,10 @@ export function patternWords(id: PatternId, o: { follow: FollowId; subject?: str
     if (id === "fade") return { label: "Each game its own team does not lose", sentence: "Each coin spends a share of its own burn pool after each game its team wins or ties, this season." };
     if (id === "once") return { label: "Their next game only", sentence: "When their next listed game is final, the coin of the team that lost burns once." };
   }
+  if (o.follow === "market" && id === "fade") return { label: MARKET_NO_LABEL, sentence: MARKET_NO_SENTENCE };
   if (o.follow === "rivalry" && o.pairKind === "candidates" && id === "once") return { label: "If this candidate wins", sentence: "Each coin burns once, if its own candidate's market pays out YES." };
+  // website-22 (audit 10 item 22): a one-time market's two sides are its YES and its NO payout, each once
+  if (o.follow === "market" && id === "once") return { label: MARKET_YES_LABEL, sentence: MARKET_YES_SENTENCE };
   return { label: PATTERNS[id].label, sentence: PATTERNS[id].sentence };
 }
 
@@ -354,8 +370,8 @@ export function matchupFacts(o: { a: string; b: string; oneLinerA: string; oneLi
       ? `When the game is final, the coin of the team that lost burns once. A ${o.tie} burns neither coin, and a postponed or cancelled game burns nothing.`
       : `A game counts only when it has a settled result. A loss burns that team's coin. A win or a ${o.tie} burns nothing, and a postponed or cancelled game counts for neither coin.`;
   const example = o.inverse
-    ? `For example, on a day ${o.teamA} win, ${A} spends its share of its own burn pool and the tokens it buys are burned. ${B} burns that day too if ${o.teamB} also played and did not lose.`
-    : `For example, if ${o.teamA} lose, ${A} spends its share of its own burn pool, the ${A} tokens it buys are burned, and ${B} does nothing for that game.`;
+    ? `For example, on a day ${teamRefByName(o.teamA)} win, ${A} spends its share of its own burn pool and the tokens it buys are burned. ${B} burns that day too if ${teamRefByName(o.teamB)} also played and did not lose.`
+    : `For example, if ${teamRefByName(o.teamA)} lose, ${A} spends its share of its own burn pool, the ${A} tokens it buys are burned, and ${B} does nothing for that game.`;
   return { kind: "independent", trigger, burned: `The coin whose rule fires is bought and burned. ${rules}`, pays: "Each coin pays from its own burn pool.", moves: "No SOL moves between the two coins, because they are separate launches.", example };
 }
 
@@ -399,14 +415,21 @@ export function pairTickers(a: string, b: string): { a: string; b: string } {
   return { a: `${A}V${B}`.slice(0, 10), b: `${B}V${A}`.slice(0, 10) };
 }
 /** The on-chain name carries the matchup: "WIF vs BONK, WIF side" (at most 32 characters). */
-export function pairNames(a: string, b: string): { a: string; b: string } {
-  // audit 7 item 8: never cut mid-word ("Guardians vs Rays, Guardians sid"): the full form, then the shorter "Guardians vs Rays", then
-  // whole words up to 32 bytes (the program counts a name in bytes)
+export function pairNames(a: string, b: string, codes: { a?: string | null; b?: string | null } = {}): { a: string; b: string } {
+  // audit 7 item 8: never cut mid-word ("Guardians vs Rays, Guardians sid"): the full form, then the shorter "Guardians vs Rays".
+  // QA pass 9 #15: never a cut team name either ("Leeds United vs Manchester"): a complete shorter name instead, from the team's common
+  // short form ("Man United"), then the other team's code ("Leeds United vs MUN"), then both codes; only then whole words up to 32 bytes
   const bytes = (x: string) => new TextEncoder().encode(x).length;
-  const words = (x: string) => { let out = ""; for (const w of x.split(" ")) { const next = out ? `${out} ${w}` : w; if (bytes(next) > 32) break; out = next; } return out.replace(/[,\s]+$/, ""); };
   const full = { a: `${a} vs ${b}, ${a} side`, b: `${b} vs ${a}, ${b} side` };
   if (bytes(full.a) <= 32 && bytes(full.b) <= 32) return full;   // both sides take the same form
-  return { a: words(`${a} vs ${b}`), b: words(`${b} vs ${a}`) };
+  const sa = shortTeamName(a), sb = shortTeamName(b), ca = codes.a ?? null, cb = codes.b ?? null;
+  const side = (x: string, sx: string, cx: string | null, y: string, sy: string, cy: string | null) => fitName([`${x} vs ${y}`, `${sx} vs ${sy}`, `${x} vs ${sy}`, ...(cy ? [`${x} vs ${cy}`, `${sx} vs ${cy}`] : []), ...(cx && cy ? [`${cx} vs ${cy}`] : []), sx]);
+  return { a: side(a, sa, ca, b, sb, cb), b: side(b, sb, cb, a, sa, ca) };
+}
+/** The short form people use for a long club name ("Manchester United" → "Man United", "Wolverhampton Wanderers" → "Wolves"); else the name. */
+export function shortTeamName(n: string): string {
+  const known: Record<string, string> = { "Wolverhampton Wanderers": "Wolves", "Brighton & Hove Albion": "Brighton", "Brighton and Hove Albion": "Brighton", "Tottenham Hotspur": "Spurs", "Nottingham Forest": "Forest", "Heart of Midlothian": "Hearts", "Borussia Mönchengladbach": "Gladbach", "Paris Saint-Germain": "PSG" };
+  return known[n] ?? n.replace(/^Manchester /, "Man ");
 }
 /**
  * A team coin's ticker: ONE generator for the wizard, /v1/search and /v1/sports/teams (tickers.ts; ChatGPT audit 6 item 6). $LAD (the
@@ -420,7 +443,7 @@ export function teamTickerForRule(r: BurnRule, abbr?: string | null): string | n
   const e = r.oracle === "catalogue" && r.series ? parseEspnSeries(r.series) : null;
   if (!e) return null;
   if (e.kind !== "team") return teamTicker(abbr ?? e.abbr, { league: e.league, window: "game", outcome: e.outcome, inverse: !!r.inverse });
-  if (e.window.kind === "meetings") return meetingsTicker(abbr ?? e.abbr, e.window.opp);
+  if (e.window.kind === "meetings") return meetingsTicker(abbr ?? e.abbr, e.window.opp, abbr ? null : e.league);
   const w = e.window, window = w.kind === "legacy" ? (w.scope === "post" ? "post" : "season") : w.kind;
   return teamTicker(abbr ?? e.abbr, { league: e.league, window, games: w.kind === "next" ? w.n : null, outcome: e.outcome, inverse: !!r.inverse });
 }
@@ -451,10 +474,24 @@ export const RIVALRY_GAME_LABEL = "One game between them";
 export const RIVALRY_GAME_LINE = "Pick the game. When it is final, the coin of the team that lost burns once.";
 export const RIVALRY_SEASON_LABEL = "Every loss this season";
 export const RIVALRY_SEASON_LINE = "Each coin burns every time its own team loses any game this season, through the postseason, not only the games between these two.";
+/** QA pass 9 #19: "through the postseason" only for a league that has one (European soccer leagues and the UEFA cups do not). */
+export const rivalrySeasonLine = (league: LeagueId | null): string => (league && noPlayoffs(league) ? "Each coin burns every time its own team loses any match this season, not only the matches between these two." : RIVALRY_SEASON_LINE);
 export const RIVALRY_SCOPE_LINE = "The first two options make two separate coins, one for each team. Each burns from its own pool, and no SOL moves between them. The third links the two coins, so SOL moves to the winning coin's burn.";
 /** Item 154: a failed schedule read is never "no listed game". */
 export const SCHEDULE_UNAVAILABLE_LINE = "The schedule could not be read just now, so their games are not shown.";
 export const NO_LISTED_MEETING_LINE = "The schedule lists no game between them right now.";
+/**
+ * QA pass 9 #4 (2026-10-13): the one-game option lists EVERY game between the two teams that the league's schedule lists for the season and
+ * that is still to be played (GET /v1/sports/rivalry `meetings[].oneGame`), not only the next eight days, and says what was searched.
+ */
+export function oneGameSearchLine(season: string, n: number, playoffs: boolean): string {
+  const where = `the league's schedule for the ${season} season${playoffs ? ", playoffs included" : ""}`;
+  return n > 1 ? `Searched ${where}. It lists ${n} games between them still to be played. Pick the one the coins follow.`
+    : n === 1 ? `Searched ${where}. It lists one game between them still to be played.`
+    : `Searched ${where}. It lists no game between them still to be played.`;
+}
+/** QA pass 9 #28: college football lists the FBS by default; the rest of the list is one choice away. */
+export const FBS_DEFAULT_LINE = (fbs: number, others: number): string => `Showing the ${fbs} FBS programs, in alphabetical order. ${others} more teams from the FCS and other divisions are listed under Show all divisions.`;
 /** Item 157: what the list covers. */
 export const scheduleCoverageLine = (n: number): string => (n > 1 ? `The league's schedule lists ${n} games between them from today on. Pick the one the coins follow.` : n === 1 ? "The league's schedule lists one game between them from today on." : "Only games the league's schedule lists from today on can be picked.");
 /**
@@ -477,8 +514,8 @@ export function meetingsPairRules(league: LeagueId, a: string, b: string, year: 
   return { a: { ...firstPartyRule(s.a, fraction), onEnd: { ...MEETINGS_ON_END } }, b: { ...firstPartyRule(s.b, fraction), onEnd: { ...MEETINGS_ON_END } } };
 }
 /** The pair's names and tickers: "76ers vs Celtics" and "Celtics vs 76ers", $PHIVBOS and $BOSVPHI (tickers are upper case everywhere). */
-export function meetingsPairNames(a: { abbr: string; nickname: string | null; name: string }, b: { abbr: string; nickname: string | null; name: string }): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
-  const n = pairNames(a.nickname ?? a.name, b.nickname ?? b.name), t = pairTickers(a.abbr, b.abbr);
+export function meetingsPairNames(a: { abbr: string; code?: string | null; nickname: string | null; name: string }, b: { abbr: string; code?: string | null; nickname: string | null; name: string }): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
+  const n = pairNames(a.nickname ?? a.name, b.nickname ?? b.name, { a: a.code ?? a.abbr, b: b.code ?? b.abbr }), t = pairTickers(a.code ?? a.abbr, b.code ?? b.abbr);
   return { a: { name: n.a, ticker: t.a }, b: { name: n.b, ticker: t.b } };
 }
 /**
@@ -498,11 +535,11 @@ export const meetingsPairSentence = (o: { a: string; b: string; oneA: string; on
   `$${o.a} ${o.oneA}, and $${o.b} ${o.oneB}. After each game between them, the coin of the team that won spends ${o.share} of its own burn pool, and the other coin sends ${o.share} of its pool to the winning coin's burn.`;
 /** The review's "Which coin burns" fact for a rivalry series pair: the winning team's coin, which also takes the other coin's share. */
 export const meetingsWhichCoinLine = (o: { a: string; b: string; teamA: string; teamB: string }): string =>
-  `$${o.a} when the ${o.teamA} win a game between them, and $${o.b} when the ${o.teamB} win one. The winning coin also takes the other coin's share for that game.`;
+  `$${o.a} when ${teamRefByName(o.teamA)} win a game between them, and $${o.b} when ${teamRefByName(o.teamB)} win one. The winning coin also takes the other coin's share for that game.`;
 /** Step 2: the heading of the meetings list under the third rivalry option. */
 export const MEETINGS_LIST_LABEL = "Their games this season";
 /** One game between the two teams as GET /v1/sports/rivalry lists it (`result` is from team a's side). */
-export interface MeetingRow { eventId: string; startsAt: string; date?: string; playoff: boolean; home: string; away: string; status: string; result: string }
+export interface MeetingRow { eventId: string; startsAt: string; date?: string; playoff: boolean; home: string; away: string; status: string; result: string; /** QA pass 9 #35 */ live?: boolean; /** QA pass 9 #4: a game still to be played, as a one-game pair (aHome from the fixture, QA pass 9 #2) */ oneGame?: { aHome: boolean; series: { aLoss: string; bLoss: string } } | null }
 /**
  * The meetings list (step 2): soonest first, each with where it is played from the first team's side ("vs BOS" at home, "at BOS" away),
  * whether it is a playoff game, and its state once it is not just scheduled ("PHI won", "BOS won", "draw", "in progress", "postponed or
@@ -511,7 +548,7 @@ export interface MeetingRow { eventId: string; startsAt: string; date?: string; 
 export function meetingsListRows(ms: readonly MeetingRow[], a: string, b: string): { key: string; startsAt: string; where: string; playoff: boolean; state: string | null }[] {
   return [...ms].sort((x, y) => x.startsAt.localeCompare(y.startsAt)).map((m) => ({
     key: m.eventId, startsAt: m.startsAt, where: m.home === a ? `vs ${b}` : `at ${b}`, playoff: !!m.playoff,
-    state: m.result === "win" ? `${a} won` : m.result === "loss" ? `${b} won` : m.result === "draw" ? "draw" : m.result === "void" || m.status === "postponed or cancelled" ? "postponed or cancelled" : m.status === "in progress" ? "in progress" : null,
+    state: m.result === "win" ? `${a} won` : m.result === "loss" ? `${b} won` : m.result === "draw" ? "draw" : m.result === "void" || m.status === "postponed or cancelled" ? "postponed or cancelled" : m.status === "in progress" || m.live ? LIVE_NOW : null,
   }));
 }
 
@@ -519,7 +556,7 @@ export function meetingsListRows(ms: readonly MeetingRow[], a: string, b: string
 export const RIVAL_SAME_TEAM = "The second team was cleared, because it is now the first team. Pick another second team.";
 /** Audit 7 item 9: season coins are named for what they count ("Guardians 2026 Losses", $CLEL). */
 export function seasonPairNames(a: { abbr: string; nickname: string | null; name: string }, b: { abbr: string; nickname: string | null; name: string }, year: number, league: string | null): { a: { name: string; ticker: string }; b: { name: string; ticker: string } } {
-  const one = (t: typeof a) => { const n = `${t.nickname ?? t.name} ${year} Losses`; return { name: new TextEncoder().encode(n).length <= 32 ? n : `${t.abbr} ${year} Losses`, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "loss" }) }; };
+  const one = (t: typeof a & { code?: string | null }) => ({ name: fitName([`${t.nickname ?? t.name} ${year} Losses`, `${shortTeamName(t.nickname ?? t.name)} ${year} Losses`, `${t.code ?? t.abbr} ${year} Losses`]), ticker: teamTicker(t.abbr, { league, window: "season", outcome: "loss" }) });
   return { a: one(a), b: one(b) };
 }
 
@@ -532,3 +569,196 @@ export function walletAddressProblem(v: string): string | null {
   return "That is not a wallet address. Enter a creator's Solana wallet address: 32 to 44 letters and digits, without 0, O, I or a lower-case l.";
 }
 export const DRAFT_ROUTE_LINE = "Continue a draft, or start a new coin on the launch page";
+
+// ---- website-22 (QA pass 9 and audit 10, 2026-10-13) ----
+
+/**
+ * Audit 10 item 1: the event card's outcome follows the side the rule burns on. A market coin switched to "If it resolves NO" says the NO
+ * outcome, never the YES label it was picked with.
+ */
+export function eventForSide<T extends { outcome: string | null }>(ev: T | null, rule: Pick<BurnRule, "kind" | "binary"> | null, labels: { yes?: string | null; no?: string | null } = {}): T | null {
+  if (!ev || !rule || rule.kind !== "binary") return ev;
+  const no = !rule.binary?.onYes && !!rule.binary?.onNo;
+  return { ...ev, outcome: no ? `“${labels.no ?? "No"}”` : labels.yes ? `“${labels.yes}”` : ev.outcome };
+}
+
+/** What the page picked in step 2, as the review reads it (a Kalshi or Polymarket market, a catalogue series and its source's unit). */
+export interface PickLike { oracle: "kalshi" | "catalogue" | "polymarket"; series: string | null; market: string | null; source?: { unit: { label: string } | null } | null }
+/**
+ * Audit 10 item 2: whether the step-2 pick still describes the rule on screen. A pick left over from another path (a market searched, then
+ * a team chosen) never lends its unit, title or source to the active rule.
+ */
+export function pickDescribesRule(rule: Pick<BurnRule, "oracle" | "series" | "market"> | null, pick: PickLike | null): boolean {
+  if (!rule || !pick || pick.oracle !== rule.oracle) return false;
+  if (rule.market || pick.market) return (rule.market ?? null) === (pick.market ?? null);
+  return !!pick.series && pick.series === rule.series;
+}
+/** The unit the ACTIVE rule counts, for the budget row: the picked source's unit only while that pick is the rule's own scalar source. */
+export function activeUnit(rule: Pick<BurnRule, "oracle" | "series" | "market" | "kind"> | null, pick: PickLike | null): { label: string } | null {
+  return rule && rule.kind === "scalar" && pickDescribesRule(rule, pick) ? pick!.source?.unit ?? null : null;
+}
+
+/**
+ * Audit 10 item 6: a warning that names a coin is stored with placeholders and rendered with the tickers on screen, so a renamed coin is
+ * never warned about under its old ticker.
+ */
+export const WARN_A = "{A}", WARN_B = "{B}";
+export const renderWarnings = (ws: readonly string[], a: string, b: string): string[] => ws.map((w) => w.split(WARN_A).join(a || "A").split(WARN_B).join(b || "B"));
+/**
+ * sources-6 (audit 10 #5): the server's candidate-to-market sentence ("$ROGERS is named for Mike Rogers, but it settles on …"), with its
+ * leading ticker as a placeholder so a renamed coin is named as it is now.
+ */
+export const mappingWarning = (mapping: string, side: "A" | "B" = "A"): string => mapping.replace(/^\$[A-Z0-9]+\b/, `$${side === "A" ? WARN_A : WARN_B}`);
+/** The party-market warning (snag 8), with the coin's ticker as a placeholder (when the server sends no mapping). */
+export const partyMarketWarning = (question: string, surname: string, side: "A" | "B" = "A"): string => `$${side === "A" ? WARN_A : WARN_B} settles on the market "${question}". That market is about the party's result, not ${surname} by name.`;
+
+/**
+ * Audit 10 item 7: the review's "What triggers the burn" fact, built from its parts, never cut at the first full stop (which broke on
+ * "U.S."). `lead` is the sentence the rule is described with; the rest of the paragraph never enters the trigger.
+ */
+export function triggerText(o: { pair?: { a: string; b: string; oneA: string; oneB: string } | null; oneShot?: string | null; lead?: string | null; fallback: string }): string {
+  if (o.pair) return `$${o.pair.a || "A"} ${o.pair.oneA.replace(/\.$/, "")}, and $${o.pair.b || "B"} ${o.pair.oneB.replace(/\.$/, "")}.`;
+  if (o.oneShot) return o.oneShot;
+  return (o.lead ?? "").trim() || o.fallback;
+}
+
+/**
+ * Audit 10 item 22: the pattern words a one-time market reads with. Its "does not happen" side is its NO payout, once ("If it resolves
+ * NO"), never "each day or reading".
+ */
+export const MARKET_YES_LABEL = "If it resolves YES";
+export const MARKET_YES_SENTENCE = "The coin spends its share once, if the market settles YES.";
+
+/** Audit 10 item 22: the progress strip's answer for a source: its own words, without a trailing note in brackets. */
+export const whichAnswer = (title: string): string => title.replace(/\s*\([^()]{0,40}\)\s*$/, "").trim();
+
+/**
+ * QA 9 item 1: the pattern cards stay the same set while the creator moves between the forms of one subject (a natural disaster's
+ * per-event count and its next-event one-shot). A pattern is offered when either form takes it; its words are the current form's, or the
+ * other form's when only that one takes it. The order never changes, so a card never moves under a tap.
+ */
+export function stablePatternOptions(cur: readonly PatternOption[], other: readonly PatternOption[] | null): PatternOption[] {
+  return cur.map((o) => { if (o.available || !other) return o; const x = other.find((y) => y.id === o.id); return x?.available ? { ...x } : o; });
+}
+
+/** QA 9 item 6: a team's line in the step-2 list, its parts joined with " · " only between parts (never a dangling dot). */
+export const teamLine = (parts: readonly (string | null | undefined)[]): string => parts.filter((x): x is string => !!x && !!x.trim()).join(" · ");
+
+/** QA 9 item 3 (owner): one game between two teams burns once, so its share follows the one-shot row whenever the rule's dial allows it. */
+export const oneGameShare = (maxFraction: number): number => (maxFraction >= 1 ? DEFAULT_SHARE.oneShot : DEFAULT_SHARE.recurring);
+
+/**
+ * Audit 10 item 8: a coin's description is one paragraph on its page and in its metadata (launchFields.ts refuses line breaks there), so a
+ * line break typed or pasted becomes a space, and the field says so where it happened.
+ */
+/** Carriage returns, line feeds, tabs and the Unicode line and paragraph separators (U+2028, U+2029). */
+const LINE_BREAKS = new RegExp(`\\r\\n?|\\n|\\t|${String.fromCharCode(0x2028)}|${String.fromCharCode(0x2029)}`, "g");
+export const DESCRIPTION_ONE_PARAGRAPH = "The description is one paragraph on the coin's page, so line breaks became spaces.";
+export function oneParagraph(raw: string): { value: string; changed: boolean } {
+  const value = raw.replace(LINE_BREAKS, " ");
+  return { value, changed: value !== raw };
+}
+
+/** Audit 10 item 11: the words, links and note kept from the coin set up before a new choice in step 1, said once with two ways on. */
+export const keptProfileLine = (parts: readonly string[]): string => `Your ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0]} from the coin you were setting up ${parts.length > 1 ? "are" : "is"} still filled in.`;
+export const KEPT_PROFILE_REUSE = "Reuse them";
+export const KEPT_PROFILE_FRESH = "Start the profile fresh";
+/** Which of a profile's words were kept ("description", "X link", "note"); empty when nothing was. */
+export function keptProfileParts(p: { description: string; x: string; telegram: string; website: string }, note: string): string[] {
+  const out: string[] = [];
+  if (p.description.trim()) out.push("description");
+  for (const [k, l] of [["x", "X link"], ["telegram", "Telegram link"], ["website", "website link"]] as const) if (p[k].trim()) out.push(l);
+  if (note.trim()) out.push("note");
+  return out;
+}
+
+/** Audit 10 item 12: the name step's disclosure names only the fields this coin can carry (a pair has no note). */
+export const profileMoreLabel = (note: boolean): string => (note ? "Description, links and a note. Each one is optional." : "Description and links. Each one is optional.");
+
+/** QA 9 item 14: the image line is confirmed on the name step, before the review. */
+export const IMAGE_RIGHTS_REQUIRED = "Confirm that you have the right to use the image, or remove it, before you go on.";
+/** QA 9 item 14: a picture that is not square is shown as its middle square; the outline shows that part. */
+export const notSquareLine = (w: number, h: number): string => `This image is ${w} by ${h} pixels, so it is not square. The coin shows only the outlined middle square.`;
+/** The crop a square frame takes of a w × h image, in percent of its width and height (the middle square). */
+export function squareCrop(w: number, h: number): { left: number; top: number; width: number; height: number } {
+  if (!(w > 0 && h > 0) || w === h) return { left: 0, top: 0, width: 100, height: 100 };
+  if (w > h) { const width = (h / w) * 100; return { left: (100 - width) / 2, top: 0, width, height: 100 }; }
+  const height = (w / h) * 100;
+  return { left: 0, top: (100 - height) / 2, width: 100, height };
+}
+
+/**
+ * Audit 10 item 3: how the coins launch, which decides the fee sentence on the review. "single" one LaunchLab coin; "independent" two
+ * separate LaunchLab launches; "linked" two LaunchLab coins linked at creation; "pair-curve" a registered pair on the pair curve, whose
+ * pools open with Raydium's creator fee off. `lp` and `pairLp` are the review card's LP_LINE and PAIR_LP_LINE (built from the fee
+ * constants in feeShareLine.ts); no percentage is typed here.
+ */
+export type LaunchVenue = "single" | "independent" | "linked" | "pair-curve";
+export function lpDisclosureFor(venue: LaunchVenue, lp: string, pairLp: string): string {
+  if (venue === "pair-curve") return pairLp;
+  if (venue === "independent") return `Each coin is its own LaunchLab launch with its own pool. For each one: ${lp}`;
+  if (venue === "linked") return `The two coins are linked, and each one moves from LaunchLab to its own pool. For each one: ${lp}`;
+  return lp;
+}
+
+/** The profile fields the checks read (ProfileFields.tsx ProfileValue has these and more). */
+export interface ProfileChecked { image: unknown | null; rights: boolean; description: string; x: string; telegram: string; website: string; imageState?: "pending" | "failed" | null }
+/** The field a profile problem belongs to (the review's Edit link focuses it). */
+export type ProfileField = "image" | "description" | "x" | "telegram" | "website";
+/**
+ * website-22 (QA 9 item 11, audit 10 item 8): every problem in these fields with the field it belongs to, using the server's own link
+ * check (creatorProfile.ts linkProblem: https only, X on x.com or twitter.com, Telegram on t.me, no javascript: or data:) and the server's
+ * check on invisible and text-direction characters (launchFields.ts controlCharProblem).
+ */
+export function profileFieldProblems(v: ProfileChecked): { field: ProfileField; text: string }[] {
+  const out: { field: ProfileField; text: string }[] = [];
+  const isp = imageStateProblem(v.imageState ?? null); if (isp) out.push({ field: "image", text: isp });
+  if (v.image && !v.rights) out.push({ field: "image", text: "Confirm the image line, or remove the image." });
+  if (v.description.length > DESCRIPTION_MAX) out.push({ field: "description", text: `The description can be at most ${DESCRIPTION_MAX} characters.` });
+  const cc = controlCharProblem(v.description, "description"); if (cc) out.push({ field: "description", text: cc });
+  for (const [k, label] of LINK_FIELDS) { const lp = linkFieldProblem(label, v[k]); if (lp) out.push({ field: k, text: lp }); }
+  return out;
+}
+export const LINK_FIELDS = [["x", "X"], ["telegram", "Telegram"], ["website", "Website"]] as const;
+/** One link field's problem, as the server says it (null when empty or fine). */
+export const linkFieldProblem = (label: string, raw: string): string | null => (raw.trim() ? linkProblem(label, raw.trim()) : null);
+/** The id of a profile field on the page (side "a" or "b"), so the review's Edit link can focus it. */
+
+/** Audit 10 item 17: what the pair's estimate leaves out, beside "Launch both". */
+export const PAIR_COST_EXCLUSIONS = "The estimate covers creating both coins. It leaves out the account that links the two coins, whose rent is not measured yet, and any fee your wallet adds.";
+
+/** Audit 10 item 24: the share is a share of the coin's burn pool (its budget for burns), never of the coin's supply; said once on the review. */
+export const shareOfBudgetLine = (share: number): string => `The burn pool is the coin's budget for burns, so ${pctLabel(share)} is never a share of the coin's supply.`;
+
+/** Audit 10 item 24: the words beside the small pair diagram on the review. */
+export const PAIR_DIAGRAM_LABEL = { independent: "Two separate coins. Each burns from its own pool, and no SOL moves between them.", linked: "A linked pair. The coin whose rule fires also takes the other coin's share for that result, and only that coin burns." } as const;
+
+/**
+ * Audit 10 item 10 and QA 9 item 12: every reason the launch button is off, in one list on the review. Each reason is said once.
+ */
+export function reviewBlockers(o: { fields?: string[]; profile?: string[]; note?: string | null; identity?: string[]; ruleProblems?: string[]; serverProblems?: string[]; blocked?: string | null }): string[] {
+  const all = [...(o.fields ?? []), ...(o.profile ?? []), ...(o.note ? [o.note] : []), ...(o.identity ?? []), ...(o.ruleProblems ?? []), ...(o.serverProblems ?? []), ...(o.blocked ? [o.blocked] : [])];
+  const seen = new Set<string>(), out: string[] = [];
+  for (const x of all) { const k = x.trim().replace(/\.$/, "").toLowerCase(); if (k && !seen.has(k)) { seen.add(k); out.push(x); } }
+  return out;
+}
+/** The note's quick local read (the server's lint is the one that counts), as a sentence beside the field and in the review's list. */
+export function noteProblemOf(note: string): string | null {
+  if (/https?:\/\/|www\.|\.(com|io|xyz|fun)\b/i.test(note)) return "The note cannot have links.";
+  if (/\b(official|endorsed|partner(ed|ship)?|affiliated|backed|guaranteed|insured|audited|verified|licensed|sponsored)\b/i.test(note)) return "The note cannot claim an affiliation or an endorsement.";
+  return null;
+}
+
+/**
+ * Audit 10 item 14 (one flow): the guided question a free-text card, a template or a deep link answers, read from the rule it builds, so
+ * every entry walks the same five steps and the review never falls back to the older chooser.
+ */
+export function followForRule(r: Pick<BurnRule, "oracle" | "series" | "market"> | null, o: { matchup?: boolean; hazard?: boolean } = {}): FollowId {
+  if (o.matchup) return "rivalry";
+  if (!r) return "market";
+  if (r.oracle === "derby") return "coins";
+  if (r.oracle === "polymarket" || r.oracle === "kalshi") return r.market ? "market" : "number";
+  if (r.oracle === "catalogue" && r.series && parseEspnSeries(r.series)) return "team";
+  if (o.hazard) return "disaster";
+  return "number";
+}

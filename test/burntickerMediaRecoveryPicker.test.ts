@@ -92,7 +92,8 @@ describe("245 + 246 the line under the search box", () => {
 describe("247 [VERIFY] closing the Coin vs Coin panel", () => {
   test("the close control is not offered while a launch is being signed (closing unmounted the signing card mid-run)", () => {
     const c = code(tile);
-    assert.match(c, /\{!\(out \|\| pcOut\) && <button className="underline" data-nav onClick=\{\(\) => setOpen\(false\)\}>close<\/button>\}/);
+    // website-22 (QA 9 item 38): the tile walks the page's guided steps, so it has no close control at all; Back is the page's
+    assert.doesNotMatch(c, />close<\/button>/);
   });
 });
 

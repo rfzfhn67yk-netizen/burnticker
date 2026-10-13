@@ -1,4 +1,5 @@
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * YOUTUBE CHANNEL MILESTONES (sources-2, 2026-10-12). Built so the catalogue can name it, and NOT LAUNCHABLE: the YouTube API Services
@@ -42,6 +43,6 @@ export function applyYoutubeMilestone(cfg: HttpSourceConfig, param: string): Htt
 /** The coin text pieces, for the catalogue card only while the source is not launchable (lint-clean). */
 export function youtubeText(s: { channel: string; metric: YoutubeMetric; n: number }, spends: string, channelName: string | null = null): { name: string; ticker: string; oneLiner: string; block: string; oneShot: boolean } {
   const who = channelName ? `the ${channelName} YouTube channel` : "this YouTube channel", n = s.n.toLocaleString("en-US");
-  return { name: `${channelName ?? "Channel"} ${n}`.slice(0, 32), ticker: "YTMILE", oneLiner: `burns once when ${who} passes ${n} ${s.metric}`, oneShot: true,
+  return { name: fitName(`${channelName ?? "Channel"} ${n}`), ticker: "YTMILE", oneLiner: `burns once when ${who} passes ${n} ${s.metric}`, oneShot: true,
     block: `The first time ${who} reads ${n} ${s.metric} or more, ${spends} once, with a receipt on chain. The count comes from the YouTube Data API. If it stays under ${n}, nothing burns.` };
 }

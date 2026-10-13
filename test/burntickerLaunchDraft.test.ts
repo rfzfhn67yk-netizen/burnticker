@@ -101,7 +101,8 @@ describe("L01 / L10 — one typed draft from every card and template to the prog
     assert.match(page, /firstPartyRule\(series, DEFAULT_SHARE\.recurring\)/);
     assert.match(page, /composeRule\(pick, \{/, "the reviewed rule is composeRule's (launchDraft.ts)");
     assert.match(page, /launchBody\(\{ creator, ticker, name/, "the single-coin request body is launchBody's");
-    for (const [rule, label] of [[firstPartyRule("espn.game:mlb-401999999-TB-loss", 0.02), "matchup game"], [firstPartyRule("espn.team:mlb-TB.30-win-s2026", 0.02), "team season"]] as const) assert.equal(presetProblem(rule), null, label);
+    // QA pass 9 #3: a single game is a one-shot, so its preset is the one-shot 100 %
+    for (const [rule, label] of [[firstPartyRule("espn.game:mlb-401999999-TB-loss", 1), "matchup game"], [firstPartyRule("espn.team:mlb-TB.30-win-s2026", 0.02), "team season"]] as const) assert.equal(presetProblem(rule), null, label);
   });
 
   test("every template: the example names the template's share, the share is its row's default, and its start exists", () => {
@@ -259,7 +260,7 @@ describe("L05 — provenance from the resolver; schedule problems are display pr
 
   test("warnings travel into the review; election settlement sentences carry no raw URL", async () => {
     const page = read("src/app/burnticker/launch/page.tsx");
-    assert.match(page, /setSrcWarnings\(c\.note \? \[c\.note\] : \[\]\)/); assert.match(page, /warnings=\{\[\.\.\.srcWarnings, /, "website-20 (WIRING-PARITY audit 6 #8): the review's own warnings join the source's");
+    assert.match(page, /setSrcWarnings\(c\.note \? \[c\.note\] : \[\]\)/); assert.match(page, /warnings=\{\[\.\.\.new Set\(\[\.\.\.renderWarnings\(srcWarnings, ticker, tickerB\), /, "website-20 (WIRING-PARITY audit 6 #8): the review's own warnings join the source's");
     const r = await universalSearch("El-Sayed wins Michigan Senate", deps());
     assert.doesNotMatch(r.cards[0].settlement, /https?:\/\//);
   });

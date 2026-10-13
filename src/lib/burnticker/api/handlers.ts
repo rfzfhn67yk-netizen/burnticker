@@ -1,5 +1,5 @@
 import type { Platform } from "@/lib/burnticker/server";
-import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
+import { EVENT_LEVEL_REFUSAL, eventLevelRule, meetingsPairNames, MEETINGS_NONE_LINE, RIVALRY_GAME_LABEL, oneGameSearchLine, FBS_DEFAULT_LINE, RIVALRY_SERIES_LABEL, RIVALRY_SERIES_LINE } from "@/lib/burnticker/guidedLaunch";
 import { catalogue, fixtureReadings, previewFromFixture, feedById, feedRuleProblems, loadFixture, verifyUrl, type Feed } from "@/lib/burnticker/catalogue";
 
 import { identityRefusals, ruleRefusals, sampleEligibility } from "@/lib/burnticker/launchPreflight";
@@ -14,7 +14,7 @@ import { validateRule, lockRule, ruleStatement, isMeetingsRule, BURNTICKER_RULES
 import { summariseOpen } from "@/lib/burnticker/oracle/kalshi";
 import { gameSides, legFilterCollisions, ownLegFilter, type EventHit } from "@/lib/burnticker/oracle/events";
 import { POLYMARKET_TAG_FOR, type BrowseSeries } from "@/lib/burnticker/oracle/browse";
-import { categoryCards, categoryList, loadCategories, type FeedCardInput } from "@/lib/burnticker/browse";
+import { categoryCards, categoryList, formatReading, loadCategories, type FeedCardInput } from "@/lib/burnticker/browse";
 import { KALSHI_UNAVAILABLE, POLYMARKET_UNAVAILABLE, scrubMarketData, type VenueFlags } from "@/lib/burnticker/venues";
 import { espnClient, fecClient, nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { electionPairTemplate } from "@/lib/burnticker/electionPair";
@@ -26,14 +26,14 @@ import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } fro
 import { creatorTextProblems, generatedParagraph, metadataDescription, NOTE_MAX, registeredDescription, serverDescribeCtx, statedCtx } from "@/lib/burnticker/coinText";
 import { pinCoin, type PinnedCoin } from "@/lib/burnticker/pin";
 import { describeRule } from "@/lib/burnticker/describe";
-import { universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
-import { BALLOT_NOTE, RACE_TYPES, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
-import { LEAGUES, NBA_FEED_WORDING, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { CLOSING_SOON_HOURS, universalSearch, dedupeTickers, derbyHrefFrom, polyRule, type FeedLike } from "@/lib/burnticker/search";
+import { BALLOT_NOTE, RACE_TYPES, candidateMappingLine, loadRaces, outcomeCardTitle, outcomeSettlesNote, stateName } from "@/lib/burnticker/elections";
+import { LEAGUES, LIVE_NOW, noPlayoffs, isLive, pickerTeams, teamCodeOf, NBA_FEED_WORDING, SCHEDULE_NEEDS_KEY, SPORTS, ScheduleUnavailable, gameSeries, isLeague, findTeams, seasonYearAt, teamSeries, teamsOf, teamByAbbr, meetingsPairSeries, meetingOutcome, tallyMeetings, seasonLabel, type Game, type LeagueId } from "@/lib/burnticker/sources/espn";
 import type { PolyEventHit } from "@/lib/burnticker/oracle/polymarket";
 import { backtest, backtestSentence } from "@/lib/burnticker/oracle/backtest";
 import { isBinary, POLYGONSCAN_CTF } from "@/lib/burnticker/oracle/polymarket";
 import { wideRule } from "@/lib/burnticker/registry";
-import { loadRefuseList, nameRefusals, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
+import { loadRefuseList, nameRefusals, refusalMessage, refusalsFor, type Refusal } from "@/lib/burnticker/oracle/refuse";
 import { existingCoinsFor } from "@/lib/burnticker/duplicateRuleMatch";
 import { buildLaunchBundle, buildPairBundles, launchProblems, raiseProblem, type LaunchBundle, type LaunchInput } from "@/lib/burnticker/launchBundle";
 import { MAINNET_OFF_SENTENCE, NO_OPENING_PURCHASE_SENTENCE, VAULT_HIDDEN_SENTENCE, requestedOpeningPurchase } from "@/lib/burnticker/hostedLaunch";
@@ -109,10 +109,10 @@ export function catalogueSources(now: number, o: { includeConfig?: boolean } = {
 export function forgetCatalogueMemo(): void { catalogueMemo.clear(); }
 function catalogueSourcesUncached(now: number, o: { includeConfig?: boolean } = {}): { sources: Record<string, unknown>[]; tiers: typeof TIER_LABEL; admission: typeof ADMISSION } {
   const http = catalogue().map((f) => {
-    let last: { id: string; value: string | null; at: string } | null = null, readings: { id: string; value: string | null }[] = [], preview: unknown = null, fixtureFetchedAt: string | null = null, refusals: string[] = [];
+    let last: { id: string; value: string | null; at: string; display: string | null } | null = null, readings: { id: string; value: string | null }[] = [], preview: unknown = null, fixtureFetchedAt: string | null = null, refusals: string[] = [];
     try {
       const fr = fixtureReadings(f, now); fixtureFetchedAt = fr.fetchedAt; refusals = fr.refusals;
-      const l = fr.readings[fr.readings.length - 1] ?? null; last = l ? { id: l.id, value: l.value, at: l.at } : null; readings = fr.readings.map((r) => ({ id: r.id, value: r.value }));
+      const l = fr.readings[fr.readings.length - 1] ?? null; last = l ? { id: l.id, value: l.value, at: l.at, display: l.value === null ? null : formatReading(l.value, f.valueLabel ?? null) } : null; readings = fr.readings.map((r) => ({ id: r.id, value: r.value }));
       const rule = validateRule({ schema: BURNTICKER_RULES_SCHEMA, oracle: "catalogue", series: f.id, market: null, filter: {}, kind: "scalar", scalar: { unit: f.unit!.size, perUnit: { fractionOfPool: 0.02 }, baseline: f.baseline!, direction: f.direction! }, binary: null, onVoid: "skip", floorUsd: "1", reserveSol: "0.02", vault: null });
       const pv = previewFromFixture(f, rule, now); preview = { window: pv.window, units: pv.totals.units, burnEvents: pv.totals.burnEvents, poolFractionSpent: pv.totals.poolFractionSpent };
     } catch { /* no fixture: the card says so */ }
@@ -120,7 +120,7 @@ function catalogueSourcesUncached(now: number, o: { includeConfig?: boolean } = 
     // provider, time, status, page and id (never a bare id)
     const elig = sampleEligibility(f, now);
     const title = elig.subject ? `${elig.subject.name} succeeds (Launch Library 2)` : f.title;
-    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: sourceTypeLabel(f), title, sourceName: f.sourceName, settlement: isSingleOfficialSource(f.config) ? singleSourceSentence(f.id) : null, sourceUrl: elig.subject?.url ?? verifyUrl(f, now), cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: elig.decided ? { ok: false, why: elig.reason } : f.launchable, eligibility: { decided: elig.decided, reason: elig.reason }, subject: elig.subject, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
+    return { id: f.id, kind: f.kind, tier: f.tier, tierLabel: sourceTypeLabel(f), title, sourceName: f.sourceName, settlement: isSingleOfficialSource(f.config) ? singleSourceSentence(f.id) : null, sourceUrl: elig.subject?.url ?? verifyUrl(f, now), cadence: f.cadence, unit: f.unit, direction: f.direction, baseline: f.baseline, carry: f.carry, valueLabel: f.valueLabel, flags: f.flags, launchable: elig.decided ? { ok: false, why: elig.reason } : f.launchable, resolved: elig.decided, eligibility: { decided: elig.decided, reason: elig.reason }, subject: elig.subject, param: f.param, needsKey: f.config.needsKey ?? null, fixtureFetchedAt, refusals, lastReading: last, readings, preview, ...(o.includeConfig ? { config: publicConfig(f.config) } : {}) };
   });
   const onchain = (Object.keys(ONCHAIN_FACTS) as (keyof typeof ONCHAIN_FACTS)[]).map((id) => { const s = onchainSource(id, null); return { id, kind: s.kind, tier: s.tier, tierLabel: sourceTypeLabel(s), title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: s.unit, direction: s.direction, baseline: s.baseline, carry: s.carry, valueLabel: s.valueLabel, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }; });
   const stubs = [polymarketCard(), umaStub(), driftBetStub(), hedgehogStub()].map((s) => ({ id: s.id, kind: s.kind, tier: s.tier, tierLabel: sourceTypeLabel(s), title: s.title, sourceName: s.sourceName, sourceUrl: s.sourceUrl, cadence: s.cadence, unit: null, direction: null, baseline: null, carry: s.carry, valueLabel: null, flags: s.flags, launchable: s.launchable, param: null, needsKey: null, fixtureFetchedAt: null, refusals: [], lastReading: null, readings: [], preview: null, ...(o.includeConfig ? { config: null } : {}) }));
@@ -239,7 +239,7 @@ export async function elections(p: Platform, q: { type?: string | null; state?: 
     const shown = type ? ofType.filter((r) => type === "control" || !st || r.state === st) : [];
     return ok(scrubMarketData({
       types: RACE_TYPES.map((t) => ({ ...t, races: races.filter((r) => r.type === t.id).length })), ballot: BALLOT_NOTE, type, state: st, states,
-      races: (type === "control" || st ? shown : []).slice(0, 60).map((r) => ({ ...r, outcomes: r.outcomes.map((o) => ({ ...o, title: outcomeCardTitle(r, o), settles: outcomeSettlesNote(r, o), rule: polyRule(o.conditionId) })) })),
+      races: (type === "control" || st ? shown : []).slice(0, 60).map((r) => ({ ...r, outcomes: r.outcomes.map((o) => ({ ...o, title: outcomeCardTitle(r, o), settles: outcomeSettlesNote(r, o), mapping: candidateMappingLine(r, o), rule: polyRule(o.conditionId) })) })),
       note: "These are Polymarket's open midterm races. Placeholder outcomes with no name are hidden. Settlement reads the on-chain payout, and the state's certified results are the second source that checks it.",
     }));
   } catch (e) { return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
@@ -267,13 +267,13 @@ export async function electionPair(p: Platform, q: { slug?: string | null; a?: s
   } catch (e) { return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
 }
 
-const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league).find((x) => x.abbr === s.abbr); return { abbr: s.abbr, name: s.name || t?.name || s.abbr, nickname: s.nickname || t?.nickname || s.abbr, ticker: t?.ticker ?? s.abbr, record: s.record }; };
+const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league).find((x) => x.abbr === s.abbr); return { abbr: s.abbr, code: t ? teamCodeOf(t) : s.abbr, name: s.name || t?.name || s.abbr, nickname: s.nickname || t?.nickname || s.abbr, ticker: t?.ticker ?? s.abbr, record: s.record, home: s.homeAway === "home" }; };
 
 /** Where a league's schedule on the pickers comes from, in one sentence (the NBA's feed answers 403 since 2026-10-12: espn.ts probe note). */
 const NBA_SCHEDULE_SOURCE = NBA_FEED_WORDING;
 const scheduleSource = (league: LeagueId): string => (league === "mlb" || league === "nhl" ? "The schedule comes from the league's official feed." : league === "nba" ? "The schedule comes from the NBA's feed when it answers, otherwise from TheSportsDB under licence." : "The schedule comes from TheSportsDB, with a licensed key.");
 /** GET /v1/sports/teams?league= — the team picker for team coins (the league's own schedule or TheSportsDB; no ESPN reads): the static team table with each team's next game and record. No league → the leagues. */
-export async function sportsTeams(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
+export async function sportsTeams(_p: Platform, q: { league?: string | null; q?: string | null; division?: string | null }, nowMs = Date.now()): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
   if (!league) return ok({ leagues: Object.values(LEAGUES).map((l) => { const off = countedOfficialOf(l.id); return { id: l.id, label: l.label, sport: l.sport, crossRead: off ? CROSS_LABEL[off] : "The on-chain payout and the licensed final score confirm each other.", crossReadMissing: false, schedule: off ? `${CROSS_LABEL[off]}, which is free` : l.id === "nba" ? NBA_SCHEDULE_SOURCE : "TheSportsDB, with a licensed key", scheduleAvailable: espnClient().scheduleAvailable(l.id), draws: l.draws, teams: teamsOf(l.id).length }; }), sports: SPORTS, source: "Schedules come from the league's official feed for MLB and NHL, from the NBA's feed when it answers and otherwise TheSportsDB for the NBA, and from TheSportsDB with a licensed key for every other league." });
   if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
@@ -287,19 +287,22 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
   const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
   // ChatGPT audit 6 item 2: whether the team has games left this season, from the same schedule read (seasonStatus)
   const readable = scheduleNote === null;
-  const teams = teamsOf(league).filter((t) => !named || named.has(t.abbr) || t.name.toLowerCase().includes(needle.toLowerCase())).slice(0, needle ? 200 : 400).map((t) => {
-    const g = games.filter((x) => x.home.abbr === t.abbr || x.away.abbr === t.abbr).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
+  // QA pass 9 #28 and #29: alphabetical by name; college football lists the FBS unless division=all
+  const division = q.division === "all" ? "all" : "fbs";
+  const listed = pickerTeams(league, { division });
+  const teams = listed.filter((t) => !named || named.has(t.abbr) || t.name.toLowerCase().includes(needle.toLowerCase())).slice(0, needle ? 200 : 400).map((t) => {
+    // a game being played comes first, then the next one (a live game is "Live now", QA pass 9 #35)
+    const g = games.filter((x) => (x.home.abbr === t.abbr || x.away.abbr === t.abbr) && !x.completed).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
     const opp = g ? (g.home.abbr === t.abbr ? g.away : g.home) : null;
     const me = g ? (g.home.abbr === t.abbr ? g.home : g.away) : null;
     const win = teamSeries(league, t.abbr, "win", { kind: "season", year });
     // audit 6 item 10: a record only when the schedule carries one; the field is left out otherwise (never null, never a bare dash)
     const record = me?.record ?? null;
-    return { abbr: t.abbr, city: t.city, nickname: t.nickname, name: t.name, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "win" }), league, series: { win, loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, ...(record ? { record } : {}), next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr } : null, season: seasonStatus(t.abbr, games, readable) };
+    const live = !!g && isLive(g, nowMs);
+    return { abbr: t.abbr, code: teamCodeOf(t), city: t.city, nickname: t.nickname, name: t.name, ticker: teamTicker(t.abbr, { league, window: "season", outcome: "win" }), league, series: { win, loss: teamSeries(league, t.abbr, "loss", { kind: "season", year }), ...(LEAGUES[league].draws ? { draw: teamSeries(league, t.abbr, "draw", { kind: "season", year }) } : {}), seasonYear: year, perpetual: { win: teamSeries(league, t.abbr, "win", { kind: "perpetual" }), loss: teamSeries(league, t.abbr, "loss", { kind: "perpetual" }) } }, ...(record ? { record } : {}), next: g && opp ? { eventId: g.eventId, title: g.name, startsAt: g.startsAt, detail: g.detail, opponent: opp.nickname || opp.abbr, home: g.home.abbr === t.abbr, live, when: live ? LIVE_NOW : null } : null, season: seasonStatus(t.abbr, games, readable) };
   });
-  // teams with a listed game first (soonest first), then no game listed soon, then an unreadable schedule, then season over
-  const rank = { upcoming: 0, "none-listed": 1, unknown: 2, over: 3 } as const;
-  teams.sort((a, b) => rank[a.season.status] - rank[b.season.status] || (a.next?.startsAt ?? "").localeCompare(b.next?.startsAt ?? ""));
-  return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote, scheduleDetail, teams });
+  const divisionInfo = league === "cfb" ? { division: { shown: division, line: division === "fbs" ? FBS_DEFAULT_LINE(listed.length, teamsOf("cfb").length - listed.length) : null, all: "/api/burnticker/v1/sports/teams?league=cfb&division=all" } } : {};
+  return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote, scheduleDetail, ...divisionInfo, order: "alphabetical", teams });
 }
 
 /**
@@ -318,7 +321,7 @@ export function seasonStatus(abbr: string, games: readonly Game[], readable: boo
 }
 
 /** GET /v1/sports/games?league=&q= — upcoming games for matchups (the league's own schedule or TheSportsDB, the next 8 days; no ESPN reads): both sides and each side's one-game loss selector. */
-export async function sportsGames(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
+export async function sportsGames(_p: Platform, q: { league?: string | null; q?: string | null }, nowMs = Date.now()): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
   if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
   try {
@@ -327,7 +330,7 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
     const needle = (q.q ?? "").trim();
     const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
     const rows = games.filter((g) => !g.completed && g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
-      eventId: g.eventId, league, title: g.name, startsAt: g.startsAt, detail: g.detail, a: sideOf(league, g.away), b: sideOf(league, g.home),
+      eventId: g.eventId, league, title: g.name, startsAt: g.startsAt, detail: g.detail, live: isLive(g, nowMs), when: isLive(g, nowMs) ? LIVE_NOW : null, a: sideOf(league, g.away), b: sideOf(league, g.home),
       series: { aLoss: gameSeries(league, g.eventId, g.away.abbr, "loss"), bLoss: gameSeries(league, g.eventId, g.home.abbr, "loss") },
     }));
     return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: null, scheduleDetail: null, games: rows, count: rows.length });
@@ -341,7 +344,7 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
  * far; both series ids (sources/espn.ts window `meetings`) and the pair's names and tickers. `offered` is false when the schedule lists no
  * game between them (the option is then not offered for that pair).
  */
-export async function sportsRivalry(_p: Platform, q: { league?: string | null; a?: string | null; b?: string | null }): Promise<ApiResult> {
+export async function sportsRivalry(_p: Platform, q: { league?: string | null; a?: string | null; b?: string | null }, nowMs = Date.now()): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
   if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
   const ta = teamByAbbr(league, q.a?.trim() ?? ""), tb = teamByAbbr(league, q.b?.trim() ?? "");
@@ -349,7 +352,7 @@ export async function sportsRivalry(_p: Platform, q: { league?: string | null; a
   if (ta.abbr === tb.abbr) return fail(400, "Pick two different teams.");
   const source = scheduleSource(league);
   const names = meetingsPairNames(ta, tb);
-  const base = { league, label: LEAGUES[league].label, source, option: { label: RIVALRY_SERIES_LABEL, line: RIVALRY_SERIES_LINE }, a: { abbr: ta.abbr, team: ta.name, nickname: ta.nickname, ...names.a }, b: { abbr: tb.abbr, team: tb.name, nickname: tb.nickname, ...names.b } };
+  const base = { league, label: LEAGUES[league].label, source, option: { label: RIVALRY_SERIES_LABEL, line: RIVALRY_SERIES_LINE }, a: { abbr: ta.abbr, code: teamCodeOf(ta), team: ta.name, nickname: ta.nickname, ...names.a }, b: { abbr: tb.abbr, code: teamCodeOf(tb), team: tb.name, nickname: tb.nickname, ...names.b } };
   let games: Game[];
   try { games = await espnClient().season(league, ta.abbr); } catch (e) {
     const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160));
@@ -359,10 +362,13 @@ export async function sportsRivalry(_p: Platform, q: { league?: string | null; a
   const isB = (x: Game["home"]) => x.abbr === tb.abbr;
   const rows = games.filter((g) => isB(g.home) || isB(g.away)).sort((x, y) => x.startsAt.localeCompare(y.startsAt)).map((g) => {
     const result = meetingOutcome(g, ta.abbr);
-    return { eventId: g.eventId, startsAt: g.startsAt, date: g.date, playoff: g.seasonType === 3, home: g.home.abbr, away: g.away.abbr, title: g.name, status: result === "pending" ? (g.state === "in" ? "in progress" : "scheduled") : result === "void" ? "postponed or cancelled" : "final", result, score: g.completed && g.home.score !== null && g.away.score !== null ? { home: g.home.score, away: g.away.score } : null };
+    const live = result === "pending" && isLive(g, nowMs);
+    // QA pass 9 #4: every listed game still to be played can be the one-game pair (each side's one-game loss selector, and which side is at home, from the fixture itself: #2)
+    const open = result === "pending" && !live && Date.parse(g.startsAt) > nowMs;
+    return { eventId: g.eventId, startsAt: g.startsAt, date: g.date, playoff: g.seasonType === 3, home: g.home.abbr, away: g.away.abbr, title: g.name, live, when: live ? LIVE_NOW : null, oneGame: open ? { aHome: g.home.abbr === ta.abbr, series: { aLoss: gameSeries(league, g.eventId, ta.abbr, "loss"), bLoss: gameSeries(league, g.eventId, tb.abbr, "loss") } } : null, status: result === "pending" ? (live || g.state === "in" ? "in progress" : "scheduled") : result === "void" ? "postponed or cancelled" : "final", result, score: g.completed && g.home.score !== null && g.away.score !== null ? { home: g.home.score, away: g.away.score } : null };
   });
   const tally = tallyMeetings(rows.map((r) => r.result));
-  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered: rows.length > 0, offeredLine: rows.length ? null : MEETINGS_NONE_LINE, meetings: rows, count: rows.length, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
+  return ok({ ...base, year, season: seasonLabel(league, year), series: meetingsPairSeries(league, ta.abbr, tb.abbr, year), scheduleNote: null, scheduleDetail: null, offered: rows.length > 0, offeredLine: rows.length ? null : MEETINGS_NONE_LINE, meetings: rows, count: rows.length, oneGame: { label: RIVALRY_GAME_LABEL, searched: oneGameSearchLine(seasonLabel(league, year), rows.filter((r) => r.oneGame).length, !noPlayoffs(league)), count: rows.filter((r) => r.oneGame).length }, tally: { [ta.abbr]: tally.wins, [tb.abbr]: tally.losses, draws: tally.draws, voids: tally.voids, note: "From the schedule's own scores. The coins count only results that two independent sources agree on." } });
 }
 
 /** Which venues this host serves (venues.ts): Kalshi behind BURNTICKER_KALSHI_ENABLED; Polymarket and the first-party feeds always. */
@@ -444,14 +450,20 @@ export async function kalshiCategories(p: Platform, q: { category?: string | nul
  * the hits as recurring selectors (`tag:<slug>`, `tag:<slug>/moneyline` where the hits are games). The refuse list marks refused events;
  * a refused market is never offered. No prices, odds or volume are returned (venues.ts).
  */
-export async function polymarketSearch(p: Platform, q: { q?: string | null; status?: string | null }): Promise<ApiResult> {
+export async function polymarketSearch(p: Platform, q: { q?: string | null; status?: string | null; closingSoon?: string | null }, now = Date.now()): Promise<ApiResult> {
   const query = (q.q ?? "").trim();
   const status = q.status === "closed" || q.status === "all" ? q.status : "open";
   if (p.polymarketDiscovery === false) return fail(503, POLYMARKET_UNAVAILABLE);
   if (query.length < 2) return fail(400, "Type at least two characters. You can search for a team, a person, an event, an event slug or a condition id.");
   try {
     const r = scrubMarketData(await p.polymarket.search(query, { status, limit: 10 }));
-    return ok({ query, status, venue: "polymarket", events: r.events, markets: r.markets, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned." });
+    // QA pass 9 #17: the event-outcome path hides a market closing within CLOSING_SOON_HOURS, as the universal search does (a coin made now
+    // would not graduate before the result); closingSoon=1 lists them, each marked. A market past its end date and not yet resolved is left to the market's own state
+    const soon = (endDate: string | null) => status === "open" && !!endDate && Number.isFinite(Date.parse(endDate)) && Date.parse(endDate) >= now && Date.parse(endDate) - now < CLOSING_SOON_HOURS * 3_600_000;
+    const show = /^(1|true|yes)$/i.test(q.closingSoon ?? "");
+    const markets = r.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate) })), events = r.events.map((e) => ({ ...e, closingSoon: soon(e.endDate), markets: e.markets.map((m) => ({ ...m, closingSoon: soon(m.endDate) })) }));
+    const keptM = show ? markets : markets.filter((m) => !m.closingSoon), keptE = show ? events : events.filter((e) => !e.closingSoon);
+    return ok({ query, status, venue: "polymarket", events: keptE, markets: keptM, hiddenClosingSoon: markets.length - keptM.length + events.length - keptE.length, tags: r.tags, note: "Only yes-or-no markets are listed. YES is a market's first outcome and NO is its second. The result is read from the on-chain payout on Polygon. No prices, odds or volume are returned." });
   } catch (e) {
     return fail(502, `Polymarket could not be reached just now. The reason given was: ${(e as Error).message.slice(0, 160)}`);
   }
@@ -642,7 +654,7 @@ export async function prepareLaunch(p: Platform, body: Record<string, unknown>, 
     if (dr.length) return { error: fail(403, `This launch is refused: ${dr.map((r) => r.reason).join("; ")}`, { code: "refused", refusals: dr }) };
     seriesTitle = derbyTitle(locked.rule);
   } else return { error: fail(400, `Coins cannot launch on the ${locked.rule.oracle} source yet. Kalshi, Polymarket, our own feeds and the Burn Derby are live.`, { code: "oracle-off" }) };   // ruleRefusals refused it already
-  if (refusals.length) return { error: fail(403, `This launch is refused: ${refusals.map((r) => r.reason).join("; ")}`, { code: "refused", refusals }) };
+  if (refusals.length) return { error: fail(403, refusalMessage(refusals), { code: "refused", refusals }) };
   if (o.mint && p.registry.token(o.mint)) return { error: fail(409, `The mint ${o.mint} is already registered.`, { code: "mint-taken" }) };
   { const g = await launchGuardRefusal(p, { ticker: input.ticker, name: input.name, rule: locked.rule, mint: o.mint ?? null }); if (g) return { error: fail(g.status, g.error, g.extra) }; }   // lookalike + no adoption (growth batch; lookalike.ts)
   // THE CREATION PREFLIGHT (2026-10-10, the settlement-coverage audit): the selector run live once — primary + independent cross-read

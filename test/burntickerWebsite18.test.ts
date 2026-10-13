@@ -27,7 +27,7 @@ const clean = (t: string) => { const r = lintCopy(t, cfg); assert.ok(r.ok, `${t}
 
 describe("A: the create flow first; examples and benefits at the bottom, closed", () => {
   test("the first wizard control comes before the disclosure, which is closed and holds both lists; the templates page keeps them as they are", () => {
-    const search = page.indexOf('aria-label="Describe the event"'), disc = page.indexOf("data-examples-benefits");
+    const search = page.indexOf('data-free-text'), disc = page.indexOf("data-examples-benefits");
     assert.ok(search > 0 && disc > search, "the search box comes first");
     assert.ok(page.indexOf("<CreatorBenefitsList />") > disc && page.indexOf("<ExampleTickets site=") > disc, "both inside the disclosure");
     assert.match(page, /<p className="z-30 sm:sticky [^"]*"[^>]*data-preview-banner>/, "the preview banner sticks from the sm width up only (at 390 it covered the links)");
@@ -71,7 +71,7 @@ describe("B: the Team path", () => {
 
 describe("the image control: one coin, each coin of a pair, and a host without custom images", () => {
   test("the control renders for a single coin and for both coins of a Matchup and of Coin vs Coin, above Advanced", () => {
-    assert.match(page, /image=\{pairOn && ruleB \? <div [^>]*data-pair-images>\{imageField\(profile, setProfile, [^)]*\)\}\{imageField\(profileB, setProfileB, [^)]*\)\}<\/div> : imageField\(profile, setProfile, null\)\}/);
+    assert.match(page, /image=\{two \? <div [^>]*data-pair-images>\{imageField\(profile, setProfile, [^)]*\)\}\{imageField\(profileB, setProfileB, [^)]*\)\}<\/div> : imageField\(profile, setProfile, null\)\}/);
     assert.match(cvc, /image=\{<div [^>]*data-pair-images>(?:\{imagesDropped[^\n]*?<\/p>\})?<ProfileFields value=\{profA\}[^>]*part="image"[^>]*\/><ProfileFields value=\{profB\}[^>]*part="image"[^>]*\/><\/div>\}/);
     assert.doesNotMatch(page, /profile=\{pairOn \? null/, "a pair no longer loses its profile fields");
   });

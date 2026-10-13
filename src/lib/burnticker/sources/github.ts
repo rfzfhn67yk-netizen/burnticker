@@ -1,4 +1,5 @@
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * GITHUB RELEASES AND STAR MILESTONES (sources-2, 2026-10-12). GitHub's REST API, keyless (60 requests an hour) or with the owner's
@@ -54,12 +55,12 @@ export function githubText(s: NonNullable<ReturnType<typeof parseGithubSeries>>,
   const name = s.repo.split("/")[1];
   if (s.kind === "releases") {
     const src = "The result comes from GitHub's public list of the repository's releases. Drafts and releases marked as pre-releases do not count, and each UTC day is read once it is over.";
-    if (inverse) return { name: `${name} Quiet Days`.slice(0, 32), ticker: `NOREL${name.toUpperCase().replace(/[^A-Z0-9]/g, "")}`.slice(0, 10), oneLiner: `burns on every day the ${s.repo} repository publishes no release`, oneShot: false,
+    if (inverse) return { name: fitName(`${name} Quiet Days`), ticker: `NOREL${name.toUpperCase().replace(/[^A-Z0-9]/g, "")}`.slice(0, 10), oneLiner: `burns on every day the ${s.repo} repository publishes no release`, oneShot: false,
       block: `For every day the ${s.repo} repository publishes no release, ${spends}, with a receipt on chain. ${src} A day with a release burns nothing.` };
-    return { name: `${name} Releases`.slice(0, 32), ticker: `${name.toUpperCase().replace(/[^A-Z0-9]/g, "")}REL`.slice(0, 10), oneLiner: `burns when the ${s.repo} repository ships a release`, oneShot: false,
+    return { name: fitName(`${name} Releases`), ticker: `${name.toUpperCase().replace(/[^A-Z0-9]/g, "")}REL`.slice(0, 10), oneLiner: `burns when the ${s.repo} repository ships a release`, oneShot: false,
       block: `For every release the ${s.repo} repository publishes, ${spends}, with a receipt on chain. ${src} A day with no release burns nothing.` };
   }
   const n = s.n.toLocaleString("en-US");
-  return { name: `${name} ${n} Stars`.slice(0, 32), ticker: `${name.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)}STAR`, oneLiner: `burns once when the ${s.repo} repository passes ${n} stars`, oneShot: true,
+  return { name: fitName(`${name} ${n} Stars`), ticker: `${name.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)}STAR`, oneLiner: `burns once when the ${s.repo} repository passes ${n} stars`, oneShot: true,
     block: `The first time the star count of the ${s.repo} repository reads ${n} or more, ${spends} once, with a receipt on chain. The count comes from GitHub's public repository data, read a few times a day. If the count stays under ${n}, nothing burns.` };
 }

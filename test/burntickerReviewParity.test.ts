@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prepareLaunch, sportsTeams, sportsRivalry, search, catalogueSources } from "@/lib/burnticker/api/handlers";
-import { meetingsPairNames, meetingsPairRules } from "@/lib/burnticker/guidedLaunch";
+import { meetingsPairNames, meetingsPairRules, reviewBlockers } from "@/lib/burnticker/guidedLaunch";
 import { buildLaunchReview, type LaunchReview } from "@/lib/burnticker/launchReview";
 import { LEAGUES, teamsOf, teamSeries, gameSeries, seasonYearAt, type LeagueId } from "@/lib/burnticker/sources/espn";
 import { firstPartyRule } from "@/lib/burnticker/wizard";
@@ -55,6 +55,11 @@ function checkReview(label: string, rule: BurnRule, r: LaunchReview, o: { series
     if (/\bundefined\b|\bNaN\b|\[object Object\]/.test(t)) fail("text: undefined/NaN", `${label}: ${t}`);
     if (o.series && t.includes(o.series)) fail("text: raw source id", `${label}: ${t}`);
     else if (RAW_ID.test(t)) fail("text: raw source id", `${label}: ${RAW_ID.exec(t)![0]} in "${t}"`);
+    // sources-6 (QA pass 9 #18-#21): words a rule's type does not have
+    const sports = rule.oracle === "catalogue" && /^espn\./.test(rule.series ?? "");
+    if (!sports && /season is cancelled|through the postseason/.test(t)) fail("text: season words on a non-sports rule", `${label}: ${t}`);
+    if (/\bEach 1 [a-z]/.test(t)) fail("text: 'Each 1 <unit>'", `${label}: ${t}`);
+    if (/\bthe (Leeds United|Arsenal|Manchester City|Manchester United|Inter Miami|Real Madrid)\b/.test(t)) fail("text: an article before a club", `${label}: ${t}`);
   }
   // the end line never contradicts the rule's own end: a rule with an end sink says where the rest goes and never that it "sends nothing"
   const end = r.rule.endsLine, sink = describeEndSink(rule), perpetual = /no end date/.test(end);
@@ -83,6 +88,8 @@ async function setup(p: Parameters<typeof prepareLaunch>[0], label: string, body
   if (bErr && bErr.status >= 500 && !o.network && !/is not turned on for this site|turned off on this site/.test(String((bErr.body as { error?: string }).error))) fail("bundle 5xx", `${label}: ${bErr.status} ${(bErr.body as { error?: string }).error}`);
   const reviewProblems = "problems" in rv ? rv.problems : [...rv.review.problems, ...(rv.review.typeAvailable ? [] : [rv.review.typeReason ?? "type"])];
   const reviewRefuses = reviewProblems.length > 0, bundleRefuses = !!bErr;
+  // website-22 (audit 10 item 10): every problem the review reports reaches the launch page's one list of blockers, each said once
+  { const norm = (x: string) => x.trim().replace(/\.$/, "").toLowerCase(); const listed = reviewBlockers({ serverProblems: reviewProblems }); if (listed.length !== new Set(reviewProblems.map(norm).filter(Boolean)).size || reviewProblems.some((x) => x.trim() && !listed.some((y) => norm(y) === norm(x)))) fail("review blockers: a problem missing from the page's list", `${label}: ${reviewProblems.join(" | ")}`); }
   if (!(o.network && bErr && bErr.status >= 500)) {
     if (!reviewRefuses && bundleRefuses) fail(`parity: review ok, bundle refuses [${String((bErr!.body as { error?: string }).error).replace(/[0-9A-Z]{2,}[0-9A-Za-z.:-]*/g, "#").slice(0, 70)}]`, `${label}: ${bErr!.status} ${(bErr!.body as { code?: string }).code ?? ""} ${(bErr!.body as { error?: string }).error}`);
     if (reviewRefuses && !bundleRefuses) fail("parity: review refuses, bundle ok", `${label}: ${reviewProblems.join(" | ")}`);

@@ -65,7 +65,7 @@ describe("review 2 F6 — one factual pair sentence, checked against the engine"
     const b = validateRule(pairMirrorRule(a));
     const w = pairWinnerOf({ ticker: "TEAMWIF", rule: a }, { ticker: "TEAMSHIB", rule: b }, "yes")!;
     assert.equal(w.winner.ticker, "TEAMWIF", "WIF out-gained SHIB: $TEAMWIF's rule fires");
-    assert.match(TEMPLATES.find((t) => t.id === "coin-vs-coin")!.example, /did better fires/);
+    assert.match(TEMPLATES.find((t) => t.id === "coin-vs-coin")!.example, /\$TEAMWIF burns on a day WIF out-gains SHIB, and \$TEAMSHIB's share for that day goes to \$TEAMWIF's burn\..*WIF and SHIB are only read, never traded or burned\./);
   });
 
   test("every surface that explains a registered pair carries the one sentence; none says the losing coin burns or that a pool cannot pay the other", () => {

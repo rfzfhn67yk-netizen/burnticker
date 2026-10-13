@@ -289,14 +289,20 @@ export function derbySentence(d: CoinVsSpec, tickerA: string, tickerB: string | 
   if (d.flip) {
     const a = `$${tickerA} burns ${pctText(fraction)} once, the first ${d.window === "daily" ? "day" : "week"} ${d.a.symbol}'s market cap passes ${d.b.symbol}'s (${src} × circulating supply, ${boundary(d.window)}).`;
     const b = tickerB ? ` $${tickerB} burns ${pctText(fraction)} once if the run ends without it.` : "";
-    return `${a}${b} Runs for ${d.season.days} days, then winds down.`;
+    return `${a}${b} ${derbyReadOnlySentence(d)} Runs for ${d.season.days} days, then winds down.`;
   }
-  const verb = d.measure === "mcap" ? `${d.a.symbol} out-gains ${d.b.symbol} by market cap` : `${d.a.symbol} out-gains ${d.b.symbol}`;
-  const a = `$${tickerA} burns ${pctText(fraction)} ${windowText(d.window)} ${verb} (${src}, ${boundary(d.window)}).`;
-  const b = tickerB ? ` $${tickerB} burns when ${d.b.symbol} wins.` : "";
+  const by = d.measure === "mcap" ? " by market cap" : "";
+  const verb = `${d.a.symbol} out-gains ${d.b.symbol}${by}`;
+  // the owner, 2026-10-13: "the winner's coin burns" read as if the reference coins burn; every derby sentence names the NEW coin that
+  // burns, says where the other new coin's share goes, and says the reference coins are only read
+  const day = d.window === "daily" ? "day" : "week";
+  const head = `$${tickerA} burns ${pctText(fraction)} ${windowText(d.window)} ${verb} (${src}, ${boundary(d.window)})`;
+  const ab = tickerB ? `${head}, and $${tickerB}'s share for that ${day} goes to $${tickerA}'s burn. On a ${day} ${d.b.symbol} out-gains ${d.a.symbol}${by}, $${tickerB} burns and takes $${tickerA}'s share.` : `${head}.`;
   // "Runs for N days" (the owner, 2026-10-10: "in the coin vs coin it reads as seasons for the duration")
-  return `${a}${b} Runs for ${d.season.days} days, then winds down.`;
+  return `${ab} ${derbyReadOnlySentence(d)} Runs for ${d.season.days} days, then winds down.`;
 }
+/** The reference coins are inputs only (the owner, 2026-10-13). */
+export const derbyReadOnlySentence = (d: Pick<CoinVsSpec, "a" | "b">): string => `${d.a.symbol} and ${d.b.symbol} are only read, never traded or burned.`;
 
 /** The rule paragraph for the token page (rules.ts ruleStatement delegates here for oracle "derby"). */
 export function derbyStatement(d: DerbySpec, side: "A" | "B" | null, pairId: string | null, scalar: { unit: number; direction: string } | null = null): string {
@@ -313,7 +319,11 @@ export function derbyStatement(d: DerbySpec, side: "A" | "B" | null, pairId: str
   }
   const measure = d.measure === "mcap" ? "percentage change in size (circulating supply read from the mint, times the feed value)" : "percentage change";
   const wnd = d.window === "daily" ? "UTC day (00:00 to 00:00)" : "UTC week (Monday 00:00 to Monday 00:00)";
-  const pairText = pairId ? ` This coin is side ${side} of Burn Derby pair ${pairId}. Side A's coin burns on a window ${d.a.symbol} wins, and side B's coin burns on a window ${d.b.symbol} wins, so the winner's coin burns.` : "";
+  // the owner, 2026-10-13: name the new coin that burns, never "the winner's coin", and say the reference coins are only read
+  const mine = side === "B" ? d.b.symbol : d.a.symbol, theirs = side === "B" ? d.a.symbol : d.b.symbol;
+  const pairText = pairId ? (d.flip
+    ? ` This coin is side ${side} of Burn Derby pair ${pairId}, one of two new coins. ${side === "B" ? `It burns once if the season ends without ${d.a.symbol} passing ${d.b.symbol}.` : `It burns once on the first window ${d.a.symbol} passes ${d.b.symbol}.`} ${derbyReadOnlySentence(d)}`
+    : ` This coin is side ${side} of Burn Derby pair ${pairId}, one of two new coins. This coin burns on a window ${mine} wins. On a window ${theirs} wins, the other new coin burns, and this coin's share for that window goes to the other new coin's burn. ${derbyReadOnlySentence(d)}`) : "";
   const season = `The season runs ${d.season.days} days from ${d.season.start}. Windows after that read nothing.`;
   if (d.flip) return `This is a one-shot flippening. The first ${wnd} that ends with ${d.a.symbol}'s size above ${d.b.symbol}'s settles YES. Size is circulating supply times ${feed(d.a)} for ${d.a.symbol}, and times ${feed(d.b)} for ${d.b.symbol}. If the season ends without that, it settles NO.${pairText} ${season} After that, nothing more is read. A cross-read that disagrees by more than ${DERBY_DISAGREEMENT_PP}% on the comparison withholds the reading, so there is no reading and no burn.`;
   return `Every ${wnd}, ${d.a.symbol}'s ${measure} (${feed(d.a)}) is compared with ${d.b.symbol}'s (${feed(d.b)}). The larger one wins the window. A window ${d.a.symbol} wins settles YES, and a window ${d.b.symbol} wins settles NO. An exact tie is a void and burns nothing.${pairText} ${season} A cross-read from an independent operator that disagrees by more than ${DERBY_DISAGREEMENT_PP} points on the margin withholds the window, so there is no reading and no burn. Readings use each coin's feed at the boundaries. Our own coins' trading is never read.`;

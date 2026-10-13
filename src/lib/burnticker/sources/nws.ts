@@ -28,11 +28,13 @@ export interface Station { code: string; city: string; label: string; state: str
 export const STATIONS: Station[] = [
   ["ATL", "Atlanta", "Atlanta (Hartsfield)", "GA"], ["AUS", "Austin", "Austin (Camp Mabry)", "TX"], ["BOS", "Boston", "Boston (Logan)", "MA"], ["CLE", "Cleveland", "Cleveland (Hopkins)", "OH"],
   ["DCA", "Washington", "Washington, D.C. (Reagan National)", "VA"], ["DEN", "Denver", "Denver (DIA)", "CO"], ["DFW", "Dallas", "Dallas–Fort Worth", "TX"], ["DTW", "Detroit", "Detroit (Metro)", "MI"],
-  ["IAH", "Houston", "Houston (Bush Intercontinental)", "TX"], ["LAS", "Las Vegas", "Las Vegas (Harry Reid)", "NV"], ["LAX", "Los Angeles", "Los Angeles (LAX)", "CA"], ["MIA", "Miami", "Miami", "FL"],
+  ["IAH", "Houston", "Houston (Bush Intercontinental)", "TX"], ["LAS", "Las Vegas", "Las Vegas (Harry Reid)", "NV"], ["LAX", "Los Angeles", "Los Angeles (International)", "CA"], ["MIA", "Miami", "Miami", "FL"],
   ["MSP", "Minneapolis", "Minneapolis–St. Paul", "MN"], ["NYC", "New York", "New York (Central Park)", "NY"], ["ORD", "Chicago", "Chicago (O'Hare)", "IL"], ["PHL", "Philadelphia", "Philadelphia", "PA"],
-  ["PHX", "Phoenix", "Phoenix (Sky Harbor)", "AZ"], ["PIT", "Pittsburgh", "Pittsburgh", "PA"], ["SEA", "Seattle", "Seattle (Sea-Tac)", "WA"], ["SFO", "San Francisco", "San Francisco (SFO)", "CA"],
+  ["PHX", "Phoenix", "Phoenix (Sky Harbor)", "AZ"], ["PIT", "Pittsburgh", "Pittsburgh", "PA"], ["SEA", "Seattle", "Seattle (Sea-Tac)", "WA"], ["SFO", "San Francisco", "San Francisco (International)", "CA"],
   ["SLC", "Salt Lake City", "Salt Lake City", "UT"], ["STL", "St. Louis", "St. Louis (Lambert)", "MO"],
 ].map(([code, city, label, state]) => ({ code, city, label, state }));
+/** QA pass 9 #34: a station as a picker option, its code said once ("Los Angeles (International), LAX"), never "Los Angeles (LAX) (LAX)". */
+export const stationOptionLabel = (s: Pick<Station, "label" | "code">): string => (new RegExp(`\\b${s.code}\\b`).test(s.label) ? s.label : `${s.label}, ${s.code}`);
 export const stationByCode = (c: string): Station | null => STATIONS.find((s) => s.code === c.toUpperCase()) ?? null;
 /** Stations a query names by city or code ("detroit", "DTW", "new york"). */
 export function findStations(q: string): Station[] {

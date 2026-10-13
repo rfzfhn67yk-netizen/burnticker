@@ -15,6 +15,24 @@ const okTicker = (t: string) => /^[A-Z0-9]{2,10}$/.test(t);
 export const NAME_MAX_BYTES = 32;
 export const SYMBOL_MAX_BYTES = 10;
 export const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
+/**
+ * A GENERATED NAME THAT FITS (QA pass 9 #15, 2026-10-13: "Leeds United vs Manchester" was a cut, not a name). The first candidate that
+ * fits in `max` bytes wins; candidates are whole names, shortest last. When none fits, the last one is cut at a word boundary in bytes,
+ * never inside a word, and a dangling small word ("vs", "of", "the", "and") or punctuation is dropped with the cut. Client-safe.
+ */
+export function fitName(candidates: string | readonly string[], max = NAME_MAX_BYTES): string {
+  const list = (typeof candidates === "string" ? [candidates] : candidates).map((c) => c.replace(/\s+/g, " ").trim()).filter(Boolean);
+  for (const c of list) if (utf8Bytes(c) <= max) return c;
+  const last = list[list.length - 1] ?? "";
+  const words: string[] = [];
+  for (const w of last.split(" ")) { if (utf8Bytes([...words, w].join(" ")) > max) break; words.push(w); }
+  while (words.length > 1 && /^(vs\.?|v|of|the|a|an|and|for|on|in|by|to|at|—|-|&)$/i.test(words[words.length - 1])) words.pop();
+  const out = words.join(" ").replace(/[,:;—&-]+$/, "").trim();
+  if (out) return out;
+  // one word longer than the limit: whole characters up to the limit (never half of a multi-byte character)
+  let s = ""; for (const ch of Array.from(last)) { if (utf8Bytes(s + ch) > max) break; s += ch; }
+  return s;
+}
 /** The characters of a name a person can see (whitespace, format and control characters, fillers and lone marks removed). */
 export const visibleText = (s: string): string => s.replace(/[\s\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}\p{Mn}\p{Me}\u034F\u115F\u1160\u2800\u3164\uFE00-\uFE0F\uFFA0\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}]/gu, "");
 /** The field problems of one coin, each a sentence a person can act on ("" = fine). */

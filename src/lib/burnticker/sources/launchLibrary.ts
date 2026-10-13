@@ -1,4 +1,5 @@
 import type { HttpSourceConfig } from "@/lib/burnticker/sources/attestedHttp";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * LAUNCH LIBRARY 2 BY PROVIDER, AND ONE NAMED LAUNCH (sources-2, 2026-10-12). The Space Devs' Launch Library 2 (ll.thespacedevs.com,
@@ -64,9 +65,9 @@ export function ll2Text(s: NonNullable<ReturnType<typeof parseLl2Series>>, spend
   const src = "The result comes from Launch Library 2, a public launch database run by The Space Devs.";
   if (s.kind === "provider") {
     const p = LL2_PROVIDERS[s.provider];
-    if (inverse) return { name: `No ${p.name} Launch Days`.slice(0, 32), ticker: `NO${p.abbrev}`.slice(0, 10), oneLiner: `burns on every day ${p.name} has no successful launch`, oneShot: false,
+    if (inverse) return { name: fitName(`No ${p.name} Launch Days`), ticker: `NO${p.abbrev}`.slice(0, 10), oneLiner: `burns on every day ${p.name} has no successful launch`, oneShot: false,
       block: `For every day ${p.name} has no successful orbital launch, ${spends}, with a receipt on chain. ${src} Each day is read once it is over in UTC. A day with a successful launch burns nothing.` };
-    return { name: `${p.name} Launches`.slice(0, 32), ticker: `${p.abbrev}LAUNCH`.slice(0, 10), oneLiner: `burns for every successful ${p.name} launch`, oneShot: false,
+    return { name: fitName(`${p.name} Launches`), ticker: `${p.abbrev}LAUNCH`.slice(0, 10), oneLiner: `burns for every successful ${p.name} launch`, oneShot: false,
       block: `For every successful orbital launch by ${p.name}, ${spends}, with a receipt on chain. Two launches on one day burn twice. ${src} Each day is read once it is over in UTC. A failed launch, a suborbital flight or a day with no launch burns nothing.` };
   }
   // intent audit 2 item 2: never a bare "this launch"; with no name known, the immutable id the rule locks

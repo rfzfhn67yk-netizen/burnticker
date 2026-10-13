@@ -1,7 +1,7 @@
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { eventIdentity } from "@/lib/burnticker/eventIdentity";
 import { teamTicker, type TeamWindow } from "@/lib/burnticker/tickers";
-import { championSeries, LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
+import { championSeries, displayAbbr, findTeams, LEAGUES, noPlayoffs, parseEspnSeries, seasonLabel, seasonStartYear, teamByAbbr, teamById, type EspnSeries, type LeagueId, type Window } from "@/lib/burnticker/sources/espn";
 import { parseNwsSeries, stationByCode } from "@/lib/burnticker/sources/nws";
 import { fedregEoText, isFedregEo } from "@/lib/burnticker/sources/fedreg";
 import { ll2Text, parseLl2Series } from "@/lib/burnticker/sources/launchLibrary";
@@ -17,6 +17,7 @@ import { statedSentences } from "@/lib/burnticker/sources/polyStated";
 import { CATALOGUE_ONE_SHOT_RE } from "@/lib/burnticker/inverse";
 import { highLastDay, highText } from "@/lib/burnticker/derby/high";
 import { paramName } from "@/lib/burnticker/paramNames";
+import { fitName } from "@/lib/burnticker/launchFields";
 
 /**
  * THE AUTO-GENERATED COIN TEXT (2026-10-10, the owner thinks in sentences): from the LOCKED RULE, by deterministic templates — no model —
@@ -59,7 +60,7 @@ export interface DescribeCtx {
    * A Polymarket-settled coin (sources-2): Polymarket's stated source as coin text, the cross-read when an adapter reads that publisher's
    * fact, and the dispute window (oracle/polymarket.ts polyStated → sources/polyStated.ts). Absent: the text keeps its older wording.
    */
-  stated?: { phrase: string | null; crossRead: { text: string } | null; finalAfter: { text: string } } | null;
+  stated?: { phrase: string | null; crossRead: { text: string } | null; finalAfter: { text: string }; /** QA pass 9 #17: the market's end date from the server's own read (the review's due date when the page sent none) */ endsAt?: string | null } | null;
   /** A named launch's name (ll2.launch) or a channel's name (youtube.milestone), when the picker knows it. */
   subjectName?: string | null;
 }
@@ -109,7 +110,7 @@ export function winnerTakesBurnFacts(a: string, b: string): PairFacts {
   };
 }
 export function independentPairFacts(a: string, b: string, teams: { a: string; b: string } | null = null): PairFacts {
-  const A = teams?.a ?? `$${a}'s side`, B = teams?.b ?? `$${b}'s side`;
+  const A = teams ? teamRefByName(teams.a) : `$${a}'s side`, B = teams ? teamRefByName(teams.b) : `$${b}'s side`;
   return {
     kind: "independent",
     trigger: `These are two separate coins with their own rules. $${a}'s rule fires when ${A} lose, and $${b}'s rule fires when ${B} lose.`,
@@ -156,7 +157,11 @@ const sinkPhrase = (k: "flagship" | "pair-winner"): string => (k === "pair-winne
 const burnDown = (r: BurnRule): string => { const k = describeEndSink(r); return k ? `${sinkPhrase(k)} and the coin retires` : BURN_DOWN; };
 /** The void sentence that follows the window sentence of a rule with an end sink ("" otherwise). */
 export const END_SINK_VOID_SENTENCE = "If the result is voided or the season is cancelled, whatever is left burns down on this coin over four weeks instead.";
-const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindOf(r) !== "perpetual" ? ` ${END_SINK_VOID_SENTENCE}` : "");
+/** QA pass 9 #19 (2026-10-13): "the season is cancelled" only where a season exists (a team or rivalry coin); every other rule says the result. */
+export const END_SINK_VOID_SENTENCE_PLAIN = "If the result is voided, whatever is left burns down on this coin over four weeks instead.";
+export const isSportsRule = (r: Pick<BurnRule, "oracle" | "series">): boolean => r.oracle === "catalogue" && !!r.series && parseEspnSeries(r.series) !== null;
+export const voidSentenceFor = (r: Pick<BurnRule, "oracle" | "series">): string => (isSportsRule(r) ? END_SINK_VOID_SENTENCE : END_SINK_VOID_SENTENCE_PLAIN);
+const voidSentence = (r: BurnRule): string => (describeEndSink(r) && windowKindOf(r) !== "perpetual" ? ` ${voidSentenceFor(r)}` : "");
 /**
  * THE CHAMPION PATH (website-18, the owner on 2026-10-12: "say I want to pick the Dodgers to win the World Series: it should burn every
  * game they win until the last game of the World Series, then burn the remaining balance after they win. If they lose, it should ... burn
@@ -203,7 +208,7 @@ export function endText(r: BurnRule, o: { team?: string | null } = {}): EndText 
   if (windowKindOf(r) === "perpetual" && !r.market && r.oracle !== "derby") return mk("perpetual", PERPETUAL_SENTENCE, null);
   const sink = describeEndSink(r);
   // the coin description says the same void sentence (END_SINK_VOID_SENTENCE is this text at the default 28 days)
-  const VOID = days === 28 ? END_SINK_VOID_SENTENCE : END_SINK_VOID_SENTENCE.replace("over four weeks", over);
+  const VOID = days === 28 ? voidSentenceFor(r) : voidSentenceFor(r).replace("over four weeks", over);
   if (!sink) return mk("self", `When the rule ends, the coin's own burn pool burns down what is left ${over}, then the coin retires. A retired coin's pool keeps burning any fees it still receives. This end only burns this coin and sends nothing to another coin.`, null);
   if (sink === "pair-winner" && isMeetingsSeries(r)) return mk("pair-winner", MEETINGS_END_RESULT, `${MEETINGS_LEVEL_SENTENCE} ${VOID}`);
   if (sink === "pair-winner") return mk("pair-winner", "When the rule ends on a result, the rest of the pool, and any fees that arrive later, goes to the rival coin's burn if the rival won the last result, or to $DEFICIT's burn if it did not. Then the coin retires.", VOID);
@@ -226,15 +231,8 @@ export const SNOW_SEASON_SENTENCE = "The season runs July 1 to June 30, and only
  * A generated coin name, at most `max` characters, cut at a word boundary and never mid-word (intent audit 4 item 19: "Wikipedia daily
  * views of an arti"). A trailing small word ("of", "the", "a", "an", "and") is dropped with the cut.
  */
-export function capName(name: string, max = 32): string {
-  const s = name.replace(/\s+/g, " ").trim();
-  if (s.length <= max) return s;
-  const words = s.slice(0, max + 1).split(" ");
-  if (words.length > 1) words.pop();
-  while (words.length > 1 && /^(of|the|a|an|and|for|on|in|by|to|—|-)$/i.test(words[words.length - 1])) words.pop();
-  const out = words.join(" ").replace(/[,:;—-]+$/, "").trim();
-  return out.length ? out.slice(0, max) : s.slice(0, max);
-}
+// QA pass 9 #15: measured in bytes, as the program measures a name (launchFields.ts fitName), and never cut inside a word
+export function capName(name: string, max = 32): string { return fitName(name, max); }
 
 /**
  * The selected subject of a parameterized series, its short name and what each reading measures, read from the series id itself (the same
@@ -433,7 +431,17 @@ function espnText(r: BurnRule, s: EspnSeries, c: DescribeCtx): CoinText {
  */
 export const MEETINGS_LEVEL_SENTENCE = "If the two teams won the same number of games against each other, nothing moves at the end and whatever is left burns down on this coin over four weeks.";
 export const teamRef = (league: LeagueId, nickname: string): string => (LEAGUES[league].sport === "soccer" || league === "cfb" || league === "mcbb" || league === "wcbb" ? nickname : `the ${nickname}`);
-export const meetingsTicker = (abbr: string, opp: string): string => `${abbr.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}V${opp.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}`.slice(0, 10);
+/**
+ * QA pass 9 #21 (2026-10-13: "the Leeds United lose"): a team named without its league takes the article its league uses, found by name in
+ * the team tables ("the Celtics", "Leeds United", "Georgia"); a name already starting with "the" is kept; an unknown name takes none.
+ */
+export function teamRefByName(name: string): string {
+  const n = name.trim();
+  if (/^the\s/i.test(n)) return n;
+  const t = findTeams(n).find((x) => [x.nickname, x.name].some((k) => k.toLowerCase() === n.toLowerCase()));
+  return t ? teamRef(t.league, n) : n;
+}
+export const meetingsTicker = (abbr0: string, opp0: string, league: LeagueId | null = null): string => { const abbr = league ? displayAbbr(league, abbr0) : abbr0, opp = league ? displayAbbr(league, opp0) : opp0; return `${abbr.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}V${opp.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4)}`.slice(0, 10); };
 function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Window, { kind: "meetings" }>, c: DescribeCtx, mk: (name: string, ticker: string, oneLiner: string, rules: string, windowSentence: string, windowKind: WindowKind, shape: CoinText["shape"]) => CoinText, o: { ref: string; nick: string; pens: string; cross: string }): CoinText {
   const oppTeam = teamById(league, w.oppId) ?? teamByAbbr(league, w.opp);
   const oppNick = oppTeam?.nickname ?? w.opp, oref = teamRef(league, oppNick), L = seasonLabel(league, w.year), t = c.ticker;
@@ -443,7 +451,7 @@ function meetingsText(r: BurnRule, league: LeagueId, abbr: string, w: Extract<Wi
   const check = CROSS[league] ? "The league's own feed confirms it." : "A second, independent source confirms it.";
   const rules = `For every game ${o.ref} win against ${oref} ${scope}, ${spend}, with a receipt on chain. Each game's result comes from ${SPORTS_RESULT}. ${check}${o.pens} When ${oref} win one of those games, this coin's share for that game goes to the burn pool of the ${oppNick} coin instead. A draw moves nothing, and a postponed or cancelled game counts for neither side. ${MEETINGS_LEVEL_SENTENCE}`;
   const windowSentence = `This coin covers the ${L} season only, including ${noPlayoffs(league) ? "every match of the competition" : "the playoffs"}. After both teams' last game, whatever is left burns the coin of the team that won more of the games between them, or $DEFICIT if that coin is not live, and the coin retires. It does not continue into ${nextSeason(league, w.year)}.`;
-  return mk(`${o.nick} vs ${oppNick} ${L}`, meetingsTicker(abbr, w.opp), `burns when ${o.ref} beat ${oref}`, rules, windowSentence, "season", "recurring");
+  return mk(`${o.nick} vs ${oppNick} ${L}`, meetingsTicker(abbr, w.opp, league), `burns when ${o.ref} beat ${oref}`, rules, windowSentence, "season", "recurring");
 }
 
 /** A level cup tie decided on penalties (website-20 item 78, owner decision 2026-10-12). */
@@ -456,9 +464,9 @@ export const PENALTIES_SENTENCE = "A cup tie decided on penalties counts as a wi
  */
 const QUIET_NAMES: Record<string, string> = { "noaa.flares": "Quiet Sun" };
 export function fadeName(series: string | null, subject: string, zeroCount: boolean): string {
-  if (!zeroCount) return `No Move ${subject}`.slice(0, 32);
+  if (!zeroCount) return fitName(`No Move ${subject}`);
   const known = series ? QUIET_NAMES[series.split(":")[0]] : undefined;
-  return (known ?? `Days Without ${subject}`).slice(0, 32).trimEnd();
+  return fitName(known ?? `Days Without ${subject}`);
 }
 
 /** The coin's name, ticker, one-liner and paragraph from its rule. `ctx.ticker` is the ticker the text names (the suggestion when empty). */
@@ -530,7 +538,7 @@ export function describeRule(r: BurnRule, ctx: DescribeCtx): CoinText {
     const phrase0 = (ctx.eventPhrase ?? "the market's event happens").replace(/\s*\(resolves once\)$/, "");
     const id = eventIdentity(phrase0), phrase = id.verb ? id.phrase : phrase0, not = negatePhrase(phrase);
     const settle = ctx.stated ? statedSentences(ctx.stated, ctx.stated.finalAfter) : `The result comes from Polymarket's on-chain payout, cross-checked against ${ctx.crossRead ?? "the official result"}.`;
-    return build(`${id.verb && id.confident ? id.name : "Event"} No`.slice(0, 32), `NO${tickerFrom(id.ticker)}`.slice(0, 10), `burns if the Polymarket market settles NO, meaning ${not}`,
+    return build(fitName(`${id.verb && id.confident ? id.name : "Event"} No`), `NO${tickerFrom(id.ticker)}`.slice(0, 10), `burns if the Polymarket market settles NO, meaning ${not}`,
       (t) => `If the Polymarket market settles NO, meaning ${not}, ${spends(r, t)} once, with a receipt on chain. ${settle} If it settles YES, nothing burns. A voided or cancelled market never counts as a NO, and nothing burns for it.`, oneShotSentence(r, ctx.endsAt), "one-shot");
   }
   if (r.oracle === "polymarket" && r.market) {
