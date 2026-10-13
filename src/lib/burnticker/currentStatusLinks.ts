@@ -22,7 +22,7 @@ export const FIRST_BURN_PATH_URL = "https://github.com/rfzfhn67yk-netizen/burnti
  * after the push): a file added since the pinned commit 404s until then. test/burntickerTrustLinks.test.ts checks the shape.
  */
 export const PUBLIC_REPO_URL = "https://github.com/rfzfhn67yk-netizen/burnticker";
-export const PUBLIC_REPO_COMMIT = "2b6adfafe4b2a6d3f1fdb7ce48c313bd90136412";
+export const PUBLIC_REPO_COMMIT = "7729f6d69b80cf136300f8bd9f6cb2df2a6109eb";
 /** Repository paths a page may cite (top-level folders of the public tree). */
 export const REPO_PATH_RE = /\b(?:docs|config|src|programs|scripts|site|test|deploy)\/[A-Za-z0-9_./\[\]-]*[A-Za-z0-9_\]/-]/g;
 /** The pinned GitHub URL of a repository path: a trailing "/" (a folder) opens the tree view, anything else the file. */
