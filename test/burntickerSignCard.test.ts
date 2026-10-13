@@ -142,7 +142,7 @@ describe("the page and the tile reach the same signing card", () => {
     const page = read("src/app/burnticker/launch/page.tsx"), tile = read("src/app/burnticker/launch/CoinVsCoinTile.tsx"), card = read("src/app/burnticker/launch/SignCard.tsx");
     assert.match(page, /setStep\("launch"\)/, "the review card's Launch moves to the sign step after the bundle arrives");
     assert.match(page, /pcOut \? pairCurvePlan\(.*\) : pairOut \? launchlabPlan\(\[pairOut\.a, pairOut\.b\]\) : launchlabPlan\(\[bundle!\]\)/);
-    assert.equal((page.match(/<SignCard\b/g) ?? []).length, 1); assert.equal((tile.match(/<SignCard\b/g) ?? []).length, 1);
+    assert.equal((page.match(/<SignCard\b/g) ?? []).length, 1); assert.equal((tile.match(/<SignCard\b/g) ?? []).length, 2, "website-21: the pair and the record-close coin each end on SignCard");
     assert.ok(!fs.existsSync(path.join(ROOT, "src/app/burnticker/launch/PairCurveSign.tsx")));
     assert.match(card, /signAndSendPlan\(/); assert.match(card, /confirmPlan\(/);
     assert.ok(!/odds|price|chance/i.test(card.replace(/\/\*[\s\S]*?\*\//g, "")), "no odds or prices on the signing card");

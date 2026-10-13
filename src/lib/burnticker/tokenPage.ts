@@ -4,6 +4,8 @@ import { STATUS_CSS, seriesChartSvg, toJson, publishSite } from "@/lib/burnKeepe
 import { CURVE_FEES, postGraduationFeesFor, LP_BURNED_PCT, LP_LOCKED_PCT, PRE_AUDIT_POOL_CAP_SOL, OPERATOR_LINE, OPERATOR_SHARE_LINE, USE_OF_FEES, bpsPerSol, burnPoolAddresses, capPool, feeSplitSentence, type FeeSplit } from "@/lib/burnticker/fees";
 import { DECIMALS, DISCLAIMER_FOOTER, TOTAL_SUPPLY, descriptionFooter, oracleDisclosure, pairClause, pairMirrorRule, pairWinnerTakesBurn, ruleMappings, ruleStatement, type LockedRule } from "@/lib/burnticker/rules";
 import { badgeFromText, PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+// website-21 (WIRING-RIVALRY-SERIES gap): a rivalry series pair reads two series, one per team, never one shared market
+import { isMeetingsSelector, MEETINGS_PAIR_PAGE_LINE } from "@/lib/burnticker/guidedLaunch";
 import { creatorTextOf } from "@/lib/burnticker/creatorProfile";
 import { auditBadgeView } from "@/lib/burnticker/auditBadge";
 import { NO_WALLET_LINE, termLine } from "@/lib/burnticker/glossary";
@@ -657,7 +659,7 @@ ${STATUS_CSS}
 </style></head><body><main>
 <p><a href="../../">← Burnticker</a></p>
 <h1><a href="../../t/${A}/">$${A}</a> <span class="muted" style="font-weight:400">vs</span> <a href="../../t/${B}/">$${B}</a></h1>
-<p class="muted">This is the rivalry pair <code>${esc(tally.pairId)}</code>. Both coins read the same market (<code>${esc(a.selectorKey)}</code>${a.seriesTitle ? `, ${esc(a.seriesTitle)}` : ""}) with opposite rules, so each result burns exactly one side. A voided market burns neither. Updated ${esc(a.generatedAt)}.</p>
+<p class="muted">This is the rivalry pair <code>${esc(tally.pairId)}</code>. ${isMeetingsSelector(a.selectorKey) ? `${esc(MEETINGS_PAIR_PAGE_LINE)} A draw, a postponed or a cancelled game moves nothing.` : `Both coins read the same market (<code>${esc(a.selectorKey)}</code>${a.seriesTitle ? `, ${esc(a.seriesTitle)}` : ""}) with opposite rules, so each result burns exactly one side. A voided market burns neither.`} Updated ${esc(a.generatedAt)}.</p>
 <div class="score">$${A} ${tally.burnsA} <span class="muted">:</span> ${tally.burnsB} $${B}</div>
 <div class="tiles">
 ${tiles}

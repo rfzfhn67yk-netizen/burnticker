@@ -76,7 +76,7 @@ describe("three decisions to a coin", () => {
     // website-20: the guided path's step 4 renders the same card in its "name" mode; the review itself is still one card
     assert.equal((src.match(/<ReviewCard\b/g) ?? []).length, 2, "one review card for every page path, plus its name step");
     assert.equal((src.match(/<ReviewCard mode="name"/g) ?? []).length, 1);
-    assert.equal((read(TILE).match(/<ReviewCard\b/g) ?? []).length, 1, "Coin vs Coin: two coins → the same review card");
+    assert.equal((read(TILE).match(/<ReviewCard\b/g) ?? []).length, 2, "Coin vs Coin: two coins → the same review card; website-21: a coin's record close → its own one-coin card");
   });
 
   test("the controls the owner cut are gone from the web UI (each is API-only; ui-conventions.md lists the endpoint)", () => {

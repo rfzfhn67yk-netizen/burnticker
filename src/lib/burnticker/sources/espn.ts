@@ -23,6 +23,17 @@ import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { ty
  *       n<N>.<YYYYMMDD> the team's next N games (1–20) starting on that UTC date, across a season boundary if it comes to that
  *       perpetual      every game, every season, no end date: off-season days read nothing (the pool keeps filling) and readings
  *                      resume with the next season's first game — this coin does not retire
+ *       m<YYYY>.<OPP>.<OPPID>  EVERY GAME BETWEEN THE TEAM AND ONE OPPONENT in season YYYY, regular season and postseason (the rivalry
+ *                      series, owner 2026-10-12: "sixers vs celtics as a pair ... resolves at the end of the season"). Outcome is always
+ *                      `win`; the opponent is pinned by its ESPN team id too. The mirror id (the opponent's side) is meetingsMirror(id).
+ *                      A meetings reading is SIGNED: per game day, the team's wins minus its losses against that opponent (+1 a win,
+ *                      −1 a loss, 0 a draw or a split day); a postponed or cancelled meeting counts for neither side. When the window
+ *                      ends (both teams' last listed game, postseason included, every game final, SEASON_END_GRACE_MS passed) ONE more
+ *                      reading is written, dated the day after that last game: +1 if the team won more of the meetings, −1 if fewer,
+ *                      nothing if level (the window then ends void). Read as a pair (rules.ts meetingsSeriesId; both coins direction
+ *                      up, side B on the mirror id), the existing winner-takes-the-burn path does the rest: a +1 is the coin's win,
+ *                      a −1 is its loss (pairMirrorRule), so the loser's share forwards; the end-day reading is the season-end
+ *                      PairResult the program's pair-winner end sink reads (end.rs partner_won). See docs in WIRING-RIVALRY-SERIES.md.
  *   espn.team:<league>-<ABBR>-<win|loss>[-reg|-post]  the 10-10 first form (still read): this season by abbreviation
  *   espn.game:<league>-<eventId>-<ABBR>-<win|loss> one game: value 1 if the team won (or lost) it (a tie burns neither side)
  * Readings are keyed by the game's UTC start date ("2026-10-04"); a doubleheader counts 2.
@@ -132,11 +143,12 @@ export type Window =
   | { kind: "post"; year: number }
   | { kind: "next"; n: number; from: string }
   | { kind: "perpetual" }
+  | { kind: "meetings"; year: number; opp: string; oppId: string }
   | { kind: "legacy"; scope: "all" | "reg" | "post" };
 export type WindowKind = Window["kind"];
 export const NEXT_MAX = 20;
 export function windowCode(w: Window): string {
-  return w.kind === "season" ? `s${w.year}` : w.kind === "post" ? `p${w.year}` : w.kind === "next" ? `n${w.n}.${w.from}` : w.kind === "perpetual" ? "perpetual" : w.scope === "all" ? "" : w.scope;
+  return w.kind === "season" ? `s${w.year}` : w.kind === "post" ? `p${w.year}` : w.kind === "next" ? `n${w.n}.${w.from}` : w.kind === "perpetual" ? "perpetual" : w.kind === "meetings" ? `m${w.year}.${w.opp.toUpperCase()}.${w.oppId}` : w.scope === "all" ? "" : w.scope;
 }
 export function parseWindowCode(c: string): Window | null {
   let m = /^([sp])(\d{4})$/.exec(c);
@@ -144,6 +156,8 @@ export function parseWindowCode(c: string): Window | null {
   m = /^n(\d{1,2})\.(\d{8})$/.exec(c);
   if (m) { const n = Number(m[1]); return n >= 1 && n <= NEXT_MAX && !Number.isNaN(Date.parse(`${m[2].slice(0, 4)}-${m[2].slice(4, 6)}-${m[2].slice(6)}T00:00:00Z`)) ? { kind: "next", n, from: m[2] } : null; }
   if (c === "perpetual") return { kind: "perpetual" };
+  m = /^m(\d{4})\.([A-Z0-9]{2,6})\.(\d{1,7})$/.exec(c);
+  if (m) return { kind: "meetings", year: Number(m[1]), opp: m[2], oppId: m[3] };
   if (c === "" || c === "all" || c === "reg" || c === "post") return { kind: "legacy", scope: (c || "all") as "all" | "reg" | "post" };
   return null;
 }
@@ -163,6 +177,7 @@ export function windowPhrase(league: LeagueId, w: Window): string {
   if (w.kind === "post") return `the ${seasonLabel(league, w.year)} postseason`;
   if (w.kind === "next") return `the next ${w.n} game${w.n === 1 ? "" : "s"} from ${w.from.slice(0, 4)}-${w.from.slice(4, 6)}-${w.from.slice(6)}`;
   if (w.kind === "perpetual") return "every season, no end date";
+  if (w.kind === "meetings") { const o = teamById(league, w.oppId) ?? teamByAbbr(league, w.opp); return `every game against ${o?.name ?? w.opp} in the ${seasonLabel(league, w.year)} season${noPlayoffs(league) ? "" : ", playoffs included"}`; }
   return w.scope === "post" ? "this postseason" : w.scope === "reg" ? "this regular season" : "this season";
 }
 export const teamIdOf = (league: LeagueId, abbr: string): string | null => TEAM_IDS[`${league}:${abbr.toUpperCase()}`] ?? teamByAbbr(league, abbr)?.id ?? null;
@@ -182,12 +197,37 @@ export function teamSeries(league: LeagueId, abbr: string, outcome: Outcome, win
   if (!id) throw new Error(`no ESPN team id for ${league} ${abbr}`);
   return `espn.team:${league}-${abbr.toUpperCase()}.${id}-${outcome}-${windowCode(window)}`;
 }
+/** The rivalry series of one side: `abbr`'s head-to-head games against `opp` in season `year` (both pinned by their team ids). */
+export function meetingsSeries(league: LeagueId, abbr: string, opp: string, year: number): string {
+  const oppId = teamIdOf(league, opp);
+  if (!oppId) throw new Error(`no ESPN team id for ${league} ${opp}`);
+  if (abbr.toUpperCase() === opp.toUpperCase()) throw new Error("a rivalry series needs two different teams");
+  return teamSeries(league, abbr, "win", { kind: "meetings", year, opp: opp.toUpperCase(), oppId });
+}
+/** The other side's series of a rivalry series id (PHI vs BOS → BOS vs PHI), or null when `id` is not one. */
+export function meetingsMirror(id: string): string | null {
+  const e = parseEspnSeries(id);
+  if (e?.kind !== "team" || e.window.kind !== "meetings") return null;
+  return meetingsSeries(e.league, e.window.opp, e.abbr, e.window.year);
+}
+/** The two series of a rivalry pair, one per team. */
+export const meetingsPairSeries = (league: LeagueId, a: string, b: string, year: number): { a: string; b: string } => ({ a: meetingsSeries(league, a, b, year), b: meetingsSeries(league, b, a, year) });
+export type MeetingsSeries = Extract<EspnSeries, { kind: "team" }> & { window: Extract<Window, { kind: "meetings" }> };
+export const asMeetings = (s: EspnSeries | null | undefined): MeetingsSeries | null => (s?.kind === "team" && s.window.kind === "meetings" ? (s as MeetingsSeries) : null);
+/** True when a catalogue series id is a rivalry series (the pair gate in rules.ts repeats this as a pattern, MEETINGS_SERIES_RE). */
+export const isMeetingsSeriesId = (id: string | null | undefined): boolean => !!id && asMeetings(parseEspnSeries(id)) !== null;
 export const gameSeries = (league: LeagueId, eventId: string, abbr: string, outcome: Outcome): string => `espn.game:${league}-${eventId}-${abbr.toUpperCase()}-${outcome}`;
 export function parseEspnSeries(id: string): EspnSeries | null {
-  let m = new RegExp(`^espn\\.team:(${LEAGUE_ALT})-([A-Z0-9]{2,6})\\.(\\d{1,7})-(win|loss|draw)-(s\\d{4}|p\\d{4}|n\\d{1,2}\\.\\d{8}|perpetual)$`).exec(id);
+  let m = new RegExp(`^espn\\.team:(${LEAGUE_ALT})-([A-Z0-9]{2,6})\\.(\\d{1,7})-(win|loss|draw)-(s\\d{4}|p\\d{4}|n\\d{1,2}\\.\\d{8}|perpetual|m\\d{4}\\.[A-Z0-9]{2,6}\\.\\d{1,7})$`).exec(id);
   if (m) {
-    const lg = m[1] as LeagueId, t = teamById(lg, m[3]) ?? teamByAbbr(lg, m[2]), w = parseWindowCode(m[5]);
+    const lg = m[1] as LeagueId, t = teamById(lg, m[3]) ?? teamByAbbr(lg, m[2]); let w = parseWindowCode(m[5]);
     if (m[4] === "draw" && !LEAGUES[lg].draws) return null;
+    if (w?.kind === "meetings") {
+      // the rivalry series: outcome `win` only (a signed head-to-head reading), a real opponent that is not the team itself
+      const o = teamById(lg, w.oppId) ?? teamByAbbr(lg, w.opp);
+      if (m[4] !== "win" || !o || !t || o.abbr === t.abbr) return null;
+      w = { ...w, opp: o.abbr };
+    }
     return t && w ? { kind: "team", league: lg, abbr: t.abbr, teamId: m[3], outcome: m[4] as Outcome, window: w } : null;
   }
   m = /^espn\.team:(nfl|nba|mlb|nhl)-([A-Z]{2,5})-(win|loss)(?:-(reg|post))?$/.exec(id);
@@ -198,6 +238,7 @@ export function parseEspnSeries(id: string): EspnSeries | null {
 }
 export function espnSeriesTitle(s: EspnSeries): string {
   const t = teamByAbbr(s.league, s.abbr)!;
+  if (s.kind === "team" && s.window.kind === "meetings") { const o = teamById(s.league, s.window.oppId) ?? teamByAbbr(s.league, s.window.opp); return `${t.name} against ${o?.name ?? s.window.opp}, head to head — ${windowPhrase(s.league, s.window)} (${LEAGUES[s.league].label})`; }
   return s.kind === "team" ? `${t.name} ${s.outcome === "win" ? "wins" : "losses"}${s.window.kind === "legacy" && s.window.scope === "all" ? "" : ` — ${windowPhrase(s.league, s.window)}`} (${LEAGUES[s.league].label})` : `${t.name} ${s.outcome === "win" ? "win" : "loss"} in ESPN game ${s.eventId}`;
 }
 
@@ -306,6 +347,34 @@ export function outcomeOf(g: Game, abbr: string, teamId: string | null = null): 
   return us.score > them.score ? "win" : us.score < them.score ? "loss" : "tie";
 }
 
+/** Does game `g` have team (abbr / id) on one side? */
+export const playsIn = (g: Game, abbr: string, teamId: string | null = null): boolean => [g.home, g.away].some((x) => (teamId && x.id ? x.id === teamId : x.abbr === abbr));
+/** Is `g` a meeting of the series' team and its opponent? */
+export const isMeetingOf = (s: MeetingsSeries, g: Game): boolean => playsIn(g, s.abbr, s.teamId) && playsIn(g, s.window.opp, s.window.oppId);
+/**
+ * One meeting from the side's view, as the SCHEDULE lists it (the catalogue and the API listing; the keeper's readings settle each game
+ * through gameSettle.ts instead): win / loss / draw once final, void when the schedule marks it cancelled or postponed without a result,
+ * pending while it is still to be played.
+ */
+export type MeetingOutcome = "win" | "loss" | "draw" | "void" | "pending";
+export function meetingOutcome(g: Game, abbr: string, teamId: string | null = null): MeetingOutcome {
+  if (!g.completed) return g.state === "post" || CANCELLED_RE.test(g.detail) || /postpon|suspend/i.test(g.detail) ? "void" : "pending";
+  const o = outcomeOf(g, abbr, teamId);
+  return o === "win" ? "win" : o === "loss" ? "loss" : o === "tie" || o === "draw" ? "draw" : "pending";
+}
+/** The head-to-head count of a rivalry series, from the side's view, and who leads it. */
+export interface MeetingsTally { wins: number; losses: number; draws: number; voids: number; leader: "team" | "opponent" | "level" }
+export function tallyMeetings(outcomes: readonly MeetingOutcome[]): MeetingsTally {
+  const n = (k: MeetingOutcome) => outcomes.filter((o) => o === k).length;
+  const wins = n("win"), losses = n("loss");
+  return { wins, losses, draws: n("draw"), voids: n("void"), leader: wins > losses ? "team" : losses > wins ? "opponent" : "level" };
+}
+/** The season-end reading's day: the UTC day after the later of the two teams' last listed games (never a meeting's own day). */
+export const seriesEndDay = (lastGameStartsAt: string): string => new Date(Date.parse(`${lastGameStartsAt.slice(0, 10)}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+/** The end reason of a level series. It starts with "void", so the end-sink keeper records a void end: each coin winds down on itself. */
+export const MEETINGS_LEVEL_REASON = "void: the two teams won the same number of games against each other this season, so nothing moves between the two coins and each burns down on its own pool";
+export const meetingsEndReason = (t: MeetingsTally, team: string, opp: string): string => (t.leader === "level" ? MEETINGS_LEVEL_REASON : `the season series is over: ${team} ${t.wins}, ${opp} ${t.losses}${t.draws ? `, ${t.draws} drawn` : ""}`);
+
 // ---- name variants (TheSportsDB names clubs and colleges its own way) ----
 export function tsdbNamePairs(g: Game): [string, string][] {
   const vs = (x: GameSide) => [...new Set([x.name, (x.name || "").replace(/^(AFC|FC|CF|SC|CD|CA|AC|AS|SS|SSC|US|RC|RCD|VfB|VfL|TSG|1\. FC)\s+|\s+(FC|CF|SC|AFC)$/g, "").trim(), x.short ?? "", x.location ?? ""].filter((n) => n && n.length >= 3))];
@@ -405,6 +474,7 @@ export async function gamesFor(client: EspnClient, s: EspnSeries, sinceIso: stri
   const key = s.kind === "team" && s.teamId ? s.teamId : s.abbr;
   if (s.kind === "game") return (await client.season(s.league, key)).filter((g) => g.eventId === s.eventId);
   const w = s.window;
+  if (w.kind === "meetings") { const ms = s as MeetingsSeries; return (await client.season(s.league, key, w.year)).filter((g) => isMeetingOf(ms, g)); }
   if (w.kind === "season" || w.kind === "post") return (await client.season(s.league, key, w.year)).filter((g) => w.kind === "season" || g.seasonType === 3);
   if (w.kind === "legacy") return (await client.season(s.league, key)).filter((g) => w.scope === "all" || (w.scope === "reg" ? g.seasonType === 2 : g.seasonType === 3));
   const from = w.kind === "next" ? `${w.from.slice(0, 4)}-${w.from.slice(4, 6)}-${w.from.slice(6)}` : sinceIso?.slice(0, 10) ?? null;
@@ -430,6 +500,8 @@ export interface WindowStatus {
    * window (championOf). true or false only for a league in CHAMPION_KNOWN; null when the source cannot tell; absent before the end.
    */
   champion?: boolean | null;
+  /** A rivalry series (window kind `meetings`) whose window ended: the head-to-head count from the settled readings, and the season-end reading's day (null when level). */
+  series?: (MeetingsTally & { endDay: string | null }) | null;
   /** The UTC date of the team's last POSTSEASON game, which `champion` was read from (null when it did not reach the postseason); the
    *  coin's own receipt for that day must agree before the keeper acts. */
   championDate?: string | null;
@@ -495,6 +567,7 @@ export function windowStatus(s: EspnSeries, games: readonly Game[], nowMs: numbe
   const lastDone = scope.filter((g) => g.completed).pop() ?? null;
   const endG = lastDone ?? scope[scope.length - 1] ?? last!;
   const champ = w.kind === "season" && CHAMPION_KNOWN.has(s.league) ? { champion: championOf(s, lastDone), championDate: lastDone?.seasonType === 3 ? lastDone.date : null } : {};
+  if (w.kind === "meetings") return { perpetual: false, ended: true, endsAt: last!.startsAt, lastGame: last, reason: `both teams' seasons are over (the last game was ${last!.date})` };
   return { perpetual: false, ended: true, endsAt: endG.startsAt, lastGame: last, reason: scope.length ? `the team's last game of the window was ${endG.date}` : `no postseason games: the season ended ${last!.date}`, ...champ };
 }
 

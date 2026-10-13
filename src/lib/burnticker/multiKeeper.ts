@@ -120,6 +120,11 @@ export function recordWindowEnd(d: Pick<KeeperDeps, "registry" | "dryRun" | "log
     const rule = d.registry.lockedRule(t).rule;
     if (!rule.onEnd) continue;
     let reason = `the coin's window ended: ${w.reason}`;
+    // THE RIVALRY SERIES (espn.ts window `meetings`): the season-end reading (+1 to the side that won more meetings, −1 to the other) is
+    // planned BEFORE the end is recorded (planToken skips a coin whose rule ended), so the end is dated at that reading and the pair's
+    // season-end result exists for the program's pair-winner end sink (end.rs partner_won). A level series has no such reading.
+    // Every reading of the series (each meeting too) is planned first, so a level series' end never skips its last meetings.
+    if (w.series !== undefined && d.registry.readings(t.selectorKey, t.baselineAt).some((x) => !d.registry.receipt(t.mint, x.id))) { d.log(`  [end] $${t.ticker}: the season series is over; its last results${w.series?.endDay ? `, the season-end result (${w.series.endDay}) included,` : ""} are planned first, then the end is recorded`); continue; }
     // website-18 THE CHAMPION PATH (describe.ts championPathRule): the end waits until the source and the coin's own receipt agree on
     // whether the team won the championship; a champion's coin winds down on itself, any other end forwards the rest to $DEFICIT
     if (championPathRule(rule)) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createLatest } from "@/lib/burnticker/latestOnly";
-import { imageStateProblem } from "@/lib/burnticker/guidedLaunch";
+import { IMAGE_CANCEL_LABEL, IMAGE_KEEP_GENERATED_LABEL, imageStateProblem } from "@/lib/burnticker/guidedLaunch";
 import { DESCRIPTION_MAX, IMAGE_HELP, IMAGE_WAYS, RIGHTS_LINE, creatorLinks, imageFromTransfer } from "@/lib/burnticker/creatorProfile";
 import { BADGE_UNAVAILABLE_LINE, IMAGE_READ_FAILED, IMAGE_SIZE_HELP, pickImage } from "@/lib/burnticker/profileImagePick";
 import { BADGE_NOTE, BADGE_TOGGLE } from "@/lib/burnticker/creatorBadgeCopy";
@@ -118,7 +118,7 @@ export function ProfileFields({ value, onChange, part = "all", who = null, custo
           <p data-image-rights><LinkedWords text={IMAGE_RIGHTS_LINE} links={[{ words: "terms of use", href: "/burnticker/terms" }]} /></p>
           {busy && <p role="status">Adding the receipt mark.</p>}
           {fileErr && <p className="text-red-400" role="alert">{fileErr}</p>}
-          {!value.image && value.imageState && <button type="button" data-optional="profile" className="underline" onClick={() => { latest.cancel(); set({ imageState: null }); setFileErr(null); setBusy(false); }}>Remove the image</button>}
+          {!value.image && value.imageState && <button type="button" data-optional="profile" className="underline" onClick={() => { latest.cancel(); set({ imageState: null }); setFileErr(null); setBusy(false); }} data-image-way-out={value.imageState}>{value.imageState === "failed" ? IMAGE_KEEP_GENERATED_LABEL : IMAGE_CANCEL_LABEL}</button>}
           {value.image && !value.image.badgeUnavailable && <label className="flex items-start gap-2 text-neutral-200"><input type="checkbox" data-optional="profile" data-badge-toggle checked={value.badge} onChange={(e) => set({ badge: e.target.checked })} /><span>{BADGE_TOGGLE}</span></label>}
           {value.image && !value.image.badgeUnavailable && <p data-badge-note>{BADGE_NOTE}</p>}
           {value.image?.badgeUnavailable && <p data-badge-unavailable>{BADGE_UNAVAILABLE_LINE}</p>}

@@ -51,22 +51,22 @@ export function GuidedTop({ phase, onBack, onStartOver, confirm, answers = {}, o
 }
 
 /**
- * The step's one primary action ("Next", "Review"), kept in view at the bottom of the screen, above the phone tab bar (64 px plus the safe
- * area below 900 px wide), never under it.
+ * The step's one primary action ("Next", "Review"), kept in view at the bottom of the screen, above the phone tab bar (WIRING-POLISH 2: its
+ * height --bt-tabbar-h plus the safe area and a 10 px gap below 900 px wide), never under it, on the same opaque ground as the bar.
  */
 export function StickyAction({ children }: { children: ReactNode }) {
-  return <div className="sticky bottom-[calc(72px+env(safe-area-inset-bottom))] z-20 -mx-1 rounded-lg bg-neutral-950/95 px-1 py-2 min-[900px]:bottom-4" data-sticky-action>{children}</div>;
+  return <div className="sticky bottom-[calc(var(--bt-tabbar-h,62px)+env(safe-area-inset-bottom)+10px)] z-20 -mx-1 rounded-lg bg-neutral-950 px-1 py-2 min-[900px]:bottom-4" data-sticky-action>{children}</div>;
 }
 
 /** Question 1: what the coin follows. Compact cards (title and one line); a tap picks and moves on. */
-export function FollowStep({ onPick, blocked, upfront = [], extra = null }: { onPick: (f: FollowId) => void; blocked: (f: FollowId) => string | null; /** audit 6 item 14 */ upfront?: string[]; /** WIRING-SOURCES3: an extra entry card after the five */ extra?: ReactNode }) {
+export function FollowStep({ onPick, blocked, upfront = [], extra = null, value = null }: { /** audit 7 item 16: the card already chosen (aria-checked) */ value?: FollowId | null; onPick: (f: FollowId) => void; blocked: (f: FollowId) => string | null; /** audit 6 item 14 */ upfront?: string[]; /** WIRING-SOURCES3: an extra entry card after the five */ extra?: ReactNode }) {
   return (
     <section className="space-y-2" aria-label={GUIDED_STEPS[0].question} data-guided-step="follow">
       <h2 className="text-lg font-semibold sm:text-xl outline-none" tabIndex={-1} data-step-heading>{GUIDED_STEPS[0].question}</h2>
-      <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={GUIDED_STEPS[0].question}>
+      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={GUIDED_STEPS[0].question}>
         {STEP1_CHOICES.map((c) => { const why = blocked(c.id); return (
           <div key={c.id} className={`min-w-0 rounded-xl border border-neutral-800 bg-neutral-900 ${why ? "opacity-60" : ""}`} data-follow={c.id}>
-            <button type="button" data-decision="what" data-follow-choice={c.id} aria-label={c.label} aria-describedby={`follow-${c.id}-line`} disabled={!!why} onClick={() => onPick(c.id)} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed">
+            <button type="button" role="radio" aria-checked={value === c.id} data-decision="what" data-follow-choice={c.id} aria-label={c.label} aria-describedby={`follow-${c.id}-line`} disabled={!!why} onClick={() => onPick(c.id)} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-xl px-3 py-2 text-left hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed">
               <span className="min-w-0"><span className="block text-base font-semibold">{c.label} <span className="ml-1 align-middle text-[11px] font-normal text-neutral-400" data-creates={c.coins}>{createsLine(c.coins)}</span></span><span id={`follow-${c.id}-line`} className="block truncate text-sm text-neutral-300">{c.line}</span></span>
               <span aria-hidden="true" className="shrink-0 text-neutral-500">›</span>
             </button>
@@ -85,16 +85,16 @@ export function FollowStep({ onPick, blocked, upfront = [], extra = null }: { on
 }
 
 /** Question 2 for a rivalry pair: two teams, or two candidates. */
-export function RivalryKindStep({ onPick, teamsBlocked }: { onPick: (k: "teams" | "candidates") => void; teamsBlocked: string | null }) {
+export function RivalryKindStep({ onPick, teamsBlocked, value = null }: { onPick: (k: "teams" | "candidates") => void; teamsBlocked: string | null; /** audit 7 item 16 */ value?: "teams" | "candidates" | null }) {
   const opt = (k: "teams" | "candidates", label: string, sentence: string, why: string | null) => (
-    <button key={k} type="button" data-decision="what" aria-label={label} disabled={!!why} onClick={() => onPick(k)} className="w-full rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 border border-neutral-800 bg-neutral-900 p-3 text-left hover:border-amber-400 disabled:opacity-60 sm:p-4" data-rivalry={k}>
+    <button key={k} type="button" role="radio" aria-checked={value === k} data-decision="what" aria-label={label} disabled={!!why} onClick={() => onPick(k)} className="w-full rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 border border-neutral-800 bg-neutral-900 p-3 text-left hover:border-amber-400 disabled:opacity-60 sm:p-4" data-rivalry={k}>
       <span className="block text-base font-semibold">{label}</span><span className="mt-0.5 block text-sm text-neutral-300">{sentence}</span>{why && <span className="mt-1 block text-xs text-amber-300">{why}</span>}
     </button>
   );
   return (
     <section className="space-y-3" aria-label={GUIDED_STEPS[1].question} data-guided-step="which">
       <h2 className="text-xl font-semibold outline-none" tabIndex={-1} data-step-heading>{whichHeading("rivalry")}</h2>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={whichHeading("rivalry")}>
         {opt("teams", "Two teams", "One game, or a whole season. Each team gets its own coin.", teamsBlocked)}
         {opt("candidates", "Two candidates in one race", "Each candidate gets its own coin, settled on that candidate's own market.", null)}
       </div>
@@ -148,11 +148,12 @@ export function PatternStep({ preview, options, value, onPick, shares, share, on
  * The end, stated on the review (website-20; pass B item 18, audit 6 item 12): the sentences read from the rule, then the ends the program
  * can pin that this coin does not use, one tap away. Never a menu with one live choice.
  */
-export function EndSection({ sentences, options }: { sentences: string[]; options: EndOption[] }) {
+export function EndSection({ sentences, options, title = null }: { sentences: string[]; options: EndOption[]; /** website-21: a rivalry series pair names its one end ("The rest goes to the series winner") */ title?: string | null }) {
   const other = options.filter((o) => !o.available);
   return (
-    <section className="min-w-0 space-y-1 rounded-lg border border-neutral-800 p-3 text-sm" aria-label={END_LABEL} data-end-section>
+    <section className="min-w-0 space-y-1 rounded-lg border border-neutral-800 p-3 text-sm" aria-label={title ?? END_LABEL} data-end-section>
       <h3 className="text-xs font-medium text-neutral-400">{END_LABEL}</h3>
+      {title && <p className="font-medium text-amber-200" data-end-title>{title}</p>}
       <div className="min-w-0 space-y-1 break-words text-neutral-100" data-end-sentences>{sentences.map((s) => <p key={s}>{s}</p>)}</div>
       {other.length > 0 && (
         <details className="text-xs text-neutral-400" data-other-ends>

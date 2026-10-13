@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 import { EmbedSnippet } from "../../_components/EmbedSnippet";
 import { likeHref } from "@/lib/burnticker/templates";
 import { PAIR_BURN_SENTENCE } from "@/lib/burnticker/describe";
+import { isMeetingsSelector, MEETINGS_PAIR_PAGE_LINE } from "@/lib/burnticker/guidedLaunch";
 import { TermNote } from "../../_components/Term";
 import { CurveBar } from "../../_components/CoinCard";
 import { BURNS_AFTER_GRADUATION, COIN_TAB_LABEL, checkReceiptHref, coinTabs, initialTab, raydiumLink, ruleFacts, type CoinTab } from "@/lib/burnticker/coinPage";
@@ -77,7 +78,7 @@ export default function PairPage() {
   );
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-6 text-sm">
-      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={`/burnticker/t/${A}`}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={`/burnticker/t/${B}`}>${B}</Link></h1>{launch.open && <p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this →</Link></p>}{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}<p className="text-neutral-400 text-xs">This is the rivalry pair <code>{d.pair.pairId}</code>. Both coins read the same market (<code>{d.pair.selectorKey}</code>) with opposite rules, so each result burns exactly one side. A voided market burns neither. The receipts are the scoreboard.</p></header>
+      <header><p className="text-xs"><Link className="underline" href="/burnticker">← Burnticker</Link></p><h1 className="text-2xl font-semibold"><Link className="underline" href={`/burnticker/t/${A}`}>${A}</Link> <span className="text-neutral-500">vs</span> <Link className="underline" href={`/burnticker/t/${B}`}>${B}</Link></h1>{launch.open && <p className="mt-1"><Link className="inline-block rounded border border-neutral-700 px-2 py-1 text-xs hover:border-amber-400" href={likeHref(A)}>Launch a pair like this →</Link></p>}{(d.a.status as { profile?: { badge?: string } }).profile?.badge && <p className="mt-1"><span className="bt-chip bt-chip-window" title="the pair's window, fixed in both rules">{(d.a.status as { profile?: { badge?: string } }).profile!.badge}</span></p>}<p className="text-neutral-400 text-xs">This is the rivalry pair <code>{d.pair.pairId}</code>. {isMeetingsSelector(d.pair.selectorKey) ? <>{MEETINGS_PAIR_PAGE_LINE} A draw, a postponed or a cancelled game moves nothing.</> : <>Both coins read the same market (<code>{d.pair.selectorKey}</code>) with opposite rules, so each result burns exactly one side. A voided market burns neither.</>} The receipts are the scoreboard.</p></header>
 
       {/* ---- TOP, for each side: the chart, one outbound link to Raydium, and a static read of the curve. No order panel. ---- */}
       <section className="grid gap-3 md:grid-cols-2" aria-label="Both coins">{sides.map(([s, side, tc]) => {

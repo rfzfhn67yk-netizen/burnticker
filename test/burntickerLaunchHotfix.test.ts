@@ -47,7 +47,7 @@ describe("the owner: easier to follow", () => {
     assert.match(page, /aria-label=\{t\.name\} aria-pressed=\{team\?\.abbr === t\.abbr\}/, "step 2's team buttons are named");
   });
   test("the step's one action stays in view above the tab bar; the ticker strip is off on the launch page", () => {
-    assert.match(steps, /sticky bottom-\[calc\(72px\+env\(safe-area-inset-bottom\)\)\]/, "64 px tab bar plus 8 px");
+    assert.match(steps, /sticky bottom-\[calc\(var\(--bt-tabbar-h,62px\)\+env\(safe-area-inset-bottom\)\+10px\)\]/, "the tab bar height plus 10 px (WIRING-POLISH 2)");
     assert.match(page, /const nextBtn = \(label: string, to: GuidedPhase\) => <StickyAction>/);
     assert.match(read("src/app/burnticker/_components/SiteHeader.tsx"), /\{pathname\?\.startsWith\("\/burnticker\/launch"\) \? null : <ActivityTicker \/>\}/);
   });

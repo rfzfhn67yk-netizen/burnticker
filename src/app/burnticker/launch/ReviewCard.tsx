@@ -16,6 +16,7 @@ import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
 import { AMOUNT_MATH_LABEL, ELECTION_AUTHORITY_LABEL, GRADUATION_LABEL, NOTE_HELP, NOTE_LABEL, NOTE_VS_DESCRIPTION, UPFRONT_LABEL, shareExample } from "@/lib/burnticker/guidedLaunch";
 import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
+import type { FundsFlow } from "@/lib/burnticker/pairFundsFlow";
 
 /**
  * THE REVIEW CARD (2026-10-10, the owner: "it feels overly complicated to get a coin set up … the UI needs to be simpler, even if it
@@ -112,6 +113,24 @@ export interface ReviewCardProps {
   next?: ReactNode;
   /** Pass B item 16: the compounding arithmetic, behind "How the amount is calculated". */
   amountMath?: string | null;
+}
+
+/**
+ * website-21 (WIRING-RIVALRY-SERIES): a funds flow the review answered (review.meetings.flow, pairFundsFlow.ts meetingsFundsFlow), rendered
+ * the way PairFundsFlow.tsx renders pairFundsFlow: the one line, then the steps, every outcome and the never line behind a disclosure.
+ */
+export function FundsFlowView({ flow, open = false }: { flow: FundsFlow; open?: boolean }) {
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-3 text-xs" aria-label="Where the money goes" data-pair-funds-flow={flow.version} data-meetings-flow>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">{flow.versionLabel}</p>
+      <p className="mt-1 text-sm text-neutral-100">{flow.oneLiner}</p>
+      <details className="mt-2" open={open}><summary className="cursor-pointer text-neutral-300">Where the money goes, and what happens on a draw, a missing result or a time-out</summary>
+        <dl className="mt-2 space-y-1">{flow.steps.map((s) => <div key={s.title}><dt className="inline font-medium text-neutral-200">{s.title}: </dt><dd className="inline text-neutral-300">{s.text}</dd></div>)}</dl>
+        <ul className="mt-2 list-disc pl-5 space-y-1 text-neutral-300">{flow.outcomes.map((o) => <li key={o.when}><b className="text-neutral-200">{o.when}:</b> {o.then}</li>)}</ul>
+        <p className="mt-2 text-neutral-400">{flow.never}</p>
+      </details>
+    </section>
+  );
 }
 
 export const RECEIPTS_LINE = "Every burn posts a public receipt: the reading it settled on, the amount and the transaction, on the coin's page.";

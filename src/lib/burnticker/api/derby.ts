@@ -9,6 +9,10 @@ import { searchDerbyCoins } from "@/lib/burnticker/derby/search";
 import type { Tournament } from "@/lib/burnticker/derby/bracket";
 import { ruleMappings } from "@/lib/burnticker/rules";
 import type { FetchLike } from "@/lib/burnticker/oracle/types";
+import { DerbyAdapter } from "@/lib/burnticker/derby/adapter";
+import { HIGH_NOT_READ_HERE, highSpanOf, highUnderlyingProblem } from "@/lib/burnticker/derby/highTile";
+import { highReview } from "@/lib/burnticker/derby/high";
+import type { DerbyUnderlying } from "@/lib/burnticker/derby/spec";
 
 /**
  * BURN DERBY'S API (2026-10-10; spec in api/derbySpec.ts, OpenAPI 1.4.0): GET /derby (every bracket and derby pair), GET /derby/{id}
@@ -49,6 +53,27 @@ export async function v1Derby(p: Platform, id: string, now = Date.now()): Promis
   const blk = await derbyPairBlock(p, key, null, now);
   if (blk) return ok({ kind: "pair", tournament: null, pair: blk.pair, tickers: blk.tickers, post: blk.post });
   return fail(404, `There is no Burn Derby bracket or pair called ${key}.`);
+}
+
+/**
+ * WIRING-SOURCES4 (website-21): the review's baseline for a record-close coin (derby/high.ts): the reference's daily closes read from Pyth
+ * at each past 00:00 UTC boundary (derby/adapter.ts highBaseline), back to the feed's start or 1,826 days for "all", or the last 30 or 90
+ * days. Answers `today` (UTC; derby/admission.ts refuses a block whose season does not start today), the baseline and the review's
+ * current-high line, or `refusal` ({ code, reason }), which the launch page shows as the review's refusal sentence.
+ */
+export async function v1DerbyHighBaseline(p: Platform, body: Record<string, unknown> | null, now = Date.now()): Promise<ApiResult> {
+  const span = highSpanOf(body?.span);
+  if (span === null) return fail(400, 'Pick how far back the record reaches: "all", 30 or 90.');
+  const bad = highUnderlyingProblem(body?.u);
+  if (bad) return fail(400, bad);
+  const u = body!.u as DerbyUnderlying, today = new Date(now).toISOString().slice(0, 10);
+  const adapter = p.oracles.derby;
+  if (!(adapter instanceof DerbyAdapter)) return ok({ today, span, refusal: { code: "no-readings", reason: HIGH_NOT_READ_HERE } });
+  try {
+    const r = await adapter.highBaseline(u, span, now);
+    if ("refusal" in r) return ok({ today, span, refusal: r.refusal });
+    return ok({ today, span, baseline: r.baseline, line: highReview({ span, baseline: r.baseline }).line });
+  } catch (e) { return fail(502, `The daily closes could not be read just now. The reason given was: ${(e as Error).message.slice(0, 120)}`); }
 }
 
 export async function v1DerbySearch(p: Platform, q: URLSearchParams): Promise<ApiResult> {

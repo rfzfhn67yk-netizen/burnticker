@@ -3,7 +3,7 @@ import type { LockFeeClaimRow } from "@/lib/burnticker/lockFees";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import { lockRule, type BurnMapping, type BurnRule, type LockedRule, type RuleMode } from "@/lib/burnticker/rules";
+import { lockRule, meetingsMirrorId, type BurnMapping, type BurnRule, type LockedRule, type RuleMode } from "@/lib/burnticker/rules";
 import type { SettledEvent } from "@/lib/burnticker/units";
 import { derbyReadingInSeason } from "@/lib/burnticker/derby/season";
 
@@ -541,7 +541,9 @@ export class Registry {
     const ra = this.lockedRule(a).rule, rb = this.lockedRule(b).rule;
     if (ra.pair?.pairId !== pairId || ra.pair.side !== "A") throw new Error(`registry: ${a.ticker}'s rule is not side A of ${pairId}`);
     if (rb.pair?.pairId !== pairId || rb.pair.side !== "B" || rb.pair.counterpartMint !== mintA) throw new Error(`registry: ${b.ticker}'s rule is not side B of ${pairId} naming ${mintA}`);
-    if (a.selectorKey !== b.selectorKey) throw new Error("registry: a pair shares one selector key");
+    // a rivalry series pair (rules.ts isMeetingsRule) reads two series, one per team, each the other's mirror; every other pair shares one
+    const mirrored = ra.oracle === "catalogue" && rb.oracle === "catalogue" && !!ra.series && meetingsMirrorId(ra.series) === rb.series;
+    if (a.selectorKey !== b.selectorKey && !mirrored) throw new Error("registry: a pair shares one selector key");
     const ca = JSON.stringify({ c: ra.pair?.clause ?? null, v: ra.pair?.voidBy ?? null, e: ra.onEnd ?? null }), cb = JSON.stringify({ c: rb.pair?.clause ?? null, v: rb.pair?.voidBy ?? null, e: rb.onEnd ?? null });
     if (ca !== cb) throw new Error("registry: both sides of a pair carry the same both-or-neither clause and onEnd (clause, voidBy, onEnd)");
     this.db.prepare("INSERT INTO pairs (pair_id, mint_a, mint_b, selector_key, created_at) VALUES (?,?,?,?,?)").run(pairId, mintA, mintB, a.selectorKey, now);

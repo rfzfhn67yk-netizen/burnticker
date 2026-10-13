@@ -72,7 +72,7 @@ describe("review 8 F3 / audit 7 item 10: the election pair says the same thing e
     }
     assert.match(t.pairLine!, /two separate coins/); assert.match(t.example, /its own burn pool/); assert.match(settingsLine(t), /burns once/);
     assert.match(picker, /own market/); assert.match(PATTERN_REASON.candidatesSeparate, /own pool/); assert.match(f.moves, /No SOL moves/);
-    assert.match(read("src/app/burnticker/launch/page.tsx"), /durations=\{pairOn && !elPick \?/, "item 52: no 'this season' on an election pair");
+    assert.match(read("src/app/burnticker/launch/page.tsx"), /durations=\{pairOn && !elPick && !meetingsOn \?/, "item 52: no 'this season' on an election pair (website-21: nor on a rivalry series pair)");
   });
 });
 

@@ -39,6 +39,18 @@ export const LIVE_ORACLES: readonly OracleId[] = ["kalshi", "catalogue", "polyma
  * (derby/spec.ts; docs/burnticker/DERBY.md). Only a "coinvs" derby pairs; a bracket fan coin is a single coin.
  */
 export const PAIR_ORACLES: readonly OracleId[] = ["kalshi", "polymarket", "derby"];
+/**
+ * THE RIVALRY SERIES (owner 2026-10-12; sources/espn.ts window `meetings`): the one first-party catalogue source that pairs — every game
+ * between two teams this season, one coin per team (side B on the mirror series), winner takes the burn. The pattern repeats
+ * espn.ts isMeetingsSeriesId (rules.ts does not import the sports tables); every other catalogue pair stays refused.
+ */
+export const MEETINGS_SERIES_RE = /^espn\.team:[a-z0-9.]+-[A-Z0-9]{2,6}\.\d{1,7}-win-m\d{4}\.[A-Z0-9]{2,6}\.\d{1,7}$/;
+/** The other side's series of a rivalry series id, by its spelling alone (espn.ts meetingsMirror is the same with the team tables). */
+export function meetingsMirrorId(series: string): string | null {
+  const m = /^espn\.team:([a-z0-9.]+)-([A-Z0-9]{2,6})\.(\d{1,7})-win-m(\d{4})\.([A-Z0-9]{2,6})\.(\d{1,7})$/.exec(series);
+  return m ? `espn.team:${m[1]}-${m[5]}.${m[6]}-win-m${m[4]}.${m[2]}.${m[3]}` : null;
+}
+export const isMeetingsRule = (r: { oracle?: unknown; series?: unknown }): boolean => r.oracle === "catalogue" && typeof r.series === "string" && MEETINGS_SERIES_RE.test(r.series);
 
 /**
  * POLYMARKET SELECTORS (2026-10-10). One market = its CTF condition id, lowercase hex (`market: "0x…64"`), a one-shot. Recurring =
@@ -372,7 +384,8 @@ export function validateRule(raw: unknown): BurnRule {
       if (pair.side !== "A" && pair.side !== "B") p.push('pair.side must be "A" or "B"');
       if (pair.counterpartMint !== null && (typeof pair.counterpartMint !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(pair.counterpartMint))) p.push("pair.counterpartMint must be a Solana address or null");
       if (pair.side === "B" && pair.counterpartMint === null) p.push("pair side B must name side A's mint as counterpartMint");
-      if (!PAIR_ORACLES.includes(r.oracle as OracleId)) p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket) or a Burn Derby coin-vs-coin selector");
+      if (!PAIR_ORACLES.includes(r.oracle as OracleId) && !isMeetingsRule(r)) p.push("pair: v1 pairs must use a tier-1 adjudicated market source (kalshi or polymarket), a Burn Derby coin-vs-coin selector, or a head-to-head season series between two teams");
+      if (isMeetingsRule(r) && r.kind === "scalar" && r.scalar && r.scalar.direction !== "up") p.push('pair: a head-to-head series side counts its own team\'s wins (direction "up"); the other team\'s coin reads the mirror series');
       if (r.oracle === "derby" && (derby as DerbySpec | undefined)?.selector === "bracket") p.push("pair: a bracket fan coin is a single coin (coin-vs-coin and single-asset derby rules pair)");
       if (r.kind === "scalar" && r.scalar && r.scalar.direction === "abs") p.push('pair: a scalar side needs direction "up" or "down" (abs cannot be inverted)');
       if (r.kind === "binary" && r.binary && r.binary.onYes && r.binary.onNo) p.push("pair: a binary side burns on exactly one outcome (onYes or onNo, not both)");
