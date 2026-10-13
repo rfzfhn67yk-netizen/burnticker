@@ -15,7 +15,7 @@
 # Exit 0 = every built program's executable hash equals the deployed program's hash on mainnet. Exit 1 = a difference (the table says
 # which). Exit 2 = it could not run (wrong architecture, a failed install, a failed build).
 set -euo pipefail
-COMMIT="67ea2e2f05b9a4d81f8e8b2229a50228d8682533"
+COMMIT="913ce3091cd03daaf9a96ce74dad3397f9523df0"
 REPO="https://github.com/rfzfhn67yk-netizen/burnticker"
 RPC="https://api.mainnet-beta.solana.com"
 INSTALL=1
