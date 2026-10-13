@@ -9,9 +9,22 @@ import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { ty
 /**
  * TEAMS, LEAGUES, SERIES AND SCHEDULES FOR TEAM COINS (the file keeps its old name; since 2026-10-10 NOTHING here reads ESPN). The team
  * tables are frozen (oracle/events alias table + config/burnticker/espn-teams.json: names, abbreviations, colours, the ESPN team id used
- * only as a stable PIN in series ids). Schedules come from the league's free official feed (MLB StatsAPI, NHL api-web, NBA cdn) or from
- * TheSportsDB v2 under its commercial licence (every other league; without BURNTICKER_THESPORTSDB_KEY: "schedule needs the licensed
- * key"). Settlement: sources/gameSettle.ts. A plain human link to ESPN's scoreboard is the only trace of ESPN on a page.
+ * only as a stable PIN in series ids). Schedules come from the league's free official feed (MLB StatsAPI, NHL api-web), the NBA's feed
+ * when it answers (else TheSportsDB, see the probe note below), or TheSportsDB v2 under its commercial licence (every other league;
+ * without BURNTICKER_THESPORTSDB_KEY: "schedule needs the licensed key"). Settlement: sources/gameSettle.ts. A plain human link to
+ * ESPN's scoreboard is the only trace of ESPN on a page.
+ *
+ * NBA FEED PROBE (2026-10-12 21:17 Denver, read-only curl from the operator's Mac; the Burnticker host saw the same 403 at ~21:40):
+ *   cdn.nba.com/static/json/staticData/scheduleLeagueV2.json             HTTP 403 (plain, and with browser User-Agent/Referer/Origin)
+ *   cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json           HTTP 403 (both)
+ *   cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json HTTP 403 (both)
+ *   stats.nba.com/stats/scheduleleaguev2 (x-nba-stats-origin/token, Referer nba.com)  no answer, timed out at 45 s
+ * No official NBA endpoint answers, so NBA_OFFICIAL_ANSWERS is false: the NBA schedule is read from TheSportsDB (league 4387) first and
+ * the cdn is tried only when TheSportsDB cannot be read or no key is set. Re-probe and flip the flag if the cdn answers 200 again; the
+ * series ids and team pins do not depend on which feed listed the games (teams resolve by name to the same frozen table). TheSportsDB's
+ * NBA rounds (checked the same night on its public test key): intRound 0 regular season, 500 preseason (dropped), 125 to 180 the
+ * playoffs (2025 second round 125, the 2025 Finals 180); a December game with a round number is the NBA Cup final, which does not count
+ * in the standings and is dropped as the NBA's own feed did (game ids 006).
  *
  * SERIES (catalogue ids; scalar, unit 1, baseline 0, direction up — one unit per qualifying game):
  *   espn.team:<league>-<ABBR>.<ID>-<win|loss>-<window>   a team coin, the team PINNED BY ITS ESPN TEAM ID (a rename or relocation keeps
@@ -40,7 +53,7 @@ import ESPN_TEAMS from "../../../../config/burnticker/espn-teams.json" with { ty
  */
 
 /**
- * EVERY TEAM-SPORT LEAGUE ESPN'S SCOREBOARD SERVES (the owner, 2026-10-10: "all inclusive: MLB, NBA, NHL, soccer leagues, really all
+ * EVERY TEAM-SPORT LEAGUE BURNTICKER COVERS, the list ESPN's scoreboard pages show, never read (the owner, 2026-10-10: "all inclusive: MLB, NBA, NHL, soccer leagues, really all
  * leagues" — never NFL-first). Each league names its cross-read: the league's own feed where one is public and keyless (MLB StatsAPI,
  * the NHL score feed), else TheSportsDB's event search (a second, independent operator; free test key unless
  * BURNTICKER_THESPORTSDB_KEY is set), which covers the NBA, NFL, WNBA, college football and basketball and the soccer leagues below. A
@@ -249,8 +262,8 @@ export interface Game { eventId: string; league: LeagueId; /** 2 regular season,
 
 const num = (v: unknown): number | null => { const x = typeof v === "object" && v !== null ? (v as { value?: unknown }).value : v; const n = Number(x); return x === null || x === undefined || x === "" || !Number.isFinite(n) ? null : n; };
 
-// ---- schedules: NO ESPN READS (owner, 2026-10-10). The free official feeds for MLB, the NHL and the NBA; TheSportsDB v2 (licensed key)
-// for every other league. A league without its feed answers "schedule needs the licensed key" — never a fallback to ESPN.
+// ---- schedules: NO ESPN READS (owner, 2026-10-10). The free official feeds for MLB and the NHL; the NBA's feed when it answers, else
+// TheSportsDB (the probe note at the top); TheSportsDB v2 (licensed key) for every other league. A league without its feed answers "schedule needs the licensed key" — never a fallback to ESPN.
 
 export class ScheduleUnavailable extends Error {}
 export const SCHEDULE_NEEDS_KEY = "schedule needs the licensed key (BURNTICKER_THESPORTSDB_KEY)";
@@ -292,6 +305,8 @@ export function nhlGames(body: unknown): Game[] {
   });
 }
 export const NBA_LEAGUE_SCHEDULE = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json";
+/** Whether an official NBA endpoint answered the last probe (header note, 2026-10-12: none did). False: TheSportsDB first for the NBA. */
+export const NBA_OFFICIAL_ANSWERS = false;
 export function nbaGames(body: unknown): Game[] {
   const ls = (body as { leagueSchedule?: { seasonYear?: string; gameDates?: { games?: unknown[] }[] } } | null)?.leagueSchedule;
   const year = ls?.seasonYear ? Number(String(ls.seasonYear).slice(0, 4)) + 1 : null;
@@ -319,9 +334,13 @@ export const tsdbV1Urls = (key: string, league: LeagueId, year: number): string[
 export const redactKey = (url: string): string => url.replace(/(thesportsdb\.com\/api\/v1\/json\/)[^/]+/, "$1<key>");
 export function tsdbGames(league: LeagueId, body: unknown, year: number): Game[] {
   const lists = body && typeof body === "object" ? (Object.values(body as Record<string, unknown>).filter(Array.isArray) as Record<string, unknown>[][]) : [];
-  return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent)).map((e) => {
+  const nbaRound = (e: Record<string, unknown>) => { const r = Number(e.intRound ?? 0); return Number.isFinite(r) ? r : 0; };
+  // the NBA (header note): round 500 is the preseason and a December round is the NBA Cup final, neither counts; 100 to 499 is the playoffs
+  const keep = (e: Record<string, unknown>) => league !== "nba" || (nbaRound(e) !== 500 && !(nbaRound(e) >= 100 && String(e.dateEvent ?? e.strTimestamp ?? "").slice(5, 7) === "12"));
+  const post = (e: Record<string, unknown>) => (league === "nba" ? nbaRound(e) >= 100 && nbaRound(e) < 500 : /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer");
+  return lists.flat().filter((e) => e && typeof e === "object" && e.idEvent && (e.strTimestamp || e.dateEvent) && keep(e)).map((e) => {
     const done = /^(FT|AOT|AET|AP|PEN|Match Finished|Final)/i.test(String(e.strStatus ?? "")), startsAt = String(e.strTimestamp ?? `${e.dateEvent}T${e.strTime ?? "00:00:00"}`).replace(/(\+00:00)?$/, "").replace(/Z?$/, "Z");
-    return mk(league, String(e.idEvent), startsAt, /playoff|final|knockout|round of/i.test(String(e.strRound ?? e.intRound ?? "")) && LEAGUES[league].sport !== "soccer" ? 3 : 2, year, done ? "post" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
+    return mk(league, String(e.idEvent), startsAt, post(e) ? 3 : 2, year, done ? "post" : "pre", done, String(e.strStatus ?? ""), sideOf(league, "home", String(e.strHomeTeam ?? ""), null, num(e.intHomeScore)), sideOf(league, "away", String(e.strAwayTeam ?? ""), null, num(e.intAwayScore)));
   });
 }
 /**
@@ -390,7 +409,9 @@ export interface EspnClientOpts { fetchImpl?: FetchLike; now?: () => number; min
 
 /**
  * THE SPORTS SCHEDULE READER (no ESPN reads). Kept under its old name for the callers; `SportsClient` is the same class.
- *   MLB  statsapi.mlb.com  (free, official)      NHL  api-web.nhle.com (free, official)      NBA  cdn.nba.com (free, official)
+ *   MLB  statsapi.mlb.com  (free, official)      NHL  api-web.nhle.com (free, official)
+ *   NBA  the NBA's feed (cdn.nba.com) when it answers, else TheSportsDB under licence; while NBA_OFFICIAL_ANSWERS is false TheSportsDB
+ *        is read first and the cdn only when TheSportsDB cannot be read (nbaSchedule)
  *   every other league     TheSportsDB v2 league schedule (BURNTICKER_THESPORTSDB_KEY) — without the key: ScheduleUnavailable
  */
 export class EspnClient {
@@ -415,7 +436,7 @@ export class EspnClient {
     const p = this.chain.then(run, run); this.chain = p.then(() => undefined, () => undefined); return p;
   }
   /** Whether this host can read a league's schedule (the three free official feeds, or TheSportsDB with the key). */
-  scheduleAvailable(league: LeagueId): boolean { return league === "mlb" || league === "nhl" || league === "nba" || !!this.tsdbKey; }
+  scheduleAvailable(league: LeagueId): boolean { return league === "mlb" || league === "nhl" || (league === "nba" && NBA_OFFICIAL_ANSWERS) || !!this.tsdbKey; }
   /** v2 refused this key (not a premium key): v1 from then on, for this process. */
   tsdbV1 = false;
   /**
@@ -436,6 +457,19 @@ export class EspnClient {
     if (!got && last) throw last;
     return { events };
   }
+  /**
+   * The NBA's games for season `year`: the NBA's feed when it answers, else TheSportsDB under licence (header note). While
+   * NBA_OFFICIAL_ANSWERS is false TheSportsDB is read first; either way the other one is the fallback, so a feed that answers 403 never
+   * leaves the schedule empty while the other can be read. Neither readable: the TheSportsDB error (ScheduleUnavailable without a key).
+   */
+  async nbaSchedule(year: number): Promise<Game[]> {
+    const cdn = async () => nbaGames(await this.get(NBA_LEAGUE_SCHEDULE)).filter((g) => g.seasonYear === year);
+    const tsdb = () => this.tsdb("nba", year);
+    const [first, second] = NBA_OFFICIAL_ANSWERS ? [cdn, tsdb] : [tsdb, cdn];
+    let firstErr: unknown;
+    try { return await first(); } catch (e) { firstErr = e; }
+    try { return await second(); } catch (e) { throw NBA_OFFICIAL_ANSWERS ? e : firstErr; }
+  }
   private async tsdb(league: LeagueId, year: number): Promise<Game[]> {
     if (!this.tsdbKey || !TSDB_LEAGUE[league]) throw new ScheduleUnavailable(`${LEAGUES[league].label}: ${SCHEDULE_NEEDS_KEY}`);
     return tsdbGames(league, await this.tsdbRead(this.tsdbKey, tsdbScheduleUrl(league, year), (k) => tsdbV1Urls(k, league, year)), year);
@@ -449,7 +483,7 @@ export class EspnClient {
     let games: Game[];
     if (league === "mlb") games = mlbGames(await this.get(mlbTeamScheduleUrl(t.abbr, y)));
     else if (league === "nhl") games = nhlGames(await this.get(nhlClubScheduleUrl(t.abbr, y)));
-    else if (league === "nba") games = nbaGames(await this.get(NBA_LEAGUE_SCHEDULE)).filter((g) => g.seasonYear === y);
+    else if (league === "nba") games = await this.nbaSchedule(y);
     else games = await this.tsdb(league, y);
     return dedupeListings(games.filter(mine)).map((g) => ({ ...g, seasonYear: g.seasonYear ?? y })).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
@@ -459,7 +493,7 @@ export class EspnClient {
     let games: Game[];
     if (league === "mlb") games = mlbGames(await this.get(mlbRangeUrl(from, to)));
     else if (league === "nhl") games = nhlGames(await this.get(nhlWeekUrl(from)));
-    else if (league === "nba") games = nbaGames(await this.get(NBA_LEAGUE_SCHEDULE));
+    else if (league === "nba") games = await this.nbaSchedule(seasonYearAt(league, this.now()));
     else games = await this.tsdb(league, seasonYearAt(league, this.now()));
     return games.filter((g) => g.date >= from && g.date <= to).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   }
@@ -510,7 +544,7 @@ export interface WindowStatus {
  * THE LEAGUES WHOSE SCHEDULE CAN TELL A CHAMPION FROM AN ELIMINATED TEAM (website-18). In a single-elimination postseason every team but
  * one loses its last game, so "the team won its last postseason game and nothing more was listed" means it won the title. That needs a
  * schedule that marks postseason games exactly: MLB StatsAPI (game types F, D, L, W), the NHL feed (game type 3) and the NBA feed (game
- * ids 004 and 005). TheSportsDB marks the postseason by its round label, which is not exact for the NFL or the WNBA; college football and
+ * ids 004 and 005), or for the NBA TheSportsDB's round number (100 to 499, the header note). TheSportsDB marks the postseason by its round label, which is not exact for the NFL or the WNBA; college football and
  * basketball have bowls, the NIT and conference tournaments, where many teams win their last game; soccer leagues crown the table
  * leader. Those leagues are left out: their season coins keep the plain end (the rest goes to $DEFICIT's burn).
  */

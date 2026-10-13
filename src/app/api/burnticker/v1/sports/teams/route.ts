@@ -1,4 +1,4 @@
-// Public API v1 (2026-10-10): the ESPN team picker for team coins. See src/lib/burnticker/api/spec.ts and docs/burnticker/api.md.
+// Public API v1 (2026-10-10): the team picker for team coins (the league's own schedule or TheSportsDB; never ESPN). See src/lib/burnticker/api/spec.ts and docs/burnticker/api.md.
 import { runV1 } from "@/lib/burnticker/api/http";
 import { platform, v1SportsTeams } from "@/lib/burnticker/api/v1";
 

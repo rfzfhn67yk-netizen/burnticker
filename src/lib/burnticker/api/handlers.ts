@@ -19,7 +19,7 @@ import { KALSHI_UNAVAILABLE, POLYMARKET_UNAVAILABLE, scrubMarketData, type Venue
 import { espnClient, fecClient, nativeRuleProblems, nativeSourceById } from "@/lib/burnticker/sources/native";
 import { electionPairTemplate } from "@/lib/burnticker/electionPair";
 import { publicOrigin } from "@/lib/burnticker/coinArt";
-import { CROSS_LABEL, officialOf } from "@/lib/burnticker/sources/gameSettle";
+import { CROSS_LABEL, countedOfficialOf } from "@/lib/burnticker/sources/gameSettle";
 import { scheduleProblem } from "@/lib/burnticker/sources/provenance";
 import { badgeCreatorImage, checkCreatorImage } from "@/lib/burnticker/creatorBadge";
 import { DESCRIPTION_MAX, RIGHTS_LINE, decodeCreatorImage, withCreatorText } from "@/lib/burnticker/creatorProfile";
@@ -269,12 +269,16 @@ export async function electionPair(p: Platform, q: { slug?: string | null; a?: s
 
 const sideOf = (league: LeagueId, s: Game["home"]) => { const t = teamsOf(league).find((x) => x.abbr === s.abbr); return { abbr: s.abbr, name: s.name || t?.name || s.abbr, nickname: s.nickname || t?.nickname || s.abbr, ticker: t?.ticker ?? s.abbr, record: s.record }; };
 
+/** Where a league's schedule on the pickers comes from, in one sentence (the NBA's feed answers 403 since 2026-10-12: espn.ts probe note). */
+const NBA_SCHEDULE_SOURCE = "the NBA's feed when it answers, otherwise TheSportsDB under licence";
+const scheduleSource = (league: LeagueId): string => (league === "mlb" || league === "nhl" ? "The schedule comes from the league's official feed." : league === "nba" ? "The schedule comes from the NBA's feed when it answers, otherwise from TheSportsDB under licence." : "The schedule comes from TheSportsDB, with a licensed key.");
 /** GET /v1/sports/teams?league= — the team picker for team coins (the league's own schedule or TheSportsDB; no ESPN reads): the static team table with each team's next game and record. No league → the leagues. */
 export async function sportsTeams(_p: Platform, q: { league?: string | null; q?: string | null }): Promise<ApiResult> {
   const league = q.league?.trim().toLowerCase() ?? "";
-  if (!league) return ok({ leagues: Object.values(LEAGUES).map((l) => { const off = officialOf(l.id); return { id: l.id, label: l.label, sport: l.sport, crossRead: off ? CROSS_LABEL[off] : "The on-chain payout and the licensed final score confirm each other.", crossReadMissing: false, schedule: off ? `${CROSS_LABEL[off]}, which is free` : "TheSportsDB, with a licensed key", scheduleAvailable: espnClient().scheduleAvailable(l.id), draws: l.draws, teams: teamsOf(l.id).length }; }), sports: SPORTS, source: "Schedules come from the league's official feed for MLB, NHL and NBA, and from TheSportsDB with a licensed key for every other league." });
+  if (!league) return ok({ leagues: Object.values(LEAGUES).map((l) => { const off = countedOfficialOf(l.id); return { id: l.id, label: l.label, sport: l.sport, crossRead: off ? CROSS_LABEL[off] : "The on-chain payout and the licensed final score confirm each other.", crossReadMissing: false, schedule: off ? `${CROSS_LABEL[off]}, which is free` : l.id === "nba" ? NBA_SCHEDULE_SOURCE : "TheSportsDB, with a licensed key", scheduleAvailable: espnClient().scheduleAvailable(l.id), draws: l.draws, teams: teamsOf(l.id).length }; }), sports: SPORTS, source: "Schedules come from the league's official feed for MLB and NHL, from the NBA's feed when it answers and otherwise TheSportsDB for the NBA, and from TheSportsDB with a licensed key for every other league." });
   if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
-  // schedules: MLB / NHL / NBA from their free official feeds, every other league from TheSportsDB (licensed key) — never ESPN
+  // schedules: MLB and NHL from their free official feeds, the NBA from its feed when it answers else TheSportsDB, every other league
+  // from TheSportsDB (licensed key) — never ESPN
   // launch audit 5 L05: a schedule that cannot be read is a display problem only — the sentence says so; the technical reason is apart
   let scheduleNote: string | null = null, scheduleDetail: string | null = null;
   const games = await espnClient().upcoming(league, 8).catch((e) => { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); scheduleNote = sp.line; scheduleDetail = sp.detail; return [] as Game[]; });
@@ -295,7 +299,7 @@ export async function sportsTeams(_p: Platform, q: { league?: string | null; q?:
   // teams with a listed game first (soonest first), then no game listed soon, then an unreadable schedule, then season over
   const rank = { upcoming: 0, "none-listed": 1, unknown: 2, over: 3 } as const;
   teams.sort((a, b) => rank[a.season.status] - rank[b.season.status] || (a.next?.startsAt ?? "").localeCompare(b.next?.startsAt ?? ""));
-  return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's official feed." : "The schedule comes from TheSportsDB, with a licensed key.", scheduleNote, scheduleDetail, teams });
+  return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote, scheduleDetail, teams });
 }
 
 /**
@@ -319,20 +323,20 @@ export async function sportsGames(_p: Platform, q: { league?: string | null; q?:
   if (!isLeague(league)) return fail(400, `Pick a league from this list: ${Object.keys(LEAGUES).join(", ")}.`);
   try {
     let games: Game[];
-    try { games = await espnClient().upcoming(league, 8); } catch (e) { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's official feed." : "The schedule comes from TheSportsDB, with a licensed key.", scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
+    try { games = await espnClient().upcoming(league, 8); } catch (e) { console.error(`[burnticker/sports] ${league} schedule could not be read:`, e); const sp = e instanceof ScheduleUnavailable ? scheduleProblem(league, "needs-licence", SCHEDULE_NEEDS_KEY) : scheduleProblem(league, "unreadable", (e as Error).message.slice(0, 160)); return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: sp.line, scheduleDetail: sp.detail, games: [], count: 0 }); }
     const needle = (q.q ?? "").trim();
     const named = needle ? new Set(findTeams(needle).filter((t) => t.league === league).map((t) => t.abbr)) : null;
     const rows = games.filter((g) => !g.completed && g.home.abbr !== "TBD" && g.away.abbr !== "TBD" && (!named || named.has(g.home.abbr) || named.has(g.away.abbr))).sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((g) => ({
       eventId: g.eventId, league, title: g.name, startsAt: g.startsAt, detail: g.detail, a: sideOf(league, g.away), b: sideOf(league, g.home),
       series: { aLoss: gameSeries(league, g.eventId, g.away.abbr, "loss"), bLoss: gameSeries(league, g.eventId, g.home.abbr, "loss") },
     }));
-    return ok({ league, label: LEAGUES[league].label, source: league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's official feed." : "The schedule comes from TheSportsDB, with a licensed key.", scheduleNote: null, scheduleDetail: null, games: rows, count: rows.length });
+    return ok({ league, label: LEAGUES[league].label, source: scheduleSource(league), scheduleNote: null, scheduleDetail: null, games: rows, count: rows.length });
   } catch (e) { return fail(502, `The schedule could not be read just now. The reason given was: ${(e as Error).message.slice(0, 160)}`); }
 }
 
 /**
  * THE RIVALRY SERIES PICKER (RIVALRY-SERIES-BRIEF item 4): every game between two teams this season, regular season and postseason, from
- * the league's own schedule (MLB StatsAPI, the NHL feed, the NBA feed) or TheSportsDB with its licensed key — never ESPN. Each game with its
+ * the league's own schedule (MLB StatsAPI, the NHL feed, the NBA feed when it answers) or TheSportsDB with its licensed key — never ESPN. Each game with its
  * date, whether it is a playoff game, and where it stands from team `a`'s side (win, loss, draw, void, pending); the head-to-head count so
  * far; both series ids (sources/espn.ts window `meetings`) and the pair's names and tickers. `offered` is false when the schedule lists no
  * game between them (the option is then not offered for that pair).
@@ -343,7 +347,7 @@ export async function sportsRivalry(_p: Platform, q: { league?: string | null; a
   const ta = teamByAbbr(league, q.a?.trim() ?? ""), tb = teamByAbbr(league, q.b?.trim() ?? "");
   if (!ta || !tb) return fail(400, `Name two teams of the ${LEAGUES[league].label} by their abbreviation, as /sports/teams lists them.`);
   if (ta.abbr === tb.abbr) return fail(400, "Pick two different teams.");
-  const source = league === "mlb" || league === "nhl" || league === "nba" ? "The schedule comes from the league's own feed." : "The schedule comes from TheSportsDB, with a licensed key.";
+  const source = scheduleSource(league);
   const names = meetingsPairNames(ta, tb);
   const base = { league, label: LEAGUES[league].label, source, option: { label: RIVALRY_SERIES_LABEL, line: RIVALRY_SERIES_LINE }, a: { abbr: ta.abbr, team: ta.name, nickname: ta.nickname, ...names.a }, b: { abbr: tb.abbr, team: tb.name, nickname: tb.nickname, ...names.b } };
   let games: Game[];
@@ -460,7 +464,7 @@ export async function runBacktest(p: Platform, body: { rule?: unknown; months?: 
   const months = Math.min(24, Math.max(1, Number(body.months ?? 12) || 12));
   try {
     if (locked.rule.oracle === "catalogue" && nativeSourceById(locked.rule.series!)) {
-      // native first-party source (ESPN scoreboard, NWS climate): a live read of what it has published — display-grade, no cross-read
+      // native first-party source (the sports schedules, NWS climate; never ESPN): a live read of what it has published — display-grade, no cross-read
       const src = nativeSourceById(locked.rule.series!)!;
       const np = nativeRuleProblems(src, locked.rule);
       if (np.length) return fail(400, np.join("; "), { problems: np });

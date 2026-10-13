@@ -206,5 +206,7 @@ None of these are in the repository. Each one goes into the host's environment f
   Polymarket moneyline market. Until it is set, such games are held and the coin is refused at creation. Pages that show its data
   carry the attribution "data: TheSportsDB" (the sources table and the trust page).
 - **`BURNTICKER_APISPORTS_KEY`**: API-Sports, the second licensed provider. It is the cross-read for every league without an official
-  feed of its own: WNBA, NFL, college, and all the soccer leagues. Until it is set, those leagues' cross-read is missing and their coins
-  are refused. MLB, the NHL and the NBA are cross-read by their own official feeds and need no key.
+  feed of its own that answers: the NBA, WNBA, NFL, college, and all the soccer leagues. Until it is set, a game in those leagues
+  without a market has no second read and is held. MLB and the NHL are cross-read by their own official feeds and need no key. The
+  NBA's own feed has answered HTTP 403 since 2026-10-12, so the NBA's schedule comes from TheSportsDB and its games settle on the
+  on-chain payout and TheSportsDB checking each other (src/lib/burnticker/sources/espn.ts probe note).

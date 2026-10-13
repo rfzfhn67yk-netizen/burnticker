@@ -1,5 +1,6 @@
 // Shared world for the rivalry-series tests (test/burntickerRivalrySeries*.test.ts): a synthetic NBA league schedule (the league's own cdn
-// feed, which is also the official cross-read), a fake moneyline market per game paying the side with more points (a level score: a split,
+// feed, read here because the client has no TheSportsDB key: the cdn is the fallback when it answers, espn.ts probe note; the live cdn
+// answers 403 since 2026-10-12, test/burntickerNbaSchedule.test.ts covers that path), a fake moneyline market per game paying the side with more points (a level score: a split,
 // read as a draw), and a winner-takes-the-burn pair of two LaunchLab coins on the two mirror series. Not a test file itself. No network.
 import { Keypair } from "@solana/web3.js";
 import { openRegistry, type Registry, type TokenRow } from "@/lib/burnticker/registry";

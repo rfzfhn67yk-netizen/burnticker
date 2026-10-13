@@ -1,4 +1,4 @@
-import { CROSS_LABEL, SETTLED_ON, crossIdOf } from "@/lib/burnticker/sources/gameSettle";
+import { CROSS_LABEL, SETTLED_ON, countedOfficialOf, crossIdOf } from "@/lib/burnticker/sources/gameSettle";
 import { LEAGUES, type LeagueId } from "@/lib/burnticker/sources/espn";
 
 /**
@@ -7,7 +7,8 @@ import { LEAGUES, type LeagueId } from "@/lib/burnticker/sources/espn";
  * Four roles, kept apart because they fail differently:
  *
  *   discovery     how the wizard finds teams and games (the static team table; the schedule below)
- *   schedule      the next games shown on the picker — the league's own free feed (MLB, NHL, NBA) or TheSportsDB under its licence;
+ *   schedule      the next games shown on the picker — the league's own free feed (MLB, NHL), the NBA's feed when it answers (it answers
+ *                 HTTP 403 since 2026-10-12, espn.ts probe note), or TheSportsDB under its licence;
  *                 when it cannot be read, only the "next game" line is missing: settlement does not use this read
  *   settlement    gameSettle.ts PRIMARY A / B: the game's on-chain payout where a Polymarket moneyline market exists, else
  *                 TheSportsDB's licensed final score
@@ -18,12 +19,15 @@ import { LEAGUES, type LeagueId } from "@/lib/burnticker/sources/espn";
  * CROSS_LABEL), so a change of resolver changes the copy. ESPN appears only as a plain human link on a game row (never fetched).
  * Client-safe.
  */
-const OFFICIAL_FEEDS = (["mlb", "nhl", "nba"] as LeagueId[]).map((l) => CROSS_LABEL[crossIdOf(l)]);
+/** The official feeds counted as a confirmation today (the NBA's only while it answers: gameSettle.ts countedOfficialOf). */
+const OFFICIAL_FEEDS = (["mlb", "nhl", "nba"] as LeagueId[]).map(countedOfficialOf).filter((x): x is NonNullable<typeof x> => !!x).map((id) => CROSS_LABEL[id]);
+/** The NBA's schedule while its own feed does not answer: the feed when it answers, else TheSportsDB under licence. */
+const NBA_SCHEDULE = "the NBA's feed when it answers, otherwise TheSportsDB under licence";
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`);
 
 export const SPORTS_PROVENANCE = {
   discovery: "Burnticker's own team table for every league it covers",
-  schedule: `the league's own free schedule for MLB, the NHL and the NBA, and TheSportsDB's licensed feed for other leagues`,
+  schedule: countedOfficialOf("nba") ? `the league's own free schedule for MLB, the NHL and the NBA, and TheSportsDB's licensed feed for other leagues` : `the league's own free schedule for MLB and the NHL, ${NBA_SCHEDULE} for the NBA, and TheSportsDB's licensed feed for other leagues`,
   settlement: `${SETTLED_ON["on-chain payout"]} when Polymarket lists a market for it, and otherwise ${SETTLED_ON.TheSportsDB} from TheSportsDB`,
   confirmation: `a second, independent source, such as ${list(OFFICIAL_FEEDS)}`,
   confirmationOther: `For other leagues, the on-chain payout and the licensed score confirm each other, or ${CROSS_LABEL["apisports.games"]} does.`,
@@ -48,6 +52,7 @@ export function sportsConfirmationLine(): string {
 /** A league's schedule source and its confirmation source, in words. */
 export function leagueProvenance(league: LeagueId): { schedule: string; confirmation: string } {
   const cross = crossIdOf(league);
+  if (cross === "nba.cdn" && !countedOfficialOf(league)) return { schedule: NBA_SCHEDULE, confirmation: "the on-chain payout and the licensed final score, each confirming the other" };
   return { schedule: cross === "apisports.games" ? "TheSportsDB (licensed)" : `${CROSS_LABEL[cross]} (free)`, confirmation: CROSS_LABEL[cross] };
 }
 
@@ -71,7 +76,7 @@ export const sourceUnavailableLine = (why: string | null | undefined): string =>
  */
 export function scheduleProblem(league: LeagueId, kind: "needs-licence" | "unreadable", detail: string | null = null): { line: string; detail: string | null } {
   const label = LEAGUES[league]?.label ?? league;
-  const src = leagueProvenance(league).schedule.replace(/ \((free|licensed)\)$/, "");
+  const src = league === "nba" && !countedOfficialOf(league) ? "the NBA's feed or TheSportsDB" : leagueProvenance(league).schedule.replace(/ \((free|licensed)\)$/, "");
   return kind === "needs-licence"
     ? { line: `${label}'s schedule comes from TheSportsDB's licensed feed, which is not linked on this host: teams are listed without their next game.`, detail }
     : { line: `${label}'s next games could not be read from ${src} just now: teams are listed without their next game. This affects only the schedule shown here; settlement does not use this read.`, detail };

@@ -1,16 +1,17 @@
 import type { SettledEvent } from "@/lib/burnticker/units";
 import type { ResolvedSelector } from "@/lib/burnticker/oracle/types";
-import { LEAGUES, SETTLE_AFTER_START_MS, asMeetings, dedupeListings, gamesFor, meetingsEndReason, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
+import { LEAGUES, NBA_OFFICIAL_ANSWERS, SETTLE_AFTER_START_MS, asMeetings, dedupeListings, gamesFor, meetingsEndReason, seriesEndDay, tallyMeetings, teamById, teamByAbbr, tsdbNamePairs, windowStatus, type EspnClient, type EspnSeries, type Game, type GameSide, type LeagueId, type MeetingOutcome, type MeetingsSeries, type Outcome } from "@/lib/burnticker/sources/espn";
 
 /**
  * HOW A TEAM COIN'S GAME SETTLES (owner, 2026-10-10). NO ESPN READS: the game list comes from the league's free official schedule (MLB
- * StatsAPI, the NHL's api-web, the NBA's cdn) or TheSportsDB v2 (licensed key) — espn.ts EspnClient/SportsClient. Each completed game:
+ * StatsAPI, the NHL's api-web), the NBA's feed when it answers (else TheSportsDB), or TheSportsDB v2 (licensed key) — espn.ts
+ * EspnClient/SportsClient. Each completed game:
  *
  *   PRIMARY A  the game's ON-CHAIN PAYOUT where Polymarket lists a moneyline market (Gamma search by the two teams and the date → the
  *              condition id → the Conditional Tokens payout vector on Polygon), exactly as an election does;
  *   PRIMARY B  otherwise THESPORTSDB (commercial licence, BURNTICKER_THESPORTSDB_KEY, the v2 API): the final score;
  *   CONFIRMED  by a SECOND, independent operator: the on-chain payout and TheSportsDB confirm each other when both exist; the league's
- *              official feed (MLB, NHL, NBA) is a further read where it is free; API-Sports (BURNTICKER_APISPORTS_KEY) is optional.
+ *              official feed (MLB, NHL, and the NBA's when it answers) is a further read where it is free; API-Sports (BURNTICKER_APISPORTS_KEY) is optional.
  *              Every read must agree (scores where both carry scores, else the winner). A game only ONE operator can read is held.
  *
  * Every reading says how it settled: "settled on the game's on-chain payout · confirmed by MLB's official feed", plus a plain human
@@ -103,6 +104,11 @@ export function finalFromNhl(g: Game, body: unknown, url: string): Final | null 
   const h = n(hit.homeTeam?.score), a = n(hit.awayTeam?.score);
   return { home: h ?? 0, away: a ?? 0, done: /^(OFF|FINAL)$/.test(String(hit.gameState)) && h !== null && a !== null, detail: `NHL ${a ?? "?"}–${h ?? "?"} (${hit.gameState ?? "?"})`, url };
 }
+/**
+ * The NBA's own feed. It answers HTTP 403 since 2026-10-12 (espn.ts probe note), so while NBA_OFFICIAL_ANSWERS is false it is still tried
+ * as a further read (a final it does serve is compared like any other) but never counted as one of the two operators a game needs: an
+ * NBA game settles on the on-chain payout and TheSportsDB confirming each other, or TheSportsDB and API-Sports where its key is set.
+ */
 export const NBA_SCHEDULE_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json";
 export function finalFromNba(g: Game, body: unknown, url: string): Final | null {
   const dates = ((body as { leagueSchedule?: { gameDates?: { games?: unknown[] }[] } } | null)?.leagueSchedule?.gameDates ?? []);
@@ -161,11 +167,18 @@ export async function crossFinal(client: EspnClient, g: Game, d: GameDeps, which
   return { id, final: await firstFinal(client, [g.date, prevDay].map((day) => apiSportsUrl(g.league, day)), (b, u) => finalFromApiSports(g, b, u), { "x-apisports-key": d.apiSportsKey }) };
 }
 
-/** The league's free official feed (MLB, NHL, NBA), if any — a third read where it exists. */
+/** The league's free official feed (MLB, NHL, NBA), if any — a third read where it exists (the NBA's is tried, not counted: countedOfficialOf). */
 export const officialOf = (league: LeagueId): CrossId | null => (league === "mlb" ? "mlb.statsapi" : league === "nhl" ? "nhl.score" : league === "nba" ? "nba.cdn" : null);
+/**
+ * The league's official feed when it can be COUNTED as one of the two operators: MLB and the NHL always; the NBA only while its feed
+ * answers (NBA_OFFICIAL_ANSWERS, false since the 2026-10-12 probe). A feed that answers 403 is never counted on, so a dead feed cannot
+ * make a game wait for a read that will not come; the pair payout plus TheSportsDB settles it.
+ */
+export const countedOfficialOf = (league: LeagueId): CrossId | null => { const off = officialOf(league); return off === "nba.cdn" && !NBA_OFFICIAL_ANSWERS ? null : off; };
 /** How many independent operators can read this league's games on this host, at best (for the creation check before any game). */
 export function operatorsFor(league: LeagueId, d: GameDeps, hasMarket: boolean): string[] {
-  return [hasMarket ? "on-chain payout" : null, d.tsdbKey ? "TheSportsDB" : null, officialOf(league) ? CROSS_LABEL[officialOf(league)!] : null, d.apiSportsKey ? "API-Sports" : null].filter((x): x is string => !!x);
+  const off = countedOfficialOf(league);
+  return [hasMarket ? "on-chain payout" : null, d.tsdbKey ? "TheSportsDB" : null, off ? CROSS_LABEL[off] : null, d.apiSportsKey ? "API-Sports" : null].filter((x): x is string => !!x);
 }
 
 /**

@@ -138,8 +138,12 @@ describe("every league, draws and shoot-outs", () => {
     const rows = leagueCoverage(loadSourceEntries());
     assert.deepEqual(rows.map((r) => r.id).sort(), Object.keys(LEAGUES).sort());
     for (const r of rows) { assert.equal(r.primaryA, "polymarket.gamepayout", r.label); assert.deepEqual(r.primaryB, { id: "thesportsdb.v2", needsKey: "BURNTICKER_THESPORTSDB_KEY" }); assert.ok(r.teams > 0, r.label); }
-    assert.deepEqual(rows.filter((r) => r.verdict === "settleable").map((r) => [r.id, r.official!.id, r.schedule.needsKey]).sort(), [["mlb", "mlb.statsapi", null], ["nba", "nba.cdn", null], ["nhl", "nhl.score", null]]);
-    for (const r of rows.filter((x) => !["mlb", "nba", "nhl"].includes(x.id))) {
+    assert.deepEqual(rows.filter((r) => r.verdict === "settleable").map((r) => [r.id, r.official!.id, r.schedule.needsKey]).sort(), [["mlb", "mlb.statsapi", null], ["nhl", "nhl.score", null]]);
+    // the NBA's cdn answers HTTP 403 since 2026-10-12 (espn.ts probe note): named as tried first, never counted on; the NBA settles like
+    // every other league on the payout and TheSportsDB
+    const nba = rows.find((r) => r.id === "nba")!;
+    assert.equal(nba.official, null); assert.equal(nba.officialDown, "nba.cdn");
+    for (const r of rows.filter((x) => !["mlb", "nhl"].includes(x.id))) {
       assert.equal(r.verdict, "settleable with the TheSportsDB key", r.label);
       assert.equal(r.schedule.needsKey, "BURNTICKER_THESPORTSDB_KEY");
       assert.match(r.withMarket, /^on-chain payout \+ TheSportsDB/, "the payout and TheSportsDB confirm each other");

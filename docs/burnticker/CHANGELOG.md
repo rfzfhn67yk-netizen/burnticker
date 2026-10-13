@@ -1050,3 +1050,19 @@ written before one public commit, the commit is recorded against the later tag. 
 - IDL sha256 (src/lib/burnReceipts/idl.ts): `decc3a1e20d516b664feb5929f69c4995225f3d01c5caaadffb9c43bdcfc0322`
 - allowlist sha256 (config/public-repo.allowlist): `2113c2e4d31ce9a07eb17e5e32cf5eea6ecdea8ad3d6c214a8c2ee641dd69949`
 - files published: 1793
+
+## 2026-10-12 — publish from e7d86a10584a
+
+- monorepo commit: `e7d86a10584a39982391909d7b3dbbe4a0af7117` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `decc3a1e20d516b664feb5929f69c4995225f3d01c5caaadffb9c43bdcfc0322`
+- allowlist sha256 (config/public-repo.allowlist): `2113c2e4d31ce9a07eb17e5e32cf5eea6ecdea8ad3d6c214a8c2ee641dd69949`
+- files published: 1795
+
+## 2026-10-12 — publish from e96dec284202
+
+- monorepo commit: `e96dec28420271afc5fa3f2de401a926a7127626` (the working tree had uncommitted changes when this tag was written)
+- program hash: none — program not built on the publishing host (no target/deploy/burn_receipts.so) — the IDL hash below is the only program fingerprint in this entry
+- IDL sha256 (src/lib/burnReceipts/idl.ts): `decc3a1e20d516b664feb5929f69c4995225f3d01c5caaadffb9c43bdcfc0322`
+- allowlist sha256 (config/public-repo.allowlist): `2113c2e4d31ce9a07eb17e5e32cf5eea6ecdea8ad3d6c214a8c2ee641dd69949`
+- files published: 1795

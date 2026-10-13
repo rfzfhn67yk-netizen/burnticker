@@ -26,7 +26,7 @@ export const SELECTOR_KINDS: SelectorKind[] = [
   { id: "matchup-season", label: "two coins, each on its own team's games", wizard: "Matchup pair, for every game this season", appliesTo: ["sports"] },
 ];
 
-/** The per-game result fact the ESPN scoreboard and its league cross-reads share (config/burnticker/sources.json, kind native). */
+/** The per-game result fact the sports sources and their league cross-reads share (config/burnticker/sources.json, kind native). */
 export const SPORTS_FACT = "sports.game.final-score";
 
 export const SETTLEMENT_RULE = "A coin settles on a primary source, checked by an independent second source for the same fact. The second source must be run by another operator on another domain. A coin can also settle on an adjudicated Polymarket market, read from its on-chain payout on Polygon. Prediction markets help people find events, and they can serve as an extra check where their terms allow it. Kalshi's terms allow neither use, so Kalshi is never an input.";
@@ -67,7 +67,7 @@ function kindRow(kind: SelectorKind, primaries: SourceDescriptor[], pairs: Cross
       if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "Two coins follow one game, one for each team. The game settles on its on-chain payout where a moneyline market exists, and on TheSportsDB's licensed final score otherwise. It counts once a second, independent operator agrees.", true);
       return polyOk ? row("adjudicated-only", "Both coins follow one Polymarket moneyline market, with side B taking the opposite result. Every result burns exactly one side.") : row("uncovered", "This site has no Polymarket game markets.");
     case "team-coin":
-      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `Nothing is read from ESPN. The schedule comes from the league's own feed for MLB, NHL and NBA, and from TheSportsDB with a licensed key for other leagues. Each game settles on its on-chain payout where a Polymarket moneyline market exists, and on TheSportsDB's final score otherwise. It counts once a second, independent operator agrees. The on-chain payout and TheSportsDB confirm each other, the league's official feed is read where it is free, and API-Sports is optional. Each league is listed below.`, true);
+      if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", `Nothing is read from ESPN. The schedule comes from the league's own feed for MLB and NHL, from the NBA's feed when it answers and otherwise TheSportsDB for the NBA, and from TheSportsDB with a licensed key for other leagues. Each game settles on its on-chain payout where a Polymarket moneyline market exists, and on TheSportsDB's final score otherwise. It counts once a second, independent operator agrees. The on-chain payout and TheSportsDB confirm each other, the league's official feed is read where it is free and answers, and API-Sports is optional. Each league is listed below.`, true);
       return row("uncovered", "The only way was the team's own market in a Kalshi game series. Polymarket moneylines have no fixed YES or NO for each team, because the team order changes from game to game. The ESPN NFL feed counts only final scores and is not allowed.");
     case "matchup-season":
       if (pairs.some((x) => x.fact === SPORTS_FACT)) return row("settleable", "Two team coins follow their own teams. Each game settles on its on-chain payout or on TheSportsDB's final score, once a second, independent operator agrees.", true);

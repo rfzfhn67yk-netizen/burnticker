@@ -117,7 +117,7 @@
     {
       "category": "Sports (team coins, matchups)",
       "primary": "the game's Polymarket on-chain payout where a moneyline market exists, or else TheSportsDB's licensed final score",
-      "check": "the league's own free feed (MLB, NHL, NBA), or whichever of the two was not the main source. ESPN is never read",
+      "check": "the league's own free feed (MLB, NHL), or whichever of the two was not the main source; for the NBA the on-chain payout and TheSportsDB check each other, because the NBA's own feed does not answer. ESPN is never read",
       "status": "available, since the TheSportsDB license key was set up on the host on 2026-10-11"
     },
     {
