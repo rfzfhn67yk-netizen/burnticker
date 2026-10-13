@@ -10,13 +10,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS } from "../src/lib/burnticker/siteNav.mjs";
+import { shellHeaderHtml, shellFooterHtml, shellScript, shellFontCss, SHELL_CSS } from "../src/lib/burnticker/siteNav.mjs";
 
 /** The trust copy's operator line, verbatim (src/lib/burnticker/trustpack/copy.ts OPERATOR_LINE), for the shared footer receipt. */
 export function operatorLine(root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")) {
   const m = /export const OPERATOR_LINE = "([^"]+)";/.exec(fs.readFileSync(path.join(root, "src/lib/burnticker/trustpack/copy.ts"), "utf8"));
   if (!m) throw new Error("src/lib/burnticker/trustpack/copy.ts: OPERATOR_LINE not found");
   return m[1];
+}
+
+/**
+ * The footer's one-line fee disclosure (fees.ts DEV_FEE_LINE). This script runs without the TypeScript alias hook, so it reads the line
+ * from the home page that scripts/burnticker-site-nav.mts writes from fees.ts (run that first; test/burntickerSitePolish2.test.ts holds
+ * the two equal).
+ */
+export function feeLine(root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")) {
+  const m = /<span data-fee-line>([^<]+)<\/span>/.exec(fs.readFileSync(path.join(root, "site/burnticker/index.html"), "utf8"));
+  if (!m) throw new Error("site/burnticker/index.html: the footer's data-fee-line not found (run scripts/burnticker-site-nav.mts --write)");
+  return m[1].replace(/&quot;/g, '"').replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&");
 }
 
 /** The app layout's theme boot (src/app/burnticker/_components/theme.ts THEME_BOOT), verbatim: one `bt-theme` preference site-wide. */
@@ -163,7 +174,8 @@ const page = `<!DOCTYPE html>
 <meta name="twitter:image" content="https://burnticker.com/brand/og.png">
 <link rel="icon" type="image/png" sizes="64x64" href="brand/favicon.png">
 <script>${THEME_BOOT_JS}</script>
-<style>${SHELL_CSS}</style>
+<style>${shellFontCss()}
+${SHELL_CSS}</style>
 <style>
 :root{
   --bg:#1f1c19;--surface:#2a2622;--line:#3a352f;--ink:#f2eee4;--dim:#c9c3b6;--muted:#9a9387;--amber:#ffb000;
@@ -241,7 +253,7 @@ ${body.join("\n")}
 <footer class="wrap">
   <p>Source of this page: <code>${opts.source}</code>.</p>
 </footer>
-${shellFooterHtml({ current: "/whitepaper.html", operatorLine: operatorLine() })}
+${shellFooterHtml({ current: "/whitepaper.html", operatorLine: operatorLine(), feeLine: feeLine() })}
 <script>
 ${shellScript()}
 </script>

@@ -65,7 +65,7 @@ describe("one shell, same links, same order, every surface (the owner's review i
     for (const l of ALL_LINKS.filter((x) => x.kind === "external")) assert.match(html, new RegExp(`<a href="${l.href.replace(/[.$]/g, "\\$&")}" target="_blank" rel="noopener">[^<]+<span aria-hidden="true"> ↗</span></a>`));
     const header = read("src/app/burnticker/_components/SiteHeader.tsx");
     assert.match(header, /item\.external\) return <a className="bt-nav-link" href=\{item\.href\} target="_blank" rel="noopener"/);
-    assert.match(shellHeaderHtml(), /data-site-nav="learn"/); assert.match(shellFooterHtml({ operatorLine: "x" }), /data-site-nav="tabs"/);
+    assert.match(shellHeaderHtml(), /data-site-nav="learn"/); assert.match(shellFooterHtml({ operatorLine: "x", feeLine: "y" }), /data-site-nav="tabs"/);
   });
 
   test("the app header: Launch a coin opens the closed-launches dialog while launches are closed; the phone menu traps focus and closes on Escape", () => {

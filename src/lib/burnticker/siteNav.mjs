@@ -83,6 +83,23 @@ export const TWO_PATHS = [
   { id: "explore", label: "Explore coins", href: "/burnticker", text: "See every coin, its rule and its receipts, and follow coins in this browser without a wallet." },
   { id: "create", label: "Create a coin", href: "/burnticker/launch", text: "Pick a public result and lock one rule, and the launch page shows every detail before your wallet signs anything." },
 ];
+/**
+ * The create path while creator launches are closed (audit 10 item 23, 2026-10-13): the hero says "Preview a coin launch" and prints the
+ * site launch record's own sentence beside it (launchAvailability.ts SiteLaunchState.sentence), never typed here. Only a record that can
+ * sign (`canSign`: open, freshly read, hosted signing complete) turns it back into "Create a coin". The static home runs createPathFor in
+ * the browser on GET /api/burnticker/home → launch; before that read lands it shows the closed label with the record's loading sentence.
+ */
+export const CREATE_PREVIEW = { label: "Preview a coin launch", text: "Walk through a launch and its review, with nothing signed." };
+/**
+ * @param {{ canSign?: boolean; sentence?: string } | null | undefined} launch the site launch record (null = not read)
+ * @returns {{ label: string; text: string; status: string | null; open: boolean }}
+ */
+export function createPathFor(launch) {
+  const open = !!(launch && launch.canSign === true);
+  const create = TWO_PATHS[1];
+  if (open) return { label: create.label, text: create.text, status: null, open: true };
+  return { label: CREATE_PREVIEW.label, text: CREATE_PREVIEW.text, status: launch && typeof launch.sentence === "string" && launch.sentence ? launch.sentence : LAUNCH_CLOSED.unread, open: false };
+}
 /** The plain way in to the evidence, under the two paths: the devnet receipt walked through step by step. */
 export const WALKTHROUGH_LINK = { label: "Watch how a burn works", href: "/burnticker/how-a-burn-works", text: "A real devnet burn, taken apart step by step." };
 
@@ -122,6 +139,19 @@ export const FOOTER_COPY = {
   sources: "The rules read public sources such as the U.S. Treasury, BLS, the National Weather Service, MLB, the NHL, the NBA, TheSportsDB, the FEC, JPL, Wikimedia and Polymarket. None of them is affiliated with any coin or endorses one.",
 };
 
+/**
+ * THE FOOTER'S ROWS (site-polish-2, 2026-10-13; the private review's footer item): the slip keeps every disclosure (the risk paragraph
+ * above, the operator, the fees, the API) but each explanation lives on its own page, so the rows print one line and a link to the
+ * detail instead of the whole paragraph on every page. The fee line itself is fees.ts DEV_FEE_LINE (passed in by the caller); its full
+ * use-of-fees paragraph is on the Trust page. `api` is the base path, which answers with the version and the docs link.
+ */
+export const FOOTER_ROWS = {
+  operator: { label: "OPERATOR", more: "What the operator controls", href: "/burnticker/trust" },
+  fees: { label: "DEV FEE", more: "The fee ledger", href: "/burnticker/fees/ledger" },
+  api: { label: "API", path: "/api/burnticker/v1", more: "Docs", href: "/burnticker/docs" },
+  end: "KEEP THIS RECEIPT",
+};
+
 /** The words of FOOTER_COPY.legal that link to the terms and privacy pages (polish-1 wiring). */
 export const FOOTER_LEGAL_LINKS = [
   { words: "terms of use", href: "/burnticker/terms" },
@@ -143,13 +173,18 @@ export const SITE_ICONS = {
 /** One icon as SVG markup for a static page (the app draws the same paths in JSX). */
 export const iconSvg = (name, cls = "sh-icon") => `<svg class="${cls}" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${(SITE_ICONS[name] ?? []).map((d) => `<path d="${d}"/>`).join("")}</svg>`;
 
-/** The phone tab bar, on every page under 900 px (review item 16). @type {{ label: string; href: string; icon: string }[]} */
+/**
+ * The phone tab bar, on every page under 900 px (review item 16).
+ * `name` is the link's accessible name (QA pass 9 item 43): it starts with the visible label (WCAG 2.5.3, label in name) and says where
+ * the tab goes, so a screen reader hears "Search coins", not a bare "Search" beside an icon.
+ * @type {{ label: string; name: string; href: string; icon: string }[]}
+ */
 export const SITE_TABS = [
-  { label: "Coins", href: "/burnticker", icon: "coins" },
-  { label: "Search", href: "/burnticker#search", icon: "search" },
-  { label: "Launch", href: "/burnticker/launch", icon: "launch" },
-  { label: "Seasons", href: "/burnticker/leagues", icon: "seasons" },
-  { label: "Learn", href: "/burnticker/about", icon: "learn" },
+  { label: "Coins", name: "Coins, the list of every coin", href: "/burnticker", icon: "coins" },
+  { label: "Search", name: "Search coins", href: "/burnticker#search", icon: "search" },
+  { label: "Launch", name: "Launch a coin", href: "/burnticker/launch", icon: "launch" },
+  { label: "Seasons", name: "Seasons and league scoreboards", href: "/burnticker/leagues", icon: "seasons" },
+  { label: "Learn", name: "Learn how it works", href: "/burnticker/about", icon: "learn" },
 ];
 
 /**
@@ -199,7 +234,7 @@ export function shellHeaderHtml(o = {}) {
     `    <a class="sh-brand" href="${origin}/" aria-label="Burnticker home">${MARK.replace("ORIGIN", origin)}<span class="sh-word">BURNTICKER</span></a>`,
     `    <nav class="sh-nav" aria-label="Burnticker" data-site-nav="header">`,
     linksHtml(SITE_NAV, { origin, current: o.current, indent: "      " }),
-    `      <details class="sh-learn"><summary>Learn</summary>`,
+    `      <details class="sh-learn"><summary>Learn<span aria-hidden="true" class="sh-ext">▾</span></summary>`,
     `        <div class="sh-learn-menu" data-site-nav="learn">`,
     linksHtml(LEARN_NAV, { origin, current: o.current, indent: "          " }),
     `        </div>`,
@@ -232,31 +267,37 @@ export function shellHeaderHtml(o = {}) {
 /**
  * The static footer receipt (the app's SiteFooter prints the same lines) and the phone tab bar. `operatorLine` is the trust copy's
  * OPERATOR_LINE, passed in verbatim by the generator (src/lib/burnticker/trustpack/copy.ts).
- * @param {{ origin?: string; current?: string; operatorLine: string }} o
+ * `feeLine` is fees.ts DEV_FEE_LINE. Same order and rows as the app's SiteFooter (site-polish-2: one slip on every surface).
+ * @param {{ origin?: string; current?: string; operatorLine: string; feeLine: string }} o
  */
 export function shellFooterHtml(o) {
   const origin = o.origin ?? "";
+  const R = FOOTER_ROWS;
   return [
     `<footer class="sh-footer" id="disclosure">`,
     `  <div class="sh-slip">`,
     `    <p class="sh-slip-title">BURNTICKER</p>`,
-    `    <p class="sh-slip-never">${esc(FOOTER_COPY.never)}</p>`,
     `    <div class="sh-rule"></div>`,
-    `    <p><b>NOT ADVICE.</b> ${esc(FOOTER_COPY.notAdvice)}</p>`,
+    `    <p class="sh-slip-never">${esc(FOOTER_COPY.never)}</p>`,
+    `    <p><b>*** NOT ADVICE ***</b> ${esc(FOOTER_COPY.notAdvice)}</p>`,
     `    <p>${esc(FOOTER_COPY.affiliation)} ${esc(FOOTER_COPY.chain)}</p>`,
     `    <p class="sh-slip-dim">${esc(FOOTER_COPY.sources)}</p>`,
     `    <p data-legal-line>${FOOTER_LEGAL_LINKS.reduce((h, l) => h.replace(esc(l.words), `<a href="${esc(origin + l.href)}">${esc(l.words)}</a>`), esc(FOOTER_COPY.legal))}</p>`,
     `    <div class="sh-rule"></div>`,
-    `    <p data-operator-line>${esc(o.operatorLine)}</p>`,
+    `    <dl class="sh-rows">`,
+    `      <div><dt>${R.operator.label}</dt><dd><span data-operator-line>${esc(o.operatorLine)}</span> <a href="${origin}${R.operator.href}">${esc(R.operator.more)}</a></dd></div>`,
+    `      <div><dt>${R.fees.label}</dt><dd><span data-fee-line>${esc(o.feeLine)}</span> <a href="${origin}${R.fees.href}">${esc(R.fees.more)}</a></dd></div>`,
+    `      <div><dt>${R.api.label}</dt><dd><a href="${origin}${R.api.path}">${R.api.path}</a> · <a href="${origin}${R.api.href}">${esc(R.api.more)}</a></dd></div>`,
+    `    </dl>`,
     `    <div class="sh-rule"></div>`,
     `    <nav class="sh-slip-links" aria-label="Footer" data-site-nav="footer">`,
     linksHtml(ALL_LINKS, { origin, current: o.current, indent: "      " }),
     `    </nav>`,
-    `    <p class="sh-slip-end">KEEP THIS RECEIPT</p>`,
+    `    <p class="sh-slip-end">— ${R.end} —</p>`,
     `  </div>`,
     `</footer>`,
     `<nav class="sh-tabbar" aria-label="Burnticker sections" data-site-nav="tabs">`,
-    ...SITE_TABS.map((t) => `  <a href="${origin}${t.href}"${t.href === o.current ? ' aria-current="page"' : ""}><span aria-hidden="true">${iconSvg(t.icon)}</span><span>${t.label}</span></a>`),
+    ...SITE_TABS.map((t) => `  <a href="${origin}${t.href}" aria-label="${esc(t.name)}"${t.href === o.current ? ' aria-current="page"' : ""}><span aria-hidden="true">${iconSvg(t.icon)}</span><span>${t.label}</span></a>`),
     `</nav>`,
   ].join("\n");
 }
@@ -274,23 +315,24 @@ export const SHELL_CSS = `
 .sh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .sh-skip{position:absolute;left:-9999px;top:8px;z-index:60;background:var(--sh-paper);color:var(--sh-paper-ink);padding:6px 10px;font-family:var(--sh-mono)}.sh-skip:focus{left:8px}
 .sh-header{position:sticky;top:0;z-index:40;background:var(--sh-bg);border-bottom:2px dashed var(--sh-line);font-family:var(--sh-sans)}
-.sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.sh-row{max-width:72rem;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px}
 .sh-brand{display:flex;align-items:center;gap:10px;color:var(--sh-ink);text-decoration:none;flex:0 0 auto}
-.sh-mark{width:34px;height:34px;border-radius:50%;display:block}
-.sh-word{font:700 1.02rem/1 var(--sh-mono);letter-spacing:.16em}
+.sh-mark{width:34px;height:34px;border-radius:50%;display:block;box-shadow:0 0 0 1px var(--sh-line)}
+.sh-word{font:700 1.08rem/1 var(--sh-mono);letter-spacing:.16em}
 .sh-nav{display:none;align-items:center;gap:6px;margin-left:12px} /* private review 8: room between the wordmark, the links and Learn at 1440 */
-.sh-nav a,.sh-learn>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
+.sh-nav a,.sh-learn>summary{font:700 .8rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--sh-dim);text-decoration:none;padding:9px 10px;border-radius:4px;white-space:nowrap;cursor:pointer;list-style:none}
 .sh-learn>summary::-webkit-details-marker{display:none}
+.sh-ext{font-size:.7em;margin-left:3px;opacity:.7}
 .sh-nav a:hover,.sh-learn>summary:hover{color:var(--sh-ink);background:var(--sh-counter)}
 .sh-nav a[aria-current="page"]{color:var(--sh-ink);box-shadow:inset 0 -2px 0 var(--sh-stamp);border-radius:0}
 .sh-learn{position:relative}
-.sh-learn-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:50;display:grid;min-width:200px;padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px}
+.sh-learn-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:50;display:grid;min-width:210px;padding:6px;background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.35)}
 .sh-learn-menu a{text-transform:none;letter-spacing:.02em;font:600 .9rem/1.2 var(--sh-sans);padding:10px}
 .sh-search{flex:1 1 auto;min-width:0;display:none}
 .sh-search input{width:100%;max-width:26rem;font:.9rem var(--sh-sans);color:var(--sh-ink);background:var(--sh-counter);border:1px solid var(--sh-line);border-radius:6px;padding:9px 12px}
 .sh-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
-.sh-launch{display:inline-block;font:700 .8rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
-.sh-wallet,.sh-ghost{font:700 .78rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
+.sh-launch{display:inline-block;font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--sh-stamp-solid);border:2px solid var(--sh-stamp-solid);border-radius:4px;padding:9px 12px;text-decoration:none;white-space:nowrap;cursor:pointer}
+.sh-wallet,.sh-ghost{font:700 .76rem/1 var(--sh-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;padding:9px 12px;white-space:nowrap}
 .sh-wallet{display:none;color:var(--sh-ink);border-color:var(--sh-stamp);text-decoration:none}.sh-wallet:hover{background:var(--sh-stamp-solid);border-color:var(--sh-stamp-solid);color:#fff}.sh-ghost{cursor:pointer}
 .sh-menu-wallet{margin:6px 0 0;padding:10px;border-top:1px dashed var(--sh-line);font:.8rem/1.4 var(--sh-sans);color:var(--sh-dim)}.sh-menu-wallet a{display:inline;padding:0;color:var(--sh-ink);text-decoration:underline}
 .sh-icon,.sh-menu>summary{font:700 .78rem/1 var(--sh-mono);letter-spacing:.1em;color:var(--sh-dim);background:transparent;border:1px solid var(--sh-line);border-radius:4px;height:34px;min-width:34px;padding:0 10px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;list-style:none}
@@ -309,19 +351,23 @@ export const SHELL_CSS = `
 .sh-modal h2{font:700 1rem/1.3 var(--sh-mono);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px}
 .sh-modal-row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
 .sh-footer{margin-top:48px;padding:0 16px 40px;font-family:var(--sh-mono)}
-.sh-slip{max-width:34rem;margin:0 auto;background:var(--sh-paper);color:var(--sh-paper-ink);font-size:.84rem;line-height:1.5;padding:24px 20px 20px;background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.sh-slip{position:relative;max-width:34rem;margin:0 auto;background:var(--sh-paper);color:var(--sh-paper-ink);font-size:.86rem;line-height:1.5;padding:26px 22px 22px;transform:rotate(-.6deg);box-shadow:0 10px 28px rgba(0,0,0,.35),0 1px 0 rgba(0,0,0,.25);background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.sh-slip::before,.sh-slip::after{content:"";position:absolute;left:0;right:0;height:10px;background-repeat:repeat-x;background-size:14px 10px}
+.sh-slip::before{top:-10px;background-image:conic-gradient(from 135deg at 50% 0,var(--sh-paper) 90deg,transparent 0)}
+.sh-slip::after{bottom:-10px;background-image:conic-gradient(from -45deg at 50% 100%,var(--sh-paper) 90deg,transparent 0)}
 .sh-slip p{margin:0 0 8px}
-.sh-slip-title{text-align:center;font-weight:700;font-size:1.3rem;letter-spacing:.22em}
+.sh-slip-title{text-align:center;font-weight:700;font-size:1.35rem;letter-spacing:.22em}
 .sh-slip-never{text-align:center;font-weight:700}
-.sh-slip-dim{color:var(--sh-paper-dim);font-size:.78rem}
+.sh-slip-dim{color:var(--sh-paper-dim);font-size:.8rem}
+.sh-rows{margin:0;display:grid;gap:6px}.sh-rows>div{display:grid;grid-template-columns:6.5rem 1fr;gap:10px}.sh-rows dt{font-weight:700;letter-spacing:.08em}.sh-rows dd{margin:0;overflow-wrap:anywhere}
 .sh-rule{border-top:2px dashed color-mix(in srgb,var(--sh-paper-ink) 70%,transparent);margin:12px 0}
-.sh-slip a{color:var(--sh-paper-ink);text-decoration:underline;text-underline-offset:2px}
+.sh-slip a{color:var(--sh-paper-ink);text-decoration:underline;text-underline-offset:2px}.sh-slip a:hover{color:var(--sh-stamp-solid)}
 .sh-slip-links{display:flex;flex-wrap:wrap;gap:6px 14px}
 .sh-slip-end{margin:14px 0 0!important;text-align:center;font-size:.72rem;letter-spacing:.18em;color:var(--sh-paper-dim)}
 .sh-tabbar{display:none}
 a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--sh-stamp);outline-offset:2px}
 @media (min-width:640px){.sh-search{display:block}.sh-wallet{display:inline-block}}
-@media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}}
+@media (min-width:900px){.sh-nav{display:flex}.sh-menu{display:none}.sh-actions{margin-left:8px}}
 @media (max-width:899px){
   body{padding-bottom:calc(62px + env(safe-area-inset-bottom) + 12px)}
   .sh-tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--sh-bg);border-top:2px dashed var(--sh-line);padding-bottom:env(safe-area-inset-bottom)}
@@ -334,8 +380,26 @@ a:focus-visible,summary:focus-visible,button:focus-visible,input:focus-visible{o
 .sh-ticker.more-start{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px);mask-image:linear-gradient(90deg,transparent,#000 40px)}
 .sh-ticker.more-start.more-end{-webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 40px),transparent)}
 @media (max-width:420px){.sh-row{gap:8px}.sh-launch{padding:9px 9px;font-size:.72rem}.sh-actions{gap:4px}}
-@media (max-width:479px){.sh-word{display:none}} /* audit 7 item 18: the wordmark returns only where the header tools fit beside it (no overflow at 401 to 479 px) */
+@media (max-width:479px){.sh-word{display:none}}
+@media (max-width:480px){.sh-slip{transform:none;padding:24px 16px 18px}.sh-rows>div{grid-template-columns:1fr;gap:0}}
+@media (prefers-reduced-motion:reduce){.sh-slip{transform:none}} /* audit 7 item 18: the wordmark returns only where the header tools fit beside it (no overflow at 401 to 479 px) */
 `;
+
+/**
+ * ONE TYPEFACE SET (QA pass 9 item 42, 2026-10-13): the app self-hosts Courier Prime and Space Grotesk through next/font, but the static
+ * pages only named them, so a visitor without them installed read the home in the system fonts. The same two families (latin subset, the
+ * files next/font serves; SIL Open Font License) now ship with the static site in site/burnticker/fonts/, and every static page's shell
+ * style starts with these rules. `origin` is "" on burnticker.com and SITE_ORIGIN on another host (Caddy sends the CORS header for
+ * /fonts/*). Same families, weights and display as the app's layout (config/public-repo/overlay/src/app/layout.tsx).
+ */
+export const SHELL_FONTS = [
+  { family: "Courier Prime", weight: "400", file: "courier-prime-400-latin.woff2" },
+  { family: "Courier Prime", weight: "700", file: "courier-prime-700-latin.woff2" },
+  { family: "Space Grotesk", weight: "300 700", file: "space-grotesk-latin.woff2" },
+];
+const LATIN = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD";
+/** @param {string} [origin] */
+export const shellFontCss = (origin = "") => SHELL_FONTS.map((f) => `@font-face{font-family:"${f.family}";font-style:normal;font-weight:${f.weight};font-display:swap;src:url("${origin}/fonts/${f.file}") format("woff2");unicode-range:${LATIN}}`).join("\n");
 
 /**
  * The shell's script for the static pages: the theme switch (one `bt-theme` key with the app), the phone menu (keyboard: Enter opens,
@@ -379,7 +443,15 @@ export function shellScript(o = {}) {
   var btns = Array.prototype.slice.call(document.querySelectorAll("[data-launch-button]")), dlg = document.getElementById("sh-launch-closed"), open = false;
   var said = dlg && dlg.querySelector("[data-launch-sentence]");
   window.btHome = window.btHome || fetch(${api} + "/home", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
-  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : ${JSON.stringify(LAUNCH_CLOSED.unread)}; });
+  window.btHome.then(function (j) { var l = j && j.launch; open = !!(l && l.wizard === true); if (said) said.textContent = l && l.sentence ? l.sentence : ${JSON.stringify(LAUNCH_CLOSED.unread)}; createPath(l || null); });
+  // audit 10 item 23: the home's create path, from the same record (siteNav.mjs createPathFor, written here as source)
+  function createPath(l) {
+    var TWO_PATHS = ${JSON.stringify(TWO_PATHS)}, CREATE_PREVIEW = ${JSON.stringify(CREATE_PREVIEW)}, LAUNCH_CLOSED = ${JSON.stringify({ unread: LAUNCH_CLOSED.unread })};
+    var p = (${createPathFor.toString()})(l), box = document.querySelector("[data-two-paths]"); if (!box) return;
+    var t = box.querySelector("[data-create-label]"), x = box.querySelector("[data-create-text]"), s = box.querySelector("[data-create-status]");
+    if (t) t.textContent = p.label; if (x) x.textContent = p.text; if (s) { s.textContent = p.status || ""; s.hidden = !p.status; }
+    box.setAttribute("data-create-open", p.open ? "true" : "false");
+  }
   if (dlg && typeof dlg.showModal === "function") btns.forEach(function (btn) { btn.addEventListener("click", function (e) { if (open) return; e.preventDefault(); dlg.showModal(); }); });
   if (dlg) { var c = dlg.querySelector("[data-modal-close]"); if (c) c.addEventListener("click", function () { dlg.close(); }); }
   if (dlg && /(^|#)launch-closed$/.test(location.hash) && typeof dlg.showModal === "function") dlg.showModal();

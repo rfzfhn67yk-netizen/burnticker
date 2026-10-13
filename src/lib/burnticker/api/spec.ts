@@ -31,8 +31,14 @@ export interface Endpoint {
   media?: string[];
 }
 
-export const API_VERSION = "1.15.0";
+export const API_VERSION = "1.16.0";
 export const API_PREFIX = "/api/burnticker/v1";
+/** The human-readable docs page (src/app/burnticker/docs). */
+export const API_DOCS_PATH = "/burnticker/docs";
+/** GET /api/burnticker/v1 (since 1.16.0): the base path's answer, so the address the site prints is never a 404 (QA pass 9 item 10). */
+export function apiIndex(): { name: string; version: string; openapi: string; docs: string } {
+  return { name: "Burnticker public API", version: API_VERSION, openapi: `${API_PREFIX}/openapi.json`, docs: API_DOCS_PATH };
+}
 
 /** Requests per client: a token bucket of `burst`, refilled at `perMinute` (or `perHour`). One table, read by the limiter and the docs. */
 export const RATE_LIMITS: Record<Bucket, { burst: number; refillPerSec: number; human: string }> = {
@@ -59,6 +65,7 @@ export const SCHEMAS: Record<string, Schema> = {
   ...BADGE_SCHEMAS,
   ...OPS_SCHEMAS,
   Error: obj({ error: str, code: str, problems: arr(str), retryAfterSec: int }, ["error"]),
+  ApiIndex: obj({ name: str, version: str, openapi: str, docs: str }, ["name", "version", "openapi", "docs"], { description: "since 1.16.0: the base path's own answer" }),
   // LP LOCKED FOREVER (since 1.8.0; owner decision 2026-10-10): graduation LP is 100 % locked with Raydium's LP lock, the Fee Key NFT is
   // owned by the burn program's fee-keys PDA, and the permissionless claim_lock_fees splits the SOL side 80 % burn pool / 20 % operator.
   LpLock: obj({
@@ -335,6 +342,8 @@ export const ENDPOINTS: Endpoint[] = [
   { operationId: "verifyReceipt", method: "GET", path: "/tokens/{ticker}/verify/{id}", tag: "tokens", summary: "Verify one receipt from the source and the chain", description: "Re-reads the settled result from the original source, re-applies the published rule, recomputes the spend, and compares the memo on chain. The SDK's verifyReceipt does the same on your machine without trusting this server.", params: [tickerParam, { name: "id", in: "path", required: true, description: "the receipt's event id (market ticker, event ticker or feed period)", schema: str }], request: null, response: "Verification", errors: [404, 429], cacheSec: 60, bucket: "heavy" },
   { operationId: "getTrust", method: "GET", path: "/trust", tag: "platform", summary: "The Powers Register and the live fees", description: "Every power anyone holds (who, what it can and cannot do, timelock, sunset), the designed fee split next to the LIVE LaunchLab platform config decoded from chain (when the host has an RPC), program facts, attesters, the last audit and the platform statements.", params: [], request: null, response: "Trust", errors: [429], cacheSec: 60, bucket: "read" },
   { operationId: "getCoverage", method: "GET", path: "/coverage", tag: "platform", summary: "What each category can settle without Kalshi", description: "Since 1.3.0. For every category of config/burnticker/categories.json and every selector kind the wizard can emit: the primary sources (first-party, launchable, never Kalshi), their independent cross-reads (the same fact from another operator on another domain), the 90-day dry run of each (expected vs produced readings, median latency, disagreement with the cross-read) and the verdict — settleable (a primary with a cross-read), adjudicated-only (Polymarket's payout vector on Polygon) or uncovered. Computed from the sources' frozen fixtures (no network), cached; docs/burnticker/SETTLEMENT-COVERAGE.md is rendered from the same object.", params: [], request: null, response: "Coverage", errors: [429], cacheSec: 600, bucket: "read" },
+  // QA pass 9 item 10 (2026-10-13): the base path itself answers, so the address the footer prints is never a 404
+  { operationId: "getApiIndex", method: "GET", path: "/", tag: "platform", summary: "Where to start: the version, this document and the docs", description: "Since 1.16.0. The API's version, the address of this document (openapi.json) and the human-readable docs page. Nothing else; every other operation is listed in this document.", params: [], request: null, response: "ApiIndex", errors: [429], cacheSec: 300, bucket: "read" },
   { operationId: "getOpenApi", method: "GET", path: "/openapi.json", tag: "platform", summary: "This document", description: "OpenAPI 3.1, generated from the same table the routes read their cache and rate-limit settings from.", params: [], request: null, response: "OpenApi", errors: [429], cacheSec: 3600, bucket: "read" },
 ];
 

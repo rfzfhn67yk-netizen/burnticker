@@ -276,7 +276,8 @@ describe("the committed platform fixture and the brand", () => {
     assert.doesNotMatch(fs.readFileSync("site/burnticker/brand/header.svg", "utf8"), /kalshi/i, "the retired SVG kit too");
   });
   test("the app shell: footer line, the public layout's Open Graph title and description, the Seasons label", async () => {
-    assert.match(fs.readFileSync("src/app/burnticker/_components/SiteFooter.tsx", "utf8"), /COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS/);
+    // site-polish-2 (2026-10-13, the private review's footer item): the slip's tagline repeated the hero on every page, so it is gone
+    assert.doesNotMatch(fs.readFileSync("src/app/burnticker/_components/SiteFooter.tsx", "utf8"), /COINS THAT BURN ON REAL-WORLD RESULTS · WITH RECEIPTS/);
     const layout = fs.readFileSync("config/public-repo/overlay/src/app/layout.tsx", "utf8");
     // audit 4 BT-21, made phase-aware 2026-10-11; website-13 (Claude site audit 2 item 1): the previews carry the current headline and
     // the launch state in launchAvailability.ts's own words, read at request time. The layout types neither "open" nor "closed".

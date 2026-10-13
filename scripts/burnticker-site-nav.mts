@@ -10,10 +10,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { shellHeaderHtml, shellFooterHtml, shellScript, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS, FIRST_USE, TWO_PATHS, WALKTHROUGH_LINK } from "../src/lib/burnticker/siteNav.mjs";
+import { shellHeaderHtml, shellFooterHtml, shellScript, shellFontCss, SHELL_CSS, SITE_ORIGIN, HERO, HOW_IT_WORKS, FIRST_USE, TWO_PATHS, WALKTHROUGH_LINK, createPathFor } from "../src/lib/burnticker/siteNav.mjs";
 import { deficitQueueCore } from "../src/lib/burnticker/deficitQueueCore.mjs";
 import { cardAge } from "../src/lib/burnticker/cardAge.mjs";
 import { OPERATOR_LINE } from "../src/lib/burnticker/trustpack/copy.ts";
+import { DEV_FEE_LINE } from "../src/lib/burnticker/fees.ts";
 import { prerequisiteLineFor } from "../src/lib/burnticker/launchReview.ts";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,13 +26,19 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
  * trader-2); "What these words mean" opens the plain meanings on demand (FIRST_USE).
  */
 export function heroHtml(): string {
+  const createLoading = createPathFor(null);
   return [
     `<section class="hero wrap" aria-labelledby="hero-h">`,
     `  <h1 id="hero-h">${esc(HERO.title)}</h1>`,
     `  <p class="sub">${esc(HERO.sub)}</p>`,
     // website-14 (product idea 1): two paths on arrival, one sentence each; "Create a coin" opens the closed-launches dialog while closed
     `  <div class="paths" data-two-paths>`,
-    ...TWO_PATHS.map((p: { id: string; label: string; href: string; text: string }) => `    <a class="path path-${p.id}" href="${p.href}"${p.id === "create" ? " data-launch-button" : ""}><span class="path-t">${esc(p.label)}</span><span class="path-x">${esc(p.text)}</span></a>`),
+    // audit 10 item 23: while creator launches are closed the create path reads "Preview a coin launch" with the site launch record's own
+    // sentence beside it (siteNav.mjs createPathFor); printed closed here, the shell script fills it from GET /api/burnticker/home
+    `    <a class="path path-explore" href="${TWO_PATHS[0].href}"><span class="path-t">${esc(TWO_PATHS[0].label)}</span><span class="path-x">${esc(TWO_PATHS[0].text)}</span></a>`,
+    `    <a class="path path-create" href="${TWO_PATHS[1].href}" data-launch-button data-create-path><span class="path-t" data-create-label>${esc(createLoading.label)}</span><span class="path-x" data-create-text>${esc(createLoading.text)}</span></a>`,
+    // the status line is empty until the record is read (the home's word budget, test/burntickerHome.test.ts), then the record's sentence
+    `    <p class="path-status" data-create-status role="status" hidden></p>`,
     `  </div>`,
     `  <p class="walk"><a href="${WALKTHROUGH_LINK.href}">${esc(WALKTHROUGH_LINK.label)}</a>. ${esc(WALKTHROUGH_LINK.text)}</p>`,
     `</section>`,
@@ -50,9 +57,9 @@ export function heroHtml(): string {
 
 type Region = { file: string; name: string; render: () => string };
 const shell = (file: string, origin: string): Region[] => [
-  { file, name: "css", render: () => `<style>${SHELL_CSS}</style>` },
+  { file, name: "css", render: () => `<style>${shellFontCss(origin)}\n${SHELL_CSS}</style>` },
   { file, name: "header", render: () => shellHeaderHtml({ origin }) },
-  { file, name: "footer", render: () => shellFooterHtml({ origin, operatorLine: OPERATOR_LINE }) },
+  { file, name: "footer", render: () => shellFooterHtml({ origin, operatorLine: OPERATOR_LINE, feeLine: DEV_FEE_LINE }) },
   { file, name: "script", render: () => `<script>\n${shellScript({ origin })}\n</script>` },
 ];
 
