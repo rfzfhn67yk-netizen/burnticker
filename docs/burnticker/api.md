@@ -235,7 +235,7 @@ A bot that follows receipts, previews a launch or queues posts can start from `p
 
 Owner decision 2026-10-10: graduation LP is locked forever (Raydium's LP lock), the Fee Key is owned by the burn program's
 `["fee_keys"]` PDA, and the permissionless `claim_lock_fees` pays 80 % of the LP fees' SOL side to the coin's burn pool and 20 % to the
-operator treasury (fixed in code; the coin side is burned). All additions, nothing removed:
+operator treasury (fixed in code; the coin side is burned). On mainnet: After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%. All additions, nothing removed:
 
 - `GET /tokens/{ticker}` → `status.lp` (`LpLock`): `policy` "locked-forever", `lockProgram`, `feeKey` (the Fee Key NFT mint; null before
   graduation), `feeKeyOwner` (the fee-keys PDA), `lockedLiquidity`, `feeKeyRecord`, `lockedPct`, `split` { burnBps 8000, operatorBps

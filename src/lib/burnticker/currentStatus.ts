@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import { siteLaunchState } from "@/lib/burnticker/launchAvailability";
 import path from "node:path";
 import { b58encode, base64ToBytes } from "@/lib/burnticker/trustpack/base58";
@@ -204,7 +205,7 @@ export function buildCurrentStatus(i: { root?: string; env?: Readonly<Record<str
     st.attesters.line,
     // audit 4 BT-12: who can authorise an upgrade and how much notice there is, in the top-level summary (keys vs controllers)
     `The 2-of-3 Squads vault holds the upgrade authority. ${st.squads.mainnet.keyControl ? `${st.squads.mainnet.keyControl} ` : ""}${mainTL.line}${mainTL.timeLockSecs === 0 ? " With no time lock, an approved upgrade executes at once, with no advance notice." : ""}`,
-    "The operator earns 0.25% of curve trading volume and 20% of the SOL fees from the liquidity pool after graduation. The other 80% of those SOL fees, and all of the token-side fees, go to each coin's burn pool. Creators take no cash from fees.",
+    `The operator earns 0.25% of curve trading volume. ${OPERATOR_SHARE_LINE} The coin side of the liquidity fees is burned. Creators take no cash from fees.`,
     `No security firm has audited the code. ${waiting === 1 ? "One fixed finding still waits" : `${countWord(waiting)} fixed findings still wait`} for an independent re-check.`,
     `${openCount === 1 ? "One thing is" : `${countWord(openCount)} things are`} still open before release.${anyMain || mainUnknown ? "" : " The first is the mainnet deployment."}`,
   ];

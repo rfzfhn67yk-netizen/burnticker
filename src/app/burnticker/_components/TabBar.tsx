@@ -1,5 +1,6 @@
 "use client";
 
+import { announceLaunchStart } from "@/lib/burnticker/launchStart";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TABS, activeTab } from "./nav";
@@ -18,7 +19,7 @@ export function TabBar() {
   return (
     <nav className="bt-tabbar" aria-label="Burnticker sections">
       {TABS.map((t) => (
-        <Link key={t.href} href={t.href} className={`bt-tabbar-item${active === t.href ? " is-active" : ""}${t.href === "/burnticker/launch" && launchOpen ? " is-launch" : ""}`} aria-current={active === t.href ? "page" : undefined}>
+        <Link key={t.href} href={t.href} className={`bt-tabbar-item${active === t.href ? " is-active" : ""}${t.href === "/burnticker/launch" && launchOpen ? " is-launch" : ""}`} aria-current={active === t.href ? "page" : undefined} onClick={() => announceLaunchStart(t.href)}>
           <span aria-hidden="true" className="bt-tabbar-glyph"><Icon name={t.icon} /></span>
           <span>{t.label}</span>
         </Link>

@@ -143,7 +143,11 @@ const COPY_MODULES = ["trustpack/copy.ts", "currentStatusText.ts", "currentStatu
   // devnet hide (owner decision 2026-10-12): the devnet practice page's words
   "devnetCopy.ts",
   // website-19 (2026-10-12): the guided launch, the ticker check at review and the reserved names
-  "guidedLaunch.ts", "tickerCheck.ts", "reservedNames.ts"]
+  "guidedLaunch.ts", "tickerCheck.ts", "reservedNames.ts",
+  // launch-intent audit 5 (2026-10-12): the name and link checks and the team-query sentences
+  "launchFields.ts", "creatorProfile.ts", "teamQuery.ts",
+  // fees copy (2026-10-12): the operator's post-graduation share, led by the whole swap
+  "feeShareLine.ts"]
   .map((f) => `src/lib/burnticker/${f}`);
 
 describe("plain-English copy: no shorthand on any page (website-9)", () => {

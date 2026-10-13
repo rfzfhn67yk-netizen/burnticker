@@ -7,6 +7,7 @@ import { NAV, LEARN, HOME_HREF, LAUNCH_LABELS, activeNav, inLearn, type NavItem 
 import { useSiteLaunchState } from "./useSiteLaunchState";
 import { THEME_KEY, currentTheme, type Theme } from "./theme";
 import { ActivityTicker } from "./ActivityTicker";
+import { announceLaunchStart } from "@/lib/burnticker/launchStart";
 import { LaunchClosedModal } from "./LaunchClosedModal";
 import { SEARCH } from "@/lib/burnticker/siteNav.mjs";
 import { WalletButton } from "./WalletButton";
@@ -30,7 +31,7 @@ import { WALLET_COPY } from "@/lib/burnticker/walletShell";
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   if (item.external) return <a className="bt-nav-link" href={item.href} target="_blank" rel="noopener" onClick={onNavigate}>{item.label}<span aria-hidden="true" className="bt-ext">↗</span><span className="sr-only"> (opens a new tab)</span></a>;
   if (item.static) return <a className="bt-nav-link" href={item.href} onClick={onNavigate}>{item.label}</a>;
-  return <Link className={`bt-nav-link${active ? " is-active" : ""}`} href={item.href} aria-current={active ? "page" : undefined} onClick={onNavigate} {...(item.launch ? { "data-launch-link": true } : {})}>{item.label}</Link>;
+  return <Link className={`bt-nav-link${active ? " is-active" : ""}`} href={item.href} aria-current={active ? "page" : undefined} onClick={() => { announceLaunchStart(item.href); onNavigate?.(); }} {...(item.launch ? { "data-launch-link": true } : {})}>{item.label}</Link>;
 }
 
 /** The Learn menu: a button and a list, closed by Escape, a click outside or a navigation. */
@@ -161,7 +162,7 @@ export function SiteHeader() {
         </form>
         <div className="bt-header-tools">
           {launchOpen
-            ? <Link className="bt-launch-btn bt-launch-head" href="/burnticker/launch" data-launch-button>{LAUNCH_LABELS.button}</Link>
+            ? <Link className="bt-launch-btn bt-launch-head" href="/burnticker/launch" data-launch-button onClick={() => announceLaunchStart("/burnticker/launch")}>{LAUNCH_LABELS.button}</Link>
             : <button type="button" className="bt-launch-btn bt-launch-head" onClick={() => setModal(true)} aria-haspopup="dialog" data-launch-button>{LAUNCH_LABELS.button}</button>}
           <WalletButton />
           <button type="button" className="bt-icon-btn" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={theme === "dark" ? "Light theme" : "Dark theme"}>
@@ -176,7 +177,8 @@ export function SiteHeader() {
         {[...NAV, ...LEARN].map((n) => <NavLink key={n.href} item={n} active={active === n.href} onNavigate={() => setOpen(false)} />)}
         <div className="bt-nav-wallet"><p>{WALLET_COPY.menuNote}</p><WalletButton variant="menu" /></div>
       </nav>
-      <ActivityTicker />
+      {/* owner, 2026-10-12: no ticker strip on the launch page; the steps get the height */}
+      {pathname?.startsWith("/burnticker/launch") ? null : <ActivityTicker />}
       {modal && <LaunchClosedModal state={launch} onClose={() => { setModal(false); if (window.location.hash === "#launch-closed") window.history.replaceState(null, "", window.location.pathname + window.location.search); }} />}
     </header>
   );

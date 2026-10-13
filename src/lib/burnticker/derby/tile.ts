@@ -29,7 +29,7 @@ export function tileRule(c: TileChoice, seriesHash: string, tickers: { a: string
   const spec = tileSpec(c);
   const problems = derbySpecProblems(spec);
   // website-19: the flippening resolves once (rules.ts isOneShot), so it takes the one-shot share, up to the whole pool
-  if (!(c.fraction >= 0.01 && c.fraction <= (c.flip ? 1 : 0.1))) problems.push(c.flip ? "the one-time burn is 1–100% of the burn pool" : "the burn per winning window is 1–10% of the burn pool");
+  if (!(c.fraction >= 0.01 && c.fraction <= (c.flip ? 1 : 0.25))) problems.push(c.flip ? "the one-time burn is 1–100% of the burn pool" : "the burn per winning window is 1–25% of the burn pool");
   const sentence = derbySentence(spec, tickers.a, tickers.b, c.fraction);
   if (problems.length) return { rule: null, spec, sentence, problems };
   const m = { fractionOfPool: Number(c.fraction.toFixed(4)) };

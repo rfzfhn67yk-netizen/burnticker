@@ -20,7 +20,7 @@ describe("rules: validation", () => {
     assert.equal(ruleMode(validateRule(VAULT_RULE)), "vault");
   });
   test("every problem is listed at once; hybrid, out-of-bounds and nonsense selectors are refused", () => {
-    assert.throws(() => validateRule({ ...BRONCOS, binary: { onYes: { fractionOfPool: 0.5 }, onNo: { tokens: 5 } }, series: "lower case", floorUsd: "1.234" }), (e: Error) => /fractionOfPool must be a number in \[0\.01, 0\.1\]/.test(e.message) && /same mode/.test(e.message) && /series must be a ticker/.test(e.message) && /floorUsd/.test(e.message));
+    assert.throws(() => validateRule({ ...BRONCOS, binary: { onYes: { fractionOfPool: 0.5 }, onNo: { tokens: 5 } }, series: "lower case", floorUsd: "1.234" }), (e: Error) => /fractionOfPool must be a number in \[0\.01, 0\.25\]/.test(e.message) && /same mode/.test(e.message) && /series must be a ticker/.test(e.message) && /floorUsd/.test(e.message));
     assert.throws(() => validateRule({ ...BRONCOS, series: "KXNFLGAME", market: "KXNFLGAME-X-Y" }), /a series OR one market/);
     assert.throws(() => validateRule({ ...BRONCOS, series: null }), /name a series or a market/);
     assert.throws(() => validateRule({ ...BRONCOS, binary: { onYes: { fractionOfPool: 0.02, tokens: 1 }, onNo: null } }), /exactly one of/);

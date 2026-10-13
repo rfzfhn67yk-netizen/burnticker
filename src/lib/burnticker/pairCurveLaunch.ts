@@ -1,8 +1,8 @@
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { BURN_RECEIPTS_IDL } from "@/lib/burnReceipts/idl";
 import { decodeType, encodeInstruction } from "@/lib/burnReceipts/idlCoder";
-import { POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
-import { CPMM_CONFIG_ID } from "@/lib/burnticker/cpmmTier";
+import { LOCK_FEE_BURN_BPS, LOCK_FEE_OPERATOR_BPS, POOL_POLICY_PAIR_CURVE } from "@/lib/burnReceipts/constants";
+import { CPMM_CONFIG_ID, CPMM_TIER, postGraduationBps } from "@/lib/burnticker/cpmmTier";
 import { END_SINK_PAIR_WINNER } from "@/lib/burnReceipts/endSink";
 import { linkPairIx } from "@/lib/burnReceipts/pairs";
 import { pairPda, vaultPda } from "@/lib/pairCurve/accounts";
@@ -32,6 +32,8 @@ export { pairCurveEnabled, PAIR_CURVE_FLAG };
 export const PAIR_CURVE_BADGE = { id: "pair-curve", label: "Pair curve", text: "Both coins graduate together, or neither does. One launch program runs the pair." } as const;
 
 /** The Raydium CPMM AmmConfig the platform points at, per cluster (cpmmTier.ts: mainnet tier 9, devnet index 0). init_pair re-checks it against the TokenConfigs' pin. */
+/** A pair coin's pool after graduation: mainnet tier 9 opened by the public initialize, so the creator fee is off (fees string below). */
+const PAIR_POST = postGraduationBps({ ...CPMM_TIER.mainnet, creatorFeeRate: 0 }, LOCK_FEE_BURN_BPS);
 export const DEFAULT_CP_CONFIG: Record<"mainnet" | "devnet" | "localnet", string> = CPMM_CONFIG_ID;
 
 export interface PairCurveParams {
@@ -145,7 +147,7 @@ export async function buildPairCurveLaunch(pair: PairBundles, creator: string, d
     version: "burnticker.pair-curve-launch/v1", ready: pending.length === 1, pending, badge: PAIR_CURVE_BADGE, pairId: pair.pairId, pair: pairAddress.toBase58(), vault: vault.toBase58(),
     mints: { a: mintA.toBase58(), b: mintB.toBase58() },
     params: { virtualSolLamports: p.virtualSolLamports.toString(), virtualTokenAmount: p.virtualTokenAmount.toString(), curveSupply: p.curveSupply.toString(), reserveSupply: (TOTAL_SUPPLY - p.curveSupply).toString(), targetRaiseLamports: p.targetRaiseLamports.toString(), minSideShareBps: p.minSideShareBps, deadline: p.deadline },
-    fees: "100 bps on every curve trade: 25 bps to the developer wallet, 75 bps to the traded coin's burn pool. After graduation the CPMM pools pay no creator fee (public initialize); the LP is locked forever (lock_lp) and its fees fund the burn: 80% to the coin's burn pool, 20% to the operator, fixed in code.",
+    fees: `100 bps on every curve trade: 25 bps to the developer wallet, 75 bps to the traded coin's burn pool. After graduation the CPMM pools pay no creator fee (public initialize); the LP is locked forever (lock_lp) and its fees fund the burn: of every swap, ${PAIR_POST.lpToBurnPool} bps to the coin's burn pool and ${PAIR_POST.lpToOperator} bps to the operator (${LOCK_FEE_OPERATOR_BPS / 100}% of the locked pool's ${PAIR_POST.lpFees} bps of liquidity fees), fixed in code; Raydium keeps ${PAIR_POST.raydiumTotal} bps.`,
     transactions: txs,
     notes: [
       `both or neither: graduation needs ${p.targetRaiseLamports} lamports combined with each side ≥ ${p.minSideShareBps / 100} % of it before ${new Date(p.deadline * 1000).toISOString()}; otherwise the pair voids and every holder can sell back on the curve`,

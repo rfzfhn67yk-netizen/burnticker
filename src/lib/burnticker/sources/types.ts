@@ -11,8 +11,9 @@ import type { CarryPolicy } from "@/lib/burnticker/units";
  *                  plausibility, carry, schedule — read by our keeper today, by a Switchboard On-Demand job (same URL + path) later
  *   onchain        facts read directly from Solana accounts / RPC (block height); never an indexer
  *
- * TIER (shown on every card and token page; admission rules per tier in the README):
+ * TIER (a trust rank, shown on every card and token page; admission rules per tier in the README):
  *   1 adjudicated market · 2 optimistic assertion · 3 TEE-or-zk-attested primary API · 4 keeper-read primary API · 5 page-scraped.
+ *   The card's words come from sourceTypeLabel: an on-chain fact is tier 1 but is labelled by its type, not as a market.
  * The token's own price is excluded everywhere; third-party asset prices are admitted only through tiers 1–3.
  */
 
@@ -21,6 +22,13 @@ import type { CarryPolicy } from "@/lib/burnticker/units";
 export type SourceKind = "market" | "assertion" | "attested-http" | "onchain" | "price-feed";
 export type Tier = 1 | 2 | 3 | 4 | 5;
 export const TIER_LABEL: Record<Tier, string> = { 1: "adjudicated market", 2: "optimistic assertion", 3: "attested primary API (TEE/zk)", 4: "keeper-read primary API", 5: "page-scraped" };
+/**
+ * THE TRUST RANK IS NOT THE SOURCE TYPE (intent audit item 10, 2026-10-12: Solana's block height and slot are tier 1 for trust, and their
+ * cards said "adjudicated market", which they are not). A kind that is not what its tier's label names carries its own label; every other
+ * kind shows its tier's label. The tier number itself is unchanged.
+ */
+export const KIND_LABEL: Partial<Record<SourceKind, string>> = { onchain: "on-chain consensus state" };
+export const sourceTypeLabel = (s: { kind: SourceKind | string; tier: Tier }): string => (KIND_LABEL as Record<string, string | undefined>)[s.kind] ?? TIER_LABEL[s.tier];
 
 export interface SourceFacts {
   id: string; kind: SourceKind; tier: Tier; title: string; sourceName: string; sourceUrl: string; cadence: string;

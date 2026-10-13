@@ -8,12 +8,13 @@ import Link from "next/link";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { CoinCard } from "../_components/CoinCard";
 import { FieldHelp } from "../_components/FieldHelp";
-import { pctLabel, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, type RaisePreset } from "@/lib/burnticker/launchPresets";
+import { MAIN_RECURRING, pctLabel, RAISE_PRESET_SHARED, RAISE_PRESET_TEXT, type RaisePreset } from "@/lib/burnticker/launchPresets";
 import { RetirementFacts } from "../_components/RetirementFacts";
 import { pairFactLines, type PairFacts } from "@/lib/burnticker/describe";
 import { nameProblem, tickerNormalised, tickerProblem } from "@/lib/burnticker/launchFields";
 import { ADVANCED_LABEL, ADVANCED_NOTE } from "@/lib/burnticker/creatorCopy";
 import { GRADUATION_LABEL } from "@/lib/burnticker/guidedLaunch";
+import { OPERATOR_SHARE_LINE, PAIR_OPERATOR_SHARE_LINE } from "@/lib/burnticker/feeShareLine";
 import type { TickerCheck } from "@/lib/burnticker/tickerCheck";
 
 /**
@@ -100,7 +101,9 @@ export const RECEIPTS_LINE = "Every burn posts a public receipt: the reading it 
  * graduation, not of every trading fee, and SOL sent to a burn pool is a budget, not something already burned. The full split per 1 SOL
  * traded is in the summary below the card.
  */
-export const LP_LINE = "The pool's liquidity is locked forever. After graduation, the SOL side of the fees it earns goes 80% to the coin's burn pool and 20% to the operator, a split fixed in code.";
+// fees copy (2026-10-12, WIRING-FEES.md; the owner: "it's showing I'm getting 20%"): the operator's share said from the constants
+export const LP_LINE = `The pool's liquidity is locked forever. ${OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
+export const PAIR_LP_LINE = `The pool's liquidity is locked forever. ${PAIR_OPERATOR_SHARE_LINE} The operator's part of the liquidity fees is fixed in code.`;
 /** A4: the dial's name. The share is of the coin's burn budget, never of its supply. */
 export const BUDGET_LABEL = "Burn budget per result";
 /** website-14: the graduation preset's name. */
@@ -127,6 +130,9 @@ function AdvancedWrap({ advanced, children }: { advanced: { defaults: string[] }
 export function ReviewCard(p: ReviewCardProps) {
   const [editState, setEditState] = useState(false), [noteOpen, setNoteOpen] = useState(!!p.note?.value);
   const [tickerNotes, setTickerNotes] = useState<Record<string, string | null>>({});
+  // owner, 2026-10-12: 10 and 25 % behind "More", shown at once when one of them is chosen
+  const [moreShares, setMoreShares] = useState(false);
+  const showMore = moreShares || !(MAIN_RECURRING as readonly number[]).includes(p.shares.value);
   const modal = useWalletModal();
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   // ChatGPT A11: connecting and launching are two separate steps. Without a wallet the button is "Connect wallet" (it only opens the
@@ -196,7 +202,10 @@ export function ReviewCard(p: ReviewCardProps) {
       {p.profile}
       <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label={p.budget?.label ?? BUDGET_LABEL} aria-describedby={`${uid}-budget`}>
         <span className="text-xs text-neutral-500" aria-hidden="true">{p.budget?.label ?? BUDGET_LABEL}</span>
-        {p.shares.options.map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
+        {/* owner, 2026-10-12: 1, 2 and 5 % on the row; 10 and 25 % behind "More" (open when one of them is chosen) */}
+        {p.shares.options.filter((f) => p.shares.options.length <= 3 || (MAIN_RECURRING as readonly number[]).includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
+        {p.shares.options.length > 3 && <button type="button" data-optional="preset" aria-expanded={showMore} className="text-xs text-neutral-400 underline" onClick={() => setMoreShares(!moreShares)} data-share-more>{showMore ? "Less" : "More"}</button>}
+        {p.shares.options.length > 3 && showMore && p.shares.options.filter((f) => !(MAIN_RECURRING as readonly number[]).includes(f)).map((f) => <button key={f} type="button" role="radio" aria-checked={p.shares.value === f} data-optional="preset" className={chip(p.shares.value === f)} onClick={() => p.shares.onChange(f)}>{pctLabel(f)}</button>)}
       </div>
       {p.inverse && (
         <div className="flex min-w-0 flex-wrap items-center gap-2" role="radiogroup" aria-label="When the coin burns" data-inverse>
@@ -253,7 +262,7 @@ export function ReviewCard(p: ReviewCardProps) {
         {p.summary}
         <details className="min-w-0" data-terms>
           <summary className="cursor-pointer text-neutral-300">What you confirm by launching</summary>
-          <p className="mt-1 break-words text-neutral-400">{RECEIPTS_LINE} {LP_LINE}</p>
+          <p className="mt-1 break-words text-neutral-400">{RECEIPTS_LINE} {many ? PAIR_LP_LINE : LP_LINE}</p>
           <p className="mt-1 break-words text-neutral-400">{ACK_LINE} <Link className="underline" href="/burnticker/docs">More options: the API</Link></p>
         </details>
       </div>

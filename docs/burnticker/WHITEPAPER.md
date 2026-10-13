@@ -590,7 +590,7 @@ designed values are in `src/lib/burnticker/fees.ts`. The table gives fees in bas
   constants. `LOCK_FEE_BURN_BPS` sends 8,000 basis points of it to the coin's burn pool. `LOCK_FEE_OPERATOR_BPS` sends 2,000 basis points
   to the operator treasury, which is the Squads vault. The coin side is burned. No admin key or config field can change the split.
   Per swap after graduation, that was about 21.55 basis points toward the burn on CPMM tier 0 (16.8 + 4.75; it was 4.75 with the LP
-  burned) and 4.2 basis points to the operator. **The operator earns 20 % of post-graduation LP fees.** On mainnet the treasury is not compiled in yet.
+  burned) and 4.2 basis points to the operator. **After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.** On mainnet the treasury is not compiled in yet.
   Until it is, every claim refuses with `TreasuryNotPinned`, and the fees stay in the lock.
 - **The Raydium pool tier is 9.** The owner decided this on 2026-10-12, replacing tier 0. The LaunchLab platform's `cpConfigId` names
   Raydium CPMM AmmConfig index 9 (`LNmHRmMvk9kmtepfTSr98kqGLThd61kH1DPWf2cVRaC`): the same 25 bps trade fee as tier 0 and a 75 bps

@@ -3,6 +3,7 @@
 // cross-site refusal on every POST; a launch bundle that never carries a secret and never signs; and no adopt-existing-token path.
 import { test, describe, before } from "node:test";
 import assert from "node:assert/strict";
+import { postGraduationShareLine } from "@/lib/burnticker/feeShareLine";
 import { Keypair, Transaction } from "@solana/web3.js";
 import { buildOpenApi, ENDPOINTS, endpoint, RATE_LIMITS } from "@/lib/burnticker/api/spec";
 import { limiter, RateLimiter, clientKey } from "@/lib/burnticker/api/http";
@@ -133,7 +134,7 @@ describe("v1 read endpoints", () => {
     assert.equal(lp.operatorTreasury, "A8VVQ8ztPcPmKTzWJDADP8EthMg8DvqKcK15dNBqMffD");
     const d = (body.fees as { designed: { lpBurnedPct: number; lpLockedPct: number } }).designed;
     assert.deepEqual([d.lpBurnedPct, d.lpLockedPct], [0, 100]);
-    assert.ok((body.statements as string[]).some((x) => /The operator earns 20% of the LP fees after graduation\./.test(x)));
+    assert.ok((body.statements as string[]).some((x) => x.startsWith(postGraduationShareLine((body.fees as { designed: { postGraduation: { legs: { label: string; bps: number }[] } } }).designed.postGraduation))), "the operator's share is led by the whole swap (fees copy, 2026-10-12)");
   });
   test("GET /openapi.json: the generated document", async () => {
     const { body, res } = await call("getOpenApi");

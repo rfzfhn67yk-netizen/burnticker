@@ -141,7 +141,7 @@ describe("the rule dials", () => {
     assert.deepEqual(a, b);
     assert.deepEqual(a.ids, ["fraction", "league", "inverse", "side", "window"]);
     assert.deepEqual(a.window!.options.map((o) => o.value), ["season", "post", "next", "perpetual"]);
-    assert.equal(a.fraction, 0.02); assert.deepEqual(a.bounds, { min: 0.01, max: 0.1, step: 0.005 });
+    assert.equal(a.fraction, 0.02); assert.deepEqual(a.bounds, { min: 0.01, max: 0.25, step: 0.005 });
   });
 
   test("the one-shot card: fraction 1–100 % (default 100 %, website-19), YES / NO, league mode from the card's set", async () => {
@@ -156,7 +156,7 @@ describe("the rule dials", () => {
 
   test("each dial is a pure rewrite of the rule", () => {
     const r = team("mlb", "TB", "win", S(2026));
-    assert.deepEqual((applyDial(r, "fraction", 0.5) as BurnRule).scalar!.perUnit, { fractionOfPool: 0.1 }, "recurring clamps at 10 %");
+    assert.deepEqual((applyDial(r, "fraction", 0.5) as BurnRule).scalar!.perUnit, { fractionOfPool: 0.25 }, "recurring clamps at 25 % (owner, 2026-10-12)");
     assert.equal(applyDial(r, "side", "loss", ctx).series, "espn.team:mlb-TB.30-loss-s2026");
     assert.equal(applyDial(r, "side", "draw", ctx).series, r.series, "no draws in baseball");
     assert.equal(applyDial(team("eng.1", "ARS", "win", S(2026)), "side", "draw", ctx).series, "espn.team:eng.1-ARS.359-draw-s2026");

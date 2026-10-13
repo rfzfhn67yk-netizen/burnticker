@@ -108,7 +108,7 @@ burns exactly one side; the receipts are the scoreboard.
 model in `docs/burnticker/PAIR-CURVE.md`) is the launch program for rivalry pairs: one `Pair` account, two path-independent
 virtual-reserve curves, one SOL vault, 100 bps per trade (25 developer, 75 the traded coin's burn pool), graduation only when the
 combined raise hits the target with each side at its minimum share (default 25 %), both CPMM pools created at pair_curve addresses with
-the LP locked forever (its fees fund the burn: 80 % burned, 20 % operator, fixed in code), or a void at the deadline after which every holder sells back. No admin, no withdraw.
+the LP locked forever (its fees fund the burn: about 0.17% of every swap goes to the coin's burn pool and about 0.04% to the operator, which is 20% of the locked pool's liquidity fees, fixed in code), or a void at the deadline after which every holder sells back. No admin, no withdraw.
 
 - **Flag:** `BURNTICKER_PAIR_CURVE_ENABLED=1` (default off) makes the wizard's matchup / election pair launch through pair_curve:
   `src/lib/burnticker/pairCurveLaunch.ts` turns `buildPairBundles`' two LaunchLab bundles into three transactions (mint A + its
@@ -562,7 +562,8 @@ Sources: [Unchained](https://unchainedcrypto.com/kalshi-powered-tokenized-predic
 ## 9. Owner decisions baked in (2026-10-09)
 
 Developer slice 25 bps of curve volume via the platform slot to `BURNTICKER_FEE_WALLET`; creators earn no cash from fees (creator-fee
-slot → burn pool, 100 %, 50 bps cap); graduation LP 100 % locked forever since 2026-10-10 (was: burned) — its Fee Key is owned by the burn program and
+slot → burn pool, 100 %, 50 bps cap); graduation LP 100 % locked forever since 2026-10-10 (was: burned). After graduation, about 0.88% of every swap goes to the coin's burn pool and about 0.04% to the operator — 20% of the locked pool's liquidity fees. Raydium keeps about 0.08%.
+The Fee Key is owned by the burn program and
 claim_lock_fees pays 80 % of the LP fees to the burn pool and 20 % to the operator (fixed in code), plus Raydium's fixed CPMM
 creator fee to the burn pool (CPMM tier 9 since the 2026-10-12 decision: 75 bps, 71.25 bps/SOL to the burn pool after Raydium's 5 %;
 it was tier 0's 4.75 bps; a coin keeps the tier it pinned at initialize_token); no team allocation; pre-audit cap 25 SOL per burn pool with the excess queued ("released after audit";

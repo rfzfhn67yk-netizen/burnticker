@@ -210,6 +210,9 @@ export function planLaunch(i: LaunchInput): LaunchPlan {
   const problems: string[] = [];
   if (i.decimals !== 6) problems.push(`decimals must be 6 (the program's BASE_MINT_DECIMALS; SDK Curve.checkParam) — got ${i.decimals}`);
   if (i.symbol.length > 10) problems.push("symbol must be at most 10 characters (SDK createLaunchpad)");
+  // the token metadata the create writes (Metaplex) holds at most 32 bytes of name and 10 of symbol, in UTF-8 bytes, not characters
+  if (Buffer.byteLength(i.name, "utf8") > 32) problems.push("name must be at most 32 bytes of UTF-8 (token metadata)");
+  if (Buffer.byteLength(i.symbol, "utf8") > 10) problems.push("symbol must be at most 10 bytes of UTF-8 (token metadata)");
   if (!i.uri) problems.push("metadata uri is required");
   if (!i.global.mintB.equals(WSOL_MINT)) problems.push(`the config's quote mint is ${i.global.mintB.toBase58()}, not SOL — this builder only supports SOL-quoted launches`);
   if (i.global.curveType !== 0) problems.push(`config curveType ${i.global.curveType} — only the constant-product curve (0) is supported`);

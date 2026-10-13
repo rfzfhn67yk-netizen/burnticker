@@ -27,12 +27,14 @@ export const CUSTOM_IMAGES_OFF_LINE = "Custom images are off on this site, so th
 export const ADVANCED_LABEL = "Advanced";
 export const ADVANCED_NOTE = "Every choice below already has a default. You can launch without opening this.";
 /** The defaults the Team path sets, one plain sentence each, shown inside Advanced. */
-export function teamAdvancedDefaults(o: { sharePct: string; raiseSol: string; minForwardSol: string }): string[] {
+export function teamAdvancedDefaults(o: { sharePct: string; raiseSol: string; minForwardSol: string; /** the creator's current image, description and links (ChatGPT review item 43) */ profile?: { image: boolean; description: boolean; links: number } }): string[] {
+  const p = o.profile ?? { image: false, description: false, links: 0 };
+  const extra = [p.description ? "your description follows the rule sentence" : null, p.links ? `${p.links === 1 ? "one link" : `${p.links} links`} are shown on the coin's page`.replace(/^one link are/, "one link is") : null].filter(Boolean) as string[];
   return [
     `Each win spends ${o.sharePct} of the burn pool.`,
     "The coin burns when the team wins. The other choice burns it when the team does not win.",
     `Fees that arrive after the end move on once they reach ${o.minForwardSol} SOL, at most once a week.`,
     `The curve raises ${o.raiseSol} SOL before graduation.`,
-    "The image is the generated receipt art unless you add your own above. There is no extra description and there are no links.",
+    `${p.image ? "The image is the one you added above." : "The image is the generated receipt art unless you add your own above."} ${extra.length ? `${extra.map((x, i) => (i === 0 ? x[0].toUpperCase() + x.slice(1) : x)).join(", and ")}.` : "There is no extra description and there are no links."}`,
   ];
 }

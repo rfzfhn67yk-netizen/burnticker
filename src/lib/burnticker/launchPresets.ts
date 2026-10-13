@@ -6,14 +6,19 @@ import { dialsFor } from "@/lib/burnticker/dials";
  * review then showed 2% with no word about the change). Every surface that names a share before launch — a search card, a template
  * example, a Browse rule, the review card's preset row, the request payload and the rule initialize_token receives — reads these:
  *
- *   recurring   1, 2 or 5 % of the burn pool per qualifying unit (default 2 %; website-19, the guided launch brief)
+ *   recurring   1, 2, 5, 10 or 25 % of the burn pool per qualifying unit (default 2 %; the owner raised the cap to 25 % on 2026-10-12)
  *   one-shot    100 % or 50 % once (default 100 %; website-19, the owner: a title coin was offered 2 / 5 / 10 %)
  *
  * A share outside the row is never swapped silently: `presetProblem` names it, and `snapToPreset` reports `changed` so the page can say
  * what it did ("the coin you copied burned 3%; the web launcher offers 2 / 5 / 10%"). Other shares stay available through the API.
  * Client-safe (dials.ts is).
  */
-export const SHARE_PRESETS = { recurring: [0.01, 0.02, 0.05], oneShot: [1, 0.5] } as const;
+// owner, 2026-10-12 ~18:10 Denver: a recurring rule may burn up to 25 % per unit; the review shows 1, 2 and 5 % with 10 and 25 % under "More"
+export const SHARE_PRESETS = { recurring: [0.01, 0.02, 0.05, 0.1, 0.25], oneShot: [1, 0.5] } as const;
+/** The recurring presets on the main row; the rest sit behind "More". */
+export const MAIN_RECURRING = [0.01, 0.02, 0.05] as const;
+/** Above this share a recurring burn is said to land in slices (one burn run buys with at most 2 % of the pool's SOL). */
+export const SLICED_ABOVE = 0.05;
 export const DEFAULT_SHARE = { recurring: 0.02, oneShot: 1 } as const;
 export type ShareShape = keyof typeof SHARE_PRESETS;
 

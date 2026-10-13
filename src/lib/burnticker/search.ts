@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BurnRule } from "@/lib/burnticker/rules";
 import { BURNTICKER_RULES_SCHEMA } from "@/lib/burnticker/rules";
-import { findTeams, gameSeries, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
+import { findTeams, gameSeries, noPlayoffs, teamSeries, LEAGUES, ScheduleUnavailable, windowChoices, windowFor, windowPhrase, type EspnClient, type EspnTeam, type Game, type LeagueId, type WindowKind } from "@/lib/burnticker/sources/espn";
 import { findStations, type NwsMetric } from "@/lib/burnticker/sources/nws";
 import { gameLine } from "@/lib/burnticker/oneShotEligibility";
 import { climateDaySentence, FIRST_SNOW_SEASON, leastReportable, parseWeatherIntent, planWeather, type WeatherIntent, type WeatherPlan } from "@/lib/burnticker/weatherIntent";
@@ -16,6 +16,7 @@ import { championshipCode, describeRule, tickerFrom, type CoinText, type Describ
 import type { SeriesSummary } from "@/lib/burnticker/oracle/types";
 import { DEFAULT_SHARE, pctLabel, shareOf } from "@/lib/burnticker/launchPresets";
 import { scheduleProblem, SPORTS_CHIP } from "@/lib/burnticker/sources/provenance";
+import { asksWomen, compoundOf, compoundSentence, isWomenLeague, milestoneOf, milestoneSentence, regularSeasonOnly, REGULAR_SEASON_SENTENCE, womenSentence, type Compound } from "@/lib/burnticker/teamQuery";
 
 /**
  * INTENT → RULE CARDS (2026-10-10, the owner thinks in sentences, not sources). One box on the launch page takes a plain phrase and
@@ -82,6 +83,8 @@ export interface Suggestion {
   interpreted?: string | null;
   /** L04: true when the card is a related rule, not the query's exact event (the page labels it "Alternative"). */
   alternative?: boolean;
+  /** Intent audit item 6: the query held two conditions and the card follows only one of them (the note names the part left out). */
+  partial?: boolean;
   /** An event card (polySearch.ts): pick one of the event's named outcomes, then the normal dials. No numbers. */
   picker?: { slug: string; title: string; noun: string; outcomes: PickerOutcome[] } | null;
   href: string | null; suggestedName: string | null; suggestedTicker: string | null; refused: string[]; score: number;
@@ -268,11 +271,34 @@ function oneGameCard(t: EspnTeam, g: Game, outcome: "win" | "loss" | "draw"): Su
   };
 }
 
+/** The result a team query counts: a loss or a draw when it says so, else a win. */
+export const outcomeOf = (q: string, league: LeagueId): "win" | "loss" | "draw" => /\b(lose|loses|losing|loss|losses)\b/i.test(q) ? "loss" : LEAGUES[league].draws && /\b(draw|draws|tie|ties)\b/i.test(q) ? "draw" : "win";
+
+/**
+ * Intent audit items 6 to 9 (teamQuery.ts): a second condition, a count of wins, the regular season only, or a women's team the site does
+ * not cover. Every card becomes an alternative; the sentence that says why goes on every card for items 6 and 9 and on the per-result card
+ * for items 7 and 8 (the championship card is labelled an alternative without it).
+ */
+function labelTeamIntent(cards: Suggestion[], q: string, t: EspnTeam, o: { compound: Compound | null; women: boolean }): void {
+  const all: string[] = [], perResult: string[] = [];
+  if (o.compound) all.push(compoundSentence(o.compound));
+  if (o.women && !isWomenLeague(t.league)) all.push(womenSentence(t.name));
+  const n = milestoneOf(q);
+  if (n !== null) perResult.push(milestoneSentence(n, outcomeOf(q, t.league)));
+  if (regularSeasonOnly(q) && !noPlayoffs(t.league)) perResult.push(REGULAR_SEASON_SENTENCE);
+  if (!all.length && !perResult.length) return;
+  for (const c of cards) {
+    c.alternative = true;
+    if (o.compound) c.partial = true;
+    c.note = [...all, ...(c.shape === "recurring" ? perResult : []), c.note].filter(Boolean).join(" ");
+  }
+}
+
 async function teamIntentCards(q: string, t: EspnTeam, d: SearchDeps): Promise<Suggestion[]> {
   let scheduleNote: string | null = null;
   // L05: a schedule that cannot be read is said in plain words (provenance.ts); the card's rule still settles on its own sources
   const games = d.espn ? await d.espn.season(t.league, t.abbr).catch((e) => { scheduleNote = e instanceof ScheduleUnavailable ? scheduleProblem(t.league, "needs-licence").line : scheduleProblem(t.league, "unreadable").line; return [] as Game[]; }) : [];
-  const outcome: "win" | "loss" | "draw" = /\b(lose|loses|losing|loss|losses)\b/i.test(q) ? "loss" : LEAGUES[t.league].draws && /\b(draw|draws|tie|ties)\b/i.test(q) ? "draw" : "win";
+  const outcome = outcomeOf(q, t.league);
   const rec = recurringCard(t, games, outcome, d.nowMs);
   if (scheduleNote) { rec.scheduleUnavailable = true; console.warn(`[burnticker/search] ${t.league} schedule: ${scheduleNote}`); }
   const ti = readTeamIntent(q);
@@ -446,13 +472,20 @@ export async function universalSearch(q: string, d: SearchDeps): Promise<{ query
     const order = [...new Set(ranked.map(groupOf))];
     return scrubMarketData({ query, cards: withBadges(order.flatMap((g) => ranked.filter((c) => groupOf(c) === g)).map((c) => ({ ...c, group: groupOf(c) }))), empty: ranked.length === 0, errors });
   }
-  const team = findTeams(query).find((t) => namesTeam(query, t) && nameMatch(query, [t.name, t.nickname, ...t.alt]).nameHits > 0) ?? null;
+  // intent audit items 6 and 9: the cards follow the first clause that names a team, and a women's query prefers a women's league team
+  const namedIn = (s: string) => findTeams(s).filter((t) => namesTeam(s, t) && nameMatch(s, [t.name, t.nickname, ...t.alt]).nameHits > 0);
+  const compound = compoundOf(query, findTeams(query), (s) => namedIn(s).length > 0);
+  const focus = compound ? compound.kept : query;
+  const women = asksWomen(focus);
+  const named = namedIn(focus);
+  const team = (women ? named.find((t) => isWomenLeague(t.league)) : null) ?? named[0] ?? null;
   // a person-looking query ("lakers tonight" is not one; "el sayed" is) goes to the people only when a candidate's name matches it
   let personHit = false;
   if (team && person && d.venues.polymarket && d.polyGet) { try { personHit = searchRaces(await loadRaces(d.polyGet, d.refuse), query).some((h) => h.score >= 1.5); } catch { personHit = false; } }
   if (team && !personHit) {
     // a team is named: exactly the team's shapes (recurring, one-shot championship, the next game when both sides are known)
-    const tc = await teamIntentCards(query, team, d);
+    const tc = await teamIntentCards(focus, team, d);
+    labelTeamIntent(tc, focus, team, { compound, women });
     return scrubMarketData({ query, cards: withBadges(tc.sort((a, b) => b.score - a.score)).map((c) => ({ ...c, group: groupOf(c) })), empty: false, errors });
   }
   cards.push(...feedCards(query, d.feeds));   // a weather query returned above (weatherCards)

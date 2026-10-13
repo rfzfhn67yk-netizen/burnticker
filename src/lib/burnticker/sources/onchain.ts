@@ -4,7 +4,8 @@ import type { ImpliedChance, ResolvedSelector, SeriesSummary } from "@/lib/burnt
 import type { ResolutionSource } from "@/lib/burnticker/sources/types";
 
 /**
- * ON-CHAIN FACTS (kind "onchain", tier 1 for the keeper's purposes: anyone can read the same RPC call and the Receipts program can
+ * ON-CHAIN FACTS (kind "onchain", tier 1 as a TRUST rank, labelled "on-chain consensus state" and never "adjudicated market" by
+ * sourceTypeLabel in types.ts; tier 1 because anyone can read the same RPC call and the Receipts program can
  * verify it directly). v1: Solana block height and slot, read with getBlockHeight / getSlot — a snapshot per UTC day. Admitted: facts
  * that are ACCOUNT DATA or RPC consensus state. Not admitted: anything from an indexer (holder counts, volumes, prices).
  */

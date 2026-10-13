@@ -2,7 +2,8 @@ import type { BurnRule } from "@/lib/burnticker/rules";
 import { dialsFor } from "@/lib/burnticker/dials";
 import { championPathRule, describeEndSink, windowKindOf } from "@/lib/burnticker/describe";
 import { CATALOGUE_ONE_SHOT_RE, inverseRefusal } from "@/lib/burnticker/inverse";
-import { parseEspnSeries } from "@/lib/burnticker/sources/espn";
+import { parseEspnSeries, teamSeries, type LeagueId } from "@/lib/burnticker/sources/espn";
+import { firstPartyRule } from "@/lib/burnticker/wizard";
 import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchPresets";
 
 /**
@@ -23,21 +24,25 @@ import { pctLabel, SHARE_PRESETS, DEFAULT_SHARE } from "@/lib/burnticker/launchP
 
 export type GuidedStepId = "follow" | "which" | "burn" | "end";
 export const GUIDED_STEPS: readonly { id: GuidedStepId; question: string; short: string }[] = [
-  { id: "follow", question: "What does this coin follow?", short: "What it follows" },
-  { id: "which", question: "Which one?", short: "Which one" },
-  { id: "burn", question: "How does it burn?", short: "How it burns" },
-  { id: "end", question: "What happens at the end?", short: "The end" },
+  { id: "follow", question: "What does this coin follow?", short: "Follows" },
+  { id: "which", question: "Which one?", short: "Which" },
+  { id: "burn", question: "How does it burn?", short: "Burns" },
+  { id: "end", question: "What happens at the end?", short: "Ends" },
 ];
 /** "1 of 4". */
 export const progressLabel = (i: number): string => `${i + 1} of ${GUIDED_STEPS.length}`;
 
 export type FollowId = "team" | "market" | "number" | "coins" | "rivalry";
-export const FOLLOW_CHOICES: readonly { id: FollowId; label: string; sentence: string; example: string }[] = [
-  { id: "team", label: "A team", sentence: "One team in any league. It can burn on every win this season, or once if they win the title.", example: "For example, $LAD for the Dodgers' season." },
-  { id: "market", label: "A market", sentence: "One outcome of a Polymarket market, such as a candidate, a film or a team. It burns once when the market pays out.", example: "For example, a candidate winning a Senate race." },
-  { id: "number", label: "A number someone publishes", sentence: "A public figure or record, such as the national debt, a city's daily high or rocket launches.", example: "For example, every $1B the debt rises." },
-  { id: "coins", label: "A coin against another coin", sentence: "Two coins people already hold, compared each day on their published feeds. You launch two new coins, one for each side.", example: "For example, WIF against BONK." },
-  { id: "rivalry", label: "A rivalry pair", sentence: "Two teams in one game or one season, or two candidates in one race. You launch one coin for each side.", example: "For example, the Dodgers against the Brewers." },
+/**
+ * `line` is the one line a choice card shows (owner, 2026-10-12: "make the step workflow easier to follow": title and one line, so all
+ * five fit on one phone screen); `sentence` and `example` sit in the Examples disclosure below the cards.
+ */
+export const FOLLOW_CHOICES: readonly { id: FollowId; label: string; line: string; sentence: string; example: string }[] = [
+  { id: "team", label: "A team", line: "One team in any league.", sentence: "One team in any league. It can burn on every win this season, or once if they win the title.", example: "For example, $LAD for the Dodgers' season." },
+  { id: "market", label: "A market", line: "One outcome of a Polymarket market.", sentence: "One outcome of a Polymarket market, such as a candidate, a film or a team. It burns once when the market pays out.", example: "For example, a candidate winning a Senate race." },
+  { id: "number", label: "A number someone publishes", line: "A public figure or record, like the debt.", sentence: "A public figure or record, such as the national debt, a city's daily high or rocket launches.", example: "For example, every $1B the debt rises." },
+  { id: "coins", label: "A coin against another coin", line: "Two coins, compared once a day.", sentence: "Two coins people already hold, compared each day on their published feeds. You launch two new coins, one for each side.", example: "For example, WIF against BONK." },
+  { id: "rivalry", label: "A rivalry pair", line: "Two teams or two candidates, one coin each.", sentence: "Two teams in one game or one season, or two candidates in one race. You launch one coin for each side.", example: "For example, the Dodgers against the Brewers." },
 ];
 
 export type PatternId = "every" | "fade" | "once" | "winner";
@@ -60,10 +65,22 @@ export const EVENT_LEVEL_REFUSAL = "This market is a set of outcomes. Pick one o
  * THE ONE-SHOT REVIEW SENTENCES (owner, 2026-10-12, the Dodgers World Series case): what the coin burns, when, how it lands and where the
  * rest goes, from the share and the market's own words. `subject` is "they" for a team and "it" for anything else.
  */
-export function oneShotSentences(o: { share: number; happened: string; subject: "they" | "it" }): string[] {
+export function oneShotSentences(o: { share: number; happened: string; subject: "they" | "it"; no?: boolean }): string[] {
   const what = o.share >= 1 ? "its whole pool" : `${pctLabel(o.share)} of its pool`;
-  return [`This coin burns ${what} once, when Polymarket's payout says ${o.happened}.`, "The burn lands in slices sized to the pool's liquidity.", `If ${o.subject} ${o.subject === "they" ? "do" : "does"} not, the rest goes to $DEFICIT's burn.`];
+  const tail = o.no ? `If ${o.subject} ${o.subject === "they" ? "do" : "does"}, the rest goes to $DEFICIT's burn. A voided market is not a NO.` : `If ${o.subject} ${o.subject === "they" ? "do" : "does"} not, the rest goes to $DEFICIT's burn.`;
+  return [`This coin burns ${what} once, when Polymarket's payout says ${o.happened}.`, "The burn lands in slices sized to the pool's liquidity.", tail];
 }
+
+/** What blocks the launch while an image is being prepared, or after its preparation failed (intent audit 5 item 15). */
+export const IMAGE_PENDING = "The image is still being prepared. Wait a moment, or remove it.";
+export const IMAGE_FAILED = "The image could not be prepared. Choose it again, or remove it.";
+export const imageStateProblem = (s: "pending" | "failed" | null): string | null => (s === "pending" ? IMAGE_PENDING : s === "failed" ? IMAGE_FAILED : null);
+
+/** A saved draft keeps the words and links but never an image (intent audit 5 item 11). */
+export const IMAGE_NOT_KEPT = "A saved draft does not keep an image. Add it again if you want one.";
+
+/** A one-time market's fade side, said with its real cadence. */
+export const MARKET_NO_SENTENCE = "The coin spends its share once, if the market settles NO. A voided market is not a NO.";
 
 /** The reasons a pattern is greyed, in plain words. */
 export const PATTERN_REASON = {
@@ -75,6 +92,7 @@ export const PATTERN_REASON = {
   noTitleMarket: "No market for this yet.",
   titleMarketLoading: "Looking for a market on this team's title.",
   needsTwo: "Winner takes the burn needs two linked coins. Pick a coin against another coin in step 1.",
+  noMeeting: "These two teams have no listed game right now. Pick This season instead.",
   teamsSeparate: "Two team coins launch as two separate coins, and each one burns from its own pool. Winner takes the burn is offered for a coin against another coin.",
   candidatesSeparate: "Two candidates settle on two separate markets, so each coin burns from its own pool.",
   candidatesEvery: "A race is decided once, so it cannot burn every time.",
@@ -91,6 +109,8 @@ export interface PatternInput {
   titleMarket?: "found" | "none" | "loading" | null;
   /** A rivalry pair: two teams or two candidates. */
   pairKind?: "teams" | "candidates" | null;
+  /** Two teams: whether they have a listed game against each other (false greys "once"). */
+  meeting?: boolean | null;
 }
 
 const isOneShotRule = (r: BurnRule): boolean => windowKindOf(r) === "one-shot" || (r.oracle === "catalogue" && CATALOGUE_ONE_SHOT_RE.test(r.series ?? ""));
@@ -112,7 +132,7 @@ export function patternOptions(i: PatternInput): { options: PatternOption[]; pre
   if (i.follow === "rivalry") {
     // two teams: this season (each coin burns when its own team loses), its fade side, or this game only
     const fade = r && dialsFor(r).inverse ? null : r && !isOneShotRule(r) ? plainInverseReason(r) || null : null;
-    return { options: [mk("every", null), mk("fade", fade), mk("once", null), mk("winner", PATTERN_REASON.teamsSeparate)], preselected: r && isOneShotRule(r) ? "once" : "every" };
+    return { options: [mk("every", null), mk("fade", fade), mk("once", i.meeting === false ? PATTERN_REASON.noMeeting : null), mk("winner", PATTERN_REASON.teamsSeparate)], preselected: r && isOneShotRule(r) ? "once" : "every" };
   }
   const one = !!r && isOneShotRule(r);
   const winner = mk("winner", PATTERN_REASON.needsTwo);
@@ -122,7 +142,8 @@ export function patternOptions(i: PatternInput): { options: PatternOption[]; pre
     const fadeReason = e && r ? (dialsFor(r).inverse ? null : plainInverseReason(r)) : r?.oracle === "polymarket" ? null : PATTERN_REASON.oneShotFade;
     return { options: [mk("every", null), mk("fade", e ? fadeReason : null), mk("once", r?.oracle === "polymarket" ? null : onceReason), winner], preselected: r?.oracle === "polymarket" ? "once" : r?.inverse ? "fade" : "every" };
   }
-  if (i.follow === "market") return { options: [mk("every", PATTERN_REASON.marketOnce), mk("fade", r && r.kind === "binary" ? null : PATTERN_REASON.marketFade), mk("once", null), winner], preselected: r?.kind === "binary" && r.binary?.onNo && !r.binary.onYes ? "fade" : "once" };
+  // a one-time market's "does not happen" is its NO side: once, on a NO payout (never "each day or reading")
+  if (i.follow === "market") return { options: [mk("every", PATTERN_REASON.marketOnce), { ...mk("fade", r && r.kind === "binary" ? null : PATTERN_REASON.marketFade), sentence: MARKET_NO_SENTENCE }, mk("once", null), winner], preselected: r?.kind === "binary" && r.binary?.onNo && !r.binary.onYes ? "fade" : "once" };
   // a published number: the recurring rule and its fade side, or a one-time release
   if (one) return { options: [mk("every", PATTERN_REASON.oneShotEvery), mk("fade", PATTERN_REASON.oneShotFade), mk("once", null), winner], preselected: "once" };
   const fade = r ? (dialsFor(r).inverse ? null : plainInverseReason(r) || PATTERN_REASON.oneShotFade) : null;
@@ -181,7 +202,7 @@ export function endSentences(rule: BurnRule, o: { team?: string | null } = {}): 
   else if (isOneShotRule(rule)) sentences = ["When the result is in, the rest of the pool goes to $DEFICIT's burn.", VOID];
   else sentences = ["After the last game or reading the rule covers, the rest of the pool goes to $DEFICIT's burn.", VOID];
   const options: EndOption[] = [
-    { kind: "flagship", label: "The rest goes to $DEFICIT", available: kind === "flagship", reason: kind === "flagship" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival first." : "This kind of coin has no end sink today." },
+    { kind: "flagship", label: kind === "flagship" && championPathRule(rule) ? sentences.join(" ") : "The rest goes to $DEFICIT", available: kind === "flagship", reason: kind === "flagship" ? null : kind === "pair-winner" ? "A linked pair sends the rest to the rival first." : "This kind of coin has no end sink today." },
     { kind: "pair-winner", label: "The rest goes to the rival", available: kind === "pair-winner", reason: kind === "pair-winner" ? null : "Only two linked coins can name each other." },
     { kind: "named-coin", label: "The rest goes to another coin you name", available: false, reason: "The launch page does not build this end." },
   ];
@@ -243,6 +264,24 @@ export function candidateFacts(o: { a: string; b: string; candA: string; candB: 
     moves: "No SOL moves between the two coins, because they are separate launches.",
     example: `For example, if ${o.candA} wins, ${A} spends its share of its own burn pool and the tokens it buys are burned, and ${B} does nothing.`,
   };
+}
+
+/**
+ * A RIVALRY PAIR OF TWO TEAMS (owner, 2026-10-12, live walkthrough of publish 18: "trying to set up a rivalry pair but the only options
+ * were games, not 2 teams"). Step 2 picks a league, then any two of its teams (the second list leaves out the first), then one game or
+ * the season. The season pair is two separate coins, each burning when its own team loses, for the season including the postseason
+ * (the same window as a team coin); one game needs a listed meeting between them.
+ */
+export const otherTeams = <T extends { abbr: string }>(teams: readonly T[], first: string | null): T[] => teams.filter((t) => t.abbr !== first);
+/** The next listed game between the two teams (either home or away), or null. */
+export function meetingOf<G extends { expectedAt?: string | null; pair: { a: { abbr: string }; b: { abbr: string } } | null }>(games: readonly G[], a: string, b: string): G | null {
+  const hits = games.filter((g) => g.pair && ((g.pair.a.abbr === a && g.pair.b.abbr === b) || (g.pair.a.abbr === b && g.pair.b.abbr === a)));
+  return hits.sort((x, y) => Date.parse(x.expectedAt ?? "") - Date.parse(y.expectedAt ?? ""))[0] ?? null;
+}
+/** The two season rules of a rivalry pair: each coin burns when its own team loses, this season including the postseason. */
+export function seasonPairRules(league: LeagueId, a: string, b: string, year: number, fraction = DEFAULT_SHARE.recurring): { a: BurnRule; b: BurnRule } {
+  const w = { kind: "season" as const, year };
+  return { a: firstPartyRule(teamSeries(league, a, "loss", w), fraction), b: firstPartyRule(teamSeries(league, b, "loss", w), fraction) };
 }
 
 // ---- generated tickers and names (owner, 2026-10-12: "two teamwifs") ----

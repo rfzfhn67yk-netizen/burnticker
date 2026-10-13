@@ -25,9 +25,9 @@ export type DialId = "fraction" | "side" | "window" | "games" | "threshold" | "u
 export interface DialCtx { nowMs?: number; seasonYear?: number | null; /** an outcome-list market's set (the championship card knows it) */ set?: { id: string; outcome: string } | null }
 /** rules.ts DEFAULT_ON_END, copied so this file stays client-safe (rules.ts reads node:crypto); a test pins the two equal. */
 export const ON_END_DEFAULT = { windDownDays: 28, sweepThresholdLamports: 50_000_000, endSink: true } as const;
-/** One-shot rules may spend up to 100 % (rules.ts ONE_SHOT_MAX_FRACTION); recurring ones 1–10 %. */
+/** One-shot rules may spend up to 100 % (rules.ts ONE_SHOT_MAX_FRACTION); recurring ones 1–25 % (owner, 2026-10-12). */
 export const ONE_SHOT_FRACTION = { min: 0.01, max: 1, step: 0.01 } as const;
-export const FRACTION = { min: 0.01, max: 0.1, step: 0.005 } as const;
+export const FRACTION = { min: 0.01, max: 0.25, step: 0.005 } as const;
 export interface DialSet {
   ids: DialId[];
   fraction: number;

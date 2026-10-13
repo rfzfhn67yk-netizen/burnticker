@@ -81,6 +81,11 @@ describe("the launch plan", () => {
     assert.ok(Buffer.compare(p.cpmm.token0.toBuffer(), p.cpmm.token1.toBuffer()) < 0, "CPMM mints in byte order");
     assert.equal(p.vestingRecord, null);
   });
+  test("launch-intent audit 5 item 2: the metadata limits are UTF-8 bytes (32 for the name, 10 for the symbol); 32 bytes pass", () => {
+    assert.ok(planLaunch(input({ name: "🌙".repeat(12) })).problems.includes("name must be at most 32 bytes of UTF-8 (token metadata)"));
+    assert.deepEqual(planLaunch(input({ name: "é".repeat(16) })).problems, []);
+    assert.ok(planLaunch(input({ symbol: "ÉÉÉÉÉÉ" })).problems.includes("symbol must be at most 10 bytes of UTF-8 (token metadata)"));
+  });
   test("vault mode (25% locked on mainnet): totalSellA lowered to 60% so the 15% migration reserve holds; 20% and 30% also fit; 70% does not", () => {
     const p = planLaunch(input({ lockedPercent: 25, unlockSeconds: BigInt(365 * 86400) }));
     assert.deepEqual(p.problems, []);
